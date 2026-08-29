@@ -73,12 +73,41 @@ def test_een_skill_loze_rol_kan_alleen_via_de_tweede_trede():
     assert [r["rol"] for r in uit] == ["dev"]
 
 
-def test_het_model_wordt_niet_gebeld_als_de_opzoeking_iets_vond():
-    """Alleen op leeg, niet bij elke open — anders kost elk scherm een call."""
+def test_het_model_vult_de_gaten_en_overschrijft_niets():
+    """Eerst was dit alles-of-niets: één stap die toevallig een skill dekte hield het modelrondje
+    tegen, en dan bleven de andere stappen zonder rol terwijl er wél een voor de hand liggende was.
+    Gemeten: van vier stappen dekte er één een Copywriter-skill, en Scientist en Library kwamen
+    daardoor niet in beeld."""
+    prompts = []
+
+    def _m(prompt, **k):
+        prompts.append(prompt)
+        return '{"toewijzingen":[{"stap":1,"rol":"sci"}]}'
+    uit = roles_for([{"tekst": "cureer dit", "skill": "curate"},
+                     {"tekst": "zoek uit wat er bekend is", "skill": None}],
+                    records=ST, ai=None, skills_of=SKILLS, reason_fn=_m)
+    assert {r["rol"] for r in uit} == {"lib", "sci"}
+    # ÉÉN gebatchte call, en alleen over de stap die trede 1 niet dekte
+    assert len(prompts) == 1
+    assert "zoek uit wat er bekend is" in prompts[0] and "cureer dit" not in prompts[0]
+
+
+def test_zonder_openstaande_stappen_wordt_het_model_niet_gebeld():
     n = []
-    roles_for([{"tekst": "a", "skill": "curate"}, {"tekst": "b", "skill": None}],
-              records=ST, ai=None, skills_of=SKILLS, reason_fn=lambda *a, **k: n.append(1))
-    assert n == []
+    uit = roles_for([{"tekst": "cureer dit", "skill": "curate"}],
+                    records=ST, ai=None, skills_of=SKILLS, reason_fn=lambda *a, **k: n.append(1))
+    assert [r["rol"] for r in uit] == ["lib"] and n == []
+
+
+def test_een_rol_uit_beide_tredes_verschijnt_één_keer():
+    """En houdt de STERKSTE grond: een skill-match is harder dan een purpose-match."""
+    uit = roles_for([{"tekst": "cureer dit", "skill": "curate"},
+                     {"tekst": "en dit ook", "skill": None}],
+                    records=ST, ai=None, skills_of=SKILLS,
+                    reason_fn=lambda *a, **k: '{"toewijzingen":[{"stap":1,"rol":"lib"}]}')
+    assert len(uit) == 1
+    assert uit[0]["stappen"] == ["cureer dit", "en dit ook"]
+    assert uit[0]["grond"] == "heeft de skill die deze stap vraagt"
 
 
 # ── Fail-open en fail-closed ───────────────────────────────────────────────

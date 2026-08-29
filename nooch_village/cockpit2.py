@@ -6227,6 +6227,17 @@ def make_handler(data_dir: str, csrf_token: str,
                                               herkomst=f"↳ gevraagd bij het aanmaken van {titel}",
                                               door=aid, opdrachtgever=aid, bron_project=pid)
                         taken_ref.append({"rol": t_rol, "ref": _ref})
+                    # WERKT DE SUGGESTIE EIGENLIJK? Eén regel per project, dom geteld, zodat
+                    # kill-of-houden over een week op een getal gaat en niet op een gevoel.
+                    # Fail-soft: meten mag een aanmaak nooit blokkeren.
+                    try:
+                        from nooch_village.checklist_vorm import noteer_acceptatie
+                        _int = lambda k: int(g1(k) or 0) if (g1(k) or "0").isdigit() else 0
+                        noteer_acceptatie(data_dir, aangeboden=_int("sug_aan"),
+                                          overgenomen=_int("sug_over"), eigen=_int("sug_eigen"),
+                                          pid=pid)
+                    except Exception:
+                        logging.getLogger("cockpit2.wizard").exception("acceptatie-spoor faalde")
                     self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel,
                                      "taken": taken_ref})
                     return

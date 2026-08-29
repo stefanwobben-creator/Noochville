@@ -110,3 +110,68 @@ def test_de_prompt_zegt_dat_het_kennisblok_extern_onderzoek_is():
     assert "EXTERN ONDERZOEK" in gezien["p"]
     assert "GEEN lijst van" in gezien["p"]
     assert str(MAX_WOORDEN) in gezien["p"]        # de vormregel staat er ook in
+
+
+# ── Werkt de suggestie eigenlijk? ──────────────────────────────────────────
+
+def test_de_teller_is_dom_en_telt_één_regel_per_project(tmp_path):
+    """Geen analytics-rig: per aangemaakt project één regel. Genoeg om over een week op een GETAL
+    te beslissen, te weinig om zelf onderhoud te worden."""
+    from nooch_village.checklist_vorm import acceptatie, noteer_acceptatie
+    d = str(tmp_path)
+    assert acceptatie(d) == {"projecten": 0, "aangeboden": 0, "overgenomen": 0, "eigen": 0,
+                             "aandeel": None}
+    noteer_acceptatie(d, aangeboden=4, overgenomen=1, eigen=2, pid="p1")
+    noteer_acceptatie(d, aangeboden=3, overgenomen=3, eigen=0, pid="p2")
+    uit = acceptatie(d)
+    assert uit["projecten"] == 2 and uit["aangeboden"] == 7 and uit["overgenomen"] == 4
+    assert uit["aandeel"] == round(4 / 7, 3)
+
+
+def test_nooit_aangeboden_is_geen_nul_procent(tmp_path):
+    """`no_data ≠ nul`: een deling die 0% suggereert waar de vraag niet gesteld is, leest als
+    'genegeerd' terwijl er niets te negeren viel."""
+    from nooch_village.checklist_vorm import acceptatie, noteer_acceptatie
+    d = str(tmp_path)
+    noteer_acceptatie(d, aangeboden=0, overgenomen=0, eigen=3, pid="p")
+    assert acceptatie(d)["aandeel"] is None
+
+
+def test_de_eigen_stappen_zijn_de_eerlijke_noemer(tmp_path):
+    """Nul overgenomen bij nul eigen stappen betekent 'geen checklist gemaakt', niet 'suggesties
+    genegeerd'. Zonder dat getal is het cijfer niet te lezen."""
+    from nooch_village.checklist_vorm import acceptatie, noteer_acceptatie
+    d = str(tmp_path)
+    noteer_acceptatie(d, aangeboden=5, overgenomen=0, eigen=0, pid="p")
+    assert acceptatie(d)["eigen"] == 0 and acceptatie(d)["overgenomen"] == 0
+
+
+def test_meten_blokkeert_nooit_een_aanmaak(tmp_path):
+    from nooch_village.checklist_vorm import noteer_acceptatie
+    assert noteer_acceptatie("/bestaat/niet/echt", aangeboden=1, overgenomen=1) is False
+
+
+def test_de_wizard_telt_aangeboden_overgenomen_en_eigen(tmp_path):
+    """De drie tellers zitten in de JS én reizen mee naar /wizard/create."""
+    from nooch_village.views.wizard import render_wizard
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(str(tmp_path))
+    h = render_wizard(cockpit2._Stores(str(tmp_path)), "t")
+    assert "S.sugAan=(S.sugAan||0)+S.suggesties.length" in h     # getoond
+    assert "S.sugOver=(S.sugOver||0)+1" in h                      # aangetikt
+    assert "S.sugEigen=(S.sugEigen||0)+1" in h                    # zelf getypt
+    assert "sug_aan:String(S.sugAan||0)" in h                     # en meegestuurd
+
+
+def test_de_aanmaak_schrijft_het_spoor(tmp_path):
+    from nooch_village import cockpit2
+    from nooch_village.checklist_vorm import acceptatie
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    rol = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "wizard_noop", {}, username="guest")   # store-init
+    st = cockpit2._Stores(dd)
+    assert st.records.get(rol) is not None
+    from nooch_village.checklist_vorm import noteer_acceptatie
+    noteer_acceptatie(dd, aangeboden=2, overgenomen=1, eigen=1, pid="x")
+    assert acceptatie(dd)["projecten"] == 1

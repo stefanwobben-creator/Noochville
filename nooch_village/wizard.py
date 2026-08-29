@@ -210,8 +210,10 @@ def roles_for(items: list, *, records, ai, skills_of, reason_fn=None,
 
       1. DETERMINISTISCH (gratis): draagt een stap al een skill, dan zoeken we op wélke rol die
          skill heeft. Een opzoeking, geen gok.
-      2. ALLEEN OP LEEG: één begrensd modelrondje over de roster (purpose + accountabilities +
-         skills). Niet bij elke keer — alleen als de gratis weg niets vond.
+      2. DE GATEN: één GEBATCHTE modelcall over de stappen die trede 1 niet dekte, met de roster
+         erbij (purpose + accountabilities + skills). Het model vult aan, het overschrijft niets.
+         Eén call per keer dat iemand de sectie opent — een mens die een wizard opent is zeldzaam
+         en bewust, anders dan een autonome lus die elke puls vuurt.
 
     WAAROM DIE TWEEDE TREDE ER MOEST KOMEN, gemeten op prod 29 aug 2026. Op het doel "technische
     specs van alle materialen" zei dit scherm "geen rol heeft een passende skill", terwijl Scientist,
@@ -235,9 +237,38 @@ def roles_for(items: list, *, records, ai, skills_of, reason_fn=None,
         return []
     rollen = _wakkere_rollen(records, ai, skills_of)
     gevonden = _match_deterministisch(stappen, rollen)
-    if gevonden:
+
+    # HET MODEL VULT DE GATEN, het overschrijft niets. Eerst was dit alles-of-niets: één stap die
+    # toevallig een skill dekte hield het modelrondje tegen, en dan bleven de andere stappen zonder
+    # rol staan terwijl er wél een voor de hand liggende was. Gemeten: van vier stappen dekte er
+    # één een Copywriter-skill, en Scientist en Library kwamen daardoor niet in beeld.
+    #
+    # Eén GEBATCHTE call over de resterende stappen, niet één per stap: de kandidatenlijst is toch
+    # dezelfde, en een mens die een wizard opent is zeldzaam en bewust — heel anders dan een
+    # autonome lus die elke puls vuurt.
+    gedekt = {t for r in gevonden for t in r["stappen"]}
+    open_stappen = [it for it in stappen if (it.get("tekst") or "").strip() not in gedekt]
+    if not open_stappen:
         return gevonden
-    return _match_model(stappen, rollen, reason_fn=reason_fn, ladder=ladder)
+    erbij = _match_model(open_stappen, rollen, reason_fn=reason_fn, ladder=ladder)
+    return _voeg_samen(gevonden, erbij)
+
+
+def _voeg_samen(a: list[dict], b: list[dict]) -> list[dict]:
+    """Twee uitkomstlijsten op rol samenvoegen, zonder een stap dubbel te tonen.
+
+    De GROND van de eerste treffer blijft staan: een skill-match is harder dan een purpose-match,
+    en het label hoort de sterkste grond te noemen die er voor die rol is."""
+    per_rol: dict[str, dict] = {}
+    for rij in [*a, *b]:
+        bestaand = per_rol.get(rij["rol"])
+        if bestaand is None:
+            per_rol[rij["rol"]] = {**rij, "stappen": list(rij["stappen"])}
+            continue
+        for t in rij["stappen"]:
+            if t not in bestaand["stappen"]:
+                bestaand["stappen"].append(t)
+    return list(per_rol.values())
 
 
 def roles_for_tekst(tekst: str, *, records, ai, skills_of, reason_fn=None,

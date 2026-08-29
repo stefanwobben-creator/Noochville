@@ -109,3 +109,70 @@ def zeef(items: list, *, data_dir: str = "") -> tuple[list, list]:
         log.info("checklist-vorm: %d van de %d stappen geweigerd (%s)", len(weg),
                  len(goed) + len(weg), "; ".join(r for w in weg for r in w["redenen"])[:200])
     return goed, weg
+
+
+# ── Werkt de suggestie eigenlijk? Eén regel per project, meer niet ───────────
+#
+# DOM MET OPZET. Geen analytics-rig, geen sessies, geen trechter: per aangemaakt project één regel
+# met hoeveel suggesties er lagen en hoeveel er zijn overgenomen. Genoeg om over een week
+# kill-of-houden op een GETAL te beslissen in plaats van op een gevoel, en te weinig om zelf een
+# onderhoudslast te worden.
+#
+# Append-only jsonl naast `llm_usage.jsonl` en `groeidagboek.jsonl` — dezelfde meet-spoor-familie.
+# Bewust GEEN store op `_Stores`: dit is een logboek, geen bron van waarheid, en de conventie-poort
+# telt stores om precies die reden.
+
+SPOOR = "checklist_suggesties.jsonl"
+
+
+def noteer_acceptatie(data_dir: str, *, aangeboden: int, overgenomen: int, eigen: int = 0,
+                      pid: str = "", tijd=None) -> bool:
+    """Leg vast wat er met de suggesties gebeurde. Fail-soft: meten mag nooit iets blokkeren.
+
+    `aangeboden` = hoeveel suggesties de wizard toonde, `overgenomen` = hoeveel de mens aantikte,
+    `eigen` = hoeveel stappen hij zelf typte. Die derde is de eerlijke noemer: nul overgenomen bij
+    nul eigen stappen betekent 'geen checklist gemaakt', niet 'suggesties genegeerd'."""
+    import json
+    import os
+    import time
+    if not data_dir or aangeboden < 0 or overgenomen < 0:
+        return False
+    rij = {"ts": (tijd if tijd is not None else time.time()),
+           "pid": str(pid or "")[:40], "aangeboden": int(aangeboden),
+           "overgenomen": int(overgenomen), "eigen": int(eigen)}
+    try:
+        with open(os.path.join(data_dir, SPOOR), "a", encoding="utf-8") as f:
+            f.write(json.dumps(rij, ensure_ascii=False) + "\n")
+        return True
+    except Exception as e:                               # noqa: BLE001 — meten blokkeert nooit
+        log.warning("acceptatie-spoor niet weggeschreven: %s", e)
+        return False
+
+
+def acceptatie(data_dir: str) -> dict:
+    """De telling terug: {projecten, aangeboden, overgenomen, eigen, aandeel}.
+
+    `aandeel` is overgenomen/aangeboden, en None als er nooit iets is aangeboden — geen deling die
+    0% suggereert waar de vraag niet gesteld is. Zelfde regel als `no_data ≠ nul`."""
+    import json
+    import os
+    pad = os.path.join(data_dir or "", SPOOR)
+    uit = {"projecten": 0, "aangeboden": 0, "overgenomen": 0, "eigen": 0, "aandeel": None}
+    if not os.path.exists(pad):
+        return uit
+    try:
+        with open(pad, encoding="utf-8") as f:
+            for regel in f:
+                try:
+                    r = json.loads(regel)
+                except ValueError:
+                    continue
+                uit["projecten"] += 1
+                for k in ("aangeboden", "overgenomen", "eigen"):
+                    uit[k] += int(r.get(k) or 0)
+    except Exception as e:                               # noqa: BLE001
+        log.warning("acceptatie-spoor onleesbaar: %s", e)
+        return uit
+    if uit["aangeboden"]:
+        uit["aandeel"] = round(uit["overgenomen"] / uit["aangeboden"], 3)
+    return uit
