@@ -11,6 +11,8 @@ buiten.
 """
 from __future__ import annotations
 
+import hashlib
+
 import json
 import re
 
@@ -34,17 +36,40 @@ def _extract_json(text):
         return None
 
 
-def match_project_to_role(project_text: str, roster: list, *, reason_fn=None, name: str = "noochie"):
+def invoer_vinger(project_text: str, roster: list) -> str:
+    """Vingerafdruk van ALLES wat het antwoord bepaalt: de projecttekst plus de kandidaat-rollen met
+    hun skills en accountabilities.
+
+    Verandert er niets aan de invoer, dan verandert het antwoord ook niet — en dan hoeft het model
+    niet gebeld te worden. Rollen gaan mee omdat een nieuwe skill of accountability een rol alsnog
+    tot match kan maken; zonder dat zou een governance-wijziging pas landen als iemand toevallig het
+    project aanraakt."""
+    kern = [(project_text or "").strip()]
+    for r in sorted(roster or [], key=lambda x: str(x.get("role_id"))):
+        kern.append(f"{r.get('role_id')}|{sorted(r.get('skills') or [])}|"
+                    f"{sorted(r.get('accountabilities') or [])}")
+    return hashlib.sha1("\n".join(kern).encode("utf-8")).hexdigest()[:16]
+
+
+def match_project_to_role(project_text: str, roster: list, *, reason_fn=None, name: str = "noochie",
+                          met_status: bool = False):
     """Bepaal of één rol uit `roster` dit project binnen haar scope heeft ÉN een skill om te handelen.
 
     `roster` = [{"role_id", "name", "accountabilities": [...], "skills": [...]}]. Alleen rollen MÉT skills
     tellen mee (zonder skill kan een rol niets concreets, dus geen nudge). `reason_fn(prompt)->str|None` is
     injecteerbaar (test); standaard via llm.reason met json_mode. Returnt {role_id, name, skill} of None.
-    Machine-check: de teruggegeven rol moet bestaan en de skill moet echt in háár DNA zitten."""
+    Machine-check: de teruggegeven rol moet bestaan en de skill moet echt in háár DNA zitten.
+
+    `met_status=True` geeft `(match, beantwoord)` terug. `beantwoord` zegt of het MODEL heeft
+    gesproken — niet of er een match was. Dat onderscheid is er voor de vloer in de nudge-lus: een
+    'geen match' mag onthouden worden, een 'geen model' nooit. Zonder dit zou één quota-storing het
+    oordeel 'geen match' vastzetten tot iemand het project aanraakt, en dat is precies de stille
+    degradatie die we bij het embedding-model al tegenkwamen."""
     project_text = (project_text or "").strip()
     roster = [r for r in (roster or []) if r.get("skills")]
+    antwoord = lambda m, ok: ((m, ok) if met_status else m)      # noqa: E731 — één vorm, twee callers
     if not project_text or not roster:
-        return None
+        return antwoord(None, False)
     try:
         lines = []
         for r in roster:
@@ -68,17 +93,19 @@ def match_project_to_role(project_text: str, roster: list, *, reason_fn=None, na
             from nooch_village import llm
             raw = llm.reason(prompt, json_mode=True, call_site="scope_nudge_match")
         if not raw:
-            return None
+            return antwoord(None, False)      # het model zweeg: NIETS onthouden
         data = _extract_json(raw)
         if not isinstance(data, dict):
-            return None
+            return antwoord(None, False)      # onbruikbaar antwoord telt niet als oordeel
         rid = data.get("role_id")
         sk = data.get("skill")
         match = next((r for r in roster if r["role_id"] == rid), None)
         if not match or not sk or sk not in (match.get("skills") or []):
-            return None                       # machine-check: rol bestaat + skill hoort echt bij die rol
-        return {"role_id": rid, "name": match.get("name", ""), "skill": sk}
+            # Machine-check: rol bestaat + skill hoort echt bij die rol. Het model SPRAK wel, dus dit
+            # is een geldig 'geen match' — dat mag de vloer onthouden.
+            return antwoord(None, True)
+        return antwoord({"role_id": rid, "name": match.get("name", ""), "skill": sk}, True)
     except Exception as e:
         refuse("SCOPE_NUDGE_EXC", "match_project_to_role wierp een exceptie (fail-closed)",
                exc=type(e).__name__, name=name)
-        return None
+        return antwoord(None, False)

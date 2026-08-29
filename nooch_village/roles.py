@@ -2151,11 +2151,11 @@ class Noochie(Inhabitant):
         if projects is None or records is None:
             return
         try:
-            from nooch_village.scope_nudge import match_project_to_role
+            from nooch_village.scope_nudge import invoer_vinger, match_project_to_role
             roster = self._scope_roster(records)
             if not roster:
                 return
-            done = 0
+            done, gevraagd, overgeslagen = 0, 0, 0
             for p in projects.active():
                 if done >= self._MAX_NUDGES_PER_PULSE:
                     break
@@ -2163,8 +2163,34 @@ class Noochie(Inhabitant):
                 text = self._project_text(p)
                 if not pid or not text:
                     continue
-                cand = [r for r in roster if r["role_id"] != owner]     # niet de eigenaar nudgen
-                m = match_project_to_role(text, cand, name=self.id)
+                # POORT 1 — een rol die dit project al genudged kreeg, kan er niets meer opleveren.
+                # Deze check stond ACHTER de call; hier haalt hij kandidaten weg vóór de call, en
+                # blijft er niets over, dan hoeft het model niet gebeld te worden.
+                al = set(p.get("scope_nudges") or [])
+                cand = [r for r in roster                                # niet de eigenaar nudgen
+                        if r["role_id"] != owner and r["role_id"] not in al]
+                if not cand:
+                    overgeslagen += 1
+                    continue
+                # POORT 2 — de vloer. Dezelfde tekst en dezelfde kandidaten geven hetzelfde antwoord;
+                # gemeten verandert er per dag 2% van de actieve projecten (7 van de 332). Dit is de
+                # vorm van `kennis_dedup`: deterministisch waar het kan, het model voor de rest.
+                vinger = invoer_vinger(text, cand)
+                if vinger and projects.scope_nudge_checked(pid) == vinger:
+                    overgeslagen += 1
+                    continue
+                m, beantwoord = match_project_to_role(text, cand, name=self.id, met_status=True)
+                gevraagd += 1
+                # FAIL-OPEN: alleen onthouden als het MODEL sprak. Een 'geen match' is een oordeel,
+                # 'geen model' is een storing — die vastleggen zou de nudge voor dit project stilzetten
+                # tot iemand het aanraakt.
+                if beantwoord:
+                    projects.mark_scope_nudge_checked(pid, vinger)
+                # De poort hierboven is een KOSTENFILTER (bespaart de call); deze is de GARANTIE
+                # (geen tweede nudge). Ze zeggen hetzelfde en dat is hier de bedoeling: de filter
+                # leunt op de machine-check in `match_project_to_role`, en die staat in een andere
+                # module. Zakt die ooit weg, dan vangt deze regel het — een dubbele nudge is voor de
+                # ontvanger niet te onderscheiden van een nieuwe vraag.
                 if not m or projects.already_scope_nudged(pid, m["role_id"]):
                     continue
                 naam = m["name"] or m["role_id"]
@@ -2175,8 +2201,9 @@ class Noochie(Inhabitant):
                 projects.mark_scope_nudge(pid, m["role_id"])
                 self._notify_role(m["role_id"], pid)
                 done += 1
-            if done:
-                self.log.info("🔔 Noochie nudgde %d scope-match(es) proactief", done)
+            if done or gevraagd or overgeslagen:
+                self.log.info("🔔 Noochie: %d nudge(s) · %d model-vraag/vragen · %d overgeslagen "
+                              "door de vloer", done, gevraagd, overgeslagen)
         except Exception as e:
             self.log.debug("scope-nudge overgeslagen (fail-closed): %s", e)
 
