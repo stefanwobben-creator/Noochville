@@ -3443,51 +3443,55 @@ def _act_notif_outcome(c):
         prov = f"↳ uit inbox-spanning {nid}"
         label = OTYPE_LABEL.get(otype, otype)
         made = ""
-        if otype == "ping":
-            # Ping = een licht pingetje: de inhoud landt als mention in de inbox van de gekozen rol. Geen
-            # note, geen overleg. (Iedere ingelogde mag pingen — het is puur een bericht, geen structuur.)
-            ping_role = g("ping_role")
-            prec = st.records.get(ping_role) if ping_role else None
-            if prec is None:
-                return nxt, "✗ pick a role to ping"
-            st.notif.add("role", ping_role, src_pid, src_eid, by=(by_name or "inbox"), snippet=content)
-            made = f"{label} naar {_name(prec)}: {content[:50]}"
-        elif otype == "project":
-            owner = g("owner")
-            if not owner:
-                return nxt, "✗ pick a role owner for the project"
-            _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
-                     if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
-            if _deny:
-                return nxt, _deny
-            orec = st.records.get(owner)
-            if orec is not None and org.is_circle(orec):
-                return nxt, "✗ a circle cannot contain a project — pick a role"
-            _outcome_project(st, owner, content, provenance=prov, actor_id=aid)
-            made = f"{label}: {content[:60]}"
-        elif otype == "action":
+        if otype == "action":
+            # FLOW 1 — ACTIE. Twee landingsplekken, en het zijn er allebei bestaande:
+            #
+            #   · een LOPEND PROJECT gekozen → de actie wordt een stap in de checklist die dat
+            #     project al heeft. De rol van dat project bezit die lijst, dus de `@`-keuze doet
+            #     hier niets meer; dat staat ook zo op het formulier.
+            #   · anders → `route_werk`, DEZELFDE routing als het werkoverleg en de wizard: een
+            #     mens-vervulde rol krijgt het in zijn inbox, een AI-vervulde rol krijgt een project
+            #     (die leest de NotifStore nooit). Geen doel gekozen = jijzelf.
+            #
+            # Geen eigen actie- of projectvorm in de inbox: dat was precies de tweede mechaniek die
+            # #364 en #375 weghaalden, en hij mag hier niet terugkomen.
             pid_link = g("pid_link")
-            tgt = pj.get(pid_link)
-            if tgt is None:
-                return nxt, "✗ target project not found"
-            _deny = _role_gate(tgt.get("owner") or "", username, st)
-            if _deny:
-                return nxt, _deny
-            _outcome_action(st, pid_link, content)
-            _prov_feed(st, pid_link, prov, aid)
-            pj.reopen(pid_link)
-            made = f"{label}: {content[:60]}"
-        elif otype == "note":
-            note_role = g("note_role")
-            if not note_role:
-                return nxt, "✗ pick a role for the note"
-            _deny = _artefact_gate(note_role, username, st)
-            if _deny:
-                return nxt, _deny
-            if len(content) > 4000:
-                return nxt, f"✗ note te lang ({len(content)}/4000) — kort in"
-            _outcome_note(st, note_role, content, actor_id=aid, change_note=prov)
-            made = f"{label} bij {_name(st.records.get(note_role))}"
+            if pid_link:
+                tgt = pj.get(pid_link)
+                if tgt is None:
+                    return nxt, "✗ target project not found"
+                # AUTHZ: rolvervuller of Circle Lead — een stap toevoegen raakt het bord van die rol
+                _deny = _role_gate(tgt.get("owner") or "", username, st)
+                if _deny:
+                    return nxt, _deny
+                _outcome_action(st, pid_link, content)
+                _prov_feed(st, pid_link, prov, aid)
+                pj.reopen(pid_link)
+                made = f"{label} in {str(tgt.get('scope') or pid_link)[:50]}"
+            else:
+                # `doel` is "role:<id>" of "person:<id>" uit de `@`-keuze; leeg = voor jezelf.
+                soort, _, doel_id = (g("doel") or "").partition(":")
+                # EXACT ÉÉN doel. `route_werk` laat een persoon van een rol winnen, dus een rol
+                # kiezen én stilzwijgend jezelf als persoon meesturen laat het werk bij JOU landen
+                # terwijl het scherm de ander noemt. Een test ving dat; het is precies de soort
+                # stille misrouting die #364 wegnam.
+                if soort == "role" and doel_id:
+                    rol, persoon = doel_id, ""
+                elif soort == "person" and doel_id:
+                    rol, persoon = "", doel_id
+                else:
+                    rol, persoon = "", (aid or "")
+                if rol:
+                    rrec = st.records.get(rol)
+                    if rrec is None or org.is_circle(rrec) or getattr(rrec, "slaapt", False) \
+                            or getattr(rrec, "archived", False):
+                        return nxt, "✗ that role cannot take work right now"
+                elif not persoon:
+                    return nxt, "✗ no one to give this to — log in or pick someone with @"
+                _s, ref = route_werk(st, tekst=content, rol=rol, persoon=persoon,
+                                     herkomst=f"↳ uit een spanning in de inbox",
+                                     door=aid, opdrachtgever=aid, bron_project=src_pid)
+                made = f"{label} {ref}"
         elif otype == "roloverleg":
             if src_p is None:
                 return nxt, "✗ no source circle for a governance-meeting item"
@@ -5590,11 +5594,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 # `ruw`/`uitkomst` zijn de voorvulling uit de plek waar je vandaan komt (het bord
                 # of een inbox-spanning). Wat de mens al intypte hoort hij niet over te tikken.
+                # `mine=1` komt uit de inbox: daar maak je alleen een project voor een rol die
+                # je ZELF vervult. Geen aparte wizard — dezelfde, met een smallere rolkiezer.
+                _eigen = None
+                if (qs.get("mine") or [""])[0] == "1":
+                    _eigen = [tid for ty, tid in _person_targets(st, username) if ty == "role"]
                 self._send(render_wizard(st, effective_csrf,
                                          role=(qs.get("role") or [""])[0], fragment=fr,
                                          ruw=(qs.get("ruw") or [""])[0],
                                          uitkomst=(qs.get("uitkomst") or [""])[0],
-                                         trekker=(qs.get("trekker") or [""])[0]),
+                                         trekker=(qs.get("trekker") or [""])[0],
+                                         eigen=_eigen),
                            chrome=False)
                 return
 

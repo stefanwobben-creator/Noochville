@@ -26,7 +26,7 @@ def ii_cirkel(role: str) -> str:
     return r[len(II_PREFIX):] if r.startswith(II_PREFIX) else ""
 
 
-def _role_options(st, circle: str = "") -> str:
+def _role_options(st, circle: str = "", eigen: list | None = None) -> str:
     """Alleen rollen die je vandaag werk kunt geven: WAKKER en niet gearchiveerd.
 
     Een slapende rol staat stil (geen thread, geen oordeel, geen nieuw werk) — hem in deze lijst
@@ -39,6 +39,12 @@ def _role_options(st, circle: str = "") -> str:
     kandidaten = [r for r in sorted(alle, key=lambda x: _name(x).lower())
                   if not getattr(r, "archived", False) and not getattr(r, "slaapt", False)
                   and not org.is_circle(r)]
+    # EIGEN ROLLEN, als de aanroeper daarom vraagt (de inbox doet dat). Werk bij een ANDERE rol
+    # neerleggen is een verzoek, geen project dat je voor hem aanmaakt — een rol is baas over zijn
+    # eigen bord. Vanaf het projectbord blijft de volle lijst staan: daar kies je bewust een kolom.
+    if eigen is not None:
+        toegestaan = set(eigen)
+        kandidaten = [r for r in kandidaten if r.id in toegestaan]
     labels = _rol_labels(kandidaten, alle)            # Circle Lead ≠ Circle Lead: welke cirkel?
     opts = [f"<option value='{_e(r.id)}'>{_e(labels.get(r.id) or _name(r))}</option>"
             for r in kandidaten]
@@ -96,7 +102,8 @@ def _js(tekst: str) -> str:
 
 
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
-                  ruw: str = "", uitkomst: str = "", trekker: str = "") -> str:
+                  ruw: str = "", uitkomst: str = "", trekker: str = "",
+                  eigen: list | None = None) -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
     gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
@@ -111,7 +118,7 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
     hangen die het stylesheet nog niet had). Dezelfde URL = één download, geen dubbele kost."""
-    role_opts = _role_options(st, circle=ii_cirkel(role))
+    role_opts = _role_options(st, circle=ii_cirkel(role), eigen=eigen)
     trek_opts = _trekker_options(st)
     # EEN `ii:<cirkel>`-EIGENAAR IS EEN GELDIGE VOORSELECTIE. Hij staat niet in de records (het is
     # geen rol), dus de check hieronder wees hem af en je viel terug op "Pick a role…" — precies de

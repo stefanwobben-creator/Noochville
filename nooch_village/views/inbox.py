@@ -16,7 +16,7 @@ import json
 
 from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
-from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
+from nooch_village.inbox_wizard import FLOWS, GOVERNANCE, OTYPE_LABEL
 
 _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
            "verwerkt": ("✓ handled", "chip outline")}
@@ -413,6 +413,31 @@ def _spanning_pane(st, n: dict) -> str:
             f"{volledig}{record}</div>")
 
 
+def _at_doelen(st) -> list:
+    """Wie kun je met `@` kiezen: WAKKERE rollen en personen. Meer niet.
+
+    Slapende en gearchiveerde rollen staan er bewust niet bij — werk beloven aan een bureau waar
+    niemand zit is precies wat we bij de afslanking wilden voorkomen, en het is dezelfde regel als
+    in de wizard-rolkiezer en de uitkomst-rollijst van het werkoverleg.
+
+    Cirkels ook niet: een cirkel heeft geen handen (harde regel 7), die delegeert."""
+    from nooch_village import org
+    alle = st.records.all()
+    rollen = [r for r in alle
+              if not org.is_circle(r) and not getattr(r, "archived", False)
+              and not getattr(r, "slaapt", False)]
+    labels = _rol_labels(rollen, alle)                 # Circle Lead ≠ Circle Lead: welke cirkel?
+    uit = [{"id": r.id, "kind": "role", "label": labels.get(r.id) or _name(r)} for r in rollen]
+    try:                                               # personen zijn een aanvulling, geen vereiste
+        for p in st.people.all():
+            naam = (getattr(p, "name", "") or "").strip()
+            if naam:
+                uit.append({"id": p.id, "kind": "person", "label": naam})
+    except Exception:                                  # noqa: BLE001 — zonder personen kies je een rol
+        pass
+    return sorted(uit, key=lambda d: d["label"].lower())
+
+
 _WIZ_OPEN = (
     "var f=this.closest('form');"
     "var q=new URLSearchParams({role:(f.owner?f.owner.value:''),"
@@ -422,46 +447,90 @@ _WIZ_OPEN = (
 )
 
 
+def _actie_form(st, nid: str, csrf: str, prefill: str, pj_opts: str, nxt: str) -> str:
+    """Flow 1 — Actie. Tekst, wie het doet (default jijzelf, `@` voor een ander), optioneel een
+    lopend project.
+
+    GEEN EIGEN ROUTING. Dit formulier post naar `notif_outcome`, en die roept `route_werk` aan —
+    dezelfde regel als het werkoverleg en de wizard: een mens-vervulde rol krijgt het in zijn inbox,
+    een AI-vervulde rol krijgt een project, want die leest de NotifStore nooit. Een tweede kopie van
+    die regel hier zou na één wijziging uit de pas lopen en werk stil op de verkeerde plek laten
+    landen — precies wat #364 wegnam."""
+    doelen = _at_doelen(st)
+    lijst = "".join(f"<option value='@{_e(d['label'])}'></option>" for d in doelen)
+    kaart = _json_min([{"l": d["label"], "v": f"{d['kind']}:{d['id']}"} for d in doelen])
+    # `.qadd-form` (kolom) en niet `.wo-oc` (rij): `.wo-oc` is `display:flex; align-items:center`
+    # en bedoeld voor de compacte twee-veld-vorm. Met drie veldgroepen zet die de labels NAAST de
+    # velden — op het scherm gezien, niet in een test. Hergebruik het bestaande vocabulaire uit
+    # docs/UX_PATTERNS.md; geen nieuwe klasse.
+    return (f"<form method='post' action='/action' class='qadd-form' "
+            f"onsubmit='return ibxAtResolve(this)'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='nid' value='{_e(nid)}'>"
+            f"<input type='hidden' name='otype' value='action'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+            f"<input type='hidden' name='doel' value=''>"
+            f"<script type='application/json' data-at-kaart>{kaart}</script>"
+            + _field("What needs to happen?", "content", kind="textarea", value=prefill,
+                     fid=f"act-ct-{nid}")
+            + f"<label class='att-lbl' for='act-wie-{_e(nid)}'>Who does it?</label>"
+              f"<input id='act-wie-{_e(nid)}' data-at-veld list='at-{_e(nid)}' "
+              f"placeholder='you — type @ for someone else' autocomplete='off'>"
+              f"<datalist id='at-{_e(nid)}'>{lijst}</datalist>"
+            + f"<label class='att-lbl' for='act-pj-{_e(nid)}'>Part of a running project? "
+              f"(optional)</label>"
+              f"<select id='act-pj-{_e(nid)}' name='pid_link'>"
+              f"<option value=''>no — just an action</option>{pj_opts}</select>"
+              f"<p class='muted'>Linked to a project, it becomes a step in that project's "
+              f"checklist — the project's role owns that list.</p>"
+            + f"<button class='btn ok sm' name='action' value='notif_outcome'>Add action</button>"
+            f"</form>")
+
+
+def _json_min(rows: list) -> str:
+    """JSON voor in een <script>-blok. `<` wordt geëscaped zodat een label nooit het blok kan
+    sluiten — dat is de enige injectie-route die een JSON-script-tag heeft."""
+    import json
+    return json.dumps(rows, ensure_ascii=False).replace("<", "\u003c")
+
+
 def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
                   nxt: str, uid: str) -> str:
-    """Het compacte formulier achter een uitkomst-knop. Alleen relevante velden, met gekoppelde labels
-    (for=/id via _field of expliciet). Post naar notif_outcome, blijft daarna op de verwerk-pagina zodat
-    je uitkomsten kunt stapelen. `uid` maakt de veld-ids uniek (dezelfde uitkomst kan meermaals op de
-    pagina staan)."""
+    """Wat er achter een flow-kop uitklapt.
+
+    Nog twee gevallen, en dat is de hele opruiming: PROJECT is een DEUR naar de wizard, en
+    ROLOVERLEG staat ongewijzigd tot flow 3 apart ontworpen is. De oude takken (`ping`, `action`,
+    `note`) zijn weg — `action` heeft nu zijn eigen formulier met `@`-keuze (`_actie_form`), en
+    `ping`/`note` waren de info-intentie die uit de inbox verdwijnt.
+
+    EEN INGANG IS EEN DEUR, GEEN FORMULIER (docs/CONVENTIES.md, geleerd bij #375). Hier stond een
+    tekstveld plus een rolkiezer plus een knop — dat ziet eruit als een tweede plek waar je een
+    project maakt, en de rolkiezer bood bovendien de rollen van ANDEREN aan. Werk bij een andere rol
+    neerleggen is een verzoek, en een verzoek is een actie met `@`; een rol is baas over zijn eigen
+    bord. Dus: één link, met de spanningstekst als zaad en de wizard gescoped op je eigen rollen."""
+    if otype == "project":
+        # `mine=1` scopet de rolkiezer van de wizard op de rollen die JIJ vervult, plus Individuele
+        # actie. `target=_top` omdat de verwerk-pagina als iframe in de inbox-lade draait: zonder
+        # dat opent de wizard in een strook van 460 pixels.
+        href = "/project/nieuw?" + _urlencode({"ruw": prefill, "mine": "1"})
+        return (f"<a class='btn ok sm' href='{_e(href)}' target='_top'>"
+                f"Open the project wizard</a>")
+    # roloverleg — ongewijzigd: gebruikt de cirkel van de bron.
     hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
            f"<input type='hidden' name='nid' value='{_e(nid)}'>"
            f"<input type='hidden' name='otype' value='{_e(otype)}'>"
            f"<input type='hidden' name='next' value='{_e(nxt)}'>")
-    if otype == "ping":
-        sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>To which role?</label>"
-               f"<select id='{sid}' name='ping_role'>{role_opts}</select>")
-    elif otype == "project":
-        sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>On which role?</label>"
-               f"<select id='{sid}' name='owner'>{role_opts}</select>")
-    elif otype == "action":
-        sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>To which project?</label>"
-               f"<select id='{sid}' name='pid_link'>{pj_opts}</select>")
-    elif otype == "note":
-        sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>Note on which role?</label>"
-               f"<select id='{sid}' name='note_role'>{role_opts}</select>")
-    else:  # roloverleg — gebruikt de cirkel van de bron
-        tgt = "<span class='muted'>Becomes a proposal on the governance meeting agenda (human route).</span>"
+    tgt = ("<span class='muted'>Becomes a proposal on the governance meeting agenda "
+           "(human route).</span>")
     inhoud = _field("Content (editable)", "content", kind="textarea", value=prefill, fid=f"ct-{uid}")
-    # EEN PROJECT MAAK JE IN DE WIZARD, ook vanuit een spanning. Dit formulier maakte er zelf een
-    # (content + rol) en was daarmee de derde manier om hetzelfde te doen. De velden blijven —
-    # de spanningstekst en de gekozen rol reizen mee als zaad — maar de knop opent de wizard.
-    # Zonder javascript navigeert hij gewoon; de wizard is ook een volle pagina.
-    if otype == "project":
-        knop = (f"<button class='btn sm' type='button' onclick=\"{_WIZ_OPEN}\">"
-                f"Open the project wizard</button>")
-    else:
-        knop = "<button class='btn sm' name='action' value='notif_outcome'>Record</button>"
+    knop = "<button class='btn sm' name='action' value='notif_outcome'>Record</button>"
     return (f"<form method='post' action='/action' class='wo-oc'>{hid}"
             f"{inhoud}{tgt}{knop}</form>")
+
+
+def _urlencode(d: dict) -> str:
+    from urllib.parse import urlencode
+    return urlencode({k: v for k, v in d.items() if v})
 
 
 # ── De hoofdactie, één keer geschreven ───────────────────────────────────────
@@ -547,45 +616,29 @@ def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox", n: dict | None = None)
             f"{_e(_woorden(n)['klaar'])}</button></form>")
 
 
-def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
-    """Rechts: Wat heb je nodig? Per intentie een accordeon; per uitkomst een vraag + knop die het
-    compacte formulier uitklapt. 'Niks nodig' sluit het item direct (FYI-klep)."""
+def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
+    """Rechts: wat doe je met deze spanning?
+
+    Drie vormen, en welke je krijgt hangt van het TYPE af — een verzoek en een al afgesproken actie
+    hebben hun eigen, kortere handeling. Alleen een gewone spanning krijgt de twee flows.
+    'Klaar' sluit het item ook zonder uitkomst (FYI-klep)."""
     from nooch_village import zelf_verwerking as zv
 
     nid = n.get("id", "")
     prefill = n.get("snippet") or ""
     nxt = f"/inbox/verwerk?nid={nid}"
-    groups = []
-    for intent in INTENTS:
-        opts = []
-        for op in intent["options"]:
-            q, otype, label, ready = op["q"], op["otype"], op["label"], op.get("ready", True)
-            uid = f"{intent['key']}-{otype}"
-            if not ready:
-                opts.append(f"<div class='wo-ocd rdr-dim'><span class='muted'>{_e(q)}</span> → "
-                            f"<strong>{_e(label)}</strong> <em>(coming in step 2)</em></div>")
-            else:
-                form = _outcome_form(otype, nid, csrf, prefill, role_opts, pj_opts, nxt, uid)
-                opts.append(f"<details class='wo-ocd box-details'><summary>{_e(q)} → "
-                            f"<strong>{_e(label)}</strong></summary>{form}</details>")
-        groups.append(f"<details class='box-details'><summary><strong>{_e(intent['label'])}"
-                      f"</strong></summary>{''.join(opts)}</details>")
     klaar = _klaar_knop(nid, csrf, n=n)
-    # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja,
-    # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
-    # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
-    # bron-project is; de triage-intenties hieronder blijven voor al het andere.
+
     # DE DRIE KNOPPEN op een operationeel verzoek: accepteren, aanpassen, weigeren. Dat is het
     # "in één handeling" waar de kaart om vraagt — een uitleg zonder knop laat de lezer alsnog
     # zoeken waar hij ja moet zeggen.
-    besluit = ""
     if _type_van(n) == "naar_rol":
         return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
                 + _verzoek_knoppen(n, csrf) + "</div>")
 
-    # EEN ACTIE IS AL AFGESPROKEN. De volle intentie-wizard vraagt "wat heb je nodig?" en dat is
-    # hier de verkeerde vraag: het overleg heeft het besluit al genomen. Twee handelingen blijven
-    # over — afvinken, of erkennen dat het meer is dan één handeling en er een project van maken.
+    # EEN ACTIE IS AL AFGESPROKEN. De flows vragen "wat doe je hiermee?" en dat is hier de verkeerde
+    # vraag: het besluit is al genomen. Twee handelingen blijven over — afvinken, of erkennen dat
+    # het meer is dan één handeling en er een project van maken.
     if _type_van(n) == zv.ACTIE:
         pj = _outcome_form("project", nid, csrf, prefill, role_opts, pj_opts, nxt, "actie-project")
         return ("<div class='rdr-pane'><h3>Wat doe je met deze actie?</h3>"
@@ -593,13 +646,37 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
                 f"<details class='wo-ocd box-details'><summary>Meer dan één handeling? → "
                 f"<strong>maak er een project van</strong></summary>{pj}</details></div>")
 
+    # TWEE CONCRETE FLOWS, en het label draagt de uitleg. De oude boom vroeg je eerst je INTENTIE te
+    # classificeren ('info' / 'zelf' / 'iemand anders') voordat je iets mocht doen; over 560 items
+    # leverde dat 42 uitkomsten op, waarvan 26x 'niks nodig' en 0x een actie.
+    groups = []
+    for flow in FLOWS:
+        body = (_actie_form(st, nid, csrf, prefill, pj_opts, nxt) if flow["key"] == "action"
+                else _outcome_form("project", nid, csrf, prefill, role_opts, pj_opts, nxt,
+                                   f"flow-{flow['key']}"))
+        groups.append(
+            f"<details class='box-details'><summary><strong>{_e(flow['label'])}</strong> "
+            f"<span class='muted'>&mdash; {_e(flow['regel'])}</span></summary>"
+            f"<p class='muted'>{_e(flow['hulp'])}</p>{body}</details>")
+    # De governance-route staat er ongewijzigd bij tot flow 3 apart ontworpen is.
+    groups.append(
+        f"<details class='box-details'><summary><strong>{_e(GOVERNANCE['label'])}</strong> "
+        f"<span class='muted'>&mdash; {_e(GOVERNANCE['regel'])}</span></summary>"
+        + _outcome_form("roloverleg", nid, csrf, prefill, role_opts, pj_opts, nxt, "flow-gov")
+        + "</details>")
+
+    # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja, nee of
+    # een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed en de spanning
+    # sluit. Alleen met een bron-project; de flows hieronder blijven voor al het andere.
+    besluit = ""
     if n.get("project_id"):
         besluit = (f"<details class='box-details' open><summary><strong>Decide now</strong>"
                    f"</summary><p class='muted'>Your answer lands as a reply to the inhabitant, "
                    f"who can take it further — that's how the village learns to resolve tensions. "
                    f"The tension closes immediately.</p>"
                    + _besluit_knoppen(n, csrf) + "</details>")
-    return (f"<div class='rdr-pane'><h3>What do you need?</h3>{besluit}{''.join(groups)}{klaar}</div>")
+    return (f"<div class='rdr-pane'><h3>What do you do with this?</h3>"
+            f"{besluit}{''.join(groups)}{klaar}</div>")
 
 
 def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_opts: str = "") -> str:
@@ -609,9 +686,11 @@ def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_op
                  "<p class='muted'>This tension no longer exists.</p></div></div>")
         return _page("Process", inner)
     split = (f"<div class='rdr-split'>"
-             f"{_spanning_pane(st, n)}{_wizard_pane(n, csrf_token, role_opts, pj_opts)}</div>")
+             f"{_spanning_pane(st, n)}{_wizard_pane(st, n, csrf_token, role_opts, pj_opts)}</div>")
     main = (f"<div class='c2-main'><h1>{_e(_woorden(n)['kop'])}</h1>{split}</div>")
-    inner = (f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
+    # De @-resolver hoort HIER, niet in de chrome: deze pagina draait als iframe in de inbox-lade en
+    # krijgt de drawer-JS dus niet mee (chrome=False).
+    inner = (f"{_DS_LINK}<div class='c2-wrap'>{main}</div><script>{_AT_JS}</script>")
     return _page("Process", inner)
 
 
@@ -660,6 +739,28 @@ def _person_role_options(st, targets) -> str:
              for r in recs]
     return "".join(opts)
 
+
+# De `@`-resolver. Het zichtbare veld is een gewone tekst-input met een datalist (autocomplete op
+# elk toetsaanslag, zonder eigen dropdown-implementatie); bij het versturen vertaalt dit het GEKOZEN
+# LABEL naar `kind:id`. Staat er iets dat niet in de lijst staat, dan blijft `doel` leeg en is de
+# actie voor jezelf — FAIL-CLOSED: liever bij jezelf dan bij een geraden ander.
+_AT_JS = """
+function ibxAtResolve(f){
+  var veld=f.querySelector('[data-at-veld]'), kaart=f.querySelector('[data-at-kaart]');
+  var doel=f.querySelector("input[name='doel']");
+  if(!veld||!kaart||!doel)return true;
+  var t=(veld.value||'').trim().replace(/^@/,'').toLowerCase();
+  doel.value='';
+  if(!t)return true;
+  try{
+    var rows=JSON.parse(kaart.textContent||'[]');
+    for(var i=0;i<rows.length;i++){
+      if((rows[i].l||'').toLowerCase()===t){doel.value=rows[i].v;break;}
+    }
+  }catch(e){}
+  return true;
+}
+"""
 
 _IBX_JS = """
 var IBX_CSRF=__IBX_CSRF__;

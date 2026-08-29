@@ -106,10 +106,16 @@ def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
     inbox = _outcome_form("project", "nid", "t", "de spanningstekst", "<option>r</option>", "",
                           "/inbox", "u1")
     assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
-    assert "ruw:" in inbox and "role:" in inbox          # content als zaad, rol mee
-    # de andere uitkomsttypen blijven gewoon opnemen
-    ping = _outcome_form("ping", "nid", "t", "x", "<option>r</option>", "", "/inbox", "u2")
-    assert "notif_outcome" in ping and "/project/nieuw" not in ping
+    assert "ruw=de+spanningstekst" in inbox              # de spanningstekst als zaad
+    # GEEN ROL MEE, en dat is de beslissing van 29 aug 2026: uit de inbox maak je een project voor
+    # een rol die je ZELF vervult (`mine=1` scopet de wizard-kiezer). Werk bij een andere rol
+    # neerleggen is een verzoek, en een verzoek is een actie met `@` — een rol is baas over zijn
+    # eigen bord. Daarom ook geen tekstveld hier: een ingang is een deur, geen formulier.
+    assert "mine=1" in inbox and "role=" not in inbox
+    assert "<textarea" not in inbox and "<select" not in inbox
+    # de governance-route staat er ongewijzigd naast en neemt gewoon op
+    gov = _outcome_form("roloverleg", "nid", "t", "x", "<option>r</option>", "", "/inbox", "u2")
+    assert "notif_outcome" in gov and "/project/nieuw" not in gov
 
 
 def test_de_ai_is_een_bonus_geen_poort(tmp_path):

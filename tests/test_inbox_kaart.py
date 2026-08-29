@@ -174,7 +174,7 @@ def test_een_operationeel_verzoek_krijgt_drie_echte_knoppen():
     from nooch_village.views.inbox import _wizard_pane
     n = {"id": "o", "by": "compliance", "project_id": "p1", "snippet": "zet die zin op de pagina",
          "poort": {"deur": "gerouteerd", "klasse": ""}}
-    html = _wizard_pane(n, "csrf-token", "", "")
+    html = _wizard_pane(_St(), n, "csrf-token", "", "")
     assert "verzoek_besluit" in html
     for label in ("Accepteren", "Formulering aanpassen", "Weigeren"):
         assert label in html
@@ -186,7 +186,7 @@ def test_een_founder_besluit_houdt_zijn_eigen_wizard():
     from nooch_village.views.inbox import _wizard_pane
     n = {"id": "f", "by": "compliance", "project_id": "p1", "snippet": BESLUIT,
          "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
-    html = _wizard_pane(n, "csrf-token", "", "")
+    html = _wizard_pane(_St(), n, "csrf-token", "", "")
     assert "verzoek_besluit" not in html
 
 
@@ -197,5 +197,5 @@ def test_het_type_van_de_haak_bepaalt_ook_de_knoppen():
     from nooch_village.views.inbox import _wizard_pane
     n = {"id": "v", "by": "compliance", "project_id": "", "type": "naar_rol",
          "snippet": "pas de zin op de productpagina aan"}
-    assert "verzoek_besluit" in _wizard_pane(n, "csrf", "", "")
+    assert "verzoek_besluit" in _wizard_pane(_St(), n, "csrf", "", "")
     assert "Operationeel verzoek" in _kaart_html(_St(), n)
