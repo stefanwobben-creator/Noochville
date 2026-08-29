@@ -14,9 +14,7 @@ from nooch_village.cockpit2_util import _DS_LINK
 from nooch_village.web_base import _e, _page
 
 
-def _name(rec) -> str:
-    d = getattr(rec, "definition", None)
-    return (getattr(d, "name", None) or getattr(rec, "id", "") or "").strip() or rec.id
+from nooch_village.cockpit2_util import _name, _rol_labels    # één naamregel, geen tweede vorm
 
 
 II_PREFIX = "ii:"          # Individueel Initiatief: werk onder de cirkel, zonder rol
@@ -37,11 +35,13 @@ def _role_options(st, circle: str = "") -> str:
 
     Plus 'Individuele actie': niet elk project hoort bij een mandaat. Die hangt onder de cirkel via
     het bestaande `ii:<circle>`-eigenaarschap — geen verzonnen pseudo-rol."""
-    opts = []
-    for r in sorted(st.records.all(), key=lambda x: _name(x).lower()):
-        if getattr(r, "archived", False) or getattr(r, "slaapt", False) or org.is_circle(r):
-            continue
-        opts.append(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>")
+    alle = st.records.all()
+    kandidaten = [r for r in sorted(alle, key=lambda x: _name(x).lower())
+                  if not getattr(r, "archived", False) and not getattr(r, "slaapt", False)
+                  and not org.is_circle(r)]
+    labels = _rol_labels(kandidaten, alle)            # Circle Lead ≠ Circle Lead: welke cirkel?
+    opts = [f"<option value='{_e(r.id)}'>{_e(labels.get(r.id) or _name(r))}</option>"
+            for r in kandidaten]
     # INDIVIDUELE ACTIE HANGT ONDER EEN CIRKEL, en welke dat is mag niet stilzwijgend gekozen
     # worden. Kwam je van een `ii:<cirkel>`-baan, dan is het díe cirkel. Anders bieden we ze
     # allemaal aan met de naam erbij — één stil kiezen is precies de aanname die vandaag negen

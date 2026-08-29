@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from nooch_village.web_base import _e, _page, _field
-from nooch_village.cockpit2_util import _name, _BUILD, _stamp, _DS_LINK, _nav
+from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
 from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
 
 _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
@@ -652,12 +652,12 @@ def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
 def _person_role_options(st, targets) -> str:
     """Opties voor 'vanuit welke rol voel je het' bij zelf een spanning toevoegen: de rollen die de
     ingelogde persoon vervult, plus 'als mezelf'."""
+    recs = [r for r in (st.records.get(tid) for ty, tid in targets if ty == "role")
+            if r is not None]
+    labels = _rol_labels(recs, st.records.all())      # Circle Lead ≠ Circle Lead: welke cirkel?
     opts = ["<option value=''>as myself</option>"]
-    for ty, tid in targets:
-        if ty == "role":
-            rec = st.records.get(tid)
-            if rec is not None:
-                opts.append(f"<option value='{_e(tid)}'>{_e(_name(rec))}</option>")
+    opts += [f"<option value='{_e(r.id)}'>{_e(labels.get(r.id) or _name(r))}</option>"
+             for r in recs]
     return "".join(opts)
 
 

@@ -34,6 +34,49 @@ def _name(rec) -> str:
     return getattr(rec.definition, "name", "") or rec.id
 
 
+def _rol_labels(kandidaten, alle=None) -> dict:
+    """rol-id → label voor een KEUZELIJST: de naam, met de cirkel erachter waar dat nodig is.
+
+    Op prod heten drie rollen 'Circle Lead', drie 'Secretary', drie 'Facilitator' en twee
+    'Circle Rep' — samen elf exemplaren onder vier namen. In een dropdown staan die dan als
+    identieke regels onder elkaar en is er niets te kiezen; je kunt alleen gokken.
+
+    Drie regels, en ze horen bij elkaar:
+
+    1. **Alleen waar het botst.** Er wordt geteld binnen DEZE lijst, niet in de hele organisatie.
+       Staat er maar één Facilitator op het scherm, dan is 'Facilitator' precies goed — een
+       cirkelnaam erachter is ruis waar niets te verwarren valt.
+    2. **De cirkel is de onderscheider**, want dat is wat de rollen daadwerkelijk uit elkaar houdt:
+       de Circle Lead ván Nooch is een andere rol dan die ván Noochville.
+    3. **Blijft het dan nog dubbel, dan wint eerlijkheid van netheid.** Twee rollen met dezelfde
+       naam in dezelfde cirkel krijgen hun id erbij. Lelijk, maar een lijst die belooft te
+       onderscheiden en dat niet doet is erger: dan denk je dat je kiest.
+    """
+    kandidaten = list(kandidaten or [])
+    index = {getattr(r, "id", ""): r for r in (alle if alle is not None else kandidaten)}
+
+    def _cirkel(rec) -> str:
+        ouder = getattr(rec, "parent", "") or ""
+        p = index.get(ouder)
+        return _name(p) if p is not None else (ouder.split("__")[-1] if ouder else "")
+
+    per_naam: dict = {}
+    for r in kandidaten:
+        per_naam.setdefault(_name(r), []).append(r)
+
+    labels: dict = {}
+    for naam, groep in per_naam.items():
+        if len(groep) == 1:
+            labels[groep[0].id] = naam
+            continue
+        voorlopig = {r.id: (f"{naam} ({_cirkel(r)})" if _cirkel(r) else naam) for r in groep}
+        botsingen = {lab for lab in voorlopig.values()
+                     if list(voorlopig.values()).count(lab) > 1}
+        for rid, lab in voorlopig.items():
+            labels[rid] = f"{lab} [{rid}]" if lab in botsingen else lab
+    return labels
+
+
 def _initials(name: str) -> str:
     return "".join(w[0] for w in name.split()[:2]).upper() or "?"
 
