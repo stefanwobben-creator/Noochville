@@ -44,7 +44,8 @@ def maak_verrijker(records, assignments, data_dir: str = "", reason_fn=None,
         tekst = volledig(n)
         if not tekst.strip():
             return {}
-        b = bv.herschrijf(tekst, rol=rol, records=records, reason_fn=reason_fn) if herschrijf else {}
+        b = (bv.herschrijf(tekst, rol=rol, records=records, reason_fn=reason_fn, data_dir=data_dir)
+             if herschrijf else {})
         t = zv.verwerk(tekst, rol=rol, records=records, reason_fn=reason_fn,
                        voorstel=b.get("voorstel") or "", data_dir=data_dir)
         log.info("spanning van %s getypeerd als %s (bevinding %s)", rol or "?",
