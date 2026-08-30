@@ -6,20 +6,16 @@ from zoneinfo import ZoneInfo
 from nooch_village.util import atomic_write_json, run_bounded, is_due
 
 
-def _should_fire_daily(now, last_day, fire_hh: int, fire_mm: int) -> bool:
-    """Vuur de dagcyclus zodra de LOKALE tijd het vaste kloktijdstip (fire_hh:fire_mm) heeft bereikt
-    en we die kalenderdag nog niet gevuurd hebben. `last_day` = de laatst-gevuurde datum (persistent),
-    zodat een restart/deploy niet dubbel vuurt en het volgende moment niet verschuift; miste de server
-    04:32 (was down), dan vuurt hij de dag alsnog éénmaal bij de eerste tick erna."""
-    if now.date().isoformat() == last_day:
-        return False
-    return (now.hour, now.minute) >= (fire_hh, fire_mm)
 from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import _persona_ladder, Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 from nooch_village.insight import Insight
 from nooch_village.insight_ingest import insight_from_grounding
+# De dagcadans is INFRASTRUCTUUR en woont in `dagcyclus.py` — zie de kop daar: hij zat hier,
+# in een rol, en toen die rol sliep stond het dorp drie dagen stil. Deze twee namen blijven
+# hier alleen als doorverwijzing, zodat bestaande imports niet stil iets anders gaan betekenen.
+from nooch_village.dagcyclus import cadence_events, should_fire_daily
 
 
 def _bounded_trends(fetch_fn, budget: float, log=None) -> dict:
@@ -74,21 +70,6 @@ def _publish_keyword_proposed(bus, from_id: str, word: str, demand: dict, librar
         return False
     bus.publish(Event("keyword_proposed", {"word": word, "demand": demand, "from": from_id}, from_id))
     return True
-
-
-def cadence_events(d) -> list[str]:
-    """Pure helper: geeft de event-namen die op datum d gepubliceerd moeten worden.
-
-    Altijd: dag_begint. Bovendien:
-      maand_begint    — op dag 1 van elke maand
-      kwartaal_begint — op dag 1 van jan/apr/jul/okt
-    """
-    events = ["dag_begint"]
-    if d.day == 1:
-        events.append("maand_begint")
-        if d.month in (1, 4, 7, 10):
-            events.append("kwartaal_begint")
-    return events
 
 
 class WebsiteWatcherWorker(Inhabitant):
@@ -1217,102 +1198,20 @@ class Facilitator(Inhabitant):
     """Bewaakt de geldigheid van governance-voorstellen zonder inhoudelijk te oordelen.
     Draait de poort G0-G4 en beslist adopt-by-default of escaleren naar de mens.
     Integreert bezwaren NOOIT automatisch: alleen de mens kan dat doen.
-    Verzorgt ook de dagcyclus-cadans (dag_begint, dag_eindigt, maand_begint, kwartaal_begint)."""
+
+    DE DAGCADANS ZAT HIER, EN DAT WAS EEN FOUT. `dag_begint`, `dag_eindigt`, `maand_begint` en
+    `kwartaal_begint` werden gepubliceerd vanuit deze rol. Toen de afslanking van 28 augustus 2026
+    `facilitator` slapend legde, luidde niemand meer de bel en stond het dorp drie dagen stil —
+    zonder foutmelding, want er faalde niets; er tikte alleen niets meer.
+
+    Een hartslag hoort niet af te hangen van een deelnemer: over een rol mag het dorp besluiten,
+    over zijn klok niet. De cadans woont daarom in `dagcyclus.Dagcyclus`, naast de rollen in plaats
+    van erin. Deze rol mag hierna gewoon slapen."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # ── governance-poort ──────────────────────────────────────────
         self._gate = Gate()
         self.react("proposal_raised", self._on_proposal_raised)
-        # ── dagcyclus-cadans ──────────────────────────────────────────
-        self._last_beat: float = 0.0
-        self._first_ring: bool = True
-        self._interval: float = float(self.context.settings.get("heartbeat_seconds", 0) or 0)
-        # Vast kloktijdstip voor dag_begint (config, centraal in settings.ini).
-        raw = str(self.context.settings.get("dag_begint_time", "04:32")).strip()
-        try:
-            hh, mm = raw.split(":")
-            self._fire_hh, self._fire_mm = int(hh), int(mm)
-        except Exception:
-            self._fire_hh, self._fire_mm = 4, 32
-        # Tijdzone EXPLICIET uit config (IANA, via stdlib zoneinfo), los van de server-tz — Nooch zit
-        # in Spanje. Ongeldige/ontbrekende zone → None = val terug op server-lokale tijd (fail-soft).
-        tz_name = str(self.context.settings.get("dag_begint_tz", "Europe/Madrid")).strip()
-        try:
-            self._tz = ZoneInfo(tz_name) if tz_name else None
-        except Exception:
-            self._tz = None
-        # Laatst-gevuurde datum persistent → restart/deploy vuurt niet dubbel en verschuift niet.
-        self._last_day: str | None = self._load_last_day()
-
-    def _last_day_path(self) -> str:
-        return os.path.join(self.context.data_dir, "timekeeper_last_day.json")
-
-    def _load_last_day(self):
-        try:
-            with open(self._last_day_path()) as f:
-                return json.load(f).get("last_day")
-        except Exception:
-            return None
-
-    def _save_last_day(self) -> None:
-        try:
-            atomic_write_json(self._last_day_path(), {"last_day": self._last_day})
-        except Exception:
-            pass
-
-    def tick(self) -> None:
-        if self._interval > 0:                        # demo/test: relatieve hartslag (heartbeat_seconds)
-            now = time.time()
-            if now - self._last_beat >= self._interval:
-                self._last_beat = now
-                self._ring("demo-puls", date.today())
-            return
-        # productie: één keer per kalenderdag op het vaste kloktijdstip in de GECONFIGUREERDE tijdzone
-        # (dag_begint_tz), niet de server-tz. _should_fire_daily + de persist-datum rekenen hiertegen.
-        now_local = datetime.now(self._tz)
-        if _should_fire_daily(now_local, self._last_day, self._fire_hh, self._fire_mm):
-            self._last_day = now_local.date().isoformat()
-            self._save_last_day()
-            self._run_pulse_watchdog(self._last_day)      # dead man's switch op de vorige dag, vóór de cyclus
-            self._ring(self._last_day, now_local.date())
-
-    def _run_pulse_watchdog(self, today_iso: str) -> None:
-        """Dorp-brede watchdog: escaleer zichtbaar als een verwachte dagelijkse rol op de zojuist
-        afgesloten vorige dag geen hartslag naliet (mogelijk niet-uitvoering). Verwachte set uit
-        config `daily_pulse_roles` (default: harry_hemp). Fail-soft: mag de cadans nooit breken."""
-        try:
-            from nooch_village.pulse_watchdog import run_watchdog
-            from nooch_village.human_inbox import _notify_founder
-            data_dir = self.context.data_dir
-            expected = [r.strip() for r in
-                        str(self.context.settings.get("daily_pulse_roles", "harry_hemp")).split(",")
-                        if r.strip()]
-            if not expected:
-                return
-
-            def _notify(role, day):
-                _notify_founder(
-                    os.path.join(data_dir, "human_inbox.json"), by="pulse_watchdog",
-                    snippet=(f"⚠️ Puls-uitval: rol '{role}' liet geen hartslag na op {day} — "
-                             f"mogelijk niet-uitvoering (hook/service), geen fout gemeld. "
-                             f"Beoordeel via python -m nooch_village.inbox"))
-
-            gemist = run_watchdog(data_dir, expected, today_iso, _notify)
-            if gemist:
-                self.log.warning("🕳️ puls-watchdog: geen hartslag voor %s op de vorige dag → "
-                                 "founder geëscaleerd", gemist)
-        except Exception as exc:
-            self.log.warning("puls-watchdog faalde (genegeerd): %s", exc)
-
-    def _ring(self, label: str, today) -> None:
-        if not self._first_ring:
-            self.log.info("🌙 dag_eindigt (%s)", label)
-            self.bus.publish(Event("dag_eindigt", {"label": label}, self.id))
-        self._first_ring = False
-        for name in cadence_events(today):
-            self.log.info("🔔 %s (%s)", name, label)
-            self.bus.publish(Event(name, {"label": label}, self.id))
 
     def _on_proposal_raised(self, event: Event) -> None:
         proposal = proposal_from_dict(event.data["proposal"])

@@ -7,6 +7,10 @@ er aan zo'n rol HING. Gevolg, één voor één ontdekt in de dagen erna:
   1. `facilitator` sliep → de DAGBEL viel weg. Het dorp pulseerde drie dagen niet.
   2. `facilitator` sliep → `dag_eindigt` viel weg, en daarmee de dag-afsluitende curatie van de
      Librarian (tag-onderhoud, verband-voorstellen).
+
+     ↳ 1 en 2 kunnen sinds 30 aug 2026 niet meer: de cadans is uit de rol gehaald (`dagcyclus.py`).
+       Deze poort blijft het vangnet voor de gevallen die je niet kunt loskoppelen — maar waar je
+       een koppeling kúnt wegnemen, is dat sterker dan hem tonen.
   3. `website_watcher` sliep → `pulse_completed` viel weg. Daardoor kon de afrondingsregel niet
      verschijnen en bleven `last_pulse.json` en `pulse_history.jsonl` op 27 augustus staan.
   4. `website_watcher` sliep → de hele GROEI-PULS viel weg: Field Note, Plausible-metrics,

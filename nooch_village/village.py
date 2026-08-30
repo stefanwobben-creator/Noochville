@@ -163,6 +163,11 @@ class Village:
         seed_records(self.records)
         migrate_records(self.records)
         self.context.records = self.records
+        # DE HARTSLAG STAAT NAAST DE ROLLEN, niet erin. Hij zat in `Facilitator`, en toen die rol
+        # slapend werd gelegd stond het dorp drie dagen stil. Een klok is geen deelnemer: het dorp
+        # mag over zijn structuur besluiten, niet over zijn cadans. Zie `dagcyclus.py`.
+        from nooch_village.dagcyclus import Dagcyclus
+        self.dagcyclus = Dagcyclus(self.bus, self.context)
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus, links=self.context.links)
         self.reconciler = Reconciler(self.records, self.bus, self.registry, self.context,
@@ -429,6 +434,9 @@ class Village:
         self._write_role_status()
         self._prime_board_watch()          # bestaande 'running'-projecten niet als nieuwe activatie vuren
         self.root.start()
+        # NA de rollen: eerst luisteraars, dan pas bellen. Andersom valt de eerste ring in een leeg
+        # dorp — en die ring komt pas de volgende kalenderdag terug.
+        self.dagcyclus.start()
 
     def _migrate_persona_bindings(self) -> None:
         """Legacy `record.persona_id` → de assignments-store: één bron van waarheid voor bemensing.
@@ -470,6 +478,7 @@ class Village:
                 rid)
 
     def stop(self):
+        self.dagcyclus.stop()
         self.root.stop()
 
     def report_keys(self) -> str:
@@ -621,6 +630,11 @@ class Village:
         return new_ids
 
 
+#: Rollen die de groei-puls dragen. Slaapt er één, dan komt `pulse_completed` niet — en dat mag
+#: geen stilte zijn maar een melding met een naam.
+_PULS_ROLLEN = ("website_watcher",)
+
+
 def _run_single_pulse(v: "Village") -> None:
     """Draai één puls op een al-geconstrueerde Village: print de sleutels, abonneer op de
     afronding, trap 'dag_begint' af, wacht tot de puls (en Noochie) klaar zijn, print de uitkomst.
@@ -640,6 +654,16 @@ def _run_single_pulse(v: "Village") -> None:
             break
         time.sleep(0.1)
     v.stop()
+    if not done:
+        # STILTE IS GEEN UITKOMST. Dit printte "Field Note: None | tension=None" en dat leest als een
+        # lege dag, niet als een uitgevallen puls. `pulse_completed` komt van een ROL, en een rol kan
+        # slapen — dus zeg dat dan ook, met de naam erbij. De bel is inmiddels infrastructuur
+        # (dagcyclus.py); het WERK dat erop volgt blijft rolwerk, en dat mag je zien.
+        stil = [rid for rid in _PULS_ROLLEN if rid not in v.reconciler.live]
+        waarom = (f" — slapend of onbemand: {', '.join(stil)}" if stil
+                  else " — de rol draait wel; kijk in het log waar hij bleef")
+        print(f"⚠️  Geen groei-puls afgerond (geen pulse_completed){waarom}")
+        return
     print(f"Field Note: {done.get('note_path')} | tension={done.get('tension')}")
     if noochie:
         print(f"\nNoochie: {noochie.get('oordeel', '-')}")
