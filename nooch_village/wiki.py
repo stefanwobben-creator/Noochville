@@ -276,7 +276,7 @@ def voorstel_velden(pagina, *, voorstel: str, waarom: str, van_naam: str, van_id
 
     titel = getattr(pagina, "title", "") or getattr(pagina, "id", "")
     spanning = waarom.strip() or f"“{titel}” zegt volgens {van_naam or 'iemand'} niet het juiste"
-    snippet = f"voorstel voor pagina {titel}: {spanning}"[:160]
+    snippet = f"voorstel voor pagina {titel}: {spanning}"   # geen eigen cap (#389)
     extra = {
         "type": zv.NAAR_ROL,
         "bevinding": {"ok": True, "spanning": spanning,

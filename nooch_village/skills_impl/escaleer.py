@@ -84,7 +84,8 @@ class EscaleerSkill(Skill):
         try:
             from nooch_village.notifications import NotifStore
             notif = NotifStore(os.path.join(dd, "notifications.json"))
-            n = notif.add("role", naar, "", by=van, snippet=f"⤴ beslissing gevraagd: {keuze}"[:160])
+            # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
+            n = notif.add("role", naar, "", by=van, snippet=f"⤴ beslissing gevraagd: {keuze}")
         except Exception as e:
             return {"error": f"escalatie kon niet landen: {e}"}
         return {"ok": True, "aard": "beslissing", "naar": naar, "reden": keuze,

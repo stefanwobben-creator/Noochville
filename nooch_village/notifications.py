@@ -28,8 +28,12 @@ def preview(tekst: str, n: int = PREVIEW_MAX) -> str:
     t = " ".join(str(tekst or "").split())
     if len(t) <= n:
         return t
-    kort = t[:n].rsplit(" ", 1)[0]
-    return (kort or t[:n]) + "…"
+    # De ellips telt MEE in het budget: `n` is de maximale lengte van wat je overhoudt, niet van
+    # wat je afknipt. Zonder deze regel wordt een tekst zonder spaties n+1 lang, en dan klopt de
+    # belofte 'hoogstens n' niet meer. Mijn eigen test wees dat aan.
+    ruimte = max(1, n - 1)
+    kort = t[:ruimte].rsplit(" ", 1)[0]
+    return (kort or t[:ruimte]) + "…"
 
 
 def volledig(n: dict) -> str:
