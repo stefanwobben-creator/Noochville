@@ -1197,7 +1197,7 @@ class Inhabitant(threading.Thread):
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
             "'input' shape of that skill (e.g. a term skill wants {\"term\": \"...\"}, keywords_everywhere wants "
             "{\"kw\": [\"...\"]}, a brands skill wants {\"brands\": [\"...\"]}). If no skill can carry out the "
-            "item, set \"skill\": null, \"payload\": {} and give a short reason (e.g. \"no patent skill\"). "
+            "item, set \"skill\": null, \"payload\": {} and give a short reason in Dutch (e.g. \"geen octrooi-skill\"). "
             "For EVERY item with \"skill\": null also set \"kind\":\n"
             "  - \"human_external\" if NO software could ever do it because it needs a person or an "
             "outside party in the physical world (visiting a factory, filming, phoning a supplier, "
@@ -1207,7 +1207,20 @@ class Inhabitant(threading.Thread):
             "Be strict: \"someone should decide\" is not human_external if the deciding is really "
             "just research. "
             "Also determine which accountability the goal touches and which deliverable belongs to it. "
-            "Write all free text in English. "
+            # DE BRON VAN 134 ENGELSE INBOX-BERICHTEN, en het was één regel: "Write all free text in
+            # English." Die tekst is geen UI-chrome maar INHOUD — hij landt als checklist-item op een
+            # project en als spanning in de inbox van een mens, náást bevindingen en Field Notes die
+            # allemaal Nederlands zijn. Gemeten op prod: 154 Engelse machine-berichten, 134 daarvan
+            # gegenereerd (de andere 20 waren code-literals). Allemaal intern; geen enkele was
+            # klant-copy — dat pad (de Copywriter) schrijft met opzet Engels en blijft ongemoeid.
+            #
+            # Bij de BRON oplossen, niet bij de leesbaarheidslaag: vertalen is precies waar een model
+            # iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag
+            # blijft het vangnet voor wat tóch in het Engels binnenkomt.
+            "Write every human-readable field (text, reason, deliverable, accountability) in DUTCH — "
+            "these land in a person's inbox, next to findings and notes that are Dutch. Keep the JSON "
+            "keys and the fixed values (skill names, human_external, missing_capability) exactly as "
+            "written here. A quoted claim or source stays in its original language. "
             "Answer ONLY with JSON, exactly this schema:\n"
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\", "

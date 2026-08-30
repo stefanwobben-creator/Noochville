@@ -104,8 +104,12 @@ Antwoord ALLEEN met JSON: {{"spanning": "...", "voorstel": "..."}}"""
 
 # Woorden die een slag om de arm houden, en woorden die zekerder zijn. De tweede groep mag alleen
 # voorkomen als de bron zelf al zo stellig was.
-_SLAG_OM_DE_ARM = ("mogelijk", "misschien", "wellicht", "vermoedelijk", "lijkt", "zou kunnen",
-                   "mogelijkerwijs", "onduidelijk", "maybe", "possibly", "perhaps")
+# Ook deze op woordgrens, en om dezelfde reden als hierboven: "onmogelijk" bevat "mogelijk" en zou
+# als slag om de arm tellen terwijl het het tegendeel zegt. Dat de fout hier de ANDERE kant op valt
+# (te veel hedge zien → minder afkeuren) maakt hem niet minder fout, alleen stiller.
+_SLAG_OM_DE_ARM = tuple(re.compile(r"\b" + w + r"\b") for w in
+                        ("mogelijk", "misschien", "wellicht", "vermoedelijk", "lijkt", "zou kunnen",
+                         "mogelijkerwijs", "onduidelijk", "onzeker", "maybe", "possibly", "perhaps"))
 # OP WOORDGRENS, en dat is geen detail. De eerste versie zocht op losse tekst, en verwierp toen een
 # perfecte herschrijving omdat er "ONduidelijk" in stond — het woord dat de slag om de arm juist
 # vasthoudt, gelezen als het tegendeel. De poort die feitbehoud bewaakt kan zelf een feit verdraaien.
@@ -137,7 +141,8 @@ def feitbehoud(bron: str, tekst: str) -> tuple[bool, str]:
     if not b.strip() or not t.strip():
         return True, ""
     erbij = next((r.pattern for r in _STELLIGER if r.search(t)), "")
-    if erbij and not any(r.search(b) for r in _STELLIGER) and any(w in b for w in _SLAG_OM_DE_ARM):
+    if (erbij and not any(r.search(b) for r in _STELLIGER)
+            and any(r.search(b) for r in _SLAG_OM_DE_ARM)):
         woord = erbij.replace(r"\b", "")
         return False, f"stelliger dan de bron: '{woord}' terwijl er een slag om de arm stond"
     # Getallen: elk getal in de uitkomst moet in de bron te vinden zijn. Een datum mag anders
@@ -207,8 +212,41 @@ def keur(bevinding: dict, *, voorstel_verplicht: bool = True) -> tuple[bool, str
     return True, ""
 
 
+# ── de twee tredes ──────────────────────────────────────────────────────────
+#
+# MISTRAL IS DE BASIS, de sterke trede is de KLIM. Gemeten op vier echte ijkpunten (systeem-pad,
+# rol-pad, vrij Engels, verpakte tekst): mistral haalde alle vier de feitbehoud-punten, gemini-flash
+# viel af op punt 3 — het voegde "essentieel" en "onbekende gevolgen" toe, karakterisering die de
+# bron niet had. Vlotter lezen weegt niet op tegen epistemische inflatie.
+#
+# De sterke trede stond eerst vooraan, met de dorpsstaart eronder. Dat betekende in de praktijk:
+# anthropic zonder krediet → doorvallen naar gemini-flash-LITE, de goedkoopste trede van allemaal en
+# precies degene die we niet willen. Vandaar deze volgorde: eerst de trede die het aantoonbaar haalt,
+# en de sterke trede alleen waar hij verschil maakt.
+_BASIS = "mistral:mistral-small-latest"
+
+
+def basis_ladder() -> str:
+    """De trede die élke herschrijving draait. Met de dorpsstaart eronder, zodat een storing bij één
+    leverancier geen lege bevinding oplevert — een spanning zonder tekst bereikt niemand."""
+    try:
+        from nooch_village.llm import met_dorpsstaart
+        return met_dorpsstaart(_BASIS)
+    except Exception:                                              # noqa: BLE001
+        return _BASIS
+
+
+def klim_ladder() -> str:
+    """De sterke trede, ALLEEN voor een afgekeurde herschrijving. Geen tweede poging voor de sport:
+    hij draait waar de goedkope trede aantoonbaar tekortschoot, en dat is precies de plek waar een
+    beter oordeel iets oplevert. Is er geen krediet, dan levert hij niets en blijft de ruwe tekst
+    staan — dezelfde uitkomst als zonder klim, alleen een call duurder."""
+    from nooch_village.llm_keuze import hoog_inzet_ladder
+    return hoog_inzet_ladder()
+
+
 def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
-               ladder: str = "", data_dir: str = "") -> dict:
+               ladder: str = "", data_dir: str = "", klim: bool = True) -> dict:
     """Eén call per nieuwe spanning. Geeft {spanning, voorstel, ok, reden, ruw}.
 
     `ok=False` betekent: dit is niet verzendbaar en degradeert naar 'moet herschreven'. Nooit een
@@ -224,19 +262,7 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     if reason_fn is None:
         from nooch_village.llm import reason as reason_fn         # noqa: PLC0415
     if not ladder:
-        try:
-            # MET de dorpsstaart, zoals `ladder_voor` hem voor elke andere hoog-inzet-site
-            # samenstelt. Dit was de enige plek die de kop kaal doorgaf, en dat is precies het
-            # geval waar `met_dorpsstaart` voor bestaat: valt de premium-leverancier weg (geen
-            # krediet, storing), dan is het resultaat niet 'een goedkoper antwoord' maar GEEN
-            # antwoord — en dan degradeert élke verse spanning naar 'moet herschreven' en bereikt
-            # er niets meer een bureau. Gemeten op prod 26-08: 13 van de 13 bevindingen leeg omdat
-            # anthropic geen krediet had, terwijl de dorpsladder gewoon stond te draaien.
-            from nooch_village.llm import met_dorpsstaart
-            from nooch_village.llm_keuze import hoog_inzet_ladder
-            ladder = met_dorpsstaart(hoog_inzet_ladder())
-        except Exception:                                          # noqa: BLE001
-            ladder = ""
+        ladder = basis_ladder()
 
     # GROND-EERST, MODEL-LAATST. De deterministische systeemjargon-swap draait vóór de call: gratis,
     # gegarandeerd, en onafhankelijk van welke trede er draait. Wat overblijft (structuur,
@@ -273,6 +299,18 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     uit["voorstel"] = str(data.get("voorstel") or "").strip()
     ok, reden = keur(uit)
     uit["ok"], uit["reden"] = ok, reden
-    if not ok:
-        log.info("bevinding geweigerd (%s) op: %s", reden, ruw[:70])
-    return uit
+    if ok or not klim:
+        if not ok:
+            log.info("bevinding geweigerd (%s) op: %s", reden, ruw[:70])
+        return uit
+    # DE KLIM. De goedkope trede schoot aantoonbaar tekort — niet vermoedelijk, maar volgens een
+    # deterministische poort. Dát is het moment waarop een sterker model iets toevoegt, en het is
+    # ook de enige plek waar we hem betalen. Levert de klim niets (geen krediet, opnieuw afgekeurd),
+    # dan blijft de afwijzing van de basis staan en toont het scherm de ruwe tekst.
+    sterk = klim_ladder()
+    if not sterk or sterk == ladder:
+        return uit
+    log.info("bevinding: klim naar %s na afkeuring (%s)", sterk, reden)
+    hoger = herschrijf(tekst, rol=rol, records=records, reason_fn=reason_fn, ladder=sterk,
+                       data_dir=data_dir, klim=False)
+    return hoger if hoger.get("ok") else uit

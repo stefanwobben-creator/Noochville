@@ -154,3 +154,90 @@ def test_een_citaat_blijft_staan_ook_in_het_engels():
     Dezelfde familie als de Copywriter-uitzondering: Engels dat er met opzet staat, blijft."""
     assert "GECITEERDE tekst blijft staan" in bv._PROMPT
     assert "bewijsmateriaal" in bv._PROMPT
+
+
+# ── de trede-keuze ──────────────────────────────────────────────────────────
+
+def test_mistral_is_de_basis_niet_gemini():
+    """GEMETEN, niet gekozen. Op vier echte ijkpunten haalde mistral alle vier de feitbehoud-punten;
+    gemini-flash viel af op punt 3 — het voegde "essentieel" en "onbekende gevolgen" toe,
+    karakterisering die de bron niet had. Vlotter lezen weegt niet op tegen epistemische inflatie.
+
+    En de volgorde is niet toevallig: stond de sterke trede vooraan met de dorpsstaart eronder, dan
+    viel hij zonder krediet door naar gemini-flash-LITE — de goedkoopste van allemaal, precies
+    degene die we niet willen."""
+    assert bv.basis_ladder().split(",")[0] == "mistral:mistral-small-latest"
+
+
+def test_de_klim_draait_alleen_na_een_afkeuring():
+    """Geen tweede poging voor de sport: de sterke trede draait waar de goedkope aantoonbaar
+    tekortschoot — volgens een deterministische poort, niet op gevoel."""
+    beurten = []
+
+    def _nep(prompt, **kw):
+        beurten.append(kw.get("ladder", ""))
+        return ('{"spanning": "Waarschijnlijk is het achtergrondproces gestopt en dat raakt de '
+                'hele dag.", "voorstel": "Kun je kijken wat er aan de hand is?"}'
+                if len(beurten) == 1 else
+                '{"spanning": "Mogelijk startte een achtergrondproces niet, en er kwam geen '
+                'foutmelding.", "voorstel": "Kun je kijken wat er aan de hand is?"}')
+
+    uit = bv.herschrijf(BRON, rol="harry_hemp", reason_fn=_nep, ladder="mistral:x")
+    assert len(beurten) == 2, "de klim draaide niet na de afkeuring"
+    assert uit["ok"] is True and "Mogelijk" in uit["spanning"]
+
+
+def test_zonder_afkeuring_geen_tweede_call():
+    beurten = []
+
+    def _nep(prompt, **kw):
+        beurten.append(1)
+        return ('{"spanning": "Mogelijk startte een achtergrondproces niet op 29 augustus 2026.", '
+                '"voorstel": "Kun je kijken wat er aan de hand is?"}')
+
+    bv.herschrijf(BRON, rol="harry_hemp", reason_fn=_nep, ladder="mistral:x")
+    assert len(beurten) == 1
+
+
+def test_een_mislukte_klim_laat_de_afkeuring_staan():
+    """Levert de klim niets (geen krediet), dan blijft de ruwe tekst staan — dezelfde uitkomst als
+    zonder klim, alleen een call duurder."""
+    def _nep(prompt, **kw):
+        if "sonnet" in kw.get("ladder", ""):
+            return None                                   # geen krediet
+        return ('{"spanning": "Waarschijnlijk is het achtergrondproces gestopt en dat raakt de hele '
+                'dag.", "voorstel": "Kun je kijken wat er aan de hand is?"}')
+
+    uit = bv.herschrijf(BRON, rol="harry_hemp", reason_fn=_nep, ladder="mistral:x")
+    assert uit["ok"] is False and "slag om de arm" in uit["reden"]
+
+
+# ── de bron levert Nederlands ───────────────────────────────────────────────
+
+def test_de_plan_prompt_vraagt_nederlands():
+    """DE BRON VAN 134 ENGELSE INBOX-BERICHTEN, en het was één regel: "Write all free text in
+    English." Die tekst is geen UI-chrome maar INHOUD: hij landt als checklist-item op een project
+    en als spanning in de inbox, náást bevindingen en Field Notes die allemaal Nederlands zijn.
+
+    Bij de BRON oplossen, niet bij de laag: vertalen is precies waar een model iets bijverzint, dus
+    de veiligste vertaling is de vertaling die niet nodig is."""
+    import inspect
+
+    from nooch_village.inhabitant import Inhabitant
+    bron = inspect.getsource(Inhabitant._plan_checklist)
+    assert "Write all free text in English" not in bron
+    assert "in DUTCH" in bron
+    assert "quoted claim or source stays in its original language" in bron
+
+
+def test_geen_engelse_berichten_meer_uit_de_founder_flow():
+    """De 20 code-literals. Drie ervan stuurden Engels naar een inbox — "Bank the evidence for:" was
+    er 14 van. De cockpit-CHROME blijft Engels (i18n fase 1); de berichtinhoud is Nederlands, net als
+    elke andere spanning."""
+    import inspect
+
+    from nooch_village import founder_taken
+    bron = inspect.getsource(founder_taken)
+    for engels in ("Bank the evidence for", "Ground this claim scientifically",
+                   "Approved proposal from"):
+        assert engels not in bron, engels

@@ -102,12 +102,20 @@ def test_een_aangehaalde_term_is_geen_afgekapte_zin():
     assert bv.afgekapt('Hij zei "dit mag niet.') is True          # dubbele telt wel
 
 
-def test_de_hoog_inzet_kop_houdt_de_dorpsstaart(monkeypatch):
-    """De premium-kop bepaalt waar het oordeel vandaan komt; de staart bepaalt DAT er een oordeel is.
+def test_de_basis_trede_houdt_de_dorpsstaart(monkeypatch):
+    """De kop bepaalt waar het oordeel vandaan komt; de staart bepaalt DAT er een oordeel is.
 
     Zonder staart betekent één wegvallende leverancier (geen krediet, storing) geen antwoord — en
     dan degradeert élke verse spanning naar 'moet herschreven' en bereikt er niets meer een bureau.
-    """
+
+    DE KOP IS VERANDERD, en dat was een besluit op een meting. Hier stond de premium-kop vooraan met
+    de staart eronder. In de praktijk betekende dat: anthropic zonder krediet → doorvallen naar de
+    goedkoopste trede van de staart, gemini-flash-lite. En juist gemini viel op de feitbehoud-meting
+    af (het voegde karakterisering toe die de bron niet had). De vangnet-constructie leverde dus
+    stilzwijgend het model op dat we niet wilden.
+
+    Nu: mistral vooraan, want die haalde alle vier de feitbehoud-punten; de staart blijft eronder als
+    vangnet; en de sterke trede draait als KLIM, alleen na een afkeuring (zie test_leesbaarheid)."""
     from nooch_village import bevinding as bv, llm
 
     gezien = {}
@@ -118,9 +126,8 @@ def test_de_hoog_inzet_kop_houdt_de_dorpsstaart(monkeypatch):
                '"voorstel": "Ik zoek een tweede weg naar deze gegevens."}'
 
     monkeypatch.setattr(llm, "dorpsladder", lambda: "gemini:gemini-2.5-flash")
-    monkeypatch.setenv("LLM_HOOG_INZET_LADDER", "anthropic:claude-sonnet-5")
     uit = bv.herschrijf("de bron antwoordt niet meer", rol="librarian", reason_fn=_reason)
     assert uit["ok"], uit["reden"]
     tredes = [t.strip() for t in gezien["ladder"].split(",")]
-    assert tredes[0] == "anthropic:claude-sonnet-5"          # de kop blijft de kop
+    assert tredes[0] == "mistral:mistral-small-latest"       # de gemeten trede is de kop
     assert "gemini:gemini-2.5-flash" in tredes               # en de staart vangt hem op
