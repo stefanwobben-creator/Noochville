@@ -1936,8 +1936,19 @@ def _act_proj_feed(c):
             msg = "💬 update geplaatst" if kind == "update" else "💬 reactie geplaatst"
             _, by_name = _mentionables(st)
             ment = _mentions_in(g("text"), by_name)
+            # WIE HET TYPTE, niet het kanaal. Dit stond op `by="dialoog"` — een label voor de
+            # plek, niet voor de auteur — en daardoor kon de leesbaarheids-poort niet zien dat een
+            # MENS deze woorden schreef. Mensentaal hoeft niet vertaald te worden, en andermans
+            # woorden herschrijven is inmenging: dan moet het record dus wel zeggen wie het was.
+            # Fail-soft: geen herkenbare auteur → 'dialoog', zoals vroeger.
+            _auteur = "dialoog"
+            if atype == "human":
+                _p = st.people.by_email(c.username) if c.username and c.username != "guest" else None
+                _auteur = (_p.id if _p is not None else "dialoog")
+            elif aid:
+                _auteur = aid
             for ty, tid, nm in ment:
-                st.notif.add(ty, tid, g("pid"), entry["id"], by="dialoog", snippet=g("text"))
+                st.notif.add(ty, tid, g("pid"), entry["id"], by=_auteur, snippet=g("text"))
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een

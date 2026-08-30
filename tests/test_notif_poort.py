@@ -108,3 +108,63 @@ def test_een_item_dat_zijn_type_al_kent_slaat_de_poort_over(tmp_path):
                        verrijker=lambda n: geraakt.append(n) or {})
     st.add("role", "r", "", by="x", snippet="iets", extra={"type": "founder"})
     assert geraakt == []
+
+
+# ── Mensentaal blijft mensentaal ───────────────────────────────────────────
+
+def test_wat_een_mens_typte_wordt_niet_herschreven(tmp_path):
+    """PRINCIPE, GEEN VOLUME. De verleiding was om dit op het cijfer te gronden (5 van de 262, dus
+    'het kost toch niks'). Maar dan draait het besluit om zodra dat cijfer groeit, en gaan we op een
+    dag iemands eigen woorden herschrijven.
+
+    De echte grond: een mens-getypt bericht ÍS al mensentaal — precies de eindvorm die deze laag
+    nastreeft. Er valt niets te vertalen, en andermans woorden herschrijven is geen leesbaarheid
+    maar inmenging.
+
+    Zelfde discipline als bij het schrappen van 'Informatie': de grond was coherentie, en het
+    gebruikscijfer was de bevestiging."""
+    from nooch_village.people import PeopleStore
+    p = PeopleStore(str(tmp_path / "people.json")).add("Stefan Wobben", "s@n.nl")
+    dd = str(tmp_path)
+    # op id én op naam — beide vormen komen in `by` voor
+    assert nm._is_mens_schrijver({"by": p.id}, dd) is True
+    assert nm._is_mens_schrijver({"by": "Stefan Wobben"}, dd) is True
+    # en de poort laat zo'n bericht met rust
+    assert nm._door_de_poort({"target_type": "person", "target_id": p.id, "by": p.id}, dd) == {}
+
+
+def test_een_machine_bericht_aan_een_mens_gaat_er_wel_doorheen(tmp_path):
+    """De andere helft van de voorwaarde. `by='puls-wacht'` is een systeemcomponent."""
+    from nooch_village.people import PeopleStore
+    p = PeopleStore(str(tmp_path / "people.json")).add("Stefan", "s@n.nl")
+    dd = str(tmp_path)
+    for machine in ("puls-wacht", "compliance", "werkoverleg", "noochie"):
+        assert nm._is_mens_schrijver({"by": machine}, dd) is False
+
+
+def test_onbekende_afzender_telt_als_machine(tmp_path):
+    """Fail-RICHTING, bewust gekozen: 'per ongeluk een machinebericht leesbaar maken' is een
+    goedkope fout, 'per ongeluk iemands woorden herschrijven' niet."""
+    assert nm._is_mens_schrijver({"by": "iets-onbekends"}, str(tmp_path)) is False
+    assert nm._is_mens_schrijver({"by": ""}, str(tmp_path)) is False
+
+
+def test_de_reden_staat_bij_de_code_niet_alleen_hier():
+    """Een regel die alleen in een test staat vindt niemand terug — en deze moet juist overeind
+    blijven als het volume verandert."""
+    import inspect
+    bron = inspect.getsource(nm._is_mens_schrijver)
+    assert "PRINCIPE, GEEN VOLUMEKWESTIE" in bron
+    assert "inmenging" in bron
+
+
+def test_het_mention_pad_geeft_de_auteur_mee_niet_het_kanaal(tmp_path):
+    """OP HET PRINCIPE GESTUIT. `_act_proj_feed` schreef `by="dialoog"` — een label voor de PLEK,
+    niet voor de auteur. Daardoor kon de poort niet zien dat een mens deze woorden typte, en zou
+    hij ze alsnog herschrijven. Een principe dat het record niet kan waarnemen, handhaaft niets."""
+    import inspect
+
+    from nooch_village import cockpit2
+    bron = inspect.getsource(cockpit2._act_proj_feed)
+    assert 'by="dialoog"' not in bron.split("Fail-soft")[-1], "het kanaal staat weer in `by`"
+    assert "st.people.by_email(c.username)" in bron

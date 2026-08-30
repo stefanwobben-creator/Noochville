@@ -74,6 +74,38 @@ def _is_mens_lezer(n: dict, data_dir: str) -> bool:
     return False
 
 
+def _is_mens_schrijver(n: dict, data_dir: str) -> bool:
+    """Heeft een MENS deze tekst getypt? Dan blijft hij zoals hij is.
+
+    DIT IS EEN PRINCIPE, GEEN VOLUMEKWESTIE. De verleiding is om het op het cijfer te gronden — van
+    de 262 berichten die een mens leest zijn er 5 door een mens getypt, dus 'het kost toch niks om
+    ze mee te nemen'. Maar dan draait het besluit om zodra dat cijfer groeit, en gaan we op een dag
+    de eigen woorden van mensen herschrijven.
+
+    De echte grond: een mens-getypt bericht IS al mensentaal — precies de eindvorm die deze laag
+    nastreeft. Er valt niets te vertalen. En andermans woorden herschrijven is geen leesbaarheid
+    maar inmenging.
+
+    De voorwaarde is dus tweeledig: een mens LEEST dit én een machine SCHREEF het.
+
+    Fail-richting: kunnen we het niet vaststellen, dan behandelen we het als machine-tekst. Een
+    onbekende `by` is in dit dorp vrijwel altijd een rol of een systeemcomponent, en 'per ongeluk
+    een machinebericht leesbaar maken' is een goedkope fout — 'per ongeluk iemands woorden
+    herschrijven' niet."""
+    by = str(n.get("by") or "").strip()
+    if not by:
+        return False
+    try:
+        from nooch_village.people import PeopleStore
+        mensen = PeopleStore(os.path.join(data_dir, "people.json")).all()
+    except Exception:                                # noqa: BLE001
+        return False
+    for p in mensen:
+        if by == getattr(p, "id", "") or by == (getattr(p, "name", "") or "").strip():
+            return True
+    return False
+
+
 def _door_de_poort(n: dict, data_dir: str, eigen=None) -> dict:
     """DE POORT, en hij zit in `add()` — de klasse-methode die álle schrijvers aanroepen.
 
@@ -84,12 +116,18 @@ def _door_de_poort(n: dict, data_dir: str, eigen=None) -> dict:
 
     Hier kan niemand er meer omheen: elke instantie draagt hem, want de klasse draagt hem.
 
+    De voorwaarde is tweeledig: een mens LEEST dit én een machine SCHREEF het. Mensentaal hoeft
+    niet vertaald te worden, en andermans woorden herschrijven is inmenging.
+
     `eigen` is er alleen voor tests. Fail-soft: kan de poort niet draaien, dan blijft de rauwe
     notificatie gewoon staan — een spanning die niet verrijkt kon worden is nog steeds een spanning."""
     try:
         if eigen is not None:
             return eigen(dict(n)) or {}
-        if not _is_mens_lezer(n, data_dir):
+        # TWEE VOORWAARDEN: een mens leest dit, én een machine schreef het. Zie
+        # `_is_mens_schrijver` voor waarom die tweede er principieel in hoort en niet omdat het
+        # toevallig weinig berichten zijn.
+        if not _is_mens_lezer(n, data_dir) or _is_mens_schrijver(n, data_dir):
             return {}
         from nooch_village.assignments import Assignments
         from nooch_village.governance import Records
