@@ -97,6 +97,27 @@ in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
 
+### Tonen is zwakker dan wegnemen
+
+De poort uit `afslank_afhankelijkheden.py` is een **vangnet, geen eerste keus.** Hij bestond omdat
+`facilitator` slapend werd gelegd terwijl die rol de dagbel luidde; hij zou zo'n snit voortaan tonen
+vóór hij gebeurt. Maar een waarschuwing die je mag wegklikken houdt geen systeem overeind — en de
+echte fout was niet dat het onzichtbaar was, maar dat de hartslag überhaupt aan een rol hing.
+
+De volgorde is dus:
+
+1. **Kun je ontkoppelen, ontkoppel dan.** De cadans verhuisde naar `dagcyclus.py`: geen rol, geen
+   record, geen `CLASS_MAP`. De afhankelijkheid bestaat niet meer, dus valt er ook niets te
+   waarschuwen. De test die de koppeling aantoonde, bewijst nu haar afwezigheid.
+2. **Bewaak wat je niet kunt weghalen.** `pulse_completed` komt van `website_watcher` en dat is
+   terecht rolwerk. Daar heeft de poort tanden, want daar hangt echt werk aan een echte rol.
+3. **Wat je niet kunt loskoppelen, moet je kunnen horen.** `once()` printte bij uitval
+   `Field Note: None` — dat leest als een lege dag, niet als een uitgevallen puls. `None` hoor je
+   niet; een melding mét de naam van de stilgevallen rol wel.
+
+Zelfde beweging als hierboven, één trede hoger: waarneembaarheid maakt een regel handhaafbaar,
+maar de regel niet nodig hebben is beter dan hem kunnen handhaven.
+
 Elke ratchet is **monotoon dalend**: het plafond mag omlaag als je schuld opruimt, nooit omhoog.
 Een nieuwe mechaniek toevoegen mag — maar dan met een expliciete regel in de lijst en een reden,
 niet stilzwijgend.
