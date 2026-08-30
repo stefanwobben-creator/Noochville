@@ -64,11 +64,31 @@ def laatste_bel(data_dir: str) -> str:
         return ""
 
 
-def log_activiteit_vandaag(unit: str = UNIT) -> bool | None:
-    """Heeft de daemon vandaag iets gelogd? None = niet vast te stellen (geen journalctl).
+def _unit_bestaat(unit: str) -> bool | None:
+    """Kent systemd deze unit? None = geen systemd om het aan te vragen.
 
-    None is geen 'nee': op een machine zonder journal weten we het niet, en dan hoort de bewaker
-    daarover te zwijgen in plaats van een storing te melden die hij niet kan zien."""
+    Nodig omdat `journalctl -u <onbekend>` exact hetzelfde antwoordt als een unit die vandaag
+    toevallig stil was: '-- No entries --'. Zonder deze check leest een tikfout in de unit-naam als
+    'de daemon ligt stil', en dan huilt de bewaker elke ochtend wolf om zijn eigen configuratie.
+    De CI ving dat: daar bestaat journalctl wél en de test-unit niet."""
+    try:
+        uit = subprocess.run(["systemctl", "show", unit, "--property=LoadState", "--value"],
+                             capture_output=True, text=True, timeout=20)
+    except Exception:                                    # noqa: BLE001 — geen systemd
+        return None
+    if uit.returncode != 0:
+        return None
+    return (uit.stdout or "").strip() == "loaded"
+
+
+def log_activiteit_vandaag(unit: str = UNIT) -> bool | None:
+    """Heeft de daemon vandaag iets gelogd? None = niet vast te stellen.
+
+    None is geen 'nee', en dat geldt op drie manieren: geen journalctl, geen systemd, of een unit
+    die systemd niet kent. In al die gevallen weten we het niet, en dan hoort de bewaker te zwijgen
+    in plaats van een storing te melden die hij niet kan zien."""
+    if _unit_bestaat(unit) is not True:
+        return None
     try:
         uit = subprocess.run(["journalctl", "-u", unit, "--since", "today", "--no-pager", "-n", "1"],
                              capture_output=True, text=True, timeout=20)
