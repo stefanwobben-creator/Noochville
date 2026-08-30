@@ -213,6 +213,13 @@ class NotifStore:
             "at": time.time(), "read": False,
         }
         n.update({k: v for k, v in (extra or {}).items() if k not in _BESCHERMD})
+        # WIE DIT SCHREEF IS EEN FEIT VAN NU, geen live afleiding. Staat het merk er nog niet, dan
+        # zetten we het hier één keer, zodat elke latere lezer (de poort, de leesbaarheidslaag, het
+        # scherm) hetzelfde veld leest in plaats van people.json opnieuw te bevragen. Verandert die
+        # store later — iemand hernoemd, iemand weg — dan blijft staan wat waar wás toen er getypt
+        # werd, en dat is precies de vraag die we stellen.
+        if MENS_GETYPT not in n and _is_mens_schrijver(n, self.data_dir):
+            n[MENS_GETYPT] = True
         self._items.append(n)
         self._save()
         # Een item dat zijn type al bij het ontstaan kent (een pagina-voorstel weet exact wat het
