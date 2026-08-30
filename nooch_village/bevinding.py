@@ -47,7 +47,7 @@ _EIND = re.compile(r"[.!?…]\s*$")
 _MIN_SPANNING = 40
 _MIN_VOORSTEL = 15
 
-_PROMPT = """Je herschrijft een interne signalering tot iets wat een mens in één blik begrijpt.
+_PROMPT = """Je maakt een interne signalering leesbaar voor de mens die hem straks opent.
 
 CONTEXT: dit is een zelfsturende organisatie. Een rol liep tegen iets aan en moet dat aan iemand
 anders uitleggen. Er is geen vergadering waarin hij het even kan toelichten — jouw tekst is de hele
@@ -57,19 +57,93 @@ DE ROL DIE DIT OPWERPT: {rol}
 ZIJN VERANTWOORDELIJKHEDEN: {accountabilities}
 DE RUWE SIGNALERING: {tekst}
 
+FEITBEHOUD GAAT VÓÓR LEESBAARHEID. Een leesbaar-maar-fout bericht is erger dan een lelijk-maar-juist
+bericht. Behoud niet alleen de feiten maar ook hoe ZEKER ze zijn:
+
+  1. De slag om de arm blijft staan. Staat er "mogelijk", schrijf dan niet "waarschijnlijk".
+  2. Alternatieven blijven heel. Staat er "A of B", kies er dan niet één; noem ze allebei, of
+     gebruik één woord dat ze allebei dekt.
+  3. Er komt geen detail bij. Geen oorzaak, geen naam, geen getal en geen tijdstip dat de ruwe
+     tekst niet had. Weet je iets niet, laat het weg — vul het niet in.
+  4. Is de ruwe tekst (deels) Engels, vertaal dan letterlijk wat er staat. Vertalen is precies waar
+     er iets bij verzonnen wordt: geen gladdere formulering, geen ingevulde bedoeling.
+
+Kun je iets niet begrijpelijk maken zonder één van die vier te schenden, laat het dan staan zoals het
+was. Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.
+
 Schrijf twee dingen.
 
-1. "spanning" — wat er aan de hand is, in HOOGSTENS VIER ZINNEN. Volledige zinnen, geen afgekapte
-   gedachte, en liever korter dan langer: dit moet in één blik te lezen zijn. Schrijf zo dat
-   een veertienjarige het hardop kan voorlezen en snapt: geen vakjargon, geen Engelse technische
-   termen, geen interne systeemwoorden. Als de ruwe tekst een verwijzing bevat die je niet kunt
-   uitleggen, laat hem dan weg in plaats van hem over te nemen. Noem geen bestandsnamen of id's.
+1. "spanning" — in HOOGSTENS VIER ZINNEN, in deze volgorde:
+     • wat er gebeurde;
+     • waarom dat telt voor de lezer;
+     • wat er nodig is.
+   Volledige zinnen, geen afgekapte gedachte, liever korter dan langer: dit moet in één blik te
+   lezen zijn. Noem geen bestandsnamen, geen id's en geen commando's.
 
-2. "voorstel" — wat deze rol wil doen of nodig heeft, concreet genoeg dat iemand er ja op kan
-   zeggen. Eén handeling, geen lijstje opties. Weet je het niet uit de tekst af te leiden, geef dan
-   een lege string terug — verzin er geen.
+2. "voorstel" — wat deze rol wil doen of nodig heeft, als een MENSELIJKE VRAAG en niet als een
+   opdracht aan een computer. Niet "Beoordeel via het inbox-commando" maar "Kun je kijken wat er aan
+   de hand is?". Eén handeling, geen lijstje opties. En stel geen vraag die een oorzaak al
+   veronderstelt als de ruwe tekst die oorzaak niet noemt. Weet je het niet uit de tekst af te
+   leiden, geef dan een lege string terug — verzin er geen.
+
+DE VIJF LEZERSTESTS. Je tekst doorstaat ze alle vijf; ze staan in de policy van dit dorp:
+
+{lezerstests}
 
 Antwoord ALLEEN met JSON: {{"spanning": "...", "voorstel": "..."}}"""
+
+
+# ── feitbehoud, deterministisch ─────────────────────────────────────────────
+#
+# Twee van de vier eisen zijn te MÉTEN in plaats van te vragen, en gemeten is sterker: een model dat
+# zijn eigen tekst beoordeelt kijkt zijn eigen huiswerk na. De andere twee (alternatieven heel,
+# letterlijk vertalen) zijn oordeel en blijven in de prompt.
+
+# Woorden die een slag om de arm houden, en woorden die zekerder zijn. De tweede groep mag alleen
+# voorkomen als de bron zelf al zo stellig was.
+_SLAG_OM_DE_ARM = ("mogelijk", "misschien", "wellicht", "vermoedelijk", "lijkt", "zou kunnen",
+                   "mogelijkerwijs", "onduidelijk", "maybe", "possibly", "perhaps")
+# OP WOORDGRENS, en dat is geen detail. De eerste versie zocht op losse tekst, en verwierp toen een
+# perfecte herschrijving omdat er "ONduidelijk" in stond — het woord dat de slag om de arm juist
+# vasthoudt, gelezen als het tegendeel. De poort die feitbehoud bewaakt kan zelf een feit verdraaien.
+# Gevonden door de meting, niet door de test die ik erbij schreef.
+#
+# "dus" en het kale "zeker" staan er bewust niet bij. "dus" is een gevolgtrekking, geen
+# zekerheidsclaim. En "zeker" is in het Nederlands te veelzijdig: "we moeten zeker weten of alles
+# werkt" is een WENS om te controleren, precies het tegenovergestelde van een stellige bewering — en
+# de meting verwierp daarop een correcte herschrijving. Tweede valse afwijzing van dezelfde soort.
+_STELLIGER = tuple(re.compile(r"\b" + w + r"\b") for w in
+                   ("waarschijnlijk", "duidelijk", "ongetwijfeld", "uiteraard",
+                    "blijkbaar", "kennelijk", "vast en zeker"))
+# ELK getal, ook een losse cijfer. "De dagpuls draaide 3 dagen niet" is precies de vorm waarin een
+# model een specifiek detail bijverzint dat de bron niet had, en die glipte door een grens van twee
+# cijfers heen. Vals afkeuren kost een lelijke maar ware tekst; dat is de goedkope kant.
+_GETAL = re.compile(r"\d+")
+
+
+def feitbehoud(bron: str, tekst: str) -> tuple[bool, str]:
+    """Is de herschrijving niet ZEKERDER of SPECIFIEKER dan de bron? Geeft (ok, reden).
+
+    De aanleiding staat in het ijkpunt van de spec. De ruwe tekst zei "mogelijk niet-uitvoering
+    (hook of service)"; de eerste leesbare versie maakte daar "waarschijnlijk draait zijn service
+    niet meer" van. Twee mogelijkheden werden er één, en "mogelijk" werd "waarschijnlijk" — feitbehoud
+    dat faalt in het klein, geschreven door een mens met aandacht. Een goedkoop model doet het vaker.
+
+    Fail-open: zonder bron valt er niets te vergelijken, en dan keurt deze poort niets af."""
+    b, t = (bron or "").lower(), (tekst or "").lower()
+    if not b.strip() or not t.strip():
+        return True, ""
+    erbij = next((r.pattern for r in _STELLIGER if r.search(t)), "")
+    if erbij and not any(r.search(b) for r in _STELLIGER) and any(w in b for w in _SLAG_OM_DE_ARM):
+        woord = erbij.replace(r"\b", "")
+        return False, f"stelliger dan de bron: '{woord}' terwijl er een slag om de arm stond"
+    # Getallen: elk getal in de uitkomst moet in de bron te vinden zijn. Een datum mag anders
+    # geschreven worden ("2026-08-29" → "29 augustus"), want de cijfers zitten dan nog in de bron.
+    bron_cijfers = "".join(_GETAL.findall(b))
+    for g in _GETAL.findall(t):
+        if g not in bron_cijfers:
+            return False, f"getal '{g}' staat niet in de ruwe tekst"
+    return True, ""
 
 
 def _accountabilities(records, rol: str) -> str:
@@ -93,8 +167,13 @@ def afgekapt(tekst: str) -> bool:
 
 
 def jargon_in(tekst: str) -> list[str]:
+    """OP WOORDGRENS. Dit deed een substring-vergelijking, en verwierp daarmee een prima
+    herschrijving omdat er "kernproces" stond — "kern" staat in de lijst. Zelfde soort fout als in
+    `feitbehoud`, en allebei gevonden door de meting en niet door een test: "match" zit in
+    "matchmaker", "store" in "geschiedenisstore", "kern" in "kernproces". Een poort die op letters
+    zoekt in plaats van op woorden keurt taal af die er niets mee te maken heeft."""
     laag = (tekst or "").lower()
-    return [w for w in JARGON if w in laag]
+    return [w for w in JARGON if re.search(r"\b" + re.escape(w) + r"\b", laag)]
 
 
 def keur(bevinding: dict, *, voorstel_verplicht: bool = True) -> tuple[bool, str]:
@@ -109,6 +188,13 @@ def keur(bevinding: dict, *, voorstel_verplicht: bool = True) -> tuple[bool, str
     gevonden = jargon_in(spanning) or jargon_in(voorstel)
     if gevonden:
         return False, f"jargon dat de lezer niet hoeft te kennen: {', '.join(gevonden[:4])}"
+    # Feitbehoud gaat vóór politoer: liever de ruwe tekst laten staan dan een gladde versie die
+    # zekerder of specifieker is dan wat er stond. Afkeuren = terugvallen op het origineel.
+    bron = str((bevinding or {}).get("ruw") or "")
+    for deel in (spanning, voorstel):
+        ok, reden = feitbehoud(bron, deel)
+        if not ok:
+            return False, reden
     if voorstel_verplicht:
         if len(voorstel) < _MIN_VOORSTEL:
             return False, ("geen concreet voorstel — zonder 'wat wil je doen' is dit een melding, "
@@ -119,7 +205,7 @@ def keur(bevinding: dict, *, voorstel_verplicht: bool = True) -> tuple[bool, str
 
 
 def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
-               ladder: str = "") -> dict:
+               ladder: str = "", data_dir: str = "") -> dict:
     """Eén call per nieuwe spanning. Geeft {spanning, voorstel, ok, reden, ruw}.
 
     `ok=False` betekent: dit is niet verzendbaar en degradeert naar 'moet herschreven'. Nooit een
@@ -157,8 +243,11 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     # ruwe tekst alsnog naar het model — fail-open naar het origineel, nooit naar niets.
     from nooch_village.systeemtaal import ontjargon
     leesbaar = ontjargon(ruw) or ruw
+    from nooch_village.helderheid import reader_tests
+    lezerstests, _uit_policy = reader_tests(data_dir)
     prompt = _PROMPT.format(rol=rol or "onbekend", tekst=leesbaar[:1200],
-                            accountabilities=_accountabilities(records, rol))
+                            accountabilities=_accountabilities(records, rol),
+                            lezerstests=lezerstests)
     try:
         # 700 tokens kapte lange antwoorden af, en de afkap-poort weigerde ze dan terecht — maar
         # de oorzaak lag bij mij, niet bij het model. Ruimer, plus een lengte-instructie in de
