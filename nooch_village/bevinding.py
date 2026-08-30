@@ -149,7 +149,15 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
         except Exception:                                          # noqa: BLE001
             ladder = ""
 
-    prompt = _PROMPT.format(rol=rol or "onbekend", tekst=ruw[:1200],
+    # GROND-EERST, MODEL-LAATST. De deterministische systeemjargon-swap draait vóór de call: gratis,
+    # gegarandeerd, en onafhankelijk van welke trede er draait. Wat overblijft (structuur,
+    # leesbaarheid, een menselijke vraag in plaats van een commando) is oordeel, en dat is het model.
+    # `uit["ruw"]` blijft de ECHTE ruwe tekst: dat veld is herkomst, en herkomst hoor je niet op te
+    # poetsen. Loopt de swap de tekst leeg (een bericht dat alleen een commando was), dan gaat de
+    # ruwe tekst alsnog naar het model — fail-open naar het origineel, nooit naar niets.
+    from nooch_village.systeemtaal import ontjargon
+    leesbaar = ontjargon(ruw) or ruw
+    prompt = _PROMPT.format(rol=rol or "onbekend", tekst=leesbaar[:1200],
                             accountabilities=_accountabilities(records, rol))
     try:
         # 700 tokens kapte lange antwoorden af, en de afkap-poort weigerde ze dan terecht — maar

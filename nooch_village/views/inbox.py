@@ -17,7 +17,8 @@ import json
 from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
 from nooch_village.inbox_wizard import FLOWS, GOVERNANCE, OTYPE_LABEL
-from nooch_village.notifications import volledig as _volledig
+from nooch_village.notifications import MENS_GETYPT, volledig as _volledig
+from nooch_village.systeemtaal import ontjargon
 
 _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
            "verwerkt": ("✓ handled", "chip outline")}
@@ -78,6 +79,26 @@ _TYPE_CHIP = {"founder": "besluit", "naar_rol": "verzoek", "governance": "govern
               "actie": "actie"}
 
 
+def _leesbaar(n: dict, tekst: str) -> str:
+    """De deterministische systeemjargon-swap op de LEESTEKST.
+
+    Waarom ook hier, en niet alleen vóór het model: deze laag is gratis en moet gegarandeerd zijn.
+    Faalt het model — geen krediet, storing — dan valt het scherm terug op de ruwe signalering, en
+    dan hoort die tenminste geen `python -m …` en geen `niet-uitvoering` meer te bevatten. De swap
+    is deterministisch en betekenis-behoudend, dus hij mag zonder oordeel draaien.
+
+    NIET op mens-getypte tekst: dezelfde regel als de herschrijf-poort. Een mens-getypt bericht ís al
+    mensentaal, en andermans woorden opschonen is inmenging — ook als het maar één woord is."""
+    if n.get(MENS_GETYPT) is True:
+        return tekst
+    # Eerst de verpakking eraf, dan de swaps. `tensie_poort.kern` is DE plek die onze eigen omhulsels
+    # kent ("⏸️ Project van X vastgelopen op 5 item(s): …") — die hier nog eens uitschrijven zou een
+    # tweede vorm van hetzelfde zijn. Gemeten op prod: 84 van de laatste 30 dagen dragen dat omhulsel,
+    # en op de LIJST stond het nog voluit; de detailweergave gebruikte `kern` al wél.
+    from nooch_village import tensie_poort as tp
+    return ontjargon(tp.kern(tekst) or tekst) or tekst
+
+
 def _een_regel(n: dict) -> str:
     """De bevinding als hij er is, anders de rauwe signalering.
 
@@ -87,7 +108,7 @@ def _een_regel(n: dict) -> str:
     b = dict(n.get("bevinding") or {})
     if b.get("ok") and b.get("spanning"):
         return _one_line(b["spanning"])
-    return _one_line(n.get("snippet"))
+    return _one_line(_leesbaar(n, str(n.get("snippet") or "")))
 
 
 def _inline_actie(st, n: dict, csrf: str) -> str:
@@ -333,10 +354,12 @@ def _kaart_html(st, n: dict) -> str:
             regels.append(f"<details class='box-details'><summary class='muted'>ruwe signalering"
                           f"</summary><p class='muted'>{_e(kern or tekst)}</p></details>")
         elif herschreven and not herschreven.get("ok"):
-            regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
+            # De hoofdtekst wordt opgeschoond; de "ruwe signalering" hierboven blijft letterlijk,
+            # want dat blok is herkomst en herkomst poets je niet op.
+            regels.append(f"<div class='fbubble'>{_e(_leesbaar(n, kern or tekst))}</div>")
             regels.append(f"<p class='muted'>⚠ moet herschreven: {_e(herschreven.get('reden'))}</p>")
         else:
-            regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
+            regels.append(f"<div class='fbubble'>{_e(_leesbaar(n, kern or tekst))}</div>")
         if behoefte:
             regels.append(f"<p><strong>Wat ik van jou nodig heb:</strong> {_e(behoefte)}</p>")
         # Het LIJF: per type een andere uitleg van wat er van de lezer gevraagd wordt.
