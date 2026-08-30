@@ -54,11 +54,12 @@ def test_mention_mens_alleen_notificatie(tmp_path, monkeypatch):
                                         "text": [f"@{person.name} kijk even"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     assert any(n["target_type"] == "person" for n in st.notif.all())     # notificatie zoals altijd
-    # WÉL de poort: een PERSOON leest dit, dus gaat het langs de leesbaarheids-poort in
-    # `NotifStore.add`. Hier stond 'geen LLM aangeroepen' — die regel kwam uit de tijd dat de
-    # verrijker personen oversloeg. Besluit 30 aug 2026: de lezer wint. Gemeten kost dat weinig:
-    # van de 262 berichten die een mens leest zijn er 5 door een mens getypt.
-    assert called, "een bericht aan een mens hoort langs de poort te gaan"
+    # De poort laat dit met rust: een MENS typte deze woorden, en dan is het al mensentaal.
+    # (In deze test is de auteur 'guest' en dus niet als persoon herkenbaar; het pad geeft nu wél
+    # de echte auteur mee waar die er is — zie `_act_proj_feed`.)
+    ingelogd = st.people.by_email("guest") is not None
+    if ingelogd:
+        assert not called, "de eigen woorden van een mens horen niet herschreven te worden"
     assert all(e.get("author", {}).get("type") != "persona" for e in st.projects.get(pid)["log"])
 
 

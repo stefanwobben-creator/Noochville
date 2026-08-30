@@ -143,4 +143,8 @@ def test_de_conventies_staan_opgeschreven():
     doc = (ROOT.parent / "docs" / "CONVENTIES.md").read_text(encoding="utf-8")
     for mechaniek in ("NV.swap", "NotifStore", "de wizard", "data-qa-frag"):
         assert mechaniek in doc, mechaniek
+    # De meta-les onder de projectcreatie-poort, de postbus-blinde-vlek, de afslank-poort én de
+    # herschrijf-poort: alle vier waren een regel die niets kon waarnemen.
+    assert "Handhaving vereist waarneembaarheid" in doc
+    assert "MENS_GETYPT" in doc
     assert "tests/test_conventies_ratchet.py" in doc      # het doc wijst naar zijn eigen poortje
