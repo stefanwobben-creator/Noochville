@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werkoverleg — 3-koloms prototype</title>
+<style>
+  :root{
+    --bg:#F4F1EC; --panel:#FFFFFF; --ink:#23201B; --muted:#8A8578; --border:#E4DFD5;
+    --coral:#FF6B5B; --coral-tint:#FFEDEA; --green:#1F9D55; --green-tint:#E7F5EC;
+    --yellow:#FFCE2E; --ai:#7A5BD1; --ai-tint:#EEE9FA;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--ink)}
+  .muted{color:var(--muted)}
+  button{font:inherit;cursor:pointer}
+
+  /* ---- modal shell ---- */
+  .ovl{position:fixed;inset:0;background:rgba(20,18,15,.35);display:flex;
+       align-items:center;justify-content:center;padding:20px}
+  .wo{background:var(--panel);width:min(1160px,96vw);height:min(760px,94vh);
+      border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.28);display:flex;
+      flex-direction:column;overflow:hidden;border:1px solid var(--border)}
+
+  /* ---- header ---- */
+  .wo-head{display:flex;align-items:center;gap:12px;padding:12px 16px;
+           border-bottom:1px solid var(--border);flex:0 0 auto}
+  .wo-head h1{font-size:15px;margin:0;font-weight:650}
+  .wo-head .crumb{color:var(--muted);font-weight:400}
+  .wo-head .spacer{flex:1}
+  .timer{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);
+         background:var(--bg);border:1px solid var(--border);border-radius:20px;
+         padding:3px 10px}
+  .leave{border:1px solid var(--border);background:transparent;color:var(--muted);
+         border-radius:8px;padding:5px 10px;font-size:13px}
+  .leave:hover{background:var(--coral-tint);border-color:var(--coral);color:var(--coral)}
+
+  /* ---- 3 columns ---- */
+  .wo-body{flex:1;display:grid;grid-template-columns:250px 1fr 230px;min-height:0}
+  .col{min-height:0;overflow:auto}
+  .left{border-right:1px solid var(--border);padding:14px 12px;display:flex;flex-direction:column;gap:14px}
+  .mid{padding:20px 26px;display:flex;flex-direction:column}
+  .right{border-left:1px solid var(--border);padding:12px;background:#FBF9F5}
+
+  /* ---- steps ---- */
+  .steps{display:flex;flex-direction:column;gap:2px}
+  .step{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;
+        color:var(--ink);text-decoration:none;border:1px solid transparent}
+  .step:hover{background:var(--bg)}
+  .step.active{background:var(--coral-tint);border-color:var(--coral);font-weight:600}
+  .step .n{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+           font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+  .step.active .n{background:var(--coral);border-color:var(--coral);color:#fff}
+  .step.done .n{background:var(--green-tint);border-color:var(--green);color:var(--green)}
+
+  .tensbox{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}
+  .tensbox label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .tensbox textarea{width:100%;margin-top:6px;border:1px solid var(--border);border-radius:8px;
+                    padding:8px;resize:vertical;min-height:52px;font:inherit;background:var(--panel)}
+  .tensbox .add{margin-top:6px;width:100%;border:1px dashed var(--border);background:var(--panel);
+                border-radius:8px;padding:7px;color:var(--muted)}
+
+  /* ---- middle content ---- */
+  .mid h2{margin:0 0 2px;font-size:19px}
+  .mid .sub{color:var(--muted);margin-bottom:16px}
+  .content{flex:1}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+        padding:12px 14px;margin-bottom:10px}
+  .rowline{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border)}
+  .rowline:last-child{border-bottom:0}
+  .chip{display:inline-block;font-size:11px;padding:1px 8px;border-radius:20px;
+        background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+  .chip.g{background:var(--green-tint);border-color:var(--green);color:var(--green)}
+  .chip.c{background:var(--coral-tint);border-color:var(--coral);color:var(--coral)}
+  .vx{margin-left:auto;display:flex;gap:6px}
+  .vx button{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--panel)}
+  .vx .on-v{background:var(--green-tint);border-color:var(--green);color:var(--green)}
+  .vx .on-x{background:var(--coral-tint);border-color:var(--coral);color:var(--coral)}
+
+  /* per-step action bar (no fixed footer) */
+  .step-act{display:flex;justify-content:flex-end;padding-top:16px;margin-top:8px}
+  .btn{border:1px solid var(--coral);background:var(--coral);color:#fff;border-radius:9px;
+       padding:9px 18px;font-weight:600}
+  .btn.ghost{background:transparent;color:var(--coral)}
+  .btn.big{padding:14px 34px;font-size:16px;border-radius:11px}
+
+  /* step 7 summary */
+  .summary .card h3{margin:0 0 8px;font-size:14px}
+  .close-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:26px}
+  .close-wrap .note{color:var(--muted);font-size:13px}
+
+  /* ---- right: presence / video ---- */
+  .right h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:2px 4px 10px}
+  .tile{border-radius:10px;margin-bottom:10px;overflow:hidden;border:1px solid var(--border);background:#fff}
+  .cam{aspect-ratio:4/3;background:linear-gradient(135deg,#2c2a25,#454138);position:relative;
+       display:grid;place-items:center;color:#cfc9bd}
+  .cam .off{font-size:12px;color:#9a9382}
+  .cam .avatarbig{width:52px;height:52px;border-radius:50%;background:#5b5648;color:#fff;
+                  display:grid;place-items:center;font-weight:600}
+  .tile .lbl{display:flex;align-items:center;gap:6px;padding:6px 9px;font-size:12.5px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .mic{margin-left:auto;color:var(--muted);font-size:12px}
+  .tile.ai{border-color:var(--ai);background:var(--ai-tint)}
+  .tile.ai .lbl{color:var(--ai);font-weight:600}
+  .tile.ai .badge{margin-left:auto;font-size:10px;background:var(--ai);color:#fff;border-radius:20px;padding:1px 7px}
+  .ai-face{aspect-ratio:4/3;display:grid;place-items:center;background:var(--ai-tint);color:var(--ai);font-size:30px}
+  .empty{border:1px dashed var(--border);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px}
+
+  .flag{margin:10px 12px 0;font-size:11px;color:var(--muted);background:var(--yellow);
+        opacity:.9;border-radius:6px;padding:6px 8px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="ovl">
+  <div class="wo">
+
+    <!-- HEADER: timer klein rechts + verlaat-overleg (abort, secundair) -->
+    <div class="wo-head">
+      <h1>Werkoverleg <span class="crumb">· Nooch-cirkel</span></h1>
+      <div class="spacer"></div>
+      <span class="timer" title="loopt sinds start">⏱ 12:34</span>
+      <button class="leave" title="Sluit alleen jouw view en verlaat de room — beëindigt het overleg NIET">✕ verlaat overleg</button>
+    </div>
+
+    <div class="wo-body">
+
+      <!-- LINKS: stappen + spanningen-input (~250px) -->
+      <div class="col left">
+        <div class="steps" id="steps"></div>
+        <div class="tensbox">
+          <label>Spanning inbrengen</label>
+          <textarea placeholder="Wat knelt of kan beter?"></textarea>
+          <button class="add">+ op de agenda</button>
+        </div>
+      </div>
+
+      <!-- MIDDEN: content van de actieve stap (krijgt de ruimte van de oude onderbalk) -->
+      <div class="col mid">
+        <div id="content" class="content"></div>
+        <div id="stepact"></div>
+      </div>
+
+      <!-- RECHTS: video/presence — vast over álle stappen -->
+      <div class="col right">
+        <h3>In de room</h3>
+
+        <div class="tile">
+          <div class="cam"><div class="avatarbig">SW</div></div>
+          <div class="lbl"><span class="dot"></span>Stefan Wobben <span class="mic">🎙</span></div>
+        </div>
+
+        <div class="tile">
+          <div class="cam"><span class="off">📷 camera uit</span></div>
+          <div class="lbl"><span class="dot"></span>Lotte Mulder <span class="mic">🔇</span></div>
+        </div>
+
+        <!-- AI-rolvervullers: presence-tile, eigen styling, GEEN camera, GEEN aanwezig/afwezig -->
+        <div class="tile ai">
+          <div class="ai-face">🤖</div>
+          <div class="lbl">TrendScout <span class="badge">AI</span></div>
+        </div>
+        <div class="tile ai">
+          <div class="ai-face">🥥</div>
+          <div class="lbl">Cory Coconut <span class="badge">AI</span></div>
+        </div>
+
+        <div class="empty">Leeg tot iemand joint · presence koppelt aan check-in</div>
+        <span class="flag">Prototype — video/presence is een eigen kolom, niet in de content</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  {k:"checkin",  n:"Check-in"},
+  {k:"checklist",n:"Checklist"},
+  {k:"metrics",  n:"Metrics"},
+  {k:"projecten",n:"Projecten"},
+  {k:"agenda",   n:"Agenda"},
+  {k:"checkout", n:"Check-out"},
+  {k:"sluiten",  n:"Sluiten"},
+];
+
+function personRow(name, initials, present, ai){
+  return `<div class="rowline"><span class="chip ${present?'g':'c'}">${present?'aanwezig':'afwezig'}</span> ${name}
+    <span class="vx"><button class="${present?'on-v':''}">✓</button><button class="${!present?'on-x':''}">✗</button></span></div>`;
+}
+
+const CONTENT = {
+  checkin: `<h2>Check-in</h2><div class="sub">Wie is er? Join in de room → automatisch aanwezig. De v/✗ blijft voor de uitzondering.</div>
+    <div class="card">
+      ${personRow("Stefan Wobben","SW",true)}
+      ${personRow("Lotte Mulder","LM",true)}
+      ${personRow("Nina Wolter","NW",false)}
+    </div>
+    <div class="card muted" style="font-size:12.5px">
+      <b>Afwezig, welke soort?</b><br>
+      ◦ <b>Eenmalig afwezig bij dit overleg</b> — geen gevolgen voor taken.<br>
+      ◦ <b>Op verlof</b> — taken pauzeren. <span class="chip c">alleen dít pauzeert taken</span><br>
+      <span class="muted">AI-rolvervullers staan rechts als presence-tile, niet in deze lijst.</span>
+    </div>`,
+  checklist: `<h2>Checklist</h2><div class="sub">Terugkerende acties — ✓ / ✗ voor deze periode.</div>
+    <div class="card">
+      <div class="rowline">Field Note gepubliceerd <span class="chip">Alle leden</span><span class="vx"><button class="on-v">✓</button><button>✗</button></span></div>
+      <div class="rowline">Trends-puls gedraaid <span class="chip">Alle leden</span><span class="vx"><button>✓</button><button class="on-x">✗</button></span></div>
+      <div class="rowline">Backlog getrieerd <span class="chip">Website Developer</span><span class="vx"><button class="on-v">✓</button><button>✗</button></span></div>
+    </div>`,
+  metrics: `<h2>Metrics</h2><div class="sub">Laatste readings — read-only in het overleg.</div>
+    <div class="card"><div class="rowline"><b>Bezoekers (7d)</b><span class="chip g">▲ 321</span><span class="muted" style="margin-left:auto">2 dagen geleden</span></div>
+    <div class="rowline"><b>Orders</b><span class="chip">— geen recente meting</span></div></div>`,
+  projecten: `<h2>Projecten</h2><div class="sub">Loopt er iets vast? Snelle stand.</div>
+    <div class="card"><div class="rowline"><span class="chip g">Actief</span>Productpagina live <span class="muted" style="margin-left:auto">trekker: Lotte</span></div>
+    <div class="rowline"><span class="chip c">Wacht</span>Checkout-flow <span class="muted" style="margin-left:auto">trekker: Stefan</span></div></div>`,
+  agenda: `<h2>Agenda — triage</h2><div class="sub">Elk item legt zijn uitkomst <b>direct</b> op de server vast (project / actie / info).</div>
+    <div class="card"><div class="rowline">Zoekwoord-dip week 27 <span class="chip">spanning</span><span style="margin-left:auto"><button class="btn ghost" style="padding:4px 12px">→ project</button></span></div>
+    <div class="rowline">Nieuwsbrief-cadans onduidelijk <span class="chip">rol</span><span style="margin-left:auto"><button class="btn ghost" style="padding:4px 12px">→ actie</button></span></div></div>
+    <div class="muted" style="font-size:12.5px">Vastgelegd blijft staan, ook als iemand halverwege "verlaat overleg" klikt.</div>`,
+  checkout: `<h2>Check-out</h2><div class="sub">Kort rondje — hoe ging het? (1–5)</div>
+    <div class="card"><div class="rowline">Stefan Wobben <span class="vx" style="margin-left:auto"><button>1</button><button>2</button><button>3</button><button class="on-v">4</button><button>5</button></span></div>
+    <div class="rowline">Lotte Mulder <span class="vx" style="margin-left:auto"><button>1</button><button>2</button><button>3</button><button>4</button><button class="on-v">5</button></span></div></div>`,
+  sluiten: `<h2>Sluiten</h2><div class="sub">Dit scherm ís de bevestiging — geen aparte "weet je het zeker?".</div>
+    <div class="summary">
+      <div class="card"><h3>Vastgelegde projecten</h3>
+        <div class="rowline"><span class="chip g">nieuw</span>Zoekwoord-dip aanpakken <span class="muted" style="margin-left:auto">owner: Website Developer</span></div></div>
+      <div class="card"><h3>Vastgelegde acties</h3>
+        <div class="rowline"><span class="chip">actie</span>Nieuwsbrief-cadans vastleggen <span class="muted" style="margin-left:auto">→ checklist</span></div>
+        <div class="rowline"><span class="chip">info</span>@Marketing Lead geïnformeerd over week 27</div></div>
+    </div>`,
+};
+
+let cur = "checkin";
+const visited = new Set(["checkin"]);
+
+function render(){
+  // steps
+  document.getElementById("steps").innerHTML = STEPS.map((s,i)=>{
+    const cls = s.k===cur ? "active" : (visited.has(s.k) ? "done" : "");
+    const mark = (visited.has(s.k) && s.k!==cur) ? "✓" : (i+1);
+    return `<a class="step ${cls}" href="#" data-k="${s.k}"><span class="n">${mark}</span>${s.n}</a>`;
+  }).join("");
+  // content
+  document.getElementById("content").innerHTML = CONTENT[cur];
+  // per-step action: 1..6 = Volgende (rechts); 7 = centrale Sluit overleg
+  const idx = STEPS.findIndex(s=>s.k===cur);
+  const act = document.getElementById("stepact");
+  if(cur==="sluiten"){
+    act.className="";
+    act.innerHTML = `<div class="close-wrap">
+        <button class="btn big" onclick="alert('PROTO: zet meeting-status op afgerond (terminale commit). Uitkomsten staan al op de server.')">Sluit overleg</button>
+        <span class="note">Terminale actie · uitkomsten zijn al per item vastgelegd</span></div>`;
+  } else {
+    act.className="step-act";
+    const next = STEPS[idx+1].k;
+    act.innerHTML = `<button class="btn" data-next="${next}">Volgende →</button>`;
+  }
+}
+
+document.addEventListener("click",(e)=>{
+  const s = e.target.closest("[data-k]");
+  const n = e.target.closest("[data-next]");
+  if(s){ e.preventDefault(); cur=s.dataset.k; visited.add(cur); render(); }
+  if(n){ cur=n.dataset.next; visited.add(cur); render(); }
+});
+render();
+</script>
+</body>
+</html>

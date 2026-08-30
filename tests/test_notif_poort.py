@@ -110,6 +110,25 @@ def test_een_item_dat_zijn_type_al_kent_slaat_de_poort_over(tmp_path):
     assert geraakt == []
 
 
+def _herschrijft(n: dict, dd: str, mp=None) -> bool:
+    """Wat de poort de verrijker meegeeft. TYPEREN en HERSCHRIJVEN zijn twee handelingen: de eerste
+    zegt wát iets is en laat de tekst staan, de tweede vervángt de zin die de lezer ziet. Alleen de
+    tweede raakt andermans woorden — en alleen die staat hier ter discussie."""
+    import nooch_village.spanning_ontstaat as so
+    gezien = {}
+
+    def _nep(records, assignments, data_dir="", reason_fn=None, herschrijf=True):
+        gezien["h"] = herschrijf
+        return lambda x: {}
+    echt = so.maak_verrijker
+    so.maak_verrijker = _nep
+    try:
+        nm._door_de_poort(n, dd)
+    finally:
+        so.maak_verrijker = echt
+    return gezien.get("h")
+
+
 # ── Mensentaal blijft mensentaal ───────────────────────────────────────────
 
 def test_wat_een_mens_typte_wordt_niet_herschreven(tmp_path):
@@ -129,8 +148,8 @@ def test_wat_een_mens_typte_wordt_niet_herschreven(tmp_path):
     # op id én op naam — beide vormen komen in `by` voor
     assert nm._is_mens_schrijver({"by": p.id}, dd) is True
     assert nm._is_mens_schrijver({"by": "Stefan Wobben"}, dd) is True
-    # en de poort laat zo'n bericht met rust
-    assert nm._door_de_poort({"target_type": "person", "target_id": p.id, "by": p.id}, dd) == {}
+    # en de poort geeft dat door aan de verrijker: typeren mag, herschrijven niet
+    assert _herschrijft({"target_type": "person", "target_id": p.id, "by": p.id}, dd) is False
 
 
 def test_een_machine_bericht_aan_een_mens_gaat_er_wel_doorheen(tmp_path):
@@ -140,6 +159,8 @@ def test_een_machine_bericht_aan_een_mens_gaat_er_wel_doorheen(tmp_path):
     dd = str(tmp_path)
     for machine in ("puls-wacht", "compliance", "werkoverleg", "noochie"):
         assert nm._is_mens_schrijver({"by": machine}, dd) is False
+    # en dan mag er wél herschreven worden — dit is precies de tekst waar de laag voor bestaat
+    assert _herschrijft({"target_type": "person", "target_id": p.id, "by": "puls-wacht"}, dd) is True
 
 
 def test_onbekende_afzender_telt_als_machine(tmp_path):
@@ -168,3 +189,64 @@ def test_het_mention_pad_geeft_de_auteur_mee_niet_het_kanaal(tmp_path):
     bron = inspect.getsource(cockpit2._act_proj_feed)
     assert 'by="dialoog"' not in bron.split("Fail-soft")[-1], "het kanaal staat weer in `by`"
     assert "st.people.by_email(c.username)" in bron
+
+
+# ── Het pad wint van de naam ───────────────────────────────────────────────
+
+def test_een_mens_pad_zonder_naam_blijft_mens(tmp_path):
+    """DE RAND DIE ANDERSOM MOEST. De harde regel is 'nooit andermans woorden herschrijven'. Als
+    die alleen op auteur-HERKENNING hangt, valt hij om precies waar het pijn doet: een
+    dialoog-comment van een uitgelogde gebruiker viel terug op `by="dialoog"`, en een eigen spanning
+    in je eigen inbox draagt `by="zelf"` — allebei onmiskenbaar mens-getypt, allebei onherkenbaar,
+    dus allebei herschreven.
+
+    Het pad wist wél dat er een mens zat te typen. Dus zegt het record dat nu, en het pad wint van
+    de naam. Alleen een écht niet-mens-pad is machine-tekst."""
+    dd = str(tmp_path)
+    for by in ("dialoog", "zelf", "", "The Source"):
+        n = {"by": by, nm.MENS_GETYPT: True}
+        assert nm._is_mens_schrijver(n, dd) is True, by
+
+
+def test_het_merk_moet_er_echt_staan(tmp_path):
+    """Geen 'truthy genoeg': alleen True telt. Een pad dat het veld half zet, is een pad dat het
+    niet weet — en dan valt het terug op de goedkope fout."""
+    dd = str(tmp_path)
+    for waarde in (False, None, "ja", 1, 0):
+        assert nm._is_mens_schrijver({"by": "dialoog", nm.MENS_GETYPT: waarde}, dd) is False, waarde
+
+
+def test_de_typ_paden_merken_hun_eigen_tekst():
+    """Het merk hoort bij het PAD, en een pad dat het vergeet is stil: dan wordt er alsnog
+    herschreven en merkt niemand het. Deze vier zijn de plekken waar een mens letterlijk zit te
+    typen en de tekst ongefilterd in een notificatie belandt."""
+    import inspect
+
+    from nooch_village import cockpit2
+    for fn in (cockpit2._act_proj_feed, cockpit2._act_notif_add, cockpit2._act_notif_besluit):
+        assert "MENS_GETYPT" in inspect.getsource(fn), fn.__name__
+
+
+def test_het_dialoog_merk_hangt_aan_het_pad_niet_aan_de_persoon():
+    """Specifiek: bij een mention is `atype == "human"` het bewijs, niet of we de persoon
+    terugvinden. Anders herschrijven we juist de woorden van wie we níét kennen."""
+    import inspect
+
+    from nooch_village import cockpit2
+    bron = inspect.getsource(cockpit2._act_proj_feed)
+    assert 'if atype == "human" else {}' in bron
+
+
+def test_typeren_gaat_door_ook_bij_een_mens_die_typte(tmp_path):
+    """DE VONDST DIE EEN TEST DEED OMVALLEN. De poort stond vóór de verrijker, en die verrijker doet
+    twee dingen tegelijk: typeren (wát is dit) én herschrijven (de zin die de lezer krijgt). 'Nooit
+    andermans woorden herschrijven' zette daarmee stilzwijgend ook de ROUTERING uit — een
+    handgevangen spanning kwam ongetypeerd bij de rol aan.
+
+    Een principe dat een werkende stroom afknijpt is geen principe meer maar een storing. Dus knipt
+    de poort de twee uit elkaar: typeren altijd (voor een mens-lezer), herschrijven alleen bij
+    machinetekst."""
+    import nooch_village.spanning_ontstaat as so
+    bron = inspect.getsource(so.maak_verrijker)
+    assert "herschrijf: bool = True" in bron
+    assert "geen aanvulling" in bron            # het verschil staat bij de code

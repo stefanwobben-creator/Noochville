@@ -17,6 +17,11 @@ log = logging.getLogger("village.notificaties")
 # een aanroeper een item op een ander doel of een andere tijd laten lijken dan het is.
 _BESCHERMD = ("id", "target_type", "target_id", "at", "read", "by")
 
+# HET PAD IS HET BEWIJS, NIET DE NAAM. Een schrijfpad weet of er een mens zat te typen; die kennis
+# gaat verloren op het moment dat alleen een `by`-string overblijft. Zet dit veld op elk pad waar
+# een mens de tekst zelf intikt — dan hoeft de poort hem niet te herkennen om hem met rust te laten.
+MENS_GETYPT = "mens_getypt"
+
 
 # De preview voor de lijst. Op een WOORDGRENS, want een halve zin leest als een defect en niet als
 # een samenvatting — dezelfde les als bij de herkomst-regel van de laatste meter.
@@ -88,10 +93,20 @@ def _is_mens_schrijver(n: dict, data_dir: str) -> bool:
 
     De voorwaarde is dus tweeledig: een mens LEEST dit én een machine SCHREEF het.
 
-    Fail-richting: kunnen we het niet vaststellen, dan behandelen we het als machine-tekst. Een
-    onbekende `by` is in dit dorp vrijwel altijd een rol of een systeemcomponent, en 'per ongeluk
-    een machinebericht leesbaar maken' is een goedkope fout — 'per ongeluk iemands woorden
-    herschrijven' niet."""
+    HET PAD WINT VAN DE NAAM. Eerst keek dit alleen naar `by`, en dan hangt de regel aan of we de
+    afzender toevallig kunnen thuisbrengen. Dat gaat mis waar het het meeste pijn doet: een
+    dialoog-comment van een uitgelogde of onbekende gebruiker viel terug op `by="dialoog"`, en een
+    eigen spanning in je eigen inbox draagt `by="zelf"` — allebei onmiskenbaar mens-getypt, allebei
+    'niet herkend', dus allebei herschreven. De naam ontbrak; het pad wist het wél.
+
+    Daarom is `MENS_GETYPT` de eerste toets. Alleen een pad waar écht geen mens zat te typen is
+    machine-tekst; ontbrekende auteur-herkenning is dat niet.
+
+    Fail-richting: staat het pad-merk er niet én kennen we de afzender niet, dan geldt het als
+    machine-tekst. Dat blijft de goedkope kant — maar de rand hierboven laat zien dat 'onbekend'
+    te vaak 'mens zonder naam' betekende om er de hele regel op te bouwen."""
+    if n.get(MENS_GETYPT) is True:
+        return True
     by = str(n.get("by") or "").strip()
     if not by:
         return False
@@ -116,25 +131,30 @@ def _door_de_poort(n: dict, data_dir: str, eigen=None) -> dict:
 
     Hier kan niemand er meer omheen: elke instantie draagt hem, want de klasse draagt hem.
 
-    De voorwaarde is tweeledig: een mens LEEST dit én een machine SCHREEF het. Mensentaal hoeft
-    niet vertaald te worden, en andermans woorden herschrijven is inmenging.
+    Twee vragen, en ze doen niet hetzelfde:
+      * LEEST een mens dit? Zo nee, dan gebeurt er niets. De lezer opent de poort.
+      * SCHREEF een mens dit? Zo ja, dan wordt er wél getypeerd (dat zegt alleen wát het is) maar
+        niet HERschreven (dat vervangt de zin die de lezer ziet). Mensentaal hoeft niet vertaald te
+        worden, en andermans woorden herschrijven is inmenging — maar hem daarom ook niet meer
+        routeren zou van een principe een storing maken. Zie `maak_verrijker`.
 
     `eigen` is er alleen voor tests. Fail-soft: kan de poort niet draaien, dan blijft de rauwe
     notificatie gewoon staan — een spanning die niet verrijkt kon worden is nog steeds een spanning."""
     try:
         if eigen is not None:
             return eigen(dict(n)) or {}
-        # TWEE VOORWAARDEN: een mens leest dit, én een machine schreef het. Zie
-        # `_is_mens_schrijver` voor waarom die tweede er principieel in hoort en niet omdat het
-        # toevallig weinig berichten zijn.
-        if not _is_mens_lezer(n, data_dir) or _is_mens_schrijver(n, data_dir):
+        # DE LEZER OPENT DE POORT: gaat geen mens dit lezen, dan hoeft er niets te gebeuren.
+        if not _is_mens_lezer(n, data_dir):
             return {}
+        # DE SCHRIJVER BEPAALT HOEVER HET GAAT, en dat is een fijnere grens dan 'wel of niet'.
+        # Typeren zegt wát dit is en laat de tekst staan; herschrijven vervángt de zin die de lezer
+        # ziet. Alleen dat tweede is inmenging in andermans woorden — zie `maak_verrijker`.
         from nooch_village.assignments import Assignments
         from nooch_village.governance import Records
         from nooch_village.spanning_ontstaat import maak_verrijker
         verrijk = maak_verrijker(Records(os.path.join(data_dir, "governance_records.json")),
                                  Assignments(os.path.join(data_dir, "assignments.json")),
-                                 data_dir)
+                                 data_dir, herschrijf=not _is_mens_schrijver(n, data_dir))
         return verrijk(dict(n)) or {}
     except Exception as e:                           # noqa: BLE001 — verrijken mag nooit blokkeren
         log.warning("poort op notificatie %s faalde: %s", n.get("id"), e)

@@ -112,7 +112,9 @@ def test_spanning_gaat_ongetypeerd_de_bestaande_haak_in(tmp_path, monkeypatch):
     it = st.werk.backlog_add(CIRCLE, "een punt om te verwerken", by_id="p1")
     gezien = {}
 
-    def _nep_verrijker(records, assignments, data_dir="", reason_fn=None):
+    def _nep_verrijker(records, assignments, data_dir="", reason_fn=None, herschrijf=True):
+        gezien["herschrijf"] = herschrijf
+
         def _fn(n):
             gezien.update(n)
             return {"type": "naar_rol",
@@ -127,6 +129,10 @@ def test_spanning_gaat_ongetypeerd_de_bestaande_haak_in(tmp_path, monkeypatch):
     item = cockpit2._Stores(dd).notif.all()[0]
     assert item["type"] == "naar_rol"                               # de haak typeerde hem
     assert item["bevinding"]["ok"] is True
+    # TYPEREN WEL, HERSCHRIJVEN NIET. Een gevangen punt is met de hand ingetypt, dus de zin blijft
+    # van de vanger — maar hij moet nog wél ergens heen, en dat is de typering. Zonder dit
+    # onderscheid zette 'nooit andermans woorden herschrijven' stilzwijgend de routering uit.
+    assert gezien["herschrijf"] is False
 
 
 def test_punt_wordt_project_op_het_bord_van_een_rol(tmp_path):

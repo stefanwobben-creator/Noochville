@@ -75,6 +75,28 @@ Twee lessen, allebei duurder dan ze klinken:
 Zelfde familie als de postbus-blinde-vlek hierboven: de aanname was "er zijn er twee", de telling
 wees de derde aan.
 
+### Handhaving vereist waarneembaarheid
+
+De meta-les onder de twee hierboven, en onder de afslank-poort. Drie keer dezelfde vorm:
+
+| regel | wat er ontbrak | gevolg |
+|---|---|---|
+| "een tweede projectcreatie-vorm mag niet" | de poort telde een naam, niet de vorm | het formulier stond er gewoon, telling nul |
+| "er zijn drie postbussen" | niets telde de klassen | de aanname was twee |
+| "een rol slapen leggen mag niet stilletjes werk breken" | niemand keek wat die rol droeg | ingetrokken skill, teruggezaaid door `seeds.py` |
+| "nooit andermans woorden herschrijven" | het record schreef `by="dialoog"` — de plek, niet de auteur | de poort kón niet zien dat een mens typte |
+
+**Een principe dat het record niet kan waarnemen, handhaaft niets.** Een regel is pas een regel als
+er een feit in de data staat waaraan je hem kunt toetsen; anders is het een voornemen dat toevallig
+in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
+
+1. **Leg het feit vast op het pad dat het weet.** Het schrijfpad weet of een mens zat te typen; die
+   kennis verdwijnt zodra er alleen een string overblijft. Vandaar `notifications.MENS_GETYPT` —
+   het pad merkt zijn eigen tekst, in plaats van dat de poort de afzender moet raden.
+2. **Het pad wint van de afleiding.** Herkenning-achteraf faalt precies bij de randgevallen: `zelf`,
+   `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
+   die hij het minst kent.
+
 Elke ratchet is **monotoon dalend**: het plafond mag omlaag als je schuld opruimt, nooit omhoog.
 Een nieuwe mechaniek toevoegen mag — maar dan met een expliciete regel in de lijst en een reden,
 niet stilzwijgend.

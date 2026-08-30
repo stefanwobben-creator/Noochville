@@ -86,6 +86,7 @@ from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_ca
                                        reground_seed as _reground_seed,
                                        migrate_definitions as _migrate_definitions)
 from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
+from nooch_village import notifications
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -1947,8 +1948,14 @@ def _act_proj_feed(c):
                 _auteur = (_p.id if _p is not None else "dialoog")
             elif aid:
                 _auteur = aid
+            # Het PAD zegt of een mens dit typte: `atype == "human"`. Dat blijft waar als we de
+            # persoon niet kunnen thuisbrengen (uitgelogd, onbekend e-mail) — en juist dan zou de
+            # poort de woorden van die mens herschrijven. Het merk hoort dus bij het pad, niet bij
+            # de auteur-herkenning.
+            _getypt = {notifications.MENS_GETYPT: True} if atype == "human" else {}
             for ty, tid, nm in ment:
-                st.notif.add(ty, tid, g("pid"), entry["id"], by=_auteur, snippet=g("text"))
+                st.notif.add(ty, tid, g("pid"), entry["id"], by=_auteur, snippet=g("text"),
+                             extra=_getypt)
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
@@ -2997,7 +3004,8 @@ def _act_vangst_verwerk(c):
             if not doel.get("rol"):
                 return nxt, "✗ no mailbox found for this role"
             n = st.notif.add("role", doel["rol"], "", by=(it.get("by_id") or (actor.id if actor else "")),
-                             snippet=tekst)
+                             snippet=tekst,     # met de hand ingetypt; ook als de vanger een gast is
+                             extra={notifications.MENS_GETYPT: True})
             naam = _name(st.records.get(doel["rol"])) if st.records.get(doel["rol"]) else doel["rol"]
             waarom = f" ({doel['reden']})" if doel.get("reden") else ""
             detail = f"tension for {naam}{waarom}"
@@ -3397,11 +3405,13 @@ def _act_notif_add(c):
         role = (g("role") or "").strip()
         if not text:
             return c.nxt, "✗ empty tension"
+        _getypt = {notifications.MENS_GETYPT: True}      # jij typte dit zelf, letterlijk
         if role and st.records.get(role) is not None:
-            st.notif.add("role", role, "", by="zelf", snippet=text)
+            st.notif.add("role", role, "", by="zelf", snippet=text, extra=_getypt)
         else:
             actor = st.people.by_email(username) if username and username != "guest" else None
-            st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text)
+            st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text,
+                         extra=_getypt)
         return c.nxt, "✓ tension added"
 
 
@@ -3550,7 +3560,10 @@ def _act_notif_besluit(c):
                                   author_type="human", author_id=aid)
         st.notif.add("role", owner, src_pid, (entry or {}).get("id", ""), by=by_name,
                      snippet=(f"{kop} op '{(n.get('snippet') or '')[:70]}'"
-                              + (f" — {toel[:60]}" if toel else "")))
+                              + (f" — {toel[:60]}" if toel else "")),
+                     # Het frame is van ons, de toelichting is van The Source. Herschrijven zou
+                     # zijn woorden raken, dus blijft het hele bericht zoals het is.
+                     extra={notifications.MENS_GETYPT: True})
         st.notif.add_outcome(nid, intent="besluit", otype=f"besluit_{keuze}",
                              label=(f"besluit: {kop}" + (f" — {toel[:60]}" if toel else "")),
                              by=by_name)
