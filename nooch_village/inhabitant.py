@@ -1257,7 +1257,11 @@ class Inhabitant(threading.Thread):
             from nooch_village.notifications import NotifStore
             from nooch_village.human_inbox import FOUNDER_ROLE_ID
             pad = os.path.join(self.context.data_dir, "notifications.json")
-            NotifStore(pad).add("role", FOUNDER_ROLE_ID, project_id, by=self.id, snippet=snippet[:160])
+            # GEEN EIGEN CAP. De store bewaart de volledige tekst en leidt zelf de preview af
+            # (#389). Hier nog eens afkappen zou die reparatie op het HOOFDKANAAL van de daemon
+            # naar de founder ongedaan maken — en dat is precies waar de langste spanningen langs
+            # komen.
+            NotifStore(pad).add("role", FOUNDER_ROLE_ID, project_id, by=self.id, snippet=snippet)
         except Exception:
             pass
 

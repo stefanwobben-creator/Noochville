@@ -3092,7 +3092,7 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
         leest_mee = bool(persoon) and st.people.get(persoon) is not None
     if leest_mee:
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
-                     snippet=tekst[:160],
+                     snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
                             "opdrachtgever": opdrachtgever, "bron_project": bron_project})
         naam = (_person_name(st, persoon) if persoon
@@ -3120,7 +3120,7 @@ def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = 
         return ""
     try:
         n = st.notif.add("person", opdrachtgever, bron_project or "", by=(door or "village"),
-                         snippet=f"Klaar: {wat}"[:160],
+                         snippet=f"Klaar: {wat}",   # geen eigen cap (#389)
                          extra={"type": "actie", "herkomst": "↳ wat je vroeg is afgerond",
                                 "afronding": True, "bron_project": bron_project})
         return n.get("id", "")

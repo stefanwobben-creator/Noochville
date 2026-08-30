@@ -32,7 +32,8 @@ def _notify_founder(inbox_path: str, *, by: str, snippet: str) -> None:
     try:
         from nooch_village.notifications import NotifStore
         pad = os.path.join(os.path.dirname(inbox_path) or ".", "notifications.json")
-        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet[:160])
+        # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
+        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet)
     except Exception:
         pass
 
