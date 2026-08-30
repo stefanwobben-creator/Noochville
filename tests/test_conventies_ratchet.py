@@ -147,4 +147,7 @@ def test_de_conventies_staan_opgeschreven():
     # herschrijf-poort: alle vier waren een regel die niets kon waarnemen.
     assert "Handhaving vereist waarneembaarheid" in doc
     assert "MENS_GETYPT" in doc
+    # En de trede daarboven: de afslank-poort is het vangnet voor wat je NIET kunt weghalen, geen
+    # vervanging van het weghalen zelf (de cadans verhuisde naar dagcyclus.py).
+    assert "Tonen is zwakker dan wegnemen" in doc
     assert "tests/test_conventies_ratchet.py" in doc      # het doc wijst naar zijn eigen poortje

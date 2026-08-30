@@ -7,6 +7,10 @@ Wat er daarna één voor één omviel:
   1. `facilitator` sliep → de DAGBEL viel weg; het dorp pulseerde drie dagen niet.
   2. `facilitator` sliep → `dag_eindigt` viel weg, en daarmee de dag-afsluitende curatie van de
      Librarian (tag-onderhoud, verband-voorstellen).
+
+     ↳ 1 en 2 zijn sinds 30 aug 2026 ONMOGELIJK: de cadans is uit de rol gehaald en woont in
+       `dagcyclus.py`. De test daarvoor bewijst nu de afwezigheid van de koppeling, niet de
+       zichtbaarheid ervan — wegnemen is sterker dan waarschuwen.
   3. `website_watcher` sliep → `pulse_completed` viel weg; de afrondingsregel kon niet verschijnen
      en `last_pulse`/`pulse_history` bleven op 27 augustus staan.
   4. `website_watcher` sliep → de GROEI-PULS viel weg (Field Note, Plausible-metrics,
@@ -28,16 +32,21 @@ from nooch_village import afslanken as af
 
 # ── Richting A: een rol slapen ─────────────────────────────────────────────
 
-def test_geval_1_de_facilitator_draagt_de_dagbel():
-    d = aa.rol_afhankelijkheden("facilitator")
-    assert d["eigen_ritme"] is True, "de tick die de dagbel luidt wordt niet gezien"
+def test_geval_1_en_2_kunnen_niet_meer_gebeuren():
+    """DE POORT WAS HET VANGNET, NIET DE OPLOSSING.
 
+    Geval 1 en 2 gingen allebei over dezelfde koppeling: de dagbel en `dag_eindigt` werden
+    gepubliceerd vanuit `Facilitator`, dus een governance-besluit over die ROL zette de hartslag van
+    het hele DORP uit. Deze poort zou dat voortaan tonen vóór de snit — maar tonen is zwakker dan
+    wegnemen, en een waarschuwing die je mag wegklikken houdt een systeem niet overeind.
 
-def test_geval_2_de_facilitator_draagt_dag_eindigt():
+    De cadans is daarom verhuisd naar `dagcyclus.py`: infrastructuur, geen rol. De facilitator draagt
+    hem niet meer, en dus is er niets meer te waarschuwen. Dat deze test omdraaide van 'let op' naar
+    'kan niet meer' is de winst; zie tests/test_hartslag_los.py voor de ratchet die het zo houdt."""
     d = aa.rol_afhankelijkheden("facilitator")
-    ev = {e["event"]: e["consumenten"] for e in d["events"]}
-    assert "dag_eindigt" in ev
-    assert "Librarian" in ev["dag_eindigt"], "de dag-afsluitende curatie hangt hieraan"
+    ev = {e["event"] for e in d["events"]}
+    assert not (ev & {"dag_begint", "dag_eindigt", "maand_begint", "kwartaal_begint"})
+    assert d["eigen_ritme"] is False, "de facilitator heeft geen eigen ritme meer nodig"
 
 
 def test_geval_3_website_watcher_draagt_pulse_completed():
@@ -89,9 +98,12 @@ def _plan(rollen=(), skills=()):
 
 
 def test_een_snit_met_afhankelijkheden_wordt_geweigerd():
+    """Stond op `facilitator` + `dag_eindigt`; die koppeling bestaat niet meer (zie hierboven).
+    `website_watcher` draagt nog wél echt werk waar anderen op wachten, dus daar heeft de poort
+    zijn tanden."""
     with pytest.raises(af.AfhankelijkheidNietBevestigd) as e:
-        af.voer_uit(_plan(rollen=["facilitator"]), None, data_dir="", bevestigd=False)
-    assert "dag_eindigt" in str(e.value)
+        af.voer_uit(_plan(rollen=["website_watcher"]), None, data_dir="", bevestigd=False)
+    assert "pulse_completed" in str(e.value)
 
 
 def test_bevestigen_mag_wel_want_het_kan_de_juiste_keuze_zijn():

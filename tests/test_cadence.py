@@ -1,6 +1,6 @@
 """Tests voor cadence_events — pure helper, thread-vrij, geen bus."""
 from datetime import date
-from nooch_village.roles import cadence_events
+from nooch_village.dagcyclus import cadence_events
 
 
 def test_1_januari():

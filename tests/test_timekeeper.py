@@ -1,9 +1,11 @@
-"""TimeKeeper (dagcyclus in Facilitator): dag_begint op een vast kloktijdstip (config), restart-bestendig."""
+"""De dagcadans: dag_begint op een vast kloktijdstip (config), restart-bestendig.
+
+Woonde in `Facilitator` tot 30 aug 2026 — zie `dagcyclus.py` voor waarom dat verhuisde."""
 from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 
-from nooch_village.roles import _should_fire_daily, Facilitator
+from nooch_village.dagcyclus import Dagcyclus, should_fire_daily as _should_fire_daily
 
 
 def test_vuurt_op_vast_tijdstip():
@@ -23,9 +25,9 @@ def test_restart_vuurt_niet_dubbel_en_verschuift_niet():
 
 def test_last_day_persisteert_over_restart(tmp_path):
     class _Stub:
-        _last_day_path = Facilitator._last_day_path
-        _load_last_day = Facilitator._load_last_day
-        _save_last_day = Facilitator._save_last_day
+        _last_day_path = Dagcyclus._last_day_path
+        _load_last_day = Dagcyclus._load_last_day
+        _save_last_day = Dagcyclus._save_last_day
     s = _Stub(); s.context = SimpleNamespace(data_dir=str(tmp_path))
     s._last_day = "2026-07-05"; s._save_last_day()
     s2 = _Stub(); s2.context = SimpleNamespace(data_dir=str(tmp_path))
