@@ -33,7 +33,11 @@ def maak_verrijker(records, assignments, data_dir: str = "", reason_fn=None):
         if not _is_mens_doel(str(n.get("target_id") or ""), records, assignments):
             return {}
         rol = str(n.get("by") or "")
-        tekst = str(n.get("snippet") or "")
+        # DE VOLLE TEKST, niet de preview. Dit las `snippet` — de afgekapte kopie — en herschreef
+        # dus een spanning die al halverwege een zin ophield. De herschrijver kon nooit compleet
+        # maken wat hem incompleet werd aangereikt.
+        from nooch_village.notifications import volledig
+        tekst = volledig(n)
         if not tekst.strip():
             return {}
         # SLAPENDE ROL: geen oordeel. Een spanning van een slapende rol wordt niet herschreven en

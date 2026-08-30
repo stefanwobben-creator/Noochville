@@ -17,6 +17,7 @@ import json
 from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
 from nooch_village.inbox_wizard import FLOWS, GOVERNANCE, OTYPE_LABEL
+from nooch_village.notifications import volledig as _volledig
 
 _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
            "verwerkt": ("✓ handled", "chip outline")}
@@ -264,7 +265,7 @@ def _type_van(n: dict) -> str:
         return zv.FOUNDER
     if deur == tp.GEROUTEERD:
         return zv.NAAR_ROL
-    tekst = str(n.get("snippet") or "")
+    tekst = _volledig(n)                     # de waarheid, niet de lijst-preview
     domein, _ = zv.founder_behoefte(tekst)
     if domein:
         return zv.FOUNDER
@@ -297,7 +298,7 @@ def _kaart_html(st, n: dict) -> str:
         # in `by`, en die vindt hij niet — dan stond er een kaal id op het scherm. De herkomst van
         # een actie is het overleg, en die dragen we al mee.
         if _type_van(n) == zv.ACTIE:
-            regels = [f"<div class='fbubble'>{_e(n.get('snippet') or '')}</div>"]
+            regels = [f"<div class='fbubble'>{_e(_volledig(n))}</div>"]
             if n.get("herkomst"):
                 regels.append(f"<p class='muted'>{_e(n['herkomst'])}</p>")
             titel, uitleg = _TYPE_LIJF["actie"]
@@ -305,7 +306,7 @@ def _kaart_html(st, n: dict) -> str:
             regels.append(f"<p class='muted'>{_e(uitleg)}</p>")
             return "".join(regels)
 
-        tekst = str(n.get("snippet") or "")
+        tekst = _volledig(n)                     # de waarheid, niet de lijst-preview
         kern = tp.kern(tekst)
         domein, behoefte = zv.founder_behoefte(tekst)
         # Een VERSE spanning heeft nog geen poort-oordeel, dus geen klasse — en dan vond de kaart
@@ -385,7 +386,7 @@ def _spanning_pane(st, n: dict) -> str:
     # dump ("Project van X vastgelopen op 1 mens-/extern item: 'Deze taak vereist…'"), dan is alle
     # herformulering in de CLI voor hem onzichtbaar geweest. Vier regels: wie werpt het op, vanuit
     # welke eigen verantwoordelijkheid, wat de spanning is, en wat hij van de founder nodig heeft.
-    body = _kaart_html(st, n) or _e(n.get("snippet") or "(no content)").replace("\n", "<br>")
+    body = _kaart_html(st, n) or _e(_volledig(n) or "(no content)").replace("\n", "<br>")
     # De volledige vraag van de bewoner (founder, 19 jul): de snippet is maar 160 tekens,
     # het échte voorstel staat in de bron-feed-entry waar de notificatie naar wijst.
     # Zonder die tekst kan de mens niet beslissen ("er staat 2 besluiten maar niet welke").
@@ -396,7 +397,7 @@ def _spanning_pane(st, n: dict) -> str:
             p = st.projects.get(src_pid)
             e = next((x for x in ((p or {}).get("log") or []) if x.get("id") == src_eid), None)
             tekst = (e or {}).get("text") or ""
-            if tekst and tekst.strip() != (n.get("snippet") or "").strip():
+            if tekst and tekst.strip() != _volledig(n).strip():
                 volledig = (f"<div class='box rdr-rec'><strong>The full question</strong>"
                             f"<div class='fbubble'>{_e(tekst).replace(chr(10), '<br>')}</div></div>")
         except Exception:
@@ -625,7 +626,7 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     from nooch_village import zelf_verwerking as zv
 
     nid = n.get("id", "")
-    prefill = n.get("snippet") or ""
+    prefill = _volledig(n)                   # de flows werken op de hele tekst
     nxt = f"/inbox/verwerk?nid={nid}"
     klaar = _klaar_knop(nid, csrf, n=n)
 
