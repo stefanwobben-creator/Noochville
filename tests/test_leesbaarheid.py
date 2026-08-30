@@ -143,3 +143,14 @@ def test_de_herschrijver_krijgt_de_lezerstests_mee(tmp_path):
     uit = bv.herschrijf(BRON, rol="harry_hemp", reason_fn=_nep, data_dir=str(tmp_path))
     assert "Veertien" in gezien["p"]
     assert uit["ok"] is True, uit["reden"]
+
+
+def test_een_citaat_blijft_staan_ook_in_het_engels():
+    """GEVONDEN IN DE BRON-ANALYSE. Drie prod-berichten citeren een Engelse KLANTCLAIM in een
+    Nederlandse zin: "🔴 Vervang: good for the planet — …". Dat citaat is bewijsmateriaal: iemand
+    heeft precies díe woorden op de site gezien. Vertaal je het mee, dan klopt het niet meer met de
+    bron — en dan is de leesbaarheidslaag bewijs gaan bewerken.
+
+    Dezelfde familie als de Copywriter-uitzondering: Engels dat er met opzet staat, blijft."""
+    assert "GECITEERDE tekst blijft staan" in bv._PROMPT
+    assert "bewijsmateriaal" in bv._PROMPT

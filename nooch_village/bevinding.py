@@ -67,6 +67,9 @@ bericht. Behoud niet alleen de feiten maar ook hoe ZEKER ze zijn:
      tekst niet had. Weet je iets niet, laat het weg — vul het niet in.
   4. Is de ruwe tekst (deels) Engels, vertaal dan letterlijk wat er staat. Vertalen is precies waar
      er iets bij verzonnen wordt: geen gladdere formulering, geen ingevulde bedoeling.
+  5. Een GECITEERDE tekst blijft staan zoals hij is, ook als hij Engels is. Staat er een claim of
+     zin tussen aanhalingstekens, dan is dat bewijsmateriaal: iemand heeft precies díe woorden
+     ergens gezien. Vertaal je hem, dan klopt het citaat niet meer met de bron. Vertaal eromheen.
 
 Kun je iets niet begrijpelijk maken zonder één van die vier te schenden, laat het dan staan zoals het
 was. Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.
