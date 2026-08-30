@@ -71,14 +71,18 @@ def test_een_verse_spanning_krijgt_zijn_bevinding_en_type(tmp_path):
     assert uit["type"] and uit["type_reden"]
 
 
-def test_werk_tussen_rollen_kost_geen_dure_call(tmp_path):
-    """Alleen wat een MENS gaat lezen wordt herschreven; rollen lezen hun eigen bord."""
-    geroepen = []
-    v = maak_verrijker(RECS, _Assign({"founder"}), str(tmp_path),
-                       reason_fn=lambda p, **kw: geroepen.append(1) or "{}")
-    assert v({"target_type": "role", "target_id": "compliance", "by": "librarian",
-              "snippet": "iets"}) == {}
-    assert geroepen == []
+def test_de_poort_beslist_wie_verrijkt_wordt_niet_de_verrijker(tmp_path):
+    """Dit filter is VERHUISD naar `NotifStore.add` (`_is_mens_lezer`), en dat was de hele fix: het
+    hing aan de instantie en stond op 2 van de 7 stores. De verrijker doet nu alleen nog de INHOUD.
+
+    Wie er verrijkt wordt is één vraag, en die hoort op één plek."""
+    from nooch_village import notifications as nm
+    dd = str(tmp_path)
+    # een AI-vervulde rol leest geen postbus → de poort houdt hem tegen
+    assert nm._is_mens_lezer({"target_type": "role", "target_id": "compliance"}, dd) is False
+    # een onbekend doel ook niet
+    assert nm._is_mens_lezer({"target_type": "role", "target_id": ""}, dd) is False
+    assert nm._is_mens_lezer({"target_type": "iets", "target_id": "x"}, dd) is False
 
 
 def test_de_store_roept_de_haak_aan_en_blijft_zelf_dom(tmp_path):
@@ -113,4 +117,4 @@ def test_een_kapotte_haak_verliest_de_spanning_niet(tmp_path, caplog):
         n = nm.NotifStore(pad, verrijker=_stuk).add("role", "founder", "", by="compliance",
                                                     snippet="iets")
     assert n["snippet"] == "iets" and "bevinding" not in n
-    assert "verrijken" in caplog.text
+    assert "poort op notificatie" in caplog.text

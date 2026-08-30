@@ -107,7 +107,11 @@ def test_voorstel_slaat_de_dure_herschrijfhaak_over(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     geraakt = []
-    st.notif.set_verrijker(lambda n: geraakt.append(n) or {"type": "founder"})
+    # `set_verrijker` bestaat niet meer: de poort zit in `add()` zelf. De constructor-parameter
+    # blijft over voor tests, zodat je hem kunt waarnemen zonder een echte LLM-call.
+    from nooch_village.notifications import NotifStore
+    st.notif = NotifStore(st.notif.path,
+                          verrijker=lambda n: geraakt.append(n) or {"type": "founder"})
     a = st.att.add(OWNER, "note", title="p", body="oud")
     snippet, extra = wiki.voorstel_velden(a, voorstel="nieuw", waarom="omdat",
                                           van_naam="Bob", van_id="b1")

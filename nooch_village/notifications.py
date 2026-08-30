@@ -45,6 +45,64 @@ def volledig(n: dict) -> str:
     return str((n or {}).get("tekst") or (n or {}).get("snippet") or "")
 
 
+def _is_mens_lezer(n: dict, data_dir: str) -> bool:
+    """Gaat een MENS dit lezen? Een mens-vervulde rol of een persoon.
+
+    DE LEZER BESLIST, NIET DE AFZENDER. Dit stond in `spanning_ontstaat` en keek naar allebei: het
+    doel moest een rol zijn (personen vielen af) én de AFZENDER mocht niet slapen. Beide regels
+    waren rol-hulpje-regels uit een tijd dat dit een dienst aan een rol was.
+
+    Ze houden geen stand zodra dit een communicatielaag is. Het ijkpunt-bericht van de puls-wacht
+    komt van een systeemcomponent zonder rol, laat staan een slaaptoestand — en 17 notificaties gaan
+    naar een PERSOON, precies de berichten die een mens direct leest. Een mens die iets leest
+    verdient een leesbaar bericht, ongeacht wie het stuurde."""
+    tt, tid = str(n.get("target_type") or ""), str(n.get("target_id") or "")
+    if not tid:
+        return False
+    try:
+        if tt == "person":
+            from nooch_village.people import PeopleStore
+            return PeopleStore(os.path.join(data_dir, "people.json")).get(tid) is not None
+        if tt == "role":
+            from nooch_village.assignments import Assignments, door_mens_bemand
+            from nooch_village.governance import Records
+            recs = Records(os.path.join(data_dir, "governance_records.json"))
+            assign = Assignments(os.path.join(data_dir, "assignments.json"))
+            return bool(door_mens_bemand(tid, assign, recs))
+    except Exception:                                # noqa: BLE001 — onbekend = niet verrijken
+        return False
+    return False
+
+
+def _door_de_poort(n: dict, data_dir: str, eigen=None) -> dict:
+    """DE POORT, en hij zit in `add()` — de klasse-methode die álle schrijvers aanroepen.
+
+    Hij hing hiervóór aan de INSTANTIE (`set_verrijker`), en dat is geen poort maar een suggestie:
+    zeven plekken in het dorp bouwen hun eigen `NotifStore`, en de haak werd op twee gezet — beide
+    in de web-laag. Het hoofdkanaal van de daemon naar de founder, het puls-wacht-alarm en de
+    escalatie-skill gingen er dus nooit langs. Een achtste store zou hem opnieuw missen.
+
+    Hier kan niemand er meer omheen: elke instantie draagt hem, want de klasse draagt hem.
+
+    `eigen` is er alleen voor tests. Fail-soft: kan de poort niet draaien, dan blijft de rauwe
+    notificatie gewoon staan — een spanning die niet verrijkt kon worden is nog steeds een spanning."""
+    try:
+        if eigen is not None:
+            return eigen(dict(n)) or {}
+        if not _is_mens_lezer(n, data_dir):
+            return {}
+        from nooch_village.assignments import Assignments
+        from nooch_village.governance import Records
+        from nooch_village.spanning_ontstaat import maak_verrijker
+        verrijk = maak_verrijker(Records(os.path.join(data_dir, "governance_records.json")),
+                                 Assignments(os.path.join(data_dir, "assignments.json")),
+                                 data_dir)
+        return verrijk(dict(n)) or {}
+    except Exception as e:                           # noqa: BLE001 — verrijken mag nooit blokkeren
+        log.warning("poort op notificatie %s faalde: %s", n.get("id"), e)
+        return {}
+
+
 class NotifStore:
     """Notificaties, plus de haak bij het ONTSTAAN.
 
@@ -59,8 +117,13 @@ class NotifStore:
 
     def __init__(self, path: str, verrijker=None):
         self.path = path
-        self._verrijker = verrijker
+        self._verrijker = verrijker              # alleen voor tests: None = de eigen poort
         self._items: list[dict] = read_json(path, [], expect=list)
+
+    @property
+    def data_dir(self) -> str:
+        """De map waar deze store in leeft — genoeg om zelf zijn records te vinden."""
+        return os.path.dirname(self.path) or "."
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
@@ -95,21 +158,14 @@ class NotifStore:
         self._items.append(n)
         self._save()
         # Een item dat zijn type al bij het ontstaan kent (een pagina-voorstel weet exact wat het
-        # vraagt) gaat NIET langs de herschrijf-haak: die is er om een rauwe signalering te typeren,
-        # en een dure LLM-call zou hier alleen een al bekend antwoord kunnen overschrijven.
-        if self._verrijker is not None and not n.get("type"):
-            try:
-                extra = self._verrijker(dict(n)) or {}
-                if extra:
-                    n.update(extra)
-                    self._save()
-            except Exception as e:                   # noqa: BLE001 — verrijken mag nooit een
-                log.warning("verrijken van notificatie %s faalde: %s", n.get("id"), e)
+        # vraagt) gaat NIET langs de herschrijf-poort: die is er om een rauwe signalering te
+        # typeren, en een dure LLM-call zou hier alleen een al bekend antwoord overschrijven.
+        if not n.get("type"):
+            extra = _door_de_poort(n, self.data_dir, self._verrijker)
+            if extra:
+                n.update(extra)
+                self._save()
         return n
-
-    def set_verrijker(self, fn) -> None:
-        """Zet (of wis) de haak op déze store."""
-        self._verrijker = fn
 
     def for_targets(self, targets) -> list[dict]:
         """Notificaties voor een set (type, id)-doelen, nieuwste eerst."""

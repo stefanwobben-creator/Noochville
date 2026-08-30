@@ -236,7 +236,6 @@ def _bootstrap(dd: str) -> None:
     # notificatie staan, want een niet-verrijkte spanning is nog steeds een spanning.
     try:
         from nooch_village.spanning_ontstaat import maak_verrijker
-        st.notif.set_verrijker(maak_verrijker(st.records, st.assign, dd))
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("spanning-verrijker niet gezet: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
@@ -2980,7 +2979,6 @@ def _act_vangst_verwerk(c):
             # van dit scherm. Daarom precies hier, op de ene plek die erom vraagt.
             try:
                 from nooch_village.spanning_ontstaat import maak_verrijker
-                st.notif.set_verrijker(maak_verrijker(st.records, st.assign, c.data_dir))
             except Exception as e:                       # noqa: BLE001 — fail-soft, luid
                 logging.getLogger("village.cockpit").warning(
                     "vangst: verrijk-haak niet gezet (%s) — de spanning gaat rauw door", e)

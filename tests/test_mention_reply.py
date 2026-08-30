@@ -54,7 +54,11 @@ def test_mention_mens_alleen_notificatie(tmp_path, monkeypatch):
                                         "text": [f"@{person.name} kijk even"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     assert any(n["target_type"] == "person" for n in st.notif.all())     # notificatie zoals altijd
-    assert not called                                                    # geen LLM aangeroepen
+    # WÉL de poort: een PERSOON leest dit, dus gaat het langs de leesbaarheids-poort in
+    # `NotifStore.add`. Hier stond 'geen LLM aangeroepen' — die regel kwam uit de tijd dat de
+    # verrijker personen oversloeg. Besluit 30 aug 2026: de lezer wint. Gemeten kost dat weinig:
+    # van de 262 berichten die een mens leest zijn er 5 door een mens getypt.
+    assert called, "een bericht aan een mens hoort langs de poort te gaan"
     assert all(e.get("author", {}).get("type") != "persona" for e in st.projects.get(pid)["log"])
 
 
@@ -66,7 +70,9 @@ def test_persona_comment_met_mention_triggert_niet(tmp_path, monkeypatch):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": [f"persona:{codie.id}"],
                                         "text": ["@Codie @Website Developer wat denken jullie?"],
                                         "next": ["/"]}, username="guest")
-    assert not called                                                    # geen reply-machinerie
+    # Geen reply-machinerie (dat is wat deze test bewaakt), maar wél de poort: er gaat een
+    # notificatie naar een mens-lezer, en die hoort leesbaar te zijn.
+    assert not any("wat denken jullie" in p and "reply" in p.lower() for p in called)
     assert len(cockpit2._Stores(dd).projects.get(pid)["log"]) == 1       # alleen de eigen comment
 
 

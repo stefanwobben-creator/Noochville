@@ -123,23 +123,24 @@ def test_slapende_rol_krijgt_geen_thread(tmp_path):
     assert ROL in r.unmanned                            # zichtbaar gepauzeerd, niet verdwenen
 
 
-def test_slapende_rol_krijgt_geen_oordeel_meer(tmp_path):
-    """De dure kant: geen bevinding, geen typering voor een spanning van een slapende rol."""
-    from nooch_village.spanning_ontstaat import maak_verrijker
-    dd = _dd(tmp_path)
-    recs = _recs(dd)
-    st = cockpit2._Stores(dd)
-    geroepen = []
+def test_de_slaaptoestand_van_de_AFZENDER_telt_niet_meer(tmp_path):
+    """BESLUIT van 30 aug 2026: de LEZER wint, niet de afzender.
 
-    def _reason(*a, **k):
-        geroepen.append(1)
-        return '{"spanning": "x", "voorstel": "y"}'
+    Hier stond dat een spanning van een slapende rol niet herschreven werd — "slapen dempt het
+    oordeel". Dat was een rol-hulpje-regel uit de tijd dat dit een dienst aan een rol was. Zodra het
+    een communicatielaag is houdt hij geen stand: het ijkpunt-bericht van de puls-wacht komt van een
+    systeemcomponent zónder rol, laat staan een slaaptoestand, en het gaat wél naar een mens.
 
-    verrijk = maak_verrijker(recs, st.assign, dd, reason_fn=_reason)
-    n = {"target_type": "role", "target_id": WAKKER_ROL, "by": ROL, "snippet": "een spanning"}
-    af.slaap_leggen(recs, ROL, reden="x")
-    assert verrijk(dict(n)) == {}
-    assert geroepen == []                               # geen enkele model-call
+    Een mens die iets leest verdient een leesbaar bericht, ongeacht wie het stuurde."""
+    import inspect
+
+    from nooch_village import spanning_ontstaat as so
+    bron = inspect.getsource(so.maak_verrijker)
+    assert "slaapt" not in bron, "de afzender-slaaptoestand is terug in de verrijker"
+    # en de poort kijkt alleen naar de lezer
+    from nooch_village import notifications as nm
+    poort = inspect.getsource(nm._is_mens_lezer)
+    assert "target_type" in poort and "by" not in poort.split('"""', 2)[2]
 
 
 def test_slapende_rol_staat_niet_meer_op_de_roster(tmp_path):
