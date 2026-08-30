@@ -1520,9 +1520,21 @@ def main() -> None:
         plan = af.plan(audit, recs, kill_skills=kill, uit_governance=uitgov,
                        gedaan_skills=af.reeds_ingetrokken(ctx.data_dir))
         apply = "--apply" in sys.argv
+        # DE POORT, twee richtingen: wat consumeren anderen van een rol die gaat slapen, en welke
+        # code roept een skill nog aan die je intrekt. Staat in het rapport, en blokkeert de snit
+        # tot je hem bevestigt — de afslanking van 28 aug legde de dagbel stil zonder dat één poort
+        # iets zei.
+        bevestigd = "--afhankelijkheden-gelezen" in sys.argv
+        plan["_afhankelijkheden"] = af.afhankelijkheden_van(plan, recs)["tekst"]
         print(af.rapport_tekst(plan, apply=apply))
         if apply:
-            gedaan = af.voer_uit(plan, recs, data_dir=ctx.data_dir)
+            try:
+                gedaan = af.voer_uit(plan, recs, data_dir=ctx.data_dir, bevestigd=bevestigd)
+            except af.AfhankelijkheidNietBevestigd as e:
+                print(f"\n\u2717 GESTOPT — {e}\n\nLees het bovenstaande. Klopt het dat deze "
+                      f"mechanismen mogen stilvallen, draai dan opnieuw met "
+                      f"--apply --afhankelijkheden-gelezen.")
+                sys.exit(3)
             print(f"\n\u2713 {len(gedaan['slaap'])} rol(len) slapen, "
                   f"{len(gedaan['archiveer_rol'])} gearchiveerd, "
                   f"{len(gedaan['skill_intrekken'])} skill(s) ingetrokken.")
