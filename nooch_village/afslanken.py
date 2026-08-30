@@ -371,8 +371,42 @@ def skill_intrekken(records, skill: str, *, reden: str, data_dir: str = "") -> l
     return geraakt
 
 
-def voer_uit(plan_: dict, records, *, data_dir: str) -> dict:
-    """Voer het plan uit. Alleen aanroepen ná een dry-run en een menselijk akkoord."""
+def afhankelijkheden_van(plan_: dict, records=None) -> dict:
+    """Wat draagt dit plan weg? Twee richtingen, zie `afslank_afhankelijkheden`.
+
+    Geeft {rollen: [...], skills: [...], tekst: str, leeg: bool}. `leeg` betekent: niets in dit plan
+    draagt een mechanisme dat een ander consumeert — dan is de snit vrij."""
+    from nooch_village import afslank_afhankelijkheden as aa
+    rollen = [r["id"] for r in plan_.get("slapen", [])]
+    rollen += [r["id"] for r in plan_.get("opruimen", []) if r.get("soort") == "rol"]
+    skills = [r["naam"] for r in plan_.get("opruimen", []) if r.get("soort") == "skill"]
+    detail_r = [aa.rol_afhankelijkheden(rid, records) for rid in rollen]
+    detail_s = [aa.skill_afhankelijkheden(sk) for sk in skills]
+    leeg = (not any(d["events"] or d["eigen_ritme"] or d["alleen_houder"] for d in detail_r)
+            and not any(d["aanroepers"] for d in detail_s))
+    return {"rollen": detail_r, "skills": detail_s, "leeg": leeg,
+            "tekst": aa.rapport(rollen, skills, records)}
+
+
+class AfhankelijkheidNietBevestigd(RuntimeError):
+    """De snit raakt iets waar een ander op wacht, en dat is niet bevestigd."""
+
+
+def voer_uit(plan_: dict, records, *, data_dir: str, bevestigd: bool = False) -> dict:
+    """Voer het plan uit. Alleen aanroepen ná een dry-run en een menselijk akkoord.
+
+    DE POORT: raakt dit plan een rol of skill waar een ander op wacht, dan moet `bevestigd=True`
+    meekomen. Niet omdat de machine het beter weet — een rol slapen die iets draagt kán de juiste
+    keuze zijn — maar omdat het een BESLISSING hoort te zijn en geen bijvangst.
+
+    De afslanking van 28 aug 2026 legde de dagbel, `dag_eindigt`, `pulse_completed` en de hele
+    groei-puls stil zonder dat één poort iets zei; drie dagen later stond het dorp nog steeds. Deze
+    regel is die dagen."""
+    if not bevestigd:
+        afh = afhankelijkheden_van(plan_, records)
+        if not afh["leeg"]:
+            raise AfhankelijkheidNietBevestigd(
+                "dit plan raakt mechanismen waar anderen op wachten:\n" + afh["tekst"])
     gedaan = {"slaap": [], "archiveer_rol": [], "skill_intrekken": []}
     for r in plan_["slapen"]:
         reden = f"waarde-audit: {r['advies']} — {r['bewijs'][:120]}"
@@ -424,6 +458,12 @@ def rapport_tekst(plan_: dict, *, apply: bool) -> str:
                 f"{' · wordt gehouden door: ' + ', '.join(r['houders']) if r.get('houders') else ''} |"
                 for r in skills]
         uit.append("")
+
+    uit += ["## Wat er aan deze snit hangt", "",
+            "Twee richtingen: wat consumeren ANDEREN van een rol die gaat slapen, en welke CODE "
+            "roept een skill nog aan die je intrekt. Dit is een waarschuwing voor een mens, geen "
+            "blokkade — maar hij moet gelezen zijn.", "", "```",
+            (plan_.get("_afhankelijkheden") or "(niet bepaald)"), "```", ""]
 
     uit += [f"## Overgeslagen ({len(plan_['overgeslagen'])})", "",
             "Deze zijn bewust NIET aangeraakt:", ""]
