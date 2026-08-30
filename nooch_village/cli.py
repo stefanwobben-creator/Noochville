@@ -599,6 +599,25 @@ def main() -> None:
               f"{(' · alleen ' + rol) if rol else ''}\n")
         rapport(ctx.data_dir, apply=toepassen, owner=rol)
 
+    elif mode == "puls_wacht":
+        # De hartslagbewaker die BUITEN het dorp staat — bedoeld voor cron/systemd, niet voor de
+        # daemon. Grondt op timekeeper_last_day + logactiviteit, NIET op pulse_completed of
+        # last_pulse: die hangen aan website_watcher, en die kan slapen.
+        #   python -m nooch_village.village puls_wacht
+        # exit 0 = de bel is geluid · exit 1 = alarm (cron mailt, systemd logt)
+        from nooch_village.config import load_context
+        from nooch_village.puls_wacht import alarm, controleer
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        uit = controleer(ctx.data_dir, ctx.settings)
+        if uit["ok"]:
+            staat = ("bel geluid: " + uit["bel"]) if uit["verwacht"] else \
+                    f"nog vóór het vuurmoment (laatste bel: {uit['bel'] or 'nooit'})"
+            print(f"\u2713 puls-wacht: {staat}")
+            sys.exit(0)
+        alarm(ctx.data_dir, uit)
+        sys.exit(1)
+
     elif mode == "competitor":
         import os
         from nooch_village.config import load_context
