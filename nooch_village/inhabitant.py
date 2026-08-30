@@ -1216,7 +1216,15 @@ class Inhabitant(threading.Thread):
             #
             # Bij de BRON oplossen, niet bij de leesbaarheidslaag: vertalen is precies waar een model
             # iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag
-            # blijft het vangnet voor wat tóch in het Engels binnenkomt.
+            # blijft het vangnet voor wat tóch in het Engels binnenkomt — een vangnet, geen route.
+            #
+            # NIET TERUGDRAAIEN NAAR ENGELS zonder dit te lezen. De verleiding is er, want de cockpit
+            # is Engels (i18n fase 1) en dan lijkt "alles Engels" consistent. Maar die grens loopt
+            # ergens anders: CHROME is Engels (knoppen, kolomkoppen, menu's), INHOUD is Nederlands
+            # (bevindingen, Field Notes, spanningen, checklist-items). Een checklist-item is inhoud —
+            # het staat straks in een inbox naast een bevinding, en die twee horen dezelfde taal te
+            # spreken. Wil je dit toch omdraaien, draai dan de hele inhoudslaag om, niet één prompt.
+            # De test staat in tests/test_leesbaarheid.py.
             "Write every human-readable field (text, reason, deliverable, accountability) in DUTCH — "
             "these land in a person's inbox, next to findings and notes that are Dutch. Keep the JSON "
             "keys and the fixed values (skill names, human_external, missing_capability) exactly as "

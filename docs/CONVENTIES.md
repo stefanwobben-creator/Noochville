@@ -97,6 +97,74 @@ in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
 
+### Bewijs blijft woordelijk
+
+**Een feit wijs je aan; je herschrijft het niet.** Dat is één principe onder drie regels die er los
+van elkaar uitzagen:
+
+| waar | wat het zegt |
+|---|---|
+| `bevinding.feitbehoud` | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
+| regel 5 in de herschrijf-prompt | een geciteerde claim blijft staan, ook in het Engels |
+| COPYCHECK-001 | *"Quote the failing sentence, do not summarise"* |
+
+Alle drie beschermen hetzelfde: de woorden waarop iemand zich straks beroept. Een geciteerde
+klantclaim staat er omdat iemand precies díe zin op de site zag; een falende zin moet je kunnen
+terugvinden; een slag om de arm is een uitspraak over hoe zeker het feit is, en dus zelf een feit.
+Vertaal, vat samen of poets die op, en het bewijs is losgeraakt van waar het vandaan komt — zonder
+dat iemand het merkt, want de tekst leest juist béter.
+
+Praktisch, in volgorde van hardheid:
+
+1. **Behoud het epistemische niveau.** `mogelijk` blijft `mogelijk`; `A of B` wordt niet stil één
+   ervan; er komt geen getal, naam of oorzaak bij die de bron niet had.
+2. **Citaten blijven letterlijk**, ook als de rest vertaald wordt. Vertaal eromheen.
+3. **Herkomst poets je niet op.** `bevinding["ruw"]` en het blok "ruwe signalering" tonen wat er
+   werkelijk stond; alleen de LEESTEKST wordt leesbaar gemaakt.
+4. **Andermans woorden herschrijf je nooit** — zie `notifications.MENS_GETYPT` hierboven.
+
+En de keerzijde die dit werkbaar houdt: kan een herschrijving het feit niet behouden, dan is de ruwe
+tekst de uitkomst. **Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.**
+
+### Chrome is Engels, inhoud is Nederlands
+
+De taalgrens loopt niet om de applicatie maar dwars erdoorheen:
+
+| | taal | voorbeelden |
+|---|---|---|
+| **chrome** | Engels (i18n fase 1) | knoppen, kolomkoppen, menu's, statusmeldingen |
+| **inhoud** | Nederlands | bevindingen, Field Notes, spanningen, checklist-items, projecttitels |
+
+Waarom dit erin staat: één regel in de checklist-prompt — `"Write all free text in English."` — zette
+134 Engelse berichten in de inbox van de founder, náást bevindingen en Field Notes die allemaal
+Nederlands zijn. De regel leek consistent (de cockpit is immers Engels) maar stond aan de verkeerde
+kant van de grens.
+
+Twee uitzonderingen, allebei principieel en geen slordigheid:
+
+- **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet Engels.
+- **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven.
+
+En taal repareer je bij de BRON, niet bij de leesbaarheidslaag: vertalen is precies waar een model
+iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag blijft het
+vangnet voor wat tóch in de verkeerde taal binnenkomt — een vangnet, geen route.
+
+### Een ratchet toetst gedrag, niet broncode
+
+De testkant van "handhaving vereist waarneembaarheid". Een poort die zijn eigen implementatie
+beschrijft is zwakker dan een die zijn eigen uitkomst meet.
+
+De aanleiding: twee poorten zochten op LETTERS in plaats van op WOORDEN — `"kern"` matchte
+`"kernproces"`, `"duidelijk"` matchte `"ONduidelijk"` — en allebei faalden ze stil. Mijn eerste
+ratchet scande de broncode op een `in`-vergelijking en gaf een valse treffer op een variabele die
+toevallig `r` heette. De tweede versie plakt voor elk woord in elke lijst een voor- en achtervoegsel
+en controleert dat geen poort aanslaat (`tests/test_woordgrens.py`). Die versie kent de
+implementatie niet en hoeft dat ook niet.
+
+Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een broncode-scan is voor
+wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
+zelfs daar telt hij de vorm en niet de naam (zie hierboven).
+
 ### Tonen is zwakker dan wegnemen
 
 De poort uit `afslank_afhankelijkheden.py` is een **vangnet, geen eerste keus.** Hij bestond omdat
