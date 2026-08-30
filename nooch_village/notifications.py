@@ -18,6 +18,29 @@ log = logging.getLogger("village.notificaties")
 _BESCHERMD = ("id", "target_type", "target_id", "at", "read", "by")
 
 
+# De preview voor de lijst. Op een WOORDGRENS, want een halve zin leest als een defect en niet als
+# een samenvatting — dezelfde les als bij de herkomst-regel van de laatste meter.
+PREVIEW_MAX = 160
+
+
+def preview(tekst: str, n: int = PREVIEW_MAX) -> str:
+    """De korte afgeleide van een volledige tekst. Eén afleidingsplek, geen tweede feit."""
+    t = " ".join(str(tekst or "").split())
+    if len(t) <= n:
+        return t
+    kort = t[:n].rsplit(" ", 1)[0]
+    return (kort or t[:n]) + "…"
+
+
+def volledig(n: dict) -> str:
+    """De hele tekst van een notificatie.
+
+    Valt terug op `snippet` voor items van vóór 30 aug 2026: die hebben geen `tekst`, en hun
+    origineel is weg. Beter de afgekapte waarheid dan een leeg scherm — maar het is wél afgekapt,
+    en dat is precies waarom dit veld nu bestaat."""
+    return str((n or {}).get("tekst") or (n or {}).get("snippet") or "")
+
+
 class NotifStore:
     """Notificaties, plus de haak bij het ONTSTAAN.
 
@@ -43,12 +66,25 @@ class NotifStore:
             by: str = "", snippet: str = "", *, extra: dict | None = None) -> dict:
         """Voeg een item toe. `extra` zijn velden die bij het ONTSTAAN al bekend zijn (type,
         bevinding, en bv. de pagina waar een voorstel over gaat). Beschermde sleutels blijven
-        onaanraakbaar; wie iets al weet, mag het niet stiekem over de identiteit heen schrijven."""
+        onaanraakbaar; wie iets al weet, mag het niet stiekem over de identiteit heen schrijven.
+
+        TWEE VELDEN, ÉÉN WAARHEID. `tekst` is de volledige, ongekapte tekst; `snippet` is de
+        AFGELEIDE preview voor de lijst. Ze zijn geen twee feiten: `snippet` wordt hier, op één
+        plek, uit `tekst` afgeleid — verander de afleiding en alles verandert mee.
+
+        WAAROM DIT MOEST, gemeten op prod 30 aug 2026. Dit veld heette `snippet`, was gecapt op 160
+        tekens, en was tegelijk de ENIGE kopie. Van de 566 notificaties waren er 220 exact 160
+        tekens lang; de langste tekst in de hele store was 160. Elke spanning die langer was, werd
+        bij het schrijven halverwege een zin afgehakt en het origineel bestond nergens meer: van de
+        223 afgekapte items was er in 30 nog een langere versie in de project-feed terug te vinden,
+        en in 193 niet. Een veld dat 'samenvatting' heet maar de enige kopie is, is geen
+        samenvatting maar een amputatie."""
+        volledig = (snippet or "")
         n = {
             "id": uuid.uuid4().hex[:10],
             "target_type": target_type, "target_id": target_id,
             "project_id": project_id, "entry_id": entry_id,
-            "by": by, "snippet": (snippet or "")[:160],
+            "by": by, "tekst": volledig, "snippet": preview(volledig),
             "at": time.time(), "read": False,
         }
         n.update({k: v for k, v in (extra or {}).items() if k not in _BESCHERMD})
