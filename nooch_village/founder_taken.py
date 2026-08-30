@@ -280,7 +280,7 @@ def _claim_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     elif oordeel == "bewijs":
         claims_board.bericht_aan_rol(
             st, COMPLIANCE_ROL,
-            f"Bank the evidence for: {claim} — record source + literal quote in the Chronicle.",
+            f"Leg het bewijs vast voor: {claim} — bron en letterlijk citaat in de Kroniek.",
             door="founder-flow",
             done_when=f"vastgesteld of de claim {claim} houdbaar is, met bron en citaat in de "
                       f"Kroniek of een concreet correctievoorstel")
@@ -288,7 +288,7 @@ def _claim_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     elif oordeel == "scientist":
         claims_board.bericht_aan_rol(
             st, SCIENTIST_ROL,
-            f"Ground this claim scientifically: {claim} — no hard source in the database yet.",
+            f"Onderbouw deze claim wetenschappelijk: {claim} — nog geen harde bron in de database.",
             door="founder-flow",
             done_when=f"wetenschappelijke onderbouwing voor de claim {claim} gevonden, of "
                       f"vastgesteld dat die er niet is")
@@ -479,7 +479,7 @@ def _voorstel_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     if oordeel == "aanpassen":
         return "✎ adjusted — your version is recorded as the diff"
     claims_board.bericht_aan_rol(
-        st, UITVOERDER_ROL, f"Approved proposal from {rij.get('rol')}: {str(v.get('actie', ''))[:400]}",
+        st, UITVOERDER_ROL, f"Aangenomen voorstel van {rij.get('rol')}: {str(v.get('actie', ''))[:400]}",
         project_id=str(rij.get("project") or ""), door="founder-flow",
         done_when=f"de voorgestelde wijziging is doorgevoerd: {str(v.get('actie', ''))[:120]}")
     return f"✓ confirmed — handed to {UITVOERDER_ROL}"
