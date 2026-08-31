@@ -241,3 +241,63 @@ def test_geen_engelse_berichten_meer_uit_de_founder_flow():
     for engels in ("Bank the evidence for", "Ground this claim scientifically",
                    "Approved proposal from"):
         assert engels not in bron, engels
+
+
+# ── de grond-check: derde onafhankelijke deelcheck ──────────────────────────
+
+CLAIM_BRON = ('🟠 Claim-scan: 2 model-gevonden claim(s) zonder lijstterm — "This helps reduce…" '
+              '(faq), "We are on a mission…" (mission) (vermoeden, geen wet)')
+
+
+def test_het_ijkpunt_van_prod_wordt_geweigerd_ook_zonder_cijfers():
+    """HET GEVAL VAN 31 AUGUSTUS, op prod, op het eerste echte bericht. De bron zei letterlijk
+    "(vermoeden, geen wet)"; de herschrijving maakte er "de EU-richtlijn 2024/825 (EmpCo)" van.
+
+    De richtlijn BESTAAT — het model had gelijk — en juist dat maakt het gevaarlijk: correct maar
+    ongegrond zie je bij nalezen niet, want alles klopt. De getal-check ving hem, maar bij toeval:
+    zonder de cijfers was hij erdoor. Een poort die zijn vangst aan cijfers dankt, dekt niet wat hij
+    lijkt te dekken."""
+    met_cijfers = "Twee claims missen mogelijk een term uit de EU-richtlijn 2024/825 (EmpCo)."
+    zonder = "Twee claims missen mogelijk een term uit de EU-richtlijn EmpCo."
+    assert bv.feitbehoud(CLAIM_BRON, met_cijfers)[0] is False
+    ok, reden = bv.feitbehoud(CLAIM_BRON, zonder)
+    assert ok is False and "zonder grond" in reden, reden
+
+
+def test_een_legitieme_herformulering_overleeft():
+    """De andere kant. Streng afstellen mag omdat fail-open goedkoop is — maar een poort die alles
+    weigert beschermt niets, hij zet de laag uit."""
+    goed = "Twee claims op de site missen mogelijk een lijstterm; het is een vermoeden, geen wet."
+    assert bv.feitbehoud(CLAIM_BRON, goed)[0] is True
+
+
+def test_niet_elk_hoofdletterwoord_telt():
+    """Bewust GESCOPED op opzoekbare gegevens. Een naam of een zin die met een hoofdletter begint is
+    geen specifiek gegeven, en zou een legitieme herformulering laten sneuvelen."""
+    bron = "harry_hemp liet geen hartslag na, en de faq-pagina gaf een fout"
+    assert bv.feitbehoud(bron, "Harry Hemp keek naar de FAQ-pagina.")[0] is True
+    assert bv.feitbehoud(bron, "Deze rol gaf geen teken van leven.")[0] is True
+
+
+def test_de_naam_aan_een_acroniem_telt_wel():
+    """GEVONDEN IN DE METING, niet bedacht: de bron zei "EU Green" (afgekapt), de herschrijving
+    maakte er "EU Green Deal-regelgeving" van. "Deal" is een gewoon woord met een hoofdletter en
+    viel dus buiten de andere patronen — maar vastgeplakt aan een acroniem is het wél een
+    opzoekbare aanduiding. Zo blijft "niet elk hoofdletterwoord" overeind."""
+    assert bv.feitbehoud("… uit de EU Green", "definities uit de EU Green Deal")[0] is False
+    assert bv.feitbehoud("… uit de EU Green", "definities uit de EU Green")[0] is True
+
+
+def test_een_koppelteken_is_geen_verschil():
+    """Een poort die over spelling struikelt keurt taal af in plaats van inhoud."""
+    assert bv.feitbehoud("de EU-richtlijn zegt iets", "de EU richtlijn zegt iets")[0] is True
+
+
+def test_de_drie_deelchecks_overlappen_niet():
+    """DE REDEN DAT HET ER DRIE ZIJN. De smokkel van 31 augustus hield zich keurig aan de
+    zekerheidsregel — "mogelijk" bleef gewoon staan — en glipte langs een andere as. Eén goede check
+    is zwakker dan drie die elkaar niet dekken."""
+    # zekerheid geschonden, grond in orde
+    assert "slag om de arm" in bv.feitbehoud("mogelijk iets", "Het is duidelijk iets.")[1]
+    # grond geschonden, zekerheid in orde
+    assert "zonder grond" in bv.feitbehoud("mogelijk iets", "Mogelijk iets uit de ISO-norm.")[1]

@@ -128,8 +128,70 @@ _STELLIGER = tuple(re.compile(r"\b" + w + r"\b") for w in
 _GETAL = re.compile(r"\d+")
 
 
+# ── de grond-check ──────────────────────────────────────────────────────────
+#
+# GEGENERALISEERD UIT DE GETAL-CHECK, en de aanleiding stond op prod. Een compliance-bericht zei
+# letterlijk "(vermoeden, geen wet)"; de herschrijving maakte daar "de EU-richtlijn 2024/825 (EmpCo)"
+# van. De richtlijn bestáát — het model had gelijk — en juist dat maakt het gevaarlijk: alles klopt,
+# alleen stond het niet in de bron. Correct-maar-ongegrond zie je bij nalezen niet.
+#
+# De getal-check ving hem, maar bij toeval: had het model "de EU-richtlijn EmpCo" geschreven zonder
+# cijfers, dan was hij erdoor. Een poort die zijn vangst aan cijfers dankt, dekt niet wat hij lijkt
+# te dekken.
+#
+# WAT TELT ALS SPECIFIEK: gegevens die naar iets buiten de tekst wijzen en die je kunt opzoeken.
+# Acroniemen (EU, ISO, EmpCo), formele identifiers (2024/825, EN-1234), getallen. NIET elk woord met
+# een hoofdletter: een naam als "Harry Hemp" of een zin die met een hoofdletter begint is geen
+# opzoekbaar gegeven, en die zou een legitieme herformulering laten sneuvelen.
+#
+# STRENG MAG. Een valse afwijzing kost een lelijke maar ware tekst; een gemiste smokkel kost een
+# feit. Fail-open naar het origineel maakt de goedkope kant ook echt goedkoop.
+_SPECIFIEK = (
+    re.compile(r"\b[A-Z]{2,}\b"),                    # acroniem: EU, ISO, MOQ, GSC
+    re.compile(r"\b[A-Z][a-z]+[A-Z][A-Za-z]*\b"),    # binnenkapitaal: EmpCo, GreenClaims
+    re.compile(r"\b[A-Za-z]{2,}[-/]?\d+(?:/\d+)?\b"),  # identifier: ISO14001, EN-1234
+    # De NAAM die aan zo'n acroniem vastzit: "EU Green Deal", "ISO Standard". Gevonden in de meting:
+    # de bron zei "EU Green", de herschrijving maakte er "EU Green Deal-regelgeving" van. "Deal" is
+    # een gewoon woord met een hoofdletter en viel dus buiten de andere patronen — maar vastgeplakt
+    # aan een acroniem is het wél een opzoekbare aanduiding. Zo blijft de regel "geen enkel
+    # hoofdletterwoord" overeind: alleen wat aan een formele bron vastzit telt mee.
+    re.compile(r"\b[A-Z]{2,}(?:[ -][A-Z][a-z]+){1,3}\b"),
+)
+
+
+def _plat(x: str) -> str:
+    """Koppeltekens en schuine strepen als spatie: "EU-richtlijn" en "EU richtlijn" zijn hetzelfde
+    gegeven, en een poort die daarover struikelt keurt taal af in plaats van inhoud."""
+    return re.sub(r"\s+", " ", re.sub(r"[-/]", " ", x or "")).strip()
+
+
+def _ongegronde_specifieken(bron: str, tekst: str) -> list[str]:
+    """Specifieke gegevens in de herschrijving die niet in de bron staan.
+
+    Op WOORDGRENS en hoofdletter-ongevoelig: "EU" mag uit "EU-richtlijn" komen, maar niet uit
+    "Europa". Zelfde regel als bij de jargon- en zekerheidspoort, en om dezelfde reden."""
+    uit, gezien = [], set()
+    for r in _SPECIFIEK:
+        for tok in r.findall(tekst or ""):
+            k = tok.casefold()
+            if k in gezien:
+                continue
+            gezien.add(k)
+            if not re.search(r"\b" + re.escape(_plat(tok)) + r"\b", _plat(bron), re.I):
+                uit.append(tok)
+    return uit
+
+
 def feitbehoud(bron: str, tekst: str) -> tuple[bool, str]:
     """Is de herschrijving niet ZEKERDER of SPECIFIEKER dan de bron? Geeft (ok, reden).
+
+    DRIE ONAFHANKELIJKE DEELCHECKS, en dat is met opzet: de smokkel van vandaag hield zich keurig aan
+    de zekerheidsregel ("mogelijk" bleef staan) en glipte langs een andere as. Eén goede check is
+    zwakker dan drie die elkaar niet overlappen.
+
+      slag om de arm   `mogelijk` wordt geen `waarschijnlijk`      (hieronder)
+      grond            geen specifiek gegeven dat de bron niet had (`_ongegronde_specifieken`)
+      alternatieven    `A of B` wordt niet stil één ervan          (in de prompt — oordeel)
 
     De aanleiding staat in het ijkpunt van de spec. De ruwe tekst zei "mogelijk niet-uitvoering
     (hook of service)"; de eerste leesbare versie maakte daar "waarschijnlijk draait zijn service
@@ -151,6 +213,10 @@ def feitbehoud(bron: str, tekst: str) -> tuple[bool, str]:
     for g in _GETAL.findall(t):
         if g not in bron_cijfers:
             return False, f"getal '{g}' staat niet in de ruwe tekst"
+    ongegrond = _ongegronde_specifieken(bron or "", tekst or "")
+    if ongegrond:
+        return False, (f"specifiek gegeven zonder grond in de ruwe tekst: "
+                       f"{', '.join(repr(x) for x in ongegrond[:3])}")
     return True, ""
 
 
