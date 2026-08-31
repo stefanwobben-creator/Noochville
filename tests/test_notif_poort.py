@@ -223,7 +223,9 @@ def test_de_typ_paden_merken_hun_eigen_tekst():
     import inspect
 
     from nooch_village import cockpit2
-    for fn in (cockpit2._act_proj_feed, cockpit2._act_notif_add, cockpit2._act_notif_besluit):
+    # Waren er drie; `_act_notif_besluit` (Decide-now) is weg. De vangst-tak markeert zijn tekst
+    # via `extra=`, dus die staat in de dispatch-handler en niet in een eigen functie.
+    for fn in (cockpit2._act_proj_feed, cockpit2._act_notif_add):
         assert "MENS_GETYPT" in inspect.getsource(fn), fn.__name__
 
 

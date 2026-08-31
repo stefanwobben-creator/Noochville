@@ -3415,16 +3415,58 @@ def _act_notif_add(c):
         return c.nxt, "✓ tension added"
 
 
+def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str) -> str:
+    """De reden bij het sluiten terug naar wie het vroeg. Fail-soft: een mislukte terugkoppeling
+    mag het sluiten nooit blokkeren, maar hij mag ook niet stil verdwijnen — vandaar de log.
+
+    Alleen op de BRON-FEED, en niet ook als bericht aan de eigenaar-rol. Dat laatste deed
+    Decide-now wel, en bij een AI-vervulde rol was dat een dead letter: die leest de NotifStore
+    nooit. De feed-entry is het kanaal dat de bewoner écht weer aan het werk zet."""
+    src_pid = str(n.get("project_id") or "")
+    if not src_pid:
+        return ""
+    try:
+        p = pj.get(src_pid)
+        if p is None:
+            return ""
+        orec = st.records.get(p.get("owner") or "")
+        rolnaam = _name(orec) if orec else (p.get("owner") or "rol")
+        tekst = f"@{rolnaam} Deze spanning is gesloten door {by or 'The Source'} — reden: {reden}"
+        entry = pj.add_feed_entry(src_pid, tekst[:1500], kind="comment",
+                                  author_type="human", author_id=aid)
+        return (entry or {}).get("id", "")
+    except Exception:                                          # noqa: BLE001
+        logging.getLogger("cockpit2.inbox").exception("reden bij sluiten niet teruggekoppeld")
+        return ""
+
+
 def _act_notif_klaar(c):
         # 'Klaar met deze spanning': het ENIGE sluitmodel. Sloot je met nul uitkomsten, dan legt de handler
         # zelf 'geen uitkomst' vast (zichtbaar voor de raadsvergadering). Redirect naar de inbox met de
         # zojuist-verwerkte spanning gemarkeerd — een klein viermoment.
         st, nid = c.st, c.g("nid")
         n = st.notif._find(nid)
-        if n is not None and not st.notif.verwerkingen_of(n):
-            st.notif.add_outcome(nid, intent="none", otype="none", label="geen uitkomst")
         actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
         by = _person_name(st, actor.id) if actor else ""
+        # DE VIERDE UITKOMST DRAAGT NU EEN REDEN, en dat is waar Decide-now's "nee" naartoe is.
+        # Negen van de twaalf Decide-now-gevallen waren een ACTIE (een antwoord waarmee een
+        # vastgelopen bewoner verder kon) en lopen nu via flow 1. De tiende vorm — "nee, want …" —
+        # paste in géén handelings-flow: actie, project en governance veronderstellen alle drie dát
+        # er iets gebeurt.
+        #
+        # DE REDEN GAAT TERUG, NIET ALLEEN DE OPSLAG IN. Sloeg hij alleen op, dan verdween de
+        # terugkoppeling die Decide-now's "nee" wél gaf — stil, en precies de degradatie die we bij
+        # de "iedereen"-tekst van de wall hebben weggehaald. Hij landt als comment op de bron-feed:
+        # dezelfde plek waar het antwoord van Decide-now landde, en een `comment`+`human`-entry zet
+        # `worked=False`, dus de bewoner pakt het zelf weer op.
+        reden = (c.g("reden") or "").strip()
+        if n is not None and reden:
+            _sluit_reden_terug(c.st, c.pj, n, reden, aid=(actor.id if actor else ""), by=by)
+        if n is not None and not st.notif.verwerkingen_of(n):
+            st.notif.add_outcome(nid, intent="none",
+                                 otype=("geen_uitkomst_met_reden" if reden else "none"),
+                                 label=(f"gesloten: {reden[:160]}" if reden else "geen uitkomst"),
+                                 by=by)
         st.notif.mark_done(nid, by=by)
         # Zelfde lus als bij een afgerond project: wie erom vroeg hoort dat het klaar is. Een
         # afrondings-melding meldt zichzelf niet terug — anders pingen twee mensen elkaar eindeloos.
@@ -3524,51 +3566,6 @@ def _act_notif_outcome(c):
                               kind="system", author_type="human", author_id=aid)
         st.notif.add_outcome(nid, intent=intent_of(otype), otype=otype, label=made, by=by_name)
         return nxt, f"✓ {label} vastgelegd — nog een uitkomst, of klik Klaar."
-
-
-def _act_notif_besluit(c):
-        # Beslis direct (founder, 19 jul): ja / nee / suggestie op een spanning uit de inbox.
-        # Het antwoord landt als menselijke reactie op de bron-feed (@rol; comment+human zet
-        # worked=False, dus de bewoner pakt het zelf weer op) plus een notificatie aan de
-        # eigenaar-rol, en de spanning sluit — beslissen ís verwerken. Zo leert het dorp
-        # spanningen zelf oplossen in plaats van dat de mens het werk overneemt.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        nid = g("nid")
-        n = st.notif._find(nid)
-        if n is None:
-            return nxt, "✗ tension not found"
-        keuze = g("besluit")
-        if keuze not in ("ja", "nee", "suggestie"):
-            return nxt, "✗ onbekend besluit"
-        toel = (g("toelichting") or "").strip()
-        if keuze == "suggestie" and not toel:
-            return nxt, "✗ a suggestion without content does not help the inhabitant — fill in the text"
-        src_pid = n.get("project_id") or ""
-        p = pj.get(src_pid) if src_pid else None
-        if p is None:
-            return nxt, "✗ this tension has no source project to reply on — use a ping"
-        owner = p.get("owner") or ""
-        orec = st.records.get(owner)
-        rolnaam = _name(orec) if orec else (owner or "rol")
-        actor = st.people.by_email(username) if username and username != "guest" else None
-        aid = actor.id if actor else ""
-        by_name = (_person_name(st, aid) if aid else (username or "The Source"))
-        kop = {"ja": "✓ JA", "nee": "✗ NEE", "suggestie": "💬 SUGGESTIE"}[keuze]
-        tekst = (f"@{rolnaam} Besluit van The Source op je spanning: {kop}"
-                 + (f" — {toel}" if toel else ""))
-        entry = pj.add_feed_entry(src_pid, tekst[:1500], kind="comment",
-                                  author_type="human", author_id=aid)
-        st.notif.add("role", owner, src_pid, (entry or {}).get("id", ""), by=by_name,
-                     snippet=(f"{kop} op '{(n.get('snippet') or '')[:70]}'"
-                              + (f" — {toel[:60]}" if toel else "")),
-                     # Het frame is van ons, de toelichting is van The Source. Herschrijven zou
-                     # zijn woorden raken, dus blijft het hele bericht zoals het is.
-                     extra={notifications.MENS_GETYPT: True})
-        st.notif.add_outcome(nid, intent="besluit", otype=f"besluit_{keuze}",
-                             label=(f"besluit: {kop}" + (f" — {toel[:60]}" if toel else "")),
-                             by=by_name)
-        st.notif.mark_item_processed(nid, outcome=f"besluit_{keuze}", by=by_name)
-        return nxt, f"✓ {kop} — je antwoord staat bij de bewoner, spanning gesloten"
 
 
 def _act_notif_archive(c):
@@ -5225,7 +5222,6 @@ ACTIONS = {
     "notif_read": _act_notif_read,
     "notif_processed": _act_notif_processed,
     "notif_outcome": _act_notif_outcome,
-    "notif_besluit": _act_notif_besluit,
     "notif_klaar": _act_notif_klaar,
     "notif_delete": _act_notif_delete,
     "notif_add": _act_notif_add,

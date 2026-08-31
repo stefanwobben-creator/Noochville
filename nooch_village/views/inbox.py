@@ -122,13 +122,14 @@ def _inline_actie(st, n: dict, csrf: str) -> str:
     if soort == "naar_rol":
         binnen = _verzoek_knoppen(n, csrf)
     elif n.get("project_id"):
-        binnen = _besluit_knoppen(n, csrf)
+        # Decide-now stond hier ook, en is weg. Wat blijft is SLUITEN — met een reden als er een
+        # vrager is. Een spanning met een bron-project heeft altijd iemand die op antwoord wacht,
+        # en dat is precies waar "nee, want …" thuishoort.
+        binnen = ""
     else:
         return ""
-    if not binnen:
-        return ""
     return (f"<details class='wo-ocd box-details'><summary>handle here</summary>"
-            f"{binnen}{_klaar_knop(n.get('id', ''), csrf)}</details>")
+            f"{binnen}{_klaar_knop(n.get('id', ''), csrf, n=n)}</details>")
 
 
 def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
@@ -599,22 +600,6 @@ def _verzoek_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
                "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p>"))
 
 
-def _besluit_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
-    """Ja / nee / suggestie op een vraag van een bewoner. Alleen met een bron-project: het antwoord
-    landt als reactie in die feed, en zonder bron is er niets om op te antwoorden."""
-    if not n.get("project_id"):
-        return ""
-    nid = n.get("id", "")
-
-    def _f(keuze, label, cls, hint, verplicht):
-        return _keuze_form(nid, csrf, actie="notif_besluit", veld="besluit", keuze=keuze,
-                           label=label, cls=cls, hint=hint, verplicht=verplicht,
-                           tekstveld="toelichting", nxt=nxt)
-    return (_f("ja", "✓ Yes", "ok ", "optional: note with your yes", False)
-            + _f("nee", "✗ No", "", "optional: why not — the inhabitant learns from it", False)
-            + _f("suggestie", "💬 Suggestion", "", "your suggestion or counter-question", True))
-
-
 # De kop, de knop en de paginatitel volgen het TYPE. Eén neutrale term zou voor alles half goed
 # zijn: "spanning" klopt voor een gesensd signaal maar niet voor een afspraak uit een overleg, en
 # "item" klopt nergens echt. De kaart weet zijn type al (`_type_van`), dus laat de woorden dat
@@ -632,10 +617,22 @@ def _woorden(n: dict | None) -> dict:
 
 
 def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox", n: dict | None = None) -> str:
+    """De VIERDE uitkomst, en de enige die er altijd al was: sluiten.
+
+    Sinds Decide-now weg is draagt hij een optionele REDEN. Dat is geen nieuwe flow maar het gat dat
+    de drie handelings-flows per definitie niet dekken: actie, project en governance veronderstellen
+    alle drie dát er iets gebeurt, en "nee, want …" is precies het tegendeel.
+
+    De reden gaat TERUG NAAR DE VRAGER als comment op de bron-feed — opslaan alleen zou de
+    terugkoppeling stil laten verdwijnen die Decide-now's "nee" wél gaf."""
+    reden = ""
+    if n is not None and n.get("project_id"):
+        reden = _field("Why (optional) — goes back to whoever asked", "reden", kind="textarea",
+                       value="", fid=f"kl-r-{nid}")
     return (f"<form method='post' action='/action' class='emo-f rdr-rec'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='nid' value='{_e(nid)}'>"
-            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>{reden}"
             f"<button class='btn ok sm' name='action' value='notif_klaar'>"
             f"{_e(_woorden(n)['klaar'])}</button></form>")
 
@@ -689,18 +686,16 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
         + _outcome_form("roloverleg", nid, csrf, prefill, role_opts, pj_opts, nxt, "flow-gov")
         + "</details>")
 
-    # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja, nee of
-    # een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed en de spanning
-    # sluit. Alleen met een bron-project; de flows hieronder blijven voor al het andere.
-    besluit = ""
-    if n.get("project_id"):
-        besluit = (f"<details class='box-details' open><summary><strong>Decide now</strong>"
-                   f"</summary><p class='muted'>Your answer lands as a reply to the inhabitant, "
-                   f"who can take it further — that's how the village learns to resolve tensions. "
-                   f"The tension closes immediately.</p>"
-                   + _besluit_knoppen(n, csrf) + "</details>")
+    # DECIDE NOW IS WEG. Een eigen knoppenrij (ja / nee / suggestie) voor 12 van de 570 items, en
+    # negen daarvan waren gewoon een ACTIE: een antwoord waarmee een vastgelopen bewoner verder kan.
+    # Die lopen nu via flow 1, met de AI-rol als ontvanger — `route_werk` maakt daar een project van,
+    # want een AI-rol leest de inbox nooit.
+    #
+    # De tiende vorm, "nee, want …", paste in géén van de drie handelings-flows: die veronderstellen
+    # alle drie dát er iets gebeurt. Die hoort bij de VIERDE uitkomst, sluiten — zie `_klaar_knop`,
+    # dat nu een optioneel reden-veld draagt en die reden terugstuurt naar de vrager.
     return (f"<div class='rdr-pane'><h3>What do you do with this?</h3>"
-            f"{besluit}{''.join(groups)}{klaar}</div>")
+            f"{''.join(groups)}{klaar}</div>")
 
 
 def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_opts: str = "") -> str:

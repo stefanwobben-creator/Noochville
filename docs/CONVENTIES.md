@@ -97,6 +97,30 @@ in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
 
+### Vier uitkomsten, en de vierde was er altijd al
+
+Een spanning in de inbox kent er **vier**, voor mens én AI, zonder aparte route:
+
+| uitkomst | veronderstelt |
+|---|---|
+| actie | er gebeurt iets — via `route_werk` (mens-rol → inbox, AI-rol → project) |
+| project | er gebeurt iets, en het is meer dan één stap |
+| governance | er gebeurt iets aan de STRUCTUUR |
+| **sluiten** | er gebeurt **niets** |
+
+De eerste drie zijn handelings-flows en veronderstellen alle drie dát er iets gebeurt. Dat lijkt
+volledig tot je iets wilt zeggen wat géén handeling is — **"nee, want …"**. Die hoort bij de vierde,
+niet bij de eerste drie, en dat is de reden dat sluiten een optioneel reden-veld heeft.
+
+Zo verdween "Decide now" (een eigen ja/nee/suggestie-rij) zonder verlies. Gemeten over 570 items:
+12 keer gebruikt, waarvan **9 gewoon een actie** waren — een antwoord waarmee een vastgelopen
+bewoner verder kon — en 2 een akkoord dat óók een actie is. Alleen de tiende vorm paste nergens.
+
+**Wat je niet kunt loskoppelen, moet je kunnen horen** (zie hierboven), en dat geldt hier letterlijk:
+de reden gaat als comment terug op de bron-feed, niet alleen de opslag in. Alleen bewaren zou de
+terugkoppeling stil laten verdwijnen die Decide-now's "nee" wél gaf — dezelfde degradatie als de
+"iedereen"-tekst op de wall, die beloofde te versturen en niets deed.
+
 ### Bewijs blijft woordelijk
 
 **Een feit wijs je aan; je herschrijft het niet.** Dat is één principe onder drie regels die er los

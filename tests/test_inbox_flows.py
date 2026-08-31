@@ -209,3 +209,51 @@ def test_zonder_scope_blijft_de_volle_lijst_staan(tmp_path):
     from nooch_village.views.wizard import _role_options
     st = cockpit2._Stores(_dd(tmp_path))
     assert _role_options(st) == _role_options(st, eigen=None)
+
+
+# ── Vier uitkomsten, één set, voor mens én AI ───────────────────────────────
+
+VIER = {"action", "project", "governance", "klaar"}
+
+
+def test_er_zijn_vier_uitkomsten_en_geen_vijfde():
+    """DE RATCHET. Drie handelings-flows plus sluiten — dat is alles, voor élke spanning.
+
+    Decide-now was de vijfde: een eigen knoppenrij (ja / nee / suggestie) voor 12 van de 570 items.
+    Negen daarvan waren gewoon een ACTIE, en de tiende ("nee, want …") hoorde bij sluiten. Een vorm
+    die naast de vier staat is een vorm die je apart moet onderhouden, en die na één wijziging uit
+    de pas loopt."""
+    import inspect
+
+    from nooch_village import cockpit2
+    from nooch_village.inbox_wizard import FLOWS, GOVERNANCE
+    soorten = {f["key"] for f in FLOWS} | {GOVERNANCE["key"]} | {"klaar"}
+    assert soorten == VIER, f"de set uitkomsten veranderde: {sorted(soorten)}"
+    assert not hasattr(cockpit2, "_act_notif_besluit"), "Decide-now is terug"
+    bron = inspect.getsource(cockpit2)
+    assert '"notif_besluit"' not in bron, "de Decide-now-actie staat weer in de dispatch"
+
+
+def test_geen_aparte_ai_route():
+    """Een spanning van een AI-rol loopt door dezelfde vier uitkomsten als een van een mens. Het
+    enige verschil zit in de BEZORGING, en die kent `route_werk` — niet de inbox."""
+    import inspect
+
+    from nooch_village.views import inbox as v
+    bron = inspect.getsource(v._wizard_pane)
+    assert "Decide now" not in bron
+    for verboden in ("is_ai", "ai_rol", "door_mens_bemand"):
+        assert verboden not in bron, f"de inbox kiest zelf een route op {verboden}"
+
+
+def test_sluiten_draagt_de_reden_terug():
+    """De vierde uitkomst is de enige die geen handeling veronderstelt, en dus de enige plek waar
+    "nee, want …" thuishoort. De reden gaat terug naar de vrager; alleen opslaan zou de
+    terugkoppeling stil laten verdwijnen die Decide-now's "nee" wél gaf."""
+    import inspect
+
+    from nooch_village import cockpit2
+    bron = inspect.getsource(cockpit2._act_notif_klaar)
+    assert "_sluit_reden_terug" in bron
+    terug = inspect.getsource(cockpit2._sluit_reden_terug)
+    assert "add_feed_entry" in terug and 'author_type="human"' in terug
