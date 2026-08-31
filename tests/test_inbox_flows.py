@@ -257,3 +257,67 @@ def test_sluiten_draagt_de_reden_terug():
     assert "_sluit_reden_terug" in bron
     terug = inspect.getsource(cockpit2._sluit_reden_terug)
     assert "add_feed_entry" in terug and 'author_type="human"' in terug
+
+
+# ── route_werk kent de vervuller, niet alleen de rol ────────────────────────
+
+def test_een_rol_met_een_vervuller_levert_bij_die_mens(tmp_path, monkeypatch):
+    """EEN ROL IS EEN MANDAAT, GEEN POSTBUS. Heeft hij precies één menselijke vervuller, dan is dát
+    het adres — de rol reist mee als context, niet als bestemming."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = _mens(st)
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [p.id] if r == _OWNER else [])
+    soort, ref = cockpit2.route_werk(st, tekst="bel de leverancier", rol=_OWNER)
+    assert soort == "inbox" and p.name in ref
+    bij = cockpit2._Stores(dd).notif.for_targets([("person", p.id)])
+    assert bij and bij[-1].get("rol") == _OWNER
+
+
+def test_meerdere_vervullers_worden_niet_stil_gekozen(tmp_path, monkeypatch):
+    """GEEN STILLE KEUZE — dezelfde regel die `_thuis_cirkel` overtrad door de eerste subcirkel te
+    pakken. Met twee vervullers geeft `route_werk` de keuze terug; kán de aanroeper niet kiezen, dan
+    gaat het naar de rol als geheel en zien ze het allebei."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: ["p1", "p2"])
+    assert cockpit2.route_werk(st, tekst="x", rol=_OWNER, keuze_kan=True) == ("keuze", _OWNER)
+    soort, _ref = cockpit2.route_werk(st, tekst="x", rol=_OWNER)
+    assert soort == "inbox"
+
+
+def test_een_rol_die_niets_kan_krijgt_geen_rottend_project(tmp_path, monkeypatch):
+    """GEMETEN OP PROD: 5 open projecten op rollen zonder mens én zonder AI — allemaal ontstaan
+    doordat de rol ná het aanmaken slapend werd gelegd. Een project op zo'n bord is een belofte aan
+    een leeg bureau. Werk dat niemand kan uitvoeren hoort BELEGD te worden, en dat is de Circle
+    Lead — niet uitgevoerd."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    monkeypatch.setattr(cockpit2, "_circle_lead_van", lambda _s, r: "")
+    soort, _ = cockpit2.route_werk(st, tekst="x", rol=_OWNER)
+    assert soort == "project"          # geen lead gevonden → oude gedrag, nooit blokkeren
+    monkeypatch.setattr(cockpit2, "_circle_lead_van", lambda _s, r: "lead_rol")
+    _s, ref = cockpit2.route_werk(st, tekst="x", rol=_OWNER)
+    assert "heeft geen vervuller" in ref
+
+
+def test_weigeren_gebruikt_dezelfde_route_als_sluiten_met_reden():
+    """DE TWEEDE IMPLEMENTATIE IS WEG. `_terug` stuurde een NotifStore-bericht naar de vragende ROL,
+    en 14 van de 29 rollen hebben geen mens — daar verdween elke weigering stil. Nu loopt hij door
+    `_sluit_reden_terug` (#401), en het inbox-bericht ernaast alleen als de vrager het leest."""
+    import inspect
+    bron = inspect.getsource(cockpit2._act_verzoek_besluit)
+    assert "_sluit_reden_terug(" in bron
+    assert "mens_vervullers(st, van)" in bron, "het tweede kanaal is niet lezer-bewust"
+
+
+def test_een_verzoek_kun_je_sluiten_zonder_te_weigeren():
+    """Deze tak keerde vroeg terug zonder Done-knop: je kon een verzoek alleen kwijtraken door
+    iemand te weigeren. "Niet meer relevant" is geen oordeel over de vrager."""
+    import inspect
+    from nooch_village.views import inbox as v
+    bron = inspect.getsource(v._wizard_pane)
+    tak = bron[bron.index('== "naar_rol"'):bron.index('== zv.ACTIE')]
+    assert "klaar" in tak and "Niet meer relevant" in tak

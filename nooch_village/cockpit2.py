@@ -3079,49 +3079,134 @@ def _outcome_project(st, owner: str, title: str, *, provenance: str = "", actor_
     return pid
 
 
+def _kan_uitvoeren(st, rol: str) -> bool:
+    """Kan deze rol werk UITVOEREN? Een AI-vervuller, eigen code of eigen skills telt.
+
+    Dezelfde definitie die de Reconciler gebruikt om te bepalen of een rol een thread krijgt —
+    hier LIVE berekend en niet uit `role_status.json` gelezen. Dat was mijn eerste versie, en die
+    had de verkeerde faalrichting: dat bestand wordt door de DAEMON geschreven, dus in een test, een
+    verse installatie of de webserver vóór de eerste dorpsstart is het er niet. "Bestand leeg" werd
+    dan "niemand kan iets", en dan zou ál het AI-werk naar de Circle Lead worden omgeleid.
+    Onbekend is niet leeg — zelfde regel als `no_data ≠ nul`."""
+    if not rol:
+        return False
+    rec = None
+    try:
+        rec = st.records.get(rol)
+        if any(f.type == "persona" for f in st.assign.fillers_of(rol, record=rec)):
+            return True
+    except Exception:                                         # noqa: BLE001
+        pass
+    if list(getattr(getattr(rec, "definition", None), "skills", None) or []):
+        return True
+    try:
+        from nooch_village.village import CLASS_MAP
+        return rol in CLASS_MAP
+    except Exception:                                         # noqa: BLE001
+        return True          # kunnen we het niet vaststellen → oude gedrag, nooit blokkeren
+
+
+def mens_vervullers(st, rol: str) -> list[str]:
+    """De MENSEN die deze rol vervullen. Eén plek, want drie schermen stelden dezelfde vraag."""
+    if not rol:
+        return []
+    try:
+        rec = st.records.get(rol)
+        return [f.id for f in st.assign.fillers_of(rol, record=rec) if f.type == "person"]
+    except Exception:                                         # noqa: BLE001
+        return []
+
+
+def _circle_lead_van(st, rol: str) -> str:
+    """De Circle Lead van de cirkel waar deze rol in hangt. Het adres voor werk dat NIEMAND draagt:
+    een rol zonder mens én zonder AI kan niets, en dan is beleggen de handeling — niet uitvoeren."""
+    try:
+        from nooch_village import org
+        cid = resolve_circle_id(rol, st.records)
+        for r in st.records.all():
+            if getattr(r, "archived", False) or org.is_circle(r):
+                continue
+            if getattr(r, "parent", "") == cid and "circle_lead" in r.id:
+                return r.id
+    except Exception:                                         # noqa: BLE001
+        pass
+    return ""
+
+
 def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: str = "",
                door: str = "", opdrachtgever: str = "", bron_project: str = "",
-               prive: bool = False) -> tuple[str, str]:
+               prive: bool = False, keuze_kan: bool = False,
+               _lead_hop: bool = False) -> tuple[str, str]:
     """Waar landt een stuk werk? ÉÉN regel, gedeeld door het werkoverleg en de project-wizard.
 
     Dit stond als losse tak in `_act_vangst_uitkomst` (#364). Hem hier een tweede keer uitschrijven
     zou precies de fout zijn die `docs/CONVENTIES.md` verbiedt: twee vormen van hetzelfde die na één
     wijziging uit de pas lopen — en dan landt werk stil op de verkeerde plek.
 
-    De regel:
-      * een PERSOON leest een postbus → inbox;
-      * een MENS-VERVULDE ROL ook → inbox bij de rol;
-      * een AI-VERVULDE ROL leest de NotifStore NOOIT → projectroute. Een bericht daarheen is
-        stil verliezen, en verstuurd mag nooit kwijt betekenen.
+    DE REGEL, en hij kijkt naar de VERVULLER en niet naar de rol:
+
+      persoon gegeven          → inbox bij die persoon;
+      rol met ÉÉN mens         → inbox bij DIE MENS. Een rol is een mandaat, geen postbus; werk
+                                 komt bij wie het draagt, met de rol als context.
+      rol met MEER mensen      → ("keuze", rol): de aanroeper laat kiezen. Zelf de eerste pakken
+                                 zou een stille keuze zijn, en dat is precies wat `_thuis_cirkel`
+                                 fout deed. Kan de aanroeper niet kiezen (`keuze_kan=False`), dan
+                                 gaat het naar de rol als geheel — zichtbaar voor alle vervullers.
+      rol met NUL mensen, AI   → projectroute. Een AI-rol leest de NotifStore nooit; een bericht
+                                 daarheen is stil verliezen, en verstuurd mag nooit kwijt betekenen.
+      rol met NUL vervullers   → de CIRCLE LEAD. Hier ging het mis: zo'n rol kreeg gewoon een
+                                 project, en dat rot weg op een bord waar niemand kijkt. Gemeten op
+                                 prod: 5 open projecten op rollen die ná het aanmaken slapend
+                                 werden gelegd. Een rol die niets kan uitvoeren hoort werk niet te
+                                 KRIJGEN maar te laten BELEGGEN.
 
     `opdrachtgever` reist mee zodat de lus kan sluiten: rondt de ontvanger het af, dan krijgt de
     opdrachtgever bericht (`meld_opdrachtgever`).
 
-    Geeft (soort, ref) terug: "inbox"/"project" plus een leesbare verwijzing."""
+    Geeft (soort, ref) terug: "inbox" / "project" / "keuze" plus een leesbare verwijzing."""
     doel_type, doel_id = ("person", persoon) if persoon else ("role", rol)
-    if doel_type == "role":
-        from nooch_village.assignments import door_mens_bemand
-        try:
-            leest_mee = bool(rol and door_mens_bemand(rol, st.assign, st.records))
-        except Exception:                                     # noqa: BLE001
-            leest_mee = False
-    else:
+    if doel_type == "person":
         leest_mee = bool(persoon) and st.people.get(persoon) is not None
+    else:
+        mensen = mens_vervullers(st, rol)
+        if len(mensen) > 1 and keuze_kan:
+            return "keuze", rol
+        if len(mensen) == 1:
+            # EÉN VERVULLER, DUS GEEN RAADSEL. Het werk landt bij de mens; de rol blijft de context
+            # (die staat in `rol` op het item), maar het adres is de persoon.
+            doel_type, doel_id, persoon = "person", mensen[0], mensen[0]
+        leest_mee = bool(mensen)
     if leest_mee:
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
                             "opdrachtgever": opdrachtgever, "bron_project": bron_project})
-        naam = (_person_name(st, persoon) if persoon
+        naam = (_person_name(st, doel_id) if doel_type == "person"
                 else (_name(st.records.get(rol)) or rol))
         return "inbox", f"in de inbox van {naam}"
+    # Geen mens. Draagt de rol wél iets (AI-vervuller of code), dan is de projectroute juist.
+    # Draagt hij niets, dan is een project een belofte aan een leeg bureau.
+    if rol and not _lead_hop and not _kan_uitvoeren(st, rol):
+        lead = _circle_lead_van(st, rol)
+        # ÉÉN HOP, EN NOOIT NAAR JEZELF. Zonder deze grens loopt een onbemande Circle Lead in
+        # zichzelf rond: hij kan niets uitvoeren, dus wordt hij naar zijn eigen lead gestuurd, dus
+        # naar zichzelf. Gevonden door de test die ik erbij schreef, niet door het lezen.
+        if lead and lead != rol:
+            rec = st.records.get(rol)
+            rolnaam = (_name(rec) if rec is not None else "") or rol
+            _s, _ref = route_werk(
+                st, tekst=f"[niemand vervult {rolnaam}] {tekst}", rol=lead, herkomst=herkomst,
+                door=door, opdrachtgever=opdrachtgever, bron_project=bron_project, prive=prive,
+                _lead_hop=True)
+            return _s, f"{_ref} — {rolnaam} heeft geen vervuller"
     eigenaar = rol or f"{_II_PREFIX}{bron_project or ''}"
     pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",
                              parent=(bron_project or None), opdrachtgever=opdrachtgever or "")
     _prov_feed(st, pid, herkomst, door)
     if prive:
         st.projects.edit(pid, private=True, allow_done=True)
-    return "project", f"als project bij {_name(st.records.get(rol)) or rol}"
+    _rec = st.records.get(rol) if rol else None
+    return "project", f"als project bij {(_name(_rec) if _rec is not None else '') or rol}"
 
 
 def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = "",
@@ -4658,16 +4743,25 @@ def _act_verzoek_besluit(c):
     pag = dict(n.get("pagina") or {})
 
     def _terug(bericht: str) -> None:
-        """Antwoord aan de vrager. Een rol-verzoek gaat terug naar de ROL; een pagina-voorstel komt
-        van een MENS, en die leest zijn persoon-inbox — een 'rol' met een persoon-id erin zou een
-        dead letter zijn (zelfde val als @rol-berichten aan AI-rollen)."""
+        """Antwoord aan de vrager, via DEZELFDE route als sluiten-met-reden (#401).
+
+        HIER STOND EEN TWEEDE IMPLEMENTATIE, en die verloor data. Ze stuurde een NotifStore-bericht
+        naar de vragende ROL — en 14 van de 29 rollen hebben geen menselijke vervuller, dus die
+        leest de NotifStore nooit. Elke weigering en elke herformulering aan zo'n rol verdween stil.
+        De docstring waarschuwde zelf voor die val, maar alleen voor het pagina-geval.
+
+        Nu: de reden landt als comment op de bron-feed (`comment` + `human` zet `worked=False`, dus
+        de bewoner pakt zijn eigen spanning weer op) — en DAARNAAST een inbox-bericht, maar alleen
+        als de vrager het ook leest. Die vraag stelt `route_werk`, niet dit scherm."""
         if pag:
+            # Een pagina-voorstel komt van een MENS; die leest zijn persoon-inbox.
             wie = str(pag.get("van_id") or "")
             if wie:
                 st.notif.add("person", wie, "", by=rol, snippet=bericht)
             return
+        _sluit_reden_terug(st, c.pj, n, bericht, aid=_web_actor_id(username, st), by=rol)
         van = str(n.get("by") or "")
-        if van:
+        if van and mens_vervullers(st, van):
             st.notif.add("role", van, n.get("project_id") or "", by=rol, snippet=bericht)
 
     if keuze == "accepteer" and pag:

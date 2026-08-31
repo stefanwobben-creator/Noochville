@@ -36,11 +36,17 @@ def _project(st, *, owner="harry_hemp", opdrachtgever="") -> dict:
 
 
 def _mens_rol(st, rid: str, monkeypatch, extra: set = frozenset()):
-    """Doe alsof `rid` (en `extra`) door een mens bemand zijn — de assignments-laag zelf is elders
-    getest; hier gaat het om de KEUZE."""
+    """Doe alsof `rid` (en `extra`) door een mens vervuld zijn — de assignments-laag zelf is elders
+    getest; hier gaat het om de KEUZE.
+
+    Patcht `mens_vervullers` en niet meer `door_mens_bemand`: sinds `route_werk` naar de VERVULLER
+    kijkt in plaats van naar de rol is "wie vervult dit" de vraag, niet "is het vervuld". Dat is
+    ook een betere fixture — hij zegt nu wie het draagt."""
     bemand = {rid, *extra}
-    monkeypatch.setattr("nooch_village.assignments.door_mens_bemand",
-                        lambda rol, a, r: rol in bemand)
+    persoon = st.people.add("Testmens", "test@nooch.earth")
+    monkeypatch.setattr(cockpit2, "mens_vervullers",
+                        lambda _st, rol: [persoon.id] if rol in bemand else [])
+    return persoon
 
 
 # ── 1. Het landt in een échte inbox, via bestaande mechaniek ─────────────────
@@ -49,16 +55,19 @@ def test_de_stap_landt_in_de_inbox_van_de_gekozen_mens(st, tmp_path, monkeypatch
     rol = "mother_earth__nooch__creator_of_shoes"
     if st.records.get(rol) is None:
         pytest.skip("rol niet in de seed")
-    _mens_rol(st, rol, monkeypatch)
+    mens = _mens_rol(st, rol, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: {"role": rol, "kind": "human_external"})
     p = _project(st)
     uit = er.naar_mens(data_dir=str(tmp_path), project=p, from_role="harry_hemp",
                        from_naam="Scientist", waarom="het vraagt een mens of externe partij",
                        item_text="Laat de samples testen in een erkend lab (TÜV of SGS)")
     assert uit and uit["soort"] == "inbox" and uit["rol"] == rol
-    open_notifs = [n for n in cockpit2._Stores(str(tmp_path)).notif.all()
-                   if n.get("target_id") == rol]
-    assert open_notifs, "niets in de inbox van de gekozen rol"
+    # BIJ DE MENS, MET DE ROL ALS CONTEXT. Een rol is een mandaat, geen postbus: heeft hij precies
+    # één vervuller, dan is dát het adres. De rol reist mee in `rol` zodat de context niet wegvalt.
+    alles = cockpit2._Stores(str(tmp_path)).notif.all()
+    bij_mens = [n for n in alles if n.get("target_id") == mens.id]
+    assert bij_mens, "niets in de inbox van de vervuller"
+    assert bij_mens[-1].get("rol") == rol, "de rol-context is weg"
 
 
 def test_er_komt_geen_vierde_kanaal_bij():
@@ -133,13 +142,13 @@ def test_een_rol_die_dit_werk_al_zag_krijgt_het_niet_terug(st, tmp_path, monkeyp
 # ── 3. Wélgevormd: wie, waarop, en wat er nodig is ──────────────────────────
 
 def test_de_melding_noemt_de_rol_de_plek_en_de_vraag(st, tmp_path, monkeypatch):
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
+    mens = _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)
     er.naar_mens(data_dir=str(tmp_path), project=_project(st), from_role="harry_hemp",
                  from_naam="Scientist", waarom="het vraagt een mens of externe partij",
                  item_text="Laat de samples testen in een erkend lab (TÜV of SGS)")
     n = [x for x in cockpit2._Stores(str(tmp_path)).notif.all()
-         if x.get("target_id") == FOUNDER_ROLE_ID][-1]
+         if x.get("target_id") == mens.id][-1]
     tekst, herkomst = n.get("snippet") or "", n.get("herkomst") or ""
     assert "Scientist" in tekst                              # WIE
     assert "erkend lab" in tekst                             # WAT hij nodig heeft
@@ -151,13 +160,14 @@ def test_de_melding_noemt_de_rol_de_plek_en_de_vraag(st, tmp_path, monkeypatch):
 def test_het_bron_project_reist_mee_zodat_de_lus_terugloopt(st, tmp_path, monkeypatch):
     """Zonder het project is de melding een dood briefje: de lezer kan wel iets doen, maar niet
     zien wát er stilstaat of het weer in beweging zetten."""
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
+    mens = _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)
     p = _project(st)
     er.naar_mens(data_dir=str(tmp_path), project=p, from_role="harry_hemp", from_naam="Scientist",
                  waarom="x", item_text="iets")
+    # bij de VERVULLER, niet bij de rol — zie `route_werk`
     n = [x for x in cockpit2._Stores(str(tmp_path)).notif.all()
-         if x.get("target_id") == FOUNDER_ROLE_ID][-1]
+         if x.get("target_id") == mens.id][-1]
     assert n.get("bron_project") == p["id"] or n.get("project_id") == p["id"]
 
 

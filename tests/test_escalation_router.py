@@ -86,7 +86,10 @@ def test_op_de_hop_limiet_gaat_het_naar_de_mens(tmp_path):
                      reason_fn=_antwoord(role="harry"), notify=lambda p, t: gemeld.append(t))
 
     assert res["actie"] == "human"
-    assert gemeld and "hop-limiet" in gemeld[0]
+    # DE VAGE PING IS EEN VANGNET, GEEN ROUTE. Hij vuurt alleen als `naar_mens` het NIET kwijt kan.
+    # Sinds `route_werk` naar de vervuller kijkt landt dit hier wél — en dan is een tweede,
+    # vagere melding erbij precies de dubbele ping die we elders hebben weggehaald.
+    assert res["geland"], "de laatste meter landde niet"
     assert res["gap"] is not None                          # ook hier wordt het gat geoogst
 
 
@@ -184,7 +187,10 @@ def test_fysiek_werk_gaat_naar_de_mens(tmp_path):
                      notify=lambda p, t: gemeld.append(t))
 
     assert res["actie"] == "human" and res["reason"] == gap_ledger.HUMAN_EXTERNAL
-    assert gemeld and "mens of externe partij" in gemeld[0]
+    # DE VAGE PING IS EEN VANGNET, GEEN ROUTE. Hij vuurt alleen als `naar_mens` het NIET kwijt kan.
+    # Sinds `route_werk` naar de vervuller kijkt landt dit hier wél — en dan is een tweede,
+    # vagere melding erbij precies de dubbele ping die we elders hebben weggehaald.
+    assert res["geland"] or (gemeld and "mens of externe partij" in gemeld[0])
     assert gap_ledger.alle(str(tmp_path))[0]["reason"] == gap_ledger.HUMAN_EXTERNAL
 
 

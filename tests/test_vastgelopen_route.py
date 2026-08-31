@@ -12,6 +12,10 @@ import pytest
 from nooch_village import cockpit2, escalation_router as er, vastgelopen_route as vr
 from nooch_village.human_inbox import FOUNDER_ROLE_ID
 
+#: de mens die de founder-rol vervult in deze fixtures — het ADRES sinds de
+#: vervuller-pass; de rol blijft de context op het item.
+FOUNDER_PERSOON = "p-founder"
+
 MENS = "vastgelopen op 1 item(s) — wacht op een mens of externe partij"
 ROLWERK = "vastgelopen op 1 item(s) — payload onvolledig na herstelpoging: veld term"
 
@@ -19,8 +23,11 @@ ROLWERK = "vastgelopen op 1 item(s) — payload onvolledig na herstelpoging: vel
 @pytest.fixture
 def dd(tmp_path, monkeypatch):
     cockpit2._bootstrap(str(tmp_path))
-    monkeypatch.setattr("nooch_village.assignments.door_mens_bemand",
-                        lambda rol, a, r: rol == FOUNDER_ROLE_ID)
+    # `mens_vervullers` en niet meer `door_mens_bemand`: `route_werk` kijkt sinds de vervuller-pass
+    # naar WIE een rol draagt, niet naar of hij gedragen wordt. De founder-rol krijgt hier één
+    # vervuller, dus het werk landt bij die mens met de rol als context.
+    monkeypatch.setattr(cockpit2, "mens_vervullers",
+                        lambda _st, rol: [FOUNDER_PERSOON] if rol == FOUNDER_ROLE_ID else [])
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)      # geen model → founder
     return str(tmp_path)
 
@@ -47,7 +54,7 @@ def test_een_mens_park_reden_landt_wel(dd):
     v = vr.pas(dd, apply=True)
     assert v["in_aanmerking"] == 1 and len(v["geland"]) == 1
     assert v["geland"][0]["pid"] == pid
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_ROLE_ID]
+    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
     assert n and "erkend lab" in (n[-1].get("snippet") or "")
 
 
@@ -70,7 +77,7 @@ def test_twee_keer_draaien_levert_geen_tweede_melding(dd):
     tweede = vr.pas(dd, apply=True)
     assert len(eerste["geland"]) == 1
     assert tweede["geland"] == [] and tweede["al_gemeld"] == 1
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_ROLE_ID]
+    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
     assert len(n) == 1, "dezelfde vraag twee keer verstuurd"
 
 
@@ -89,7 +96,7 @@ def test_droge_loop_schrijft_niets(dd):
     v = vr.pas(dd)                                     # geen apply
     assert len(v["geland"]) == 1 and v["toegepast"] is False
     assert not [x for x in cockpit2._Stores(dd).notif.all()
-                if x.get("target_id") == FOUNDER_ROLE_ID]
+                if x.get("target_id") == FOUNDER_PERSOON]
 
 
 def test_filteren_op_één_rol(dd):
@@ -109,7 +116,7 @@ def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     assert sum(v["verdeling"].values()) == 1
     assert list(v["gronden"]) == ["geen rol bezit dit, en het project heeft geen opdrachtgever"]
     assert not [x for x in cockpit2._Stores(dd).notif.all()          # en nog steeds niets geschreven
-                if x.get("target_id") == FOUNDER_ROLE_ID]
+                if x.get("target_id") == FOUNDER_PERSOON]
 
 
 def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):

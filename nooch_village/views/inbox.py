@@ -654,8 +654,15 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # "in één handeling" waar de kaart om vraagt — een uitleg zonder knop laat de lezer alsnog
     # zoeken waar hij ja moet zeggen.
     if _type_van(n) == "naar_rol":
+        # SLUITEN HOORT ER ALTIJD BIJ. Deze tak keerde vroeg terug zonder de Done-knop, en dus kon
+        # je een verzoek alleen kwijtraken door iemand te WEIGEREN. "Niet meer relevant" bestond
+        # niet, dus werd een weigering gestuurd waar geen oordeel voor nodig was — of het verzoek
+        # bleef staan. De vierde uitkomst is er voor precies dit.
         return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
-                + _verzoek_knoppen(n, csrf) + "</div>")
+                + _verzoek_knoppen(n, csrf)
+                + "<p class='muted'>Niet meer relevant? Sluit het — dat is geen weigering en de "
+                  "vrager krijgt alleen je reden als je er een schrijft.</p>"
+                + klaar + "</div>")
 
     # EEN ACTIE IS AL AFGESPROKEN. De flows vragen "wat doe je hiermee?" en dat is hier de verkeerde
     # vraag: het besluit is al genomen. Twee handelingen blijven over — afvinken, of erkennen dat

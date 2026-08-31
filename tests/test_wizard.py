@@ -271,8 +271,14 @@ def test_toewijzen_gebruikt_dezelfde_routing_als_het_werkoverleg(tmp_path):
     n = next(x for x in st.notif.all() if "site nakijken" in (x.get("snippet") or ""))
     assert n["opdrachtgever"] == p.id                          # de lus kan sluiten
 
-    for f in list(st.assign.fillers_of(rid)):                  # geen mens meer
-        st.assign.unassign(rid, f.type, f.id)
+    # Alleen de MENSEN eraf, de AI-vervuller blijft: dat is de projectroute-casus. Álles weghalen
+    # maakt de rol volledig onbemand, en dat is sinds de vervuller-pass een ander geval — dan gaat
+    # het naar de Circle Lead in plaats van naar een bord waar niemand kijkt.
+    for f in list(st.assign.fillers_of(rid)):
+        if f.type == "person":
+            st.assign.unassign(rid, f.type, f.id)
+    if not [f for f in st.assign.fillers_of(rid) if f.type == "persona"]:
+        st.assign.assign(rid, "persona", "een-ai")
     soort2, _ref2 = c2.route_werk(st, tekst="ander werk", rol=rid, opdrachtgever=p.id)
     assert soort2 == "project"
     pr = next(x for x in st.projects.all() if "ander werk" in str(x.get("scope")))

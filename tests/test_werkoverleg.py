@@ -222,8 +222,15 @@ def test_een_rol_zonder_mens_krijgt_geen_dead_letter(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     iid = _punt(dd, "Iets voor een AI-rol")
     st = cockpit2._Stores(dd)
+    # ALLEEN DE MENSEN eraf; de persona blijft. De fixture haalde eerst ÁLLE vervullers weg en
+    # maakte de rol daarmee volledig ONBEMAND — iets anders dan "AI-vervuld", en sinds de
+    # vervuller-pass gaat zo'n rol naar de Circle Lead in plaats van een project te krijgen dat
+    # wegrot. De docstring hierboven beschreef de AI-rol; nu doet de fixture dat ook.
     for f in list(st.assign.fillers_of(RID)):
-        st.assign.unassign(RID, f.type, f.id)             # niemand van vlees en bloed meer
+        if f.type == "person":
+            st.assign.unassign(RID, f.type, f.id)
+    if not [f for f in st.assign.fillers_of(RID) if f.type == "persona"]:
+        st.assign.assign(RID, "persona", "een-ai")
     _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
