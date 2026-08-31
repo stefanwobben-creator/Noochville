@@ -139,3 +139,37 @@ def test_zonder_apply_staat_er_dry_run_bij(tmp_path, monkeypatch, capsys):
     cli.main()
     uit = capsys.readouterr().out
     assert "DRY-RUN" in uit and "slaper" in uit
+
+
+def test_een_slapende_rol_kan_niets_hoeveel_code_er_ook_is(tmp_path):
+    """GEVONDEN DOOR DE DROGE RUN OP PROD, niet door een test. De sweep meldde "geen wezen" terwijl
+    er vijf lagen: `noochie` en `facilitator` staan allebei in CLASS_MAP, dus "kan uitvoeren" zei ja
+    — terwijl ze slapen en er geen thread draait.
+
+    KUNNEN IS NIET DRAAIEN. Zelfde onderscheid als bij de dagbel: de code stond er, er tikte alleen
+    niets meer. En het raakt méér dan de opruiming: zonder deze regel krijgt een slapende AI-rol nog
+    steeds projecten toegewezen, op een bord waar niemand kijkt."""
+    dd, st = _st(tmp_path)
+    rol = next(r.id for r in st.records.all() if getattr(r, "definition", None))
+    st.assign.assign(rol, "persona", "een-ai")               # een AI-vervuller: kan uitvoeren
+    rec = st.records.get(rol)
+    assert cockpit2._kan_uitvoeren(st, rol) is True          # wakker: doet mee
+    rec.slaapt = True
+    st.records.put(rec)
+    st2 = cockpit2._Stores(dd)
+    assert cockpit2._kan_uitvoeren(st2, rol) is False, "een slapende rol telt nog als uitvoerder"
+
+
+def test_werk_voor_een_slapende_rol_gaat_niet_naar_zijn_bord(tmp_path, monkeypatch):
+    """Het gevolg van hierboven, in de router: geen nieuw project op een slapend bord."""
+    dd, st = _st(tmp_path)
+    rol = next(r.id for r in st.records.all() if getattr(r, "definition", None))
+    st.assign.assign(rol, "persona", "een-ai")
+    rec = st.records.get(rol)
+    rec.slaapt = True
+    st.records.put(rec)
+    st2 = cockpit2._Stores(dd)
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_circle_lead_van", lambda _s, r: "een_lead")
+    _soort, ref = cockpit2.route_werk(st2, tekst="iets", rol=rol)
+    assert "heeft geen vervuller" in ref
