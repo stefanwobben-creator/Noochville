@@ -97,3 +97,45 @@ def test_een_fout_op_een_project_stopt_de_sweep_niet(tmp_path, monkeypatch):
     res = aw.herrouteer(st, apply=True)
     assert len(res["items"]) == 3
     assert sum(1 for x in res["items"] if x["naar"].startswith("FOUT")) == 1
+
+
+def test_het_cli_commando_draait_echt(tmp_path, monkeypatch, capsys):
+    """DE TAK ZELF DRAAIEN, want de volle suite (4264 tests) ving een `UnboundLocalError` in dit
+    commando niet: geen enkele test voerde hem uit. Hij viel pas om op prod, bij de eerste droge
+    run — en dat is precies één stap te laat.
+
+    Een compileerbare tak is geen werkende tak. Deze test roept `main()` aan zoals de shell dat doet,
+    tegen een wegwerp-datamap, en zou de fout hebben gevangen vóór hij de server haalde."""
+    import sys
+    import types
+
+    from nooch_village import cli
+    dd = str(tmp_path / "cli")
+    cockpit2._bootstrap(dd)
+    monkeypatch.setattr("nooch_village.config.load_context",
+                        lambda _b: types.SimpleNamespace(data_dir=dd))
+    monkeypatch.setattr(sys, "argv", ["village", "afslank_wezen"])
+    cli.main()
+    uit = capsys.readouterr().out
+    assert "wees" in uit or "geen wezen" in uit
+
+
+def test_zonder_apply_staat_er_dry_run_bij(tmp_path, monkeypatch, capsys):
+    """Wat er niet gebeurde, moet net zo duidelijk zijn als wat er wél gebeurde — anders leest een
+    droge run als een uitgevoerde."""
+    import sys
+    import types
+
+    from nooch_village import cli
+    dd = str(tmp_path / "cli2")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    st.projects.create("slaper", "Iets dat bleef liggen", "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    monkeypatch.setattr("nooch_village.config.load_context",
+                        lambda _b: types.SimpleNamespace(data_dir=dd))
+    monkeypatch.setattr(sys, "argv", ["village", "afslank_wezen"])
+    cli.main()
+    uit = capsys.readouterr().out
+    assert "DRY-RUN" in uit and "slaper" in uit

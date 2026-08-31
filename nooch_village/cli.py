@@ -1569,6 +1569,7 @@ def main() -> None:
         from nooch_village import afslank_wezen as aw
         from nooch_village import cockpit2 as _c2
         from nooch_village.config import load_context as _lc
+        from nooch_village.village import BASE_DIR      # lokaal, zoals elke andere tak hier
         _ctx = _lc(BASE_DIR)
         _st = _c2._Stores(_ctx.data_dir)
         _apply = "--apply" in _sys.argv

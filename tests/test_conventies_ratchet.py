@@ -156,4 +156,5 @@ def test_de_conventies_staan_opgeschreven():
     assert "Chrome is Engels, inhoud is Nederlands" in doc
     assert "Onafhankelijke deelchecks dekken verschillende assen" in doc
     assert "Vier uitkomsten, en de vierde was er altijd al" in doc
+    assert "Consolideer het mechaniek, niet de copy" in doc
     assert "tests/test_conventies_ratchet.py" in doc      # het doc wijst naar zijn eigen poortje
