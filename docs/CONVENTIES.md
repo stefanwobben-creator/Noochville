@@ -117,29 +117,48 @@ die anders heet, heet anders omdat ze anders is.
 Zelfde familie als "een ingang is een deur, geen formulier": het gaat mis zodra iets eruitziet als
 iets wat het niet is.
 
-### Vier uitkomsten, en de vierde was er altijd al
+### Drie verwerkingsuitkomsten, en weigeren zit er niet bij
 
-Een spanning in de inbox kent er **vier**, voor mens én AI, zonder aparte route:
+Een spanning verwerk je tot **actie**, **project** of **governance**. Meer niet.
 
-| uitkomst | veronderstelt |
+| uitkomst | wanneer |
 |---|---|
-| actie | er gebeurt iets — via `route_werk` (mens-rol → inbox, AI-rol → project) |
-| project | er gebeurt iets, en het is meer dan één stap |
-| governance | er gebeurt iets aan de STRUCTUUR |
-| **sluiten** | er gebeurt **niets** |
+| **actie** | het werk is van iemand anders — je DEELT het door, via `route_werk` |
+| **project** | het werk is van jouw rol — je BORGT het |
+| **governance** | de STRUCTUUR moet mee (bereikbaar via een actie: deel de spanning met wie het voorstel indient) |
 
-De eerste drie zijn handelings-flows en veronderstellen alle drie dát er iets gebeurt. Dat lijkt
-volledig tot je iets wilt zeggen wat géén handeling is — **"nee, want …"**. Die hoort bij de vierde,
-niet bij de eerste drie, en dat is de reden dat sluiten een optioneel reden-veld heeft.
+**Het werkwoord bepaalt of het werk doorloopt.** Dat is de kern, en alles hieronder volgt eruit.
+Delen, borgen en amenderen zetten werk in beweging; weigeren stopt het op de plek waar het juist
+door moest. Daarom is **weigeren geen uitkomst** — niet uit voorkeur maar omdat het geen richting
+heeft.
 
-Zo verdween "Decide now" (een eigen ja/nee/suggestie-rij) zonder verlies. Gemeten over 570 items:
-12 keer gebruikt, waarvan **9 gewoon een actie** waren — een antwoord waarmee een vastgelopen
-bewoner verder kon — en 2 een akkoord dat óók een actie is. Alleen de tiende vorm paste nergens.
+Holacracy zegt hetzelfde in andere woorden: hoort het bij je rol, dan borg je het — een rol weigert
+zijn eigen accountability niet. Hoort het er niet bij, dan deel je het door naar wie het wél draagt.
+In beide gevallen is "nee" het verkeerde werkwoord: het sluit een vraag zonder hem ergens te laten
+landen.
 
-**Wat je niet kunt loskoppelen, moet je kunnen horen** (zie hierboven), en dat geldt hier letterlijk:
-de reden gaat als comment terug op de bron-feed, niet alleen de opslag in. Alleen bewaren zou de
-terugkoppeling stil laten verdwijnen die Decide-now's "nee" wél gaf — dezelfde degradatie als de
-"iedereen"-tekst op de wall, die beloofde te versturen en niets deed.
+Het enige "nee" dat ooit op prod is gegeven laat dat zien. Lara vroeg om een oordeel; ze kreeg
+*"NEE — verkeerde doelgroep"*. Dat is inhoudelijk precies goed en als handeling precies fout: het
+werk bleef van haar rol, dus het antwoord had een ACTIE moeten zijn die haar verder helpt. Zelfde
+inhoud, ander werkwoord — en het werkwoord besliste of haar vraag doorliep of doodliep.
+
+**Sluiten is een uitgang, geen uitkomst.** "Niet meer relevant" is geen verwerking maar het einde
+ervan; hij draagt een optionele reden die teruggaat naar de vrager (zie hieronder). Zet hem niet
+naast de drie alsof het er vier zijn — dan wordt de makkelijkste weg een uitkomst.
+
+**Goed formuleren is de voorwaarde, niet een vierde keuze.** Je kunt een spanning alleen delen of
+borgen als er staat wát er aan de hand is; een onbegrijpelijk verzoek is niet weigerbaar maar
+onleesbaar. Dat is precies wat de leesbaarheidslaag levert (`systeemtaal` + `bevinding`), en waarom
+"aanpassen" geen aparte uitkomst is: het is de stap die overal beschikbaar hoort te zijn.
+
+#### Wat de meting zei
+
+Over de hele prod-historie: **0 weigeringen, 0 herformuleringen.** Van de zes `naar_rol`-items zijn
+er drie geaccepteerd (→ project, dus geborgd), twee waren testruis en één staat open. Het enige
+"nee" ooit kwam uit Decide-now — en dat was geen weigering maar een *inhoudelijk antwoord*
+("verkeerde doelgroep"), dus onder deze regels een ACTIE terug naar de rol die het vroeg.
+
+De knoppenrij accepteren/aanpassen/weigeren had dus één gebruikte tak van de drie.
 
 ### Bewijs blijft woordelijk
 
