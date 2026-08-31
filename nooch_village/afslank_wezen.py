@@ -57,9 +57,14 @@ def herrouteer(st, *, apply: bool = False) -> dict:
             # wát — en dan is het aftekenen van een sweep een handtekening zonder inhoud.
             from nooch_village.cockpit2 import bestemming, bestemming_tekst
             try:
-                gedaan.append({**w, "naar": bestemming_tekst(st, bestemming(st, rol=w["rol"]))})
+                doel = bestemming_tekst(st, bestemming(st, rol=w["rol"]))
             except Exception as e:                            # noqa: BLE001
-                gedaan.append({**w, "naar": f"(niet te bepalen: {e})"})
+                doel = f"(niet te bepalen: {e})"
+            # BEIDE KANTEN VAN DE VERHUIZING. Alleen de bestemming tonen laat de helft weg die het
+            # verschil maakt tussen verplaatsen en kopiëren — en juist dáár ging het bijna mis.
+            # "Zeg wát er gebeurt, niet dát er iets gebeurt" geldt ook voor wat er ACHTERBLIJFT.
+            gedaan.append({**w, "naar": doel,
+                           "origineel": f"archiveren met spoor naar: {doel}"})
             continue
         try:
             soort, ref = route_werk(
@@ -77,7 +82,7 @@ def herrouteer(st, *, apply: bool = False) -> dict:
                 w["pid"], f"↳ verhuisd: {w['rol']} heeft geen vervuller meer → {ref}",
                 kind="system", author_type="system", author_id="afslank-opruiming")
             st.projects.archive(w["pid"])
-            gedaan.append({**w, "naar": f"{soort}: {ref}"})
+            gedaan.append({**w, "naar": f"{soort}: {ref}", "origineel": "gearchiveerd"})
             log.info("wees %s (%s) herrouteerd → %s (origineel gearchiveerd)", w["pid"], w["rol"], ref)
         except Exception as e:                                # noqa: BLE001 — nooit blokkeren
             gedaan.append({**w, "naar": f"FOUT: {e}"})
