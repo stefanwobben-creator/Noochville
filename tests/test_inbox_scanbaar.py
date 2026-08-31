@@ -9,7 +9,7 @@ Drie beloften:
 from __future__ import annotations
 
 from nooch_village import cockpit2
-from nooch_village.views.inbox import (_besluit_knoppen, _een_regel, _verzoek_knoppen,
+from nooch_village.views.inbox import (_klaar_knop, _een_regel, _verzoek_knoppen,
                                        render_inbox, render_verwerk)
 
 ROL = "mother_earth__nooch__creator_of_shoes"
@@ -96,10 +96,15 @@ def test_zonder_bron_geen_lege_uitklap(tmp_path):
     assert "More…" in html                       # de diepte blijft bereikbaar
 
 
-def test_ja_nee_suggestie_alleen_met_een_bron_om_op_te_antwoorden(tmp_path):
+def test_een_reden_bij_sluiten_alleen_met_een_bron_om_op_te_antwoorden(tmp_path):
+    """Stond op de ja/nee/suggestie-rij van Decide-now; die is weg. De regel eronder is dezelfde
+    gebleven: alleen met een BRON valt er iets terug te koppelen, en zonder bron zou het reden-veld
+    een belofte doen die nergens landt."""
     dd, st = _st(tmp_path)
-    assert _besluit_knoppen({"id": "x"}, "t") == ""
-    assert "notif_besluit" in _besluit_knoppen({"id": "x", "project_id": "p1"}, "t")
+    assert "reden" not in _klaar_knop("x", "t", n={"id": "x"})
+    met_bron = _klaar_knop("x", "t", n={"id": "x", "project_id": "p1"})
+    assert "name='reden'" in met_bron or 'name="reden"' in met_bron
+    assert "goes back to whoever asked" in met_bron
 
 
 def test_zonder_schrijfsessie_geen_knoppen(tmp_path):
