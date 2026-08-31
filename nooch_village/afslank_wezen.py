@@ -66,8 +66,19 @@ def herrouteer(st, *, apply: bool = False) -> dict:
                 st, tekst=w["titel"], rol=w["rol"],
                 herkomst=f"↳ {w['rol']} heeft geen vervuller meer; project {w['pid']} lag stil",
                 door="afslank-opruiming", bron_project=w["pid"])
+            # HET ORIGINEEL MOET DICHT, anders is dit geen VERHUIZING maar een KOPIE. Zonder deze
+            # stap blijft het wees-project staan én verschijnt er een nieuw item: twee plekken voor
+            # één stuk werk, en bij de volgende sweep opnieuw. Een opruiming die niet idempotent is
+            # maakt bij elke run meer rommel dan hij weghaalt.
+            #
+            # Archiveren en niet afronden: het werk is niet klaar, het ligt ergens anders. De
+            # verwijzing gaat als feed-entry mee zodat je het spoor terug kunt lopen.
+            st.projects.add_feed_entry(
+                w["pid"], f"↳ verhuisd: {w['rol']} heeft geen vervuller meer → {ref}",
+                kind="system", author_type="system", author_id="afslank-opruiming")
+            st.projects.archive(w["pid"])
             gedaan.append({**w, "naar": f"{soort}: {ref}"})
-            log.info("wees %s (%s) herrouteerd → %s", w["pid"], w["rol"], ref)
+            log.info("wees %s (%s) herrouteerd → %s (origineel gearchiveerd)", w["pid"], w["rol"], ref)
         except Exception as e:                                # noqa: BLE001 — nooit blokkeren
             gedaan.append({**w, "naar": f"FOUT: {e}"})
             log.warning("wees %s niet herrouteerd: %s", w["pid"], e)

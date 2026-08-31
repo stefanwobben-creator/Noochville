@@ -209,3 +209,31 @@ def test_voorspellen_en_uitvoeren_zijn_dezelfde_regel():
     assert "best = bestemming(" in bron
     assert "mens_vervullers(" not in bron, "route_werk beslist weer zelf"
     assert "_circle_lead_van(" not in bron
+
+
+def test_herrouteren_is_een_verhuizing_geen_kopie(tmp_path, monkeypatch):
+    """GEVONDEN VÓÓR --APPLY, en het had de sweep erger gemaakt dan de kwaal. Zonder het origineel
+    te sluiten blijft het wees-project staan én verschijnt er een nieuw item: twee plekken voor één
+    stuk werk. En bij de volgende run opnieuw — een opruiming die niet idempotent is maakt bij elke
+    beurt meer rommel dan hij weghaalt."""
+    dd, st = _st(tmp_path)
+    pid = st.projects.create("slaper", "Iets dat bleef liggen", "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    monkeypatch.setattr(cockpit2, "route_werk", lambda *a, **k: ("inbox", "bij de Circle Lead"))
+    aw.herrouteer(st, apply=True)
+    p = st.projects.get(pid)
+    assert p.get("archived") is True, "het origineel bleef op het dode bord staan"
+    spoor = " ".join(str(e.get("text") or "") for e in (p.get("log") or []))
+    assert "verhuisd" in spoor and "Circle Lead" in spoor, "het spoor terug ontbreekt"
+
+
+def test_twee_keer_sweepen_levert_niet_twee_kopieen(tmp_path, monkeypatch):
+    """Idempotent: de tweede run vindt niets meer, want de eerste sloot het origineel."""
+    dd, st = _st(tmp_path)
+    st.projects.create("slaper", "Iets dat bleef liggen", "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    monkeypatch.setattr(cockpit2, "route_werk", lambda *a, **k: ("inbox", "bij de Circle Lead"))
+    assert aw.herrouteer(st, apply=True)["gevonden"] == 1
+    assert aw.herrouteer(st, apply=True)["gevonden"] == 0
