@@ -157,6 +157,7 @@ def test_de_conventies_staan_opgeschreven():
     assert "Onafhankelijke deelchecks dekken verschillende assen" in doc
     assert "Consolideer het mechaniek, niet de copy" in doc
     assert "Routeer op leven, niet op vermogen" in doc
+    assert "Een droge run rekent door hetzelfde pad, of hij liegt" in doc
     assert "Drie verwerkingsuitkomsten, en weigeren zit er niet bij" in doc
     # De kern van die conventie, niet de voetnoot: een werkwoord dat werk stopt is
     # daarom geen uitkomst.

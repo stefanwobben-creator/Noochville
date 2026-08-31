@@ -258,6 +258,31 @@ Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een bro
 wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
 zelfs daar telt hij de vorm en niet de naam (zie hierboven).
 
+### Een droge run rekent door hetzelfde pad, of hij liegt
+
+Een dry-run die zijn eigen antwoord berekent is geen voorbeschouwing maar een tweede implementatie —
+en die loopt na één wijziging uit de pas. Dan toont het scherm A, gebeurt er B, en heeft iemand op A
+zijn handtekening gezet.
+
+De sweep van de wees-projecten moest de bestemming per project TONEN vóór er iets verschoof. Eerst
+stond er `(dry-run)`: dát er iets gebeurt, niet wát — een handtekening zonder inhoud. De oplossing
+was niet een voorspeller ernaast maar de beslissing eruit halen:
+
+    bestemming()   pure functie, schrijft niets — WAAR zou dit landen
+    route_werk()   voert diezelfde uitkomst uit
+
+Voorspellen en uitvoeren zijn nu één functie; ze kúnnen niet verschillen. Een test bevriest dat
+`route_werk` zijn besluit uit `bestemming` haalt en niet zelf opnieuw neemt.
+
+Twee eisen aan elke droge run:
+
+1. **Zelfde pad, geen parallelle berekening.** Verschilt de weg, dan is de uitkomst een gok.
+2. **Zeg wát er gebeurt, niet dát er iets gebeurt.** "3 items worden verwerkt" is geen droge run.
+
+En de keerzijde, ook uit deze sweep: een verplaatsing die het origineel laat staan is een KOPIE.
+Zonder het oude project te sluiten stond hetzelfde werk op twee plekken, en vond de volgende run het
+opnieuw. **Een opruiming die niet idempotent is maakt bij elke beurt meer rommel dan hij weghaalt.**
+
 ### Routeer op leven, niet op vermogen
 
 **Een rol met een class KAN werken; een rol met een draaiende thread WERKT.** Die twee door elkaar
