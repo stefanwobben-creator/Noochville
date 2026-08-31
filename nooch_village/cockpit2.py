@@ -3500,7 +3500,8 @@ def _act_notif_add(c):
         return c.nxt, "✓ tension added"
 
 
-def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str) -> str:
+def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str,
+                       kern: str = "") -> str:
     """De reden bij het sluiten terug naar wie het vroeg. Fail-soft: een mislukte terugkoppeling
     mag het sluiten nooit blokkeren, maar hij mag ook niet stil verdwijnen — vandaar de log.
 
@@ -3516,7 +3517,12 @@ def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str) -> str
             return ""
         orec = st.records.get(p.get("owner") or "")
         rolnaam = _name(orec) if orec else (p.get("owner") or "rol")
-        tekst = f"@{rolnaam} Deze spanning is gesloten door {by or 'The Source'} — reden: {reden}"
+        # `kern` laat de aanroeper zijn eigen zin meegeven. Zonder dat werd een weigering dubbel
+        # ingepakt — "gesloten door X — reden: ✗ je verzoek is geweigerd: …" — en stond er
+        # bovendien "gesloten" boven iets wat een WEIGERING is. Twee woorden voor twee dingen.
+        tekst = f"@{rolnaam} " + (kern or
+                                  f"Deze spanning is gesloten door {by or 'The Source'} — "
+                                  f"reden: {reden}")
         entry = pj.add_feed_entry(src_pid, tekst[:1500], kind="comment",
                                   author_type="human", author_id=aid)
         return (entry or {}).get("id", "")
@@ -4759,7 +4765,10 @@ def _act_verzoek_besluit(c):
             if wie:
                 st.notif.add("person", wie, "", by=rol, snippet=bericht)
             return
-        _sluit_reden_terug(st, c.pj, n, bericht, aid=_web_actor_id(username, st), by=rol)
+        # De zin is hier al gevormd ("✗ je verzoek is geweigerd: …") en draagt de juiste WERKWOORD:
+        # weigeren is geen sluiten. Alleen de route is gedeeld, niet de formulering.
+        _sluit_reden_terug(st, c.pj, n, bericht, aid=_web_actor_id(username, st),
+                           by=_name(st.records.get(rol)) or rol, kern=bericht)
         van = str(n.get("by") or "")
         if van and mens_vervullers(st, van):
             st.notif.add("role", van, n.get("project_id") or "", by=rol, snippet=bericht)

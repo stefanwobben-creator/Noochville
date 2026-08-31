@@ -1560,6 +1560,29 @@ def main() -> None:
         else:
             print("\nDRY-RUN \u2014 er is niets geschreven. Draai opnieuw met --apply.")
 
+    elif mode == "afslank_wezen":
+        # Open projecten op een rol die niets meer kan (geen mens, geen AI, geen code). Ontstaan
+        # doordat een rol slapend werd gelegd NÁ het aanmaken — de afslank-poort keek naar wat er
+        # aan een rol hing, niet naar wat er op zijn bord lag. Dry-run tenzij --apply.
+        import sys as _sys
+
+        from nooch_village import afslank_wezen as aw
+        from nooch_village import cockpit2 as _c2
+        from nooch_village.config import load_context as _lc
+        _ctx = _lc(BASE_DIR)
+        _st = _c2._Stores(_ctx.data_dir)
+        _apply = "--apply" in _sys.argv
+        _res = aw.herrouteer(_st, apply=_apply)
+        if not _res["gevonden"]:
+            print("✓ geen wezen — elk open project heeft een eigenaar die iets kan.")
+        else:
+            print(f"{_res['gevonden']} wees-project(en):")
+            for _w in _res["items"]:
+                print(f"  {_w['rol']:<28} {str(_w['status']):<9} {_w['titel'][:52]}")
+                print(f"      → {_w['naar']}")
+            if not _apply:
+                print("\nDRY-RUN — draai opnieuw met --apply om te herrouteren.")
+
     elif mode == "waarde_audit":
         # Wat bracht elke rol en elke skill voort dat een mens echt raakte? Deterministisch,
         # read-only, geen LLM. Schrijft alleen het verslag.
