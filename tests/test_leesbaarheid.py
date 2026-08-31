@@ -228,6 +228,9 @@ def test_de_plan_prompt_vraagt_nederlands():
     assert "Write all free text in English" not in bron
     assert "in DUTCH" in bron
     assert "quoted claim or source stays in its original language" in bron
+    # En de reden staat bij de code, zodat niemand hem terugdraait omdat de cockpit Engels is.
+    assert "NIET TERUGDRAAIEN NAAR ENGELS" in bron
+    assert "CHROME is Engels" in bron and "INHOUD is Nederlands" in bron
 
 
 def test_geen_engelse_berichten_meer_uit_de_founder_flow():

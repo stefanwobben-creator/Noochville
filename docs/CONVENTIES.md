@@ -97,6 +97,104 @@ in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
 
+### Bewijs blijft woordelijk
+
+**Een feit wijs je aan; je herschrijft het niet.** Dat is één principe onder drie regels die er los
+van elkaar uitzagen:
+
+| waar | wat het zegt |
+|---|---|
+| `bevinding.feitbehoud` | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
+| regel 5 in de herschrijf-prompt | een geciteerde claim blijft staan, ook in het Engels |
+| COPYCHECK-001 | *"Quote the failing sentence, do not summarise"* |
+
+Alle drie beschermen hetzelfde: de woorden waarop iemand zich straks beroept. Een geciteerde
+klantclaim staat er omdat iemand precies díe zin op de site zag; een falende zin moet je kunnen
+terugvinden; een slag om de arm is een uitspraak over hoe zeker het feit is, en dus zelf een feit.
+Vertaal, vat samen of poets die op, en het bewijs is losgeraakt van waar het vandaan komt — zonder
+dat iemand het merkt, want de tekst leest juist béter.
+
+Praktisch, in volgorde van hardheid:
+
+1. **Behoud het epistemische niveau.** `mogelijk` blijft `mogelijk`; `A of B` wordt niet stil één
+   ervan; er komt geen getal, naam of oorzaak bij die de bron niet had.
+2. **Citaten blijven letterlijk**, ook als de rest vertaald wordt. Vertaal eromheen.
+3. **Herkomst poets je niet op.** `bevinding["ruw"]` en het blok "ruwe signalering" tonen wat er
+   werkelijk stond; alleen de LEESTEKST wordt leesbaar gemaakt.
+4. **Andermans woorden herschrijf je nooit** — zie `notifications.MENS_GETYPT` hierboven.
+
+En de keerzijde die dit werkbaar houdt: kan een herschrijving het feit niet behouden, dan is de ruwe
+tekst de uitkomst. **Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.**
+
+### Chrome is Engels, inhoud is Nederlands
+
+De taalgrens loopt niet om de applicatie maar dwars erdoorheen:
+
+| | taal | voorbeelden |
+|---|---|---|
+| **chrome** | Engels (i18n fase 1) | knoppen, kolomkoppen, menu's, statusmeldingen |
+| **inhoud** | Nederlands | bevindingen, Field Notes, spanningen, checklist-items, projecttitels |
+
+Waarom dit erin staat: één regel in de checklist-prompt — `"Write all free text in English."` — zette
+134 Engelse berichten in de inbox van de founder, náást bevindingen en Field Notes die allemaal
+Nederlands zijn. De regel leek consistent (de cockpit is immers Engels) maar stond aan de verkeerde
+kant van de grens.
+
+Twee uitzonderingen, allebei principieel en geen slordigheid:
+
+- **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet Engels.
+- **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven.
+
+En taal repareer je bij de BRON, niet bij de leesbaarheidslaag: vertalen is precies waar een model
+iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag blijft het
+vangnet voor wat tóch in de verkeerde taal binnenkomt — een vangnet, geen route.
+
+### Onafhankelijke deelchecks dekken verschillende assen
+
+**Eén goede check is zwakker dan drie die elkaar niet dekken.** Dat is de reden dat de
+leesbaarheidslaag drie poorten heeft in plaats van één strenge.
+
+De aanleiding, op prod, op het eerste echte bericht dat de laag raakte. De bron zei
+`(vermoeden, geen wet)`; de herschrijving maakte er *"de EU-richtlijn 2024/825 (EmpCo)"* van. Het
+model hield zich **keurig aan de zekerheidsregel** — `mogelijk` bleef gewoon staan — en glipte langs
+een as die niemand bewaakte. Een enkele check had hem doorgelaten, en de tekst las beter dan het
+origineel.
+
+| deelcheck | as | waar |
+|---|---|---|
+| slag om de arm | hoe ZEKER is het | gemeten (`bevinding.feitbehoud`) |
+| grond | is dit gegeven OPZOEKBAAR in de bron | gemeten (`_ongegronde_specifieken`) |
+| alternatieven heel | zijn er MOGELIJKHEDEN weggevallen | oordeel (in de prompt) |
+
+Drie regels bij het toevoegen van een deelcheck:
+
+1. **Een nieuwe as, geen strengere versie van een bestaande.** Twee checks die hetzelfde meten geven
+   de illusie van dekking; de smokkel loopt langs de derde as die er niet is.
+2. **Meten waar het kan, vragen waar het moet.** Een model dat zijn eigen tekst beoordeelt kijkt
+   zijn eigen huiswerk na. Wat je met de bron kunt vergelijken, vergelijk je.
+3. **Streng mag, mits falen goedkoop is.** Deze poorten mogen scherp staan omdat afkeuren betekent:
+   de ruwe tekst blijft staan. Zonder die fail-open is elke valse afwijzing verlies, en dan durf je
+   niet meer streng te zijn — dan bewaakt de poort niets meer.
+
+Zelfde vorm als "een poort bewaakt alleen wat hij telt", één trede hoger: die gaat over wat één
+poort ziet, deze over wat je tússen de poorten door laat lopen.
+
+### Een ratchet toetst gedrag, niet broncode
+
+De testkant van "handhaving vereist waarneembaarheid". Een poort die zijn eigen implementatie
+beschrijft is zwakker dan een die zijn eigen uitkomst meet.
+
+De aanleiding: twee poorten zochten op LETTERS in plaats van op WOORDEN — `"kern"` matchte
+`"kernproces"`, `"duidelijk"` matchte `"ONduidelijk"` — en allebei faalden ze stil. Mijn eerste
+ratchet scande de broncode op een `in`-vergelijking en gaf een valse treffer op een variabele die
+toevallig `r` heette. De tweede versie plakt voor elk woord in elke lijst een voor- en achtervoegsel
+en controleert dat geen poort aanslaat (`tests/test_woordgrens.py`). Die versie kent de
+implementatie niet en hoeft dat ook niet.
+
+Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een broncode-scan is voor
+wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
+zelfs daar telt hij de vorm en niet de naam (zie hierboven).
+
 ### Tonen is zwakker dan wegnemen
 
 De poort uit `afslank_afhankelijkheden.py` is een **vangnet, geen eerste keus.** Hij bestond omdat
