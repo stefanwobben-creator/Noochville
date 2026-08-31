@@ -237,3 +237,16 @@ def test_twee_keer_sweepen_levert_niet_twee_kopieen(tmp_path, monkeypatch):
     monkeypatch.setattr(cockpit2, "route_werk", lambda *a, **k: ("inbox", "bij de Circle Lead"))
     assert aw.herrouteer(st, apply=True)["gevonden"] == 1
     assert aw.herrouteer(st, apply=True)["gevonden"] == 0
+
+
+def test_de_droge_run_toont_ook_wat_er_met_het_origineel_gebeurt(tmp_path, monkeypatch):
+    """BEIDE KANTEN VAN DE VERHUIZING. Alleen de bestemming tonen laat precies de helft weg die het
+    verschil maakt tussen verplaatsen en kopiëren — en juist dáár ging het bijna mis. "Zeg wát er
+    gebeurt, niet dát er iets gebeurt" geldt ook voor wat er ACHTERBLIJFT."""
+    dd, st = _st(tmp_path)
+    st.projects.create("slaper", "Iets dat bleef liggen", "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    item = aw.herrouteer(st, apply=False)["items"][0]
+    assert "archiveren" in item["origineel"], item
+    assert item["naar"] in item["origineel"], "het spoor noemt de bestemming niet"
