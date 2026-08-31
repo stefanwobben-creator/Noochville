@@ -97,6 +97,26 @@ in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
 
+### Consolideer het mechaniek, niet de copy
+
+De keerzijde van "één mechaniek per ding". Twee handelingen mogen dezelfde ROUTE delen zonder
+dezelfde ZIN te delen — en ze door elkaar halen levert tekst op die niet klopt.
+
+Weigeren en sluiten lopen allebei door `_sluit_reden_terug`: comment op de bron-feed, `worked=False`,
+geen tweede kanaal. Dat is de winst. Maar toen de zin ook gedeeld werd, las een weigering als:
+
+> Deze spanning is **gesloten** door `mother_earth__nooch__website_developer` — reden: ✗ je verzoek is **geweigerd**: …
+
+Twee werkwoorden voor twee verschillende dingen, en een rol-ID waar een naam hoort. De aanroeper
+geeft nu zijn eigen zin mee; de route blijft één.
+
+De toets: **is dit hetzelfde MECHANIEK of dezelfde WOORDEN?** Bezorging, autorisatie, opslag en
+routering horen op één plek. Wat de lezer te zien krijgt hoort bij de handeling — en een handeling
+die anders heet, heet anders omdat ze anders is.
+
+Zelfde familie als "een ingang is een deur, geen formulier": het gaat mis zodra iets eruitziet als
+iets wat het niet is.
+
 ### Vier uitkomsten, en de vierde was er altijd al
 
 Een spanning in de inbox kent er **vier**, voor mens én AI, zonder aparte route:
