@@ -52,7 +52,14 @@ def herrouteer(st, *, apply: bool = False) -> dict:
     gedaan = []
     for w in gevonden:
         if not apply:
-            gedaan.append({**w, "naar": "(dry-run)"})
+            # DE BESTEMMING VOORSPELD MET DEZELFDE REGEL die hem straks uitvoert. "(dry-run)" als
+            # bestemming is geen droge run maar een lege belofte: je ziet dat er iets gebeurt, niet
+            # wát — en dan is het aftekenen van een sweep een handtekening zonder inhoud.
+            from nooch_village.cockpit2 import bestemming, bestemming_tekst
+            try:
+                gedaan.append({**w, "naar": bestemming_tekst(st, bestemming(st, rol=w["rol"]))})
+            except Exception as e:                            # noqa: BLE001
+                gedaan.append({**w, "naar": f"(niet te bepalen: {e})"})
             continue
         try:
             soort, ref = route_werk(

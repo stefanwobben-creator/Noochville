@@ -258,6 +258,26 @@ Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een bro
 wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
 zelfs daar telt hij de vorm en niet de naam (zie hierboven).
 
+### Routeer op leven, niet op vermogen
+
+**Een rol met een class KAN werken; een rol met een draaiende thread WERKT.** Die twee door elkaar
+halen maakt een wees-fabriek.
+
+`_kan_uitvoeren` vroeg of een rol code, skills of een AI-vervuller HEEFT. `noochie` en `facilitator`
+staan allebei in `CLASS_MAP`, dus het antwoord was ja — terwijl ze slapen en er geen thread is.
+Gevolg: de opruiming vond de vijf wees-projecten niet, én dezelfde functie stuurde `route_werk`, dus
+een slapende AI-rol kreeg nog steeds nieuwe projecten op een dood bord. De opruimer miste wat de
+bron bleef produceren.
+
+Dezelfde familie als de hartslag: *de code stond er, er tikte alleen niets meer.*
+
+**En de faalrichting is de andere kant op.** Mijn eerste versie las `role_status.json` — een bestand
+dat de daemon schrijft. Ontbreekt het (test, verse installatie, webserver vóór de eerste dorpsstart),
+dan werd "leeg" gelezen als "niemand leeft", en dan gaat ál het AI-werk naar de Circle Lead.
+**Onbekend leven is geen dood, net zoals `no_data` geen nul is.** De check grondt daarom op de
+records zelf — slapend/gearchiveerd, AI-vervuller, skills, `CLASS_MAP` — live berekend, nooit uit een
+cache; en wat hij niet kan vaststellen laat hij leven.
+
 ### Tonen is zwakker dan wegnemen
 
 De poort uit `afslank_afhankelijkheden.py` is een **vangnet, geen eerste keus.** Hij bestond omdat

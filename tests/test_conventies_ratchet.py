@@ -156,6 +156,7 @@ def test_de_conventies_staan_opgeschreven():
     assert "Chrome is Engels, inhoud is Nederlands" in doc
     assert "Onafhankelijke deelchecks dekken verschillende assen" in doc
     assert "Consolideer het mechaniek, niet de copy" in doc
+    assert "Routeer op leven, niet op vermogen" in doc
     assert "Drie verwerkingsuitkomsten, en weigeren zit er niet bij" in doc
     # De kern van die conventie, niet de voetnoot: een werkwoord dat werk stopt is
     # daarom geen uitkomst.
