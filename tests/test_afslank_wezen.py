@@ -173,3 +173,39 @@ def test_werk_voor_een_slapende_rol_gaat_niet_naar_zijn_bord(tmp_path, monkeypat
     monkeypatch.setattr(cockpit2, "_circle_lead_van", lambda _s, r: "een_lead")
     _soort, ref = cockpit2.route_werk(st2, tekst="iets", rol=rol)
     assert "heeft geen vervuller" in ref
+
+
+def test_de_levencheck_leest_geen_bestand(tmp_path):
+    """DE OMGEKEERDE VAL. Mijn eerste versie las `role_status.json` — een bestand dat de DAEMON
+    schrijft. Ontbreekt het (test, verse installatie, webserver vóór de eerste dorpsstart), dan werd
+    "leeg" gelezen als "niemand leeft", en dan gaat ál het AI-werk naar de Circle Lead.
+
+    Onbekend leven is geen dood, net zoals `no_data` geen nul is. De check grondt op de records zelf
+    en berekent live; deze test bevriest dat hij geen cache aanraakt."""
+    import inspect
+    bron = inspect.getsource(cockpit2._kan_uitvoeren)
+    kaal = "\n".join(r for r in bron.splitlines() if not r.strip().startswith("#"))
+    assert "role_status" not in kaal, "de levencheck leest weer een bestand"
+    assert "read_json" not in kaal and "open(" not in kaal
+
+
+def test_de_droge_run_noemt_de_bestemming(tmp_path, monkeypatch):
+    """"(dry-run)" als bestemming is geen droge run maar een lege belofte: je ziet dát er iets
+    gebeurt, niet wát — en dan is aftekenen een handtekening zonder inhoud."""
+    dd, st = _st(tmp_path)
+    st.projects.create("slaper", "Iets dat bleef liggen", "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    res = aw.herrouteer(st, apply=False)
+    naar = res["items"][0]["naar"]
+    assert "(dry-run)" not in naar and naar.strip(), naar
+
+
+def test_voorspellen_en_uitvoeren_zijn_dezelfde_regel():
+    """Twee keer dezelfde beslissing uitschrijven loopt na één wijziging uit de pas, en dan belooft
+    het scherm iets anders dan er gebeurt. `route_werk` neemt zijn besluit UIT `bestemming`."""
+    import inspect
+    bron = inspect.getsource(cockpit2.route_werk)
+    assert "best = bestemming(" in bron
+    assert "mens_vervullers(" not in bron, "route_werk beslist weer zelf"
+    assert "_circle_lead_van(" not in bron

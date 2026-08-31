@@ -3082,12 +3082,15 @@ def _outcome_project(st, owner: str, title: str, *, provenance: str = "", actor_
 def _kan_uitvoeren(st, rol: str) -> bool:
     """Kan deze rol werk UITVOEREN? Een AI-vervuller, eigen code of eigen skills telt.
 
-    Dezelfde definitie die de Reconciler gebruikt om te bepalen of een rol een thread krijgt —
-    hier LIVE berekend en niet uit `role_status.json` gelezen. Dat was mijn eerste versie, en die
-    had de verkeerde faalrichting: dat bestand wordt door de DAEMON geschreven, dus in een test, een
-    verse installatie of de webserver vóór de eerste dorpsstart is het er niet. "Bestand leeg" werd
-    dan "niemand kan iets", en dan zou ál het AI-werk naar de Circle Lead worden omgeleid.
-    Onbekend is niet leeg — zelfde regel als `no_data ≠ nul`."""
+    ROUTEER OP LEVEN, NIET OP VERMOGEN. Een rol met een class KAN werken; een rol met een draaiende
+    thread WERKT. Slapend of gearchiveerd telt dus niet mee, hoeveel code er ook achter zit.
+
+    Dezelfde definitie die de Reconciler gebruikt om te bepalen of een rol een thread krijgt — hier
+    LIVE uit de records berekend en niet uit een door de daemon geschreven cache. Die cache was mijn
+    eerste versie en had de verkeerde faalrichting: ontbreekt het bestand (test, verse installatie,
+    webserver vóór de eerste dorpsstart), dan werd "leeg" gelezen als "niemand leeft" en ging ál het
+    AI-werk naar de Circle Lead. Onbekend leven is geen dood — zelfde regel als `no_data ≠ nul`, en
+    wat hier niet vast te stellen is, laten we leven."""
     if not rol:
         return False
     rec = None
@@ -3145,6 +3148,53 @@ def _circle_lead_van(st, rol: str) -> str:
     return ""
 
 
+def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
+               _lead_hop: bool = False) -> dict:
+    """WAAR zou dit werk landen? Zelfde beslissing als `route_werk`, zonder iets te schrijven.
+
+    Bestaat omdat de droge run van de wees-opruiming een bestemming moet TONEN vóór er iets
+    verschuift, en die vraag twee keer beantwoorden is precies de fout waar `docs/CONVENTIES.md`
+    voor waarschuwt: twee vormen van dezelfde regel lopen na één wijziging uit de pas, en dan belooft
+    het scherm iets anders dan er gebeurt. Eén regel, twee gebruiken — voorspellen en uitvoeren.
+
+    Geeft {soort, doel_type, doel_id, via} terug. `via` vertelt hoe hij daar kwam (bv. de rol die
+    niemand vervulde), zodat een droge run leesbaar is zonder de code ernaast te leggen."""
+    if persoon:
+        return {"soort": "inbox", "doel_type": "person", "doel_id": persoon, "via": ""}
+    mensen = mens_vervullers(st, rol)
+    if len(mensen) > 1:
+        if keuze_kan:
+            return {"soort": "keuze", "doel_type": "role", "doel_id": rol, "via": ""}
+        # `toelichting` en niet `via`: dit is geen OMLEIDING maar de rol zelf, en dan hoort er geen
+        # "[…]" voor de tekst van de ontvanger. `via` betekent "dit ligt hier omdat het ergens
+        # anders niet kon", en dát moet de lezer weten.
+        return {"soort": "inbox", "doel_type": "role", "doel_id": rol, "via": "",
+                "toelichting": "meerdere vervullers"}
+    if len(mensen) == 1:
+        return {"soort": "inbox", "doel_type": "person", "doel_id": mensen[0], "via": ""}
+    if rol and not _lead_hop and not _kan_uitvoeren(st, rol):
+        lead = _circle_lead_van(st, rol)
+        if lead and lead != rol:
+            door = bestemming(st, rol=lead, _lead_hop=True)
+            return {**door, "via": f"{rol} heeft geen vervuller"}
+    return {"soort": "project", "doel_type": "role", "doel_id": rol, "via": ""}
+
+
+def bestemming_tekst(st, best: dict) -> str:
+    """De bestemming in mensentaal: een naam, geen id."""
+    doel = best.get("doel_id") or ""
+    if best.get("doel_type") == "person":
+        naam = _person_name(st, doel) or doel
+        wat = f"inbox van {naam}"
+    else:
+        rec = st.records.get(doel) if doel else None
+        naam = (_name(rec) if rec is not None else "") or doel or "(niemand)"
+        wat = {"keuze": f"keuze uit de vervullers van {naam}",
+               "inbox": f"inbox van de rol {naam}"}.get(best.get("soort"), f"project bij {naam}")
+    achter = best.get("via") or best.get("toelichting") or ""
+    return wat + (f" — {achter}" if achter else "")
+
+
 def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: str = "",
                door: str = "", opdrachtgever: str = "", bron_project: str = "",
                prive: bool = False, keuze_kan: bool = False,
@@ -3176,49 +3226,30 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     opdrachtgever bericht (`meld_opdrachtgever`).
 
     Geeft (soort, ref) terug: "inbox" / "project" / "keuze" plus een leesbare verwijzing."""
-    doel_type, doel_id = ("person", persoon) if persoon else ("role", rol)
-    if doel_type == "person":
-        leest_mee = bool(persoon) and st.people.get(persoon) is not None
-    else:
-        mensen = mens_vervullers(st, rol)
-        if len(mensen) > 1 and keuze_kan:
-            return "keuze", rol
-        if len(mensen) == 1:
-            # EÉN VERVULLER, DUS GEEN RAADSEL. Het werk landt bij de mens; de rol blijft de context
-            # (die staat in `rol` op het item), maar het adres is de persoon.
-            doel_type, doel_id, persoon = "person", mensen[0], mensen[0]
-        leest_mee = bool(mensen)
-    if leest_mee:
+    # DE BESLISSING KOMT UIT `bestemming`, en daar staat hij één keer. Hier stond hem nóg een keer
+    # uitschrijven — inclusief de lead-hop als recursie — en dat is precies de tweede vorm waar
+    # docs/CONVENTIES.md voor waarschuwt. Nu voorspelt de droge run van de wees-opruiming met
+    # dezelfde functie die hem straks uitvoert; ze KUNNEN niet uit elkaar lopen.
+    best = bestemming(st, rol=rol, persoon=persoon, keuze_kan=keuze_kan, _lead_hop=_lead_hop)
+    if best["soort"] == "keuze":
+        return "keuze", rol
+    doel_type, doel_id = best["doel_type"], best["doel_id"]
+    if best.get("via"):
+        # De ontvanger moet zien waaróm dit bij hem ligt en niet bij de rol die het vroeg.
+        tekst = f"[{best['via']}] {tekst}"
+    if best["soort"] == "inbox":
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
                             "opdrachtgever": opdrachtgever, "bron_project": bron_project})
-        naam = (_person_name(st, doel_id) if doel_type == "person"
-                else (_name(st.records.get(rol)) or rol))
-        return "inbox", f"in de inbox van {naam}"
-    # Geen mens. Draagt de rol wél iets (AI-vervuller of code), dan is de projectroute juist.
-    # Draagt hij niets, dan is een project een belofte aan een leeg bureau.
-    if rol and not _lead_hop and not _kan_uitvoeren(st, rol):
-        lead = _circle_lead_van(st, rol)
-        # ÉÉN HOP, EN NOOIT NAAR JEZELF. Zonder deze grens loopt een onbemande Circle Lead in
-        # zichzelf rond: hij kan niets uitvoeren, dus wordt hij naar zijn eigen lead gestuurd, dus
-        # naar zichzelf. Gevonden door de test die ik erbij schreef, niet door het lezen.
-        if lead and lead != rol:
-            rec = st.records.get(rol)
-            rolnaam = (_name(rec) if rec is not None else "") or rol
-            _s, _ref = route_werk(
-                st, tekst=f"[niemand vervult {rolnaam}] {tekst}", rol=lead, herkomst=herkomst,
-                door=door, opdrachtgever=opdrachtgever, bron_project=bron_project, prive=prive,
-                _lead_hop=True)
-            return _s, f"{_ref} — {rolnaam} heeft geen vervuller"
-    eigenaar = rol or f"{_II_PREFIX}{bron_project or ''}"
+        return "inbox", "in de " + bestemming_tekst(st, best)
+    eigenaar = doel_id or f"{_II_PREFIX}{bron_project or ''}"
     pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",
                              parent=(bron_project or None), opdrachtgever=opdrachtgever or "")
     _prov_feed(st, pid, herkomst, door)
     if prive:
         st.projects.edit(pid, private=True, allow_done=True)
-    _rec = st.records.get(rol) if rol else None
-    return "project", f"als project bij {(_name(_rec) if _rec is not None else '') or rol}"
+    return "project", "als " + bestemming_tekst(st, best)
 
 
 def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = "",
