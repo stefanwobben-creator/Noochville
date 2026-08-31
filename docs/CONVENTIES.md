@@ -127,10 +127,20 @@ Een spanning verwerk je tot **actie**, **project** of **governance**. Meer niet.
 | **project** | het werk is van jouw rol — je BORGT het |
 | **governance** | de STRUCTUUR moet mee (bereikbaar via een actie: deel de spanning met wie het voorstel indient) |
 
-**Weigeren bestaat niet als uitkomst**, en dat is Holacracy en geen voorkeur. Hoort het bij je rol,
-dan borg je het — een rol weigert zijn eigen accountability niet. Hoort het er niet bij, dan deel je
-het door naar wie het wél draagt. "Nee" is in beide gevallen het verkeerde werkwoord: het sluit een
-vraag zonder hem ergens te laten landen.
+**Het werkwoord bepaalt of het werk doorloopt.** Dat is de kern, en alles hieronder volgt eruit.
+Delen, borgen en amenderen zetten werk in beweging; weigeren stopt het op de plek waar het juist
+door moest. Daarom is **weigeren geen uitkomst** — niet uit voorkeur maar omdat het geen richting
+heeft.
+
+Holacracy zegt hetzelfde in andere woorden: hoort het bij je rol, dan borg je het — een rol weigert
+zijn eigen accountability niet. Hoort het er niet bij, dan deel je het door naar wie het wél draagt.
+In beide gevallen is "nee" het verkeerde werkwoord: het sluit een vraag zonder hem ergens te laten
+landen.
+
+Het enige "nee" dat ooit op prod is gegeven laat dat zien. Lara vroeg om een oordeel; ze kreeg
+*"NEE — verkeerde doelgroep"*. Dat is inhoudelijk precies goed en als handeling precies fout: het
+werk bleef van haar rol, dus het antwoord had een ACTIE moeten zijn die haar verder helpt. Zelfde
+inhoud, ander werkwoord — en het werkwoord besliste of haar vraag doorliep of doodliep.
 
 **Sluiten is een uitgang, geen uitkomst.** "Niet meer relevant" is geen verwerking maar het einde
 ervan; hij draagt een optionele reden die teruggaat naar de vrager (zie hieronder). Zet hem niet
