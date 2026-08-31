@@ -3093,6 +3093,18 @@ def _kan_uitvoeren(st, rol: str) -> bool:
     rec = None
     try:
         rec = st.records.get(rol)
+    except Exception:                                         # noqa: BLE001
+        rec = None
+    # SLAPEND OF GEARCHIVEERD KAN NIETS, hoeveel code er ook achter zit. Dit ontbrak, en de droge
+    # sweep wees het aan: `noochie` en `facilitator` staan allebei in CLASS_MAP, dus "kan uitvoeren"
+    # zei ja — terwijl ze slapen en er geen thread draait. Precies de vijf wees-projecten die deze
+    # opruiming moest vinden, gemist door de vraag die hij stelde.
+    #
+    # KUNNEN is niet DRAAIEN. Zelfde onderscheid als bij de dagbel: de code stond er, er tikte alleen
+    # niets meer.
+    if rec is not None and (getattr(rec, "slaapt", False) or getattr(rec, "archived", False)):
+        return False
+    try:
         if any(f.type == "persona" for f in st.assign.fillers_of(rol, record=rec)):
             return True
     except Exception:                                         # noqa: BLE001
