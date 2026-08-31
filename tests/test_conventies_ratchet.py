@@ -154,4 +154,5 @@ def test_de_conventies_staan_opgeschreven():
     assert "Bewijs blijft woordelijk" in doc
     assert "Een ratchet toetst gedrag, niet broncode" in doc
     assert "Chrome is Engels, inhoud is Nederlands" in doc
+    assert "Onafhankelijke deelchecks dekken verschillende assen" in doc
     assert "tests/test_conventies_ratchet.py" in doc      # het doc wijst naar zijn eigen poortje

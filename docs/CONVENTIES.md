@@ -149,6 +149,36 @@ En taal repareer je bij de BRON, niet bij de leesbaarheidslaag: vertalen is prec
 iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag blijft het
 vangnet voor wat tóch in de verkeerde taal binnenkomt — een vangnet, geen route.
 
+### Onafhankelijke deelchecks dekken verschillende assen
+
+**Eén goede check is zwakker dan drie die elkaar niet dekken.** Dat is de reden dat de
+leesbaarheidslaag drie poorten heeft in plaats van één strenge.
+
+De aanleiding, op prod, op het eerste echte bericht dat de laag raakte. De bron zei
+`(vermoeden, geen wet)`; de herschrijving maakte er *"de EU-richtlijn 2024/825 (EmpCo)"* van. Het
+model hield zich **keurig aan de zekerheidsregel** — `mogelijk` bleef gewoon staan — en glipte langs
+een as die niemand bewaakte. Een enkele check had hem doorgelaten, en de tekst las beter dan het
+origineel.
+
+| deelcheck | as | waar |
+|---|---|---|
+| slag om de arm | hoe ZEKER is het | gemeten (`bevinding.feitbehoud`) |
+| grond | is dit gegeven OPZOEKBAAR in de bron | gemeten (`_ongegronde_specifieken`) |
+| alternatieven heel | zijn er MOGELIJKHEDEN weggevallen | oordeel (in de prompt) |
+
+Drie regels bij het toevoegen van een deelcheck:
+
+1. **Een nieuwe as, geen strengere versie van een bestaande.** Twee checks die hetzelfde meten geven
+   de illusie van dekking; de smokkel loopt langs de derde as die er niet is.
+2. **Meten waar het kan, vragen waar het moet.** Een model dat zijn eigen tekst beoordeelt kijkt
+   zijn eigen huiswerk na. Wat je met de bron kunt vergelijken, vergelijk je.
+3. **Streng mag, mits falen goedkoop is.** Deze poorten mogen scherp staan omdat afkeuren betekent:
+   de ruwe tekst blijft staan. Zonder die fail-open is elke valse afwijzing verlies, en dan durf je
+   niet meer streng te zijn — dan bewaakt de poort niets meer.
+
+Zelfde vorm als "een poort bewaakt alleen wat hij telt", één trede hoger: die gaat over wat één
+poort ziet, deze over wat je tússen de poorten door laat lopen.
+
 ### Een ratchet toetst gedrag, niet broncode
 
 De testkant van "handhaving vereist waarneembaarheid". Een poort die zijn eigen implementatie
