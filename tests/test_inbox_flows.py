@@ -321,3 +321,13 @@ def test_een_verzoek_kun_je_sluiten_zonder_te_weigeren():
     bron = inspect.getsource(v._wizard_pane)
     tak = bron[bron.index('== "naar_rol"'):bron.index('== zv.ACTIE')]
     assert "klaar" in tak and "Niet meer relevant" in tak
+
+
+def test_weigeren_houdt_zijn_eigen_woord():
+    """WEIGEREN IS GEEN SLUITEN. Beide lopen door dezelfde route (#401), maar de zin komt van de
+    aanroeper: anders werd een weigering dubbel ingepakt — "gesloten door X — reden: ✗ je verzoek is
+    geweigerd: …" — met twee werkwoorden voor twee verschillende dingen. Eén route, twee woorden."""
+    import inspect
+    bron = inspect.getsource(cockpit2._act_verzoek_besluit)
+    assert "kern=bericht" in bron
+    assert "_name(st.records.get(rol)) or rol" in bron, "de rol-ID stond in de tekst i.p.v. de naam"
