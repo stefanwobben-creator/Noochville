@@ -258,6 +258,27 @@ Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een bro
 wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
 zelfs daar telt hij de vorm en niet de naam (zie hierboven).
 
+### De poort verifieert dat het bewijs BESTAAT, niet dat het PAST
+
+Bestaan is grondbaar; passendheid is oordeel, en oordeel blijft bij de mens.
+
+De triage-poort laat het model een rol noemen én de accountability citeren waarop het matcht, en
+controleert dat citaat daarna deterministisch tegen de records. Dat ving op de eerste echte poging
+een verzinsel: bij een spanning over een lekkende koffiemachine noemde het model netjes een rol én
+een citaat, en dat citaat stond nergens.
+
+**Maar hij toetst niet of de match GOED is.** Bij "Moment van methodische scherpte in bulletin" koos
+hij `librarian` met *"Evaluating candidate words for approval."* — een echte accountability, een
+magere match. Daar is bewust geen relevantie-poort bijgebouwd:
+
+- **bestaan** is een vergelijking (staat dit citaat in de records, ja of nee) en dus grondbaar;
+- **passendheid** is een oordeel, en een machine die dat oordeel afdwingt vervangt de mens in plaats
+  van hem te helpen.
+
+Daarom is het een SUGGESTIE en geen routering: de band zegt wat wij denken en waaróm, de rauwe
+spanning staat er onaangetast onder, en de lezer ziet de match zelf. Zelfde grens als bij de
+feitbehoud-check — wij vergelijken wat vergelijkbaar is, en laten het oordeel waar het hoort.
+
 ### De afzender is niet de auteur — poort op herkomst, niet op indiener
 
 `_is_mens_schrijver` las `by`: wie het item indiende. Dat werkt tot iemand iets DOORZET. Op 1

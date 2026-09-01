@@ -160,6 +160,7 @@ def test_de_conventies_staan_opgeschreven():
     assert "Een droge run rekent door hetzelfde pad, of hij liegt" in doc
     assert "Een test die van de datum afhangt, injecteert de datum" in doc
     assert "De afzender is niet de auteur" in doc
+    assert "De poort verifieert dat het bewijs BESTAAT, niet dat het PAST" in doc
     assert "Een transportfout is onbekend, geen leegte" in doc
     # De keerzijde: los van elkaar trekken mag geen stilte opleveren bij echte uitval.
     assert "aanhoudende ophaalfout is nog steeds een capaciteitsprobleem" in doc
