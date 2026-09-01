@@ -335,3 +335,39 @@ def test_weigeren_houdt_zijn_eigen_woord():
     bron = inspect.getsource(cockpit2._act_verzoek_besluit)
     assert "kern=bericht" in bron
     assert "_name(st.records.get(rol)) or rol" in bron, "de rol-ID stond in de tekst i.p.v. de naam"
+
+
+def test_onbewerkt_doorzetten_telt_niet_als_mensgeschreven(tmp_path):
+    """DE SPIEGEL VAN #394, en het lek van 1 september. Daar leerde ik dat een PAD kan weten dat een
+    mens typte terwijl de naam ontbreekt; hier weet het pad dat een mens INDIENDE terwijl de tekst
+    van een machine is. Beide keren: de afzender is niet de auteur.
+
+    Het actieformulier is voorgevuld met de spanningstekst. Zet je hem onbewerkt door, dan stuur je
+    machinetekst door met je eigen naam eronder — en dan hoort de herschrijf-poort gewoon te draaien."""
+    from nooch_village.notifications import MENS_GETYPT
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = _mens(st)
+    _src, n = _spanning(st, p)
+    ruw = cockpit2._volledig_van(n)
+    cockpit2.dispatch(dd, "notif_outcome",
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"],
+                       "content": [ruw], "next": ["/x"]}, username=p.email)
+    laatste = cockpit2._Stores(dd).notif.all()[-1]
+    assert laatste.get(MENS_GETYPT) is False, "onbewerkte machinetekst telt als mensgeschreven"
+
+
+def test_bewerken_maakt_het_wel_jouw_tekst(tmp_path):
+    """Het randgeval, en het is de eerlijke grens: pas je de voorvulling aan, dan is het jouw zin
+    geworden. Vergelijken van de twee strings is het beste dat we hebben."""
+    from nooch_village.notifications import MENS_GETYPT
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = _mens(st)
+    _src, n = _spanning(st, p)
+    cockpit2.dispatch(dd, "notif_outcome",
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"],
+                       "content": ["ik ga zelf de leverancier bellen"], "next": ["/x"]},
+                      username=p.email)
+    laatste = cockpit2._Stores(dd).notif.all()[-1]
+    assert laatste.get(MENS_GETYPT) is True

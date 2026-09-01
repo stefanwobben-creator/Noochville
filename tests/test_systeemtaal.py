@@ -70,12 +70,29 @@ def test_een_pure_opdracht_gaat_weg():
     assert "beoordeel" not in st.ontjargon(IJKPUNT).lower()
 
 
-def test_een_zin_met_een_feit_blijft_heel():
-    """ALLES OF NIETS. Het commando midden uit een zin knippen haalde het feit weg wát er gedraaid
-    was, terwijl de zin bleef staan. Een deterministische laag doet alleen wat onmiskenbaar veilig
-    is; twijfel is voor het model."""
+def test_geen_enkele_naar_mens_tekst_draagt_een_commando():
+    """DE INVARIANT, en hij overrulet mijn eerste regel. Ik had hier alles-of-niets: raakte het
+    commando een zin met inhoud, dan bleef de zin HEEL — om het feit niet te verliezen wát er
+    gedraaid was. Dat hield stand tot een echte melding het tegendeel liet zien:
+
+        "⚠️ Capaciteit ontbreekt: bron levert niet meer — beoordeel via python -m nooch_village.inbox"
+
+    Eén zin, inhoud én opdracht, dus alles-of-niets liet het commando gewoon staan. Een
+    terminalopdracht hoort in GEEN ENKELE naar-mens-tekst; dat weegt zwaarder dan het feit wát er
+    gedraaid werd — en dat feit blijft bewaard in de ruwe signalering."""
+    ruw = "⚠️ Capaciteit ontbreekt: bron levert niet meer — beoordeel via python -m nooch_village.inbox"
+    uit = st.ontjargon(ruw)
+    assert "python -m" not in uit and "beoordeel via" not in uit.lower()
+    assert "Capaciteit ontbreekt" in uit and "levert niet meer" in uit
+
+
+def test_de_zin_eromheen_blijft_leesbaar():
+    """Het restje na het knippen ("… beoordeel via") leest als een afgebroken zin, dus dat gaat mee."""
     zin = "De koppeling viel om nadat we systemctl restart draaiden, en sindsdien is de bel weg."
-    assert st.ontjargon(zin) == zin
+    uit = st.ontjargon(zin)
+    assert "systemctl" not in uit
+    assert uit.startswith("De koppeling viel om") and uit.endswith("de bel weg.")
+
 
 
 # ── de swaps zelf ──────────────────────────────────────────────────────────
@@ -168,14 +185,19 @@ def test_het_scherm_toont_de_opgeschoonde_leestekst():
     assert "mogelijk" in vol.lower() and "waarschijnlijk" not in vol.lower()
 
 
-def test_het_scherm_laat_mens_getypte_tekst_met_rust():
-    """Dezelfde regel als de herschrijf-poort: een mens-getypt bericht ÍS al mensentaal, en
-    andermans woorden opschonen is inmenging — ook als het maar één woord is."""
+def test_het_scherm_strijkt_een_commando_ook_uit_mens_ingediende_tekst():
+    """DE CORRECTIE, gemeten op prod 1 september. Commando-strippen hing aan dezelfde vlag als het
+    model-herschrijven, en dat lekte: een machine-melding die een MENS doorzette droeg `mens_getypt`,
+    dus bleef "beoordeel via python -m …" gewoon staan op het scherm van diezelfde mens.
+
+    De twee zorgen zijn niet hetzelfde. Een commando weghalen is geen herschrijving van iemands stem
+    maar een DISPLAY-INVARIANT. Het model-herschrijven blijft wél gepoort op auteurschap."""
     from nooch_village.notifications import MENS_GETYPT
-    from nooch_village.views.inbox import _een_regel
-    eigen = "Ik heb de hook zelf uitgezet, dat was mijn fout."
-    assert _een_regel({"snippet": eigen, MENS_GETYPT: True}) == eigen
-    assert "achtergrondproces" in _een_regel({"snippet": eigen})     # zonder merk wél
+    from nooch_village.views.inbox import _leesbaar
+    ruw = "⚠️ Bron levert niet meer — beoordeel via python -m nooch_village.inbox"
+    for merk in ({}, {MENS_GETYPT: True}):
+        assert "python -m" not in _leesbaar(merk, ruw), merk
+
 
 
 def test_het_merk_wordt_bij_het_schrijven_vastgelegd():

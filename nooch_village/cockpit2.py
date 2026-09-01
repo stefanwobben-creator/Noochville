@@ -3197,7 +3197,7 @@ def bestemming_tekst(st, best: dict) -> str:
 
 def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: str = "",
                door: str = "", opdrachtgever: str = "", bron_project: str = "",
-               prive: bool = False, keuze_kan: bool = False,
+               prive: bool = False, keuze_kan: bool = False, van_mens: bool | None = None,
                _lead_hop: bool = False) -> tuple[str, str]:
     """Waar landt een stuk werk? ÉÉN regel, gedeeld door het werkoverleg en de project-wizard.
 
@@ -3238,10 +3238,14 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
         # De ontvanger moet zien waaróm dit bij hem ligt en niet bij de rol die het vroeg.
         tekst = f"[{best['via']}] {tekst}"
     if best["soort"] == "inbox":
+        # `van_mens` komt van de AANROEPER, want die weet of de tekst is ingetikt of voorgevuld.
+        # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
+        # mee door een mens-pad en krijgt hij de bescherming die voor mensentaal bedoeld was.
+        _merk = {} if van_mens is None else {notifications.MENS_GETYPT: bool(van_mens)}
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
-                            "opdrachtgever": opdrachtgever, "bron_project": bron_project})
+                            "opdrachtgever": opdrachtgever, "bron_project": bron_project, **_merk})
         return "inbox", "in de " + bestemming_tekst(st, best)
     eigenaar = doel_id or f"{_II_PREFIX}{bron_project or ''}"
     pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",
@@ -3611,6 +3615,12 @@ def _act_notif_klaar(c):
         return f"/inbox?done={nid}", "✓ done with this tension 🎉"
 
 
+def _volledig_van(n: dict) -> str:
+    """De volle tekst van een spanning — dezelfde die het formulier voorvult."""
+    from nooch_village.notifications import volledig
+    return volledig(n or {})
+
+
 def _act_notif_outcome(c):
         # Eén uitkomst vastleggen vanuit de verwerk-wizard: maak 'm via dezelfde _outcome_*-helpers als de
         # wall (met de bron-spanning als herkomst) ÉN voeg 'm toe aan het verwerk-record. Sluit het item
@@ -3632,6 +3642,18 @@ def _act_notif_outcome(c):
         by_name = _person_name(st, aid) if aid else (username or "")
         prov = f"↳ uit inbox-spanning {nid}"
         label = OTYPE_LABEL.get(otype, otype)
+        # AUTEURSCHAP KOMT UIT DE HERKOMST, NIET UIT `by`. Dit formulier is VOORGEVULD met de tekst
+        # van de bestaande spanning, dus wie hem onbewerkt doorzet stuurt MACHINETEKST door — met
+        # zijn eigen naam eronder. Op prod van 1 september leverde dat een melding op die "beoordeel
+        # via python -m nooch_village.inbox" nog droeg: de poort zag een mens als afzender en liet
+        # hem met rust, terwijl geen mens die woorden had geschreven.
+        #
+        # De afzender is niet de auteur. Bewerkt de mens de voorvulling wél, dan is het zijn tekst
+        # geworden en telt hij als mensgeschreven — dan is het vergelijken van de twee strings het
+        # eerlijkste dat we hebben.
+        _origineel = " ".join(str(_volledig_van(n)).split())
+        _bewerkt = " ".join(content.split())
+        _van_mens = bool(_bewerkt) and _bewerkt != _origineel
         made = ""
         if otype == "action":
             # FLOW 1 — ACTIE. Twee landingsplekken, en het zijn er allebei bestaande:
@@ -3680,7 +3702,8 @@ def _act_notif_outcome(c):
                     return nxt, "✗ no one to give this to — log in or pick someone with @"
                 _s, ref = route_werk(st, tekst=content, rol=rol, persoon=persoon,
                                      herkomst=f"↳ uit een spanning in de inbox",
-                                     door=aid, opdrachtgever=aid, bron_project=src_pid)
+                                     door=aid, opdrachtgever=aid, bron_project=src_pid,
+                                     van_mens=_van_mens)
                 made = f"{label} {ref}"
         elif otype == "roloverleg":
             if src_p is None:

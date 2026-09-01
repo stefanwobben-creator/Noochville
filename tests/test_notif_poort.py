@@ -252,3 +252,44 @@ def test_typeren_gaat_door_ook_bij_een_mens_die_typte(tmp_path):
     bron = inspect.getsource(so.maak_verrijker)
     assert "herschrijf: bool = True" in bron
     assert "geen aanvulling" in bron            # het verschil staat bij de code
+
+
+# ── De invariant heeft een waarnemer ───────────────────────────────────────
+
+def test_de_poort_meldt_een_commando_dat_de_swap_niet_weghaalt(tmp_path, caplog, monkeypatch):
+    """"Een terminalopdracht hoort in geen enkele naar-mens-tekst" was een regel zonder waarnemer,
+    en dus lekte hij stil: het scherm strijkt hem weg, maar als dat een keer niet gebeurt merkt
+    niemand het — je ziet het pas in je inbox.
+
+    Geen blokkade: een melding tegenhouden is duurder dan een lelijke melding doorlaten. Wel een
+    alarm, zodat een volgend lek zich in het LOG meldt."""
+    import logging
+
+    monkeypatch.setattr("nooch_village.systeemtaal.ontjargon", lambda t: t)   # swap faalt
+    store = nm.NotifStore(str(tmp_path / "n.json"), verrijker=lambda n: {})
+    with caplog.at_level(logging.WARNING):
+        store.add("role", "x", "", by="y", snippet="Bron dood — beoordeel via python -m nooch.inbox")
+    assert any("LEESBAARHEID" in r.message for r in caplog.records)
+
+
+def test_geen_alarm_als_de_swap_zijn_werk_doet(tmp_path, caplog):
+    """De andere kant: een alarm dat altijd afgaat is geen alarm."""
+    import logging
+    store = nm.NotifStore(str(tmp_path / "n.json"), verrijker=lambda n: {})
+    with caplog.at_level(logging.WARNING):
+        store.add("role", "x", "", by="y", snippet="Bron dood — beoordeel via python -m nooch.inbox")
+    assert not [r for r in caplog.records if "LEESBAARHEID" in r.message]
+
+
+def test_het_pad_wint_van_de_indiener(tmp_path):
+    """DE AFZENDER IS NIET DE AUTEUR. Op prod zette een mens een MACHINE-melding door; `by` was hij,
+    de tekst was niet van hem — en de poort liet hem daarom met rust, inclusief het commando erin.
+
+    Staat het merk expliciet (ook op False), dan wint dat van de afleiding uit `by`."""
+    from nooch_village.people import PeopleStore
+    p = PeopleStore(str(tmp_path / "people.json")).add("Stefan", "s@n.nl")
+    dd = str(tmp_path)
+    # by = een mens, maar het pad zegt: niet door hem geschreven
+    assert nm._is_mens_schrijver({"by": p.id, nm.MENS_GETYPT: False}, dd) is False
+    # zonder merk valt hij terug op de afleiding uit `by`
+    assert nm._is_mens_schrijver({"by": p.id}, dd) is True

@@ -88,18 +88,32 @@ _LEEG = re.compile(r"^[\W_]*(?:beoordeel|draai|voer|run|check|zie|via|met|door|o
                    r"dit|dat|hier|dan|nog|even|alsjeblieft)?[\W_]*$", re.I)
 
 
-def _zin_zonder_commando(zin: str) -> str:
-    """Eén zin: was hij niets dan een opdracht, dan gaat hij weg. Anders blijft hij HEEL.
+# Restjes die na het knippen blijven hangen: "beoordeel via ", "draai met ". Zonder het commando
+# betekenen ze niets meer, en ze laten staan leest als een afgebroken zin.
+_STAART = re.compile(r"[\s,;:—–-]*\b(?:beoordeel|draai|voer|run|check|zie|gebruik)?"
+                     r"\s*(?:via|met|door|through|using)\s*$", re.I)
 
-    ALLES OF NIETS, en dat is met opzet. Een commando midden uit een zin knippen haalde
-    "systemctl restart" weg uit "de koppeling viel om nadat we systemctl restart draaiden" — de zin
-    bleef staan maar miste het feit wát er gedraaid was. Een deterministische laag hoort alleen te
-    doen wat onmiskenbaar veilig is; twijfelgevallen zijn voor het model, dat de hele tekst ziet."""
+
+def _zin_zonder_commando(zin: str) -> str:
+    """Eén zin: het commando eruit, en de zin weg als er niets inhoudelijks overblijft.
+
+    DE INVARIANT WEEGT ZWAARDER DAN MIJN EERSTE REGEL. Ik had hier alles-of-niets staan: raakte het
+    commando een zin met inhoud, dan bleef de zin HEEL — om niet het feit te verliezen wát er
+    gedraaid was. Dat is verdedigbaar tot je de invariant scherp stelt: **een terminalopdracht hoort
+    in geen enkele naar-mens-tekst.** Met alles-of-niets bleef "… — beoordeel via python -m
+    nooch_village.inbox" gewoon staan, want de zin ervoor droeg inhoud.
+
+    Dus nu: het commando gaat er ALTIJD uit; blijft er ≤3 inhoudelijke woorden over, dan was de zin
+    niets dan een opdracht en gaat hij helemaal weg. Het feit wát er gedraaid werd is daarmee uit de
+    LEESTEKST verdwenen — en dat is precies waar de ruwe signalering voor bewaard blijft: herkomst
+    poets je niet op, maar je zet hem ook niet in de leesregel."""
     kaal = _COMMANDO.sub(" ", zin)
     if kaal == zin:
         return zin
     woorden = [w for w in re.split(r"\s+", kaal.strip()) if w and not _LEEG.match(w)]
-    return "" if len(woorden) <= 3 else zin
+    if len(woorden) <= 3:
+        return ""
+    return _STAART.sub("", kaal.rstrip())
 
 
 def ontjargon(tekst: str) -> str:

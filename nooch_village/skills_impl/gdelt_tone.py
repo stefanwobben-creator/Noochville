@@ -18,13 +18,18 @@ import urllib.parse
 
 import requests
 
+from nooch_village.bron_ophalen import Uitkomst, haal_met_retry
 from nooch_village.skills import DataSourceSkill
 
 log = logging.getLogger(__name__)
 
 _ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
 _TIMESPAN = "2d"
-_SPACING_SECONDS = 6.0        # GDELT: max 1 request / 5s → per term netjes spatiëren
+# GDELT staat ~1 request/5s toe en verbreekt daarboven de VERBINDING (geen 429). 6 seconden bleek te
+# krap: de tweede term kreeg systematisch een reset, elf dagen lang, en dat las als "geen data".
+# 15 is beleefdheid — de RETRY vangt de drift. Leun op het getal en je bouwt opnieuw iets dat
+# stilletjes verschuift; zie nooch_village/bron_ophalen.py.
+_SPACING_SECONDS = 15.0
 
 
 def _sanitize_field(term: str) -> str:
@@ -66,42 +71,54 @@ class GdeltToneSkill(DataSourceSkill):
         r.raise_for_status()
         return r.json()                                   # niet-JSON → raise → fail-closed in _tone_for
 
-    def _tone_for(self, term: str, datum: str, *, _fetch=None) -> float | None:
-        """Gemiddelde toon voor EXACT `datum`, strikt geparsed. None bij fetch-fout, niet-JSON, afwijkende
-        structuur, niet-numerieke waarde, of geen data voor die dag (geen mock, geen schatting)."""
-        try:
-            data = _fetch(term) if _fetch else self._get(term)
-        except Exception as exc:
-            log.warning("GDELT fetch faalde (%s): %s", term, exc)
-            return None
-        # strikte structuur-validatie
+    def tone_uitkomst(self, term: str, datum: str, *, _fetch=None, _sleep=None) -> Uitkomst:
+        """Gemiddelde toon voor EXACT `datum`, met het ONDERSCHEID dat hier ontbrak.
+
+        "opgehaald maar leeg" en "niet kunnen ophalen" zijn twee verschillende dingen, en ze werden
+        allebei `None`. Daardoor stond `vegan_footwear` elf dagen als dode bron terwijl de ruwe
+        respons gewoon 200 gaf: de tweede van twee calls kreeg een `ConnectionResetError`, en de
+        `except` eromheen las dat als afwezigheid. Zie `bron_ophalen` — no_data ≠ nul, één laag
+        lager."""
+        res = haal_met_retry(lambda: (_fetch(term) if _fetch else self._get(term)),
+                             naam=f"gdelt/{term}", sleep=_sleep)
+        if res.status == "ophaalfout":
+            return res
+        data, _pog = res.waarde, res.pogingen
+        # strikte structuur-validatie. Een afwijkende structuur is een INHOUDELIJKE fout, geen
+        # transportfout: opnieuw proberen helpt niet, en het is ook geen leegte.
         if not isinstance(data, dict):
-            return None
+            return Uitkomst("ophaalfout", None, "antwoord is geen JSON-object", _pog)
         timeline = data.get("timeline")
         if not isinstance(timeline, list) or not timeline or not isinstance(timeline[0], dict):
             log.warning("GDELT onverwachte structuur (geen timeline) voor %s", term)
-            return None
+            return Uitkomst("ophaalfout", None, "geen timeline in het antwoord", _pog)
         points = timeline[0].get("data")
         if not isinstance(points, list):
             log.warning("GDELT onverwachte structuur (geen data-lijst) voor %s", term)
-            return None
+            return Uitkomst("ophaalfout", None, "geen data-lijst in de timeline", _pog)
         want = datum.replace("-", "")                     # 'YYYY-MM-DD' → 'YYYYMMDD'
         vals = []
         for p in points:
             if not isinstance(p, dict) or "date" not in p or "value" not in p:
-                return None                               # afwijkend punt → fail-closed
+                return Uitkomst("ophaalfout", None, "afwijkend datapunt", _pog)
             d = str(p["date"])
             if len(d) < 8 or not d[:8].isdigit():
-                return None
+                return Uitkomst("ophaalfout", None, "onleesbare datum in een datapunt", _pog)
             if d[:8] != want:
                 continue
             try:
                 vals.append(float(p["value"]))
             except (TypeError, ValueError):
-                return None                               # niet-numerieke waarde → fail-closed
+                return Uitkomst("ophaalfout", None, "niet-numerieke waarde", _pog)
         if not vals:
-            return None                                   # geen data voor die dag → gat
-        return round(sum(vals) / len(vals), 4)
+            # OPGEHAALD EN LEEG: dat is een feit over de wereld, geen storing bij ons.
+            return Uitkomst("leeg", None, f"geen datapunten voor {datum}", _pog)
+        return Uitkomst("ok", round(sum(vals) / len(vals), 4), "", _pog)
+
+    def _tone_for(self, term: str, datum: str, *, _fetch=None) -> float | None:
+        """De oude vorm, voor aanroepers die alleen de waarde willen. `None` betekent hier "geen
+        waarde" en zegt bewust NIET waarom — wie het verschil nodig heeft neemt `tone_uitkomst`."""
+        return self.tone_uitkomst(term, datum, _fetch=_fetch).waarde
 
     def daily_values(self, context, datum: str, *, _sleep=None) -> dict:
         """Per term één observatie. GDELT staat max 1 request/5s toe → spatieer tussen de per-term-calls
@@ -111,7 +128,16 @@ class GdeltToneSkill(DataSourceSkill):
         for i, term in enumerate(self._terms(context)):
             if i:
                 sleep(_SPACING_SECONDS)
-            out[_sanitize_field(term)] = self._tone_for(term, datum)
+            res = self.tone_uitkomst(term, datum, _sleep=sleep)
+            # HET ONDERSCHEID IN HET LOG, want dat is waar een mens het leest. "leeg" is een
+            # waarneming over de wereld; "ophaalfout" is onwetendheid over onszelf, en die twee
+            # dezelfde regel geven maakt een levende bron elf dagen lang dood.
+            if res.status == "ophaalfout":
+                log.warning("GDELT %s: OPHAALFOUT (%s) — geen waarneming, niet 'leeg'",
+                            term, res.reden)
+            elif res.status == "leeg":
+                log.info("GDELT %s: leeg voor %s — opgehaald, er was niets", term, datum)
+            out[_sanitize_field(term)] = res.waarde
         return out
 
     def observation_meta(self, context, datum: str, field: str) -> dict:

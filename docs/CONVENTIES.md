@@ -258,6 +258,65 @@ Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een bro
 wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
 zelfs daar telt hij de vorm en niet de naam (zie hierboven).
 
+### De afzender is niet de auteur — poort op herkomst, niet op indiener
+
+`_is_mens_schrijver` las `by`: wie het item indiende. Dat werkt tot iemand iets DOORZET. Op 1
+september zette de founder een machine-melding door als actie; `by` was hij, de tekst was van een
+skill — en de poort liet hem daarom met rust, inclusief het `python -m …` erin.
+
+Het actieformulier is VOORGEVULD met de spanningstekst, dus onbewerkt doorzetten stuurt machinetekst
+door met een mensennaam eronder. Het schrijfpad weet dat en `by` niet:
+
+- **onbewerkt doorgezet** → machinetekst; het merk gaat expliciet op `False`;
+- **bewerkt** → jouw zin geworden; mensgeschreven, geen model-herschrijving;
+- **staat het merk expliciet, dan wint het** van de afleiding uit `by` — ook als het `False` is.
+
+De spiegel van de regel uit #394: daar wist het pad dat een mens typte terwijl de naam ontbrak, hier
+weet het pad dat een mens indiende terwijl de tekst van een machine is. Beide keren is de vraag
+"waar komt deze tekst vandaan", niet "wie drukte op verzenden".
+
+**En splits de zorgen die aan zo'n vlag hangen.** Het lek bestond omdat commando-strippen en
+model-herschrijven allebei aan `mens_getypt` hingen. Ze zijn niet hetzelfde: een terminalopdracht
+weghalen is geen herschrijving van iemands stem maar een **display-invariant** — die draait altijd,
+ongeacht afzender. Alleen het model-oordeel is gepoort op auteurschap.
+
+### Een transportfout is onbekend, geen leegte
+
+`no_data ≠ nul`, één laag lager: niet in de data maar in het TRANSPORT.
+
+    ok           opgehaald, hier is de waarde
+    leeg         opgehaald, er was niets — dat is een FEIT
+    ophaalfout   niet kunnen ophalen — dat is GEEN feit, dat is onwetendheid
+
+`gdelt_tone/vegan_footwear` stond elf dagen als dode bron in de inbox terwijl de ruwe fetch gewoon
+HTTP 200 gaf met 103 datapunten. De skill haalde twee termen op met 6 seconden ertussen, GDELT
+verbrak de tweede verbinding (`ConnectionResetError`, **geen 429**), en de `except` eromheen las dat
+als "geen data". De tweede term werd systematisch uitgehongerd; niets kon het verschil zien.
+
+`nooch_village/bron_ophalen.py` is het gedeelde sjabloon: `haal_met_retry` classificeert de fout
+(transport → opnieuw met backoff; inhoudelijk → niet herhalen, dat gaat de tweede keer net zo goed
+mis) en geeft een `Uitkomst` met een status terug. **Bluesky (403) en Trends (429) hebben dezelfde
+vorm** — de bron zegt geen nee maar hangt op — en horen daar straks langs.
+
+En: **leun op de retry, niet op de spacing.** Een vast interval is een gok over gedrag dat je niet
+beheerst; de backoff vangt de drift. De spacing is beleefdheid.
+
+#### Maar aanhoudende ophaalfout is nog steeds een capaciteitsprobleem
+
+De keerzijde, en zonder haar ruil je een zichtbare storing in voor een stille. "Ophaalfout is geen
+leegte" mag nooit worden gelezen als "ophaalfout is geen probleem": een bron die dágen alleen
+ophaalfouten geeft, levert geen data, en dat hoort gewoon als capaciteitsgat op te duiken.
+
+Dat werkt hier structureel, en het is het controleren waard bij elke refactor van deze laag:
+`indicator_freshness` leest de OBSERVATIES en vraagt "wanneer kreeg dit veld voor het laatst een
+waarde". Een ophaalfout schrijft er geen — net zomin als "leeg" — dus de versheid verloopt en de
+fresh→stale-overgang vuurt gewoon. De splitsing veranderde HOE we loggen en of we opnieuw proberen,
+niet WÁT er wordt vastgelegd.
+
+De spanning die dit onderzoek startte was terecht. Ze was alleen verkeerd toegeschreven: de bron was
+niet dood, wij haalden hem niet op. **Beide horen zichtbaar te zijn, en het verschil hoort in het
+log** — daar leest een mens of een reeks stilviel door de wereld of door ons.
+
 ### Een test die van de datum afhangt, injecteert de datum
 
 Tenzij de datum het onderwerp is. Anders is het geen test maar een tijdbom, en die gaat af op een

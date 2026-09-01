@@ -84,19 +84,25 @@ def _leesbaar(n: dict, tekst: str) -> str:
 
     Waarom ook hier, en niet alleen vóór het model: deze laag is gratis en moet gegarandeerd zijn.
     Faalt het model — geen krediet, storing — dan valt het scherm terug op de ruwe signalering, en
-    dan hoort die tenminste geen `python -m …` en geen `niet-uitvoering` meer te bevatten. De swap
-    is deterministisch en betekenis-behoudend, dus hij mag zonder oordeel draaien.
+    dan hoort die tenminste geen `python -m …` en geen `niet-uitvoering` meer te bevatten.
 
-    NIET op mens-getypte tekst: dezelfde regel als de herschrijf-poort. Een mens-getypt bericht ís al
-    mensentaal, en andermans woorden opschonen is inmenging — ook als het maar één woord is."""
-    if n.get(MENS_GETYPT) is True:
-        return tekst
+    HIJ DRAAIT ALTIJD, OOK OP MENS-GETYPTE TEKST, en dat is een correctie op de eerste versie.
+    Commando-strippen en model-herschrijven hingen aan dezelfde vlag, en dat lekte: een
+    machine-melding die een MENS doorzette droeg `mens_getypt`, dus bleef "beoordeel via
+    python -m nooch_village.inbox" gewoon staan op het scherm van diezelfde mens. Gemeten op prod,
+    1 september 2026.
+
+    De twee zorgen zijn niet hetzelfde. Een commando weghalen is geen herschrijving van iemands stem
+    maar een DISPLAY-INVARIANT: een terminalopdracht hoort in geen enkele naar-mens-tekst, ongeacht
+    wie hem indiende. Het model-herschrijven blijft wél gepoort op auteurschap — en dat auteurschap
+    komt sinds deze fix uit de HERKOMST, niet uit `by`."""
     # Eerst de verpakking eraf, dan de swaps. `tensie_poort.kern` is DE plek die onze eigen omhulsels
     # kent ("⏸️ Project van X vastgelopen op 5 item(s): …") — die hier nog eens uitschrijven zou een
     # tweede vorm van hetzelfde zijn. Gemeten op prod: 84 van de laatste 30 dagen dragen dat omhulsel,
     # en op de LIJST stond het nog voluit; de detailweergave gebruikte `kern` al wél.
     from nooch_village import tensie_poort as tp
     return ontjargon(tp.kern(tekst) or tekst) or tekst
+
 
 
 def _een_regel(n: dict) -> str:
