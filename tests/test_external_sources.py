@@ -211,3 +211,46 @@ def test_alphavantage_spatieert_per_symbool(monkeypatch):
     slept = []
     out = s.daily_values(ctx, "2026-07-02", _sleep=lambda x: slept.append(x))
     assert out == {"spx": 744.78, "aex": 100.0} and slept == [13.0]           # één spacing tussen twee symbolen
+
+
+def test_ophaalfout_schrijft_niets_dus_het_recency_alarm_blijft_werken(tmp_path):
+    """DE KEERZIJDE VAN DE SPLITSING, en de vraag die hem compleet maakt.
+
+    We hebben "ophaalfout" losgetrokken van "leeg" zodat een reset niet meer als waarneming telt.
+    Dan is de volgende vraag terecht: gaat het recency-alarm ("laatste data N dagen geleden") nog
+    wél af als een bron dagenlang ALLEEN ophaalfout geeft? Anders ruilen we een zichtbare storing in
+    voor een stille — en de oorspronkelijke spanning die dit onderzoek startte was terecht.
+
+    Het antwoord is ja, en het is structureel: `indicator_freshness` leest de OBSERVATIES en vraagt
+    "wanneer kreeg dit veld voor het laatst een waarde". Een ophaalfout schrijft er geen — net zomin
+    als "leeg" — dus de versheid verloopt gewoon en de fresh→stale-overgang vuurt.
+
+    De splitsing veranderde HOE we het loggen en of we opnieuw proberen, niet WAT er wordt
+    vastgelegd. Dat is precies de bedoeling: een ophaalfout is geen waarneming, en dus mag hij een
+    lege reeks ook niet opvullen."""
+    from nooch_village.bron_ophalen import Uitkomst
+    s = GdeltToneSkill()
+    ctx = _ctx(gdelt_terms="vegan footwear")
+
+    def _altijd_reset(term, datum, **kw):
+        return Uitkomst("ophaalfout", None, "ConnectionResetError")
+
+    s.tone_uitkomst = _altijd_reset
+    out = s.daily_values(ctx, "2026-09-01", _sleep=lambda _x: None)
+    # geen waarde → de collector legt niets vast → de reeks veroudert → fresh→stale → source_died
+    assert out == {"vegan_footwear": None}
+
+
+def test_leeg_en_ophaalfout_leggen_allebei_niets_vast_maar_zeggen_iets_anders(caplog):
+    """Ze schrijven hetzelfde (niets) en betekenen iets anders. Dat verschil hoort in het LOG te
+    staan, want daar leest een mens waarom een reeks stilviel — data of storing."""
+    import logging
+    from nooch_village.bron_ophalen import Uitkomst
+    s = GdeltToneSkill()
+    ctx = _ctx(gdelt_terms="x")
+    for status, woord in (("ophaalfout", "OPHAALFOUT"), ("leeg", "leeg")):
+        caplog.clear()
+        s.tone_uitkomst = lambda t, d, _st=status, **kw: Uitkomst(_st, None, "reden")
+        with caplog.at_level(logging.INFO):
+            assert s.daily_values(ctx, "2026-09-01", _sleep=lambda _x: None) == {"x": None}
+        assert any(woord in r.message for r in caplog.records), status

@@ -301,6 +301,22 @@ vorm** — de bron zegt geen nee maar hangt op — en horen daar straks langs.
 En: **leun op de retry, niet op de spacing.** Een vast interval is een gok over gedrag dat je niet
 beheerst; de backoff vangt de drift. De spacing is beleefdheid.
 
+#### Maar aanhoudende ophaalfout is nog steeds een capaciteitsprobleem
+
+De keerzijde, en zonder haar ruil je een zichtbare storing in voor een stille. "Ophaalfout is geen
+leegte" mag nooit worden gelezen als "ophaalfout is geen probleem": een bron die dágen alleen
+ophaalfouten geeft, levert geen data, en dat hoort gewoon als capaciteitsgat op te duiken.
+
+Dat werkt hier structureel, en het is het controleren waard bij elke refactor van deze laag:
+`indicator_freshness` leest de OBSERVATIES en vraagt "wanneer kreeg dit veld voor het laatst een
+waarde". Een ophaalfout schrijft er geen — net zomin als "leeg" — dus de versheid verloopt en de
+fresh→stale-overgang vuurt gewoon. De splitsing veranderde HOE we loggen en of we opnieuw proberen,
+niet WÁT er wordt vastgelegd.
+
+De spanning die dit onderzoek startte was terecht. Ze was alleen verkeerd toegeschreven: de bron was
+niet dood, wij haalden hem niet op. **Beide horen zichtbaar te zijn, en het verschil hoort in het
+log** — daar leest een mens of een reeks stilviel door de wereld of door ons.
+
 ### Een test die van de datum afhangt, injecteert de datum
 
 Tenzij de datum het onderwerp is. Anders is het geen test maar een tijdbom, en die gaat af op een
