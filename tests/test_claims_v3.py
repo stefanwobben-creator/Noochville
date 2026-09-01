@@ -22,6 +22,12 @@ from nooch_village.skills_impl import regulation_watch as rw
 from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill, markeer_week
 from nooch_village.skills_impl.regulation_watch import RegulationWatchSkill
 
+#: EEN VASTE MAAND, want deze tests hingen aan de echte klok en vielen op 1 september 2026 allemaal
+#: om: `HANDHAVING_MAAND` was aangebroken, dus de skill schreef terecht een mijlpaal-regel erbij en
+#: de tests rekenden op de wereld van daarvoor. Een test die van de datum afhangt is een tijdbom die
+#: afgaat op een dag dat je met iets anders bezig bent.
+VASTE_MAAND = "2026-06"
+
 PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nooch_village")
 
 _BRONNEN = ("\nA | EU-richtlijn 2024/825 | https://eur-lex.europa.eu/x\n"
@@ -70,7 +76,7 @@ def test_pdf_hasht_op_bytes():
 
 def test_eerste_run_is_nulmeting_zonder_alarm(tmp_path):
     ctx = _ctx(tmp_path)
-    uit = RegulationWatchSkill().run({"_fetch": _fetch("wettekst")}, ctx)
+    uit = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("wettekst")}, ctx)
     assert uit["ok"] and uit["gewijzigd"] == []
     assert uit["nieuw"] == 0                              # nulmeting is geen nieuws
     assert len(rw.lees_log(str(tmp_path))) == 3
@@ -79,8 +85,8 @@ def test_eerste_run_is_nulmeting_zonder_alarm(tmp_path):
 
 def test_gewijzigde_bron_wordt_taak_en_headsup(tmp_path):
     ctx = _ctx(tmp_path)
-    RegulationWatchSkill().run({"_fetch": _fetch("oude wettekst")}, ctx)
-    uit = RegulationWatchSkill().run({"force": True, "_fetch": _fetch("NIEUWE wettekst")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("oude wettekst")}, ctx)
+    uit = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("NIEUWE wettekst")}, ctx)
     assert len(uit["gewijzigd"]) == 3
     # De proxy-bron levert bewust geen taak: die pagina verandert om andere redenen.
     assert uit["nieuw"] == 2
@@ -92,24 +98,24 @@ def test_gewijzigde_bron_wordt_taak_en_headsup(tmp_path):
 
 def test_proxybron_maakt_geen_taak(tmp_path):
     ctx = _ctx(tmp_path, bronnen="C | NL-omzetting EmpCo — PROXY | https://www.internetconsultatie.nl/\n")
-    RegulationWatchSkill().run({"_fetch": _fetch("a")}, ctx)
-    uit = RegulationWatchSkill().run({"force": True, "_fetch": _fetch("b")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("a")}, ctx)
+    uit = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("b")}, ctx)
     assert len(uit["gewijzigd"]) == 1 and uit["nieuw"] == 0
     assert ctx.projects.all() == []
 
 
 def test_dedupe_zolang_de_taak_open_staat(tmp_path):
     ctx = _ctx(tmp_path, bronnen="A | Wet | https://eur-lex.europa.eu/x\n")
-    RegulationWatchSkill().run({"_fetch": _fetch("v1")}, ctx)
-    RegulationWatchSkill().run({"force": True, "_fetch": _fetch("v2")}, ctx)
-    RegulationWatchSkill().run({"force": True, "_fetch": _fetch("v3")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("v1")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("v2")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("v3")}, ctx)
     assert len(ctx.projects.all()) == 1                   # geen stapel duplicaten
 
 
 def test_maand_idempotent(tmp_path):
     ctx = _ctx(tmp_path)
-    RegulationWatchSkill().run({"_fetch": _fetch("x")}, ctx)
-    tweede = RegulationWatchSkill().run({"_fetch": _fetch("x")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("x")}, ctx)
+    tweede = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("x")}, ctx)
     assert tweede["skipped"] is True
 
 
@@ -119,9 +125,9 @@ def test_een_misser_is_geen_alarm_twee_wel(tmp_path):
     def kapot(url):
         raise safe_fetch.FetchMislukt("timeout")
     ctx = _ctx(tmp_path, bronnen="A | Wet | https://eur-lex.europa.eu/x\n")
-    eerste = RegulationWatchSkill().run({"_fetch": kapot}, ctx)
+    eerste = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": kapot}, ctx)
     assert eerste["escalate"]["reason"].startswith("geen enkele bron")   # alles stuk deze run
-    tweede = RegulationWatchSkill().run({"force": True, "_fetch": kapot}, ctx)
+    tweede = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": kapot}, ctx)
     assert "twee maanden achtereen" in tweede["escalate"]["reason"]
 
 
@@ -133,9 +139,9 @@ def test_zonder_bronnen_escaleert(tmp_path):
 def test_mijlpaal_handhaving_eenmalig(tmp_path, monkeypatch):
     monkeypatch.setattr(rw, "HANDHAVING_MAAND", "2000-01")   # altijd bereikt
     ctx = _ctx(tmp_path, bronnen="A | Wet | https://eur-lex.europa.eu/x\n")
-    eerste = RegulationWatchSkill().run({"_fetch": _fetch("x")}, ctx)
+    eerste = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("x")}, ctx)
     assert any("EmpCo-handhaving" in t["titel"] for t in eerste["aangemaakt"])
-    tweede = RegulationWatchSkill().run({"force": True, "_fetch": _fetch("x")}, ctx)
+    tweede = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("x")}, ctx)
     assert not any("EmpCo-handhaving" in t["titel"] for t in tweede["aangemaakt"])
 
 
@@ -143,12 +149,12 @@ def test_mijlpaal_nl_omzetting_bij_echte_bron(tmp_path):
     """Zolang de bron een PROXY is bestaat de wettekst niet. Vult compliance de echte bron in
     (label zonder PROXY), dan is dát het moment om hem naast de database te leggen."""
     proxy = _ctx(tmp_path, bronnen="C | NL-omzetting EmpCo — PROXY | https://www.acm.nl/p\n")
-    uit = RegulationWatchSkill().run({"_fetch": _fetch("x")}, proxy)
+    uit = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("x")}, proxy)
     assert not any("NL-wettekst" in t["titel"] for t in uit["aangemaakt"])
 
     echt = _ctx(tmp_path, bronnen="A | NL-omzetting EmpCo (Stb. 2026) | https://www.acm.nl/wet\n")
     echt.projects = proxy.projects
-    uit2 = RegulationWatchSkill().run({"force": True, "_fetch": _fetch("x")}, echt)
+    uit2 = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("x")}, echt)
     assert any("NL-wettekst" in t["titel"] for t in uit2["aangemaakt"])
 
 
@@ -156,7 +162,7 @@ def test_wetscheck_raakt_de_claims_database_nooit_aan(tmp_path):
     """De harde grens: detecteren mag, muteren niet. Dit is compliance-domein."""
     voor = open(claims_db.DB_PATH, encoding="utf-8").read()
     ctx = _ctx(tmp_path)
-    RegulationWatchSkill().run({"force": True, "_fetch": _fetch("heel andere wettekst")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("heel andere wettekst")}, ctx)
     assert open(claims_db.DB_PATH, encoding="utf-8").read() == voor
 
 
@@ -173,8 +179,8 @@ def test_wetscheck_bevat_geen_llm_en_geen_duiding():
 
 def test_log_is_append_only(tmp_path):
     ctx = _ctx(tmp_path, bronnen="A | Wet | https://www.acm.nl/x\n")
-    RegulationWatchSkill().run({"_fetch": _fetch("a")}, ctx)
-    RegulationWatchSkill().run({"force": True, "_fetch": _fetch("b")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": _fetch("a")}, ctx)
+    RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": _fetch("b")}, ctx)
     rijen = rw.lees_log(str(tmp_path))
     assert len(rijen) == 2                                # de eerste meting blijft staan
     assert rijen[0]["hash"] != rijen[1]["hash"]
@@ -222,6 +228,9 @@ def test_ritme_zonder_run_belooft_niets(tmp_path):
 
 
 def test_wetscheck_ritme_leest_de_meetreeks(tmp_path):
+    """DEZE wil juist de ECHTE maand: het ritme kijkt of de meting van deze maand is, en een vaste
+    maand uit het verleden maakt hem per definitie overtijd. De andere tests pinnen de maand omdat
+    ze de mijlpaal-logica niet in de weg willen; deze test gaat er nou net over dat het NU gebeurde."""
     ctx = _ctx(tmp_path)
     RegulationWatchSkill().run({"_fetch": _fetch("x")}, ctx)
     r = role_rhythm.ritmes_voor("compliance", _rec(["regulation_watch"]), str(tmp_path))[0]

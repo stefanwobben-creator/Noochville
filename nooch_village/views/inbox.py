@@ -119,9 +119,9 @@ def _inline_actie(st, n: dict, csrf: str) -> str:
     dat doe je niet vanuit een lijst), dan staat er geen uitklap: een lege accordeon is erger dan
     geen accordeon."""
     soort = _type_van(n)
-    if soort == "naar_rol":
+    if soort == "naar_rol" and n.get("pagina"):
         binnen = _verzoek_knoppen(n, csrf)
-    elif n.get("project_id"):
+    elif soort == "naar_rol" or n.get("project_id"):
         # Decide-now stond hier ook, en is weg. Wat blijft is SLUITEN — met een reden als er een
         # vrager is. Een spanning met een bron-project heeft altijd iemand die op antwoord wacht,
         # en dat is precies waar "nee, want …" thuishoort.
@@ -581,7 +581,12 @@ def _keuze_form(nid: str, csrf: str, *, actie: str, veld: str, keuze: str, label
 
 
 def _verzoek_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
-    """Accepteren / aanpassen / weigeren op een operationeel verzoek."""
+    """Accepteren / aanpassen / weigeren op een PAGINA-voorstel.
+
+    Alleen daar nog. Voor een operationeel verzoek stond dit ook, en dat was fout op twee manieren:
+    ongebruikt (0 weigeringen en 0 herformuleringen over de hele historie) én in strijd met de regel
+    dat rol-werk je borgt en andermans werk je doorgeeft. Een pagina-voorstel is een ander geval:
+    accepteren IS er de handeling (een nieuwe versie), niet een project dat het nog moet gaan doen."""
     nid = n.get("id", "")
 
     def _f(keuze, label, cls, hint, verplicht):
@@ -595,9 +600,8 @@ def _verzoek_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
             # Bij een pagina-voorstel is accepteren de handeling zélf (nieuwe versie), niet een
             # project dat het nog moet gaan doen. Eén zin, maar hij bepaalt wat de lezer denkt
             # te tekenen.
-            + ("<p class='muted'>Accepting saves the proposed text as a new version of the "
-               "page — no project.</p>" if n.get("pagina") else
-               "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p>"))
+            + "<p class='muted'>Accepting saves the proposed text as a new version of the "
+              "page — no project.</p>")
 
 
 # De kop, de knop en de paginatitel volgen het TYPE. Eén neutrale term zou voor alles half goed
@@ -653,16 +657,22 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # DE DRIE KNOPPEN op een operationeel verzoek: accepteren, aanpassen, weigeren. Dat is het
     # "in één handeling" waar de kaart om vraagt — een uitleg zonder knop laat de lezer alsnog
     # zoeken waar hij ja moet zeggen.
-    if _type_van(n) == "naar_rol":
-        # SLUITEN HOORT ER ALTIJD BIJ. Deze tak keerde vroeg terug zonder de Done-knop, en dus kon
-        # je een verzoek alleen kwijtraken door iemand te WEIGEREN. "Niet meer relevant" bestond
-        # niet, dus werd een weigering gestuurd waar geen oordeel voor nodig was — of het verzoek
-        # bleef staan. De vierde uitkomst is er voor precies dit.
-        return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
-                + _verzoek_knoppen(n, csrf)
-                + "<p class='muted'>Niet meer relevant? Sluit het — dat is geen weigering en de "
-                  "vrager krijgt alleen je reden als je er een schrijft.</p>"
-                + klaar + "</div>")
+    # EEN OPERATIONEEL VERZOEK KRIJGT HET GEWONE SCHERM. Hier stonden accepteren / aanpassen /
+    # weigeren, en de meting over de hele prod-historie zei: 0 weigeringen, 0 herformuleringen, 3
+    # accepteringen — die alle drie een project werden. Eén gebruikte tak van de drie.
+    #
+    # En de twee dode takken waren niet alleen ongebruikt maar verkeerd. Hoort het verzoek bij jouw
+    # rol, dan BORG je het (project); hoort het er niet bij, dan DEEL je het door (actie naar wie het
+    # wél draagt). "Nee" is in beide gevallen het verkeerde werkwoord: het sluit een vraag zonder
+    # hem ergens te laten landen. Zie docs/CONVENTIES.md — het werkwoord bepaalt of het werk
+    # doorloopt.
+    #
+    # Een PAGINA-voorstel blijft wél zijn eigen scherm houden, en dat is geen uitzondering op de
+    # regel maar een ander geval: daar IS accepteren de handeling zelf (een nieuwe versie van de
+    # pagina), niet een project dat het nog moet gaan doen.
+    if _type_van(n) == "naar_rol" and n.get("pagina"):
+        return ("<div class='rdr-pane'><h3>Wat doe je met dit voorstel?</h3>"
+                + _verzoek_knoppen(n, csrf) + klaar + "</div>")
 
     # EEN ACTIE IS AL AFGESPROKEN. De flows vragen "wat doe je hiermee?" en dat is hier de verkeerde
     # vraag: het besluit is al genomen. Twee handelingen blijven over — afvinken, of erkennen dat
