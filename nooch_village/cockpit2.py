@@ -3148,6 +3148,28 @@ def _circle_lead_van(st, rol: str) -> str:
     return ""
 
 
+def _rolsuggestie(st, tekst: str, rol: str) -> dict:
+    """De rolsuggestie als `extra`-velden, of {} als er niets gegronds te zeggen valt.
+
+    Fail-soft en fail-STIL is hier niet hetzelfde: valt de classificatie uit, dan komt er geen
+    suggestie MAAR WEL een reden mee (`triage_grond`), zodat het scherm kan zeggen "geen rol
+    gevonden" in plaats van niets. Een lege band laat de lezer raden of we niets vonden of niet
+    hebben gekeken."""
+    try:
+        from nooch_village.triage_rol import classificeer
+        cirkel = resolve_circle_id(rol, st.records) if rol else ""
+        uit = classificeer(tekst, st.records, cirkel=cirkel)
+    except Exception as e:                                   # noqa: BLE001 — nooit de routering breken
+        logging.getLogger("village.triage").warning("rolsuggestie faalde: %s", e)
+        return {"triage_grond": "classificatie niet gedraaid"}
+    velden = {"triage_vorm": uit.get("vorm", ""), "triage_grond": uit.get("grond", "")}
+    if uit.get("rol"):
+        velden["triage_rol"] = uit["rol"]
+        velden["triage_accountability"] = uit["accountability"]
+        velden["triage_waarom"] = uit.get("waarom", "")
+    return velden
+
+
 def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
                _lead_hop: bool = False) -> dict:
     """WAAR zou dit werk landen? Zelfde beslissing als `route_werk`, zonder iets te schrijven.
@@ -3237,6 +3259,16 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     if best.get("via"):
         # De ontvanger moet zien waaróm dit bij hem ligt en niet bij de rol die het vroeg.
         tekst = f"[{best['via']}] {tekst}"
+    # DE TRIAGE-STAP, en hij staat hier en NIET in `bestemming`. Dat is met opzet: `bestemming` is
+    # de pure functie die de droge run gebruikt, en daar een modelaanroep in zetten maakt een
+    # voorbeschouwing duur en onvoorspelbaar. De classificatie verandert de BESTEMMING ook niet —
+    # ze annoteert. Stefan accepteert, overschrijft of houdt hem zelf.
+    #
+    # Alleen waar hij iets toevoegt: werk dat via de lead-hop komt (niemand vervult de rol) of dat
+    # als project op een AI-bord landt. Bij een mens met naam is er niets te raden.
+    _suggestie = {}
+    if best.get("via") or best["soort"] == "project":
+        _suggestie = _rolsuggestie(st, tekst, rol)
     if best["soort"] == "inbox":
         # `van_mens` komt van de AANROEPER, want die weet of de tekst is ingetikt of voorgevuld.
         # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
@@ -3245,7 +3277,8 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
-                            "opdrachtgever": opdrachtgever, "bron_project": bron_project, **_merk})
+                            "opdrachtgever": opdrachtgever, "bron_project": bron_project,
+                            **_merk, **_suggestie})
         return "inbox", "in de " + bestemming_tekst(st, best)
     eigenaar = doel_id or f"{_II_PREFIX}{bron_project or ''}"
     pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",

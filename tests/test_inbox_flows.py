@@ -371,3 +371,44 @@ def test_bewerken_maakt_het_wel_jouw_tekst(tmp_path):
                       username=p.email)
     laatste = cockpit2._Stores(dd).notif.all()[-1]
     assert laatste.get(MENS_GETYPT) is True
+
+
+# ── De triage-band ─────────────────────────────────────────────────────────
+
+def test_de_suggestie_annoteert_maar_verplaatst_niets(tmp_path, monkeypatch):
+    """DE CLASSIFICATIE VERANDERT DE BESTEMMING NIET. Ze is een voorstel om te accepteren of te
+    weerspreken; het werk gaat gewoon naar de Circle Lead. Daarom mag ze ook falen zonder dat er
+    iets zoekraakt — en daarom staat ze in `route_werk` en niet in `bestemming`, dat de droge run
+    gebruikt."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = _mens(st)
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [] if r == "slaper" else [p.id])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    monkeypatch.setattr(cockpit2, "_circle_lead_van", lambda _s, r: "een_lead")
+    monkeypatch.setattr(cockpit2, "_rolsuggestie",
+                        lambda _s, t, r: {"triage_rol": "compliance", "triage_vorm": "project",
+                                          "triage_accountability": "toetst claims",
+                                          "triage_grond": "gematcht door secretary"})
+    soort, ref = cockpit2.route_werk(st, tekst="de claims op de FAQ toetsen", rol="slaper")
+    assert "heeft geen vervuller" in ref                      # routering onveranderd
+    laatste = cockpit2._Stores(dd).notif.all()[-1]
+    assert laatste.get("triage_rol") == "compliance"          # de suggestie reist mee als annotatie
+
+
+def test_de_droge_run_roept_het_model_niet_aan(tmp_path, monkeypatch):
+    """`bestemming` is de pure functie die de droge run gebruikt. Een modelaanroep daarin maakt een
+    voorbeschouwing duur en onvoorspelbaar — en een droge run die anders rekent dan de echte liegt."""
+    import inspect
+    bron = inspect.getsource(cockpit2.bestemming)
+    assert "_rolsuggestie" not in bron and "classificeer" not in bron
+
+
+def test_zonder_gegronde_match_zegt_de_band_waarom(tmp_path):
+    """Een lege band laat de lezer raden of we niets vonden of niet hebben gekeken."""
+    from nooch_village.views.inbox import _triage_band
+    import types as _t
+    st = _t.SimpleNamespace(records=_t.SimpleNamespace(get=lambda r: None))
+    band = _triage_band(st, {"triage_vorm": "actie", "triage_grond": "geen wakkere rol met de "
+                                                                    "classificatie-accountability"})
+    assert "Geen rol gevonden" in band and "classificatie-accountability" in band
