@@ -52,9 +52,17 @@ ARTEFACT_KINDS = ("note", "policy", "tool")
 STATUSES = ("draft", "active", "archived")
 
 # Body-cap per soort. Een rol-note is de wiki-pagina (zie `nooch_village.wiki`) en dus een document,
-# geen briefje: 4000 tekens is daar te krap. De andere soorten blijven ongewijzigd. De store kapt af
-# als backstop; de schrijf-routes weigeren een te lange body nét, zodat niemand stil tekst verliest.
-BODY_CAP = {"note": 40_000}
+# geen briefje: 4000 tekens is daar te krap. De store kapt af als backstop; de schrijf-routes
+# weigeren een te lange body nét, zodat niemand stil tekst verliest.
+#
+# POLICY OMHOOG NAAR 12.000, en de aanleiding was een stille afkapping van mijn eigen hand.
+# COPYCHECK-001 telt 3765 tekens prosa; de cap stond op 4000. Toen het structuurblok voor de
+# copy-checker erbij kwam (445 tekens) paste het niet, en de store deed precies wat hij belooft:
+# afkappen. Resultaat: een policy met een half codeblok en een niet-gesloten fence.
+#
+# Sinds een policy zijn eigen MACHINE-LEESBARE regels draagt naast de prosa, is hij geen briefje
+# meer maar een document met twee lezers. 4000 was de maat van het oude ding.
+BODY_CAP = {"note": 40_000, "policy": 12_000}
 BODY_CAP_DEFAULT = 4000
 
 

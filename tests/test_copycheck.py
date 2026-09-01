@@ -121,3 +121,25 @@ def test_de_checker_verandert_de_tekst_niet():
     hits = cc.check(tekst, cc.parse_blok(BODY))
     assert all("suggestie" in h for h in hits)
     assert tekst == "Hey friend!"
+
+
+def test_een_policy_met_blok_past_binnen_de_cap():
+    """STILLE AFKAPPING VAN MIJN EIGEN HAND. COPYCHECK-001 telt 3765 tekens prosa; de policy-cap
+    stond op 4000. Het structuurblok (445 tekens) paste niet, en de store deed wat hij belooft:
+    afkappen. Er stond een half codeblok in de policy, met een niet-gesloten fence — en `parse_blok`
+    vond dus niets, dus de checker had stilletjes NUL regels.
+
+    Sinds een policy zijn eigen machine-leesbare regels draagt naast de prosa, is hij geen briefje
+    meer maar een document met twee lezers. 4000 was de maat van het oude ding."""
+    from nooch_village.attachments import body_cap
+    assert body_cap("policy") >= 3765 + 445 * 3, "geen ruimte voor prosa plus blok"
+    assert body_cap("policy") < body_cap("note")
+
+
+def test_de_schrijfroute_weigert_liever_dan_af_te_kappen():
+    """De store kapt af als BACKSTOP; de route hoort te weigeren. Mijn eigen script omzeilde die
+    route en liep dus recht in de backstop — de guard bestond al, ik gebruikte hem niet."""
+    from nooch_village.cockpit2 import _body_te_lang
+    from nooch_village.attachments import body_cap
+    assert _body_te_lang("x" * (body_cap("policy") + 1), "policy").startswith("✗")
+    assert _body_te_lang("x" * 100, "policy") == ""
