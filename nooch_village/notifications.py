@@ -6,6 +6,7 @@ verwijst naar het project + de feed-entry, en draagt een snippet voor de weergav
 from __future__ import annotations
 import logging
 import os
+import re
 import time
 import uuid
 
@@ -105,8 +106,12 @@ def _is_mens_schrijver(n: dict, data_dir: str) -> bool:
     Fail-richting: staat het pad-merk er niet én kennen we de afzender niet, dan geldt het als
     machine-tekst. Dat blijft de goedkope kant — maar de rand hierboven laat zien dat 'onbekend'
     te vaak 'mens zonder naam' betekende om er de hele regel op te bouwen."""
-    if n.get(MENS_GETYPT) is True:
-        return True
+    if MENS_GETYPT in n:
+        # HET PAD WEET HET BETER DAN DE INDIENER. Staat het merk er expliciet — ook op False — dan
+        # heeft het schrijfpad de vraag al beantwoord, en die kennis is beter dan wat we uit `by`
+        # kunnen raden. Op prod van 1 sep zette een mens een MACHINE-melding door; `by` was hij, de
+        # tekst was niet van hem. De afzender is niet de auteur.
+        return n[MENS_GETYPT] is True
     by = str(n.get("by") or "").strip()
     if not by:
         return False
@@ -119,6 +124,28 @@ def _is_mens_schrijver(n: dict, data_dir: str) -> bool:
         if by == getattr(p, "id", "") or by == (getattr(p, "name", "") or "").strip():
             return True
     return False
+
+
+#: Wat in geen enkele naar-mens-tekst hoort. De poort BLOKKEERT niets — hij meldt zich, zodat een
+#: volgend lek in het LOG verschijnt in plaats van in iemands inbox.
+_COMMANDO_IN_TEKST = re.compile(
+    r"\b(?:python\s+-m|\./venv/bin/|sudo\s+\w|systemctl\s+\w|journalctl\s+-|git\s+[a-z]+\s)", re.I)
+
+
+def _meld_commando(n: dict) -> None:
+    """DE INVARIANT WAARNEEMBAAR MAKEN. "Een terminalopdracht hoort in geen enkele naar-mens-tekst"
+    was een regel zonder waarnemer, en dus lekte hij stil: het scherm strijkt hem weg, maar als het
+    strijken een keer niet gebeurt merkt niemand het — je ziet het pas in je inbox.
+
+    Zelfde vorm als 'handhaving vereist waarneembaarheid', nu op de leesbaarheidslaag. Geen blokkade:
+    een melding tegenhouden is duurder dan een lelijke melding doorlaten."""
+    tekst = volledig(n)
+    if not tekst or not _COMMANDO_IN_TEKST.search(tekst):
+        return
+    from nooch_village.systeemtaal import ontjargon
+    if _COMMANDO_IN_TEKST.search(ontjargon(tekst)):
+        log.warning("LEESBAARHEID: notificatie %s draagt een commando dat de swap niet weghaalt — "
+                    "dit komt zo op iemands scherm: %r", n.get("id"), tekst[:120])
 
 
 def _door_de_poort(n: dict, data_dir: str, eigen=None) -> dict:
@@ -218,6 +245,9 @@ class NotifStore:
         # scherm) hetzelfde veld leest in plaats van people.json opnieuw te bevragen. Verandert die
         # store later — iemand hernoemd, iemand weg — dan blijft staan wat waar wás toen er getypt
         # werd, en dat is precies de vraag die we stellen.
+        # Staat het merk er al (het schrijfpad WEET of er getypt is), dan wint dat: alleen als
+        # niemand het zegt leiden we het af uit `by`. Een expliciet `False` blijft dus False —
+        # anders zou de afleiding uit de indiener het pad-oordeel overschrijven, en precies dat lekte.
         if MENS_GETYPT not in n and _is_mens_schrijver(n, self.data_dir):
             n[MENS_GETYPT] = True
         self._items.append(n)
@@ -225,6 +255,7 @@ class NotifStore:
         # Een item dat zijn type al bij het ontstaan kent (een pagina-voorstel weet exact wat het
         # vraagt) gaat NIET langs de herschrijf-poort: die is er om een rauwe signalering te
         # typeren, en een dure LLM-call zou hier alleen een al bekend antwoord overschrijven.
+        _meld_commando(n)          # invariant-alarm, blokkeert niets
         if not n.get("type"):
             extra = _door_de_poort(n, self.data_dir, self._verrijker)
             if extra:
