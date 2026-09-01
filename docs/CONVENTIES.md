@@ -340,6 +340,30 @@ vragen om bijstellen, dit om stoppen.
 `village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
 Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
 
+### Meet de compositie, niet één ingrediënt — en erf geen grond
+
+Ik meldde dat de copy-generator de tekstpolicies niet zag: hij las alleen `STANCE`, `WIP`,
+`DECISIONMAKI` en `MONEY`. Dat klopte voor `artefacts.serialize_context()` — en dat is één pad, niet
+het antwoord. De generator componeert via `copy_stack`: erfenis PLUS bewuste inclusies. Zijn echte
+stack telt negen policies, met COPYCHECK, POSITIONSTAT en TONEOFVOICE bovenaan.
+
+De docstring van `copy_stack.py` beschrijft mijn "vondst" woordelijk als het probleem dat hij oplost.
+**Ik mat een ingrediënt en trok de conclusie op het gerecht.**
+
+Twee regels die daaruit volgen:
+
+1. **Meet wat er UIT komt, niet wat er in gaat.** Bij een laag die dingen samenstelt is elk los pad
+   een halve waarheid. Zelfde familie als "een ratchet toetst gedrag, niet broncode": kijk naar de
+   uitkomst van het geheel.
+2. **Een onderwerp-tool erft zijn grond niet — hij legt hem vast.** De generator MAG breed
+   componeren, met lagen die iemand aan of uit zet; dat hoort bij schrijven. Maar de grond waartegen
+   je TOETST mag niet stil veranderen omdat iemand een generator-instelling omzette. De checker
+   draagt daarom zijn eigen constante set (`copycheck.COPY_POLICIES`).
+
+**Twee tools, twee gronden.** En daarom staat `STANCE-001` in de generator bewust op `False` terwijl
+de checker hem wél toetst: hem daar aanzetten omdat de checker hem nodig heeft zou een
+zijeffect-koppeling zijn — één knop die twee dingen doet, en dan verandert de tweede stilletjes mee.
+
 ### Eén bewaakte schrijfroute per store — schrijf nooit rechtstreeks
 
 Elke store heeft een route die WEIGERT wat niet mag: te lange tekst, een ontbrekende poort, een
