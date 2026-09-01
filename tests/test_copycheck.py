@@ -175,3 +175,61 @@ def test_binnen_de_cap_geen_geschreeuw(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         store.add("rol", "policy", body="x" * 100)
     assert not [r for r in caplog.records if "AFKAPPING" in r.message]
+
+
+# ── De grond van de checker ────────────────────────────────────────────────
+
+def test_de_checker_heeft_zijn_eigen_expliciete_set():
+    """DE GROND MAG NIET STIL VERANDEREN. De generator componeert via `copy_stack`: erfenis plus
+    inclusies, met lagen die iemand in de UI aan of uit kan zetten. Dat is juist voor SCHRIJVEN.
+    Maar een checker die gisteren op vier policies toetste en vandaag op drie, zonder dat iemand dat
+    besloot, geeft een groen scherm dat niets betekent.
+
+    Twee tools, twee gronden. De brand- en design-policies vallen bewust buiten: die gaan over het
+    visuele medium, niet over tekst."""
+    assert cc.COPY_POLICIES == ("COPYCHECK-001", "POSITIONSTAT-001", "TONEOFVOICE-001",
+                                "STANCE-001")
+    for merk in ("BRANDPOSITIO-001", "DESIGNSYSTEM-001"):
+        assert merk not in cc.COPY_POLICIES
+
+
+def test_de_grond_hangt_niet_aan_de_generator():
+    """Geen zijeffect-koppeling: de checker leest zijn eigen constante, niet wat de generator
+    toevallig aan heeft staan."""
+    import inspect
+    import re as _re
+    # De CODE, niet het commentaar: dat legt juist uit waaróm we hem niet gebruiken, en die uitleg
+    # moet mogen blijven staan.
+    bron = inspect.getsource(cc)
+    kaal = _re.sub(r"#[^\n]*", "", bron)
+    assert "copy_stack" not in kaal.split('"""')[-1]
+    assert "componeer(" not in kaal
+    assert "from nooch_village.copy_stack" not in kaal
+
+
+class _Att:
+    def __init__(self, bodies):
+        self._b = bodies
+
+    def get(self, pid):
+        import types
+        return types.SimpleNamespace(body=self._b[pid]) if pid in self._b else None
+
+
+def test_alleen_policies_met_een_blok_dragen_regels():
+    """Een policy zonder blok levert niets — geen valse zekerheid. Levert extractie geen checkbare
+    tekstregel op, dan blijft hij leeg, en dat is een eerlijke uitkomst en geen gat."""
+    att = _Att({"COPYCHECK-001": BODY, "POSITIONSTAT-001": "alleen prosa, geen blok"})
+    ids = [pid for pid, _ in cc.regels_uit(att)]
+    assert ids == ["COPYCHECK-001"]
+
+
+def test_elke_bevinding_noemt_zijn_bronpolicy():
+    """Bij vier gronden moet je kunnen zien wélke regel je overtreedt — anders is 'het mag niet'
+    een bewering zonder adres."""
+    tweede = BODY.replace("verboden: friend", "verboden: eco-warrior").replace(
+        "Never write: friend,", "Never write: eco-warrior,")
+    att = _Att({"COPYCHECK-001": BODY, "TONEOFVOICE-001": tweede})
+    hits = cc.check_alles("Hey friend, you eco-warrior!", att)
+    bronnen = {h["policy"] for h in hits}
+    assert bronnen == {"COPYCHECK-001", "TONEOFVOICE-001"}, bronnen

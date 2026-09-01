@@ -32,6 +32,48 @@ from __future__ import annotations
 
 import re
 
+#: DE GROND VAN DE CHECKER, expliciet en los van de generator.
+#:
+#: De generator componeert zijn stack via `copy_stack`: erfenis plus bewuste inclusies, met lagen die
+#: iemand in de UI aan of uit kan zetten. Dat is juist voor SCHRIJVEN — je wilt merk en kader erbij
+#: kunnen halen. Maar de grond waartegen je TOETST mag niet stil veranderen omdat iemand een
+#: generator-instelling omzet. Een checker die gisteren op vier policies toetste en vandaag op drie,
+#: zonder dat iemand dat besloot, geeft een groen scherm dat niets betekent.
+#:
+#: Twee tools, twee gronden. De brand- en design-policies vallen hier bewust buiten: die gaan over
+#: het visuele medium, niet over tekst, en horen bij een eventuele aparte brand-tool op Brand &
+#: Visual Designer.
+COPY_POLICIES = ("COPYCHECK-001", "POSITIONSTAT-001", "TONEOFVOICE-001", "STANCE-001")
+
+
+def regels_uit(att, policies=COPY_POLICIES) -> list[tuple[str, dict]]:
+    """(policy_id, blok) voor elke policy uit de vaste set die een structuurblok draagt.
+
+    Een policy zonder blok levert niets — geen valse zekerheid. Levert extractie voor een policy
+    geen checkbare tekstregel op, dan hoort hij hier gewoon leeg te blijven; hij draagt dan niets bij
+    en dat is een eerlijke uitkomst, geen gat."""
+    uit = []
+    for pid in policies:
+        try:
+            a = att.get(pid)
+        except Exception:                                    # noqa: BLE001
+            a = None
+        if a is None:
+            continue
+        blok = parse_blok(getattr(a, "body", "") or "")
+        if blok:
+            uit.append((pid, blok))
+    return uit
+
+
+def check_alles(tekst: str, att, policies=COPY_POLICIES) -> list[dict]:
+    """Alle bevindingen over de hele gecureerde set, met per bevinding de bronpolicy."""
+    uit = []
+    for pid, blok in regels_uit(att, policies):
+        uit.extend(check(tekst, blok, policy_id=pid))
+    return uit
+
+
 #: De fence waarin het blok staat. Bewust een eigen taal-tag: een lezer ziet meteen dat dit geen
 #: voorbeeld is maar de regels zelf.
 _FENCE = re.compile(r"```check\s*\n(.*?)```", re.S | re.I)
