@@ -29,6 +29,38 @@ _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
 _PID_IN_TEKST = re.compile(r"\b([0-9a-f]{12})\b")
 
 
+#: Wat de vorm-woorden betekenen op het scherm. De sleutel is intern, de zin is voor de lezer.
+_VORM_TEKST = {"accountability": "hoort structureel bij een rol (accountability)",
+               "project": "meerdere stappen met één uitkomst (project)",
+               "actie": "één handeling (actie)"}
+
+
+def _triage_band(st, n: dict) -> str:
+    """"Waarschijnlijk voor <rol>, omdat <accountability>" — een suggestie mét grond.
+
+    DE RAUWE SPANNING BLIJFT ERONDER STAAN, onaangetast. Dit is een voorstel om te accepteren of te
+    weerspreken, geen besluit dat al genomen is: de band vertelt WAT wij denken en WAAROM, en de
+    tekst eronder laat je zelf oordelen.
+
+    Zonder gegronde match verschijnt de reden in plaats van een naam. Een lege band zou de lezer
+    laten raden of we niets vonden of niet hebben gekeken — en dat verschil is precies wat een
+    suggestie bruikbaar maakt."""
+    rol = str(n.get("triage_rol") or "")
+    vorm = _VORM_TEKST.get(str(n.get("triage_vorm") or ""), "")
+    grond = str(n.get("triage_grond") or "")
+    if not (rol or vorm or grond):
+        return ""
+    if rol:
+        rec = st.records.get(rol)
+        naam = (_name(rec) if rec is not None else "") or rol
+        kop = (f"<strong>Waarschijnlijk voor {_e(naam)}</strong>, omdat: "
+               f"“{_e(str(n.get('triage_accountability') or ''))}”")
+    else:
+        kop = f"<strong>Geen rol gevonden</strong> — {_e(grond)}"
+    staart = f"<br><span class='muted'>Vorm: {_e(vorm)}</span>" if vorm else ""
+    return f"<p class='muted'>{kop}{staart}</p>"
+
+
 def _herkomst_html(st, tekst: str) -> str:
     """Herkomst met KLIKBARE bron-ids.
 
@@ -368,6 +400,7 @@ def _kaart_html(st, n: dict) -> str:
             regels = [f"<div class='fbubble'>{_e(_volledig(n))}</div>"]
             if n.get("herkomst"):
                 regels.append(f"<p class='muted'>{_herkomst_html(st, str(n['herkomst']))}</p>")
+            regels.append(_triage_band(st, n))
             titel, uitleg = _TYPE_LIJF["actie"]
             regels.insert(0, f"<p class='chip'>{_e(titel)}</p>")
             regels.append(f"<p class='muted'>{_e(uitleg)}</p>")
