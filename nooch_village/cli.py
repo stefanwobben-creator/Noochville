@@ -1583,7 +1583,8 @@ def main() -> None:
         else:
             print(f"{_res['gevonden']} wees-project(en):")
             for _w in _res["items"]:
-                print(f"  {_w['rol']:<28} {str(_w['status']):<9} {_w['titel'][:52]}")
+                from nooch_village.notifications import preview as _prev
+                print(f"  {_w['rol']:<28} {str(_w['status']):<9} {_prev(_w['titel'], 52)}")
                 print(f"      → {_w['naar']}")
                 if _w.get("origineel"):
                     print(f"      ↳ origineel {_w['pid']}: {_w['origineel']}")

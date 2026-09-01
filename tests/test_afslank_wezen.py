@@ -250,3 +250,21 @@ def test_de_droge_run_toont_ook_wat_er_met_het_origineel_gebeurt(tmp_path, monke
     item = aw.herrouteer(st, apply=False)["items"][0]
     assert "archiveren" in item["origineel"], item
     assert item["naar"] in item["origineel"], "het spoor noemt de bestemming niet"
+
+
+def test_de_sweep_kapt_de_titel_niet_af(tmp_path, monkeypatch):
+    """MIJN EIGEN CAP VAN GISTEREN, gevonden op een echt geveegd item. Hier stond `[:80]`, en die
+    afkapping ging als TEKST de nieuwe inbox-melding in — "…compleet overzicht beschikbaa". Geen
+    enkele weergave-fix kan dat nog repareren: het verlies zat al in de data.
+
+    Zelfde les als de 160-cap: een veld dat 'titel' heet maar de enige kopie is, is geen titel maar
+    een amputatie."""
+    dd, st = _st(tmp_path)
+    lang = ("De Village Update is klaar wanneer er een actueel, compleet overzicht beschikbaar is "
+            "van alle lopende initiatieven, acties en besluiten binnen de Village")
+    st.projects.create("slaper", lang, "human")
+    monkeypatch.setattr(cockpit2, "mens_vervullers", lambda _s, r: [])
+    monkeypatch.setattr(cockpit2, "_kan_uitvoeren", lambda _s, r: False)
+    titel = aw.wezen(st)[0]["titel"]
+    assert titel == lang[:200], "de titel is onderweg afgekapt"
+    assert "beschikbaar" in titel

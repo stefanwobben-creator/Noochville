@@ -13,6 +13,7 @@ beslisboom). Geen nieuwe opslag — leunt op NotifStore (met het verwerk-record)
 from __future__ import annotations
 
 import json
+import re
 
 from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
@@ -24,11 +25,36 @@ _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
            "verwerkt": ("✓ handled", "chip outline")}
 
 
+#: Een project-id in lopende tekst: 12 hex-tekens. Smal genoeg om geen gewone woorden te raken.
+_PID_IN_TEKST = re.compile(r"\b([0-9a-f]{12})\b")
+
+
+def _herkomst_html(st, tekst: str) -> str:
+    """Herkomst met KLIKBARE bron-ids.
+
+    "project 2d5e7fac383b lag stil" is waar, en onbruikbaar: een mens kan dat id nergens intikken en
+    ziet dus nooit wat er lag. Een herkomst die je niet kunt openen is handhaving zonder
+    waarneembaarheid — hetzelfde patroon als het record dat de PLEK in `by` schreef.
+
+    Alleen ids die ECHT bestaan worden een link; een onbekend id blijft gewone tekst. Een dode link
+    is erger dan geen link: hij belooft context die er niet is."""
+    def _vervang(m):
+        pid = m.group(1)
+        try:
+            if st.projects.get(pid) is None:
+                return pid
+        except Exception:                                    # noqa: BLE001
+            return pid
+        return f"<a href='/project?pid={_e(pid)}'>{_e(pid)}</a>"
+    return _PID_IN_TEKST.sub(_vervang, _e(tekst))
+
+
 def _source_link(st, n: dict) -> str:
     pid = (n.get("project_id") or "").strip()
     p = st.projects.get(pid) if pid else None
     if p is not None:
-        scope = str(p.get("scope") or "project")[:60]
+        from nooch_village.notifications import preview
+        scope = preview(str(p.get("scope") or "project"), 60)
         return f"<a href='/project?pid={_e(pid)}'>{_e(scope)}</a>"
     pag = dict(n.get("pagina") or {})
     if pag.get("aid"):
@@ -56,8 +82,18 @@ def _who(st, n: dict) -> str:
 
 
 def _one_line(text: str, cap: int = 90) -> str:
+    """Eén regel voor de lijst, afgebroken op een WOORDGRENS.
+
+    DE TWEEDE KOPIE VAN DE 160-CAP, en hij overleefde de veegronde van #389/#392. Daar haalden we de
+    caps uit de STORE en de callers weg; deze zat in de WEERGAVE en kapte gewoon midden in een woord:
+    "compleet overzicht beschikbaa", "die live updates lev", "an entrepre". Een halve zin leest als
+    een defect, niet als een samenvatting.
+
+    Eén afleidingsplek: `notifications.preview` doet dit al, inclusief de ellips-in-het-budget-regel.
+    Hem hier opnieuw uitschrijven is precies hoe deze kopie ontstond."""
+    from nooch_village.notifications import preview
     t = " ".join((text or "").split())
-    return (t[:cap] + "…") if len(t) > cap else (t or "(no summary)")
+    return preview(t, cap) if t else "(no summary)"
 
 
 def _hid(csrf: str, nid: str, nxt: str = "/inbox") -> str:
@@ -149,7 +185,10 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
     meta = (f"<div class='rdr-meta'><span class='{chip}'>{_e(lbl)}</span> {tchip}"
             f"<span class='muted'>via {_e(_who(st, n))}</span> {sep} {_source_link(st, n)} {sep} "
             f"<span class='muted'>{_e(_stamp(n.get('at')))}</span></div>")
-    title = f"<div class='rdr-sig'>{_e(_een_regel(n))}</div>"
+    # `title=` draagt de hele zin: de regel blijft scanbaar, de rest is één hover ver. Zonder dat is
+    # een afgebroken regel een doodlopende weg — je ziet dát er meer was, niet wát.
+    _vol = _leesbaar(n, _volledig(n) or str(n.get("snippet") or ""))
+    title = f"<div class='rdr-sig' title='{_e(_vol[:400])}'>{_e(_een_regel(n))}</div>"
 
     if status == "verwerkt":
         vs = st.notif.verwerkingen_of(n)
@@ -328,7 +367,7 @@ def _kaart_html(st, n: dict) -> str:
         if _type_van(n) == zv.ACTIE:
             regels = [f"<div class='fbubble'>{_e(_volledig(n))}</div>"]
             if n.get("herkomst"):
-                regels.append(f"<p class='muted'>{_e(n['herkomst'])}</p>")
+                regels.append(f"<p class='muted'>{_herkomst_html(st, str(n['herkomst']))}</p>")
             titel, uitleg = _TYPE_LIJF["actie"]
             regels.insert(0, f"<p class='chip'>{_e(titel)}</p>")
             regels.append(f"<p class='muted'>{_e(uitleg)}</p>")
@@ -742,18 +781,23 @@ def _ibx_row(st, n: dict) -> str:
     rechts om te archiveren."""
     nid = n.get("id", "")
     status = st.notif.status_of(n)
-    title = _e(_one_line(n.get("snippet")))
+    # De VOLLE tekst als bron, niet de 160-tekens-preview: die was zelf al afgekapt, en dan kapte
+    # `_one_line` de afkapping nog eens af. `title=` op het element geeft de hele zin bij hover, zodat
+    # de korte regel scanbaar blijft zonder de rest te verliezen.
+    _vol = _leesbaar(n, _volledig(n) or str(n.get("snippet") or ""))
+    title = _e(_one_line(_vol))
+    _hover = _e(_vol[:400])
     who = _e(_who(st, n))
     if status == "verwerkt":
         vs = st.notif.verwerkingen_of(n)
         kader = "".join(f"<div class='ibx-kader'>✓ {_e(v.get('label') or 'outcome')}</div>" for v in vs)
         return (f"<div class='ibx-row done' data-nid='{_e(nid)}'><span class='ibx-dot read'></span>"
-                f"<div class='ibx-rb'><div class='ibx-title'>{title}</div>"
+                f"<div class='ibx-rb'><div class='ibx-title' title='{_hover}'>{title}</div>"
                 f"<div class='ibx-meta'>processed · {who}</div>{kader}</div>"
                 f"<span class='ibx-swipe'>swipe &rarr; archive</span></div>")
     dot = "ibx-dot read" if status == "gelezen" else "ibx-dot"
     return (f"<div class='ibx-row' data-nid='{_e(nid)}' onclick=\"ibxOpen('{_e(nid)}')\">"
-            f"<span class='{dot}'></span><div class='ibx-rb'><div class='ibx-title'>{title}</div>"
+            f"<span class='{dot}'></span><div class='ibx-rb'><div class='ibx-title' title='{_hover}'>{title}</div>"
             f"<div class='ibx-meta'>via {who} &middot; {_e(_stamp(n.get('at')))}</div></div>"
             f"<button class='ibx-trash' title='delete' "
             f"onclick=\"event.stopPropagation();ibxTrash('{_e(nid)}')\">&#128465;</button></div>")

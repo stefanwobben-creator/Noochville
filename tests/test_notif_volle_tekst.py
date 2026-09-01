@@ -80,9 +80,19 @@ def test_de_verwerkpagina_toont_de_volle_tekst(tmp_path):
     n = st.notif.add("person", st.people.all()[0].id, "", by="rol", snippet=LANG)
     html = cockpit2.render_verwerk(st, st.notif._find(n["id"]), csrf_token="t")
     assert LANG[-60:] in html, "het einde van de spanning staat niet op het scherm"
-    # en de lijst houdt het kort
+    # EN DE LIJST HOUDT HET KORT — maar "kort" gaat over wat je ZIET, niet over wat er in de HTML
+    # staat. Deze guard toetste of de volle tekst nergens in de pagina voorkwam, en dat brak toen de
+    # afgebroken regel een `title=` kreeg met de hele zin erin: een regel die afbreekt zonder de rest
+    # ergens te laten zien is een doodlopende weg.
+    #
+    # De bedoeling van de guard blijft overeind, dus hij toetst hem nu waar hij zit: de ZICHTBARE
+    # regel is een preview, en de hover is begrensd.
+    import re as _re
     lijst = cockpit2.render_inbox(st, [("person", st.people.all()[0].id)], csrf_token="t")
-    assert LANG[-60:] not in lijst
+    zichtbaar = _re.sub(r"<[^>]+>", " ", lijst)          # attributen eruit, tekst over
+    assert LANG[-60:] not in zichtbaar, "de volle tekst staat ZICHTBAAR in de lijst"
+    hovers = _re.findall(r"title='([^']*)'", lijst)
+    assert all(len(h) <= 400 for h in hovers), "een hover zonder grens is een tweede volledige tekst"
 
 
 def test_er_is_één_afleidingsplek():

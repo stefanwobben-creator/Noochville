@@ -40,7 +40,14 @@ def wezen(st) -> list[dict]:
             continue
         if mens_vervullers(st, rol) or _kan_uitvoeren(st, rol):
             continue
-        uit.append({"pid": p.get("id"), "rol": rol, "titel": str(p.get("scope") or "")[:80],
+        # DE VOLLE SCOPE, en dat is een correctie op mijn eigen sweep van gisteren. Hier stond
+        # `[:80]`, en dat kapte midden in een woord — "…compleet overzicht beschikbaa". Die
+        # afkapping ging vervolgens als TEKST de nieuwe inbox-melding in, dus geen enkele
+        # weergave-fix kon hem nog repareren: het verlies zat al in de data.
+        #
+        # Zelfde les als de 160-cap: een veld dat 'titel' heet maar de enige kopie is, is geen
+        # titel maar een amputatie. Wie een korte regel wil, leidt hem af bij het TONEN.
+        uit.append({"pid": p.get("id"), "rol": rol, "titel": str(p.get("scope") or ""),
                     "status": p.get("status")})
     return uit
 

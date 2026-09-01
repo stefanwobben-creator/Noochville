@@ -196,3 +196,51 @@ def test_de_andere_soorten_houden_hun_eigen_woorden(tmp_path):
         html = render_verwerk(st, n, csrf_token="t")
         assert "<h1>Process tension</h1>" in html, soort or "(typeloos)"
         assert "Actie afronden" not in html, soort or "(typeloos)"
+
+
+# ── Volledigheid en herkomst ───────────────────────────────────────────────
+
+def test_een_titel_breekt_op_een_woordgrens(tmp_path):
+    """DE TWEEDE KOPIE VAN DE 160-CAP, en hij overleefde de veegronde van #389/#392. Daar haalden we
+    de caps uit de STORE en de callers; deze zat in de WEERGAVE en kapte midden in een woord:
+    "compleet overzicht beschikbaa", "die live updates lev", "an entrepre".
+
+    Een halve zin leest als een defect, niet als een samenvatting — en hij is bovendien de INVOER
+    van de classificatie die hierna komt."""
+    from nooch_village.views.inbox import _one_line
+    lang = ("Zorg dat er een compleet overzicht beschikbaar is van alle leveranciers die live "
+            "updates leveren over hun voorraad")
+    kort = _one_line(lang)
+    assert kort.endswith("…")
+    romp = kort[:-1].rstrip()
+    assert lang.startswith(romp), "de regel eindigt niet op een woord uit de bron"
+    assert romp.split()[-1] in lang.split(), "laatste woord is afgekapt"
+
+
+def test_de_regel_draagt_de_hele_zin_als_hover(tmp_path):
+    """Een afgebroken regel zonder de rest is een doodlopende weg: je ziet dát er meer was, niet wát."""
+    dd, st = _st(tmp_path)
+    n = _item(st)
+    n["tekst"] = ("Een hele lange spanning die ver voorbij de negentig tekens doorloopt zodat de "
+                  "regel moet afbreken en de hover het verschil maakt")
+    st.notif._save()
+    html = render_inbox(st, [("role", ROL)], csrf_token="t")
+    assert "title='Een hele lange spanning" in html or 'title="Een hele lange spanning' in html
+
+
+def test_een_bron_id_in_de_herkomst_wordt_een_link(tmp_path):
+    """"project 2d5e7fac383b lag stil" is waar en onbruikbaar: dat id kun je nergens intikken. Een
+    herkomst die je niet kunt openen is handhaving zonder waarneembaarheid."""
+    from nooch_village.views.inbox import _herkomst_html
+    dd, st = _st(tmp_path)
+    pid = st.projects.create("een_rol", "Het bronproject", "human")
+    uit = _herkomst_html(st, f"↳ {pid} lag stil")
+    assert f"/project?pid={pid}" in uit
+
+
+def test_een_onbekend_id_blijft_gewone_tekst(tmp_path):
+    """Een dode link is erger dan geen link: hij belooft context die er niet is."""
+    from nooch_village.views.inbox import _herkomst_html
+    dd, st = _st(tmp_path)
+    uit = _herkomst_html(st, "↳ 0123456789ab lag stil")
+    assert "<a " not in uit and "0123456789ab" in uit
