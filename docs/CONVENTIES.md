@@ -208,6 +208,20 @@ Twee uitzonderingen, allebei principieel en geen slordigheid:
 - **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet Engels.
 - **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven.
 
+#### Een record neemt de taal van zijn buren
+
+De inhoudsregel hierboven zegt niets over wat er gebeurt als een bestaand record al in een andere
+taal staat. Rol-DNA is zo'n record: het wordt als GEHEEL gelezen, en accountabilities verschijnen
+geciteerd naast elkaar op het scherm.
+
+`mother_earth__secretary` draagt vijf Engelse accountabilities uit de GlassFrog-import. Er een
+Nederlandse bij zetten leest als een **fout**, niet als een keuze — ook al is roldefinitie-tekst
+volgens de regel hierboven "inhoud". Dus: **een nieuwe regel neemt de taal van zijn buren, en een
+taalwissel is een bewuste hele-rol-pass.**
+
+Dat kost hier niets: de triage vergelijkt het citaat LETTERLIJK tegen de records, dus de matching is
+taal-onafhankelijk.
+
 En taal repareer je bij de BRON, niet bij de leesbaarheidslaag: vertalen is precies waar een model
 iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag blijft het
 vangnet voor wat tóch in de verkeerde taal binnenkomt — een vangnet, geen route.
