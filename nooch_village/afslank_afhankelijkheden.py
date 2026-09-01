@@ -48,6 +48,8 @@ import functools
 import pathlib
 import re
 
+from nooch_village.notifications import preview as _preview
+
 ROOT = pathlib.Path(__file__).resolve().parent
 
 _PUBLICEERT = re.compile(r'Event\(\s*"([a-z_]+)"')
@@ -141,7 +143,9 @@ def open_projecten(rol_id: str, projects=None) -> list[dict]:
             continue
         if str(p.get("owner") or "") == rol_id:
             uit.append({"pid": p.get("id"), "status": p.get("status"),
-                        "titel": str(p.get("scope") or p.get("label") or "")[:70]})
+                        # Afbreken op een WOORDGRENS, en alleen voor de weergave: dit rapport is
+                        # het enige dat deze titel gebruikt, dus hier mag hij kort.
+                        "titel": _preview(str(p.get("scope") or p.get("label") or ""), 70)})
     return uit
 
 
