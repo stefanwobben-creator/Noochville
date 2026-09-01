@@ -168,12 +168,21 @@ def test_feit_zonder_grond_heet_ongegrond():
 
 # ── opslag: de body-cap van een pagina ──────────────────────────────────────
 
-def test_note_krijgt_document_cap_andere_soorten_niet(tmp_path):
-    assert body_cap("note") == 40_000 and body_cap("policy") == 4000
+def test_elke_soort_heeft_de_maat_van_zijn_eigen_ding(tmp_path):
+    """De caps verschillen omdat de dingen verschillen, niet omdat het historie is.
+
+    Een NOTE is een wiki-pagina: een document. Een POLICY was een briefje van 4000 — tot hij zijn
+    eigen machine-leesbare regels ging dragen naast de prosa, en dus een document met twee lezers
+    werd. Dat paste niet, en de store kapte stil af: er stond een half codeblok in COPYCHECK-001.
+    Een TOOL is nog steeds een briefje."""
+    assert body_cap("note") == 40_000
+    assert body_cap("policy") == 12_000
+    assert body_cap("tool") == 4000                                      # ongewijzigd
     store = AttachmentStore(str(tmp_path / "att.json"))
-    lang = "x" * 10_000
-    assert len(store.add(OWNER, "note", body=lang).body) == 10_000      # past nu wél
-    assert len(store.add(OWNER, "policy", body=lang).body) == 4000      # ongewijzigd
+    lang = "x" * 20_000
+    assert len(store.add(OWNER, "note", body=lang).body) == 20_000
+    assert len(store.add(OWNER, "policy", body=lang).body) == 12_000
+    assert len(store.add(OWNER, "tool", body=lang).body) == 4000
 
 
 def test_te_lange_body_wordt_geweigerd_niet_stil_afgekapt(tmp_path):
