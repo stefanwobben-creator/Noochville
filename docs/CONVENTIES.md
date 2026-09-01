@@ -330,6 +330,12 @@ de suggesties slechter worden:
 | hoog | laag | de band werkt: hij wordt gebruikt én hij klopt |
 | hoog | **hoog** | **gewenning** — de enkele keer dat hij wordt gevolgd klopt hij, maar meestal wordt hij genegeerd |
 | laag | laag | de band wordt gebruikt en zit ernaast: dán is er iets te repareren |
+| laag | hoog | **nutteloos** — hij wordt niet gevolgd én klopt niet: uitzetten of hard repareren |
+
+De vierde rij staat er omdat een onvolledige grid je juist in de steek laat op het moment dat je hem
+nodig hebt: bij drie rijen lees je een leeg vakje als "komt niet voor" in plaats van als "hier heb ik
+niet over nagedacht". En dit is het enige vakje waar het antwoord WEGHALEN is — de andere drie
+vragen om bijstellen, dit om stoppen.
 
 `village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
 Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
