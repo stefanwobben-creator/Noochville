@@ -27,6 +27,7 @@ De autorisatie ("wie mag schrijven") en de erf-query leven bewust in `nooch_vill
 zodat deze store puur opslag blijft (geen kennis van de org-boom of van vervullers).
 """
 from __future__ import annotations
+import logging
 import os
 import re
 import time
@@ -34,6 +35,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 
 from nooch_village.util import atomic_write_json, read_json, file_lock
+
+log = logging.getLogger("village.attachments")
 
 # ── Schrijf-serialisatie ─────────────────────────────────────────────────────
 # De cockpit draait als ThreadingHTTPServer en bouwt per request een verse store die het hele
@@ -64,6 +67,26 @@ STATUSES = ("draft", "active", "archived")
 # meer maar een document met twee lezers. 4000 was de maat van het oude ding.
 BODY_CAP = {"note": 40_000, "policy": 12_000}
 BODY_CAP_DEFAULT = 4000
+
+
+def _binnen_cap(body: str, kind: str, *, waar: str) -> str:
+    """Kap af als backstop — maar SCHREEUW erbij.
+
+    De cap-comment zei "zodat niemand stil tekst verliest", en toen verloor de backstop stil tekst:
+    een schrijfroute die de weigering omzeilde liep hier binnen, en er bleef een half codeblok in
+    COPYCHECK-001 achter. Niemand merkte het tot iemand de OPGESLAGEN tekst las.
+
+    Een stille backstop verbergt precies de omzeiling die hij zou moeten vangen. Hij blijft afkappen
+    — een halve opslag is beter dan een crash midden in een schrijfactie — maar hij laat het weten,
+    met de plek erbij, zodat de route die hem raakte te vinden is."""
+    body = body or ""
+    cap = body_cap(kind)
+    if len(body) <= cap:
+        return body
+    log.warning("AFKAPPING in %s: %s-body van %d tekens gekapt op %d. Dit is een BACKSTOP, geen "
+                "route: de aanroeper hoorde te weigeren (zie cockpit2._body_te_lang). "
+                "Verloren staart: %r", waar, kind, len(body), cap, body[cap:cap + 80])
+    return body[:cap]
 
 
 def body_cap(kind: str) -> int:
@@ -178,7 +201,7 @@ class AttachmentStore:
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
         domain = (domain or "").strip()[:60] if kind == "policy" else ""
-        body = (body or "").strip()[:body_cap(kind)]
+        body = _binnen_cap((body or "").strip(), kind, waar="AttachmentStore.add")
         with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
             aid = self._mint_id(kind, anchor, domain)
@@ -241,7 +264,8 @@ class AttachmentStore:
             if title is not None:
                 d["title"] = title.strip()[:200]
             if body is not None:
-                d["body"] = body.strip()[:body_cap(d.get("kind", ""))]
+                d["body"] = _binnen_cap(body.strip(), d.get("kind", ""),
+                                        waar="AttachmentStore.update")
             if meta is not None:
                 d["meta"] = dict(meta)
             if scope is not None:

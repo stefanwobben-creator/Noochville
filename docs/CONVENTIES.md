@@ -340,6 +340,30 @@ vragen om bijstellen, dit om stoppen.
 `village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
 Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
 
+### Eén bewaakte schrijfroute per store — schrijf nooit rechtstreeks
+
+Elke store heeft een route die WEIGERT wat niet mag: te lange tekst, een ontbrekende poort, een
+dead letter. Nieuwe code gebruikt die route. Schrijf je rechtstreeks naar de store, dan omzeil je
+niet één controle maar alle controles die daar ooit nog bij komen.
+
+**Dit is de tweede keer in één week:**
+
+| omzeiling | wat er stil misging |
+|---|---|
+| een eigen `notif.add` naast `route_werk` | een bericht aan een AI-rol werd een dead letter |
+| een script dat rechtstreeks in `AttachmentStore` schreef | een policy-body werd stil afgekapt; er bleef een half codeblok achter |
+
+Beide keren bestond de bewaakte route al (`route_werk`, `cockpit2._body_te_lang`), en beide keren
+faalde de omzeiling STIL — dat is geen toeval maar de vorm: de controle die je oversloeg is precies
+degene die het gemerkt zou hebben.
+
+Twee gevolgen:
+
+1. **Ook eenmalige scripts gaan door de route.** Een migratie of opruiming is geen uitzondering; het
+   is juist de plek waar niemand meekijkt.
+2. **De backstop schreeuwt.** Een store die stil afkapt verbergt de omzeiling die hij zou moeten
+   vangen — dus logt hij nu wát er wegviel en wélke route had moeten weigeren.
+
 ### De afzender is niet de auteur — poort op herkomst, niet op indiener
 
 `_is_mens_schrijver` las `by`: wie het item indiende. Dat werkt tot iemand iets DOORZET. Op 1

@@ -143,3 +143,35 @@ def test_de_schrijfroute_weigert_liever_dan_af_te_kappen():
     from nooch_village.attachments import body_cap
     assert _body_te_lang("x" * (body_cap("policy") + 1), "policy").startswith("✗")
     assert _body_te_lang("x" * 100, "policy") == ""
+
+
+def test_de_backstop_schreeuwt_als_hij_afgaat(tmp_path, caplog):
+    """EEN STILLE BACKSTOP VERBERGT DE OMZEILING DIE HIJ ZOU MOETEN VANGEN.
+
+    De cap-comment zei "zodat niemand stil tekst verliest", en toen verloor de backstop stil tekst:
+    mijn schrijfroute omzeilde de weigering, liep hier binnen, en er bleef een half codeblok in
+    COPYCHECK-001 achter. Niemand merkte het tot iemand de OPGESLAGEN tekst las.
+
+    Hij blijft afkappen — een halve opslag is beter dan een crash midden in een schrijfactie — maar
+    hij laat het weten, mét de plek en de verloren staart, zodat de route te vinden is."""
+    import logging
+
+    from nooch_village.attachments import AttachmentStore, body_cap
+    store = AttachmentStore(str(tmp_path / "a.json"))
+    with caplog.at_level(logging.WARNING):
+        a = store.add("rol", "policy", body="x" * (body_cap("policy") + 500))
+    assert len(a.body) == body_cap("policy")
+    gilt = [r for r in caplog.records if "AFKAPPING" in r.message]
+    assert gilt, "de backstop kapte stil af"
+    assert "_body_te_lang" in gilt[0].message, "de melding wijst niet naar de route die had moeten weigeren"
+
+
+def test_binnen_de_cap_geen_geschreeuw(tmp_path, caplog):
+    """Een alarm dat altijd afgaat is geen alarm."""
+    import logging
+
+    from nooch_village.attachments import AttachmentStore
+    store = AttachmentStore(str(tmp_path / "b.json"))
+    with caplog.at_level(logging.WARNING):
+        store.add("rol", "policy", body="x" * 100)
+    assert not [r for r in caplog.records if "AFKAPPING" in r.message]
