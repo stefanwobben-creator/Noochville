@@ -125,3 +125,63 @@ def test_het_rapport_toont_de_afhankelijkheden():
     tekst = af.rapport_tekst(plan, apply=False)
     assert "Wat er aan deze snit hangt" in tekst
     assert "pulse_completed" in tekst and "serpapi_trends" in tekst
+
+
+# ── Richting C: wat ligt er op zijn bord ────────────────────────────────────
+
+def test_open_projecten_van_een_rol_tellen_mee(tmp_path):
+    """RICHTING C, EN HIJ KOSTTE EEN HANDMATIGE OPRUIMING. A en B kijken naar de CODE — wat
+    publiceert deze rol, wie roept die skill aan — en dat is precies wat statische analyse ziet.
+    Wat er op zijn bord ligt staat niet in de code maar in de DATA, en die vraag stelde niemand.
+    Gevolg op prod: 5 open projecten op rollen die ná het aanmaken slapend werden gelegd."""
+    from nooch_village.projects import ProjectLedger
+    pj = ProjectLedger(str(tmp_path / "p.json"))
+    pj.create("slaper", "Iets dat nog loopt", "human")
+    d = aa.rol_afhankelijkheden("slaper", None, pj)
+    assert [x["titel"] for x in d["open_projecten"]] == ["Iets dat nog loopt"]
+
+
+def test_een_afgerond_of_gearchiveerd_project_telt_niet_mee(tmp_path):
+    from nooch_village.projects import ProjectLedger
+    pj = ProjectLedger(str(tmp_path / "p.json"))
+    klaar = pj.create("slaper", "Al klaar", "human")
+    pj.complete(klaar, "klaar")
+    weg = pj.create("slaper", "Gearchiveerd", "human")
+    pj.archive(weg)
+    assert aa.rol_afhankelijkheden("slaper", None, pj)["open_projecten"] == []
+
+
+def test_zonder_projectstore_beweert_de_poort_niets(tmp_path):
+    """Een poort die niets kan zien hoort niets te beweren — geen valse groene vinkje."""
+    assert aa.rol_afhankelijkheden("slaper", None, None)["open_projecten"] == []
+
+
+def test_een_generieke_inwoner_met_een_vol_bord_wordt_ook_gezien(tmp_path):
+    """HET GEMISTE GEVAL. Richting A stopt bij "geen CLASS_MAP-entry = draagt geen mechanisme", en
+    dat klopt voor code — maar zijn BORD kan wel vol liggen. Daarom staat richting C buiten die
+    check."""
+    from nooch_village.projects import ProjectLedger
+    pj = ProjectLedger(str(tmp_path / "p.json"))
+    pj.create("een_rol_zonder_klasse", "Werk dat blijft liggen", "human")
+    d = aa.rol_afhankelijkheden("een_rol_zonder_klasse", None, pj)
+    assert d["klasse"] == "" and d["open_projecten"], d
+
+
+def test_de_snit_wordt_geweigerd_om_een_vol_bord(tmp_path):
+    """De poort heeft tanden: open projecten blokkeren de snit tot je ze bevestigt."""
+    from nooch_village.projects import ProjectLedger
+    pj = ProjectLedger(str(tmp_path / "p.json"))
+    pj.create("website_watcher", "Werk dat blijft liggen", "human")
+    with pytest.raises(af.AfhankelijkheidNietBevestigd) as e:
+        af.voer_uit(_plan(rollen=["website_watcher"]), None, data_dir="", bevestigd=False,
+                    projects=pj)
+    assert "OPEN PROJECT" in str(e.value)
+
+
+def test_het_rapport_noemt_het_project_bij_naam(tmp_path):
+    """Een waarschuwing die niet zegt WÁT er blijft liggen, laat je alsnog gokken."""
+    from nooch_village.projects import ProjectLedger
+    pj = ProjectLedger(str(tmp_path / "p.json"))
+    pj.create("website_watcher", "Carbon footprint jaarlijks meten", "human")
+    tekst = aa.rapport(["website_watcher"], [], None, pj)
+    assert "OPEN PROJECT" in tekst and "Carbon footprint" in tekst

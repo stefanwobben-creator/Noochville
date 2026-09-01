@@ -21,11 +21,21 @@ er aan zo'n rol HING. Gevolg, één voor één ontdekt in de dagen erna:
 Vier van de vijf zijn dezelfde fout in richting A, de vijfde is richting B. Een poort die alleen
 naar opbrengst kijkt, ziet geen van beide.
 
-TWEE RICHTINGEN:
+DRIE RICHTINGEN:
 
   A. Een ROL slapen of archiveren → wat consumeren ANDEREN van hem? Events die hij publiceert en
      waar een ander op reageert, een eigen ritme (`tick`), en skills die alleen hij houdt.
   B. Een SKILL of grant intrekken → welke CODE roept hem nog aan?
+  C. Een ROL slapen of archiveren → wat ligt er nog OP ZIJN BORD? Open projecten verdwijnen niet
+     met de rol; ze blijven staan op een bureau waar niemand meer zit.
+
+RICHTING C KWAM LATER, en hij kostte een handmatige opruiming. A en B kijken naar de CODE — wat
+publiceert deze rol, wie roept die skill aan — en dat is precies wat je met statische analyse ziet.
+Wat er op zijn bord ligt staat niet in de code maar in de DATA, en die vraag stelde niemand. Gevolg
+op prod: 5 open projecten op rollen die ná het aanmaken slapend werden gelegd, gevonden toen er al
+weken overheen waren.
+
+Een poort die alleen leest wat hij makkelijk kan zien, bewaakt de rest niet.
 
 Statische analyse over de broncode: geen draaiend dorp nodig, en daarom bruikbaar in een dry-run.
 Bewust RUIM: liever een afhankelijkheid te veel tonen dan er één missen — dit is een waarschuwing
@@ -86,14 +96,17 @@ def _consumenten(event: str, *, behalve_klasse: str = "") -> list[str]:
     return uit
 
 
-def rol_afhankelijkheden(rol_id: str, records=None) -> dict:
+def rol_afhankelijkheden(rol_id: str, records=None, projects=None) -> dict:
     """RICHTING A. Wat verliest het dorp als deze rol stilvalt?
 
     Geeft {klasse, events: [{event, consumenten}], eigen_ritme, alleen_houder}. Een lege uitkomst
     betekent: deze rol draagt niets waar een ander op wacht — dan is slapen vrij."""
     klas = _klasse_van(rol_id)
     uit = {"rol": rol_id, "klasse": getattr(klas, "__name__", ""), "events": [],
-           "eigen_ritme": False, "alleen_houder": []}
+           "eigen_ritme": False, "alleen_houder": [],
+           # RICHTING C staat BUITEN de klasse-check hieronder: een generieke inwoner draagt geen
+           # mechanisme, maar zijn bord kan wel vol liggen. Dat was precies het gemiste geval.
+           "open_projecten": open_projecten(rol_id, projects)}
     if klas is None:
         return uit                                       # generieke Inwoner: draagt geen mechanisme
     src = _blok_van_klasse(klas)
@@ -106,6 +119,29 @@ def rol_afhankelijkheden(rol_id: str, records=None) -> dict:
             uit["events"].append({"event": ev, "consumenten": wie})
     if records is not None:
         uit["alleen_houder"] = _alleen_houder(rol_id, records)
+    return uit
+
+
+def open_projecten(rol_id: str, projects=None) -> list[dict]:
+    """RICHTING C. Open projecten op het bord van deze rol.
+
+    `projects` is een ProjectLedger of een lijst dicts; zonder store geen uitspraak (leeg) — een
+    poort die niets kan zien hoort niets te beweren."""
+    if projects is None:
+        return []
+    try:
+        rijen = projects.all() if hasattr(projects, "all") else list(projects)
+    except Exception:                                    # noqa: BLE001
+        return []
+    uit = []
+    for p in rijen:
+        if not isinstance(p, dict) or p.get("archived"):
+            continue
+        if str(p.get("status") or "").lower() in ("done", "afgerond", "klaar"):
+            continue
+        if str(p.get("owner") or "") == rol_id:
+            uit.append({"pid": p.get("id"), "status": p.get("status"),
+                        "titel": str(p.get("scope") or p.get("label") or "")[:70]})
     return uit
 
 
@@ -149,15 +185,15 @@ def skill_afhankelijkheden(skill: str) -> dict:
     return uit
 
 
-def rapport(rollen: list, skills: list, records=None) -> str:
+def rapport(rollen: list, skills: list, records=None, projects=None) -> str:
     """Het menselijke overzicht dat vóór de snit op het scherm hoort."""
     regels = []
     for rid in rollen:
-        d = rol_afhankelijkheden(rid, records)
-        if not (d["events"] or d["eigen_ritme"] or d["alleen_houder"]):
+        d = rol_afhankelijkheden(rid, records, projects)
+        if not (d["events"] or d["eigen_ritme"] or d["alleen_houder"] or d["open_projecten"]):
             regels.append(f"  {rid}: draagt geen mechanisme dat een ander consumeert.")
             continue
-        regels.append(f"  ⚠ {rid} ({d['klasse']}) draagt:")
+        regels.append(f"  ⚠ {rid} ({d['klasse'] or 'generieke inwoner'}) draagt:")
         if d["eigen_ritme"]:
             regels.append("      · een EIGEN RITME (tick) — dat stopt met de rol")
         for e in d["events"]:
@@ -165,6 +201,8 @@ def rapport(rollen: list, skills: list, records=None) -> str:
                           f"{', '.join(e['consumenten'])}")
         if d["alleen_houder"]:
             regels.append(f"      · is de ENIGE houder van: {', '.join(d['alleen_houder'])}")
+        for pj in d["open_projecten"]:
+            regels.append(f"      · OPEN PROJECT ({pj['status']}): {pj['titel']}")
     for sk in skills:
         d = skill_afhankelijkheden(sk)
         if not d["aanroepers"]:
