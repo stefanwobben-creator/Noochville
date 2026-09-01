@@ -42,7 +42,15 @@ CALL_SITE = "triage_rol"
 
 #: De accountability die een rol tot eigenaar van deze classificatie maakt. Geen rol met deze
 #: tekst = geen classificatie; de Circle Lead vangt het werk dan gewoon op.
-SECRETARY_ACCOUNTABILITY = "classificeer wees- en AI-werk en stel de eigenaar-rol voor"
+#:
+#: ENGELS, EN DAT IS EEN KEUZE. De vijf buren op deze rol komen uit de GlassFrog-import en zijn
+#: Engels; deze accountability verschijnt straks GECITEERD naast die vijf op het scherm. Eén
+#: Nederlandse regel ertussen leest als een fout, niet als een keuze. De matching is toch
+#: taal-onafhankelijk — het citaat wordt letterlijk vergeleken, niet vertaald.
+#:
+#: Rol-DNA is een RECORD dat als geheel wordt gelezen: nieuwe regels nemen de taal van hun buren, en
+#: een taalwissel is een bewuste hele-rol-pass. Zie docs/CONVENTIES.md.
+SECRETARY_ACCOUNTABILITY = "Classifying orphaned and AI work, and proposing the owning role"
 
 VORMEN = ("accountability", "project", "actie")
 
