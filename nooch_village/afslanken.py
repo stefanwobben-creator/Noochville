@@ -371,7 +371,7 @@ def skill_intrekken(records, skill: str, *, reden: str, data_dir: str = "") -> l
     return geraakt
 
 
-def afhankelijkheden_van(plan_: dict, records=None) -> dict:
+def afhankelijkheden_van(plan_: dict, records=None, projects=None) -> dict:
     """Wat draagt dit plan weg? Twee richtingen, zie `afslank_afhankelijkheden`.
 
     Geeft {rollen: [...], skills: [...], tekst: str, leeg: bool}. `leeg` betekent: niets in dit plan
@@ -380,19 +380,23 @@ def afhankelijkheden_van(plan_: dict, records=None) -> dict:
     rollen = [r["id"] for r in plan_.get("slapen", [])]
     rollen += [r["id"] for r in plan_.get("opruimen", []) if r.get("soort") == "rol"]
     skills = [r["naam"] for r in plan_.get("opruimen", []) if r.get("soort") == "skill"]
-    detail_r = [aa.rol_afhankelijkheden(rid, records) for rid in rollen]
+    detail_r = [aa.rol_afhankelijkheden(rid, records, projects) for rid in rollen]
     detail_s = [aa.skill_afhankelijkheden(sk) for sk in skills]
-    leeg = (not any(d["events"] or d["eigen_ritme"] or d["alleen_houder"] for d in detail_r)
+    # `open_projecten` telt MEE in de poort. Zonder dat blijft de poort groen terwijl er werk op een
+    # bord achterblijft waar niemand meer zit — de vijf wezen die we met de hand moesten opruimen.
+    leeg = (not any(d["events"] or d["eigen_ritme"] or d["alleen_houder"] or d["open_projecten"]
+                    for d in detail_r)
             and not any(d["aanroepers"] for d in detail_s))
     return {"rollen": detail_r, "skills": detail_s, "leeg": leeg,
-            "tekst": aa.rapport(rollen, skills, records)}
+            "tekst": aa.rapport(rollen, skills, records, projects)}
 
 
 class AfhankelijkheidNietBevestigd(RuntimeError):
     """De snit raakt iets waar een ander op wacht, en dat is niet bevestigd."""
 
 
-def voer_uit(plan_: dict, records, *, data_dir: str, bevestigd: bool = False) -> dict:
+def voer_uit(plan_: dict, records, *, data_dir: str, bevestigd: bool = False,
+             projects=None) -> dict:
     """Voer het plan uit. Alleen aanroepen ná een dry-run en een menselijk akkoord.
 
     DE POORT: raakt dit plan een rol of skill waar een ander op wacht, dan moet `bevestigd=True`
@@ -403,7 +407,16 @@ def voer_uit(plan_: dict, records, *, data_dir: str, bevestigd: bool = False) ->
     groei-puls stil zonder dat één poort iets zei; drie dagen later stond het dorp nog steeds. Deze
     regel is die dagen."""
     if not bevestigd:
-        afh = afhankelijkheden_van(plan_, records)
+        # `projects` erbij: richting C (wat ligt er op zijn bord). Ontbreekt hij, dan vraagt de
+        # poort de projecten zelf op uit `data_dir` — een poort die je kunt uitschakelen door hem
+        # iets niet mee te geven is geen poort.
+        if projects is None and data_dir:
+            try:
+                from nooch_village.projects import ProjectLedger
+                projects = ProjectLedger(os.path.join(data_dir, "projects.json"))
+            except Exception:                                # noqa: BLE001
+                projects = None
+        afh = afhankelijkheden_van(plan_, records, projects)
         if not afh["leeg"]:
             raise AfhankelijkheidNietBevestigd(
                 "dit plan raakt mechanismen waar anderen op wachten:\n" + afh["tekst"])

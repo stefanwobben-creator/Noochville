@@ -1539,16 +1539,20 @@ def main() -> None:
         plan = af.plan(audit, recs, kill_skills=kill, uit_governance=uitgov,
                        gedaan_skills=af.reeds_ingetrokken(ctx.data_dir))
         apply = "--apply" in sys.argv
-        # DE POORT, twee richtingen: wat consumeren anderen van een rol die gaat slapen, en welke
-        # code roept een skill nog aan die je intrekt. Staat in het rapport, en blokkeert de snit
-        # tot je hem bevestigt — de afslanking van 28 aug legde de dagbel stil zonder dat één poort
-        # iets zei.
+        # DE POORT, DRIE RICHTINGEN: wat consumeren anderen van een rol die gaat slapen, welke code
+        # roept een skill nog aan die je intrekt, en wat ligt er nog OP HET BORD van die rol. Staat
+        # in het rapport en blokkeert de snit tot je hem bevestigt — de afslanking van 28 aug legde
+        # de dagbel stil zonder dat één poort iets zei, en liet daarnaast vijf open projecten
+        # achter op boards waar niemand meer zat.
         bevestigd = "--afhankelijkheden-gelezen" in sys.argv
-        plan["_afhankelijkheden"] = af.afhankelijkheden_van(plan, recs)["tekst"]
+        from nooch_village.projects import ProjectLedger as _PL
+        _pjs = _PL(os.path.join(ctx.data_dir, "projects.json"))
+        plan["_afhankelijkheden"] = af.afhankelijkheden_van(plan, recs, _pjs)["tekst"]
         print(af.rapport_tekst(plan, apply=apply))
         if apply:
             try:
-                gedaan = af.voer_uit(plan, recs, data_dir=ctx.data_dir, bevestigd=bevestigd)
+                gedaan = af.voer_uit(plan, recs, data_dir=ctx.data_dir, bevestigd=bevestigd,
+                                     projects=_pjs)
             except af.AfhankelijkheidNietBevestigd as e:
                 print(f"\n\u2717 GESTOPT — {e}\n\nLees het bovenstaande. Klopt het dat deze "
                       f"mechanismen mogen stilvallen, draai dan opnieuw met "

@@ -258,6 +258,23 @@ Vuistregel: **kun je de eigenschap meten aan de uitkomst, doe dat dan.** Een bro
 wat je alléén aan de vorm kunt zien — een tweede store, een tweede formulier, een inline style — en
 zelfs daar telt hij de vorm en niet de naam (zie hierboven).
 
+### Een test die van de datum afhangt, injecteert de datum
+
+Tenzij de datum het onderwerp is. Anders is het geen test maar een tijdbom, en die gaat af op een
+dag dat je met iets anders bezig bent.
+
+Zes tests van `regulation_watch` vielen om op 1 september 2026 — niet door een wijziging maar doordat
+`HANDHAVING_MAAND = "2026-09"` aanbrak. De skill deed precies wat hij hoort te doen (een
+mijlpaal-regel schrijven), en de tests rekenden op de wereld van daarvóór. De suite was rood voordat
+iemand iets had aangeraakt.
+
+`_maand` is daarom injecteerbaar, net als `_fetch` dat al was. Vijf tests pinnen hem; de zesde wil
+juist de ECHTE maand, want die gaat er nou net over dat de meting NU gebeurde — en dat verschil staat
+bij de test, niet in het hoofd van wie hem schreef.
+
+Zelfde familie als `no_data ≠ nul`: **een waarde die je niet controleert is geen constante maar een
+aanname**, en een aanname over "nu" wordt vanzelf onwaar.
+
 ### Een droge run rekent door hetzelfde pad, of hij liegt
 
 Een dry-run die zijn eigen antwoord berekent is geen voorbeschouwing maar een tweede implementatie —
