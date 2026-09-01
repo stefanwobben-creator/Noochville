@@ -120,3 +120,65 @@ def test_de_eigenaar_wordt_op_accountability_gevonden_niet_op_naam():
     titel."""
     assert tr.secretary_rol(_records()) == "secretary"
     assert tr.secretary_rol(_records(secretary=False)) == ""
+
+
+# ── De meting ───────────────────────────────────────────────────────────────
+
+def _item(rol="compliance"):
+    return {"id": "n1", "triage_rol": rol, "triage_accountability": ACC}
+
+
+def test_dezelfde_rol_kiezen_is_accepteren(tmp_path):
+    assert tr.noteer_uitkomst(str(tmp_path), _item(), gekozen_rol="compliance",
+                              otype="action") == "geaccepteerd"
+
+
+def test_een_andere_rol_kiezen_is_overschrijven(tmp_path):
+    assert tr.noteer_uitkomst(str(tmp_path), _item(), gekozen_rol="website_dev",
+                              otype="action") == "overschreven"
+
+
+def test_geen_doel_kiezen_is_zelf_houden(tmp_path):
+    assert tr.noteer_uitkomst(str(tmp_path), _item(), otype="action") == "zelf"
+
+
+def test_een_andere_uitkomst_telt_apart(tmp_path):
+    """Project of governance zegt niets over WIE het zou moeten doen — dat is een andere vraag, en
+    hem meetellen zou de ratio vervuilen."""
+    assert tr.noteer_uitkomst(str(tmp_path), _item(), otype="project") == "anders"
+
+
+def test_zonder_suggestie_valt_er_niets_te_meten(tmp_path):
+    assert tr.noteer_uitkomst(str(tmp_path), {"id": "n2"}, gekozen_rol="x") == ""
+
+
+def test_de_ratio_telt_alleen_de_gevallen_waarin_een_rol_werd_gekozen(tmp_path):
+    """"Zelf houden" en "andere uitkomst" zeggen niets over de suggestie: dan ging het werk ergens
+    anders heen om een reden die los staat van wie het zou moeten doen. Ze meetellen maakt de ratio
+    onleesbaar — precies het soort getal waar je later een drempel op zou bouwen."""
+    dd = str(tmp_path)
+    tr.noteer_uitkomst(dd, _item(), gekozen_rol="compliance", otype="action")
+    tr.noteer_uitkomst(dd, _item(), gekozen_rol="compliance", otype="action")
+    tr.noteer_uitkomst(dd, _item(), gekozen_rol="website_dev", otype="action")
+    tr.noteer_uitkomst(dd, _item(), otype="action")            # zelf
+    tr.noteer_uitkomst(dd, _item(), otype="project")           # anders
+    uit = tr.acceptatie(dd)
+    assert uit["n"] == 5 and uit["geaccepteerd"] == 2 and uit["overschreven"] == 1
+    assert uit["zelf"] == 1 and uit["anders"] == 1
+    assert abs(uit["ratio"] - 2 / 3) < 1e-9
+
+
+def test_zonder_metingen_is_de_ratio_none_en_geen_nul(tmp_path):
+    """`no_data ≠ nul`, opnieuw: "nog niets gemeten" is iets anders dan "nooit geaccepteerd", en dat
+    verschil bepaalt of je een drempel mag bouwen."""
+    uit = tr.acceptatie(str(tmp_path / "leeg"))
+    assert uit["n"] == 0 and uit["ratio"] is None
+
+
+def test_een_kapotte_regel_stopt_de_telling_niet(tmp_path):
+    import os
+    dd = str(tmp_path)
+    tr.noteer_uitkomst(dd, _item(), gekozen_rol="compliance", otype="action")
+    with open(os.path.join(dd, tr.BESTAND), "a", encoding="utf-8") as f:
+        f.write("dit is geen json\n")
+    assert tr.acceptatie(dd)["geaccepteerd"] == 1

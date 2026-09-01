@@ -1564,6 +1564,29 @@ def main() -> None:
         else:
             print("\nDRY-RUN \u2014 er is niets geschreven. Draai opnieuw met --apply.")
 
+    elif mode == "triage_ratio":
+        # Hoe vaak was de rolsuggestie bruikbaar? Alleen tellen, geen oordeel — dit is het getal dat
+        # later mag bepalen of er een drempel komt, en dan pas als het erom vraagt.
+        from nooch_village.config import load_context as _lc2
+        from nooch_village.triage_rol import acceptatie as _acc
+        from nooch_village.village import BASE_DIR as _BD
+        _u = _acc(_lc2(_BD).data_dir)
+        if not _u["n"]:
+            print("nog niets gemeten — er is nog geen suggestie verwerkt.")
+        else:
+            print(f"suggesties verwerkt : {_u['n']}")
+            print(f"  geaccepteerd      : {_u['geaccepteerd']}")
+            print(f"  overschreven      : {_u['overschreven']}")
+            print(f"  zelf gehouden     : {_u['zelf']}")
+            print(f"  andere uitkomst   : {_u['anders']}")
+            if _u["ratio"] is None:
+                # `no_data ≠ nul`: niemand koos een rol, dus er valt niets te ratio-en.
+                print("\nacceptatieratio    : (nog niet te bepalen — nog geen rol gekozen)")
+            else:
+                print(f"\nacceptatieratio    : {_u['ratio']:.0%} "
+                      f"({_u['geaccepteerd']}/{_u['geaccepteerd'] + _u['overschreven']} keer dat "
+                      f"er een rol werd gekozen)")
+
     elif mode == "afslank_wezen":
         # Open projecten op een rol die niets meer kan (geen mens, geen AI, geen code). Ontstaan
         # doordat een rol slapend werd gelegd NÁ het aanmaken — de afslank-poort keek naar wat er
