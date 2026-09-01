@@ -161,6 +161,8 @@ def test_de_conventies_staan_opgeschreven():
     assert "Een test die van de datum afhangt, injecteert de datum" in doc
     assert "De afzender is niet de auteur" in doc
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
+    # Eén getal kan stijgen terwijl de suggesties slechter worden: lees het paar.
+    assert "Twee getallen, niet" in doc
     assert "De poort verifieert dat het bewijs BESTAAT, niet dat het PAST" in doc
     assert "Een transportfout is onbekend, geen leegte" in doc
     # De keerzijde: los van elkaar trekken mag geen stilte opleveren bij echte uitval.

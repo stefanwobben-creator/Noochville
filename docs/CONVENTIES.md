@@ -317,6 +317,23 @@ De ratio telt alleen de keren dat er een ROL werd gekozen. "Zelf gehouden" en "a
 zeggen niets over de suggestie, en meetellen maakt het getal onleesbaar — precies het getal waar je
 later een grens op zou zetten.
 
+**Lees hem daarom naast het aandeel "zelf gehouden" van álle getoonde banden. Twee getallen, niet
+één in de ander gevouwen.**
+
+De schone ratio meet PRECISIE-BIJ-ROUTEREN: koos de mens de voorgestelde rol op het moment dat hij
+een rol koos. Wat hij niet meet is de band die zó zwak was dat er helemaal geen rol werd gekozen —
+die verdwijnt in de zelf-bucket en telt nergens als misser. Eén getal zou dus kunnen stijgen terwijl
+de suggesties slechter worden:
+
+| ratio | zelf-aandeel | wat het zegt |
+|---|---|---|
+| hoog | laag | de band werkt: hij wordt gebruikt én hij klopt |
+| hoog | **hoog** | **gewenning** — de enkele keer dat hij wordt gevolgd klopt hij, maar meestal wordt hij genegeerd |
+| laag | laag | de band wordt gebruikt en zit ernaast: dán is er iets te repareren |
+
+`village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
+Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
+
 ### De afzender is niet de auteur — poort op herkomst, niet op indiener
 
 `_is_mens_schrijver` las `by`: wie het item indiende. Dat werkt tot iemand iets DOORZET. Op 1
