@@ -3648,6 +3648,16 @@ def _act_notif_klaar(c):
         return f"/inbox?done={nid}", "✓ done with this tension 🎉"
 
 
+def _noteer_triage(data_dir: str, n: dict, **kw) -> None:
+    """Wat deed de mens met de rolsuggestie? Fail-stil: een meting die een handeling blokkeert is
+    geen meting maar een obstakel."""
+    try:
+        from nooch_village.triage_rol import noteer_uitkomst
+        noteer_uitkomst(data_dir, n, **kw)
+    except Exception:                                        # noqa: BLE001
+        logging.getLogger("village.triage").debug("triage-uitkomst niet genoteerd", exc_info=True)
+
+
 def _volledig_van(n: dict) -> str:
     """De volle tekst van een spanning — dezelfde die het formulier voorvult."""
     from nooch_village.notifications import volledig
@@ -3688,6 +3698,8 @@ def _act_notif_outcome(c):
         _bewerkt = " ".join(content.split())
         _van_mens = bool(_bewerkt) and _bewerkt != _origineel
         made = ""
+        if otype != "action":
+            _noteer_triage(c.data_dir, n, otype=otype)   # project/governance: de suggestie ging niet mee
         if otype == "action":
             # FLOW 1 — ACTIE. Twee landingsplekken, en het zijn er allebei bestaande:
             #
@@ -3737,6 +3749,12 @@ def _act_notif_outcome(c):
                                      herkomst=f"↳ uit een spanning in de inbox",
                                      door=aid, opdrachtgever=aid, bron_project=src_pid,
                                      van_mens=_van_mens)
+                # DE BAND METEN, niet strenger maken. Grond stopt fabricatie, niet irrelevantie —
+                # dus is de vraag hoe váák een suggestie stoort, en dat weet alleen de mens die hem
+                # accepteerde, overschreef of negeerde. Geen UI erbij: de drie handelingen bestaan
+                # al, we noteren welke het werd.
+                _noteer_triage(c.data_dir, n, gekozen_rol=rol, gekozen_persoon=persoon,
+                               otype=otype)
                 made = f"{label} {ref}"
         elif otype == "roloverleg":
             if src_p is None:

@@ -293,6 +293,30 @@ Daarom is het een SUGGESTIE en geen routering: de band zegt wat wij denken en wa
 spanning staat er onaangetast onder, en de lezer ziet de match zelf. Zelfde grens als bij de
 feitbehoud-check — wij vergelijken wat vergelijkbaar is, en laten het oordeel waar het hoort.
 
+### Grond stopt fabricatie, niet irrelevantie — dus meet het
+
+Een geverifieerd citaat bewijst dat het bewijs ECHT is. Op prod bleek dat goedkoop: het model vond
+voor "de koffiemachine lekt" netjes *"Facilitating the Circle's regular Tactical Meetings"* — waar,
+verifieerbaar, en volstrekt naast de kwestie. De poort liet het door, en dat is juist: passendheid is
+oordeel (zie hierboven).
+
+**Bouw dan geen strengere poort, maar meet eerst hoe vaak het stoort.** Twee signalen, allebei
+meetbaar en geen van beide een oordeel:
+
+- **de acceptatieratio** — accepteerde de mens de suggestie, overschreef hij hem, of hield hij het
+  zelf? Dat is de enige echte uitspraak over bruikbaarheid, en hij kost geen UI: de drie handelingen
+  bestaan al, je noteert welke het werd (`triage_rol.noteer_uitkomst`, `village triage_ratio`);
+- **de marge** tussen de beste en de op-één-na-beste match. Een suggestie die nét wint van vijf
+  andere zegt iets anders dan een die er met kop en schouders bovenuit steekt.
+
+En als er ooit een drempel komt: **op de marge, niet op zelf-gerapporteerd zelfvertrouwen.** Een
+model dat zijn eigen zekerheid inschat beoordeelt zijn eigen huiswerk — dezelfde reden dat de
+feitbehoud-check meet in plaats van vraagt.
+
+De ratio telt alleen de keren dat er een ROL werd gekozen. "Zelf gehouden" en "andere uitkomst"
+zeggen niets over de suggestie, en meetellen maakt het getal onleesbaar — precies het getal waar je
+later een grens op zou zetten.
+
 ### De afzender is niet de auteur — poort op herkomst, niet op indiener
 
 `_is_mens_schrijver` las `by`: wie het item indiende. Dat werkt tot iemand iets DOORZET. Op 1
