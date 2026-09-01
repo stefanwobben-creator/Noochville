@@ -4843,6 +4843,11 @@ def _act_verzoek_besluit(c):
         return nxt, f"✓ accepted — new version of {cur.id} saved"
 
     if keuze == "accepteer":
+        # Deze tak is sinds de sloop-pass alleen nog bereikbaar voor een PAGINA-voorstel; het
+        # gewone operationele verzoek loopt door de drie uitkomsten (accepteren = Project, via de
+        # wizard). De code blijft staan omdat een pagina-voorstel dat GEEN pagina meer heeft (de
+        # note is verwijderd) hier alsnog uitkomt, en dan is een project op het bord van de
+        # eigenaar-rol de eerlijke uitkomst — geen stille fout.
         from nooch_village.project_items import handoff
         van = str(n.get("by") or "")
         uit = handoff(st.projects, rol, titel, records=st.records, van_rol=van,

@@ -162,7 +162,12 @@ class RegulationWatchSkill(Skill):
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
         data_dir = getattr(context, "data_dir", ".")
-        maand = period_key("maand")
+        # `_maand` is er voor de TEST, net als `_fetch`. Zonder injectiepunt hingen zes tests aan de
+        # echte klok, en op 1 september 2026 vielen ze allemaal om: `HANDHAVING_MAAND` was aangebroken,
+        # dus de skill deed zijn werk (een mijlpaal-regel erbij) en de tests rekenden op de wereld van
+        # daarvoor. Geen bug in de skill maar een tijdbom in de tests — en die gaat af op een dag dat
+        # je met iets anders bezig bent.
+        maand = payload.get("_maand") or period_key("maand")
         rijen = lees_log(data_dir)
         if not payload.get("force") and maand_gedaan(rijen, maand):
             return {"ok": True, "maand": maand, "skipped": True, "reden": "deze maand al gemeten"}

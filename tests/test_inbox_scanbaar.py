@@ -64,21 +64,35 @@ def test_een_afgekeurde_bevinding_wint_niet_van_de_ruwe_tekst():
 
 # ── 3. afhandelen zonder modal, met dezelfde knoppen ────────────────────────
 
-def test_een_verzoek_is_af_te_handelen_vanuit_de_lijst(tmp_path):
+def test_een_operationeel_verzoek_krijgt_het_gewone_scherm(tmp_path):
+    """DE KNOPPENRIJ IS WEG. Accepteren / aanpassen / weigeren stond hier, en de meting over de hele
+    prod-historie zei: 0 weigeringen, 0 herformuleringen, 3 accepteringen — die alle drie een project
+    werden. Eén gebruikte tak van de drie, en de twee dode waren ook nog fout: rol-werk borg je,
+    andermans werk deel je door. "Nee" laat een vraag nergens landen."""
     dd, st = _st(tmp_path)
     _item(st, type="naar_rol")
     html = render_inbox(st, [("role", ROL)], csrf_token="t")
-    assert "handle here" in html
-    for actie in ("accepteer", "aanpassen", "weiger"):
-        assert f"value='{actie}'" in html
-    assert "value='verzoek_besluit'" in html
-    assert "value='notif_klaar'" in html
+    for weg in ("value='accepteer'", "value='aanpassen'", "value='weiger'", "value='verzoek_besluit'"):
+        assert weg not in html, weg
+    assert "value='notif_klaar'" in html          # sluiten blijft, met reden
+
+
+def test_een_pagina_voorstel_houdt_zijn_eigen_knoppen(tmp_path):
+    """GEEN UITZONDERING OP DE REGEL MAAR EEN ANDER GEVAL: bij een pagina-voorstel IS accepteren de
+    handeling zelf (een nieuwe versie), niet een project dat het nog moet gaan doen."""
+    dd, st = _st(tmp_path)
+    n = _item(st, type="naar_rol")
+    n["pagina"] = {"aid": "NOTE-1", "body": "nieuwe tekst", "van_id": "p1"}
+    html = render_verwerk(st, n, csrf_token="t")
+    assert "value='verzoek_besluit'" in html and "new version" in html
 
 
 def test_de_lijst_gebruikt_dezelfde_knoppen_als_de_verwerkpagina(tmp_path):
     """Geen tweede set: als de verwerk-pagina er een veld bij krijgt, krijgt de lijst hem ook."""
     dd, st = _st(tmp_path)
     n = _item(st, type="naar_rol")
+    n["pagina"] = {"aid": "NOTE-1", "body": "nieuwe tekst", "van_id": "p1"}
+    st.notif._save()
     lijst = render_inbox(st, [("role", ROL)], csrf_token="t")
     for blok in _verzoek_knoppen(n, "t").split("</details>"):
         if blok.strip():

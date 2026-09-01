@@ -168,17 +168,31 @@ def test_een_governance_spanning_krijgt_ook_een_type_en_een_lijf():
 
 # ── De drie knoppen op een operationeel verzoek ─────────────────────────────
 
-def test_een_operationeel_verzoek_krijgt_drie_echte_knoppen():
-    """Het eerlijke restant van "in één handeling": een uitleg zonder knop laat de lezer alsnog
-    zoeken waar hij ja moet zeggen."""
+def test_een_operationeel_verzoek_krijgt_de_drie_uitkomsten():
+    """DE KNOPPENRIJ IS WEG, en dit is de test die hem bewaakte. Accepteren / aanpassen / weigeren
+    was "in één handeling" bedoeld, maar de meting over de hele prod-historie zei: 0 weigeringen,
+    0 herformuleringen, 3 accepteringen — die alle drie een project werden.
+
+    Een verzoek is gewoon een spanning: hoort het bij je rol dan BORG je het (project), hoort het er
+    niet bij dan DEEL je het door (actie). "Nee" laat een vraag nergens landen."""
     from nooch_village.views.inbox import _wizard_pane
     n = {"id": "o", "by": "compliance", "project_id": "p1", "snippet": "zet die zin op de pagina",
          "poort": {"deur": "gerouteerd", "klasse": ""}}
     html = _wizard_pane(_St(), n, "csrf-token", "", "")
-    assert "verzoek_besluit" in html
-    for label in ("Accepteren", "Formulering aanpassen", "Weigeren"):
-        assert label in html
-    assert "als project op je bord" in html
+    assert "verzoek_besluit" not in html
+    for weg in ("Accepteren", "Formulering aanpassen", "Weigeren"):
+        assert weg not in html, weg
+    assert "notif_klaar" in html                      # sluiten blijft de uitgang
+
+
+def test_een_pagina_voorstel_houdt_de_drie_knoppen():
+    """Ander geval, geen uitzondering: bij een pagina-voorstel IS accepteren de handeling zelf."""
+    from nooch_village.views.inbox import _wizard_pane
+    n = {"id": "o", "by": "compliance", "project_id": "p1", "type": "naar_rol",
+         "snippet": "zet die zin op de pagina",
+         "pagina": {"aid": "NOTE-1", "body": "nieuwe tekst", "van_id": "p1"}}
+    html = _wizard_pane(_St(), n, "csrf-token", "", "")
+    assert "verzoek_besluit" in html and "new version" in html
 
 
 def test_een_founder_besluit_houdt_zijn_eigen_wizard():
@@ -197,5 +211,7 @@ def test_het_type_van_de_haak_bepaalt_ook_de_knoppen():
     from nooch_village.views.inbox import _wizard_pane
     n = {"id": "v", "by": "compliance", "project_id": "", "type": "naar_rol",
          "snippet": "pas de zin op de productpagina aan"}
-    assert "verzoek_besluit" in _wizard_pane(_St(), n, "csrf", "", "")
+    # De KAART leest het type nog steeds uit de haak; de knoppen zijn sinds de sloop-pass de drie
+    # gewone uitkomsten, dus daar valt niets meer uit de pas te lopen.
+    assert "notif_klaar" in _wizard_pane(_St(), n, "csrf", "", "")
     assert "Operationeel verzoek" in _kaart_html(_St(), n)

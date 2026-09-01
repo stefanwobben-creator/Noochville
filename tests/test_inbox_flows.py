@@ -313,14 +313,18 @@ def test_weigeren_gebruikt_dezelfde_route_als_sluiten_met_reden():
     assert "mens_vervullers(st, van)" in bron, "het tweede kanaal is niet lezer-bewust"
 
 
-def test_een_verzoek_kun_je_sluiten_zonder_te_weigeren():
-    """Deze tak keerde vroeg terug zonder Done-knop: je kon een verzoek alleen kwijtraken door
-    iemand te weigeren. "Niet meer relevant" is geen oordeel over de vrager."""
+def test_een_operationeel_verzoek_loopt_door_de_drie_uitkomsten():
+    """DE KNOPPENRIJ IS WEG, en met haar het enige scherm dat een vierde weg bood. Een verzoek is nu
+    gewoon een spanning: borg hem (project), deel hem door (actie), of amendeer de structuur
+    (governance). Sluiten blijft de uitgang.
+
+    Alleen een PAGINA-voorstel houdt zijn eigen knoppen — daar is accepteren de handeling zelf."""
     import inspect
     from nooch_village.views import inbox as v
     bron = inspect.getsource(v._wizard_pane)
     tak = bron[bron.index('== "naar_rol"'):bron.index('== zv.ACTIE')]
-    assert "klaar" in tak and "Niet meer relevant" in tak
+    assert 'n.get("pagina")' in tak, "de niet-pagina-tak leeft nog"
+    assert "_verzoek_knoppen" in tak and tak.count("_verzoek_knoppen") == 1
 
 
 def test_weigeren_houdt_zijn_eigen_woord():
