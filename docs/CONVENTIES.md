@@ -350,13 +350,21 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+**Bij de derde instantie migreer je de KLASSE, niet de instantie.** Eén geval is pech, twee is
+toeval, drie is een vorm — en vanaf dan is "we noteren het voor later" een fictie: je hebt de klasse
+al drie keer aangeraakt zonder hem op te lossen. De drie hierboven vielen binnen één week.
+
 **Quoting is geen oplossing maar een verplaatsing.** Termen tussen aanhalingstekens zetten loste de
 komma op en verplaatste de botsing naar het aanhalingsteken — een policy die een citaat bevat had hem
 opnieuw geraakt, en dan zonder dat iemand iets fout schreef.
 
-De duurzame vorm is een formaat waarin het **niet kán botsen**: gedefinieerde escaping en een echte
-parser. Het structuurblok is daarom JSON. Eén term per regel had ook gekund; de keuze viel op JSON
-omdat een echte parser er ook nog bij zegt wát er stuk is.
+De duurzame vorm is een formaat met **echte escaping**: een scheidingsteken dat in de data kan
+voorkomen vraagt JSON of iets met dezelfde garantie, niet betere quoting. Het structuurblok is daarom
+JSON. Eén term per regel had ook gekund; de keuze viel op JSON omdat een echte parser er ook nog bij
+zegt wát er stuk is — en dat is de tweede eis:
+
+**Het faalt luid én precies.** Niet stil `{}`, maar wélk blok en wát eraan mankeert. Stil falen maakt
+van "kapot" hetzelfde als "leeg", en dan staat een checker zonder dekking op groen.
 
 **En het faalt luid.** Een kapot blok geeft een klacht terug, niet stilletjes `{}`: *"geen blok"* en
 *"kapot blok"* zijn twee verschillende dingen, en de tweede hoort niemand stil op groen te zetten.

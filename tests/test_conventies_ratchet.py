@@ -164,6 +164,8 @@ def test_de_conventies_staan_opgeschreven():
     assert "Meet de compositie, niet één ingrediënt" in doc
     assert "Literaal token is laag 1, claim-concept is laag 2" in doc
     assert "Structuur botst met content die de structuur bevat" in doc
+    # Drie instanties in één week: dan is "later" een fictie.
+    assert "Bij de derde instantie migreer je de KLASSE" in doc
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
     # Eén getal kan stijgen terwijl de suggesties slechter worden: lees het paar.
     assert "Twee getallen, niet" in doc
