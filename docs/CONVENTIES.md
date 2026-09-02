@@ -350,6 +350,24 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Een identifier is mechaniek, een label is content
+
+**Een sleutel die twee kanten aan elkaar koppelt, is een identifier: hij blijft stabiel.** Een
+schermlabel is content en komt uit de policy. Verwar die twee niet, ook niet als de identifier
+lelijk of anderstalig is.
+
+Gevonden op de copy-checker: het scherm toonde `uitroepteken: 3 found`. Verleidelijk om de sleutel
+te hernoemen — maar die sleutel koppelt het policy-blok aan de teller in de code, en als code en
+blok uit de pas lopen vindt de teller de limiet niet meer en **stopt de check zonder te klagen**.
+Het blok droeg het label al: het prosa-anker. `Maximum one exclamation mark per text — 3 found, at
+most 1 allowed`. Sleutel blijft identifier, policy levert de woorden. Niets hernoemd, niets stils.
+
+**En chrome volgt zijn lezer.** Dezelfde module kan beide talen dragen: `regel` en `suggestie` staan
+op een Engels scherm en zijn dus Engels; de koppeltest-klachten leest een ontwikkelaar in een
+dry-run en blijven Nederlands. De grens ligt bij *"komt dit op een scherm terecht"*, niet bij *"staat
+het in een view"* — een string in een logic-module kan schermtekst zijn, en een string in een view
+kan dat niet zijn.
+
 ### Bevindingen staan in de volgorde van de tekst, niet van de lus
 
 **Presenteer wat je vond in de volgorde waarin de LEZER het tegenkomt.** Een checker die per policy
