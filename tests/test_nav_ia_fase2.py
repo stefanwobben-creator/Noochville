@@ -34,9 +34,21 @@ def test_role_tools_leeg_voor_niet_eigenaar():
 def test_registry_dekt_de_eigenaar_rollen():
     # website_developer erbij: de Backlog Builder stond op zijn Notes-tab en woont nu onder Tools,
     # zoals elk ander rol-gereedschap.
+    #
+    # mother_earth__nooch is de eerste CIRKEL in dit register, en dat is een bewuste keuze: de
+    # copy-policies wonen bij Community & Email, maar ze gelden voor iedereen die voor Nooch
+    # schrijft. Hing het gereedschap aan de eigenaar-rol, dan zou de copywriter het niet vinden.
     assert set(_ROLE_TOOLS) == {
         "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp",
-        "compliance", "mother_earth__nooch__website_developer"}
+        "compliance", "mother_earth__nooch__website_developer", "mother_earth__nooch"}
+
+
+def test_copy_gereedschap_hangt_onder_de_nooch_cirkel():
+    """Vooraf de prompt, achteraf de toets, tegen precies dezelfde policies — dus samen op één
+    plek. Twee kaarten, geen twee vindplaatsen."""
+    html = _role_tools_html(_rec("mother_earth__nooch"))
+    assert "/copy-prompt" in html and "/copy-check" in html
+    assert "Copy prompt generator" in html and "Copy checker" in html
 
 
 def test_backlog_builder_hangt_onder_de_website_rol():

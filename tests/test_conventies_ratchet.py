@@ -175,6 +175,8 @@ def test_de_conventies_staan_opgeschreven():
         assert poort in doc
     # Een lege uitkomst is een uitkomst.
     assert "zonder laag-1-voetafdruk is een geldige uitkomst" in doc
+    # Volgorde van de tekst, niet van de lus.
+    assert "in de volgorde waarin de LEZER het tegenkomt" in doc
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
     # Eén getal kan stijgen terwijl de suggesties slechter worden: lees het paar.
     assert "Twee getallen, niet" in doc

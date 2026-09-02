@@ -712,6 +712,13 @@ _ROLE_TOOLS = {
         ("Claims-checker", "EmpCo/ACM check on text or page — red, orange, green", "/claims")],
     # De Backlog Builder stond op de Notes-tab van deze rol. Een gereedschap hoort onder Tools,
     # naast de andere rol-tools — en zo houdt de rol zijn eigen notes/wiki-pagina's.
+    # De copy-policies wonen bij Community & Email, maar ze gelden voor iedereen die voor Nooch
+    # schrijft. Daarom staan generator en checker op de CIRKEL: vooraf de prompt, achteraf de
+    # toets, tegen precies dezelfde policies.
+    "mother_earth__nooch": [
+        ("Copy prompt generator", "The copy policies as a ready-made prompt", "/copy-prompt"),
+        ("Copy checker", "Check a text against the copy policies — layer 1, then the judgement",
+         "/copy-check")],
     WEBSITE_DEVELOPER_ROLE: [
         ("Backlog Builder", "Bugs, wishes and ideas → a prioritised backlog", "/backlog")],
 }

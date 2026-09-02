@@ -350,6 +350,21 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Bevindingen staan in de volgorde van de tekst, niet van de lus
+
+**Presenteer wat je vond in de volgorde waarin de LEZER het tegenkomt.** Een checker die per policy
+of per regel itereert, geeft zijn treffers terug in de volgorde van zijn eigen lus — dan komt de
+tweede zin van een tekst als laatste terug omdat alleen de derde policy hem noemt.
+
+Gevonden op de copy-checker: drie zinnen kwamen terug als 1, 3, 2. Het verschil is niet cosmetisch.
+In lusvolgorde leest het scherm als een **klachtenlijst** en moet de schrijver per regel zoeken waar
+hij is; in tekstvolgorde leest het als een **doorloop van zijn eigen copy** en kan hij van boven naar
+beneden werken.
+
+Sorteren op positie in de bron is een presentatiekeuze en hoort dus in de view, net als het
+groeperen zelf. De meting eronder blijft ongemoeid — dat is dezelfde grens als "de checker dedupet
+niet, de view vouwt".
+
 ### Een regel in code is een ongereguleerde regel
 
 **De checker-code parseert, matcht en telt — hij bevat nooit een regel.** Elke regel komt uit een
