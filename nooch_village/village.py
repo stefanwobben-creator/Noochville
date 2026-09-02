@@ -486,11 +486,59 @@ class Village:
         from nooch_village.key_audit import audit_keys, format_key_report
         return format_key_report(audit_keys(self.registry, self.context))
 
+    def _meld_verweesde_pulse_skills(self) -> list[str]:
+        """Een pulse-skill die aan GEEN ENKELE levende rol is toegekend, draait nooit.
+
+        Dit is de derde puls-toestand, en de enige die werk voor een mens is. De andere twee
+        (overgeslagen door ritme, gedraaid en niets gevonden) zijn rust en blijven log-only.
+
+        WAAROM DIT OP DORPSNIVEAU STAAT en niet in de rol-lus: "ik heb deze skill niet" is voor
+        vrijwel elke rol de normale toestand — de Copywriter hoort geen claims-scan te draaien.
+        Per rol melden zou 31 rollen × 2 skills = 62 meldingen per puls opleveren voor iets wat
+        niemand hoeft op te lossen. Een rol kan bovendien niet weten of een ANDER hem heeft; alleen
+        het dorp weet dat. Eén keer per puls, gededupliceerd door de HumanInbox op `gap_key`.
+
+        Geeft de verweesde skill-namen terug (leeg = alles is belegd)."""
+        rauw = self.context.settings.get("pulse_skills", "claims_site_scan")
+        skills = [x.strip() for x in str(rauw).split(",") if x.strip()]
+        belegd: set[str] = set()
+        for rec in self.records.all():
+            if getattr(rec, "slaapt", False) or getattr(rec, "archived", False):
+                continue                                   # een slapende rol draagt geen capaciteit
+            belegd.update((getattr(rec, "definition", None) and rec.definition.skills) or [])
+        wees = [s for s in skills if s not in belegd]
+        log = logging.getLogger("village")
+        if not wees:
+            log.info("⏱ pulse-skills belegd: %s — elke skill heeft minstens één rol",
+                     ", ".join(skills) or "(geen)")
+            return []
+        for naam in wees:
+            log.warning("⏱ pulse-skill '%s' is aan GEEN ENKELE levende rol toegekend — "
+                        "hij loopt mee op de puls maar draait nooit", naam)
+            try:                                           # fail-soft: melden mag de puls niet breken
+                self.human_inbox.add_means_gap(
+                    f"pulse_skill:{naam}",
+                    f"Periodieke skill '{naam}' loopt mee op de dagpuls maar is aan geen enkele "
+                    f"levende rol toegekend — hij draait dus nooit.",
+                    sensed_by="dorp")
+            except Exception:                              # noqa: BLE001
+                log.warning("⏱ verweesde pulse-skill '%s' niet gemeld", naam)
+        return wees
+
+    def _veilig_verweesd(self) -> None:
+        try:
+            self._meld_verweesde_pulse_skills()
+        except Exception as e:                             # noqa: BLE001
+            logging.getLogger("village").warning("verweesde-pulse-skill-check faalde: %s", e)
+
     def run_forever(self):
         print(self.report_keys())
         self.bus.subscribe("pulse_completed", lambda e: logging.getLogger("village").info(
             "✅ dagpuls verwerkt — het dorp leeft en wacht nu op de volgende dag-puls. "
             "Geen nieuwe regels = normaal, niet vastgelopen. Ctrl+C om te stoppen."))
+        # De nul moet zichzelf verklaren: na elke puls één keer toetsen of elke pulse-skill
+        # überhaupt een eigenaar heeft. Fail-soft — een controle mag de puls nooit breken.
+        self.bus.subscribe("pulse_completed", lambda e: self._veilig_verweesd())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
