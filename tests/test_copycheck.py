@@ -233,3 +233,27 @@ def test_elke_bevinding_noemt_zijn_bronpolicy():
     hits = cc.check_alles("Hey friend, you eco-warrior!", att)
     bronnen = {h["policy"] for h in hits}
     assert bronnen == {"COPYCHECK-001", "TONEOFVOICE-001"}, bronnen
+
+
+def test_de_checker_dedupliceert_niet_over_policies():
+    """DRIFT IS HEDEN, EN DE CHECKER VERBERGT HEM NIET. `biodegradable` staat in twee copy-policies;
+    beide flaggen. Dedupliceren zou dat verstoppen — dan lijkt het één regel terwijl het er twee zijn,
+    en dan merkt niemand dat ze uit elkaar kunnen lopen. De opschoning is een policy-vraag, niet iets
+    wat de checker cosmetisch oplost."""
+    tweede = BODY.replace("bron_vereist: biodegradable", "bron_vereist: biodegradable")
+    att = _Att({"COPYCHECK-001": BODY, "POSITIONSTAT-001": tweede})
+    hits = cc.check_alles("Our soles are biodegradable.", att)
+    bronnen = sorted(h["policy"] for h in hits if "biodegradable" in h["regel"])
+    assert bronnen == ["COPYCHECK-001", "POSITIONSTAT-001"], bronnen
+
+
+def test_laag_1_blijft_letterlijk():
+    """LAAG 1 FUZZY MAKEN ERODEERT DE SCHEIDING. De policy verbiedt "lasts longer than leather";
+    echte copy schrijft "they last longer than leather". Laag 1 flagt dat NIET, en dat is de grens —
+    een vergelijkende claim heeft oneindig veel bewoordingen en hoort bij het oordeel van laag 2.
+
+    Zou laag 1 gaan stemmen, dan is de term in het blok niet meer letterlijk in de prosa terug te
+    vinden, en verdwijnt de grond waarop hij mag bestaan."""
+    blok = {"verboden": ["lasts longer than leather"], "bron_vereist": [], "limieten": {}}
+    assert cc.check("They last longer than leather.", blok) == []
+    assert cc.check("It lasts longer than leather.", blok)

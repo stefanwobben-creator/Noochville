@@ -340,6 +340,42 @@ vragen om bijstellen, dit om stoppen.
 `village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
 Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
 
+### Literaal token is laag 1, claim-concept is laag 2
+
+De copy-checker heeft twee lagen, en de grens ertussen is niet "makkelijk versus moeilijk" maar
+**grondbaar versus oordeel**:
+
+| | laag 1 (cockpit, deterministisch) | laag 2 (chat, oordeel) |
+|---|---|---|
+| vangt | een LETTERLIJK token: `biodegradable`, `100% natural`, `at Nooch, we believe` | een CLAIM-CONCEPT in elke bewoording |
+| grond | het staat er, of het staat er niet | een mens leest het |
+
+De vondst die de grens scherp maakte: de policy verbiedt *"lasts longer than leather"*, en echte copy
+schrijft *"they last longer than leather"*. Laag 1 flagde niets.
+
+**Dat is geen gat in laag 1 maar de grens zelf.** Een vergelijkende claim heeft oneindig veel
+bewoordingen; hem met stemming of fuzzy matching willen vangen maakt de match onnauwkeurig én breekt
+de koppeltest — want dan is de term in het blok niet meer letterlijk in de prosa terug te vinden, en
+verdwijnt de grond waarop laag 1 mag bestaan.
+
+**Laag 1 fuzzy maken erodeert de scheiding.** Wat je niet letterlijk kunt aanwijzen, hoort bij het
+oordeel — daar is laag 2 voor, met de policy als prompt.
+
+Praktisch gevolg voor extractie: een policy die vooral uit Do/Don't-VOORBEELDEN bestaat levert een
+klein blok en een grote laag-2-prompt. Dat is de juiste verdeling, geen tekortkoming.
+
+#### Twee aandachtspunten, geen actie
+
+- **Een voorbeeldzin is geen regel.** `POSITIONSTAT-001` citeert *"lasts longer than leather"* waar
+  een regel bedoeld is ("geen vergelijkende duurzaamheidsclaim zonder lifecycle-studie"). Dat als
+  regel herschrijven is een verbetering langs Community & Email — en hij helpt óók de laag-2-prompt.
+  Bewuste policy-wijziging, geen extractie.
+- **Drift is heden, niet toekomst.** `biodegradable` flagt nu al uit twee policies (COPYCHECK en
+  POSITIONSTAT), en Compliance hanteert dezelfde regel nog een derde keer. De checker toont **beide
+  bronpolicies en dedupliceert niet** — dat is eerlijk: hij laat zien dat de regel op twee plekken
+  staat in plaats van dat te verbergen. De opschoning is C&E-hygiëne. Streefbeeld: één bron, waarbij
+  Compliance op dezelfde policy grondt als de checker.
+
 ### Meet de compositie, niet één ingrediënt — en erf geen grond
 
 Ik meldde dat de copy-generator de tekstpolicies niet zag: hij las alleen `STANCE`, `WIP`,
