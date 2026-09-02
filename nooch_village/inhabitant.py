@@ -1304,23 +1304,59 @@ class Inhabitant(threading.Thread):
         (er is iets gevonden dat aandacht vraagt). Alles wat hier staat is generiek — geen
         skill-specifieke kennis, anders wordt elke skill een dode capability voor elke andere rol."""
         gegrant = set(self.capabilities())
+        telling = {"gedraaid": 0, "overgeslagen": 0, "geen_grant": 0, "gemeld": 0, "fout": 0}
         for naam in self._periodieke_skills():
+            # TOESTAND 3 — NIET GEDRAAID, GEEN GRANT. Alleen TELLEN, hier geen signaal.
+            #
+            # DIT IS DE PLEK WAAR EEN DROGE RUN ME REDDE. Eerst meldde deze tak per rol een
+            # capaciteitsgat. Dat zijn 31 rollen × 2 pulse-skills = 62 meldingen per puls, voor de
+            # normaalste zaak van de wereld: de Copywriter hóórt geen claims-scan te draaien.
+            # Precies de 135 vastgelopen-project-notificaties opnieuw (zie CONVENTIES).
+            #
+            # "Deze rol heeft de grant niet" is rust. Het echte gat is "GEEN ENKELE rol heeft hem" —
+            # en dat weet een rol niet over zichzelf. Die check staat op dorpsniveau
+            # (`village._meld_verweesde_pulse_skills`), draait één keer per puls, en dedupliceert.
             if naam not in gegrant:
+                telling["geen_grant"] += 1
                 continue
             uitslag = self.use_skill(naam, {})
-            if not isinstance(uitslag, dict) or uitslag.get("skipped"):
+            if not isinstance(uitslag, dict):
+                telling["fout"] += 1
+                self.log.warning("⏱ periodieke skill '%s' gaf geen uitslag terug (%s) — "
+                                 "niet te onderscheiden van niets gevonden, dus gemeld",
+                                 naam, type(uitslag).__name__)
+                continue
+            # TOESTAND 1 — OVERGESLAGEN DOOR ZIJN EIGEN RITME. Log-only: er is niets mis. Maar de
+            # REDEN moet erbij, anders leest een maandelijkse skill die vandaag niet aan de beurt
+            # is er hetzelfde uit als een skill die stuk is.
+            if uitslag.get("skipped"):
+                telling["overgeslagen"] += 1
+                self.log.info("⏱ periodieke skill '%s' overgeslagen — %s", naam,
+                              uitslag.get("reden") or "ritme zegt: deze periode al gedaan")
                 continue
             escalatie = uitslag.get("escalate")
             if escalatie or not uitslag.get("ok", True):
+                telling["fout"] += 1
                 reden = (escalatie or {}).get("reason") or uitslag.get("error") or "onbekende fout"
                 self.log.warning("⏱ periodieke skill '%s' kon niet draaien: %s", naam, reden)
                 self._notify_founder("", f"⏱ '{naam}' kon niet draaien: {reden}")
                 continue
+            # TOESTAND 2 — GEDRAAID. Met of zonder vondst; allebei log-only, en allebei expliciet.
             headsup = uitslag.get("headsup")
+            telling["gedraaid"] += 1
             if headsup:
+                telling["gemeld"] += 1
                 self._notify_founder("", str(headsup))
-            self.log.info("⏱ periodieke skill '%s' gedraaid%s", naam,
-                          f" — {headsup}" if headsup else "")
+            self.log.info("⏱ periodieke skill '%s' gedraaid — %s", naam,
+                          headsup if headsup else "niets gevonden")
+        # EEN NUL MOET ZICHZELF VERKLAREN. Zonder deze regel is "geen notificaties vandaag" niet te
+        # onderscheiden van "de puls draaide niet" — en dan verzint de lezer een verklaring.
+        if any(telling.values()):
+            self.log.info("⏱ pulsbalans %s: %d gedraaid (%d gemeld), %d overgeslagen door ritme, "
+                          "%d niet van deze rol, %d fout", self.id,
+                          telling["gedraaid"], telling["gemeld"], telling["overgeslagen"],
+                          telling["geen_grant"], telling["fout"])
+        return telling
 
     def _claim_run_complete(self, pid: str) -> None:
         """Voer een ACTIEF project uit via zijn checklist. Markeert DONE ALLEEN als run_project een outcome

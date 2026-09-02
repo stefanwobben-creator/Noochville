@@ -179,6 +179,9 @@ def test_de_conventies_staan_opgeschreven():
     assert "in de volgorde waarin de LEZER het tegenkomt" in doc
     # Identifier versus label, en chrome volgt zijn lezer.
     assert "Een identifier is mechaniek, een label is content" in doc
+    # De duurdere variant van no_data != nul: wat stilte met de LEZER doet.
+    assert "Een onwaarneembare nul fabriceert verklaringen" in doc
+    assert "elke tak die niets doet, logt waar\u00f3m hij niets doet" in doc
     assert "chrome volgt zijn lezer" in doc.lower()
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
     # Eén getal kan stijgen terwijl de suggesties slechter worden: lees het paar.

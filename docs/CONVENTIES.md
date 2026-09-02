@@ -350,6 +350,31 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Een onwaarneembare nul fabriceert verklaringen
+
+`no_data ≠ nul` kennen we als datafout. De duurdere variant is wat een onwaarneembare nul doet met
+de MENS die ernaar kijkt: hij verbergt niet alleen een bug, hij **produceert actief een verkeerde
+verklaring**. Een nul zonder reden is een lege plek, en een lege plek wordt ingevuld.
+
+Gemeten op 2 september 2026. Eén kale `continue` in de pulslus plakte drie toestanden op dezelfde
+nul: *overgeslagen door zijn eigen ritme*, *gedraaid en niets gevonden*, *nooit gedraaid want geen
+grant*. De dagpuls schreef nul notificaties. Twee onderzoekers verklaarden die nul anderhalf uur
+lang verkeerd — eerst als een dode LLM-ladder, daarna als een stille drop — terwijl het gewoon een
+maandelijkse skill was die deze maand al gemeten had. Er was niets stuk. De stilte was het defect.
+
+**De regel: elke tak die niets doet, logt waaróm hij niets doet.** En onderscheid daarbij de
+toestanden op wat ze van een mens vragen, niet op hoe ze eruitzien:
+
+| toestand | wat het is | route |
+|---|---|---|
+| overgeslagen door ritme | correct gedrag | log, mét de reden |
+| gedraaid, niets gevonden | correct gedrag | log, expliciet "niets gevonden" |
+| nooit gedraaid, geen capaciteit | een gat | het bestaande spanningspad, niet het log |
+
+Twee daarvan zijn rust en één is werk; dat verschil hoort niet uit een logregel afgeleid te worden.
+En een lus die dit onderscheidt, sluit af met een **telling per toestand** — dan draagt de nul zijn
+eigen verklaring en hoeft niemand er een te bedenken.
+
 ### Een identifier is mechaniek, een label is content
 
 **Een sleutel die twee kanten aan elkaar koppelt, is een identifier: hij blijft stabiel.** Een
