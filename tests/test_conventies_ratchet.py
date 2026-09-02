@@ -181,6 +181,8 @@ def test_de_conventies_staan_opgeschreven():
     assert "Een identifier is mechaniek, een label is content" in doc
     # De duurdere variant van no_data != nul: wat stilte met de LEZER doet.
     assert "Een onwaarneembare nul fabriceert verklaringen" in doc
+    # Cache versus record bij een corrupt bestand.
+    assert "Leeg beginnen mag dus, stil beginnen niet" in doc
     assert "elke tak die niets doet, logt waar\u00f3m hij niets doet" in doc
     assert "chrome volgt zijn lezer" in doc.lower()
     assert "Grond stopt fabricatie, niet irrelevantie" in doc

@@ -184,7 +184,15 @@ def test_password_change_page_forced_verbergt_huidig_veld():
     assert "onjuist" in _auth.password_change_page(error="onjuist")
 
 
-def test_invalidate_user_is_noop_en_breekt_niets(tmp_path):
+def test_invalidate_user_laat_de_eigen_verse_sessie_staan(tmp_path):
+    """Was 'no-op' zolang de store in het geheugen leefde. Nu sessies een herstart overleven doet
+    hij echt werk — maar met één sessie, die je zelf wilt houden, is de uitkomst hetzelfde: niets
+    ingetrokken, eigen sessie intact."""
     s = _auth.SessionStore(); tok = s.create(EMAIL)
-    assert s.invalidate_user(EMAIL, keep_token=tok) == 0                   # no-op nu
-    assert s.get_username(tok) == EMAIL                                    # eigen sessie intact
+    assert s.invalidate_user(EMAIL, keep_token=tok) == 0
+    assert s.get_username(tok) == EMAIL
+
+    ouder = s.create(EMAIL)                                                # tweede sessie erbij
+    nieuw = s.create(EMAIL)
+    assert s.invalidate_user(EMAIL, keep_token=nieuw) == 2                 # tok + ouder eruit
+    assert s.get_username(nieuw) == EMAIL and s.get_username(ouder) is None
