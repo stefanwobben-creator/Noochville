@@ -125,7 +125,39 @@ def parse_blok(body: str) -> tuple[dict, str]:
         except (TypeError, ValueError):
             return {}, f"limiet '{naam}' hoort [getal, \"prosa-anker\"] te zijn"
     uit["limieten"] = lim
+    regels = {}
+    for naam, anker_tekst in (rauw.get("regels") or {}).items():
+        if naam not in BENOEMDE_REGELS:
+            return {}, f"onbekende regel '{naam}' — er is geen mechaniek voor"
+        regels[str(naam)] = str(anker_tekst)
+    uit["regels"] = regels
     return uit, ""
+
+
+#: BENOEMDE REGELS: het MECHANISME staat hier, de REGEL staat in een policy.
+#:
+#: De percentage-check zat eerst als losse `if` in `check()` en vuurde bij élke policy mee. Een regel
+#: in code is een ONGEREGULEERDE regel: geen eigenaar, geen prosa, geen koppeltest — precies het gat
+#: dat het structuurblok dicht. Hij vuurde ook drie keer voor iets wat maar in één policy staat.
+#:
+#: Nu declareert een policy hem, met het prosa-fragment dat hem uitspreekt:
+#:
+#:     "regels": {"percentage_zonder_bron": "Percentages without a source"}
+#:
+#: De code weet HOE je een percentage zonder bron herkent (tellen, matchen, parsen). De policy zegt
+#: DAT de regel geldt, en waar dat staat. Een onbekende regelnaam is een klacht: dan verwijst een
+#: policy naar mechaniek die niet bestaat.
+def _percentage_zonder_bron(zinnen: list[str]) -> list[tuple[str, str]]:
+    uit = []
+    for zin in zinnen:
+        if _GETAL_MET_PROCENT.search(zin) and not _BRON_NABIJ.search(zin):
+            uit.append((zin, "voeg de bron toe waar dit getal vandaan komt"))
+    return uit
+
+
+BENOEMDE_REGELS = {
+    "percentage_zonder_bron": ("percentage zonder bron", _percentage_zonder_bron),
+}
 
 
 def _plat(t: str) -> str:
@@ -148,6 +180,11 @@ def koppeltest(body: str) -> list[str]:
         for term in blok.get(sleutel, []):
             if _plat(term) not in prosa:
                 klachten.append(f"'{term}' staat in het blok ({sleutel}) maar niet in de prosa")
+    for naam, anker in (blok.get("regels") or {}).items():
+        if not anker:
+            klachten.append(f"regel '{naam}' heeft geen prosa-anker — dan is hij niet te staven")
+        elif _plat(anker) not in prosa:
+            klachten.append(f"het anker van regel '{naam}' staat niet in de prosa: “{anker}”")
     for naam, (getal, anker) in (blok.get("limieten") or {}).items():
         if not anker:
             klachten.append(f"limiet '{naam}' heeft geen prosa-anker — dan is hij niet te staven")
@@ -168,6 +205,11 @@ def koppeltest(body: str) -> list[str]:
 _ZIN = re.compile(r"[^.!?\n]+[.!?]?")
 _EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿️]")
 _GETAL_MET_PROCENT = re.compile(r"\b\d+(?:[.,]\d+)?\s*%")
+# Woorden die een BRON aankondigen. Dit is mechaniek (hoe herken je een bronvermelding), niet de
+# regel zelf — die staat in de policy. Ruim: liever een percentage mét bron doorlaten dan een
+# schrijver lastigvallen die netjes citeerde.
+_BRON_NABIJ = re.compile(r"\b(bron|source|sources|volgens|according|aldus|per|zie|see|"
+                         r"TRAID|Higg)\b", re.I)
 
 
 def _zinnen(tekst: str) -> list[str]:
@@ -202,10 +244,10 @@ def check(tekst: str, blok: dict, *, policy_id: str = "") -> list[dict]:
                     "suggestie": "noem de bron, of gebruik de toegestane formulering",
                     "policy": policy_id})
 
-    for zin in zinnen:
-        if _GETAL_MET_PROCENT.search(zin) and not re.search(r"\b(bron|source|volgens|per)\b", zin, re.I):
-            uit.append({"regel": "percentage zonder bron", "citaat": zin,
-                        "suggestie": "voeg de bron toe waar dit getal vandaan komt",
+    for naam in (blok.get("regels") or {}):
+        label, detector = BENOEMDE_REGELS[naam]
+        for citaat, suggestie in detector(zinnen):
+            uit.append({"regel": label, "citaat": citaat, "suggestie": suggestie,
                         "policy": policy_id})
 
     tellers = {"emoji": len(_EMOJI.findall(tekst or "")),
