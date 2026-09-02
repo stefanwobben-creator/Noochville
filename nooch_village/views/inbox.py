@@ -886,10 +886,28 @@ var IBX_CSRF=__IBX_CSRF__;
 function ibxToggle(){var d=document.getElementById('ibx-drawer');d.classList.toggle('open');
   if(d.classList.contains('open'))ibxRefresh();}
 function ibxAddToggle(){document.getElementById('ibx-add').classList.toggle('open');}
+function ibxMelding(t){var e=document.getElementById('ibx-melding');
+  if(!e)return;e.textContent=t||'';e.classList.toggle('hide',!t);}
+/* EEN MISLUKTE POST MOET ZICHZELF MELDEN. Stond hier eerst een kale fetch: het veld leegde zich,
+   de drawer klapte dicht, de lijst ververste — en er was niets toegevoegd. Een 403 na een herstart
+   (sessie en CSRF-token leven in het procesgeheugen) zag er precies zo uit als succes. */
 function ibxPost(a,x){return fetch('/action',{method:'POST',
   headers:{'Content-Type':'application/x-www-form-urlencoded'},
-  body:new URLSearchParams(Object.assign({action:a,csrf:IBX_CSRF,next:'/inbox'},x||{}))});}
-function ibxRefresh(){return fetch('/inbox?frag=1').then(function(r){return r.text();}).then(function(h){
+  body:new URLSearchParams(Object.assign({action:a,csrf:IBX_CSRF,next:'/inbox'},x||{}))})
+  .then(function(r){
+    if(r.ok){ibxMelding('');return r;}
+    ibxMelding(r.status===403?'Your session expired — reload the page and sign in again.'
+                             :'Could not save that ('+r.status+'). Nothing was added.');
+    throw new Error('ibxPost '+r.status);})
+  .catch(function(e){
+    if(String(e.message||'').indexOf('ibxPost')!==0)
+      ibxMelding('No connection to the village. Nothing was added.');
+    throw e;});}
+function ibxRefresh(){return fetch('/inbox?frag=1').then(function(r){
+  if(!r.ok){ibxMelding(r.status===403?'Your session expired — reload the page and sign in again.'
+                                     :'Could not load the inbox ('+r.status+').');
+            throw new Error('ibxRefresh '+r.status);}
+  return r.text();}).then(function(h){
   var t=document.createElement('div');t.innerHTML=h;var w=t.firstElementChild;
   var cnt=w?parseInt(w.getAttribute('data-count')||'0',10):0;
   document.getElementById('ibx-list').innerHTML=w?w.innerHTML:h;
@@ -908,7 +926,8 @@ function ibxFrameLoad(){try{var p=document.getElementById('ibx-frame').contentWi
   if(p==='/inbox'){ibxCloseModal();ibxThumb();ibxRefresh();}}catch(e){}}
 function ibxAddSubmit(){var t=document.getElementById('ibx-addtext'),r=document.getElementById('ibx-addrole');
   if(!t.value.trim())return;ibxPost('notif_add',{text:t.value.trim(),role:r.value}).then(function(){
-    t.value='';ibxAddToggle();ibxRefresh();});}
+    t.value='';ibxAddToggle();ibxRefresh();}).catch(function(){/* melding staat er al; tekst blijft
+    staan zodat de mens hem niet opnieuw hoeft te typen */});}
 function ibxTrash(nid){ibxPost('notif_delete',{nid:nid}).then(ibxRefresh);}
 function ibxThumb(){var t=document.getElementById('ibx-thumb');t.classList.add('on');
   setTimeout(function(){t.classList.remove('on');},900);}
@@ -945,7 +964,8 @@ def render_inbox_chrome(csrf_token: str = "", role_opts: str = "") -> str:
               "<div class='ibx-head'><h2>Inbox</h2><span class='ibx-hct' id='ibx-hct'>0</span>"
               "<button class='ibx-plus' title='Add tension' onclick='ibxAddToggle()'>+</button>"
               "<button class='ibx-x' title='close' onclick='ibxToggle()'>&times;</button></div>"
-              "<div class='ibx-sub' id='ibx-sub'></div>" + add +
+              "<div class='ibx-sub' id='ibx-sub'></div>"
+              "<div class='ibx-sub ibx-err hide' id='ibx-melding'></div>" + add +
               "<div class='ibx-list' id='ibx-list'></div></aside>")
     modal = ("<div class='ibx-scrim' id='ibx-scrim'><div class='ibx-modal'>"
              "<button class='ibx-mx' title='close' onclick='ibxCloseModal()'>&times;</button>"
