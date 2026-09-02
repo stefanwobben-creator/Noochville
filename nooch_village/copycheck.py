@@ -30,6 +30,8 @@ het prosa-fragment dat hem uitspreekt. Het blok mag geen regel dragen die de pro
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 
 #: DE GROND VAN DE CHECKER, expliciet en los van de generator.
@@ -60,7 +62,7 @@ def regels_uit(att, policies=COPY_POLICIES) -> list[tuple[str, dict]]:
             a = None
         if a is None:
             continue
-        blok = parse_blok(getattr(a, "body", "") or "")
+        blok, _fout = parse_blok(getattr(a, "body", "") or "")
         if blok:
             uit.append((pid, blok))
     return uit
@@ -76,6 +78,8 @@ def check_alles(tekst: str, att, policies=COPY_POLICIES) -> list[dict]:
 
 #: De fence waarin het blok staat. Bewust een eigen taal-tag: een lezer ziet meteen dat dit geen
 #: voorbeeld is maar de regels zelf.
+log = logging.getLogger("village.copycheck")
+
 _FENCE = re.compile(r"```check\s*\n(.*?)```", re.S | re.I)
 
 #: Lijst-sleutels (komma-gescheiden termen) en limiet-sleutels (getal + prosa-anker).
@@ -87,33 +91,41 @@ _GETALWOORD = {0: ("0", "zero", "nul", "geen"), 1: ("1", "one", "één", "een"),
                2: ("2", "two", "twee"), 3: ("3", "three", "drie")}
 
 
-def parse_blok(body: str) -> dict:
-    """Het structuurblok uit een policy-body. Geeft {} als er geen blok is.
+def parse_blok(body: str) -> tuple[dict, str]:
+    """Het structuurblok uit een policy-body als (blok, fout). Geen blok → ({}, "").
 
-    Vorm: {"verboden": [...], "bron_vereist": [...], "limieten": {"emoji": (0, "Zero emoji"), ...}}
-    """
+    JSON, EN DAT IS DE DERDE KEER DAT STRUCTUUR OP CONTENT STUKLIEP. Eerst een `sleutel: waarde`-
+    formaat met komma-gescheiden termen — tot `"At Nooch, we believe"` in tweeën brak. Quoting loste
+    dat op en verplaatste de botsing naar het aanhalingsteken; een policy die een citaat bevat had hem
+    opnieuw geraakt.
+
+    Zelfde familie als de 4000-cap-truncatie en de titel-amputatie: een structuur die botst met
+    content die diezelfde structuur bevat. De duurzame vorm is niet betere quoting maar een formaat
+    waarin het niet KÁN botsen — JSON heeft gedefinieerde escaping en een echte parser.
+
+    En hij faalt LUID: een kapot blok geeft een foutmelding terug in plaats van stilletjes {}, want
+    "geen blok" en "kapot blok" zijn twee verschillende dingen en de tweede hoort niemand stil op
+    groen te zetten."""
     m = _FENCE.search(body or "")
     if not m:
-        return {}
-    uit: dict = {k: [] for k in _LIJSTEN}
-    uit["limieten"] = {}
-    for regel in m.group(1).splitlines():
-        regel = regel.strip()
-        if not regel or regel.startswith("#") or ":" not in regel:
-            continue
-        sleutel, _, waarde = regel.partition(":")
-        sleutel, waarde = sleutel.strip().lower(), waarde.strip()
-        if sleutel in _LIJSTEN:
-            uit[sleutel] = [t.strip() for t in waarde.split(",") if t.strip()]
-            continue
-        lim = _LIMIET.match(sleutel)
-        if lim:
-            getal, _, anker = waarde.partition("|")
-            try:
-                uit["limieten"][lim.group(1)] = (int(getal.strip()), anker.strip())
-            except ValueError:
-                continue
-    return uit
+        return {}, ""
+    try:
+        rauw = json.loads(m.group(1))
+    except ValueError as e:
+        log.warning("structuurblok is geen geldige JSON: %s", e)
+        return {}, f"het blok is geen geldige JSON: {e}"
+    if not isinstance(rauw, dict):
+        return {}, "het blok is geen JSON-object"
+    uit: dict = {k: [str(t) for t in (rauw.get(k) or [])] for k in _LIJSTEN}
+    lim = {}
+    for naam, waarde in (rauw.get("limieten") or {}).items():
+        try:
+            getal, anker = waarde
+            lim[str(naam)] = (int(getal), str(anker))
+        except (TypeError, ValueError):
+            return {}, f"limiet '{naam}' hoort [getal, \"prosa-anker\"] te zijn"
+    uit["limieten"] = lim
+    return uit, ""
 
 
 def _plat(t: str) -> str:
@@ -125,7 +137,9 @@ def koppeltest(body: str) -> list[str]:
 
     Dit is de reden dat het blok mag bestaan. Zonder deze test is het een tweede waarheid die
     stilletjes iets anders gaat zeggen dan de tekst die de eigenaar leest en onderhoudt."""
-    blok = parse_blok(body)
+    blok, fout = parse_blok(body)
+    if fout:
+        return [fout]                                   # een kapot blok is een klacht, geen stilte
     if not blok:
         return []
     prosa = _plat(_FENCE.sub(" ", body or ""))          # de prosa is alles BUITEN het blok
