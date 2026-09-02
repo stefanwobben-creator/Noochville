@@ -350,6 +350,24 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Een cache mag leeg opstarten, een record niet — en nooit stil
+
+`read_json` gooit bewust op een corrupt bestand: stil leeg opstarten en bij de volgende save
+overschrijven is hoe je data verliest. Die regel geldt voor **records** — de waarheid, die alleen
+in dat bestand bestaat.
+
+Voor een **cache** ligt het andersom. Sessies en het csrf-token zijn afgeleide staat: kwijt betekent
+dat iedereen opnieuw inlogt, precies de situatie van vóór ze bestonden. Fail-closed betekent daar
+een cockpit die niet start — strikt erger dan het probleem.
+
+**Leeg beginnen mag dus, stil beginnen niet.** Een `WARNING` die zegt wát er weg is en wat de mens
+merkt, is het verschil tussen fail-open en wegkijken; zonder die regel is het onderscheid met een
+bug niet te maken. De test controleert op de waarschuwing, niet alleen op het herstel.
+
+En: **vervang het kapotte bestand meteen.** Elke schrijfmethode van een `JsonStore` herlaadt onder
+het slot, dus een corrupt bestand dat je alleen negeert laat niet de start falen maar de eerste
+schrijf — bij sessies dus het inloggen. De reparatie hoort bij het moment dat je het merkt.
+
 ### Een onwaarneembare nul fabriceert verklaringen
 
 `no_data ≠ nul` kennen we als datafout. De duurdere variant is wat een onwaarneembare nul doet met

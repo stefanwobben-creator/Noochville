@@ -100,11 +100,14 @@ def test_session_delete():
 
 
 def test_session_verloopt(monkeypatch):
+    """De klok is time.time() en niet time.monotonic(), en dat is de kern van de persistente
+    store: monotonic telt vanaf het opstarten van de MACHINE en heeft geen betekenis in een
+    volgend proces. Een vervaldatum die een herstart niet overleeft, maakt persistente sessies
+    zinloos — dan logt iedereen alsnog uit, maar stiller."""
     sessions = auth.SessionStore(ttl=10)
     token = sessions.create("stefan@nooch.earth")
-    # spring voorbij de TTL
-    base = time.monotonic()
-    monkeypatch.setattr(auth.time, "monotonic", lambda: base + 11)
+    base = time.time()
+    monkeypatch.setattr(auth.time, "time", lambda: base + 11)
     assert sessions.get_username(token) is None
 
 

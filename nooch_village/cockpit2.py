@@ -6730,9 +6730,13 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     dd = data_dir or _default_data_dir()
     _load_env()   # LLM-keys beschikbaar maken voor 'AI praat mee'
     _bootstrap(dd)
-    csrf_token = secrets.token_urlsafe(32)
+    # Ook het CSRF-token overleeft de herstart. Anders blijft een tab die openstond tijdens een
+    # deploy 403 krijgen — alleen met een andere tekst, en voor de mens is dat hetzelfde.
+    csrf_token = _auth.load_or_create_csrf(os.path.join(dd, "csrf.json"))
     users    = _auth.UserStore(os.path.join(dd, "people.json"))
-    sessions = _auth.SessionStore()
+    # PERSISTENT: sessies moeten een deploy overleven. Leefden ze in het geheugen, dan logde elke
+    # herstart iedereen uit — en tot #425 zag je dat niet eens, want de drawer slikte de 403.
+    sessions = _auth.SessionStore(os.path.join(dd, "sessions.json"))
     _Stores(dd).people.backfill_must_change()   # markeer uitstaande temps 'moet wijzigen' (idempotent)
     httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token, sessions, users))
     httpd.daemon_threads = True
