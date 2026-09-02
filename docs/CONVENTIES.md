@@ -340,6 +340,35 @@ vragen om bijstellen, dit om stoppen.
 `village triage_ratio` drukt beide af; het pairen is een LEESHANDELING, geen ontbrekende functie.
 Zelfde valkuil als bij `scope_nudge`: nul calls zag eruit als winst en was stilte.
 
+### Structuur botst met content die de structuur bevat — kies een formaat waarin het niet kán
+
+Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
+
+| | de structuur | de content die hem raakte |
+|---|---|---|
+| titel-amputatie | `[:90]` op een zin | een woord dat over de grens viel |
+| policy-truncatie | een cap van 4000 | een body die er net overheen ging |
+| blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
+
+**Quoting is geen oplossing maar een verplaatsing.** Termen tussen aanhalingstekens zetten loste de
+komma op en verplaatste de botsing naar het aanhalingsteken — een policy die een citaat bevat had hem
+opnieuw geraakt, en dan zonder dat iemand iets fout schreef.
+
+De duurzame vorm is een formaat waarin het **niet kán botsen**: gedefinieerde escaping en een echte
+parser. Het structuurblok is daarom JSON. Eén term per regel had ook gekund; de keuze viel op JSON
+omdat een echte parser er ook nog bij zegt wát er stuk is.
+
+**En het faalt luid.** Een kapot blok geeft een klacht terug, niet stilletjes `{}`: *"geen blok"* en
+*"kapot blok"* zijn twee verschillende dingen, en de tweede hoort niemand stil op groen te zetten.
+De koppeltest is de schrijfpoort, dus een onleesbaar blok komt er niet in.
+
+#### En de negatieve casus van een test moet negatief zijn tegen DIT onderwerp
+
+Mijn bewijs "een verzonnen term laat de koppeltest vallen" gebruikte `greenwashing` — dat staat
+gewoon in de TONEOFVOICE-prosa. De test zweeg dus terecht en bewees niets. Een geleende constante
+maakt van een bewijs een ritueel: de tegenvoorbeeld-waarde hoort per onderwerp gekozen en
+aantoonbaar afwezig te zijn.
+
 ### Literaal token is laag 1, claim-concept is laag 2
 
 De copy-checker heeft twee lagen, en de grens ertussen is niet "makkelijk versus moeilijk" maar
