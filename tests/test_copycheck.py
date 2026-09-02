@@ -257,3 +257,18 @@ def test_laag_1_blijft_letterlijk():
     blok = {"verboden": ["lasts longer than leather"], "bron_vereist": [], "limieten": {}}
     assert cc.check("They last longer than leather.", blok) == []
     assert cc.check("It lasts longer than leather.", blok)
+
+
+def test_een_term_mag_zelf_een_komma_bevatten():
+    """GEVONDEN IN DE DROGE RUN OP TONEOFVOICE-001. `At Nooch, we believe` brak in tweeën, en
+    `At Nooch` alleen flagt élke zin die zo begint — veel te breed, en niet meer wat de policy zegt.
+
+    Een scheidingsteken dat ook in de data voorkomt heeft een ontsnapping nodig; anders verandert de
+    betekenis stilletjes bij het LEZEN, zonder dat iemand iets fout schreef."""
+    body = ('prosa: At Nooch, we believe en Our mission is to\n\n'
+            '```check\nverboden: "At Nooch, we believe", Our mission is to\n```\n')
+    blok = cc.parse_blok(body)
+    assert blok["verboden"] == ["At Nooch, we believe", "Our mission is to"]
+    assert cc.koppeltest(body) == []
+    assert cc.check("At Nooch we make shoes.", blok) == [], "te breed: 'At Nooch' alleen"
+    assert cc.check("At Nooch, we believe in plants.", blok)

@@ -87,6 +87,22 @@ _GETALWOORD = {0: ("0", "zero", "nul", "geen"), 1: ("1", "one", "één", "een"),
                2: ("2", "two", "twee"), 3: ("3", "three", "drie")}
 
 
+#: Een term mag zelf een komma bevatten — dan staat hij tussen aanhalingstekens. Zonder dat brak
+#: `"At Nooch, we believe"` in tweeën, en `At Nooch` alleen flagt elke zin die zo begint: veel te
+#: breed, en niet meer wat de policy zegt. Een scheidingsteken dat ook in de data voorkomt heeft een
+#: ontsnapping nodig; anders verandert de betekenis stilletjes bij het lezen.
+_TERM = re.compile(r'"([^"]+)"|([^,]+)')
+
+
+def _termen(waarde: str) -> list[str]:
+    uit = []
+    for m in _TERM.finditer(waarde or ""):
+        t = (m.group(1) if m.group(1) is not None else m.group(2)).strip()
+        if t:
+            uit.append(t)
+    return uit
+
+
 def parse_blok(body: str) -> dict:
     """Het structuurblok uit een policy-body. Geeft {} als er geen blok is.
 
@@ -104,7 +120,7 @@ def parse_blok(body: str) -> dict:
         sleutel, _, waarde = regel.partition(":")
         sleutel, waarde = sleutel.strip().lower(), waarde.strip()
         if sleutel in _LIJSTEN:
-            uit[sleutel] = [t.strip() for t in waarde.split(",") if t.strip()]
+            uit[sleutel] = _termen(waarde)
             continue
         lim = _LIMIET.match(sleutel)
         if lim:
