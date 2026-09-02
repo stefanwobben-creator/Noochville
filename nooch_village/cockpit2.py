@@ -316,6 +316,7 @@ from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village import founder_kaart as _founder_kaart
 from nooch_village.copy_stack import StackConfig as CopyStackConfig
 from nooch_village.views.copy_prompt import render_copy_prompt
+from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
@@ -6175,6 +6176,13 @@ def make_handler(data_dir: str, csrf_token: str,
                     labels=_claims_labels.telling(data_dir),
                     bordresultaat=_claims_bordresultaat(qs)))
                 return
+            if path == "/copy-check":
+                # AUTHZ: iedereen-ingelogd — dezelfde read-scope als /copy-prompt en
+                # /node?tab=policies: de checker leest de copy-policies en rapporteert, en
+                # muteert niets. Een regel wijzigen blijft bij de domein-eigenaar via de
+                # artefact-routes.
+                self._send(render_copy_check(_Stores(data_dir), csrf_token=effective_csrf))
+                return
             if path == "/copy-prompt":
                 # AUTHZ: iedereen-ingelogd — dezelfde read-scope als /node?tab=policies en
                 # /context: de pagina toont policies die die routes ook al tonen, en schrijft
@@ -6489,6 +6497,18 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send_json({"error": str(e)}, 500)
                     return
 
+            if path == "/copy-check":
+                # AUTHZ: iedereen-ingelogd — scannen is lezen; er wordt niets geschreven.
+                username = self._session_username()
+                if sessions is not None and username is None:
+                    self._send("Not logged in", 403); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self._send("CSRF token invalid", 403); return
+                self._send(render_copy_check(_Stores(data_dir), csrf_token=csrf_token,
+                                             tekst=(form.get("tekst") or [""])[0]))
+                return
             if path == "/claims/scan":
                 # AUTHZ: iedereen-ingelogd — lezen/scannen is vrij; muteren blijft compliance.
                 # De URL wordt SERVER-side opgehaald (safe_fetch, met SSRF-guardrail), niet door de
