@@ -102,11 +102,37 @@ def test_een_claim_zonder_bron_wordt_aangewezen():
     assert hits and "bron nodig" in hits[0]["regel"]
 
 
-def test_een_percentage_zonder_bron_wordt_aangewezen():
-    hits = cc.check("We cut emissions by 40% last year.", cc.parse_blok(BODY)[0])
-    assert any("percentage zonder bron" in h["regel"] for h in hits)
-    schoon = cc.check("We cut emissions by 40% according to the TRAID source.", cc.parse_blok(BODY)[0])
-    assert not [h for h in schoon if "percentage" in h["regel"]]
+def test_een_regel_geldt_alleen_als_een_policy_hem_NOEMT():
+    """EEN REGEL IN CODE IS EEN ONGEREGULEERDE REGEL. De percentage-check zat als losse `if` in
+    `check()` en vuurde bij ÉLKE policy mee — geen eigenaar, geen prosa, geen koppeltest, en drie
+    treffers voor iets wat maar in één policy staat.
+
+    Nu declareert een policy hem, met het prosa-fragment dat hem uitspreekt. De code weet HOE je hem
+    herkent; de policy zegt DÁT hij geldt."""
+    zonder = cc.parse_blok(BODY)[0]                       # BODY noemt geen percentages
+    assert cc.check("We cut emissions by 40% last year.", zonder) == []
+
+    met = ('Percentages without a source are never claimed.\n\n'
+           '```check\n{"regels": {"percentage_zonder_bron": "Percentages without a source"}}\n```\n')
+    blok = cc.parse_blok(met)[0]
+    assert cc.koppeltest(met) == []
+    assert [h["regel"] for h in cc.check("We cut emissions by 40% last year.", blok)] == \
+        ["percentage zonder bron"]
+    assert cc.check("We cut emissions by 40%, according to TRAID.", blok) == []
+
+
+def test_een_onbekende_regelnaam_is_een_klacht():
+    """Een policy die naar mechaniek verwijst die niet bestaat, hoort te klagen — anders staat er
+    een regel in een blok die nooit vuurt en denkt iedereen dat hij gedekt is."""
+    verzonnen = ('prosa met Iets Verzonnen erin\n\n'
+                 '```check\n{"regels": {"verzonnen_regel": "Iets Verzonnen"}}\n```\n')
+    blok, fout = cc.parse_blok(verzonnen)
+    assert blok == {} and "onbekende regel" in fout
+
+
+def test_een_regel_zonder_prosa_anker_faalt_ook():
+    kaal = ('prosa\n\n```check\n{"regels": {"percentage_zonder_bron": ""}}\n```\n')
+    assert any("prosa-anker" in k for k in cc.koppeltest(kaal))
 
 
 def test_een_limiet_telt_en_zegt_hoeveel_eraf_moet():

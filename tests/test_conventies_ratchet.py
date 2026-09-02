@@ -166,6 +166,15 @@ def test_de_conventies_staan_opgeschreven():
     assert "Structuur botst met content die de structuur bevat" in doc
     # Drie instanties in één week: dan is "later" een fictie.
     assert "Bij de derde instantie migreer je de KLASSE" in doc
+    # De checker levert mechaniek, de policy levert de regel.
+    assert "hij bevat nooit een regel" in doc
+    assert "een bevinding zonder bronpolicy kan niet bestaan" in doc.lower()
+    # De splitsing zelf, en de drie poorten die hem bewaken.
+    assert "de code levert het *mechanisme*" in doc
+    for poort in ("onbekende regelnaam", "leeg anker", "anker niet in de prosa"):
+        assert poort in doc
+    # Een lege uitkomst is een uitkomst.
+    assert "zonder laag-1-voetafdruk is een geldige uitkomst" in doc
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
     # Eén getal kan stijgen terwijl de suggesties slechter worden: lees het paar.
     assert "Twee getallen, niet" in doc

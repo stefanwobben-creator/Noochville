@@ -350,6 +350,40 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Een regel in code is een ongereguleerde regel
+
+**De checker-code parseert, matcht en telt — hij bevat nooit een regel.** Elke regel komt uit een
+policy-blok, via extractie uit de prosa die de eigenaar bezit. De code levert het *mechanisme* (hoe
+herken je een percentage zonder bron); de policy levert de *regel* (dát hij geldt) plus het
+prosa-fragment dat hem uitspreekt, en de koppeltest weigert een anker dat er niet staat.
+
+Gevonden bij de percentage-check: die zat als losse `if` in `check()`. Gevolgen, alle drie stil:
+geen eigenaar die hem kan wijzigen, geen prosa waarin hij te lezen is, en hij vuurde bij élke policy
+mee — drie treffers voor iets wat maar in één policy staat. De teller mat de code, niet de policies.
+
+**De splitsing:** de code levert het *mechanisme* — hóe herken je het (tellen, matchen, parsen). De
+policy levert de *regel* plus het *anker* — dát hij geldt, en waar in de prosa hij gegrond is. Drie
+poorten bewaken dat de checker geen eigen regel gaat dragen:
+
+| poort | wat er misgaat | wanneer |
+|---|---|---|
+| onbekende regelnaam | de policy wijst naar mechaniek die niet bestaat | bij het parsen |
+| leeg anker | de regel is niet te staven | koppeltest |
+| anker niet in de prosa | auteurschap vermomd als extractie | koppeltest |
+
+Verbreden van een *detector* (welke woorden kondigen een bron aan) is mechaniek en mag vrij. Een
+term toevoegen die de prosa niet noemt is auteurschap en wordt geweigerd.
+
+**Een policy zonder laag-1-voetafdruk is een geldige uitkomst, geen gat.** STANCE-001 zegt zelf
+"nothing here is legally testable — this governs how we stand"; al zijn statements zijn houdingen.
+Er waren letterlijke kandidaten (`saving the planet` dubbelt COPYCHECK; `flowers`/`sprouts` gaan over
+beeldtaal, niet over het woord; `part of a community` is een houding die bot token-matchen zou
+false-positiven) en toch blijft het blok leeg. Een leeg blok afdwingen omdat de andere policies er
+een hebben, is symmetrie boven grond.
+
+**Gevolg-invariant: een bevinding zonder bronpolicy kan niet bestaan.** Kan de UI een bevinding niet
+terugvoeren op een policy-regel, dan is dat geen presentatiegat maar een regel die nergens hoort.
+
 **Bij de derde instantie migreer je de KLASSE, niet de instantie.** Eén geval is pech, twee is
 toeval, drie is een vorm — en vanaf dan is "we noteren het voor later" een fictie: je hebt de klasse
 al drie keer aangeraakt zonder hem op te lossen. De drie hierboven vielen binnen één week.
