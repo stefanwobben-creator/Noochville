@@ -99,7 +99,7 @@ def test_een_schone_tekst_levert_niets():
 
 def test_een_claim_zonder_bron_wordt_aangewezen():
     hits = cc.check("Our soles are biodegradable.", cc.parse_blok(BODY)[0])
-    assert hits and "bron nodig" in hits[0]["regel"]
+    assert hits and "needs a source" in hits[0]["regel"]
 
 
 def test_een_regel_geldt_alleen_als_een_policy_hem_NOEMT():
@@ -117,7 +117,7 @@ def test_een_regel_geldt_alleen_als_een_policy_hem_NOEMT():
     blok = cc.parse_blok(met)[0]
     assert cc.koppeltest(met) == []
     assert [h["regel"] for h in cc.check("We cut emissions by 40% last year.", blok)] == \
-        ["percentage zonder bron"]
+        ["percentage without a source"]
     assert cc.check("We cut emissions by 40%, according to TRAID.", blok) == []
 
 
@@ -137,8 +137,12 @@ def test_een_regel_zonder_prosa_anker_faalt_ook():
 
 def test_een_limiet_telt_en_zegt_hoeveel_eraf_moet():
     hits = cc.check("Wow! Amazing! Great!", cc.parse_blok(BODY)[0])
-    uitroep = [h for h in hits if "uitroepteken" in h["regel"]][0]
-    assert "3 gevonden" in uitroep["regel"] and "2 weg" in uitroep["suggestie"]
+    uitroep = [h for h in hits if "exclamation" in h["regel"]][0]
+    assert "3 found" in uitroep["regel"] and "remove 2" in uitroep["suggestie"]
+    # Het label is de zin uit de policy, niet de sleutel: `uitroepteken` is een
+    # identifier die de policy aan de teller koppelt, geen schermtekst.
+    assert uitroep["regel"].startswith("Maximum one exclamation mark per text")
+    assert "uitroepteken" not in uitroep["regel"]
 
 
 def test_de_checker_verandert_de_tekst_niet():

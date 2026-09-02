@@ -151,12 +151,12 @@ def _percentage_zonder_bron(zinnen: list[str]) -> list[tuple[str, str]]:
     uit = []
     for zin in zinnen:
         if _GETAL_MET_PROCENT.search(zin) and not _BRON_NABIJ.search(zin):
-            uit.append((zin, "voeg de bron toe waar dit getal vandaan komt"))
+            uit.append((zin, "add the source this number comes from"))
     return uit
 
 
 BENOEMDE_REGELS = {
-    "percentage_zonder_bron": ("percentage zonder bron", _percentage_zonder_bron),
+    "percentage_zonder_bron": ("percentage without a source", _percentage_zonder_bron),
 }
 
 
@@ -216,6 +216,10 @@ def _zinnen(tekst: str) -> list[str]:
     return [z.strip() for z in _ZIN.findall(tekst or "") if z.strip()]
 
 
+#: TAAL: `regel` en `suggestie` zijn SCHERMTEKST — ze staan op /copy-check, waar de rest van de
+#: pagina Engels is (i18n fase 1). Vandaar Engels, terwijl comments, logs en de koppeltest-klachten
+#: Nederlands blijven: die laatste leest een ontwikkelaar in een dry-run, geen schrijver op een
+#: scherm. De grens ligt bij "komt dit op een scherm terecht", niet bij "staat het in een view".
 def check(tekst: str, blok: dict, *, policy_id: str = "") -> list[dict]:
     """Overtredingen van het structuurblok, met het WOORDELIJKE citaat erbij.
 
@@ -232,16 +236,16 @@ def check(tekst: str, blok: dict, *, policy_id: str = "") -> list[dict]:
         if t not in laag:
             continue
         citaat = next((z for z in zinnen if t in z.lower()), term)
-        uit.append({"regel": f"verboden woord: “{term}”", "citaat": citaat,
-                    "suggestie": "vervang of schrap dit woord", "policy": policy_id})
+        uit.append({"regel": f"forbidden word: “{term}”", "citaat": citaat,
+                    "suggestie": "replace it or drop it", "policy": policy_id})
 
     for term in blok.get("bron_vereist", []):
         t = term.lower()
         if t not in laag:
             continue
         citaat = next((z for z in zinnen if t in z.lower()), term)
-        uit.append({"regel": f"“{term}” is een claim die een bron nodig heeft", "citaat": citaat,
-                    "suggestie": "noem de bron, of gebruik de toegestane formulering",
+        uit.append({"regel": f"“{term}” is a claim that needs a source", "citaat": citaat,
+                    "suggestie": "name the source, or use the wording the policy allows",
                     "policy": policy_id})
 
     for naam in (blok.get("regels") or {}):
@@ -257,7 +261,13 @@ def check(tekst: str, blok: dict, *, policy_id: str = "") -> list[dict]:
         gevonden = tellers.get(naam)
         if gevonden is None or gevonden <= grens:
             continue
-        uit.append({"regel": f"{naam}: {gevonden} gevonden, hoogstens {grens} toegestaan",
+        # HET LABEL IS HET PROSA-ANKER, NIET DE SLEUTEL. `uitroepteken` is een identifier: hij
+        # koppelt de policy aan de teller hierboven en moet daarom stabiel blijven, ook als het
+        # Nederlands is. Maar hij hoorde op het scherm te staan als wat de policy zelf zegt —
+        # "Maximum one exclamation mark per text" — en dat staat al in het blok. Zo komt de tekst
+        # uit de policy in plaats van uit een sleutel, en hoeft er niets hernoemd te worden dat
+        # stil kan breken zodra code en blok uit de pas lopen.
+        uit.append({"regel": f"{anker or naam} — {gevonden} found, at most {grens} allowed",
                     "citaat": anker or naam,
-                    "suggestie": f"haal er {gevonden - grens} weg", "policy": policy_id})
+                    "suggestie": f"remove {gevonden - grens}", "policy": policy_id})
     return uit
