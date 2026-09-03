@@ -335,7 +335,12 @@ _CALLBAR_JS = r"""
     if(!joined)return;
     var body=new URLSearchParams();
     body.set('action','lk_mute');body.set('csrf',CSRF);body.set('identity',rep.identity);body.set('muted',mute?'1':'0');
-    fetch('/action',{method:'POST',body:body}).then(function(r){return r.text();}).then(function(){
+    /* De callbar staat sinds 11 aug uit de app-shell (dood maar intact). De poort staat er toch
+       in: zou hij terugkomen, dan komt de bug niet mee terug. `r.ok` meet het transport, ok=0 is
+       de uitkomst — zie cockpit2.is_weigering. */
+    fetch('/action',{method:'POST',body:body}).then(function(r){
+      var q=new URL(r.url,location.origin).searchParams;
+      if(!r.ok||q.get('ok')==='0'){toast(q.get('msg')||'could not mute');return;}
       publishMute(pName(rep),mute);
       toast('You '+(mute?'muted ':'unmuted ')+esc(pName(rep)));
     }).catch(function(){toast('could not mute');});
