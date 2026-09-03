@@ -6452,6 +6452,18 @@ def make_handler(data_dir: str, csrf_token: str,
                             st.notif.add_outcome(_nid, intent="doen", otype="project", ref=pid,
                                                  label=f"project: {titel[:60]}", by=_by)
                             st.notif.mark_done(_nid, by=_by)
+                            # DE LINK MOET BEIDE KANTEN OP. De spanning wees naar het project,
+                            # maar het project noemde de spanning nergens — geen feed-entry, geen
+                            # veld. En juist dát is de rechtvaardiging om de gesloten spanning uit
+                            # de inbox te halen: hij is niet weg, hij is terug te vinden vanaf het
+                            # bord. Zonder deze regel was die belofte niet waar.
+                            _n = st.notif._find(_nid)
+                            _tekst = str((_n or {}).get("snippet") or "")[:200]
+                            pj.add_feed_entry(
+                                pid,
+                                f"Ontstaan uit een spanning in de inbox ({_nid}): {_tekst}",
+                                kind="system", author_type="human",
+                                author_id=(_actor.id if _actor else ""))
                         except Exception:
                             logging.getLogger("cockpit2.wizard").exception(
                                 "spanning %s niet gesloten na project %s", _nid, pid)

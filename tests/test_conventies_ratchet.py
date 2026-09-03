@@ -183,6 +183,9 @@ def test_de_conventies_staan_opgeschreven():
     assert "Een onwaarneembare nul fabriceert verklaringen" in doc
     # Cache versus record bij een corrupt bestand.
     assert "Leeg beginnen mag dus, stil beginnen niet" in doc
+    # Het meetinstrument zelf valideren voor je een afwezigheid meldt.
+    assert "Valideer je meetinstrument voor je een afwezigheid meldt" in doc
+    assert "niet-leeg teruggaf" in doc
     assert "elke tak die niets doet, logt waar\u00f3m hij niets doet" in doc
     assert "chrome volgt zijn lezer" in doc.lower()
     assert "Grond stopt fabricatie, niet irrelevantie" in doc
