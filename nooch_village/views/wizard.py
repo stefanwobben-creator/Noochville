@@ -102,7 +102,7 @@ def _js(tekst: str) -> str:
 
 
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
-                  ruw: str = "", uitkomst: str = "", trekker: str = "",
+                  ruw: str = "", uitkomst: str = "", trekker: str = "", nid: str = "",
                   eigen: list | None = None) -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
@@ -130,12 +130,16 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
         pre = role if role and st.records.get(role) is not None \
             and not org.is_circle(st.records.get(role)) else ""
     ruw, uitkomst = (ruw or "").strip(), (uitkomst or "").strip()
+    # De spanning waar dit project uit voortkomt, als die er is. Reist mee tot aan
+    # /wizard/create, die hem sluit zodra het project bestaat.
+    nid = (nid or "").strip()
     # Geen startstap meer: het is ÉÉN form. De voorvulling landt gewoon in de velden, en de
     # opslaan-knop staat er meteen — dat is het verschil met de zes stappen die je moest doorlopen.
     body = _WIZ_HTML.replace("__CSRF__", _e(csrf_token)) \
                     .replace("__ROLES__", role_opts) \
                     .replace("__TREK__", trek_opts) \
                     .replace("__RUW__", _js(ruw)) \
+                    .replace("__NID__", _js(nid)) \
                     .replace("__UIT__", _js(uitkomst)) \
                     .replace("__TREKKER__", _js(trekker)) \
                     .replace("__ROLE__", _e(pre))
@@ -160,7 +164,7 @@ const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 // project op het bord te krijgen, en elke stap was een plek om te blijven hangen. Nu staat de
 // hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
-const S={ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
+const S={ruw:"__RUW__",uitkomst:"__UIT__",nid:"__NID__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
          business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
          rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,
          trekker:"__TREKKER__",bezig:false,klaar:null};
@@ -388,7 +392,7 @@ async function maak(){
   const b=document.getElementById('wz-save'); if(b)b.textContent='Putting it on the board…';
   // GEEN UITKOMST IS GEEN BLOKKADE: dan is je idee de uitkomst, en scherp je hem later aan.
   const r=await post('/wizard/create',{role:S.role,uitkomst:(S.uitkomst||S.ruw),
-    trekker:S.trekker,tijd:S.tijd,missie:S.missie,business:S.business,
+    trekker:S.trekker,tijd:S.tijd,missie:S.missie,business:S.business,nid:S.nid||'',
     items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken),
     sug_aan:String(S.sugAan||0),sug_over:String(S.sugOver||0),sug_eigen:String(S.sugEigen||0)});
   S.bezig=false;

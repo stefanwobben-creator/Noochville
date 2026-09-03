@@ -350,6 +350,28 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Valideer je meetinstrument voor je een afwezigheid meldt
+
+`no_data ≠ nul` geldt ook voor de MEETOPSTELLING. Lees je het verkeerde veld, dan krijg je leeg
+terug — en leeg poseert als afwezig. Het verschil tussen "er is niets" en "ik keek op de verkeerde
+plek" is van buiten niet te zien, en een verkeerde uitlezing leidt tot een verkeerde conclusie die
+vervolgens als feit wordt doorgegeven.
+
+Drie keer op één dag (3 sep 2026), en elke keer werd het bijna een bevinding:
+
+| gemeten | echte plek | wat ik bijna meldde |
+|---|---|---|
+| `record["skills"]` | `record["definition"]["skills"]` | "0 rollen hebben de grant" — onmogelijk, want de rol draaide de skill de dag ervoor |
+| `project["title"]` | `project["scope"]` | "het project heeft een lege titel" |
+| `project["feed"]` | `project["log"]` | "de herkomst-link wordt niet geschreven" |
+
+**De regel: een lezer die leeg teruggeeft, is pas een meting nadat hij op een BEKEND AANWEZIG geval
+niet-leeg teruggaf.** Zonder die controle is "leeg" onfalsifieerbaar. Eén positief geval erbij kost
+een regel code en maakt het verschil tussen een meting en een aanname.
+
+En let op de tegenspraak als gratis alarm: bij de skills wist ik dat compliance de skill de dag
+ervoor gedraaid had. Dat "onmogelijk" was het signaal — niet het getal.
+
 ### Een cache mag leeg opstarten, een record niet — en nooit stil
 
 `read_json` gooit bewust op een corrupt bestand: stil leeg opstarten en bij de volgende save

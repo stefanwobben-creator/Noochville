@@ -222,12 +222,16 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
     _vol = _leesbaar(n, _volledig(n) or str(n.get("snippet") or ""))
     title = f"<div class='rdr-sig' title='{_e(_vol[:400])}'>{_e(_een_regel(n))}</div>"
 
-    if status == "verwerkt":
+    # 'verwerkt' (bekeken, blijft in de wachtrij) en 'klaar' (gesloten, verlaat hem) tonen allebei
+    # hun record. Een gesloten spanning komt hier alleen langs voor het viermoment: `render_inbox`
+    # zet hem daar eenmalig terug in de lijst.
+    if status in ("verwerkt", "klaar"):
         vs = st.notif.verwerkingen_of(n)
         chips = " ".join(f"<span class='chip outline'>{_e(v.get('label') or 'outcome')}</span>" for v in vs) \
             or "<span class='chip outline'>handled</span>"
         body = f"{meta}{title}<div class='ffoot-l'>{chips}</div>"
-        act = f"<div class='rdr-act'>{_btn(csrf, nid, 'notif_archive', 'archive')}</div>"
+        act = ("" if status == "klaar"                    # gesloten = al weg; niets meer te doen
+               else f"<div class='rdr-act'>{_btn(csrf, nid, 'notif_archive', 'archive')}</div>")
         # Viermoment: de zojuist afgeronde spanning krijgt een groene rand + een kader met wat je vastlegde.
         if nid and nid == done_nid:
             regels = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'outcome')}</li>" for v in vs) \
@@ -304,6 +308,15 @@ def _poort_secties(st, items, csrf_token, done) -> str:
 
 def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = "") -> str:
     items = st.notif.open_for_targets(targets)
+    # HET VIERMOMENT MOET DE ZOJUIST GESLOTEN SPANNING NOG KUNNEN TONEN. Sinds sluiten de wachtrij
+    # écht verkort, staat hij er niet meer in — en dan verdween precies het schermpje dat laat zien
+    # wát je vastlegde. De gesloten spanning wordt daarom eenmalig terug in de lijst gezet, alleen
+    # voor deze render, alleen als `done` hem noemt en hij van deze mens is.
+    if done and not any(n.get("id") == done for n in items):
+        gesloten = st.notif._find(done)
+        if gesloten is not None and (gesloten.get("target_type"),
+                                     gesloten.get("target_id")) in set(targets):
+            items = [gesloten] + items
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
     body = (_poort_secties(st, items, csrf_token, done) if items
             else "<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions you, "
@@ -615,7 +628,10 @@ def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str,
         # `mine=1` scopet de rolkiezer van de wizard op de rollen die JIJ vervult, plus Individuele
         # actie. `target=_top` omdat de verwerk-pagina als iframe in de inbox-lade draait: zonder
         # dat opent de wizard in een strook van 460 pixels.
-        href = "/project/nieuw?" + _urlencode({"ruw": prefill, "mine": "1"})
+        # `nid` MOET MEE. Zonder dat kent de wizard de spanning niet, kan hij geen uitkomst
+        # terugmelden en blijft de bron open — precies het subsidie-geval: project gemaakt, spanning
+        # bleef staan, en de mens moest zelf raden dat er nog een klik nodig was.
+        href = "/project/nieuw?" + _urlencode({"ruw": prefill, "mine": "1", "nid": nid})
         return (f"<a class='btn ok sm' href='{_e(href)}' target='_top'>"
                 f"Open the project wizard</a>")
     # roloverleg — ongewijzigd: gebruikt de cirkel van de bron.
@@ -821,7 +837,10 @@ def _ibx_row(st, n: dict) -> str:
     title = _e(_one_line(_vol))
     _hover = _e(_vol[:400])
     who = _e(_who(st, n))
-    if status == "verwerkt":
+    # 'verwerkt' (bekeken, blijft in de wachtrij) en 'klaar' (gesloten, verlaat hem) tonen allebei
+    # hun record. Een gesloten spanning komt hier alleen langs voor het viermoment: `render_inbox`
+    # zet hem daar eenmalig terug in de lijst.
+    if status in ("verwerkt", "klaar"):
         vs = st.notif.verwerkingen_of(n)
         kader = "".join(f"<div class='ibx-kader'>✓ {_e(v.get('label') or 'outcome')}</div>" for v in vs)
         return (f"<div class='ibx-row done' data-nid='{_e(nid)}'><span class='ibx-dot read'></span>"
