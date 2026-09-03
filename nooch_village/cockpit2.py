@@ -5558,6 +5558,28 @@ ACTIONS = {
 }
 
 
+#: De vormen waarin een dispatch-tak NEE zegt. Geteld in cockpit2 op 3 sep 2026: ✗ (119×),
+#: ⛔ (17×), "No access…"/"Not …" (41×). Eén lijst, want de client mag hier nooit zelf naar raden.
+_WEIGERING_TEKENS = ("✗", "⛔", "⚠")
+_WEIGERING_WOORDEN = ("no access", "not linked", "no accountability", "not logged in",
+                      "csrf token invalid")
+
+
+def is_weigering(msg: str) -> bool:
+    """Zegt deze melding NEE? Server-side waarheid over de uitkomst van een actie.
+
+    VALS SUCCES IS ERGER DAN STILLE MISLUKKING. Een gebruiker die niets ziet gebeuren, kijkt
+    verder; een gebruiker die "✓ moved" leest, gelooft het en gaat door. Daarom kent de server
+    zelf het verschil, en raadt de client niet."""
+    t = (msg or "").strip()
+    if not t:
+        return False
+    if t[0] in _WEIGERING_TEKENS:
+        return True
+    laag = t.lower()
+    return any(laag.startswith(w) for w in _WEIGERING_WOORDEN)
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -6274,6 +6296,17 @@ def make_handler(data_dir: str, csrf_token: str,
             self._send("<p>404</p>", 404)
 
         def _redirect(self, nxt: str, msg: str):
+            # DE WEIGERING WORDT HIER GEMARKEERD, SERVER-SIDE. Een geweigerde actie reisde als
+            # melding op een 303; `fetch` volgt die redirect, dus de client zag een 200 en meldde
+            # "✓ moved" terwijl de server NEE zei. Vals succes, niet stille stilte.
+            #
+            # De markering staat hier en niet bij de ~180 aanroepers: die geven allemaal een kale
+            # (nxt, msg) terug, en dit is het ene punt waar elke melding langskomt. De emoji blijft
+            # voor de MENS; `ok=0` is voor de machine. Zou de client op de emoji sniffen, dan zit de
+            # betekenis in een teken dat iemand ooit vervangt door een ander teken.
+            if msg and is_weigering(msg):
+                sep = "&" if "?" in nxt else "?"
+                nxt = f"{nxt}{sep}ok=0"
             if msg:
                 sep = "&" if "?" in nxt else "?"
                 nxt = f"{nxt}{sep}msg={urllib.parse.quote(msg)}"

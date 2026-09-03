@@ -905,6 +905,8 @@ var IBX_CSRF=__IBX_CSRF__;
 function ibxToggle(){var d=document.getElementById('ibx-drawer');d.classList.toggle('open');
   if(d.classList.contains('open'))ibxRefresh();}
 function ibxAddToggle(){document.getElementById('ibx-add').classList.toggle('open');}
+function ibxWeigering(u){try{var q=new URL(u,location.origin).searchParams;
+  if(q.get('ok')!=='0')return '';return q.get('msg')||'\u26a0 geweigerd';}catch(e){return '';}}
 function ibxMelding(t){var e=document.getElementById('ibx-melding');
   if(!e)return;e.textContent=t||'';e.classList.toggle('hide',!t);}
 /* EEN MISLUKTE POST MOET ZICHZELF MELDEN. Stond hier eerst een kale fetch: het veld leegde zich,
@@ -914,7 +916,13 @@ function ibxPost(a,x){return fetch('/action',{method:'POST',
   headers:{'Content-Type':'application/x-www-form-urlencoded'},
   body:new URLSearchParams(Object.assign({action:a,csrf:IBX_CSRF,next:'/inbox'},x||{}))})
   .then(function(r){
-    if(r.ok){ibxMelding('');return r;}
+    /* DEZELFDE BLINDE VLEK ALS BIJ DE PROJECTEN-DONE: `r.ok` meet het TRANSPORT, niet de UITKOMST.
+       Een inhoudelijke weigering ("✗ …", "No access — …") reist als melding op een 303; fetch volgt
+       die, de status is 200, en dit zette de drawer op groen. De server markeert de weigering nu
+       zelf met ok=0; wij lezen die markering en tonen de reden die er al bij zat. */
+    if(r.ok){var w=ibxWeigering(r.url);
+             if(w){ibxMelding(w.slice(0,140));throw new Error('ibxPost geweigerd');}
+             ibxMelding('');return r;}
     ibxMelding(r.status===403?'Your session expired — reload the page and sign in again.'
                              :'Could not save that ('+r.status+'). Nothing was added.');
     throw new Error('ibxPost '+r.status);})

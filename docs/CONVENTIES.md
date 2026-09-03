@@ -350,6 +350,27 @@ Drie keer deze week dezelfde vorm, en pas de derde keer zag ik hem als vorm:
 | policy-truncatie | een cap van 4000 | een body die er net overheen ging |
 | blok-scheiding | komma tussen termen | `"At Nooch, we believe"` |
 
+### Vals succes is erger dan stille mislukking
+
+Een geweigerde actie mag **nooit** als geslaagd renderen. Wie niets ziet gebeuren kijkt verder en
+probeert opnieuw; wie "✓ moved" leest, gelooft het en gaat door — en ontdekt het gat pas veel later,
+als de oorzaak niet meer te vinden is.
+
+Gevonden op de projecten-Done (3 sep 2026). De poort weigerde correct — het einddocument bevatte nog
+geen antwoord, bij 89 van de 341 lopende projecten. Die weigering reisde als melding op een
+303-redirect, `fetch` volgde die, de status was 200, en de `resp.ok`-poort die er al stond zette het
+scherm op groen. **De controle was aanwezig en toch onjuist**: hij mat het transport, niet de
+uitkomst.
+
+**De uitkomst wordt aan de SERVERKANT gemarkeerd, niet aan de clientkant geraden.** De emoji is voor
+de mens; de markering (`ok=0`) is voor de machine. Zou de client op "⛔" sniffen, dan zit de betekenis
+in een teken dat iemand ooit vervangt door een ander teken, en dan faalt hij weer stil.
+
+Staan de weiger-plekken verspreid — hier ~180 dispatch-takken die een kale `(nxt, msg)` teruggeven —
+centraliseer de classificatie dan op het ene punt waar elke melding langskomt. Eén lijst met
+weigeringsvormen, met een test die de code afzoekt: ontbreekt een vorm in die lijst, dan rendert die
+als succes, en dat is precies de bug.
+
 ### Valideer je meetinstrument voor je een afwezigheid meldt
 
 `no_data ≠ nul` geldt ook voor de MEETOPSTELLING. Lees je het verkeerde veld, dan krijg je leeg
