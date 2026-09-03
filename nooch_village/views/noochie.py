@@ -112,17 +112,32 @@ def _noochie_chrome() -> str:
           "document.addEventListener('submit',function(e){var f=e.target;"
           "var c=f&&f.getAttribute&&f.getAttribute('data-confirm');"
           "if(c&&!window.confirm(c)){e.preventDefault();e.stopPropagation();}},true);"
+          # Leest de server-markering uit de gevolgde redirect (zie cockpit2.is_weigering).
+          "function nooWeigering(u){try{var q=new URL(u,location.origin).searchParams;"
+          "if(q.get('ok')!=='0')return '';return q.get('msg')||'\\u26a0 geweigerd';}catch(e){return '';}}"
           "function ctxLabel(){var el=document.querySelector('.c2-main h2,.c2-main h1,h2,h1');"
           "return (el?el.textContent:document.title||'').trim().slice(0,80);}"
+          # Had geen respons-controle: een 500 of een login-redirect vulde het paneel met een
+          # foutpagina, zonder dat iets zich meldde.
           "function load(show,ctx){fetch('/noochie?fragment=1&ctx='+encodeURIComponent(ctx!=null?ctx:ctxLabel()))"
-          ".then(function(r){return r.text();}).then(function(h){"
+          ".then(function(r){if(!r.ok)throw new Error(r.status);return r.text();}).then(function(h){"
           "document.getElementById('noo-body').innerHTML=h;"
-          "if(show)document.getElementById('novl').style.display='flex';wireN();});}"
+          "if(show)document.getElementById('novl').style.display='flex';wireN();})"
+          ".catch(function(e){var b=document.getElementById('noo-body');"
+          "if(b)b.textContent='\\u26a0 Noochie kon niet laden ('+e.message+').';"
+          "if(show)document.getElementById('novl').style.display='flex';});}"
           "window.noochieAsk=function(label){load(true,label);};"
           "function wireN(){document.querySelectorAll('#noo-body form').forEach(function(f){"
           "f.addEventListener('submit',function(e){e.preventDefault();"
           "var d=new URLSearchParams(new FormData(f));var s=e.submitter;if(s&&s.name)d.set(s.name,s.value);"
-          "fetch('/action',{method:'POST',body:d}).then(function(){load(false);});});});"
+          # ZELFDE POORT ALS OP DE ANDERE OPPERVLAKKEN (#429): `r.ok` meet het transport, de
+          # server markeert de UITKOMST met ok=0. Zonder deze regel meldt een geweigerde actie
+          # zich als een geslaagde: het paneel herlaadt en doet alsof er iets gebeurde.
+          "fetch('/action',{method:'POST',body:d}).then(function(r){"
+          "var w=nooWeigering(r.url);"
+          "if(!r.ok||w){var b=document.getElementById('noo-body');"
+          "if(b)b.textContent=w||('\\u26a0 niet opgeslagen ('+r.status+').');return;}"
+          "load(false);});});});"
           "var ta=document.querySelector('#noo-body textarea');if(ta)ta.focus();}"
           "var cta=document.querySelector('.noo-cta');if(cta)cta.addEventListener('click',function(){load(true);});"
           "var nx=document.querySelector('.noo-x');if(nx)nx.addEventListener('click',function(){document.getElementById('novl').style.display='none';});"
