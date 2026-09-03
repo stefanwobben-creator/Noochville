@@ -185,6 +185,9 @@ def test_de_conventies_staan_opgeschreven():
     assert "Leeg beginnen mag dus, stil beginnen niet" in doc
     # Het meetinstrument zelf valideren voor je een afwezigheid meldt.
     assert "Valideer je meetinstrument voor je een afwezigheid meldt" in doc
+    # Een weigering mag nooit als succes renderen.
+    assert "Vals succes is erger dan stille mislukking" in doc
+    assert "aan de SERVERKANT gemarkeerd" in doc
     assert "niet-leeg teruggaf" in doc
     assert "elke tak die niets doet, logt waar\u00f3m hij niets doet" in doc
     assert "chrome volgt zijn lezer" in doc.lower()

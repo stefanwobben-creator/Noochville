@@ -419,9 +419,18 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "window.emoFilter=function(inp){var q=inp.value.toLowerCase();"
         "inp.parentNode.querySelectorAll('.emo-f').forEach(function(f){"
         "var k=f.getAttribute('data-k')||'';f.style.display=(!q||k.indexOf(q)>-1)?'':'none';});};"
+        # Leest de server-markering uit de gevolgde redirect: `ok=0` betekent geweigerd, en
+        # `msg` draagt de reden die de mens moet lezen. Geen markering → gewoon gelukt.
+        "function weigering(u){try{var q=new URL(u,location.origin).searchParams;"
+        "if(q.get('ok')!=='0')return '';"
+        "return q.get('msg')||'\\u26a0 geweigerd';}catch(e){return '';}}"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u,push){var wasClosed=(ov.style.display==='none'||!ov.style.display);last=u;"
-        "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
+        # Had geen enkele respons-controle: een 500 of een login-redirect vulde de kaart met
+        # een foutpagina of stilte, zonder dat iets zich meldde.
+        "fetch(frag(u)).then(function(r){"
+        "if(!r.ok){toast('\\u26a0 kon deze kaart niet laden ('+r.status+')');throw new Error(r.status);}"
+        "return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
         # Fragmenten die een eigen flow meedragen (de project-wizard) markeren hun <script> met
         # data-modal-run; innerHTML voert scripts niet uit, dus vervangen we ze door verse elementen.
         "bd.querySelectorAll('script[data-modal-run]').forEach(function(o){var s=document.createElement('script');"
@@ -469,6 +478,11 @@ def _modal_html(mentions_json: str = "[]") -> str:
         # response.ok-poort (generiek voor ELKE modal-actie, incl. de auto-opslaan-controls): een 413
         # (bestand te groot) of elke andere niet-2xx toont de server-melding en NOOIT '✓ opgeslagen'.
         "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'not saved').slice(0,90)));});return;}"
+        # ZELFDE POORT ALS BIJ DE DROP. Hier liep de done-knop óók langs: de server weigerde
+        # met "⛔ het einddocument is nog leeg", de redirect gaf 200, en dit toastte
+        # "✓ saved". Geen confetti op een weigering.
+        "var w=weigering(resp.url);"
+        "if(w){reopen();toast(w.slice(0,140));return;}"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
         "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 saved');}})"
@@ -515,8 +529,14 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "var d=new URLSearchParams();d.set('csrf',dcsrf);d.set('pid',pid);d.set('next','/');"
         "if(to==='done'){d.set('action','proj_done');}else{d.set('action','proj_status');d.set('to',to);}"
         # response.ok-poort (zoals wire()): een niet-2xx toont de server-melding, nooit '✓ verplaatst'.
+        # `resp.ok` IS NIET GENOEG. Een weigering reist als melding op een 303; fetch volgt die,
+        # dus de status is 200 en `ok` staat op true terwijl de server NEE zei. De server
+        # markeert dat nu zelf met `ok=0` in de redirect-URL — wij lezen de markering, niet de
+        # emoji, en tonen de reden die er al bij zat.
         "fetch('/action',{method:'POST',body:d}).then(function(resp){"
         "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'not moved').slice(0,90)));});return;}"
+        "var w=weigering(resp.url);"
+        "if(w){reopen();toast(w.slice(0,140));return;}"
         "reopen();toast('\\u2713 moved');})"
         ".catch(function(){reopen();toast('\\u26a0 not moved');});});});"
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
