@@ -3133,6 +3133,29 @@ def mens_vervullers(st, rol: str) -> list[str]:
         return []
 
 
+def standaard_trekker(st, rol: str) -> str:
+    """De owner die het projectformulier voorkiest voor deze rol, of "" als er niets te kiezen valt.
+
+    Drie takken, en de derde is de reden dat dit BOVENOP `mens_vervullers` zit en niet op
+    `bestemming`:
+
+      één vervuller     → die persoon, als default (niet als verplichting)
+      meerdere          → "" — het formulier laat kiezen; een stille gok tussen twee mensen is erger
+                          dan geen keuze, want niemand ziet dat er gegokt is
+      geen vervuller    → "" — "no owner" blijft staan
+
+    `bestemming()` beantwoordt dezelfde vraag voor het ROUTEREN van werk, en heeft daar een derde
+    stap die hier schadelijk is: bij een onbemande rol hopt hij naar de Circle Lead. Voor werk is dat
+    juist — het moet ergens landen. Voor een formulier-default zou het "no owner" stilletjes ombouwen
+    tot "de Circle Lead is eigenaar", en dan maak je precies de wees-projecten die `afslank_wezen`
+    achteraf opruimde, alleen met een naam erop.
+
+    Eén mechaniek, twee consumenten: `mens_vervullers` is de bron van waarheid over wie een rol
+    vervult; `bestemming` en deze helper zijn er allebei een lezer van."""
+    mensen = mens_vervullers(st, rol)
+    return f"person:{mensen[0]}" if len(mensen) == 1 else ""
+
+
 def _circle_lead_van(st, rol: str) -> str:
     """De Circle Lead van de cirkel waar deze rol in hangt. Het adres voor werk dat NIEMAND draagt:
     een rol zonder mens én zonder AI kan niets, en dan is beleggen de handeling — niet uitvoeren."""
@@ -5870,7 +5893,10 @@ def make_handler(data_dir: str, csrf_token: str,
                                          ruw=(qs.get("ruw") or [""])[0],
                                          uitkomst=(qs.get("uitkomst") or [""])[0],
                                          nid=(qs.get("nid") or [""])[0],
-                                         trekker=(qs.get("trekker") or [""])[0],
+                                         # Expliciete trekker wint; anders de vervuller van de
+                                         # rol als default (één vervuller → voorgekozen).
+                                         trekker=((qs.get("trekker") or [""])[0]
+                                                  or standaard_trekker(st, (qs.get("role") or [""])[0])),
                                          eigen=_eigen),
                            chrome=False)
                 return
