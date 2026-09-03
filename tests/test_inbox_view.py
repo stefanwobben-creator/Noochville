@@ -60,7 +60,10 @@ def test_verwerk_pagina_toont_spanning_en_wizard(tmp_path):
         assert oud not in html, oud
 
 
-def test_verwerk_outcome_stapelt_en_houdt_open(tmp_path):
+def test_een_uitkomst_kiezen_sluit_de_bronspanning(tmp_path):
+    """WAS: 'stapelt en houdt open'. Dat model kostte een tweede klik op 'Done', en wie die niet
+    deed hield een afgehandelde spanning in zijn inbox — Stefan liep erop vast met een project dat
+    wél bestond. Verwerken tot een uitkomst ÍS de verwerking."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
@@ -74,7 +77,11 @@ def test_verwerk_outcome_stapelt_en_houdt_open(tmp_path):
     st2 = cockpit2._Stores(dd)
     nn = st2.notif._find(n["id"])
     assert len(st2.notif.verwerkingen_of(nn)) == 1
-    assert st2.notif.status_of(nn) == "gelezen"           # open gebleven, stapelen kan door
+    assert st2.notif.status_of(nn) == "klaar"             # de uitkomst sluit de bron
+    # De BRON is weg uit de wachtrij. Wat er wél staat is de nieuwe actie die de uitkomst maakte —
+    # dat is geen restant maar het werk zelf, en dat hoort in je inbox.
+    over = st2.notif.open_for_targets([("person", person.id)])
+    assert all(x.get("id") != n["id"] for x in over)
 
 
 def test_verwerk_meerdere_uitkomsten_in_record(tmp_path):
@@ -98,8 +105,13 @@ def test_verwerk_klaar_sluit_item(tmp_path):
     person = st.people.all()[0]
     _, _, n = _spanning(st, person)
     cockpit2.dispatch(dd, "notif_klaar", {"nid": [n["id"]], "next": ["/inbox"]}, username="guest")
-    nn = cockpit2._Stores(dd).notif._find(n["id"])
-    assert cockpit2._Stores(dd).notif.status_of(nn) == "verwerkt"
+    st2 = cockpit2._Stores(dd)
+    nn = st2.notif._find(n["id"])
+    # 'verwerkt' betekende ooit 'af', maar `mark_done` schreef precies dezelfde velden als
+    # `mark_item_processed` ('bekeken') en de wachtrij filterde op geen van beide. Sluiten is nu
+    # een eigen staat, en die verlaat de wachtrij — anders is het geen sluiten.
+    assert st2.notif.status_of(nn) == "klaar"
+    assert st2.notif.open_for_targets([("person", person.id)]) == []
 
 
 def test_klaar_met_nul_uitkomsten_legt_geen_uitkomst_vast(tmp_path):
@@ -111,12 +123,15 @@ def test_klaar_met_nul_uitkomsten_legt_geen_uitkomst_vast(tmp_path):
     cockpit2.dispatch(dd, "notif_klaar", {"nid": [n["id"]], "next": ["/inbox"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     nn = st2.notif._find(n["id"])
-    assert st2.notif.status_of(nn) == "verwerkt"
+    assert st2.notif.status_of(nn) == "klaar"
     vs = st2.notif.verwerkingen_of(nn)
     assert vs and vs[0]["otype"] == "none" and vs[0]["label"] == "geen uitkomst"
 
 
 def test_klaar_viert_de_zojuist_verwerkte_spanning(tmp_path):
+    """REGRESSIE DIE HET SLUITEN ZELF VEROORZAAKTE: het viermoment zoekt de spanning in de
+    wachtrij, en die verlaat hij nu. Zonder de terugzet-regel in `render_inbox` verdween precies
+    het schermpje dat toont wát je vastlegde — sluiten zou dan stiller voelen dan niets doen."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
@@ -143,14 +158,25 @@ def test_prullenbak_haalt_uit_wachtrij(tmp_path):
 
 
 def test_verwerkt_toont_record_en_archiveer(tmp_path):
+    """CONSEQUENTIE VAN HET NIEUWE MODEL, expliciet vastgelegd. Een item dat 'verwerkt' is (bekeken
+    via `mark_item_processed`) blijft in de wachtrij staan mét zijn record en de archiveer-knop.
+
+    Een item dat GESLOTEN is verlaat de wachtrij meteen; daar is geen swipe-naar-archief meer voor
+    nodig, en die stap wordt dus overgeslagen. Dat is de keuze: verwerken tot een uitkomst is de
+    verwerking, niet de eerste helft ervan."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
     n = st.notif.add("person", person.id, "", by="noochie", snippet="hoi")
     st.notif.add_outcome(n["id"], intent="self", otype="project", label="project: iets", by="Stefan")
-    st.notif.mark_done(n["id"], by="Stefan")
+    st.notif.mark_item_processed(n["id"])
     html = cockpit2.render_inbox(cockpit2._Stores(dd), [("person", person.id)], csrf_token="t")
     assert "project: iets" in html and "notif_archive" in html
+
+    # en gesloten: weg uit de lijst
+    st.notif.mark_done(n["id"], by="Stefan")
+    html2 = cockpit2.render_inbox(cockpit2._Stores(dd), [("person", person.id)], csrf_token="t")
+    assert "Your inbox is empty" in html2
 
 
 def test_inbox_leeg_toont_uitleg(tmp_path):

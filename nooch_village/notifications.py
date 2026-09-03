@@ -286,6 +286,8 @@ class NotifStore:
     def status_of(n: dict) -> str:
         """De inbox-status van één notificatie: 'verwerkt' (mens is klaar), 'gelezen' (geopend, nog te
         doen), of 'nieuw' (nog niet bekeken). Afgeleid van de vlaggen, backward-compat met oude items."""
+        if n.get("done"):
+            return "klaar"
         if n.get("processed"):
             return "verwerkt"
         return "gelezen" if n.get("read") else "nieuw"
@@ -293,8 +295,12 @@ class NotifStore:
     def open_for_targets(self, targets) -> list[dict]:
         """De inbox-wachtrij: NIET-gearchiveerde, NIET-weggegooide notificaties voor deze doelen, nieuwste
         eerst."""
+        # `done` erbij: sluiten hoort de wachtrij te verkorten, anders is het geen sluiten.
+        # BEWUST GEEN retro-close op `processed`: dat veld zet ook `mark_item_processed`, en dat is
+        # "bekeken", geen besluit. Zes bestaande items dorp-breed dragen het; die stilletjes
+        # dichtdoen zou geschiedenis herschrijven op een aanname.
         return [n for n in self.for_targets(targets)
-                if not n.get("archived") and not n.get("deleted")]
+                if not n.get("archived") and not n.get("deleted") and not n.get("done")]
 
     def _find(self, notif_id: str) -> dict | None:
         return next((n for n in self._items if n.get("id") == notif_id), None)
@@ -365,13 +371,23 @@ class NotifStore:
         return entry
 
     def mark_done(self, notif_id: str, by: str = "") -> bool:
-        """Sluit een item ('klaar'): het is verwerkt. De gestapelde uitkomsten in `verwerkingen` blijven
-        als record staan. Gebruik na add_outcome(s), of direct voor een FYI zonder uitkomst."""
+        """Sluit een item ('klaar'): het is af en verdwijnt uit de wachtrij.
+
+        HIJ SLOOT NIETS. Deze methode zette `read` en `processed` — precies dezelfde twee velden als
+        `mark_item_processed`, dat alleen "bekeken/afgehandeld" betekent — terwijl
+        `open_for_targets` uitsluitend op `archived` en `deleted` filtert. Sluiten schreef dus een
+        staat die de wachtrij niet als gesloten kende, en een afgehandelde spanning bleef staan. Voor
+        altijd, en voor elke spanning; Stefan liep erop vast met een project dat wél bestond.
+
+        Nu is er een eigen vlag. `processed` blijft staan voor backward-compat, maar `done` is wat
+        telt — en `done_at` maakt achteraf te zien wanneer iets dichtging."""
         n = self._find(notif_id)
         if n is None:
             return False
         n["read"] = True
         n["processed"] = True
+        n["done"] = True
+        n["done_at"] = time.time()
         if by:
             n["processed_by"] = str(by)[:80]
         self._save()

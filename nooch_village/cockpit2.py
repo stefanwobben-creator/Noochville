@@ -3774,7 +3774,12 @@ def _act_notif_outcome(c):
             pj.add_feed_entry(src_pid, f"→ {label} created from the inbox: {content[:60]}",
                               kind="system", author_type="human", author_id=aid)
         st.notif.add_outcome(nid, intent=intent_of(otype), otype=otype, label=made, by=by_name)
-        return nxt, f"✓ {label} vastgelegd — nog een uitkomst, of klik Klaar."
+        # VERWERKEN TOT EEN UITKOMST *IS* DE VERWERKING. Hiervoor moest je daarna nog apart op
+        # "Done with this tension" klikken; wie dat niet deed hield een afgehandelde spanning in
+        # zijn inbox — en dat is precies wat er bij het subsidie-project misging. "Done" blijft
+        # bestaan, maar als de exit voor een spanning die géén uitkomst nodig heeft.
+        st.notif.mark_done(nid, by=by_name)
+        return nxt, f"✓ {label} vastgelegd — spanning gesloten."
 
 
 def _act_notif_archive(c):
@@ -5842,6 +5847,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                          role=(qs.get("role") or [""])[0], fragment=fr,
                                          ruw=(qs.get("ruw") or [""])[0],
                                          uitkomst=(qs.get("uitkomst") or [""])[0],
+                                         nid=(qs.get("nid") or [""])[0],
                                          trekker=(qs.get("trekker") or [""])[0],
                                          eigen=_eigen),
                            chrome=False)
@@ -6432,6 +6438,23 @@ def make_handler(data_dir: str, csrf_token: str,
                                     done_when=uitkomst, person=person or None,
                                     agent=agent or None, missie_impact=missie,
                                     business_impact=business, effort=effort)
+                    # DE LUS SLUITEN. Kwam dit project uit een spanning, dan is het project DE
+                    # uitkomst van die spanning: leg hem vast met een verwijzing naar het pid en
+                    # sluit de bron. Deed de wizard dit niet, dan bleef de spanning open terwijl het
+                    # project al bestond — het subsidie-geval. Fail-soft: een mislukte terugkoppeling
+                    # mag nooit het zojuist gemaakte project ongedaan lijken te maken.
+                    _nid = g1("nid")
+                    if _nid:
+                        try:
+                            _actor = (st.people.by_email(username)
+                                      if username and username != "guest" else None)
+                            _by = _person_name(st, _actor.id) if _actor else ""
+                            st.notif.add_outcome(_nid, intent="doen", otype="project", ref=pid,
+                                                 label=f"project: {titel[:60]}", by=_by)
+                            st.notif.mark_done(_nid, by=_by)
+                        except Exception:
+                            logging.getLogger("cockpit2.wizard").exception(
+                                "spanning %s niet gesloten na project %s", _nid, pid)
                     # Seed het levende einddocument met de DoD als kop. Vanaf hier is de projectpoort
                     # doc-gedreven: Done kan pas als het document van deze seed afwijkt (echt antwoord).
                     try:
