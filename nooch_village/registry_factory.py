@@ -47,6 +47,7 @@ from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
 from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
 from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
 from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
+from nooch_village.materiaal_memo import MateriaalKwartaalSkill, MateriaalShortlistSkill
 from nooch_village.skills_impl.regulation_watch import RegulationWatchSkill
 from nooch_village.skills_impl.kroniek_interpret import KroniekInterpretSkill
 from nooch_village.skills_impl.weten_we_dit_al import WetenWeDitAlSkill
@@ -88,6 +89,9 @@ def build_skill_registry() -> SkillRegistry:
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),
         CertEvidenceSkill(), ClaimEvidenceSkill(), ClaimsCheckSkill(), ClaimsSiteScanSkill(), RegulationWatchSkill(),
+        # De radar-uitgang (#436/#437). Zonder registratie is een grant een lege
+        # verwijzing: de rol draagt dan een capability-naam die nergens op wijst.
+        MateriaalKwartaalSkill(), MateriaalShortlistSkill(),
         KroniekInterpretSkill(),
         WetenWeDitAlSkill(),
         RuisCheckSkill(),

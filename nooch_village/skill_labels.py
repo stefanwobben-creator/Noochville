@@ -51,6 +51,8 @@ LABELS: dict[str, str] = {
     "claims_check": "Toetst tekst aan de Europese regels voor duurzaamheidsclaims",
     "claims_site_scan": "Scant onze eigen site wekelijks op riskante claims",
     "regulation_watch": "Merkt maandelijks of de wet onder ons is verschoven",
+    "materiaal_kwartaal": "Vertelt per kwartaal waar materiaalinnovatie beweegt",
+    "materiaal_shortlist": "Draagt maandelijks 1-2 materialen voor om een sample van aan te vragen",
     "bulletin_schrijven": "Schrijft het dagelijkse dorpsbulletin",
     "field_note": "Duidt de cijfers van vandaag tegen de missie",
     "voorstel_schrijven": "Werkt een vaag gevoel uit tot een concreet voorstel",
