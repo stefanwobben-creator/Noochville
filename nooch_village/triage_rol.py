@@ -80,14 +80,26 @@ def secretary_rol(records) -> str:
     titel. Drie rollen heten 'Secretary' op prod; alleen wie deze accountability heeft doet dit."""
     naald = SECRETARY_ACCOUNTABILITY.lower()[:40]
     try:
-        for r in records.all():
-            if getattr(r, "archived", False) or getattr(r, "slaapt", False):
-                continue
-            accs = list(getattr(getattr(r, "definition", None), "accountabilities", None) or [])
-            if any(naald in str(a).lower() for a in accs):
-                return r.id
-    except Exception:                                        # noqa: BLE001
-        pass
+        rollen = list(records.all())
+    except Exception as e:                                   # noqa: BLE001
+        # EEN AANROEPFOUT IS GEEN AFWEZIGHEID. Hier stond `except Exception: pass`, en die maakte
+        # van élke fout een lege string — niet te onderscheiden van "geen enkele rol draagt deze
+        # accountability". Op 4 sep 2026 gaf ik deze functie een LIJST waar hij de store verwacht;
+        # `records.all()` bestond daar niet, de except slikte het, en de uitkomst las als "de
+        # secretary slaapt". Ik heb dat als systeembevinding gerapporteerd voor ik het doorhad.
+        #
+        # De uitkomst blijft "" — de aanroeper hoort niet te klappen omdat de classificatie niet
+        # lukt — maar hij is nu hoorbaar, en de melding noemt het type dat binnenkwam.
+        log.warning("secretary_rol: records niet op te sommen (%s: %s) — behandeld als 'geen "
+                    "secretary', maar dit is een AANROEPFOUT en geen lege org",
+                    type(e).__name__, e)
+        return ""
+    for r in rollen:
+        if getattr(r, "archived", False) or getattr(r, "slaapt", False):
+            continue
+        accs = list(getattr(getattr(r, "definition", None), "accountabilities", None) or [])
+        if any(naald in str(a).lower() for a in accs):
+            return r.id
     return ""
 
 
