@@ -36,6 +36,7 @@ import os
 import re
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from nooch_village.skills import Skill
 from nooch_village.skills_impl.trends import _drop_partial, _USER_AGENT
@@ -275,10 +276,27 @@ def _save_watchlist(data_dir: str, terms: list[dict]) -> None:
 
 
 def _append_signal(data_dir: str, record: dict) -> None:
-    """Append-only observatiereeks: één JSON-regel per gevolgde term per puls."""
+    """Append-only observatiereeks: één JSON-regel per gevolgde term per puls.
+
+    ELKE REGEL DRAAGT ZIJN EIGEN TIJD. De 639 bestaande regels hebben er geen: `base_year`,
+    `index_latest` en `recent_months` zeggen iets over de MEETPERIODE van Google Trends, niets over
+    wanneer wij keken. Daardoor kan deze store niet beantwoorden wat er "dit kwartaal" veranderde —
+    de vraag waarvoor een signaalstore bestaat. Het kwartaaloverzicht (#436) draait daarom op de
+    radar-feed, die wel een datum heeft.
+
+    GOING FORWARD, GEEN TERUGWERKENDE KRACHT. De oude regels krijgen niets: een verzonnen tijd op
+    historie is een gefabriceerd signaal, en dat is erger dan de eerlijke afwezigheid. Ze blijven
+    leesbaar en tellen gewoon mee waar tijd niet nodig is; alleen tijdgebonden vragen slaan ze over.
+
+    `at` = unix-tijd (sorteerbaar, tijdzone-vrij), `op` = ISO-datum voor wie het log leest."""
     path = os.path.join(data_dir, _SIGNALS_FILE)
+    nu = time.time()
+    regel = {**record,
+             "at": record.get("at", nu),
+             "op": record.get("op", datetime.fromtimestamp(nu, timezone.utc)
+                              .strftime("%Y-%m-%d"))}
     with open(path, "a") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.write(json.dumps(regel, ensure_ascii=False) + "\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
