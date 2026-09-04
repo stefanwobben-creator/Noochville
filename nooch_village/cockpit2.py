@@ -1456,15 +1456,25 @@ def _act_proj_done(c):
         if _deny:
             return nxt, _deny
         pid = g("pid")
-        # De projectpoort (founder, 19 jul; verhuisd 21 jul naar het einddocument): done = uitkomst
-        # beantwoord in het einddocument, niet werk gedaan. Zolang het document alleen de geseede
-        # opdracht bevat (of leeg is) weigert de cockpit de status Done.
-        from nooch_village.projects import dod_poort
+        # GEEN DOCUMENT-POORT MEER. Hier stond de projectpoort (founder 19 jul, verhuisd 21 jul
+        # naar het einddocument): Done werd geweigerd zolang het document leeg was of alleen de
+        # geseede opdracht bevatte. Stefan heeft die 4 sep 2026 ingetrokken — een Done vereist geen
+        # einddocument. Een goed getitelde, echt afgeronde taak is Done, en dat oordeel is van de
+        # mens, niet van een poort die naar het document kijkt in plaats van naar het werk.
+        #
+        # Bewust ook GEEN zachte variant: geen nudge, geen waarschuwing, geen bevestigingsvraag.
+        # Die zijn expliciet afgewezen — half blokkeren is de traagheid houden zonder de zekerheid.
+        #
+        # Gemeten op de draaiende server bij het intrekken: 65 projecten stonden hierop vast
+        # (44 met een leeg document, 21 met alleen de opdracht). Zie tests/test_project_dod_poort.py
+        # voor de regel die dit besluit vastlegt in plaats van in iemands hoofd.
+        #
+        # Het document wordt hier nog wél gelezen: het voedt verderop de conclusie van het
+        # radarsignaal. Bij het weghalen van de poort ging deze lezing eerst mee, en omdat de
+        # signaal-aanmaak fail-soft in een `except` zit, verdween het signaal stil — de suite ving
+        # het, de logging niet.
         _ds = getattr(st, "project_docs", None)
         _doc = _ds.read(pid) if _ds is not None else ""
-        _dicht = dod_poort(pj.get(pid), _doc)
-        if _dicht:
-            return nxt, "⛔ " + _dicht
         # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
         p = pj.get(pid) or {}
         cl = next((c for c in p.get("checklists", []) if c.get("title") == PREP_CHECKLIST_TITLE), None)

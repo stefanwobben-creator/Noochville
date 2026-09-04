@@ -1,12 +1,17 @@
 """Een geweigerde actie mag nooit als geslaagd renderen.
 
 HET GEVAL (3 sep 2026): Stefan sleepte projecten naar Done en zag "✓ moved". Er bewoog niets. De
-done-handler weigerde correct — `dod_poort` blokkeert Done zolang het einddocument nog geen antwoord
-bevat, en dat gold voor 89 van de 341 lopende projecten. Maar die weigering reist als melding op een
-303-redirect; `fetch` volgt die, dus de status is 200 en de client meldde succes.
+done-handler weigerde correct — `dod_poort` blokkeerde Done zolang het einddocument nog geen
+antwoord bevatte. Maar die weigering reist als melding op een 303-redirect; `fetch` volgt die, dus
+de status is 200 en de client meldde succes.
 
 VALS SUCCES IS ERGER DAN STILLE MISLUKKING. Wie niets ziet gebeuren kijkt verder; wie "✓ moved"
-leest, gelooft het en gaat door. De poort is niet versoepeld: 89 projecten hebben echt geen antwoord.
+leest, gelooft het en gaat door.
+
+De poort uit dat verhaal bestaat inmiddels niet meer (ingetrokken 4 sep 2026, zie
+tests/test_project_dod_poort.py) — maar deze test gaat niet over die poort. Hij gaat over de vorm
+van een weigering, en die vorm moet herkenbaar blijven voor elke andere weigering in de cockpit.
+De strings hieronder zijn daarom voorbeelden, geen aanroepen.
 """
 from __future__ import annotations
 

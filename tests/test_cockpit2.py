@@ -305,13 +305,15 @@ def test_project_status_done_delete(tmp_path):
     # status → wacht
     cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"
-    # → done. De projectpoort (21 jul) laat Done pas toe met een antwoord in het einddocument.
+    # → done. Hier stond de projectpoort (21 jul): Done werd geweigerd zonder antwoord in het
+    # einddocument. Die is 4 sep 2026 ingetrokken — een Done vereist geen document meer, dus de
+    # overgang lukt in één keer. Zie tests/test_project_dod_poort.py voor het besluit.
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"      # poort dicht
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
+    # Een document schrijven blijft gewoon werken en verandert niets aan de status.
     cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "next": ["/"], "doc": [
         "## Conclusie\nDe drie gemelde bugs zijn verholpen; een vierde bleek geen bug."]},
         username="guest")
-    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
     # verwijderen
     cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]}, username="guest")

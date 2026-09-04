@@ -1160,7 +1160,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     # 1b) De DoD-contract-box is vervallen (founder, 21 jul): de 'klaar wanneer' (uitgebreide DoD)
     # staat nu als kop van het einddocument (direct onder de titel), en de projectpoort is
-    # doc-gedreven (projects.dod_poort leest het einddocument). Zie _einddocument_html.
+    # De poort die daarbij hoorde (projects.dod_poort) is 4 sep 2026 ingetrokken:
+    # een Done vereist geen einddocument. Zie tests/test_project_dod_poort.py.
 
     # 2) Checklist — vier onderscheidbare states + skill/payload (zie _checklists_html)
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw, st=st)
