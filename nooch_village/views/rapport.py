@@ -80,7 +80,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
         concept = (f"<div class='card einddoc-concept'>"
                    f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>"
                    f"<span class='muted'>{tel}</span></div>"
-                   f"<div class='einddoc-body einddoc-vol'>{_md_doc(c.get('tekst') or '')}</div>"
+                   f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
                    f"{knoppen}</div>")
 
     # DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is, is iets anders dan
@@ -93,9 +93,9 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
         body = (f"<div class='card'><p class='muted'>No report written yet — this is still the "
                 f"assignment as it was set. The assigned inhabitant writes towards the answer "
                 f"below it on every successful pulse.</p>"
-                f"<div class='einddoc-body einddoc-vol'>{_md_doc(doc)}</div></div>")
+                f"<div class='einddoc-body'>{_md_doc(doc)}</div></div>")
     else:
-        body = f"<div class='card'><div class='einddoc-body einddoc-vol'>{_md_doc(doc)}</div></div>"
+        body = f"<div class='card'><div class='einddoc-body'>{_md_doc(doc)}</div></div>"
 
     acties = ""
     if rw:

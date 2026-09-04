@@ -83,10 +83,14 @@ def test_route_toont_het_volledige_rapport_in_de_leeslaag(tmp_path):
     pid = _project(dd, st, f"# Kop\n\n{_LANG}\n")
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     assert "einddoc-body" in html                       # dezelfde leeslaag-typografie (#441)
-    # ...maar ZONDER de hoogte-cap: die beschermde de kaart, en hier is geen kaart. Gemeten op
-    # een echt rapport: 1540px inhoud in een venster van 431px, dus een scrollbakje in een
-    # scrollende pagina.
-    assert "einddoc-vol" in html
+    # ...maar ZONDER hoogte-cap. Die beschermde de kaart tegen een inline rapport; sinds het
+    # rapport hier woont beschermt hij niets en maakt hij een scrollbak binnen een scrollende
+    # pagina (gemeten: 1540px inhoud in 431px venster). Getoetst op de STIJL zelf, niet op een
+    # klassenaam — een klasse die niets doet is geen bewijs.
+    import pathlib as _pl
+    _css = _pl.Path("nooch_village/static/nooch.css").read_text(encoding="utf-8")
+    _regel = [r for r in _css.splitlines() if r.startswith(".einddoc-body{")]
+    assert _regel and "max-height" not in _regel[0], _regel
     assert _STAART in html                              # niets weggesneden
     assert f"/project?pid={pid}" in html                # en een weg terug
 
@@ -105,7 +109,7 @@ def test_route_zonder_schrijfrecht_toont_geen_bewerkacties(tmp_path):
     pid = _project(dd, st, "# Kop\n\nEen zin die als essentie kan dienen op de kaart.\n")
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
     assert "proj_doc_edit" not in html and "proj_regen_doc" not in html
-    assert "einddoc-body" in html and "einddoc-vol" in html      # lezen mag wel
+    assert "einddoc-body" in html                                # lezen mag wel
 
 
 def test_route_onderscheidt_seed_van_geen_document(tmp_path):

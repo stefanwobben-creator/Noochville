@@ -185,17 +185,17 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
     onvolledige payload). Zonder deze knoppen sluit de mens wel de spanning maar blijft het item open
     en het project geparkeerd — de herhaal-lus. 'Gedaan' zit al op het ✓-vakje ernaast (dat loopt via
     dezelfde resolutie-route), hier staan 'overslaan' en 'overdragen'."""
-    skip = (f"<form method='post' action='/action' class='emo-f'>{hid}{clitem}"
-            f"<button class='btn ghost sm' type='submit' name='action' value='check_skip' "
-            f"title='This does not need doing (any more) — it stops counting towards done'>"
-            f"⤳ skip (n/a)</button></form>")
+    # 'skip (n/a)' IS WEG. Hij stond naast het ✓-vakje en deed vrijwel hetzelfde: een item dat
+    # niet meer hoeft, vink je af of haal je weg. Twee knoppen voor één gedachte maakt de keuze
+    # zwaarder dan de handeling. De `skipped`-STAAT blijft bestaan (oude items dragen hem nog en
+    # `checklist_progress` telt hem correct niet mee); alleen de knop om hem te zetten is weg.
     hand = (f"<details class='fedit'><summary class='flink'>📤 hand off</summary>"
             f"<form method='post' action='/action'>{hid}{clitem}"
             f"<select name='naar_rol'>{role_opts}</select>"
             f"<input name='reason' placeholder='done when…'>"
             f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
             f"hand off</button></form></details>") if role_opts else ""
-    return f"<span class='ck-resolve'>{skip}{hand}</span>"
+    return f"<span class='ck-resolve'>{hand}</span>"
 
 
 #: De lege checklist. "no items yet" CONSTATEERT; dit NODIGT UIT — en zegt erbij waar een eerste
