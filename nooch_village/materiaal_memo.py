@@ -266,3 +266,165 @@ def ontvanger(st, data_dir: str, waarover: str) -> dict:
         log.warning("ontvanger niet te bepalen voor %r — terugval op de founder", waarover,
                     exc_info=True)
         return {"rol": "", "mens": None, "waarom": "ontvanger niet te bepalen", "via": "fout"}
+
+
+# ── memo 2: de maandelijkse shortlist ─────────────────────────────────────────────────────────
+
+#: De drie filters, letterlijk zoals ze in de spec staan. Ze zitten in de PROMPT en niet in code,
+#: want "marktrijp" en "past bij Nooch" zijn oordelen, geen tellingen — een regex die doet alsof
+#: hij dat kan beslissen, is een verzonnen zekerheid.
+_FILTERS = (
+    "MARKTRIJP — het materiaal is te koop of te bemonsteren, niet 'in ontwikkeling', "
+    "'veelbelovend' of 'onderzoekers werken aan'.",
+    "FOOTWEAR — er is een concrete toepassing in schoeisel (bovenwerk, zool, lijm, garen, voering).",
+    "PAST BIJ NOOCH — plantaardig, plasticvrij en/of aantoonbaar lagere CO2. Geen leer, geen "
+    "fossiele kunststof, geen dierlijk materiaal.",
+)
+
+
+class MateriaalShortlistSkill(Skill):
+    """1-2 kandidaat-materialen per maand, elk mét bron, als voorstel — niet als bevinding."""
+
+    name = "materiaal_shortlist"
+    cost = "free"
+    side_effect_free = False
+    description = ("Maandelijkse shortlist van 1-2 marktrijpe materiaalkandidaten uit de "
+                   "radar-stroom, met bron, ter beoordeling.")
+    output_schema = "ok, periode, skipped, reden, kandidaten, ontvanger, headsup"
+
+    #: Eén maand terug plus wat marge: de feed levert ~8 per dag, dus dit is ruim genoeg om niets
+    #: te missen zonder de prompt te laten dichtslibben.
+    VENSTER = 45 * 24 * 3600
+    #: Hoeveel er hoogstens aan een mens gegeven wordt. De spec zegt 1-2; meer is geen shortlist.
+    MAX = 2
+
+    def run(self, payload: dict, context=None) -> dict:
+        payload = payload or {}
+        data_dir = getattr(context, "data_dir", ".")
+        periode = payload.get("_periode") or period_key("maand")
+        if not payload.get("force") and periode_gedaan(data_dir, self.name, periode):
+            return {"ok": True, "periode": periode, "skipped": True,
+                    "reden": "deze maand al gedraaid"}
+
+        st = payload.get("_stores") or _stores(data_dir)
+        verse = _nieuw_voor_de_mens(st, data_dir, time.time() - self.VENSTER)
+        if not verse:
+            noteer_periode(data_dir, self.name, periode)
+            return {"ok": True, "periode": periode, "skipped": False, "kandidaten": 0,
+                    "reden": "geen ongeziene signalen in dit venster"}
+
+        gekozen = _schift(context, verse, self.MAX)
+        noteer_periode(data_dir, self.name, periode)
+        if not gekozen:
+            # EEN LEGE SHORTLIST IS EEN UITKOMST. Niets haalde de lat; dat is informatie, geen
+            # stilte — en het zegt de mens dat er WEL gekeken is.
+            return {"ok": True, "periode": periode, "skipped": False, "kandidaten": 0,
+                    "reden": f"{len(verse)} ongeziene signalen bekeken, geen enkele haalde de lat"}
+
+        onthoud_voorgelegd(data_dir, [k["sleutel"] for k in gekozen])
+        ontv = ontvanger(st, data_dir, f"Materiaalkandidaten {periode}: sample aanvragen")
+        return {"ok": True, "periode": periode, "skipped": False, "kandidaten": len(gekozen),
+                "ontvanger": ontv["rol"], "ontvanger_grond": ontv["waarom"],
+                "headsup": _shortlist_tekst(periode, gekozen, len(verse))}
+
+
+def _nieuw_voor_de_mens(st, data_dir: str, sinds: float) -> list[dict]:
+    """Goedgekeurde signalen die nog NOOIT aan een mens zijn voorgelegd.
+
+    HET GEHEUGEN IS HET VERSCHIL TUSSEN EEN RADAR EN RUIS. De feed blijft dezelfde ontdekking
+    aanleveren — via een tweede bron, een vervolgartikel, een persbericht. Zonder dit boek kent de
+    schifting geen verschil tussen 'nieuw' en 'vorige maand al afgewezen', en duwt hij elke maand
+    hetzelfde omhoog tot de mens stopt met lezen.
+
+    Een 'nee' is definitief: één keer afgewezen betekent nooit meer voorleggen."""
+    boek = voorgelegd(data_dir)
+    return [it for it in _items(st, sinds) if sleutel_van(it) not in boek]
+
+
+def _schift(context, kandidaten: list[dict], maxaantal: int) -> list[dict]:
+    """De drie filters, door het model. Geeft [{sleutel, wat, waarom, leverancier, bron}].
+
+    DIT IS EEN OORDEEL, GEEN TELLING. "Marktrijp" en "past bij Nooch" zijn niet met een regex te
+    beslissen; een filter dat doet alsof, verzint zekerheid. Vandaar het model — en vandaar dat de
+    uitkomst een VOORSTEL heet en geen bevinding (harry_hemp's eigen "je oordeelt NIET"-regel: hij
+    draagt aan, de mens beslist).
+
+    Geen model → LEGE shortlist, geen ongefilterde lijst. Alles doorgeven zou de schifting
+    overslaan en de mens de ruis geven die dit juist moet wegnemen; dat is erger dan niets sturen,
+    want het ziet eruit als een selectie."""
+    regels = [f"[{i}] {str(k.get('content'))[:200]}\n     bron: {_bron_regel(k)}"
+              for i, k in enumerate(kandidaten[:60])]
+    prompt = (
+        "Je selecteert hoogstens "
+        f"{maxaantal} materiaal-kandidaten voor een vegan schoenenmerk, uit de signalen hieronder.\n"
+        "Je BESLIST NIET of we het gaan gebruiken; je draagt voor, en een mens oordeelt.\n\n"
+        "EEN KANDIDAAT HAALT DE LIJST ALLEEN ALS ALLE DRIE KLOPPEN:\n"
+        + "\n".join(f"  {i+1}. {f}" for i, f in enumerate(_FILTERS)) + "\n\n"
+        "Twijfel je bij één ervan, dan valt de kandidaat af. Liever nul dan een zwakke.\n\n"
+        "ANTWOORD als JSON: {\"kandidaten\": [{\"nr\": <getal uit de lijst>, "
+        "\"wat\": \"...\", \"waarom\": \"...\", \"leverancier\": \"...\"}]}\n"
+        "- `wat`: in één zin, wat het materiaal is.\n"
+        "- `waarom`: waarom het bij dit merk past — alleen op grond van wat er in het signaal staat.\n"
+        # GEVONDEN IN DE DROGE RUN: het model zette "Newswise (via wetenschappelijke bronnen)" als
+        # leverancier — dat is de NIEUWSSITE. De hele exit is "sample aanvragen bij [leverancier]",
+        # dus een publicatie op die plek stuurt de mens naar de verkeerde deur. De bron staat er al
+        # apart onder; leeg laten is beter dan iets dat op een leverancier lijkt.
+        "- `leverancier`: de MAKER van het materiaal — het bedrijf of lab dat het produceert.\n"
+        "  NOOIT de nieuwssite, het tijdschrift of de uitgever waar je het las: die staat al\n"
+        "  als bron vermeld. Kun je de maker niet uit het signaal halen, antwoord dan \"\".\n"
+        "- Staat er niets dat de drie filters haalt, antwoord dan {\"kandidaten\": []}.\n\n"
+        "SIGNALEN:\n" + "\n".join(regels))
+    try:
+        from nooch_village.llm import reason
+        rauw = reason(prompt, call_site="materiaal_shortlist", json_mode=True)
+    except Exception:                                        # noqa: BLE001
+        log.warning("shortlist: model niet bereikbaar", exc_info=True)
+        rauw = None
+    if not rauw:
+        log.info("shortlist zonder model — LEGE lijst, geen ongefilterde ruis")
+        return []
+    try:
+        data = json.loads(rauw)
+        rijen = data.get("kandidaten") if isinstance(data, dict) else None
+    except ValueError:
+        log.warning("shortlist: antwoord is geen geldige JSON — lege lijst")
+        return []
+    uit = []
+    for r in (rijen or [])[:maxaantal]:
+        if not isinstance(r, dict):
+            continue
+        try:
+            bron_item = kandidaten[int(r.get("nr"))]
+        except (TypeError, ValueError, IndexError):
+            # EEN KANDIDAAT ZONDER BRONSIGNAAL BESTAAT NIET. Zou het model er een verzinnen, dan
+            # heeft hij geen link, geen bron en geen sleutel — en precies dat maakt hem
+            # onnavolgbaar voor de mens die hem moet beoordelen.
+            log.warning("shortlist: kandidaat verwijst niet naar een signaal — overgeslagen")
+            continue
+        uit.append({"sleutel": sleutel_van(bron_item),
+                    "wat": str(r.get("wat") or "")[:300],
+                    "waarom": str(r.get("waarom") or "")[:300],
+                    "leverancier": str(r.get("leverancier") or "")[:120],
+                    "bron": _bron_regel(bron_item)})
+    return uit
+
+
+def _shortlist_tekst(periode: str, gekozen: list[dict], bekeken: int) -> str:
+    """De memo. KANDIDAAT-VOOR-OORDEEL, niet bevinding — dat verschil staat in de kop én per item.
+
+    De actie is geen knop in deze tekst maar de bestaande inbox-weg: dit bericht is een spanning, en
+    'verwerken tot project' opent de wizard met deze tekst als zaad (#428). Zo landt het sample-
+    project op dezelfde geresolveerde rol, en sluit de spanning zichzelf zodra het project bestaat."""
+    kop = (f"🧪 Materiaalkandidaten {periode} — {len(gekozen)} ter beoordeling "
+           f"(uit {bekeken} ongeziene signalen)\n"
+           "Dit zijn VOORSTELLEN, geen bevindingen: ik draag aan, jij oordeelt.\n")
+    blokken = []
+    for k in gekozen:
+        lev = k["leverancier"] or "leverancier niet genoemd in de bron"
+        blokken.append(
+            f"\n• {k['wat']}\n"
+            f"  waarom hier: {k['waarom']}\n"
+            f"  leverancier: {lev}\n"
+            f"  bron: {k['bron']}\n"
+            f"  → sample aanvragen: verwerk deze spanning tot een project")
+    return kop + "".join(blokken)
