@@ -56,6 +56,13 @@ def _persona_ladder(context, role_id: str, call_site: str) -> str | None:
         return None
 
 
+def _founder_rol() -> str:
+    """Het adres van laatste toevlucht. Eén plek, want twee plekken die het founder-id kennen is
+    hoe een verhuizing op de ene wel en op de andere niet landt."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    return FOUNDER_ROLE_ID
+
+
 class Inhabitant(threading.Thread):
     """Eén rol per inwoner (leaf). Doet zelf werk via zijn skills."""
 
@@ -1358,7 +1365,11 @@ class Inhabitant(threading.Thread):
             telling["gedraaid"] += 1
             if headsup:
                 telling["gemeld"] += 1
-                self._notify_founder("", str(headsup))
+                # DE SKILL MAG ZIJN ONTVANGER NOEMEN. Zonder dat ging élke headsup naar de founder,
+                # ook als het werk aantoonbaar bij iemand anders hoorde. Noemt hij er geen, dan
+                # blijft de founder het adres — het gedrag van vóór deze regel.
+                self._notify_rol(str(uitslag.get("ontvanger") or "")
+                                 or _founder_rol(), "", str(headsup))
             self.log.info("⏱ periodieke skill '%s' gedraaid — %s", naam,
                           headsup if headsup else "niets gevonden")
         # EEN NUL MOET ZICHZELF VERKLAREN. Zonder deze regel is "geen notificaties vandaag" niet te
