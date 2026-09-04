@@ -54,6 +54,35 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
     kop = (f"<div class='c2-bar'><a href='{_e(_terug(pid, back))}'>← project</a></div>"
            f"<h1>📄 {_e(titel)}{rol_chip} {_herkomst_chip(st, pid)}</h1>")
 
+    # HET WACHTENDE CONCEPT, BOVEN HET DOCUMENT. Niet eroverheen: zolang niemand bevestigd heeft,
+    # is dit een afleiding en niet de waarheid. De provenance staat erbij omdat een mens die een
+    # tekst bevestigt, moet kunnen zien waaruit hij is samengesteld — anders bevestigt hij proza.
+    concept = ""
+    c = store.concept(pid) if store is not None else {}
+    if (c.get("tekst") or "").strip():
+        bronnen = [str(b) for b in (c.get("bronnen") or [])]
+        tel = (f"assembled from {len(bronnen)} source{'s' if len(bronnen) != 1 else ''}: "
+               + ", ".join(_e(b) for b in bronnen)) if bronnen else "assembled without sources"
+        knoppen = ""
+        if rw:
+            _hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                    f"<input type='hidden' name='next' value='/rapport?pid={_e(pid)}'>")
+            knoppen = (f"<div class='qadd-row'>"
+                       f"<form method='post' action='/action' class='pf'>{_hid}"
+                       f"<button class='btn ok sm' type='submit' name='action' "
+                       f"value='verslag_bevestig'>Confirm report</button></form>"
+                       f"<details class='cardmenu'><summary class='flink'>Edit before confirming"
+                       f"</summary><form method='post' action='/action' class='pf'>{_hid}"
+                       f"{md_editor('tekst', value=c.get('tekst') or '', rows=14, help=True)}"
+                       f"<button class='btn ok sm' type='submit' name='action' "
+                       f"value='verslag_bijwerken'>Save draft</button></form></details></div>")
+        concept = (f"<div class='card einddoc-concept'>"
+                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>"
+                   f"<span class='muted'>{tel}</span></div>"
+                   f"<div class='einddoc-body einddoc-vol'>{_md_doc(c.get('tekst') or '')}</div>"
+                   f"{knoppen}</div>")
+
     # DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is, is iets anders dan
     # geen document — en beide zijn iets anders dan een geschreven rapport. Ze op één hoop gooien
     # is precies wat de kaart hiervóór deed.
@@ -93,5 +122,5 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                   f"This overwrites the current text.')\">Refresh from deliverables</button>"
                   f"</form></div>")
 
-    main = f"<div class='c2-main'>{kop}{_banner(msg)}{body}{acties}</div>"
+    main = f"<div class='c2-main'>{kop}{_banner(msg)}{concept}{body}{acties}</div>"
     return _page(f"Report · {titel}", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
