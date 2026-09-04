@@ -87,6 +87,69 @@ class ProjectDocStore:
         except OSError as e:
             log.warning("DOC_META_FAIL: herkomst van %s niet vastgelegd: %s", pid, e)
 
+    # ── het CONCEPT-verslag (tweede sidecar, naast het document) ────────────
+    # WAAROM NAAST EN NIET EROVERHEEN. Deze store overschrijft atomisch en houdt GEEN versies
+    # ("laatste schrijver wint"). Een assemblage die het document meteen zou overschrijven,
+    # vernietigt de werkoutput die de puls erin schreef — onherroepelijk. Het concept wacht daarom
+    # naast het document tot een mens het bevestigt; pas dán vervangt het de tekst.
+    def _concept_path(self, pid: str) -> str:
+        return os.path.join(self.dir, f"{pid}.concept.json")
+
+    def write_concept(self, pid: str, md: str, *, bronnen: list | None = None,
+                      voorzet: str = "", ts: float | None = None) -> None:
+        """Leg een samengesteld conceptverslag klaar. Overschrijft een eerder concept (er is er
+        altijd maar één in behandeling); raakt het document NIET aan."""
+        os.makedirs(self.dir, exist_ok=True)
+        payload = {"tekst": md or "", "bronnen": list(bronnen or []),
+                   "voorzet": voorzet, "ts": ts if ts is not None else time.time()}
+        pad = self._concept_path(pid)
+        fd, tmp = tempfile.mkstemp(dir=self.dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False)
+            os.replace(tmp, pad)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    def concept(self, pid: str) -> dict:
+        """Het wachtende concept, of {} als er geen is. Onleesbaar → {} met een LUIDE logregel:
+        een concept dat stil verdwijnt leest als "er was niets samengesteld"."""
+        try:
+            with open(self._concept_path(pid), encoding="utf-8") as fh:
+                d = json.load(fh)
+            return d if isinstance(d, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except (ValueError, OSError) as e:
+            log.warning("DOC_CONCEPT_READ_FAIL: concept van %s onleesbaar: %s", pid, e)
+            return {}
+
+    def clear_concept(self, pid: str) -> bool:
+        """Weg met het concept. True als er een was."""
+        try:
+            os.remove(self._concept_path(pid))
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError as e:
+            log.warning("DOC_CONCEPT_DEL_FAIL: concept van %s niet verwijderd: %s", pid, e)
+            return False
+
+    def confirm_concept(self, pid: str) -> bool:
+        """De mens bevestigt: het concept wórdt het document. Geen tier — een bevestigd verslag is
+        van de mens, ook al stelde een model het samen. Zonder concept: False, niets veranderd."""
+        c = self.concept(pid)
+        tekst = (c.get("tekst") or "").strip()
+        if not tekst:
+            return False
+        self.write(pid, tekst)
+        self.clear_concept(pid)
+        return True
+
     def meta(self, pid: str) -> dict:
         """De herkomst van het huidige document: `{"tier": str, "terugval": bool}`, of {} als het
         document met de hand is geschreven of van vóór deze markering stamt."""
@@ -103,6 +166,7 @@ class ProjectDocStore:
     def delete_for(self, pid: str) -> bool:
         """Cascade bij DEFINITIEVE project-delete. Geeft True als er een document verwijderd is."""
         self._write_meta(pid, None)                     # herkomst hoort bij het document, dus mee weg
+        self.clear_concept(pid)                         # en een wachtend concept net zo goed
         try:
             os.remove(self._path(pid))
             return True

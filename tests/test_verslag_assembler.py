@@ -1,0 +1,228 @@
+"""Het verslag stelt zichzelf samen bij afsluiting — als CONCEPT, zonder poort.
+
+Drie dingen die deze tests bewaken, elk met een reden die uit de meting op productie komt:
+
+1. **Het bestaande document overleeft.** `ProjectDocStore` overschrijft atomisch en houdt geen
+   versies. Een assemblage die meteen over het document heen schrijft, wist de werkoutput die de
+   puls erin zette — onherroepelijk. Het concept wacht dus ernaast.
+2. **Er is geen nieuwe poort.** We hebben net `dod_poort` weggehaald; een assemblage die kan
+   blokkeren zou daar een nieuwe van maken met een ander gezicht. Mislukt hij, dan is het project
+   gewoon afgesloten.
+3. **De kaart liegt niet.** Onbevestigde modeltekst als essentie tonen zou de kaart weer laten
+   zeggen dat er een verslag ligt dat er nog niet ligt — hetzelfde als de sjabloonzin bij de seeds.
+"""
+from __future__ import annotations
+
+from nooch_village import cockpit2
+from nooch_village.project_verslag import (BEHAALD, NIET_BEHAALD, ONBEKEND, bronnen_van, stel_samen,
+                                   voorzet_result)
+from nooch_village.views import projects as P
+from nooch_village.views.rapport import render_projectrapport
+
+ROLE = "mother_earth__nooch__website_developer"
+
+
+def _st(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    return dd, cockpit2._Stores(dd)
+
+
+def _project(dd, st, *, doc="", items=(), gesprek=()):
+    pid = st.projects.create(ROLE, "Hemp canvas bij een tweede leverancier", "human",
+                             status="queued", done_when="Er ligt een shortlist van drie.")
+    st.projects.start(pid)
+    if items:
+        # `checklist_add` geeft een dict terug en `check_add` een bool — niet de id's. De id's
+        # komen dus uit het project zelf; ze raden zou de helper stil laten falen (en dat deed hij).
+        cl = st.projects.checklist_add(pid, "Stappen")
+        cid = cl["id"]
+        for tekst, _ in items:
+            assert st.projects.check_add(pid, cid, tekst), tekst
+        vers = st.projects.get(pid)
+        rij = next(c for c in vers["checklists"] if c["id"] == cid)["items"]
+        for (tekst, af), it in zip(items, rij):
+            if af:
+                assert st.projects.check_toggle(pid, cid, it["id"]), tekst
+    for tekst in gesprek:
+        cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": [tekst], "author": ["human:"],
+                                            "next": ["/"]}, username="guest")
+    if doc:
+        cockpit2._Stores(dd).project_docs.write(pid, doc)
+    return pid
+
+
+# ── de voorzet: deterministisch, en een "nee" mag ────────────────────────────
+def test_voorzet_alles_af_is_waarschijnlijk_behaald():
+    p = {"checklists": [{"items": [{"text": "a", "done": True}, {"text": "b", "done": True}]}]}
+    soort, reden = voorzet_result(p)
+    assert soort == BEHAALD and "afgevinkt" in reden
+
+
+def test_voorzet_niets_af_is_waarschijnlijk_niet_behaald():
+    """Een 'nee' is net zo waardevol als een 'ja'. Zou de voorzet altijd positief zijn, dan wordt
+    een mislukking stil weggezet — precies wat we vermijden."""
+    p = {"checklists": [{"items": [{"text": "a", "done": False}, {"text": "b", "done": False}]}]}
+    assert voorzet_result(p)[0] == NIET_BEHAALD
+
+
+def test_voorzet_zegt_onbekend_in_plaats_van_te_gokken():
+    half = {"checklists": [{"items": [{"text": "a", "done": True}, {"text": "b", "done": False}]}]}
+    assert voorzet_result(half)[0] == ONBEKEND
+    assert voorzet_result({})[0] == ONBEKEND          # geen checklist = niets om aan af te lezen
+
+
+# ── provenance: alleen wat er echt is ────────────────────────────────────────
+def test_bronnen_noemen_alleen_wat_bestaat():
+    """Een lege checklist als bron noemen maakt de telling ("samengesteld uit N bronnen") een
+    leugen — en die telling is juist waarop een mens zijn bevestiging baseert."""
+    kaal = {"scope": "Iets"}
+    assert bronnen_van(kaal) == ["de projectdefinitie"]
+    rijk = {"scope": "Iets", "checklists": [{"items": [{"text": "a", "done": True}]}],
+            "log": [{"who": "rol", "text": "gedaan"}]}
+    b = bronnen_van(rijk, "een document")
+    assert len(b) == 4 and "het bestaande einddocument" in b
+
+
+def test_zonder_enige_bron_geen_concept():
+    assert stel_samen({}, "") is None
+
+
+# ── de terugval zonder model ─────────────────────────────────────────────────
+def test_zonder_model_toch_een_verslag_maar_zichtbaar_soberder():
+    """Fail-closed betekent hier: niets bedenken, niet niets leveren. De feiten liggen er al."""
+    p = {"scope": "Shortlist", "done_when": "Drie leveranciers benaderd.",
+         "checklists": [{"items": [{"text": "Leverancier A", "done": True},
+                                   {"text": "Leverancier B", "done": False}]}]}
+    c = stel_samen(p, "", reason=None)
+    assert c is not None
+    assert "## Goal" in c.tekst and "## What happened" in c.tekst and "## Result" in c.tekst
+    assert "Leverancier A" in c.tekst and "Leverancier B" in c.tekst
+    assert "without a language model" in c.tekst      # herkenbaar soberder, geen nep-proza
+
+
+def test_een_kapot_model_blokkeert_niets():
+    def stuk(*a, **k):
+        raise RuntimeError("model weg")
+    c = stel_samen({"scope": "Iets", "checklists": [{"items": [{"text": "a", "done": True}]}]},
+                   "", reason=stuk)
+    assert c is not None and "## Result" in c.tekst
+
+
+# ── de afsluitflow: geen poort, document blijft ──────────────────────────────
+def test_afsluiten_maakt_een_concept_naast_het_document(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, doc="# Het werk\n\nDrie leveranciers vergeleken op prijs en herkomst.",
+                   items=[("Leverancier A", True), ("Leverancier B", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    st2 = cockpit2._Stores(dd)
+    assert st2.projects.get(pid)["status"] == "done"
+    # HET DOCUMENT IS ONGEMOEID — dit is de kern: de store kent geen versies.
+    assert "Drie leveranciers vergeleken" in st2.project_docs.read(pid)
+    c = st2.project_docs.concept(pid)
+    assert (c.get("tekst") or "").strip()
+    assert c["voorzet"] == BEHAALD and len(c["bronnen"]) >= 3
+
+
+def test_afsluiten_lukt_ook_als_de_assemblage_stukgaat(tmp_path, monkeypatch):
+    """GEEN NIEUWE POORT. We haalden net dod_poort weg; een assemblage die kan blokkeren zou daar
+    een nieuwe van maken met een ander gezicht."""
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, items=[("A", True)])
+    import nooch_village.project_verslag as V
+    monkeypatch.setattr(V, "stel_samen", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk")))
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    st2 = cockpit2._Stores(dd)
+    assert st2.projects.get(pid)["status"] == "done"        # afgesloten, ondanks de kapotte assembler
+    assert st2.project_docs.concept(pid) == {}
+
+
+def test_de_mislukking_wordt_luid_gelogd(tmp_path, monkeypatch, caplog):
+    """Een assemblage die stil wegvalt leest later als "er viel niets samen te stellen" — dezelfde
+    onzichtbaarheid als bij het radarsignaal dat in een `except` verdween."""
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, items=[("A", True)])
+    import nooch_village.project_verslag as V
+    monkeypatch.setattr(V, "stel_samen", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk")))
+    with caplog.at_level("ERROR"):
+        cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert any("VERSLAG_MISLUKT" in r.message for r in caplog.records), caplog.text
+
+
+# ── bevestigen en bijwerken ──────────────────────────────────────────────────
+def test_bevestigen_maakt_het_concept_het_document(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, doc="oud document", items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    concept = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
+    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]}, username="guest")
+    st2 = cockpit2._Stores(dd)
+    assert st2.project_docs.read(pid) == concept
+    assert st2.project_docs.concept(pid) == {}          # niets meer te bevestigen
+
+
+def test_bijwerken_houdt_het_onbevestigd_en_bewaart_de_provenance(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, doc="oud document", items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    bronnen_voor = cockpit2._Stores(dd).project_docs.concept(pid)["bronnen"]
+    cockpit2.dispatch(dd, "verslag_bijwerken", {"pid": [pid], "tekst": ["## Result\nmijn versie"],
+                                                "next": ["/"]}, username="guest")
+    st2 = cockpit2._Stores(dd)
+    c = st2.project_docs.concept(pid)
+    assert c["tekst"] == "## Result\nmijn versie"
+    assert c["bronnen"] == bronnen_voor                 # waaruit is samengesteld verandert niet
+    assert st2.project_docs.read(pid) == "oud document"  # nog steeds niet bevestigd
+
+
+def test_leeg_bijwerken_wist_niets(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    _, msg = cockpit2.dispatch(dd, "verslag_bijwerken", {"pid": [pid], "tekst": ["  "],
+                                                         "next": ["/"]}, username="guest")
+    assert cockpit2.is_weigering(msg)
+    assert (cockpit2._Stores(dd).project_docs.concept(pid).get("tekst") or "").strip()
+
+
+def test_bevestigen_zonder_concept_is_een_nette_weigering(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st)
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]},
+                               username="guest")
+    assert cockpit2.is_weigering(msg)
+
+
+# ── de schermen ──────────────────────────────────────────────────────────────
+def test_de_route_toont_het_concept_boven_het_document_met_provenance(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, doc="oud document", items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "not confirmed yet" in html
+    assert "assembled from" in html
+    assert "oud document" in html                       # het document staat er nog steeds
+    assert "verslag_bevestig" in html and "verslag_bijwerken" in html
+
+
+def test_de_kaart_toont_een_merkteken_maar_niet_de_onbevestigde_tekst(tmp_path):
+    """De essentie blijft die van het BEVESTIGDE document. Onbevestigde modeltekst als samenvatting
+    tonen is dezelfde leugen als de sjabloonzin bij de seeds."""
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, doc="# Kop\n\nDit is het bevestigde werk met een echte eerste zin.",
+                   items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    concept = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
+    assert "Draft report awaiting confirmation" in frag
+    assert "Dit is het bevestigde werk" in frag         # de essentie van het document
+    assert concept[:60] not in frag                     # niet de onbevestigde tekst
+
+
+def test_zonder_schrijfrecht_geen_bevestigknop(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
+    assert "not confirmed yet" in html                  # lezen mag
+    assert "verslag_bevestig" not in html               # bevestigen niet

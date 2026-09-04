@@ -855,21 +855,30 @@ def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -
         # bruikbare essentie.
         return f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>{_e(label)} →</a></p>"
 
+    # EEN WACHTEND CONCEPT IS EEN SIGNAAL, GEEN VERSLAG. De essentie blijft die van het BEVESTIGDE
+    # document: onbevestigde modeltekst als samenvatting tonen zou de kaart weer laten zeggen dat er
+    # iets ligt wat er niet ligt — precies wat we bij de seeds weghaalden. Wel een merkteken, want
+    # er valt iets te doen.
+    wacht = ""
+    if store is not None and (store.concept(pid).get("tekst") or "").strip():
+        wacht = (f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>"
+                 f"Draft report awaiting confirmation →</a></p>")
+
     if not doc.strip():
         body = ("<p class='muted'>No end document yet — the assigned inhabitant writes it on "
-                "every successful pulse.</p>")
+                "every successful pulse.</p>") + wacht
         return body, ""
 
     ess = essentie_van(doc)
     if ess.soort == "seed":
         body = ("<p class='muted'>No report written yet — only the assignment.</p>"
-                + lees("Read the assignment"))
+                + lees("Read the assignment") + wacht)
     elif ess.heeft_tekst:
-        body = f"<p class='einddoc-kern'>{_e(ess.tekst)}</p>" + lees("Full report")
+        body = f"<p class='einddoc-kern'>{_e(ess.tekst)}</p>" + lees("Full report") + wacht
     else:
         # Trede 4: wel een rapport, maar geen zin die als essentie kan dienen (4x op productie).
         # Liever niets dan een fragment dat zich als samenvatting voordoet.
-        body = lees("Full report")
+        body = lees("Full report") + wacht
     return body, ""
 
 

@@ -744,6 +744,12 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    stopt het rapport alleen in een scrollbakje binnen een scrollende pagina. De cap hoorde bij het
    inline-op-de-kaart-tijdperk; nu staat er geen rapport meer op een kaart. */
 .einddoc-vol{max-height:none;overflow:visible}
+/* Het onbevestigde concept. Zichtbaar ánders dan het document eronder: een amberen rand zegt
+   "hier moet nog iemand ja op zeggen" zonder dat het een waarschuwing wordt. `einddoc-` en geen
+   eigen `verslag-`-familie: dit IS het einddocument, in ontwerp. Een nieuw prefix voor twee regels
+   is een privé-stylesheet. */
+.einddoc-concept{border-left:3px solid var(--yellow)}
+.einddoc-ckop{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
 .einddoc-kern{font-size:1.02rem;line-height:1.6;color:var(--ink);margin:0 0 .5rem;max-width:68ch}
 .einddoc-meer{margin:0}
 .att-hint{margin:.2rem 0 .5rem}

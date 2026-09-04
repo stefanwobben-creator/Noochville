@@ -1490,6 +1490,31 @@ def _act_proj_done(c):
         else:
             outcome = "goedgekeurd na review"
         pj.complete(pid, outcome); msg = "✓ afgerond"
+        # HET VERSLAG STELT ZICHZELF SAMEN — één keer, hier, niet elke puls. Uit wat er al ligt:
+        # definitie + checklist + gesprek + het bestaande document. Het resultaat is een CONCEPT
+        # dat naast het document wacht tot een mens het bevestigt (zie project_doc_store).
+        #
+        # GEEN POORT. De status staat hierboven al op done; mislukt de assemblage, dan is het
+        # project gewoon afgesloten en staat er geen concept. Maar dan wél LUID: een assemblage die
+        # stil wegvalt leest later als "er viel niets samen te stellen", en dat is precies de
+        # onzichtbaarheid waar we bij het radarsignaal tegenaan liepen.
+        try:
+            from nooch_village.project_verslag import stel_samen
+            from nooch_village.llm import reason as _reason
+            _p = pj.get(pid) or {}
+            _concept = stel_samen(_p, _doc, reason=_reason)
+            if _concept is not None and _ds is not None:
+                _ds.write_concept(pid, _concept.tekst, bronnen=_concept.bronnen,
+                                  voorzet=_concept.voorzet)
+                logging.getLogger("cockpit2.verslag").info(
+                    "VERSLAG_CONCEPT: pid=%s bronnen=%d voorzet=%s", pid, len(_concept.bronnen),
+                    _concept.voorzet)
+            else:
+                logging.getLogger("cockpit2.verslag").info(
+                    "VERSLAG_GEEN_MATERIAAL: pid=%s — geen bronnen om uit samen te stellen", pid)
+        except Exception:
+            logging.getLogger("cockpit2.verslag").exception(
+                "VERSLAG_MISLUKT: pid=%s afgesloten zonder concept", pid)
         # DE LUS SLUIT. Vroeg iemand dit als taak, dan hoort hij nu dat het klaar is. Zonder deze
         # regel is werk dat een rol voor je oppakt een eenrichtingsweg: het gebeurt, en jij hoort
         # er nooit meer iets van. Fail-soft — een melding die niet lukt blokkeert geen afronding.
@@ -1653,6 +1678,43 @@ def _act_proj_regen_doc(c):
             log=logging.getLogger("village.cockpit_regen"), data_dir=c.data_dir)
         return nxt, ("📄 rapport opnieuw gegenereerd" if ok
                      else "no report generated (no deliverables or no LLM key)")
+
+
+def _act_verslag_bevestig(c):
+    # AUTHZ: rolvervuller of Circle Lead — het verslag hoort bij het project, dus dezelfde poort als
+    # het bewerken van het document zelf (_act_proj_doc_edit). Bevestigen is een oordeel over eigen
+    # werk, geen org-brede mutatie.
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    pid = g("pid")
+    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    store = getattr(st, "project_docs", None)
+    if store is None or not store.confirm_concept(pid):
+        return nxt, "✗ no draft report to confirm"
+    return nxt, "✓ report confirmed"
+
+
+def _act_verslag_bijwerken(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie _act_verslag_bevestig. Bijwerken raakt het CONCEPT,
+    # niet het document: het blijft dus onbevestigd tot iemand er expliciet ja op zegt.
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    pid = g("pid")
+    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    store = getattr(st, "project_docs", None)
+    if store is None:
+        return nxt, "✗ no document store"
+    huidig = store.concept(pid)
+    tekst = (g("tekst") or "").strip()
+    if not tekst:
+        return nxt, "✗ empty draft — nothing saved"
+    # De provenance blijft staan: hij beschrijft waaruit is samengesteld, en dat verandert niet
+    # doordat een mens de formulering bijschaaft.
+    store.write_concept(pid, tekst, bronnen=huidig.get("bronnen") or [],
+                        voorzet=huidig.get("voorzet") or "")
+    return nxt, "✓ draft saved — still unconfirmed"
 
 
 def _act_proj_doc_edit(c):
@@ -5496,6 +5558,8 @@ ACTIONS = {
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
+    "verslag_bevestig": _act_verslag_bevestig,
+    "verslag_bijwerken": _act_verslag_bijwerken,
     "proj_regen_doc": _act_proj_regen_doc,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
