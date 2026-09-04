@@ -321,7 +321,7 @@ from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.wiki import render_pagina
-from nooch_village.views.rapport import render_rapport
+from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.backlog import render_backlog
 from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
@@ -5901,7 +5901,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 # exact dezelfde read-scope als /project (die de kaart toont, waar het rapport tot
                 # nu toe inline stond). Schrijven (proj_doc_edit, proj_regen_doc) zit achter de
                 # bestaande poorten in de dispatch-takken, niet hier.
-                self._send(render_rapport(st, (qs.get("pid") or qs.get("id") or [""])[0],
+                self._send(render_projectrapport(st, (qs.get("pid") or qs.get("id") or [""])[0],
                                           csrf_token=effective_csrf, username=username,
                                           msg=(qs.get("msg") or [""])[0],
                                           back=(qs.get("back") or ["/"])[0]))

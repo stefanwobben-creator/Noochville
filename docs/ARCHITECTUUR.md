@@ -21,7 +21,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/index.html` | `(inline)` | `cockpit2.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
 | `/backlog` | `render_backlog` | `nooch_village/views/backlog.py` |
-| `/rapport` | `render_rapport` | `nooch_village/views/rapport.py` |
+| `/rapport` | `render_projectrapport` | `nooch_village/views/rapport.py` |
 | `/pagina` | `render_pagina` | `nooch_village/views/wiki.py` |
 | `/project/nieuw` | `render_wizard` | `nooch_village/views/wizard.py` |
 | `/project` | `render_project` | `nooch_village/views/projects.py` |

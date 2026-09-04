@@ -10,7 +10,7 @@ from __future__ import annotations
 from nooch_village import cockpit2
 from nooch_village.projects import seed_document
 from nooch_village.views import projects as P
-from nooch_village.views.rapport import render_rapport
+from nooch_village.views.rapport import render_projectrapport
 
 ROLE = "mother_earth__nooch__website_developer"
 # Een UNIEKE staart: met een herhaalde zin komt de staart ook in de gekapte essentie voor, en
@@ -81,7 +81,7 @@ def test_kaart_zonder_bruikbare_essentie_toont_alleen_de_link(tmp_path):
 def test_route_toont_het_volledige_rapport_in_de_leeslaag(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st, f"# Kop\n\n{_LANG}\n")
-    html = render_rapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     assert "einddoc-body" in html                       # dezelfde leeslaag-typografie (#441)
     # ...maar ZONDER de hoogte-cap: die beschermde de kaart, en hier is geen kaart. Gemeten op
     # een echt rapport: 1540px inhoud in een venster van 431px, dus een scrollbakje in een
@@ -94,7 +94,7 @@ def test_route_toont_het_volledige_rapport_in_de_leeslaag(tmp_path):
 def test_bewerken_en_verversen_blijven_bereikbaar_op_de_route(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st, "# Kop\n\nEen zin die als essentie kan dienen op de kaart.\n")
-    html = render_rapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     for actie in ("proj_doc_edit", "proj_regen_doc"):
         assert f"value='{actie}'" in html, f"{actie} onbereikbaar geworden"
     assert "/rapport?pid=" in html                      # na opslaan blijf je bij het document
@@ -103,7 +103,7 @@ def test_bewerken_en_verversen_blijven_bereikbaar_op_de_route(tmp_path):
 def test_route_zonder_schrijfrecht_toont_geen_bewerkacties(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st, "# Kop\n\nEen zin die als essentie kan dienen op de kaart.\n")
-    html = render_rapport(cockpit2._Stores(dd), pid, csrf_token="")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
     assert "proj_doc_edit" not in html and "proj_regen_doc" not in html
     assert "einddoc-body" in html and "einddoc-vol" in html      # lezen mag wel
 
@@ -114,8 +114,8 @@ def test_route_onderscheidt_seed_van_geen_document(tmp_path):
     leeg = _project(dd, st)
     dw = "De shortlist is af"
     seed = _project(dd, st, seed_document(dw), done_when=dw)
-    h_leeg = render_rapport(cockpit2._Stores(dd), leeg, csrf_token="TOK")
-    h_seed = render_rapport(cockpit2._Stores(dd), seed, csrf_token="TOK")
+    h_leeg = render_projectrapport(cockpit2._Stores(dd), leeg, csrf_token="TOK")
+    h_seed = render_projectrapport(cockpit2._Stores(dd), seed, csrf_token="TOK")
     assert "No end document yet" in h_leeg
     assert "No report written yet" in h_seed and dw in h_seed   # de opdracht staat er wél
     assert "No end document yet" not in h_seed
@@ -123,5 +123,20 @@ def test_route_onderscheidt_seed_van_geen_document(tmp_path):
 
 def test_onbekend_project_geeft_een_nette_melding(tmp_path):
     dd, _ = _st(tmp_path)
-    html = render_rapport(cockpit2._Stores(dd), "bestaat-niet", csrf_token="TOK")
+    html = render_projectrapport(cockpit2._Stores(dd), "bestaat-niet", csrf_token="TOK")
     assert "Report not found" in html
+
+
+def test_de_claims_renderer_blijft_zijn_eigen_functie():
+    """De naamsbotsing die #444 introduceerde: `views/claims.render_rapport` werd in cockpit2 stil
+    overschreven door de project-renderer, dus de claims-aanroep gaf `uitslag` door als `st`.
+
+    Deze test raakt het pad dat toen geen dekking had: hij roept de claims-renderer met zijn eigen
+    handtekening aan. Kruipt de botsing terug, dan valt hij hier om — naast de structurele guard in
+    test_architectuur.py die de dubbele naam zelf verbiedt."""
+    from nooch_village.views.claims import render_rapport as claims_rapport
+    from nooch_village.views.rapport import render_projectrapport
+    assert claims_rapport is not render_projectrapport
+    frag = claims_rapport({"bevindingen": [], "score": 100}, markten=[], bron="test",
+                          csrf_token="TOK", kan_bord=False, db=None)
+    assert isinstance(frag, str) and frag

@@ -31,7 +31,7 @@ def _terug(pid: str, back: str) -> str:
     return f"/project{q}"
 
 
-def render_rapport(st, pid: str, csrf_token: str = "", username: str | None = None,
+def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | None = None,
                    msg: str = "", back: str = "/") -> str:
     """Het volledige einddocument van één project."""
     p = st.projects.get(pid)
