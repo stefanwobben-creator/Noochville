@@ -6,6 +6,7 @@ import urllib.parse
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
+from nooch_village.project_essentie import essentie_van
 from nooch_village.cockpit2_util import (
     _DS_LINK,
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
@@ -826,37 +827,50 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
-def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid) -> tuple[str, str]:
-    """Het levende einddocument, GESPLITST in (body, acties) voor de nieuwe sectie-indeling.
+def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -> tuple[str, str]:
+    """De Description-sectie: de ESSENTIE plus een weg naar het volledige rapport.
 
-    Hiervoor droeg dit blok zijn eigen kop ("📄 End document") en zat het in een <details>. In de
-    herindeling is "Beschrijving" de sectiekop en horen Bewerken/Verversen bij die kop — zoals in
-    de mock. De <details> vervalt: de sectie IS de eenheid, en een klapper binnen een sectie die al
-    afgebakend is, is een extra klik zonder betekenis.
+    Hiervóór stond het hele einddocument hier inline. Dat maakte de kaart onscanbaar — je opent
+    een project om te zien waar het staat en krijgt een document van vijf schermen. De kaart toont
+    nu een of twee zinnen; het rapport woont op `/rapport?pid=…` (zie views/rapport.py voor waarom
+    een eigen route en geen uitklapper).
 
-    De leeslaag (#441) blijft: .einddoc-body draagt de typografie en de hoogte-cap."""
+    GEEN INFORMATIEVERLIES: de essentie snijdt niets weg dat niet één klik verder staat, en bij een
+    gekapte zin is de link geen aanbod maar noodzaak — daarom staat hij er dan ook altijd.
+
+    DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is (107x op productie) is
+    iets anders dan geen document. Een essentie tonen bij een seed zou zeggen dat er een rapport
+    is, en dat is niet waar; de 'klaar wanneer'-regel als samenvatting tonen zou bovendien bij 84
+    van die 107 bijna letterlijk de projecttitel herhalen die er twee centimeter boven staat.
+
+    De acties (`proj_doc_edit`, `proj_regen_doc`) horen bij het volledige rapport en verhuizen dus
+    mee naar die route; wat hier blijft is de ingang ernaartoe."""
     store = getattr(st, "project_docs", None)
     doc = store.read(pid) if store is not None else ""
-    if doc.strip():
-        body = f"<div class='einddoc-body'>{_md_doc(doc)}</div>"
-    else:
+    nxt = f"/rapport?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
+
+    def lees(label: str) -> str:
+        # GEEN %-formatting hier: `nxt` bevat url-gecodeerde tekens (%2F), en die leest %-formatting
+        # als een format-specifier. De suite ving dat als een TypeError op elk project zonder
+        # bruikbare essentie.
+        return f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>{_e(label)} →</a></p>"
+
+    if not doc.strip():
         body = ("<p class='muted'>No end document yet — the assigned inhabitant writes it on "
                 "every successful pulse.</p>")
-    if not rw:
         return body, ""
-    editor = (f"<details class='cardmenu'><summary class='flink'>Edit</summary>"
-              f"<form method='post' action='/action' class='pf'>{hid()}"
-              f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-              f"<label class='att-lbl'>The AI updates this document; give lasting instructions via "
-              f"a #task comment on the wall.</label>"
-              f"{md_editor('doc', value=doc, rows=10, help=True)}"
-              f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Save document</button>"
-              f"</form></details>")
-    regen = (f"<form method='post' action='/action' class='pf einddoc-regen'>{hid()}"
-             f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
-             f"onclick=\"return confirm('Regenerate the report from the latest deliverables? "
-             f"This overwrites the current text.')\">Refresh</button></form>")
-    return body, f"{editor}{regen}"
+
+    ess = essentie_van(doc)
+    if ess.soort == "seed":
+        body = ("<p class='muted'>No report written yet — only the assignment.</p>"
+                + lees("Read the assignment"))
+    elif ess.heeft_tekst:
+        body = f"<p class='einddoc-kern'>{_e(ess.tekst)}</p>" + lees("Full report")
+    else:
+        # Trede 4: wel een rapport, maar geen zin die als essentie kan dienen (4x op productie).
+        # Liever niets dan een fragment dat zich als samenvatting voordoet.
+        body = lees("Full report")
+    return body, ""
 
 
 def _ai_namen(st) -> list[str]:
@@ -1259,7 +1273,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
-    einddoc_body, einddoc_acties = _einddocument_delen(st, pid, rw, hid)
+    einddoc_body, einddoc_acties = _einddocument_delen(st, pid, rw, hid, back)
     # ═══ DE HERINDELING ═══════════════════════════════════════════════════════════════
     # Header (crumb + titel + chips), dan drie secties in de hoofdkolom en een lichte rail. De
     # oude koppen "END DOCUMENT" en "WALL — CONTENT & CONVERSATION" zijn weg: ze schreeuwden en

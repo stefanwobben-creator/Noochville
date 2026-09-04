@@ -1131,6 +1131,67 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip()
 
 
+# ── TWEE VRAGEN OVER DEZELFDE SEED ───────────────────────────────────────────────────────────
+# "Wat toon je?" en "wat is Done?" lijken hetzelfde te vragen, maar zijn het niet, en ze op één
+# functie laten leunen is hoe een beleidswijziging per ongeluk uit een weergave-fix rolt.
+#
+#   is_seed_van_dit_project  → DE POORTVRAAG. Is dit exact de seed die bij DIT project hoort?
+#                              Strikt, en record-gedreven: hij vergelijkt tegen `done_when`.
+#   heeft_seed_vorm          → DE WEERGAVEVRAAG. Heeft dit document de VORM van een seed, welke
+#                              opdracht er ook in staat? Los van het record.
+#
+# Dit is bewust GEEN duplicatie zoals de status-chip die in twee zones stond. Daar stond één feit
+# op twee plekken; hier staan twee verschillende vragen naast elkaar. Het sjabloon zelf leeft nog
+# steeds op precies één plek — `seed_document` — en beide functies leiden zich daaruit af.
+#
+# Waarom ze uit elkaar lopen: op productie hebben 67 geseede documenten een LEEG `done_when` op
+# het record. De poortvraag zegt daar "nee" (er is geen seed om tegen te vergelijken) en de
+# weergavevraag "ja" (dit document is zichtbaar niets dan de opdracht). Beide antwoorden zijn juist
+# voor hun eigen vraag: de kaart mag zo'n document niet als samenvatting tonen, én een echt
+# afgeronde taak met een goede titel mag Done worden zonder geschreven document. Of Done een
+# document zou MOETEN vereisen is een eigen ontwerpbeslissing, niet iets wat hier stilletjes
+# meelift.
+
+# Het seed-sjabloon met een merkteken op de plek van de opdracht, zodat we de vaste kop en staart
+# kunnen aflezen ZONDER ze ergens over te tikken. Verandert `seed_document`, dan verandert dit mee.
+_SEED_MERK = "\x00OPDRACHT\x00"
+_SEED_KOP, _SEED_STAART = seed_document(_SEED_MERK).split(_SEED_MERK, 1)
+
+
+def is_seed_van_dit_project(project: dict | None, doc_text: str = "") -> bool:
+    """DE POORTVRAAG: is dit document exact de seed die bij dít project hoort?
+
+    Strikt en record-gedreven — `dod_poort` gebruikt hem, en alleen hij. Leeg `done_when` op het
+    record betekent: geen seed om tegen te vergelijken, dus False. Dat is hier het gewenste
+    antwoord: de poort hoort geen projecten te sluiten op grond van een vermoeden.
+
+    Voor "hoe ziet dit document eruit" moet je bij `heeft_seed_vorm` zijn."""
+    dt = (doc_text or "").strip()
+    if not dt:
+        return False
+    seed = seed_document(((project or {}).get("done_when") or ""))
+    return bool(seed) and _norm(dt) == _norm(seed)
+
+
+def heeft_seed_vorm(doc_text: str = "") -> bool:
+    """DE WEERGAVEVRAAG: is dit document niets dan de opdracht — welke opdracht dan ook?
+
+    Anders gezegd: bestaat er een X waarvoor dit gelijk is aan `seed_document(X)`? Kop en staart
+    komen uit `seed_document` zelf, dus het sjabloon staat nog steeds op één plek.
+
+    Nodig omdat 67 geseede documenten op productie een leeg `done_when` op het record hebben. Zonder
+    deze vorm-vraag toonde de kaart daar de sjabloonzin ("De inwoner werkt dit document bij elke
+    puls bij…") als samenvatting — een kaart die zegt dat er een rapport is dat er niet is.
+
+    Neemt bewust GEEN project aan: de vraag "wat staat hier" is uit het document alleen te
+    beantwoorden. Dat is precies waarin hij van de poortvraag verschilt."""
+    n = _norm(doc_text or "")
+    kop, staart = _norm(_SEED_KOP), _norm(_SEED_STAART)
+    if not n or not kop:
+        return False
+    return n.startswith(kop) and n.endswith(staart) and len(n) > len(kop) + len(staart)
+
+
 def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
     """De projectpoort (founder, 19 jul; verhuisd 21 jul naar het einddocument): Done vereist
     dat de uitkomst beantwoord is IN het einddocument, niet dat het werk 'gedaan' is. De poort is
@@ -1147,7 +1208,8 @@ def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
     if not dt:
         return ("nog niet af: het einddocument is nog leeg — schrijf eerst het antwoord op de "
                 "uitkomst (of waarom die onbeantwoordbaar is)")
-    if _norm(dt) == _norm(seed_document(p.get("done_when") or "")):
+    # DE POORTVRAAG, bewust de strikte: zie het blok bij is_seed_van_dit_project.
+    if is_seed_van_dit_project(p, dt):
         return ("nog niet af: het einddocument bevat alleen de opdracht (klaar wanneer), nog geen "
                 "antwoord op de uitkomst")
     return None

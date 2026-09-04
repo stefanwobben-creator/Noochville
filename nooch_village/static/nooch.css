@@ -737,6 +737,16 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    het reactievak eronder niet uit beeld duwt; laten vallen zou de ene klacht oplossen en de andere
    verergeren. De <details open> eromheen is de ontsnapping voor wie het hele document wil. */
 .einddoc-body{max-height:70vh;overflow-y:auto;padding-right:.4rem;line-height:1.6}
+/* De essentie op de kaart: één of twee zinnen, iets groter dan lopende tekst want dit is het
+   enige wat een scanner leest. `einddoc-` en geen eigen prefix — het IS het einddocument, alleen
+   ingekort; een nieuwe familie zou een privé-stylesheet voor twee regels zijn. */
+/* Op de eigen route is het document de pagina: daar beschermt de hoogte-cap niets meer, hij
+   stopt het rapport alleen in een scrollbakje binnen een scrollende pagina. De cap hoorde bij het
+   inline-op-de-kaart-tijdperk; nu staat er geen rapport meer op een kaart. */
+.einddoc-vol{max-height:none;overflow:visible}
+.einddoc-kern{font-size:1.02rem;line-height:1.6;color:var(--ink);margin:0 0 .5rem;max-width:68ch}
+.einddoc-meer{margin:0}
+.att-hint{margin:.2rem 0 .5rem}
 .einddoc-body h3,.einddoc-body h4,.einddoc-body h5,.einddoc-body h6{margin:1.4rem 0 .5rem;font-family:var(--font-display);line-height:1.2}
 .einddoc-body>:first-child{margin-top:0}
 .einddoc-body h3{font-size:1.25rem}.einddoc-body h4{font-size:1.1rem}.einddoc-body h5{font-size:.95rem}.einddoc-body h6{font-size:.85rem}

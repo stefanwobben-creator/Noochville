@@ -321,6 +321,7 @@ from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.wiki import render_pagina
+from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.backlog import render_backlog
 from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
@@ -5894,6 +5895,16 @@ def make_handler(data_dir: str, csrf_token: str,
                 # niet hier; deze route toont alleen wat je mag zien.
                 self._send(render_backlog(st, csrf=effective_csrf, username=username,
                                           msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/rapport":
+                # AUTHZ: iedereen-ingelogd — het rapport IS het einddocument van een project, dus
+                # exact dezelfde read-scope als /project (die de kaart toont, waar het rapport tot
+                # nu toe inline stond). Schrijven (proj_doc_edit, proj_regen_doc) zit achter de
+                # bestaande poorten in de dispatch-takken, niet hier.
+                self._send(render_projectrapport(st, (qs.get("pid") or qs.get("id") or [""])[0],
+                                          csrf_token=effective_csrf, username=username,
+                                          msg=(qs.get("msg") or [""])[0],
+                                          back=(qs.get("back") or ["/"])[0]))
                 return
             if path == "/pagina":
                 # AUTHZ: iedereen-ingelogd — een wiki-pagina IS een rol-note, dus exact dezelfde
