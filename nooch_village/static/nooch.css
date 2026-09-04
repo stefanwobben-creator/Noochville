@@ -1222,3 +1222,100 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
 .wz-srow:first-child{border-top:none}.wz-sk{width:95px;flex:none;color:var(--subtle);font-weight:600}.wz-sv{flex:1}
 .wz-cheer{text-align:center;padding:1rem 0}.wz-cheer .big{font-size:2.6rem}
+
+
+/* ══ PROJECTKAART — herindeling ═══════════════════════════════════════════════════════════════
+   Structuur uit docs/projectkaart_redesign_prototype.html. De MAATVOERING komt uit die mock
+   (chip-pil 999px met rand, sectiekop klein in kapitalen, rail met eigen grond); de KLEUREN en
+   radii komen uit onze tokens, zodat de kaart bij de rest van de cockpit hoort en niet bij het
+   prototype. Elf klassen, één familie — dat is de prijs van een herindeling, en ze horen bij
+   elkaar in plaats van los rond te zwerven. */
+.pkaart{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.pkaart-head{padding:1.25rem 1.5rem .9rem;border-bottom:1px solid var(--border)}
+.pkaart-crumb{font-size:.75rem;color:var(--subtle);margin-bottom:.5rem}
+.pkaart-body{display:grid;grid-template-columns:1fr 15rem;gap:0;align-items:start}
+.pkaart-main{padding:1.4rem 1.5rem;min-width:0}
+.pkaart-rail{padding:1.25rem 1.1rem;border-left:1px solid var(--border);background:var(--cream-2)}
+@media(max-width:760px){.pkaart-body{grid-template-columns:1fr}
+  .pkaart-rail{border-left:none;border-top:1px solid var(--border)}}
+
+/* De chips: echte pillen met rand en grond. Een LEGE chip krijgt een streepjesrand — de mock
+   onderscheidt "nog niet ingevuld" zo, en dat nodigt uit waar grijze tekst alleen constateert. */
+.pchips{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.75rem;align-items:center}
+.pchip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
+  background:var(--surface);border-radius:var(--radius-pill);padding:.26rem .7rem;
+  font-size:.78rem;font-weight:600;color:var(--ink);line-height:1.5}
+.pchip-k{color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.pchip-v{font-weight:600}
+.pchip-leeg{background:var(--green-tint);border-style:dashed;border-color:var(--green)}
+.pchip-leeg .pchip-v{color:var(--green-dark);font-weight:500}
+.pchip-eig{gap:.45rem}
+.pchip-form{display:inline}
+.pchip-form select{border:none;background:none;font:inherit;font-size:.78rem;font-weight:600;
+  color:var(--ink);cursor:pointer;padding:0;max-width:9rem}
+
+/* Sectiekop: klein, in kapitalen, gedempt — de INHOUD is de hoofdzaak. De oude koppen
+   ("END DOCUMENT", "WALL — CONTENT & CONVERSATION") schreeuwden en zeiden niets over wat eronder
+   stond. Acties rechts uitgelijnd, zoals Bewerken/Verversen in de mock. */
+.psec{margin:0 0 1.9rem}
+.psec:last-child{margin-bottom:0}
+.psec-head{display:flex;align-items:baseline;gap:.6rem;margin:0 0 .7rem}
+.psec-head h2{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  font-weight:700;margin:0}
+.psec-bij{font-size:.75rem;color:var(--subtle)}
+.psec-act{margin-left:auto;display:flex;gap:.8rem;align-items:baseline;font-size:.78rem}
+
+/* De rail: één regel per veld, waarde rechts. Geen formulierveld in beeld tot je hem aanraakt. */
+.rail-kop{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);
+  font-weight:700;margin:0 0 .55rem}
+.rail-kop2{margin-top:1.4rem}
+.rail-rij{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;font-size:.8rem;min-width:0}
+.rail-i{width:1.1rem;text-align:center;opacity:.7;flex:0 0 auto}
+.rail-l{color:var(--subtle);flex:0 0 auto}
+.rail-v{margin-left:auto;text-align:right;min-width:0;color:var(--ink);font-size:.78rem}
+.rail-v select{max-width:8.5rem}
+.rail-acties{display:flex;flex-direction:column;gap:.4rem;align-items:flex-start}
+.rail-meer{margin-top:.1rem}   /* de rail-kop scheidt al; een lijn erbij is dezelfde scheiding twee keer (ADD heeft er ook geen) */
+/* De Status-chip is een <details>-trigger: hij ziet eruit als elke andere pil, maar opent het
+   status-menu. `list-style:none` + `::-webkit-details-marker` halen het driehoekje weg dat de
+   browser zelf voor een <summary> zet — anders staan er twee carets. */
+.pchip-menu{position:relative;display:inline-block}
+summary.pchip{cursor:pointer;list-style:none}
+summary.pchip::-webkit-details-marker{display:none}
+summary.pchip .caret{color:var(--subtle);font-size:.8rem;margin-left:.15rem;line-height:1}
+summary.pchip:hover{border-color:var(--gray)}
+/* Het ⋯ in de rail. `details.cardmenu` heeft kaartstyling uit zijn ándere gebruik (de statuspil
+   in de projectlijst): rand, radius 9px, witte grond, 204px breed. In de rail is dat een lege doos
+   om één teken heen. Hier strippen we die schil; `.cardmenu > summary` is specifieker dan
+   `.meertrigger`, dus de trigger-regels staan óók op die combinatie. */
+.rail-meer .cardmenu{border:0;background:transparent;padding:0;border-radius:0;width:auto;
+  box-shadow:none}   /* de schaduw óók: een schaduw om een transparante doos tekent nog steeds die doos */
+.rail-meer .cardmenu > summary.meertrigger{list-style:none;cursor:pointer;font-size:1.05rem;
+  color:var(--subtle);line-height:1;width:1.85rem;height:1.85rem;padding:0;border-radius:var(--radius-pill);
+  display:inline-flex;align-items:center;justify-content:center}
+.rail-meer .cardmenu > summary.meertrigger::-webkit-details-marker{display:none}
+.rail-meer .cardmenu > summary.meertrigger:hover{color:var(--ink);background:var(--sand)}
+
+/* ── herindeling: drie dingen die pas op het scherm zichtbaar werden ────────────────────────── */
+/* 1. De titel liep buiten de kaart. .pcard-head was gebouwd voor een titel MET buren rechts
+      (deadline, status, menu); die staan nu in de chips-rij en de rail, dus de titel krijgt de
+      volle breedte en mag afbreken. */
+.pkaart .pcard-head{display:block}
+.pkaart .pcard-head .ptitle,.pkaart .pcard-head h2{white-space:normal;overflow-wrap:anywhere;
+  max-width:100%;line-height:1.25}
+.pkaart .pcard-head input[type=text],.pkaart .titleform input{width:100%;max-width:100%}
+
+/* 2. De Inzet-chip: `_effort_control` houdt zijn eigen model, maar zijn invoervak brak de pil.
+      Rand en grond weg BINNEN de chip — de pil is de omlijsting. */
+.pchip-inzet input,.pchip-inzet select{border:none;background:none;font:inherit;font-size:.78rem;
+  font-weight:600;color:var(--ink);padding:0;box-shadow:none}
+.pchip-inzet input{width:2.4rem;text-align:right}
+.pchip-inzet .fieldform{gap:.25rem}
+
+/* 3. De doel-knop rendeerde zijn SVG op natuurlijke grootte. */
+.rail-btn{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
+  background:var(--surface);border-radius:var(--radius);padding:.35rem .6rem;font:inherit;
+  font-size:.78rem;color:var(--ink);cursor:pointer}
+.rail-btn:hover:not([disabled]){background:var(--green-tint);border-color:var(--green)}
+.rail-btn[disabled]{opacity:.55;cursor:default}
+.rail-btn svg{width:1rem;height:1rem;flex:0 0 auto}

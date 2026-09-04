@@ -21,9 +21,11 @@ def test_detail_overzicht_kop(tmp_path):
     # tweeregelig — label boven, control op volle breedte — en dat stapelde tot de "zware kolom"
     # waar Stefan over viel. De dropdowns blijven (uniformiteit uit #154); alleen de kolom is half
     # zo hoog. `wide` is daarmee dode CSS geworden en verwijderd.
-    for k in ("pgrid", "pside", "class='dcol'", "Project details",
-              "<span class='dk'>Role</span>", "<span class='dk'>Owner</span>",
-              "<span class='dk'>Created</span>", "<span class='dk'>Visible</span>"):
+    # DE HERINDELING (na #441/#442): de meta staat niet meer als dcol-rijen in een pside-kolom
+    # maar als chips in de header (impact, business, inzet, status, trekker) en als rail-regels
+    # (rol, deadline, zichtbaar, aangemaakt). pgrid/pside/dcol zijn op deze kaart vervallen.
+    for k in ("pkaart", "pkaart-body", "pkaart-rail", "pchips",
+              "rail-rij", "Role", "Deadline", "Created", "Visible"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
     # statuswissel via het …-menu
@@ -40,7 +42,8 @@ def test_status_menu_markeert_huidige(tmp_path):
 def test_detail_readonly_geen_menu(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="", fragment=True)
-    assert "cardmenu" not in frag and "class='dcol'" in frag
+    # Read-only: geen bewerk-menu, maar de rail toont de waarden wel.
+    assert "cardmenu" not in frag and "pkaart-rail" in frag
 
 
 def test_redesign_layout(tmp_path):
@@ -48,15 +51,22 @@ def test_redesign_layout(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     # full-width header met titel inline + …-menu (status/archiveren/verwijderen)
     assert "pcard-head" in frag and "titleform" in frag and "title-edit" in frag
-    assert "cardmenu" in frag and "menu-h" in frag and "Archive" in frag and "Delete" in frag
-    # Structuur-kantlijn: Project details + Checklist-panel; de opdracht-editor is uit de UI verwijderd
+    # `menu-h` (de kop "Status" bóven de status-items) is vervallen: de status-items hangen nu
+    # onder de Status-chip, en een kop "Status" in een menu dat je opent vanaf een chip met
+    # het label "Status" zegt hetzelfde twee keer. Het ⋯-menu houdt alleen acties over.
+    assert "cardmenu" in frag and "Archive" in frag and "Delete" in frag
+    assert "menu-h" not in frag
+    # De rail heet nu "Details" (klein, in kapitalen) in plaats van een paneel "Project details":
+    # de sectiekoppen zijn gedempt zodat de INHOUD de hoofdzaak is.
     # (geen proj_describe-form meer); Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside)
-    assert "Project details" in frag and "value='proj_describe'" not in frag
+    assert "Details" in frag and "value='proj_describe'" not in frag
     # De zin staat nu in de HINT en niet meer in het label: bij het compacter maken van de
     # composer viel hij er bijna uit, en hij is informatie — hij zegt waar sturen gebeurt.
     assert "Steer via the checklist" in frag
     assert "File from your computer" in frag                 # bijlage-affordance in de composer
-    assert "pside" in frag and "Wall — content" in frag
+    # De kop "Wall — content & conversation" is vervallen: de sectie heet nu "Gesprek", en de
+    # kolom is de rail. De oude koppen schreeuwden en zeiden niets over wat eronder stond.
+    assert "pkaart-rail" in frag and "Conversation" in frag and "Wall — content" not in frag
     # geen apart 'Acties'-blok
     assert "Acties" not in frag
 
