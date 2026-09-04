@@ -826,26 +826,25 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
-def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
-    """Het levende einddocument: in-/uitklapbare, leesbaar-gerenderde weergave (📄, via `_md_doc`) +
-    edit-form (mens redigeert bij review). De weergave zit in een <details open> met een eigen
-    hoogte-cap (.einddoc-body) zodat een lang rapport de composer eronder niet uit beeld duwt; inklappen
-    maakt de composer direct bereikbaar. De AI werkt het document bij; mens-edits zijn input voor de
-    volgende synthese-pass (geen merge)."""
+def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid) -> tuple[str, str]:
+    """Het levende einddocument, GESPLITST in (body, acties) voor de nieuwe sectie-indeling.
+
+    Hiervoor droeg dit blok zijn eigen kop ("📄 End document") en zat het in een <details>. In de
+    herindeling is "Beschrijving" de sectiekop en horen Bewerken/Verversen bij die kop — zoals in
+    de mock. De <details> vervalt: de sectie IS de eenheid, en een klapper binnen een sectie die al
+    afgebakend is, is een extra klik zonder betekenis.
+
+    De leeslaag (#441) blijft: .einddoc-body draagt de typografie en de hoogte-cap."""
     store = getattr(st, "project_docs", None)
     doc = store.read(pid) if store is not None else ""
     if doc.strip():
-        body = f"<div class='fentry'><div class='fbubble einddoc-body'>{_md_doc(doc)}</div></div>"
+        body = f"<div class='einddoc-body'>{_md_doc(doc)}</div>"
     else:
-        body = ("<div class='fentry'><div class='fbubble'><span class='muted'>No end document yet — "
-                "the assigned inhabitant writes it on every successful pulse.</span></div></div>")
-    view = (f"<details class='einddoc-d' open><summary class='wall-head einddoc-sum'>"
-            f"<h2>📄 End document</h2>{_herkomst_chip(st, pid)}"
-            f"<span class='einddoc-toggle'>expand/collapse</span></summary>"
-            f"{body}</details>")
+        body = ("<p class='muted'>No end document yet — the assigned inhabitant writes it on "
+                "every successful pulse.</p>")
     if not rw:
-        return view
-    editor = (f"<details class='cardmenu'><summary class='flink'>✏️ edit document</summary>"
+        return body, ""
+    editor = (f"<details class='cardmenu'><summary class='flink'>Edit</summary>"
               f"<form method='post' action='/action' class='pf'>{hid()}"
               f"<input type='hidden' name='pid' value='{_e(pid)}'>"
               f"<label class='att-lbl'>The AI updates this document; give lasting instructions via "
@@ -856,8 +855,8 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
     regen = (f"<form method='post' action='/action' class='pf einddoc-regen'>{hid()}"
              f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
              f"onclick=\"return confirm('Regenerate the report from the latest deliverables? "
-             f"This overwrites the current text.')\">🔄 regenerate report</button></form>")
-    return f"{view}{editor}{regen}"
+             f"This overwrites the current text.')\">Refresh</button></form>")
+    return body, f"{editor}{regen}"
 
 
 def _ai_namen(st) -> list[str]:
@@ -888,6 +887,131 @@ def _ai_namen(st) -> list[str]:
     return uit
 
 
+def _psectie(kop: str, inhoud: str, *, bijschrift: str = "", acties: str = "") -> str:
+    """Eén sectie in de hoofdkolom: kleine kop in kapitalen, acties rechts, inhoud eronder.
+
+    De koppen zijn klein en gedempt (zoals in de mock), niet groot en display: de INHOUD is de
+    hoofdzaak. De oude koppen "END DOCUMENT" en "WALL — CONTENT & CONVERSATION" schreeuwden en
+    zeiden tegelijk niets over wat eronder stond."""
+    bs = f"<span class='psec-bij'>{_e(bijschrift)}</span>" if bijschrift else ""
+    ac = f"<span class='psec-act'>{acties}</span>" if acties else ""
+    return (f"<section class='psec'><div class='psec-head'><h2>{_e(kop)}</h2>{bs}{ac}</div>"
+            f"{inhoud}</section>")
+
+
+def _rail_regel(icoon: str, label: str, waarde: str, *, control: str = "") -> str:
+    """Eén regel in de rail: icoon, label, waarde rechts. `control` vervangt de waarde als het veld
+    bewerkbaar is — dan staat het besturingselement zelf in de regel."""
+    rechts = control or f"<span class='rail-v'>{_e(waarde)}</span>"
+    return (f"<div class='rail-rij'><span class='rail-i'>{icoon}</span>"
+            f"<span class='rail-l'>{_e(label)}</span>{rechts}</div>")
+
+
+def _chip_knop(kop: str, waarde: str, *, leeg: bool = False, extra: str = "") -> str:
+    """Eén chip uit de mock: pil met kop-label en waarde. `leeg` → gestippelde rand (de mock
+    onderscheidt "nog niet ingevuld" met een streepjesrand, niet met grijze tekst — een leeg veld
+    dat eruitziet als een gevuld veld nodigt niet uit)."""
+    return (f"<span class='pchip{' pchip-leeg' if leeg else ''}{extra}'>"
+            f"<span class='pchip-k'>{_e(kop)}</span>"
+            f"<span class='pchip-v'>{_e(waarde)}</span></span>")
+
+
+def _chips_rij(st, p, rw: bool, hid) -> str:
+    """De meta-rij als chips onder de titel, in plaats van een kolom dropdowns.
+
+    DIT DOORBREEKT BEWUST DE UNIFORMITEIT UIT #154. Die PR maakte impact/business gelijk aan
+    Rol/Trekker door er dropdowns van te maken; na het live zien van de incrementele versie koos
+    Stefan voor de mock-indeling. Geen oversight, een herziene afweging.
+
+    GEEN NIEUW SCHRIJFPAD: elke chip post naar dezelfde dispatch als de dropdown die hij vervangt
+    (`proj_setimpact`, `proj_seteffort`, `proj_status`, `proj_settrekker`). De opgeslagen waarden
+    blijven Nederlands — dat is de logica-sleutel — en `_IMPACT_LABEL` blijft de enige display-
+    mapping. Bewerkbaar, niet display-only."""
+    uit = []
+    for veld, kind, opts, kop in (("missie_impact", "missie", _MISSIE_OPTS, "Impact"),
+                                  ("business_impact", "business", _BUSINESS_OPTS, "Business")):
+        cur = p.get(veld, "")
+        label = _IMPACT_LABEL.get(cur, cur) or "—"
+        if not rw:
+            uit.append(_chip_knop(kop, label, leeg=not cur))
+            continue
+        keuzes = "".join(
+            f"<option value='{_e(v)}'{' selected' if v == cur else ''}>{_e(_IMPACT_LABEL.get(v, v))}</option>"
+            for v, _ in opts)
+        uit.append(
+            f"<form method='post' action='/action' class='pchip-form'>{hid()}"
+            f"<input type='hidden' name='action' value='proj_setimpact'>"
+            f"<input type='hidden' name='kind' value='{_e(kind)}'>"
+            f"<span class='pchip{'' if cur else ' pchip-leeg'}'>"
+            f"<span class='pchip-k'>{_e(kop)}</span>"
+            f"<select name='value' onchange='{_AUTOSAVE}'>"
+            f"<option value=''>—</option>{keuzes}</select></span></form>")
+    # Inzet: de chip TOONT de waarde, de bestaande _effort_control blijft het bewerkveld. Effort
+    # heeft een eigen model (uren als canonieke opslag, uren/dagen-toggle); dat in een chip persen
+    # zou een tweede bewerkpatroon maken voor iets dat al werkt.
+    _u = _effort_hours(p.get("effort"))
+    if rw:
+        # `_effort_control` HOUDT zijn eigen model (uren canoniek, uren/dagen-toggle, autosave op
+        # blur). Hij verhuist alleen naar de chip; hem hier naspelen zou een tweede bewerkpatroon
+        # maken voor iets dat al werkt — en de suite ving dat hij anders ONBEREIKBAAR werd.
+        uit.append(f"<span class='pchip pchip-inzet{'' if _u else ' pchip-leeg'}'>"
+                   f"<span class='pchip-k'>Effort</span>{_effort_control(p, rw, hid)}</span>")
+    else:
+        uit.append(_chip_knop("Effort",
+                              (f"{_u // 8} d" if _u and _u % 8 == 0 else f"{_u} u") if _u else "—",
+                              leeg=not _u))
+    # ÉÉN HUIS PER EIGENSCHAP. Status stond twee keer: hier als etiket (niet bewerkbaar) en in de
+    # rail als trigger van het ⋯-menu (wél bewerkbaar). Lezen en veranderen op twee plekken is de
+    # ergste vorm van de dubbeling: de zichtbare chip loog dat er niets te kiezen viel. De chip is
+    # nu zelf de trigger; het menu-lichaam is ongewijzigd (zelfde `proj_status` / `proj_done`).
+    _slbl = _PROJ_CHIP.get(p.get("status", ""), (p.get("status", "—"), ""))[0]
+    if rw and hid is not None:
+        items = ""
+        for label, key, statuses in _PROJ_COLS:
+            act = "proj_done" if key == "done" else "proj_status"
+            to = "" if key == "done" else f"<input type='hidden' name='to' value='{_e(key)}'>"
+            on = " on" if p.get("status", "") in statuses else ""
+            items += (f"<form method='post' action='/action'>{hid()}{to}"
+                      f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>"
+                      f"{_e(label)}</button></form>")
+        uit.append(f"<details class='cardmenu pchip-menu'>"
+                   f"<summary class='pchip pchip-status' aria-label='change status'>"
+                   f"<span class='pchip-k'>Status</span>"
+                   f"<span class='pchip-v'>{_e(_slbl)}</span><span class='caret'>▾</span></summary>"
+                   f"<div class='cardmenu-b'>{items}</div></details>")
+    else:
+        uit.append(_chip_knop("Status", _slbl))
+    return "<div class='pchips'>" + "".join(uit) + "</div>"
+
+
+def _eigenaar_chip(st, p, rw: bool = False, hid=None, trekker_opts: str = "") -> str:
+    """De trekker als chip in de header: wie het DOET. De rol (waar het hangt) staat in de rail.
+
+    De mock heeft één "Owner"; de kaart heeft twee velden. Ze samenvoegen zou er één laten
+    verdwijnen, dus ze staan op de twee plekken die bij hun betekenis horen."""
+    # BEWERKBAAR, NIET ALLEEN TONEN. De suite ving dit: `proj_settrekker` zat in de rail-rij die
+    # ik weghaalde, en de chip toonde alleen. Daarmee was de actie ONBEREIKBAAR — een
+    # herindeling mag een veld verplaatsen, niet laten verdwijnen.
+    if rw and hid is not None and trekker_opts:
+        return (f"<form method='post' action='/action' class='pchip-form'>{hid()}"
+                f"<input type='hidden' name='action' value='proj_settrekker'>"
+                f"<span class='pchip pchip-eig'><span class='pchip-k'>Assignee</span>"
+                f"<select name='trekker' onchange='{_AUTOSAVE}'>{trekker_opts}</select>"
+                f"</span></form>")
+    if p.get("agent"):
+        persona = st.personas.get(p["agent"])
+        naam = ((persona or {}).get("name") if isinstance(persona, dict)
+                else getattr(persona, "name", "")) or "AI"
+        return (f"<span class='pchip pchip-eig'><span class='av ai'>{_e(_initials(naam))}</span>"
+                f"<span class='pchip-v'>{_e(naam)}</span></span>")
+    if p.get("person"):
+        naam = _person_name(st, p["person"]) or "—"
+        return (f"<span class='pchip pchip-eig'><span class='av'>{_e(_initials(naam))}</span>"
+                f"<span class='pchip-v'>{_e(naam)}</span></span>")
+    return ("<span class='pchip pchip-leeg pchip-eig'><span class='pchip-k'>Assignee</span>"
+            "<span class='pchip-v'>nobody yet</span></span>")
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False, username: str | None = None) -> str:
     p = st.projects.get(pid)
@@ -912,19 +1036,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     role_name = _name(orec) if orec else ""
     mention_names = [m["l"] for m in _mentionables(st)[0]]   # voor highlight in de bubble
 
-    # ---- Status-menu (huidige status gemarkeerd) — in de header ----
+    # ---- ⋯ Meer: alleen ACTIES (archiveren, verwijderen) ----
+    # De status-items zijn hiéruit verhuisd naar de Status-chip. Wat overblijft is geen eigenschap
+    # van het project maar iets wat je ermee DOET — dat is precies de scheiding die de rail bedoelt.
     menu = ""
     if rw:
-        st_items = ""
-        for label, key, statuses in _PROJ_COLS:
-            act = "proj_done" if key == "done" else "proj_status"
-            to = "" if key == "done" else f"<input type='hidden' name='to' value='{key}'>"
-            on = " on" if status in statuses else ""
-            st_items += (f"<form method='post' action='/action'>{hid()}{to}"
-                         f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
-        menu = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='change status'>"
-                f"{_proj_chip(status)}<span class='caret'>▾</span></summary><div class='cardmenu-b'>"
-                f"<div class='menu-h'>Status</div>{st_items}<div class='menu-sep'></div>"
+        menu = (f"<details class='cardmenu'><summary class='meertrigger' aria-label='more actions'>⋯</summary>"
+                f"<div class='cardmenu-b'>"
                 f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
                 f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archive</button></form>"
                 f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
@@ -961,9 +1079,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         due_head = (f"<span class='chip {'coral' if over else 'outline'}'>{_IC_CLOCK}{_e(due_lbl)}</span>{due_badge}"
                     if p.get("due") else "")
     # De herkomst-chip staat naast de status: bij review kijk je hier, niet pas onderin het document.
-    head = (f"<div class='pcard-head'>{title}"
-            f"<div class='pcard-head-r'>{_herkomst_chip(st, pid)}{due_head}"
-            f"{menu or _proj_chip(status)}</div></div>")
+    # ALLEEN DE TITEL. Deadline, status en het ⋯-menu stonden hier én in de nieuwe chips-rij/rail;
+    # de screenshot liet drie dubbelingen zien. Twee plekken voor hetzelfde veld is hoe een scherm
+    # zichzelf tegenspreekt — zelfde reden als waarom de trekker uit de rail ging.
+    head = f"<div class='pcard-head'>{title}</div>"
 
     # ═══ RECHTS: STRUCTUUR (sticky kantlijn) ═══════════════════════════════════════════
     # 1) Projectdetails (rol+dangling, trekker, aangemaakt, zichtbaar, impacts, effort-buckets)
@@ -981,6 +1100,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                  f"<select name='owner' onchange='{_AUTOSAVE}'>{_owner_options(st, owner, circle=owner_circle)}</select></form>")
     else:
         rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
+    # De trekker-opties: één bron, twee gebruikers (de chip in de header en — read-only — de rail).
+    _trekker_opts_html = (_trekker_options(st, owner, p.get("person") or "", p.get("agent") or "")
+                          if rw else "")
     if rw:
         pers_v = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
                   f"<input type='hidden' name='action' value='proj_settrekker'>"
@@ -1039,11 +1161,22 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     checklist_panel = _psec(_IC_CHECK, "Checklist", cl_inner)
 
     # 3) Doel & relaties — placeholder (functie later)
-    goals_panel = _psec(_IC_TARGET, "Goal & relations",
-                        "<p class='muted'>Not linked to a goal yet.</p>"
-                        f"<button type='button' class='acard acard-off' disabled>{_IC_TARGET}"
-                        "<span>Link to goal · soon</span></button>")
-    structure = details_panel + checklist_panel + goals_panel
+    goal_knop = (f"<button type='button' class='rail-btn' disabled>{_IC_TARGET}"
+                 f"<span>Link to goal · soon</span></button>")
+    # ═══ DE RAIL: licht, één regel per veld, waarde rechts ════════════════════════════
+    # De meta stond in .dcol-rijen die de kolom zwaar maakten. Wat naar de header verhuisde
+    # (impact, business, inzet, status, trekker) staat hier NIET meer — twee plekken voor hetzelfde
+    # veld is hoe een scherm zichzelf tegenspreekt. Wat hier blijft is wat de header niet draagt.
+    rail = (f"<div class='rail-kop'>Details</div>"
+            + _rail_regel("👤", "Role", "", control=f"<span class='rail-v'>{rol_v}</span>")
+            + _rail_regel("📅", "Deadline", "", control=f"<span class='rail-v'>{due_head or '—'}</span>")
+            + _rail_regel("👁", "Visible", "", control=f"<span class='rail-v'>{vis_v}</span>")
+            + _rail_regel("🗓", "Created", _created_full(p.get("created_at")))
+            + f"<div class='rail-kop rail-kop2'>Add</div>"
+            + f"<div class='rail-acties'>{cl_new}{goal_knop}</div>"
+            + (f"<div class='rail-kop rail-kop2'>More</div><div class='rail-meer'>{menu}</div>"
+               if menu else ""))
+    structure = rail
 
     # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
     composer = ""
@@ -1087,8 +1220,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         _hint = f"<span class='muted comp-hint'>{_tip}Steer via the checklist.</span>"
         composer = (f"<form id='{_cfid}' method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<div class='comp-head'>{_av}"
-                    f"<label class='att-lbl'>Conversation</label></div>"
+                    # Het label "Conversation" stond hier én als sectiekop erboven. De sectiekop is de kop;
+                    # wat hier hoort is wie er schrijft, niet nog een keer waar je bent.
+                    f"<div class='comp-head'>{_av}</div>"
                     f"{md_editor('text', rows=2, placeholder='Write a reply, or ask a colleague to weigh in…', help=True)}"
                     f"{_hint}"
                     f"</form>"
@@ -1113,9 +1247,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     stream_html = (_opdracht_post(p) if heeft_opdracht else "") + "".join(h for _, h in entries)
     # Nieuwste bovenaan (zie stream_html): geen auto-scroll-naar-onder meer; de wall opent bovenaan zodat
     # de composer + de recentste berichten meteen in beeld staan.
-    wall = (f"<div class='wall-head'><h2>Wall — content &amp; conversation</h2></div>"
-            f"{composer}"
-            f"<div class='wall-scroll'>{stream_html}</div>")
+    wall = (f"{composer}<div class='wall-scroll'>{stream_html}</div>")
 
     # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
     labelbar = ""
@@ -1127,10 +1259,25 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
-    einddoc = _einddocument_html(st, pid, rw, hid)
-    detail = (f"{top_bar}{labelbar}{_banner(msg)}{head}"
-              f"<div class='pgrid'><div class='pmain'>{einddoc}{wall}</div>"
-              f"<aside class='pside psticky'>{structure}</aside></div>{foot_bar}")
+    einddoc_body, einddoc_acties = _einddocument_delen(st, pid, rw, hid)
+    # ═══ DE HERINDELING ═══════════════════════════════════════════════════════════════
+    # Header (crumb + titel + chips), dan drie secties in de hoofdkolom en een lichte rail. De
+    # oude koppen "END DOCUMENT" en "WALL — CONTENT & CONVERSATION" zijn weg: ze schreeuwden en
+    # zeiden niets over de inhoud eronder.
+    _crumb = (f"<div class='pkaart-crumb'>{_e(_name(orec) if orec else (owner or 'project'))} "
+              f"· project</div>")
+    kop = (f"<div class='pkaart-head'>{_crumb}{head}"
+           f"{_chips_rij(st, p, rw, hid)}{_eigenaar_chip(st, p, rw, hid, _trekker_opts_html)}{_herkomst_chip(st, pid)}"
+           # Het verzwakt-blok hoort bij de Impact-chip: het is het GEVOLG van die waarde.
+           # Het verdween met de .dcol en werd daarmee onbereikbaar — de suite ving dat.
+           f"{verzwakt_block}</div>")
+    secties = (_psectie("Description", einddoc_body, acties=einddoc_acties)
+               + _psectie("Checklist", checklists_html, bijschrift="actions from the meeting")
+               + _psectie("Conversation", wall))
+    detail = (f"{top_bar}{labelbar}{_banner(msg)}"
+              f"<div class='pkaart'>{kop}"
+              f"<div class='pkaart-body'><div class='pkaart-main'>{secties}</div>"
+              f"<aside class='pkaart-rail'>{structure}</aside></div></div>{foot_bar}")
     if fragment:
         return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
     main = (f"<div class='c2-main pdetail'>"

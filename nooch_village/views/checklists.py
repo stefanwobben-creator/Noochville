@@ -202,8 +202,8 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
 #: item vandaan komt, want dat is de vraag waar iemand op vastloopt. Eigen klasse binnen de bestaande
 #: .cl--familie: de andere lege staten in het systeem zijn losse <span class='muted'>-zinnen, en die
 #: dragen geen ruimte of toon.
-_CL_LEEG = ("<li class='cl-empty'>Nog geen acties. Zet de eerste stap uit het overleg hier neer — "
-            "of splits het einddocument in wat er nog moet gebeuren.</li>")
+_CL_LEEG = ("<li class='cl-empty'>No actions yet. Put the first step from the meeting "
+            "here — or split the end document into what still needs doing.</li>")
 
 
 def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Stores = None) -> str:

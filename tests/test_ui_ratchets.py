@@ -41,7 +41,8 @@ _LABEL_WHITELIST = {
     "views/feed.py": 4,
     "views/metrics.py": 11,
     "views/overview.py": 12,
-    "views/projects.py": 5,    # -3: het losse toevoegformulier is weg (één form = de wizard)
+    "views/projects.py": 4,    # -4: het losse toevoegformulier is weg (één form = de wizard); het
+                               # composer-label "Conversation" is weg (stond dubbel met de sectiekop)
     "views/roloverleg.py": 4,
     "views/werkoverleg.py": 0,   # de oude triage is weg (gedeelde vangst-component)
 }
@@ -93,7 +94,12 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 62   # +1: 'ibx-' — de inbox-drawer is een bewust nieuw UI-component (globale chrome)
+_PREFIX_CEILING = 66   # +1 'ibx-' (inbox-drawer, globale chrome); +4 voor de projectkaart-
+                       # HERINDELING: 'pkaart-', 'pchip-', 'psec-', 'rail-'. Bewust besluit
+                       # van Stefan na het live zien van de incrementele poets (#441/#442):
+                       # die loste de klachten deels op maar las nog als de oude kaart. Een
+                       # herindeling kost een nieuwe familie; deze vier horen bij elkaar en
+                       # staan op de bestaande tokens (kleur, radius, spacing).
                        # +1: 'kn-' — de kennisbank (/kennisbank, prototype nooch-kb): drawer + zekerheids-
                        #      meter + bewijs-noten; expliciet besluit dd 2026-07-16 (akkoord Stefan)
                        # +1: 'gs-' — de global search in de gedeelde header (eigen dropdown + categorie-

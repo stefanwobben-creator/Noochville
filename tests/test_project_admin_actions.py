@@ -263,7 +263,10 @@ def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
     assert "proj_setimpact" in rw and "<select name='value' onchange=" in rw   # dropdown + auto-opslaan
     assert "value='neutraal' selected" in rw                            # huidige waarde voorgeselecteerd
-    assert "Mission impact" in rw and "Business impact" in rw
+    # De herindeling: de labels zijn chip-koppen geworden ("Impact" / "Business") in plaats van
+    # dcol-rijen ("Mission impact" / "Business impact"). Zelfde velden, zelfde dispatch, korter
+    # label omdat een chip geen ruimte heeft voor een zin.
+    assert ">Impact<" in rw and ">Business<" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
     assert "Neutral" in ro                     # wel de gekozen waarde als tekst (display-label)
 
