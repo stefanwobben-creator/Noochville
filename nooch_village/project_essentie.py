@@ -23,9 +23,12 @@ Trede 0 is GEEN weergave-fix. `cockpit2_util._md_doc` stript de fence al bij het
 volledige rapport toonde altijd goed. Trede 0 bestaat omdat DEZE parser anders alleen een codeblok
 ziet en over de hele tekst heen stapt.
 
-Trede 1 vraagt het niet zelf maar aan `projects.is_seed_document` — dezelfde vergelijking die
-`dod_poort` gebruikt. Een eigen regex op `**Klaar wanneer**` zou een tweede definitie van "nog
-alleen de opdracht" zijn, en die twee lopen uit elkaar zodra de seed-tekst verandert.
+Trede 1 vraagt het niet zelf maar aan `projects.heeft_seed_vorm` — de WEERGAVEVRAAG ("is dit
+document niets dan de opdracht, welke opdracht dan ook"). Dat is bewust een andere vraag dan de
+poortvraag van `dod_poort` ("is dit exact de seed van dít project"); zie het blok boven
+`is_seed_van_dit_project` in projects.py voor waarom die twee uit elkaar horen te lopen. Het
+sjabloon zelf leeft nog steeds op één plek. Een eigen regex op `**Klaar wanneer**` zou wél een
+tweede definitie zijn, en die drijft af zodra de seed-tekst verandert.
 
 Geen I/O, geen store, geen netwerk: tekst in, essentie uit.
 """
@@ -34,7 +37,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from nooch_village.projects import is_seed_document
+from nooch_village.projects import heeft_seed_vorm
 
 # Een essentie langer dan dit leest niet meer als essentie maar als het begin van een rapport.
 # Gemeten: mediaan 88 tekens, p75 200. De knip zoekt een zinsgrens vóór de harde cap.
@@ -138,12 +141,15 @@ def _kap(t: str) -> tuple[str, bool]:
     return (t[:ruimte] if ruimte > 0 else t[:_CAP]).rstrip(" ,;:-") + "…", True
 
 
-def essentie_van(doc: str, project: dict | None = None) -> Essentie:
-    """De ladder. Eerste trede die raakt, wint."""
+def essentie_van(doc: str) -> Essentie:
+    """De ladder. Eerste trede die raakt, wint.
+
+    Neemt geen project aan: wat je op de kaart toont is uit het document alleen te bepalen. De
+    poortvraag ("is dit Done") heeft het record wél nodig en woont daarom elders."""
     ruw = doc or ""
-    # Trede 1 vóór het ontfencen: `is_seed_document` vergelijkt tegen de opgeslagen seed, en die
-    # is nooit gefencet. Ontfencen zou de vergelijking juist kapotmaken.
-    if is_seed_document(project, ruw):
+    # Trede 1 vóór het ontfencen: de seed wordt nooit gefencet opgeslagen, dus ontfencen zou de
+    # vormvergelijking juist kapotmaken.
+    if heeft_seed_vorm(ruw):
         return Essentie("seed", "")
     md = ontfence(ruw)
     if not md.strip():

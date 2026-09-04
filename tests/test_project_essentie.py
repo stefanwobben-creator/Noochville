@@ -8,7 +8,8 @@ from __future__ import annotations
 import pytest
 
 from nooch_village.project_essentie import Essentie, essentie_van, ontfence
-from nooch_village.projects import is_seed_document, seed_document
+from nooch_village.projects import (dod_poort, heeft_seed_vorm,
+                                    is_seed_van_dit_project, seed_document)
 
 
 # ── trede 0: de fence ────────────────────────────────────────────────────────
@@ -29,39 +30,71 @@ def test_ontfence_laat_code_MIDDEN_in_het_document_staan():
 def test_fence_blokkeert_de_essentie_niet():
     """Trede 0 bestaat hiervóór: zonder ontfencen ziet de parser alleen een codeblok."""
     md = "```markdown\n# Kop\n\nDit rapport bevat een echte eerste zin met genoeg lengte.\n```"
-    e = essentie_van(md, {})
+    e = essentie_van(md)
     assert e.soort == "eerste_zin" and e.tekst.startswith("Dit rapport bevat")
 
 
 # ── trede 1: de seed ─────────────────────────────────────────────────────────
 def test_seed_geeft_geen_essentie():
     """Een essentie tonen bij een seed zou zeggen dat er een rapport is. Dat is niet waar."""
-    p = {"done_when": "De shortlist is af"}
-    e = essentie_van(seed_document("De shortlist is af"), p)
+    e = essentie_van(seed_document("De shortlist is af"))
     assert e.soort == "seed" and not e.heeft_tekst
 
 
 def test_seed_wordt_herkend_ook_als_done_when_leeg_is_op_het_record():
-    """84 van de 107 seeds op prod hebben een LEEG done_when terwijl het document wél geseed is.
+    """67 seeds op prod hebben een LEEG done_when terwijl het document wél geseed is.
 
-    Die vielen door de directe vergelijking heen, waardoor de sjabloonzin als samenvatting op de
+    Die vielen door de strikte vergelijking heen, waardoor de sjabloonzin als samenvatting op de
     kaart kwam — precies het liegen dat deze trede moet voorkomen."""
     doc = seed_document("Meta & Google tracking volledig geïmplementeerd.")
-    assert is_seed_document({"done_when": ""}, doc) is True
-    assert essentie_van(doc, {"done_when": ""}).soort == "seed"
+    assert heeft_seed_vorm(doc) is True
+    assert essentie_van(doc).soort == "seed"
 
 
 def test_seed_plus_antwoord_is_geen_seed_meer():
     doc = seed_document("De shortlist is af") + "\n\nDrie leveranciers benaderd, twee reageerden."
-    p = {"done_when": "De shortlist is af"}
-    assert is_seed_document(p, doc) is False
-    assert essentie_van(doc, p).soort == "eerste_zin"
+    assert heeft_seed_vorm(doc) is False
+    assert essentie_van(doc).soort == "eerste_zin"
 
 
 def test_leeg_document_is_geen_seed():
     """'Nog de opdracht' en 'nog niets' zijn op het scherm verschillende zinnen."""
-    assert is_seed_document({"done_when": "x"}, "") is False
-    assert essentie_van("", {}).soort == "geen"
+    assert heeft_seed_vorm("") is False
+    assert essentie_van("").soort == "geen"
+
+
+# ── de bewuste splitsing: weergave versus poort ──────────────────────────────
+# Dit is GEEN duplicatie zoals de status-chip die in twee zones stond (daar stond één feit op twee
+# plekken). Hier staan twee verschillende vragen naast elkaar, en juist een bewuste splitsing
+# sluipt later dicht als niemand hem bewaakt.
+
+def test_weergave_en_poort_stellen_verschillende_vragen():
+    """Een geseed document met LEEG done_when op het record: 67x op productie.
+
+    De kaart moet zeggen "nog geen rapport" (anders toont hij de sjabloonzin als samenvatting).
+    De poort moet het project gewoon afsluitbaar laten: een echt afgeronde taak met een goede
+    titel is Done, ook zonder geschreven document. Of Done een document zou MOETEN vereisen is een
+    eigen ontwerpbeslissing en hangt hier bewust niet aan vast."""
+    doc = seed_document("Barefoot Sneaker Created with WTF")
+    p = {"done_when": ""}
+    assert heeft_seed_vorm(doc) is True            # weergave: dit is niets dan de opdracht
+    assert is_seed_van_dit_project(p, doc) is False  # poort: geen seed om tegen te vergelijken
+    assert dod_poort(p, doc) is None               # ...dus de poort blijft open
+
+
+def test_de_poort_blijft_sluiten_waar_hij_dat_altijd_al_deed():
+    """Met een gevuld done_when verandert er niets aan het poortgedrag."""
+    dw = "De shortlist van drie leveranciers is af"
+    p = {"done_when": dw}
+    assert dod_poort(p, seed_document(dw)) is not None       # alleen de opdracht → dicht
+    assert dod_poort(p, "") is not None                      # leeg document → dicht
+    assert dod_poort(p, seed_document(dw) + "\n\nAf.") is None   # antwoord erbij → open
+
+
+def test_het_sjabloon_leeft_op_een_plek():
+    """Beide vragen leiden zich af uit `seed_document`; geen van beide tikt het sjabloon over."""
+    doc = seed_document("Wat dan ook")
+    assert heeft_seed_vorm(doc) and is_seed_van_dit_project({"done_when": "Wat dan ook"}, doc)
 
 
 # ── trede 2: de doelregel ────────────────────────────────────────────────────
@@ -72,13 +105,13 @@ def test_leeg_document_is_geen_seed():
 ])
 def test_doelregel_wint_van_de_eerste_zin(regel):
     md = f"# Kop\n\n{regel}\n\nDaaronder staat nog een hele alinea met andere inhoud erin."
-    assert essentie_van(md, {}).soort == "doelregel"
+    assert essentie_van(md).soort == "doelregel"
 
 
 def test_doelregel_eist_een_scheidingsteken():
     """Anders vangt hij elke zin die toevallig met 'Doel' begint."""
     md = "# Kop\n\nDoelgericht werken is belangrijk voor dit project en zijn uitkomst.\n"
-    assert essentie_van(md, {}).soort == "eerste_zin"
+    assert essentie_van(md).soort == "eerste_zin"
 
 
 # ── trede 3: de eerste zin ───────────────────────────────────────────────────
@@ -91,18 +124,18 @@ def test_doelregel_eist_een_scheidingsteken():
 ])
 def test_fragmenten_zijn_geen_essentie(fragment, waarom):
     md = f"# Kop\n\n{fragment}\n"
-    assert essentie_van(md, {}).soort == "geen", waarom
+    assert essentie_van(md).soort == "geen", waarom
 
 
 def test_koppen_lijsten_en_tabellen_zijn_geen_kandidaat():
     md = "# Kop\n\n- punt een\n- punt twee\n\n| a | b |\n|---|---|\n\n> citaat\n"
-    assert essentie_van(md, {}).soort == "geen"
+    assert essentie_van(md).soort == "geen"
 
 
 def test_eerste_echte_zin_wint():
     md = ("# Kop\n\n- eerst een lijst\n\n"
           "Het onderzoek laat zien dat er geen harde onderbouwing is voor de claim.\n")
-    e = essentie_van(md, {})
+    e = essentie_van(md)
     assert e.soort == "eerste_zin"
     assert e.tekst == "Het onderzoek laat zien dat er geen harde onderbouwing is voor de claim."
 
@@ -111,7 +144,7 @@ def test_eerste_echte_zin_wint():
 def test_lange_essentie_wordt_op_een_zinsgrens_gekapt():
     lang = ("Dit is de eerste zin van het rapport en hij is lang genoeg om te tellen. "
             + "Daarna volgt nog veel meer tekst die niet meer op de kaart hoeft te passen. " * 4)
-    e = essentie_van(f"# Kop\n\n{lang}\n", {})
+    e = essentie_van(f"# Kop\n\n{lang}\n")
     assert e.gekapt is True
     assert len(e.tekst) <= 240
     assert e.tekst.endswith((".", "…"))
@@ -119,12 +152,12 @@ def test_lange_essentie_wordt_op_een_zinsgrens_gekapt():
 
 def test_korte_essentie_wordt_niet_gekapt():
     md = "# Kop\n\nHet onderzoek laat zien dat er geen harde onderbouwing is voor de claim.\n"
-    assert essentie_van(md, {}).gekapt is False
+    assert essentie_van(md).gekapt is False
 
 
 def test_kappen_breekt_nooit_midden_in_een_woord():
     lang = "Woord " * 200
-    e = essentie_van(f"# Kop\n\n{lang.strip()}.\n", {})
+    e = essentie_van(f"# Kop\n\n{lang.strip()}.\n")
     assert not e.tekst.rstrip("…").endswith("Woor")
 
 
@@ -132,7 +165,7 @@ def test_kappen_breekt_nooit_midden_in_een_woord():
 def test_essentie_is_altijd_een_van_vier_soorten():
     for doc in ("", "```markdown\n```", "# Alleen een kop\n", seed_document("x"),
                 "# Kop\n\nEen zin die lang genoeg is om als essentie te dienen.\n"):
-        assert essentie_van(doc, {"done_when": "x"}).soort in {
+        assert essentie_van(doc).soort in {
             "seed", "doelregel", "eerste_zin", "geen"}
 
 

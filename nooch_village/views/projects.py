@@ -847,7 +847,6 @@ def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -
     mee naar die route; wat hier blijft is de ingang ernaartoe."""
     store = getattr(st, "project_docs", None)
     doc = store.read(pid) if store is not None else ""
-    p = st.projects.get(pid) or {}
     nxt = f"/rapport?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
 
     def lees(label: str) -> str:
@@ -861,7 +860,7 @@ def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -
                 "every successful pulse.</p>")
         return body, ""
 
-    ess = essentie_van(doc, p)
+    ess = essentie_van(doc)
     if ess.soort == "seed":
         body = ("<p class='muted'>No report written yet — only the assignment.</p>"
                 + lees("Read the assignment"))

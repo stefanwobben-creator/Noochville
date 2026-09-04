@@ -60,7 +60,7 @@ def render_rapport(st, pid: str, csrf_token: str = "", username: str | None = No
     if not doc.strip():
         body = ("<div class='card'><p class='muted'>No end document yet — the assigned inhabitant "
                 "writes it on every successful pulse.</p></div>")
-    elif _projects.is_seed_document(p, doc):
+    elif _projects.heeft_seed_vorm(doc):
         body = (f"<div class='card'><p class='muted'>No report written yet — this is still the "
                 f"assignment as it was set. The assigned inhabitant writes towards the answer "
                 f"below it on every successful pulse.</p>"
