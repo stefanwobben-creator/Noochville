@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
+from nooch_village import cockpit2
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus
@@ -22,6 +23,19 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.personas import PersonaStore
+
+
+def _een_vervuller(dd, rol="mother_earth__nooch__website_developer") -> str:
+    """Kies één van de vervullers van deze rol, als `trekker`-waarde.
+
+    `website_developer` heeft in de fixture TWEE vervullers (test_poc_datamodel bevriest dat), en
+    de cardinaliteitswet eist dan een expliciete keuze vóór een project op het bord mag. Deze tests
+    gaan niet over eigenaarschap, dus ze kiezen er gewoon één — precies zoals de andere
+    proj_add-tests `done_when` invullen sinds díe poort er is (zie test_proj_add_eist_done_when).
+    """
+    st = cockpit2._Stores(dd)
+    f = st.assign.fillers_of(rol, record=st.records.get(rol))[0]
+    return f"{'person' if f.type == 'person' else 'persona'}:{f.id}"
 
 TODAY = "2026-07-11"
 _REASON = "nooch_village.llm.reason"
@@ -216,6 +230,7 @@ def _cockpit_project(dd):
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add",
                       {"owner": [role], "scope": ["Doc-scope"],
+                       "trekker": [_een_vervuller(dd)],
                        "done_when": ["af bij oplevering"], "col": ["actief"], "next": ["/"]},
                       username="guest")
     pid = next(p["id"] for p in cockpit2._Stores(dd).projects.all() if p.get("scope") == "Doc-scope")

@@ -19,6 +19,17 @@ from nooch_village.village import Village
 from nooch_village.views.signals import render_signals
 
 
+
+def _een_vervuller(dd, rol="mother_earth__nooch__website_developer") -> str:
+    """Kies één vervuller van deze rol als `trekker`-waarde.
+
+    De rol heeft in de fixture twee vervullers, en de cardinaliteitswet eist dan een expliciete
+    keuze vóór een project op het bord mag. Deze tests gaan over signalen, niet over eigenaarschap,
+    dus ze kiezen er gewoon één."""
+    st = cockpit2._Stores(dd)
+    f = st.assign.fillers_of(rol, record=st.records.get(rol))[0]
+    return f"{'person' if f.type == 'person' else 'persona'}:{f.id}"
+
 def _ledger(tmp_path):
     return ProjectLedger(str(tmp_path / "projects.json"))
 
@@ -80,7 +91,7 @@ def test_cockpit_proj_done_maakt_signaal(tmp_path):
     dd = _dd(tmp_path)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Bordklus"],
-                                       "done_when": ["af bij oplevering"], "trekker": [""],
+                                       "done_when": ["af bij oplevering"], "trekker": [_een_vervuller(dd)],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     # De projectpoort (verhuisd 21 jul naar het einddocument) laat Done pas toe als het document
@@ -107,7 +118,7 @@ def test_signals_pagina_krijgt_projecten_feedchip(tmp_path):
     dd = _dd(tmp_path)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Chip-check"],
-                                       "done_when": ["af bij oplevering"], "trekker": [""],
+                                       "done_when": ["af bij oplevering"], "trekker": [_een_vervuller(dd)],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "next": ["/"], "doc": [
