@@ -3156,6 +3156,27 @@ def standaard_trekker(st, rol: str) -> str:
     return f"person:{mensen[0]}" if len(mensen) == 1 else ""
 
 
+def vervullers_map(st) -> dict:
+    """Per rol de MENSEN die hem vervullen, voor de owner-kiezer in de wizard.
+
+    Alleen rollen met TWEE of meer: bij één is er niets te kiezen (die is al de default, zie
+    `standaard_trekker`) en bij nul valt er niets te tonen. Zo draagt de pagina alleen wat hij echt
+    gebruikt — op prod zijn dat twee rollen.
+
+    Zelfde bron als de default: `mens_vervullers`. Zou dit zijn eigen lijst opbouwen, dan kan het
+    scherm iemand aanbieden die de default niet kent, en dan tonen twee vormen van dezelfde vraag
+    een ander antwoord."""
+    uit = {}
+    for rec in st.records.all():
+        rid = getattr(rec, "id", "")
+        if not rid or getattr(rec, "archived", False):
+            continue
+        mensen = mens_vervullers(st, rid)
+        if len(mensen) >= 2:
+            uit[rid] = [{"v": f"person:{p}", "n": _person_name(st, p) or p} for p in mensen]
+    return uit
+
+
 def _circle_lead_van(st, rol: str) -> str:
     """De Circle Lead van de cirkel waar deze rol in hangt. Het adres voor werk dat NIEMAND draagt:
     een rol zonder mens én zonder AI kan niets, en dan is beleggen de handeling — niet uitvoeren."""
@@ -5897,7 +5918,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                          # rol als default (één vervuller → voorgekozen).
                                          trekker=((qs.get("trekker") or [""])[0]
                                                   or standaard_trekker(st, (qs.get("role") or [""])[0])),
-                                         eigen=_eigen),
+                                         eigen=_eigen,
+                                         vervullers=vervullers_map(st)),
                            chrome=False)
                 return
 

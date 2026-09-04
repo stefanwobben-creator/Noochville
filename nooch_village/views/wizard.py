@@ -103,6 +103,7 @@ def _js(tekst: str) -> str:
 
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
                   ruw: str = "", uitkomst: str = "", trekker: str = "", nid: str = "",
+                  vervullers: dict | None = None,
                   eigen: list | None = None) -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
@@ -140,6 +141,7 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__TREK__", trek_opts) \
                     .replace("__RUW__", _js(ruw)) \
                     .replace("__NID__", _js(nid)) \
+                    .replace("__VERVULLERS__", json.dumps(vervullers or {})) \
                     .replace("__UIT__", _js(uitkomst)) \
                     .replace("__TREKKER__", _js(trekker)) \
                     .replace("__ROLE__", _e(pre))
@@ -160,6 +162,9 @@ _WIZ_HTML = r"""
 (function(){
 const CSRF="__CSRF__";
 const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
+// Alleen rollen met TWEE of meer vervullers (cockpit2.vervullers_map). Bij één is er
+// niets te kiezen — die staat al als default in S.trekker — en bij nul niets te tonen.
+const VERVULLERS=__VERVULLERS__;
 // EEN FORM, SNELLE ROUTE EERST. Dit was een flow van zes stappen: je moest er doorheen om één
 // project op het bord te krijgen, en elke stap was een plek om te blijven hangen. Nu staat de
 // hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
@@ -369,12 +374,32 @@ function drawRollen(){
     :'No role has a matching skill for these steps — '}assign one yourself below.</p>`;
   const gekozen=S.taken.map((t,i)=>`<div class="wz-item"><div class="wz-itxt">→ ${esc(t.naam)}: ${esc(t.tekst)}</div>
     <button class="wz-rm" onclick="S.taken.splice(${i},1);drawRollen()">✕</button></div>`).join('');
-  el.innerHTML=`${leeg}${kaarten}
+  el.innerHTML=`${eigenaarBlok()}${leeg}${kaarten}
    <div class="wz-clab">Or assign a step yourself</div>
    <input id="wz-tt" placeholder="what should they do?">
    <div class="wz-add"><select id="wz-tr">${ROLEOPTS}</select>
      <button onclick="taakZelf()">＋ add</button></div>
    ${gekozen?`<div class="wz-clab">Tasks to hand out when you save</div>${gekozen}`:''}`;
+}
+/* DE OWNER-KIEZER. Alleen als de gekozen rol MEER DAN ÉÉN vervuller heeft: bij één staat hij al
+   als default in S.trekker (onzichtbaar, want er valt niets te kiezen) en bij nul blijft "no owner".
+
+   Hij staat BOVENAAN deze sectie en met zijn eigen kop, los van "Or assign a step yourself"
+   eronder. Dat onderscheid is niet cosmetisch: dat tweede blok wijst een STAP toe aan een rol, dit
+   zet de EIGENAAR van het project. Zonder de scheiding kiest iemand een stap-uitvoerder in de
+   veronderstelling dat hij de eigenaar zet, en dan borgt het scherm stil de verkeerde intentie.
+
+   "Owner" is bewust hetzelfde woord als op de projectkaart (views/projects.py, `<span class='dk'>
+   Owner</span>`) — één term voor één ding. */
+function eigenaarBlok(){
+  const opties=VERVULLERS[S.role]||[];
+  if(opties.length<2)return '';
+  const rijen=opties.map(o=>`<option value="${esc(o.v)}"${S.trekker===o.v?' selected':''}>${esc(o.n)}</option>`).join('');
+  return `<div class="wz-clab">Owner</div>
+   <p class="wz-hint">This role has more than one person. Pick who owns the project, or leave it open.</p>
+   <select id="wz-owner" onchange="S.trekker=this.value">
+     <option value="">— no owner —</option>${rijen}</select>
+   <div class="wz-clab">Hand out steps</div>`;
 }
 function taak(i){const r=S.rollen[i]; if(!r)return;
   S.taken.push({rol:r.rol,naam:r.naam,tekst:(r.stappen||[])[0]||''}); drawRollen();}
