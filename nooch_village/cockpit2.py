@@ -3171,6 +3171,16 @@ def vervullers_map(st) -> dict:
         rid = getattr(rec, "id", "")
         if not rid or getattr(rec, "archived", False):
             continue
+        # EEN CIRKEL BEZIT GEEN PROJECT — `_act_proj_add` weigert dat expliciet ("a circle cannot
+        # contain a project"). Zonder deze regel droeg de map `mother_earth__nooch` als
+        # kiezer-ingang: onschadelijk, want de rolkiezer biedt nooit een cirkel-id, maar wel een
+        # ingang die per definitie nooit bruikbaar is. Dat is de dood-maar-intact-vorm die iemand
+        # later doet denken dat het wél kan.
+        #
+        # `org.is_circle` en geen eigen string-check: een derde definitie van "dit is een cirkel"
+        # is precies hoe twee vormen van dezelfde vraag uit elkaar gaan lopen.
+        if org.is_circle(rec):
+            continue
         mensen = mens_vervullers(st, rid)
         if len(mensen) >= 2:
             uit[rid] = [{"v": f"person:{p}", "n": _person_name(st, p) or p} for p in mensen]

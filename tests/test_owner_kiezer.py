@@ -103,3 +103,53 @@ def test_hij_zit_in_de_opgevouwen_laag_en_niet_op_de_snelle_route():
     assert 'ontoggle="if(this.open)rollen()"' in html
     snelle_route = html[html.index('class="wz-clab">Your idea'):html.index("box-details")]
     assert "wz-owner" not in snelle_route
+
+
+# ── een cirkel hoort niet in de kiezer ─────────────────────────────────────────────────────────
+
+def test_een_cirkel_komt_nooit_in_de_map(monkeypatch):
+    """GEVONDEN OP DE LIVE-VERIFICATIE van #432: de map droeg `mother_earth__nooch` — een CIRKEL —
+    als owner-kiezer-ingang. Praktisch onschadelijk (de rolkiezer biedt nooit een cirkel-id, dus de
+    kiezer rendert er nooit voor), maar `_act_proj_add` weigert een project op een cirkel expliciet:
+    "a circle cannot contain a project". Een ingang die per definitie nooit bruikbaar is, is de
+    dood-maar-intact-vorm die iemand later doet denken dat het wél kan.
+
+    Ook mét twee vervullers blijft hij eruit — juist dan, want dat is het enige geval waarin hij
+    anders zou renderen."""
+    import types
+    from nooch_village import cockpit2
+
+    cirkel = types.SimpleNamespace(id="een_cirkel", archived=False)
+    rol = types.SimpleNamespace(id="een_rol", archived=False)
+
+    class _St:
+        class records:
+            @staticmethod
+            def all():
+                return [cirkel, rol]
+
+            @staticmethod
+            def get(r):
+                return cirkel if r == "een_cirkel" else rol
+
+        class assign:
+            @staticmethod
+            def fillers_of(rol_id, record=None):
+                return [types.SimpleNamespace(id="p1", type="person"),
+                        types.SimpleNamespace(id="p2", type="person")]
+
+    monkeypatch.setattr(cockpit2.org, "is_circle", lambda rec: getattr(rec, "id", "") == "een_cirkel")
+    monkeypatch.setattr(cockpit2, "_person_name", lambda st, p: p.upper())
+    mp = cockpit2.vervullers_map(_St())
+
+    assert "een_cirkel" not in mp                     # ook al heeft hij er twee
+    assert "een_rol" in mp and len(mp["een_rol"]) == 2
+
+
+def test_de_map_gebruikt_het_bestaande_cirkel_predikaat():
+    """Geen eigen string-check ('__circle_lead' in id, of id.count('__')<2): een derde definitie van
+    'dit is een cirkel' is precies hoe twee vormen van dezelfde vraag uit elkaar gaan lopen."""
+    import inspect
+    from nooch_village import cockpit2
+    src = inspect.getsource(cockpit2.vervullers_map)
+    assert "org.is_circle(rec)" in src
