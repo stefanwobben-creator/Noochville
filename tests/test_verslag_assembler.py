@@ -56,7 +56,9 @@ def _project(dd, st, *, doc="", items=(), gesprek=()):
 def test_voorzet_alles_af_is_waarschijnlijk_behaald():
     p = {"checklists": [{"items": [{"text": "a", "done": True}, {"text": "b", "done": True}]}]}
     soort, reden = voorzet_result(p)
-    assert soort == BEHAALD and "afgevinkt" in reden
+    # De reden is Engels: hij reist naar de prompt én naar het scherm. De SLEUTEL blijft
+    # Nederlands, want die wordt opgeslagen en vergeleken.
+    assert soort == BEHAALD and "ticked" in reden
 
 
 def test_voorzet_niets_af_is_waarschijnlijk_niet_behaald():
@@ -226,3 +228,95 @@ def test_zonder_schrijfrecht_geen_bevestigknop(tmp_path):
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
     assert "not confirmed yet" in html                  # lezen mag
     assert "verslag_bevestig" not in html               # bevestigen niet
+
+
+# ── kwaliteitsfixes uit de eerste echte assemblage op productie ──────────────
+# Drie dingen die pas zichtbaar werden toen er echte concepten uitrolden. Ze staan hier als test
+# omdat ze alle drie raken wat er bij BEVESTIGEN wordt opgeslagen — en dat is de canonieke tekst.
+
+def test_de_markdown_fence_wordt_gestript_voor_opslag():
+    """Het model wikkelt zijn antwoord in ```markdown. Op het scherm valt dat niet op (`_md_doc`
+    stript hem), maar bij bevestigen wordt deze tekst het document — en dan bestendigt hij precies
+    de opslag-rommel die in 46 van de 307 bestaande documenten zit."""
+    c = stel_samen({"scope": "X", "checklists": [{"items": [{"text": "a", "done": True}]}]}, "",
+                   reason=lambda *a, **k: "```markdown\n## Goal\nIets\n```")
+    assert not c.tekst.startswith("```") and c.tekst.startswith("## Goal")
+
+
+def test_de_voorzet_gaat_als_engels_label_de_prompt_in():
+    """IDENTIFIER IS MECHANIEK, LABEL IS CONTENT. De sleutel blijft Nederlands (hij wordt
+    opgeslagen en vergeleken); wat naar het model en het scherm gaat is Engels. Zonder die
+    scheiding stond er letterlijk "## Result: onbekend (geen checklist om aan af te lezen)" in
+    een Engels verslag — gezien op productie."""
+    from nooch_village.project_verslag import label_voor
+    gezien = {}
+
+    def vang(prompt, **k):
+        gezien["p"] = prompt
+        return "## Goal\nx"
+    # Twee bronnen, anders slaat `stel_samen` het model over (zie
+    # test_alleen_de_definitie_roept_geen_model_aan) en is er geen prompt om te toetsen.
+    stel_samen({"scope": "X", "log": [{"who": "rol", "text": "iets gedaan"}]}, "", reason=vang)
+    assert "unclear" in gezien["p"]
+    assert "onbekend" not in gezien["p"] and "geen checklist" not in gezien["p"]
+    assert label_voor(BEHAALD) == "achieved" and label_voor(NIET_BEHAALD) == "not achieved"
+
+
+def test_onbekende_voorzetsleutel_valt_niet_stil_weg():
+    from nooch_village.project_verslag import label_voor
+    assert label_voor("iets_nieuws") == "iets_nieuws"
+
+
+def test_een_seed_document_is_geen_bron():
+    """Bij 31% van de afgesloten projecten op productie is het "document" niets dan de opdracht.
+    Meetellen maakt de provenance-telling onwaar; als materiaal aanbieden zette het model op een
+    dwaalspoor ("an existing final document titled 'Klaar wanneer'"). De opdracht komt al binnen
+    via done_when."""
+    from nooch_village.projects import seed_document
+    seed = seed_document("POS material created")
+    assert "het bestaande einddocument" not in bronnen_van({"scope": "POS"}, seed)
+    assert "het bestaande einddocument" in bronnen_van({"scope": "POS"}, "# Werk\n\nEcht werk.")
+
+
+def test_de_seed_tekst_komt_niet_in_het_materiaal():
+    from nooch_village.projects import seed_document
+    seed = seed_document("POS material created")
+    gezien = {}
+
+    def vang(prompt, **k):
+        gezien["p"] = prompt
+        return "## Goal\nx"
+    stel_samen({"scope": "POS", "checklists": [{"items": [{"text": "a", "done": True}]}]},
+               seed, reason=vang)
+    assert "De inwoner werkt dit document" not in gezien["p"]
+
+
+def test_de_route_toont_de_voorzet_als_label_niet_als_sleutel(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, items=[("A", True)])
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "result: achieved" in html
+    assert ">result: behaald<" not in html
+
+
+def test_alleen_de_definitie_roept_geen_model_aan():
+    """Met alleen een titel kan een model niets doen behalve gaten opvullen. Gemeten op productie:
+    zo'n project houdt ~5 tokens materiaal over. De gestructureerde variant zegt hetzelfde,
+    eerlijker, en kost niets."""
+    geroepen = []
+    c = stel_samen({"scope": "POS material created"}, "",
+                   reason=lambda *a, **k: geroepen.append(1) or "verzonnen proza")
+    assert geroepen == [], "model aangeroepen terwijl er niets te verslaan viel"
+    assert c is not None and "without a language model" in c.tekst
+
+
+def test_met_een_tweede_bron_wel():
+    geroepen = []
+
+    def vang(*a, **k):
+        geroepen.append(1)
+        return "## Goal\nx"
+    stel_samen({"scope": "X", "checklists": [{"items": [{"text": "a", "done": True}]}]}, "",
+               reason=vang)
+    assert geroepen == [1]

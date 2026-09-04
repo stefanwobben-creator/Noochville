@@ -32,6 +32,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from nooch_village.project_essentie import ontfence
+from nooch_village.projects import heeft_seed_vorm
+
 log = logging.getLogger("village.verslag")
 
 # Per gespreksregel, zodat één rol-dump van 1500 tekens de invoer niet overheerst. Gemeten: met
@@ -39,9 +42,21 @@ log = logging.getLogger("village.verslag")
 _REGEL_CAP = 600
 _MAX_REGELS = 20            # de laatste 20; oudere regels zijn zelden nog het verhaal van de afloop
 
+# De sleutel is MECHANIEK en blijft Nederlands (hij wordt opgeslagen en vergeleken); het label is
+# CONTENT en volgt de taal van het scherm. Dezelfde scheiding als `_IMPACT_LABEL` in views/projects.
+# Zonder die scheiding lekte "onbekend (geen checklist om aan af te lezen)" letterlijk in een
+# Engels verslag — gezien in de eerste echte assemblage op productie.
 BEHAALD = "behaald"
 NIET_BEHAALD = "niet behaald"
 ONBEKEND = "onbekend"
+
+_VOORZET_LABEL = {BEHAALD: "achieved", NIET_BEHAALD: "not achieved", ONBEKEND: "unclear"}
+
+
+def label_voor(voorzet: str) -> str:
+    """Het Engelse label bij een voorzet-sleutel. Onbekende sleutel → de sleutel zelf, zodat een
+    nieuwe waarde zichtbaar wordt in plaats van stil als lege tekst te renderen."""
+    return _VOORZET_LABEL.get(voorzet, voorzet)
 
 
 @dataclass(frozen=True)
@@ -91,14 +106,14 @@ def voorzet_result(project: dict) -> tuple[str, str]:
     stille mislukking die we vermijden. De mens bevestigt of corrigeert (volgende PR)."""
     items = _checklist_items(project)
     if not items:
-        return ONBEKEND, "geen checklist om aan af te lezen"
+        return ONBEKEND, "there is no checklist to read progress from"
     af = [i for i in items if i.get("done")]
     over = [i for i in items if not i.get("done") and not i.get("skipped")]
     if not over:
-        return BEHAALD, f"alle {len(items)} checklist-items zijn afgevinkt of overgeslagen"
+        return BEHAALD, f"all {len(items)} checklist items are ticked or skipped"
     if not af:
-        return NIET_BEHAALD, f"geen van de {len(items)} checklist-items is afgevinkt"
-    return ONBEKEND, f"{len(af)} van {len(items)} items af — te weinig om uit af te leiden"
+        return NIET_BEHAALD, f"none of the {len(items)} checklist items is ticked"
+    return ONBEKEND, f"{len(af)} of {len(items)} items done — too little to conclude from"
 
 
 def bronnen_van(project: dict, document: str = "") -> list[str]:
@@ -114,9 +129,21 @@ def bronnen_van(project: dict, document: str = "") -> list[str]:
     regels = _gesprek(project)
     if regels:
         uit.append(f"het gesprek ({len(regels)} regels)")
-    if (document or "").strip():
+    if _bruikbaar_document(document):
         uit.append("het bestaande einddocument")
     return uit
+
+
+def _bruikbaar_document(document: str) -> bool:
+    """Telt dit document als bron?
+
+    NEE ALS HET DE SEED IS. Bij 31% van de afgesloten projecten op productie is het "document"
+    niets dan de geseede opdracht. Dat als vierde bron meetellen maakt de provenance-telling
+    onwaar, en het als materiaal aanbieden zet het model op een dwaalspoor: in de eerste echte
+    assemblage schreef het "an existing final document titled 'Klaar wanneer'" — het las de
+    seed-kop als een documenttitel. De opdracht komt al binnen via `done_when`; twee keer
+    aanbieden voegt niets toe en verzint iets."""
+    return bool((document or "").strip()) and not heeft_seed_vorm(document)
 
 
 def _materiaal(project: dict, document: str) -> str:
@@ -135,7 +162,7 @@ def _materiaal(project: dict, document: str) -> str:
     if regels:
         delen.append("\nGesprek:")
         delen.extend(regels)
-    if (document or "").strip():
+    if _bruikbaar_document(document):
         delen.append("\nBestaand einddocument:\n" + document.strip())
     return "\n".join(delen)
 
@@ -172,11 +199,22 @@ def stel_samen(project: dict, document: str = "", *, reason=None) -> Concept | N
     voorzet, reden = voorzet_result(project)
     mat = _materiaal(project, document)
 
+    # ALLEEN DE DEFINITIE IS NIETS OM OVER TE SCHRIJVEN. Dan kan een model niets doen behalve de
+    # titel omschrijven en de gaten opvullen — en dat is precies hoe "an existing final document
+    # titled 'Klaar wanneer'" ontstond. Gemeten: zo'n project houdt ~5 tokens materiaal over.
+    # De gestructureerde variant zegt hetzelfde, eerlijker, en kost niets.
+    genoeg = len(bronnen) > 1
     tekst = ""
-    if reason is not None:
+    if reason is not None and genoeg:
         try:
-            tekst = (reason(f"{_PROMPT}\nVoorzet voor Result: {voorzet} ({reden}).\n\n"
+            tekst = (reason(f"{_PROMPT}\nProvisional Result: {label_voor(voorzet)} ({reden}).\n\n"
                             f"--- MATERIAAL ---\n{mat}", call_site="verslag_assemblage") or "").strip()
+            # DE FENCE ERAF VÓÓR OPSLAG. Het model wikkelt zijn antwoord in ```markdown — gezien in
+            # de eerste echte assemblage, en hetzelfde artefact als in 46 van de 307 bestaande
+            # documenten. Op het scherm valt het niet op (`_md_doc` stript hem), maar bij bevestigen
+            # wordt deze tekst het OPGESLAGEN document, en dan bestendigt hij precies de
+            # opslag-rommel die we los aan het opruimen zijn. Zelfde helper als de essentie-ladder.
+            tekst = ontfence(tekst).strip()
         except Exception as e:                                  # noqa: BLE001 - luid, niet stil
             log.warning("VERSLAG_LLM_FAIL: assemblage voor %s mislukt (%s) — "
                         "terugval op de gestructureerde variant", project.get("id"), e)
@@ -205,7 +243,7 @@ def _zonder_model(project: dict, document: str, voorzet: str, reden: str) -> str
         regels.append("\n\n".join(stuk))
     else:
         regels.append("## What happened\nNo checklist was kept for this project.")
-    regels.append(f"## Result\n{voorzet} — {reden}.")
+    regels.append(f"## Result\n{label_voor(voorzet)} — {reden}.")
     regels.append("_Assembled without a language model: the facts below are listed as they were "
                   "recorded, not rewritten._")
     return "\n\n".join(regels)

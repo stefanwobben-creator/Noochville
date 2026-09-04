@@ -63,6 +63,13 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
         bronnen = [str(b) for b in (c.get("bronnen") or [])]
         tel = (f"assembled from {len(bronnen)} source{'s' if len(bronnen) != 1 else ''}: "
                + ", ".join(_e(b) for b in bronnen)) if bronnen else "assembled without sources"
+        # De voorzet in het ENGELSE label, niet de opgeslagen sleutel: die sleutel is mechaniek.
+        # Hij staat erbij omdat een mens die straks bevestigt moet zien wat er is voorgesteld —
+        # en of het verslag die voorzet volgt of tegenspreekt.
+        from nooch_village.project_verslag import label_voor
+        _v = (c.get("voorzet") or "").strip()
+        voorzet = (f"<span class='chip outline' title='Provisional guess from the checklist'>"
+                   f"result: {_e(label_voor(_v))}</span>") if _v else ""
         knoppen = ""
         if rw:
             _hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -78,7 +85,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                        f"<button class='btn ok sm' type='submit' name='action' "
                        f"value='verslag_bijwerken'>Save draft</button></form></details></div>")
         concept = (f"<div class='card einddoc-concept'>"
-                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>"
+                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>{voorzet}"
                    f"<span class='muted'>{tel}</span></div>"
                    f"<div class='einddoc-body einddoc-vol'>{_md_doc(c.get('tekst') or '')}</div>"
                    f"{knoppen}</div>")
