@@ -297,7 +297,58 @@ def acceptatie(data_dir: str) -> dict:
 
 # ── wie krijgt dit werk, als MENS? ────────────────────────────────────────────────────────────
 
-def menselijke_eigenaar(st, tekst: str, *, reason_fn=None) -> dict:
+def domein_eigenaar(st, domein: str) -> dict:
+    """De wakkere rol die dit DOMEIN houdt → {rol, grond}. `rol` is "" als er geen eigenaar is.
+
+    Een domein is een VERKLARING ("deze rol bezit dit onderwerp"), geen gevolgtrekking uit tekst.
+    Daarom staat hij vóór de secretary-classificatie: die matcht accountability-tekst via een model
+    en is dus tekstgestuurd — subtieler dan een vaste rol-id, maar even broos.
+    `radar_beoordeling.rol_voor` noteerde het al: "domein-match zou sterker zijn … zodra rollen ze
+    krijgen". Dit is die zodra.
+
+    DRIE UITKOMSTEN, EN TWEE ERVAN ZIJN NIET HETZELFDE:
+
+      geen domein geconfigureerd  → STILLE terugval. Niets mis: de config zegt niets over
+                                    eigenaarschap, en de secretary neemt het over.
+      domein houdt niemand        → LUIDE logregel. Dit is een CONFIG-FOUT (typefout, of het
+                                    governance-akte is nooit gezet). Zonder die regel routeert de
+                                    radar stil voor altijd naar de founder: een signaal dat bestaat
+                                    maar niet gelezen wordt.
+      twee rollen houden het      → LUIDE logregel plus terugval. Twee eigenaren van één domein is
+                                    een governance-fout; ertussen kiezen zou die fout verbergen
+                                    achter een gok.
+
+    `grond` reist mee, zodat een droge run leesbaar is zonder de code ernaast te leggen."""
+    domein = (domein or "").strip()
+    if not domein:
+        return {"rol": "", "grond": "geen eigenaar_domein geconfigureerd"}
+    naald = domein.lower()
+    houders = []
+    try:
+        for r in st.records.all():
+            if getattr(r, "archived", False) or getattr(r, "slaapt", False):
+                continue
+            doms = list(getattr(getattr(r, "definition", None), "domains", None) or [])
+            if any(naald == str(d).strip().lower() for d in doms):
+                houders.append(r.id)
+    except Exception:                                        # noqa: BLE001
+        log.warning("domein-eigenaar zoeken faalde voor %r", domein, exc_info=True)
+        return {"rol": "", "grond": f"domein {domein!r} niet op te zoeken"}
+
+    if len(houders) == 1:
+        return {"rol": houders[0], "grond": f"houdt het domein {domein!r}"}
+    if len(houders) > 1:
+        log.warning("GOVERNANCE-FOUT: domein %r wordt gehouden door %d rollen (%s) — geen "
+                    "eigenaar aangewezen, terugval op de classificatie",
+                    domein, len(houders), ", ".join(houders))
+        return {"rol": "", "grond": f"meerdere rollen houden {domein!r}"}
+    log.warning("CONFIG-FOUT: domein %r is geconfigureerd maar wordt door GEEN enkele wakkere rol "
+                "gehouden — typefout, of het governance-akte is nooit gezet. Tot dat klopt "
+                "routeert dit naar de Circle Lead of de founder.", domein)
+    return {"rol": "", "grond": f"domein {domein!r} wordt door niemand gehouden"}
+
+
+def menselijke_eigenaar(st, tekst: str, *, reason_fn=None, domein: str = "") -> dict:
     """De rol die dit werk hoort te dragen ÉN door een mens vervuld wordt.
 
     ÉÉN LOOKUP, TWEE GEBRUIKEN: de memo-ontvanger en de landing van het project dat eruit volgt.
@@ -321,9 +372,18 @@ def menselijke_eigenaar(st, tekst: str, *, reason_fn=None) -> dict:
     from nooch_village.cockpit2 import mens_vervullers, _circle_lead_van   # noqa: PLC0415
     from nooch_village.human_inbox import FOUNDER_ROLE_ID                  # noqa: PLC0415
 
-    uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
-    rol = uitslag.get("rol") or ""
-    waarom = uitslag.get("grond") or ""
+    # DOMEIN EERST: een verklaring gaat vóór een gevolgtrekking. Houdt niemand het domein (of is er
+    # geen geconfigureerd), dan neemt de secretary het over — `domein_eigenaar` heeft het verschil
+    # tussen "niets geconfigureerd" en "config-fout" dan al geLOGD.
+    dom = domein_eigenaar(st, domein)
+    if dom["rol"]:
+        rol, waarom = dom["rol"], dom["grond"]
+    else:
+        uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
+        rol = uitslag.get("rol") or ""
+        waarom = uitslag.get("grond") or ""
+        if domein:
+            waarom = f"{dom['grond']}; {waarom}"
 
     def _mens(r):
         return (mens_vervullers(st, r) or [None])[0] if r else None

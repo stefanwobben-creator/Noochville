@@ -31,8 +31,13 @@ _DEFAULT_FEEDS = [
      "mode": "precisie", "label": "Competitor Watch"},
     {"env": "INOREADER_LEGAL_JSON_URL", "role": "mother_earth__nooch__strategic_lead_founder_steward",
      "mode": "precisie", "label": "Legal & Green Claims"},
+    # `eigenaar_domein`: WIE BEZIT DE UITKOMST van deze feed. `role` zegt wie hem bewaakt; dat is
+    # niet dezelfde vraag. Een domein en geen rol-id, want rolvervulling en rol-eigenaarschap
+    # veranderen — en dan wijst een bevroren id stil naar de verkeerde plek. Overschrijfbaar via
+    # data/feeds.json, dus verplaatsen kan zonder codewijziging.
     {"env": "INOREADER_MATERIALS_JSON_URL", "role": "harry_hemp",
-     "mode": "precisie", "focus": "materials", "label": "Material Innovation"},
+     "mode": "precisie", "focus": "materials", "label": "Material Innovation",
+     "eigenaar_domein": "Materials"},
     {"env": "INOREADER_INDUSTRY_JSON_URL", "role": "mother_earth__nooch__strategic_lead_founder_steward",
      "mode": "precisie", "label": "Industry Watch"},
 ]
