@@ -5941,7 +5941,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 _pid = (qs.get("pid") or qs.get("id") or [""])[0]
                 self._send(_frag(render_project(st, _pid, csrf_token=effective_csrf,
                                                 msg=(qs.get("msg") or [""])[0],
-                                                back=(qs.get("back") or ["/"])[0], fragment=fr), fr))
+                                                back=(qs.get("back") or ["/"])[0], fragment=fr,
+                                                username=username), fr))
                 return
             if path == "/rolefillers":
                 fr = (qs.get("fragment") or [""])[0] == "1"

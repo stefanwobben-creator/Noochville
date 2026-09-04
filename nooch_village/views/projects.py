@@ -860,8 +860,36 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
     return f"{view}{editor}{regen}"
 
 
+def _ai_namen(st) -> list[str]:
+    """De namen van AI-vervulde rollen, voor de @-hint in de composer.
+
+    UIT DE ECHTE ORG, niet uit een lijstje in code. De mock noemt @Sid en @Lotte; die twee
+    hardcoden zou de hint laten liegen zodra een persona verdwijnt of erbij komt — dezelfde
+    broosheid als een rol-id vastzetten. Slapende rollen tellen niet mee: een naam noemen die niet
+    antwoordt is een uitnodiging die nergens toe leidt.
+
+    Fail-soft: geen personas of een onleesbare store → lege lijst, en dan toont de composer gewoon
+    geen hint."""
+    uit = []
+    try:
+        for rec in st.records.all():
+            if getattr(rec, "slaapt", False) or getattr(rec, "archived", False):
+                continue
+            pid = getattr(rec, "persona_id", "") or getattr(rec, "persona", "")
+            if not pid:
+                continue
+            persona = st.personas.get(pid)
+            naam = (persona or {}).get("name") if isinstance(persona, dict) else getattr(persona, "name", "")
+            voornaam = str(naam or "").split()[0] if naam else ""
+            if voornaam and voornaam not in uit:
+                uit.append(voornaam)
+    except Exception:                                        # noqa: BLE001
+        return []
+    return uit
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
-                   fragment: bool = False) -> str:
+                   fragment: bool = False, username: str | None = None) -> str:
     p = st.projects.get(pid)
     if p is None:
         if fragment:
@@ -975,7 +1003,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         vis_v = "Only for this circle" if p.get("private") else "Whole circle tree"
     verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
-    w = " wide" if rw else ""                    # bewerkbaar → label boven + dropdown op volle breedte
+    # LABEL EN CONTROL OP ÉÉN REGEL. Hier stond `w = " wide"`, dat vijf van de zeven rijen
+    # tweeregelig maakte: label op een eigen regel, dropdown op volle breedte eronder. Voor twee
+    # velden was dat uitlijning (#154, waar Rol/Trekker gelijkgetrokken werden); bij vijf velden
+    # stapelt het tot tien regels en tien volle-breedte-controls — de "zware kolom" waar Stefan
+    # over viel. De dropdowns zelf blijven, en daarmee de uniformiteit die #154 maakte; alleen de
+    # kolom wordt half zo hoog.
+    w = ""
     details_dcol = (
         f"<div class='dcol'>"
         f"<span class='dk{w}'>Role</span><span class='dv{w}'>{rol_v}</span>"
@@ -1037,10 +1071,26 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         # form → de File wordt niet als multipart verstuurd (form-encoded, bestand valt weg). Plaatsen
         # submit de composer via het form=-attribuut; de bijlage is nu een eigen sibling-form.
         _cfid = f"cf-{_e(pid)}"
+        # JIJ SCHRIJFT DIT, EN JE KUNT IEMAND VRAGEN. De composer was een kaal veld met een
+        # abstracte uitleg ("@name asks an inhabitant"). Een avatar maakt zichtbaar dat het jouw
+        # stem is, en echte namen maken de @-hint een uitnodiging in plaats van een instructie.
+        # Bewust GEEN gok op de avatar: zonder ingelogde persoon staat er niets, want een verkeerd
+        # initiaal is erger dan geen.
+        _ik = st.people.by_email(username) if username and username != "guest" else None
+        _av = (f"<span class='av' title='{_e(_ik.name)}'>{_e(_initials(_ik.name))}</span>"
+               if _ik else "")
+        _tagbaar = ", ".join(f"@{n}" for n in _ai_namen(st)[:2])
+        # "Steer via the checklist" stond in het oude label en is GEEN decoratie: het zegt waar
+        # sturen gebeurt, en dat is niet in het gesprek. Bij het lichter maken van het label viel
+        # hij er bijna uit; hij hoort in de hint, naast de @-uitnodiging.
+        _tip = (f"Tip: noem {_tagbaar} om een AI-collega mee te laten kijken. " if _tagbaar else "")
+        _hint = f"<span class='muted comp-hint'>{_tip}Steer via the checklist.</span>"
         composer = (f"<form id='{_cfid}' method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<label class='att-lbl'>Conversation — @name asks an inhabitant to weigh in. Steer via the checklist.</label>"
-                    f"{md_editor('text', rows=2, placeholder='Write a reply…', help=True)}"
+                    f"<div class='comp-head'>{_av}"
+                    f"<label class='att-lbl'>Conversation</label></div>"
+                    f"{md_editor('text', rows=2, placeholder='Write a reply, or ask a colleague to weigh in…', help=True)}"
+                    f"{_hint}"
                     f"</form>"
                     f"<div class='comp-row'>"
                     f"{bijlage}"                                    # bijlage links op de toolbar-rij (eigen form)…

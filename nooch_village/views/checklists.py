@@ -198,6 +198,14 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
     return f"<span class='ck-resolve'>{skip}{hand}</span>"
 
 
+#: De lege checklist. "no items yet" CONSTATEERT; dit NODIGT UIT — en zegt erbij waar een eerste
+#: item vandaan komt, want dat is de vraag waar iemand op vastloopt. Eigen klasse binnen de bestaande
+#: .cl--familie: de andere lege staten in het systeem zijn losse <span class='muted'>-zinnen, en die
+#: dragen geen ruimte of toon.
+_CL_LEEG = ("<li class='cl-empty'>Nog geen acties. Zet de eerste stap uit het overleg hier neer — "
+            "of splits het einddocument in wat er nog moet gebeuren.</li>")
+
+
 def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Stores = None) -> str:
     """Named checklists (Trello-stijl): titel + voortgangsbalk + items + verwijderen."""
     def hid():
@@ -253,7 +261,9 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{resolve}{unskip}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-               f"<input name='text' placeholder='add item…'>"
+               # EEN PLACEHOLDER IS EEN UITNODIGING OF EEN GRIJS VLAK. "add item…" beschrijft het
+               # veld; een voorbeeld laat zien wat er in hoort en hoe fijn een item mag zijn.
+               f"<input name='text' placeholder='E.g. Ask three suppliers for a sample'>"
                f"<button class='btn ok' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
         delc = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
@@ -261,5 +271,5 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
                 f"<span class='cl-title'>{_e(cl.get('title', 'Checklist'))}</span>{delc}</div>"
-                f"{bar}<ul class='clean ck-list'>{rows or '<li class=muted>no items yet</li>'}</ul>{add}</div>")
+                f"{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     return out

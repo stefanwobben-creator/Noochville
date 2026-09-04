@@ -17,10 +17,12 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # Details in de structuur-kantlijn (pside): bewerkbare Rol/Owner op volle breedte (dk wide),
-    # Created/Visible als compacte label|waarde-rijen (dk)
+    # ALLE rijen zijn nu compacte label|waarde-paren (dk). De `wide`-modifier maakte er vijf
+    # tweeregelig — label boven, control op volle breedte — en dat stapelde tot de "zware kolom"
+    # waar Stefan over viel. De dropdowns blijven (uniformiteit uit #154); alleen de kolom is half
+    # zo hoog. `wide` is daarmee dode CSS geworden en verwijderd.
     for k in ("pgrid", "pside", "class='dcol'", "Project details",
-              "<span class='dk wide'>Role</span>", "<span class='dk wide'>Owner</span>",
+              "<span class='dk'>Role</span>", "<span class='dk'>Owner</span>",
               "<span class='dk'>Created</span>", "<span class='dk'>Visible</span>"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
@@ -50,7 +52,9 @@ def test_redesign_layout(tmp_path):
     # Structuur-kantlijn: Project details + Checklist-panel; de opdracht-editor is uit de UI verwijderd
     # (geen proj_describe-form meer); Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside)
     assert "Project details" in frag and "value='proj_describe'" not in frag
-    assert "Steer via the checklist" in frag        # nieuwe composer-label
+    # De zin staat nu in de HINT en niet meer in het label: bij het compacter maken van de
+    # composer viel hij er bijna uit, en hij is informatie — hij zegt waar sturen gebeurt.
+    assert "Steer via the checklist" in frag
     assert "File from your computer" in frag                 # bijlage-affordance in de composer
     assert "pside" in frag and "Wall — content" in frag
     # geen apart 'Acties'-blok

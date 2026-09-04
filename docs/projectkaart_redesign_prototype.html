@@ -1,0 +1,303 @@
+<title>Projectkaart Redesign</title>
+<style>
+  :root{
+    --bg:#e9e8e0; --board:#e4e3da; --surface:#ffffff; --surface-2:#faf9f4; --surface-3:#f0efe6;
+    --ink:#1c1c19; --muted:#6d6d63; --faint:#9a998d;
+    --green:#3a6a4d; --green-deep:#2c5340; --green-soft:#e6efe7; --green-line:#c7ddca;
+    --line:#e4e2d8; --line-soft:#edece3;
+    --amber:#b7791f; --amber-soft:#f7edd7;
+    --red:#b23b3b;
+    --shadow:0 1px 2px rgba(40,40,30,.06),0 10px 30px rgba(40,40,30,.10);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#121310; --board:#171814; --surface:#1e201c; --surface-2:#23251f; --surface-3:#282a23;
+      --ink:#ecebe3; --muted:#a6a89b; --faint:#7c7e72;
+      --green:#7fb08d; --green-deep:#9cc4a7; --green-soft:#24312a; --green-line:#33463a;
+      --line:#2c2e28; --line-soft:#262822;
+      --amber:#dcb35f; --amber-soft:#312819;
+      --red:#e08b86;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#121310; --board:#171814; --surface:#1e201c; --surface-2:#23251f; --surface-3:#282a23;
+    --ink:#ecebe3; --muted:#a6a89b; --faint:#7c7e72;
+    --green:#7fb08d; --green-deep:#9cc4a7; --green-soft:#24312a; --green-line:#33463a;
+    --line:#2c2e28; --line-soft:#262822; --amber:#dcb35f; --amber-soft:#312819; --red:#e08b86;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+  .top{max-width:1080px;margin:0 auto;padding:26px 22px 8px}
+  .kick{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:700}
+  h1.t{font-size:23px;margin:.25em 0 .1em;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:14.5px;margin:.2em 0 16px;max-width:680px}
+  .toggle{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;gap:3px;box-shadow:var(--shadow)}
+  .toggle button{border:none;background:none;font:inherit;font-weight:700;font-size:13.5px;color:var(--muted);
+    padding:7px 18px;border-radius:999px;cursor:pointer}
+  .toggle button.on{background:var(--green);color:#fff}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .toggle button.on{color:#0d100c}}
+  .cap{font-size:13px;color:var(--faint);margin:12px 2px 0}
+
+  .stage{background:var(--board);margin:16px auto 40px;max-width:1080px;border-radius:16px;padding:26px 20px;
+    position:relative;overflow:hidden}
+  .ghostcol{position:absolute;inset:0;opacity:.4;pointer-events:none;padding:18px;display:flex;gap:12px}
+  .ghostcol .gc{flex:1;background:var(--surface);border-radius:10px;height:90px;border:1px solid var(--line)}
+
+  .card{position:relative;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+    max-width:900px;margin:0 auto;overflow:hidden;border:1px solid var(--line)}
+
+  /* ============ NU (current) ============ */
+  .nu .cbody{display:grid;grid-template-columns:1fr 300px;gap:0}
+  .nu .main{padding:16px 18px;border-right:1px solid var(--line);min-width:0}
+  .nu .side{padding:14px 14px;background:var(--surface-2);font-size:13px}
+  .nu h2.title{font-size:16px;margin:0 0 10px}
+  .nu .doc{font-size:13.5px;line-height:1.35}
+  .nu .doc h3{font-size:14px;margin:10px 0 4px}
+  .nu .doc p{margin:4px 0}
+  .nu .doc ul{margin:4px 0;padding-left:18px}
+  .nu .doc li{margin:2px 0}
+  .nu .links{font-size:12.5px;color:var(--green-deep);margin:10px 0}
+  .nu .wall{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+  .nu .wlabel{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .nu .editor{border:1px solid var(--line);border-radius:6px;margin-top:6px;min-height:70px;padding:8px;color:var(--faint);font-size:13px}
+  .nu .barmini{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:2px 6px;display:inline-block;margin-right:4px}
+  .nu .field{margin:8px 0}
+  .nu .field label{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:700;display:block;margin-bottom:2px}
+  .nu .field .sel{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--surface);font-size:13px;display:flex;justify-content:space-between}
+  .nu .noowner{color:var(--red);font-size:12px;margin-bottom:8px}
+  .nu .addl{font-size:12px;color:var(--green-deep)}
+
+  /* ============ VOORSTEL (redesign) ============ */
+  .re .head{padding:20px 24px 14px;border-bottom:1px solid var(--line-soft)}
+  .re .crumb{font-size:12px;color:var(--faint);margin-bottom:8px}
+  .re h2.title{font-size:21px;margin:0 0 12px;letter-spacing:-.01em;line-height:1.25}
+  .re .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .re .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:999px;
+    padding:5px 12px;background:var(--surface-3);color:var(--muted);border:1px solid var(--line);cursor:pointer}
+  .re .chip .k{color:var(--faint);font-weight:500}
+  .re .chip.assign{color:var(--green-deep);background:var(--green-soft);border-color:var(--green-line);border-style:dashed}
+  .re .chip .av{width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .re .chip .av{color:#0d100c}}
+
+  .re .cbody{display:grid;grid-template-columns:1fr 232px;gap:0}
+  @media(max-width:720px){.re .cbody{grid-template-columns:1fr}}
+  .re .main{padding:20px 24px;min-width:0}
+  .re .rail{padding:20px 18px;border-left:1px solid var(--line-soft);background:var(--surface-2)}
+  @media(max-width:720px){.re .rail{border-left:none;border-top:1px solid var(--line-soft)}}
+
+  .re .sec{margin-bottom:26px}
+  .re .sechead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .re .sechead h3{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0}
+  .re .sechead .act{margin-left:auto;font-size:12.5px;color:var(--green-deep);font-weight:600;cursor:pointer;display:inline-flex;gap:12px}
+  .re .sechead .act span:hover{text-decoration:underline}
+
+  /* readable document */
+  .re .doc{font-size:15px;line-height:1.68;color:var(--ink);max-width:62ch}
+  .re .doc h4{font-size:15.5px;margin:1.5em 0 .4em;font-weight:700;letter-spacing:-.01em}
+  .re .doc h4:first-child{margin-top:0}
+  .re .doc p{margin:.6em 0}
+  .re .doc ul{margin:.6em 0;padding-left:0;list-style:none}
+  .re .doc ul li{position:relative;padding:8px 0 8px 16px;border-top:1px solid var(--line-soft)}
+  .re .doc ul li:first-child{border-top:none}
+  .re .doc ul li::before{content:"";position:absolute;left:2px;top:16px;width:6px;height:6px;border-radius:50%;background:var(--green-line)}
+  .re .doc li b{font-weight:700}
+  .re .doc li .meta{color:var(--muted);font-size:13.5px}
+  .re .gap{background:var(--amber-soft);border:1px solid var(--line);border-radius:10px;padding:2px 14px;margin-top:6px}
+
+  /* checklist trello-like */
+  .re .prog{height:6px;background:var(--surface-3);border-radius:6px;overflow:hidden;margin:2px 0 12px;flex:1}
+  .re .prog i{display:block;height:100%;background:var(--green);border-radius:6px}
+  .re .cl-empty{border:1px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--faint);font-size:13.5px;margin-bottom:10px;background:var(--surface-2)}
+  .re .additem{display:flex;gap:8px}
+  .re .additem input{flex:1;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:14px;background:var(--surface)}
+  .re .additem input::placeholder{color:var(--faint)}
+  .re .btn{border:none;background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:13.5px;border-radius:9px;padding:0 16px;cursor:pointer}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .re .btn{color:#0d100c}}
+  .re .clrow{display:flex;align-items:center;gap:10px;padding:8px 2px;font-size:14px}
+  .re .clrow .box{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line);flex:none}
+  .re .clrow.done .box{background:var(--green);border-color:var(--green)}
+  .re .clrow.done span{color:var(--faint);text-decoration:line-through}
+
+  /* activity */
+  .re .comment{display:flex;gap:11px;align-items:flex-start}
+  .re .comment .av{width:32px;height:32px;border-radius:50%;background:var(--green);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .re .comment .av{color:#0d100c}}
+  .re .cbox{flex:1;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px 14px;color:var(--faint);font-size:14px;cursor:text}
+  .re .cbox .hint{margin-top:8px;font-size:12px;color:var(--faint)}
+  .re .cbox .hint b{color:var(--green-deep)}
+
+  /* right rail actions */
+  .re .rail h4{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;margin:0 0 10px}
+  .re .add-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--line);
+    background:var(--surface);border-radius:10px;padding:9px 12px;font:inherit;font-size:13.5px;font-weight:600;
+    color:var(--ink);cursor:pointer;margin-bottom:8px}
+  .re .add-btn:hover{background:var(--green-soft);border-color:var(--green-line);color:var(--green-deep)}
+  .re .add-btn .i{width:18px;text-align:center;color:var(--green-deep)}
+  .re .meta-val{font-size:11.5px;color:var(--faint);margin-left:auto;font-weight:500}
+
+  /* annotations */
+  .annos{max-width:1080px;margin:0 auto 60px;padding:0 22px;display:none}
+  .annos.show{display:block}
+  .annos h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+  .annos ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+  .annos li{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13.5px;box-shadow:var(--shadow)}
+  .annos li b{display:block;margin-bottom:3px;color:var(--green-deep)}
+  .annos li span{color:var(--muted)}
+</style>
+
+<div class="top">
+  <div class="kick">Redesign · projectkaart</div>
+  <h1 class="t">De projectkaart: overzichtelijker en uitnodigender</h1>
+  <p class="sub">Zelfde project, twee behandelingen. Links hoe het nu voelt, rechts een Trello-achtig voorstel: een rustige leeslaag, en toevoegen dat licht en aanlokkelijk wordt in plaats van verstopt.</p>
+  <div class="toggle">
+    <button id="bNu" onclick="show('nu')">Nu</button>
+    <button id="bRe" class="on" onclick="show('re')">Voorstel</button>
+  </div>
+  <div class="cap" id="cap">Trello-achtig voorstel: leesbare tekst, heldere hiërarchie, en overal een lichte uitnodiging om iets toe te voegen.</div>
+</div>
+
+<!-- ============ NU ============ -->
+<div class="stage" id="stage-nu" hidden>
+  <div class="ghostcol"><div class="gc"></div><div class="gc"></div><div class="gc"></div><div class="gc"></div></div>
+  <div class="card nu">
+    <div class="cbody">
+      <div class="main">
+        <h2 class="title">Productiepartners Spanje verkend</h2>
+        <div class="doc">
+          <ul>
+            <li><b>Massibo Factory (Elche):</b> MOQ 10 paar, prototype binnen 2-3 weken, vegan opties beschikbaar.</li>
+            <li><b>Laurel Shoes (Petrer):</b> Sneakers in aanbod; klanten o.a. Stuart Weitzman, Hermès, Jimmy Choo.</li>
+            <li><b>Vulcanizados Alberola (Elche):</b> Vulcanisatiefabriek (sinds 1981), B2B-catalogus; private label niet expliciet (waarschijnlijk).</li>
+          </ul>
+          <h3>Bekende gaten (Vervolgronde nodig)</h3>
+          <p>ISDAMA, Elche (Carrús): Gelijmd (geen vulcanisatie, dus zelfde route als Portugal), sneakers in het assortiment, "cheapest and fastest", klanten beginnen met een kleine serie. Constructiemethode niet vermeld, dus vraag expliciet naar gelijmd monteren met voorverwarmde zool +34 611 05 89 58, Info@MassiboFactory.com</p>
+        </div>
+        <div class="links">✏️ edit document · 🔄 regenerate report</div>
+        <div class="wall">
+          <div class="wlabel">Wall — content &amp; conversation</div>
+          <div style="font-size:11px;color:var(--faint);margin:4px 0">CONVERSATION — @NAME ASKS AN INHABITANT TO WEIGH IN. STEER VIA THE CHECKLIST.</div>
+          <div><span class="barmini">B</span><span class="barmini">I</span><span class="barmini">S</span><span class="barmini">H</span><span class="barmini">?</span></div>
+          <div class="editor">Write a reply…</div>
+          <div style="font-size:12px;color:var(--faint);margin-top:6px">📎 attachment</div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="noowner">● no owner</div>
+        <div class="field"><label>Visible</label><div class="sel">☐ only for this circle</div></div>
+        <div class="field"><label>Mission impact</label><div class="sel">Strengthens ▾</div></div>
+        <div class="field"><label>Business impact</label><div class="sel">High ▾</div></div>
+        <div class="field"><label>Effort</label><div class="sel">5 · hours ▾</div></div>
+        <div class="field"><label>Checklist</label><div class="sel">Acties uit overleg</div>
+          <div style="font-size:12px;color:var(--faint);margin-top:4px">no items yet</div>
+          <div class="sel" style="margin-top:4px;color:var(--faint)">add item…</div>
+          <div class="addl" style="margin-top:4px">+ new checklist</div>
+        </div>
+        <div class="field"><label>Goal &amp; relations</label><div style="font-size:12px;color:var(--faint)">Not linked to a goal yet.</div>
+          <div style="font-size:12px;color:var(--faint);margin-top:3px">◎ Link to goal · soon</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ VOORSTEL ============ -->
+<div class="stage" id="stage-re">
+  <div class="ghostcol"><div class="gc"></div><div class="gc"></div><div class="gc"></div><div class="gc"></div></div>
+  <div class="card re">
+    <div class="head">
+      <div class="crumb">Nooch · Creator of Shoes · project</div>
+      <h2 class="title">Productiepartners Spanje verkend</h2>
+      <div class="chips">
+        <span class="chip assign"><span class="i">＋</span> Owner toewijzen</span>
+        <span class="chip"><span class="k">Impact</span> Versterkt missie</span>
+        <span class="chip"><span class="k">Business</span> Hoog</span>
+        <span class="chip"><span class="k">Inzet</span> 5 u</span>
+        <span class="chip"><span class="k">Status</span> Actief</span>
+      </div>
+    </div>
+    <div class="cbody">
+      <div class="main">
+
+        <div class="sec">
+          <div class="sechead"><h3>Beschrijving</h3><div class="act"><span>Bewerken</span><span>Verversen</span></div></div>
+          <div class="doc">
+            <h4>Shortlist leveranciers</h4>
+            <ul>
+              <li><b>Massibo Factory</b> <span class="meta">· Elche</span><br>MOQ 10 paar, prototype binnen 2 tot 3 weken, vegan opties beschikbaar.</li>
+              <li><b>Laurel Shoes</b> <span class="meta">· Petrer</span><br>Sneakers in aanbod. Klanten o.a. Stuart Weitzman, Hermès, Jimmy Choo.</li>
+              <li><b>Vulcanizados Alberola</b> <span class="meta">· Elche</span><br>Vulcanisatiefabriek sinds 1981, B2B-catalogus. Private label niet expliciet, waarschijnlijk wel mogelijk.</li>
+            </ul>
+            <h4>Bekende gaten <span class="meta" style="font-weight:400;font-size:13px">· vervolgronde nodig</span></h4>
+            <div class="gap">
+              <ul>
+                <li><b>ISDAMA</b> <span class="meta">· Elche (Carrús)</span><br>Gelijmd, geen vulcanisatie, dus dezelfde route als Portugal. Sneakers in het assortiment, "cheapest and fastest". Constructiemethode niet vermeld: vraag expliciet naar gelijmd monteren met voorverwarmde zool.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sechead"><h3>Checklist · Acties uit overleg</h3></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:var(--faint);font-weight:600">0%</span><div class="prog"><i style="width:0%"></i></div></div>
+          <div class="cl-empty">Nog geen acties. Zet de eerste stap uit het overleg hieronder neer.</div>
+          <div class="additem">
+            <input placeholder="Bijv. Massibo bellen over gelijmd monteren…">
+            <button class="btn">Toevoegen</button>
+          </div>
+        </div>
+
+        <div class="sec" style="margin-bottom:6px">
+          <div class="sechead"><h3>Gesprek</h3></div>
+          <div class="comment">
+            <div class="av">SW</div>
+            <div class="cbox">Schrijf een reactie, of vraag een AI-collega om mee te denken…
+              <div class="hint">Tip: noem <b>@Sid</b> voor onderzoek of <b>@Lotte</b> voor materiaalkeuze. 📎 Sleep een bestand hierheen.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="rail">
+        <h4>Toevoegen</h4>
+        <button class="add-btn"><span class="i">👤</span> Owner <span class="meta-val">geen</span></button>
+        <button class="add-btn"><span class="i">🏷️</span> Label / impact</button>
+        <button class="add-btn"><span class="i">✓</span> Checklist</button>
+        <button class="add-btn"><span class="i">📎</span> Bijlage</button>
+        <button class="add-btn"><span class="i">◎</span> Koppel aan doel</button>
+        <h4 style="margin-top:20px">Zichtbaarheid</h4>
+        <button class="add-btn"><span class="i">👁</span> Hele cirkel <span class="meta-val">wijzig</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="annos show" id="annos">
+  <h3>Wat er verandert</h3>
+  <ul>
+    <li><b>Leesbare tekst</b><span>Ruimere regelafstand, witruimte tussen secties en een leesbreedte. Een lang document wordt geen muur meer.</span></li>
+    <li><b>Titel en kern bovenaan</b><span>Titel groot, en impact/inzet/status als lichte chips in plaats van een kolom zware dropdowns.</span></li>
+    <li><b>Uitnodigend toevoegen</b><span>De checklist heeft een zichtbaar invoerveld met een concrete voorbeeldtekst, niet een grijze "add item…".</span></li>
+    <li><b>Gesprek als gesprek</b><span>Een reactievak met je avatar en een hint om een AI-collega te taggen, in plaats van een kale editorbalk.</span></li>
+    <li><b>Rustige rechterkolom</b><span>Acties als heldere "Toevoegen"-knoppen (Trello-stijl), niet als altijd-open formuliervelden.</span></li>
+    <li><b>Plakken wordt schoon</b><span>Achter de schermen: geplakte tekst wordt genormaliseerd naar schone opmaak, zodat het document niet vervuilt.</span></li>
+  </ul>
+</div>
+
+<script>
+  function show(which){
+    document.getElementById('stage-nu').hidden = which!=='nu';
+    document.getElementById('stage-re').hidden = which!=='re';
+    document.getElementById('bNu').classList.toggle('on', which==='nu');
+    document.getElementById('bRe').classList.toggle('on', which==='re');
+    document.getElementById('annos').classList.toggle('show', which==='re');
+    document.getElementById('cap').textContent = which==='nu'
+      ? 'Zoals het nu voelt: krappe leeslaag, een kolom zware dropdowns, en toevoegen dat grijs en verstopt is.'
+      : 'Trello-achtig voorstel: leesbare tekst, heldere hiërarchie, en overal een lichte uitnodiging om iets toe te voegen.';
+  }
+</script>
