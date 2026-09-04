@@ -8,8 +8,7 @@ from __future__ import annotations
 import pytest
 
 from nooch_village.project_essentie import Essentie, essentie_van, ontfence
-from nooch_village.projects import (dod_poort, heeft_seed_vorm,
-                                    is_seed_van_dit_project, seed_document)
+from nooch_village.projects import heeft_seed_vorm, seed_document
 
 
 # ── trede 0: de fence ────────────────────────────────────────────────────────
@@ -63,38 +62,26 @@ def test_leeg_document_is_geen_seed():
     assert essentie_van("").soort == "geen"
 
 
-# ── de bewuste splitsing: weergave versus poort ──────────────────────────────
-# Dit is GEEN duplicatie zoals de status-chip die in twee zones stond (daar stond één feit op twee
-# plekken). Hier staan twee verschillende vragen naast elkaar, en juist een bewuste splitsing
-# sluipt later dicht als niemand hem bewaakt.
+# ── het sjabloon woont op één plek ───────────────────────────────────────────
+# Hier stonden drie tests die een bewuste splitsing bewaakten: de weergavevraag (deze) naast een
+# strengere poortvraag voor `dod_poort`. Die poort is 4 sep 2026 ingetrokken — een Done vereist
+# geen einddocument — en daarmee is dit weer één vraag. Wat blijft is de eis die er altijd al
+# onder lag: geen van beide mag het sjabloon overtikken.
 
-def test_weergave_en_poort_stellen_verschillende_vragen():
-    """Een geseed document met LEEG done_when op het record: 67x op productie.
-
-    De kaart moet zeggen "nog geen rapport" (anders toont hij de sjabloonzin als samenvatting).
-    De poort moet het project gewoon afsluitbaar laten: een echt afgeronde taak met een goede
-    titel is Done, ook zonder geschreven document. Of Done een document zou MOETEN vereisen is een
-    eigen ontwerpbeslissing en hangt hier bewust niet aan vast."""
-    doc = seed_document("Barefoot Sneaker Created with WTF")
-    p = {"done_when": ""}
-    assert heeft_seed_vorm(doc) is True            # weergave: dit is niets dan de opdracht
-    assert is_seed_van_dit_project(p, doc) is False  # poort: geen seed om tegen te vergelijken
-    assert dod_poort(p, doc) is None               # ...dus de poort blijft open
+def test_de_herkenning_leidt_zich_af_uit_het_sjabloon():
+    """Geen tweede definitie van "nog alleen de opdracht": `heeft_seed_vorm` leest kop en staart
+    uit `seed_document`. Zou iemand het sjabloon wijzigen, dan verandert de herkenning mee — een
+    regex op `**Klaar wanneer**` zou stil achterblijven."""
+    for opdracht in ("Wat dan ook", "Iets heel anders", "x"):
+        assert heeft_seed_vorm(seed_document(opdracht)), opdracht
 
 
-def test_de_poort_blijft_sluiten_waar_hij_dat_altijd_al_deed():
-    """Met een gevuld done_when verandert er niets aan het poortgedrag."""
-    dw = "De shortlist van drie leveranciers is af"
-    p = {"done_when": dw}
-    assert dod_poort(p, seed_document(dw)) is not None       # alleen de opdracht → dicht
-    assert dod_poort(p, "") is not None                      # leeg document → dicht
-    assert dod_poort(p, seed_document(dw) + "\n\nAf.") is None   # antwoord erbij → open
-
-
-def test_het_sjabloon_leeft_op_een_plek():
-    """Beide vragen leiden zich af uit `seed_document`; geen van beide tikt het sjabloon over."""
-    doc = seed_document("Wat dan ook")
-    assert heeft_seed_vorm(doc) and is_seed_van_dit_project({"done_when": "Wat dan ook"}, doc)
+def test_de_weergavevraag_heeft_het_projectrecord_niet_nodig():
+    """Wat je op de kaart toont volgt uit het document alleen — dat is precies waarom deze vraag
+    los kon blijven staan van welk beleid dan ook. 67 documenten op productie hebben een leeg
+    `done_when` op het record en zijn tóch zichtbaar niets dan de opdracht."""
+    assert heeft_seed_vorm(seed_document("Barefoot Sneaker Created with WTF")) is True
+    assert essentie_van(seed_document("Barefoot Sneaker Created with WTF")).soort == "seed"
 
 
 # ── trede 2: de doelregel ────────────────────────────────────────────────────

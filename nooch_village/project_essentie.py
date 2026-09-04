@@ -23,12 +23,11 @@ Trede 0 is GEEN weergave-fix. `cockpit2_util._md_doc` stript de fence al bij het
 volledige rapport toonde altijd goed. Trede 0 bestaat omdat DEZE parser anders alleen een codeblok
 ziet en over de hele tekst heen stapt.
 
-Trede 1 vraagt het niet zelf maar aan `projects.heeft_seed_vorm` — de WEERGAVEVRAAG ("is dit
-document niets dan de opdracht, welke opdracht dan ook"). Dat is bewust een andere vraag dan de
-poortvraag van `dod_poort` ("is dit exact de seed van dít project"); zie het blok boven
-`is_seed_van_dit_project` in projects.py voor waarom die twee uit elkaar horen te lopen. Het
-sjabloon zelf leeft nog steeds op één plek. Een eigen regex op `**Klaar wanneer**` zou wél een
-tweede definitie zijn, en die drijft af zodra de seed-tekst verandert.
+Trede 1 vraagt het niet zelf maar aan `projects.heeft_seed_vorm`, want daar leeft het sjabloon.
+Een eigen regex op `**Klaar wanneer**` zou een tweede definitie zijn en drijft af zodra de
+seed-tekst verandert. (Deze vraag stond kort naast een strengere poortvariant voor `dod_poort`;
+die poort is 4 sep 2026 ingetrokken — een Done vereist geen einddocument — dus dit is nu de enige
+vraag die het dorp over een seed stelt.)
 
 Geen I/O, geen store, geen netwerk: tekst in, essentie uit.
 """

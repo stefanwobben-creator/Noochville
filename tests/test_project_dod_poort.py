@@ -1,38 +1,81 @@
-"""De projectpoort (founder, 19 jul — naast G0-G4): done = vraag beantwoord, niet werk
-gedaan. Drie borgingen: (1) dod_poort weigert Done zolang het EINDDOCUMENT geen antwoord
-bevat (sinds 21 jul; een ingevuld dod_outcome blijft als legacy openen); (2) set_dod
-schrijft de twee DoD-contractvelden en niets anders; (3) een mens-project kan met done_when
-geboren worden (de intake-eis leeft in de handler; create zelf blijft vrij voor rollen)."""
+"""Done vereist GEEN einddocument. En: `set_dod` schrijft alleen de contractvelden.
+
+DE REGEL IS OMGEDRAAID (4 sep 2026). Hier stond het omgekeerde: `dod_poort` weigerde Done zolang
+het einddocument leeg was of alleen de geseede opdracht bevatte (founder 19 jul, verhuisd naar het
+document op 21 jul). Stefan heeft die poort ingetrokken.
+
+De reden: de poort keek naar het document, niet naar het werk. Een taak waarvan de titel de
+opdracht goed omschrijft en die echt af is, is Done — of er nu iemand een rapport bij schreef of
+niet. Dat oordeel hoort bij de mens. Bij het intrekken stonden 65 projecten op deze poort vast
+(44 met een leeg document, 21 met alleen de opdracht), gemeten op de draaiende server.
+
+Bewust ook geen zachte variant: geen nudge, geen waarschuwing, geen "weet je het zeker". Die zijn
+expliciet afgewezen — half blokkeren houdt de traagheid zonder de zekerheid te leveren.
+
+Waarom dit een test is en geen aantekening: een conventie die je moet onthouden is een
+waarschuwing, geen guard. Zou iemand de poort ooit opnieuw invoeren, dan valt deze test om en
+leest hij meteen waarom hij weg was.
+"""
 from __future__ import annotations
 
-from nooch_village.projects import ProjectLedger, dod_poort, seed_document
+from nooch_village import cockpit2
+from nooch_village.projects import ProjectLedger, seed_document
+
+ROLE = "mother_earth__nooch__website_developer"
 
 
-def test_dod_poort_weigert_zonder_antwoord_en_opent_met(tmp_path):
-    """De poort verhuisde 21 jul van het veld `dod_outcome` naar het EINDDOCUMENT: het antwoord
-    hoort in het document te staan, niet in een los veld. Hij oordeelt niet over kwaliteit —
-    alleen dat er méér staat dan de geseede opdracht."""
-    pj = ProjectLedger(f"{tmp_path}/projects.json")
+def test_er_is_geen_document_poort_meer():
+    """De functie zelf is weg. Terugkomen mag, maar niet ongemerkt."""
+    import nooch_village.projects as P
+    assert not hasattr(P, "dod_poort"), (
+        "dod_poort is terug. Dat is een beleidswijziging (Done zou weer een document vereisen) "
+        "en hoort een eigen besluit te zijn — zie de docstring bovenaan dit bestand.")
+    assert not hasattr(P, "is_seed_van_dit_project"), (
+        "is_seed_van_dit_project hoorde bij die poort en had daarna geen consument meer. "
+        "Voor de weergavevraag is er `heeft_seed_vorm`.")
+
+
+def _done(tmp_path, doc: str | None):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
     done_when = "Er ligt een getal met bron, of de uitleg waarom dat niet kan."
-    pid = pj.create("harry_hemp", "Hoeveel massa verliest een schoenzool?", "human",
-                    done_when=done_when)
-    # dicht: leeg einddocument
-    reden = dod_poort(pj.get(pid))
-    assert reden and "einddocument is nog leeg" in reden
-    # dicht: alleen de geseede opdracht in het document — dat is de vraag, niet het antwoord
-    reden = dod_poort(pj.get(pid), seed_document(done_when))
-    assert reden and "alleen de opdracht" in reden
-    # ook dicht voor None / leeg project (fail-closed)
-    assert dod_poort(None)
-    assert dod_poort({})
-    # open zodra het document een antwoord bevat
-    assert dod_poort(pj.get(pid), seed_document(done_when) +
-                     "\n\n## Conclusie\nCa. 1-5 g per 100 km, grotendeels microplastics.") is None
-    # legacy: een project met het oude dod_outcome-veld blijft afrondbaar, ook zonder document
-    pj.set_dod(pid, "dod_outcome", "Ca. 1-5 g per 100 km; bronnen in het einddocument.")
-    assert dod_poort(pj.get(pid)) is None
+    pid = st.projects.create(ROLE, "Hoeveel massa verliest een schoenzool?", "human",
+                             done_when=done_when)
+    st.projects.start(pid)
+    if doc is not None:
+        cockpit2._Stores(dd).project_docs.write(pid, doc)
+    _, msg = cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    return cockpit2._Stores(dd).projects.get(pid), msg, done_when
 
 
+def test_afronden_zonder_enig_einddocument(tmp_path):
+    p, msg, _ = _done(tmp_path, None)
+    assert p["status"] == "done", msg
+    assert not cockpit2.is_weigering(msg), msg
+
+
+def test_afronden_met_alleen_de_opdracht_in_het_document(tmp_path):
+    """Precies het geval dat de poort blokkeerde: het document is nog de seed."""
+    seed = seed_document("Er ligt een getal met bron, of de uitleg waarom dat niet kan.")
+    p, msg, _ = _done(tmp_path, seed)
+    assert p["status"] == "done", msg
+    assert not cockpit2.is_weigering(msg), msg
+
+
+def test_afronden_met_een_geschreven_rapport_blijft_gewoon_werken(tmp_path):
+    doc = seed_document("Er ligt een getal met bron.") + "\n\n## Conclusie\nCa. 1-5 g per 100 km."
+    p, msg, _ = _done(tmp_path, doc)
+    assert p["status"] == "done", msg
+
+
+def test_de_uitkomst_wordt_nog_steeds_vastgelegd(tmp_path):
+    """De poort is weg, de administratie niet: er hoort nog altijd een outcome bij een Done."""
+    p, _, _ = _done(tmp_path, None)
+    assert (p.get("dod_outcome") or p.get("outcome") or "").strip(), p
+
+
+# ── ongewijzigd: het DoD-contract zelf ───────────────────────────────────────
 def test_set_dod_schrijft_alleen_contractvelden(tmp_path):
     pj = ProjectLedger(f"{tmp_path}/projects.json")
     pid = pj.create("librarian", "Woordenschat-toets", "human")
