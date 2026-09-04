@@ -727,10 +727,23 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .einddoc-d>summary{list-style:none;cursor:pointer}
 .einddoc-d>summary::-webkit-details-marker{display:none}
 .einddoc-toggle{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);font-weight:700}
-.einddoc-body{max-height:46vh;overflow-y:auto;padding-right:.4rem}
-.einddoc-body h3,.einddoc-body h4,.einddoc-body h5,.einddoc-body h6{margin:.7rem 0 .35rem;font-family:var(--font-display);line-height:1.2}
-.einddoc-body h3{font-size:1.05rem}.einddoc-body h4{font-size:.95rem}.einddoc-body h5{font-size:.85rem}.einddoc-body h6{font-size:.8rem}
-.einddoc-body p{margin:.4rem 0}.einddoc-body ul,.einddoc-body ol{margin:.35rem 0 .35rem 1.1rem}.einddoc-body li{margin:.15rem 0}
+/* LEESLAAG. Het einddocument is PROZA, en erfde de regelafstand van de interface eromheen. Bij een
+   lang rapport werd dat één grijze massa: koppen die nauwelijks van de tekst verschilden (1.05 →
+   .95 → .85 is 0,1rem per niveau), regels zo breed als de kolom, en krappe alinea-afstand.
+   De waarden komen uit het bestaande vocabulaire (.editor 1.55, .att-body 1.5), aan de ruime kant
+   omdat dit gelezen wordt en niet ingevuld.
+   De cap blijft — verruimd van 46vh naar 70vh. Hij staat er zodat een lang rapport de checklist en
+   het reactievak eronder niet uit beeld duwt; laten vallen zou de ene klacht oplossen en de andere
+   verergeren. De <details open> eromheen is de ontsnapping voor wie het hele document wil. */
+.einddoc-body{max-height:70vh;overflow-y:auto;padding-right:.4rem;line-height:1.6}
+.einddoc-body h3,.einddoc-body h4,.einddoc-body h5,.einddoc-body h6{margin:1.4rem 0 .5rem;font-family:var(--font-display);line-height:1.2}
+.einddoc-body>:first-child{margin-top:0}
+.einddoc-body h3{font-size:1.25rem}.einddoc-body h4{font-size:1.1rem}.einddoc-body h5{font-size:.95rem}.einddoc-body h6{font-size:.85rem}
+/* max-width op de TEKST en niet op de container: die draagt ook koppen en de inspringing van
+   lijsten, en die mogen de volle breedte houden. */
+.einddoc-body p{margin:.75rem 0;max-width:68ch}
+.einddoc-body ul,.einddoc-body ol{margin:.6rem 0 .6rem 1.1rem}
+.einddoc-body li{margin:.25rem 0;max-width:68ch}
 /* Hoogte-koppeling projectdetail (niet roloverleg): main en zijbalk delen één bounded frame, elk met
    eigen interne scroll, zodat de onderkanten uitlijnen i.p.v. dat de wall op een vaste hoogte afkapt
    terwijl de zijbalk doorloopt. Alleen desktop; op mobiel (1 kolom) groeit alles natuurlijk mee. */
