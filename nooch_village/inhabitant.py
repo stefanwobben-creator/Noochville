@@ -1270,21 +1270,33 @@ class Inhabitant(threading.Thread):
         return isinstance(data, dict) and isinstance(data.get("items"), list) and bool(data["items"])
 
     # ── DEEL B: uitvoering (bij de puls voor projecten in ACTIEF) ─────────────────────────────
-    def _notify_founder(self, project_id: str, snippet: str) -> None:
-        """Zichtbare heads-up naar de founder-rol (NotifStore, naast de human_inbox). GEEN approve-knop —
-        beslissen blijft op het geauthenticeerde human_inbox-oppervlak (CLAUDE.md). Fail-soft: mag de
-        puls nooit breken."""
+    def _notify_rol(self, rol_id: str, project_id: str, snippet: str) -> None:
+        """Heads-up naar EEN ROL. `_notify_founder` is hier de bijzondere geval van.
+
+        De hardwire zat in de enige meldweg van de pulslus: elke `headsup` ging naar
+        FOUNDER_ROLE_ID, ook als het werk aantoonbaar bij iemand anders hoorde. Een rol als adres
+        (en niet een persoon) overleeft bovendien een wisseling van vervuller."""
+        if not rol_id:
+            return
         try:
             from nooch_village.notifications import NotifStore
-            from nooch_village.human_inbox import FOUNDER_ROLE_ID
             pad = os.path.join(self.context.data_dir, "notifications.json")
-            # GEEN EIGEN CAP. De store bewaart de volledige tekst en leidt zelf de preview af
-            # (#389). Hier nog eens afkappen zou die reparatie op het HOOFDKANAAL van de daemon
-            # naar de founder ongedaan maken — en dat is precies waar de langste spanningen langs
-            # komen.
-            NotifStore(pad).add("role", FOUNDER_ROLE_ID, project_id, by=self.id, snippet=snippet)
-        except Exception:
-            pass
+            NotifStore(pad).add("role", rol_id, project_id, by=self.id, snippet=snippet)
+        except Exception:                                    # noqa: BLE001
+            self.log.warning("melding aan '%s' mislukt", rol_id, exc_info=True)
+
+    def _notify_founder(self, project_id: str, snippet: str) -> None:
+        """Heads-up naar de founder-rol. Het bijzondere geval van `_notify_rol`.
+
+        GEEN EIGEN CAP. De store bewaart de volledige tekst en leidt zelf de preview af (#389).
+        Hier nog eens afkappen zou die reparatie op het HOOFDKANAAL van de daemon naar de founder
+        ongedaan maken — en dat is precies waar de langste spanningen langs komen.
+
+        GEEN EIGEN STORE-BOUW. De ratchet in `test_notif_poort` telt de plekken die een NotifStore
+        construeren, en die telling ving deze methode terecht: twee bouwplekken voor één kanaal is
+        hoe een reparatie op de ene wel en op de andere niet landt."""
+        from nooch_village.human_inbox import FOUNDER_ROLE_ID
+        self._notify_rol(FOUNDER_ROLE_ID, project_id, snippet)
 
     def _periodieke_skills(self) -> list[str]:
         """Skills die uit zichzelf op de dagpuls meelopen, uit `settings`. De skill bewaakt

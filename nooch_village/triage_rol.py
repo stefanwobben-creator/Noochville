@@ -293,3 +293,49 @@ def acceptatie(data_dir: str) -> dict:
     keuzes = telling["geaccepteerd"] + telling["overschreven"]
     return {"n": len(rijen), "ratio": (telling["geaccepteerd"] / keuzes) if keuzes else None,
             **telling}
+
+
+# ── wie krijgt dit werk, als MENS? ────────────────────────────────────────────────────────────
+
+def menselijke_eigenaar(st, tekst: str, *, reason_fn=None) -> dict:
+    """De rol die dit werk hoort te dragen ÉN door een mens vervuld wordt.
+
+    ÉÉN LOOKUP, TWEE GEBRUIKEN: de memo-ontvanger en de landing van het project dat eruit volgt.
+    Zou de memo naar de ene rol gaan en het project naar de andere, dan kan "één persoon oordeelt
+    én bezit" alleen per toeval kloppen — en breekt het stil zodra de org verschuift.
+
+    Geen vaste rol-id. `classificeer` matcht de tekst tegen de ACTUELE accountabilities, dus een
+    andere vervuller én een verplaatste eigenaar-rol worden allebei gevolgd.
+
+    DRIE FAIL-OPENS, want dit mag nooit stil wegvallen:
+      geen gegronde match      → Circle Lead van de cirkel
+      rol zonder MENS          → Circle Lead. Let op: een AI-vervulde rol is hier net zo goed
+                                 onbruikbaar als een lege — een persona leest de NotifStore nooit,
+                                 dus een bericht daarheen is een dead letter (zie CLAUDE.md).
+                                 `bestemming()` hopt hier NIET, want die vraagt of de rol kan
+                                 UITVOEREN, en dat kan een persona; wij vragen of er iemand LEEST.
+      ook de lead onbemand     → de founder-rol, het laatste adres dat altijd bestaat
+
+    Geeft {rol, mens, waarom, via} — `via` vertelt hoe hij daar kwam, zodat een droge run leesbaar
+    is zonder de code ernaast te leggen."""
+    from nooch_village.cockpit2 import mens_vervullers, _circle_lead_van   # noqa: PLC0415
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID                  # noqa: PLC0415
+
+    uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
+    rol = uitslag.get("rol") or ""
+    waarom = uitslag.get("grond") or ""
+
+    def _mens(r):
+        return (mens_vervullers(st, r) or [None])[0] if r else None
+
+    if rol and _mens(rol):
+        return {"rol": rol, "mens": _mens(rol), "waarom": waarom, "via": ""}
+
+    reden = ("geen gegronde match" if not rol
+             else f"{rol} heeft geen menselijke vervuller")
+    lead = _circle_lead_van(st, rol) if rol else ""
+    if lead and _mens(lead):
+        return {"rol": lead, "mens": _mens(lead), "waarom": waarom, "via": reden}
+
+    return {"rol": FOUNDER_ROLE_ID, "mens": _mens(FOUNDER_ROLE_ID), "waarom": waarom,
+            "via": f"{reden}; ook de Circle Lead is onbemand"}
