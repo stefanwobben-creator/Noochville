@@ -1131,6 +1131,42 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip()
 
 
+# Het seed-sjabloon met een merkteken op de plek van de opdracht, zodat we de vaste kop en staart
+# kunnen aflezen ZONDER ze ergens over te tikken. Verandert `seed_document`, dan verandert dit mee.
+_SEED_MERK = "\x00OPDRACHT\x00"
+_SEED_KOP, _SEED_STAART = seed_document(_SEED_MERK).split(_SEED_MERK, 1)
+
+
+def is_seed_document(project: dict | None, doc_text: str = "") -> bool:
+    """Is dit document nog LETTERLIJK de geseede opdracht — de 'klaar wanneer'-kop zonder antwoord?
+
+    DE ENIGE PLEK waar die vraag beantwoord wordt. `dod_poort` gebruikt hem als poortcriterium en
+    de projectkaart om te weten of er een essentie te tonen valt of alleen de opdracht. Twee keer
+    "is dit nog de seed" beantwoorden (bijvoorbeeld met een regex op `**Klaar wanneer**`) laat die
+    antwoorden stil uit elkaar lopen zodra het sjabloon verandert.
+
+    TWEE WEGEN, ÉÉN DEFINITIE. Eerst de directe vergelijking met de seed van dít project. Maar op
+    productie heeft 84 van de 107 geseede documenten een LEEG `done_when` op het record, terwijl
+    het document wél met een opdracht geseed is — de tekst leeft dan alleen nog in het document.
+    Die vielen door de directe vergelijking heen (`seed_document("")` is ""), waardoor `dod_poort`
+    ze als beantwoord zag en de kaart de sjabloonzin als samenvatting toonde. Daarom de tweede
+    weg: is dit document gelijk aan seed_document(X) voor ÉÉNDER WELKE X? Dat is dezelfde
+    definitie, alleen niet afhankelijk van een veld dat leeg kan zijn. Kop en staart komen uit
+    `seed_document` zelf, dus het sjabloon staat nog steeds op één plek.
+
+    Leeg document → False: dat is niet "nog de opdracht", dat is "nog niets". Op het scherm zijn
+    dat verschillende zinnen, dus hier verschillende antwoorden."""
+    dt = (doc_text or "").strip()
+    if not dt:
+        return False
+    seed = seed_document(((project or {}).get("done_when") or ""))
+    if seed and _norm(dt) == _norm(seed):
+        return True
+    kop, staart = _norm(_SEED_KOP), _norm(_SEED_STAART)
+    n = _norm(dt)
+    return bool(kop) and n.startswith(kop) and n.endswith(staart) and len(n) > len(kop) + len(staart)
+
+
 def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
     """De projectpoort (founder, 19 jul; verhuisd 21 jul naar het einddocument): Done vereist
     dat de uitkomst beantwoord is IN het einddocument, niet dat het werk 'gedaan' is. De poort is
@@ -1147,7 +1183,7 @@ def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
     if not dt:
         return ("nog niet af: het einddocument is nog leeg — schrijf eerst het antwoord op de "
                 "uitkomst (of waarom die onbeantwoordbaar is)")
-    if _norm(dt) == _norm(seed_document(p.get("done_when") or "")):
+    if is_seed_document(p, dt):
         return ("nog niet af: het einddocument bevat alleen de opdracht (klaar wanneer), nog geen "
                 "antwoord op de uitkomst")
     return None

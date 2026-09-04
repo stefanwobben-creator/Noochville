@@ -41,8 +41,9 @@ _LABEL_WHITELIST = {
     "views/feed.py": 4,
     "views/metrics.py": 11,
     "views/overview.py": 12,
-    "views/projects.py": 4,    # -4: het losse toevoegformulier is weg (één form = de wizard); het
-                               # composer-label "Conversation" is weg (stond dubbel met de sectiekop)
+    "views/projects.py": 3,    # -5: het losse toevoegformulier is weg (één form = de wizard); het
+                               # composer-label "Conversation" is weg (stond dubbel met de sectiekop);
+                               # het einddocument-editorlabel verhuisde mee naar /rapport
     "views/roloverleg.py": 4,
     "views/werkoverleg.py": 0,   # de oude triage is weg (gedeelde vangst-component)
 }
