@@ -222,6 +222,32 @@ class ProjectLedger:
         self._save()
         return True
 
+    # De drie waarden van het menselijke oordeel. Sleutels, geen labels: ze worden opgeslagen en
+    # geteld. "overgeslagen" is er een volwaardige van — wie de vraag overslaat hoort niet als
+    # "behaald" of "niet behaald" in een telling te belanden.
+    RESULTAAT_WAARDEN = ("behaald", "niet_behaald", "overgeslagen")
+
+    def set_resultaat(self, pid: str, oordeel: str, toelichting: str = "",
+                      learnings: str = "") -> bool:
+        """Het menselijke sluitstuk: is het doel behaald, met een toelichting en optionele leringen.
+
+        WAAROM EEN EIGEN VELD EN NIET IN DE VERSLAGTEKST. Een ja/nee dat je later wilt tellen —
+        hoeveel projecten haalden hun doel, en hoeveel niet — mag niet in proza wonen. Dat is
+        dezelfde reden als bij de essentie: tekst is voor mensen, een sleutel is voor de machine.
+        De tekst komt er ook, maar in het verslag; dit is het telbare deel.
+
+        `learnings` is nooit verplicht: het orggeheugen is een aanbod, geen formulier-eis."""
+        p = self._projects.get(pid)
+        if p is None or oordeel not in self.RESULTAAT_WAARDEN:
+            return False
+        p["resultaat"] = oordeel
+        p["resultaat_toelichting"] = (toelichting or "").strip()[:2000]
+        p["learnings"] = (learnings or "").strip()[:2000]
+        p["resultaat_at"] = time.time()
+        self._touch(p)
+        self._save()
+        return True
+
     def add_reaction(self, pid: str, entry_id: str, emoji: str) -> bool:
         """Voeg een emoji-reactie toe aan een feed-entry (per emoji een teller). Alleen entries met
         een id (nieuw schema) kunnen reacties dragen."""
@@ -1178,6 +1204,7 @@ _WRITE_METHODS = (
     "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
+    "set_resultaat",
     "set_item_offer", "accept_item_offer",
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",

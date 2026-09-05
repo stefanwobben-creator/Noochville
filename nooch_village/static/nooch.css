@@ -749,6 +749,15 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    is een privé-stylesheet. */
 .einddoc-concept{border-left:3px solid var(--yellow)}
 .einddoc-ckop{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+/* De twee signalen naast elkaar: modeloordeel en checklist-kruischeck. Bewust NIET samengevoegd
+   tot één regel — juist als ze botsen wil je dat zien. */
+.einddoc-sig{display:flex;flex-direction:column;gap:.3rem;margin:.2rem 0 .8rem}
+.einddoc-sigr{display:flex;gap:.5rem;align-items:baseline;font-size:.86rem}
+.einddoc-sigk{color:var(--gray);flex:none;min-width:7.5rem}
+.einddoc-sigv{color:var(--ink)}
+.einddoc-keuzes{display:flex;gap:.4rem 1rem;flex-wrap:wrap;align-items:center;margin:.2rem 0 .5rem}
+.einddoc-keuze{font-size:.9rem;cursor:pointer;margin-right:.6rem}
+.einddoc-rform{margin-top:.2rem}
 .einddoc-kern{font-size:1.02rem;line-height:1.6;color:var(--ink);margin:0 0 .5rem;max-width:68ch}
 .einddoc-meer{margin:0}
 .att-hint{margin:.2rem 0 .5rem}

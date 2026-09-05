@@ -5,8 +5,9 @@ import json
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from nooch_village.web_base import _e, _page, _banner
+from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.project_essentie import essentie_van
+from nooch_village.projects import heeft_seed_vorm
 from nooch_village.cockpit2_util import (
     _DS_LINK,
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
@@ -827,6 +828,50 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
+def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> str:
+    """Het menselijke sluitstuk op de kaart: doel behaald ja/nee, toelichting, optionele learnings.
+
+    GEEN POORT. De status stond al op done vóór dit formulier bestond; dit is een vraag ná de
+    handeling, geen dialoog ertussen. Overslaan kan, en dat markeert het verslag eerlijk
+    ("not recorded") in plaats van het als behaald weg te zetten.
+
+    TWEE SIGNALEN NAAST ELKAAR. Het modeloordeel is het voorstel; de checklist-staat is de
+    kruischeck. Botsen ze — de checklist zei "8 van 8 af", het gesprek zei "twee gaten open" — dan
+    is dat iets om naar te kijken. Ze samenvoegen tot één cijfer zou de botsing verstoppen, en
+    juist die botsing is de reden dat een mens hier kijkt."""
+    from nooch_village.project_verslag import label_voor, modeloordeel
+    model = modeloordeel(concept.get("tekst") or "")
+    kruis = label_voor((concept.get("voorzet") or "").strip())
+    signalen = (f"<div class='einddoc-sig'>"
+                + (f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Report says</span>"
+                   f"<span class='einddoc-sigv'>{_e(model)}</span></div>" if model else "")
+                + f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Checklist says</span>"
+                  f"<span class='einddoc-sigv'>{_e(kruis)}</span></div></div>")
+    # Expliciete for/id, ook al zou een omwikkelend label ook werken: dan blijft de ratchet
+    # (labels-zonder-for) meten wat hij bedoelt te meten in plaats van hier een uitzondering te
+    # moeten kennen.
+    keuze = "".join(
+        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'"
+        f"{' checked' if w == 'behaald' else ''}>"
+        f"<label class='einddoc-keuze' for='ro-{_e(w)}-{_e(pid)}'>{_e(lbl)}</label>"
+        for w, lbl in (("behaald", "Goal achieved"), ("niet_behaald", "Not achieved")))
+    return (f"<div class='card einddoc-concept'>"
+            f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
+            f"<span class='muted'>the report is assembled but not confirmed</span></div>"
+            f"{signalen}"
+            f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
+            f"<input type='hidden' name='next' value='{nxt}'>"
+            f"<div class='einddoc-keuzes'>{keuze}</div>"
+            f"{_field('Why (one line)', 'toelichting', fid=f'rt-{pid}', placeholder='What made it so?')}"
+            f"{_field('Learnings — optional', 'learnings', kind='textarea', fid=f'rl-{pid}', placeholder='Worth remembering?')}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='verslag_bevestig'>"
+            f"Confirm report</button>"
+            f"<button class='flink' type='submit' name='action' value='verslag_overslaan' "
+            f"title='Close without recording a result — the report says so honestly'>"
+            f"Skip this</button></div></form></div>")
+
+
 def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -> tuple[str, str]:
     """De Description-sectie: de ESSENTIE plus een weg naar het volledige rapport.
 
@@ -847,6 +892,7 @@ def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -
     mee naar die route; wat hier blijft is de ingang ernaartoe."""
     store = getattr(st, "project_docs", None)
     doc = store.read(pid) if store is not None else ""
+    p = st.projects.get(pid) or {}
     nxt = f"/rapport?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
 
     def lees(label: str) -> str:
@@ -854,6 +900,15 @@ def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -
         # als een format-specifier. De suite ving dat als een TypeError op elk project zonder
         # bruikbare essentie.
         return f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>{_e(label)} →</a></p>"
+
+    # HET MENSELIJKE SLUITSTUK, MAAR ALLEEN WAAR HET NIET OPDRINGT. Staat er al een écht rapport
+    # (geen seed), dan is een formulier dat vraagt of we het mogen vervangen een stille downgrade
+    # in beleefde vorm — daar blijft het bij een link naar de route. Gemeten op productie: 152 van
+    # de 300 afsluitbare projecten hebben een leeg of seed-document en krijgen de vraag dus wél;
+    # 148 hebben een echt rapport en krijgen hem niet.
+    _c = store.concept(pid) if store is not None else {}
+    if rw and (_c.get("tekst") or "").strip() and (not doc.strip() or heeft_seed_vorm(doc)):
+        return _result_formulier(st, pid, p, _c, hid, nxt), ""
 
     # EEN WACHTEND CONCEPT IS EEN SIGNAAL, GEEN VERSLAG. De essentie blijft die van het BEVESTIGDE
     # document: onbevestigde modeltekst als samenvatting tonen zou de kaart weer laten zeggen dat er

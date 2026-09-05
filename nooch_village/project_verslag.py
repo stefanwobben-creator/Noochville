@@ -247,3 +247,70 @@ def _zonder_model(project: dict, document: str, voorzet: str, reden: str) -> str
     regels.append("_Assembled without a language model: the facts below are listed as they were "
                   "recorded, not rewritten._")
     return "\n\n".join(regels)
+
+
+# ── het menselijke sluitstuk ──────────────────────────────────────────────────────────────────
+_RESULT_LABEL = {"behaald": "achieved", "niet_behaald": "not achieved",
+                 "overgeslagen": "not recorded"}
+
+
+def modeloordeel(concept_tekst: str) -> str:
+    """De Result-alinea die het MODEL schreef, uit het concept.
+
+    Nodig omdat de twee signalen naast elkaar horen: het modeloordeel als voorstel en de
+    checklist-staat als kruischeck. Botsen ze — zoals bij het barefoot-project, waar de checklist
+    "af" zei en het gesprek "nog niet" — dan is dat iets om naar te kijken, niet iets om te
+    verstoppen achter één samengevoegd cijfer.
+
+    Geen kopje gevonden → "", en dan toont het scherm alleen de kruischeck. Liever niets dan een
+    willekeurige alinea die zich voordoet als een oordeel."""
+    regels = (concept_tekst or "").splitlines()
+    for i, r in enumerate(regels):
+        if r.strip().lower().lstrip("#").strip() == "result":
+            rest = []
+            for volgende in regels[i + 1:]:
+                if volgende.strip().startswith("#"):
+                    break
+                rest.append(volgende)
+            return " ".join(x.strip() for x in rest if x.strip())[:400]
+    return ""
+
+
+def result_blok(oordeel: str, toelichting: str = "", learnings: str = "") -> str:
+    """Het definitieve Result-kopje, zoals het in het bevestigde document komt.
+
+    DIT VERVANGT het Result van het model: de mens heeft het laatste woord. Het modeloordeel was
+    een voorstel en heeft zijn werk gedaan zodra iemand erop reageert."""
+    delen = [f"## Result\n**{_RESULT_LABEL.get(oordeel, oordeel)}.**"
+             + (f" {toelichting.strip()}" if (toelichting or "").strip() else "")]
+    if (learnings or "").strip():
+        delen.append(f"## Learnings\n{learnings.strip()}")
+    return "\n\n".join(delen)
+
+
+def met_result(concept_tekst: str, oordeel: str, toelichting: str = "",
+               learnings: str = "") -> str:
+    """Zet het menselijke Result in de plaats van dat van het model, met behoud van de rest.
+
+    GEEN INFORMATIEVERLIES: Goal en What happened blijven staan zoals ze waren; alleen het
+    voorstel-Result maakt plaats voor het oordeel. Was er geen Result-kop (bijvoorbeeld in de
+    modelloze variant), dan komt het blok er gewoon onder."""
+    regels = (concept_tekst or "").splitlines()
+    uit, i, geknipt = [], 0, False
+    while i < len(regels):
+        r = regels[i]
+        if not geknipt and r.strip().lower().lstrip("#").strip() in ("result", "learnings"):
+            geknipt = True
+            i += 1
+            while i < len(regels) and not regels[i].strip().startswith("#"):
+                i += 1
+            continue
+        if geknipt and r.strip().lower().lstrip("#").strip() == "learnings":
+            i += 1
+            while i < len(regels) and not regels[i].strip().startswith("#"):
+                i += 1
+            continue
+        uit.append(r)
+        i += 1
+    kop = "\n".join(uit).rstrip()
+    return (kop + "\n\n" + result_blok(oordeel, toelichting, learnings)).strip()
