@@ -76,27 +76,27 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
             _hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                     f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                     f"<input type='hidden' name='next' value='/rapport?pid={_e(pid)}'>")
-            # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit): het
-            # bewerkveld neemt de plek van het GERENDERDE CONCEPT in, in plaats van een tweede
-            # textarea eronder te openen. Eén interactie, één implementatie.
-            # DEZELFDE OORDEELVRAAG als op de kaart (views/projects.result_velden). Hier stond
-            # alleen een kale "Confirm report" — en sinds bevestigen een oordeel EIST, weigerde die
-            # knop dus altijd. Het scherm waar het concept het best zichtbaar is, was juist het
-            # scherm zonder keuze.
-            from nooch_village.views.projects import result_velden
+            # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit):
+            # het bewerkveld neemt de plek van het GERENDERDE rapport in. En de balk staat
+            # ERONDER, niet ernaast — het rapport ís het formulier.
+            from nooch_village.views.projects import result_balk
+
             def _hidf():
                 return _hid
-            knoppen = (f"{result_velden(pid, c, _hidf, f'/rapport?pid={_e(pid)}')}"
-                       f"<div class='qadd-row'>{inline_edit_knop('Edit before confirming')}</div>")
+            knoppen = result_balk(pid, c, _hidf, f"/rapport?pid={_e(pid)}",
+                                  edit_knop=inline_edit_knop("Edit before confirming"))
         _weergave = f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
         _blok = (inline_edit(_weergave,
                              md_editor("tekst", value=c.get("tekst") or "", rows=14, help=True),
                              sleutel=f"concept-{pid}", opslaan="verslag_bijwerken",
                              opslaan_label="Save draft", verborgen=_hid)
                  if rw else _weergave)
-        concept = (f"<div class='card einddoc-concept editor-inline'>"
-                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>{voorzet}"
-                   f"<span class='muted'>{tel}</span></div>"
+        concept = (f"<div class='einddoc-banner'>📄 Draft report — read it, tweak if needed, "
+                   f"confirm below</div>"
+                   f"<div class='card einddoc-concept editor-inline'>"
+                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>"
+                   f"{voorzet}</div>"
+                   f"<p class='muted einddoc-prov'>{tel}</p>"
                    f"<p class='muted einddoc-vervangt'>The current report stays as it is until you "
                    f"confirm this draft.</p>"
                    f"{_blok}{knoppen}</div>")

@@ -418,6 +418,30 @@ def voorstel_learnings(concept_tekst: str) -> str:
     return _kopblok(concept_tekst, _LERINGEN_KOPPEN)[:600]
 
 
+def modeloordeel_kort(concept_tekst: str) -> str:
+    """Alleen het OORDEEL uit de Result-sectie, voor de signaalregel.
+
+    `modeloordeel` geeft de hele alinea; die hoort in het rapport en niet in een balk van één regel
+    — daar leest hij als een tweede samenvatting naast de eerste. Gezien in de render: "Draft
+    concluded **Achieved.** The STCB grant was successfully submitted, approved, and funded."
+
+    Neemt de eerste zin, strip de markdown-nadruk (die als sterretjes zou renderen omdat de
+    signaalregel geëscapete tekst is, geen markdown) en kap op een woordgrens."""
+    t = modeloordeel(concept_tekst)
+    if not t:
+        return ""
+    t = t.replace("**", "").replace("__", "").strip()
+    for punt in (". ", "! ", "? "):
+        i = t.find(punt)
+        if 0 < i <= 60:
+            return t[:i]
+    t = t.split(".")[0] if len(t.split(".")[0]) <= 60 else t
+    if len(t) > 60:
+        ruimte = t.rfind(" ", 0, 60)
+        t = (t[:ruimte] if ruimte > 0 else t[:60]) + "…"
+    return t.strip()
+
+
 def modeloordeel(concept_tekst: str) -> str:
     """De Result-alinea die het MODEL schreef, uit het concept.
 

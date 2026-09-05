@@ -430,6 +430,19 @@ def met_dorpsstaart(ladder: str) -> str:
     return ",".join(eigen + staart)
 
 
+def _steps_voor_call_site(call_site: str):
+    """De tredes voor dit call_site: zijn eigen beleid als het er een heeft, anders de dorpsladder.
+
+    Lokale import — `llm_keuze` importeert `llm`, dus op moduleniveau zou dit een cirkel zijn.
+    Fail-soft: gaat het ophalen mis, dan de dorpsladder; een modelkeuze mag nooit een call breken."""
+    try:
+        from nooch_village.llm_keuze import ladder_voor
+        eigen = ladder_voor(call_site)
+    except Exception:                                       # noqa: BLE001
+        eigen = None
+    return _parse_ladder(eigen) if eigen else _ladder()
+
+
 def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
            json_mode: bool = False, return_tier: bool = False, call_site: str = "onbekend"):
     """Optionele LLM-redenering via de getrapte ladder (goedkoop → duur).
@@ -450,7 +463,19 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
     Alle LLM-aanroepen van het dorp lopen door dit ene poortje en worden hier in de tijd
     uitgesmeerd (LIMITER), zodat het dorp onder de gratis limiet blijft."""
     LIMITER.acquire()
-    steps = _parse_ladder(ladder) if ladder else _ladder()
+    # DE HOOG-INZET-LADDER WERD ALLEEN GEBRUIKT ALS DE CALLER HEM MEEGAF — en 5 van de 10
+    # hoog-inzet-sites deden dat niet (`verslag_assemblage`, `plan_checklist`, `wizard_plan`,
+    # `escalation_mens`, `noochie_weigh_in`). Die draaiden dus stil op de dorpsladder, die met
+    # mistral begint: `HOOG_INZET` stond keurig in de code en betekende voor de helft niets.
+    # Zichtbaar in de cijfers: wizard_plan 31 van 31 calls op mistral, en Sonnet gaf gewoon 200.
+    #
+    # `reason` haalt de ladder nu zelf op uit het call_site. `ladder_voor` geeft ALLEEN iets terug
+    # voor een site met een eigen beleid (hoog of laag) en anders None, dus dit raakt de gewone
+    # sites niet. Een expliciete `ladder=` wint nog steeds — die is een bewuste keuze van de caller.
+    #
+    # Waarom in de functie en niet bij elke aanroep: een conventie die je moet ONTHOUDEN is een
+    # waarschuwing, geen garantie. Vergeten leverde hier geen fout op, alleen een goedkoper model.
+    steps = _parse_ladder(ladder) if ladder else _steps_voor_call_site(call_site)
     outcomes: list[str] = []                       # per trede de uitkomst — voor de samenvatting bij falen
     for vendor, model in steps:
         tier = f"{vendor}:{model or 'default'}"

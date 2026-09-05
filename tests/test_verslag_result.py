@@ -83,12 +83,13 @@ def test_geen_enkele_andere_dispatch_maakt_het_concept_tot_document(tmp_path):
 def test_bevestigen_is_de_enige_schrijver(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="oud document")
+    concept_voor = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
     cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"],
-                                               "toelichting": ["Alles rond."], "next": ["/"]},
-                      username="guest")
+                                               "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     doc = st2.project_docs.read(pid)
-    assert "oud document" not in doc and "Alles rond." in doc
+    # De concepttekst gaat ONGEWIJZIGD door: wat de mens las is wat er wordt vastgelegd.
+    assert "oud document" not in doc and doc == concept_voor
     assert st2.project_docs.concept(pid) == {}
     assert st2.projects.get(pid)["resultaat"] == "behaald"
 
@@ -132,8 +133,14 @@ def test_de_twee_signalen_staan_naast_elkaar(tmp_path):
     store.write_concept(pid, "## Goal\nx\n\n## Result\nNot achieved. Twee gaten open.",
                         bronnen=["de projectdefinitie"], voorzet="behaald")
     frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    assert "Report says" in frag and "Twee gaten open" in frag
-    assert "Checklist says" in frag and "achieved" in frag
+    sig = frag.split("einddoc-sig'>")[1].split("</div>")[0]
+    # HET OORDEEL, niet de hele alinea: "Twee gaten open" is de onderbouwing en hoort in het
+    # rapport. In een balk van één regel zou hij als tweede samenvatting lezen.
+    assert "Draft concluded" in sig and "Not achieved" in sig
+    assert "Twee gaten open" not in sig
+    assert "Checklist says" in sig and "achieved" in sig
+    # de botsing blijft zichtbaar: het model zegt nee, de checklist ja
+    assert "Not achieved" in sig and "<b>achieved</b>" in sig
 
 
 def test_zonder_result_kop_toont_alleen_de_kruischeck(tmp_path):
@@ -151,7 +158,9 @@ def test_overslaan_markeert_eerlijk_in_plaats_van_te_zwijgen(tmp_path):
     assert st2.projects.get(pid)["resultaat"] == "overgeslagen"
     # Het VERSLAG is Nederlands (orgkennis); het SCHERM blijft Engels. Zelfde sleutel,
     # twee lezers — zie label_voor(taal=).
-    assert "Not recorded" in st2.project_docs.read(pid)
+    # Toevoegen, niet herschrijven: anders leest het rapport als een bevestigd oordeel
+    # terwijl niemand er ja op zei.
+    assert "Closed without a recorded result" in st2.project_docs.read(pid)
     assert st2.project_docs.concept(pid) == {}
 
 
@@ -159,11 +168,10 @@ def test_een_nee_kan_net_zo_makkelijk_als_een_ja(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="")
     cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["niet_behaald"],
-                                               "toelichting": ["De leverancier haakte af."],
                                                "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
+    # Het TELBARE deel is het oordeel; de tekst blijft die van het rapport.
     assert st2.projects.get(pid)["resultaat"] == "niet_behaald"
-    assert "not achieved" in st2.project_docs.read(pid).lower()
 
 
 def test_learnings_zijn_optioneel(tmp_path):
@@ -241,31 +249,23 @@ def test_geen_rauwe_sleutel_op_de_kaart(tmp_path):
     # In de GETOONDE tekst hoort het label; als radio-WAARDE hoort juist de sleutel. Toets dus de
     # signaal-cellen en niet de hele HTML — anders verbiedt de guard iets wat correct is.
     import re
-    getoond = re.findall(r"class='einddoc-sigv'>([^<]*)", frag)
-    assert any("not achieved" in g for g in getoond), getoond      # scherm blijft Engels
-    assert not any(NIET_BEHAALD in g for g in getoond), f"opslagsleutel getoond: {getoond}"
+    sig = frag.split("einddoc-sig'>")[1].split("</div>")[0]
+    assert "not achieved" in sig, sig                        # scherm blijft Engels
+    assert NIET_BEHAALD not in sig, f"opslagsleutel getoond: {sig}"
     assert f"value='{NIET_BEHAALD}'" in frag                 # als formulierwaarde juist wél
 
 
 # ── cluster 1: de suggestie doet het voorwerk ────────────────────────────────
-def test_de_velden_zijn_voorgevuld_uit_het_concept(tmp_path):
-    """DE ANTI-HUISWERK-BELOFTE. Een leeg veld laat de mens het werk doen dat de assembler net al
-    deed: de analyse staat al in de wall én in het concept. Voorinvullen maakt van de vraag een
-    aanvulling in plaats van een opstel."""
+def test_er_zijn_geen_losse_why_en_learnings_velden(tmp_path):
+    """HET RAPPORT ÍS HET FORMULIER. Die velden herhaalden de Result- en Learnings-sectie die al in
+    het rapport staat: je typte tweemaal hetzelfde en er ontstonden twee versies van dezelfde
+    gedachte. Bewerken gebeurt op één plek — in het rapport, via "Edit before confirming"."""
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="")
-    store = cockpit2._Stores(dd).project_docs
-    c = store.concept(pid)
-    store.write_concept(pid,
-                        "## Doel\nx\n\n## Resultaat\n**Niet behaald.** Twee van drie reageerden.\n\n"
-                        "## Leringen\nMonsters meteen meevragen.",
-                        bronnen=c.get("bronnen") or [], voorzet="niet_behaald")
     frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    # `_field` rendert met DUBBELE aanhalingstekens; de rest van de view met enkele. Op het
-    # attribuut matchen in plaats van op een geciteerde string maakt de test daar ongevoelig voor.
-    assert 'name="toelichting" value="Twee van drie reageerden."' in frag
-    assert "Monsters meteen meevragen." in frag               # learnings voorgevuld
-    assert "**Niet behaald.**" not in frag.split("einddoc-rform")[1]  # het label niet geëchood
+    assert 'name="toelichting"' not in frag and 'name="learnings"' not in frag
+    assert "Edit before confirming" in frag or "Read the draft" in frag
+    assert "reasoning and learnings live in the report" in frag
 
 
 def test_het_oordeel_wordt_niet_voorgeselecteerd(tmp_path):
@@ -276,8 +276,11 @@ def test_het_oordeel_wordt_niet_voorgeselecteerd(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="", items=(("A", False),))
     frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    # De keuze is een segmented control: twee submit-knoppen met `name='oordeel'`. Een knop heeft
+    # geen "checked"-staat, dus er ís geen voorselectie mogelijk — sterker dan een lege radio.
+    assert "name='oordeel' value='behaald'" in frag
+    assert "name='oordeel' value='niet_behaald'" in frag
     assert "checked" not in frag.split("einddoc-rform")[1].split("</form>")[0]
-    assert "value='behaald'" in frag and "value='niet_behaald'" in frag
 
 
 def test_bevestigen_zonder_keuze_schrijft_niet(tmp_path):
@@ -357,9 +360,9 @@ def test_de_rapportroute_biedt_dezelfde_oordeelvraag(tmp_path):
     pid = _afgesloten(dd, st, doc="")
     for naam, html in (("kaart", P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")),
                        ("route", render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK"))):
-        assert "value='behaald'" in html and "value='niet_behaald'" in html, naam
+        assert "name='oordeel' value='behaald'" in html, naam
+        assert "name='oordeel' value='niet_behaald'" in html, naam
         assert "verslag_overslaan" in html, naam
-        assert 'name="toelichting"' in html, naam
         blok = html.split("einddoc-rform")[1].split("</form>")[0]
         assert "checked" not in blok, f"{naam}: oordeel voorgeselecteerd"
 
@@ -368,7 +371,7 @@ def test_bevestigen_vanaf_de_route_werkt_met_een_keuze(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="oud document")
     _, msg = cockpit2.dispatch(dd, "verslag_bevestig",
-                               {"pid": [pid], "oordeel": ["behaald"], "toelichting": ["Rond."],
+                               {"pid": [pid], "oordeel": ["behaald"],
                                 "next": [f"/rapport?pid={pid}"]}, username="guest")
     assert not cockpit2.is_weigering(msg), msg
     assert cockpit2._Stores(dd).projects.get(pid)["resultaat"] == "behaald"
@@ -443,3 +446,48 @@ def test_de_outcome_machinerie_zelf_blijft_bestaan():
     from nooch_village import cockpit2 as ck
     assert callable(_wall_outcome_form) and callable(_wall_outcome_opts)
     assert "wall_outcome" in ck.ACTIONS
+
+
+# ── de compacte bevestigbalk (docs/confirm_schoon.html) ─────────────────────
+def test_de_balk_staat_onder_het_rapport_in_de_volgorde_van_de_referentie(tmp_path):
+    """HET RAPPORT ÍS HET FORMULIER: eerst lezen, dan de balk. Banner → chip → provenance →
+    rapport → scheiding → signalen → keuze → acties → hint."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    # alleen de MARKUP: de ingesloten stylesheet bevat dezelfde klassenamen en matcht anders mee —
+    # dat maakte mijn eerste meting onzin.
+    body = html[html.rindex("</style>"):]
+    volgorde = ["einddoc-banner", "not confirmed yet", "einddoc-prov", "einddoc-body",
+                "einddoc-split", "einddoc-sig'", "einddoc-verdict", "einddoc-acties",
+                "einddoc-hint"]
+    pos = [body.find(k) for k in volgorde]
+    assert all(p >= 0 for p in pos), dict(zip(volgorde, pos))
+    assert pos == sorted(pos), dict(zip(volgorde, pos))
+
+
+def test_de_signaalregel_toont_het_oordeel_en_niet_de_hele_alinea():
+    """Gezien in de render: "Draft concluded **Achieved.** The STCB grant was successfully
+    submitted, approved, and funded." — de hele Result-alinea, mét sterretjes, in een balk van één
+    regel. Dan staat dezelfde samenvatting er twee keer en leest de balk als een tweede rapport."""
+    from nooch_village.project_verslag import modeloordeel_kort
+    lang = "**Achieved.** The STCB grant was successfully submitted, approved, and funded."
+    assert modeloordeel_kort(f"## Result\n{lang}") == "Achieved"
+    assert "**" not in modeloordeel_kort(f"## Result\n{lang}")
+    assert modeloordeel_kort("## Goal\nx") == ""            # geen Result-kop → geen signaal
+    lang2 = "Not achieved because two of three suppliers never replied to the request at all"
+    assert len(modeloordeel_kort(f"## Result\n{lang2}")) <= 61
+
+
+def test_de_keuze_is_de_enige_gestructureerde_invoer(tmp_path):
+    """Het telbare oordeel blijft; de reasoning en leringen leven in het rapport."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    body = html[html.rindex("</style>"):]
+    invoervelden = [n for n in ("toelichting", "learnings")
+                    if f'name="{n}"' in body or f"name='{n}'" in body]
+    assert invoervelden == [], invoervelden
+    assert "name='oordeel'" in body
