@@ -1,6 +1,8 @@
 """Checklist-views — brok 5 van de cockpit2-split."""
 from __future__ import annotations
 
+from nooch_village.projects import PREP_CHECKLIST_TITLE
+
 import urllib.parse
 from typing import TYPE_CHECKING
 
@@ -11,6 +13,25 @@ from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
+
+
+# DEFAULT-TITELS ZIJN GEEN NAMEN. Op productie heet 234 van de ~265 checklists "Uitvoerplan" —
+# de naam die de wizard en de puls zetten, niet iets wat iemand bedacht. Die op elke kaart tonen is
+# ruis met de vorm van informatie: je leest een kop die op 90% van de kaarten hetzelfde zegt.
+#
+# `Uitvoerplan` BLIJFT de identifier: hij gate't de Done-uitkomst, het aanbod-mechanisme, de wizard
+# en de puls (`projects.PREP_CHECKLIST_TITLE`). Alleen de WEERGAVE vervalt — identifier is
+# mechaniek, label is content, dezelfde scheiding als bij de verslag-voorzet.
+_DEFAULT_TITELS = {PREP_CHECKLIST_TITLE.casefold(), "tasks", "checklist"}
+
+
+def toon_titel(titel: str) -> str:
+    """De titel zoals hij op het scherm hoort, of "" als het een default is.
+
+    Alleen een titel die iemand ECHT zelf gaf verdient ruimte. Leeg → "", want een lege naam is
+    ook geen naam."""
+    t = (titel or "").strip()
+    return "" if t.casefold() in _DEFAULT_TITELS else t
 
 
 def _cl_target_label(st: _Stores, item: dict) -> str:
@@ -185,17 +206,17 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
     onvolledige payload). Zonder deze knoppen sluit de mens wel de spanning maar blijft het item open
     en het project geparkeerd — de herhaal-lus. 'Gedaan' zit al op het ✓-vakje ernaast (dat loopt via
     dezelfde resolutie-route), hier staan 'overslaan' en 'overdragen'."""
-    skip = (f"<form method='post' action='/action' class='emo-f'>{hid}{clitem}"
-            f"<button class='btn ghost sm' type='submit' name='action' value='check_skip' "
-            f"title='This does not need doing (any more) — it stops counting towards done'>"
-            f"⤳ skip (n/a)</button></form>")
+    # 'skip (n/a)' IS WEG. Hij stond naast het ✓-vakje en deed vrijwel hetzelfde: een item dat
+    # niet meer hoeft, vink je af of haal je weg. Twee knoppen voor één gedachte maakt de keuze
+    # zwaarder dan de handeling. De `skipped`-STAAT blijft bestaan (oude items dragen hem nog en
+    # `checklist_progress` telt hem correct niet mee); alleen de knop om hem te zetten is weg.
     hand = (f"<details class='fedit'><summary class='flink'>📤 hand off</summary>"
             f"<form method='post' action='/action'>{hid}{clitem}"
             f"<select name='naar_rol'>{role_opts}</select>"
             f"<input name='reason' placeholder='done when…'>"
             f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
             f"hand off</button></form></details>") if role_opts else ""
-    return f"<span class='ck-resolve'>{skip}{hand}</span>"
+    return f"<span class='ck-resolve'>{hand}</span>"
 
 
 #: De lege checklist. "no items yet" CONSTATEERT; dit NODIGT UIT — en zegt erbij waar een eerste
@@ -269,7 +290,9 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                 f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
                 f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
+        _titel = toon_titel(cl.get("title", ""))
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
-                f"<span class='cl-title'>{_e(cl.get('title', 'Checklist'))}</span>{delc}</div>"
+                + (f"<span class='cl-title'>{_e(_titel)}</span>" if _titel else "")
+                + f"{delc}</div>"
                 f"{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     return out

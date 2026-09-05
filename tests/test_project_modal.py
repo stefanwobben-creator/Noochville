@@ -21,11 +21,11 @@ def test_detail_overzicht_kop(tmp_path):
     # tweeregelig — label boven, control op volle breedte — en dat stapelde tot de "zware kolom"
     # waar Stefan over viel. De dropdowns blijven (uniformiteit uit #154); alleen de kolom is half
     # zo hoog. `wide` is daarmee dode CSS geworden en verwijderd.
-    # DE HERINDELING (na #441/#442): de meta staat niet meer als dcol-rijen in een pside-kolom
-    # maar als chips in de header (impact, business, inzet, status, trekker) en als rail-regels
-    # (rol, deadline, zichtbaar, aangemaakt). pgrid/pside/dcol zijn op deze kaart vervallen.
-    for k in ("pkaart", "pkaart-body", "pkaart-rail", "pchips",
-              "rail-rij", "Role", "Deadline", "Created", "Visible"):
+    # DE HERINDELING, tweede ronde: de chips-rij boven de content is weg en ALLE meta staat in de
+    # rail — status, assignee, impact, business, effort naast rol, deadline, zichtbaar en
+    # aangemaakt. Zie tests/test_kaart_meta_rail.py voor de regel zelf; hier alleen de skeletklassen.
+    for k in ("pkaart", "pkaart-body", "pkaart-rail", "mrow",
+              "Status", "Assignee", "Role", "Deadline", "Created", "Visible"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
     # statuswissel via het …-menu
@@ -144,7 +144,11 @@ def test_named_checklists(tmp_path):
     cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "cl-title" in frag and "Stappen" in frag and "Stap 1" in frag
-    assert "Checklist name" in frag                       # actie-kaart popover
+    # Een BESTAANDE lijst houdt zijn naam; alleen het naamVELD bij het aanmaken is weg — je hoeft
+    # niet eerst een naam te verzinnen voor je je eerste taak kwijt kunt. Nieuwe lijsten heten
+    # "tasks". Zie test_kaart_meta_rail.test_nieuwe_checklist_heeft_geen_naamveld_en_heet_tasks.
+    assert "Checklist name" not in frag
+    assert "value='tasks'" in frag
     # checklist verwijderen
     cockpit2.dispatch(dd, "checklist_remove", {"pid": [pid], "clid": [clid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["checklists"] == []

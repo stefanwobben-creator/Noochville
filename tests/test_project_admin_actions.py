@@ -211,7 +211,9 @@ def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
     me = st.people.add("Ingelogd Persoon", "ingelogd@nooch.earth")     # bezet ROLE2 níet
     pid = st.projects.create(ROLE2, "Scope-check", "human", status="queued")
     page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    opts = re.search(r"<select name='trekker'[^>]*>(.*?)</select>", page, re.DOTALL).group(1)
+    # De select draagt nu ook class='ctrl' (rail-control); het attribuut ervóór meenemen in de
+    # regex maakt hem broos, dus matchen op de naam waar hij ook staat.
+    opts = re.search(r"<select[^>]*name='trekker'[^>]*>(.*?)</select>", page, re.DOTALL).group(1)
     assert "no owner" in opts
     assert f"person:{me.id}" not in opts     # geen me-default: de gebruiker bezet de rol niet
     # wél de echte vervullers van die rol
@@ -261,12 +263,12 @@ def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="neutraal")
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
-    assert "proj_setimpact" in rw and "<select name='value' onchange=" in rw   # dropdown + auto-opslaan
+    # De control zit nu in de rail (class 'ctrl'); dezelfde dispatch, dezelfde auto-opslag.
+    assert "proj_setimpact" in rw and "<select class='ctrl' name='value' onchange=" in rw
     assert "value='neutraal' selected" in rw                            # huidige waarde voorgeselecteerd
-    # De herindeling: de labels zijn chip-koppen geworden ("Impact" / "Business") in plaats van
-    # dcol-rijen ("Mission impact" / "Business impact"). Zelfde velden, zelfde dispatch, korter
-    # label omdat een chip geen ruimte heeft voor een zin.
-    assert ">Impact<" in rw and ">Business<" in rw
+    # De labels staan weer voluit: in de rail is ruimte voor "Mission impact", waar een chip die
+    # niet had. Zelfde velden, zelfde dispatch.
+    assert ">Mission impact<" in rw and ">Business<" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
     assert "Neutral" in ro                     # wel de gekozen waarde als tekst (display-label)
 

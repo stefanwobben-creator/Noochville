@@ -939,54 +939,26 @@ def _chip_knop(kop: str, waarde: str, *, leeg: bool = False, extra: str = "") ->
             f"<span class='pchip-v'>{_e(waarde)}</span></span>")
 
 
-def _chips_rij(st, p, rw: bool, hid) -> str:
-    """De meta-rij als chips onder de titel, in plaats van een kolom dropdowns.
+def _meta_rij(kop: str, waarde: str) -> str:
+    """Eén regel in de rail: label links, waarde/control rechts. Uit de mock."""
+    return (f"<div class='mrow'><span class='mk'>{_e(kop)}</span>"
+            f"<span class='mv'>{waarde}</span></div>")
 
-    DIT DOORBREEKT BEWUST DE UNIFORMITEIT UIT #154. Die PR maakte impact/business gelijk aan
-    Rol/Trekker door er dropdowns van te maken; na het live zien van de incrementele versie koos
-    Stefan voor de mock-indeling. Geen oversight, een herziene afweging.
 
-    GEEN NIEUW SCHRIJFPAD: elke chip post naar dezelfde dispatch als de dropdown die hij vervangt
-    (`proj_setimpact`, `proj_seteffort`, `proj_status`, `proj_settrekker`). De opgeslagen waarden
-    blijven Nederlands — dat is de logica-sleutel — en `_IMPACT_LABEL` blijft de enige display-
-    mapping. Bewerkbaar, niet display-only."""
+def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "") -> str:
+    """ALLE meta in één rail — status, assignee, impact, business, effort.
+
+    Deze controls stonden in een pillenrij bóven de content. Dat had twee problemen: de rij duwde
+    de inhoud naar beneden, en status — het veld dat je het vaakst verandert — verdween zodra je
+    naar de conversatie scrollde. In de rail staat hij altijd in beeld.
+
+    GEEN NIEUWE CONTROLS. Elke regel hieronder post naar dezelfde dispatch als de chip die hij
+    vervangt (`proj_setimpact`, `proj_seteffort`, `proj_status`/`proj_done`, `proj_settrekker`);
+    `_effort_control` verhuist ongewijzigd mee, met zijn eigen uren/dagen-model."""
     uit = []
-    for veld, kind, opts, kop in (("missie_impact", "missie", _MISSIE_OPTS, "Impact"),
-                                  ("business_impact", "business", _BUSINESS_OPTS, "Business")):
-        cur = p.get(veld, "")
-        label = _IMPACT_LABEL.get(cur, cur) or "—"
-        if not rw:
-            uit.append(_chip_knop(kop, label, leeg=not cur))
-            continue
-        keuzes = "".join(
-            f"<option value='{_e(v)}'{' selected' if v == cur else ''}>{_e(_IMPACT_LABEL.get(v, v))}</option>"
-            for v, _ in opts)
-        uit.append(
-            f"<form method='post' action='/action' class='pchip-form'>{hid()}"
-            f"<input type='hidden' name='action' value='proj_setimpact'>"
-            f"<input type='hidden' name='kind' value='{_e(kind)}'>"
-            f"<span class='pchip{'' if cur else ' pchip-leeg'}'>"
-            f"<span class='pchip-k'>{_e(kop)}</span>"
-            f"<select name='value' onchange='{_AUTOSAVE}'>"
-            f"<option value=''>—</option>{keuzes}</select></span></form>")
-    # Inzet: de chip TOONT de waarde, de bestaande _effort_control blijft het bewerkveld. Effort
-    # heeft een eigen model (uren als canonieke opslag, uren/dagen-toggle); dat in een chip persen
-    # zou een tweede bewerkpatroon maken voor iets dat al werkt.
-    _u = _effort_hours(p.get("effort"))
-    if rw:
-        # `_effort_control` HOUDT zijn eigen model (uren canoniek, uren/dagen-toggle, autosave op
-        # blur). Hij verhuist alleen naar de chip; hem hier naspelen zou een tweede bewerkpatroon
-        # maken voor iets dat al werkt — en de suite ving dat hij anders ONBEREIKBAAR werd.
-        uit.append(f"<span class='pchip pchip-inzet{'' if _u else ' pchip-leeg'}'>"
-                   f"<span class='pchip-k'>Effort</span>{_effort_control(p, rw, hid)}</span>")
-    else:
-        uit.append(_chip_knop("Effort",
-                              (f"{_u // 8} d" if _u and _u % 8 == 0 else f"{_u} u") if _u else "—",
-                              leeg=not _u))
-    # ÉÉN HUIS PER EIGENSCHAP. Status stond twee keer: hier als etiket (niet bewerkbaar) en in de
-    # rail als trigger van het ⋯-menu (wél bewerkbaar). Lezen en veranderen op twee plekken is de
-    # ergste vorm van de dubbeling: de zichtbare chip loog dat er niets te kiezen viel. De chip is
-    # nu zelf de trigger; het menu-lichaam is ongewijzigd (zelfde `proj_status` / `proj_done`).
+
+    # Status: bewerkbaar in de rail zelf. Sinds de ontdubbeling woont lezen en veranderen op
+    # dezelfde plek; die eis verhuist mee.
     _slbl = _PROJ_CHIP.get(p.get("status", ""), (p.get("status", "—"), ""))[0]
     if rw and hid is not None:
         items = ""
@@ -997,42 +969,61 @@ def _chips_rij(st, p, rw: bool, hid) -> str:
             items += (f"<form method='post' action='/action'>{hid()}{to}"
                       f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>"
                       f"{_e(label)}</button></form>")
-        uit.append(f"<details class='cardmenu pchip-menu'>"
-                   f"<summary class='pchip pchip-status' aria-label='change status'>"
-                   f"<span class='pchip-k'>Status</span>"
-                   f"<span class='pchip-v'>{_e(_slbl)}</span><span class='caret'>▾</span></summary>"
-                   f"<div class='cardmenu-b'>{items}</div></details>")
+        uit.append(_meta_rij("Status",
+                             f"<details class='cardmenu mmenu'>"
+                             f"<summary class='ctrl' aria-label='change status'>{_e(_slbl)}"
+                             f"<span class='car'>▾</span></summary>"
+                             f"<div class='cardmenu-b'>{items}</div></details>"))
     else:
-        uit.append(_chip_knop("Status", _slbl))
-    return "<div class='pchips'>" + "".join(uit) + "</div>"
+        uit.append(_meta_rij("Status", f"<span class='ctrl'>{_e(_slbl)}</span>"))
+
+    uit.append(_meta_rij("Assignee", _eigenaar_control(st, p, rw, hid, trekker_opts)))
+
+    for veld, kind, opts, kop in (("missie_impact", "missie", _MISSIE_OPTS, "Mission impact"),
+                                  ("business_impact", "business", _BUSINESS_OPTS, "Business")):
+        cur = p.get(veld, "")
+        label = _IMPACT_LABEL.get(cur, cur) or "—"
+        if not rw:
+            uit.append(_meta_rij(kop, f"<span class='ctrl'>{_e(label)}</span>"))
+            continue
+        keuzes = "".join(
+            f"<option value='{_e(v)}'{' selected' if v == cur else ''}>{_e(_IMPACT_LABEL.get(v, v))}</option>"
+            for v, _ in opts)
+        uit.append(_meta_rij(kop,
+                             f"<form method='post' action='/action' class='mform'>{hid()}"
+                             f"<input type='hidden' name='action' value='proj_setimpact'>"
+                             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
+                             f"<select class='ctrl' name='value' onchange='{_AUTOSAVE}'>"
+                             f"<option value=''>—</option>{keuzes}</select></form>"))
+
+    _u = _effort_hours(p.get("effort"))
+    uit.append(_meta_rij("Effort", _effort_control(p, rw, hid) if rw else
+                         (f"<span class='ctrl'>"
+                          f"{(f'{_u // 8} d' if _u and _u % 8 == 0 else f'{_u} u') if _u else '—'}"
+                          f"</span>")))
+    return "".join(uit)
 
 
-def _eigenaar_chip(st, p, rw: bool = False, hid=None, trekker_opts: str = "") -> str:
-    """De trekker als chip in de header: wie het DOET. De rol (waar het hangt) staat in de rail.
+def _eigenaar_control(st, p, rw: bool = False, hid=None, trekker_opts: str = "") -> str:
+    """De trekker als rail-control: wie het DOET. De rol (waar het hangt) staat een regel lager.
 
-    De mock heeft één "Owner"; de kaart heeft twee velden. Ze samenvoegen zou er één laten
-    verdwijnen, dus ze staan op de twee plekken die bij hun betekenis horen."""
-    # BEWERKBAAR, NIET ALLEEN TONEN. De suite ving dit: `proj_settrekker` zat in de rail-rij die
-    # ik weghaalde, en de chip toonde alleen. Daarmee was de actie ONBEREIKBAAR — een
-    # herindeling mag een veld verplaatsen, niet laten verdwijnen.
+    BEWERKBAAR, NIET ALLEEN TONEN. Bij de vorige herindeling verdween `proj_settrekker` bijna omdat
+    het formulier in een verwijderde rij zat; de suite ving dat. Zelfde dispatch als altijd."""
     if rw and hid is not None and trekker_opts:
-        return (f"<form method='post' action='/action' class='pchip-form'>{hid()}"
+        return (f"<form method='post' action='/action' class='mform'>{hid()}"
                 f"<input type='hidden' name='action' value='proj_settrekker'>"
-                f"<span class='pchip pchip-eig'><span class='pchip-k'>Assignee</span>"
-                f"<select name='trekker' onchange='{_AUTOSAVE}'>{trekker_opts}</select>"
-                f"</span></form>")
+                f"<select class='ctrl' name='trekker' onchange='{_AUTOSAVE}'>{trekker_opts}</select>"
+                f"</form>")
     if p.get("agent"):
         persona = st.personas.get(p["agent"])
         naam = ((persona or {}).get("name") if isinstance(persona, dict)
                 else getattr(persona, "name", "")) or "AI"
-        return (f"<span class='pchip pchip-eig'><span class='av ai'>{_e(_initials(naam))}</span>"
-                f"<span class='pchip-v'>{_e(naam)}</span></span>")
+        return (f"<span class='ctrl'><span class='av ai'>{_e(_initials(naam))}</span>"
+                f"{_e(naam)}</span>")
     if p.get("person"):
         naam = _person_name(st, p["person"]) or "—"
-        return (f"<span class='pchip pchip-eig'><span class='av'>{_e(_initials(naam))}</span>"
-                f"<span class='pchip-v'>{_e(naam)}</span></span>")
-    return ("<span class='pchip pchip-leeg pchip-eig'><span class='pchip-k'>Assignee</span>"
-            "<span class='pchip-v'>nobody yet</span></span>")
+        return (f"<span class='ctrl'><span class='av'>{_e(_initials(naam))}</span>{_e(naam)}</span>")
+    return "<span class='ctrl muted'>nobody yet</span>"
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
@@ -1139,12 +1130,16 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         pers_v = "<span class='muted'>—</span>"
     if rw:
-        vis_v = (f"<form method='post' action='/action' class='visform'>{hid()}"
+        # EEN TOGGLE, GEEN VINKJE MET EEN ZIN ERNAAST. Zichtbaar is de normale toestand; de actie
+        # die je soms wilt is verbergen. Het vinkje "only for this circle" vroeg je om een
+        # negatieve eigenschap aan te zetten — een omweg om te zeggen "hou dit binnen".
+        _verborgen = bool(p.get("private"))
+        vis_v = (f"<form method='post' action='/action' class='mform'>{hid()}"
                  f"<input type='hidden' name='action' value='proj_setprivate'>"
-                 f"<label><input type='checkbox' name='private' value='1'"
-                 f"{' checked' if p.get('private') else ''} "
-                 f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
-                 f" only for this circle</label></form>")
+                 f"<input type='hidden' name='private' value='{'' if _verborgen else '1'}'>"
+                 f"<button class='ctrl' type='submit' "
+                 f"title='{'Make visible to the whole circle tree' if _verborgen else 'Hide from other circles'}'>"
+                 f"{'Only this circle' if _verborgen else 'Whole circle tree'}</button></form>")
     else:
         vis_v = "Only for this circle" if p.get("private") else "Whole circle tree"
     verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
@@ -1176,11 +1171,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw, st=st)
     cl_new = ""
     if rw:
-        cl_new = (f"<details class='acard-d cl-newlist'><summary class='flink'>+ new checklist</summary>"
-                  f"<div class='datepop'><form method='post' action='/action'>{hid()}"
-                  f"<input name='title' placeholder='Checklist name'>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='checklist_add'>Add</button>"
-                  f"</form></div></details>")
+        # GEEN NAAMVELD MEER. Vrijwel elke lijst heette iets als "Acties uit overleg" of "Stappen"
+        # — een naam die niemand leest en die je wel moet verzinnen vóór je je eerste taak kwijt
+        # kunt. De naam is nu "tasks" en de knop maakt de lijst in één klik.
+        cl_new = (f"<form method='post' action='/action' class='pf cl-newlist'>{hid()}"
+                  f"<input type='hidden' name='title' value='tasks'>"
+                  f"<button class='flink' type='submit' name='action' value='checklist_add'>"
+                  f"+ new checklist</button></form>")
     cl_inner = (checklists_html or "<p class='muted'>No checklist yet.</p>") + cl_new
     checklist_panel = _psec(_IC_CHECK, "Checklist", cl_inner)
 
@@ -1191,15 +1188,25 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # De meta stond in .dcol-rijen die de kolom zwaar maakten. Wat naar de header verhuisde
     # (impact, business, inzet, status, trekker) staat hier NIET meer — twee plekken voor hetzelfde
     # veld is hoe een scherm zichzelf tegenspreekt. Wat hier blijft is wat de header niet draagt.
+    # ═══ DE RAIL: ÉÉN HUIS VOOR ALLE META ═════════════════════════════════════════════
+    # Status, assignee, impact, business en effort stonden in een pillenrij BOVEN de content. Die
+    # rij duwde de inhoud omlaag, en status — het veld dat je het vaakst verandert — verdween uit
+    # beeld zodra je naar de conversatie scrollde. Alles staat nu bij elkaar in een sticky rail;
+    # `_meta_rijen` draagt de vijf verhuisde controls, de regels hieronder de rest.
+    #
+    # ARCHIEF EN VERWIJDEREN KRIJGEN EEN VASTE PLEK, onderaan de rail achter een scheiding. Ze
+    # stonden onder een wall die met elk gesprek langer wordt; een actie die verder wegzakt naarmate
+    # een project meer leeft, is geen bereikbare actie.
     rail = (f"<div class='rail-kop'>Details</div>"
-            + _rail_regel("👤", "Role", "", control=f"<span class='rail-v'>{rol_v}</span>")
-            + _rail_regel("📅", "Deadline", "", control=f"<span class='rail-v'>{due_head or '—'}</span>")
-            + _rail_regel("👁", "Visible", "", control=f"<span class='rail-v'>{vis_v}</span>")
-            + _rail_regel("🗓", "Created", _created_full(p.get("created_at")))
-            + f"<div class='rail-kop rail-kop2'>Add</div>"
-            + f"<div class='rail-acties'>{cl_new}{goal_knop}</div>"
-            + (f"<div class='rail-kop rail-kop2'>More</div><div class='rail-meer'>{menu}</div>"
-               if menu else ""))
+            + _meta_rijen(st, p, rw, hid, _trekker_opts_html)
+            + _meta_rij("Role", rol_v)
+            + _meta_rij("Deadline", due_head or "—")
+            + _meta_rij("Visible", vis_v)
+            + _meta_rij("Created", _created_full(p.get("created_at")))
+            + f"<div class='railsplit'></div>"
+            + f"<div class='rail-acties'>{goal_knop}</div>"
+            + (f"<div class='rail-kop rail-kop2'>More</div>"
+               f"<div class='rail-meer'>{menu}</div>" if menu else ""))
     structure = rail
 
     # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
@@ -1290,13 +1297,16 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # zeiden niets over de inhoud eronder.
     _crumb = (f"<div class='pkaart-crumb'>{_e(_name(orec) if orec else (owner or 'project'))} "
               f"· project</div>")
-    kop = (f"<div class='pkaart-head'>{_crumb}{head}"
-           f"{_chips_rij(st, p, rw, hid)}{_eigenaar_chip(st, p, rw, hid, _trekker_opts_html)}{_herkomst_chip(st, pid)}"
-           # Het verzwakt-blok hoort bij de Impact-chip: het is het GEVOLG van die waarde.
-           # Het verdween met de .dcol en werd daarmee onbereikbaar — de suite ving dat.
-           f"{verzwakt_block}</div>")
+    # ALLEEN DE TITEL BOVENAAN. De pillenrij is weg; alle meta staat rechts. Het verzwakt-blok
+    # blijft hier: het is een SIGNAAL over dit project, geen instelbaar veld, en het hoort gezien te
+    # worden zonder dat je de rail afgaat. (Het verdween ooit met de .dcol en werd onbereikbaar —
+    # de suite ving dat, en die eis geldt nog steeds.)
+    kop = f"<div class='pkaart-head'>{_crumb}{head}{_herkomst_chip(st, pid)}{verzwakt_block}</div>"
     secties = (_psectie("Description", einddoc_body, acties=einddoc_acties)
-               + _psectie("Checklist", checklists_html, bijschrift="actions from the meeting")
+               # "+ new checklist" stond in de rail onder "Add". Hij hoort bij de checklist waar hij
+               # iets aan toevoegt — zo staat het ook in de mock.
+               + _psectie("Checklist", checklists_html, bijschrift="actions from the meeting",
+                          acties=cl_new)
                + _psectie("Conversation", wall))
     detail = (f"{top_bar}{labelbar}{_banner(msg)}"
               f"<div class='pkaart'>{kop}"
