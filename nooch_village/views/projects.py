@@ -828,7 +828,7 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
-def result_balk(pid: str, concept: dict, hid, nxt: str, *, edit_knop: str = "") -> str:
+def result_balk(pid: str, concept: dict, hid, *, edit_knop: str = "") -> str:
     """De compacte bevestigbalk onder het rapport: twee signalen, één keuze, drie acties.
 
     HET RAPPORT ÍS HET FORMULIER. Hier stonden losse WHY- en Learnings-velden; die herhaalden de
@@ -851,20 +851,28 @@ def result_balk(pid: str, concept: dict, hid, nxt: str, *, edit_knop: str = "") 
     signalen.append(f"<span>Checklist says <b>{_e(kruis)}</b></span>")
     sig = "<span class='einddoc-sigsep'>·</span>".join(signalen)
 
+    # DE KEUZE ÍS DE BEVESTIGING. Er stonden vier losse submitknoppen in één formulier: twee met
+    # `name='oordeel'` en één met `name='action'`. Een HTML-submit draagt alleen zijn EIGEN
+    # naam/waarde, dus die twee konden nooit samen in één POST — "Achieved" stuurde een oordeel
+    # zonder actie (er gebeurde niets) en "Confirm report" een actie zonder oordeel (validatie
+    # faalde). Er was geen klik die beide droeg.
+    #
+    # Nu draagt elke keuzeknop de hele beslissing: één actie, oordeel eringebakken. Geen JavaScript,
+    # en nog steeds geen voorselectie — het zijn ACTIES, geen toggles, en dat is precies wat een
+    # keuze zonder default hoort te zijn.
     keuze = "".join(
-        f"<button class='einddoc-seg' type='submit' name='oordeel' value='{_e(w)}' "
-        f"formaction='/action'>{_e(lbl)}</button>"
-        for w, lbl in (("behaald", "Achieved"), ("niet_behaald", "Not achieved")))
+        f"<button class='einddoc-seg' type='submit' name='action' value='{_e(act)}'>{_e(lbl)}</button>"
+        for act, lbl in (("verslag_bevestig_behaald", "Achieved"),
+                         ("verslag_bevestig_niet_behaald", "Not achieved")))
     return (f"<div class='einddoc-split'></div>"
             f"<div class='einddoc-sig'>{sig}</div>"
+            # `hid()` draagt csrf, pid ÉN next; hier stond nóg een next-input, dus elk formulier
+            # verstuurde er twee. De eerste won, de tweede was ruis.
             f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
-            f"<input type='hidden' name='next' value='{nxt}'>"
             f"<div class='einddoc-verdict'>"
             f"<span class='einddoc-vq'>Did it reach its goal?</span>"
             f"<span class='einddoc-seggroup'>{keuze}</span></div>"
             f"<div class='einddoc-acties'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='verslag_bevestig'>"
-            f"Confirm report</button>"
             f"{edit_knop}"
             f"<button class='flink' type='submit' name='action' value='verslag_overslaan' "
             f"title='Close without recording a result — the report says so honestly'>Skip</button>"
@@ -879,7 +887,7 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
     return (f"<div class='card einddoc-concept'>"
             f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
             f"<span class='muted'>the report is assembled but not confirmed</span></div>"
-            f"{result_balk(pid, concept, hid, nxt, edit_knop=f_lees(nxt))}</div>")
+            f"{result_balk(pid, concept, hid, edit_knop=f_lees(nxt))}</div>")
 
 
 def f_lees(nxt: str) -> str:

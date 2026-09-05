@@ -56,7 +56,7 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import (ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT,
+from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT, _EFFORT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
@@ -1706,13 +1706,16 @@ def _act_proj_regen_doc(c):
         return nxt, f"📄 draft report assembled from {len(concept.bronnen)} sources — confirm it below"
 
 
-def _act_verslag_bevestig(c):
-    # AUTHZ: rolvervuller of Circle Lead — het verslag hoort bij het project, dus dezelfde poort als
-    # het bewerken van het document zelf. Bevestigen is een oordeel over eigen werk.
-    #
-    # ALLEEN HIER WORDT GESCHREVEN. Dit is de enige plek waar een concept het einddocument wordt;
-    # een onbevestigd concept mag nooit stil de canonieke tekst worden. De guard
-    # tests/test_verslag_result.py bevriest dat.
+def _bevestig_met(c, oordeel: str):
+    """Bevestig het concept mét een oordeel. Eén plek, twee ingangen (behaald / niet behaald).
+
+    HET OORDEEL ZIT IN DE ACTIE, niet in een apart veld. Een HTML-submitknop draagt alleen zijn
+    EIGEN naam/waarde, dus "Achieved" (name=oordeel) en "Confirm report" (name=action) konden nooit
+    samen in één POST: de eerste stuurde een oordeel zonder actie (er gebeurde niets), de tweede een
+    actie zonder oordeel (validatie faalde). Er was geen klik die beide droeg.
+
+    Twee acties met het oordeel eringebakken lost dat op zonder JavaScript en zonder voorselectie —
+    het zijn ACTIES, geen toggles, en dat is precies wat een keuze-zonder-default hoort te zijn."""
     nxt, st, g, username = c.nxt, c.st, c.g, c.username
     pid = g("pid")
     _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
@@ -1721,27 +1724,26 @@ def _act_verslag_bevestig(c):
     store = getattr(st, "project_docs", None)
     if store is None:
         return nxt, "✗ no document store"
-    concept = store.concept(pid)
-    if not (concept.get("tekst") or "").strip():
+    if not (store.concept(pid).get("tekst") or "").strip():
         return nxt, "✗ no draft report to confirm"
-
-    # ZONDER KEUZE GEEN BEVESTIGING. Sinds de radio's onaangevinkt starten is dit een bereikbaar
-    # pad: klikken op Confirm zonder te kiezen. Stil doorlaten zou het verslag bevestigen mét het
-    # modeloordeel erin, alsof de mens dat had onderschreven — precies wat de lege radio voorkomt.
-    # Wie geen oordeel wil geven heeft "Skip this", en dat markeert het verslag eerlijk.
-    oordeel = (g("oordeel") or "").strip()
-    if not oordeel:
-        return nxt, "✗ pick achieved or not achieved first — or use Skip"
-    # DE TEKST GAAT ONGEWIJZIGD DOOR. Hij herschreef eerst de Result- en Learnings-secties uit
-    # losse formuliervelden; die velden zijn weg omdat ze herhaalden wat al in het rapport stond.
-    # Wat de mens LAS is nu wat er wordt vastgelegd — en als hij het er niet mee eens is, past hij
-    # de tekst aan via "Edit before confirming" vóór hij bevestigt. Het oordeel is het telbare
-    # deel en woont in zijn eigen veld.
+    # DE TEKST GAAT ONGEWIJZIGD DOOR: wat de mens las is wat er wordt vastgelegd. Het oordeel is
+    # het telbare deel en woont in zijn eigen veld.
     if not st.projects.set_resultaat(pid, oordeel):
         return nxt, "✗ unknown result value"
     if not store.confirm_concept(pid):
         return nxt, "✗ nothing to confirm"
     return nxt, "✓ report confirmed"
+
+
+def _act_verslag_bevestig_behaald(c):
+    # AUTHZ: rolvervuller of Circle Lead — het verslag hoort bij het project, dus dezelfde poort als
+    # het bewerken van het document zelf. Bevestigen is een oordeel over eigen werk.
+    return _bevestig_met(c, BEHAALD)
+
+
+def _act_verslag_bevestig_niet_behaald(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie hierboven.
+    return _bevestig_met(c, NIET_BEHAALD)
 
 
 def _act_verslag_overslaan(c):
@@ -5689,7 +5691,8 @@ ACTIONS = {
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
-    "verslag_bevestig": _act_verslag_bevestig,
+    "verslag_bevestig_behaald": _act_verslag_bevestig_behaald,
+    "verslag_bevestig_niet_behaald": _act_verslag_bevestig_niet_behaald,
     "verslag_overslaan": _act_verslag_overslaan,
     "verslag_bijwerken": _act_verslag_bijwerken,
     "proj_regen_doc": _act_proj_regen_doc,

@@ -162,8 +162,10 @@ def test_bevestigen_maakt_het_concept_het_document(tmp_path):
     # Bevestigen vereist een oordeel sinds de radio's leeg starten: zonder keuze zou het verslag
     # het modeloordeel bevestigen alsof de mens dat onderschreef. Zie
     # test_verslag_result.test_bevestigen_zonder_keuze_schrijft_niet.
-    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"],
-                                               "next": ["/"]}, username="guest")
+    # De keuze ÍS de bevestiging: één actie draagt oordeel én bevestiging. Zie
+    # test_verslag_result.test_een_keuzeknop_draagt_zowel_de_actie_als_het_oordeel.
+    cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
+                      username="guest")
     st2 = cockpit2._Stores(dd)
     assert "## Result" in st2.project_docs.read(pid)
     assert concept.split("\n")[0] in st2.project_docs.read(pid)   # de rest van het concept bleef
@@ -197,7 +199,7 @@ def test_leeg_bijwerken_wist_niets(tmp_path):
 def test_bevestigen_zonder_concept_is_een_nette_weigering(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st)
-    _, msg = cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]},
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
                                username="guest")
     assert cockpit2.is_weigering(msg)
 
