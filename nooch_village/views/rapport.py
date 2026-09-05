@@ -83,7 +83,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
 
             def _hidf():
                 return _hid
-            knoppen = result_balk(pid, c, _hidf, f"/rapport?pid={_e(pid)}",
+            knoppen = result_balk(pid, c, _hidf,
                                   edit_knop=inline_edit_knop("Edit before confirming"))
         _weergave = f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
         _blok = (inline_edit(_weergave,
