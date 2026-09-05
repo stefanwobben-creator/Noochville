@@ -173,3 +173,37 @@ def test_read_only_toont_de_meta_maar_geen_bewerkacties(tmp_path):
     assert "Status" in rail and "Assignee" in rail        # lezen mag
     for a in _META:
         assert f"value='{a}'" not in rail, a
+
+
+# ── een default-titel is geen naam ───────────────────────────────────────────
+def test_default_checklisttitels_worden_niet_getoond():
+    """Op productie heet 236 van de 273 checklists "Uitvoerplan", "tasks" of "Checklist" — de naam
+    die de wizard of de puls zette, niet iets wat iemand bedacht. Een kop die op 86% van de kaarten
+    hetzelfde zegt is ruis met de vorm van informatie.
+
+    DE IDENTIFIER BLIJFT. `Uitvoerplan` gate't de Done-uitkomst, het aanbod-mechanisme, de wizard en
+    de puls (`projects.PREP_CHECKLIST_TITLE`); alleen de WEERGAVE vervalt. Identifier is mechaniek,
+    label is content — dezelfde scheiding als bij de verslag-voorzet."""
+    from nooch_village.projects import PREP_CHECKLIST_TITLE
+    from nooch_village.views.checklists import toon_titel
+    for default in (PREP_CHECKLIST_TITLE, "tasks", "Checklist", "uitvoerplan", "", "   "):
+        assert toon_titel(default) == "", default
+    for eigen in ("Uit dialoog", "Road to Harvest Party", "Stappenplan"):
+        assert toon_titel(eigen) == eigen
+
+
+def test_de_identifier_zelf_blijft_ongemoeid():
+    """Zou iemand `PREP_CHECKLIST_TITLE` veranderen om "de titel weg te krijgen", dan breekt de
+    koppeling met de puls en de Done-uitkomst. Deze test zegt dat de weergave-regel daar niet
+    voor bedoeld is."""
+    from nooch_village.projects import PREP_CHECKLIST_TITLE
+    assert PREP_CHECKLIST_TITLE == "Uitvoerplan"
+
+
+def test_de_kaart_toont_geen_default_titel_maar_wel_een_eigen(tmp_path):
+    dd, pid, _, _, main, _ = _kaart(tmp_path)
+    assert "cl-title" not in main                     # "tasks" is een default
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Road to Harvest Party"],
+                                            "next": ["/"]}, username="guest")
+    html = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "Road to Harvest Party" in html and "cl-title" in html
