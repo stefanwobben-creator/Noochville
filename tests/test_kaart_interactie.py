@@ -68,7 +68,9 @@ def test_comment_bewerken_stuurt_je_terug_naar_het_project(tmp_path):
     """Zonder `next` valt de dispatch terug op "/" en beland je op het beginscherm — weg uit het
     project waarin je aan het werk was."""
     dd, pid, _, _, html = _kaart(tmp_path)
-    form = html[html.index("fentry-edit"):]
+    # `fentry-edit` heette de eigen implementatie; sinds beide schermen hetzelfde component
+    # gebruiken heet het `editor-inline-f` (cockpit2_util.inline_edit).
+    form = html[html.index("editor-inline-f"):]
     form = form[:form.index("</form>")]
     assert f"name=\"next\" value=\"/project?pid={pid}" in form or \
            f"name='next' value='/project?pid={pid}" in form, form[:300]
@@ -91,12 +93,12 @@ def test_bewerken_is_inline_en_niet_een_tweede_veld_eronder(tmp_path):
     naast elkaar lezen en je moet raden welke de echte is. Zoals het aanpassen van de projecttitel
     al werkt: het veld staat op de plek van de tekst."""
     dd, pid, _, _, html = _kaart(tmp_path)
-    assert "fentry-edit" in html and "data-fb=" in html      # bubbel en editor delen een plek
+    assert "editor-inline-f" in html and "data-toon=" in html   # bubbel en editor delen een plek
     # De oude klapper was `<details class='fedit'><summary>Edit</summary>`. Alleen díe is weg;
     # `.fedit` zelf leeft nog voor de hand-off-klapper op checklist-items.
     assert "<summary class='flink'>Edit</summary>" not in html
     # de editor start verborgen en de bubbel zichtbaar
-    i = html.index("fentry-edit")
+    i = html.index("editor-inline-f")
     assert "hidden" in html[i:i + 200]
 
 
@@ -104,7 +106,7 @@ def test_read_only_toont_geen_editor(tmp_path):
     """De terugweg naar de kaart hing eerst aan `if rw:` en werd daarbuiten gebruikt — read-only
     viel om met een UnboundLocalError. Hij beschrijft WAAR je bent, niet of je mag schrijven."""
     dd, pid, _, _, html = _kaart(tmp_path, rw=False)
-    assert "fentry-edit" not in html and ">Edit</button>" not in html
+    assert "editor-inline-f" not in html and ">Edit</button>" not in html
     assert "Interactie" in html                              # en de kaart rendert gewoon
 
 
@@ -130,3 +132,55 @@ def test_verwijderen_blijft_om_bevestiging_vragen(tmp_path):
     blok = html[max(0, i - 300):i + 100]
     assert "confirm(" in blok and "Archiving keeps the project" in blok
     assert "menuitem danger" in blok
+
+
+# ── één component voor inline bewerken ───────────────────────────────────────
+def test_comment_en_concept_delen_hetzelfde_edit_component(tmp_path):
+    """ÉÉN INTERACTIE, ÉÉN IMPLEMENTATIE. De comment-edit toggelde `[data-fb]`/`[data-fe]` binnen
+    `.fentry`; "Edit before confirming" op /rapport opende een <details> met een tweede textarea
+    ónder het concept. Twee bouwsels voor dezelfde handeling lopen uiteen zodra er één verandert,
+    en de gebruiker moet het patroon twee keer leren."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create(ROLE, "Eén component", "human", status="queued", done_when="af")
+    st.projects.start(pid)
+    cl = st.projects.checklist_add(pid, "tasks")["id"]
+    st.projects.check_add(pid, cl, "A")
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["comment"], "author": ["human:"],
+                                        "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    kaart = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    rapport = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    for naam, html in (("kaart", kaart), ("rapport", rapport)):
+        assert "editor-inline" in html, naam                    # dezelfde wrapper-klasse
+        assert html.count("data-toon=") == html.count("data-bewerk="), naam
+        assert html.count("data-toon=") >= 1, naam
+    # en de oude, parallelle bouwsels zijn weg
+    assert "data-fb=" not in kaart and "fentry-edit" not in kaart
+    assert "<summary class='flink'>Edit before confirming" not in rapport
+
+
+def test_de_toggle_knop_vindt_zijn_eigen_blok(tmp_path):
+    """DE GASTHEER MARKEERT DE GRENS. Een wrapper strak om het PAAR zou smaller zijn dan de knop —
+    die staat bij de andere acties — en dan geeft `closest()` null terug. Dat ging bij de eerste
+    poging precies zo mis, in beide schermen tegelijk."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create(ROLE, "Grens", "human", status="queued", done_when="af")
+    st.projects.start(pid)
+    cl = st.projects.checklist_add(pid, "tasks")["id"]
+    st.projects.check_add(pid, cl, "A")
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["c"], "author": ["human:"],
+                                        "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    for html in (P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK"),
+                 render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")):
+        # de wrapper opent VÓÓR het paar en VÓÓR de knop, en sluit erna: dan omvat hij beide
+        w = html.index("editor-inline")
+        assert html.index("data-toon=", w) > w
+        # De onclick wordt ge-escaped gerenderd; zoek op het stabiele deel dat beide vormen delen.
+        assert "closest(" in html[w:] and ".editor-inline" in html[w:]

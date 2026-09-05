@@ -268,6 +268,61 @@ _WRAPSEL_DEF = ("if(!window.wrapSel){window.wrapSel=function(btn,pre,post){"
 _WRAPSEL_JS = f"<script>{_WRAPSEL_DEF}</script>"
 
 
+# ── Inline bewerken: één component, twee gebruikers ──────────────────────────────────────────
+# Het bewerkveld neemt de PLEK in van wat het bewerkt; er komt geen tweede blok ernaast. Dat was
+# eerst twee keer los gebouwd: de comment-edit toggelde `[data-fb]`/`[data-fe]` binnen `.fentry`,
+# en "Edit before confirming" op /rapport opende een <details> met een tweede textarea ónder het
+# gerenderde concept. Twee implementaties van dezelfde interactie lopen uiteen zodra er één
+# verandert — en de gebruiker leert het patroon twee keer.
+#
+# De wrapper draagt zijn eigen klasse (`.editor-inline`), zodat de JS niet afhangt van de gastheer:
+# `.fentry` op de wall, de conceptkaart op /rapport, en wat er hierna bij komt.
+_INLINE_TOON_JS = ("var w=this.closest('.editor-inline');"
+                   "w.querySelector('[data-toon]').hidden=true;"
+                   "var e=w.querySelector('[data-bewerk]');e.hidden=false;"
+                   "var t=e.querySelector('textarea');if(t){t.focus();"
+                   "t.setSelectionRange(t.value.length,t.value.length);}")
+_INLINE_TERUG_JS = ("var w=this.closest('.editor-inline');"
+                    "w.querySelector('[data-bewerk]').hidden=true;"
+                    "w.querySelector('[data-toon]').hidden=false;")
+
+
+def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
+                opslaan: str, opslaan_label: str = "Save", verborgen: str = "",
+                toon_cls: str = "") -> str:
+    """Het getoonde blok plus een bewerkformulier dat er OP dezelfde plek voor in de plaats komt.
+
+    `getoond`          de gerenderde weergave (bubbel, conceptverslag, …)
+    `formulier_inhoud` het invoerveld, meestal `md_editor(...)`
+    `sleutel`          uniek per blok op de pagina — twee blokken die dezelfde sleutel delen
+                       zouden elkaars knoppen aanspreken
+    `opslaan`          de dispatch-actie van de opslaan-knop
+    `verborgen`        de hidden inputs (csrf, pid, next, …)
+
+    Geeft alleen het PAAR terug; de knop die het opent komt uit `inline_edit_knop`, want die staat
+    bij de andere acties en niet in de bubbel.
+
+    DE GASTHEER MARKEERT DE GRENS, niet deze helper: zet `editor-inline` op het element dat zowel
+    het paar ALS de knop omvat (`.fentry` op de wall, de conceptkaart op /rapport). Een wrapper hier
+    zou strakker om het paar zitten dan om de knop, en dan vindt `closest()` hem niet — precies wat
+    er misging toen ik het wél zo probeerde."""
+    return (f"<div data-toon='{_e(sleutel)}'"
+            f"{f' class={chr(39)}{toon_cls}{chr(39)}' if toon_cls else ''}>{getoond}</div>"
+            f"<form method='post' action='/action' class='pf editor-inline-f' "
+            f"data-bewerk='{_e(sleutel)}' hidden>{verborgen}{formulier_inhoud}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='{_e(opslaan)}'>"
+            f"{_e(opslaan_label)}</button>"
+            f"<button class='flink' type='button' onclick=\"{_INLINE_TERUG_JS}\">Cancel</button>"
+            f"</div></form>")
+
+
+def inline_edit_knop(label: str = "Edit") -> str:
+    """De knop die het bewerkveld op zijn plek zet. Hoort binnen dezelfde `.editor-inline`."""
+    return (f"<button class='flink' type='button' onclick=\"{_INLINE_TOON_JS}\">"
+            f"{_e(label)}</button>")
+
+
 def md_editor(name: str, value: str = "", rows: int = 6,
               placeholder: str = "Body (markdown)…", help: bool = False) -> str:
     """De GEDEELDE opmaak-editor (markdown → veilige `_md`-weergave): `.editor`-kaart met mini-toolbar

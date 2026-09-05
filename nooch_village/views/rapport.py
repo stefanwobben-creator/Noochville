@@ -17,7 +17,8 @@ op de kaart (#441), de acties zijn letterlijk dezelfde dispatch-takken (`proj_do
 from __future__ import annotations
 
 from nooch_village.web_base import _e, _page, _banner
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _md_doc, _name, md_editor
+from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md_doc, _name, inline_edit,
+                                          inline_edit_knop, md_editor)
 from nooch_village import projects as _projects
 
 
@@ -75,20 +76,24 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
             _hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                     f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                     f"<input type='hidden' name='next' value='/rapport?pid={_e(pid)}'>")
+            # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit): het
+            # bewerkveld neemt de plek van het GERENDERDE CONCEPT in, in plaats van een tweede
+            # textarea eronder te openen. Eén interactie, één implementatie.
             knoppen = (f"<div class='qadd-row'>"
                        f"<form method='post' action='/action' class='pf'>{_hid}"
                        f"<button class='btn ok sm' type='submit' name='action' "
                        f"value='verslag_bevestig'>Confirm report</button></form>"
-                       f"<details class='cardmenu'><summary class='flink'>Edit before confirming"
-                       f"</summary><form method='post' action='/action' class='pf'>{_hid}"
-                       f"{md_editor('tekst', value=c.get('tekst') or '', rows=14, help=True)}"
-                       f"<button class='btn ok sm' type='submit' name='action' "
-                       f"value='verslag_bijwerken'>Save draft</button></form></details></div>")
-        concept = (f"<div class='card einddoc-concept'>"
+                       f"{inline_edit_knop('Edit before confirming')}</div>")
+        _weergave = f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
+        _blok = (inline_edit(_weergave,
+                             md_editor("tekst", value=c.get("tekst") or "", rows=14, help=True),
+                             sleutel=f"concept-{pid}", opslaan="verslag_bijwerken",
+                             opslaan_label="Save draft", verborgen=_hid)
+                 if rw else _weergave)
+        concept = (f"<div class='card einddoc-concept editor-inline'>"
                    f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>{voorzet}"
                    f"<span class='muted'>{tel}</span></div>"
-                   f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
-                   f"{knoppen}</div>")
+                   f"{_blok}{knoppen}</div>")
 
     # DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is, is iets anders dan
     # geen document — en beide zijn iets anders dan een geschreven rapport. Ze op één hoop gooien

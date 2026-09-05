@@ -35,6 +35,10 @@ DAEMON_SETTLE=8            # de daemon mag even booten; een import-fout is binne
 
 log(){ printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
 fout(){ printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; }
+# Geel, en met een eigen teken. Een no-op deploy PRINTTE al dat er niets te doen was, maar in
+# dezelfde neutrale ▸-stijl als elke geslaagde stap — dus hij las als "klaar" en niet als "er is
+# niets gebeurd". Dat kostte een ronde: er werd gedeployd, er veranderde niets, en niemand zag het.
+niets(){ printf '\n\033[33m◌ %s\033[0m\n' "$*"; }
 git_nooch(){ sudo -u "$RUN_USER" git -C "$REPO" "$@"; }
 
 # curl de app; "gezond" = een HTTP-status < 500 (200/302/401/403 = app leeft; leeg/5xx = stuk).
@@ -106,7 +110,11 @@ git_nooch fetch --quiet origin main
 OUD="$(git_nooch rev-parse HEAD)"
 NIEUW="$(git_nooch rev-parse origin/main)"
 if [ "$OUD" = "$NIEUW" ]; then
-  log "al up-to-date ($OUD) — niets te deployen. (Herstart forceren? systemctl restart ${SERVICES[*]})"; exit 0
+  niets "GEEN NIEUWE COMMIT — NIETS GEDEPLOYED."
+  printf '  server en origin/main staan allebei op %s\n' "${OUD:0:9}"
+  printf '  is dit onverwacht? Dan is je merge naar main waarschijnlijk nog niet gedaan.\n'
+  printf '  alleen de services herstarten: systemctl restart %s\n' "${SERVICES[*]}"
+  exit 0
 fi
 
 # Alleen fast-forward: als main en de server uit elkaar lopen, stoppen we (geen stille merge).
