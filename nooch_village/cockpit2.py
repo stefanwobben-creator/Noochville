@@ -1732,15 +1732,13 @@ def _act_verslag_bevestig(c):
     oordeel = (g("oordeel") or "").strip()
     if not oordeel:
         return nxt, "✗ pick achieved or not achieved first — or use Skip"
-    if oordeel:
-        # Het menselijke oordeel VERVANGT dat van het model: de mens heeft het laatste woord.
-        from nooch_village.project_verslag import met_result
-        toel, lear = g("toelichting"), g("learnings")
-        if not st.projects.set_resultaat(pid, oordeel, toel, lear):
-            return nxt, "✗ unknown result value"
-        store.write_concept(pid, met_result(concept["tekst"], oordeel, toel, lear),
-                            bronnen=concept.get("bronnen") or [],
-                            voorzet=concept.get("voorzet") or "")
+    # DE TEKST GAAT ONGEWIJZIGD DOOR. Hij herschreef eerst de Result- en Learnings-secties uit
+    # losse formuliervelden; die velden zijn weg omdat ze herhaalden wat al in het rapport stond.
+    # Wat de mens LAS is nu wat er wordt vastgelegd — en als hij het er niet mee eens is, past hij
+    # de tekst aan via "Edit before confirming" vóór hij bevestigt. Het oordeel is het telbare
+    # deel en woont in zijn eigen veld.
+    if not st.projects.set_resultaat(pid, oordeel):
+        return nxt, "✗ unknown result value"
     if not store.confirm_concept(pid):
         return nxt, "✗ nothing to confirm"
     return nxt, "✓ report confirmed"
@@ -1761,9 +1759,11 @@ def _act_verslag_overslaan(c):
     concept = store.concept(pid) if store is not None else {}
     if not (concept.get("tekst") or "").strip():
         return nxt, "✗ no draft report"
-    from nooch_village.project_verslag import met_result
-    st.projects.set_resultaat(pid, "overgeslagen", "", "")
-    store.write_concept(pid, met_result(concept["tekst"], "overgeslagen"),
+    # OVERSLAAN LAAT DE TEKST OOK STAAN, maar zet er één regel onder: anders leest het rapport als
+    # een bevestigd oordeel terwijl niemand er ja op zei. Toevoegen, niet herschrijven.
+    st.projects.set_resultaat(pid, "overgeslagen")
+    store.write_concept(pid, concept["tekst"].rstrip()
+                        + "\n\n_Closed without a recorded result._",
                         bronnen=concept.get("bronnen") or [],
                         voorzet=concept.get("voorzet") or "")
     store.confirm_concept(pid)

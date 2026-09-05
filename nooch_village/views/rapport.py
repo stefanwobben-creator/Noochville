@@ -76,33 +76,42 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
             _hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                     f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                     f"<input type='hidden' name='next' value='/rapport?pid={_e(pid)}'>")
-            # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit): het
-            # bewerkveld neemt de plek van het GERENDERDE CONCEPT in, in plaats van een tweede
-            # textarea eronder te openen. Eén interactie, één implementatie.
-            # DEZELFDE OORDEELVRAAG als op de kaart (views/projects.result_velden). Hier stond
-            # alleen een kale "Confirm report" — en sinds bevestigen een oordeel EIST, weigerde die
-            # knop dus altijd. Het scherm waar het concept het best zichtbaar is, was juist het
-            # scherm zonder keuze.
-            from nooch_village.views.projects import result_velden
+            # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit):
+            # het bewerkveld neemt de plek van het GERENDERDE rapport in. En de balk staat
+            # ERONDER, niet ernaast — het rapport ís het formulier.
+            from nooch_village.views.projects import result_balk
+
             def _hidf():
                 return _hid
-            knoppen = (f"{result_velden(pid, c, _hidf, f'/rapport?pid={_e(pid)}')}"
-                       f"<div class='qadd-row'>{inline_edit_knop('Edit before confirming')}</div>")
+            knoppen = result_balk(pid, c, _hidf, f"/rapport?pid={_e(pid)}",
+                                  edit_knop=inline_edit_knop("Edit before confirming"))
         _weergave = f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
         _blok = (inline_edit(_weergave,
                              md_editor("tekst", value=c.get("tekst") or "", rows=14, help=True),
                              sleutel=f"concept-{pid}", opslaan="verslag_bijwerken",
                              opslaan_label="Save draft", verborgen=_hid)
                  if rw else _weergave)
-        concept = (f"<div class='card einddoc-concept editor-inline'>"
-                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>{voorzet}"
-                   f"<span class='muted'>{tel}</span></div>"
+        concept = (f"<div class='einddoc-banner'>📄 Draft report — read it, tweak if needed, "
+                   f"confirm below</div>"
+                   f"<div class='card einddoc-concept editor-inline'>"
+                   f"<div class='einddoc-ckop'><span class='chip amber'>not confirmed yet</span>"
+                   f"{voorzet}</div>"
+                   f"<p class='muted einddoc-prov'>{tel}</p>"
+                   f"<p class='muted einddoc-vervangt'>The current report stays as it is until you "
+                   f"confirm this draft.</p>"
                    f"{_blok}{knoppen}</div>")
 
-    # DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is, is iets anders dan
-    # geen document — en beide zijn iets anders dan een geschreven rapport. Ze op één hoop gooien
-    # is precies wat de kaart hiervóór deed.
-    if not doc.strip():
+    # OF-OF, NOOIT ALLEBEI. Het concept en het bestaande document stonden onder elkaar op één
+    # pagina: twee versies van hetzelfde rapport, en de lezer moest raden welke telt. Er wás geen
+    # keuze — `body` werd altijd gebouwd en `main` plakte ze achter elkaar.
+    #
+    # Wacht er een concept, dan is dát het onderwerp van deze pagina en de rest ruis. Het bestaande
+    # document blijft gewoon bestaan op dataniveau; pas bevestigen vervangt het. Dit is puur de
+    # weergave, en de kop hieronder zegt dat met zoveel woorden zodat niemand denkt dat het oude
+    # verslag al weg is.
+    if concept:
+        body = ""
+    elif not doc.strip():
         body = ("<div class='card'><p class='muted'>No end document yet — the assigned inhabitant "
                 "writes it on every successful pulse.</p></div>")
     elif _projects.heeft_seed_vorm(doc):
@@ -113,8 +122,11 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
     else:
         body = f"<div class='card'><div class='einddoc-body'>{_md_doc(doc)}</div></div>"
 
+    # Ook de document-acties horen bij het document. Wacht er een concept, dan werk je aan het
+    # CONCEPT (dat heeft zijn eigen Edit) en zou "Edit document" een tekst bewerken die niet eens
+    # in beeld staat.
     acties = ""
-    if rw:
+    if rw and not concept:
         # DEZELFDE TAKKEN als op de kaart stonden, met `next` terug naar deze route zodat je na
         # opslaan of verversen bij het document blijft in plaats van op de kaart te belanden.
         nxt = f"/rapport?pid={_e(pid)}"

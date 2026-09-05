@@ -144,7 +144,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_describe` | `cockpit2.py:1663` |
 | `proj_doc_edit` | `cockpit2.py:1795` |
 | `verslag_bevestig` | `cockpit2.py:1709` |
-| `verslag_overslaan` | `cockpit2.py:1749` |
+| `verslag_overslaan` | `cockpit2.py:1747` |
 | `verslag_bijwerken` | `cockpit2.py:1773` |
 | `proj_regen_doc` | `cockpit2.py:1674` |
 | `proj_settrekker` | `cockpit2.py:1808` |

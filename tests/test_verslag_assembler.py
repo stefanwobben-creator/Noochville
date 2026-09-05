@@ -203,14 +203,21 @@ def test_bevestigen_zonder_concept_is_een_nette_weigering(tmp_path):
 
 
 # ── de schermen ──────────────────────────────────────────────────────────────
-def test_de_route_toont_het_concept_boven_het_document_met_provenance(tmp_path):
+def test_de_route_toont_het_concept_met_zijn_provenance(tmp_path):
+    """OF-OF, NIET ALLEBEI. Deze test eiste eerst dat het document ONDER het concept mee-rendeerde;
+    dat waren twee versies van hetzelfde rapport op één pagina, en de lezer moest raden welke telt.
+    Wacht er een concept, dan is dát het onderwerp — het document blijft op DATANIVEAU bestaan tot
+    bevestigen het vervangt, en de pagina zegt dat met zoveel woorden.
+    Zie tests/test_rapport_route.py::test_nooit_het_concept_en_het_document_tegelijk."""
     dd, st = _st(tmp_path)
     pid = _project(dd, st, doc="oud document", items=[("A", True)])
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     assert "not confirmed yet" in html
     assert "assembled from" in html
-    assert "oud document" in html                       # het document staat er nog steeds
+    assert "oud document" not in html                   # niet meer mee-gerenderd
+    assert "stays as it is until you confirm" in html   # maar wél benoemd
+    assert "oud document" in cockpit2._Stores(dd).project_docs.read(pid)   # en nog steeds de waarheid
     assert "verslag_bevestig" in html and "verslag_bijwerken" in html
 
 

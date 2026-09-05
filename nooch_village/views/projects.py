@@ -828,56 +828,63 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
-def result_velden(pid: str, concept: dict, hid, nxt: str) -> str:
-    """De oordeelvraag: twee signalen, de ja/nee-keuze, toelichting en optionele leringen.
+def result_balk(pid: str, concept: dict, hid, nxt: str, *, edit_knop: str = "") -> str:
+    """De compacte bevestigbalk onder het rapport: twee signalen, één keuze, drie acties.
 
-    GEDEELD DOOR BEIDE SCHERMEN. Hij stond alleen op de projectkaart, terwijl /rapport óók een
-    "Confirm report"-knop heeft. Toen bevestigen een oordeel ging EISEN, weigerde die knop dus
-    altijd — het scherm waar het concept het best zichtbaar is, was juist het scherm zonder keuze.
-    Eén functie, twee aanroepers; een derde kopie zou hetzelfde opnieuw laten verlopen.
+    HET RAPPORT ÍS HET FORMULIER. Hier stonden losse WHY- en Learnings-velden; die herhaalden de
+    Result- en Learnings-sectie die al in het rapport staan, dus je typte tweemaal hetzelfde en er
+    ontstonden twee versies van dezelfde gedachte. Bewerken gebeurt nu op één plek — in het rapport
+    zelf, via "Edit before confirming".
 
-    TWEE SIGNALEN NAAST ELKAAR. Het modeloordeel is het voorstel, de checklist-staat de kruischeck.
-    Botsen ze, dan is dat iets om naar te kijken; samenvoegen tot één cijfer zou de botsing
-    verstoppen, en juist die botsing is de reden dat een mens hier kijkt.
+    HET TELBARE OORDEEL IS DE ENIGE GESTRUCTUREERDE INVOER. Een ja/nee dat je later wilt tellen
+    hoort niet in proza; de rest van de betekenis staat in de tekst die de mens leest en goedkeurt.
 
-    GEEN VOORSELECTIE. Toelichting en leringen zijn vóórgevuld — dat is een concept om bij te
-    schaven. Het oordeel niet: dat is de ene beslissing die de mens actief moet nemen, en elke
-    default duwt hem naar een antwoord zodra de signalen botsen."""
-    from nooch_village.project_verslag import (label_voor, modeloordeel, voorstel_learnings,
-                                               voorstel_toelichting)
+    GEEN VOORSELECTIE: elke default duwt de mens naar een antwoord zodra de twee signalen botsen —
+    en juist die botsing is de reden dat hij kijkt."""
+    from nooch_village.project_verslag import label_voor, modeloordeel_kort
     tekst = concept.get("tekst") or ""
-    model = modeloordeel(tekst)
+    model = modeloordeel_kort(tekst)
     kruis = label_voor((concept.get("voorzet") or "").strip())
-    signalen = (f"<div class='einddoc-sig'>"
-                + (f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Report says</span>"
-                   f"<span class='einddoc-sigv'>{_e(model)}</span></div>" if model else "")
-                + f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Checklist says</span>"
-                  f"<span class='einddoc-sigv'>{_e(kruis)}</span></div></div>")
+    signalen = []
+    if model:
+        signalen.append(f"<span>Draft concluded <b>{_e(model)}</b></span>")
+    signalen.append(f"<span>Checklist says <b>{_e(kruis)}</b></span>")
+    sig = "<span class='einddoc-sigsep'>·</span>".join(signalen)
+
     keuze = "".join(
-        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'>"
-        f"<label class='einddoc-keuze' for='ro-{_e(w)}-{_e(pid)}'>{_e(lbl)}</label>"
-        for w, lbl in (("behaald", "Goal achieved"), ("niet_behaald", "Not achieved")))
-    return (f"{signalen}"
+        f"<button class='einddoc-seg' type='submit' name='oordeel' value='{_e(w)}' "
+        f"formaction='/action'>{_e(lbl)}</button>"
+        for w, lbl in (("behaald", "Achieved"), ("niet_behaald", "Not achieved")))
+    return (f"<div class='einddoc-split'></div>"
+            f"<div class='einddoc-sig'>{sig}</div>"
             f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
             f"<input type='hidden' name='next' value='{nxt}'>"
-            f"<div class='einddoc-keuzes'>{keuze}</div>"
-            f"{_field('Why', 'toelichting', value=voorstel_toelichting(tekst), fid=f'rt-{pid}', placeholder='What made it so?')}"
-            f"{_field('Learnings — optional', 'learnings', kind='textarea', value=voorstel_learnings(tekst), fid=f'rl-{pid}', placeholder='Worth remembering?')}"
-            f"<div class='qadd-row'>"
+            f"<div class='einddoc-verdict'>"
+            f"<span class='einddoc-vq'>Did it reach its goal?</span>"
+            f"<span class='einddoc-seggroup'>{keuze}</span></div>"
+            f"<div class='einddoc-acties'>"
             f"<button class='btn ok sm' type='submit' name='action' value='verslag_bevestig'>"
             f"Confirm report</button>"
+            f"{edit_knop}"
             f"<button class='flink' type='submit' name='action' value='verslag_overslaan' "
-            f"title='Close without recording a result — the report says so honestly'>"
-            f"Skip this</button></div></form>")
+            f"title='Close without recording a result — the report says so honestly'>Skip</button>"
+            f"</div></form>"
+            f"<p class='muted einddoc-hint'>Your pick is the one that counts. The reasoning and "
+            f"learnings live in the report above — change them with “Edit before confirming”.</p>")
 
 
 def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> str:
-    """De oordeelvraag op de KAART, in zijn eigen kaartje. De velden komen uit `result_velden`;
-    hier omheen staat alleen de kop die zegt dat er iets te bevestigen valt."""
+    """De bevestigvraag op de KAART. Hier staat het rapport niet, dus de knop die het opent is de
+    weg naar de tekst waar de toelichting en leringen in leven."""
     return (f"<div class='card einddoc-concept'>"
             f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
             f"<span class='muted'>the report is assembled but not confirmed</span></div>"
-            f"{result_velden(pid, concept, hid, nxt)}</div>")
+            f"{result_balk(pid, concept, hid, nxt, edit_knop=f_lees(nxt))}</div>")
+
+
+def f_lees(nxt: str) -> str:
+    """De 'lees het concept'-link voor de kaartvariant van de bevestigbalk."""
+    return f"<a class='flink' href='{nxt}'>Read the draft</a>"
 
 
 def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -> tuple[str, str]:
