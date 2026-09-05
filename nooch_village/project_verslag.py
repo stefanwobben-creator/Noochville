@@ -18,6 +18,7 @@ DE VIER BRONNEN, en waarom precies deze:
     checklist    items + wat afgevinkt   het logboek van wat er gebeurde (gem. 3,6 items, 3,3 af)
     gesprek      log-regels met tekst    waar rollen en mensen verslag deden
     document     het bestaande einddoc   de rijkste bron; 57 van 57 afgesloten projecten heeft er een
+    deliverables wat de skills opleverden 197 van de 373 projecten heeft er, 652 in totaal
 
 Het bestaande document is een BRON en geen slachtoffer: het concept wacht naast het document
 (`ProjectDocStore.write_concept`) en vervangt het pas als een mens bevestigt. Deze store houdt geen
@@ -127,7 +128,40 @@ def voorzet_result(project: dict) -> tuple[str, str]:
     return ONBEKEND, f"{len(af)} van {len(items)} items af — te weinig om uit af te leiden"
 
 
-def bronnen_van(project: dict, document: str = "") -> list[str]:
+_DELIVERABLE_CAP = 1200          # per stuk; anders bepaalt één lange oplevering de hele invoer
+
+
+def deliverable_blokken(deliverables, pid: str) -> list[str]:
+    """De opgeleverde deliverables als tekstblokken. Fail-soft: geen store of een leesfout → leeg,
+    want een verslag zonder deliverables is nog steeds een verslag.
+
+    DEZE BRON KWAM VAN DE OUDE SYNTHESE. Die las hem al (652 deliverables over 197 projecten); hem
+    niet overnemen zou betekenen dat het nieuwe pad mínder weet dan het oude, en dan is "de oude
+    synthese vervangen" in werkelijkheid informatieverlies."""
+    if deliverables is None or not pid:
+        return []
+    try:
+        recs = deliverables.for_project(pid) or []
+    except Exception as e:                                      # noqa: BLE001 - luid, niet stil
+        log.warning("VERSLAG_DELIVERABLES_FAIL: niet te lezen voor %s: %s", pid, e)
+        return []
+    uit = []
+    for r in recs:
+        body = (r.get("summary") or "").strip()
+        try:
+            inhoud = deliverables.content_for(r["id"])
+        except Exception:                                       # noqa: BLE001
+            inhoud = None
+        if inhoud:
+            tekst = str(inhoud)
+            body += "\n  " + (tekst[:_DELIVERABLE_CAP] + " …[ingekort]"
+                              if len(tekst) > _DELIVERABLE_CAP else tekst)
+        if body.strip():
+            uit.append(body.strip())
+    return uit
+
+
+def bronnen_van(project: dict, document: str = "", deliverables: list | None = None) -> list[str]:
     """Welke bronnen dit verslag daadwerkelijk voedden. Alleen wat er ECHT is: een lege checklist
     is geen bron, en hem toch noemen maakt de provenance-telling een leugen."""
     uit = []
@@ -140,6 +174,8 @@ def bronnen_van(project: dict, document: str = "") -> list[str]:
     regels = _gesprek(project)
     if regels:
         uit.append(f"het gesprek ({len(regels)} regels)")
+    if deliverables:
+        uit.append(f"de opgeleverde deliverables ({len(deliverables)})")
     if _bruikbaar_document(document):
         uit.append("het bestaande einddocument")
     return uit
@@ -157,7 +193,7 @@ def _bruikbaar_document(document: str) -> bool:
     return bool((document or "").strip()) and not heeft_seed_vorm(document)
 
 
-def _materiaal(project: dict, document: str) -> str:
+def _materiaal(project: dict, document: str, deliverables: list | None = None) -> str:
     """Het ruwe materiaal, in de volgorde waarin een mens het zou lezen."""
     delen = [f"# {project.get('scope') or project.get('id')}"]
     dw = (project.get("done_when") or "").strip()
@@ -173,6 +209,9 @@ def _materiaal(project: dict, document: str) -> str:
     if regels:
         delen.append("\nGesprek:")
         delen.extend(regels)
+    if deliverables:
+        delen.append("\nOpgeleverde deliverables:")
+        delen.extend(f"- {b}" for b in deliverables)
     if _bruikbaar_document(document):
         delen.append("\nBestaand einddocument:\n" + document.strip())
     return "\n".join(delen)
@@ -202,7 +241,8 @@ _PROMPT = (
     "aanleiding voor geeft; anders laat je dit kopje weg.\n"
 )
 
-def stel_samen(project: dict, document: str = "", *, reason=None) -> Concept | None:
+def stel_samen(project: dict, document: str = "", *, reason=None,
+               deliverables: list | None = None) -> Concept | None:
     """Stel het conceptverslag samen. `reason` is de LLM-functie (injectie, geen import in dit pad).
 
     ZONDER MODEL GEEN PROZA, MAAR WEL EEN VERSLAG. De feiten liggen er al; een model schrijft ze
@@ -212,11 +252,11 @@ def stel_samen(project: dict, document: str = "", *, reason=None) -> Concept | N
 
     Geeft None als er werkelijk niets is om uit samen te stellen; dan hoort er geen verslag te zijn
     en zegt de kaart dat gewoon."""
-    bronnen = bronnen_van(project, document)
+    bronnen = bronnen_van(project, document, deliverables)
     if not bronnen:
         return None
     voorzet, reden = voorzet_result(project)
-    mat = _materiaal(project, document)
+    mat = _materiaal(project, document, deliverables)
 
     # ALLEEN DE DEFINITIE IS NIETS OM OVER TE SCHRIJVEN. Dan kan een model niets doen behalve de
     # titel omschrijven en de gaten opvullen — en dat is precies hoe "an existing final document

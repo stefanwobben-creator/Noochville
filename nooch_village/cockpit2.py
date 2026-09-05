@@ -1508,10 +1508,14 @@ def _act_proj_done(c):
         # stil wegvalt leest later als "er viel niets samen te stellen", en dat is precies de
         # onzichtbaarheid waar we bij het radarsignaal tegenaan liepen.
         try:
-            from nooch_village.project_verslag import stel_samen
+            from nooch_village.project_verslag import deliverable_blokken, stel_samen
             from nooch_village.llm import reason as _reason
             _p = pj.get(pid) or {}
-            _concept = stel_samen(_p, _doc, reason=_reason)
+            # DEZELFDE BRONNEN als de knop op /rapport: anders weet het ene pad meer dan het
+            # andere en krijg je twee verschillende verslagen voor hetzelfde project.
+            _concept = stel_samen(_p, _doc, reason=_reason,
+                                  deliverables=deliverable_blokken(
+                                      getattr(st, "deliverables", None), pid))
             if _concept is not None and _ds is not None:
                 _ds.write_concept(pid, _concept.tekst, bronnen=_concept.bronnen,
                                   voorzet=_concept.voorzet)
@@ -1668,25 +1672,38 @@ def _act_proj_describe(c):
 
 
 def _act_proj_regen_doc(c):
-        # AUTHZ: zelfde poort als de edit-route (rolvervuller of Circle Lead) — regenereren overschrijft
-        # het einddocument. Forceert een verse synthese uit de deliverables ('trek oud project bij').
+        # AUTHZ: zelfde poort als de edit-route (rolvervuller of Circle Lead).
+        #
+        # ÉÉN ASSEMBLER, TWEE INGANGEN. Deze knop draaide de OUDE per-taak-synthese uit
+        # `inhabitant.synthesize_einddocument`, terwijl het afsluit-pad de nieuwe assembler
+        # gebruikte. Gevolg: dezelfde knop op hetzelfde scherm gaf een ander soort document —
+        # Engels, een kop per taak, en "Niet onderzocht — geen gegrond resultaat" onder koppen waar
+        # wél iets gebeurde. Gemeten op 310 productiedocumenten: mediaan 6 koppen, 253 kopblokken
+        # met "niet onderzocht", 64 (bijna) leeg.
+        #
+        # HIJ SCHRIJFT NU EEN CONCEPT, GEEN DOCUMENT. Dat is dezelfde regel als bij het afsluiten:
+        # alleen een expliciete bevestiging vervangt de canonieke tekst. "Opnieuw genereren" is een
+        # voorstel, en een voorstel dat zichzelf meteen doorvoert is geen voorstel.
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        p = pj.get(g("pid"))
+        pid = g("pid")
+        p = pj.get(pid)
         if p is None:
             return nxt, "✗ project not found"
         _deny = _role_gate(p.get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         _load_env()                                          # LLM-key beschikbaar maken (zoals _ai_reply)
-        import logging
-        from nooch_village.inhabitant import synthesize_einddocument
-        rec = st.records.get(p.get("owner"))
-        ok = synthesize_einddocument(
-            project_docs=st.project_docs, deliverables=st.deliverables, projects=st.projects,
-            personas=st.personas, record=rec, settings={}, project=p, force_final=True,
-            log=logging.getLogger("village.cockpit_regen"), data_dir=c.data_dir)
-        return nxt, ("📄 rapport opnieuw gegenereerd" if ok
-                     else "no report generated (no deliverables or no LLM key)")
+        from nooch_village.llm import reason as _reason
+        from nooch_village.project_verslag import deliverable_blokken, stel_samen
+        store = getattr(st, "project_docs", None)
+        if store is None:
+            return nxt, "✗ no document store"
+        concept = stel_samen(p, store.read(pid), reason=_reason,
+                             deliverables=deliverable_blokken(getattr(st, "deliverables", None), pid))
+        if concept is None:
+            return nxt, "✗ nothing to assemble from — no definition, checklist, wall or deliverables"
+        store.write_concept(pid, concept.tekst, bronnen=concept.bronnen, voorzet=concept.voorzet)
+        return nxt, f"📄 draft report assembled from {len(concept.bronnen)} sources — confirm it below"
 
 
 def _act_verslag_bevestig(c):

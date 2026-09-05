@@ -472,6 +472,20 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
         if out:
             log.info("LLM-trede %s: geslaagd", tier)
             log.info("LLM-call [%s] prompt=%d tekens → %s", call_site, len(prompt), tier)
+            # EEN TERUGVAL OP EEN HOOG-INZET-SITE IS EEN GEBEURTENIS, geen detail. Elke trede logt
+            # al zijn eigen falen, maar dát verdrinkt: op productie draaide ÉLKE hoog-inzet-call
+            # acht dagen lang op de goedkope staart zonder dat iemand het zag, omdat je het pas
+            # merkt als je per document naar de herkomst-badge kijkt. Deze regel maakt het patroon
+            # met één grep vindbaar (`journalctl | grep HOOG_INZET_TERUGVAL`) en noemt meteen de
+            # reden per overgeslagen trede — geen sleutel, cooldown, of een fout van de aanbieder.
+            if outcomes:
+                try:
+                    from nooch_village.llm_keuze import HOOG_INZET
+                    if call_site in HOOG_INZET:
+                        log.warning("HOOG_INZET_TERUGVAL: [%s] kreeg %s in plaats van de kop. "
+                                    "Overgeslagen: %s", call_site, tier, "; ".join(outcomes))
+                except Exception:                  # noqa: BLE001 - een logregel mag nooit breken
+                    pass
             try:                                   # CO2-KPI-boekhouding: usage vastleggen, fail-soft
                 from nooch_village import llm_usage
                 it, ot = llm_usage.estimate_split(prompt, out)
