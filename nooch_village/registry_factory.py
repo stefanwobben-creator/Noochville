@@ -57,6 +57,7 @@ from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
 from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
 from nooch_village.skills_impl.atomic_insights import AtomicInsightsSkill
+from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
 
 
 def build_skill_registry() -> SkillRegistry:
@@ -64,7 +65,7 @@ def build_skill_registry() -> SkillRegistry:
     het cockpit-proces gebruikt het (via `shared_registry`) alleen voor match-metadata."""
     reg = SkillRegistry()
     for skill in (
-        SiteHealthSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
+        SiteHealthSkill(), HaalPaginaSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
         FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
         GscPerformanceSkill(), GscReportSkill(),
         NgramCultureSkill(),
