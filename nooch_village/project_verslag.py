@@ -50,14 +50,24 @@ _MAX_REGELS = 20            # de laatste 20; oudere regels zijn zelden nog het v
 # ("niet behaald" met een spatie) en die lekte als rauwe sleutel op het scherm.
 ONBEKEND = "onbekend"
 
-_VOORZET_LABEL = {BEHAALD: "achieved", NIET_BEHAALD: "not achieved",
-                  OVERGESLAGEN: "not recorded", ONBEKEND: "unclear"}
+# TWEE TALEN, ÉÉN SLEUTEL. Het scherm is Engels (i18n fase 1) en het VERSLAG is Nederlands — dat is
+# geen inconsistentie maar twee verschillende lezers: de cockpit-chrome en de orgkennis. De sleutel
+# is mechaniek en verandert niet mee; alleen het label kiest zijn taal.
+_VOORZET_LABEL = {
+    "en": {BEHAALD: "achieved", NIET_BEHAALD: "not achieved",
+           OVERGESLAGEN: "not recorded", ONBEKEND: "unclear"},
+    "nl": {BEHAALD: "behaald", NIET_BEHAALD: "niet behaald",
+           OVERGESLAGEN: "niet vastgelegd", ONBEKEND: "onduidelijk"},
+}
 
 
-def label_voor(voorzet: str) -> str:
-    """Het Engelse label bij een voorzet-sleutel. Onbekende sleutel → de sleutel zelf, zodat een
-    nieuwe waarde zichtbaar wordt in plaats van stil als lege tekst te renderen."""
-    return _VOORZET_LABEL.get(voorzet, voorzet)
+def label_voor(voorzet: str, taal: str = "en") -> str:
+    """Het label bij een voorzet-sleutel, in de taal van de lezer.
+
+    Default Engels: dat is de schermtaal, en het scherm is de plek waar een ontbrekend label als
+    rauwe sleutel zou opvallen. Onbekende sleutel → de sleutel zelf, zodat een nieuwe waarde
+    zichtbaar wordt in plaats van stil als lege tekst te renderen."""
+    return _VOORZET_LABEL.get(taal, _VOORZET_LABEL["en"]).get(voorzet, voorzet)
 
 
 @dataclass(frozen=True)
@@ -107,14 +117,14 @@ def voorzet_result(project: dict) -> tuple[str, str]:
     stille mislukking die we vermijden. De mens bevestigt of corrigeert (volgende PR)."""
     items = _checklist_items(project)
     if not items:
-        return ONBEKEND, "there is no checklist to read progress from"
+        return ONBEKEND, "er is geen checklist om voortgang aan af te lezen"
     af = [i for i in items if i.get("done")]
     over = [i for i in items if not i.get("done") and not i.get("skipped")]
     if not over:
-        return BEHAALD, f"all {len(items)} checklist items are ticked or skipped"
+        return BEHAALD, f"alle {len(items)} checklist-items zijn afgevinkt of overgeslagen"
     if not af:
-        return NIET_BEHAALD, f"none of the {len(items)} checklist items is ticked"
-    return ONBEKEND, f"{len(af)} of {len(items)} items done — too little to conclude from"
+        return NIET_BEHAALD, f"geen van de {len(items)} checklist-items is afgevinkt"
+    return ONBEKEND, f"{len(af)} van {len(items)} items af — te weinig om uit af te leiden"
 
 
 def bronnen_van(project: dict, document: str = "") -> list[str]:
@@ -169,20 +179,28 @@ def _materiaal(project: dict, document: str) -> str:
 
 
 _PROMPT = (
-    "Je stelt een kort projectverslag samen voor een mens die het gaat BEVESTIGEN of corrigeren.\n"
-    "Schrijf in het Engels, in markdown, maximaal ~250 woorden.\n\n"
+    "Je stelt een kort projectverslag samen voor de founder, die het gaat BEVESTIGEN of "
+    "corrigeren.\n\n"
+    "SCHRIJF IN HET NEDERLANDS. Dit wordt orgkennis van een Nederlandstalige organisatie; de "
+    "schermtaal is Engels maar de INHOUD volgt de taal waarin hier gewerkt wordt.\n\n"
     "GRONDINGSREGEL: alles wat je schrijft moet letterlijk uit het materiaal hieronder komen. "
     "Verzin geen resultaten, getallen of conclusies. Staat er iets niet in, schrijf dan dat het "
     "er niet in staat.\n\n"
-    "Drie kopjes, in deze volgorde:\n"
-    "## Goal — het gewenste resultaat, uit de projectdefinitie. Eén of twee zinnen.\n"
-    "## What happened — wat er gebeurde, afgeleid uit de checklist en het gesprek. Feiten, geen "
-    "interpretatie.\n"
-    "## Result — of het doel behaald lijkt. De voorzet staat hieronder; onderbouw hem uit het "
-    "materiaal of spreek hem tegen als het materiaal iets anders zegt. Een 'niet behaald' is een "
-    "even goede uitkomst als een 'behaald' — schrijf het gewoon op.\n"
+    "DOELTYPE. Kijk eerst wat voor project dit is. Bij een BEOORDELINGSPROJECT ('bepaal of X "
+    "geschikt is', 'onderzoek of Y kan') is het doel BEHAALD zodra er een gegrond oordeel ligt — "
+    "ook als dat oordeel 'nee' is. Een onderbouwd 'nee' is een geslaagd onderzoek, geen "
+    "mislukking. Bij een MAAKPROJECT ('lever X op') is het doel behaald als het ding er is.\n\n"
+    "Vier kopjes, in deze volgorde, en verder niets:\n"
+    "## Doel — het gewenste resultaat, uit de projectdefinitie. Eén of twee zinnen.\n"
+    "## Wat er gebeurde — het verhaal in lopende tekst, afgeleid uit de checklist en het gesprek. "
+    "GEEN kop per taak: vlecht de bevindingen door elkaar tot één verhaal. Wat niet onderzocht is, "
+    "noem je in één zin aan het eind ('Niet onderzocht: A, B') in plaats van per taak een kopje "
+    "met 'Status: niet onderzocht'.\n"
+    "## Resultaat — of het doel behaald lijkt, gemeten langs het doeltype hierboven. De voorzet "
+    "staat onderaan; onderbouw hem of spreek hem tegen als het materiaal iets anders zegt.\n"
+    "## Leringen — wat een volgende keer sneller of beter zou gaan. Alleen als het materiaal er "
+    "aanleiding voor geeft; anders laat je dit kopje weg.\n"
 )
-
 
 def stel_samen(project: dict, document: str = "", *, reason=None) -> Concept | None:
     """Stel het conceptverslag samen. `reason` is de LLM-functie (injectie, geen import in dit pad).
@@ -208,7 +226,7 @@ def stel_samen(project: dict, document: str = "", *, reason=None) -> Concept | N
     tekst = ""
     if reason is not None and genoeg:
         try:
-            tekst = (reason(f"{_PROMPT}\nProvisional Result: {label_voor(voorzet)} ({reden}).\n\n"
+            tekst = (reason(f"{_PROMPT}\nVoorzet voor Resultaat: {label_voor(voorzet, 'nl')} ({reden}).\n\n"
                             f"--- MATERIAAL ---\n{mat}", call_site="verslag_assemblage") or "").strip()
             # DE FENCE ERAF VÓÓR OPSLAG. Het model wikkelt zijn antwoord in ```markdown — gezien in
             # de eerste echte assemblage, en hetzelfde artefact als in 46 van de 307 bestaande
@@ -230,29 +248,79 @@ def _zonder_model(project: dict, document: str, voorzet: str, reden: str) -> str
     Bewust herkenbaar soberder. Wie dit leest moet kunnen zien dat er geen model aan te pas kwam,
     anders leest een kale opsomming als een geschreven verslag."""
     dw = (project.get("done_when") or "").strip()
-    regels = [f"## Goal\n{dw or (project.get('scope') or '')}"]
+    regels = [f"## Doel\n{dw or (project.get('scope') or '')}"]
     items = _checklist_items(project)
     if items:
         gedaan = [f"- {i.get('text') or ''}" for i in items if i.get("done")]
         open_ = [f"- {i.get('text') or ''}" for i in items
                  if not i.get("done") and not i.get("skipped")]
-        stuk = ["## What happened"]
+        stuk = ["## Wat er gebeurde"]
         if gedaan:
-            stuk.append("Done:\n" + "\n".join(gedaan))
+            stuk.append("Gedaan:\n" + "\n".join(gedaan))
         if open_:
-            stuk.append("Still open:\n" + "\n".join(open_))
+            stuk.append("Nog open:\n" + "\n".join(open_))
         regels.append("\n\n".join(stuk))
     else:
-        regels.append("## What happened\nNo checklist was kept for this project.")
-    regels.append(f"## Result\n{label_voor(voorzet)} — {reden}.")
-    regels.append("_Assembled without a language model: the facts below are listed as they were "
-                  "recorded, not rewritten._")
+        regels.append("## Wat er gebeurde\nVoor dit project is geen checklist bijgehouden.")
+    regels.append(f"## {KOP_RESULTAAT}\n{label_voor(voorzet, 'nl').capitalize()} — {reden}.")
+    regels.append("_Samengesteld zonder taalmodel: de feiten hierboven staan zoals ze zijn "
+                  "vastgelegd, niet herschreven._")
     return "\n\n".join(regels)
 
 
 # ── het menselijke sluitstuk ──────────────────────────────────────────────────────────────────
 # Eén tabel voor beide: de voorzet en het menselijke oordeel spreken dezelfde taal.
-_RESULT_LABEL = _VOORZET_LABEL
+_RESULT_LABEL = _VOORZET_LABEL["nl"]   # het verslag is Nederlands
+
+# DE KOPNAMEN OP ÉÉN PLEK. Het verslag is Nederlands, dus de koppen ook — en `modeloordeel` en
+# `met_result` zoeken ernaar. Stonden ze los, dan zou een prompt-wijziging ("Result" → "Resultaat")
+# de zoekfunctie stil laten missen, en dan valt het modeloordeel weg zonder foutmelding. De Engelse
+# namen blijven herkend voor documenten van vóór deze wijziging.
+KOP_RESULTAAT = "Resultaat"
+KOP_LERINGEN = "Leringen"
+_RESULTAAT_KOPPEN = {KOP_RESULTAAT.casefold(), "result"}
+_LERINGEN_KOPPEN = {KOP_LERINGEN.casefold(), "learnings"}
+
+
+def _kopblok(tekst: str, koppen: set) -> str:
+    """De tekst onder één van deze koppen, tot de volgende kop. "" als hij er niet is."""
+    regels = (tekst or "").splitlines()
+    for i, r in enumerate(regels):
+        if r.strip().lower().lstrip("#").strip() in koppen:
+            rest = []
+            for volgende in regels[i + 1:]:
+                if volgende.strip().startswith("#"):
+                    break
+                rest.append(volgende)
+            return " ".join(x.strip() for x in rest if x.strip()).strip()
+    return ""
+
+
+def voorstel_toelichting(concept_tekst: str) -> str:
+    """De Resultaat-alinea als VOORSTEL voor het toelichtingsveld.
+
+    DE ANTI-HUISWERK-BELOFTE. Een leeg veld met "Why (one line)" laat de mens het werk doen dat de
+    assembler net al deed: de analyse staat al in de wall en in het concept. Voorinvullen maakt van
+    de vraag een AANVULLING in plaats van een opstel — en wie het niet eens is, overschrijft het.
+
+    Het label ("Behaald.", "Niet behaald.") gaat eraf: dat staat al in de radio-keuze ernaast, en
+    een toelichting die begint met het antwoord op de vraag ernaast leest als een echo."""
+    t = _kopblok(concept_tekst, _RESULTAAT_KOPPEN)
+    for lab in list(_VOORZET_LABEL["nl"].values()) + list(_VOORZET_LABEL["en"].values()):
+        for vorm in (f"**{lab.capitalize()}.**", f"**{lab}.**", f"{lab.capitalize()}.", f"{lab}."):
+            if t.lower().startswith(vorm.lower()):
+                t = t[len(vorm):].strip()
+                break
+    return t[:600]
+
+
+def voorstel_learnings(concept_tekst: str) -> str:
+    """De Leringen-alinea als voorstel, of "" als het model er geen zag.
+
+    LEEG IS EEN GELDIG VOORSTEL. De prompt zegt expliciet: alleen een Leringen-kop als het
+    materiaal er aanleiding voor geeft. Een verzonnen lering is erger dan geen — dit veld is
+    orggeheugen, geen invuloefening."""
+    return _kopblok(concept_tekst, _LERINGEN_KOPPEN)[:600]
 
 
 def modeloordeel(concept_tekst: str) -> str:
@@ -265,16 +333,7 @@ def modeloordeel(concept_tekst: str) -> str:
 
     Geen kopje gevonden → "", en dan toont het scherm alleen de kruischeck. Liever niets dan een
     willekeurige alinea die zich voordoet als een oordeel."""
-    regels = (concept_tekst or "").splitlines()
-    for i, r in enumerate(regels):
-        if r.strip().lower().lstrip("#").strip() == "result":
-            rest = []
-            for volgende in regels[i + 1:]:
-                if volgende.strip().startswith("#"):
-                    break
-                rest.append(volgende)
-            return " ".join(x.strip() for x in rest if x.strip())[:400]
-    return ""
+    return _kopblok(concept_tekst, _RESULTAAT_KOPPEN)[:400]
 
 
 def result_blok(oordeel: str, toelichting: str = "", learnings: str = "") -> str:
@@ -282,10 +341,10 @@ def result_blok(oordeel: str, toelichting: str = "", learnings: str = "") -> str
 
     DIT VERVANGT het Result van het model: de mens heeft het laatste woord. Het modeloordeel was
     een voorstel en heeft zijn werk gedaan zodra iemand erop reageert."""
-    delen = [f"## Result\n**{_RESULT_LABEL.get(oordeel, oordeel)}.**"
+    delen = [f"## {KOP_RESULTAAT}\n**{_RESULT_LABEL.get(oordeel, oordeel).capitalize()}.**"
              + (f" {toelichting.strip()}" if (toelichting or "").strip() else "")]
     if (learnings or "").strip():
-        delen.append(f"## Learnings\n{learnings.strip()}")
+        delen.append(f"## {KOP_LERINGEN}\n{learnings.strip()}")
     return "\n\n".join(delen)
 
 
@@ -300,13 +359,13 @@ def met_result(concept_tekst: str, oordeel: str, toelichting: str = "",
     uit, i, geknipt = [], 0, False
     while i < len(regels):
         r = regels[i]
-        if not geknipt and r.strip().lower().lstrip("#").strip() in ("result", "learnings"):
+        if not geknipt and r.strip().lower().lstrip("#").strip() in (_RESULTAAT_KOPPEN | _LERINGEN_KOPPEN):
             geknipt = True
             i += 1
             while i < len(regels) and not regels[i].strip().startswith("#"):
                 i += 1
             continue
-        if geknipt and r.strip().lower().lstrip("#").strip() == "learnings":
+        if geknipt and r.strip().lower().lstrip("#").strip() in _LERINGEN_KOPPEN:
             i += 1
             while i < len(regels) and not regels[i].strip().startswith("#"):
                 i += 1

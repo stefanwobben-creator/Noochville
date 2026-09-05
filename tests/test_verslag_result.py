@@ -149,7 +149,9 @@ def test_overslaan_markeert_eerlijk_in_plaats_van_te_zwijgen(tmp_path):
     cockpit2.dispatch(dd, "verslag_overslaan", {"pid": [pid], "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     assert st2.projects.get(pid)["resultaat"] == "overgeslagen"
-    assert "not recorded" in st2.project_docs.read(pid)
+    # Het VERSLAG is Nederlands (orgkennis); het SCHERM blijft Engels. Zelfde sleutel,
+    # twee lezers — zie label_voor(taal=).
+    assert "Niet vastgelegd" in st2.project_docs.read(pid)
     assert st2.project_docs.concept(pid) == {}
 
 
@@ -161,7 +163,7 @@ def test_een_nee_kan_net_zo_makkelijk_als_een_ja(tmp_path):
                                                "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     assert st2.projects.get(pid)["resultaat"] == "niet_behaald"
-    assert "not achieved" in st2.project_docs.read(pid).lower()
+    assert "niet behaald" in st2.project_docs.read(pid).lower()
 
 
 def test_learnings_zijn_optioneel(tmp_path):
@@ -189,15 +191,15 @@ def test_het_menselijke_oordeel_vervangt_dat_van_het_model():
     n = met_result(c, "behaald", "Toch af na de review.", "Eerder om review vragen.")
     assert "## Goal\nDoel." in n and "Dingen." in n          # geen informatieverlies
     assert "Twee gaten" not in n                             # het voorstel maakt plaats
-    assert "**achieved.** Toch af na de review." in n
-    assert "## Learnings\nEerder om review vragen." in n
+    assert "**Behaald.** Toch af na de review." in n         # verslagtaal = Nederlands
+    assert "## Leringen\nEerder om review vragen." in n
 
 
 def test_zonder_result_kop_komt_het_blok_er_gewoon_onder():
     """De modelloze variant heeft wél een Result-kop, maar een handmatig bijgewerkt concept
     misschien niet. Dan hoort het oordeel er alsnog bij te komen."""
     n = met_result("## Goal\nAlleen dit.", "behaald", "Klaar.")
-    assert "Alleen dit." in n and "**achieved.** Klaar." in n
+    assert "Alleen dit." in n and "**Behaald.** Klaar." in n
 
 
 # ── één set sleutels voor het hele dorp ──────────────────────────────────────
@@ -215,9 +217,16 @@ def test_de_oordeelsleutels_staan_op_een_plek():
     assert ProjectLedger.RESULTAAT_WAARDEN is RESULTAAT_WAARDEN
     assert RESULTAAT_WAARDEN == (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
     # elke opslagbare waarde heeft een label; anders lekt de sleutel naar het scherm
+    # DE ECHTE EIS IS EEN INGANG, niet dat sleutel en label verschillen: in het Nederlands ís
+    # `behaald` gewoon "behaald". Ontbreekt een ingang, dan valt `label_voor` terug op de sleutel
+    # en lekt die naar het scherm — dát is wat hier bewaakt wordt.
+    for taal in ("en", "nl"):
+        for w in RESULTAAT_WAARDEN:
+            assert w in _VOORZET_LABEL[taal], (taal, w)
+    # Op het SCHERM (Engels) mag een label nooit gelijk zijn aan de opslagsleutel: daar zou een
+    # ontbrekende ingang onzichtbaar blijven.
     for w in RESULTAAT_WAARDEN:
-        assert w in _VOORZET_LABEL, w
-        assert label_voor(w) != w, w
+        assert label_voor(w, "en") != w, w
 
 
 def test_geen_rauwe_sleutel_op_de_kaart(tmp_path):
@@ -233,6 +242,89 @@ def test_geen_rauwe_sleutel_op_de_kaart(tmp_path):
     # signaal-cellen en niet de hele HTML — anders verbiedt de guard iets wat correct is.
     import re
     getoond = re.findall(r"class='einddoc-sigv'>([^<]*)", frag)
-    assert any("not achieved" in g for g in getoond), getoond
+    assert any("not achieved" in g for g in getoond), getoond      # scherm blijft Engels
     assert not any(NIET_BEHAALD in g for g in getoond), f"opslagsleutel getoond: {getoond}"
     assert f"value='{NIET_BEHAALD}'" in frag                 # als formulierwaarde juist wél
+
+
+# ── cluster 1: de suggestie doet het voorwerk ────────────────────────────────
+def test_de_velden_zijn_voorgevuld_uit_het_concept(tmp_path):
+    """DE ANTI-HUISWERK-BELOFTE. Een leeg veld laat de mens het werk doen dat de assembler net al
+    deed: de analyse staat al in de wall én in het concept. Voorinvullen maakt van de vraag een
+    aanvulling in plaats van een opstel."""
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    store = cockpit2._Stores(dd).project_docs
+    c = store.concept(pid)
+    store.write_concept(pid,
+                        "## Doel\nx\n\n## Resultaat\n**Niet behaald.** Twee van drie reageerden.\n\n"
+                        "## Leringen\nMonsters meteen meevragen.",
+                        bronnen=c.get("bronnen") or [], voorzet="niet_behaald")
+    frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    # `_field` rendert met DUBBELE aanhalingstekens; de rest van de view met enkele. Op het
+    # attribuut matchen in plaats van op een geciteerde string maakt de test daar ongevoelig voor.
+    assert 'name="toelichting" value="Twee van drie reageerden."' in frag
+    assert "Monsters meteen meevragen." in frag               # learnings voorgevuld
+    assert "**Niet behaald.**" not in frag.split("einddoc-rform")[1]  # het label niet geëchood
+
+
+def test_de_radio_volgt_de_voorzet_en_staat_niet_altijd_op_ja(tmp_path):
+    """Standaard op "behaald" zetten terwijl de checklist "niets af" zegt, duwt de mens naar een
+    antwoord dat het materiaal niet steunt — en één klik verder staat dat als bevestigd oordeel in
+    de orgkennis."""
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="", items=(("A", False),))
+    store = cockpit2._Stores(dd).project_docs
+    c = store.concept(pid)
+    assert c["voorzet"] == "niet_behaald", c["voorzet"]
+    frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "value='niet_behaald' checked" in frag
+    assert "value='behaald' checked" not in frag
+
+
+def test_het_verslag_is_nederlands_en_het_scherm_engels(tmp_path):
+    """Twee lezers, één sleutel: de cockpit-chrome (Engels, i18n fase 1) en de orgkennis
+    (Nederlands, de taal waarin hier gewerkt wordt)."""
+    from nooch_village.project_verslag import label_voor
+    assert label_voor("behaald") == "achieved"               # scherm
+    assert label_voor("behaald", "nl") == "behaald"          # verslag
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    doc = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
+    assert "## Doel" in doc and "## Wat er gebeurde" in doc and "## Resultaat" in doc
+    assert "## Goal" not in doc and "## What happened" not in doc
+
+
+def test_de_kopnamen_leven_op_een_plek():
+    """`met_result` en `modeloordeel` zoeken naar de koppen die de prompt voorschrijft. Stonden die
+    los, dan zou een prompt-wijziging de zoekfunctie stil laten missen — en dan valt het
+    modeloordeel weg zónder foutmelding. Engelse koppen blijven herkend voor oude documenten."""
+    from nooch_village.project_verslag import KOP_RESULTAAT, _PROMPT, met_result, modeloordeel
+    assert f"## {KOP_RESULTAAT}" in _PROMPT
+    assert modeloordeel(f"## {KOP_RESULTAAT}\nBehaald.") == "Behaald."
+    assert modeloordeel("## Result\nAchieved.") == "Achieved."          # document van vóór deze PR
+    assert "Twee gaten" not in met_result("## Result\nTwee gaten.", "behaald")
+
+
+def test_geen_kop_per_taak_meer_in_de_prompt():
+    """Gemeten op productie: 310 documenten met mediaan 6 koppen, waarvan 253 kopblokken
+    "niet onderzocht" bevatten en 64 (bijna) leeg zijn. Een kop per taak levert vooral koppen op
+    die zeggen dat er niets is."""
+    from nooch_village.project_verslag import _PROMPT
+    assert "GEEN kop per taak" in _PROMPT
+    assert "Niet onderzocht:" in _PROMPT                      # één zin, niet een kopje per taak
+
+
+def test_het_doeltype_staat_in_de_prompt():
+    """Een beoordelingsproject is behaald zodra er een gegrond oordeel ligt — ook een "nee".
+    Zonder dit leest de assembler elk "nee" als een mislukking."""
+    from nooch_village.project_verslag import _PROMPT
+    assert "BEOORDELINGSPROJECT" in _PROMPT and "ook als dat oordeel 'nee' is" in _PROMPT
+
+
+def test_de_assemblage_staat_op_de_hoog_inzet_ladder():
+    """Dit wordt orgkennis zodra een mens het bevestigt. Een zwakke samenvatting die je bevestigt
+    is erger dan geen samenvatting: je kunt hem daarna niet meer wantrouwen."""
+    from nooch_village.llm_keuze import HOOG_INZET, ladder_voor
+    assert "verslag_assemblage" in HOOG_INZET
+    assert (ladder_voor("verslag_assemblage") or "").startswith("anthropic:claude-sonnet")

@@ -58,7 +58,9 @@ def test_voorzet_alles_af_is_waarschijnlijk_behaald():
     soort, reden = voorzet_result(p)
     # De reden is Engels: hij reist naar de prompt én naar het scherm. De SLEUTEL blijft
     # Nederlands, want die wordt opgeslagen en vergeleken.
-    assert soort == BEHAALD and "ticked" in reden
+    # De redenen zijn Nederlands sinds het verslag Nederlands is: ze reizen naar de
+    # prompt én naar de verslagtekst, en beide zijn orgkennis.
+    assert soort == BEHAALD and "afgevinkt" in reden
 
 
 def test_voorzet_niets_af_is_waarschijnlijk_niet_behaald():
@@ -98,9 +100,9 @@ def test_zonder_model_toch_een_verslag_maar_zichtbaar_soberder():
                                    {"text": "Leverancier B", "done": False}]}]}
     c = stel_samen(p, "", reason=None)
     assert c is not None
-    assert "## Goal" in c.tekst and "## What happened" in c.tekst and "## Result" in c.tekst
+    assert "## Doel" in c.tekst and "## Wat er gebeurde" in c.tekst and "## Resultaat" in c.tekst
     assert "Leverancier A" in c.tekst and "Leverancier B" in c.tekst
-    assert "without a language model" in c.tekst      # herkenbaar soberder, geen nep-proza
+    assert "zonder taalmodel" in c.tekst             # herkenbaar soberder, geen nep-proza
 
 
 def test_een_kapot_model_blokkeert_niets():
@@ -257,9 +259,11 @@ def test_de_voorzet_gaat_als_engels_label_de_prompt_in():
     # Twee bronnen, anders slaat `stel_samen` het model over (zie
     # test_alleen_de_definitie_roept_geen_model_aan) en is er geen prompt om te toetsen.
     stel_samen({"scope": "X", "log": [{"who": "rol", "text": "iets gedaan"}]}, "", reason=vang)
-    assert "unclear" in gezien["p"]
-    assert "onbekend" not in gezien["p"] and "geen checklist" not in gezien["p"]
-    assert label_voor(BEHAALD) == "achieved" and label_voor(NIET_BEHAALD) == "not achieved"
+    # De PROMPT is Nederlands (het verslag wordt orgkennis); het SCHERM blijft Engels.
+    assert "onduidelijk" in gezien["p"]
+    assert "onbekend" not in gezien["p"]              # de sleutel zelf nooit
+    assert label_voor(BEHAALD) == "achieved"         # scherm
+    assert label_voor(BEHAALD, "nl") == "behaald"    # verslag
 
 
 def test_onbekende_voorzetsleutel_valt_niet_stil_weg():
@@ -308,7 +312,7 @@ def test_alleen_de_definitie_roept_geen_model_aan():
     c = stel_samen({"scope": "POS material created"}, "",
                    reason=lambda *a, **k: geroepen.append(1) or "verzonnen proza")
     assert geroepen == [], "model aangeroepen terwijl er niets te verslaan viel"
-    assert c is not None and "without a language model" in c.tekst
+    assert c is not None and "zonder taalmodel" in c.tekst
 
 
 def test_met_een_tweede_bron_wel():
