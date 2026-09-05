@@ -145,9 +145,15 @@ def resolve_item(ledger, pid: str, clid: str, item_id: str, actie: str, *,
             return False, "✓ dit item stond al af"
         ledger.set_item_skipped(pid, clid, item_id, False)     # 'gedaan' wint van een eerdere skip
         ledger.check_toggle(pid, clid, item_id)
-        ledger.add_feed_entry(pid, f"✅ Mens-taak afgerond: {tekst}"
-                              + (f" — {reason[:200]}" if reason else ""),
-                              kind="system", author_type="human", author_id=wie)
+        # GEEN WALL-REGEL BIJ EEN KAAL VINKJE. Het vinkje stáát al op de checklist, twee centimeter
+        # hoger; dezelfde staat een tweede keer in de wall zetten is ruis, en met een lange
+        # checklist verdrinkt het echte gesprek erin. Zelfde regel als "één huis per eigenschap".
+        #
+        # MET een reden is het wél een wall-regel: dat is nieuwe informatie die nergens anders
+        # staat — waarom dit item afging, niet dát het afging.
+        if reason:
+            ledger.add_feed_entry(pid, f"✅ Mens-taak afgerond: {tekst} — {reason[:200]}",
+                                  kind="system", author_type="human", author_id=wie)
         msg = "✓ item afgerond"
     elif actie == "skip":
         if it.get("skipped"):

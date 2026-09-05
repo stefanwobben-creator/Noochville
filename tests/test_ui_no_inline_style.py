@@ -31,7 +31,8 @@ _STYLE_WHITELIST = {
     "views/checklists.py": 5,
     "cockpit2.py": 7,
     "views/noochie.py": 5,
-    "views/feed.py": 4,
+    "views/feed.py": 1,    # -3: de comment-editor werd inline (`.fentry-edit`) en de
+                           # verwijder-knop kreeg `.fentry-inline` in plaats van display:inline
     "views/catalog.py": 2,
 }
 
