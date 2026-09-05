@@ -341,10 +341,65 @@ def test_het_doeltype_staat_in_de_prompt():
 
 def test_de_assemblage_staat_op_de_hoog_inzet_ladder():
     """Dit wordt orgkennis zodra een mens het bevestigt. Een zwakke samenvatting die je bevestigt
-    is erger dan geen samenvatting: je kunt hem daarna niet meer wantrouwen."""
+    is erger dan geen samenvatting: je kunt hem daarna niet meer wantrouwen.
+
+    LET OP WAT DEZE TEST WÉL EN NIET ZEGT: hij toetst de BEREKENDE ladder. Dat is de configuratie,
+    niet het gedrag — en die stond maandenlang groen terwijl `reason()` in werkelijkheid mistral
+    pakte, omdat niemand de berekende ladder aan `reason()` doorgaf.
+    `test_hoog_inzet_gebruikt_de_dure_kop_ook_zonder_expliciete_ladder` hieronder toetst de
+    GEBRUIKTE ladder; die twee horen bij elkaar."""
     from nooch_village.llm_keuze import HOOG_INZET, ladder_voor
     assert "verslag_assemblage" in HOOG_INZET
     assert (ladder_voor("verslag_assemblage") or "").startswith("anthropic:claude-sonnet")
+
+
+def test_hoog_inzet_gebruikt_de_dure_kop_ook_zonder_expliciete_ladder(monkeypatch):
+    """DE GEBRUIKTE LADDER, NIET DE BEREKENDE. Dit is de guard die er niet was.
+
+    `ladder_voor()` gaf de Sonnet-kop keurig terug, maar `reason()` gebruikte de DORPSLADDER —
+    die met mistral begint — tenzij de caller `ladder=` meegaf. Vijf van de tien HOOG_INZET-sites
+    deden dat niet, dus die draaiden stil op de goedkope staart. Op productie: wizard_plan 31 van
+    31 calls op mistral, terwijl Sonnet gewoon 200 gaf.
+
+    Deze test kijkt naar WELKE TREDE ER DAADWERKELIJK WORDT AANGEROEPEN, voor élke hoog-inzet-site,
+    zonder expliciete ladder."""
+    from nooch_village import llm
+    from nooch_village.llm_keuze import HOOG_INZET
+    geprobeerd: list[tuple] = []
+
+    def _vang(vendor, model, prompt, **k):
+        geprobeerd.append((vendor, model))
+        return "ok"
+    monkeypatch.setattr(llm, "_call_tier", _vang)
+    monkeypatch.setattr(llm, "_in_cooldown", lambda tier, **k: False)
+    for site in sorted(HOOG_INZET):
+        geprobeerd.clear()
+        llm.reason("x", call_site=site)                       # GEEN ladder= meegegeven
+        assert geprobeerd, site
+        vendor, model = geprobeerd[0]
+        assert vendor == "anthropic" and "sonnet" in (model or ""), (site, geprobeerd[0])
+
+
+def test_een_gewone_site_blijft_op_de_dorpsladder(monkeypatch):
+    """De tegenproef: zonder deze zou de test hierboven ook slagen als ALLES op Sonnet ging."""
+    from nooch_village import llm
+    geprobeerd: list[tuple] = []
+    monkeypatch.setattr(llm, "_call_tier",
+                        lambda vendor, model, prompt, **k: geprobeerd.append((vendor, model)) or "ok")
+    monkeypatch.setattr(llm, "_in_cooldown", lambda tier, **k: False)
+    llm.reason("x", call_site="triage_spanning")
+    assert geprobeerd and geprobeerd[0][0] != "anthropic", geprobeerd
+
+
+def test_een_expliciete_ladder_wint_nog_steeds(monkeypatch):
+    """De caller mag bewust afwijken; `reason` vult alleen een gat."""
+    from nooch_village import llm
+    geprobeerd: list[tuple] = []
+    monkeypatch.setattr(llm, "_call_tier",
+                        lambda vendor, model, prompt, **k: geprobeerd.append((vendor, model)) or "ok")
+    monkeypatch.setattr(llm, "_in_cooldown", lambda tier, **k: False)
+    llm.reason("x", call_site="verslag_assemblage", ladder="mistral:mistral-small-latest")
+    assert geprobeerd[0] == ("mistral", "mistral-small-latest"), geprobeerd
 
 
 # ── de oordeelvraag staat op BEIDE schermen ──────────────────────────────────
