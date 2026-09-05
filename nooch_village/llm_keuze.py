@@ -63,6 +63,9 @@ PREMIUM_ONLY: frozenset[str] = frozenset()
 # brein dat we hebben, en kosten zijn hier bewust geen overweging.
 HOOG_INZET: frozenset[str] = frozenset({
     "einddocument",              # het stuk dat de mens leest en waarop hij beslist
+    "verslag_assemblage",        # hetzelfde stuk, maar dán: dit wordt orgkennis zodra een mens het
+                                 # bevestigt, en een zwakke samenvatting die je bevestigt is erger
+                                 # dan geen samenvatting — je kunt hem daarna niet meer wantrouwen
     "plan_checklist",            # bepaalt WELK werk er gebeurt — een fout hier plant zich voort
     "plan_checklist_retry",
     "wizard_plan",               # dezelfde beslissing, maar door de mens gestart (de projectwizard)

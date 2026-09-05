@@ -839,8 +839,10 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
     kruischeck. Botsen ze — de checklist zei "8 van 8 af", het gesprek zei "twee gaten open" — dan
     is dat iets om naar te kijken. Ze samenvoegen tot één cijfer zou de botsing verstoppen, en
     juist die botsing is de reden dat een mens hier kijkt."""
-    from nooch_village.project_verslag import label_voor, modeloordeel
-    model = modeloordeel(concept.get("tekst") or "")
+    from nooch_village.project_verslag import (label_voor, modeloordeel, voorstel_learnings,
+                                                voorstel_toelichting)
+    tekst = concept.get("tekst") or ""
+    model = modeloordeel(tekst)
     kruis = label_voor((concept.get("voorzet") or "").strip())
     signalen = (f"<div class='einddoc-sig'>"
                 + (f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Report says</span>"
@@ -850,9 +852,12 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
     # Expliciete for/id, ook al zou een omwikkelend label ook werken: dan blijft de ratchet
     # (labels-zonder-for) meten wat hij bedoelt te meten in plaats van hier een uitzondering te
     # moeten kennen.
+    # GEEN VOORSELECTIE. De toelichting en de leringen zijn een CONCEPT om bij te schaven — daar
+    # scheelt voorinvullen echt werk. Het oordeel is iets anders: dat is de ene beslissing die de
+    # mens actief moet nemen, en elke default duwt hem naar een antwoord zodra de twee signalen
+    # botsen. Ze staan eronder; hij kiest. Geen schrijfhuiswerk, wél een bewuste klik.
     keuze = "".join(
-        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'"
-        f"{' checked' if w == 'behaald' else ''}>"
+        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'>"
         f"<label class='einddoc-keuze' for='ro-{_e(w)}-{_e(pid)}'>{_e(lbl)}</label>"
         for w, lbl in (("behaald", "Goal achieved"), ("niet_behaald", "Not achieved")))
     return (f"<div class='card einddoc-concept'>"
@@ -862,8 +867,10 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
             f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
             f"<input type='hidden' name='next' value='{nxt}'>"
             f"<div class='einddoc-keuzes'>{keuze}</div>"
-            f"{_field('Why (one line)', 'toelichting', fid=f'rt-{pid}', placeholder='What made it so?')}"
-            f"{_field('Learnings — optional', 'learnings', kind='textarea', fid=f'rl-{pid}', placeholder='Worth remembering?')}"
+            # VÓÓRINGEVULD uit het concept: de analyse staat er al, dus de mens vult aan in plaats
+            # van blanco te typen. Overschrijven mag altijd — het is een voorstel, geen antwoord.
+            f"{_field('Why', 'toelichting', value=voorstel_toelichting(tekst), fid=f'rt-{pid}', placeholder='What made it so?')}"
+            f"{_field('Learnings — optional', 'learnings', kind='textarea', value=voorstel_learnings(tekst), fid=f'rl-{pid}', placeholder='Worth remembering?')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok sm' type='submit' name='action' value='verslag_bevestig'>"
             f"Confirm report</button>"

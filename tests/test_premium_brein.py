@@ -49,11 +49,16 @@ def test_hoog_inzet_sites_staan_vast():
     identieke stappen koos hetzelfde model vier keer wél een rol en vijf keer NONE. Alle 17 kregen
     antwoord van mistral-small, dus het was geen quota. 'Welke mens doet dit werk' is geen triage
     maar een oordeel — en het spoor maakt de fout duur: een verkeerde ontvanger vandaag sluit een
-    betere morgen uit."""
+    betere morgen uit.
+
+    `verslag_assemblage` kwam er 5 sep 2026 bij, en om dezelfde reden als `einddocument`: het is
+    hetzelfde stuk, maar dán. Het verschil is wat erna gebeurt — een mens BEVESTIGT het, en daarmee
+    wordt het orgkennis. Een zwakke samenvatting die je bevestigt is erger dan geen samenvatting:
+    daarna kun je hem niet meer wantrouwen, want er staat een handtekening onder."""
     assert lk.HOOG_INZET == {
-        "einddocument", "plan_checklist", "plan_checklist_retry", "wizard_plan",
-        "escalation_mens", "skill_tegenspraak", "skill_synthesize", "skill_content_schrijven",
-        "skill_bulletin", "skill_voorstel", "noochie_weigh_in"}
+        "einddocument", "verslag_assemblage", "plan_checklist", "plan_checklist_retry",
+        "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
+        "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in"}
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():

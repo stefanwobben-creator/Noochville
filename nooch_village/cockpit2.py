@@ -1708,7 +1708,13 @@ def _act_verslag_bevestig(c):
     if not (concept.get("tekst") or "").strip():
         return nxt, "✗ no draft report to confirm"
 
+    # ZONDER KEUZE GEEN BEVESTIGING. Sinds de radio's onaangevinkt starten is dit een bereikbaar
+    # pad: klikken op Confirm zonder te kiezen. Stil doorlaten zou het verslag bevestigen mét het
+    # modeloordeel erin, alsof de mens dat had onderschreven — precies wat de lege radio voorkomt.
+    # Wie geen oordeel wil geven heeft "Skip this", en dat markeert het verslag eerlijk.
     oordeel = (g("oordeel") or "").strip()
+    if not oordeel:
+        return nxt, "✗ pick achieved or not achieved first — or use Skip"
     if oordeel:
         # Het menselijke oordeel VERVANGT dat van het model: de mens heeft het laatste woord.
         from nooch_village.project_verslag import met_result
