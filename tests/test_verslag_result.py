@@ -84,8 +84,8 @@ def test_bevestigen_is_de_enige_schrijver(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="oud document")
     concept_voor = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
-    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"],
-                                               "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
+                      username="guest")
     st2 = cockpit2._Stores(dd)
     doc = st2.project_docs.read(pid)
     # De concepttekst gaat ONGEWIJZIGD door: wat de mens las is wat er wordt vastgelegd.
@@ -167,8 +167,8 @@ def test_overslaan_markeert_eerlijk_in_plaats_van_te_zwijgen(tmp_path):
 def test_een_nee_kan_net_zo_makkelijk_als_een_ja(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="")
-    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["niet_behaald"],
-                                               "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "verslag_bevestig_niet_behaald", {"pid": [pid], "next": ["/"]},
+                      username="guest")
     st2 = cockpit2._Stores(dd)
     # Het TELBARE deel is het oordeel; de tekst blijft die van het rapport.
     assert st2.projects.get(pid)["resultaat"] == "niet_behaald"
@@ -177,19 +177,19 @@ def test_een_nee_kan_net_zo_makkelijk_als_een_ja(tmp_path):
 def test_learnings_zijn_optioneel(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="")
-    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"], "next": ["/"]},
+    cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
                       username="guest")
     st2 = cockpit2._Stores(dd)
     assert st2.projects.get(pid)["resultaat"] == "behaald"
     assert "## Learnings" not in st2.project_docs.read(pid)
 
 
-def test_een_onbekend_oordeel_schrijft_niets(tmp_path):
+def test_een_onbekende_waarde_kan_niet_meer_binnenkomen(tmp_path):
+    """Het oordeel komt niet meer uit het formulier maar uit de ACTIE, en die is er maar in twee
+    smaken. `set_resultaat` blijft fail-closed voor programmatische aanroepen."""
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="oud document")
-    _, msg = cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["misschien"],
-                                                        "next": ["/"]}, username="guest")
-    assert cockpit2.is_weigering(msg)
+    assert st.projects.set_resultaat(pid, "misschien") is False
     assert cockpit2._Stores(dd).project_docs.read(pid) == "oud document"
 
 
@@ -252,7 +252,9 @@ def test_geen_rauwe_sleutel_op_de_kaart(tmp_path):
     sig = frag.split("einddoc-sig'>")[1].split("</div>")[0]
     assert "not achieved" in sig, sig                        # scherm blijft Engels
     assert NIET_BEHAALD not in sig, f"opslagsleutel getoond: {sig}"
-    assert f"value='{NIET_BEHAALD}'" in frag                 # als formulierwaarde juist wél
+    # De sleutel staat niet meer als formulierwaarde in de HTML: hij zit in de ACTIENAAM
+    # (`verslag_bevestig_niet_behaald`). Dat is nóg een plek minder waar hij kan lekken.
+    assert "value='verslag_bevestig_niet_behaald'" in frag
 
 
 # ── cluster 1: de suggestie doet het voorwerk ────────────────────────────────
@@ -276,26 +278,23 @@ def test_het_oordeel_wordt_niet_voorgeselecteerd(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="", items=(("A", False),))
     frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    # De keuze is een segmented control: twee submit-knoppen met `name='oordeel'`. Een knop heeft
-    # geen "checked"-staat, dus er ís geen voorselectie mogelijk — sterker dan een lege radio.
-    assert "name='oordeel' value='behaald'" in frag
-    assert "name='oordeel' value='niet_behaald'" in frag
+    # De keuze is een segmented control van twee ACTIES. Een knop heeft geen "checked"-staat, dus
+    # voorselectie is niet alleen afwezig maar onmogelijk — sterker dan een lege radio.
+    assert "value='verslag_bevestig_behaald'" in frag
+    assert "value='verslag_bevestig_niet_behaald'" in frag
     assert "checked" not in frag.split("einddoc-rform")[1].split("</form>")[0]
 
 
-def test_bevestigen_zonder_keuze_schrijft_niet(tmp_path):
-    """Sinds de radio's leeg starten is dit bereikbaar: klikken op Confirm zonder te kiezen. Stil
-    doorlaten zou het verslag bevestigen MÉT het modeloordeel erin, alsof de mens dat had
-    onderschreven — precies wat de lege radio voorkomt."""
-    dd, st = _st(tmp_path)
-    pid = _afgesloten(dd, st, doc="oud document")
-    _, msg = cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]},
-                               username="guest")
-    assert cockpit2.is_weigering(msg), msg
-    assert "Skip" in msg
-    st2 = cockpit2._Stores(dd)
-    assert st2.project_docs.read(pid) == "oud document"
-    assert (st2.project_docs.concept(pid).get("tekst") or "").strip()   # concept blijft wachten
+def test_bevestigen_zonder_keuze_kan_niet_meer_bestaan(tmp_path):
+    """Er was een aparte Confirm-knop die een oordeel EISTE maar er geen kon meesturen — daar kwam
+    de weigering "pick achieved or not achieved first" vandaan. Die knop is weg: de keuze ís de
+    bevestiging, dus een POST zonder oordeel bestaat niet meer als pad.
+
+    Wat blijft: een onbekende actie doet niets. Dat is de vangnet-kant."""
+    from nooch_village import cockpit2 as ck
+    assert "verslag_bevestig" not in ck.ACTIONS
+    assert "verslag_bevestig_behaald" in ck.ACTIONS
+    assert "verslag_bevestig_niet_behaald" in ck.ACTIONS
 
 
 def test_verslag_en_scherm_delen_de_taal_maar_de_infra_blijft(tmp_path):
@@ -415,8 +414,8 @@ def test_de_rapportroute_biedt_dezelfde_oordeelvraag(tmp_path):
     pid = _afgesloten(dd, st, doc="")
     for naam, html in (("kaart", P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")),
                        ("route", render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK"))):
-        assert "name='oordeel' value='behaald'" in html, naam
-        assert "name='oordeel' value='niet_behaald'" in html, naam
+        assert "value='verslag_bevestig_behaald'" in html, naam
+        assert "value='verslag_bevestig_niet_behaald'" in html, naam
         assert "verslag_overslaan" in html, naam
         blok = html.split("einddoc-rform")[1].split("</form>")[0]
         assert "checked" not in blok, f"{naam}: oordeel voorgeselecteerd"
@@ -425,9 +424,8 @@ def test_de_rapportroute_biedt_dezelfde_oordeelvraag(tmp_path):
 def test_bevestigen_vanaf_de_route_werkt_met_een_keuze(tmp_path):
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="oud document")
-    _, msg = cockpit2.dispatch(dd, "verslag_bevestig",
-                               {"pid": [pid], "oordeel": ["behaald"],
-                                "next": [f"/rapport?pid={pid}"]}, username="guest")
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": [f"/rapport?pid={pid}"]},
+                      username="guest")
     assert not cockpit2.is_weigering(msg), msg
     assert cockpit2._Stores(dd).projects.get(pid)["resultaat"] == "behaald"
 
@@ -545,4 +543,77 @@ def test_de_keuze_is_de_enige_gestructureerde_invoer(tmp_path):
     invoervelden = [n for n in ("toelichting", "learnings")
                     if f'name="{n}"' in body or f"name='{n}'" in body]
     assert invoervelden == [], invoervelden
-    assert "name='oordeel'" in body
+    # het oordeel zit in de ACTIE, niet in een veld — zie test_een_keuzeknop_draagt_zowel…
+    assert "value='verslag_bevestig_behaald'" in body
+
+
+# ── één klik draagt de hele beslissing ───────────────────────────────────────
+def _knoppen_in_de_balk(html: str):
+    """De submitknoppen in het bevestigformulier, zoals een browser ze zou versturen: alleen de
+    naam/waarde van de knop die je indrukt, plus de hidden inputs."""
+    import re
+    body = html[html.rindex("</style>"):]
+    form = body.split("einddoc-rform")[1].split("</form>")[0]
+    knoppen = [(m.group(1), m.group(2))
+               for m in re.finditer(r"<button[^>]*name='([a-z]+)' value='([a-z_]+)'", form)]
+    hidden = dict(re.findall(r"<input type='hidden' name='([a-z]+)' value='([^']*)'", form))
+    return form, knoppen, hidden
+
+
+def test_een_keuzeknop_draagt_zowel_de_actie_als_het_oordeel(tmp_path):
+    """DE BUG: er stonden vier losse submits in één formulier — twee met `name='oordeel'` en één
+    met `name='action'`. Een HTML-submit draagt alleen zijn EIGEN naam/waarde, dus die twee konden
+    nooit samen in één POST: "Achieved" stuurde een oordeel zonder actie (er gebeurde niets) en
+    "Confirm report" een actie zonder oordeel (validatie faalde). Er was geen klik die beide droeg.
+
+    Deze test kijkt naar wat ÉÉN knop verstuurt, want dat was precies wat ontbrak."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    for naam, html in (("kaart", P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")),
+                       ("route", render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK"))):
+        form, knoppen, _ = _knoppen_in_de_balk(html)
+        assert ("action", "verslag_bevestig_behaald") in knoppen, naam
+        assert ("action", "verslag_bevestig_niet_behaald") in knoppen, naam
+        # geen losse oordeel-knop meer, en geen aparte Confirm die de splitsing veroorzaakte
+        assert not [k for k in knoppen if k[0] == "oordeel"], (naam, knoppen)
+        assert "value='verslag_bevestig'>" not in form, naam
+
+
+def test_een_enkele_post_legt_het_oordeel_vast_en_bevestigt(tmp_path):
+    """Wat de knop verstuurt, moet de server in ÉÉN verzoek afmaken: oordeel opslaan én het concept
+    tot document maken. Simuleert precies wat een browser stuurt bij één klik — de knopwaarde plus
+    de hidden inputs, meer niet."""
+    dd, st = _st(tmp_path)
+    for actie, verwacht in (("verslag_bevestig_behaald", "behaald"),
+                            ("verslag_bevestig_niet_behaald", "niet_behaald")):
+        pid = _afgesloten(dd, st, doc="oud document")
+        concept = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
+        _, msg = cockpit2.dispatch(dd, actie, {"pid": [pid], "next": ["/"]}, username="guest")
+        assert not cockpit2.is_weigering(msg), (actie, msg)
+        st2 = cockpit2._Stores(dd)
+        assert st2.projects.get(pid)["resultaat"] == verwacht          # vastgelegd
+        assert st2.project_docs.read(pid) == concept                   # én bevestigd
+        assert st2.project_docs.concept(pid) == {}                     # niets blijft wachten
+
+
+def test_zonder_wachtend_concept_een_nette_weigering(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Leeg", "human", status="queued", done_when="af")
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
+                               username="guest")
+    assert cockpit2.is_weigering(msg), msg
+
+
+def test_het_formulier_stuurt_precies_een_next(tmp_path):
+    """`hid()` draagt csrf, pid ÉN next; de balk voegde er nóg een toe. Twee gelijknamige inputs
+    versturen allebei — de eerste wint en de tweede is ruis die bij de volgende wijziging gaat
+    afwijken."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    for naam, html in (("kaart", P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")),
+                       ("route", render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK"))):
+        form, _, _ = _knoppen_in_de_balk(html)
+        assert form.count("name='next'") == 1, (naam, form.count("name='next'"))
+        assert form.count("name='csrf'") == 1 and form.count("name='pid'") == 1, naam
