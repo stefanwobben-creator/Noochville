@@ -16,6 +16,22 @@ from nooch_village.util import atomic_write_json, read_json, synchronized as _sy
 # hiernaar (reference, don't copy) i.p.v. de literal "Uitvoerplan" te herhalen.
 PREP_CHECKLIST_TITLE = "Uitvoerplan"
 
+# ── DE DRIE WAARDEN VAN HET MENSELIJKE OORDEEL ────────────────────────────────────────────────
+# Sleutels, geen labels: ze worden opgeslagen en geteld, dus ze horen op ÉÉN plek te staan en niet
+# in twee spellingen. Ze stonden even zowel hier ("niet_behaald") als in project_verslag
+# ("niet behaald"), en het gevolg was meteen zichtbaar: de kaart toonde "Checklist says:
+# niet_behaald" — de rauwe sleutel, omdat de labeltabel de andere spelling kende.
+#
+# Ze wonen hier en niet in project_verslag omdat projects.py niets mag importeren uit die module
+# (dat zou een cirkel zijn); andersom wel.
+#
+# "overgeslagen" is een volwaardige derde waarde: wie de vraag overslaat hoort niet als "behaald"
+# of "niet behaald" in een telling te belanden.
+BEHAALD = "behaald"
+NIET_BEHAALD = "niet_behaald"
+OVERGESLAGEN = "overgeslagen"
+RESULTAAT_WAARDEN = (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
+
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 _TERMINAL       = {"done"}
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
@@ -218,6 +234,29 @@ class ProjectLedger:
         if p is None or veld not in ("done_when", "dod_outcome"):
             return False
         p[veld] = (tekst or "").strip()[:1000]
+        self._touch(p)
+        self._save()
+        return True
+
+    RESULTAAT_WAARDEN = RESULTAAT_WAARDEN          # zie de module-constanten hierboven
+
+    def set_resultaat(self, pid: str, oordeel: str, toelichting: str = "",
+                      learnings: str = "") -> bool:
+        """Het menselijke sluitstuk: is het doel behaald, met een toelichting en optionele leringen.
+
+        WAAROM EEN EIGEN VELD EN NIET IN DE VERSLAGTEKST. Een ja/nee dat je later wilt tellen —
+        hoeveel projecten haalden hun doel, en hoeveel niet — mag niet in proza wonen. Dat is
+        dezelfde reden als bij de essentie: tekst is voor mensen, een sleutel is voor de machine.
+        De tekst komt er ook, maar in het verslag; dit is het telbare deel.
+
+        `learnings` is nooit verplicht: het orggeheugen is een aanbod, geen formulier-eis."""
+        p = self._projects.get(pid)
+        if p is None or oordeel not in self.RESULTAAT_WAARDEN:
+            return False
+        p["resultaat"] = oordeel
+        p["resultaat_toelichting"] = (toelichting or "").strip()[:2000]
+        p["learnings"] = (learnings or "").strip()[:2000]
+        p["resultaat_at"] = time.time()
         self._touch(p)
         self._save()
         return True
@@ -1178,6 +1217,7 @@ _WRITE_METHODS = (
     "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
+    "set_resultaat",
     "set_item_offer", "accept_item_offer",
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",

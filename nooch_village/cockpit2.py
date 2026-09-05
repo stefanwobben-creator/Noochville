@@ -1691,17 +1691,60 @@ def _act_proj_regen_doc(c):
 
 def _act_verslag_bevestig(c):
     # AUTHZ: rolvervuller of Circle Lead — het verslag hoort bij het project, dus dezelfde poort als
-    # het bewerken van het document zelf (_act_proj_doc_edit). Bevestigen is een oordeel over eigen
-    # werk, geen org-brede mutatie.
+    # het bewerken van het document zelf. Bevestigen is een oordeel over eigen werk.
+    #
+    # ALLEEN HIER WORDT GESCHREVEN. Dit is de enige plek waar een concept het einddocument wordt;
+    # een onbevestigd concept mag nooit stil de canonieke tekst worden. De guard
+    # tests/test_verslag_result.py bevriest dat.
     nxt, st, g, username = c.nxt, c.st, c.g, c.username
     pid = g("pid")
     _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
     if _deny:
         return nxt, _deny
     store = getattr(st, "project_docs", None)
-    if store is None or not store.confirm_concept(pid):
+    if store is None:
+        return nxt, "✗ no document store"
+    concept = store.concept(pid)
+    if not (concept.get("tekst") or "").strip():
         return nxt, "✗ no draft report to confirm"
+
+    oordeel = (g("oordeel") or "").strip()
+    if oordeel:
+        # Het menselijke oordeel VERVANGT dat van het model: de mens heeft het laatste woord.
+        from nooch_village.project_verslag import met_result
+        toel, lear = g("toelichting"), g("learnings")
+        if not st.projects.set_resultaat(pid, oordeel, toel, lear):
+            return nxt, "✗ unknown result value"
+        store.write_concept(pid, met_result(concept["tekst"], oordeel, toel, lear),
+                            bronnen=concept.get("bronnen") or [],
+                            voorzet=concept.get("voorzet") or "")
+    if not store.confirm_concept(pid):
+        return nxt, "✗ nothing to confirm"
     return nxt, "✓ report confirmed"
+
+
+def _act_verslag_overslaan(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie _act_verslag_bevestig.
+    #
+    # OVERSLAAN IS EEN ANTWOORD, GEEN STILTE. Het verslag zegt dan "not recorded" in plaats van de
+    # voorzet als oordeel te laten staan — anders leest een overgeslagen vraag later als een
+    # bevestigd "behaald", en dat is precies de stille mislukking die we vermijden.
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    pid = g("pid")
+    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    store = getattr(st, "project_docs", None)
+    concept = store.concept(pid) if store is not None else {}
+    if not (concept.get("tekst") or "").strip():
+        return nxt, "✗ no draft report"
+    from nooch_village.project_verslag import met_result
+    st.projects.set_resultaat(pid, "overgeslagen", "", "")
+    store.write_concept(pid, met_result(concept["tekst"], "overgeslagen"),
+                        bronnen=concept.get("bronnen") or [],
+                        voorzet=concept.get("voorzet") or "")
+    store.confirm_concept(pid)
+    return nxt, "✓ closed without a recorded result"
 
 
 def _act_verslag_bijwerken(c):
@@ -5624,6 +5667,7 @@ ACTIONS = {
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
     "verslag_bevestig": _act_verslag_bevestig,
+    "verslag_overslaan": _act_verslag_overslaan,
     "verslag_bijwerken": _act_verslag_bijwerken,
     "proj_regen_doc": _act_proj_regen_doc,
     "proj_settrekker": _act_proj_settrekker,
