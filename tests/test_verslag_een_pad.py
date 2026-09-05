@@ -41,11 +41,10 @@ def test_de_knop_draait_de_nieuwe_assembler(tmp_path):
     cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]}, username="guest")
     concept = cockpit2._Stores(dd).project_docs.concept(pid)
     assert (concept.get("tekst") or "").strip()
-    assert "## Doel" in concept["tekst"] and "## Wat er gebeurde" in concept["tekst"]
-    # "## Result" is een SUBSTRING van "## Resultaat" — op de Engelse kop matchen zou hier altijd
-    # slagen. Toets op de Engelse kop mét regeleinde.
-    assert "## Result\n" not in concept["tekst"]              # Engels geraamte is weg
-    assert "## What happened" not in concept["tekst"]
+    assert "## Goal" in concept["tekst"] and "## What happened" in concept["tekst"]
+    # Geen NEDERLANDS geraamte meer (het verslag is terug op Engels, passend bij de cockpit);
+    # documenten van vóór die wissel blijven wél herkend, zie _RESULTAAT_KOPPEN.
+    assert "## Doel" not in concept["tekst"]
 
 
 def test_de_knop_schrijft_een_concept_en_niet_het_document(tmp_path):
@@ -90,9 +89,9 @@ def test_deliverables_zijn_een_bron_van_de_nieuwe_assembler():
     """De oude synthese las ze (652 deliverables over 197 van de 373 projecten). Ze niet overnemen
     zou betekenen dat het nieuwe pad MINDER weet dan het oude — dan is "vervangen" in werkelijkheid
     informatieverlies."""
-    assert "de opgeleverde deliverables (2)" in bronnen_van({"scope": "x"}, "", ["a", "b"])
+    assert "the delivered work (2)" in bronnen_van({"scope": "x"}, "", ["a", "b"])
     c = stel_samen({"scope": "x"}, "", reason=None, deliverables=["Rapport A"])
-    assert c is not None and "de opgeleverde deliverables (1)" in c.bronnen
+    assert c is not None and "the delivered work (1)" in c.bronnen
 
 
 def test_deliverables_lezen_faalt_zacht_maar_luid(caplog):

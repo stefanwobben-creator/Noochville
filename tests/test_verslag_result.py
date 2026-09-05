@@ -151,7 +151,7 @@ def test_overslaan_markeert_eerlijk_in_plaats_van_te_zwijgen(tmp_path):
     assert st2.projects.get(pid)["resultaat"] == "overgeslagen"
     # Het VERSLAG is Nederlands (orgkennis); het SCHERM blijft Engels. Zelfde sleutel,
     # twee lezers — zie label_voor(taal=).
-    assert "Niet vastgelegd" in st2.project_docs.read(pid)
+    assert "Not recorded" in st2.project_docs.read(pid)
     assert st2.project_docs.concept(pid) == {}
 
 
@@ -163,7 +163,7 @@ def test_een_nee_kan_net_zo_makkelijk_als_een_ja(tmp_path):
                                                "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     assert st2.projects.get(pid)["resultaat"] == "niet_behaald"
-    assert "niet behaald" in st2.project_docs.read(pid).lower()
+    assert "not achieved" in st2.project_docs.read(pid).lower()
 
 
 def test_learnings_zijn_optioneel(tmp_path):
@@ -191,15 +191,15 @@ def test_het_menselijke_oordeel_vervangt_dat_van_het_model():
     n = met_result(c, "behaald", "Toch af na de review.", "Eerder om review vragen.")
     assert "## Goal\nDoel." in n and "Dingen." in n          # geen informatieverlies
     assert "Twee gaten" not in n                             # het voorstel maakt plaats
-    assert "**Behaald.** Toch af na de review." in n         # verslagtaal = Nederlands
-    assert "## Leringen\nEerder om review vragen." in n
+    assert "**Achieved.** Toch af na de review." in n        # verslagtaal = Engels
+    assert "## Learnings\nEerder om review vragen." in n
 
 
 def test_zonder_result_kop_komt_het_blok_er_gewoon_onder():
     """De modelloze variant heeft wél een Result-kop, maar een handmatig bijgewerkt concept
     misschien niet. Dan hoort het oordeel er alsnog bij te komen."""
     n = met_result("## Goal\nAlleen dit.", "behaald", "Klaar.")
-    assert "Alleen dit." in n and "**Behaald.** Klaar." in n
+    assert "Alleen dit." in n and "**Achieved.** Klaar." in n
 
 
 # ── één set sleutels voor het hele dorp ──────────────────────────────────────
@@ -295,17 +295,18 @@ def test_bevestigen_zonder_keuze_schrijft_niet(tmp_path):
     assert (st2.project_docs.concept(pid).get("tekst") or "").strip()   # concept blijft wachten
 
 
-def test_het_verslag_is_nederlands_en_het_scherm_engels(tmp_path):
-    """Twee lezers, één sleutel: de cockpit-chrome (Engels, i18n fase 1) en de orgkennis
-    (Nederlands, de taal waarin hier gewerkt wordt)."""
+def test_verslag_en_scherm_delen_de_taal_maar_de_infra_blijft(tmp_path):
+    """Scherm én verslag zijn Engels, passend bij de cockpit. De `taal`-parameter blijft staan:
+    de sleutel is mechaniek en het label is content, dus zodra er een taalinstelling komt hoeft
+    alleen de aanroep te kiezen. We bouwen die instelling nu niet — alleen de default staat om."""
     from nooch_village.project_verslag import label_voor
-    assert label_voor("behaald") == "achieved"               # scherm
-    assert label_voor("behaald", "nl") == "behaald"          # verslag
+    assert label_voor("behaald") == "achieved"               # default = scherm én verslag
+    assert label_voor("behaald", "nl") == "behaald"          # de taal-infra blijft bestaan
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="")
     doc = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
-    assert "## Doel" in doc and "## Wat er gebeurde" in doc and "## Resultaat" in doc
-    assert "## Goal" not in doc and "## What happened" not in doc
+    assert "## Goal" in doc and "## What happened" in doc and "## Result" in doc
+    assert "## Doel" not in doc and "## Wat er gebeurde" not in doc
 
 
 def test_de_kopnamen_leven_op_een_plek():
@@ -324,15 +325,15 @@ def test_geen_kop_per_taak_meer_in_de_prompt():
     "niet onderzocht" bevatten en 64 (bijna) leeg zijn. Een kop per taak levert vooral koppen op
     die zeggen dat er niets is."""
     from nooch_village.project_verslag import _PROMPT
-    assert "GEEN kop per taak" in _PROMPT
-    assert "Niet onderzocht:" in _PROMPT                      # één zin, niet een kopje per taak
+    assert "NO heading per task" in _PROMPT
+    assert "Not investigated:" in _PROMPT                     # één zin, niet een kopje per taak
 
 
 def test_het_doeltype_staat_in_de_prompt():
     """Een beoordelingsproject is behaald zodra er een gegrond oordeel ligt — ook een "nee".
     Zonder dit leest de assembler elk "nee" als een mislukking."""
     from nooch_village.project_verslag import _PROMPT
-    assert "BEOORDELINGSPROJECT" in _PROMPT and "ook als dat oordeel 'nee' is" in _PROMPT
+    assert "ASSESSMENT project" in _PROMPT and "including a 'no'" in _PROMPT
 
 
 def test_de_assemblage_staat_op_de_hoog_inzet_ladder():

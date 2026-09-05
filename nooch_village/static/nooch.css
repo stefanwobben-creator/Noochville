@@ -751,12 +751,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .einddoc-ckop{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
 /* De twee signalen naast elkaar: modeloordeel en checklist-kruischeck. Bewust NIET samengevoegd
    tot één regel — juist als ze botsen wil je dat zien. */
-/* Inline comment-bewerken: het formulier neemt de plek van de bubbel in. Namen uit de bestaande
-   `fentry-`-familie, niet een eigen `fedit-`/`feed-`: twee regels rechtvaardigen geen nieuwe
-   familie. `.fentry-inline` vervangt bovendien een style='display:inline' die er stond. */
+/* Inline bewerken, ÉÉN component voor de wall-comment en het conceptverslag
+   (cockpit2_util.inline_edit). Namen uit de bestaande `editor-`-familie, want dit IS de editor —
+   alleen op de plek van wat hij bewerkt. `.fentry-inline` blijft voor de verwijder-knop en
+   vervangt een style='display:inline' die er stond. */
 .fentry-inline{display:inline}
-.fentry-edit{margin-top:.3rem}
-.fentry-edit .qadd-row{margin-top:.4rem}
+.editor-inline-f{margin-top:.3rem}
+.editor-inline-f .qadd-row{margin-top:.4rem}
 .einddoc-sig{display:flex;flex-direction:column;gap:.3rem;margin:.2rem 0 .8rem}
 .einddoc-sigr{display:flex;gap:.5rem;align-items:baseline;font-size:.86rem}
 .einddoc-sigk{color:var(--gray);flex:none;min-width:7.5rem}

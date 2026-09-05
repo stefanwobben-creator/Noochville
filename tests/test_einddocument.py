@@ -277,7 +277,7 @@ def test_regen_doc_action(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["rol deed het werk"],
                                         "author": ["human:"], "next": ["/"]}, username="guest")
     voor = docs.read(pid)
-    with patch("nooch_village.llm.reason", side_effect=_reason_mock("## Doel\nx\n\n## Resultaat\nAlles klaar.")):
+    with patch("nooch_village.llm.reason", side_effect=_reason_mock("## Goal\nx\n\n## Result\nAlles klaar.")):
         _, msg = cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]},
                                    username="guest")
     assert not cockpit2.is_weigering(msg), msg

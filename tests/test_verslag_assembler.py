@@ -60,7 +60,7 @@ def test_voorzet_alles_af_is_waarschijnlijk_behaald():
     # Nederlands, want die wordt opgeslagen en vergeleken.
     # De redenen zijn Nederlands sinds het verslag Nederlands is: ze reizen naar de
     # prompt én naar de verslagtekst, en beide zijn orgkennis.
-    assert soort == BEHAALD and "afgevinkt" in reden
+    assert soort == BEHAALD and "ticked" in reden
 
 
 def test_voorzet_niets_af_is_waarschijnlijk_niet_behaald():
@@ -81,11 +81,11 @@ def test_bronnen_noemen_alleen_wat_bestaat():
     """Een lege checklist als bron noemen maakt de telling ("samengesteld uit N bronnen") een
     leugen — en die telling is juist waarop een mens zijn bevestiging baseert."""
     kaal = {"scope": "Iets"}
-    assert bronnen_van(kaal) == ["de projectdefinitie"]
+    assert bronnen_van(kaal) == ["the project definition"]
     rijk = {"scope": "Iets", "checklists": [{"items": [{"text": "a", "done": True}]}],
             "log": [{"who": "rol", "text": "gedaan"}]}
     b = bronnen_van(rijk, "een document")
-    assert len(b) == 4 and "het bestaande einddocument" in b
+    assert len(b) == 4 and "the existing end document" in b
 
 
 def test_zonder_enige_bron_geen_concept():
@@ -100,9 +100,9 @@ def test_zonder_model_toch_een_verslag_maar_zichtbaar_soberder():
                                    {"text": "Leverancier B", "done": False}]}]}
     c = stel_samen(p, "", reason=None)
     assert c is not None
-    assert "## Doel" in c.tekst and "## Wat er gebeurde" in c.tekst and "## Resultaat" in c.tekst
+    assert "## Goal" in c.tekst and "## What happened" in c.tekst and "## Result" in c.tekst
     assert "Leverancier A" in c.tekst and "Leverancier B" in c.tekst
-    assert "zonder taalmodel" in c.tekst             # herkenbaar soberder, geen nep-proza
+    assert "without a language model" in c.tekst     # herkenbaar soberder, geen nep-proza
 
 
 def test_een_kapot_model_blokkeert_niets():
@@ -165,7 +165,7 @@ def test_bevestigen_maakt_het_concept_het_document(tmp_path):
     cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"],
                                                "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
-    assert "## Resultaat" in st2.project_docs.read(pid)
+    assert "## Result" in st2.project_docs.read(pid)
     assert concept.split("\n")[0] in st2.project_docs.read(pid)   # de rest van het concept bleef
     assert st2.project_docs.concept(pid) == {}          # niets meer te bevestigen
 
@@ -265,7 +265,7 @@ def test_de_voorzet_gaat_als_engels_label_de_prompt_in():
     # test_alleen_de_definitie_roept_geen_model_aan) en is er geen prompt om te toetsen.
     stel_samen({"scope": "X", "log": [{"who": "rol", "text": "iets gedaan"}]}, "", reason=vang)
     # De PROMPT is Nederlands (het verslag wordt orgkennis); het SCHERM blijft Engels.
-    assert "onduidelijk" in gezien["p"]
+    assert "unclear" in gezien["p"]
     assert "onbekend" not in gezien["p"]              # de sleutel zelf nooit
     assert label_voor(BEHAALD) == "achieved"         # scherm
     assert label_voor(BEHAALD, "nl") == "behaald"    # verslag
@@ -283,8 +283,8 @@ def test_een_seed_document_is_geen_bron():
     via done_when."""
     from nooch_village.projects import seed_document
     seed = seed_document("POS material created")
-    assert "het bestaande einddocument" not in bronnen_van({"scope": "POS"}, seed)
-    assert "het bestaande einddocument" in bronnen_van({"scope": "POS"}, "# Werk\n\nEcht werk.")
+    assert "the existing end document" not in bronnen_van({"scope": "POS"}, seed)
+    assert "the existing end document" in bronnen_van({"scope": "POS"}, "# Werk\n\nEcht werk.")
 
 
 def test_de_seed_tekst_komt_niet_in_het_materiaal():
@@ -317,7 +317,7 @@ def test_alleen_de_definitie_roept_geen_model_aan():
     c = stel_samen({"scope": "POS material created"}, "",
                    reason=lambda *a, **k: geroepen.append(1) or "verzonnen proza")
     assert geroepen == [], "model aangeroepen terwijl er niets te verslaan viel"
-    assert c is not None and "zonder taalmodel" in c.tekst
+    assert c is not None and "without a language model" in c.tekst
 
 
 def test_met_een_tweede_bron_wel():

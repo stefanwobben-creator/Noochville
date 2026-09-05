@@ -96,7 +96,13 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 66   # +1 'ibx-' (inbox-drawer, globale chrome); +4 voor de projectkaart-
+_PREFIX_CEILING = 67   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
+                       #      inline-editor van cockpit2_util wordt door de wall-comment ÉN
+                       #      het conceptverslag gebruikt. Hij verving twee ad-hoc bouwsels
+                       #      ('fentry-edit' plus een <details> op /rapport) door één, en
+                       #      'editor'/'editor-tb' stonden al in de stylesheet. Netto komt er
+                       #      een naam bij en verdwijnen er twee implementaties.
+                       # +1 'ibx-' (inbox-drawer, globale chrome); +4 voor de projectkaart-
                        # HERINDELING: 'pkaart-', 'pchip-', 'psec-', 'rail-'. Bewust besluit
                        # van Stefan na het live zien van de incrementele poets (#441/#442):
                        # die loste de klachten deels op maar las nog als de oude kaart. Een

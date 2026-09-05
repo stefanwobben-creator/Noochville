@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from nooch_village.web_base import _e
-from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
+from nooch_village.cockpit2_util import inline_edit, inline_edit_knop, _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
 from nooch_village import org
 
 # Gecureerde set standaard emoji's met zoekwoorden voor de picker.
@@ -160,19 +160,6 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
             f"{proj}{act}{note}{rov}</details>")
 
 
-# Twee regeltjes DOM-werk, geen framework: de bubbel verbergen en het formulier op dezelfde plek
-# tonen. Ze staan als constante zodat de aanhalingstekens in de f-string niet gaan schuiven en de
-# twee knoppen gegarandeerd hetzelfde paar aanspreken.
-_EDIT_JS = ("var f=this.closest('.fentry');"
-            "f.querySelector('[data-fb]').hidden=true;"
-            "var e=f.querySelector('[data-fe]');e.hidden=false;"
-            "var t=e.querySelector('textarea');if(t){t.focus();"
-            "t.setSelectionRange(t.value.length,t.value.length);}")
-_ANNULEER_JS = ("var f=this.closest('.fentry');"
-                "f.querySelector('[data-fe]').hidden=true;"
-                "f.querySelector('[data-fb]').hidden=false;")
-
-
 def _feed_entry_html(st, entry: dict, role_name: str = "",
                      pid: str = "", csrf_token: str = "", mention_names=(),
                      outcome_opts=None, terug: str = "") -> str:
@@ -208,20 +195,16 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)
     if csrf_token and eid and atype == "human":
-        # De editor staat OP de plek van de bubbel en is verborgen tot je Edit klikt. `terug` gaat
-        # mee zodat opslaan je op de projectkaart houdt in plaats van op het beginscherm.
+        # HETZELFDE COMPONENT als "Edit before confirming" op /rapport — zie
+        # cockpit2_util.inline_edit. `terug` gaat mee zodat opslaan je op de projectkaart houdt.
         _hid2 = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                  f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                  f"<input type='hidden' name='item' value='{_e(eid)}'>"
                  f"<input type='hidden' name='next' value='{_e(terug)}'>")
-        bubble = (f"<div class='fbody' data-fb='{_e(eid)}'>{bubble}</div>"
-                  f"<form method='post' action='/action' class='pf fentry-edit' "
-                  f"data-fe='{_e(eid)}' hidden>{_hid2}"
-                  f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Edit your reply…')}"
-                  f"<div class='qadd-row'>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='feed_edit'>Save</button>"
-                  f"<button class='flink' type='button' onclick=\"{_ANNULEER_JS}\">Cancel</button>"
-                  f"</div></form>")
+        bubble = inline_edit(
+            bubble,
+            md_editor("text", entry.get("text", ""), rows=3, placeholder="Edit your reply…"),
+            sleutel=eid, opslaan="feed_edit", verborgen=_hid2, toon_cls="fbody")
     # Eigen comment (mens) is wijzigbaar/verwijderbaar.
     tools = ""
     if csrf_token and eid and atype == "human":
@@ -237,7 +220,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
                 f"onclick=\"return confirm('Remove comment?')\">Remove</button></form>")
         tools = (f"<span class='fsep'>·</span>"
-                 f"<button class='flink' type='button' onclick=\"{_EDIT_JS}\">Edit</button>"
+                 f"{inline_edit_knop()}"
                  f"<span class='fsep'>·</span>{deld}")
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
@@ -247,7 +230,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         tools += f"<span class='fsep'>·</span>{oc}"
     # (De oude Level 2 voorstel-knop is verwijderd: de triage in _ai_reply verwerkt een @mention nu zelf,
     #  en de mens routeert via de '→ uitkomst'-kiezer hierboven of vanuit de inbox — dat vervangt de knop.)
-    return (f"<div class='fentry'>"
+    return (f"<div class='fentry editor-inline'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
             f"<div class='fbubble'>{bubble}</div>"

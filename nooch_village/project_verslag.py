@@ -51,9 +51,10 @@ _MAX_REGELS = 20            # de laatste 20; oudere regels zijn zelden nog het v
 # ("niet behaald" met een spatie) en die lekte als rauwe sleutel op het scherm.
 ONBEKEND = "onbekend"
 
-# TWEE TALEN, ÉÉN SLEUTEL. Het scherm is Engels (i18n fase 1) en het VERSLAG is Nederlands — dat is
-# geen inconsistentie maar twee verschillende lezers: de cockpit-chrome en de orgkennis. De sleutel
-# is mechaniek en verandert niet mee; alleen het label kiest zijn taal.
+# TWEE TALEN, ÉÉN SLEUTEL. Scherm én verslag zijn nu Engels, passend bij de cockpit (i18n fase 1).
+# De `taal`-parameter blijft bestaan: de sleutel is mechaniek en het label is content, en zodra er
+# een taalinstelling komt hoeft alleen de aanroep te kiezen. Nu staat die keuze op één default —
+# de infra bouwen we niet twee keer, maar we zetten hem ook niet nu al aan.
 _VOORZET_LABEL = {
     "en": {BEHAALD: "achieved", NIET_BEHAALD: "not achieved",
            OVERGESLAGEN: "not recorded", ONBEKEND: "unclear"},
@@ -118,14 +119,14 @@ def voorzet_result(project: dict) -> tuple[str, str]:
     stille mislukking die we vermijden. De mens bevestigt of corrigeert (volgende PR)."""
     items = _checklist_items(project)
     if not items:
-        return ONBEKEND, "er is geen checklist om voortgang aan af te lezen"
+        return ONBEKEND, "there is no checklist to read progress from"
     af = [i for i in items if i.get("done")]
     over = [i for i in items if not i.get("done") and not i.get("skipped")]
     if not over:
-        return BEHAALD, f"alle {len(items)} checklist-items zijn afgevinkt of overgeslagen"
+        return BEHAALD, f"all {len(items)} checklist items are ticked or skipped"
     if not af:
-        return NIET_BEHAALD, f"geen van de {len(items)} checklist-items is afgevinkt"
-    return ONBEKEND, f"{len(af)} van {len(items)} items af — te weinig om uit af te leiden"
+        return NIET_BEHAALD, f"none of the {len(items)} checklist items is ticked"
+    return ONBEKEND, f"{len(af)} of {len(items)} items done — too little to conclude from"
 
 
 _DELIVERABLE_CAP = 1200          # per stuk; anders bepaalt één lange oplevering de hele invoer
@@ -163,21 +164,25 @@ def deliverable_blokken(deliverables, pid: str) -> list[str]:
 
 def bronnen_van(project: dict, document: str = "", deliverables: list | None = None) -> list[str]:
     """Welke bronnen dit verslag daadwerkelijk voedden. Alleen wat er ECHT is: een lege checklist
-    is geen bron, en hem toch noemen maakt de provenance-telling een leugen."""
+    is geen bron, en hem toch noemen maakt de provenance-telling een leugen.
+
+    ENGELS, want deze lijst wordt op het SCHERM getoond ("assembled from 3 sources: …") en het
+    scherm is Engels. Ze stonden even in het Nederlands mee met het verslag; toen dat terugging
+    naar Engels bleven ze staan — zichtbaar als een halve zin in twee talen."""
     uit = []
     if (project.get("scope") or "").strip() or (project.get("done_when") or "").strip():
-        uit.append("de projectdefinitie")
+        uit.append("the project definition")
     items = _checklist_items(project)
     if items:
         af = sum(1 for i in items if i.get("done"))
-        uit.append(f"de checklist ({af} van {len(items)} af)")
+        uit.append(f"the checklist ({af} of {len(items)} done)")
     regels = _gesprek(project)
     if regels:
-        uit.append(f"het gesprek ({len(regels)} regels)")
+        uit.append(f"the conversation ({len(regels)} lines)")
     if deliverables:
-        uit.append(f"de opgeleverde deliverables ({len(deliverables)})")
+        uit.append(f"the delivered work ({len(deliverables)})")
     if _bruikbaar_document(document):
-        uit.append("het bestaande einddocument")
+        uit.append("the existing end document")
     return uit
 
 
@@ -198,7 +203,7 @@ def _materiaal(project: dict, document: str, deliverables: list | None = None) -
     delen = [f"# {project.get('scope') or project.get('id')}"]
     dw = (project.get("done_when") or "").strip()
     if dw:
-        delen.append(f"Gewenst resultaat: {dw}")
+        delen.append(f"Desired outcome: {dw}")
     items = _checklist_items(project)
     if items:
         delen.append("\nChecklist:")
@@ -207,38 +212,37 @@ def _materiaal(project: dict, document: str, deliverables: list | None = None) -
             delen.append(f"[{merk}] {i.get('text') or ''}")
     regels = _gesprek(project)
     if regels:
-        delen.append("\nGesprek:")
+        delen.append("\nConversation:")
         delen.extend(regels)
     if deliverables:
-        delen.append("\nOpgeleverde deliverables:")
+        delen.append("\nDelivered work:")
         delen.extend(f"- {b}" for b in deliverables)
     if _bruikbaar_document(document):
-        delen.append("\nBestaand einddocument:\n" + document.strip())
+        delen.append("\nExisting end document:\n" + document.strip())
     return "\n".join(delen)
 
 
 _PROMPT = (
-    "Je stelt een kort projectverslag samen voor de founder, die het gaat BEVESTIGEN of "
-    "corrigeren.\n\n"
-    "SCHRIJF IN HET NEDERLANDS. Dit wordt orgkennis van een Nederlandstalige organisatie; de "
-    "schermtaal is Engels maar de INHOUD volgt de taal waarin hier gewerkt wordt.\n\n"
-    "GRONDINGSREGEL: alles wat je schrijft moet letterlijk uit het materiaal hieronder komen. "
-    "Verzin geen resultaten, getallen of conclusies. Staat er iets niet in, schrijf dan dat het "
-    "er niet in staat.\n\n"
-    "DOELTYPE. Kijk eerst wat voor project dit is. Bij een BEOORDELINGSPROJECT ('bepaal of X "
-    "geschikt is', 'onderzoek of Y kan') is het doel BEHAALD zodra er een gegrond oordeel ligt — "
-    "ook als dat oordeel 'nee' is. Een onderbouwd 'nee' is een geslaagd onderzoek, geen "
-    "mislukking. Bij een MAAKPROJECT ('lever X op') is het doel behaald als het ding er is.\n\n"
-    "Vier kopjes, in deze volgorde, en verder niets:\n"
-    "## Doel — het gewenste resultaat, uit de projectdefinitie. Eén of twee zinnen.\n"
-    "## Wat er gebeurde — het verhaal in lopende tekst, afgeleid uit de checklist en het gesprek. "
-    "GEEN kop per taak: vlecht de bevindingen door elkaar tot één verhaal. Wat niet onderzocht is, "
-    "noem je in één zin aan het eind ('Niet onderzocht: A, B') in plaats van per taak een kopje "
-    "met 'Status: niet onderzocht'.\n"
-    "## Resultaat — of het doel behaald lijkt, gemeten langs het doeltype hierboven. De voorzet "
-    "staat onderaan; onderbouw hem of spreek hem tegen als het materiaal iets anders zegt.\n"
-    "## Leringen — wat een volgende keer sneller of beter zou gaan. Alleen als het materiaal er "
-    "aanleiding voor geeft; anders laat je dit kopje weg.\n"
+    "You are assembling a short project report for the founder, who will CONFIRM or correct it.\n\n"
+    "WRITE IN ENGLISH, in markdown, at most ~250 words. The cockpit is in English and so is this "
+    "report.\n\n"
+    "GROUNDING RULE: everything you write must come literally from the material below. Do not "
+    "invent results, numbers or conclusions. If something is not in there, say so.\n\n"
+    "GOAL TYPE. Look first at what kind of project this is. For an ASSESSMENT project ('determine "
+    "whether X is suitable', 'find out if Y is possible') the goal is ACHIEVED as soon as there is "
+    "a grounded verdict — including a 'no'. A well-founded no is a successful investigation, not a "
+    "failure. For a DELIVERY project ('produce X') the goal is achieved when the thing exists.\n\n"
+    "Four headings, in this order, and nothing else:\n"
+    "## Goal — the desired outcome, from the project definition. One or two sentences.\n"
+    "## What happened — the story in running prose, derived from the checklist and the "
+    "conversation. NO heading per task: weave the findings into one account. What was not "
+    "investigated goes in a single closing sentence ('Not investigated: A, B') instead of a "
+    "heading per task saying 'Status: not investigated'.\n"
+    "## Result — whether the goal appears achieved, measured against the goal type above. The "
+    "provisional verdict is given below; support it, or contradict it if the material says "
+    "otherwise.\n"
+    "## Learnings — what would go faster or better next time. Only if the material gives grounds "
+    "for it; otherwise leave this heading out.\n"
 )
 
 def stel_samen(project: dict, document: str = "", *, reason=None,
@@ -266,8 +270,8 @@ def stel_samen(project: dict, document: str = "", *, reason=None,
     tekst = ""
     if reason is not None and genoeg:
         try:
-            tekst = (reason(f"{_PROMPT}\nVoorzet voor Resultaat: {label_voor(voorzet, 'nl')} ({reden}).\n\n"
-                            f"--- MATERIAAL ---\n{mat}", call_site="verslag_assemblage") or "").strip()
+            tekst = (reason(f"{_PROMPT}\nProvisional Result: {label_voor(voorzet)} ({reden}).\n\n"
+                            f"--- MATERIAL ---\n{mat}", call_site="verslag_assemblage") or "").strip()
             # DE FENCE ERAF VÓÓR OPSLAG. Het model wikkelt zijn antwoord in ```markdown — gezien in
             # de eerste echte assemblage, en hetzelfde artefact als in 46 van de 307 bestaande
             # documenten. Op het scherm valt het niet op (`_md_doc` stript hem), maar bij bevestigen
@@ -288,38 +292,41 @@ def _zonder_model(project: dict, document: str, voorzet: str, reden: str) -> str
     Bewust herkenbaar soberder. Wie dit leest moet kunnen zien dat er geen model aan te pas kwam,
     anders leest een kale opsomming als een geschreven verslag."""
     dw = (project.get("done_when") or "").strip()
-    regels = [f"## Doel\n{dw or (project.get('scope') or '')}"]
+    regels = [f"## Goal\n{dw or (project.get('scope') or '')}"]
     items = _checklist_items(project)
     if items:
         gedaan = [f"- {i.get('text') or ''}" for i in items if i.get("done")]
         open_ = [f"- {i.get('text') or ''}" for i in items
                  if not i.get("done") and not i.get("skipped")]
-        stuk = ["## Wat er gebeurde"]
+        stuk = ["## What happened"]
         if gedaan:
-            stuk.append("Gedaan:\n" + "\n".join(gedaan))
+            stuk.append("Done:\n" + "\n".join(gedaan))
         if open_:
-            stuk.append("Nog open:\n" + "\n".join(open_))
+            stuk.append("Still open:\n" + "\n".join(open_))
         regels.append("\n\n".join(stuk))
     else:
-        regels.append("## Wat er gebeurde\nVoor dit project is geen checklist bijgehouden.")
-    regels.append(f"## {KOP_RESULTAAT}\n{label_voor(voorzet, 'nl').capitalize()} — {reden}.")
-    regels.append("_Samengesteld zonder taalmodel: de feiten hierboven staan zoals ze zijn "
-                  "vastgelegd, niet herschreven._")
+        regels.append("## What happened\nNo checklist was kept for this project.")
+    regels.append(f"## {KOP_RESULTAAT}\n{label_voor(voorzet).capitalize()} — {reden}.")
+    regels.append("_Assembled without a language model: the facts above are listed as they "
+                  "were recorded, not rewritten._")
     return "\n\n".join(regels)
 
 
 # ── het menselijke sluitstuk ──────────────────────────────────────────────────────────────────
 # Eén tabel voor beide: de voorzet en het menselijke oordeel spreken dezelfde taal.
-_RESULT_LABEL = _VOORZET_LABEL["nl"]   # het verslag is Nederlands
+_RESULT_LABEL = _VOORZET_LABEL["en"]   # het verslag volgt de cockpit-taal
 
 # DE KOPNAMEN OP ÉÉN PLEK. Het verslag is Nederlands, dus de koppen ook — en `modeloordeel` en
 # `met_result` zoeken ernaar. Stonden ze los, dan zou een prompt-wijziging ("Result" → "Resultaat")
 # de zoekfunctie stil laten missen, en dan valt het modeloordeel weg zonder foutmelding. De Engelse
 # namen blijven herkend voor documenten van vóór deze wijziging.
-KOP_RESULTAAT = "Resultaat"
-KOP_LERINGEN = "Leringen"
-_RESULTAAT_KOPPEN = {KOP_RESULTAAT.casefold(), "result"}
-_LERINGEN_KOPPEN = {KOP_LERINGEN.casefold(), "learnings"}
+KOP_RESULTAAT = "Result"
+KOP_LERINGEN = "Learnings"
+# Beide talen blijven HERKEND, ook al schrijven we er nog maar één. Op productie staan documenten
+# en een wachtend concept met Nederlandse koppen uit de dag dat het verslag Nederlands was; die
+# moeten leesbaar blijven. Herkennen is goedkoop, een onleesbaar verslag niet.
+_RESULTAAT_KOPPEN = {KOP_RESULTAAT.casefold(), "resultaat"}
+_LERINGEN_KOPPEN = {KOP_LERINGEN.casefold(), "leringen"}
 
 
 def _kopblok(tekst: str, koppen: set) -> str:
