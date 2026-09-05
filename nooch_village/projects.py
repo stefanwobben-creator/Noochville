@@ -16,6 +16,22 @@ from nooch_village.util import atomic_write_json, read_json, synchronized as _sy
 # hiernaar (reference, don't copy) i.p.v. de literal "Uitvoerplan" te herhalen.
 PREP_CHECKLIST_TITLE = "Uitvoerplan"
 
+# ── DE DRIE WAARDEN VAN HET MENSELIJKE OORDEEL ────────────────────────────────────────────────
+# Sleutels, geen labels: ze worden opgeslagen en geteld, dus ze horen op ÉÉN plek te staan en niet
+# in twee spellingen. Ze stonden even zowel hier ("niet_behaald") als in project_verslag
+# ("niet behaald"), en het gevolg was meteen zichtbaar: de kaart toonde "Checklist says:
+# niet_behaald" — de rauwe sleutel, omdat de labeltabel de andere spelling kende.
+#
+# Ze wonen hier en niet in project_verslag omdat projects.py niets mag importeren uit die module
+# (dat zou een cirkel zijn); andersom wel.
+#
+# "overgeslagen" is een volwaardige derde waarde: wie de vraag overslaat hoort niet als "behaald"
+# of "niet behaald" in een telling te belanden.
+BEHAALD = "behaald"
+NIET_BEHAALD = "niet_behaald"
+OVERGESLAGEN = "overgeslagen"
+RESULTAAT_WAARDEN = (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
+
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 _TERMINAL       = {"done"}
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
@@ -222,10 +238,7 @@ class ProjectLedger:
         self._save()
         return True
 
-    # De drie waarden van het menselijke oordeel. Sleutels, geen labels: ze worden opgeslagen en
-    # geteld. "overgeslagen" is er een volwaardige van — wie de vraag overslaat hoort niet als
-    # "behaald" of "niet behaald" in een telling te belanden.
-    RESULTAAT_WAARDEN = ("behaald", "niet_behaald", "overgeslagen")
+    RESULTAAT_WAARDEN = RESULTAAT_WAARDEN          # zie de module-constanten hierboven
 
     def set_resultaat(self, pid: str, oordeel: str, toelichting: str = "",
                       learnings: str = "") -> bool:

@@ -33,7 +33,7 @@ import logging
 from dataclasses import dataclass, field
 
 from nooch_village.project_essentie import ontfence
-from nooch_village.projects import heeft_seed_vorm
+from nooch_village.projects import BEHAALD, NIET_BEHAALD, OVERGESLAGEN, heeft_seed_vorm
 
 log = logging.getLogger("village.verslag")
 
@@ -46,11 +46,12 @@ _MAX_REGELS = 20            # de laatste 20; oudere regels zijn zelden nog het v
 # CONTENT en volgt de taal van het scherm. Dezelfde scheiding als `_IMPACT_LABEL` in views/projects.
 # Zonder die scheiding lekte "onbekend (geen checklist om aan af te lezen)" letterlijk in een
 # Engels verslag — gezien in de eerste echte assemblage op productie.
-BEHAALD = "behaald"
-NIET_BEHAALD = "niet behaald"
+# Uit projects.py: één set sleutels voor het hele dorp. Hier stond een tweede spelling
+# ("niet behaald" met een spatie) en die lekte als rauwe sleutel op het scherm.
 ONBEKEND = "onbekend"
 
-_VOORZET_LABEL = {BEHAALD: "achieved", NIET_BEHAALD: "not achieved", ONBEKEND: "unclear"}
+_VOORZET_LABEL = {BEHAALD: "achieved", NIET_BEHAALD: "not achieved",
+                  OVERGESLAGEN: "not recorded", ONBEKEND: "unclear"}
 
 
 def label_voor(voorzet: str) -> str:
@@ -250,8 +251,8 @@ def _zonder_model(project: dict, document: str, voorzet: str, reden: str) -> str
 
 
 # ── het menselijke sluitstuk ──────────────────────────────────────────────────────────────────
-_RESULT_LABEL = {"behaald": "achieved", "niet_behaald": "not achieved",
-                 "overgeslagen": "not recorded"}
+# Eén tabel voor beide: de voorzet en het menselijke oordeel spreken dezelfde taal.
+_RESULT_LABEL = _VOORZET_LABEL
 
 
 def modeloordeel(concept_tekst: str) -> str:

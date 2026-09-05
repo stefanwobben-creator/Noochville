@@ -198,3 +198,41 @@ def test_zonder_result_kop_komt_het_blok_er_gewoon_onder():
     misschien niet. Dan hoort het oordeel er alsnog bij te komen."""
     n = met_result("## Goal\nAlleen dit.", "behaald", "Klaar.")
     assert "Alleen dit." in n and "**achieved.** Klaar." in n
+
+
+# ── één set sleutels voor het hele dorp ──────────────────────────────────────
+def test_de_oordeelsleutels_staan_op_een_plek():
+    """ZE STONDEN EVEN IN TWEE SPELLINGEN. `projects.py` had "niet_behaald" en `project_verslag`
+    had "niet behaald" (met een spatie). Het gevolg was meteen zichtbaar in een doorloop: de kaart
+    toonde `Checklist says: niet_behaald` — de rauwe sleutel, omdat de labeltabel de ándere
+    spelling kende en er dus geen label was.
+
+    De sleutels wonen in `projects.py` (project_verslag mag daaruit importeren, andersom zou een
+    cirkel zijn) en de ledger leest dezelfde tupel."""
+    from nooch_village.project_verslag import _VOORZET_LABEL, label_voor
+    from nooch_village.projects import (BEHAALD, NIET_BEHAALD, OVERGESLAGEN, ProjectLedger,
+                                        RESULTAAT_WAARDEN)
+    assert ProjectLedger.RESULTAAT_WAARDEN is RESULTAAT_WAARDEN
+    assert RESULTAAT_WAARDEN == (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
+    # elke opslagbare waarde heeft een label; anders lekt de sleutel naar het scherm
+    for w in RESULTAAT_WAARDEN:
+        assert w in _VOORZET_LABEL, w
+        assert label_voor(w) != w, w
+
+
+def test_geen_rauwe_sleutel_op_de_kaart(tmp_path):
+    """De doorloop ving dit: een voorzet zonder label rendert als `niet_behaald`."""
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    store = cockpit2._Stores(dd).project_docs
+    from nooch_village.projects import NIET_BEHAALD
+    c = store.concept(pid)
+    store.write_concept(pid, c["tekst"], bronnen=c.get("bronnen") or [], voorzet=NIET_BEHAALD)
+    frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    # In de GETOONDE tekst hoort het label; als radio-WAARDE hoort juist de sleutel. Toets dus de
+    # signaal-cellen en niet de hele HTML — anders verbiedt de guard iets wat correct is.
+    import re
+    getoond = re.findall(r"class='einddoc-sigv'>([^<]*)", frag)
+    assert any("not achieved" in g for g in getoond), getoond
+    assert not any(NIET_BEHAALD in g for g in getoond), f"opslagsleutel getoond: {getoond}"
+    assert f"value='{NIET_BEHAALD}'" in frag                 # als formulierwaarde juist wél
