@@ -263,13 +263,27 @@ def test_doc_delete_cascade(tmp_path):
 
 # 11. Cockpit-actie: rapport handmatig opnieuw genereren (zelfde synthese als de puls)
 def test_regen_doc_action(tmp_path):
+    """DE KNOP SCHRIJFT NU EEN CONCEPT, GEEN DOCUMENT. Hij draaide de oude per-taak-synthese en
+    overschreef het einddocument meteen; nu draait hij dezelfde assembler als het afsluit-pad en
+    wacht het resultaat op bevestiging. Alleen een expliciete bevestiging vervangt de canonieke
+    tekst — zie tests/test_verslag_een_pad.py."""
     from unittest.mock import patch
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")
     pid, docs = _cockpit_project(dd)
-    with patch("nooch_village.llm.reason", side_effect=_reason_mock("## Conclusie\nAlles klaar.")):
-        cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]}, username="guest")
-    assert "Conclusie" in docs.read(pid)            # verse synthese geschreven via de herbruikbare functie
+    # TWEE BRONNEN: met alleen een projectdefinitie slaat de assembler het model bewust over (zie
+    # test_verslag_assembler.test_alleen_de_definitie_roept_geen_model_aan) en zou deze test de
+    # modelloze terugval meten in plaats van het modelpad.
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["rol deed het werk"],
+                                        "author": ["human:"], "next": ["/"]}, username="guest")
+    voor = docs.read(pid)
+    with patch("nooch_village.llm.reason", side_effect=_reason_mock("## Doel\nx\n\n## Resultaat\nAlles klaar.")):
+        _, msg = cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]},
+                                   username="guest")
+    assert not cockpit2.is_weigering(msg), msg
+    assert docs.read(pid) == voor                              # het document is onaangeroerd
+    concept = cockpit2._Stores(dd).project_docs.concept(pid)
+    assert "Alles klaar" in (concept.get("tekst") or "")       # het voorstel wacht ernaast
 
 
 # ── De terugval-markering: nooit stil doorgaan voor een premium exemplaar ────

@@ -125,8 +125,12 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                   f"Save document</button></form></details>"
                   f"<form method='post' action='/action' class='pf einddoc-regen'>{hid}"
                   f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
-                  f"onclick=\"return confirm('Regenerate the report from the latest deliverables? "
-                  f"This overwrites the current text.')\">Refresh from deliverables</button>"
+                  # De tekst zegt nu wat er gebeurt: een CONCEPT, geen overschrijving. De oude
+                  # tekst beloofde "this overwrites the current text" — dat doet hij niet meer, en
+                  # een knop die iets anders zegt dan hij doet is de vals-succes-familie.
+                  f"onclick=\"return confirm('Assemble a fresh draft report? "
+                  f"It waits for your confirmation; the current text stays until then.')\">"
+                  f"Re-assemble draft</button>"
                   f"</form></div>")
 
     main = f"<div class='c2-main'>{kop}{_banner(msg)}{concept}{body}{acties}</div>"
