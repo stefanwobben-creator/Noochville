@@ -79,11 +79,15 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
             # HETZELFDE COMPONENT als de comment-edit op de wall (cockpit2_util.inline_edit): het
             # bewerkveld neemt de plek van het GERENDERDE CONCEPT in, in plaats van een tweede
             # textarea eronder te openen. Eén interactie, één implementatie.
-            knoppen = (f"<div class='qadd-row'>"
-                       f"<form method='post' action='/action' class='pf'>{_hid}"
-                       f"<button class='btn ok sm' type='submit' name='action' "
-                       f"value='verslag_bevestig'>Confirm report</button></form>"
-                       f"{inline_edit_knop('Edit before confirming')}</div>")
+            # DEZELFDE OORDEELVRAAG als op de kaart (views/projects.result_velden). Hier stond
+            # alleen een kale "Confirm report" — en sinds bevestigen een oordeel EIST, weigerde die
+            # knop dus altijd. Het scherm waar het concept het best zichtbaar is, was juist het
+            # scherm zonder keuze.
+            from nooch_village.views.projects import result_velden
+            def _hidf():
+                return _hid
+            knoppen = (f"{result_velden(pid, c, _hidf, f'/rapport?pid={_e(pid)}')}"
+                       f"<div class='qadd-row'>{inline_edit_knop('Edit before confirming')}</div>")
         _weergave = f"<div class='einddoc-body'>{_md_doc(c.get('tekst') or '')}</div>"
         _blok = (inline_edit(_weergave,
                              md_editor("tekst", value=c.get("tekst") or "", rows=14, help=True),

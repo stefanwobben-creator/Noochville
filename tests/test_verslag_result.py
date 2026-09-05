@@ -342,3 +342,104 @@ def test_de_assemblage_staat_op_de_hoog_inzet_ladder():
     from nooch_village.llm_keuze import HOOG_INZET, ladder_voor
     assert "verslag_assemblage" in HOOG_INZET
     assert (ladder_voor("verslag_assemblage") or "").startswith("anthropic:claude-sonnet")
+
+
+# ── de oordeelvraag staat op BEIDE schermen ──────────────────────────────────
+def test_de_rapportroute_biedt_dezelfde_oordeelvraag(tmp_path):
+    """DE BLOKKADE. `/rapport` had alleen een kale "Confirm report"-knop; de radio's stonden enkel
+    op de kaart. Toen bevestigen een oordeel ging EISEN, weigerde die knop dus altijd — op het
+    scherm waar het concept juist het best zichtbaar is.
+
+    Eén functie (`views.projects.result_velden`), twee aanroepers. Een derde kopie zou hetzelfde
+    opnieuw laten verlopen."""
+    from nooch_village.views.rapport import render_projectrapport
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    for naam, html in (("kaart", P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")),
+                       ("route", render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK"))):
+        assert "value='behaald'" in html and "value='niet_behaald'" in html, naam
+        assert "verslag_overslaan" in html, naam
+        assert 'name="toelichting"' in html, naam
+        blok = html.split("einddoc-rform")[1].split("</form>")[0]
+        assert "checked" not in blok, f"{naam}: oordeel voorgeselecteerd"
+
+
+def test_bevestigen_vanaf_de_route_werkt_met_een_keuze(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="oud document")
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig",
+                               {"pid": [pid], "oordeel": ["behaald"], "toelichting": ["Rond."],
+                                "next": [f"/rapport?pid={pid}"]}, username="guest")
+    assert not cockpit2.is_weigering(msg), msg
+    assert cockpit2._Stores(dd).projects.get(pid)["resultaat"] == "behaald"
+
+
+# ── de koppen zijn vaste labels ──────────────────────────────────────────────
+def test_een_verkeerd_gespelde_kop_wordt_rechtgezet():
+    """"Lernings" is geen verzinsel: dat stond letterlijk in een document op productie. Een kop die
+    uit modeltekst komt is een typefout die wacht om te gebeuren — en dan vindt `met_result` de
+    Result-sectie niet meer en valt het modeloordeel weg ZONDER foutmelding."""
+    from nooch_village.project_verslag import normaliseer_koppen
+    n = normaliseer_koppen("## Lernings\nx\n\n### Wat er gebeurde\ny\n\n## Resultaat\nz")
+    assert "## Learnings" in n and "### What happened" in n and "## Result" in n
+    assert "Lernings" not in n
+
+
+def test_een_onbekende_kop_blijft_staan():
+    """Liever een onbekende kop zichtbaar dan stilletjes hernoemd naar iets wat het model niet
+    bedoelde."""
+    from nooch_village.project_verslag import normaliseer_koppen
+    assert "## Iets eigens" in normaliseer_koppen("## Iets eigens\nx")
+
+
+def test_de_normalisatie_draait_op_de_modeloutput(tmp_path):
+    from nooch_village.project_verslag import stel_samen
+    c = stel_samen({"scope": "x", "checklists": [{"items": [{"text": "a", "done": True}]}]}, "",
+                   reason=lambda *a, **k: "```markdown\n## Lernings\nIets geleerd.\n```")
+    assert "## Learnings" in c.tekst and "Lernings" not in c.tekst
+
+
+# ── de caps knipten feiten weg ───────────────────────────────────────────────
+def test_de_gesprekscap_is_verruimd_op_een_meting():
+    """Een verslag zei "Paques niet bevestigd" terwijl de wall die communicatie toonde: de
+    vermelding stond op positie 670 in een regel van 1296 tekens, en de cap stond op 600. Een
+    tweede project verloor hem aan de regel-cap (23 → 20 regels).
+
+    Gemeten over 373 projecten: 3075 gespreksregels, 2696 in de prompt, 598 ingekort, 22 projecten
+    die hele regels kwijtraakten. Bij 1500/50 zijn mediaan en p90 van de invoer identiek aan
+    ongekapt (1556 / 3897 tokens); de caps bijten alleen de uiterste staart nog."""
+    from nooch_village.project_verslag import _MAX_REGELS, _REGEL_CAP
+    assert _REGEL_CAP >= 1300, "een regel van 1296 tekens moet er heel in passen"
+    assert _MAX_REGELS >= 40
+    # en ze staan er nog: zonder cap bepaalt het langste gesprek de prijs van élk verslag
+    assert _REGEL_CAP < 10_000 and _MAX_REGELS < 1_000
+
+
+def test_een_feit_diep_in_een_lange_regel_bereikt_de_prompt():
+    from nooch_village.project_verslag import _gesprek
+    lang = "x " * 400 + "Paques Helian bevestigde de levering." + " y" * 200
+    regels = _gesprek({"log": [{"who": "rol", "text": lang}]})
+    assert any("Paques Helian bevestigde" in r for r in regels), "feit weggeknipt door de cap"
+
+
+# ── de outcome-affordance is weg ─────────────────────────────────────────────
+def test_de_outcome_kiezer_staat_niet_meer_onder_elk_bericht(tmp_path):
+    """Hij werd niet gebruikt — routeren gebeurt vanuit de inbox of via een @mention. Een
+    affordance die niemand gebruikt is niet neutraal: hij staat onder ÉLK bericht en maakt de wall
+    drukker naarmate er meer gesprek is."""
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="")
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["een bericht"], "author": ["human:"],
+                                        "next": ["/"]}, username="guest")
+    html = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "wall_outcome" not in html
+    assert "→ outcome" not in html and "→ uitkomst" not in html
+
+
+def test_de_outcome_machinerie_zelf_blijft_bestaan():
+    """De checklist-kant gebruikt hem nog en de `wall_outcome`-dispatch bedient de inbox-route.
+    Alleen de knop onder elk bericht is weg, niet het mechanisme."""
+    from nooch_village.views.feed import _wall_outcome_form, _wall_outcome_opts
+    from nooch_village import cockpit2 as ck
+    assert callable(_wall_outcome_form) and callable(_wall_outcome_opts)
+    assert "wall_outcome" in ck.ACTIONS
