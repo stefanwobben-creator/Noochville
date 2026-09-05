@@ -870,17 +870,25 @@ class Inhabitant(threading.Thread):
     def _on_project_activated(self, event: Event) -> None:
         """Reageer op project_activated (statuswijziging → ACTIEF, meestal een bord-drag): alleen als
         ik de eigenaar ben. Voer UITSLUITEND dit ene project uit (niet _tend_projects over het hele
-        bord). Idempotent via last_tended; geen checklist → project_needs_preparation — beide zitten al
-        in _claim_run_complete/_execute_checklist, dus geen dubbele notes en geen stil falen."""
+        bord). Idempotent via last_tended.
+
+        Het slepen naar ACTIEF IS de opdracht ("ga maar doen"), dus een project zonder checklist wordt
+        hier alsnog voorbereid. Sinds het drie-stagiairs-besluit (5 sept 2026) bereidt niemand nog
+        ongevraagd TOEKOMST voor; zonder deze stap zou de mens na het slepen tot de volgende dagpuls
+        (04:32) niets zien gebeuren, want het herstelpad zat alleen in _tend_projects."""
         if event.data.get("owner") != self.id:
             return
         pid = event.data.get("pid")
         if pid is None:
             return
+        ledger = getattr(self.context, "projects", None)
+        if ledger is not None:
+            p = ledger.get(pid)
+            if p is not None and self._project_checklist(p) is None:
+                self.prepare_project(pid)                    # idempotent: mét checklist doet dit niets
         self._claim_run_complete(pid)
 
     _PREP_CHECKLIST_TITLE = PREP_CHECKLIST_TITLE          # gedeelde bron (nooch_village.projects)
-    _WIP_POLICY_ID = "WIP-001"                    # cirkelpolicy die de voorbereidings-WIP-limiet aanzet
 
     @staticmethod
     def _extract_json(text):
@@ -918,23 +926,16 @@ class Inhabitant(threading.Thread):
         return None
 
     def _tend_projects(self, event: "Event | None" = None) -> None:
-        """Dagelijkse verzorging van mijn EIGEN projecten: voorbereiden in TOEKOMST (status future, begrensd
-        door de WIP-cirkelpolicy), uitvoeren in ACTIEF (status queued/running). Andere kolommen ongemoeid."""
+        """Dagelijkse verzorging van mijn EIGEN projecten: uitvoeren wat in ACTIEF staat (queued/running)
+        en geparkeerd werk heropenen. Andere kolommen ongemoeid.
+
+        TOEKOMST wordt NIET meer voorbereid. Sinds het drie-stagiairs-besluit (5 sept 2026) zijn er geen
+        autonoom werkende AI-rollen meer, alleen stagiairs die mensen helpen: een mens start het werk door
+        een project naar ACTIEF te slepen. Dit was het pad waarlangs 195 ongevraagde projecten ontstonden.
+        De directe variant staat in `_on_project_activated`, binnen één board-poll."""
         ledger = getattr(self.context, "projects", None)
         if ledger is None:
             return
-        my_future = [p for p in ledger.by_status("future") if p.get("owner") == self.id]
-        limit = self._wip_prepare_limit()                        # WIP-001 aan + AI-manned → N; anders None
-        if limit is None:
-            to_prepare = my_future                               # geen policy/limiet → alle (idempotent)
-        else:
-            prepared = sum(1 for p in my_future if self._project_checklist(p) is not None)
-            slots = max(0, limit - prepared)                     # vrije WIP-plekken
-            unprepared = sorted((p for p in my_future if self._project_checklist(p) is None),
-                                key=lambda p: p.get("created_at", 0))   # FIFO: oudste TOEKOMST eerst
-            to_prepare = unprepared[:slots]                      # de rest WACHT tot een plek vrijkomt
-        for p in to_prepare:
-            self.prepare_project(p["id"])
         # De parkeer-klep (DEEL A2): een geparkeerd project werd nooit meer bekeken, want deze lus
         # las alleen queued/running. Nu keert het terug zodra de VASTGELEGDE blokkade weg is — niet
         # zodra de items er runnable uitzien, want die schijn ontstaat door `reset_item_fails`.
@@ -954,33 +955,6 @@ class Inhabitant(threading.Thread):
                 if self._project_checklist(p) is None:
                     self.prepare_project(p["id"])
                 self._claim_run_complete(p["id"])
-
-    def _wip_prepare_limit(self):
-        """De WIP-limiet op voorbereiding (int), of None (geen limiet). De cirkelpolicy WIP-001 is de
-        expliciete AAN-schakelaar (via own_and_inherited op de omvattende cirkel); het getal N komt uit
-        config (`wip_prepare_limit`, default 8) — NIET uit de policy-body. Geldt alleen voor AI-bemande
-        rollen (persona_id gezet); mens-bemande rollen bereiden niet autonoom voor. Fail-closed: ontbreekt
-        een leesbron → None (huidig, ongelimiteerd gedrag)."""
-        if not getattr(self.record, "persona_id", None):
-            return None                                          # mens-bemand → geen autonome voorbereiding
-        att = getattr(self.context, "att", None)
-        records = getattr(self.context, "records", None)
-        if att is None or records is None:
-            return None
-        from nooch_village import artefacts
-        try:
-            pols = artefacts.own_and_inherited(self.id, "policy", records, att)
-        except Exception:
-            return None
-        active = list(pols.get("own", [])) + [d["artefact"] for d in pols.get("inherited", [])]
-        on = any(getattr(a, "id", "") == self._WIP_POLICY_ID and getattr(a, "status", "") == "active"
-                 for a in active)
-        if not on:
-            return None                                          # policy afwezig/inactief → geen limiet
-        try:
-            return max(0, int(self.context.settings.get("wip_prepare_limit", "8")))
-        except (TypeError, ValueError):
-            return 8
 
     # ── DEEL A: voorbereiding (alleen voor een string-scope project in TOEKOMST) ──────────────
     def prepare_project(self, pid: str) -> None:
@@ -1005,7 +979,12 @@ class Inhabitant(threading.Thread):
         plan = self._plan_checklist(goal, keyword=p.get("keyword") or "", exclude_pid=pid,
                                     description=p.get("description"), kennis=kennis)
         if plan is None:
-            self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte); blijft in TOEKOMST", pid)
+            # Fail-open op AI (CONVENTIES.md): wie dit project activeerde ziet anders een stilstaand
+            # project zonder uitleg. Naar de ROL, niet de persoon, zodat de melding een wisseling van
+            # vervuller overleeft.
+            self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte)", pid)
+            self._notify_rol(self.id, pid, "📋 Ik kon geen uitvoerplan maken voor dit project. Het staat "
+                                           "stil tot het doel scherper is of je de stappen zelf toevoegt.")
             return
         cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE)
         if cl is None:

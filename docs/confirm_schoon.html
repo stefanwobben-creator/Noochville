@@ -1,0 +1,118 @@
+<title>Confirm-flow schoon</title>
+<style>
+  :root{
+    --bg:#e9e8e0; --surface:#ffffff; --surface-2:#faf9f4; --surface-3:#f0efe6;
+    --ink:#1c1c19; --muted:#6d6d63; --faint:#9a998d;
+    --green:#3a6a4d; --green-deep:#2c5340; --green-soft:#e6efe7; --green-line:#c7ddca;
+    --line:#e4e2d8; --line-soft:#edece3;
+    --amber:#b7791f; --amber-soft:#f7edd7;
+    --violet:#6b5cc4; --violet-soft:#ece9f8;
+    --red:#b23b3b;
+    --shadow:0 1px 2px rgba(40,40,30,.06),0 10px 30px rgba(40,40,30,.10);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#121310; --surface:#1e201c; --surface-2:#23251f; --surface-3:#282a23;
+      --ink:#ecebe3; --muted:#a6a89b; --faint:#7c7e72;
+      --green:#7fb08d; --green-deep:#9cc4a7; --green-soft:#24312a; --green-line:#33463a;
+      --line:#2c2e28; --line-soft:#262822;
+      --amber:#dcb35f; --amber-soft:#312819;
+      --violet:#a99be6; --violet-soft:#262138;
+      --red:#e08b86;
+      --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#121310; --surface:#1e201c; --surface-2:#23251f; --surface-3:#282a23;
+    --ink:#ecebe3; --muted:#a6a89b; --faint:#7c7e72;
+    --green:#7fb08d; --green-deep:#9cc4a7; --green-soft:#24312a; --green-line:#33463a;
+    --line:#2c2e28; --line-soft:#262822; --amber:#dcb35f; --amber-soft:#312819;
+    --violet:#a99be6; --violet-soft:#262138; --red:#e08b86;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--green-deep);text-decoration:none}
+  .wrap{max-width:720px;margin:0 auto;padding:22px 22px 60px}
+  .cap{font-size:13px;color:var(--faint);margin:0 2px 16px}
+
+  .banner{display:flex;align-items:center;gap:9px;background:var(--green-soft);
+    border:1px solid var(--green-line);border-radius:10px;padding:10px 14px;
+    font-size:14px;font-weight:600;color:var(--green-deep);margin-bottom:14px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--amber);
+    border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px}
+  .chiprow{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .chip{border-radius:999px;padding:3px 11px;font-size:12px;font-weight:700}
+  .chip.pend{background:var(--amber-soft);color:var(--amber)}
+  .prov{font-size:12.5px;color:var(--faint);margin:6px 0 16px}
+
+  h2.sec{font-size:16px;margin:16px 0 4px}
+  h2.sec:first-of-type{margin-top:0}
+  .card p{margin:0 0 6px}
+
+  .split{height:1px;background:var(--line);margin:20px -22px 16px}
+
+  /* compact confirm bar */
+  .signals{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);margin-bottom:12px}
+  .signals b{color:var(--ink)}
+  .verdict{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .vq{font-weight:700;font-size:14.5px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .seg button{border:none;background:var(--surface-2);font:inherit;font-size:13.5px;font-weight:700;
+    color:var(--muted);padding:7px 16px;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--line)}
+  .actions{display:flex;align-items:center;gap:16px}
+  .btn{border:none;border-radius:9px;padding:9px 18px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+  .btn.p{background:var(--green);color:#fff}
+  .link{font-weight:600;font-size:14px;color:var(--muted)}
+  .hint{font-size:12.5px;color:var(--faint);margin-top:12px}
+</style>
+
+<div class="wrap">
+  <p class="cap">Mock — schone confirm-flow: het rapport ís het formulier. Eén compacte bevestigbalk eronder, geen losse WHY/Learnings-velden, geen oud document.</p>
+
+  <div class="banner">📄 Draft report — read it, tweak if needed, confirm below</div>
+
+  <div class="card">
+    <div class="chiprow"><span class="chip pend">not confirmed yet</span></div>
+    <div class="prov">assembled from 4 sources: the project definition, the checklist (5 of 5 done), the conversation (11 lines), the existing end document</div>
+
+    <h2 class="sec">Goal</h2>
+    <p>The goal was to submit and secure a STCB grant application for feasibility testing of PHA materials in shoe components.</p>
+
+    <h2 class="sec">What happened</h2>
+    <p>A STCB grant application was prepared and submitted via Innovein, covering the tested components (toe-bump, heel-counter, outsole), materials (PHA thermoplastic sheets and PHA–natural rubber composites) and validation tests. It included input from Helian Polymers and Paques Biomaterials on material feasibility. RVO granted the €25,000 subsidy, with the advance paid within two weeks. Project period: 1 August 2026 to 31 July 2027.</p>
+    <p style="color:var(--muted)"><em>Not investigated: Paques Biomaterials participation, detailed cost breakdown.</em></p>
+
+    <h2 class="sec">Result</h2>
+    <p><strong>Achieved.</strong> The STCB grant was successfully submitted, approved, and funded.</p>
+
+    <h2 class="sec">Learnings</h2>
+    <p>Start the application process early — timing was critical to secure the budget before closure.</p>
+
+    <div class="split"></div>
+
+    <div class="signals">
+      <span>Draft concluded <b>Achieved</b></span>
+      <span>·</span>
+      <span>Checklist says <b>achieved</b> (5/5 done)</span>
+    </div>
+
+    <div class="verdict">
+      <span class="vq">Did it reach its goal?</span>
+      <span class="seg"><button>Achieved</button><button>Not achieved</button></span>
+    </div>
+
+    <div class="actions">
+      <button class="btn p">Confirm report</button>
+      <a class="link" href="#">Edit before confirming</a>
+      <a class="link" href="#">Skip</a>
+    </div>
+
+    <p class="hint">Your pick is the one that counts. The reasoning and learnings live in the report above — change them with “Edit before confirming”.</p>
+  </div>
+</div>

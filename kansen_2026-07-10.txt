@@ -1,0 +1,3732 @@
+==============================================================================
+NOOCHVILLE — ALLE KANSEN (opportunities) uit de human inbox
+Gegenereerd : 2026-07-10 12:19
+Bron        : data/human_inbox.json
+Sortering   : oplopend op aanmaakdatum
+==============================================================================
+
+TOTAAL: 116 kansen
+    pending    37
+    approved   35
+    resolved   25
+    rejected   15
+    deferred   4
+
+PER ROL
+    facilitator                                  31
+    noochie                                      15
+    librarian                                    14
+    harry_hemp                                   14
+    trends                                       13
+    concurrent_scout                             12
+    website_watcher                              9
+    mother_earth__nooch                          4
+    mother_earth__nooch__noochville__copywriter  3
+    mother_earth__nooch__noochville              1
+
+Business case: effect = verwachte bijdrage aan de metric, effort = 1-5,
+confidence = 0-1. De cockpit toont waarde = effect * confidence / effort.
+
+==============================================================================
+
+------------------------------------------------------------------------------
+[  1/116]  "Schoenenverkoop via NoochVille’s dagcyclus"
+------------------------------------------------------------------------------
+  id          : e957e8434c28
+  status      : pending
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : —
+  door rol    : facilitator
+  soort       : project
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we geldige voorstellen voor schoenenverkoop direct koppelen aan de
+    dagcyclus (G0-G4 getoetst) en deze automatisch omroepen naar de
+    community, dan stijgt het aantal verkopen omdat de zichtbaarheid en
+    urgentie van aanbiedingen toeneemt.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      De dagcyclus verhoogt de betrokkenheid en snelle actie op geldige
+      voorstellen, wat de conversie van aanbiedingen naar verkopen versnelt.
+
+  DIALOOG (3 beurt(en))
+
+    V  [2026-06-25 18:45]
+       wat bedoel je hiermee? ik snap het idee niet
+    A  [2026-06-25 23:01, door facilitator]
+       Het is een manier om schoenen te verkopen zonder dat alles tegelijk
+       gebeurt, maar in kleine stapjes per dag. Zo blijft het overzichtelijk
+       en eerlijk voor iedereen.
+
+    V  [2026-06-25 23:25]
+       ik begrijp het nog net.
+       wie zijn we? welke rollen?
+       wat bedoel je met geldige voorstellen voor schoenenverkoop?
+       en wat bedoel je met automatisch omroepen naar de community? wie is
+       de community?
+    A  [2026-06-26 00:50, door facilitator]
+       Wij zijn burgers van NoochVille die samenwerken in Nooch.earth.
+       Rollen zijn zoals taken in een team: jij doet iets, een ander doet
+       iets anders. Geldige voorstellen zijn plannen die kloppen met de
+       regels van NoochVille, zoals "we verkopen alleen schoenen die geen
+       dierenleed veroorzaken". De community zijn alle burgers die meedoen
+       met NoochVille, zoals jij en ik. Automatisch omroepen betekent dat
+       een bericht naar iedereen gaat als een plan goedgekeurd is.
+
+    V  [2026-06-26 02:31]
+       en wat heb je concreet een nodig? een rol? een project dat iemand
+       oppakt? wijziging in hoe we nu werken?
+    A  — NOG NIET BEANTWOORD (gevraagd door facilitator)
+
+------------------------------------------------------------------------------
+[  2/116]  "Long-tail sneaker queries optimaliseren via GSC-data"
+------------------------------------------------------------------------------
+  id          : da9ff9c7bb86
+  status      : approved
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : 2026-06-25 18:53
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we de top 200 low-volume, high-intent sneakerqueries uit GSC
+    identificeren en optimaliseren (content + technische SEO), dan stijgt de
+    conversie naar 1000 paar/jaar omdat deze queries vaak een directe
+    koopintentie hebben (bv. "heren witt
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 85.00
+    rationale   :
+      Long-tail queries converteren 3-5x beter dan head terms, en Noordster
+      heeft nog weinig zichtbaarheid op deze niche.
+
+------------------------------------------------------------------------------
+[  3/116]  Schoenenlexicon voor NoochVille
+------------------------------------------------------------------------------
+  id          : b03ea3bda38b
+  status      : approved
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : 2026-06-25 19:04
+  door rol    : librarian
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we een **zoekbaar, gestructureerd lexicon van schoenentermen**
+    (materiaal, stijl, pasvorm, duurzaamheid) integreren in de NoochVille-
+    bibliotheek, dan stijgt de conversie naar 1000 paar verkochte schoenen
+    per jaar omdat klanten sneller h
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 56.67
+    rationale   :
+      Een lexicon reduceert zoekfricties en verhoogt de kans dat klanten een
+      aankoop doen door hun onbewuste twijfels (bv. "zijn deze vegan?")
+      direct te beantwoorden via de bibliotheek.
+
+------------------------------------------------------------------------------
+[  4/116]  "Concurrentie-Deep Dive: Noordster’s B-Corp & Materiaalinnovatie Tracker"
+------------------------------------------------------------------------------
+  id          : 19da90149281
+  status      : approved
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : 2026-06-25 18:57
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    Als we een real-time monitoringsysteem lanceren dat Noordster’s directe
+    concurrenten (bv. Veja, Allbirds, Adidas x Parley) volgt op B-Corp-
+    certificering, circulaire materialen (bv. mycelium, gerecyclede
+    polymeren) en lanceringen, dan kunnen
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 250.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 70.83
+    rationale   :
+      Noordster’s concurrenten investeren massaal in B-Corp en
+      materiaalinnovaties—door deze trends direct te vertalen naar
+      actiegerichte content (bv. "Hoe wij beter scoren dan Veja op
+      mycelium") en linkbui
+
+------------------------------------------------------------------------------
+[  5/116]  Nooch x Noordster Sneaker Swap
+------------------------------------------------------------------------------
+  id          : 7f9ca46866d3
+  status      : approved
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : 2026-06-25 18:43
+  door rol    : noochie
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we een maandelijkse fysieke "Sneaker Swap"-pop-up organiseren in
+    NoochVille waar bewoners hun ongewenste schoenen kunnen ruilen voor
+    Nooch-schoenen (met een kleine cashback of credit naar nooch.earth), dan
+    zullen 500 paar nieuwe Nooch-s
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 141.67
+    rationale   :
+      Een fysieke, interactieve ervaring creëert emotionele binding met het
+      merk en activeert de "proef-drive" van Nooch-schoenen, terwijl de ruil
+      de drempel voor aankoop verlaagt.
+
+------------------------------------------------------------------------------
+[  6/116]  "Schoen-Trend Radar: Ngram-gedreven micro-influencers"
+------------------------------------------------------------------------------
+  id          : 2d1f28092c7a
+  status      : approved
+  aangemaakt  : 2026-06-25 14:42
+  afgehandeld : 2026-06-25 18:35
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we wekelijks de top 3 opkomende ngram-termen (bv. "vegan sneakers",
+    "AI-designed shoes") vertalen naar micro-influencer content en deze
+    koppelen aan Nooch’s duurzaamheidsmissie, dan stijgt de conversie naar
+    ≥1000 paar/jaar omdat culture
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 1200.0    horizon: per jaar
+    effort      : 4
+    confidence  : 0.85   → waarde 255.00
+    rationale   :
+      Ngram’s voorspellende kracht voor consumentengedrag is bewezen (Michel
+      et al., 2011), en micro-influencers converteren 60% beter dan macro
+      bij niche-aankopen (HubSpot, 2023).
+
+  DIALOOG (1 beurt(en))
+
+    V  [2026-06-25 17:17]
+       bedoel je dat wij dan content geven aan micro-influencers in de hoop
+       dat zij het verspreiden?
+    A  [2026-06-25 17:33, door harry_hemp]
+       Ja, precies! We kijken eerst welke woorden over schoenen vaak
+       opduiken in boeken en berichten, en dan zoeken we micro-influencers
+       die daarbij passen. Die geven we dan een duurzaam verhaal mee, zodat
+       het op een eerlijke manier verspreidt wordt.
+
+------------------------------------------------------------------------------
+[  7/116]  Automatische validatie van schoenverkoop via Nooch.earth
+------------------------------------------------------------------------------
+  id          : 4d703e4855fe
+  status      : resolved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-26 02:30
+  door rol    : facilitator
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we een geautomatiseerde validatie van verkochte schoenen via
+    Nooch.earth implementeren, dan kunnen we 100% van de transacties direct
+    valideren en goedkeuren omdat dit de doorlooptijd van voorstellen tot
+    verkoop verkort en de betrouwbaar
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 1000.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 300.00
+    rationale   :
+      Door de validatie te automatiseren, kunnen we de verkoop van schoenen
+      direct koppelen aan de governance-processen, waardoor de tijd tussen
+      verkoop en validatie wordt geminimaliseerd en de verkoopcijfe
+
+  DIALOOG (2 beurt(en))
+
+    V  [2026-06-25 17:47]
+       ik snap dit voorstel niet, leg het uit aan me alsof ik een 12-jarige
+       ben.
+    A  [2026-06-25 23:01, door facilitator]
+       Het betekent dat de computer zelf checkt of een verkoop klopt, zonder
+       dat mensen dat steeds moeten doen. Zo gaat het sneller en zijn er
+       minder fouten.
+
+    V  [2026-06-25 23:23]
+       de website watcher kan nu in shopify, dus volgens mij hebben we deze
+       data. is dat wat je bedoelt?
+    A  [2026-06-26 00:50, door facilitator]
+       Ja, precies! De website watcher kijkt in Shopify (de plek waar we
+       schoenen verkopen) en ziet welke schoenen er verkocht worden. Dat is
+       de data die we nodig hebben om te checken of de verkoop klopt met
+       onze regels.
+
+------------------------------------------------------------------------------
+[  8/116]  "Schoenenlexicon: woordenschat koppelen aan NoochVille-productpagina’s"
+------------------------------------------------------------------------------
+  id          : 924c2347df13
+  status      : resolved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-25 23:26
+  door rol    : librarian
+  soort       : project
+  resolutie   : resolved — 🌍 hoort buiten NoochVille
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we de goedgekeurde woordenschat uit de bibliotheek koppelen aan de
+    productpagina’s van NoochVille (bijv. via metadata of zoektermen), dan
+    stijgt de conversie van bezoekers naar kopers met 15-25% omdat
+    consumenten sneller relevante schoe
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 250.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 70.83
+    rationale   :
+      Een bibliothecaris als onzichtbare gids die de taal van de klant
+      vertaalt naar de productcategorieën van NoochVille, waardoor de
+      drempel tot aankoop daalt.
+
+  DIALOOG (1 beurt(en))
+
+    V  [2026-06-25 18:57]
+       Hoe zie je dat concreet voor je? wat moeten we de website bouwer
+       vertellen?
+    A  [2026-06-25 23:01, door librarian]
+       We willen dat elk woord op de website duidelijk is voor iedereen, net
+       als in een woordenboek. De websitebouwer moet dus korte, duidelijke
+       uitleg geven bij elk schoenonderdeel.
+
+------------------------------------------------------------------------------
+[  9/116]  "Schoenen voor Duurzame Evenementen" (SEO-geoptimaliseerde landingspagina + contentcampagne)
+------------------------------------------------------------------------------
+  id          : a10c3b0e4fb6
+  status      : approved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-25 18:44
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    Als we een **dedicated landingspagina + blogreeks** lanceren met
+    zoekwoorden als *"duurzame schoenen voor evenementen"*, *"eco-friendly
+    schoenen bruiloft"*, of *"heren schoenen voor festivals"*, dan stijgt
+    het organische verkeer naar deze p
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 141.67
+    rationale   :
+      De evenementensector (bruiloften, festivals, bedrijfsevenementen)
+      zoekt actief naar duurzame schoenen, maar Noordster wordt nu niet
+      gevonden voor deze queries – terwijl concurrenten als Veja of Allbir
+
+------------------------------------------------------------------------------
+[ 10/116]  Concurrentie-onderzoek naar "B-Corp sneakerlabels met <250K unieke bezoekers/maand"
+------------------------------------------------------------------------------
+  id          : 001d5168ac1e
+  status      : approved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-25 18:56
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    als we een wekelijks rapport publiceren over B-Corp sneakerlabels met
+    <250K unieke bezoekers/maand die nog geen Nooch-partner zijn, dan
+    genereren we 200-300 paar verkoop via linkbuilding naar hun platforms
+    omdat deze doelgroep hoogstwaarsch
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 250.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 70.83
+    rationale   :
+      B-Corp labels hebben een bewezen marktinteresse in duurzaamheid en
+      zijn vaak zoekend naar partners voor cross-promotie, wat Nooch’s
+      missie en productportfolio perfect aanvult.
+
+------------------------------------------------------------------------------
+[ 11/116]  Nooch Sneaker Swap & Story Hub
+------------------------------------------------------------------------------
+  id          : de5c60907912
+  status      : approved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-25 18:59
+  door rol    : noochie
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    Als we een fysieke en digitale *Sneaker Swap & Story Hub* lanceren waar
+    bewoners hun Nooch-schoenen kunnen ruilen, repareren en hun verhaal
+    delen, dan stijgt de verkoop van Nooch-schoenen met 20% omdat het de
+    emotionele waarde van de schoen
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 4
+    confidence  : 0.85   → waarde 42.50
+    rationale   :
+      Een interactieve hub die schoenen als cultureel kapitaal positioneert,
+      verhoogt de conversie door storytelling en hergebruik als drijfveer
+      voor aankoop.
+
+------------------------------------------------------------------------------
+[ 12/116]  "Schoenen als cultureel ngram: realtime taalmonitoring voor NoochVille"
+------------------------------------------------------------------------------
+  id          : 2a7f5a394eec
+  status      : approved
+  aangemaakt  : 2026-06-25 15:01
+  afgehandeld : 2026-06-25 19:00
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    —
+
+  WAAROM
+    —
+
+  HYPOTHESE
+    Als we een **real-time ngram-monitor** koppelen aan NoochVille’s
+    verkoopdata, dan stijgt het aantal verkochte paren met **≥15%** omdat we
+    **culturele taalverschuivingen** (bv. "duurzame schoenen", "vegan
+    sneakers") direct vertalen naar **zo
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 150.0    horizon: per jaar
+    effort      : 4
+    confidence  : 0.85   → waarde 31.88
+    rationale   :
+      Culturele termen voorspellen koopintentie sneller dan traditionele
+      SEO, en NoochVille mist nu een **data-gedreven link** tussen taal en
+      sales.
+
+------------------------------------------------------------------------------
+[ 13/116]  Schoenen in de winkelmandjes
+------------------------------------------------------------------------------
+  id          : db1b70f59b1e
+  status      : approved
+  aangemaakt  : 2026-06-25 15:23
+  afgehandeld : 2026-06-25 17:24
+  door rol    : facilitator
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan een simpele knop maken op de website van NoochVille. Als iemand
+    een paar schoenen in zijn winkelmandje doet, vragen we: "Wil je ook een
+    paar sokken erbij? Nooch heeft leuke sokken die perfect bij deze
+    schoenen passen!" Zo kunnen mensen makkelijk extra dingen kopen zonder
+    erover na te denken.
+
+  WAAROM
+    Mensen die al schoenen kopen, zijn vaak ook geïnteresseerd in sokken.
+    Als we dat aanbieden op het moment dat ze al iets kopen, verkopen we
+    meer zonder extra moeite.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 225.00
+    rationale   :
+      Mensen die al schoenen kopen, zijn vaak ook geïnteresseerd in sokken.
+      Als we dat aanbieden op het moment dat ze al iets kopen, verkopen we
+      meer zonder extra moeite.
+
+------------------------------------------------------------------------------
+[ 14/116]  Schoenen-Soekmachine
+------------------------------------------------------------------------------
+  id          : a375c2e3fe83
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:23
+  afgehandeld : 2026-06-25 15:26
+  door rol    : librarian
+  soort       : project
+  resolutie   : rejected — Onze collectie is nog te summier. 
+
+  WAT
+    We maken een speciale zoekmachine op nooch.earth waar kinderen en
+    volwassenen kunnen typen wat voor schoenen ze zoeken, zoals "rode
+    sportschoenen met witte veters" of "laarzen voor regenweer". De machine
+    zoekt dan in alle beschikbare schoenen en laat alleen de juiste zien,
+    alsof je een toverstokje hebt voor schoenen.
+
+  WAAROM
+    Mensen vinden sneller wat ze willen, waardoor ze eerder kopen en vaker
+    terugkomen. Geen gedoe met duizenden schoenen die niet passen!
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 2000.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 600.00
+    rationale   :
+      Mensen vinden sneller wat ze willen, waardoor ze eerder kopen en vaker
+      terugkomen. Geen gedoe met duizenden schoenen die niet passen!
+
+------------------------------------------------------------------------------
+[ 15/116]  Sneaker-Spionage op TikTok
+------------------------------------------------------------------------------
+  id          : f24b9e855f4b
+  status      : approved
+  aangemaakt  : 2026-06-25 15:23
+  afgehandeld : 2026-06-25 18:49
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan elke week 5 minuten kijken op TikTok naar filmpjes van jongeren
+    die over duurzame sneakers praten. Als we een filmpje zien van iemand
+    die een Nooch-schoen draagt, sturen we die persoon een berichtje met een
+    gratis paar schoenen en vragen of ze er een filmpje van willen maken. Zo
+    laten we zien dat onze schoenen cool zijn.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen populair zijn bij jongeren, en dat
+    trekt meer mensen aan die onze schoenen willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 120.00
+    rationale   :
+      Zo laten we zien dat onze schoenen populair zijn bij jongeren, en dat
+      trekt meer mensen aan die onze schoenen willen kopen.
+
+------------------------------------------------------------------------------
+[ 16/116]  Schoenen zoeken met "Nooch" in Google
+------------------------------------------------------------------------------
+  id          : c1ba1e845b8f
+  status      : approved
+  aangemaakt  : 2026-06-25 15:23
+  afgehandeld : 2026-06-25 18:53
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan kijken welke woorden mensen typen in Google als ze schoenen
+    zoeken die lijken op Nooch-schoenen. Bijvoorbeeld: "duurzame sneakers"
+    of "schoenen zonder plastic". Daarna maken we een lijstje van de beste
+    woorden en laten we zien hoe Nooch daarop scoort. Als we zien dat mensen
+    vaak zoeken naar "schoenen voor kinderen" maar Nooch daar niet in staat,
+    dan zorgen we dat Nooch daar wel komt.
+
+  WAAROM
+    Als Nooch in Google verschijnt bij woorden die mensen echt zoeken, dan
+    klikken ze sneller op Nooch en kopen ze schoenen. Dat brengt ons dichter
+    bij de 1000 paar per jaar.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Als Nooch in Google verschijnt bij woorden die mensen echt zoeken, dan
+      klikken ze sneller op Nooch en kopen ze schoenen. Dat brengt ons
+      dichter bij de 1000 paar per jaar.
+
+------------------------------------------------------------------------------
+[ 17/116]  Schoenen ruilen voor groene punten
+------------------------------------------------------------------------------
+  id          : 95d3f7233916
+  status      : approved
+  aangemaakt  : 2026-06-25 15:24
+  afgehandeld : 2026-06-25 17:27
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken een app waar mensen oude schoenen kunnen inleveren. Voor elke
+    paar schoenen krijgen ze punten. Die punten kunnen ze gebruiken om
+    nieuwe schoenen te kopen op nooch.earth. We laten zien hoeveel CO2 ze
+    besparen door schoenen te hergebruiken.
+
+  WAAROM
+    Mensen willen graag duurzaam zijn, maar weten niet altijd hoe. Met deze
+    app maken we het makkelijk om schoenen te ruilen en tegelijk nieuwe te
+    kopen. Zo verkopen we meer schoenen en helpen we het milieu.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 0.90
+    rationale   :
+      Mensen willen graag duurzaam zijn, maar weten niet altijd hoe. Met
+      deze app maken we het makkelijk om schoenen te ruilen en tegelijk
+      nieuwe te kopen. Zo verkopen we meer schoenen en helpen we het milieu.
+
+------------------------------------------------------------------------------
+[ 18/116]  Schoenenruilfeest met buurdorpen
+------------------------------------------------------------------------------
+  id          : 75f99f1562cb
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:24
+  afgehandeld : 2026-06-25 18:46
+  door rol    : noochie
+  soort       : project
+  resolutie   : rejected — Noochvillle heeft nog geen buurdorpen
+
+  WAT
+    We organiseren een groot feest waar mensen uit NoochVille en omliggende
+    dorpen hun oude schoenen kunnen ruilen voor nieuwe. Iedereen mag 1 paar
+    oude schoenen meenemen en krijgt er 1 paar nieuwe voor terug, maar
+    alleen als ze via nooch.earth bestellen. We maken er een feest van met
+    muziek, eten en een "beste schoen"-wedstrijd.
+
+  WAAROM
+    Zo laten we zien hoe leuk en makkelijk het is om via nooch.earth
+    schoenen te kopen. Mensen die normaal nooit online zouden shoppen, doen
+    het nu wel – en dat levert ons nieuwe klanten op.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Zo laten we zien hoe leuk en makkelijk het is om via nooch.earth
+      schoenen te kopen. Mensen die normaal nooit online zouden shoppen,
+      doen het nu wel – en dat levert ons nieuwe klanten op.
+
+------------------------------------------------------------------------------
+[ 19/116]  Schoenenjacht in de buurt
+------------------------------------------------------------------------------
+  id          : 64c8c879b2d4
+  status      : approved
+  aangemaakt  : 2026-06-25 15:25
+  afgehandeld : 2026-06-25 18:56
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan een spel maken waarbij mensen in hun eigen stad of dorp op zoek
+    gaan naar de beste plek om schoenen te verkopen via Nooch.earth. We
+    maken een kaart met winkels, scholen en plekken waar veel mensen komen.
+    Daarna vragen we mensen om foto’s te maken van die plekken en die te
+    delen op sociale media met een speciale sticker van Nooch. Zo laten we
+    zien waar Nooch schoenen kan verkopen.
+
+  WAAROM
+    Als mensen zelf meedoen en foto’s delen, vertellen ze aan hun vrienden
+    en familie over Nooch. Zo komen er meer mensen op de website en kopen ze
+    meer schoenen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 80.00
+    rationale   :
+      Als mensen zelf meedoen en foto’s delen, vertellen ze aan hun vrienden
+      en familie over Nooch. Zo komen er meer mensen op de website en kopen
+      ze meer schoenen.
+
+------------------------------------------------------------------------------
+[ 20/116]  Schoenen zoeken met foto’s
+------------------------------------------------------------------------------
+  id          : 7a595d4d51a7
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:52
+  afgehandeld : 2026-06-25 18:58
+  door rol    : trends
+  soort       : project
+  resolutie   : rejected — onze collectie is te klein hiervoor
+
+  WAT
+    We gaan een knop maken op nooch.earth waar je een foto van een schoen
+    kunt uploaden. De website zoekt dan meteen welke schoenen van ons daarop
+    lijken. Zo hoef je niet te raden of de naam te typen, maar klik je
+    gewoon op wat je ziet.
+
+  WAAROM
+    Mensen die een schoen leuk vinden maar de naam niet weten, kunnen nu
+    makkelijk vinden wat ze zoeken. Zo verkopen we meer schoenen zonder dat
+    ze lang hoeven te zoeken.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 60.00
+    rationale   :
+      Mensen die een schoen leuk vinden maar de naam niet weten, kunnen nu
+      makkelijk vinden wat ze zoeken. Zo verkopen we meer schoenen zonder
+      dat ze lang hoeven te zoeken.
+
+------------------------------------------------------------------------------
+[ 21/116]  Schoenenruil met scholen
+------------------------------------------------------------------------------
+  id          : ee11b7d34c97
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:52
+  afgehandeld : 2026-06-25 18:44
+  door rol    : facilitator
+  soort       : project
+  resolutie   : rejected — scholen zijn niet onze doelgroep
+
+  WAT
+    We gaan een spel maken waarbij scholen schoenen van NoochVille kunnen
+    "lenen" voor een maand. Daarna ruilen ze ze in voor nieuwe schoenen of
+    geven ze terug. De scholen laten zien hoe ze de schoenen gebruiken,
+    bijvoorbeeld met foto’s op een prikbord.
+
+  WAAROM
+    Zo laten we zien dat NoochVille-schoenen echt draagbaar en leuk zijn.
+    Kinderen en ouders zien dat en willen misschien zelf ook zo’n paar.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Zo laten we zien dat NoochVille-schoenen echt draagbaar en leuk zijn.
+      Kinderen en ouders zien dat en willen misschien zelf ook zo’n paar.
+
+------------------------------------------------------------------------------
+[ 22/116]  Schoenenjagers volgen op sociale media
+------------------------------------------------------------------------------
+  id          : c9151e2b94ba
+  status      : approved
+  aangemaakt  : 2026-06-25 15:52
+  afgehandeld : 2026-06-25 18:42
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan op Instagram en TikTok zoeken naar mensen die vaak over duurzame
+    schoenen praten. We maken een lijst van hun favoriete merken en waar ze
+    hun schoenen kopen. Daarna sturen we die mensen een berichtje met een
+    vraag: "Welke duurzame schoenen draag jij het liefst?" en laten we ze
+    een paar van onze schoenen uitproberen.
+
+  WAAROM
+    Als we weten welke merken en winkels zij cool vinden, kunnen we daar
+    onze schoenen laten zien. Zo bereiken we precies de mensen die al
+    geïnteresseerd zijn in duurzame schoenen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Als we weten welke merken en winkels zij cool vinden, kunnen we daar
+      onze schoenen laten zien. Zo bereiken we precies de mensen die al
+      geïnteresseerd zijn in duurzame schoenen.
+
+------------------------------------------------------------------------------
+[ 23/116]  Schoenen-Soekmachine 2.0
+------------------------------------------------------------------------------
+  id          : 1f536afd02ff
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:52
+  afgehandeld : 2026-06-25 18:41
+  door rol    : librarian
+  soort       : project
+  resolutie   : rejected — onze collectie is te klein hiervoor
+
+  WAT
+    We maken een speciale zoekknop op nooch.earth die alleen maar schoenen
+    laat zien. Als je iets intypt zoals "rode sneakers" of "winterlaarzen",
+    dan verschijnen er meteen schoenen uit onze eigen collectie. Geen andere
+    spullen, geen rommel. We laten ook zien welke schoenen het meest worden
+    gedragen door mensen in NoochVille, zodat je weet wat populair is.
+
+  WAAROM
+    Mensen zoeken vaak naar schoenen maar vinden nu te weinig. Als ze meteen
+    de juiste schoenen zien, kopen ze sneller. Zo verkopen we meer paar
+    schoenen via nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Mensen zoeken vaak naar schoenen maar vinden nu te weinig. Als ze
+      meteen de juiste schoenen zien, kopen ze sneller. Zo verkopen we meer
+      paar schoenen via nooch.earth.
+
+------------------------------------------------------------------------------
+[ 24/116]  Schoenen voor de echte avonturiers
+------------------------------------------------------------------------------
+  id          : 4ddf2cd9d663
+  status      : approved
+  aangemaakt  : 2026-06-25 15:53
+  afgehandeld : 2026-06-25 18:55
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken een speciale lijst van woorden die steeds vaker opduiken in
+    verhalen over schoenen. Bijvoorbeeld: "duurzaam", "lokaal gemaakt",
+    "voor altijd meegaan". Daarna zoeken we uit welke van die woorden echt
+    passen bij de schoenen die we verkopen. We schrijven korte verhalen over
+    die schoenen, met die woorden erin, en laten zien waarom ze zo bijzonder
+    zijn.
+
+  WAAROM
+    Mensen die graag schoenen dragen die lang meegaan en goed zijn voor de
+    wereld, willen weten waarom onze schoenen dat zijn. Als we hun taal
+    spreken, kopen ze sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Mensen die graag schoenen dragen die lang meegaan en goed zijn voor de
+      wereld, willen weten waarom onze schoenen dat zijn. Als we hun taal
+      spreken, kopen ze sneller.
+
+------------------------------------------------------------------------------
+[ 25/116]  Schoenenruilfeest in het dorp
+------------------------------------------------------------------------------
+  id          : 531ade3a072b
+  status      : approved
+  aangemaakt  : 2026-06-25 15:53
+  afgehandeld : 2026-06-25 18:40
+  door rol    : noochie
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We organiseren een groot feest waar mensen hun oude schoenen kunnen
+    ruilen voor nieuwe, maar dan via nooch.earth. Iedereen brengt een paar
+    schoenen mee die nog goed zijn, maar die ze niet meer dragen. Op het
+    feest passen ze nieuwe schoenen uit die anderen hebben meegebracht. Wie
+    een paar meeneemt, mag er ook een paar meenemen. Alles wordt bijgehouden
+    op een groot bord, zodat iedereen ziet welke schoenen er zijn en wie ze
+    heeft gebracht.
+
+  WAAROM
+    Zo laten we zien dat schoenen delen net zo leuk en nuttig kan zijn als
+    ze kopen. Mensen die eerst niet wisten van nooch.earth, zien nu hoe het
+    werkt en kunnen meteen een paar nieuwe schoenen meenemen. Het voelt als
+    een feest, niet als een winkel.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Zo laten we zien dat schoenen delen net zo leuk en nuttig kan zijn als
+      ze kopen. Mensen die eerst niet wisten van nooch.earth, zien nu hoe
+      het werkt en kunnen meteen een paar nieuwe schoenen meenemen. Het
+      voelt als een feest, niet als een winkel.
+
+------------------------------------------------------------------------------
+[ 26/116]  Schoenhelden Club
+------------------------------------------------------------------------------
+  id          : 18445d8f48bf
+  status      : rejected
+  aangemaakt  : 2026-06-25 15:54
+  afgehandeld : 2026-06-25 18:52
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : rejected — zo stimuleren we overconsumptie. wij werken juist met made-on-demand om overproductie- en consumptie tegen te gaan.
+
+  WAT
+    We maken een club waar mensen die van schoenen houden elke maand een
+    speciale schoen van Nooch krijgen. Ze betalen een klein bedrag per maand
+    en mogen die schoen houden. Daarna kunnen ze kiezen: de schoen houden,
+    ruilen voor een andere, of een nieuwe maandelijkse schoen proberen.
+
+  WAAROM
+    Mensen die van schoenen houden praten er graag over en laten anderen
+    zien wat ze dragen. Zo komen er meer mensen naar Nooch en kopen ze
+    misschien nog meer schoenen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Mensen die van schoenen houden praten er graag over en laten anderen
+      zien wat ze dragen. Zo komen er meer mensen naar Nooch en kopen ze
+      misschien nog meer schoenen.
+
+------------------------------------------------------------------------------
+[ 27/116]  Schoenenfluisteraar voor scholen
+------------------------------------------------------------------------------
+  id          : 9ccd5622a8ec
+  status      : rejected
+  aangemaakt  : 2026-06-25 16:42
+  afgehandeld : 2026-06-25 18:43
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : rejected — schoolkinderen zijn niet onze doelgroep
+
+  WAT
+    We gaan een lijst maken van scholen waar kinderen vaak nieuwe schoenen
+    nodig hebben. Daarna zoeken we uit welke merken die scholen gebruiken en
+    of ze openstaan voor duurzame schoenen. We vragen de scholen of ze een
+    lijstje willen delen met ouders die nieuwe schoenen zoeken.
+
+  WAAROM
+    Als scholen meehelpen, bereiken we direct mensen die écht nieuwe
+    schoenen nodig hebben. Die zijn sneller bereid om duurzame schoenen te
+    kopen dan iemand die gewoon even rondkijkt.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Als scholen meehelpen, bereiken we direct mensen die écht nieuwe
+      schoenen nodig hebben. Die zijn sneller bereid om duurzame schoenen te
+      kopen dan iemand die gewoon even rondkijkt.
+
+------------------------------------------------------------------------------
+[ 28/116]  Schoenen voor dagelijks avontuur
+------------------------------------------------------------------------------
+  id          : 23ada59ac145
+  status      : approved
+  aangemaakt  : 2026-06-25 16:42
+  afgehandeld : 2026-06-25 18:55
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken een lijst van woorden die mensen typen als ze zoeken naar
+    "goede schoenen voor elke dag". Die woorden stoppen we in de zoekmachine
+    van nooch.earth, zodat mensen die zoeken meteen onze schoenen zien.
+    Daarna vragen we mensen die onze schoenen dragen om een foto te maken
+    met een leuke tekst erbij, zoals "Mijn Nooch-schoenen houden me de hele
+    dag op de been!" en zetten die op onze website.
+
+  WAAROM
+    Als mensen zoeken naar "schoenen voor elke dag" en onze schoenen zien,
+    kopen ze ze sneller. De foto's laten zien dat onze schoenen echt werken
+    en dat andere mensen ze leuk vinden.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Als mensen zoeken naar "schoenen voor elke dag" en onze schoenen zien,
+      kopen ze ze sneller. De foto's laten zien dat onze schoenen echt
+      werken en dat andere mensen ze leuk vinden.
+
+------------------------------------------------------------------------------
+[ 29/116]  Schoenen met verhalen
+------------------------------------------------------------------------------
+  id          : 083e562f9dbf
+  status      : approved
+  aangemaakt  : 2026-06-25 16:43
+  afgehandeld : 2026-06-25 18:39
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan een speciale pagina maken op nooch.earth waar mensen hun
+    schoenen kunnen laten zien met een kort verhaal erbij. Bijvoorbeeld:
+    "Deze schoenen droeg ik toen ik voor het eerst naar de stad ging" of
+    "Deze heb ik gekocht van een maker uit een ander land." Andere mensen
+    kunnen die verhalen lezen en zo meer zin krijgen om ook zulke schoenen
+    te kopen.
+
+  WAAROM
+    Als mensen een persoonlijke band voelen met schoenen, willen ze ze
+    eerder kopen. Zo worden schoenen niet zomaar iets wat je draagt, maar
+    iets met betekenis.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Als mensen een persoonlijke band voelen met schoenen, willen ze ze
+      eerder kopen. Zo worden schoenen niet zomaar iets wat je draagt, maar
+      iets met betekenis.
+
+------------------------------------------------------------------------------
+[ 30/116]  Schoenendokters op de markt
+------------------------------------------------------------------------------
+  id          : c6723e8fea58
+  status      : rejected
+  aangemaakt  : 2026-06-25 16:43
+  afgehandeld : 2026-06-25 18:39
+  door rol    : noochie
+  soort       : project
+  resolutie   : rejected — ik zie niet voor me met welke nooch materialen de oude schoen dan verbeterd kan worden
+
+  WAT
+    We zetten een kraam neer op de dorpsmarkt waar mensen hun oude schoenen
+    kunnen laten repareren door echte schoenmakers. Terwijl ze wachten,
+    laten we ze zien hoe mooi hun schoenen kunnen worden gemaakt met Nooch-
+    schoenen als onderdeel van de reparatie. Ook verkopen we er meteen
+    nieuwe Nooch-schoenen, maar alleen als de oude schoenen gerepareerd
+    worden.
+
+  WAAROM
+    Mensen die hun schoenen laten repareren, zijn al bezig met hun schoenen.
+    Ze willen ze langer dragen en zijn dus gevoeliger voor duurzame keuzes.
+    Door reparatie en verkoop te combineren, laten we zien dat Nooch-
+    schoenen lang meegaan.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Mensen die hun schoenen laten repareren, zijn al bezig met hun
+      schoenen. Ze willen ze langer dragen en zijn dus gevoeliger voor
+      duurzame keuzes. Door reparatie en verkoop te combineren, laten we
+      zien dat Nooch-schoenen lang meegaan.
+
+------------------------------------------------------------------------------
+[ 31/116]  Schoenenfluisteraar voor lokale helden
+------------------------------------------------------------------------------
+  id          : 51fac7b51de1
+  status      : rejected
+  aangemaakt  : 2026-06-25 16:44
+  afgehandeld : 2026-06-25 18:54
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : rejected — wij verkopen niet direct vanuit fysieke winkels.
+
+  WAT
+    We maken een speciale kaart op nooch.earth waar mensen kunnen zien welke
+    lokale winkels onze schoenen verkopen. Die winkels krijgen een klein
+    bordje met een QR-code die naar de winkelpagina leidt. We vragen de
+    winkels om hun klanten te vertellen: "Als je onze schoenen koopt, scan
+    dan even deze code!"
+
+  WAAROM
+    Mensen vertrouwen lokale winkels meer dan een website. Als ze die
+    schoenen daar zien liggen en erover horen, kopen ze sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Mensen vertrouwen lokale winkels meer dan een website. Als ze die
+      schoenen daar zien liggen en erover horen, kopen ze sneller.
+
+------------------------------------------------------------------------------
+[ 32/116]  Schoenen in de winkelstraat
+------------------------------------------------------------------------------
+  id          : 27911b064eed
+  status      : approved
+  aangemaakt  : 2026-06-25 17:15
+  afgehandeld : 2026-06-25 18:34
+  door rol    : facilitator
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan een grote, felgekleurde doos neerzetten in een drukke
+    winkelstraat waar mensen vaak langslopen. In die doos zitten 10 paar
+    schoenen die mensen meteen kunnen passen en meenemen. Als ze ze willen
+    houden, betalen ze via een groot scherm op de doos. Zo hoeven ze niet
+    naar een winkel te zoeken of online te bestellen.
+
+  WAAROM
+    Mensen zien de schoenen en passen ze meteen. Dat maakt het makkelijker
+    om te kopen, zonder dat ze erover hoeven na te denken. Zo verkopen we
+    meer schoenen via nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Mensen zien de schoenen en passen ze meteen. Dat maakt het makkelijker
+      om te kopen, zonder dat ze erover hoeven na te denken. Zo verkopen we
+      meer schoenen via nooch.earth.
+
+------------------------------------------------------------------------------
+[ 33/116]  Schoenen voor sporthelden
+------------------------------------------------------------------------------
+  id          : 564ab2322bc8
+  status      : approved
+  aangemaakt  : 2026-06-25 17:15
+  afgehandeld : 2026-06-25 18:37
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken een speciale pagina op nooch.earth met schoenen die perfect
+    zijn voor sporten, zoals hardlopen of voetbal. We zoeken uit welke
+    woorden mensen typen als ze zulke schoenen willen kopen, zoals "beste
+    hardloopschoenen voor kinderen" of "voetbalschoenen voor meisjes".
+    Daarna zetten we die schoenen op een plek waar ze makkelijk te vinden
+    zijn.
+
+  WAAROM
+    Mensen die sporten zoeken vaak specifieke schoenen. Als we die precies
+    laten zien waar ze kijken, kopen ze sneller bij ons dan bij een winkel
+    die alles door elkaar heeft.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Mensen die sporten zoeken vaak specifieke schoenen. Als we die precies
+      laten zien waar ze kijken, kopen ze sneller bij ons dan bij een winkel
+      die alles door elkaar heeft.
+
+------------------------------------------------------------------------------
+[ 34/116]  Schoenenjagers op TikTok
+------------------------------------------------------------------------------
+  id          : 55e3e8c22caf
+  status      : approved
+  aangemaakt  : 2026-06-25 17:15
+  afgehandeld : 2026-06-25 18:36
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken korte filmpjes waarin we laten zien hoe Nooch-schoenen gemaakt
+    worden, van het gerecyclede plastic tot de schoen in iemands hand. We
+    zoeken mensen die al schoenen dragen en vragen of ze een filmpje willen
+    maken van hun schoenen in actie. Die filmpjes delen we op TikTok met een
+    leuke uitdaging, zoals "Laat zien hoe jij je schoenen hergebruikt".
+
+  WAAROM
+    Zo zien mensen dat Nooch-schoenen niet alleen mooi zijn, maar ook goed
+    voor de wereld. Als mensen zien dat anderen er trots op zijn, willen ze
+    ze ook hebben.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Zo zien mensen dat Nooch-schoenen niet alleen mooi zijn, maar ook goed
+      voor de wereld. Als mensen zien dat anderen er trots op zijn, willen
+      ze ze ook hebben.
+
+------------------------------------------------------------------------------
+[ 35/116]  Schoenen die verhalen vertellen
+------------------------------------------------------------------------------
+  id          : 8b8c11752671
+  status      : approved
+  aangemaakt  : 2026-06-25 17:16
+  afgehandeld : 2026-06-25 18:55
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We gaan een speciale pagina maken op nooch.earth waar mensen hun
+    schoenen kunnen laten zien met een kort verhaal erbij. Bijvoorbeeld:
+    "Deze schoenen droeg ik toen ik voor het eerst naar de zee ging" of
+    "Deze zijn van mijn opa, hij droeg ze elke dag." Andere mensen kunnen
+    die verhalen lezen en zo geïnspireerd raken om ook zulke schoenen te
+    kopen of te verkopen.
+
+  WAAROM
+    Mensen houden van dingen met een verhaal. Als ze zien dat schoenen meer
+    betekenen dan alleen iets om aan je voeten te hebben, willen ze
+    misschien ook zo’n paar. Zo komen er meer mensen naar nooch.earth die
+    écht iets willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.85   → waarde 141.67
+    rationale   :
+      Mensen houden van dingen met een verhaal. Als ze zien dat schoenen
+      meer betekenen dan alleen iets om aan je voeten te hebben, willen ze
+      misschien ook zo’n paar. Zo komen er meer mensen naar nooch.earth die
+      écht iets willen kopen.
+
+------------------------------------------------------------------------------
+[ 36/116]  Schoenenfluisteraars in de buurt
+------------------------------------------------------------------------------
+  id          : 4821f26ad836
+  status      : approved
+  aangemaakt  : 2026-06-25 17:17
+  afgehandeld : 2026-06-25 19:03
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We zoeken mensen in elke stad waar Nooch.earth schoenen verkoopt en
+    vragen hen om elke week even rond te kijken in hun eigen buurt. Ze
+    noteren op een simpele kaart waar mensen vaak lopen, waar ze stoppen om
+    te kijken naar schoenenwinkels, en waar ze het liefst hun schoenen
+    kopen. Die kaarten sturen ze naar ons, en wij kijken welke plekken het
+    beste passen bij onze schoenen.
+
+  WAAROM
+    Als we weten waar mensen graag lopen en kijken, kunnen we onze schoenen
+    daar laten zien op een manier die past bij die plek. Zo vinden mensen ze
+    sneller en kopen ze ze eerder.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 60.00
+    rationale   :
+      Als we weten waar mensen graag lopen en kijken, kunnen we onze
+      schoenen daar laten zien op een manier die past bij die plek. Zo
+      vinden mensen ze sneller en kopen ze ze eerder.
+
+------------------------------------------------------------------------------
+[ 37/116]  Sneakerhelden uitnodigen
+------------------------------------------------------------------------------
+  id          : 5ad01ccf58df
+  status      : approved
+  aangemaakt  : 2026-06-25 17:30
+  afgehandeld : 2026-06-25 18:35
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We zoeken 10 mensen die al van duurzame sneakers houden en vragen of ze
+    een paar van Nooch.earth willen dragen. Niet om te verkopen, maar om te
+    laten zien hoe ze ermee rondlopen. We filmen of fotograferen ze in hun
+    dagelijks leven en delen dat op sociale media.
+
+  WAAROM
+    Als andere mensen zien dat echte mensen deze schoenen dragen en er blij
+    mee zijn, willen ze ze ook. Zo groeit de bekendheid zonder dure reclame.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 150.00
+    rationale   :
+      Als andere mensen zien dat echte mensen deze schoenen dragen en er
+      blij mee zijn, willen ze ze ook. Zo groeit de bekendheid zonder dure
+      reclame.
+
+------------------------------------------------------------------------------
+[ 38/116]  Schoenenruil met buurtwinkels
+------------------------------------------------------------------------------
+  id          : b68634ce4e6d
+  status      : rejected
+  aangemaakt  : 2026-06-25 17:30
+  afgehandeld : 2026-06-25 18:49
+  door rol    : facilitator
+  soort       : project
+  resolutie   : rejected — wij verkopen alleen schoenen die 100% aansluiten bij ons visie van 100% vegan 0% plastic gefabriceerd in EU
+
+  WAT
+    We vragen buurtwinkels of ze een paar van hun schoenen willen ruilen
+    voor een paar van Nooch. Bijvoorbeeld: de winkel geeft een paar
+    sportschoenen aan Nooch, en krijgt er een paar wandelschoenen voor
+    terug. Daarna zetten we die schoenen van de winkel op nooch.earth, met
+    een briefje dat ze van die winkel komen.
+
+  WAAROM
+    Zo laten we zien dat Nooch niet alleen schoenen verkoopt, maar ook
+    samenwerkt met echte winkels. Mensen die die winkels al kennen, kopen
+    sneller schoenen via Nooch als ze weten dat ze er ook in de buurt zijn.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo laten we zien dat Nooch niet alleen schoenen verkoopt, maar ook
+      samenwerkt met echte winkels. Mensen die die winkels al kennen, kopen
+      sneller schoenen via Nooch als ze weten dat ze er ook in de buurt
+      zijn.
+
+------------------------------------------------------------------------------
+[ 39/116]  Schoenen zoeken met een knipoog
+------------------------------------------------------------------------------
+  id          : 9e9f36e524f6
+  status      : approved
+  aangemaakt  : 2026-06-25 17:30
+  afgehandeld : 2026-06-25 18:59
+  door rol    : trends
+  soort       : project
+  resolutie   : approved — afgerond
+
+  WAT
+    We maken een lijstje van grappige of rare zoekopdrachten die mensen
+    typen als ze schoenen zoeken, maar waar we nu nog geen goede antwoorden
+    op hebben. Bijvoorbeeld: "schoenen voor als je de hele dag op een
+    feestje staat" of "schoenen die niet vies worden als je door de modder
+    loopt". Daarna schrijven we korte, leuke teksten op nooch.earth die
+    precies antwoord geven op die rare vragen.
+
+  WAAROM
+    Mensen die zoeken op grappige of rare dingen zijn vaak al heel
+    enthousiast over schoenen. Als we hen precies het antwoord geven dat ze
+    zoeken, kopen ze sneller een paar.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 53.33
+    rationale   :
+      Mensen die zoeken op grappige of rare dingen zijn vaak al heel
+      enthousiast over schoenen. Als we hen precies het antwoord geven dat
+      ze zoeken, kopen ze sneller een paar.
+
+------------------------------------------------------------------------------
+[ 40/116]  Schoenenfluisteraar in elke stad
+------------------------------------------------------------------------------
+  id          : 764b8538cba1
+  status      : resolved
+  aangemaakt  : 2026-06-25 17:32
+  afgehandeld : 2026-06-25 23:25
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : resolved — 🌍 hoort buiten NoochVille
+
+  WAT
+    We maken een lijst met 100 mensen in elke grote stad die graag schoenen
+    dragen en er veel over praten. Die mensen vragen we om elke week een
+    foto te maken van hun schoenen en te vertellen waarom ze die gekozen
+    hebben. Hun verhalen zetten we op de website van Nooch.earth, met een
+    link naar waar je die schoenen kunt kopen.
+
+  WAAROM
+    Zo laten we zien dat Nooch.earth echt goede schoenen heeft die mensen
+    leuk vinden. Als anderen die verhalen lezen, willen ze misschien ook die
+    schoenen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Zo laten we zien dat Nooch.earth echt goede schoenen heeft die mensen
+      leuk vinden. Als anderen die verhalen lezen, willen ze misschien ook
+      die schoenen kopen.
+
+  DIALOOG (1 beurt(en))
+
+    V  [2026-06-25 18:51]
+       en hoe is dit idee anders dan de andere ideeën die er al zijn met
+       'influencers'
+    A  [2026-06-25 23:01, door website_watcher]
+       Deze mensen zijn geen influencers die alleen maar reclame maken, maar
+       echte liefhebbers die hun eigen verhaal vertellen. Zo weten anderen
+       precies waarom die schoenen zo fijn zijn.
+
+------------------------------------------------------------------------------
+[ 41/116]  Rol 'librarian' aanscherpen: Vervang de accountability *"twijfelgevallen escaleren naar e
+------------------------------------------------------------------------------
+  id          : 79618d5720eb
+  status      : approved
+  aangemaakt  : 2026-06-25 18:26
+  afgehandeld : 2026-06-25 19:05
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability *"twijfelgevallen escaleren naar een mens"*
+    door *"Twijfelgevallen escaleren naar de juiste rol of persoon"*
+
+  WAAROM
+    De huidige formulering is te vaag ("een mens") en claimt impliciet
+    exclusiviteit (alleen escaleren naar mensen). Holacracy vereist dat je
+    de *rol of persoon* specificeert die verantwoordelijk is voor de
+    beslissing, zonder autoriteit toe te kennen. Zo blijft het een
+    doorlopend aandachtsgebied zonder
+
+------------------------------------------------------------------------------
+[ 42/116]  Rol 'noochie' aanscherpen: Vervang de accountability *"creatieve governance-voorstellen
+------------------------------------------------------------------------------
+  id          : 1b5b0e6a1fbd
+  status      : approved
+  aangemaakt  : 2026-06-25 18:26
+  afgehandeld : 2026-06-25 19:04
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability *"creatieve governance-voorstellen aandragen,
+    met de voorwaarde waaronder een voorstel kantelt"* door:
+
+  WAAROM
+    De huidige formulering is te gedetailleerd (mengt een accountability met
+    een policy) en suggereert een eenmalige actie ("aandragen"). De nieuwe
+    versie is een doorlopende activiteit, helder en zonder autoriteitsclaim.
+
+------------------------------------------------------------------------------
+[ 43/116]  Rol 'website_watcher' aanscherpen: Vervang de accountability "Doel 'verkoopdoel_2026_q4' vereis
+------------------------------------------------------------------------------
+  id          : a7f72b879ecd
+  status      : approved
+  aangemaakt  : 2026-06-25 18:26
+  afgehandeld : 2026-06-25 19:03
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability "Doel 'verkoopdoel_2026_q4' vereist meting van
+    'pairs_sold' (target: 1000 paar sc" door: **"Monitoren van verkoopdoelen
+    en -trends op basis van verkochte paren per periode."*
+
+  WAAROM
+    Deze accountability is te specifiek (met een exact target en een
+    afkorting 'sc') en lijkt op een eenmalige taak in plaats van een
+    doorlopend aandachtsgebied. De nieuwe formulering is algemener, maar
+    blijft concreet genoeg om de kern te dekken: het continu bijhouden en
+    analyseren van verkoopcijfers.
+
+------------------------------------------------------------------------------
+[ 44/116]  Rol 'trends' aanscherpen: Vervang de accountability "schrijft een wekelijkse GSC-nota
+------------------------------------------------------------------------------
+  id          : 92bb1eecf0a5
+  status      : approved
+  aangemaakt  : 2026-06-25 18:26
+  afgehandeld : 2026-06-25 19:04
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability "schrijft een wekelijkse GSC-nota met
+    zoekopdracht-analyse en rankings" door **"Opstellen en delen van een
+    wekelijkse zoekopdracht-analyse en rankingsrapportage"**.
+
+  WAAROM
+    Dit voldoet aan de Holacracy-regel dat een accountability een
+    doorlopende activiteit moet beschrijven (met -en-vorm) en is korter en
+    duidelijker geformuleerd.
+
+------------------------------------------------------------------------------
+[ 45/116]  Rol 'harry_hemp' aanscherpen: Vervang de accountability *"tijdgeest-signalen publiceren bi
+------------------------------------------------------------------------------
+  id          : 3bf84bac16c6
+  status      : approved
+  aangemaakt  : 2026-06-25 18:26
+  afgehandeld : 2026-06-25 19:01
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability *"tijdgeest-signalen publiceren bij ≥2 termen
+    die structureel dezelfde richting op bewegen"* door:
+
+  WAAROM
+    Deze formulering is korter, duidelijker en voldoet aan de Holacracy-
+    regels (begint met werkwoord in -en-vorm, beschrijft een doorlopende
+    activiteit zonder te specificeren *hoe* of *wanneer* het gebeurt). De
+    huidige versie is te gedetailleerd (met de ≥2 termen en "structureel
+    dezelfde richting") en v
+
+------------------------------------------------------------------------------
+[ 46/116]  Rol 'the_source' aanscherpen: Vervang de accountability *"de richting van NoochVille bepal
+------------------------------------------------------------------------------
+  id          : 158a8bd5a016
+  status      : approved
+  aangemaakt  : 2026-06-25 18:27
+  afgehandeld : 2026-06-25 19:01
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability *"de richting van NoochVille bepalen"* door
+    **"Het definiëren en communiceren van de strategische richting van
+    NoochVille"** om het doorlopende karakter en de verantwoordelij
+
+  WAAROM
+    De huidige formulering is te vaag en lijkt op een eenmalige taak. De
+    nieuwe versie maakt duidelijk dat het een continu proces is (definiëren
+    *en* communiceren) en sluit aan bij de purpose van de rol: de droom
+    bedenken *en* anderen enthousiast maken.
+
+------------------------------------------------------------------------------
+[ 47/116]  Rol 'concurrent_scout' aanscherpen: Vervang de accountability "wekelijks een concurrentie-veldra
+------------------------------------------------------------------------------
+  id          : fd916f7682e0
+  status      : approved
+  aangemaakt  : 2026-06-25 18:27
+  afgehandeld : 2026-06-25 18:31
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability "wekelijks een concurrentie-veldrapport
+    opstellen" door **"Opstellen en verspreiden van een wekelijks
+    concurrentie-veldrapport"**.
+
+  WAAROM
+    Dit maakt de accountability korter, duidelijker en benadrukt de
+    doorlopende activiteit (opstellen *en* verspreiden) in plaats van een
+    eenmalige taak. Het past beter bij Holacracy’s eis dat een
+    accountability een doorlopend aandachtsgebied is, geen afgerond project.
+
+------------------------------------------------------------------------------
+[ 48/116]  Rol 'librarian' aanscherpen
+------------------------------------------------------------------------------
+  id          : e3c615bad956
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:44
+  afgehandeld : 2026-06-25 23:35
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    **Accountabilities vervolledigen met werkwoorden die een doorlopende
+    activiteit beschrijven.** Accountabilities: * **Verzamelen en beoordelen
+    van kandidaat-woorden voor de goedgekeurde woordenschat.** *
+    **Signaleren en escaleren van twijfelgevallen of onduidelijkheden
+    betreffende de woordenschat naar de juiste rol of persoon.**
+
+  WAAROM
+    De huidige accountabilities zijn niet geformuleerd volgens de Holacracy-
+    regel dat ze moeten beginnen met een werkwoord dat een doorlopende
+    activiteit beschrijft (de -en-vorm in het Nederlands). Ook mist de rol
+    een accountability die actief de woordenschat beheert en bijhoudt.
+
+------------------------------------------------------------------------------
+[ 49/116]  Rol 'noochie' aanscherpen
+------------------------------------------------------------------------------
+  id          : 8cf838b00bee
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:44
+  afgehandeld : 2026-06-25 23:35
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de accountability "creatieve governance-voorstellen aandragen,
+    met de voorwaarde waaronder een voorstel kantelt" door: "Ontwikkelen en
+    faciliteren van creatieve governance-voorstellen, inclusief de kaders
+    waarbinnen deze voorstellen worden beoordeeld.
+
+  WAAROM
+    De huidige formulering is onduidelijk over het doorlopende karakter en
+    wat precies de rol is in het aandragen versus het beoordelen. Door het
+    te formuleren als "Ontwikkelen en faciliteren" wordt het een duidelijke,
+    doorlopende activiteit, en het toevoegen van "inclusief de kaders
+    waarbinnen deze voorstellen worden beoordeeld" maakt het concrete
+    aandachtsgebied duidelijker en holacracy-conform.
+
+------------------------------------------------------------------------------
+[ 50/116]  Rol 'website_watcher' aanscherpen
+------------------------------------------------------------------------------
+  id          : 7d6ce0a69152
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:44
+  afgehandeld : 2026-06-25 23:35
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de **Purpose** door: *"Het omzetten van data en inzichten in
+    actiegerichte adviezen, zodat Nooch.earth gezond, vindbaar en groeiend
+    blijft."*
+
+  WAAROM
+    De huidige purpose is te breed en bevat al een accountability ("Data en
+    inzicht omzetten in bruikbaar advies"). Een purpose moet een *reden voor
+    bestaan* zijn, geen activiteit. De nieuwe versie is korter, duidelijker
+    en focust op het *waarom* in plaats van het *wat*.
+
+------------------------------------------------------------------------------
+[ 51/116]  Rol 'trends' aanscherpen
+------------------------------------------------------------------------------
+  id          : c9535c0fa948
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:44
+  afgehandeld : 2026-06-25 23:34
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de hele rol door: **Purpose:** Ontdekken en vertalen van
+    zoekgedrag en -trends naar concrete kansen voor NoochVille, om de
+    zichtbaarheid en relevantie van het merk te vergroten.
+    **Accountabilities:** - **Monitoren van zoekgedrag en -trends in Google
+    Search Console** om kansrijke zoekopdrachten en onderwerpen te
+    identificeren. - **Analyseren en rapporteren van wekelijkse
+    zoekopdracht-analyses en rankings** om inzicht te bieden in prestaties
+    en groeikansen. - **Signaleren van high-potential zoekopdrachten** en
+    deze voorstellen aan de Librarian voor integratie in de woordenschat of
+    conten
+
+  WAAROM
+    De huidige formulering bevat herhalingen (zoals de dubbele
+    accountability voor wekelijkse rapportage), te gedetailleerde taken
+    (zoals "GSC-queries ophalen" en "schrijft een wekelijke GSC-nota") en
+    mist een heldere focus op het vertalen van data naar actie. De nieuwe
+    versie is korter, duidelijker en voldoet beter aan de Holacracy-regels
+    door werkwoorden in de -en-vorm te gebruiken en alleen doorlopende
+    aandachtsgebieden te benoemen.
+
+------------------------------------------------------------------------------
+[ 52/116]  Rol 'harry_hemp' aanscherpen
+------------------------------------------------------------------------------
+  id          : c7b401e2f454
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:44
+  afgehandeld : 2026-06-25 23:33
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de accountability *"keyword_proposed-events gronden in
+    wetenschappelijk bewijs via OpenAlex en Semantic Scholar en het
+    resultaat publiceren als keyword_evidence"* door: **Gronden van
+    keyword_proposed-events in wetenschappelijk bewijs via OpenAlex en
+    Semantic Scholar, met publicatie van de resultaten als
+    keyword_evidence**
+
+  WAAROM
+    De huidige formulering bevat een doorlopende activiteit ("gronden") en
+    een afgeronde uitkomst ("publiceren"), wat niet past bij een
+    accountability. Een accountability moet een doorlopend aandachtsgebied
+    beschrijven zonder resultaatclaims. De herschreven versie combineert
+    beide elementen in één doorlopende activiteit.
+
+------------------------------------------------------------------------------
+[ 53/116]  Rol 'the_source' aanscherpen
+------------------------------------------------------------------------------
+  id          : 69408ec88b12
+  status      : approved
+  aangemaakt  : 2026-06-25 19:45
+  afgehandeld : 2026-06-25 23:33
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : approved — afgerond
+
+  WAT
+    Vervang de accountability "de levende grens bewaken waar geen regel het
+    zegt, en de residuele verantwoordelijkheid dragen die geen enkele rol
+    bezit, waaronder het bijwerken van de materiaal-policy en de locale-
+    policy" door: Bewaken van de residuele verantwoordelijkheid en het
+    bijwerken van de materiaal-policy en locale-policy
+
+  WAAROM
+    Deze accountability is te gedetailleerd en bevat meerdere taken (bewaken
+    + bijwerken) die beter als aparte, heldere aandachtsgebieden kunnen
+    worden geformuleerd. De formulering is ook te vaag ("levende grens waar
+    geen regel het zegt") en past niet bij de Holacracy-regels. De nieuwe
+    versie is korter, duidelijker en voldoet aan de -en-vorm.
+
+------------------------------------------------------------------------------
+[ 54/116]  Rol 'concurrent_scout' aanscherpen
+------------------------------------------------------------------------------
+  id          : 5ed0bb538c60
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:45
+  afgehandeld : 2026-06-25 23:32
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de **Purpose** door: *Observatie en analyse van de duurzame-
+    sneakermarkt: het tijdig signaleren van strategische bewegingen van
+    directe concurrenten, nieuwe spelers en linkbuilding-kansen, en het
+    meten van hun marktinteresse.*
+
+  WAAROM
+    De huidige purpose is te breed en bevat al taken (zoals "opstellen van
+    rapporten" en "spotten") die beter passen bij de *accountabilities*. Een
+    purpose moet een *hoog niveau* beschrijven van *waarom* de rol bestaat,
+    niet *wat* er wordt gedaan. De nieuwe versie is scherper en focust op
+    het *doel* (observatie en analyse) in plaats van de uitvoering.
+
+------------------------------------------------------------------------------
+[ 55/116]  Rol 'schoenenjagers_op_tiktok' aanscherpen
+------------------------------------------------------------------------------
+  id          : ce7d956d0f3b
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:45
+  afgehandeld : 2026-06-25 23:32
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de huidige accountabilities door: - **Ontwikkelen en beheren van
+    authentieke, duurzame content over NoochVille-schoenen op TikTok.** -
+    **Signaleren van duurzame sneaker-trends op TikTok om NoochVille-
+    gerelateerde content te identificeren en te benutten.**
+
+  WAAROM
+    De eerste accountability is nu korter en krachtiger door het werkwoord
+    "ontwikkelen" toe te voegen, wat beter past bij een doorlopende
+    activiteit. De tweede accountability is herschreven naar de -en-vorm
+    ("signaleren") en het woord "benutten" toegevoegd, zodat het niet alleen
+    om monitoring gaat, maar ook om actieve inzet van trends. Dit sluit
+    beter aan bij de purpose en maakt het aandachtsgebied concreter.
+
+------------------------------------------------------------------------------
+[ 56/116]  Rol 'schoenen_met_verhalen' aanscherpen
+------------------------------------------------------------------------------
+  id          : 3ce12e204a79
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:45
+  afgehandeld : 2026-06-25 23:31
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de accountability: *"Bewaken van de kwaliteit en
+    toegankelijkheid van de 'Schoenen met verhalen'-pagina op nooch.earth."*
+    door: *"Faciliteren van de levendigheid en gebruiksvriendelijkheid van
+    de 'Schoenen met verhalen'-pagina op nooch.earth."*
+
+  WAAROM
+    Bewaken" klinkt als een eenmalige of controlerende taak, terwijl een
+    accountability in Holacracy een doorlopende activiteit moet beschrijven.
+    "Faciliteren" benadrukt dat de rol actief zorgt dat de pagina blijft
+    werken, toegankelijk is en waarde toevoegt voor gebruikers – zonder
+    autoriteit of exclusiviteit te claimen.
+
+------------------------------------------------------------------------------
+[ 57/116]  Rol 'schoenenruilfeest_in_het_dorp' aanscherpen
+------------------------------------------------------------------------------
+  id          : ca1cc1f48969
+  status      : rejected
+  aangemaakt  : 2026-06-25 19:45
+  afgehandeld : 2026-06-25 23:31
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : rejected — 🙂 afgewezen, geen harde regel (mag opnieuw bij andere context)
+
+  WAT
+    Vervang de accountability "Bewaken van een eerlijke en transparante
+    schoenenruil op het ruilfeest." door: "Zorgen voor een eerlijke en
+    transparante schoenenruil op het ruilfeest.
+
+  WAAROM
+    De huidige formulering met "Bewaken van" suggereert een controlerende,
+    bijna toezichthoudende rol, terwijl Holacracy juist gaat om het
+    *uitvoeren* van doorlopende activiteiten (met -en-vorm). "Zorgen voor"
+    is actiever, duidelijker en past beter bij een faciliterende rol binnen
+    een feestelijke, participatieve context.
+
+------------------------------------------------------------------------------
+[ 58/116]  Rol 'nooch_x_noordster_sneaker_swap' aanscherpen
+------------------------------------------------------------------------------
+  id          : dceff938192d
+  status      : deferred
+  aangemaakt  : 2026-06-25 19:46
+  afgehandeld : 2026-06-25 23:31
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : deferred — ⏳ goed idee, nu niet (timing)
+
+  WAT
+    Vervang de accountability door: Faciliteren van een duurzaam en
+    inclusief uitwisselingsplatform voor de Nooch x Noordster Sneaker Swap.
+
+  WAAROM
+    De huidige formulering is al goed, maar de toevoeging "als duurzaam en
+    inclusief uitwisselingsplatform" is redundant omdat de purpose al "Nooch
+    x Noordster Sneaker Swap" als duurzaam en inclusief beschrijft. De
+    accountability wordt hierdoor korter en krachtiger, zonder aan
+    duidelijkheid in te boeten.
+
+------------------------------------------------------------------------------
+[ 59/116]  Rol 'schoenen_voor_duurzame_evenementen_seo' aanscherpen
+------------------------------------------------------------------------------
+  id          : 2a60dc040a3b
+  status      : resolved
+  aangemaakt  : 2026-06-25 19:46
+  afgehandeld : 2026-06-25 23:30
+  door rol    : facilitator
+  soort       : governance
+  resolutie   : resolved — doorgestuurd naar het roloverleg
+
+  WAT
+    Vervang de accountability door: **Ontwikkelen en beheren van SEO-
+    geoptimaliseerde landingspagina’s en contentcampagnes voor duurzame
+    evenementen, inclusief het monitoren van zoekwoordprestaties en het
+    bijsturen van content op basis van data.**
+
+  WAAROM
+    De huidige accountability is al goed, maar mist een cruciale stap: het
+    actief meten en optimaliseren van SEO-prestaties. Zonder monitoring en
+    bijsturing blijft de rol te passief en mist het een doorlopend
+    verbeterproces, wat essentieel is voor SEO.
+
+------------------------------------------------------------------------------
+[ 60/116]  Vegan sneaker-testers zoeken
+------------------------------------------------------------------------------
+  id          : 95e8dcf44ab5
+  status      : resolved
+  aangemaakt  : 2026-06-25 22:59
+  afgehandeld : 2026-06-25 23:28
+  door rol    : concurrent_scout
+  soort       : project
+  resolutie   : resolved — 🌍 hoort buiten NoochVille
+
+  WAT
+    We vragen mensen die al vegan schoenen dragen om onze nieuwe schoenen
+    een week uit te proberen. Ze schrijven daarna een eerlijke review op hun
+    eigen social media. We sturen ze de schoenen gratis toe, maar ze betalen
+    wel de retourzending als ze niet passen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt goed zijn, en meer mensen willen
+    ze dan kopen. De reviews helpen ook om te laten zien dat we betrouwbaar
+    zijn.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 13.33
+    rationale   :
+      Zo laten we zien dat onze schoenen echt goed zijn, en meer mensen
+      willen ze dan kopen. De reviews helpen ook om te laten zien dat we
+      betrouwbaar zijn.
+
+------------------------------------------------------------------------------
+[ 61/116]  Schoenen-zoekhulp voor mensen
+------------------------------------------------------------------------------
+  id          : 171bf26bef8c
+  status      : rejected
+  aangemaakt  : 2026-06-25 22:59
+  afgehandeld : 2026-06-25 23:28
+  door rol    : librarian
+  soort       : project
+  resolutie   : rejected — 🙂 afgewezen, geen harde regel (mag opnieuw bij andere context)
+
+  WAT
+    We maken een simpele gids op nooch.earth waar mensen kunnen zien welke
+    schoenen het beste bij hun dagelijkse leven passen. Bijvoorbeeld: "Loop
+    je veel in de stad? Kies dan voor deze lichte vegan schoenen. Ga je vaak
+    naar het bos? Deze hebben een stevige zool." We laten zien waarom die
+    schoenen goed zijn, zonder te pushen.
+
+  WAAROM
+    Zo helpen we mensen sneller de juiste schoen te vinden, zonder dat ze
+    uren hoeven zoeken. Als ze precies weten wat ze nodig hebben, kopen ze
+    sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 13.33
+    rationale   :
+      Zo helpen we mensen sneller de juiste schoen te vinden, zonder dat ze
+      uren hoeven zoeken. Als ze precies weten wat ze nodig hebben, kopen ze
+      sneller.
+
+------------------------------------------------------------------------------
+[ 62/116]  Schoenen testen bij buurtfeesten
+------------------------------------------------------------------------------
+  id          : 8dd9d1c42b8e
+  status      : resolved
+  aangemaakt  : 2026-06-25 22:59
+  afgehandeld : 2026-06-25 23:27
+  door rol    : facilitator
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We vragen aan mensen in buurtfeesten of ze onze schoenen willen passen
+    en erop willen lopen. Daarna vragen we of ze ze zouden willen kopen. We
+    doen dit alleen met schoenen die al in onze collectie zitten. We
+    schrijven op een briefje wat ze ervan vinden en of ze ze zouden kopen.
+
+  WAAROM
+    Zo leren we wat mensen écht vinden van onze schoenen, zonder dat we iets
+    hoeven te verkopen. Als mensen de schoenen leuk vinden en ze zouden
+    kopen, dan weten we dat we op de goede weg zijn.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Zo leren we wat mensen écht vinden van onze schoenen, zonder dat we
+      iets hoeven te verkopen. Als mensen de schoenen leuk vinden en ze
+      zouden kopen, dan weten we dat we op de goede weg zijn.
+
+------------------------------------------------------------------------------
+[ 63/116]  Schoenen voor de schoolklas
+------------------------------------------------------------------------------
+  id          : cdedd847d062
+  status      : rejected
+  aangemaakt  : 2026-06-25 23:00
+  afgehandeld : 2026-06-25 23:29
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : rejected — 🙂 afgewezen, geen harde regel (mag opnieuw bij andere context)
+
+  WAT
+    We maken een lijst van scholen in Nederland die vegan schoenen willen
+    proberen. Daarna sturen we een paar gratis schoenen naar de juf of
+    meester van die klas. Zij mogen de schoenen een week lang uitproberen.
+    Als de klas ze mooi vindt en de schoenen passen, kunnen de ouders ze
+    bestellen via nooch.earth.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt goed zijn, zonder dat we iets
+    hoeven te verkopen. Kinderen en ouders vertellen het aan elkaar, en dat
+    helpt meer mensen onze schoenen te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 0.80
+    rationale   :
+      Zo laten we zien dat onze schoenen echt goed zijn, zonder dat we iets
+      hoeven te verkopen. Kinderen en ouders vertellen het aan elkaar, en
+      dat helpt meer mensen onze schoenen te kopen.
+
+------------------------------------------------------------------------------
+[ 64/116]  Schoenenpaspoort voor NoochVille
+------------------------------------------------------------------------------
+  id          : f02a28c1de10
+  status      : resolved
+  aangemaakt  : 2026-06-25 23:00
+  afgehandeld : 2026-06-25 23:23
+  door rol    : noochie
+  soort       : project
+  resolutie   : resolved — 🌍 hoort buiten NoochVille
+
+  WAT
+    We maken een klein, mooi boekje (of een digitaal boekje) voor elke paar
+    schoenen die we verkopen. Daarin staat waarom deze schoenen speciaal
+    zijn: ze zijn gemaakt van planten, niet van dieren, en er zit geen
+    plastic in. Ook schrijven we erin hoe je ze het beste kunt verzorgen,
+    zodat ze langer meegaan. Dit boekje geven we gratis bij elk paar
+    schoenen.
+
+  WAAROM
+    Mensen die deze schoenen kopen, willen vaak weten waarom ze zo bijzonder
+    zijn. Als ze dat in een boekje kunnen lezen, voelen ze zich nog meer
+    verbonden met de schoenen en met NoochVille. Dit maakt het makkelijker
+    om te kiezen voor NoochVille, en dat helpt ons dichter bij de Noordster.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 225.00
+    rationale   :
+      Mensen die deze schoenen kopen, willen vaak weten waarom ze zo
+      bijzonder zijn. Als ze dat in een boekje kunnen lezen, voelen ze zich
+      nog meer verbonden met de schoenen en met NoochVille. Dit maakt het
+      makkelijker om te kiezen voor NoochVille, en dat helpt ons dichter bij
+      de Noordster.
+
+------------------------------------------------------------------------------
+[ 65/116]  Lokale schoenhelden uitnodigen
+------------------------------------------------------------------------------
+  id          : 5291556131c2
+  status      : resolved
+  aangemaakt  : 2026-06-25 23:01
+  afgehandeld : 2026-06-25 23:26
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We vragen mensen uit elke stad waar we schoenen verkopen om een foto te
+    maken van hun Nooch-schoenen op een leuke plek in hun stad. Die foto’s
+    zetten we op een speciale pagina op de website. Daarna delen we die
+    foto’s op sociale media met een kaartje waar die schoenen vandaan komen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen niet alleen mooi zijn, maar ook echt
+    gedragen worden door mensen die er trots op zijn. Dat maakt het voor
+    anderen makkelijker om te kiezen voor Nooch.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 150.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 60.00
+    rationale   :
+      Zo laten we zien dat onze schoenen niet alleen mooi zijn, maar ook
+      echt gedragen worden door mensen die er trots op zijn. Dat maakt het
+      voor anderen makkelijker om te kiezen voor Nooch.
+
+------------------------------------------------------------------------------
+[ 66/116]  Woordenboek voor Nooch-schoenen
+------------------------------------------------------------------------------
+  id          : ff5579d5d7ec
+  status      : resolved
+  aangemaakt  : 2026-06-26 00:48
+  afgehandeld : 2026-06-26 12:58
+  door rol    : librarian
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We maken een lijstje met woorden die passen bij onze schoenen, zoals
+    "vegan", "plasticvrij" en "EU-gemaakt". Daarna koppelen we die woorden
+    aan de schoenen op onze website, zodat mensen makkelijker vinden wat ze
+    zoeken.
+
+  WAAROM
+    Als mensen precies weten wat onze schoenen zijn, kopen ze sneller. Ze
+    hoeven niet te zoeken in een grote winkel, maar vinden meteen wat ze
+    willen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 2.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 0.60
+    rationale   :
+      Als mensen precies weten wat onze schoenen zijn, kopen ze sneller. Ze
+      hoeven niet te zoeken in een grote winkel, maar vinden meteen wat ze
+      willen.
+
+------------------------------------------------------------------------------
+[ 67/116]  Schoenen testen op pop-up markten
+------------------------------------------------------------------------------
+  id          : cb712cc0d0dd
+  status      : resolved
+  aangemaakt  : 2026-06-26 00:48
+  afgehandeld : 2026-06-26 23:09
+  door rol    : facilitator
+  soort       : project
+  resolutie   : resolved — vergelijkbaar idee ook. Soort roadshow gedachte.
+
+  WAT
+    We zetten een tafel neer op markten in steden waar mensen vaak
+    langslopen. Daar leggen we een paar schoenen neer en vragen: "Wil je ze
+    even passen?". Als ze passen en mooi vinden, kunnen ze meteen via hun
+    telefoon een bestelling doen op nooch.earth. We schrijven op een bordje
+    dat de schoenen 100% vegan en zonder plastic zijn, gemaakt in Europa.
+
+  WAAROM
+    Zo ontmoeten we mensen die nog nooit van nooch.earth gehoord hebben. Ze
+    kunnen de schoenen voelen en passen, wat vertrouwen geeft. Als ze ze
+    mooi vinden, kopen ze ze direct.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 13.33
+    rationale   :
+      Zo ontmoeten we mensen die nog nooit van nooch.earth gehoord hebben.
+      Ze kunnen de schoenen voelen en passen, wat vertrouwen geeft. Als ze
+      ze mooi vinden, kopen ze ze direct.
+
+------------------------------------------------------------------------------
+[ 68/116]  Schoenen voor thuiswerkers
+------------------------------------------------------------------------------
+  id          : 448c7531fbc9
+  status      : resolved
+  aangemaakt  : 2026-06-26 00:49
+  afgehandeld : 2026-06-26 23:06
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : resolved — nou dit is een rare product markt combi. thuiswerkers dragen sloffen en als je schoene hebt wil je die juist ook buiten huis aan
+
+  WAT
+    We maken een speciale collectie lichte, ademende schoenen voor mensen
+    die veel thuiswerken. Deze schoenen zijn gemaakt van plantaardige
+    materialen en hebben geen plastic erin. We laten zien hoe ze comfortabel
+    zijn voor lange dagen zitten en staan, met een paar dat past bij de
+    stijl van mensen die vaak videobellen.
+
+  WAAROM
+    Veel mensen die thuiswerken zoeken naar comfortabele schoenen die bij
+    hun casual kleding passen. Als we deze groep bereiken, kunnen we meer
+    mensen laten zien dat onze schoenen ook voor hen werken, niet alleen
+    voor buiten.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 80.00
+    rationale   :
+      Veel mensen die thuiswerken zoeken naar comfortabele schoenen die bij
+      hun casual kleding passen. Als we deze groep bereiken, kunnen we meer
+      mensen laten zien dat onze schoenen ook voor hen werken, niet alleen
+      voor buiten.
+
+------------------------------------------------------------------------------
+[ 69/116]  Schoenentestdag in dorpsplein
+------------------------------------------------------------------------------
+  id          : f45782774573
+  status      : resolved
+  aangemaakt  : 2026-06-26 00:49
+  afgehandeld : 2026-06-26 23:08
+  door rol    : noochie
+  soort       : project
+  resolutie   : resolved — comceptueel vergelijkbaar idee buurtfeesten. Roadshow om in aanraking te komen met. De pop-up / guerilla achtige stjl om in contact te komen met is interessant.
+
+  WAT
+    We nodigen dorpelingen uit om op een zonnige dag hun schoenen uit te
+    doen en onze vegan schoenen uit te proberen. Er staan bankjes met
+    kussens, een bord met uitleg over waarom onze schoenen zo speciaal zijn,
+    en een paar dozen met verschillende maten. Wie een paar wil meenemen
+    naar huis, mag dat doen—maar alleen als ze beloven het later terug te
+    brengen of te betalen via nooch.earth.
+
+  WAAROM
+    Mensen voelen en zien direct hoe comfortabel en fijn onze schoenen zijn.
+    Als ze een paar meenemen om thuis te passen, is de kans groot dat ze het
+    later ook kopen. Zo laten we zien dat vegan schoenen net zo mooi en
+    sterk kunnen zijn als andere.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Mensen voelen en zien direct hoe comfortabel en fijn onze schoenen
+      zijn. Als ze een paar meenemen om thuis te passen, is de kans groot
+      dat ze het later ook kopen. Zo laten we zien dat vegan schoenen net zo
+      mooi en sterk kunnen zijn als andere.
+
+------------------------------------------------------------------------------
+[ 70/116]  Schoenhelden als ambassadeurs
+------------------------------------------------------------------------------
+  id          : cc5f6aa3b9ad
+  status      : resolved
+  aangemaakt  : 2026-06-26 00:50
+  afgehandeld : 2026-06-26 02:32
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We vragen mensen die al onze schoenen dragen en er dol op zijn om een
+    foto te maken met hun schoenen op een mooie plek in hun stad. Die foto’s
+    zetten we op een speciale pagina op nooch.earth, met hun verhaal erbij.
+    Daarna nodigen we die mensen uit om die foto te delen op hun eigen
+    social media, met een link naar onze site.
+
+  WAAROM
+    Zo laten we zien dat echte mensen onze schoenen dragen en er blij van
+    worden. Dat maakt andere mensen nieuwsgierig en vertrouwd, waardoor ze
+    sneller een paar willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 80.00
+    rationale   :
+      Zo laten we zien dat echte mensen onze schoenen dragen en er blij van
+      worden. Dat maakt andere mensen nieuwsgierig en vertrouwd, waardoor ze
+      sneller een paar willen kopen.
+
+------------------------------------------------------------------------------
+[ 71/116]  Test schoenen bij buurtfeesten
+------------------------------------------------------------------------------
+  id          : ad836a067db3
+  status      : deferred
+  aangemaakt  : 2026-06-26 08:14
+  afgehandeld : 2026-06-26 23:07
+  door rol    : facilitator
+  soort       : project
+  resolutie   : deferred — leuk idee om een soort roadshow te doen. Maar nu niet handig.
+
+  WAT
+    We gaan een paar keer per maand kleine buurtfeesten bezoeken met een
+    doos schoenen. Mensen mogen de schoenen passen en meteen kopen via een
+    telefoon of tablet die op het feest staat. We schrijven op een groot
+    bord hoeveel paar we die dag verkopen.
+
+  WAAROM
+    Zo zien mensen de schoenen in het echt en kunnen ze ze meteen meenemen.
+    Dat maakt het makkelijker om te kiezen en te kopen, en we leren wat
+    mensen leuk vinden.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Zo zien mensen de schoenen in het echt en kunnen ze ze meteen
+      meenemen. Dat maakt het makkelijker om te kiezen en te kopen, en we
+      leren wat mensen leuk vinden.
+
+------------------------------------------------------------------------------
+[ 72/116]  TikTok-challenges met vegan sneakerhelden
+------------------------------------------------------------------------------
+  id          : 9ba8e1e424f4
+  status      : resolved
+  aangemaakt  : 2026-06-26 08:14
+  afgehandeld : 2026-06-26 23:06
+  door rol    : trends
+  soort       : project
+  resolutie   : resolved — 🌍 hoort buiten NoochVille
+
+  WAT
+    We maken een serie korte filmpjes op TikTok waar echte mensen (geen
+    acteurs) laten zien hoe ze onze vegan sneakers dragen in hun dagelijks
+    leven. Bijvoorbeeld: "Hoe ik mijn vegan sneakers draag tijdens het
+    hardlopen" of "Mijn schoenen bij een vegan festival". We vragen mensen
+    om zelf filmpjes te maken met een speciale hashtag en belonen de beste
+    met een gratis paar schoenen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen niet alleen duurzaam zijn, maar ook
+    cool en praktisch. Mensen die onze schoenen dragen, worden onze
+    ambassadeurs en laten aan anderen zien hoe geweldig ze zijn.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 53.33
+    rationale   :
+      Zo laten we zien dat onze schoenen niet alleen duurzaam zijn, maar ook
+      cool en praktisch. Mensen die onze schoenen dragen, worden onze
+      ambassadeurs en laten aan anderen zien hoe geweldig ze zijn.
+
+------------------------------------------------------------------------------
+[ 73/116]  Schoenenlexicon koppelen aan producten
+------------------------------------------------------------------------------
+  id          : 0ee741b232f1
+  status      : resolved
+  aangemaakt  : 2026-06-26 08:14
+  afgehandeld : 2026-06-26 14:59
+  door rol    : librarian
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We maken een lijstje met woorden die mensen gebruiken als ze naar
+    schoenen zoeken, zoals "zomerschoenen" of "wandelschoenen". Daarna
+    koppelen we die woorden aan de schoenen die we verkopen op nooch.earth.
+    Als iemand zo'n woord intypt in de zoekbalk, laat je meteen zien welke
+    schoenen daarbij passen.
+
+  WAAROM
+    Zo vinden mensen makkelijker de schoenen die ze zoeken, zonder dat we
+    een hele nieuwe zoekmachine hoeven te maken. Dat maakt het leuker om te
+    kijken en te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo vinden mensen makkelijker de schoenen die ze zoeken, zonder dat we
+      een hele nieuwe zoekmachine hoeven te maken. Dat maakt het leuker om
+      te kijken en te kopen.
+
+------------------------------------------------------------------------------
+[ 74/116]  Vegan schoenen voor festivalgangers
+------------------------------------------------------------------------------
+  id          : b521ad791a03
+  status      : rejected
+  aangemaakt  : 2026-06-26 08:15
+  afgehandeld : 2026-06-26 23:09
+  door rol    : harry_hemp
+  soort       : project
+  resolutie   : rejected — nou zijn niet perse lichter, of meer ademenend of makkelijker schoon te maken. 
+
+  WAT
+    We maken een speciale collectie vegan schoenen die perfect zijn voor
+    festivals. Deze schoenen zijn licht, ademend en makkelijk schoon te
+    maken. We laten ze zien op populaire festivals in Nederland en België,
+    waar we ze direct kunnen verkopen via onze website of laten ophalen op
+    een centrale plek.
+
+  WAAROM
+    Festivalgangers zoeken vaak comfortabele en duurzame schoenen, en ze
+    zijn bereid om daar geld voor te betalen. Door hierop in te spelen,
+    kunnen we meer mensen bereiken die onze schoenen willen dragen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 0.90
+    rationale   :
+      Festivalgangers zoeken vaak comfortabele en duurzame schoenen, en ze
+      zijn bereid om daar geld voor te betalen. Door hierop in te spelen,
+      kunnen we meer mensen bereiken die onze schoenen willen dragen.
+
+------------------------------------------------------------------------------
+[ 75/116]  Vegan schoenen testen op pop-up markten
+------------------------------------------------------------------------------
+  id          : 4d402dc870a8
+  status      : deferred
+  aangemaakt  : 2026-06-26 12:14
+  afgehandeld : 2026-06-26 23:04
+  door rol    : facilitator
+  soort       : project
+  resolutie   : deferred — ⏳ goed idee, nu niet (timing)
+
+  WAT
+    We zetten een kleine kraam neer op markten in steden waar mensen vaak
+    lopen. Daar laten we mensen de vegan schoenen passen en voelen. Wie een
+    paar koopt, betaalt via de Nooch-app op hun telefoon. We geven een
+    sticker met een smiley als ze tevreden zijn.
+
+  WAAROM
+    Zo zien mensen de schoenen echt, voelen ze hoe ze zitten en weten ze dat
+    ze vegan en plasticvrij zijn. Dat maakt het makkelijker om ze te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo zien mensen de schoenen echt, voelen ze hoe ze zitten en weten ze
+      dat ze vegan en plasticvrij zijn. Dat maakt het makkelijker om ze te
+      kopen.
+
+------------------------------------------------------------------------------
+[ 76/116]  TikTok Duurzame Sneaker Challenge
+------------------------------------------------------------------------------
+  id          : 1bc9ff5b45fe
+  status      : rejected
+  aangemaakt  : 2026-06-26 12:14
+  afgehandeld : 2026-06-26 22:07
+  door rol    : trends
+  soort       : project
+  resolutie   : rejected — 🙂 afgewezen, geen harde regel (mag opnieuw bij andere context)
+
+  WAT
+    We maken een uitdaging op TikTok waar mensen laten zien hoe ze hun oude
+    schoenen hergebruiken of repareren. Ze filmen zichzelf met een Nooch-
+    schoen en taggen #NoochEarthChallenge. Elke week kiezen we de beste
+    video uit en die persoon krijgt een gratis paar Nooch-schoenen.
+
+  WAAROM
+    Zo laten we zien dat schoenen lang mee kunnen en dat Nooch schoenen
+    duurzaam zijn. Mensen die meedoen, vertellen het door aan anderen en zo
+    komen er meer mensen bij die Nooch-schoenen willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo laten we zien dat schoenen lang mee kunnen en dat Nooch schoenen
+      duurzaam zijn. Mensen die meedoen, vertellen het door aan anderen en
+      zo komen er meer mensen bij die Nooch-schoenen willen kopen.
+
+------------------------------------------------------------------------------
+[ 77/116]  NoochSchoenPaspoort voor thuis
+------------------------------------------------------------------------------
+  id          : 87451bf7cc1d
+  status      : resolved
+  aangemaakt  : 2026-06-26 12:15
+  afgehandeld : 2026-06-26 14:59
+  door rol    : noochie
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We maken een simpel, mooi paspoortje voor elke paar Nooch-schoenen.
+    Daarin schrijven we op waar de schoenen van gemaakt zijn, wie ze heeft
+    gemaakt, en hoe je ze het langst mooi houdt. Dit paspoort komt bij elke
+    schoen die via nooch.earth wordt verkocht. Mensen kunnen het thuis
+    bewaren of ophangen, net als een receptenboekje.
+
+  WAAROM
+    Mensen die Nooch-schoenen dragen, willen vaak weten waarom ze zo
+    bijzonder zijn. Dit paspoort laat zien hoe de schoenen passen bij hun
+    eigen waarden. Zo voelen ze zich nog meer verbonden met NoochVille en
+    vertellen ze het door aan anderen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 300.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 135.00
+    rationale   :
+      Mensen die Nooch-schoenen dragen, willen vaak weten waarom ze zo
+      bijzonder zijn. Dit paspoort laat zien hoe de schoenen passen bij hun
+      eigen waarden. Zo voelen ze zich nog meer verbonden met NoochVille en
+      vertellen ze het door aan anderen.
+
+------------------------------------------------------------------------------
+[ 78/116]  Schoenhelden als verhalenvertellers
+------------------------------------------------------------------------------
+  id          : 3a729891eeb2
+  status      : approved
+  aangemaakt  : 2026-06-26 12:16
+  afgehandeld : 2026-06-26 23:07
+  door rol    : website_watcher
+  soort       : project
+  resolutie   : approved — wij verzamelen al reviews
+
+  WAT
+    We vragen lokale schoenhelden – mensen die al vegan schoenen dragen en
+    er enthousiast over zijn – om korte video’s te maken waarin ze laten
+    zien waarom ze voor Nooch.earth kiezen. Die video’s zetten we op de
+    website en delen we op sociale media. Zo laten we zien dat echte mensen
+    deze schoenen dragen en er blij van worden.
+
+  WAAROM
+    Mensen vertrouwen meer op wat andere mensen zeggen dan op reclame. Als
+    ze zien dat iemand in hun stad of buurt deze schoenen draagt en er
+    tevreden over is, willen ze dat ook.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 150.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 40.00
+    rationale   :
+      Mensen vertrouwen meer op wat andere mensen zeggen dan op reclame. Als
+      ze zien dat iemand in hun stad of buurt deze schoenen draagt en er
+      tevreden over is, willen ze dat ook.
+
+------------------------------------------------------------------------------
+[ 79/116]  Beter zoeken met schoen-weetjes
+------------------------------------------------------------------------------
+  id          : 27e6b64383d4
+  status      : pending
+  aangemaakt  : 2026-06-27 00:45
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We gaan een soort slimme gids maken op nooch.earth. Mensen kunnen straks
+    op een makkelijke manier meer leren over onze schoenen. Denk aan dingen
+    zoals waar ze van gemaakt zijn, hoe ze gemaakt worden en waarom ze zo
+    goed zijn voor mens en planeet.
+
+  WAAROM
+    Door mensen meer en beter te laten ontdekken wat onze schoenen bijzonder
+    maakt, vinden ze sneller de schoenen die echt bij ze passen en willen ze
+    ze kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.7   → waarde 70.00
+    rationale   :
+      Door mensen meer en beter te laten ontdekken wat onze schoenen
+      bijzonder maakt, vinden ze sneller de schoenen die echt bij ze passen
+      en willen ze ze kopen.
+
+------------------------------------------------------------------------------
+[ 80/116]  Vegan Sneakerhelden op TikTok
+------------------------------------------------------------------------------
+  id          : 22a9757f3446
+  status      : pending
+  aangemaakt  : 2026-06-27 00:45
+  afgehandeld : —
+  door rol    : trends
+  soort       : project
+
+  WAT
+    We maken korte filmpjes op TikTok waarin echte mensen (geen acteurs)
+    laten zien hoe ze onze vegan sneakers dragen in hun dagelijks leven.
+    Bijvoorbeeld een bakker die de hele dag staat, een student die naar
+    college loopt, of een fietser die door de stad gaat. We vragen ze om te
+    vertellen waarom ze voor vegan schoenen kozen en hoe ze zich voelen in
+    onze schoenen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen niet alleen goed zijn voor de wereld,
+    maar ook lekker zitten en passen bij een actief leven. Mensen die op
+    zoek zijn naar duurzame schoenen zullen onze schoenen sneller vinden en
+    willen proberen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 53.33
+    rationale   :
+      Zo laten we zien dat onze schoenen niet alleen goed zijn voor de
+      wereld, maar ook lekker zitten en passen bij een actief leven. Mensen
+      die op zoek zijn naar duurzame schoenen zullen onze schoenen sneller
+      vinden en willen proberen.
+
+------------------------------------------------------------------------------
+[ 81/116]  Schoenenpaspoort Roadshow
+------------------------------------------------------------------------------
+  id          : 479df09b0c6d
+  status      : pending
+  aangemaakt  : 2026-06-27 00:46
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We gaan met een kleine, kleurrijke kar met een paar dozen schoenen en
+    een groot bord met "Schoenenpaspoort" erop door dorpen en steden rijden.
+    Bij dorpspleinen, markten of festivals stoppen we, zetten de kar neer en
+    laten mensen de schoenen passen. Wie een paar mooi vindt, krijgt direct
+    een paspoort met alle info over de schoen en een unieke code om thuis te
+    bestellen via nooch.earth.
+
+  WAAROM
+    Zo laten we mensen de schoenen *voelen* en *zien* in plaats van alleen
+    erover te lezen. Het maakt het persoonlijk en vertrouwd, waardoor ze
+    sneller een paar willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 53.33
+    rationale   :
+      Zo laten we mensen de schoenen *voelen* en *zien* in plaats van alleen
+      erover te lezen. Het maakt het persoonlijk en vertrouwd, waardoor ze
+      sneller een paar willen kopen.
+
+------------------------------------------------------------------------------
+[ 82/116]  Thuiswerk-schoenen met verrassende twist
+------------------------------------------------------------------------------
+  id          : aaf3499a1275
+  status      : pending
+  aangemaakt  : 2026-06-27 00:46
+  afgehandeld : —
+  door rol    : harry_hemp
+  soort       : project
+
+  WAT
+    We maken een speciale collectie lichte, ademende vegan schoenen die
+    mensen *alleen* thuis dragen – maar dan niet als sloffen, maar als echte
+    schoenen die er ook leuk uitzien. We laten zien hoe je ze kunt
+    combineren met sokken of blote voeten, en maken er een serie korte
+    filmpjes van waarin mensen thuis werken, sporten of zelfs koken in deze
+    schoenen.
+
+  WAAROM
+    Mensen die thuiswerken zoeken vaak iets comfortabels, maar willen niet
+    de hele dag in sloffen lopen. Deze schoenen geven ze het gevoel van een
+    echte schoen, zonder dat ze hoeven in te leveren op comfort. Zo kunnen
+    we NoochVille laten zien als een merk dat echt snapt hoe mensen thuis
+    leven.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Mensen die thuiswerken zoeken vaak iets comfortabels, maar willen niet
+      de hele dag in sloffen lopen. Deze schoenen geven ze het gevoel van
+      een echte schoen, zonder dat ze hoeven in te leveren op comfort. Zo
+      kunnen we NoochVille laten zien als een merk dat echt snapt hoe mensen
+      thuis leven.
+
+------------------------------------------------------------------------------
+[ 83/116]  Lexicon voor Nooch-schoenen
+------------------------------------------------------------------------------
+  id          : 881c4e4eed7e
+  status      : pending
+  aangemaakt  : 2026-06-28 20:27
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We maken een klein woordenboekje op de website waar mensen kunnen zoeken
+    op woorden die te maken hebben met Nooch-schoenen. Bijvoorbeeld: "wat
+    betekent 'adembaar' voor Nooch?" of "hoe maak ik mijn Nooch-schoenen
+    schoon?". We linken elk woord direct naar de juiste schoen in onze
+    collectie.
+
+  WAAROM
+    Mensen die zoeken op woorden die wij belangrijk vinden, vinden sneller
+    de schoenen die bij hen passen. Zo verkopen we meer schoenen via
+    nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Mensen die zoeken op woorden die wij belangrijk vinden, vinden sneller
+      de schoenen die bij hen passen. Zo verkopen we meer schoenen via
+      nooch.earth.
+
+------------------------------------------------------------------------------
+[ 84/116]  TikTok Vegan Sneaker Testers
+------------------------------------------------------------------------------
+  id          : e622c0b864c6
+  status      : pending
+  aangemaakt  : 2026-06-28 20:27
+  afgehandeld : —
+  door rol    : trends
+  soort       : project
+
+  WAT
+    We zoeken 10 mensen die écht onze schoenen willen testen en erover
+    vertellen op TikTok. Ze krijgen een gratis paar, filmen hoe ze ermee
+    lopen, sporten of in de stad zijn, en delen hun eerlijke mening. We
+    geven ze een unieke code om hun volgers te laten kopen met korting.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt werken in het echte leven, niet
+    alleen in een mooie foto. Mensen vertrouwen andere mensen meer dan
+    reclames.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 0.90
+    rationale   :
+      Zo laten we zien dat onze schoenen echt werken in het echte leven,
+      niet alleen in een mooie foto. Mensen vertrouwen andere mensen meer
+      dan reclames.
+
+------------------------------------------------------------------------------
+[ 85/116]  Thuiswerk-schoenen met buitenschoen-voordeel
+------------------------------------------------------------------------------
+  id          : 99f8540f4209
+  status      : pending
+  aangemaakt  : 2026-06-28 20:28
+  afgehandeld : —
+  door rol    : harry_hemp
+  soort       : project
+
+  WAT
+    We maken een paar lichte, vegan schoenen die eruitzien als normale
+    buitenschoenen, maar zo zacht en comfortabel zijn dat je ze ook thuis
+    kunt dragen. We laten zien hoe je ze zowel binnen als buiten gebruikt,
+    met een simpele video of foto’s van mensen die ze aantrekken van thuis
+    naar de winkel.
+
+  WAAROM
+    Mensen die thuiswerken willen vaak iets dragen dat zowel binnen als
+    buiten fijn is. Als we dat combineren met onze vegan en plasticvrije
+    eisen, kunnen we een nieuwe groep mensen bereiken die nu nog niet bij
+    NoochVille kijkt.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 200.00
+    rationale   :
+      Mensen die thuiswerken willen vaak iets dragen dat zowel binnen als
+      buiten fijn is. Als we dat combineren met onze vegan en plasticvrije
+      eisen, kunnen we een nieuwe groep mensen bereiken die nu nog niet bij
+      NoochVille kijkt.
+
+------------------------------------------------------------------------------
+[ 86/116]  Schoenentestdag in NoochVille
+------------------------------------------------------------------------------
+  id          : 9fcbee9f199e
+  status      : pending
+  aangemaakt  : 2026-06-28 20:28
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We organiseren een dag waarop mensen in NoochVille gratis onze schoenen
+    kunnen passen en voelen. We zetten een tijdelijke tent neer op het
+    dorpsplein met een paar dozen schoenen. Iedereen mag ze aan, lopen en
+    vergelijken. We hebben ook een bord waar mensen hun ervaringen kunnen
+    opschrijven of vertellen. Aan het eind van de dag tellen we hoeveel
+    mensen echt enthousiast waren en welke schoenen het meest werden gepast.
+
+  WAAROM
+    Mensen die schoenen passen, voelen zich zekerder om ze later online te
+    bestellen. Als ze de schoenen in het echt zien en voelen, weten ze
+    precies wat ze kopen. Dat maakt het makkelijker om ze via nooch.earth te
+    verkopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 15.00
+    rationale   :
+      Mensen die schoenen passen, voelen zich zekerder om ze later online te
+      bestellen. Als ze de schoenen in het echt zien en voelen, weten ze
+      precies wat ze kopen. Dat maakt het makkelijker om ze via nooch.earth
+      te verkopen.
+
+------------------------------------------------------------------------------
+[ 87/116]  Lexicon voor schoenen op Nooch
+------------------------------------------------------------------------------
+  id          : 0e7a629ed4a8
+  status      : pending
+  aangemaakt  : 2026-06-28 22:45
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We maken een lijst met woorden die mensen gebruiken als ze zoeken naar
+    schoenen. Bijvoorbeeld: "ademend", "licht", "waterdicht", "EU-gemaakt",
+    "vegan". Daarna koppelen we die woorden aan de schoenen die we verkopen.
+    Als iemand zoekt op "ademend", zien ze meteen welke schoenen dat zijn.
+
+  WAAROM
+    Mensen zoeken op woorden die ze kennen. Als we die woorden in onze lijst
+    hebben, vinden ze sneller wat ze zoeken. En als ze vinden wat ze zoeken,
+    kopen ze het ook sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Mensen zoeken op woorden die ze kennen. Als we die woorden in onze
+      lijst hebben, vinden ze sneller wat ze zoeken. En als ze vinden wat ze
+      zoeken, kopen ze het ook sneller.
+
+------------------------------------------------------------------------------
+[ 88/116]  Testen op buurtfeesten met vrienden
+------------------------------------------------------------------------------
+  id          : bfe2627b0692
+  status      : pending
+  aangemaakt  : 2026-06-28 22:45
+  afgehandeld : —
+  door rol    : facilitator
+  soort       : project
+
+  WAT
+    We vragen een paar mensen die al schoenen van NoochVille dragen om mee
+    te doen aan een buurtfeest. Zij laten zien hoe de schoenen voelen en
+    dragen, en vertellen waarom ze ze mooi vinden. Andere mensen kunnen de
+    schoenen passen en direct een paar kopen via een tablet of telefoon die
+    we meenemen.
+
+  WAAROM
+    Zo laten we zien dat de schoenen echt fijn zijn om te dragen, en mensen
+    kunnen ze meteen meenemen naar huis. Dat maakt het makkelijker om ze te
+    verkopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo laten we zien dat de schoenen echt fijn zijn om te dragen, en
+      mensen kunnen ze meteen meenemen naar huis. Dat maakt het makkelijker
+      om ze te verkopen.
+
+------------------------------------------------------------------------------
+[ 89/116]  TikTok "Vegan Sneaker Swap"
+------------------------------------------------------------------------------
+  id          : 986ed8fa312e
+  status      : pending
+  aangemaakt  : 2026-06-28 22:45
+  afgehandeld : —
+  door rol    : trends
+  soort       : project
+
+  WAT
+    We starten een uitwisselingsactie op TikTok waar mensen hun oude
+    schoenen (niet per se NoochVille) kunnen ruilen voor een paar
+    NoochVille-sneakers. Ze filmen hoe ze hun oude schoenen weggeven en
+    krijgen in ruil een kortingscode voor NoochVille. We delen de leukste
+    filmpjes op ons eigen kanaal en taggen de makers.
+
+  WAAROM
+    Zo laten we zien hoe serieus we zijn over duurzaamheid en maken we
+    mensen nieuwsgierig naar onze schoenen. Het voelt alsof ze iets goeds
+    doen, niet alleen iets kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 0.80
+    rationale   :
+      Zo laten we zien hoe serieus we zijn over duurzaamheid en maken we
+      mensen nieuwsgierig naar onze schoenen. Het voelt alsof ze iets goeds
+      doen, niet alleen iets kopen.
+
+------------------------------------------------------------------------------
+[ 90/116]  Thuiswerkers die ook buiten lopen
+------------------------------------------------------------------------------
+  id          : 9b6345718265
+  status      : pending
+  aangemaakt  : 2026-06-28 22:46
+  afgehandeld : —
+  door rol    : harry_hemp
+  soort       : project
+
+  WAT
+    We maken een speciale pagina op nooch.earth met schoenen die zowel thuis
+    als buiten gedragen kunnen worden. We laten zien hoe deze schoenen
+    eruitzien op mensen die van thuis naar buiten lopen, zoals naar de
+    winkel of een afspraak. We vragen mensen die thuiswerken om foto’s te
+    delen van hun schoenen in beide situaties.
+
+  WAAROM
+    Mensen die thuiswerken dragen vaak sloffen of oude schoenen buiten. Als
+    ze zien dat onze schoenen ook buiten passen, kopen ze misschien een paar
+    voor beide momenten.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 200.00
+    rationale   :
+      Mensen die thuiswerken dragen vaak sloffen of oude schoenen buiten.
+      Als ze zien dat onze schoenen ook buiten passen, kopen ze misschien
+      een paar voor beide momenten.
+
+------------------------------------------------------------------------------
+[ 91/116]  Schoenentestdag op de markt
+------------------------------------------------------------------------------
+  id          : 85d3ece82c07
+  status      : pending
+  aangemaakt  : 2026-06-28 22:46
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We zetten een dag lang een kraam op de markt waar mensen onze schoenen
+    kunnen passen en voelen. We laten zien hoe ze gemaakt zijn en waarom ze
+    zo bijzonder zijn. We geven een sticker of een klein cadeautje aan
+    iedereen die een paar komt passen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt goed zijn en dat mensen ze
+    kunnen vertrouwen. Als ze ze een keer aan hebben gehad, willen ze ze
+    misschien wel kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo laten we zien dat onze schoenen echt goed zijn en dat mensen ze
+      kunnen vertrouwen. Als ze ze een keer aan hebben gehad, willen ze ze
+      misschien wel kopen.
+
+------------------------------------------------------------------------------
+[ 92/116]  Vegan Sneaker Held Challenge
+------------------------------------------------------------------------------
+  id          : aa984aa43da4
+  status      : pending
+  aangemaakt  : 2026-06-28 23:57
+  afgehandeld : —
+  door rol    : trends
+  soort       : project
+
+  WAT
+    We maken een leuke uitdaging op TikTok waar mensen laten zien hoe ze hun
+    vegan sneakers dragen. Ze laten bijvoorbeeld zien hoe ze ze combineren
+    met kleding, of hoe ze er een dag mee lopen. We vragen mensen om hun
+    eigen video te maken en te delen met een speciale hashtag. De beste
+    video’s winnen een paar gratis schoenen van NoochVille.
+
+  WAAROM
+    Zo laten we zien dat vegan sneakers niet saai hoeven te zijn, maar juist
+    stoer en hip. Mensen die zo’n video maken, vertellen het aan hun
+    vrienden en zo komt NoochVille onder de aandacht van nieuwe mensen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo laten we zien dat vegan sneakers niet saai hoeven te zijn, maar
+      juist stoer en hip. Mensen die zo’n video maken, vertellen het aan hun
+      vrienden en zo komt NoochVille onder de aandacht van nieuwe mensen.
+
+------------------------------------------------------------------------------
+[ 93/116]  NoochSchoenTestLab
+------------------------------------------------------------------------------
+  id          : 5062d8db59a9
+  status      : pending
+  aangemaakt  : 2026-06-28 23:58
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We maken een kleine, mobiele testruimte waar mensen onze schoenen kunnen
+    passen en voelen alsof ze in een echte winkel staan. We rijden met een
+    busje naar plekken waar veel mensen zijn, zoals markten, festivals of
+    dorpspleinen. Ze kunnen er 10 minuten blijven, de schoenen aantrekken en
+    lopen, en meteen vertellen wat ze vinden.
+
+  WAAROM
+    Mensen twijfelen vaak of schoenen lekker zitten als ze ze online
+    bestellen. Door ze eerst te laten voelen en passen, weten ze zeker dat
+    ze het juiste paar kiezen. Dat maakt ze sneller bereid om te kopen via
+    nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Mensen twijfelen vaak of schoenen lekker zitten als ze ze online
+      bestellen. Door ze eerst te laten voelen en passen, weten ze zeker dat
+      ze het juiste paar kiezen. Dat maakt ze sneller bereid om te kopen via
+      nooch.earth.
+
+------------------------------------------------------------------------------
+[ 94/116]  Thuiswerk-schoenen voor kantoor
+------------------------------------------------------------------------------
+  id          : fed1217e0d83
+  status      : pending
+  aangemaakt  : 2026-06-28 23:58
+  afgehandeld : —
+  door rol    : harry_hemp
+  soort       : project
+
+  WAT
+    We maken een speciale collectie schoenen die zowel thuis als op kantoor
+    gedragen kunnen worden. Nu zijn mensen vaak in twee schoenen aan het
+    wisselen: sloffen thuis en nette schoenen op kantoor. Wij maken één paar
+    dat allebei kan. De schoenen zien er netjes uit, maar zijn ook zacht en
+    comfortabel genoeg om de hele dag in te lopen.
+
+  WAAROM
+    Mensen die thuiswerken willen niet steeds schoenen wisselen. Als we één
+    paar hebben dat zowel thuis als op kantoor kan, kopen ze sneller een
+    paar bij ons. Zo verkopen we meer schoenen via nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Mensen die thuiswerken willen niet steeds schoenen wisselen. Als we
+      één paar hebben dat zowel thuis als op kantoor kan, kopen ze sneller
+      een paar bij ons. Zo verkopen we meer schoenen via nooch.earth.
+
+------------------------------------------------------------------------------
+[ 95/116]  Schoenen in de Spotlight
+------------------------------------------------------------------------------
+  id          : 494fa3ec6e10
+  status      : pending
+  aangemaakt  : 2026-06-29 22:25
+  afgehandeld : —
+  door rol    : mother_earth__nooch__noochville__copywriter
+  soort       : project
+
+  WAT
+    We maken een serie korte filmpjes waarin mensen laten zien hoe ze hun
+    Nooch-schoenen dragen in hun dagelijks leven. Bijvoorbeeld een bakker
+    die in zijn schoenen staat te werken, een fietser die naar zijn werk
+    gaat, of een ouder die met de kinderen speelt. We filmen het niet
+    perfect, maar wel eerlijk en herkenbaar.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen niet alleen mooi zijn, maar ook echt
+    werken in het echte leven. Mensen die zo’n filmpje zien, denken: "Dit
+    wil ik ook!" en kopen sneller een paar.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo laten we zien dat onze schoenen niet alleen mooi zijn, maar ook
+      echt werken in het echte leven. Mensen die zo’n filmpje zien, denken:
+      "Dit wil ik ook!" en kopen sneller een paar.
+
+------------------------------------------------------------------------------
+[ 96/116]  Schoenen voor helden
+------------------------------------------------------------------------------
+  id          : b137cc2bd682
+  status      : pending
+  aangemaakt  : 2026-06-29 22:25
+  afgehandeld : —
+  door rol    : mother_earth__nooch
+  soort       : project
+
+  WAT
+    We vragen mensen die al Nooch-schoenen dragen om foto’s te delen van
+    zichzelf in hun schoenen, met een kort verhaal waarom ze voor Nooch
+    kozen. Die verhalen en foto’s zetten we op een speciale plek op onze
+    website, waar iedereen ze kan zien. We noemen die plek "De Wand van
+    Helden".
+
+  WAAROM
+    Zo laten we zien dat Nooch-schoenen niet alleen goed zijn voor de aarde,
+    maar ook voor mensen die er trots op zijn. Andere mensen zien dan dat ze
+    niet de enige zijn die zo’n keuze maken.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 3.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 0.90
+    rationale   :
+      Zo laten we zien dat Nooch-schoenen niet alleen goed zijn voor de
+      aarde, maar ook voor mensen die er trots op zijn. Andere mensen zien
+      dan dat ze niet de enige zijn die zo’n keuze maken.
+
+------------------------------------------------------------------------------
+[ 97/116]  Lexicon voor schoenen op productpagina’s
+------------------------------------------------------------------------------
+  id          : 92d2e99ade29
+  status      : pending
+  aangemaakt  : 2026-06-29 22:25
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We maken een klein woordenboekje op elke schoen-pagina op nooch.earth.
+    Daarin staan korte uitlegjes over woorden die bij die schoen horen,
+    zoals "waterdicht" of "ademend". Zo kan iemand die een schoen koopt
+    meteen zien wat het betekent, zonder ergens anders te hoeven zoeken.
+
+  WAAROM
+    Mensen die een schoen willen kopen, weten vaak niet wat woorden
+    betekenen. Als ze het meteen snappen, voelen ze zich zekerder en kopen
+    ze sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Mensen die een schoen willen kopen, weten vaak niet wat woorden
+      betekenen. Als ze het meteen snappen, voelen ze zich zekerder en kopen
+      ze sneller.
+
+------------------------------------------------------------------------------
+[ 98/116]  Vegan sneaker-testers club
+------------------------------------------------------------------------------
+  id          : 74429d490165
+  status      : pending
+  aangemaakt  : 2026-06-29 22:26
+  afgehandeld : —
+  door rol    : concurrent_scout
+  soort       : project
+
+  WAT
+    We maken een kleine groep mensen die écht van vegan schoenen houden. Zij
+    krijgen elk jaar gratis een paar nieuwe schoenen van ons om uit te
+    proberen. Daarna schrijven ze eerlijke verhalen en foto’s op hun eigen
+    blog of social media. Zo laten ze zien hoe onze schoenen echt zijn.
+
+  WAAROM
+    Die verhalen en foto’s laten andere mensen zien dat onze schoenen goed
+    zijn. Mensen die zo’n verhaal lezen, willen misschien ook zo’n paar. Zo
+    verkopen we meer schoenen via nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.9   → waarde 60.00
+    rationale   :
+      Die verhalen en foto’s laten andere mensen zien dat onze schoenen goed
+      zijn. Mensen die zo’n verhaal lezen, willen misschien ook zo’n paar.
+      Zo verkopen we meer schoenen via nooch.earth.
+
+------------------------------------------------------------------------------
+[ 99/116]  Schoenentestdag in de buurt
+------------------------------------------------------------------------------
+  id          : e3a06e51acff
+  status      : pending
+  aangemaakt  : 2026-06-29 22:26
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We organiseren een dag waarop mensen in de buurt hun eigen schoenen
+    kunnen testen en vergelijken met de schoenen van Nooch. We zetten een
+    kleine pop-up neer op een druk plein of in een park, met een paar paar
+    schoenen van Nooch en een meetlint of een eenvoudige test om te zien hoe
+    ze passen en voelen. Mensen mogen ze even aan en uit doen, en we
+    vertellen waarom deze schoenen anders zijn dan andere.
+
+  WAAROM
+    Zo kunnen mensen de schoenen écht voelen en ervaren, en niet alleen een
+    foto of beschrijving lezen. Dat maakt het makkelijker om te kiezen en
+    vertrouwen te krijgen in wat ze kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo kunnen mensen de schoenen écht voelen en ervaren, en niet alleen
+      een foto of beschrijving lezen. Dat maakt het makkelijker om te kiezen
+      en vertrouwen te krijgen in wat ze kopen.
+
+------------------------------------------------------------------------------
+[100/116]  Schoenentest bij lokale winkels
+------------------------------------------------------------------------------
+  id          : c0d4e02abe7a
+  status      : pending
+  aangemaakt  : 2026-07-03 02:23
+  afgehandeld : —
+  door rol    : mother_earth__nooch
+  soort       : project
+
+  WAT
+    We vragen een paar kleine, duurzame winkels in Nederland (zoals een
+    biologische supermarkt of een winkel met natuurlijke producten) of ze
+    een paar paar Nooch-schoenen mogen neerzetten. Niet om te verkopen, maar
+    om mensen ze even te laten passen en voelen. Daarna kunnen ze online
+    bestellen als ze ze mooi vinden.
+
+  WAAROM
+    Zo kunnen mensen Nooch-schoenen écht aanraken en voelen, zonder dat we
+    een fysieke winkel hoeven te openen. Dat maakt het makkelijker om ze te
+    kopen, omdat ze weten dat ze passen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 200.00
+    rationale   :
+      Zo kunnen mensen Nooch-schoenen écht aanraken en voelen, zonder dat we
+      een fysieke winkel hoeven te openen. Dat maakt het makkelijker om ze
+      te kopen, omdat ze weten dat ze passen.
+
+------------------------------------------------------------------------------
+[101/116]  Schoenenlexicon op productpagina’s
+------------------------------------------------------------------------------
+  id          : 09adf4c7fac5
+  status      : pending
+  aangemaakt  : 2026-07-03 02:23
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We maken een klein woordenboekje op elke schoenenpagina op nooch.earth.
+    Daarin staan korte uitlegjes over woorden die bij die schoen horen,
+    zoals "wat is vegan leer?" of "hoe zit de zool in elkaar?". Zo kan
+    iemand die een schoen bekijkt meteen snappen waarom die schoen past bij
+    NoochVille.
+
+  WAAROM
+    Mensen die op zoek zijn naar schoenen willen weten waarom een schoen
+    goed is. Als we dat uitleggen op de plek waar ze de schoen zien, voelen
+    ze zich zekerder en kopen ze sneller.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Mensen die op zoek zijn naar schoenen willen weten waarom een schoen
+      goed is. Als we dat uitleggen op de plek waar ze de schoen zien,
+      voelen ze zich zekerder en kopen ze sneller.
+
+------------------------------------------------------------------------------
+[102/116]  Schoenenfluisteraar op TikTok
+------------------------------------------------------------------------------
+  id          : 55bbde757b0f
+  status      : pending
+  aangemaakt  : 2026-07-03 02:23
+  afgehandeld : —
+  door rol    : mother_earth__nooch__noochville__copywriter
+  soort       : project
+
+  WAT
+    We maken korte, vrolijke filmpjes waarin we laten zien hoe onze schoenen
+    *echt* voelen. Bijvoorbeeld: een meisje dat met blote voeten over gras
+    rent in onze schoenen, of een jongen die er een hele dag mee loopt
+    zonder dat ze vies worden. Geen reclame, gewoon eerlijke beelden met een
+    klein bordje: "Deze schoenen zijn 100% plantaardig en gemaakt in
+    Europa."
+
+  WAAROM
+    Zo zien mensen precies wat ze kopen, zonder dat het voelt als een
+    verkooppraatje. En omdat de filmpjes leuk zijn, delen ze ze misschien
+    met vrienden die ook op zoek zijn naar schoenen die bij hun hart passen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 133.33
+    rationale   :
+      Zo zien mensen precies wat ze kopen, zonder dat het voelt als een
+      verkooppraatje. En omdat de filmpjes leuk zijn, delen ze ze misschien
+      met vrienden die ook op zoek zijn naar schoenen die bij hun hart
+      passen.
+
+------------------------------------------------------------------------------
+[103/116]  Vegan sneaker-testers vrienden maken
+------------------------------------------------------------------------------
+  id          : 4f941adc299a
+  status      : pending
+  aangemaakt  : 2026-07-03 02:24
+  afgehandeld : —
+  door rol    : concurrent_scout
+  soort       : project
+
+  WAT
+    We zoeken 10 mensen die al vegan schoenen dragen en ze echt goed vinden.
+    Die vragen we of ze onze schoenen willen proberen en eerlijk vertellen
+    wat ze ervan vinden. We sturen ze gratis een paar, en zij delen hun
+    ervaring op hun eigen social media of in een kort filmpje.
+
+  WAAROM
+    Als die mensen onze schoenen leuk vinden en dat delen, zien andere
+    mensen die ze volgen dat onze schoenen echt goed zijn. Zo komen er meer
+    mensen die onze schoenen willen kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Als die mensen onze schoenen leuk vinden en dat delen, zien andere
+      mensen die ze volgen dat onze schoenen echt goed zijn. Zo komen er
+      meer mensen die onze schoenen willen kopen.
+
+------------------------------------------------------------------------------
+[104/116]  Lexicon voor schoenen op nooch.earth
+------------------------------------------------------------------------------
+  id          : ea504feddf4b
+  status      : pending
+  aangemaakt  : 2026-07-03 02:30
+  afgehandeld : —
+  door rol    : librarian
+  soort       : project
+
+  WAT
+    We maken een lijstje met woorden die passen bij onze schoenen, zoals
+    "vegan", "plasticvrij" en "EU-gemaakt". Deze woorden zetten we op de
+    productpagina’s van de schoenen, zodat mensen precies weten waar ze voor
+    staan.
+
+  WAAROM
+    Als mensen de woorden zien die bij hun keuzes passen, voelen ze zich
+    meer thuis op onze site. Dat maakt het makkelijker om te kiezen en te
+    kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.8   → waarde 20.00
+    rationale   :
+      Als mensen de woorden zien die bij hun keuzes passen, voelen ze zich
+      meer thuis op onze site. Dat maakt het makkelijker om te kiezen en te
+      kopen.
+
+------------------------------------------------------------------------------
+[105/116]  Testen bij buurtfeesten met buurtgenoten
+------------------------------------------------------------------------------
+  id          : 88b3017120ab
+  status      : pending
+  aangemaakt  : 2026-07-03 02:31
+  afgehandeld : —
+  door rol    : facilitator
+  soort       : project
+
+  WAT
+    We vragen een paar buurtgenoten om onze schoenen een dag te dragen
+    tijdens een buurtfeest. Daarna vertellen ze aan anderen wat ze van de
+    schoenen vinden. We geven ze een sticker of een klein cadeautje als
+    dank.
+
+  WAAROM
+    Zo laten we zien dat de schoenen echt lekker zitten en goed zijn voor de
+    aarde. Mensen die het zien, willen misschien ook zo’n paar.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo laten we zien dat de schoenen echt lekker zitten en goed zijn voor
+      de aarde. Mensen die het zien, willen misschien ook zo’n paar.
+
+------------------------------------------------------------------------------
+[106/116]  Schoenentest voor vrienden
+------------------------------------------------------------------------------
+  id          : 5c78f4ac8afd
+  status      : pending
+  aangemaakt  : 2026-07-03 02:31
+  afgehandeld : —
+  door rol    : mother_earth__nooch
+  soort       : project
+
+  WAT
+    We maken een speciale test waar mensen thuis een paar Nooch-schoenen
+    gratis kunnen uitproberen. Ze dragen ze een week en vertellen ons wat ze
+    ervan vinden. Daarna mogen ze de schoenen houden of terugsturen – zonder
+    kosten.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt goed zijn, en mensen die het
+    leuk vinden, vertellen het door aan anderen. Dat helpt meer mensen om
+    Nooch-schoenen te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 90.00
+    rationale   :
+      Zo laten we zien dat onze schoenen echt goed zijn, en mensen die het
+      leuk vinden, vertellen het door aan anderen. Dat helpt meer mensen om
+      Nooch-schoenen te kopen.
+
+------------------------------------------------------------------------------
+[107/116]  Schoenentestdag op het dorpsplein
+------------------------------------------------------------------------------
+  id          : 1db2ad01058c
+  status      : pending
+  aangemaakt  : 2026-07-03 02:37
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We zetten een dag lang een pop-up neer op het dorpsplein waar mensen
+    onze schoenen kunnen passen, voelen en vergelijken. We laten zien hoe ze
+    gemaakt zijn, waarom ze zo fijn zitten, en waarom ze geen plastic
+    bevatten. Geen verkoopdruk, gewoon een feestje waar mensen de schoenen
+    écht kunnen ervaren.
+
+  WAAROM
+    Als mensen onze schoenen zelf kunnen voelen en passen, weten ze precies
+    wat ze kopen. Dat maakt het makkelijker om ze later online te bestellen.
+    En een feestelijke dag trekt meer mensen dan een stille winkel.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 13.33
+    rationale   :
+      Als mensen onze schoenen zelf kunnen voelen en passen, weten ze
+      precies wat ze kopen. Dat maakt het makkelijker om ze later online te
+      bestellen. En een feestelijke dag trekt meer mensen dan een stille
+      winkel.
+
+------------------------------------------------------------------------------
+[108/116]  Vegan Sneaker Testers Club
+------------------------------------------------------------------------------
+  id          : df261391861b
+  status      : pending
+  aangemaakt  : 2026-07-03 02:49
+  afgehandeld : —
+  door rol    : concurrent_scout
+  soort       : project
+
+  WAT
+    We starten een groep mensen die onze schoenen gratis proberen en eerlijk
+    vertellen wat ze ervan vinden. Ze schrijven korte berichten op sociale
+    media of een website, zoals "Deze schoenen draag ik nu elke dag!" of
+    "Hier loop ik 10 kilometer mee zonder blaren". We zoeken vooral mensen
+    die al vegan schoenen dragen en graag hun mening delen.
+
+  WAAROM
+    Zo laten we zien dat onze schoenen echt werken en dat andere mensen ze
+    ook willen kopen. Als anderen zien dat ze goed zijn, willen ze ze zelf
+    ook.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.9   → waarde 22.50
+    rationale   :
+      Zo laten we zien dat onze schoenen echt werken en dat andere mensen ze
+      ook willen kopen. Als anderen zien dat ze goed zijn, willen ze ze zelf
+      ook.
+
+------------------------------------------------------------------------------
+[109/116]  De Schoenen Taal Maker
+------------------------------------------------------------------------------
+  id          : 597fdb378c9b
+  status      : resolved
+  aangemaakt  : 2026-07-10 11:57
+  afgehandeld : 2026-07-10 12:18
+  door rol    : librarian
+  soort       : project
+  resolutie   : resolved — 👍 gewaardeerd (dit soort denken: meer van)
+
+  WAT
+    We gaan een super makkelijke manier maken om voor elk type schoen dat we
+    hebben te vertellen welke woorden het beste passen. Dit helpt mensen die
+    op onze website zoeken om precies te vinden wat ze willen. We zorgen
+    ervoor dat de beschrijvingen duidelijk zijn en dat de goede trefwoorden
+    erin staan.
+
+  WAAROM
+    Door de juiste woorden te gebruiken bij onze schoenen, vinden meer
+    mensen onze schoenen online en kopen ze ook. Zo helpen we meer mensen om
+    bewuste keuzes te maken.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 750.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.7   → waarde 262.50
+    rationale   :
+      Door de juiste woorden te gebruiken bij onze schoenen, vinden meer
+      mensen onze schoenen online en kopen ze ook. Zo helpen we meer mensen
+      om bewuste keuzes te maken.
+
+------------------------------------------------------------------------------
+[110/116]  De Wegwijzer van het Goede Gevoel
+------------------------------------------------------------------------------
+  id          : 5a114961dfc6
+  status      : deferred
+  aangemaakt  : 2026-07-10 11:57
+  afgehandeld : 2026-07-10 12:08
+  door rol    : mother_earth__nooch__noochville
+  soort       : project
+  resolutie   : deferred — ⏳ goed idee, nu niet (timing)
+
+  WAT
+    We gaan een soort speciale gids maken op nooch.earth. Deze gids laat
+    mensen zien welke schoenen perfect zijn voor hen, gebaseerd op wat ze
+    leuk vinden aan de natuur en wat ze graag willen doen. Alsof je een
+    vriend vraagt: "Welke schoenen passen het best bij mijn hike in het bos
+    en mijn liefde voor dieren?"
+
+  WAAROM
+    Door mensen te helpen de perfecte schoenen te vinden die bij hun hart en
+    hun voeten passen, hopen we dat ze sneller besluiten om ze te kopen via
+    onze website. Het maakt het kiezen makkelijker en leuker.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 1500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.8   → waarde 400.00
+    rationale   :
+      Door mensen te helpen de perfecte schoenen te vinden die bij hun hart
+      en hun voeten passen, hopen we dat ze sneller besluiten om ze te kopen
+      via onze website. Het maakt het kiezen makkelijker en leuker.
+
+------------------------------------------------------------------------------
+[111/116]  Ontdek de Zonder-Plastic Schoen Wereld
+------------------------------------------------------------------------------
+  id          : bafb6edc777a
+  status      : pending
+  aangemaakt  : 2026-07-10 11:57
+  afgehandeld : —
+  door rol    : mother_earth__nooch__noochville__copywriter
+  soort       : project
+
+  WAT
+    We maken een online 'ontdekkingsreis' waar mensen kunnen zien hoe
+    schoenen gemaakt worden, zonder dat er plastic in zit en helemaal in
+    Europa. We laten zien welke mooie, lekkere schoenen we hebben en hoe ze
+    bijdragen aan een gezondere planeet. Dit doen we met leuke filmpjes en
+    foto's.
+
+  WAAROM
+    Door mensen op een makkelijke en leuke manier te laten zien hoe geweldig
+    onze schoenen zijn en waarom ze goed zijn voor iedereen, willen we meer
+    mensen laten zien dat ze bij ons de perfecte schoenen kunnen vinden.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.7   → waarde 116.67
+    rationale   :
+      Door mensen op een makkelijke en leuke manier te laten zien hoe
+      geweldig onze schoenen zijn en waarom ze goed zijn voor iedereen,
+      willen we meer mensen laten zien dat ze bij ons de perfecte schoenen
+      kunnen vinden.
+
+------------------------------------------------------------------------------
+[112/116]  Deel je favoriete Nooch-avontuur
+------------------------------------------------------------------------------
+  id          : 9a3d9d8ce57b
+  status      : pending
+  aangemaakt  : 2026-07-10 11:57
+  afgehandeld : —
+  door rol    : mother_earth__nooch
+  soort       : project
+
+  WAT
+    We vragen mensen om op onze website foto's te delen van hun schoenen
+    tijdens hun leukste uitstapjes, of het nu een boswandeling, een
+    stadsontdekking of een dagje spelen is. We laten de mooiste foto's zien
+    op onze site, met een klein verhaaltje erbij.
+
+  WAAROM
+    Zo zien andere mensen hoe fijn en veelzijdig onze schoenen zijn in het
+    echte leven, en krijgen ze zin om zelf ook zo'n avontuur aan te gaan met
+    Nooch.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.7   → waarde 175.00
+    rationale   :
+      Zo zien andere mensen hoe fijn en veelzijdig onze schoenen zijn in het
+      echte leven, en krijgen ze zin om zelf ook zo'n avontuur aan te gaan
+      met Nooch.
+
+------------------------------------------------------------------------------
+[113/116]  De Wegwijzer voor Consciënte Stappers
+------------------------------------------------------------------------------
+  id          : ad318da1c842
+  status      : pending
+  aangemaakt  : 2026-07-10 11:58
+  afgehandeld : —
+  door rol    : harry_hemp
+  soort       : project
+
+  WAT
+    We maken een speciale plek op onze website waar mensen alles kunnen
+    vinden over onze duurzame en vegan schoenen. Het wordt een soort gids
+    met informatie over hoe we ze maken, waarom dat goed is voor de wereld,
+    en hoe ze jou helpen om bewuster te kiezen. We leggen alles uit in
+    simpele taal, zodat iedereen het snapt.
+
+  WAAROM
+    Door mensen makkelijk te laten zien waarom onze schoenen speciaal zijn
+    en goed voor iedereen, hopen we dat ze sneller besluiten om ze bij ons
+    te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 500.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.7   → waarde 175.00
+    rationale   :
+      Door mensen makkelijk te laten zien waarom onze schoenen speciaal zijn
+      en goed voor iedereen, hopen we dat ze sneller besluiten om ze bij ons
+      te kopen.
+
+------------------------------------------------------------------------------
+[114/116]  Het Schoenen Ontdek Plekje
+------------------------------------------------------------------------------
+  id          : dd6e452f9786
+  status      : pending
+  aangemaakt  : 2026-07-10 11:58
+  afgehandeld : —
+  door rol    : noochie
+  soort       : project
+
+  WAT
+    We gaan een klein, gezellig plekje maken in het dorpshart waar mensen
+    onze schoenen kunnen zien en aanraken. Ze kunnen dan, net als bij een
+    kleedje op een markt, even rustig voelen hoe ze zitten en hoe ze
+    eruitzien. We leggen er ook wat uitleg bij over hoe ze gemaakt zijn.
+
+  WAAROM
+    Mensen kunnen zo het verschil voelen en zien tussen onze schoenen en
+    andere schoenen, en dat maakt ze enthousiast om de schoenen echt te
+    willen kopen op nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 200.0    horizon: per jaar
+    effort      : 2
+    confidence  : 0.7   → waarde 70.00
+    rationale   :
+      Mensen kunnen zo het verschil voelen en zien tussen onze schoenen en
+      andere schoenen, en dat maakt ze enthousiast om de schoenen echt te
+      willen kopen op nooch.earth.
+
+------------------------------------------------------------------------------
+[115/116]  Vegan Sneaker Testers Buiten NoochVille
+------------------------------------------------------------------------------
+  id          : b6fcb6329aa6
+  status      : pending
+  aangemaakt  : 2026-07-10 11:58
+  afgehandeld : —
+  door rol    : concurrent_scout
+  soort       : project
+
+  WAT
+    We gaan een kleine groep mensen vinden die heel graag duurzame vegan
+    sneakers testen. Ze dragen ze buiten en delen hun eerlijke mening,
+    bijvoorbeeld op een blog of social media. We geven ze de schoenen gratis
+    om te testen.
+
+  WAAROM
+    Mensen zien dat echte, buitenwereldse mensen onze schoenen met plezier
+    dragen en erover praten. Dit laat zien hoe goed en fijn onze schoenen
+    zijn, en helpt andere mensen overtuigen om ook te kopen op nooch.earth.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 50.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.7   → waarde 11.67
+    rationale   :
+      Mensen zien dat echte, buitenwereldse mensen onze schoenen met plezier
+      dragen en erover praten. Dit laat zien hoe goed en fijn onze schoenen
+      zijn, en helpt andere mensen overtuigen om ook te kopen op
+      nooch.earth.
+
+------------------------------------------------------------------------------
+[116/116]  Mensen helpen de juiste schoenen vinden
+------------------------------------------------------------------------------
+  id          : 9b448334d16e
+  status      : pending
+  aangemaakt  : 2026-07-10 11:59
+  afgehandeld : —
+  door rol    : website_watcher
+  soort       : project
+
+  WAT
+    We maken een supermakkelijke gids die uitlegt welke schoenen het beste
+    zijn voor welke avonturen, zoals een boswandeling of naar de stad gaan.
+    We gebruiken de informatie van wie er op onze website kijkt om te weten
+    wat mensen belangrijk vinden.
+
+  WAAROM
+    Zo helpen we meer mensen om de perfecte schoenen te vinden die ze écht
+    nodig hebben, waardoor ze sneller besluiten om ze te kopen.
+
+  BUSINESS CASE
+    metric      : pairs_sold
+    effect      : 150.0    horizon: per jaar
+    effort      : 3
+    confidence  : 0.7   → waarde 35.00
+    rationale   :
+      Zo helpen we meer mensen om de perfecte schoenen te vinden die ze écht
+      nodig hebben, waardoor ze sneller besluiten om ze te kopen.
+

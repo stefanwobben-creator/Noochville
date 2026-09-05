@@ -1,0 +1,967 @@
+{
+  "librarian": {
+    "id": "librarian",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Hoeder van de goedgekeurde woordenschat (DOMEIN: bibliotheek)",
+      "accountabilities": [
+        "**Bewaken en onderhouden van de goedgekeurde woordenschat voor NoochVille.**",
+        "**Bewaken van de consistentie en kwaliteit van de goedgekeurde woordenschat.**",
+        "**Twijfelgevallen escaleren naar de juiste rol of persoon.**",
+        "kandidaat-woorden beoordelen",
+        "twijfelgevallen escaleren naar een mens"
+      ],
+      "domains": [
+        "bibliotheek"
+      ],
+      "skills": [
+        "curate",
+        "keyword_review",
+        "keywords_everywhere",
+        "library_list",
+        "library_lookup",
+        "verband_voorstel"
+      ],
+      "policies": [],
+      "name": "Library"
+    },
+    "members": [],
+    "version": 16,
+    "archived": false,
+    "source": "seed",
+    "persona": "Lara the Librarian",
+    "persona_id": "c7e77be57d39",
+    "held_by": null
+  },
+  "noochie": {
+    "id": "noochie",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "De droom van NoochVille levend houden in het dagelijkse dorp, en de brug zijn tussen The Source en de bewoners.",
+      "accountabilities": [
+        "de missie levend houden door elke veld-notitie tegen de missie te wegen",
+        "de brug zijn tussen The Source en het dorp, en The Source scherp houden",
+        "creatieve governance-voorstellen aandragen, met de voorwaarde waaronder een voorstel kantelt",
+        "het dagelijkse dorpsbulletin schrijven uit de village-events"
+      ],
+      "domains": [],
+      "skills": [
+        "bulletin_schrijven"
+      ],
+      "policies": [],
+      "name": "Noochie"
+    },
+    "members": [],
+    "version": 9,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Noochie",
+    "persona_id": "noochie_persona",
+    "held_by": null
+  },
+  "website_watcher": {
+    "id": "website_watcher",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Het omzetten van data en inzichten in actiegerichte adviezen, zodat Nooch.earth gezond, vindbaar en groeiend blijft.",
+      "accountabilities": [
+        "**Duiden en analyseren van bezoekersdata per locale, inclusief vertalen naar actiegerichte inzichten voor lokale optimalisaties.**",
+        "Doel 'verkoopdoel_2026_q4' vereist meting van 'pairs_sold' (target: 1000 paar sc",
+        "bezoekersdata duiden",
+        "bezoekersdata per locale analyseren",
+        "bezoekersdata per locale duiden",
+        "dagelijkse Field Note schrijven",
+        "site monitoren",
+        "taalgebruik per locale bewaken"
+      ],
+      "domains": [],
+      "skills": [
+        "field_note",
+        "google_trends",
+        "plausible_stats",
+        "serpapi_trends",
+        "site_health",
+        "shopify_sales"
+      ],
+      "policies": [],
+      "name": "Website Watcher"
+    },
+    "members": [],
+    "version": 24,
+    "archived": false,
+    "source": "seed",
+    "persona": "Walter Website",
+    "persona_id": "c3f96f79c3d6",
+    "held_by": null
+  },
+  "harry_hemp": {
+    "id": "harry_hemp",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Observeert de lange culturele taalverschuiving (ngram) en grondt kandidaat-termen in wetenschappelijke literatuur",
+      "accountabilities": [
+        "Gronden van keyword_proposed-events in wetenschappelijk bewijs via OpenAlex en Semantic Scholar, met publicatie van de resultaten als keywor",
+        "Vastleggen van duurzaamheids- en vegantrends in de schoenenbranche die relevant zijn voor NoochVille.",
+        "keyword_proposed-events gronden in wetenschappelijk bewijs via OpenAlex en Semantic Scholar en het resultaat publiceren als keyword_evidence",
+        "tijdgeest-signalen publiceren bij ≥2 termen die structureel dezelfde richting op bewegen",
+        "wekelijks de ngram-frequentie van missie-termen meten en stijgende termen voorstellen als keyword_proposed"
+      ],
+      "domains": [],
+      "skills": [
+        "ngram_culture",
+        "openalex_evidence",
+        "semscholar_tldr",
+        "onderzoeksvraag",
+        "patent_search"
+      ],
+      "policies": [],
+      "name": "Scientist"
+    },
+    "members": [],
+    "version": 5,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Sid the Science Kid",
+    "persona_id": "67f14c991c62",
+    "held_by": null
+  },
+  "the_source": {
+    "id": "the_source",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Envisioning the dream of NoochVille and inspiring everyone to co-create and bring it to life",
+      "accountabilities": [
+        "Acting as a safety net for unresolved tensions",
+        "Allocating resources and funds",
+        "Defining and communicating NoochVille’s strategic direction",
+        "Determining NoochVille’s trajectory",
+        "Empowering residents with freedom to act",
+        "Ensuring alignment between strategy and execution",
+        "Making decisive calls after consultation, with clear explanations",
+        "Safeguarding the living boundary where no rule applies",
+        "Tracking progress and outcomes"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Founding Farmer"
+    },
+    "members": [],
+    "version": 4,
+    "archived": false,
+    "source": "seed",
+    "persona": "Stefan",
+    "persona_id": null,
+    "held_by": null
+  },
+  "concurrent_scout": {
+    "id": "concurrent_scout",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Optimale markt- en keyword-intelligentie voor een voorsprong in de duurzame schoenenmarkt.",
+      "accountabilities": [
+        "Analyseren van SERP keywords van concurrenten en doorgeven aan @librarian",
+        "Bewegingen van directe concurrenten in de gaten houden.",
+        "Opstellen en verspreiden van een wekelijks concurrentie-veldrapport",
+        "Spotten van nieuwe toetreders",
+        "Opstellen en delen van een wekelijkse zoekopdracht-analyse en rankingsrapportage",
+        "Signaleren en analyseren van strategische bewegingen in de duurzame sneaker- en vegan schoenenmarkt"
+      ],
+      "domains": [],
+      "skills": [
+        "competitor_news",
+        "competitor_discover",
+        "linkbuilding_targets",
+        "keywords_everywhere"
+      ],
+      "policies": [],
+      "name": "Trends & Competition"
+    },
+    "members": [],
+    "version": 5,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Billy Buzz",
+    "persona_id": "99cd203b12d9",
+    "held_by": null
+  },
+  "mother_earth": {
+    "id": "mother_earth",
+    "type": "circle",
+    "parent": null,
+    "definition": {
+      "purpose": "To support and protect all forms of life through sustainable and responsible management of natural resources.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [
+        "Rolvervullers zijn transparant over hun projecten (projectenbord bijgewerkt).",
+        "Geen enkele rol mag een accountability hebben die plastic-gebaseerd of dierlijk-leer materiaal als on-mission goedkeurt.",
+        "Geen enkele rol mag uitgaven aan advertising autoriseren of plannen; betaald bereik is verboden als groeistrategie.",
+        "Verkoop loopt uitsluitend via de eigen website nooch.earth; geen enkele rol mag externe verkoopkanalen of marktplaatsen autoriseren.",
+        "Productie is on demand; geen enkele rol mag voorraadopbouw of overproductie autoriseren of plannen.",
+        "De missie-toetsing (KeywordReview, G4-poort) mag nooit als accountability worden verwijderd zonder een gelijkwaardig alternatief in hetzelfde voorstel."
+      ],
+      "name": "Mother Earth"
+    },
+    "members": [
+      "mother_earth__nooch",
+      "mother_earth__circle_lead",
+      "mother_earth__facilitator",
+      "mother_earth__secretary",
+      "mother_earth__shareholder",
+      "facilitator",
+      "the_source"
+    ],
+    "version": 3,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch": {
+    "id": "mother_earth__nooch",
+    "type": "circle",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "Nooch transforms the shoe industry, step by step. Every movement with Nooch is a step towards a better world for Mother Earth and her inhabitants.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Nooch"
+    },
+    "members": [
+      "mother_earth__nooch__brand_visual_designer",
+      "mother_earth__nooch__carbon_footprint_improver",
+      "mother_earth__nooch__circle_lead",
+      "mother_earth__nooch__circle_rep",
+      "mother_earth__nooch__community_and_email",
+      "mother_earth__nooch__creator_of_shoes",
+      "mother_earth__nooch__facilitator",
+      "mother_earth__nooch__factory_development_specialist",
+      "mother_earth__nooch__financial_controller",
+      "mother_earth__nooch__inmate_in_residence",
+      "mother_earth__nooch__marketing_lead",
+      "mother_earth__nooch__mother_earth_steward",
+      "mother_earth__nooch__secretary",
+      "mother_earth__nooch__strategic_lead_founder_steward",
+      "mother_earth__nooch__supply_chain_coordinator",
+      "mother_earth__nooch__website_developer",
+      "mother_earth__nooch__noochville"
+    ],
+    "version": 2,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__circle_lead": {
+    "id": "mother_earth__circle_lead",
+    "type": "role",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "To support and protect all forms of life through sustainable and responsible management of natural resources.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Circle Lead"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__facilitator": {
+    "id": "mother_earth__facilitator",
+    "type": "role",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "Circle governance and operational practices aligned with the Constitution.",
+      "accountabilities": [
+        "Facilitating the Circle's regular Tactical Meetings",
+        "Facilitating the Circle's Governance Process",
+        "Triggering new elections for the Circle's elected Roles after each election term expires",
+        "Auditing a Sub-Circle's meetings and records on request and declaring a Process Breakdown if one is discovered",
+        "Rapporteren over de gezondheid van de werkoverleggen"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Facilitator"
+    },
+    "members": [],
+    "version": 2,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__secretary": {
+    "id": "mother_earth__secretary",
+    "type": "role",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "Stabilize the Circle's constitutionally-required records and meetings.",
+      "accountabilities": [
+        "Scheduling regular Tactical Meetings for the Circle",
+        "Capturing and publishing Tactical Meeting outputs",
+        "Scheduling Governance Meetings for the Circle",
+        "Capturing and publishing the outputs of the Circle's Governance Process",
+        "Interpreting the Constitution and anything under its authority upon request"
+      ],
+      "domains": [
+        "All governance records of the Circle"
+      ],
+      "skills": [],
+      "policies": [],
+      "name": "Secretary"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__shareholder": {
+    "id": "mother_earth__shareholder",
+    "type": "role",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "Holding formal responsbility",
+      "accountabilities": [
+        "Assigning or removing circle lead for Nooch circle",
+        "Defining company purpose and accountabilities",
+        "Signing document for legal responsibility"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Shareholder"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__brand_visual_designer": {
+    "id": "mother_earth__nooch__brand_visual_designer",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Make Nooch visually consistent, clear and inspiring.",
+      "accountabilities": [
+        "Creating all visual assets (ads, socials, emails, packaging, etc.)",
+        "Maintaining and evolving the Nooch visual identity",
+        "Producing brand materials for marketing & community",
+        "Providing visuals for website and product page",
+        "Keeping all brand files organised and accessible"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Brand & Visual Designer"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__carbon_footprint_improver": {
+    "id": "mother_earth__nooch__carbon_footprint_improver",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Minimizing the environmental impact of Nooch products through data-driven optimization.",
+      "accountabilities": [
+        "Maintaining comprehensive insight into the Carbon Footprint of all Nooch products.",
+        "Identifying and executing opportunities to continuously lower the carbon footprint.",
+        "Collaborating with other roles to balance sustainability with cost and speed."
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Carbon Footprint Improver"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__circle_lead": {
+    "id": "mother_earth__nooch__circle_lead",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Nooch transforms the shoe industry, step by step. Every movement with Nooch is a step towards a better world for Mother Earth and her inhabitants.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Circle Lead"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__circle_rep": {
+    "id": "mother_earth__nooch__circle_rep",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Tensions relevant to process in a broader Circle channeled out and resolved.",
+      "accountabilities": [
+        "Seeking to understand Tensions conveyed by Role Leads within the Circle",
+        "Discerning Tensions appropriate to process within a broader Circle that holds the Circle",
+        "Processing Tensions within a broader Circle to remove constraints on the Circle"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Circle Rep"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__community_and_email": {
+    "id": "mother_earth__nooch__community_and_email",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Build a strong and supportive Nooch community.",
+      "accountabilities": [
+        "Writing email flows & updates",
+        "Managing customer communication",
+        "Keeping community engaged and informed"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Community and Email"
+    },
+    "members": [],
+    "version": 3,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__creator_of_shoes": {
+    "id": "mother_earth__nooch__creator_of_shoes",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Kick-ass Noochies",
+      "accountabilities": [
+        "Designing new shoe models & colorways",
+        "Working with suppliers on materials and ways of working",
+        "Reviewing product quality and samples",
+        "Translating user feedback into next iterations"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Creator of Shoes"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__facilitator": {
+    "id": "mother_earth__nooch__facilitator",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Circle governance and operational practices aligned with the Constitution.",
+      "accountabilities": [
+        "Facilitating the Circle's regular Tactical Meetings",
+        "Facilitating the Circle's Governance Process",
+        "Triggering new elections for the Circle's elected Roles after each election term expires",
+        "Auditing a Sub-Circle's meetings and records on request and declaring a Process Breakdown if one is discovered",
+        "Rapporteren over de gezondheid van de werkoverleggen"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Facilitator"
+    },
+    "members": [],
+    "version": 2,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__factory_development_specialist": {
+    "id": "mother_earth__nooch__factory_development_specialist",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Ensuring a world-class manufacturing partnership and seamless production execution.",
+      "accountabilities": [
+        "Maintaining frequent and proactive communication with the factory.",
+        "Ensuring all new orders are placed accurately and according to specifications.",
+        "Verifying that production is \"ready-to-go\" and on schedule.",
+        "Cultivating and optimizing a high-trust, long-term relationship with the factory."
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Factory Development Specialist"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__financial_controller": {
+    "id": "mother_earth__nooch__financial_controller",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Safeguarding the financial health and disciplined spending",
+      "accountabilities": [
+        "Designing and managing the operational budget.",
+        "Monitoring expenditures to ensure alignment with financial targets.",
+        "Providing financial clarity to other roles to support informed decision-making."
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Financial Controller"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__inmate_in_residence": {
+    "id": "mother_earth__nooch__inmate_in_residence",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Stunts that spread awareness around the power of what Nooch stands for",
+      "accountabilities": [
+        "Updating a prioritized list of ideas that gain attention",
+        "Coordinating and execute stunts",
+        "Informing press relations about stunts",
+        "Generating bad-ass guerrilla stunt ideas",
+        "Finding and recruiting incredible people to do stunts with",
+        "Being arrested a couple times per year for the good cause"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Inmate in residence"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__marketing_lead": {
+    "id": "mother_earth__nooch__marketing_lead",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Grow awareness and demand for Nooch.",
+      "accountabilities": [
+        "Planning and running marketing campaigns",
+        "Tracking performance and sharing insights",
+        "Managing paid & organic channels"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Marketing Lead"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__mother_earth_steward": {
+    "id": "mother_earth__nooch__mother_earth_steward",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Guarding Mother Earth",
+      "accountabilities": [
+        "Raising awareness of planetary effects on business decisions",
+        "Withholding consent on business decisions due to negative external planetary effects"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Mother Earth Steward"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__secretary": {
+    "id": "mother_earth__nooch__secretary",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Stabilize the Circle's constitutionally-required records and meetings.",
+      "accountabilities": [
+        "Scheduling regular Tactical Meetings for the Circle",
+        "Capturing and publishing Tactical Meeting outputs",
+        "Scheduling Governance Meetings for the Circle",
+        "Capturing and publishing the outputs of the Circle's Governance Process",
+        "Interpreting the Constitution and anything under its authority upon request"
+      ],
+      "domains": [
+        "All governance records of the Circle"
+      ],
+      "skills": [],
+      "policies": [],
+      "name": "Secretary"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__strategic_lead_founder_steward": {
+    "id": "mother_earth__nooch__strategic_lead_founder_steward",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Hold the long-term direction, protect the mission, and ensure Nooch grows in the right way.",
+      "accountabilities": [
+        "Shaping overall business strategy and priorities",
+        "Telling the Nooch story (press, investors, community)",
+        "Leading fundraising and financial strategy",
+        "Guarding mission, values and long-term principles",
+        "Representing Nooch externally with partners, media and stakeholders"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Strategic Lead & Founder Steward"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__supply_chain_coordinator": {
+    "id": "mother_earth__nooch__supply_chain_coordinator",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "Creating a transparent, efficient, and resilient flow of goods from source to destination.",
+      "accountabilities": [
+        "Maintaining full visibility into the supply chain (timelines, contacts, status, and costs).",
+        "Ensuring all supply chain processes remain on track and meet quality standards.",
+        "Keeping all relevant suppliers informed of needs and changes.",
+        "Identifying and mitigating supply chain risks or bottlenecks at an early stage."
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Supply Chain Coordinator"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__website_developer": {
+    "id": "mother_earth__nooch__website_developer",
+    "type": "role",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "High performing website",
+      "accountabilities": [
+        "Building new features",
+        "Optimzing website performance",
+        "Fixing bugs",
+        "Maintaining a backlog of issues"
+      ],
+      "domains": [
+        "Nooch.earth"
+      ],
+      "skills": [],
+      "policies": [],
+      "name": "Website Developer"
+    },
+    "members": [],
+    "version": 3,
+    "archived": false,
+    "source": "seed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville": {
+    "id": "mother_earth__nooch__noochville",
+    "type": "circle",
+    "parent": "mother_earth__nooch",
+    "definition": {
+      "purpose": "De autonome AI-rollen die dagelijks sensen, leren en rapporteren voor Nooch.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Noochville"
+    },
+    "members": [
+      "mother_earth__nooch__noochville__facilitator",
+      "harry_hemp",
+      "librarian",
+      "website_watcher",
+      "concurrent_scout",
+      "noochie",
+      "mother_earth__nooch__noochville__circle_lead",
+      "mother_earth__nooch__noochville__circle_rep",
+      "mother_earth__nooch__noochville__secretary",
+      "the_source",
+      "mother_earth__nooch__noochville__copywriter",
+      "mother_earth__nooch__noochville__codie_code"
+    ],
+    "version": 1,
+    "archived": false,
+    "source": "sensed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__circle_lead": {
+    "id": "mother_earth__nooch__noochville__circle_lead",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Nooch transforms the shoe industry, step by step. Every movement with Nooch is a step towards a better world for Mother Earth and her inhabitants.",
+      "accountabilities": [
+        "Assigning Roles within the Circle to people who are willing and able to fulfill them",
+        "Monitoring the fit between Role assignments and the Circle's needs",
+        "Offering feedback to Role Leads to enhance fit with their Role",
+        "Allocating the Circle's resources across its Projects and Roles",
+        "Establishing priorities and Strategies for the Circle",
+        "Defining metrics for the Circle",
+        "Removing constraints within the Circle to the Super-Circle's Purpose and Accountabilities"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Circle Lead"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "sensed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__circle_rep": {
+    "id": "mother_earth__nooch__noochville__circle_rep",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Tensions relevant to process in a broader Circle channeled out and resolved.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Circle Rep"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Noochie (AI)",
+    "persona_id": "noochie_persona",
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__secretary": {
+    "id": "mother_earth__nooch__noochville__secretary",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Stabilize the Circle's constitutionally-required records and meetings.",
+      "accountabilities": [],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Secretary"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "sensed",
+    "persona": null,
+    "persona_id": null,
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__codie_code": {
+    "id": "mother_earth__nooch__noochville__codie_code",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Beautiful, clean code that makes NoochVille thrive",
+      "accountabilities": [
+        "Writing clean, maintainable code for NoochVille features",
+        "Testing features before deployment",
+        "Deploying updates to production",
+        "Reviewing code quality and suggesting improvements",
+        "Documenting technical decisions and architecture",
+        "Flagging technical debt and proposing solutions"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Coder"
+    },
+    "members": [],
+    "version": 1,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Codie Code",
+    "persona_id": "516f203899f9",
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__copywriter": {
+    "id": "mother_earth__nooch__noochville__copywriter",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Copy that attracts and converts people",
+      "accountabilities": [
+        "Checking SEO discoverability and tone-of-voice of Nooch",
+        "Defining target audience and channel for the intended copy",
+        "Researching keywords and knowledge bank insights",
+        "Writing copy that aligns with the organization's tone of voice and mission"
+      ],
+      "domains": [],
+      "skills": [
+        "content_schrijven",
+        "content_check",
+        "voorstel_schrijven"
+      ],
+      "policies": [],
+      "name": "Copywriter"
+    },
+    "members": [],
+    "version": 4,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Wendy Words",
+    "persona_id": "313a93f9cb9a",
+    "held_by": null
+  },
+  "mother_earth__nooch__noochville__facilitator": {
+    "id": "mother_earth__nooch__noochville__facilitator",
+    "type": "role",
+    "parent": "mother_earth__nooch__noochville",
+    "definition": {
+      "purpose": "Circle governance and operational practices aligned with the Constitution.",
+      "accountabilities": [
+        "Rapporteren over de gezondheid van de werkoverleggen"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": "Facilitator"
+    },
+    "members": [],
+    "version": 2,
+    "archived": false,
+    "source": "sensed",
+    "persona": "Rupert Rubber",
+    "persona_id": null,
+    "held_by": null
+  },
+  "facilitator": {
+    "id": "facilitator",
+    "type": "role",
+    "parent": "mother_earth",
+    "definition": {
+      "purpose": "Bewaakt de geldigheid van governance-voorstellen zonder inhoudelijk te oordelen",
+      "accountabilities": [
+        "voorstellen toetsen op G0-G4",
+        "geldige voorstellen direct aannemen",
+        "risicovolle voorstellen escaleren naar de mens",
+        "Announcing the daily cadence (dag_begint) and running the automated G0-G4 validity gate on governance proposals"
+      ],
+      "domains": [],
+      "skills": [],
+      "policies": [],
+      "name": ""
+    },
+    "members": [],
+    "version": 2,
+    "archived": false,
+    "source": "seed",
+    "persona": "Rupert Rubber",
+    "persona_id": null,
+    "held_by": null
+  }
+}
