@@ -224,12 +224,13 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
                  f"<span class='fsep'>·</span>{deld}")
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
-    if outcome_opts and csrf_token and eid and kind != "system":
-        _ro, _po = outcome_opts
-        oc = _wall_outcome_form(pid, eid, csrf_token, entry.get("text", ""), _ro, _po)
-        tools += f"<span class='fsep'>·</span>{oc}"
-    # (De oude Level 2 voorstel-knop is verwijderd: de triage in _ai_reply verwerkt een @mention nu zelf,
-    #  en de mens routeert via de '→ uitkomst'-kiezer hierboven of vanuit de inbox — dat vervangt de knop.)
+    # DE "→ outcome"-KIEZER IS WEG. Hij stond onder elk bericht en werd niet gebruikt: routeren
+    # gebeurt in de praktijk vanuit de inbox of via een @mention, niet vanaf een losse comment. Een
+    # affordance die niemand gebruikt is geen neutrale toevoeging — hij staat onder élk bericht en
+    # maakt de wall drukker naarmate er meer gesprek is.
+    #
+    # `_wall_outcome_form` en `_wall_outcome_opts` blijven bestaan: de checklist-kant gebruikt ze
+    # nog (views/checklists.py) en de `wall_outcome`-dispatch bedient de inbox-route.
     return (f"<div class='fentry editor-inline'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"

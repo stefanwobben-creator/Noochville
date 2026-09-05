@@ -14,7 +14,7 @@ from nooch_village.cockpit2_util import (
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET, _nav,)
-from nooch_village.views.feed import _mentionables, _feed_entry_html, _wall_outcome_opts
+from nooch_village.views.feed import _mentionables, _feed_entry_html
 from nooch_village.views.checklists import _checklists_html
 from nooch_village import org
 
@@ -828,19 +828,23 @@ def _herkomst_chip(st: _Stores, pid: str) -> str:
     return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
 
 
-def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> str:
-    """Het menselijke sluitstuk op de kaart: doel behaald ja/nee, toelichting, optionele learnings.
+def result_velden(pid: str, concept: dict, hid, nxt: str) -> str:
+    """De oordeelvraag: twee signalen, de ja/nee-keuze, toelichting en optionele leringen.
 
-    GEEN POORT. De status stond al op done vóór dit formulier bestond; dit is een vraag ná de
-    handeling, geen dialoog ertussen. Overslaan kan, en dat markeert het verslag eerlijk
-    ("not recorded") in plaats van het als behaald weg te zetten.
+    GEDEELD DOOR BEIDE SCHERMEN. Hij stond alleen op de projectkaart, terwijl /rapport óók een
+    "Confirm report"-knop heeft. Toen bevestigen een oordeel ging EISEN, weigerde die knop dus
+    altijd — het scherm waar het concept het best zichtbaar is, was juist het scherm zonder keuze.
+    Eén functie, twee aanroepers; een derde kopie zou hetzelfde opnieuw laten verlopen.
 
-    TWEE SIGNALEN NAAST ELKAAR. Het modeloordeel is het voorstel; de checklist-staat is de
-    kruischeck. Botsen ze — de checklist zei "8 van 8 af", het gesprek zei "twee gaten open" — dan
-    is dat iets om naar te kijken. Ze samenvoegen tot één cijfer zou de botsing verstoppen, en
-    juist die botsing is de reden dat een mens hier kijkt."""
+    TWEE SIGNALEN NAAST ELKAAR. Het modeloordeel is het voorstel, de checklist-staat de kruischeck.
+    Botsen ze, dan is dat iets om naar te kijken; samenvoegen tot één cijfer zou de botsing
+    verstoppen, en juist die botsing is de reden dat een mens hier kijkt.
+
+    GEEN VOORSELECTIE. Toelichting en leringen zijn vóórgevuld — dat is een concept om bij te
+    schaven. Het oordeel niet: dat is de ene beslissing die de mens actief moet nemen, en elke
+    default duwt hem naar een antwoord zodra de signalen botsen."""
     from nooch_village.project_verslag import (label_voor, modeloordeel, voorstel_learnings,
-                                                voorstel_toelichting)
+                                               voorstel_toelichting)
     tekst = concept.get("tekst") or ""
     model = modeloordeel(tekst)
     kruis = label_voor((concept.get("voorzet") or "").strip())
@@ -849,26 +853,14 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
                    f"<span class='einddoc-sigv'>{_e(model)}</span></div>" if model else "")
                 + f"<div class='einddoc-sigr'><span class='einddoc-sigk'>Checklist says</span>"
                   f"<span class='einddoc-sigv'>{_e(kruis)}</span></div></div>")
-    # Expliciete for/id, ook al zou een omwikkelend label ook werken: dan blijft de ratchet
-    # (labels-zonder-for) meten wat hij bedoelt te meten in plaats van hier een uitzondering te
-    # moeten kennen.
-    # GEEN VOORSELECTIE. De toelichting en de leringen zijn een CONCEPT om bij te schaven — daar
-    # scheelt voorinvullen echt werk. Het oordeel is iets anders: dat is de ene beslissing die de
-    # mens actief moet nemen, en elke default duwt hem naar een antwoord zodra de twee signalen
-    # botsen. Ze staan eronder; hij kiest. Geen schrijfhuiswerk, wél een bewuste klik.
     keuze = "".join(
         f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'>"
         f"<label class='einddoc-keuze' for='ro-{_e(w)}-{_e(pid)}'>{_e(lbl)}</label>"
         for w, lbl in (("behaald", "Goal achieved"), ("niet_behaald", "Not achieved")))
-    return (f"<div class='card einddoc-concept'>"
-            f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
-            f"<span class='muted'>the report is assembled but not confirmed</span></div>"
-            f"{signalen}"
+    return (f"{signalen}"
             f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
             f"<input type='hidden' name='next' value='{nxt}'>"
             f"<div class='einddoc-keuzes'>{keuze}</div>"
-            # VÓÓRINGEVULD uit het concept: de analyse staat er al, dus de mens vult aan in plaats
-            # van blanco te typen. Overschrijven mag altijd — het is een voorstel, geen antwoord.
             f"{_field('Why', 'toelichting', value=voorstel_toelichting(tekst), fid=f'rt-{pid}', placeholder='What made it so?')}"
             f"{_field('Learnings — optional', 'learnings', kind='textarea', value=voorstel_learnings(tekst), fid=f'rl-{pid}', placeholder='Worth remembering?')}"
             f"<div class='qadd-row'>"
@@ -876,7 +868,16 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
             f"Confirm report</button>"
             f"<button class='flink' type='submit' name='action' value='verslag_overslaan' "
             f"title='Close without recording a result — the report says so honestly'>"
-            f"Skip this</button></div></form></div>")
+            f"Skip this</button></div></form>")
+
+
+def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> str:
+    """De oordeelvraag op de KAART, in zijn eigen kaartje. De velden komen uit `result_velden`;
+    hier omheen staat alleen de kop die zegt dat er iets te bevestigen valt."""
+    return (f"<div class='card einddoc-concept'>"
+            f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
+            f"<span class='muted'>the report is assembled but not confirmed</span></div>"
+            f"{result_velden(pid, concept, hid, nxt)}</div>")
 
 
 def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -> tuple[str, str]:
@@ -1338,13 +1339,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # de deliverables/bijlagen met de NIEUWSTE bovenaan. Zo staat je net-geplaatste reactie meteen in beeld
     # (onder de composer) i.p.v. onderaan een lange rapport-wall waar je aan voorbij scrollt.
     heeft_opdracht = bool(p.get("description", "").strip())
-    _oo = _wall_outcome_opts(st)   # rol-/project-opties voor '→ uitkomst' — één keer per wall
     entries = []                    # log + bijlagen; los van de gepinde opdracht, want die staat altijd bovenaan
     for m in (p.get("log") or []):
         entries.append((m.get("at") or 0,
                         _feed_entry_html(st, m, role_name=role_name, pid=pid, terug=nxt_full,
-                                         csrf_token=csrf_token, mention_names=mention_names,
-                                         outcome_opts=_oo)))
+                                         csrf_token=csrf_token, mention_names=mention_names)))
     for a in (p.get("attachments") or []):
         entries.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     entries.sort(key=lambda t: t[0], reverse=True)   # nieuwste eerst

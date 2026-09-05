@@ -38,10 +38,21 @@ from nooch_village.projects import BEHAALD, NIET_BEHAALD, OVERGESLAGEN, heeft_se
 
 log = logging.getLogger("village.verslag")
 
-# Per gespreksregel, zodat één rol-dump van 1500 tekens de invoer niet overheerst. Gemeten: met
-# deze cap is de mediane invoer ~982 tokens, zonder cap ~1385 en de staart loopt naar 6846.
-_REGEL_CAP = 600
-_MAX_REGELS = 20            # de laatste 20; oudere regels zijn zelden nog het verhaal van de afloop
+# DE CAPS KNIPTEN FEITEN WEG. Een verslag zei "Paques niet bevestigd" terwijl de wall die
+# communicatie wél toonde: de vermelding stond op positie 670 in een regel van 1296 tekens, en de
+# cap stond op 600. Een tweede project verloor hem aan de regel-cap (23 regels → 20). Gemeten over
+# alle 373 projecten: 3075 gespreksregels, 2696 in de prompt, 598 regels ingekort, 22 projecten die
+# hele regels kwijtraakten.
+#
+# Verruimd naar 1500/50 op een meting, niet op gevoel. Mediaan en p90 van de totale invoer worden
+# daarmee IDENTIEK aan volledig ongekapt (1556 / 3897 tokens) — de caps bijten alleen nog de
+# uiterste staart, waar één project met 93 regels de kosten zou bepalen. Ter maat: de oude
+# einddocument-synthese deed mediaan 4001 en p90 6519 in-tokens, dus dit blijft ruim goedkoper.
+#
+# Ze staan er nog wél: zonder cap loopt p99 naar 8698 en de max naar 11492 tokens, en dan bepaalt
+# het langste gesprek van het dorp de prijs van elk verslag.
+_REGEL_CAP = 1500
+_MAX_REGELS = 50
 
 # De sleutel is MECHANIEK en blijft Nederlands (hij wordt opgeslagen en vergeleken); het label is
 # CONTENT en volgt de taal van het scherm. Dezelfde scheiding als `_IMPACT_LABEL` in views/projects.
@@ -245,6 +256,41 @@ _PROMPT = (
     "for it; otherwise leave this heading out.\n"
 )
 
+# De vier koppen die de prompt vraagt, met de bijna-treffers die een model ervan maakt. "Lernings"
+# is geen verzinsel: dat stond letterlijk in een document op productie. Een kop is een VAST LABEL —
+# als hij uit modeltekst komt, is hij een typefout wachtend om te gebeuren, en dan vindt
+# `met_result` de Result-sectie niet meer en valt het modeloordeel stil weg.
+_KOP_NORMALISATIE = {
+    "goal": "Goal", "doel": "Goal", "project goal": "Goal", "projectdoel": "Goal",
+    "what happened": "What happened", "wat er gebeurde": "What happened",
+    "what happend": "What happened", "whathappened": "What happened",
+    "result": "Result", "resultaat": "Result", "results": "Result", "outcome": "Result",
+    "learnings": "Learnings", "lernings": "Learnings", "leringen": "Learnings",
+    "learning": "Learnings", "lessons learned": "Learnings", "lessons": "Learnings",
+}
+
+
+def normaliseer_koppen(md: str) -> str:
+    """Zet de sectiekoppen op hun vaste label. Een kop die het model net anders spelt ("Lernings")
+    breekt de zoekfunctie in `met_result` — dan verdwijnt het modeloordeel zonder foutmelding.
+
+    Alleen KOPPEN worden geraakt, en alleen als ze herkend worden; een kop die we niet kennen laten
+    we staan zoals hij is. Liever een onbekende kop zichtbaar dan stilletjes hernoemd naar iets wat
+    het model niet bedoelde."""
+    uit = []
+    for regel in (md or "").splitlines():
+        s2 = regel.strip()
+        if s2.startswith("#"):
+            hekjes = len(s2) - len(s2.lstrip("#"))
+            tekst = s2.lstrip("#").strip().strip("*").strip()
+            vast = _KOP_NORMALISATIE.get(tekst.casefold())
+            if vast:
+                uit.append("#" * hekjes + " " + vast)
+                continue
+        uit.append(regel)
+    return "\n".join(uit)
+
+
 def stel_samen(project: dict, document: str = "", *, reason=None,
                deliverables: list | None = None) -> Concept | None:
     """Stel het conceptverslag samen. `reason` is de LLM-functie (injectie, geen import in dit pad).
@@ -277,7 +323,9 @@ def stel_samen(project: dict, document: str = "", *, reason=None,
             # documenten. Op het scherm valt het niet op (`_md_doc` stript hem), maar bij bevestigen
             # wordt deze tekst het OPGESLAGEN document, en dan bestendigt hij precies de
             # opslag-rommel die we los aan het opruimen zijn. Zelfde helper als de essentie-ladder.
-            tekst = ontfence(tekst).strip()
+            # De fence eraf én de koppen op hun vaste label — in die volgorde, want een gefencete
+            # tekst heeft nog geen leesbare koppen.
+            tekst = normaliseer_koppen(ontfence(tekst)).strip()
         except Exception as e:                                  # noqa: BLE001 - luid, niet stil
             log.warning("VERSLAG_LLM_FAIL: assemblage voor %s mislukt (%s) — "
                         "terugval op de gestructureerde variant", project.get("id"), e)
