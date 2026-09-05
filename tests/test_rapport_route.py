@@ -144,3 +144,62 @@ def test_de_claims_renderer_blijft_zijn_eigen_functie():
     frag = claims_rapport({"bevindingen": [], "score": 100}, markten=[], bron="test",
                           csrf_token="TOK", kan_bord=False, db=None)
     assert isinstance(frag, str) and frag
+
+
+# ── één rapport per pagina ───────────────────────────────────────────────────
+def _met(dd, st, *, doc="", concept=""):
+    pid = st.projects.create(ROLE, "Of-of", "human", status="queued", done_when="af")
+    st.projects.start(pid)
+    s2 = cockpit2._Stores(dd)
+    if doc:
+        s2.project_docs.write(pid, doc)
+    if concept:
+        s2.project_docs.write_concept(pid, concept, bronnen=["de projectdefinitie"],
+                                      voorzet="behaald")
+    return pid
+
+
+def test_nooit_het_concept_en_het_document_tegelijk(tmp_path):
+    """Ze stonden onder elkaar op één pagina: twee versies van hetzelfde rapport, en de lezer moest
+    raden welke telt. Er wás geen keuze — `body` werd altijd gebouwd en `main` plakte ze achter
+    elkaar. Wacht er een concept, dan is dát het onderwerp van deze pagina."""
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = _met(dd, st, doc="# Oud\n\nBESTAAND RAPPORT.", concept="## Goal\nCONCEPTTEKST.")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "CONCEPTTEKST" in html
+    assert "BESTAAND RAPPORT" not in html, "beide rapporten renderen"
+
+
+def test_zonder_concept_gewoon_het_document(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = _met(dd, st, doc="# Oud\n\nBESTAAND RAPPORT.")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "BESTAAND RAPPORT" in html and "not confirmed yet" not in html
+
+
+def test_het_oude_document_blijft_op_DATANIVEAU_bestaan(tmp_path):
+    """Dit is puur de weergave. Pas bevestigen vervangt de canonieke tekst — de pagina die hem niet
+    toont mag niet lezen als "hij is al weg"."""
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = _met(dd, st, doc="# Oud\n\nBESTAAND RAPPORT.", concept="## Goal\nCONCEPTTEKST.")
+    assert "BESTAAND RAPPORT" in cockpit2._Stores(dd).project_docs.read(pid)
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "stays as it is until you confirm" in html      # en de pagina zegt dat ook
+
+
+def test_de_document_acties_horen_bij_het_document(tmp_path):
+    """Wacht er een concept, dan werk je aan het CONCEPT (dat heeft zijn eigen Edit) en zou
+    "Edit document" een tekst bewerken die niet eens in beeld staat."""
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    met = _met(dd, st, doc="# Oud\n\nx", concept="## Goal\ny")
+    zonder = _met(dd, st, doc="# Oud\n\nx")
+    assert "proj_doc_edit" not in render_projectrapport(cockpit2._Stores(dd), met, csrf_token="TOK")
+    assert "proj_doc_edit" in render_projectrapport(cockpit2._Stores(dd), zonder, csrf_token="TOK")

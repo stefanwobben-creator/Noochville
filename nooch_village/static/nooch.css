@@ -758,6 +758,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .fentry-inline{display:inline}
 .editor-inline-f{margin-top:.3rem}
 .editor-inline-f .qadd-row{margin-top:.4rem}
+.einddoc-vervangt{margin:.1rem 0 .6rem;font-size:.86rem}
 .einddoc-sig{display:flex;flex-direction:column;gap:.3rem;margin:.2rem 0 .8rem}
 .einddoc-sigr{display:flex;gap:.5rem;align-items:baseline;font-size:.86rem}
 .einddoc-sigk{color:var(--gray);flex:none;min-width:7.5rem}
