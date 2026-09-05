@@ -16,6 +16,25 @@ from nooch_village.util import atomic_write_json, read_json, synchronized as _sy
 # hiernaar (reference, don't copy) i.p.v. de literal "Uitvoerplan" te herhalen.
 PREP_CHECKLIST_TITLE = "Uitvoerplan"
 
+
+def plan_wacht_op_akkoord(project_of_checklist) -> bool:
+    """Wacht dit uitvoerplan op een menselijk akkoord?
+
+    Plannen is goedkoop en omkeerbaar; uitvoeren kost API-calls en schrijft naar de projectwall. De
+    volgorde hoort dus te zijn: het dorp maakt het plan, de mens ziet het, de mens zegt ga maar doen.
+
+    ALLEEN een expliciete `akkoord is False` blokkeert. Een checklist zonder de sleutel is met de hand
+    gemaakt of stamt van voor deze regel, en die blijft precies doen wat hij deed. Dat is bewust
+    fail-open en de enige uitzondering op `no_data != nul`: hier betekent 'geen veld' aantoonbaar 'niet
+    door de planner gemaakt', niet 'onbekend'. Fail-closed zou elk bestaand project stilzetten bij de
+    deploy, en dat is een grotere fout dan een ongevraagde uitvoering.
+
+    Neemt een project (kijkt dan naar al zijn checklists) of een losse checklist."""
+    if isinstance(project_of_checklist, dict) and "checklists" in project_of_checklist:
+        return any(cl.get("akkoord") is False
+                   for cl in (project_of_checklist.get("checklists") or []))
+    return (project_of_checklist or {}).get("akkoord") is False
+
 # ── DE DRIE WAARDEN VAN HET MENSELIJKE OORDEEL ────────────────────────────────────────────────
 # Sleutels, geen labels: ze worden opgeslagen en geteld, dus ze horen op ÉÉN plek te staan en niet
 # in twee spellingen. Ze stonden even zowel hier ("niet_behaald") als in project_verslag
@@ -426,15 +445,40 @@ class ProjectLedger:
                 return cl
         return None
 
-    def checklist_add(self, pid: str, title: str = "") -> dict | None:
+    def checklist_add(self, pid: str, title: str = "", *, akkoord: bool | None = None) -> dict | None:
+        """Voeg een checklist toe. `akkoord=False` markeert 'm als VOORSTEL: een plan dat een mens eerst
+        moet goedkeuren (zie `plan_wacht_op_akkoord`). Default None laat de sleutel weg, zodat een met de
+        hand gemaakte checklist blijft doen wat hij altijd deed."""
         p = self._projects.get(pid)
         if p is None:
             return None
         cl = {"id": uuid.uuid4().hex[:8], "title": (title or "").strip()[:80] or "Checklist", "items": []}
+        if akkoord is not None:
+            cl["akkoord"] = bool(akkoord)
         self._checklists(p).append(cl)
         p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()
         return cl
+
+    def plan_akkoord(self, pid: str, clid: str, door: str = "") -> bool:
+        """De mens zegt 'ga maar doen': zet `akkoord` op True zodat de daemon dit plan mag draaien.
+
+        EENRICHTINGSVERKEER. Er is geen weg terug naar False, en dat is geen omissie: een plan
+        intrekken doet de mens door de checklist te verwijderen of het project uit ACTIEF te slepen.
+        Een knop die het akkoord terugdraait terwijl de daemon halverwege is, geeft een half
+        uitgevoerd plan dat er onaangeraakt uitziet.
+
+        Raakt `review_raised` NIET aan: akkoord geven verandert geen enkel item, dus de review-vlag
+        (die over de INHOUD van de checklist gaat) hoort te blijven staan."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None or cl.get("akkoord") is not False:
+            return False                                  # geen plan, of er stond geen akkoord-vraag open
+        cl["akkoord"] = True
+        if door:
+            cl["akkoord_door"] = str(door)[:80]           # wie het zei - de wall vertelt wanneer
+        self._touch(p); self._save()
+        return True
 
     def checklist_remove(self, pid: str, clid: str) -> bool:
         p = self._projects.get(pid)
@@ -1218,7 +1262,7 @@ _WRITE_METHODS = (
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_resultaat",
-    "set_item_offer", "accept_item_offer",
+    "set_item_offer", "accept_item_offer", "plan_akkoord",
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",

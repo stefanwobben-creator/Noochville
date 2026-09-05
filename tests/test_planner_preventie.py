@@ -61,6 +61,12 @@ def _prepare(tmp_path, items):
     return ledger, pid
 
 
+def _akkoord(ledger, pid):
+    """Scope 4: een vers uitvoerplan is een voorstel. Deze tests gaan over wat de rol met een
+    mens-taak doet als hij eenmaal MAG draaien, dus geven ze het akkoord expliciet."""
+    ledger.plan_akkoord(pid, _cl(ledger.get(pid))["id"], door="test")
+
+
 # ── de kern: mens-werk telt niet mee ───────────────────────────────────────────
 
 def test_mens_taak_telt_niet_mee_in_de_klaar_telling(tmp_path):
@@ -114,6 +120,7 @@ def test_de_rol_probeert_een_mens_taak_niet_uit_te_voeren(tmp_path):
          "kind": "human_external"},
     ])
     ledger.start(pid)
+    _akkoord(ledger, pid)
     inh = _inh(tmp_path, ledger)
 
     inh._execute_checklist(ledger.get(pid), "2026-07-29")
@@ -132,6 +139,7 @@ def test_open_mens_taak_reist_mee_naar_de_review(tmp_path):
          "kind": "human_external"},
     ])
     ledger.start(pid)
+    _akkoord(ledger, pid)
     _inh(tmp_path, ledger)._execute_checklist(ledger.get(pid), "2026-07-29")
     p = ledger.get(pid)
 

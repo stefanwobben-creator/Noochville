@@ -251,6 +251,19 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
         pct = round(100 * done / tot) if tot else 0
         bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pct}%'></div></div>"
                f"<span class='muted'>{pct}% ({done}/{tot})</span></div>") if tot else ""
+        # Het uitvoerplan is een VOORSTEL tot een mens het goedkeurt (projects.plan_wacht_op_akkoord).
+        # Deze knop is de enige weg naar akkoord; zonder hem staat de daemon stil en zie je niet waarom.
+        poort = ""
+        if cl.get("akkoord") is False:
+            knop = (f"<form method='post' action='/action'>{hid()}"
+                    f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
+                    f"<button class='btn ok sm' type='submit' name='action' value='plan_akkoord'>"
+                    f"▶ go ahead</button></form>") if rw else ""
+            poort = (f"<div class='ck-gate'><span class='chip amber'>⏸ waiting for your go-ahead</span>"
+                     f"<span class='muted'>nothing runs until you approve this plan</span>{knop}</div>")
+        elif cl.get("akkoord_door"):
+            poort = (f"<div class='ck-gate'><span class='chip muted'>▶ approved by "
+                     f"{_e(cl['akkoord_door'])}</span></div>")
         rows = ""
         for it in items:
             d = it.get("done")
@@ -294,5 +307,5 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
                 + (f"<span class='cl-title'>{_e(_titel)}</span>" if _titel else "")
                 + f"{delc}</div>"
-                f"{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
+                f"{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     return out
