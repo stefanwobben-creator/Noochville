@@ -160,9 +160,25 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
             f"{proj}{act}{note}{rov}</details>")
 
 
+# Twee regeltjes DOM-werk, geen framework: de bubbel verbergen en het formulier op dezelfde plek
+# tonen. Ze staan als constante zodat de aanhalingstekens in de f-string niet gaan schuiven en de
+# twee knoppen gegarandeerd hetzelfde paar aanspreken.
+_EDIT_JS = ("var f=this.closest('.fentry');"
+            "f.querySelector('[data-fb]').hidden=true;"
+            "var e=f.querySelector('[data-fe]');e.hidden=false;"
+            "var t=e.querySelector('textarea');if(t){t.focus();"
+            "t.setSelectionRange(t.value.length,t.value.length);}")
+_ANNULEER_JS = ("var f=this.closest('.fentry');"
+                "f.querySelector('[data-fe]').hidden=true;"
+                "f.querySelector('[data-fb]').hidden=false;")
+
+
 def _feed_entry_html(st, entry: dict, role_name: str = "",
                      pid: str = "", csrf_token: str = "", mention_names=(),
-                     outcome_opts=None) -> str:
+                     outcome_opts=None, terug: str = "") -> str:
+    """`terug` is de plek waar de bewerk-acties naartoe redirecten. Zonder die waarde valt de
+    dispatch terug op "/" en belandt de mens na het opslaan van een comment op het beginscherm —
+    weg uit het project waarin hij aan het werk was."""
     kind, atype, aid = _feed_norm(entry)
     av, nm = _feed_who(st, atype, aid)
     if atype == "role":
@@ -191,21 +207,38 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     bubble = _md(entry.get("text", ""))
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)
+    if csrf_token and eid and atype == "human":
+        # De editor staat OP de plek van de bubbel en is verborgen tot je Edit klikt. `terug` gaat
+        # mee zodat opslaan je op de projectkaart houdt in plaats van op het beginscherm.
+        _hid2 = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                 f"<input type='hidden' name='item' value='{_e(eid)}'>"
+                 f"<input type='hidden' name='next' value='{_e(terug)}'>")
+        bubble = (f"<div class='fbody' data-fb='{_e(eid)}'>{bubble}</div>"
+                  f"<form method='post' action='/action' class='pf fentry-edit' "
+                  f"data-fe='{_e(eid)}' hidden>{_hid2}"
+                  f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Edit your reply…')}"
+                  f"<div class='qadd-row'>"
+                  f"<button class='btn ok sm' type='submit' name='action' value='feed_edit'>Save</button>"
+                  f"<button class='flink' type='button' onclick=\"{_ANNULEER_JS}\">Cancel</button>"
+                  f"</div></form>")
     # Eigen comment (mens) is wijzigbaar/verwijderbaar.
     tools = ""
     if csrf_token and eid and atype == "human":
         hidf = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='item' value='{_e(eid)}'>")
-        editd = (f"<details class='fedit'><summary class='flink'>Edit</summary>"
-                 f"<form method='post' action='/action' class='pf' style='margin-top:.3rem'>{hidf}"
-                 f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Edit your reply…')}"
-                 f"<button class='btn ok sm' type='submit' name='action' value='feed_edit' "
-                 f"style='margin-top:.3rem'>Save</button></form></details>")
-        deld = (f"<form method='post' action='/action' style='display:inline'>{hidf}"
+        # INLINE BEWERKEN, zoals de projecttitel het al doet: het veld staat op de plek van de
+        # tekst zelf, niet als tweede veld eronder. Een <details> dat een kopie van de bubbel
+        # opent, laat je twee versies van dezelfde regel naast elkaar lezen en je moet raden welke
+        # de echte is. De bubbel-kant staat in `_bubble_of_editor` hieronder.
+        editd = ""
+        deld = (f"<form method='post' action='/action' class='fentry-inline'>{hidf}"
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
                 f"onclick=\"return confirm('Remove comment?')\">Remove</button></form>")
-        tools = f"<span class='fsep'>·</span>{editd}<span class='fsep'>·</span>{deld}"
+        tools = (f"<span class='fsep'>·</span>"
+                 f"<button class='flink' type='button' onclick=\"{_EDIT_JS}\">Edit</button>"
+                 f"<span class='fsep'>·</span>{deld}")
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
     if outcome_opts and csrf_token and eid and kind != "system":

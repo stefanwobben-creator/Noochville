@@ -1007,7 +1007,7 @@ def _meta_rij(kop: str, waarde: str) -> str:
             f"<span class='mv'>{waarde}</span></div>")
 
 
-def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "") -> str:
+def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "", terminaal: str = "") -> str:
     """ALLE meta in één rail — status, assignee, impact, business, effort.
 
     Deze controls stonden in een pillenrij bóven de content. Dat had twee problemen: de rij duwde
@@ -1031,11 +1031,15 @@ def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "") -> str:
             items += (f"<form method='post' action='/action'>{hid()}{to}"
                       f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>"
                       f"{_e(label)}</button></form>")
+        # ARCHIVEREN EN VERWIJDEREN HOREN HIER. Het zijn terminale statussen — waar een project
+        # eindigt — en ze stonden onderaan de rail onder "More", los van de plek waar je de status
+        # verandert. Twee menu's voor "waar staat dit project" is één te veel; de scheiding
+        # verwijderen/archiveren blijft zichtbaar door de scheidingslijn en de danger-stijl.
         uit.append(_meta_rij("Status",
                              f"<details class='cardmenu mmenu'>"
                              f"<summary class='ctrl' aria-label='change status'>{_e(_slbl)}"
                              f"<span class='car'>▾</span></summary>"
-                             f"<div class='cardmenu-b'>{items}</div></details>"))
+                             f"<div class='cardmenu-b'>{items}{terminaal}</div></details>"))
     else:
         uit.append(_meta_rij("Status", f"<span class='ctrl'>{_e(_slbl)}</span>"))
 
@@ -1112,19 +1116,24 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     role_name = _name(orec) if orec else ""
     mention_names = [m["l"] for m in _mentionables(st)[0]]   # voor highlight in de bubble
 
-    # ---- ⋯ Meer: alleen ACTIES (archiveren, verwijderen) ----
-    # De status-items zijn hiéruit verhuisd naar de Status-chip. Wat overblijft is geen eigenschap
-    # van het project maar iets wat je ermee DOET — dat is precies de scheiding die de rail bedoelt.
-    menu = ""
+    # ---- De terminale acties: archiveren en verwijderen ----
+    # Ze horen in de status-pulldown (zie _meta_rijen): het zijn eindpunten van hetzelfde veld.
+    # Hier stond een eigen ⋯-menu onderaan de rail; dat is nu weg, want twee menu's voor "waar
+    # staat dit project" is er één te veel.
+    terminaal = ""
     if rw:
-        menu = (f"<details class='cardmenu'><summary class='meertrigger' aria-label='more actions'>⋯</summary>"
-                f"<div class='cardmenu-b'>"
-                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archive</button></form>"
-                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='menuitem danger' type='submit' name='action' value='proj_delete' "
-                f"onclick=\"return confirm('Delete permanently? Archiving keeps the project.')\">Delete</button>"
-                f"</form></div></details>")
+        terminaal = (f"<div class='menu-sep'></div>"
+                     f"<form method='post' action='/action'>{hid()}"
+                     f"<input type='hidden' name='next' value='{_e(back)}'>"
+                     f"<button class='menuitem' type='submit' name='action' value='proj_archive'>"
+                     f"Archive</button></form>"
+                     f"<form method='post' action='/action'>{hid()}"
+                     f"<input type='hidden' name='next' value='{_e(back)}'>"
+                     f"<button class='menuitem danger' type='submit' name='action' "
+                     f"value='proj_delete' "
+                     f"onclick=\"return confirm('Delete permanently? Archiving keeps the project.')\">"
+                     f"Delete</button></form>")
+    menu = ""
 
     # ---- Titel (inline bewerkbaar) ----
     if rw:
@@ -1260,21 +1269,23 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # stonden onder een wall die met elk gesprek langer wordt; een actie die verder wegzakt naarmate
     # een project meer leeft, is geen bereikbare actie.
     rail = (f"<div class='rail-kop'>Details</div>"
-            + _meta_rijen(st, p, rw, hid, _trekker_opts_html)
+            + _meta_rijen(st, p, rw, hid, _trekker_opts_html, terminaal)
             + _meta_rij("Role", rol_v)
             + _meta_rij("Deadline", due_head or "—")
             + _meta_rij("Visible", vis_v)
             + _meta_rij("Created", _created_full(p.get("created_at")))
             + f"<div class='railsplit'></div>"
             + f"<div class='rail-acties'>{goal_knop}</div>"
-            + (f"<div class='rail-kop rail-kop2'>More</div>"
-               f"<div class='rail-meer'>{menu}</div>" if menu else ""))
+            )
     structure = rail
 
     # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
+    # De terugweg naar deze kaart. Stond binnen `if rw:` en werd daarbuiten gebruikt — read-only
+    # viel daarop om met een UnboundLocalError. Hij beschrijft WAAR je bent, niet of je mag
+    # schrijven, dus hij hoort hier.
+    nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
     composer = ""
     if rw:
-        nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
         bijlage = (f"<details class='acard-d comp-attach'><summary class='flink'>📎 attachment</summary>"
                    f"<div class='datepop att-pop'>"
                    f"<form method='post' action='/action' enctype='multipart/form-data' class='filepost'>"
@@ -1331,7 +1342,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     entries = []                    # log + bijlagen; los van de gepinde opdracht, want die staat altijd bovenaan
     for m in (p.get("log") or []):
         entries.append((m.get("at") or 0,
-                        _feed_entry_html(st, m, role_name=role_name, pid=pid,
+                        _feed_entry_html(st, m, role_name=role_name, pid=pid, terug=nxt_full,
                                          csrf_token=csrf_token, mention_names=mention_names,
                                          outcome_opts=_oo)))
     for a in (p.get("attachments") or []):
