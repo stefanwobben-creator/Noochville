@@ -268,18 +268,31 @@ def test_de_velden_zijn_voorgevuld_uit_het_concept(tmp_path):
     assert "**Niet behaald.**" not in frag.split("einddoc-rform")[1]  # het label niet geëchood
 
 
-def test_de_radio_volgt_de_voorzet_en_staat_niet_altijd_op_ja(tmp_path):
-    """Standaard op "behaald" zetten terwijl de checklist "niets af" zegt, duwt de mens naar een
-    antwoord dat het materiaal niet steunt — en één klik verder staat dat als bevestigd oordeel in
-    de orgkennis."""
+def test_het_oordeel_wordt_niet_voorgeselecteerd(tmp_path):
+    """GEEN DEFAULT OP DE JA/NEE. De toelichting en de leringen zijn een concept om bij te schaven
+    — daar scheelt voorinvullen echt werk. Het oordeel is iets anders: dat is de ene beslissing die
+    de mens actief moet nemen, en élke default duwt hem naar een antwoord zodra de twee signalen
+    botsen. Ze staan eronder; hij kiest."""
     dd, st = _st(tmp_path)
     pid = _afgesloten(dd, st, doc="", items=(("A", False),))
-    store = cockpit2._Stores(dd).project_docs
-    c = store.concept(pid)
-    assert c["voorzet"] == "niet_behaald", c["voorzet"]
     frag = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    assert "value='niet_behaald' checked" in frag
-    assert "value='behaald' checked" not in frag
+    assert "checked" not in frag.split("einddoc-rform")[1].split("</form>")[0]
+    assert "value='behaald'" in frag and "value='niet_behaald'" in frag
+
+
+def test_bevestigen_zonder_keuze_schrijft_niet(tmp_path):
+    """Sinds de radio's leeg starten is dit bereikbaar: klikken op Confirm zonder te kiezen. Stil
+    doorlaten zou het verslag bevestigen MÉT het modeloordeel erin, alsof de mens dat had
+    onderschreven — precies wat de lege radio voorkomt."""
+    dd, st = _st(tmp_path)
+    pid = _afgesloten(dd, st, doc="oud document")
+    _, msg = cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]},
+                               username="guest")
+    assert cockpit2.is_weigering(msg), msg
+    assert "Skip" in msg
+    st2 = cockpit2._Stores(dd)
+    assert st2.project_docs.read(pid) == "oud document"
+    assert (st2.project_docs.concept(pid).get("tekst") or "").strip()   # concept blijft wachten
 
 
 def test_het_verslag_is_nederlands_en_het_scherm_engels(tmp_path):

@@ -159,9 +159,14 @@ def test_bevestigen_maakt_het_concept_het_document(tmp_path):
     pid = _project(dd, st, doc="oud document", items=[("A", True)])
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     concept = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
-    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "next": ["/"]}, username="guest")
+    # Bevestigen vereist een oordeel sinds de radio's leeg starten: zonder keuze zou het verslag
+    # het modeloordeel bevestigen alsof de mens dat onderschreef. Zie
+    # test_verslag_result.test_bevestigen_zonder_keuze_schrijft_niet.
+    cockpit2.dispatch(dd, "verslag_bevestig", {"pid": [pid], "oordeel": ["behaald"],
+                                               "next": ["/"]}, username="guest")
     st2 = cockpit2._Stores(dd)
-    assert st2.project_docs.read(pid) == concept
+    assert "## Resultaat" in st2.project_docs.read(pid)
+    assert concept.split("\n")[0] in st2.project_docs.read(pid)   # de rest van het concept bleef
     assert st2.project_docs.concept(pid) == {}          # niets meer te bevestigen
 
 

@@ -852,15 +852,12 @@ def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> st
     # Expliciete for/id, ook al zou een omwikkelend label ook werken: dan blijft de ratchet
     # (labels-zonder-for) meten wat hij bedoelt te meten in plaats van hier een uitzondering te
     # moeten kennen.
-    # DE RADIO VOLGT DE VOORZET, niet altijd "behaald". Standaard op ja zetten terwijl de checklist
-    # "niets af" zegt, duwt de mens naar een antwoord dat het materiaal niet steunt — en één klik
-    # verder staat dat als bevestigd oordeel in de orgkennis.
-    from nooch_village.projects import BEHAALD, NIET_BEHAALD
-    _vz = (concept.get("voorzet") or "").strip()
-    _voorkeur = _vz if _vz in (BEHAALD, NIET_BEHAALD) else BEHAALD
+    # GEEN VOORSELECTIE. De toelichting en de leringen zijn een CONCEPT om bij te schaven — daar
+    # scheelt voorinvullen echt werk. Het oordeel is iets anders: dat is de ene beslissing die de
+    # mens actief moet nemen, en elke default duwt hem naar een antwoord zodra de twee signalen
+    # botsen. Ze staan eronder; hij kiest. Geen schrijfhuiswerk, wél een bewuste klik.
     keuze = "".join(
-        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'"
-        f"{' checked' if w == _voorkeur else ''}>"
+        f"<input type='radio' id='ro-{_e(w)}-{_e(pid)}' name='oordeel' value='{_e(w)}'>"
         f"<label class='einddoc-keuze' for='ro-{_e(w)}-{_e(pid)}'>{_e(lbl)}</label>"
         for w, lbl in (("behaald", "Goal achieved"), ("niet_behaald", "Not achieved")))
     return (f"<div class='card einddoc-concept'>"
