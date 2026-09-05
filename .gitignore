@@ -43,3 +43,7 @@ _to_delete/
 # Runtime-cache op de server (pip/HF e.d.). Puur voor de netheid — de deploy-guard
 # negeert untracked bestanden sowieso (scripts/deploy.sh, --untracked-files=no).
 .cache/
+espanol/
+output/
+materiaal_memo.json
+materiaal_memo.json.lock

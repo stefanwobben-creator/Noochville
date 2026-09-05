@@ -44,6 +44,7 @@ LABELS: dict[str, str] = {
     "linkbuilding_targets": "Vindt sites en lijstjes waar we genoemd willen worden",
     "plausible_stats": "Telt hoeveel mensen de site bezoeken",
     "site_health": "Kijkt of de site nog overeind staat",
+    "haal_pagina": "Haalt een pagina op en citeert de zin waarin een woord staat",
 
     # ── Schrijven en toetsen ─────────────────────────────────────────────
     "content_schrijven": "Schrijft website-tekst in de stem van het merk",
