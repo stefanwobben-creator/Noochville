@@ -1225,6 +1225,15 @@ def _act_proj_add(c):
         if orec is not None and org.is_circle(orec):
             # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individueel Initiatief.
             return nxt, "✗ a circle cannot contain a project — pick a role or Individual Action"
+        # DE CARDINALITEITSWET, alleen als er niets gekozen is. Een expliciete keuze wint altijd:
+        # deze regel vult een gat, hij overrulet geen mens. Zie `vervulling` voor de drie takken.
+        #
+        # NA de cirkel-check: een cirkel is geen rol, dus "deze rol heeft 2 vervullers" is daar een
+        # onzinnige weiger-reden. Wie een cirkel kiest hoort te horen dát het een cirkel is.
+        if not person and not agent and owner and not owner.startswith(_II_PREFIX):
+            person, agent, _weiger = toewijzing_bij_aanmaak(st, owner)
+            if _weiger:
+                return nxt, _weiger
         # Vang de vage intake bij de bron (founder, 19 jul): een mens-project vereist één
         # zin done_when — "waar herken je aan dat dit klaar is?" De reparatie die de rol
         # anders stilletjes in zijn checklist doet, gebeurt zo vooraf, samen met de mens.
@@ -1759,11 +1768,15 @@ def _resync_trekker(pj, st, pid: str, owner: str, orec) -> None:
         return                                                 # geen trekker → niets verweesd
     if cur in keys:
         return                                                 # trekker bezet de nieuwe rol → laat staan
-    if len(fillers) == 1:                                      # precies één filler → daarheen
-        f = fillers[0]
-        pj.edit(pid, person=(f.id if f.type == "person" else ""),
-                agent=(f.id if f.type == "persona" else ""), allow_done=True)
-    else:                                                      # 0 of meerdere fillers → leeg (nooit verweesd)
+    # DEZELFDE WET als bij het aanmaken, uit dezelfde helper. Dit blok had zijn eigen kopie van
+    # "precies één filler → daarheen"; twee plekken die hetzelfde beslissen lopen uiteen zodra er
+    # één verandert. Bij 2+ blijft het hier leeg in plaats van te weigeren: dit is een NA-correctie
+    # op een owner-wissel, geen intake — de mens staat hier niet voor een formulier.
+    n, soort, wie = vervulling(st, owner)
+    if n == 1:
+        pj.edit(pid, person=(wie if soort == "person" else ""),
+                agent=(wie if soort == "persona" else ""), allow_done=True)
+    else:
         pj.edit(pid, person="", agent="", allow_done=True)
 
 
@@ -3204,6 +3217,58 @@ def mens_vervullers(st, rol: str) -> list[str]:
         return [f.id for f in st.assign.fillers_of(rol, record=rec) if f.type == "person"]
     except Exception:                                         # noqa: BLE001
         return []
+
+
+def vervulling(st, rol: str) -> tuple[int, str, str]:
+    """DE CARDINALITEITSWET: hoeveel vervullers heeft deze rol, en wie is het als er één is?
+
+    Geeft `(aantal, soort, id)` — soort is "person" of "persona", en alleen gevuld bij precies één.
+
+    Drie takken, en elke tak heeft een eigen reden:
+
+      0  → het project mag onbemand bij de rol op het bord staan. Dit is het ENIGE geval waarin
+           onbemand eerlijk is: er is werkelijk niemand om het aan te geven.
+      1  → automatisch toewijzen. Onbemand laten is hier een stille nul: de eigenaar is eenduidig,
+           en hem niet invullen suggereert dat er iets te kiezen valt.
+      2+ → een keuze afdwingen vóór het project op het bord mag. Een stille gok tussen twee mensen
+           is erger dan geen keuze, want niemand ziet dat er gegokt is.
+
+    EEN VERVULLER IS EEN MENS ÓF EEN PERSONA. Dat onderscheid is niet cosmetisch: `mens_vervullers`
+    telt alleen mensen, en onder díe definitie heeft 14 van de 29 rollen "geen vervuller" terwijl
+    11 daarvan gewoon AI-vervuld zijn. Gemeten op productie scheelt dat 135 tegen 9 projecten die
+    de één-tak raken — de definitie bepaalt de hele wet. `st.assign.fillers_of` is de bron die
+    beide kent, en `_resync_trekker` gebruikte hem al; deze helper maakt er één antwoord van.
+
+    Een SLAPENDE AI-rol telt gewoon mee: de rol bestaat en houdt het mandaat, slapen is een
+    losstaande vraag. Op productie verandert dat vandaag niets (de slapende rollen hebben geen
+    onbemande projecten), dus de keuze draagt geen last — maar hij staat hier expliciet."""
+    try:
+        rec = st.records.get(rol) if rol else None
+    except Exception:                                           # noqa: BLE001
+        return 0, "", ""
+    if rec is None:
+        return 0, "", ""
+    try:
+        fillers = list(st.assign.fillers_of(rol, record=rec))
+    except Exception:                                           # noqa: BLE001
+        return 0, "", ""
+    if len(fillers) == 1:
+        f = fillers[0]
+        return 1, f.type, f.id
+    return len(fillers), "", ""
+
+
+def toewijzing_bij_aanmaak(st, rol: str) -> tuple[str, str, str]:
+    """`(person, agent, weigering)` voor een NIEUW project bij deze rol, zonder gekozen trekker.
+
+    De weigering is niet-leeg bij 2+ vervullers; hij draagt een ✗ zodat `is_weigering` hem herkent
+    en de client hem nooit als succes rendert."""
+    n, soort, wie = vervulling(st, rol)
+    if n == 1:
+        return (wie if soort == "person" else ""), (wie if soort == "persona" else ""), ""
+    if n >= 2:
+        return "", "", (f"✗ this role has {n} fillers — pick an owner before putting it on the board")
+    return "", "", ""
 
 
 def standaard_trekker(st, rol: str) -> str:
@@ -6603,6 +6668,13 @@ def make_handler(data_dir: str, csrf_token: str,
                     if not uitkomst:
                         self._send_json({"error": "geen uitkomst"}, 400); return
                     person, agent = _parse_trekker(g1("trekker"))
+                    # Dezelfde cardinaliteitswet als bij proj_add — de wizard is de andere weg naar
+                    # het bord, en een regel die maar op één van de twee geldt is geen regel.
+                    _role = g1("role")
+                    if not person and not agent and _role and not _role.startswith(_II_PREFIX):
+                        person, agent, _weiger = toewijzing_bij_aanmaak(st, _role)
+                        if _weiger:
+                            self._send_json({"error": _weiger}, 400); return
                     missie = g1("missie") if g1("missie") in _MISSIE_IMPACT else ""
                     business = g1("business") if g1("business") in _BUSINESS_IMPACT else ""
                     effort = g1("tijd") if g1("tijd") in _EFFORT else ""
