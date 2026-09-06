@@ -152,3 +152,46 @@ def test_elk_thema_kent_beide_talen():
         toks = STRATEGIE_THEMAS[thema]
         assert nl_woord in toks, f"{thema}: Nederlands ijkwoord '{nl_woord}' weg"
         assert en_woord in toks, f"{thema}: Engels ijkwoord '{en_woord}' ontbreekt"
+
+
+# ── De laatste Nederlandse prompt, en de vangrail eronder ────────────────────────────────────────
+
+def test_wizard_title_vraagt_in_het_engels():
+    """GEMETEN AANLEIDING (6 sept, eerste echte gebruik na #466). `sharpen_outcome` ging om, maar
+    `title_from` niet. Er ging een Engelse uitkomst in en er kwam "Barefoot sneaker trend onderzoek
+    afgerond" uit: half Engels, half Nederlands, boven aan de projectkaart.
+
+    Een model antwoordt in de taal waarin je het VRAAGT, ook als de invoer een andere taal heeft.
+    De invoer is materiaal, de prompt is de opdracht. Daarom staat de taalregel expliciet in de
+    prompt en niet impliciet in de invoer."""
+    s = _src("wizard.py")
+    blok = s.split("def title_from")[1].split("def ")[0]
+    assert "Always answer in English" in blok
+    assert "OUTCOME:" in blok and "UITKOMST:" not in blok
+    assert "Vat deze" not in blok
+
+
+def test_geen_nederlandse_prompt_meer_bij_een_reason_aanroep():
+    """DE RATCHET. Niet "Nederlands mag niet" maar: elke prompt die naar het model gaat is Engels,
+    zodat er geen tweede `title_from` kan ontstaan die pas op het bord zichtbaar wordt.
+
+    Hij toetst GEDRAG via de bron (welke tekst gaat er naar `reason`), niet de aanwezigheid van
+    losse woorden ergens in een bestand: commentaar en docstrings zijn en blijven Nederlands, dat
+    is de afspraak van dit project."""
+    import pathlib
+    import re
+
+    signaal = re.compile(r'\b(Vat |Geef |Schrijf |Bepaal |Stel |Kies |Beoordeel |Maak |Noem |'
+                         r'alleen de |maximaal |woorden|zinnen|uitkomst|antwoord)', re.I)
+    gevonden = []
+    for f in sorted(pathlib.Path(_PKG).rglob("*.py")):
+        src = f.read_text(encoding="utf-8")
+        for m in re.finditer(r'reason(?:_fn)?\(\s*(.{0,900}?)(?:,\s*max_tokens|,\s*call_site|\))',
+                             src, re.S):
+            blok = m.group(1)
+            if "call_site" in blok:
+                continue
+            if len({x.strip() for x in signaal.findall(blok)}) >= 2:
+                gevonden.append(f"{f.name}:{src[:m.start()].count(chr(10)) + 1}")
+    assert not gevonden, ("Nederlandse prompt(s) naar het model, terwijl de inhoudslaag sinds "
+                          f"06-09-2026 Engels is: {gevonden}")

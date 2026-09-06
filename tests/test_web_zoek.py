@@ -300,8 +300,7 @@ def test_brave_levert_dezelfde_vorm_als_serpapi(monkeypatch):
     from nooch_village import web_read
 
     class _Resp:
-        def raise_for_status(self):
-            pass
+        status_code = 200
 
         def json(self):
             return {"web": {"results": [
@@ -333,8 +332,7 @@ def test_brave_count_gaat_niet_boven_zijn_maximum(monkeypatch):
     gezien = {}
 
     class _Resp:
-        def raise_for_status(self):
-            pass
+        status_code = 200
 
         def json(self):
             return {}
@@ -382,3 +380,82 @@ def test_leest_alleen():
     bron = inspect.getsource(web_zoek)
     assert "requests.post" not in bron and ".post(" not in bron
     assert "safe_fetch.haal_tekst_geduldig" in bron
+
+
+# ── de foutmelding van Brave is bruikbaar ────────────────────────────────────
+#
+# GEMETEN AANLEIDING (6 sept). Brave gaf 422 op elk verzoek en `raise_for_status()` leverde
+# "422 Client Error: for url: …". De reden stond in de body die hij weggooide:
+# SUBSCRIPTION_TOKEN_INVALID, want er was een teken meegeplakt (`jBSA…` in plaats van `BSA…`).
+# Dat kostte een diagnose-script en drie rondes voor iets wat de API in één zin had verteld.
+
+class _Fout:
+    def __init__(self, status, payload=None, tekst=""):
+        self.status_code, self._payload, self.text = status, payload, tekst
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("geen json")
+        return self._payload
+
+
+_TOKEN_FOUT = {"error": {"code": "SUBSCRIPTION_TOKEN_INVALID",
+                         "detail": "The provided subscription token is invalid.",
+                         "meta": {"component": "authentication"}}}
+
+
+def test_de_reden_uit_de_body_staat_in_de_melding():
+    """DE KERNTEST. De statuscode alleen stuurde de verkeerde kant op: 422 leest als 'mijn verzoek
+    klopt niet', terwijl het authenticatie was."""
+    from nooch_village.web_read import _brave_fout
+    m = _brave_fout(_Fout(422, _TOKEN_FOUT), "BSAgeldig123")
+    assert "422" in m and "SUBSCRIPTION_TOKEN_INVALID" in m
+    assert "The provided subscription token is invalid." in m
+
+
+def test_een_meegeplakt_teken_wordt_aangewezen():
+    from nooch_village.web_read import _brave_fout
+    m = _brave_fout(_Fout(422, _TOKEN_FOUT), "jBSAxxxxxxxx")
+    assert "jBSA…" in m and "'BSA'" in m and "meegeplakt teken" in m
+
+
+def test_een_sleutel_met_de_goede_vorm_wijst_naar_het_abonnement():
+    """Klopt de vorm wél, dan is de sleutel niet de verdachte en moet je op het dashboard kijken.
+    Zonder dat onderscheid ga je een goede sleutel zitten herplakken."""
+    from nooch_village.web_read import _brave_fout
+    m = _brave_fout(_Fout(422, _TOKEN_FOUT), "BSAgeldig123")
+    assert "Data for Search" in m and "meegeplakt" not in m
+
+
+def test_een_niet_json_body_gaat_ook_mee():
+    from nooch_village.web_read import _brave_fout
+    assert "gateway stuk" in _brave_fout(_Fout(502, None, "gateway stuk"), "BSAx")
+
+
+def test_de_sleutel_wordt_nooit_op_vorm_afgekeurd(monkeypatch):
+    """De API is de autoriteit over geldigheid. Zou dit vooraf weigeren, dan breekt het zodra Brave
+    zijn sleutelformaat wijzigt — en dan is de skill stuk om een reden die wij verzonnen."""
+    from nooch_village import web_read
+
+    class _Ok:
+        status_code = 200
+
+        def json(self):
+            return {"web": {"results": [{"title": "t", "url": "https://a.example/",
+                                         "description": "d"}]}}
+
+    import requests
+    monkeypatch.setattr(requests, "get", lambda *a, **k: _Ok())
+    assert web_read.brave_search("t", "een-sleutel-zonder-prefix") == [
+        {"title": "t", "link": "https://a.example/", "snippet": "d"}]
+
+
+def test_web_zoek_geeft_de_bruikbare_melding_door():
+    """De melding moet helemaal tot bovenaan komen; een skill die 'zoeken mislukt' zegt zonder reden
+    is precies het probleem dat deze commit oplost."""
+    from nooch_village.skills_impl.web_zoek import WebZoekSkill
+
+    def _stuk(*a, **k):
+        raise RuntimeError("Brave gaf 422 — SUBSCRIPTION_TOKEN_INVALID: …")
+    uit = WebZoekSkill(zoek=_stuk).run({"term": "t"}, _ctx(BRAVE_API_KEY="b"))
+    assert "SUBSCRIPTION_TOKEN_INVALID" in uit["error"]

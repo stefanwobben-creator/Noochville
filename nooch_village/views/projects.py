@@ -449,6 +449,38 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "history.pushState({card:pm[1]},'',cu);}else{history.replaceState({card:pm[1]},'',cu);}}}catch(e){}"
         "});}"
         "function reopen(){if(last)openCard(last,false);}"  # verversen na actie: geen nieuwe history-entry
+        # ── De bezig-poller ────────────────────────────────────────────────────────────────────
+        # Eén vraag: staat er nog werk open op deze kaart? `data-bezig` zet checklists.py op de
+        # poortbalk zolang er items te draaien zijn (#466). Zolang die vlag er is blijven we kijken.
+        #
+        # DRIE GRENZEN, en alle drie omdat een poller die blijft draaien erger is dan geen poller:
+        #  - de overlay dicht  -> stoppen (je kijkt er niet meer naar)
+        #  - vlag weg          -> stoppen (het werk is klaar, de kaart is actueel)
+        #  - 15 minuten om     -> stoppen (iets hangt; blijven pollen repareert dat niet)
+        #
+        # De AANLOOP is apart geregeld. Direct na 'go ahead' staat de vlag er nog niet: de bordpuls
+        # moet het project eerst oppakken. Zou de poller dan al op de vlag beslissen, dan stopt hij
+        # meteen weer. De eerste 30 seconden kijkt hij daarom onvoorwaardelijk.
+        #
+        # `volgAan` en niet `volgT` is de rem. Een tik zet zijn eigen timer-handle op null vóórdat
+        # hij reopen() aanroept, en reopen() draait wire(), en wire() start het volgen. Zou de rem op
+        # het handle staan, dan is die op precies dat moment leeg en begint er een TWEEDE ketting
+        # naast de lopende — elke ronde verdubbelend. De vlag staat los van de timer en overleeft de
+        # tik dus wél.
+        "var volgT=null,volgAan=false,volgTot=0,volgStartTs=0,volgMs=2000;"
+        "function volgActief(){return !!bd.querySelector('[data-bezig]');}"
+        "function volgStop(){volgAan=false;if(volgT){clearTimeout(volgT);volgT=null;}volgTot=0;}"
+        "function volgStart(){if(volgAan)return;volgAan=true;volgStartTs=Date.now();"
+        "volgTot=Date.now()+900000;volgMs=2000;volgTik();}"
+        "function volgTik(){volgT=setTimeout(function(){volgT=null;"
+        "if(ov.style.display==='none'||Date.now()>volgTot){volgStop();return;}"
+        "reopen();"
+        # Na reopen() heeft de fetch even nodig; pas daarna zegt de DOM iets zinnigs over de vlag.
+        "setTimeout(function(){"
+        "if(volgActief()||Date.now()-volgStartTs<30000){"
+        # Oplopend tot 8s: de eerste seconden wil je snel zien dat er iets gebeurt, daarna is elke
+        # 2 seconden een fetch zonder nieuws.
+        "volgMs=Math.min(volgMs*1.5,8000);volgTik();}else{volgStop();}},1200);},volgMs);}"
         "function shut(){if(history.state&&history.state.card){history.back();return;}"  # pushed kaart → pop naar bord-URL
         "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
         # back-knop / gepopte kaart-entry: sluit de modal, herstel de bord-URL (browser deed dat al).
@@ -488,18 +520,22 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
         "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();"
-        # NA GO-AHEAD BLIJFT DE KAART KIJKEN. Eén reopen() vuurt onmiddellijk, en op dat moment is
-        # de daemon nog niet eens aan de beurt geweest (bordpuls elke 2s, skills daarna seconden tot
-        # minuten). Je zag dus altijd een onveranderde kaart en moest zelf gaan verversen.
-        # Zeven keer met oplopende tussenpozen dekt ruim twee minuten en dooft daarna vanzelf uit —
-        # geen eeuwige poller die op de achtergrond blijft draaien als je de kaart openlaat.
-        "if(act==='plan_akkoord'){[2000,5000,9000,15000,30000,60000,120000].forEach(function(ms){"
-        "setTimeout(function(){if(ov.style.display!=='none')reopen();},ms);});}"
+        # NA GO-AHEAD BLIJFT DE KAART KIJKEN — zolang er iets draait, niet zolang een timer loopt.
+        # Stond hier eerst als [2000,5000,...,120000]: zeven vaste momenten die na twee minuten
+        # uitdoofden. Gemeten op 6 september: een plan met site_health + haal_pagina +
+        # plausible_stats duurt lánger dan dat, dus de kaart viel halverwege stil en je moest alsnog
+        # zelf verversen — precies de klacht die #466 had moeten oplossen.
+        # `volg()` kijkt nu naar de uitkomst in plaats van naar de klok: hij stopt zodra de
+        # bezig-vlag weg is, en anders pas op de harde bovengrens.
+        "if(act==='plan_akkoord'){volgStart();}"
         "toast('\\u2713 saved');}})"
         # netwerk-foutpad (geen response): melding + best-effort revert door het fragment te herladen.
         ".catch(function(){reopen();toast('\\u26a0 not saved');});});}"
         "window.__ovlWireForms=function(root){(root||bd).querySelectorAll('form').forEach(wireForm);};"
         "function wire(){bd.querySelectorAll('form').forEach(wireForm);"
+        # Open je een kaart waarop al iets draait, dan begint het volgen meteen. Zonder dit werkte
+        # het alleen in het tabblad waarin je zelf op 'go ahead' had geklikt.
+        "if(volgActief())volgStart();"
         # De gedeelde mechaniek kent de overlay niet; de overlay roept hem aan zodra hij een
         # fragment heeft ingevoegd. Zo krijgt élk toekomstig typ-en-Enter-veld in een modal de
         # wachtrij zonder dat de modal er iets van hoeft te weten.

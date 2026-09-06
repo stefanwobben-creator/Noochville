@@ -107,8 +107,12 @@ def test_de_prompt_zegt_dat_het_kennisblok_extern_onderzoek_is():
         return '{"items":[]}'
     from nooch_village.wizard import plan_items
     plan_items("doel", [], reason_fn=_vang, kennis="REEDS BEKEND: PHA, PBAT, algae-based")
-    assert "EXTERN ONDERZOEK" in gezien["p"]
-    assert "GEEN lijst van" in gezien["p"]
+    # De prompt is Engels sinds 06-09-2026 (tweede ronde na #466); de WAARSCHUWING moest mee, want
+    # die is de hele reden dat deze test bestaat. Vertaal je de prompt en niet de assert, dan valt
+    # het vangnet stil op precies de zin die de duurste fout van 29 augustus voorkwam.
+    assert "EXTERNAL RESEARCH" in gezien["p"]
+    assert "NOT a list of" in gezien["p"]
+    assert "Never write that a material from that block is ours" in gezien["p"]
     assert str(MAX_WOORDEN) in gezien["p"]        # de vormregel staat er ook in
 
 
