@@ -465,8 +465,8 @@ def _role_capabilities_block(role) -> str:
             skill_lines.append(f"- {name}: {desc[:120]}" if desc else f"- {name}")
         acc_txt = "\n".join(f"- {a}" for a in accts) or "(geen)"
         sk_txt = "\n".join(skill_lines) or "(geen)"
-        return (f"Jouw accountabilities:\n{acc_txt}\n"
-                f"Jouw skills (de ENIGE concrete tools die je hebt):\n{sk_txt}\n")
+        return (f"Your accountabilities:\n{acc_txt}\n"
+                f"Your skills (the ONLY concrete tools you have):\n{sk_txt}\n")
     except Exception:
         return ""
 
@@ -497,25 +497,25 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
     if persona is None:
         return False
     recent = "\n".join(f"- {m.get('text', '')}" for m in (p.get("log") or [])[-6:])
-    rol_line = (f"Rol: {_name(role)} — purpose: {role.definition.purpose}\n" if role is not None else "")
+    rol_line = (f"Role: {_name(role)} — purpose: {role.definition.purpose}\n" if role is not None else "")
     capab = _role_capabilities_block(role)          # accountabilities + skills → grondslag voor de toets
     aanleiding = (prefix.strip() + "\n\n") if (prefix or "").strip() else ""
     ctx = (f"{aanleiding}"
            f"Project: {_scope_text(p)}\n"
-           f"Omschrijving: {p.get('description', '') or '(geen)'}\n"
+           f"Description: {p.get('description', '') or '(none)'}\n"
            f"{rol_line}"
            f"{capab}"
-           f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
-           "Triageer dit signaal tegen JOUW accountabilities en skills. Beantwoord drie dingen:\n"
-           "1. Past het bij jouw rol? (ja / deels / nee — bij deels of nee: welk stuk kun je wél oppakken)\n"
-           "2. Kun je het NU beantwoorden puur uit wat je al weet (informatie delen), zonder een skill te "
-           "draaien of een project te starten? Zo ja: geef dat antwoord.\n"
-           "3. Kan het niet direct (er is een skill of meerdere stappen nodig)? Zeg dan kort dat je het via "
-           "je inbox verwerkt. Verzin niets en claim nooit dat je iets deed wat je niet deed.\n\n"
-           "Antwoord UITSLUITEND met JSON, exact dit schema: {\"fit\": \"ja|deels|nee\", \"welk_stuk\": "
-           "\"<bij deels/nee: welk deel je wél kunt, anders leeg>\", \"kan_direct\": true of false, "
-           "\"reactie\": \"<bij kan_direct=true je informatie-antwoord; anders een korte reactie/afwijzing, "
-           "max 4 zinnen>\"}.")
+           f"Recent dialogue:\n{recent or '(still empty)'}\n\n"
+           "Triage this signal against YOUR accountabilities and skills. Answer three things:\n"
+           "1. Does it fit your role? (yes / partly / no — if partly or no: which piece CAN you take on)\n"
+           "2. Can you answer it NOW purely from what you already know (sharing information), without "
+           "running a skill or starting a project? If so: give that answer.\n"
+           "3. If it cannot be done directly (a skill or several steps are needed), say briefly that you "
+           "handle it via your inbox. Invent nothing and never claim you did something you did not.\n\n"
+           "Answer ONLY with JSON, exactly this schema: {\"fit\": \"yes|partly|no\", \"welk_stuk\": "
+           "\"<if partly/no: which part you CAN do, otherwise empty>\", \"kan_direct\": true or false, "
+           "\"reactie\": \"<if kan_direct=true your information answer; otherwise a short reply/refusal, "
+           "max 4 sentences>\"}.")
     from nooch_village.personas import persona_prompt
     prompt = (persona_prompt(persona) + "\n\n" + ctx).strip()
     if ask is None:
@@ -696,8 +696,13 @@ def _parse_triage(out: str):
         data = None
     if not isinstance(data, dict):
         return None
-    fit = str(data.get("fit", "")).strip().lower()
-    if fit not in ("ja", "deels", "nee"):
+    # LIBERAAL PARSEN, ZOALS project_worker. De prompt vraagt sinds 06-09-2026 Engelse enum-waarden
+    # (yes|partly|no), maar een model dat in het Nederlands doorschiet mag de triage niet stilzetten:
+    # bij None valt de caller terug op een platte reactie, en dan verdwijnt de triage geruisloos.
+    # De INTERNE waarden blijven Nederlands, want daar hangt de rest van deze module op (fit == "nee").
+    _FIT = {"yes": "ja", "partly": "deels", "no": "nee", "ja": "ja", "deels": "deels", "nee": "nee"}
+    fit = _FIT.get(str(data.get("fit", "")).strip().lower(), "")
+    if not fit:
         return None
     reactie = str(data.get("reactie", "")).strip()
     if not reactie:

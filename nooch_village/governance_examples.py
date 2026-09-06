@@ -23,10 +23,9 @@ from nooch_village.util import atomic_write_json, read_json
 # meegegeven aan de LLM-calls die accountabilities/projecten verwoorden.
 ACCOUNTABILITY_RULES = (
     "Holacracy-formuleerregels:\n"
-    "- Een ACCOUNTABILITY begint ALTIJD met een werkwoord dat een doorlopende activiteit "
-    "beschrijft. In het Nederlands de -en-vorm vooraan: 'Faciliteren van...', 'Ontwikkelen "
-    "en beheren van...', 'Bewaken van...', 'Vastleggen van...'. (In het Engels een werkwoord "
-    "op -ing.)\n"
+    "- An ACCOUNTABILITY ALWAYS starts with a verb describing an ongoing activity: the "
+    "-ing form up front: 'Facilitating...', 'Developing and maintaining...', 'Guarding...', "
+    "'Recording...'.\n"
     "- Het is een doorlopend aandachtsgebied, GEEN eenmalige taak en GEEN project.\n"
     "- Het kent geen autoriteit toe en claimt geen exclusiviteit (dat zijn domeinen/policies).\n"
     "- Kort en helder; geen lange waslijst hyper-gedetailleerde punten.\n"

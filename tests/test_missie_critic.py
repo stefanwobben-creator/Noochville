@@ -34,6 +34,14 @@ from nooch_village.skills import Skill, SkillRegistry
 
 TODAY = "2026-08-11"
 _REASON = "nooch_village.llm.reason"
+def _synth_calls(m) -> int:
+    """Hoe vaak draaide de EINDDOCUMENT-SYNTHESE? Niet: hoe vaak draaide er een LLM.
+
+    Sinds 06-09-2026 zet elk opgeleverd item ook een conclusiezin boven zijn note (één goedkope
+    call per item, schakelbaar via `deliverable_conclusie_enabled`). `m.call_count` telt die mee en
+    zou deze tests laten falen op iets waar ze niet over gaan. De synthese is herkenbaar aan
+    `return_tier=True` — zij is de enige die wil weten welk model schreef, om dat te markeren."""
+    return sum(1 for c in m.call_args_list if c.kwargs.get("return_tier"))
 
 # Een rapport dat de vier assen haalt: lang genoeg, koppen per taak, raakt de done-when, en zit vol
 # strategie-thema's uit de grondwet (plasticvrij, vegan, transparantie).
@@ -440,7 +448,7 @@ def test_herkans_pas_gebeurt_in_dezelfde_puls(tmp_path):
     ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
     with patch(_REASON, side_effect=_reason_mock("te kort")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
-    assert m.call_count == 2                                      # synthese + herkansing
+    assert _synth_calls(m) == 2                                      # synthese + herkansing
     p = ledger.get(pid)
     assert p.get("critic_herkansing") is True
     assert p["status"] == "blocked"                               # niet blijven hangen

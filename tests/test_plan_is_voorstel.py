@@ -301,7 +301,15 @@ def test_o_wachtend_plan_toont_de_knop(tmp_path):
     led.plan_akkoord(pid, cl["id"], door="stefan")
     html2 = _checklists_html(led.get(pid), "csrf", pid, "/projects", True)
     assert "plan_akkoord" not in html2                             # knop weg zodra het gezegd is
-    assert "approved by stefan" in html2                           # maar wél zichtbaar wie
+    # DRIE TOESTANDEN sinds 06-09-2026, niet twee. Direct na akkoord is de rol nog BEZIG: de
+    # bordpuls is nog niet langsgeweest en het item staat open. "approved by" op dat moment tonen
+    # leest als 'klaar', en dat was precies de verwarring — je zag niet dat er nog iets liep.
+    assert "the role is working" in html2 and "1 to go" in html2
+    assert "data-bezig" in html2
+
+    led.check_toggle(pid, cl["id"], led.get(pid)["checklists"][0]["items"][0]["id"])
+    html3 = _checklists_html(led.get(pid), "csrf", pid, "/projects", True)
+    assert "approved by stefan" in html3                           # klaar: nu pas, en wél wie
 
 
 def test_p_leesmodus_toont_de_stand_zonder_knop(tmp_path):

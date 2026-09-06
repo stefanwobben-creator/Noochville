@@ -485,7 +485,8 @@ def _tab_for(kind: str) -> str:
 
 def _dt(ts) -> str:
     try:
-        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(ts)))
+        from nooch_village.cockpit2_util import lokaal
+        return lokaal(ts)                              # zone van de lezer, niet van de server
     except (TypeError, ValueError):
         return "—"
 

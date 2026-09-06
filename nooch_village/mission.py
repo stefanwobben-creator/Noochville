@@ -23,24 +23,47 @@ ANCHOR_PURPOSE = (
 # plek waar de weging van de kennisbank-voorstellen aan hangt. Label = wat de gebruiker op de kaart
 # ziet; termen = de trefwoorden (exacte token-match, of prefix voor termen ≥ 5 tekens: 'composteer'
 # vangt 'composteerbaar'). ─────────────────────────────────────────────────────────────────────────
+# TWEETALIG, EN ADDITIEF. De labels blijven Nederlands (ze zijn een interne sleutel, geen
+# schermtekst), maar de tokens dekken beide talen. Reden: dit is een DETERMINISTISCHE match op losse
+# woorden, en het dorp draagt sinds 06-09-2026 twee talen tegelijk — nieuwe content Engels, alles wat
+# er al lag Nederlands. Kies je één taal, dan scoort de helft van je kennisbank stil op nul.
+#
+# Gemeten vóór deze uitbreiding: een Nederlandse zin over een composteerbare zool zonder plastic,
+# gemaakt op bestelling in Portugal, raakte 4 thema's; de letterlijke Engelse vertaling ervan 3.
+# Dat verschil zat niet in de inhoud maar in de woordenlijst, en dat is precies het soort stille
+# scheefheid waar niemand een melding van krijgt.
+#
+# Additief houden is geen luxe: haal je de Nederlandse tokens weg, dan verliest élke bestaande kaart
+# in de kennisbank zijn strategie-score, met terugwerkende kracht en zonder foutmelding.
 STRATEGIE_THEMAS: dict[str, set[str]] = {
-    "geen plastic": {"plastic", "microplastic", "microplastics", "polyester", "petroleum",
-                     "aardolie", "fossiel", "synthetisch", "synthetische", "pla", "nylon",
-                     "elastaan", "elastan"},
-    "geen leer": {"leer", "leder", "dierlijk", "dierlijke", "dier", "dieren", "vee", "veeteelt",
-                  "veehouderij", "slacht", "slachthuis", "koe", "runder", "rundvlees", "vegan",
-                  "diervrij", "huid"},
-    "afbreekbaar & biobased": {"composteerbaar", "composteren", "afbreekbaar", "biologisch",
-                               "biodegradeerbaar", "biodegradatie", "mycelium", "cellulose",
-                               "natuurrubber", "biobased", "en13432", "compost"},
-    "in europa geproduceerd": {"europa", "europese", "lokaal", "lokale", "portugal", "portugees",
-                               "maakindustrie", "productie", "fabriek", "nabij"},
-    "op bestelling": {"bestelling", "voorraad", "overproductie", "maatwerk", "afname"},
-    "eerlijk werk & prijs": {"eerlijk", "eerlijke", "loon", "lonen", "uurloon", "leefbaar",
-                             "arbeidsomstandigheden", "arbeid", "vakbond", "kinderarbeid",
-                             "werknemers", "werkomstandigheden"},
-    "transparantie": {"transparant", "transparantie", "herkomst", "traceerbaar", "keten",
-                      "audit", "audits", "certificaat", "certificering", "gecertificeerd", "bewijs"},
+    "geen plastic": {"plastic", "plastics", "microplastic", "microplastics", "polyester",
+                     "petroleum", "petrochemical", "aardolie", "fossiel", "fossil", "synthetisch",
+                     "synthetische", "synthetic", "pla", "nylon", "elastaan", "elastan",
+                     "elastane", "spandex", "polyurethane", "pu"},
+    "geen leer": {"leer", "leder", "leather", "dierlijk", "dierlijke", "animal", "dier", "dieren",
+                  "vee", "veeteelt", "veehouderij", "livestock", "slacht", "slachthuis",
+                  "slaughter", "koe", "cow", "runder", "rundvlees", "cattle", "vegan",
+                  "diervrij", "huid", "hide", "hides", "suede"},
+    "afbreekbaar & biobased": {"composteerbaar", "composteren", "compostable", "afbreekbaar",
+                               "biologisch", "biodegradeerbaar", "biodegradatie", "biodegradable",
+                               "mycelium", "cellulose", "natuurrubber", "rubber", "biobased",
+                               "en13432", "compost", "renewable", "hernieuwbaar"},
+    "in europa geproduceerd": {"europa", "europe", "european", "europese", "lokaal", "lokale",
+                               "local", "portugal", "portugees", "portuguese", "maakindustrie",
+                               "manufacturing", "productie", "production", "fabriek", "factory",
+                               "nabij", "nearshore", "nearshoring"},
+    "op bestelling": {"bestelling", "order", "ordered", "demand", "voorraad", "stock",
+                      "inventory", "overproductie", "overproduction", "deadstock", "maatwerk",
+                      "bespoke", "afname", "preorder", "made"},
+    "eerlijk werk & prijs": {"eerlijk", "eerlijke", "fair", "fairly", "loon", "lonen", "wage",
+                             "wages", "uurloon", "leefbaar", "living", "arbeidsomstandigheden",
+                             "arbeid", "labour", "labor", "vakbond", "union", "kinderarbeid",
+                             "werknemers", "workers", "werkomstandigheden"},
+    "transparantie": {"transparant", "transparent", "transparantie", "transparency", "herkomst",
+                      "provenance", "traceerbaar", "traceable", "traceability", "keten", "chain",
+                      "supply", "audit", "audits", "audited", "certificaat", "certificate",
+                      "certificering", "certification", "gecertificeerd", "certified", "bewijs",
+                      "evidence", "proof"},
 }
 
 

@@ -44,8 +44,23 @@ def _middel_signatuur(skill: str) -> frozenset[str]:
     Het id is Engels en technisch (`keywords_everywhere`), de accountability-tekst is
     Nederlands en functioneel ('zoekvolume bijhouden'). Die twee delen geen tokens. Het label
     uit `skill_labels` is precies de brug tussen beide werelden — dus dat is waar we op matchen.
+
+    BEIDE labels, en dat is met opzet. De weergave-labels zijn sinds 06-09-2026 Engels; de
+    beloftetekst waartegen we matchen is MANDAAT en verandert alleen via een governance-ronde, dus
+    die is nog Nederlands. Stefan zet ze in het roloverleg één voor één om.
+
+    Precies dáárom niet kiezen tussen de twee. Nemen we alleen Nederlands, dan valt een belofte die
+    net omgezet is buiten de boot; nemen we alleen Engels, dan alle andere. Beide woordwolken in één
+    signatuur kost niets (het zijn stammen in een set) en werkt tijdens de héle overgang, zonder een
+    dag waarop het moet omklappen.
+
+    Bijwerking die geen probleem is: een middel matcht nu ook op zijn Engelse woorden, dus een rol
+    met al omgezette beloftes krijgt dezelfde voorstellen. Ruimer matchen is hier de goede kant om —
+    dit is een VOORSTEL dat een mens leest, met de score erbij.
     """
-    return _stammen(_skill_tokens([skill]) | _tokenize(skill_labels.label(skill)))
+    return _stammen(_skill_tokens([skill])
+                    | _tokenize(skill_labels.match_label(skill))
+                    | _tokenize(skill_labels.label(skill)))
 
 
 def _beste_accountability(skill: str, defn) -> tuple[str, str, float]:

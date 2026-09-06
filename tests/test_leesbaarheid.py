@@ -212,25 +212,44 @@ def test_een_mislukte_klim_laat_de_afkeuring_staan():
     assert uit["ok"] is False and "slag om de arm" in uit["reden"]
 
 
-# ── de bron levert Nederlands ───────────────────────────────────────────────
+# ── de bron levert één taal, en zegt welke ──────────────────────────────────
 
-def test_de_plan_prompt_vraagt_nederlands():
-    """DE BRON VAN 134 ENGELSE INBOX-BERICHTEN, en het was één regel: "Write all free text in
-    English." Die tekst is geen UI-chrome maar INHOUD: hij landt als checklist-item op een project
-    en als spanning in de inbox, náást bevindingen en Field Notes die allemaal Nederlands zijn.
+def test_de_plan_prompt_vraagt_een_expliciete_taal():
+    """De plan-prompt moet de taal VOORSCHRIJVEN, wat die taal ook is.
 
-    Bij de BRON oplossen, niet bij de laag: vertalen is precies waar een model iets bijverzint, dus
-    de veiligste vertaling is de vertaling die niet nodig is."""
+    Geschiedenis, want die verklaart waarom deze test bestaat. Ooit stond er "Write all free text
+    in English"; dat leverde 154 Engelse machine-berichten op productie op die in de inbox van een
+    mens landden náást Nederlandse bevindingen. Toen is de INHOUD Nederlands gemaakt. Op 6 september
+    2026 is dat besloten om te draaien: NoochVille wordt default Engels voor internationale groei,
+    en toen is de hele inhoudslaag meegegaan (labels, rugzakken, intake, spelvraag) in plaats van
+    alleen deze prompt.
+
+    Wat deze test bewaakt is niet de taalKEUZE maar de EIS dat er één staat, plus de twee regels die
+    los van de taal gelden: vaste tokens blijven letterlijk, en een citaat behoudt zijn eigen taal.
+    Zonder die twee vertaalt een model precies de dingen die een parser nodig heeft."""
     import inspect
 
     from nooch_village.inhabitant import Inhabitant
     bron = inspect.getsource(Inhabitant._plan_checklist)
-    assert "Write all free text in English" not in bron
-    assert "in DUTCH" in bron
+    assert "in ENGLISH" in bron or "in DUTCH" in bron, "de prompt schrijft geen taal voor"
     assert "quoted claim or source stays in its original language" in bron
-    # En de reden staat bij de code, zodat niemand hem terugdraait omdat de cockpit Engels is.
-    assert "NIET TERUGDRAAIEN NAAR ENGELS" in bron
-    assert "CHROME is Engels" in bron and "INHOUD is Nederlands" in bron
+    assert "exactly as written here" in bron            # vaste tokens blijven letterlijk
+
+
+def test_de_matching_brug_blijft_bij_de_taal_van_de_records():
+    """De weergave-labels zijn Engels; de brug waarop `skills_naar_links` matcht is dat NIET.
+
+    Accountability-teksten zijn mandaat: ze staan in governance-records en veranderen alleen via
+    een governance-ronde. Ze zijn dus nog Nederlands. Vertaalt iemand de brug mee, dan deelt hij
+    geen token meer met de belofte en komt de matcher stil op nul uit — geen fout, alleen 'niets
+    past'. Deze test is het vangnet daaronder, en mag weg zodra de records Engels zijn."""
+    from nooch_village import skill_labels
+    from nooch_village.skills_naar_links import _middel_signatuur
+
+    assert skill_labels.label("keyword_review").startswith("Judges")
+    assert skill_labels.match_label("keyword_review").startswith("Beoordeelt")
+    # De signatuur draagt de NEDERLANDSE stammen, want daar wordt tegen gematcht.
+    assert "beoord" in _middel_signatuur("keyword_review")
 
 
 def test_geen_engelse_berichten_meer_uit_de_founder_flow():

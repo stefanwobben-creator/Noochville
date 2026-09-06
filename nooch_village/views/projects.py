@@ -487,7 +487,15 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(w){reopen();toast(w.slice(0,140));return;}"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
-        "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 saved');}})"
+        "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();"
+        # NA GO-AHEAD BLIJFT DE KAART KIJKEN. Eén reopen() vuurt onmiddellijk, en op dat moment is
+        # de daemon nog niet eens aan de beurt geweest (bordpuls elke 2s, skills daarna seconden tot
+        # minuten). Je zag dus altijd een onveranderde kaart en moest zelf gaan verversen.
+        # Zeven keer met oplopende tussenpozen dekt ruim twee minuten en dooft daarna vanzelf uit —
+        # geen eeuwige poller die op de achtergrond blijft draaien als je de kaart openlaat.
+        "if(act==='plan_akkoord'){[2000,5000,9000,15000,30000,60000,120000].forEach(function(ms){"
+        "setTimeout(function(){if(ov.style.display!=='none')reopen();},ms);});}"
+        "toast('\\u2713 saved');}})"
         # netwerk-foutpad (geen response): melding + best-effort revert door het fragment te herladen.
         ".catch(function(){reopen();toast('\\u26a0 not saved');});});}"
         "window.__ovlWireForms=function(root){(root||bd).querySelectorAll('form').forEach(wireForm);};"

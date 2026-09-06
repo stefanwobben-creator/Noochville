@@ -306,9 +306,19 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             poort = (f"<div class='ck-gate'><span class='chip amber'>⏸ waiting for your go-ahead</span>"
                      f"{knop}<span class='ck-gate-wat'>{wat}</span></div>")
         elif cl.get("akkoord_door"):
-            wat, _ = _gate_samenvatting(items)
-            poort = (f"<div class='ck-gate'><span class='chip muted'>▶ approved by "
-                     f"{_e(cl['akkoord_door'])}</span><span class='ck-gate-wat'>{wat}</span></div>")
+            wat, n_exec = _gate_samenvatting(items)
+            # DRIE TOESTANDEN, NIET TWEE. Tussen "goedgekeurd" en "klaar" zit een gat waarin de rol
+            # bezig is, en dat was onzichtbaar: je klikte, de kaart herlaadde meteen, er stond nog
+            # niets, en daarna bewoog het scherm niet meer. Je moest zelf raden wanneer je moest
+            # verversen. Dat is geen nieuwe state om op te slaan — hij is af te leiden uit wat er
+            # al staat: goedgekeurd, en er staan nog items open die een skill hebben.
+            if n_exec:
+                poort = (f"<div class='ck-gate' data-bezig='1'>"
+                         f"<span class='chip amber'>⏳ the role is working — {n_exec} to go</span>"
+                         f"<span class='ck-gate-wat'>{wat}</span></div>")
+            else:
+                poort = (f"<div class='ck-gate'><span class='chip muted'>▶ approved by "
+                         f"{_e(cl['akkoord_door'])}</span><span class='ck-gate-wat'>{wat}</span></div>")
         rows = ""
         for it in items:
             d = it.get("done")

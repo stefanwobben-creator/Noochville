@@ -90,7 +90,7 @@ def build_intake_prompt(raw: str, source_hint: str = "", tabular: bool = False) 
         "  'column, quote X'), nooit een aanhef of zinsdeel uit de tekst. Copyright-regels,\n"
         "  ISBN en DOI horen NOOIT in \"content\": zet een DOI of ISBN één keer in \"reference\".\n"
         "  Zet NIET de artikel-URL in \"reference\" — de publicatie staat al in \"source\".\n"
-        "- Schrijf elke notitie in het Nederlands (vertaal indien nodig), kort en op zichzelf leesbaar.\n"
+        "- Write every note in English (translate if needed), short and readable on its own.\n"
         "- Leid het PROVENANCE-type af uit de aard van de bron (zie lijst); verzin geen\n"
         "  betrouwbaarheidsscore. Een onderzoeksinstituut of journal met DOI/ISBN =\n"
         "  peer_reviewed, ook als de toon geëngageerd is; advocacy is voor belangenorganisaties\n"

@@ -263,7 +263,7 @@ def test_dossier_toont_skills_in_mensentaal(tmp_path):
     from nooch_village.views.inwoners import render_inwoner
     st, p = _st(tmp_path)
     html = render_inwoner(st, p.id)
-    assert "Luistert op Reddit" in html                  # de zin
+    assert "Listens on Reddit" in html                   # de zin (Engels sinds 06-09-2026)
     assert "<code>community_listening</code>" in html    # én het technische id
 
 
@@ -304,7 +304,9 @@ def test_elke_geregistreerde_skill_heeft_mensentaal():
 
 def test_label_valt_terug_op_de_omschrijving():
     assert skill_labels.label("bestaat_niet_123") == "bestaat_niet_123"
-    assert skill_labels.label("community_listening").startswith("Luistert")
+    assert skill_labels.label("community_listening").startswith("Listens")
+    # De matching-brug blijft Nederlands zolang de accountability-teksten dat zijn (MATCH_NL).
+    assert skill_labels.match_label("community_listening").startswith("Luistert")
 
 
 def test_uitvoering_blijft_op_rol_dna():
@@ -395,7 +397,7 @@ def test_readme_is_leesbaar_voor_een_mens(tmp_path):
     with zipfile.ZipFile(inwoner_pakket.exporteer(p, str(tmp_path / "b.inwoner"))) as z:
         readme = z.read("README.md").decode()
     assert "# Billy Buzz" in readme
-    assert "Luistert op Reddit" in readme                 # mensentaal, niet het id alleen
+    assert "Listens on Reddit" in readme                  # mensentaal, niet het id alleen
     assert "GEEN sleutels" in readme
 
 

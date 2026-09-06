@@ -28,11 +28,21 @@ def _src(naam: str) -> str:
 # ── 2C-werklijst: prompt-token ↔ parser die het leest ────────────────────────────────────────────
 
 def test_mention_triage_enum_blijft_bij_zijn_parser():
-    """cockpit2._ai_reply vraagt {"fit": "ja|deels|nee"}; _parse_triage weigert al het andere
-    (fail-closed → geen triage meer, stil terugvallen op een platte reactie)."""
+    """2C gedaan op 06-09-2026: de prompt vraagt Engelse enum-waarden (yes|partly|no) en de parser
+    is in dezelfde commit liberaal gemaakt — hij normaliseert BEIDE talen naar de interne waarden.
+
+    Waarom liberaal en niet strikt omzetten: bij een niet-herkende waarde geeft `_parse_triage` None
+    terug en valt de caller terug op een platte reactie. De triage verdwijnt dan geruisloos, zonder
+    fout. Een model dat in het Nederlands doorschiet mag dat niet veroorzaken. Zelfde afweging als
+    bij project_worker hieronder.
+
+    De INTERNE waarden blijven Nederlands: de rest van cockpit2 hangt op `fit == "nee"`. Vertalen we
+    die mee, dan moet elke consument mee in dezelfde commit — dat is 2E, niet dit."""
     s = _src("cockpit2.py")
-    assert '\\"fit\\": \\"ja|deels|nee\\"' in s or '"fit": "ja|deels|nee"' in s
-    assert 'if fit not in ("ja", "deels", "nee")' in s
+    assert '\\"fit\\": \\"yes|partly|no\\"' in s or '"fit": "yes|partly|no"' in s
+    assert '"yes": "ja"' in s and '"partly": "deels"' in s and '"no": "nee"' in s
+    assert '"ja": "ja"' in s                     # overgangs-tolerantie blijft
+    assert 'if fit == "nee"' in s                # de consument leest nog de interne waarde
 
 
 def test_project_worker_contract_is_engels():
@@ -59,18 +69,30 @@ def test_project_worker_parser_blijft_liberaal():
 
 
 def test_opportunity_reflex_velden_blijven_bij_hun_parser():
-    """inhabitant._opportunity_reflex vraagt TITEL/WAT/WAAROM; _parse_opportunity leest die sleutels."""
+    """2C gedaan op 06-09-2026: prompt vraagt TITLE/WHAT/WHY, parser leest beide talen.
+
+    De verboden-woordenlijst is VERTAALD en niet geschrapt. Dat is geen stijlvoorkeur maar merkstem:
+    elk woord op die lijst ('conversie', 'doelgroep', 'consument') verandert een mens in een
+    transactie, en dat is precies het frame dat Nooch niet voert. Een prompt die om gewone taal
+    vraagt zonder te zeggen wélke woorden fout zijn, is de helft van de instructie."""
     s = _src("inhabitant.py")
-    assert "TITEL:" in s and "WAT:" in s and "WAAROM:" in s
-    assert 'key in ("titel", "title")' in s and 'key == "wat"' in s
+    assert "TITLE:" in s and "WHAT:" in s and "WHY:" in s
+    assert 'key in ("titel", "title")' in s and 'key in ("wat", "what")' in s
+    assert 'key in ("waarom", "why"' in s
+    assert "target audience" in s and "consumer" in s          # de lijst is mee, niet weg
+    assert "CITIZEN frame" in s
 
 
 def test_noochie_weigh_in_velden_blijven_bij_hun_parser():
-    """roles.Noochie._weigh_in vraagt BEVINDING/VRAAG + verdict 'niet_ok'; _parse_noochie_report en
-    parse_verdict_reason lezen die tokens."""
+    """2C gedaan op 06-09-2026: prompt vraagt FINDING/QUESTION + verdict 'off_mission'.
+
+    De INTERNE waarde blijft `niet_ok`: die wordt vergeleken in `_weigh_in` én opgeslagen in het
+    dagrapport (`_persist_daily`). Meevertalen zou bestaande rapporten in de cockpit een onbekend
+    oordeel geven — een migratie voor niets. Dus normaliseren aan de rand, niet doorvoeren."""
     s = _src("roles.py")
-    assert "BEVINDING:" in s and "VRAAG:" in s and "niet_ok" in s
-    assert 'low.startswith("bevinding")' in s
+    assert "FINDING:" in s and "QUESTION:" in s and "off_mission" in s
+    assert 'verdict = "niet_ok"' in s                           # genormaliseerd naar de interne waarde
+    assert 'low.startswith("bevinding") or low.startswith("finding")' in s
 
 
 # ── 2A-belofte: de stem is Engels én laat machine-tokens met rust ────────────────────────────────
@@ -91,10 +113,42 @@ def test_missie_is_engels():
     assert "duurzaamste" not in ANCHOR_PURPOSE
 
 
-def test_strategie_themas_blijven_nederlands():
-    """De thema-trefwoorden matchen DETERMINISTISCH op (nog) Nederlandse content in de kennisbank.
-    Ze vertalen hoort bij 2D (strategie-lexicon), samen met de content waarop ze matchen."""
+def test_strategie_themas_zijn_tweetalig():
+    """2D gedaan op 06-09-2026, maar ADDITIEF: Engels erbij, Nederlands blijft.
+
+    Dit is een deterministische match op losse woorden, en het dorp draagt twee talen tegelijk —
+    nieuwe content Engels, alles wat er al lag Nederlands. Kies je één taal, dan scoort de helft van
+    de kennisbank stil op nul. Zou iemand de Nederlandse tokens ooit opruimen 'omdat we Engels zijn',
+    dan verliest élke bestaande kaart met terugwerkende kracht zijn strategie-score, zonder melding.
+    Vandaar dat beide kanten hier apart worden vastgelegd."""
     from nooch_village.mission import STRATEGIE_THEMAS, strategie_relevantie
     assert "geen plastic" in STRATEGIE_THEMAS
-    n, labels = strategie_relevantie("Deze zool is composteerbaar en bevat geen plastic.")
-    assert n >= 2 and "geen plastic" in labels
+
+    nl = "Deze zool is composteerbaar en bevat geen plastic, gemaakt op bestelling in Portugal."
+    en = "This sole is compostable and contains no plastic, made to order in Portugal."
+    n_nl, l_nl = strategie_relevantie(nl)
+    n_en, l_en = strategie_relevantie(en)
+    assert n_nl == 4 and n_en == 4, f"NL={n_nl} EN={n_en} — geen pariteit"
+    assert set(l_nl) == set(l_en), "dezelfde inhoud hoort dezelfde thema's te raken"
+
+
+def test_elk_thema_kent_beide_talen():
+    """Per thema minstens één herkenbaar Engels én één Nederlands trefwoord.
+
+    Een thema dat maar één taal kent is de stille versie van het probleem hierboven: hij lijkt te
+    werken tot er content in de andere taal langskomt."""
+    from nooch_village.mission import STRATEGIE_THEMAS
+    ijk = {
+        "geen plastic": ("aardolie", "petrochemical"),
+        "geen leer": ("leer", "leather"),
+        "afbreekbaar & biobased": ("afbreekbaar", "biodegradable"),
+        "in europa geproduceerd": ("fabriek", "factory"),
+        "op bestelling": ("voorraad", "inventory"),
+        "eerlijk werk & prijs": ("loon", "wages"),
+        "transparantie": ("herkomst", "provenance"),
+    }
+    assert set(ijk) == set(STRATEGIE_THEMAS), "thema toegevoegd of hernoemd zonder ijkwoorden"
+    for thema, (nl_woord, en_woord) in ijk.items():
+        toks = STRATEGIE_THEMAS[thema]
+        assert nl_woord in toks, f"{thema}: Nederlands ijkwoord '{nl_woord}' weg"
+        assert en_woord in toks, f"{thema}: Engels ijkwoord '{en_woord}' ontbreekt"
