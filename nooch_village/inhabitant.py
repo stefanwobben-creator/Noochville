@@ -1124,22 +1124,25 @@ class Inhabitant(threading.Thread):
                         description: str = "", kennis: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
         de skill ÉN een payload in de vorm die de skill z'n input_schema voorschrijft. Machine-check: een
-        skill buiten mijn harde DNA-lijst wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld
-        input_schema laat de LLM terugvallen op naam + description.
+        skill buiten mijn EFFECTIEVE set (DNA ∪ koppelingen ∪ rugzakken, min wat de domeinpoort weigert)
+        wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld input_schema laat de LLM
+        terugvallen op naam + description.
 
         `keyword`/`exclude_pid`: voeden de geheugen-laag (bestaande deliverables als context), fail-closed.
         `kennis`: het al gerenderde, al gecapte 'REEDS BEKEND'-blok uit de kennislaag
         (kennis_context.kennis_blok); leeg = geen sectie."""
         from nooch_village.llm import reason as llm_reason
-        skills = list(self.dna.skills)
-        catalog_lines = []
-        for name in skills:                                      # catalogus mét description + input-vorm
-            obj = self.registry.get(name) if self.registry else None
-            desc = (getattr(obj, "description", "") or "").strip() if obj else ""
-            insch = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
-            catalog_lines.append(f"- {name}: {desc[:160]}\n    input: " +
-                                 (insch or "(no schema — infer it from the name/description)"))
-        catalog = "\n".join(catalog_lines) or "(no skills)"
+        from nooch_village import rugzak
+        # De catalogus komt uit de EFFECTIEVE set, niet uit het rauwe DNA. Dat was tot nu toe een
+        # stille scheve: de uitvoerpoort (`_weiger`) las al `effective_skills()`, de planner las
+        # `dna.skills`. Een gekoppeld middel mocht dus wél draaien maar werd nooit aangeboden — en
+        # met rugzakken zou diezelfde scheve elke gedeelde skill onzichtbaar houden.
+        # …en de domeinpoort filtert hem meteen: een beslis-skill die deze rol tóch niet mag voeren
+        # hoort niet in de prompt. Anders plant het model hem in en sterft het item pas bij de
+        # uitvoering — een omweg die de mens als 'er gebeurt niets' ziet. Zelfde poort als bij de
+        # uitvoering, dus er kan geen tweede oordeel ontstaan dat uiteenloopt.
+        skills = sorted(s for s in self.effective_skills() if not self._domein_weigering(s))
+        catalog = rugzak.catalogus(getattr(self.context, "rugzakken", None), skills, self.registry)
         # Geheugen-laag (fase 1): bestaande deliverables als context. Config-geschakeld, fail-closed —
         # een leeg blok laat de sectie volledig weg (geen lege kop in de prompt).
         memory_section = ""
@@ -2152,17 +2155,30 @@ class Inhabitant(threading.Thread):
         return str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja")
 
     def effective_skills(self) -> set[str]:
-        """De skills die deze rol daadwerkelijk mag voeren.
+        """De skills die deze rol daadwerkelijk mag voeren: DNA ∪ koppelingen ∪ rugzakken.
 
-        Met de vlag uit: alleen het rol-DNA (byte-voor-byte het gedrag van vóór de
-        koppelingslaag). Met de vlag aan: DNA ∪ de middelen die op zijn accountabilities
-        gekoppeld zijn. Het DNA is altijd de vloer — een koppeling neemt nooit iets af.
+        Het DNA is altijd de vloer — geen enkele laag hierboven neemt ooit iets af.
+
+        - **koppelingen** (achter `skill_links_active`): een middel dat aan één accountability
+          van deze rol hangt.
+        - **rugzakken** (`config/rugzakken.json`): cirkelbrede capaciteit. Elke rol mag erbij;
+          dát is het punt. Een rol onderscheidt zich niet door zijn gereedschap maar door zijn
+          domein, en die scheiding wordt hieronder bewaakt door `_domein_weigering` — die draait
+          NA deze functie en is absoluut. Een rugzak kan de domeinpoort dus niet omzeilen; hij
+          verruimt alleen de set die de poort daarna nog beoordeelt.
+
+        Fail-soft: een context zonder `rugzakken` (de meeste tests, en elke oudere caller) gedraagt
+        zich exact als voorheen.
         """
         dna = set(self.dna.skills)
-        if not self._skill_links_active():
-            return dna
-        from nooch_village import skill_links
-        return dna | skill_links.linked_skills(getattr(self.context, "links", None), self.id)
+        if self._skill_links_active():
+            from nooch_village import skill_links
+            dna |= skill_links.linked_skills(getattr(self.context, "links", None), self.id)
+        rugzakken = getattr(self.context, "rugzakken", None)
+        if rugzakken:
+            from nooch_village import rugzak
+            dna |= rugzak.alle_skills(rugzakken)
+        return dna
 
     def _domein_weigering(self, capability: str) -> str:
         """Verdediging in de diepte: een skill die BESLIST in een domein wordt geweigerd voor

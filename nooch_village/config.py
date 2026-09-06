@@ -16,6 +16,9 @@ class Context:
     #                          Pas uitvoeringswaarheid als skill_links_active=1 (zie skill_links.py)
     strategy: dict = field(default_factory=dict)  # geladen uit config/strategy.json
     copy_rules: str = ""  # geladen uit config/copy_rules.md — de basis voor alle copy
+    rugzakken: dict = field(default_factory=dict)  # geladen uit config/rugzakken.json:
+    #                          cirkelbrede capaciteit. Verruimt wat een rol MAG pakken; raakt niet
+    #                          wat een rol uit eigen beweging op de puls draait (zie rugzak.py).
 
 
 def load_context(base_dir: str) -> Context:
@@ -54,5 +57,7 @@ def load_context(base_dir: str) -> Context:
         with open(copy_rules_path, encoding="utf-8") as f:
             copy_rules = f.read()
 
+    from nooch_village import rugzak as _rugzak
     return Context(settings=settings, data_dir=data_dir,
-                   strategy=strategy, copy_rules=copy_rules)
+                   strategy=strategy, copy_rules=copy_rules,
+                   rugzakken=_rugzak.laad(base_dir))
