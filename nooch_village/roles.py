@@ -1937,12 +1937,15 @@ def _parse_noochie_report(text: str) -> tuple[list[str], str]:
     for raw in (text or "").splitlines():
         line = raw.strip().lstrip("*-•# ").strip()
         low = line.lower()
-        if low.startswith("bevinding") and ":" in line:
+        # Beide talen: de prompt vraagt Engels, maar een model dat terugvalt op Nederlands mag de
+        # bevindingen niet laten verdwijnen — dan blijft er een leeg dagrapport over zonder fout.
+        if (low.startswith("bevinding") or low.startswith("finding")) and ":" in line:
             v = line.split(":", 1)[1].strip().strip("* ").strip()
             if v:
                 findings.append(v)
         elif (low.startswith("vraag") or low.startswith("reflectievraag")
-              or low.startswith("suggestie")) and ":" in line and not vraag:
+              or low.startswith("suggestie") or low.startswith("question")
+              or low.startswith("reflection")) and ":" in line and not vraag:
             vraag = line.split(":", 1)[1].strip().strip("* ").strip()
     return findings[:3], vraag
 
@@ -2122,29 +2125,36 @@ class Noochie(Inhabitant):
         from nooch_village.llm import reason
         from nooch_village.coherence import parse_verdict_reason
         prompt = (
-            f"Je bent Noochie, de missiestem van Nooch.earth. Scherp, nuchter, en je kijkt naar "
-            f"het GEHEEL: verkeer, markt, missie-afstemming, kansen en risico's.\n"
-            f"Missie: {_NOOCHIE_MISSION}\n\n"
-            f"Field Note van vandaag:\n{field_note}\n\n"
-            "Regels:\n"
-            "- Baseer je UITSLUITEND op wat in de Field Note staat. Verzin geen namen, partners "
-            "of cijfers; weet je iets niet, schrijf het niet op.\n"
-            "- Elke bevinding is ÉÉN volledige, bondige zin (max ~25 woorden). Geen halve zinnen.\n"
-            "- Sluit af met één scherpe REFLECTIEVRAAG aan de oprichter die hem aan het denken zet "
-            "(geen actie die hij waarschijnlijk al doet).\n\n"
-            "Antwoord exact zo:\n"
-            "BEVINDING: <één volledige zin>\n"
-            "BEVINDING: <één volledige zin>\n"
-            "BEVINDING: <één volledige zin>\n"
-            "VRAAG: <één reflectievraag>\n"
+            f"You are Noochie, the mission voice of Nooch.earth. Sharp, level-headed, and you look "
+            f"at the WHOLE: traffic, market, mission alignment, opportunities and risks.\n"
+            f"Mission: {_NOOCHIE_MISSION}\n\n"
+            f"Today's Field Note:\n{field_note}\n\n"
+            "Rules:\n"
+            "- Base yourself ONLY on what is in the Field Note. Invent no names, partners or "
+            "figures; if you do not know something, do not write it.\n"
+            "- Every finding is ONE complete, concise sentence (max ~25 words). No fragments.\n"
+            "- Close with one sharp REFLECTION QUESTION to the founder that makes him think "
+            "(not an action he is probably already taking).\n\n"
+            "Answer exactly like this:\n"
+            "FINDING: <one complete sentence>\n"
+            "FINDING: <one complete sentence>\n"
+            "FINDING: <one complete sentence>\n"
+            "QUESTION: <one reflection question>\n"
             "VERDICT: ok\n"
-            "REASON: <één zin>\n\n"
-            "(gebruik VERDICT: niet_ok als de aanbevolen richting botst met of de missie mist)"
+            "REASON: <one sentence>\n\n"
+            "(use VERDICT: off_mission if the recommended direction clashes with or misses the mission)"
         )
         result = reason(prompt, call_site="noochie_weigh_in",
                         ladder=_persona_ladder(self.context, self.id, "noochie_weigh_in")
                         ) or "(geen LLM beschikbaar)"
-        verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
+        # Beide talen geldig, één interne waarde. De prompt vraagt sinds 06-09-2026 `off_mission`,
+        # maar `niet_ok` blijft de waarde die hieronder wordt vergeleken ÉN die in het dagrapport
+        # wordt opgeslagen (`_persist_daily`). Zou ik de interne waarde meevertalen, dan gaan de
+        # bestaande rapporten in de cockpit een onbekend oordeel dragen — een migratie voor niets.
+        verdict, reason_text = parse_verdict_reason(
+            result, frozenset({"ok", "niet_ok", "off_mission"}))
+        if verdict == "off_mission":
+            verdict = "niet_ok"
         findings, question = _parse_noochie_report(result)
 
         if verdict == "ok":

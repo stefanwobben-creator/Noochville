@@ -115,9 +115,9 @@ def test_ai_reply_prompt_bevat_accountabilities_en_triage_instructie(tmp_path):
     cockpit2._ai_reply(cockpit2._Stores(dd), pid,
                        ask=lambda prompt: gezien.setdefault("p", prompt) or "ok")
     p = gezien["p"]
-    assert "Jouw accountabilities:" in p and "Jouw skills" in p
-    assert "Triageer dit signaal" in p                  # de triage-instructie
-    assert "Past het bij jouw rol" in p and "kan_direct" in p   # fit + direct-antwoord-toets
+    assert "Your accountabilities:" in p and "Your skills" in p
+    assert "Triage this signal" in p                    # de triage-instructie
+    assert "Does it fit your role" in p and "kan_direct" in p   # fit + direct-antwoord-toets
 
 
 def test_role_capabilities_block_faalt_zacht_zonder_rol():

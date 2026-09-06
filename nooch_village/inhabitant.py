@@ -29,9 +29,9 @@ def _parse_opportunity(text: str) -> dict:
                            "add_role" if "add" in v or "nieuwe" in v else "project")
         elif key in ("titel", "title"):
             out["titel"] = val[:120]
-        elif key == "wat":
+        elif key in ("wat", "what"):
             out["wat"] = val[:600]
-        elif key in ("waarom", "hypothese", "hypothesis"):
+        elif key in ("waarom", "why", "hypothese", "hypothesis"):
             out["waarom"] = val[:300]
         elif key == "effect":
             out["effect"] = val
@@ -533,31 +533,36 @@ class Inhabitant(threading.Thread):
             f"Accountabilities: {', '.join(dna.accountabilities) or '-'}\n"
             f"Skills: {', '.join(dna.skills) or '-'}\n"
             f"Noordster: {ns_txt}. Actief doel: {goals}.\n{regels_txt}{signalen_txt}{eerder_txt}\n"
-            "Bedenk vanuit JOUW rol de ÉNE hoogst-renderende kans die ons dichter bij de noordster "
-            "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol.\n"
-            "VUISTREGEL (belangrijk): begin bij een EXPERIMENT. Stel bij twijfel een PROJECT voor, "
-            "niet meteen een accountability of nieuwe rol. Een accountability/rol is een STOLLING: "
-            "alleen als iets meermaals terugkomt en structureel frictie geeft (anderen wachten erop). "
-            "Een experiment mag vrij zolang het geen onomkeerbare schade kan doen.\n\n"
-            "SCHRIJFREGELS (heel belangrijk):\n"
-            "- Leg het idee uit alsof je het aan een 12-jarige vertelt. GEEN jargon, geen vakwoorden, "
-            "geen afkortingen.\n"
-            "- Verboden woorden (te zakelijk of verkeerd frame): validatie, valideren, transactie, "
-            "conversie, optimaliseren, implementeren, funnel, KPI, e-commerce, doelgroep, consument. "
-            "Gebruik gewone woorden.\n"
-            "- Blijf in het BURGER-frame: het gaat om mensen die bewust kiezen, schoenen kópen en "
-            "dragen — niet om 'consumenten', 'transacties' of 'conversies'.\n"
-            "- Wees CONCREET: zeg wat er in de wereld of op het scherm verandert, niet een abstract "
-            "proces. Stap voor stap als dat helpt.\n"
-            "- Volledige zinnen, niet afgekapt. Kort mag, maar af.\n\n"
-            "Antwoord exact zo:\n"
+            "From YOUR role, come up with the ONE highest-yield opportunity that brings us closer to "
+            "the north star: a project, an extension of your own role, or a new role.\n"
+            "RULE OF THUMB (important): start with an EXPERIMENT. When in doubt propose a PROJECT, "
+            "not straight away an accountability or a new role. An accountability/role is a "
+            "SOLIDIFICATION: only when something recurs and structurally causes friction (others are "
+            "waiting on it). An experiment may run freely as long as it cannot do irreversible harm.\n\n"
+            "WRITING RULES (very important):\n"
+            "- Explain the idea as if you were telling a 12-year-old. NO jargon, no trade terms, "
+            "no abbreviations.\n"
+            # DE VERBODEN WOORDEN ZIJN MERKSTEM, GEEN STIJLVOORKEUR, en daarom vertaald in plaats
+            # van geschrapt toen de inhoudslaag Engels werd (06-09-2026). Ze staan er omdat elk van
+            # deze woorden een MENS in een TRANSACTIE verandert, en dat is precies het frame dat
+            # Nooch niet voert. De Nederlandse lijst was: validatie, valideren, transactie,
+            # conversie, optimaliseren, implementeren, funnel, KPI, e-commerce, doelgroep, consument.
+            "- Forbidden words (too corporate or the wrong frame): validation, validate, transaction, "
+            "conversion, optimise, implement, funnel, KPI, e-commerce, target audience, consumer. "
+            "Use ordinary words.\n"
+            "- Stay in the CITIZEN frame: this is about people who choose deliberately, who BUY and "
+            "wear shoes — not about 'consumers', 'transactions' or 'conversions'.\n"
+            "- Be CONCRETE: say what changes in the world or on the screen, not an abstract process. "
+            "Step by step if that helps.\n"
+            "- Complete sentences, not cut off. Short is fine, finished is required.\n\n"
+            "Answer exactly like this:\n"
             "TYPE: project | amend_role | add_role\n"
-            "TITEL: <korte naam, max 8 woorden>\n"
-            "WAT: <2-4 zinnen: wat gaan we precies doen, in gewone taal>\n"
-            "WAAROM: <1-2 zinnen: hoe helpt dit meer schoenen verkopen via nooch.earth>\n"
-            "EFFECT: <geschat aantal extra paar schoenen, een getal>\n"
-            "EFFORT: <1 (klein) tot 5 (groot)>\n"
-            "CONFIDENCE: <0 tot 1: hoe zeker ben je>"
+            "TITLE: <short name, max 8 words>\n"
+            "WHAT: <2-4 sentences: what exactly are we going to do, in plain language>\n"
+            "WHY: <1-2 sentences: how does this help sell more shoes via nooch.earth>\n"
+            "EFFECT: <estimated number of extra pairs of shoes, a number>\n"
+            "EFFORT: <1 (small) to 5 (large)>\n"
+            "CONFIDENCE: <0 to 1: how sure are you>"
         )
         out = reason(prompt, call_site="opportunity_reflex")
         if not out:
@@ -1193,7 +1198,7 @@ class Inhabitant(threading.Thread):
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
             "'input' shape of that skill (e.g. a term skill wants {\"term\": \"...\"}, keywords_everywhere wants "
             "{\"kw\": [\"...\"]}, a brands skill wants {\"brands\": [\"...\"]}). If no skill can carry out the "
-            "item, set \"skill\": null, \"payload\": {} and give a short reason in Dutch (e.g. \"geen octrooi-skill\"). "
+            "item, set \"skill\": null, \"payload\": {} and give a short reason (e.g. \"no patent skill\"). "
             "For EVERY item with \"skill\": null also set \"kind\":\n"
             "  - \"human_external\" if NO software could ever do it because it needs a person or an "
             "outside party in the physical world (visiting a factory, filming, phoning a supplier, "
@@ -1203,28 +1208,27 @@ class Inhabitant(threading.Thread):
             "Be strict: \"someone should decide\" is not human_external if the deciding is really "
             "just research. "
             "Also determine which accountability the goal touches and which deliverable belongs to it. "
-            # DE BRON VAN 134 ENGELSE INBOX-BERICHTEN, en het was één regel: "Write all free text in
-            # English." Die tekst is geen UI-chrome maar INHOUD — hij landt als checklist-item op een
-            # project en als spanning in de inbox van een mens, náást bevindingen en Field Notes die
-            # allemaal Nederlands zijn. Gemeten op prod: 154 Engelse machine-berichten, 134 daarvan
-            # gegenereerd (de andere 20 waren code-literals). Allemaal intern; geen enkele was
-            # klant-copy — dat pad (de Copywriter) schrijft met opzet Engels en blijft ongemoeid.
+            # HIER STOND DE OMGEKEERDE INSTRUCTIE, en de geschiedenis is het bewaren waard.
             #
-            # Bij de BRON oplossen, niet bij de leesbaarheidslaag: vertalen is precies waar een model
-            # iets bijverzint, dus de veiligste vertaling is de vertaling die niet nodig is. De laag
-            # blijft het vangnet voor wat tóch in het Engels binnenkomt — een vangnet, geen route.
+            # Ooit stond er "Write all free text in English." Dat leverde 154 Engelse machine-
+            # berichten op productie op (134 gegenereerd, 20 code-literals) die in de inbox van een
+            # mens landden náást Nederlandse bevindingen en Field Notes. Die mengtaal is toen
+            # opgelost door de INHOUD Nederlands te maken en alleen de CHROME Engels te laten.
             #
-            # NIET TERUGDRAAIEN NAAR ENGELS zonder dit te lezen. De verleiding is er, want de cockpit
-            # is Engels (i18n fase 1) en dan lijkt "alles Engels" consistent. Maar die grens loopt
-            # ergens anders: CHROME is Engels (knoppen, kolomkoppen, menu's), INHOUD is Nederlands
-            # (bevindingen, Field Notes, spanningen, checklist-items). Een checklist-item is inhoud —
-            # het staat straks in een inbox naast een bevinding, en die twee horen dezelfde taal te
-            # spreken. Wil je dit toch omdraaien, draai dan de hele inhoudslaag om, niet één prompt.
-            # De test staat in tests/test_leesbaarheid.py.
-            "Write every human-readable field (text, reason, deliverable, accountability) in DUTCH — "
-            "these land in a person's inbox, next to findings and notes that are Dutch. Keep the JSON "
-            "keys and the fixed values (skill names, human_external, missing_capability) exactly as "
-            "written here. A quoted claim or source stays in its original language. "
+            # Op 6 september 2026 is dat besloten om te draaien: NoochVille wordt default Engels,
+            # als voorbereiding op internationale groei. De oude notitie waarschuwde terecht "draai
+            # dan de hele inhoudslaag om, niet één prompt" — en dat is precies wat er gebeurt. Deze
+            # regel gaat mee met de skill-labels, de rugzak-omschrijvingen, de kennisbank-intake, de
+            # spelvraag en de systeemtaal-swaps, in één scope.
+            #
+            # WAT NIET MEE KAN, en waarom dat geen slordigheid is: bestaande content blijft
+            # Nederlands (geen migratie — vertalen is precies waar een model iets bijverzint, dus de
+            # veiligste vertaling is de vertaling die niet nodig is), en STRATEGIE_THEMAS matcht
+            # deterministisch op die Nederlandse content. Die vertaalt pas mee als de content dat
+            # doet. Het dorp is dus een tijdje tweetalig; dat is de prijs van niet-migreren.
+            "Write every human-readable field (text, reason, deliverable, accountability) in ENGLISH. "
+            "Keep the JSON keys and the fixed values (skill names, human_external, missing_capability) "
+            "exactly as written here. A quoted claim or source stays in its original language. "
             "Answer ONLY with JSON, exactly this schema:\n"
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\", "
@@ -1506,7 +1510,8 @@ class Inhabitant(threading.Thread):
             src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
-                summary = self._deliverable_note(item, result, archetype, source=used_source)
+                summary = self._deliverable_note(item, result, archetype, source=used_source,
+                                                 lijst=str(cl.get("title") or ""))
                 wall_note_id = ledger.add_role_message(pid, summary)
                 self._store_deliverable(project, item, pos, used_source, result, summary, wall_note_id)
                 # Een geslaagde (her)draai wist de leeg-markering van een eerdere ronde: anders
@@ -2079,28 +2084,63 @@ class Inhabitant(threading.Thread):
         except Exception as e:                              # store is additief → nooit de puls breken
             self.log.warning("deliverable-record niet opgeslagen (wall-note staat wél): %s", e)
 
-    def _deliverable_note(self, item: dict, result: dict, archetype, source: str | None = None) -> str:
+    def _deliverable_note(self, item: dict, result: dict, archetype, source: str | None = None,
+                          lijst: str = "") -> str:
         """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm. `source` = de
         skill die het resultaat écht leverde; wijkt die af van de item-skill (skill-ladder-reroute), dan
-        toont het label '<source> (fallback voor <item-skill>)'."""
+        toont het label '<source> (fallback voor <item-skill>)'.
+
+        Boven de ruwe velden staat sinds 06-09-2026 een kop met herkomst en oordeel, en daaronder één
+        conclusiezin (zie `deliverable_kop`). De RUWE VELDEN blijven onaangeroerd: die zijn het bewijs
+        en de kop is de leeswijzer. Valt de leeswijzer weg (geen model, geen krediet), dan staat de
+        note er precies zo bij als voorheen."""
+        from nooch_village import deliverable_kop as _kop
+        # `getattr(self, ...)` en niet `self.context`: deze functie wordt ook los aangeroepen op een
+        # kale stub (zie test_kroniek_wiring) om puur het label te toetsen. Een leeswijzer mag nooit
+        # de reden zijn dat een note niet geschreven wordt.
+        ctx = getattr(self, "context", None)
         item_skill = item.get('skill')
         label = item_skill if (source is None or source == item_skill) else f"{source} (fallback voor {item_skill})"
-        head = f"📎 {item.get('text','')} — via {label}"
+        aantal = _kop.tel_resultaten(result, archetype)
+        head = _kop.kop(item_tekst=item.get('text', ''), skill_label=label, lijst=lijst,
+                        stagiair=_kop.stagiair_voor(getattr(ctx, "rugzakken", None),
+                                                    source or item_skill or ""),
+                        aantal=aantal)
         kind, key = archetype if archetype else (None, None)
         if kind == "list":
             recs = result.get(key, [])
-            return "\n".join([f"{head}: {result.get('total', len(recs))} resultaten"]
+            body = "\n".join([f"{head}: {result.get('total', len(recs))} results"]
                              + ["• " + self._format_record(r) for r in recs[:5]])
-        if kind == "dictlist":
+        elif kind == "dictlist":
             d = result.get(key, {})
-            return "\n".join([f"{head}: {len(d)} resultaten"]
+            body = "\n".join([f"{head}: {len(d)} results"]
                              + ["• " + self._format_record({"key": n, **(r if isinstance(r, dict) else {"value": r})})
                                 for n, r in list(d.items())[:5]])
-        if kind == "text":
-            return f"{head}:\n{(result.get(key) or '')[:1500]}"
-        if kind == "metric":
-            return f"{head}:\n{self._format_metric(result.get(key))}"
-        return f"{head}: {self._format_record(result)}"
+        elif kind == "text":
+            body = f"{head}:\n{(result.get(key) or '')[:1500]}"
+        elif kind == "metric":
+            body = f"{head}:\n{self._format_metric(result.get(key))}"
+        else:
+            body = f"{head}: {self._format_record(result)}"
+
+        # De conclusiezin komt NA het renderen, want het model vat samen wat de mens straks ziet —
+        # niet het ruwe resultaat-object. Zo kan er geen feit in de conclusie staan dat niet in het
+        # bewijs eronder terug te vinden is. Fail-soft: geen zin → de note zoals hij altijd was.
+        #
+        # SCHAKELBAAR, en dat is geen luxe: dit is één LLM-call PER opgeleverd item. Een checklist
+        # van vijf kost er dus vijf, elke puls opnieuw. Het dorp heeft al eens stilgestaan op een
+        # uitgeputte gratis quota; dan wil je één setting kunnen omzetten in plaats van een revert.
+        settings = getattr(ctx, "settings", None) or {}
+        if str(settings.get("deliverable_conclusie_enabled", "1")).strip().lower() not in (
+                "1", "true", "yes", "ja", "on"):
+            return body
+        zin = _kop.conclusie(item.get("text", ""), body,
+                             ladder=_persona_ladder(ctx, self.id, "deliverable_conclusie")
+                             if ctx is not None else None)
+        if not zin:
+            return body
+        kop_regel, _, rest = body.partition("\n")
+        return f"{kop_regel}\n➜ {zin}" + (f"\n{rest}" if rest else "")
 
     @staticmethod
     def _format_record(rec) -> str:

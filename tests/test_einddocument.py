@@ -39,6 +39,14 @@ def _een_vervuller(dd, rol="mother_earth__nooch__website_developer") -> str:
 
 TODAY = "2026-07-11"
 _REASON = "nooch_village.llm.reason"
+def _synth_calls(m) -> int:
+    """Hoe vaak draaide de EINDDOCUMENT-SYNTHESE? Niet: hoe vaak draaide er een LLM.
+
+    Sinds 06-09-2026 zet elk opgeleverd item ook een conclusiezin boven zijn note (één goedkope
+    call per item, schakelbaar via `deliverable_conclusie_enabled`). `m.call_count` telt die mee en
+    zou deze tests laten falen op iets waar ze niet over gaan. De synthese is herkenbaar aan
+    `return_tier=True` — zij is de enige die wil weten welk model schreef, om dat te markeren."""
+    return sum(1 for c in m.call_args_list if c.kwargs.get("return_tier"))
 
 
 def _reason_mock(tekst, tier="mistral:mistral-small-latest"):
@@ -103,7 +111,7 @@ def test_item_slaagt_document_bijgewerkt(tmp_path):
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot"), ("mens-taak", None, "")])   # 2e blijft open
     with patch(_REASON, side_effect=_reason_mock("# Einddocument\nEerste bevindingen.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
-    assert m.call_count == 1                                     # reguliere pass, één call
+    assert _synth_calls(m) == 1                                     # reguliere pass, één call
     assert docs.read(pid) == "# Einddocument\nEerste bevindingen."
 
 
@@ -116,7 +124,7 @@ def test_twee_items_zelfde_puls_een_call(tmp_path):
                         ("open", None, "")])                     # 2 slagen, 1 blijft open → niet all-done
     with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
-    assert m.call_count == 1                                     # één synthese, niet twee
+    assert _synth_calls(m) == 1                                     # één synthese, niet twee
 
 
 # 3. LLM faalt (geen antwoord) → document INTACT + logregel
@@ -144,7 +152,7 @@ def test_awaiting_review_finale_pass_en_note(tmp_path):
         inh._execute_checklist(ledger.get(pid), TODAY)
     # Twee syntheses, niet één: dit document is 18 tekens, dus de missie-critic zakt erop en geeft
     # één herkans-pas in dezelfde puls (zie Inhabitant._critic_gate). Zonder critic was dit er één.
-    assert m.call_count == 2
+    assert _synth_calls(m) == 2
     assert docs.read(pid) == "# Afgerond\nKlaar."
     p = ledger.get(pid)
     assert p["status"] == "blocked" and p["blocked_on"] == "review"

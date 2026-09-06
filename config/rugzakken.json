@@ -30,7 +30,7 @@
 
   "buiten": {
     "stagiair": "Sid",
-    "wat": "wat er buiten ons gebeurt: markt, mensen, wetenschap, patenten",
+    "wat": "what is happening outside us: market, people, science, patents",
     "skills": [
       "community_listening",
       "competitor_news",
@@ -49,7 +49,7 @@
 
   "onze_cijfers": {
     "stagiair": "Sid",
-    "wat": "hoe wij ervoor staan: bezoek, vindbaarheid, verkoop, gezondheid van de site",
+    "wat": "how we are doing: visitors, findability, sales, health of the site",
     "skills": [
       "plausible_stats",
       "gsc_performance",
@@ -62,7 +62,7 @@
 
   "schrijven": {
     "stagiair": "Wendy",
-    "wat": "er moet tekst komen",
+    "wat": "text needs to be written",
     "skills": [
       "content_schrijven",
       "gsc_report",
@@ -74,7 +74,7 @@
 
   "mag_dit": {
     "stagiair": "Wendy",
-    "wat": "is dit toegestaan en onderbouwd? (EU-claimregels)",
+    "wat": "is this allowed and substantiated? (EU claim rules)",
     "skills": [
       "content_check",
       "claims_check"
@@ -83,7 +83,7 @@
 
   "wat_weten_we_al": {
     "stagiair": "Noochie",
-    "wat": "ordenen, verbanden leggen, terugkijken op eerder werk",
+    "wat": "ordering, connecting, looking back at earlier work",
     "_let_op": [
       "atomic_insights is hier bewust UIT (6 sept). Zijn eigen omschrijving zegt dat hij ruwe",
       "onderzoeksdata destilleert tot 'atomaire, ALGEMENE inzichten'. Algemene inzichten heeft het",
@@ -107,7 +107,7 @@
 
   "basis": {
     "stagiair": "",
-    "wat": "leidingwerk dat elke rol altijd heeft: eerst kijken, jezelf tegenspreken, doorgeven",
+    "wat": "plumbing every role always has: look first, argue against yourself, hand over",
     "skills": [
       "weten_we_dit_al",
       "ruis_check",

@@ -20,6 +20,7 @@ from __future__ import annotations
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.keyword_layer import build_keyword_layer, converges
+from nooch_village.cockpit2_util import lokaal as _lokaal
 
 _LENSES = [
     ("marketing", "Marketing", "volume + direction — what do you make content for"),
@@ -193,7 +194,7 @@ def _lens_kroniek(kroniek: list) -> str:
         dec = r.get("decision")
         chip = "chip green" if dec == "accept" else "chip coral"
         lbl = "accepted" if dec == "accept" else "rejected"
-        when = _t.strftime("%Y-%m-%d %H:%M", _t.localtime(r.get("ts"))) if r.get("ts") else "—"
+        when = _lokaal(r.get("ts"))                    # zone van de lezer, niet van de server
         body += (f"<tr><td>{_e(r.get('term') or '—')}</td>"
                  f"<td><span class='{chip}'>{lbl}</span></td>"
                  f"<td>{_e(r.get('reason') or '—')}</td>"

@@ -97,10 +97,10 @@ def vraag_voor(kand: dict, atoms: dict, *, data_dir: str, reason_fn=reason,
     if claims:
         regels = "\n".join(f"- {c}" for c in claims)
         out = reason_fn(
-            "Je schrijft de opening van een kennisspel in een kennisbank. Hieronder staan "
-            "kaarten (claims) uit één cluster. Formuleer ÉÉN prikkelende Nederlandse vraag "
-            "van maximaal twee zinnen die de spanning of het open eind tussen deze kaarten "
-            "blootlegt.\n\n"
+            "You are writing the opening of a knowledge game in a knowledge base. Below are "
+            "cards (claims) from one cluster. Formulate ONE provocative question in English "
+            "of at most two sentences that exposes the tension or the loose end between "
+            "these cards.\n\n"
             "KEIHARDE REGEL: gebruik uitsluitend feiten die letterlijk in de kaarten staan. "
             "Voeg géén cijfers, data, namen of gebeurtenissen toe die er niet in staan.\n\n"
             f"KAARTEN:\n{regels}\n\n"

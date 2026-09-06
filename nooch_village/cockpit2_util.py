@@ -9,6 +9,53 @@ from nooch_village.web_base import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 
+
+# ── Tijd in de tijdzone van de lezer ─────────────────────────────────────────
+#
+# AANLEIDING (6 september 2026). De server draait op UTC, de mensen die het cockpit lezen zitten in
+# CEST. Alles op het scherm liep dus twee uur achter op de klok aan de muur, zonder dat er iets
+# fout stond: de tijdstempels kloppen, ze werden alleen in de verkeerde zone getoond.
+#
+# WAAROM NIET DE SERVERKLOK VERZETTEN. Dat is één commando en het lijkt gratis, maar dan verhuizen
+# ook de logs, de periode-sleutels (`checklists.period_key`) en de dagreeksen van de collector mee —
+# en die zijn met opzet UTC, want een dagreeks moet niet twee keer 02:30 hebben in oktober. De
+# OPSLAG is hier al goed: alles staat als epoch (`time.time()`), dus tijdzone-loos. Alleen de
+# WEERGAVE moest kiezen, en die koos stilzwijgend de servertijd.
+#
+# De zone is een setting en geen constante: het dorp draait op één plek, maar dat hoeft niet zo te
+# blijven, en een hardcoded 'Europe/Amsterdam' is precies het soort aanname dat je pas ontdekt als
+# iemand verhuist. Fail-soft: een onbekende zone valt terug op UTC met een logregel, want een
+# verkeerd tijdstip is minder erg dan een pagina die niet laadt.
+
+_TZ_DEFAULT = "Europe/Amsterdam"
+
+
+def _zone(settings=None):
+    naam = str((settings or {}).get("display_timezone") or
+               _os.getenv("display_timezone") or _TZ_DEFAULT).strip()
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(naam)
+    except Exception:                                  # noqa: BLE001 — onbekende zone mag niets breken
+        import datetime as _dt
+        return _dt.timezone.utc
+
+
+def lokaal(ts, vorm: str = "%Y-%m-%d %H:%M", settings=None, leeg: str = "—") -> str:
+    """Een epoch-tijdstempel in de zone van de lezer. Lege/kapotte invoer → `leeg`, nooit een crash.
+
+    Gebruik dit overal waar een TIJDSTIP op het scherm komt. Voor een DATUM zonder tijd maakt de
+    zone zelden verschil, maar rond middernacht wel — dus ook daar deze helper, niet
+    `datetime.fromtimestamp` rechtstreeks.
+    """
+    if ts in (None, "", 0):
+        return leeg
+    try:
+        import datetime as _dt
+        return _dt.datetime.fromtimestamp(float(ts), _zone(settings)).strftime(vorm)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return leeg
+
 # De rol waarop de Backlog Builder (Notes-vervanger) leeft. Eén bron voor gate + view + coupling.
 WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
 
@@ -141,12 +188,18 @@ def _bron_html(url: str) -> str:
     return f"<span class='muted' title='link not live yet'>{_e(u)} (not live yet)</span>"
 
 
-def _stamp(ts) -> str:
-    """Datum + tijd, bijv. '27 jun 2026, 14:32'."""
+def _stamp(ts, settings=None) -> str:
+    """Datum + tijd, bijv. '27 jun 2026, 14:32'. In de zone van de LEZER, niet van de server.
+
+    Dit is de tijd onder elke wall-bubbel — de meest gelezen tijd in het hele cockpit. Hij stond op
+    servertijd (UTC) terwijl iedereen die hem leest in CEST zit; zie de notitie bij `lokaal`."""
     if not ts:
         return ""
     import datetime
-    d = datetime.datetime.fromtimestamp(ts)
+    try:
+        d = datetime.datetime.fromtimestamp(float(ts), _zone(settings))
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ""
     return f"{d.day} {_MONTHS[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
 
 
