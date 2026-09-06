@@ -15,7 +15,8 @@ from nooch_village.event_bus import EventBus, Event
 from nooch_village.config import load_context
 from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
-from nooch_village.governance import Records, Secretary, Reconciler, proposal_to_dict
+from nooch_village.governance import (Records, Secretary, Reconciler,
+                                      GovernanceGate, proposal_to_dict)
 from nooch_village.models import Proposal, RecordType
 from nooch_village.roles import (
     WebsiteWatcherWorker, Librarian, TrendsWorker,
@@ -169,6 +170,10 @@ class Village:
         from nooch_village.dagcyclus import Dagcyclus
         self.dagcyclus = Dagcyclus(self.bus, self.context)
         self.matchmaker = Matchmaker(self.bus)
+        # De geldigheidspoort hoort bij de motor, niet bij een rol: zie GovernanceGate. Vóór de
+        # Secretary, zodat de volgorde op de bus leest zoals de governance-stroom loopt
+        # (poort -> adoptie) en niet andersom.
+        self.governance_gate = GovernanceGate(self.records, self.bus, self.context)
         self.secretary = Secretary(self.records, self.bus, links=self.context.links)
         self.reconciler = Reconciler(self.records, self.bus, self.registry, self.context,
                                      self.matchmaker, class_map=CLASS_MAP)
