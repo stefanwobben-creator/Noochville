@@ -35,6 +35,44 @@ def plan_wacht_op_akkoord(project_of_checklist) -> bool:
                    for cl in (project_of_checklist.get("checklists") or []))
     return (project_of_checklist or {}).get("akkoord") is False
 
+
+def uitvoerlijst(project: dict) -> dict | None:
+    """De ENE checklist die de eigenaar-rol afwerkt, of None.
+
+    De TITEL was hiervoor de schakelaar: alleen een lijst die letterlijk "Uitvoerplan" heette werd
+    gedraaid, en alleen daarop bood de cockpit een skill aan. Nina's "Acties uit overleg" en Lottes
+    "What's needed" kregen daardoor nooit een aanbod en werden nooit uitgevoerd, ook niet nadat hun
+    rollen de skills hadden. Een kopje hoort geen schakelaar te zijn, dus de schakelaar krijgt een
+    eigen veld: dezelfde ingreep als bij `akkoord`.
+
+    De volgorde, en waarom elke regel er staat:
+
+    1. `uitvoer: true` — een mens heeft deze lijst aangewezen. Wint altijd.
+    2. de titel `Uitvoerplan` — wat de planner en de wizard schrijven. Zonder deze regel zou elk
+       bestaand project een migratie nodig hebben.
+    3. precies één checklist, met minstens één item dat een skill draagt. Dit is de regel die Nina
+       en Lotte bedient zonder dat ze iets hoeven te hernoemen (29 van de 32 projecten met een
+       checklist hebben er precies één). De tweede voorwaarde is de klep: zonder skill-item is er
+       geen werk voor de rol, en zou de parkeer-klep een overleglijstje van ACTIEF trekken met een
+       hulpvraag. De rol raakt een lijst pas aan als een mens er werk in heeft gelegd, en dat
+       leggen gebeurt door een aanbod te accepteren.
+    4. anders geen. Meerdere lijsten zonder aanwijzing is een keuze voor een mens, geen gok.
+
+    Bewust ÉÉN lijst en niet alle. De keten erachter (review-gate, critic-gate, escalatie-router,
+    payload-reparatie, parkeer-klep, fail-tellers) draait allemaal op één `clid`. Moet het ooit
+    breder, dan is `uitvoer` het veld dat dat mogelijk maakt zonder de titel er weer bij te slepen.
+    """
+    cls = (project or {}).get("checklists") or []
+    for cl in cls:
+        if cl.get("uitvoer") is True:
+            return cl
+    for cl in cls:
+        if cl.get("title") == PREP_CHECKLIST_TITLE:
+            return cl
+    if len(cls) == 1 and any(it.get("skill") for it in (cls[0].get("items") or [])):
+        return cls[0]
+    return None
+
 # ── DE DRIE WAARDEN VAN HET MENSELIJKE OORDEEL ────────────────────────────────────────────────
 # Sleutels, geen labels: ze worden opgeslagen en geteld, dus ze horen op ÉÉN plek te staan en niet
 # in twee spellingen. Ze stonden even zowel hier ("niet_behaald") als in project_verslag
@@ -477,6 +515,25 @@ class ProjectLedger:
         cl["akkoord"] = True
         if door:
             cl["akkoord_door"] = str(door)[:80]           # wie het zei - de wall vertelt wanneer
+        self._touch(p); self._save()
+        return True
+
+    def set_checklist_uitvoer(self, pid: str, clid: str) -> bool:
+        """Wijs de lijst aan die de rol afwerkt (regel 1 van `uitvoerlijst`).
+
+        EXCLUSIEF: de vlag wordt eerst overal weggehaald en dan op deze lijst gezet. `uitvoerlijst`
+        kiest er ook maar één, dus twee vlaggen zouden betekenen dat de volgorde in het bestand
+        bepaalt welke lijst draait. Omkeerbaar door een andere lijst aan te wijzen; dat is meteen
+        de undo, en daarom is er geen aparte 'zet uit'.
+
+        Raakt `review_raised` niet aan: aanwijzen verandert geen enkel item."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for c in self._checklists(p):
+            c.pop("uitvoer", None)
+        cl["uitvoer"] = True
         self._touch(p); self._save()
         return True
 
@@ -1262,7 +1319,7 @@ _WRITE_METHODS = (
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_resultaat",
-    "set_item_offer", "accept_item_offer", "plan_akkoord",
+    "set_item_offer", "accept_item_offer", "plan_akkoord", "set_checklist_uitvoer",
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",

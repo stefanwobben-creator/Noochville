@@ -235,7 +235,11 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='next' value='{_e(nxt)}'>")
 
-    from nooch_village.projects import checklist_progress
+    from nooch_village.projects import checklist_progress, uitvoerlijst
+    # Welke lijst werkt de rol af? Alleen relevant als er meer dan één is; bij één lijst valt er
+    # niets te kiezen en zou de melding ruis zijn.
+    _uit_id = (uitvoerlijst(p) or {}).get("id")
+    _meerdere = len(p.get("checklists") or []) > 1
     # Rol-opties voor de overdracht: dezelfde bron als het wall-outcome-formulier (reference, don't copy).
     role_opts = ""
     if rw and st is not None:
@@ -303,9 +307,24 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                 f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
                 f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
+        # De stille valkuil zichtbaar maken: een lijst met skill-items die de rol NIET afwerkt.
+        # Zonder deze regel accepteer je een aanbod en gebeurt er nooit iets, zonder enig spoor.
+        rol_lijst = ""
+        if _meerdere:
+            if cl["id"] == _uit_id:
+                rol_lijst = ("<div class='ck-gate'><span class='chip muted'>"
+                             "▶ the role works this list</span></div>")
+            elif any(it.get("skill") for it in items):
+                knop = (f"<form method='post' action='/action'>{hid()}"
+                        f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
+                        f"<button class='btn sm' type='submit' name='action' value='checklist_uitvoer'>"
+                        f"make this the role's list</button></form>") if rw else ""
+                rol_lijst = (f"<div class='ck-gate'><span class='chip amber'>"
+                             f"⏸ the role doesn't work this list</span>"
+                             f"<span class='muted'>items with a skill sit here unused</span>{knop}</div>")
         _titel = toon_titel(cl.get("title", ""))
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
                 + (f"<span class='cl-title'>{_e(_titel)}</span>" if _titel else "")
                 + f"{delc}</div>"
-                f"{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
+                f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     return out

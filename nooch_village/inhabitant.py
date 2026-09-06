@@ -5,7 +5,7 @@ from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
 from nooch_village.skills import SkillRegistry
-from nooch_village.projects import PREP_CHECKLIST_TITLE
+from nooch_village.projects import PREP_CHECKLIST_TITLE, uitvoerlijst
 from nooch_village.triage_engine import TriageContext, classify as _triage_classify
 from nooch_village.coherence import evaluate_coherence
 
@@ -917,13 +917,10 @@ class Inhabitant(threading.Thread):
         return ""
 
     def _project_checklist(self, project: dict) -> dict | None:
-        """Het voorbereide uitvoerplan (named checklist met onze titel), of None."""
-        if not project:
-            return None
-        for cl in project.get("checklists", []):
-            if cl.get("title") == self._PREP_CHECKLIST_TITLE:
-                return cl
-        return None
+        """De checklist die ik afwerk, of None. De keuze woont in `projects.uitvoerlijst`
+        (reference, don't copy): de cockpit moet exact dezelfde lijst aanwijzen, anders biedt hij
+        werk aan op een lijst die ik nooit draai."""
+        return uitvoerlijst(project)
 
     def _tend_projects(self, event: "Event | None" = None) -> None:
         """Dagelijkse verzorging van mijn EIGEN projecten: uitvoeren wat in ACTIEF staat (queued/running)
