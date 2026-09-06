@@ -295,6 +295,8 @@ def test_o_wachtend_plan_toont_de_knop(tmp_path):
 
     html = _checklists_html(led.get(pid), "csrf", pid, "/projects", True)
     assert "plan_akkoord" in html and "go ahead" in html
+    # De balk zegt óók WAT er gaat draaien: dat is de vraag die de knop stelt.
+    assert "the role runs 1" in html and "openalex_evidence" in html
 
     led.plan_akkoord(pid, cl["id"], door="stefan")
     html2 = _checklists_html(led.get(pid), "csrf", pid, "/projects", True)
@@ -310,3 +312,61 @@ def test_p_leesmodus_toont_de_stand_zonder_knop(tmp_path):
     led.check_add(pid, cl["id"], "studies", skill="openalex_evidence")
     html = _checklists_html(led.get(pid), "", pid, "/projects", False)   # rw=False
     assert "waiting for your go-ahead" in html and "plan_akkoord" not in html
+
+
+# ── g. de balk zegt wat er gaat gebeuren ───────────────────────────────────────────────────────
+
+def _plan_met_alle_soorten(ledger, pid):
+    """Het echte geval van 6 september: twee skill-items, één mens-taak, één zonder skill."""
+    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
+    ledger.check_add(pid, cl["id"], "check of de site leeft", skill="site_health",
+                     payload={"url": "https://village.nooch.earth"})
+    ledger.check_add(pid, cl["id"], "haal de pagina op", skill="haal_pagina",
+                     payload={"url": "https://village.nooch.earth", "term": "viewport"})
+    ledger.check_add(pid, cl["id"], "test met de hand op een telefoon", human_task=True,
+                     reason="fysieke interactie met een toestel")
+    ledger.check_add(pid, cl["id"], "draai Lighthouse", reason="geen skill beschikbaar")
+    return cl
+
+
+def test_q_de_balk_vertelt_wat_de_knop_doet(tmp_path, ledger):
+    """De klacht van 6 september: 'als ik akkoord zeg kan ik niet makkelijk zien wat de AI dan
+    uitvoert'. Die informatie stond verspreid over vier items met elk een eigen labeltje. Nu staat
+    het antwoord op de plek waar de vraag gesteld wordt."""
+    from nooch_village.views.checklists import _checklists_html
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    _plan_met_alle_soorten(ledger, pid)
+    html = _checklists_html(ledger.get(pid), "csrf", pid, "/projects", True)
+
+    assert "the role runs 2" in html                       # niet 4, en niet 3
+    assert "site_health" in html and "haal_pagina" in html  # mét de namen, niet alleen een getal
+    assert "1 for you (hands-on)" in html                   # de mens-taak
+    assert "1 nobody can run yet" in html                   # het item zonder skill
+
+
+def test_r_geen_knop_als_er_niets_te_draaien_valt(tmp_path, ledger):
+    """'go ahead' op een plan dat de rol niet kan draaien is een lege belofte. Dan geen knop, wel
+    de reden — anders klik je en gebeurt er niets, zonder uitleg."""
+    from nooch_village.views.checklists import _checklists_html
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
+    ledger.check_add(pid, cl["id"], "bel de fabriek", human_task=True, reason="telefoon")
+    html = _checklists_html(ledger.get(pid), "csrf", pid, "/projects", True)
+    assert "plan_akkoord" not in html
+    assert "1 for you (hands-on)" in html
+
+
+def test_s_na_akkoord_blijft_staan_wat_van_jou_is(tmp_path, ledger):
+    """Als de rol klaar is wil je weten wat er nog op jouw bord ligt. Dezelfde samenvatting, maar
+    de gedraaide items tellen niet meer mee."""
+    from nooch_village.views.checklists import _checklists_html
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    cl = _plan_met_alle_soorten(ledger, pid)
+    ledger.plan_akkoord(pid, cl["id"], door="stefan")
+    for it in ledger.get(pid)["checklists"][0]["items"][:2]:
+        ledger.check_toggle(pid, cl["id"], it["id"])       # de rol heeft ze gedraaid
+
+    html = _checklists_html(ledger.get(pid), "csrf", pid, "/projects", True)
+    assert "approved by stefan" in html
+    assert "the role runs" not in html                      # niets meer te draaien
+    assert "1 for you (hands-on)" in html and "1 nobody can run yet" in html
