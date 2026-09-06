@@ -47,3 +47,11 @@ espanol/
 output/
 materiaal_memo.json
 materiaal_memo.json.lock
+
+# Archieven horen niet in de geschiedenis. Ze zijn groot, ze verouderen binnen een week, en git
+# bewaart ze voor altijd — ook nadat je ze verwijdert. Ruim 40 MB van deze repo is zo binnengekomen
+# (nooch-snap-22jul.tgz, backups/_cloud_export.tgz, _to_delete/nvhead.tar en tien kleinere).
+# Een backup hoort naast de repo te staan, niet erin.
+*.tgz
+*.tar
+backups/
