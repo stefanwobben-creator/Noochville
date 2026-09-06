@@ -228,7 +228,10 @@ def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
 
 def test_tend_prepareert_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
     """Root cause: een project dat ACTIEF werd zonder voorbereide checklist zat permanent stil
-    (prepare_project weigerde niet-future). De tend bereidt het nu alsnog voor én voert het uit."""
+    (prepare_project weigerde niet-future). De tend bereidt het nu alsnog voor.
+
+    Sinds scope 4 stopt het dáár: het verse plan is een voorstel en wacht op een mens. Zodra het
+    akkoord er is voert dezelfde tend het uit — zie tests/test_plan_is_voorstel.py."""
     import nooch_village.llm as llm
     plan = ('{"deliverable":"dossier","items":['
             '{"text":"studies","skill":"openalex_evidence","query":"barefoot","reason":""}]}')
@@ -239,9 +242,11 @@ def test_tend_prepareert_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
     ledger.start(pid)
     assert ledger.get(pid)["status"] == "running" and inh._project_checklist(ledger.get(pid)) is None
     inh._tend_projects(None)                                   # de dagelijkse verzorging
-    p = ledger.get(pid)
-    cl = inh._project_checklist(p)
-    assert cl is not None and cl["items"][0]["done"] is True   # voorbereid ÉN uitgevoerd
+    cl = inh._project_checklist(ledger.get(pid))
+    assert cl is not None and cl["items"][0]["done"] is False  # voorbereid, nog niet uitgevoerd
+    ledger.plan_akkoord(pid, cl["id"], door="stefan")          # de mens zegt ga maar doen
+    inh._tend_projects(None)
+    assert inh._project_checklist(ledger.get(pid))["items"][0]["done"] is True
 
 
 def test_prepare_project_verruimd_voor_actief_zonder_checklist(tmp_path, ledger, monkeypatch):

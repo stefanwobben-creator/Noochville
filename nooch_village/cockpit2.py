@@ -2137,6 +2137,23 @@ def _act_checklist_add(c):
         return nxt, msg
 
 
+def _act_plan_akkoord(c):
+        # AUTHZ: rolvervuller of Circle Lead - dit IS de menselijke poort voor uitvoering. Dezelfde
+        # gate als check_toggle: wie het werk van deze rol mag afvinken, mag ook zeggen dat het mag
+        # beginnen. Niet founder-only: dan zou Nina's plan op Stefan wachten.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        if not pj.plan_akkoord(g("pid"), g("clid"), door=username or ""):
+            return nxt, ""                               # geen open akkoord-vraag -> stil, geen valse melding
+        # Op de wall, niet alleen in een flash: over een week is "wie zei ga maar doen, en wanneer?"
+        # precies de vraag die je stelt als een project iets deed wat je niet verwachtte.
+        pj.add_role_message(g("pid"), f"▶️ Uitvoerplan goedgekeurd door {username or 'een mens'} — "
+                                      f"de rol mag de items draaien.")
+        return nxt, "▶️ plan goedgekeurd — de rol pakt het binnen enkele seconden op"
+
+
 def _act_checklist_remove(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -5737,6 +5754,7 @@ ACTIONS = {
     "proj_feed": _act_proj_feed,
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
+    "plan_akkoord": _act_plan_akkoord,
     "check_add": _act_check_add,
     "check_accept": _act_check_accept,
     "check_toggle": _act_check_toggle,

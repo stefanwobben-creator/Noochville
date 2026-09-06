@@ -830,6 +830,11 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
+/* De akkoord-poort: een plan dat wacht hoort niet weg te vallen tussen de items. Geel = wacht op
+   jou (zelfde betekenis als .chip.amber elders), grijs = het is al gezegd. */
+.ck-gate{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.2rem 0 .6rem;padding:.45rem .6rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius)}
+.ck-gate .muted{font-size:.72rem}
+.ck-gate form{margin-left:auto}
 .ck-prog{display:flex;align-items:center;gap:.6rem;margin:.2rem 0 .6rem}
 .ck-prog .pbar{flex:1 1 auto;width:auto}
 .ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}

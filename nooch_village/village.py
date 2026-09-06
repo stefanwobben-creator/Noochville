@@ -587,28 +587,39 @@ class Village:
         eerste poll geen project_activated voor bestaande actieve projecten (die lopen al mee via de
         normale flow / dag_begint) — alleen NIEUWE naar-ACTIEF-overgangen tijdens de rit tellen."""
         led = getattr(self.context, "projects", None)
-        self._activated_seen = {p["id"] for p in led.by_status("running")} if led is not None else set()
+        from nooch_village.projects import plan_wacht_op_akkoord
+        self._activated_seen = ({p["id"] for p in led.by_status("running") if not plan_wacht_op_akkoord(p)}
+                                if led is not None else set())
         # DONE-brug (#10): al-afgeronde projecten primen zodat de eerste poll geen historische
         # project_completed vuurt — alleen NIEUWE review-goedkeuringen tijdens de rit tellen.
         self._completed_seen = {p["id"] for p in led.by_status("done")} if led is not None else set()
 
     def _poll_board(self) -> list[str]:
         """Board-watch (cross-proces-brug). Detecteer projecten die sinds de vorige poll naar 'running'
-        zijn gezet — meestal een bord-drag naar ACTIEF in het losse cockpit-proces — en kondig ze aan
-        als project_activated zodat de eigenaar-rol ze binnen seconden oppakt. `by_status` triggert
-        `_maybe_reload`, dus een externe schrijf naar projects.json wordt hier zichtbaar. dag_begint
-        blijft het vangnet; dit is een versnelling, geen vervanging. Geeft de nieuw-geactiveerde pids
-        terug (voor tests/observatie)."""
+        zijn gezet — meestal een bord-drag naar ACTIEF in het losse cockpit-proces — of waarvan het
+        uitvoerplan sinds de vorige poll is goedgekeurd, en kondig ze aan als project_activated zodat
+        de eigenaar-rol ze binnen seconden oppakt. `by_status` triggert `_maybe_reload`, dus een
+        externe schrijf naar projects.json wordt hier zichtbaar. dag_begint blijft het vangnet; dit is
+        een versnelling, geen vervanging. Geeft de pids terug die nu aan de beurt zijn geraakt
+        (voor tests/observatie)."""
         led = getattr(self.context, "projects", None)
         if led is None:
             return []
         running = {p["id"]: p for p in led.by_status("running")}
-        new_ids = [pid for pid in running if pid not in self._activated_seen]
+        # AAN DE BEURT = ACTIEF ÉN het uitvoerplan wacht niet meer op een mens. Sinds scope 4 zijn dat
+        # TWEE overgangen die hetzelfde feit opleveren ("er is werk voor de eigenaar-rol"): de drag
+        # naar ACTIEF, en het akkoord op het plan dat daarna gemaakt werd. Dat akkoord is geen
+        # statuswijziging, dus een watch die alleen naar `running` kijkt ziet 'm nooit — je klikt
+        # 'go ahead' en er gebeurt tot 04:32 de volgende ochtend niets. Eén set voor beide, zodat er
+        # ook maar één plek is waar de dedup kan misgaan.
+        from nooch_village.projects import plan_wacht_op_akkoord
+        klaar = {pid: p for pid, p in running.items() if not plan_wacht_op_akkoord(p)}
+        new_ids = [pid for pid in klaar if pid not in self._activated_seen]
         for pid in new_ids:
             self.bus.publish(Event("project_activated",
-                                   {"pid": pid, "owner": running[pid].get("owner")}, "board_watch"))
-        # Prune verdwenen pids: een project dat later opnieuw naar ACTIEF gaat mag opnieuw vuren.
-        self._activated_seen = set(running)
+                                   {"pid": pid, "owner": klaar[pid].get("owner")}, "board_watch"))
+        # Prune verdwenen pids: een project dat later opnieuw aan de beurt komt mag opnieuw vuren.
+        self._activated_seen = set(klaar)
         # ── DONE-brug (#10-fix): project_completed vuurt voor ELKE nieuwe done (lifecycle-feit), zodat
         # ook een mens-DONE in het losse cockpit-proces de in-memory bus bereikt. De route wordt afgeleid:
         #   • autonoom — de rol-thread kondigde 'm al inline aan (_autonomous_done) → hier SKIPPEN (geen dubbel);

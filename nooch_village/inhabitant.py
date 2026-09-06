@@ -986,7 +986,10 @@ class Inhabitant(threading.Thread):
             self._notify_rol(self.id, pid, "📋 Ik kon geen uitvoerplan maken voor dit project. Het staat "
                                            "stil tot het doel scherper is of je de stappen zelf toevoegt.")
             return
-        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE)
+        # akkoord=False: het plan is een VOORSTEL. `_execute_checklist` slaat 'm over tot een mens
+        # op de projectkaart 'go ahead' klikt. Plannen is goedkoop en omkeerbaar, uitvoeren kost
+        # API-calls en schrijft naar de wall - dus daar ligt de knip, niet bij het slepen naar ACTIEF.
+        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False)
         if cl is None:
             return
         n_skill = n_open = n_invalid = n_mens = 0
@@ -1045,6 +1048,13 @@ class Inhabitant(threading.Thread):
             self._notify_founder(pid, f"🙋 Project van {self.display_name} is volledig mens-werk: "
                                       f"'{goal[:80]}' — geen AI-project, wacht op jou.")
             self.log.info("🙋 project '%s' is volledig mens-werk → naar de mens", pid)
+            return                                       # geen akkoord vragen op een plan dat ik niet draai
+        # Het plan ligt er; nu pas de vraag. Naar de EIGENAAR-ROL, niet de founder: wie het project
+        # activeerde beoordeelt het plan, en een rol als adres overleeft een wisseling van vervuller.
+        self._notify_rol(p.get("owner") or self.id, pid,
+                         f"📋 Uitvoerplan klaar voor '{goal[:80]}' — {n_skill} van de "
+                         f"{n_skill + n_open + n_mens + n_invalid} item(s) kan ik draaien. Ik doe niets "
+                         f"tot jij op de projectkaart 'go ahead' klikt.")
 
     def _raadpleeg_kennis(self, pid: str, goal: str, ledger) -> str:
         """Kennis-eerst: raadpleeg vóór het plannen Lara's kennislaag (kaartjes + inzichten +
@@ -1465,6 +1475,14 @@ class Inhabitant(threading.Thread):
                              "voor voorbereiding", pid)
             self.bus.publish(Event("project_needs_preparation",
                                    {"project_id": pid, "owner": self.id}, self.id))
+            return None
+        # DE POORT. Een uitvoerplan is een VOORSTEL tot een mens het goedkeurt. Slepen naar ACTIEF
+        # zegt "dit project is aan de beurt"; het zegt niet "voer dit plan uit", want dat plan bestond
+        # op dat moment nog niet. Hier staat de daemon stil, zichtbaar, tot het akkoord er is.
+        # Geen mark_tended: morgen mag hij precies zo opnieuw wachten.
+        from nooch_village.projects import plan_wacht_op_akkoord
+        if plan_wacht_op_akkoord(cl):
+            self.log.info("⏸ project '%s': uitvoerplan wacht op akkoord van een mens", pid)
             return None
         if project.get("last_tended") == today:
             return None                                          # idempotent: al vandaag uitgevoerd
