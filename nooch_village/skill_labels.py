@@ -45,6 +45,7 @@ LABELS: dict[str, str] = {
     "plausible_stats": "Counts how many people visit the site",
     "site_health": "Checks whether the site is still standing",
     "haal_pagina": "Fetches a page and quotes the sentence a word appears in",
+    "zoekstrategie": "Decides which sources to search, with which term and in which language",
 
     # ── Writing and checking ─────────────────────────────────────────────
     "content_schrijven": "Writes website copy in the brand's voice",
