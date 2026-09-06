@@ -164,6 +164,43 @@ def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
     return "exec", ""
 
 
+def _gate_samenvatting(items) -> tuple[str, int]:
+    """Wat gebeurt er als ik op 'go ahead' klik?
+
+    Dat is de enige vraag die die knop stelt, en het antwoord stond alleen verspreid over de items,
+    elk met een eigen klein labeltje: een dichte of gestippelde checkbox, een groene skill-chip, een
+    gemarkeerde mens-taak-regel. Je moest vier items decoderen om te weten wat er ging draaien.
+
+    Hier staat het één keer, in de vorm waarin je het nodig hebt: hoeveel de rol draait en met welke
+    skills, en wat er voor jou overblijft. Geeft (html, aantal-uitvoerbaar) terug; dat tweede getal
+    bepaalt of de knop überhaupt iets belooft."""
+    from collections import Counter
+    telling: Counter = Counter()
+    skills: list[str] = []
+    for it in items:
+        if it.get("done"):
+            continue
+        state, _ = _cl_item_state(it, False, it.get("skill"))
+        telling[state] += 1
+        if state == "exec" and it.get("skill"):
+            skills.append(it["skill"])
+
+    delen = []
+    if telling["exec"]:
+        chips = " ".join(f"<span class='ck-skill'>{_e(s)}</span>"
+                         for s in dict.fromkeys(skills))         # dedup, volgorde behouden
+        delen.append(f"<b>the role runs {telling['exec']}</b> {chips}")
+    if telling["human"]:
+        delen.append(f"{telling['human']} for you (hands-on)")
+    if telling["noskill"]:
+        delen.append(f"{telling['noskill']} nobody can run yet")
+    if telling["warn"]:
+        delen.append(f"{telling['warn']} incomplete, stays open")
+    if not delen:
+        return "<span class='muted'>nothing here for the role to run</span>", 0
+    return " · ".join(delen), telling["exec"]
+
+
 def _cl_fmt_payload(it: dict) -> str:
     """Compacte payload-weergave (zoals in het prototype: {sleutel: waarde}). Valt terug op query."""
     payload = it.get("payload")
@@ -259,15 +296,19 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
         # Deze knop is de enige weg naar akkoord; zonder hem staat de daemon stil en zie je niet waarom.
         poort = ""
         if cl.get("akkoord") is False:
+            wat, n_exec = _gate_samenvatting(items)
             knop = (f"<form method='post' action='/action'>{hid()}"
                     f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                     f"<button class='btn ok sm' type='submit' name='action' value='plan_akkoord'>"
-                    f"▶ go ahead</button></form>") if rw else ""
+                    f"▶ go ahead</button></form>") if (rw and n_exec) else ""
+            # Geen knop als er niets te draaien valt: dan is 'go ahead' een lege belofte, en de
+            # samenvatting zegt al waarom. Weggooien of zelf afvinken is dan de weg.
             poort = (f"<div class='ck-gate'><span class='chip amber'>⏸ waiting for your go-ahead</span>"
-                     f"<span class='muted'>nothing runs until you approve this plan</span>{knop}</div>")
+                     f"{knop}<span class='ck-gate-wat'>{wat}</span></div>")
         elif cl.get("akkoord_door"):
+            wat, _ = _gate_samenvatting(items)
             poort = (f"<div class='ck-gate'><span class='chip muted'>▶ approved by "
-                     f"{_e(cl['akkoord_door'])}</span></div>")
+                     f"{_e(cl['akkoord_door'])}</span><span class='ck-gate-wat'>{wat}</span></div>")
         rows = ""
         for it in items:
             d = it.get("done")

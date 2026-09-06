@@ -835,6 +835,11 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-gate{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.2rem 0 .6rem;padding:.45rem .6rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius)}
 .ck-gate .muted{font-size:.72rem}
 .ck-gate form{margin-left:auto}
+/* De samenvatting krijgt een eigen regel (flex-basis 100%), zodat de chip en de knop bovenaan naast
+   elkaar blijven staan en de uitleg eronder de volle breedte heeft. */
+.ck-gate-wat{flex:1 1 100%;font-size:.74rem;line-height:1.7;color:var(--gray)}
+.ck-gate-wat b{color:var(--ink)}
+.ck-gate-wat .ck-skill{margin-left:.25rem}
 .ck-prog{display:flex;align-items:center;gap:.6rem;margin:.2rem 0 .6rem}
 .ck-prog .pbar{flex:1 1 auto;width:auto}
 .ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}
