@@ -1,0 +1,119 @@
+{
+  "_wat": "Cirkelbrede capaciteit: welk gereedschap mag een rol pakken als er een project ligt.",
+  "_hoe": [
+    "Een rugzak is GEDEELD. Elke rol mag elke rugzak gebruiken; dit bestand zegt alleen welk",
+    "middel in welke rugzak zit. Wie waarover BESLIST verandert hier niet: de domeinpoort",
+    "(skill_meta.schrijft_in_domein) blijft absoluut en draait ná dit bestand. Een skill die in",
+    "een domein beslist hoort hier dus niet thuis; staat hij er per ongeluk toch in, dan weigert",
+    "de poort hem alsnog voor elke rol die dat domein niet houdt.",
+    "",
+    "Waarom groepen en niet één lijst: de planner krijgt deze catalogus in zijn prompt. Vijftig",
+    "middelen achter elkaar is zowel een lengte- als een keuzeprobleem. Gegroepeerd ziet het model",
+    "eerst welke SOORT vraag dit is en kiest het daarbinnen.",
+    "",
+    "Wat hier NIET in hoort, en waarom:",
+    "  - beslis-skills (keyword_review): die blijven bij de domeinhouder",
+    "  - periodieke skills (claims_site_scan, regulation_watch, materiaal_*): die lopen op de",
+    "    dagpuls via settings.pulse_skills en horen bij de rol die de belofte houdt, niet bij",
+    "    iedereen die het gereedschap zou kunnen pakken",
+    "  - treden (google_patents, semscholar_tldr, serpapi_trends): die hangen als alternatief",
+    "    onder een andere skill in SKILL_LADDERS, dat is geen aparte keuze",
+    "  - pure databronnen (gdelt_tone, trends_categorie, alphavantage_index, co2_village): die",
+    "    vullen vanzelf hun dagreeks; daar stelt niemand een losse vraag aan",
+    "",
+    "Ontbreekt dit bestand, dan valt alles terug op het rol-DNA en gedraagt het dorp zich",
+    "precies als voorheen.",
+    "",
+    "Beheerd door de Circle Lead. Wijzigen is operationeel en omkeerbaar, geen governance-ronde:",
+    "een rugzak zegt 'dit middel is beschikbaar', nooit 'deze rol gaat hierover'."
+  ],
+
+  "buiten": {
+    "stagiair": "Sid",
+    "wat": "wat er buiten ons gebeurt: markt, mensen, wetenschap, patenten",
+    "skills": [
+      "community_listening",
+      "competitor_news",
+      "competitor_discover",
+      "google_trends",
+      "trend_reindex",
+      "ngram_culture",
+      "openalex_evidence",
+      "epo_patents",
+      "openlibrary_search_inside",
+      "claim_evidence",
+      "cert_evidence",
+      "haal_pagina"
+    ]
+  },
+
+  "onze_cijfers": {
+    "stagiair": "Sid",
+    "wat": "hoe wij ervoor staan: bezoek, vindbaarheid, verkoop, gezondheid van de site",
+    "skills": [
+      "plausible_stats",
+      "gsc_performance",
+      "shopify_sales",
+      "site_health",
+      "keywords_everywhere",
+      "linkbuilding_targets"
+    ]
+  },
+
+  "schrijven": {
+    "stagiair": "Wendy",
+    "wat": "er moet tekst komen",
+    "skills": [
+      "content_schrijven",
+      "gsc_report",
+      "bulletin_schrijven",
+      "field_note",
+      "voorstel_schrijven"
+    ]
+  },
+
+  "mag_dit": {
+    "stagiair": "Wendy",
+    "wat": "is dit toegestaan en onderbouwd? (EU-claimregels)",
+    "skills": [
+      "content_check",
+      "claims_check"
+    ]
+  },
+
+  "wat_weten_we_al": {
+    "stagiair": "Noochie",
+    "wat": "ordenen, verbanden leggen, terugkijken op eerder werk",
+    "_let_op": [
+      "atomic_insights is hier bewust UIT (6 sept). Zijn eigen omschrijving zegt dat hij ruwe",
+      "onderzoeksdata destilleert tot 'atomaire, ALGEMENE inzichten'. Algemene inzichten heeft het",
+      "model zelf al; die hoeven wij niet te fabriceren en op te slaan. Wat het model NIET heeft is",
+      "wat wij vroegen, vonden en besloten. Dat is het onderscheid waarop deze rugzak nu geknipt is:",
+      "kroniek_interpret en library_lookup gaan over ONS, en die blijven.",
+      "",
+      "curate en verband_voorstel staan er nog in maar staan op de nominatie. Ze bedienen de",
+      "kaartjeslaag, en of die laag zijn kosten waard is hangt af van dezelfde vraag. Ze zitten",
+      "bovendien vast aan de woordketen (Librarian <-> HarryHemp) uit fase 3, dus dat is een",
+      "beslissing die daar hoort en niet hier."
+    ],
+    "skills": [
+      "curate",
+      "verband_voorstel",
+      "onderzoeksvraag",
+      "kroniek_interpret",
+      "library_lookup"
+    ]
+  },
+
+  "basis": {
+    "stagiair": "",
+    "wat": "leidingwerk dat elke rol altijd heeft: eerst kijken, jezelf tegenspreken, doorgeven",
+    "skills": [
+      "weten_we_dit_al",
+      "ruis_check",
+      "tegenspraak",
+      "escaleer",
+      "projectverzoek"
+    ]
+  }
+}
