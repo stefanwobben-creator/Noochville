@@ -178,10 +178,13 @@ class TrendsSkill(DataSourceSkill):
     DEFAULT_FREQUENCY = "weekly"
     cost = "rate_limited"
     description = (
-        "Haalt Google Trends-data op per geo/locale "
-        "(interesse + gerelateerde zoekopdrachten). "
-        "Woorden per geo komen uit het meertalige Lexicon. "
-        "Fail-closed per geo×term."
+        "Google Trends interest over time per geo/locale, plus related queries. THE SOURCE FOR "
+        "'is this a trend or a hype': it reaches back years, where `keywords_everywhere` stops at "
+        "twelve months. A month says nothing and twelve months only shows the season — ask for "
+        "24 or 36 months before calling anything a trend. Set `timeframe` (Google's own syntax: "
+        "'today 12-m', 'today 5-y', 'all'); default is 'today 12-m', which is the SHORTEST "
+        "defensible window. Words per geo come from the multilingual Lexicon. Fail-closed per "
+        "geo×term."
     )
 
     def available_metrics(self, context=None) -> list[str]:

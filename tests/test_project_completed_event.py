@@ -74,7 +74,7 @@ def test_1_checklist_af_wacht_op_review(tmp_path):
     assert p.get("review_raised") is True and p.get("outcome") in (None, "")   # outcome pas bij Done
     assert done_evt == []                                              # GEEN autonome project_completed
     assert len(review_evt) == 1 and review_evt[0]["project_id"] == pid
-    assert any(e.get("text", "").startswith("✅ Checklist voltooid") for e in p.get("log", []))
+    assert any(e.get("text", "").startswith("✅ Checklist complete") for e in p.get("log", []))
 
 
 # 2. Onvolledige checklist (blijft ACTIEF) → geen event

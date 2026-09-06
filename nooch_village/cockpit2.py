@@ -1499,10 +1499,10 @@ def _act_proj_done(c):
             from nooch_village.projects import checklist_progress, not_answered_note
             done, telbaar = checklist_progress(cl)
             weg = not_answered_note(cl)
-            outcome = (f"checklist voltooid ({done}/{telbaar}) — goedgekeurd na review"
-                       + (f" · {weg} — dit deel is NIET beantwoord" if weg else ""))
+            outcome = (f"checklist complete ({done}/{telbaar}) — approved after review"
+                       + (f" · {weg} — this part is NOT answered" if weg else ""))
         else:
-            outcome = "goedgekeurd na review"
+            outcome = "approved after review"
         pj.complete(pid, outcome); msg = "✓ afgerond"
         # HET VERSLAG STELT ZICHZELF SAMEN — één keer, hier, niet elke puls. Uit wat er al ligt:
         # definitie + checklist + gesprek + het bestaande document. Het resultaat is een CONCEPT
@@ -2166,9 +2166,9 @@ def _act_plan_akkoord(c):
             return nxt, ""                               # geen open akkoord-vraag -> stil, geen valse melding
         # Op de wall, niet alleen in een flash: over een week is "wie zei ga maar doen, en wanneer?"
         # precies de vraag die je stelt als een project iets deed wat je niet verwachtte.
-        pj.add_role_message(g("pid"), f"▶️ Uitvoerplan goedgekeurd door {username or 'een mens'} — "
-                                      f"de rol mag de items draaien.")
-        return nxt, "▶️ plan goedgekeurd — de rol pakt het binnen enkele seconden op"
+        pj.add_role_message(g("pid"), f"▶️ Execution plan approved by {username or 'a human'} — "
+                                      f"the role may run the items.")
+        return nxt, "▶️ plan approved — the role picks it up within seconds"
 
 
 def _act_checklist_remove(c):

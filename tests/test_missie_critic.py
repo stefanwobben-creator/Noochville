@@ -400,7 +400,7 @@ def test_guard_leeg_project_wordt_gevlagd(tmp_path):
     item = p["checklists"][0]["items"][0]
     assert item["done"] is True and item["leeg"] is True          # afgevinkt, maar geen antwoord
     from nooch_village.projects import not_answered_note
-    assert "uitgevoerd zonder resultaat" in not_answered_note(p["checklists"][0])
+    assert "run without a result" in not_answered_note(p["checklists"][0])
     assert p.get("critic_verdict") == "afgewezen"
     labels = mc.alle(str(tmp_path))
     assert labels and labels[0]["oordelen"]["substantieel"] is False

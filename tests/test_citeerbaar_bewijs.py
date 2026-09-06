@@ -180,10 +180,13 @@ def test_de_synthese_regel_noemt_beide_helften():
     """De valkuil van deze fix is dat het rapport vaag wordt. Grondering moet het PRECIEZER maken:
     heb je het specifieke niet, zeg dan wat je wél hebt met bron — niet 'mogelijk zorgen'."""
     src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert "een score, een status" in src and "wetsartikel of bepaling" in src
-    assert "Terugvallen op 'er zijn mogelijk zorgen' is FOUT" in src
-    assert "Verbied jezelf het verzinnen" in src
-    assert "CITEERBARE FEITEN" in src
+    # De prompt is Engels sinds 06-09-2026; de EISEN zijn ongewijzigd. Let op de
+    # regelafbrekingen: deze asserts moeten binnen één string-literal vallen, anders toetsen ze
+    # niets meer zodra iemand de tekst opnieuw laat afbreken.
+    assert "score, a status, a percentage, a certification and a legal article or provision" in src
+    assert "Falling back on 'there may be concerns' " in src
+    assert "Forbid yourself invention" in src
+    assert "CITABLE FACTS" in src
 
 
 def test_migratie_ontdubbelt_bestaande_stapels_zonder_te_wissen(tmp_path):
@@ -302,5 +305,6 @@ def test_de_schrijver_leest_een_groen_stoplicht_niet_als_goedkeuring():
     en 'kan zonder wijziging blijven staan'. Een term-scan die niets vlagt is geen juridisch
     oordeel, en voor compliance is die categoriefout gevaarlijker dan een gemist signaal."""
     src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert "een SIGNAAL, geen" in src and "juridisch of veiligheidsoordeel" in src
-    assert "veilig te gebruiken" in src and "mag zonder wijziging blijven staan" in src
+    assert "a traffic light from a term scan is a SIGNAL, not a" in src
+    assert "legal or safety judgement." in src
+    assert "not 'safe to use', not " in src and "'may stay as it is', not 'approved'" in src

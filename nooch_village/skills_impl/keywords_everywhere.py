@@ -108,7 +108,12 @@ class KeywordsEverywhereSkill(DataSourceSkill):
     cost = "credits"
     required_env = ("KEYWORDS_EVERYWHERE_API_KEY",)
     side_effect_free = True
-    description = "Haalt echte search volume, CPC, competitie en 12-maands trend per keyword uit de Keywords Everywhere API (geen mock)."
+    description = (
+        "Real search volume, CPC, competition and a 12-month trend per keyword, from the Keywords "
+        "Everywhere API. TWELVE MONTHS IS THIS SOURCE'S CEILING, not a setting: it is what the API "
+        "returns. Twelve months shows seasonality, not whether something is structurally growing — "
+        "for that question use `google_trends` with a multi-year timeframe."
+    )
 
     def available_metrics(self, context=None) -> list[str]:
         """DYNAMISCHE velden: de approved Library-keywords als veilige sleutels (alleen zoekvolume).

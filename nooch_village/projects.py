@@ -1240,9 +1240,9 @@ def not_answered_note(project_or_cl, max_toon: int = 2) -> str:
     # Zonder deze groep is een project waarin élke taak leegliep niet van een afgerond project te
     # onderscheiden — de duurste vorm van valse voltooiing.
     leeg = empty_items(project_or_cl)
-    for groep, label, redenveld in ((weg, "overgeslagen", "skip_reason"),
-                                    (mens, "mens-taak/taken open", "reason"),
-                                    (leeg, "uitgevoerd zonder resultaat", "leeg_reden")):
+    for groep, label, redenveld in ((weg, "skipped", "skip_reason"),
+                                    (mens, "human task(s) still open", "reason"),
+                                    (leeg, "run without a result", "leeg_reden")):
         if not groep:
             continue
         stukken = []
@@ -1250,8 +1250,8 @@ def not_answered_note(project_or_cl, max_toon: int = 2) -> str:
             reden = (it.get(redenveld) or "").strip()
             stukken.append(f"'{(it.get('text') or '?')[:60]}'" + (f" ({reden[:80]})" if reden else ""))
         rest = len(groep) - len(stukken)
-        delen.append(f"{len(groep)} taak/taken {label}: " + ", ".join(stukken)
-                     + (f" (+{rest} andere)" if rest > 0 else ""))
+        delen.append(f"{len(groep)} task(s) {label}: " + ", ".join(stukken)
+                     + (f" (+{rest} more)" if rest > 0 else ""))
     return " · ".join(delen)
 
 

@@ -361,10 +361,10 @@ def test_overgeslagen_taak_staat_apart_in_de_einddocument_opdracht(tmp_path):
                                 projects=ledger, personas=None, record=None, settings={},
                                 project=p, force_final=True, log=logging.getLogger("t"))
     prompt = m.call_args[0][0]
-    assert "NIET BEANTWOORDE TAKEN" in prompt
+    assert "UNANSWERED TASKS" in prompt
     assert "valt buiten scope" in prompt
-    assert "NIET beantwoord" in prompt
-    assert "conclusie" in prompt.lower()                     # moet in de conclusie benoemd worden
+    assert "not answered" in prompt
+    assert "conclusion" in prompt.lower()                     # moet in de conclusie benoemd worden
 
 
 def test_review_melding_benoemt_de_overgeslagen_taak(tmp_path):
@@ -377,9 +377,9 @@ def test_review_melding_benoemt_de_overgeslagen_taak(tmp_path):
 
     resolve_item(ledger, pid, clid, item["id"], "skip", reason="geen labcapaciteit")
 
-    melding = [e["text"] for e in ledger.get(pid).get("log", []) if "klaar voor review" in e["text"]][-1]
+    melding = [e["text"] for e in ledger.get(pid).get("log", []) if "ready for review" in e["text"]][-1]
     assert "materiaal-analyse" in melding and "geen labcapaciteit" in melding
-    assert "NIET beantwoord" in melding
+    assert "NOT answered" in melding
 
 
 def test_afrond_uitkomst_draagt_de_overgeslagen_taak_mee(tmp_path):
@@ -397,7 +397,7 @@ def test_afrond_uitkomst_draagt_de_overgeslagen_taak_mee(tmp_path):
     cockpit2_.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
 
     uitkomst = cockpit2._Stores(dd).projects.get(pid)["outcome"]
-    assert "overgeslagen" in uitkomst and "NIET beantwoord" in uitkomst
+    assert "skipped" in uitkomst and "NOT answered" in uitkomst
 
 
 def test_voortgangsbadge_markeert_een_overgeslagen_taak(tmp_path):

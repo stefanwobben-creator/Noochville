@@ -195,3 +195,26 @@ def test_geen_nederlandse_prompt_meer_bij_een_reason_aanroep():
                 gevonden.append(f"{f.name}:{src[:m.start()].count(chr(10)) + 1}")
     assert not gevonden, ("Nederlandse prompt(s) naar het model, terwijl de inhoudslaag sinds "
                           f"06-09-2026 Engels is: {gevonden}")
+
+
+# ── Een trend is geen maand ─────────────────────────────────────────────────────────────────────
+
+def test_de_skills_zeggen_zelf_welk_venster_een_trend_nodig_heeft():
+    """GEMETEN AANLEIDING (6 sept, eerste echt onderzoeksrapport). De planner koos
+    `keywords_everywhere` omdat die 'zoekvolume' heet, kreeg twaalf maanden terug, en het rapport
+    concludeerde daarop dat de interesse 'seizoensgebonden schommelt maar niet structureel groeit'.
+    Over twaalf maanden is dat oordeel niet te vellen: je ziet precies één seizoen.
+
+    De regel hoort niet in een setting maar in wat de skills OVER ZICHZELF zeggen, want dat is wat de
+    planner leest bij het kiezen. Een setting die niemand leest verandert de keuze niet."""
+    from nooch_village.registry_factory import build_skill_registry
+    reg = build_skill_registry()
+
+    ke = reg.get("keywords_everywhere").description
+    assert "CEILING" in ke.upper()                       # 12 maanden is de bron, geen keuze
+    assert "google_trends" in ke                          # en het wijst door naar wie het wél kan
+
+    gt = reg.get("google_trends").description
+    assert "trend or a hype" in gt
+    assert "24 or 36 months" in gt
+    assert "today 5-y" in gt                              # de syntax staat erbij, anders raadt het model
