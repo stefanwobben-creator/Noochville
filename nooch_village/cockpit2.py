@@ -56,7 +56,7 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT,
+from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT, _EFFORT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
@@ -1486,7 +1486,7 @@ def _act_proj_done(c):
         _doc = _ds.read(pid) if _ds is not None else ""
         # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
         p = pj.get(pid) or {}
-        cl = next((c for c in p.get("checklists", []) if c.get("title") == PREP_CHECKLIST_TITLE), None)
+        cl = uitvoerlijst(p)                     # dezelfde lijst als de rol afwerkte, niet 'die ene naam'
         if cl is not None:
             # De uitkomst is wat er later over dit project wordt teruggelezen: overgeslagen taken
             # horen daar expliciet in, anders leest een project dat afrondde zonder zijn kernitem
@@ -2137,6 +2137,18 @@ def _act_checklist_add(c):
         return nxt, msg
 
 
+def _act_checklist_uitvoer(c):
+        # AUTHZ: rolvervuller of Circle Lead — dezelfde poort als check_toggle. Aanwijzen welke lijst
+        # de rol afwerkt is operationeel werk binnen de rol, geen governance-besluit.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        if not pj.set_checklist_uitvoer(g("pid"), g("clid")):
+            return nxt, ""
+        return nxt, "▶️ de rol werkt voortaan deze lijst af"
+
+
 def _act_plan_akkoord(c):
         # AUTHZ: rolvervuller of Circle Lead - dit IS de menselijke poort voor uitvoering. Dezelfde
         # gate als check_toggle: wie het werk van deze rol mag afvinken, mag ook zeggen dat het mag
@@ -2181,9 +2193,10 @@ def _offer_skill(st, pj, pid: str, clid: str) -> bool:
     cl = next((c for c in (p.get("checklists") or []) if c.get("id") == clid), None)
     if cl is None:
         return refuse("OFFER_SKIP_NO_CL", "checklist niet gevonden op project", pid=pid, clid=clid)
-    if cl.get("title") != PREP_CHECKLIST_TITLE:          # alleen de uitvoer-checklist
-        return refuse("OFFER_SKIP_TITLE", "niet de Uitvoerplan-checklist → geen aanbod (title-gate)",
-                      pid=pid, clid=clid, title=cl.get("title"))
+    # GEEN TITEL-POORT MEER. Hij stond hier omdat alleen "Uitvoerplan" werd uitgevoerd, en die
+    # koppeling is verplaatst naar `projects.uitvoerlijst`: een project heeft één lijst die de rol
+    # afwerkt, en welke dat is staat in een veld en niet in een naam. Aanbieden mag daarom overal —
+    # het accepteren van een aanbod is juist wat een enkele lijst tot uitvoerlijst maakt (regel 3).
     items = cl.get("items") or []
     if not items:
         return refuse("OFFER_SKIP_EMPTY", "Uitvoerplan leeg", pid=pid, clid=clid)
@@ -5755,6 +5768,7 @@ ACTIONS = {
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
     "plan_akkoord": _act_plan_akkoord,
+    "checklist_uitvoer": _act_checklist_uitvoer,
     "check_add": _act_check_add,
     "check_accept": _act_check_accept,
     "check_toggle": _act_check_toggle,

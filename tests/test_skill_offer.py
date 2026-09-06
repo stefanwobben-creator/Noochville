@@ -1,7 +1,9 @@
 """Stil skill-aanbod bij checklist-toevoeging.
 
 - plan_offers: cockpit-side match (LLM gestubd), machine-check tegen DNA, fail-closed.
-- Trigger: alleen op de "Uitvoerplan"-checklist bij een echte rol-owner; II/andere titel → geen aanbod.
+- Trigger: op ELKE checklist van een project met een echte rol-owner; II-owner → geen aanbod. De
+  titel-poort is vervallen (scope "aanbod op elk item"): welke lijst de rol afwerkt staat sindsdien
+  in een veld, niet in een naam (projects.uitvoerlijst).
 - Accepteren: hangt skill+payload aan het item, aanbod weg. Negeren = afwijzen (blijft staan).
 - Render: het aanbod verschijnt als "🤖 kan dit oppakken"-knop.
 """
@@ -87,12 +89,15 @@ def test_trigger_alleen_op_uitvoerplan(tmp_path):
     assert off and off["skill"] == "openalex_evidence"
 
 
-def test_trigger_andere_titel_geen_aanbod(tmp_path):
-    dd, pid, clid = _setup(tmp_path, title="Mijn eigen lijst")
+def test_trigger_ook_op_een_eigen_titel(tmp_path):
+    """De omkering van de oude test_trigger_andere_titel_geen_aanbod. Nina's lijst heet "Acties uit
+    overleg" en Lottes "What's needed"; die kregen nooit een aanbod. Nu wel."""
+    dd, pid, clid = _setup(tmp_path, title="Acties uit overleg")
     fake = [{"skill": "openalex_evidence", "payload": {}, "payload_ok": True}]
     with patch("nooch_village.cockpit2.plan_offers", return_value=fake):
         cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert _offer_of(dd, pid, clid) is None                     # geen "Uitvoerplan" → geen aanbod
+    off = _offer_of(dd, pid, clid)
+    assert off and off["skill"] == "openalex_evidence"
 
 
 def test_trigger_ii_owner_geen_aanbod(tmp_path):
@@ -138,11 +143,16 @@ def _codes(caplog):
     return " ".join(r.getMessage() for r in caplog.records)
 
 
-def test_refuse_title_gate(tmp_path, caplog):
+def test_geen_title_gate_meer(tmp_path, caplog):
+    """De poort is weg, dus zijn refuse-code hoort ook weg te zijn. Blijft hij per ongeluk staan,
+    dan weigert de cockpit stil op een titel terwijl de daemon die lijst wél zou draaien."""
     dd, pid, clid = _setup(tmp_path, title="Mijn eigen lijst")
-    with caplog.at_level("WARNING", logger="nooch.refuse"):
+    with patch("nooch_village.cockpit2.plan_offers", return_value=[None]), \
+         caplog.at_level("WARNING", logger="nooch.refuse"):
         cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert "OFFER_SKIP_TITLE" in _codes(caplog)
+    codes = _codes(caplog)
+    assert "OFFER_SKIP_TITLE" not in codes
+    assert "OFFER_NO_MATCH" in codes                            # hij liep dóór tot de match
 
 
 def test_refuse_ii_owner(tmp_path, caplog):
