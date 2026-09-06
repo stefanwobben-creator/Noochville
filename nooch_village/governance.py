@@ -315,9 +315,82 @@ class Records:
         return None
 
 
+class GovernanceGate:
+    """De G0-G4 geldigheidspoort, losgekoppeld van welke rol dan ook.
+
+    WAAROM DIT HIER STAAT EN NIET IN EEN ROL. Deze poort zat in `roles.Facilitator`. Op 28 augustus
+    2026 legde een afslankingsronde die rol slapend, en toen stond het dorp drie dagen stil: de
+    dagcadans woonde óók in die rol en niemand luidde de bel meer. Zonder foutmelding, want er faalde
+    niets — er tikte alleen niets meer. De klok is daarna naar `dagcyclus.Dagcyclus` verhuisd, naast
+    de rollen in plaats van erin.
+
+    De poort is toen blijven zitten, en dat is dezelfde weeffout één laag dieper. In productie was
+    `Facilitator._on_proposal_raised` de ENIGE luisteraar op `proposal_raised`: archiveer of verslaap
+    die rol en elk governance-voorstel blijft onbeantwoord liggen. Stil, want er faalt niets.
+
+    Het principe is hetzelfde als bij de klok: over een rol mag het dorp besluiten, over de REGELS
+    WAARMEE het besluit niet. Een poort die kan verdwijnen omdat iemand een rol archiveert is geen
+    poort.
+
+    Gedrag ongewijzigd: zelfde `Gate`, zelfde vier events, zelfde adopt-by-default. Alleen de
+    afzender verschuift van de rol naar het dorp, en objecties integreren blijft mensenwerk.
+    """
+
+    BRON = "governance_gate"
+
+    def __init__(self, records: "Records", bus: EventBus, context=None):
+        self.records = records
+        self.bus = bus
+        self.context = context
+        self.log = logging.getLogger("village.governance_gate")
+        self._gate = Gate()
+        bus.subscribe("proposal_raised", self._on_proposal_raised)
+
+    def _on_proposal_raised(self, event: Event) -> None:
+        proposal = proposal_from_dict(event.data["proposal"])
+        self.log.info("📋 voorstel ontvangen van '%s': %s %s",
+                      proposal.proposer_role, proposal.change.kind.value,
+                      proposal.change.role_id or "")
+
+        passed, gate_name, gate_reason = self._gate.check(proposal, self.records, self.context)
+
+        if not passed and gate_name == "G0":
+            # G0-fout: structureel ongeldig, terug naar proposer — geen menselijk oordeel
+            self.log.warning("❌ G0 ongeldig: %s", gate_reason)
+            self.bus.publish(Event("proposal_invalid", {
+                "proposal_id": proposal.id,
+                "proposer_role": proposal.proposer_role,
+                "gate": "G0",
+                "reason": gate_reason,
+            }, self.BRON))
+            return
+
+        if not passed:
+            # G1-G4: escaleren naar mens
+            proposal.status = "escalated"
+            proposal.escalation_gate = gate_name
+            proposal.escalation_reason = gate_reason
+            self.log.warning("🙋 escaleert naar mens (poort %s): %s", gate_name, gate_reason)
+            self.bus.publish(Event("_store_pending_proposal",
+                                   {"proposal": proposal_to_dict(proposal)}, self.BRON))
+            self.bus.publish(Event("governance_review_requested", {
+                "proposal_id": proposal.id,
+                "proposal": proposal_to_dict(proposal),
+                "gate": gate_name,
+                "reason": gate_reason,
+                "trigger_example": proposal.trigger_example,
+            }, self.BRON))
+            return
+
+        proposal.status = "adopted"
+        self.log.info("✅ voorstel aangenomen via poort (alle G0-G4 geslaagd)")
+        self.bus.publish(Event("proposal_gate_passed",
+                               {"proposal": proposal_to_dict(proposal)}, self.BRON))
+
+
 class Secretary:
     """Bezit de records en de adoptie-schrijfactie. Heeft GEEN veto:
-    de Facilitator heeft de poort al gedraaid. De Secretary schrijft alleen."""
+    de GovernanceGate heeft de poort al gedraaid. De Secretary schrijft alleen."""
 
     def __init__(self, records: Records, bus: EventBus, links=None):
         self.records = records

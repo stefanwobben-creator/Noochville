@@ -1206,14 +1206,22 @@ class Facilitator(Inhabitant):
 
     Een hartslag hoort niet af te hangen van een deelnemer: over een rol mag het dorp besluiten,
     over zijn klok niet. De cadans woont daarom in `dagcyclus.Dagcyclus`, naast de rollen in plaats
-    van erin. Deze rol mag hierna gewoon slapen."""
+    van erin. Deze rol mag hierna gewoon slapen.
+
+    DE POORT IS HIER OOK WEG (6 september 2026), en om exact dezelfde reden. `_on_proposal_raised`
+    draaide G0-G4 en was in productie de ENIGE luisteraar op `proposal_raised`. Zolang dat zo was,
+    kon niemand deze rol archiveren of verslapen zonder dat élk governance-voorstel stil bleef
+    liggen. Dezelfde weeffout als de klok, één laag dieper: over een rol mag het dorp besluiten,
+    over de REGELS WAARMEE het besluit niet.
+
+    De poort woont nu in `governance.GovernanceGate`, naast de Secretary. Wat hier overblijft is een
+    lege rol, en dat is met opzet zichtbaar gelaten: archiveren is een governance-handeling, geen
+    commit."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._gate = Gate()
-        self.react("proposal_raised", self._on_proposal_raised)
 
-    def _on_proposal_raised(self, event: Event) -> None:
+    def _on_proposal_raised_HISTORISCH(self, event: Event) -> None:
         proposal = proposal_from_dict(event.data["proposal"])
         self.log.info("📋 voorstel ontvangen van '%s': %s %s",
                       proposal.proposer_role, proposal.change.kind.value,
