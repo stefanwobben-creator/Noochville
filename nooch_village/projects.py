@@ -483,16 +483,29 @@ class ProjectLedger:
                 return cl
         return None
 
-    def checklist_add(self, pid: str, title: str = "", *, akkoord: bool | None = None) -> dict | None:
+    def checklist_add(self, pid: str, title: str = "", *, akkoord: bool | None = None,
+                      herplan_van: str = "") -> dict | None:
         """Voeg een checklist toe. `akkoord=False` markeert 'm als VOORSTEL: een plan dat een mens eerst
         moet goedkeuren (zie `plan_wacht_op_akkoord`). Default None laat de sleutel weg, zodat een met de
-        hand gemaakte checklist blijft doen wat hij altijd deed."""
+        hand gemaakte checklist blijft doen wat hij altijd deed.
+
+        `herplan_van` = het checklist-item dat deze lijst heeft laten ontstaan (zie
+        `Inhabitant._herplan_na_strategie`). Twee dingen hangen eraan, en allebei zijn ze de reden dat
+        het een VELD is en geen afspraak over titels:
+
+        1. **Één ronde.** Bestaat er al een lijst met dit veld, dan wordt er niet opnieuw gepland. Zonder
+           die rem kan een strategie een lijst opleveren die weer een strategie bevat, en dan plant het
+           dorp door zonder ooit iets te zoeken.
+        2. **Herkomst.** Je kunt teruglezen wélke stap dit plan voorstelde. Dat is precies wat een
+           onderzoek navolgbaar maakt: niet alleen wat er gezocht is, maar op wiens voorstel."""
         p = self._projects.get(pid)
         if p is None:
             return None
         cl = {"id": uuid.uuid4().hex[:8], "title": (title or "").strip()[:80] or "Checklist", "items": []}
         if akkoord is not None:
             cl["akkoord"] = bool(akkoord)
+        if herplan_van:
+            cl["herplan_van"] = str(herplan_van)[:64]
         self._checklists(p).append(cl)
         p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()

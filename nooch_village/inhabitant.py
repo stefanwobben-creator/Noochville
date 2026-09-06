@@ -1125,6 +1125,82 @@ class Inhabitant(threading.Thread):
         except Exception:
             return ""
 
+    def _herplan_na_strategie(self, pid: str, item: dict, result: dict, ledger) -> None:
+        """De strategie heeft de volgende stappen bepaald; schrijf ze als tweede uitvoerlijst.
+
+        DIT IS DE ENIGE PLEK WAAR HET DORP TWEE KEER PLANT, en dat is met opzet zo smal gehouden.
+
+        Onderzoek is een reeks waarin elke stap de vorige gebruikt: de vraag stuurt de strategie, de
+        strategie stuurt de bronkeuze. Tot nu toe schreef de planner één lijst bij het voorbereiden en
+        was dat het; een item dat nul treffers gaf liep dood in plaats van zich aan te passen. Gemeten
+        op vijf onderzoeksprojecten uit juli: 15 van de 25 items strandden, waarvan de meeste op een
+        Nederlandse term in een Engelstalig corpus.
+
+        Het plan is geen los briefje naast de strategie — het IS de strategie, opgeschreven als
+        stappen. Daarom staat hier geen nieuwe poort en geen nieuw scherm: de tweede lijst krijgt
+        `akkoord=False` en wacht dus op dezelfde 'go ahead' als elk ander uitvoerplan.
+
+        ÉÉN RONDE, in code en niet in een prompt. Bestaat er al een lijst met `herplan_van`, dan
+        gebeurt hier niets. Zonder die rem kan een strategie een lijst opleveren die weer een
+        strategie bevat, en dan blijft het dorp plannen zonder ooit iets te zoeken. Verbreden bij nul
+        treffers hoort in de skill-ladder, niet in een tweede planronde.
+
+        Fail-soft in elke tak: geen stappen, geen plan, geen lijst → de wall-note met de strategie
+        staat er nog steeds en een mens kan de stappen zelf overnemen. Herplannen is een dienst, geen
+        voorwaarde.
+        """
+        stappen = (result or {}).get("stappen") or []
+        if not stappen:
+            return
+        p = ledger.get(pid)
+        if p is None:
+            return
+        if any(cl.get("herplan_van") for cl in (p.get("checklists") or [])):
+            self.log.info("🔁 project '%s': er is al een herplan-lijst — één ronde, dus niet opnieuw", pid)
+            return
+
+        regels = "\n".join(
+            f"- {s.get('bron')}: search term \"{s.get('term')}\" ({s.get('taal', 'en')})"
+            + (f" — {s['waarom']}" if s.get("waarom") else "")
+            for s in stappen)
+        opdracht = (
+            "A search strategy has already been decided for this project. Turn it into the execution "
+            "plan, ONE item per source below, using EXACTLY the given search term — do not translate "
+            "it, do not improve it. The term was chosen to match that source's corpus, and changing "
+            "it is the failure this step exists to prevent.\n\n"
+            f"{regels}\n"
+            + (f"\nNext term if the first runs thin: {result.get('bij_nul_treffers')}\n"
+               if result.get("bij_nul_treffers") else ""))
+
+        plan = self._plan_checklist(self._scope_text(p) or "", description=opdracht,
+                                    exclude_pid=pid)
+        if plan is None or not plan.get("items"):
+            self.log.warning("🔁 project '%s': herplannen leverde geen plan — strategie staat wel "
+                             "op de wall, een mens kan de stappen overnemen", pid)
+            return
+
+        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False,
+                                  herplan_van=str(item.get("id") or ""))
+        if cl is None:
+            return
+        for it in plan["items"]:
+            skill = it.get("skill")
+            payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
+            ok = True
+            if skill and self._missing_required(skill, payload or {}):
+                ok = False
+            ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
+                             payload_ok=ok, reason=it.get("reason", ""))
+        # De rol werkt vanaf nu deze lijst, niet meer de strategie-lijst (exclusief, zie
+        # projects.set_checklist_uitvoer). Zonder dit zou `uitvoerlijst` op titel terugvallen en
+        # zijn er twee lijsten met dezelfde naam — dan bepaalt de volgorde in het bestand wat draait.
+        ledger.set_checklist_uitvoer(pid, cl["id"])
+        self.log.info("🔁 project '%s': tweede uitvoerplan uit de strategie (%d stappen), wacht op akkoord",
+                      pid, len(plan["items"]))
+        self._notify_rol(p.get("owner") or self.id, pid,
+                         f"🔁 Strategy decided, {len(plan['items'])} steps planned. "
+                         f"Waiting for your go-ahead before anything runs.")
+
     def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "",
                         description: str = "", kennis: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
@@ -1523,6 +1599,8 @@ class Inhabitant(threading.Thread):
                 self.log.info("✅ project '%s': item '%s' via %s afgerond (inhoud uit '%s')", pid,
                               item.get("text", "")[:40], src_label,
                               (archetype[1] if archetype else "?"))
+                if used_source == "zoekstrategie":
+                    self._herplan_na_strategie(pid, item, result, ledger)
             elif status == "leeg":
                 # Actie UITGEVOERD, geen resultaat — eersteklas no-data-uitkomst (De Kroniek B3), géén
                 # mislukking: schrijf 't naar de wall ÉN vink af, zodat het project de review-gate haalt en

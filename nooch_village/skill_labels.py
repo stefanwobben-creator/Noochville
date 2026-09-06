@@ -45,6 +45,8 @@ LABELS: dict[str, str] = {
     "plausible_stats": "Counts how many people visit the site",
     "site_health": "Checks whether the site is still standing",
     "haal_pagina": "Fetches a page and quotes the sentence a word appears in",
+    "web_zoek": "Searches the open web and reads the pages it finds",
+    "zoekstrategie": "Decides which sources to search, with which term and in which language",
 
     # ── Writing and checking ─────────────────────────────────────────────
     "content_schrijven": "Writes website copy in the brand's voice",
@@ -149,6 +151,8 @@ MATCH_NL: dict[str, str] = {
     "plausible_stats": "Telt hoeveel mensen de site bezoeken",
     "site_health": "Kijkt of de site nog overeind staat",
     "haal_pagina": "Haalt een pagina op en citeert de zin waarin een woord staat",
+    "web_zoek": "Zoekt op het open web en leest de paginas die hij vindt",
+    "zoekstrategie": "Bepaalt welke bronnen doorzocht worden, met welke term en in welke taal",
     "content_schrijven": "Schrijft website-tekst in de stem van het merk",
     "content_check": "Leest publieke tekst na op verboden en onbewezen claims",
     "claims_check": "Toetst tekst aan de Europese regels voor duurzaamheidsclaims",

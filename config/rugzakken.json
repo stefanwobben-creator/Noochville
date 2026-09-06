@@ -43,7 +43,9 @@
       "openlibrary_search_inside",
       "claim_evidence",
       "cert_evidence",
-      "haal_pagina"
+      "web_zoek",
+      "haal_pagina",
+      "zoekstrategie"
     ]
   },
 
