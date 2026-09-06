@@ -1169,7 +1169,7 @@ class Inhabitant(threading.Thread):
             "it, do not improve it. The term was chosen to match that source's corpus, and changing "
             "it is the failure this step exists to prevent.\n\n"
             f"{regels}\n"
-            + (f"\nIf a source returns nothing: {result.get('bij_nul_treffers')}\n"
+            + (f"\nNext term if the first runs thin: {result.get('bij_nul_treffers')}\n"
                if result.get("bij_nul_treffers") else ""))
 
         plan = self._plan_checklist(self._scope_text(p) or "", description=opdracht,

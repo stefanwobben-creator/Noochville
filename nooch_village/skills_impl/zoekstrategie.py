@@ -39,7 +39,7 @@ log = logging.getLogger("village.skill.zoekstrategie")
 # De bronnen die Sid kan raadplegen, met hun taal-eigenaardigheid erbij. Deze lijst staat hier en niet
 # in de prompt-tekst zelf, zodat een nieuwe bron één regel is in plaats van een prompt-herschrijving.
 BRONNEN: dict[str, str] = {
-    "openalex_evidence": "academic literature, ENGLISH-language corpus — a Dutch term finds nothing",
+    "openalex_evidence": "academic literature, ENGLISH-language corpus — use an English term",
     "epo_patents": "European patent register, English/German/French — use English technical terms",
     "google_patents": "patents worldwide, English",
     "semscholar_tldr": "one-sentence summaries of papers, English",
@@ -47,11 +47,18 @@ BRONNEN: dict[str, str] = {
     "ngram_culture": "word frequency in books over decades, per language corpus — pick the corpus",
     "community_listening": "what people say on Bluesky/YouTube — the language people actually use",
     "competitor_news": "news about known competitor brands, keyless",
+    "web_zoek": "the open web: searches a term and reads the top pages, any language",
     "haal_pagina": "reads ONE public page you already have the URL of",
     "google_trends": "search volume, per country and language",
 }
 
 _MAX_STAPPEN = 6
+
+# Een reden is een EIGENSCHAP van de bron ("English-language corpus"), geen uitsluiting ("not the
+# Dutch term"). Zie `_bevestigend` voor waarom dat verschil de moeite van een vangrail waard is.
+_ONTKENNING = re.compile(
+    r"\b(not|no|never|nor|isn't|doesn't|don't|won't|avoid|rather than|instead of|"
+    r"niet|geen|nooit|vermijd|in plaats van)\b", re.I)
 
 
 class ZoekstrategieSkill(Skill):
@@ -85,16 +92,19 @@ class ZoekstrategieSkill(Skill):
             + f"\nAVAILABLE SOURCES:\n{catalogus}\n\n"
             "Pick 2 to 4 sources. For EACH one give the exact search term you would use and the "
             "language of that term.\n\n"
-            "THE RULE THAT MATTERS MOST: match the term to the corpus, not to the question. An "
-            "English-language corpus needs an English term even when the question is Dutch. Getting "
-            "this wrong returns zero results and reads exactly like 'there is nothing there'.\n\n"
-            "Also say, in one sentence, what to do if a source returns nothing: which broader or "
-            "different term to try.\n\n"
+            "THE RULE THAT MATTERS MOST: match the term to the corpus. An English-language corpus "
+            "takes an English term even when the question is Dutch.\n\n"
+            "WRITE THE PLAN AS WHAT YOU WILL DO. Every sentence names a move you are making. State "
+            "a reason as a property of the source you are using — \"English-language corpus\", "
+            "\"European register\", \"the words people use themselves\" — never as what you are "
+            "leaving out or avoiding. The reader wants your approach, not your exclusions.\n\n"
+            "Also give the term you will reach for next if the first one comes back thin: one "
+            "sentence, one concrete broader or adjacent term.\n\n"
             "Answer ONLY with JSON, exactly this schema:\n"
             '{"strategie": "<2-4 sentences in plain language: what you are going to do and why>", '
             '"stappen": [{"bron": "<source name from the list>", "term": "<the exact search term>", '
-            '"taal": "<en|nl|de|fr>", "waarom": "<one short clause>"}], '
-            '"bij_nul_treffers": "<one sentence>"}'
+            '"taal": "<en|nl|de|fr>", "waarom": "<one short affirmative clause>"}], '
+            '"bij_nul_treffers": "<one sentence naming the next term>"}'
         )
         from nooch_village.llm import reason
         try:
@@ -120,7 +130,7 @@ class ZoekstrategieSkill(Skill):
                 continue
             stappen.append({"bron": bron, "term": term[:120],
                             "taal": str(s.get("taal") or "en").strip()[:5],
-                            "waarom": str(s.get("waarom") or "").strip()[:160]})
+                            "waarom": _bevestigend(str(s.get("waarom") or "").strip()[:160])})
         if not stappen:
             return {"error": "strategie noemde geen bruikbare bron uit de catalogus"}
 
@@ -146,13 +156,40 @@ def _json_uit(rauw):
             return None
 
 
+def _bevestigend(waarom: str) -> str:
+    """Een reden die een ONTKENNING is, verdwijnt. Leeg is beter dan negatief.
+
+    Waarom deze vangrail bestaat: het model kreeg de taalval als NEGATIEF voorbeeld aangeleerd en gaf
+    hem zo ook terug — "niet 'vegan schoenen', het corpus is Engelstalig". Dat leest als een
+    verantwoording tegenover een criticus in plaats van als een plan. Wat de lezer wil weten is wat
+    Sid gaat doen; wat hij niet doet is oneindig lang en nergens interessant.
+
+    Weggooien en niet herschrijven: herschrijven kost een tweede modelronde en levert een zin op die
+    Sid niet gezegd heeft. De reden is bovendien versiering — de bron en de term dragen het werk. Een
+    stap zonder reden is nog steeds een volledige stap; een stap met een negatieve reden niet.
+
+    Grof met opzet: één ontkennend woord is genoeg om de hele clausule te laten vallen. Dat kost af
+    en toe een terechte reden waarin toevallig "no" staat, en dat is de goedkoopste kant van de fout.
+    De prompt vraagt nu bevestigend, dus normaal komt deze vangrail niet in actie.
+    """
+    if not waarom or _ONTKENNING.search(waarom):
+        if waarom:
+            log.info("zoekstrategie: ontkennende reden weggelaten (%r)", waarom[:80])
+        return ""
+    return waarom
+
+
 def _als_tekst(strategie: str, stappen: list, bij_nul: str) -> str:
     """De vorm die op de projectwall landt. Eén blok dat een mens in tien seconden leest en waaruit
-    hij kan zien of de aanpak klopt vóórdat hij op go ahead klikt."""
+    hij kan zien of de aanpak klopt vóórdat hij op go ahead klikt.
+
+    Elke regel is een handeling: dit ga ik doen, hier, met deze term. Ook de laatste — die noemt de
+    volgende term, niet het uitblijven van resultaat. Engels, zoals de hele inhoudslaag sinds
+    06-09-2026."""
     regels = [strategie] if strategie else []
     for s in stappen:
         waarom = f" — {s['waarom']}" if s.get("waarom") else ""
         regels.append(f"• {s['bron']}: “{s['term']}” ({s['taal']}){waarom}")
     if bij_nul:
-        regels.append(f"Bij nul treffers: {bij_nul}")
+        regels.append(f"Next term if the first runs thin: {bij_nul}")
     return "\n".join(regels)

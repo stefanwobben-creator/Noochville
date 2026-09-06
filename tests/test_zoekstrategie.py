@@ -25,7 +25,8 @@ from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.projects import ProjectLedger, plan_wacht_op_akkoord, uitvoerlijst
 from nooch_village.skills import SkillRegistry
-from nooch_village.skills_impl.zoekstrategie import BRONNEN, ZoekstrategieSkill, _als_tekst
+from nooch_village.skills_impl.zoekstrategie import (BRONNEN, _ONTKENNING, ZoekstrategieSkill,
+                                                    _als_tekst, _bevestigend)
 
 GOED = (
     '{"strategie": "Twee bronnen, Engelse termen, breed beginnen.",'
@@ -53,11 +54,14 @@ def test_levert_stappen_met_bron_term_en_taal(monkeypatch):
 
 
 def test_de_wall_tekst_leest_als_een_plan(monkeypatch):
+    """Elke regel is een handeling. Ook de laatste: die noemt de volgende term, niet het
+    uitblijven van resultaat."""
     uit = _skill(GOED, monkeypatch).run({"vraag": "v"}, None)
     t = uit["text"]
     assert "Twee bronnen" in t
     assert 'openalex_evidence: “vegan shoes” (en)' in t
-    assert "Bij nul treffers:" in t
+    assert "Next term if the first runs thin:" in t
+    assert "Bij nul treffers" not in t                    # Engels, zoals de hele inhoudslaag
 
 
 def test_verzonnen_bron_wordt_overgeslagen(monkeypatch):
@@ -104,11 +108,73 @@ def test_de_catalogus_noemt_de_taal_van_elk_corpus():
     assert all(BRONNEN[b].strip() for b in BRONNEN)
 
 
+def test_de_catalogus_zegt_wat_te_doen_en_niet_wat_te_laten():
+    """De catalogus gaat als voorbeeldtekst de prompt in. Stond de taalval er negatief in ("a Dutch
+    term finds nothing"), dan kwam hij er ook negatief uit — het model spiegelt de vorm die het
+    krijgt. Dat is precies de reden dat deze regel hier staat en niet alleen in de prompt."""
+    for bron, tekst in BRONNEN.items():
+        assert not _ONTKENNING.search(tekst), f"{bron} beschrijft zichzelf negatief: {tekst!r}"
+
+
 def test_alle_bronnen_bestaan_echt():
     from nooch_village.registry_factory import build_skill_registry
     bekend = set(build_skill_registry().names())
     onbekend = sorted(b for b in BRONNEN if b not in bekend)
     assert not onbekend, f"catalogus noemt niet-bestaande skills: {onbekend}"
+
+
+# ── het plan zegt wat hij WEL doet ───────────────────────────────────────────
+
+def test_een_ontkennende_reden_haalt_de_uitvoer_niet(monkeypatch):
+    """DE REGEL VAN DIT BLOK. Sid schrijft op wat hij gaat doen. Wat hij niet doet is oneindig lang
+    en nergens interessant, en het leest als een verantwoording tegenover een criticus in plaats van
+    als een plan."""
+    antwoord = ('{"strategie": "x", "stappen": ['
+                '{"bron": "openalex_evidence", "term": "vegan shoes", "taal": "en",'
+                ' "waarom": "niet \'vegan schoenen\', het corpus is Engelstalig"}]}')
+    uit = _skill(antwoord, monkeypatch).run({"vraag": "v"}, None)
+    assert uit["stappen"][0]["waarom"] == ""              # weg, niet herschreven
+    assert uit["stappen"][0]["term"] == "vegan shoes"     # de stap zelf blijft volledig
+
+
+def test_een_bevestigende_reden_blijft_gewoon_staan(monkeypatch):
+    uit = _skill(GOED, monkeypatch).run({"vraag": "v"}, None)
+    assert uit["stappen"][0]["waarom"] == "corpus is Engelstalig"
+    assert "corpus is Engelstalig" in uit["text"]
+
+
+@pytest.mark.parametrize("negatief", [
+    "not the Dutch term", "no Dutch results here", "rather than the Dutch phrasing",
+    "instead of 'vegan schoenen'", "geen Nederlandse term", "vermijd de Nederlandse term",
+])
+def test_bevestigend_herkent_de_gebruikelijke_ontkenningen(negatief):
+    assert _bevestigend(negatief) == ""
+
+
+@pytest.mark.parametrize("bevestigend", [
+    "English-language corpus", "European register", "the words people use themselves",
+    "peer-reviewed, so a claim can lean on it", "shows volume per country",
+])
+def test_bevestigend_laat_een_echte_reden_met_rust(bevestigend):
+    assert _bevestigend(bevestigend) == bevestigend
+
+
+def test_de_prompt_vraagt_om_een_bevestigend_plan(monkeypatch):
+    """De vangrail is de bodem, niet de aanpak: als de prompt om ontkenningen vraagt, gooit de
+    vangrail de halve uitvoer weg en houd je een kaal plan over. Vragen om het goede komt eerst."""
+    gezien = {}
+
+    import nooch_village.llm as llm
+    def _vang(prompt, **kw):
+        gezien["p"] = prompt
+        return GOED
+    monkeypatch.setattr(llm, "reason", _vang)
+    ZoekstrategieSkill().run({"vraag": "v"}, None)
+
+    p = gezien["p"]
+    assert "WRITE THE PLAN AS WHAT YOU WILL DO" in p
+    assert "affirmative" in p
+    assert "next if the first one comes back thin" in p or "next if the first" in p
 
 
 # ── het herplannen ───────────────────────────────────────────────────────────
@@ -186,7 +252,7 @@ def test_het_plan_krijgt_de_term_mee_met_verbod_om_te_vertalen(rol, monkeypatch)
     d = gezien["d"]
     assert 'search term "vegan shoes"' in d
     assert "do not translate" in d
-    assert "verbreed naar plant-based footwear" in d      # het nul-treffers-plan gaat mee
+    assert "Next term if the first runs thin: verbreed naar plant-based footwear" in d
 
 
 def test_zonder_stappen_gebeurt_er_niets(rol):
