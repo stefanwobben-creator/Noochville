@@ -294,10 +294,54 @@ _CL_LEEG = ("<li class='cl-empty'>No actions yet. Put the first step from the me
 #: `json.dumps` en niet `_e` voor csrf en next: dit is een SCRIPT-context, geen HTML-context.
 #: HTML-escapen maakt van `&back=` een `&amp;back=`, en dan post de sleep naar een URL die niet
 #: bestaat. Zelfde keuze als in `projects.py`, om dezelfde reden.
-def _ck_sleep_js(csrf: str, nxt: str) -> str:
+def _ck_sleep_js(csrf: str, nxt: str, waak: bool = False) -> str:
     import json
-    return _CK_SLEEP_JS_ROMP.replace("__VARS__",
-                                     f"var csrf={json.dumps(csrf)},nxt={json.dumps(nxt)},bron=null;")
+    return _CK_SLEEP_JS_ROMP.replace(
+        "__VARS__",
+        f"var csrf={json.dumps(csrf)},nxt={json.dumps(nxt)},bron=null,"
+        f"waak={'true' if waak else 'false'};")
+
+
+def _mag_waken(p: dict, st) -> bool:
+    """Kan er op dit moment een ROL aan deze lijst werken? Alleen dan gaat de pagina meekijken.
+
+    Drie voorwaarden, en alle drie lezen een feit dat al bestaat:
+
+      1. de kaart staat in de lopende kolom (`_ACTIEF_STATUSSEN`, afgeleid uit `_PROJ_COLS`);
+      2. de UITVOERLIJST heeft nog een open item mét skill — de daemon werkt alleen die ene lijst
+         af, en alleen items die een skill dragen;
+      3. de eigenaar-rol heeft een RUNNER.
+
+    Punt 3 is bewust `heeft_runner` en niet `wordt_opgepakt`. Een mens in de rol laat de vinkjes
+    niet vanzelf omvallen; die vinkt aan in deze browser, en dat handelt de inline-post uit scope 21
+    al af. Meekijken is alleen zinnig als er ergens anders iets kan bewegen.
+
+    Fail-CLOSED, andersom dan de badge op de kaart. Weten we het niet, dan kijken we niet: een
+    poll die nergens naar kijkt kost bandbreedte en levert niets. Niets tonen is hier de veilige
+    kant; bij de badge was dat juist wél tonen."""
+    try:
+        from nooch_village.views.projects import _ACTIEF_STATUSSEN
+        if str(p.get("status") or "") not in _ACTIEF_STATUSSEN:
+            return False
+        from nooch_village.projects import uitvoerlijst
+        lijst = uitvoerlijst(p) or {}
+        if not any(it.get("skill") and not it.get("done") and not it.get("skipped")
+                   for it in (lijst.get("items") or [])):
+            return False
+        rol = str(p.get("owner") or "")
+        if not rol or st is None:
+            return False
+        rec = st.records.get(rol)
+        if rec is None:
+            return False
+        from nooch_village import governance
+        from nooch_village.registry_factory import shared_registry
+        from nooch_village.village import CLASS_MAP
+        leeft, _reden = governance.heeft_runner(rec, class_map=CLASS_MAP,
+                                                registry=shared_registry(), context=None)
+        return bool(leeft)
+    except Exception:                                    # noqa: BLE001
+        return False
 
 
 _CK_SLEEP_JS_ROMP = (
@@ -357,23 +401,49 @@ _CK_SLEEP_JS_ROMP = (
     #    alles ook gewoon, want we hangen aan `submit` en niet aan `click`.
     "function ckWeigering(u){try{var q=new URL(u,location.origin).searchParams;"
     "return q.get('ok')==='0'?(q.get('msg')||'geweigerd'):'';}catch(e){return '';}}"
-    "function ckVervers(){return fetch(nxt+'&fragment=1',{cache:'no-store'})"
-    ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);return r.text();})"
-    ".then(function(h){var d=new DOMParser().parseFromString(h,'text/html');"
+    # ── Samensmelten per ITEM, niet per lijst ───────────────────────────────────────────────────
+    #
+    # Eerst verving dit de hele lijst en kreeg elk item de fade. Voor één klik is dat te billijken;
+    # voor een lijst die zichzelf afwerkt is het een knipperlicht. Alleen het item dat écht anders
+    # is wordt vervangen, en alleen dát item beweegt. De rest staat stil, en juist daardoor zíe je
+    # welk vinkje omvalt.
+    "function ckBezet(el){"
+    # Een item met de focus erin of een open uitklap-paneel is werk van de MENS. Dat onder zijn
+    # handen vervangen wist wat hij aan het typen is, en dat is erger dan een verouderde regel.
+    "return el.contains(document.activeElement)||!!el.querySelector('details[open]');}"
+    "function ckFade(el){el.classList.add('ck-vers');setTimeout(function(){"
+    "el.classList.remove('ck-vers');},450);}"
+    "function ckSmelt(h){var d=new DOMParser().parseFromString(h,'text/html');"
     "var nw=d.querySelectorAll('.checklist'),ou=document.querySelectorAll('.checklist');"
     # Een andere vorm dan verwacht betekent dat de pagina iets anders is gaan doen. Dan niet half
     # bijwerken maar eerlijk herladen: een lijst die deels van gisteren is, is erger dan een knipper.
-    "if(!nw.length||nw.length!==ou.length){location.reload();return;}"
-    "for(var i=0;i<ou.length;i++){ou[i].innerHTML=nw[i].innerHTML;"
-    "ou[i].classList.add('ck-vers');(function(el){setTimeout(function(){"
-    "el.classList.remove('ck-vers');},450);})(ou[i]);}});}"
+    "if(!nw.length||nw.length!==ou.length){location.reload();return -1;}"
+    "var n=0;"
+    "for(var i=0;i<ou.length;i++){"
+    "var a=ou[i].querySelectorAll('.ck-item'),b=nw[i].querySelectorAll('.ck-item');"
+    # Item erbij, eraf of versleept: dan is de VORM anders en zou per-item bijwerken het verkeerde
+    # item raken. In dat geval de lijst in één keer.
+    "if(a.length!==b.length){if(ou[i].innerHTML!==nw[i].innerHTML){"
+    "ou[i].innerHTML=nw[i].innerHTML;ckFade(ou[i]);n++;}continue;}"
+    "for(var j=0;j<a.length;j++){"
+    "if(a[j].getAttribute('data-item')!==b[j].getAttribute('data-item')){"
+    "ou[i].innerHTML=nw[i].innerHTML;ckFade(ou[i]);n++;break;}"
+    "if(a[j].innerHTML===b[j].innerHTML||ckBezet(a[j]))continue;"
+    "a[j].innerHTML=b[j].innerHTML;ckFade(a[j]);n++;}}"
+    "return n;}"
+    "function ckVervers(){return fetch(nxt+'&fragment=1',{cache:'no-store'})"
+    ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);return r.text();})"
+    ".then(ckSmelt);}"
     "function ckPost(f){var fd=new FormData(f),b=new URLSearchParams();"
     "fd.forEach(function(v,k){b.append(k,v);});"
     "var knop=f.querySelector('[name=action]');if(knop)b.set('action',knop.value);"
     "return fetch('/action',{method:'POST',"
     "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})"
     ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);"
-    "if(ckWeigering(r.url))throw new Error('ckgeweigerd');return ckVervers();});}"
+    # `W.laatst` bijzetten: wie zelf zit af te vinken is bezig met deze lijst, en dan hoort het
+    # waken niet af te tellen naar stilte alsof er niemand kijkt.
+    "if(ckWeigering(r.url))throw new Error('ckgeweigerd');"
+    "W.laatst=Date.now();return ckVervers();});}"
     "document.addEventListener('submit',function(e){"
     "var f=e.target;if(!f||!f.closest||!f.closest('.ck-list'))return;"
     "var knop=f.querySelector('[name=action]');if(!knop)return;"
@@ -387,6 +457,35 @@ _CK_SLEEP_JS_ROMP = (
     # Alles wat niet goed ging valt terug op de oude weg, zodat de mens de melding krijgt die de
     # server altijd al gaf. Stil falen zou hier het ergst zijn: dan lijkt je klik gelukt.
     "if(rij)rij.classList.remove('bezig');f.submit();});},true);"
+    # ── De lijst werkt voor je ogen ─────────────────────────────────────────────────────────────
+    #
+    # WAAROM HIER GEEN STATUSVELD WORDT GELEZEN. `ProjectLedger.start()` zet `status` op 'running'
+    # en niets zet hem ooit terug; dat woord blijft staan tot een mens de kaart versleept. Een veld
+    # dat iemand moet intrekken is geen bewijs van activiteit. VERANDERING is dat wel, en die kan
+    # niet verlopen: verandert er niets, dan is er ook niets te zien.
+    #
+    # DE GETALLEN KOMEN UIT DE ECHTE UITVOERING, niet uit een gevoel. Een rol werkt alle open items
+    # van de uitvoerlijst achter elkaar af op zijn eigen thread, en elk item is een echte
+    # netwerk-aanroep: time-outs van 10 tot 30s in de skills, een LLM-stap tot 180s. Vandaar kijken
+    # per 3s zolang er beweging is, terugzakken naar 10 en dan 20s als het stil blijft, en pas
+    # stoppen na 4 minuten stilte. Een kortere stilte-grens zou middenin een trage stap afhaken en
+    # precies het moment missen waar het om gaat.
+    "var W={laatst:Date.now(),t:null,mag:waak,aan:waak};"
+    "function ckStil(){return Date.now()-W.laatst;}"
+    "function ckRitme(){var s=ckStil();return s<30000?3000:(s<90000?10000:20000);}"
+    "function ckPlan(){if(!W.aan)return;if(ckStil()>240000){W.aan=false;return;}"
+    "clearTimeout(W.t);W.t=setTimeout(ckKijk,ckRitme());}"
+    "function ckKijk(){"
+    # Niet kijken naar een tabblad dat niemand ziet, en niet midden in een eigen post: die zet zo
+    # meteen zelf de nieuwe stand neer, en er dwars doorheen vervangen laat de rij springen.
+    "if(document.hidden||document.querySelector('.ck-item.bezig')){ckPlan();return;}"
+    "ckVervers().then(function(n){if(n>0)W.laatst=Date.now();ckPlan();})"
+    ".catch(function(){ckPlan();});}"
+    # Terug op het scherm is een nieuw moment: het venster begint opnieuw, ook als het waken
+    # inmiddels was gestopt. Wat er intussen gebeurde zie je dan alsnog in één keer.
+    "document.addEventListener('visibilitychange',function(){"
+    "if(document.hidden||!W.mag)return;W.laatst=Date.now();W.aan=true;ckKijk();});"
+    "ckPlan();"
     "})();</script>")
 
 
@@ -527,5 +626,6 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 + f"{delc}</div>"
                 f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     if rw and out:
-        out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""))
+        out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""),
+                            waak=_mag_waken(p, st))
     return out

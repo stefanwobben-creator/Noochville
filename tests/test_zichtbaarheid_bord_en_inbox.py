@@ -557,3 +557,123 @@ def test_het_dimmen_blijft_ook_zonder_beweging():
 # waar hij hoort: `test_ui_ratchets.py::test_geen_nieuwe_klasse_prefixen` bewaakt project-breed dat
 # een nieuwe prefix-familie niet ongemerkt binnenkomt. Die hier nog eens dunnetjes overdoen zou de
 # tweede plek zijn waar hetzelfde feit woont.
+
+
+# ── 6. De lijst werkt voor je ogen ───────────────────────────────────────────
+#
+# "Working is alleen interessant als je echt activiteit ziet, zoals een progressbar. Working is de
+# enige actie waar je continu feedback wil." Dat is geen verzoek om het woord te verbeteren maar om
+# het waar te maken: de vinkjes vallen om terwijl je kijkt.
+#
+# WAAROM HIER GEEN STATUSVELD IN ZIT. `ProjectLedger.start()` zet `status` op 'running' en niets zet
+# hem ooit terug. Verandering is het signaal, en die kan niet verlopen.
+#
+# Het GEDRAG is in een echte browser gemeten (playwright, de echte renderer voor beide fragmenten):
+# één item afgevinkt in het fragment gaf precies één vervangen item en precies één fade, en een item
+# met een open paneel plus focus bleef staan terwijl een ander item wél bijwerkte. Deze tests
+# bewaken de bedrading en de getallen; het gedrag zelf is niet uit de bron te lezen.
+
+def _waak_js(waak=True):
+    from nooch_village.views.checklists import _ck_sleep_js
+    return _ck_sleep_js("tok", "/project?pid=p1&back=%2F", waak=waak)
+
+
+def _mag(p, st=None):
+    from nooch_village.views.checklists import _mag_waken
+    return _mag_waken(p, st)
+
+
+def _proj(status="running", skill="web_zoek", done=False, owner="r1"):
+    return {"id": "p1", "status": status, "owner": owner, "checklists": [
+        {"id": "cl1", "items": [{"id": "i1", "text": "x", "skill": skill, "done": done}]}]}
+
+
+def test_er_wordt_alleen_gewaakt_als_een_rol_kan_werken():
+    """Drie voorwaarden, en de derde is `heeft_runner` en niet `wordt_opgepakt`: een MENS in de rol
+    laat de vinkjes niet vanzelf omvallen, die vinkt aan in deze browser."""
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(), St()) is True
+
+
+def test_een_kaart_die_niet_loopt_wordt_niet_bekeken():
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(status="future"), St()) is False
+
+
+def test_zonder_open_skill_item_valt_er_niets_te_zien():
+    """De daemon draait alleen items MET een skill, en alleen van de uitvoerlijst. Een lijst vol
+    menswerk beweegt niet uit zichzelf, dus ernaar kijken is bandbreedte zonder opbrengst."""
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(skill=None), St()) is False
+    assert _mag(_proj(done=True), St()) is False
+
+
+def test_zonder_runner_wordt_er_niet_gewaakt():
+    class St:
+        records = _Map({"r1": _Rec("r1", ["bestaat_niet"])})
+    assert _mag(_proj(), St()) is False
+
+
+def test_waken_faalt_dicht():
+    """Andersom dan de badge op de kaart, en dat is bewust: daar is zwijgen het risico, hier is
+    kijken-om-niets het risico."""
+    class Stuk:
+        @property
+        def records(self): raise RuntimeError("stuk")
+    assert _mag(_proj(), Stuk()) is False
+    assert _mag(_proj(), None) is False
+
+
+def test_de_pagina_kijkt_alleen_mee_als_de_server_dat_zegt():
+    assert "waak=true" in _waak_js(True)
+    assert "waak=false" in _waak_js(False)
+
+
+def test_alleen_het_veranderde_item_wordt_vervangen():
+    """Zou de hele lijst bij elke verandering meebewegen, dan is het een knipperlicht en zie je
+    juist niet meer wélk vinkje omviel."""
+    js = _waak_js()
+    assert "ckSmelt" in js
+    assert "data-item" in js                       # per item vergelijken, niet per lijst
+    assert "a[j].innerHTML===b[j].innerHTML" in js.replace(" ", "")
+
+
+def test_wat_de_mens_onder_handen_heeft_blijft_staan():
+    """Een item met de focus erin of een open paneel vervangen wist wat hij aan het typen is."""
+    js = _waak_js()
+    assert "ckBezet" in js
+    assert "document.activeElement" in js and "details[open]" in js
+
+
+def test_er_wordt_niet_gekeken_naar_een_tabblad_dat_niemand_ziet():
+    js = _waak_js()
+    assert "document.hidden" in js
+    assert "visibilitychange" in js                 # terug op het scherm is een nieuw moment
+
+
+def test_het_waken_gaat_niet_dwars_door_een_eigen_post_heen():
+    """`ckPost` zet zo meteen zelf de nieuwe stand neer; er middendoor vervangen laat de rij
+    springen en kan de bezig-stand wissen."""
+    assert ".ck-item.bezig" in _waak_js()
+
+
+def test_het_ritme_en_de_stilte_grens_komen_uit_de_echte_uitvoering():
+    """DE GETALLEN ZIJN GEEN GEVOEL. Een rol werkt de open items achter elkaar af op zijn eigen
+    thread; per item is dat een echte netwerk-aanroep (10 tot 30s in de skills) en een LLM-stap kan
+    tot 180s duren. Zou de stilte-grens daaronder liggen, dan haakt de pagina middenin een trage
+    stap af en mis je precies het moment waarvoor dit gebouwd is."""
+    js = _waak_js()
+    for getal in ("3000", "10000", "20000", "240000"):
+        assert getal in js, f"ritme-getal {getal} ontbreekt"
+    traagste_enkele_stap_ms = 180000               # llm.py: Anthropic-timeout
+    assert 240000 > traagste_enkele_stap_ms
+
+
+def test_het_waken_stopt_uit_zichzelf():
+    """Een poller die eeuwig doorloopt is een tweede soort leugen: hij suggereert dat er nog iets
+    te gebeuren staat."""
+    js = _waak_js()
+    assert "W.aan=false" in js.replace(" ", "")

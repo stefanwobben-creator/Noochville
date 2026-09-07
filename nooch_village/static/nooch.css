@@ -975,8 +975,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    "moet zeggen dat hij bezig is", maar dan zonder spinner die de aandacht opeist. */
 @keyframes ck-wacht{50%{opacity:.26}}
 /* Wat terugkomt van de server komt op, niet aan. Kort genoeg om niet in de weg te zitten als je
-   vijf items achter elkaar afvinkt. */
-.checklist.ck-vers .ck-item{animation:ck-op .32s ease both}
+   vijf items achter elkaar afvinkt.
+
+   TWEE NIVEAUS, ÉÉN BETEKENIS ("dit is zojuist ververst"). De hele lijst beweegt alleen als de VORM
+   veranderde (item erbij, eraf, versleept). Verandert er één item, dan beweegt alleen dat item, en
+   juist dat maakt zichtbaar wélk vinkje omvalt terwijl de rol de lijst afwerkt. Zou de hele lijst
+   bij elke verandering meebewegen, dan is het een knipperlicht en zie je niets meer. */
+.checklist.ck-vers .ck-item,.ck-item.ck-vers{animation:ck-op .32s ease both}
 @keyframes ck-op{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 /* Het skill-aanbod verschijnt zonder aankondiging tussen de items. Even laten opkomen maakt het
    een uitnodiging in plaats van een sprong. */
@@ -984,7 +989,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* WIE GEEN BEWEGING WIL, KRIJGT ZE NIET. Dit is geen extraatje maar de voorwaarde om überhaupt te
    mogen bewegen: alles hierboven is versiering op informatie die ook zonder de animatie klopt. */
 @media (prefers-reduced-motion: reduce){
-  .checklist.ck-vers .ck-item,.ck-item .btn.ghost.sm{animation:none}
+  .checklist.ck-vers .ck-item,.ck-item.ck-vers,.ck-item .btn.ghost.sm{animation:none}
   .ck-item{transition:none}
   /* Het ademen valt weg, het dimmen blijft: dat laatste is de status zelf en geen versiering. */
   .ck-item.bezig,.ibx-row.gk.bezig{animation:none}
