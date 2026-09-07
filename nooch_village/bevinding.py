@@ -182,6 +182,73 @@ def _ongegronde_specifieken(bron: str, tekst: str) -> list[str]:
     return uit
 
 
+# ── de vindplaats, deterministisch ──────────────────────────────────────────
+#
+# WAAR IETS ZIT VRAAG JE NIET AAN EEN MODEL, DIE PLAK JE ERONDER.
+#
+# Gemeten op het echte bord van 7 september. `claims_site_scan` stuurt een regel die de vindplaats
+# netjes meegeeft — er staat zelfs een commentaar boven die precies uitlegt waarom:
+#
+#     🔴 Claim-scan: 1 nieuwe verboden claim(s) op nooch.earth — "greener" (impact) (1 taak)
+#
+# Wat de mens in de inbox las was:
+#
+#     ... heeft 1 nieuwe verboden claim gevonden: het woord "greener" (over impact).
+#
+# Het model gooide de plek dus niet weg, het VERBOUWDE hem: `(impact)` was de pagina, en werd "over
+# impact", wat leest als een onderwerp. De lezer weet daarna nog steeds niet waar hij moet kijken,
+# en dat is erger dan een ontbrekend veld — het lijkt namelijk compleet.
+#
+# De prompt hierboven vraagt om "geen id's", en een paginanaam ziet eruit als een id. Die regel is
+# goed voor bestandsnamen en commando's en fout voor vindplaatsen. In plaats van hem te verfijnen
+# (en dan te hopen dat het model het onderscheid maakt) halen we de vindplaats bij het model weg:
+# hij komt uit de ruwe tekst, hij gaat er onveranderd onder, en niemand kan hem meer verbouwen.
+# Dat is dezelfde keuze als de rest van dit bestand: "gemeten is sterker dan gevraagd".
+_URL = re.compile(r"https?://[^\s,;)\]]+")
+#: De vorm die `claims_board.vindplaatsen()` schrijft: «"eco-friendly" (home), "vegan" (faq)».
+_TERM_PLEK = re.compile(r"[\"“]([^\"”\n]{1,60})[\"”]\s*\(([^)\n]{1,60})\)")
+
+
+def vindplaatsen_in(tekst: str) -> list[str]:
+    """De WAAR-verwijzingen in een ruwe tekst, als leesbare stukjes.
+
+    Twee vormen, want dat zijn de twee die de skills echt sturen: een URL, en het term-plek-paar uit
+    `claims_board.vindplaatsen()`. Een derde vorm verzinnen we niet: wat we niet herkennen laten we
+    met rust in plaats van te gokken op iets dat toevallig op een plek lijkt."""
+    uit, gezien = [], set()
+    for wat, waar in _TERM_PLEK.findall(tekst or ""):
+        wat, waar = wat.strip(), waar.strip()
+        # Een getal tussen haakjes is een telling ("(1 taak op het bord)"), geen pagina.
+        if not waar or waar[0].isdigit():
+            continue
+        s = f'"{wat}" op de pagina {waar}'
+        if s.casefold() not in gezien:
+            gezien.add(s.casefold()); uit.append(s)
+    for u in _URL.findall(tekst or ""):
+        if u.casefold() not in gezien:
+            gezien.add(u.casefold()); uit.append(u)
+    return uit
+
+
+def met_vindplaats(ruw: str, spanning: str) -> str:
+    """Plak de vindplaats onder de herschreven spanning, als de ruwe tekst er een had.
+
+    NA de poort, niet ervoor. `keur` beoordeelt wat het MODEL schreef; deze regel is van ons en komt
+    letterlijk uit de bron. Hem alsnog langs een poort halen die op modeluitvoer is ontworpen zou een
+    goede herschrijving kunnen laten sneuvelen op een URL die de jargon-check niet kent, en dat is
+    een categoriefout.
+
+    Staat de plek er al letterlijk in, dan gebeurt er niets: geen dubbeling."""
+    plekken = vindplaatsen_in(ruw)
+    if not plekken or not (spanning or "").strip():
+        return spanning
+    plat = _plat(spanning).casefold()
+    nieuw = [p for p in plekken if _plat(p).casefold() not in plat]
+    if not nieuw:
+        return spanning
+    return f"{spanning.rstrip()}\n\nWaar: {', '.join(nieuw)}"
+
+
 def feitbehoud(bron: str, tekst: str) -> tuple[bool, str]:
     """Is de herschrijving niet ZEKERDER of SPECIFIEKER dan de bron? Geeft (ok, reden).
 
@@ -368,6 +435,9 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     if ok or not klim:
         if not ok:
             log.info("bevinding geweigerd (%s) op: %s", reden, ruw[:70])
+        else:
+            # NA de poort: dit is onze regel, niet die van het model. Zie `met_vindplaats`.
+            uit["spanning"] = met_vindplaats(ruw, uit["spanning"])
         return uit
     # DE KLIM. De goedkope trede schoot aantoonbaar tekort — niet vermoedelijk, maar volgens een
     # deterministische poort. Dát is het moment waarop een sterker model iets toevoegt, en het is
@@ -377,6 +447,7 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     if not sterk or sterk == ladder:
         return uit
     log.info("bevinding: klim naar %s na afkeuring (%s)", sterk, reden)
+    # `klim=False` dus de klim heeft de vindplaats er zelf al onder gezet — niet nog eens.
     hoger = herschrijf(tekst, rol=rol, records=records, reason_fn=reason_fn, ladder=sterk,
                        data_dir=data_dir, klim=False)
     return hoger if hoger.get("ok") else uit

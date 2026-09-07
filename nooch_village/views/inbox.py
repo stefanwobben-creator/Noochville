@@ -738,6 +738,53 @@ def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox", n: dict | None = None)
             f"{_e(_woorden(n)['klaar'])}</button></form>")
 
 
+def _al_op_het_bord(st, n: dict) -> str:
+    """Wijst dit item naar werk dat AL bestaat? Dan die deur, en niet drie besluitvragen.
+
+    GEMETEN OP 7 SEPTEMBER, en dit is het derde soort item uit de trechter-analyse: een melding
+    waarvan de knop ergens anders zit. De claim-scan schreef:
+
+        "Er staat inmiddels 1 taak op het bord om dit op te lossen. Deze taak moet nog opgepakt
+         worden."
+
+    en het scherm bood daar Action / Project / Governance bij aan. Alle drie fout: er ís al een
+    project, en wat de lezer wil is er heen. Drie vragen stellen over een besluit dat genomen is,
+    is precies hoe een rij dichtgroeit — je kunt niets kiezen dat klopt, dus je kiest niets.
+
+    De notificatie draagt `project_id` al sinds `NotifStore.add`; het scherm keek er alleen nooit
+    naar. Geen nieuw veld dus, en geen regel over 'compliance': élke rol die werk aanmaakt en
+    daarover een bericht stuurt, krijgt hiermee de juiste deur.
+
+    TWEE VELDEN, NIET ÉÉN, en dat is een correctie op mezelf. Mijn eerste versie keek alleen naar
+    `project_id`, en dat is te breed: een @mention in een projectfeed draagt datzelfde veld, en die
+    is juist wél een gesprek waar een besluit bij hoort. Het verschil zit in de AFZENDER — een ROL
+    die meldt dat hij werk heeft neergelegd tegenover een MENS die je iets vraagt. Dus alleen als
+    `by` een bestaande rol is, en positief bevestigd: kunnen we het niet vaststellen, dan verandert
+    er niets en krijg je gewoon het oude scherm. Twijfel mag hier nooit een knop wegnemen.
+
+    Fail-soft en STIL: een verwijzing naar een project dat niet meer bestaat levert niets op in
+    plaats van een doodlopende knop. Een dode link is erger dan geen link — die kost je een klik
+    om te ontdekken dat er niets is."""
+    pid = str((n or {}).get("project_id") or "").strip()
+    door = str((n or {}).get("by") or "").strip()
+    if not pid or not door:
+        return ""
+    try:
+        if st.records.get(door) is None:              # geen rol → een mens, of onbekend: met rust laten
+            return ""
+        p = st.projects.get(pid)
+    except Exception:                                 # noqa: BLE001 — het scherm mag hier nooit op vallen
+        return ""
+    if not p:
+        return ""
+    titel = str(p.get("scope") or p.get("title") or "").strip() or "the project"
+    return (f"<div class='ibx-alaan'><strong>This already has a project.</strong> "
+            f"<a class='btn ok sm' href='/project?pid={_e(pid)}' target='_top'>"
+            f"Open “{_e(titel[:70])}”</a>"
+            f"<p class='muted'>Nothing to decide here — the work exists. "
+            f"Close this item once you have looked at it.</p></div>")
+
+
 def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     """Rechts: wat doe je met deze spanning?
 
@@ -750,6 +797,7 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     prefill = _volledig(n)                   # de flows werken op de hele tekst
     nxt = f"/inbox/verwerk?nid={nid}"
     klaar = _klaar_knop(nid, csrf, n=n)
+    bestaat_al = _al_op_het_bord(st, n)      # wijst dit item naar werk dat er al staat?
 
     # DE DRIE KNOPPEN op een operationeel verzoek: accepteren, aanpassen, weigeren. Dat is het
     # "in één handeling" waar de kaart om vraagt — een uitleg zonder knop laat de lezer alsnog
@@ -808,6 +856,13 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # De tiende vorm, "nee, want …", paste in géén van de drie handelings-flows: die veronderstellen
     # alle drie dát er iets gebeurt. Die hoort bij de VIERDE uitkomst, sluiten — zie `_klaar_knop`,
     # dat nu een optioneel reden-veld draagt en die reden terugstuurt naar de vrager.
+    # STAAT HET WERK ER AL, dan is de vraag niet "wat maak je hiervan" maar "ga kijken". De drie
+    # flows blijven bereikbaar (er kan altijd iets anders nodig zijn) maar ze zijn niet meer het
+    # eerste wat je ziet, en de kop stelt geen vraag meer die al beantwoord is.
+    if bestaat_al:
+        return (f"<div class='rdr-pane'><h3>This is a heads-up</h3>{bestaat_al}"
+                f"<details class='box-details'><summary>Something else needed after all?</summary>"
+                f"{''.join(groups)}</details>{klaar}</div>")
     return (f"<div class='rdr-pane'><h3>What do you do with this?</h3>"
             f"{''.join(groups)}{klaar}</div>")
 
