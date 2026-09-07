@@ -335,6 +335,58 @@ _CK_SLEEP_JS_ROMP = (
     "a('item',bron.getAttribute('data-item')||'');"
     "a('voor',anker?(anker.getAttribute('data-item')||''):'');"
     "document.body.appendChild(f);f.submit();});"
+    # ── Ter plekke afhandelen in plaats van de hele pagina herladen ─────────────────────────────
+    #
+    # WAAROM. Elk vinkje, elk skill-aanbod en elke bewerking gooide de hele pagina weg en bouwde hem
+    # opnieuw op. Functioneel prima, maar het voelt als stilstand: je klikt, het scherm knippert, en
+    # je zoekt opnieuw waar je was. Een lijst afwerken is de handeling die je het vaakst doet, dus
+    # daar telt dat het zwaarst.
+    #
+    # DRIE REGELS DIE IK NIET OMDRAAI, en ze staan alle drie al in dit huis:
+    #
+    # 1. `r.ok` MEET HET TRANSPORT, NIET DE UITKOMST. Een inhoudelijke weigering ("✗ …",
+    #    "No access — …") reist als melding op een 303; fetch volgt die en de status is 200. De
+    #    server markeert een weigering met `ok=0`; wij lezen díe. Exact de blinde vlek die in
+    #    `ibxPost` staat uitgeschreven.
+    # 2. NIETS OPTIMISTISCH BIJWERKEN. De rij blijft staan tot de server hem echt heeft veranderd;
+    #    we halen de nieuwe stand op bij de server (`?fragment=1`, die route bestond al) in plaats
+    #    van te gokken wat er zou moeten staan. Zelfde regel als `.ibx-row.gk.bezig`.
+    # 3. BIJ TWIJFEL GEWOON HET FORMULIER. Gaat er iets mis — transport, weigering, of een pagina
+    #    die er anders uitziet dan we verwachten — dan versturen we het originele formulier alsnog
+    #    op de oude manier. De mens krijgt dan de melding die hij altijd al kreeg. Zonder JS werkt
+    #    alles ook gewoon, want we hangen aan `submit` en niet aan `click`.
+    "function ckWeigering(u){try{var q=new URL(u,location.origin).searchParams;"
+    "return q.get('ok')==='0'?(q.get('msg')||'geweigerd'):'';}catch(e){return '';}}"
+    "function ckVervers(){return fetch(nxt+'&fragment=1',{cache:'no-store'})"
+    ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);return r.text();})"
+    ".then(function(h){var d=new DOMParser().parseFromString(h,'text/html');"
+    "var nw=d.querySelectorAll('.checklist'),ou=document.querySelectorAll('.checklist');"
+    # Een andere vorm dan verwacht betekent dat de pagina iets anders is gaan doen. Dan niet half
+    # bijwerken maar eerlijk herladen: een lijst die deels van gisteren is, is erger dan een knipper.
+    "if(!nw.length||nw.length!==ou.length){location.reload();return;}"
+    "for(var i=0;i<ou.length;i++){ou[i].innerHTML=nw[i].innerHTML;"
+    "ou[i].classList.add('ck-vers');(function(el){setTimeout(function(){"
+    "el.classList.remove('ck-vers');},450);})(ou[i]);}});}"
+    "function ckPost(f){var fd=new FormData(f),b=new URLSearchParams();"
+    "fd.forEach(function(v,k){b.append(k,v);});"
+    "var knop=f.querySelector('[name=action]');if(knop)b.set('action',knop.value);"
+    "return fetch('/action',{method:'POST',"
+    "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})"
+    ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);"
+    "if(ckWeigering(r.url))throw new Error('ckgeweigerd');return ckVervers();});}"
+    "document.addEventListener('submit',function(e){"
+    "var f=e.target;if(!f||!f.closest||!f.closest('.ck-list'))return;"
+    "var knop=f.querySelector('[name=action]');if(!knop)return;"
+    # Alleen de handelingen die je vaak achter elkaar doet. Verwijderen en doorgeven blijven een
+    # hele paginabeurt: dat zijn eindpunten, geen ritme, en daar is een duidelijke overgang beter
+    # dan een vloeiende.
+    "if(['check_toggle','check_accept','check_rename'].indexOf(knop.value)<0)return;"
+    "var rij=f.closest('.ck-item');e.preventDefault();"
+    "if(rij)rij.classList.add('bezig');"
+    "ckPost(f).catch(function(){"
+    # Alles wat niet goed ging valt terug op de oude weg, zodat de mens de melding krijgt die de
+    # server altijd al gaf. Stil falen zou hier het ergst zijn: dan lijkt je klik gelukt.
+    "if(rij)rij.classList.remove('bezig');f.submit();});},true);"
     "})();</script>")
 
 

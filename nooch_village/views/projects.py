@@ -347,7 +347,10 @@ def _kaart_status(st, p: dict) -> str:
             merk, uitleg, kls = _STATUS_UIT["wacht"]
             return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} queued</span>"
         merk, uitleg, kls = _STATUS_UIT["werkt"]
-        return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} running</span>"
+        # Het teken in een eigen span: alleen ⟳ draait, het woord ernaast staat stil. Zou de hele
+        # chip draaien, dan is hij onleesbaar en is de beweging een grap in plaats van informatie.
+        return (f"<span class='pstatus {kls}' title='{_e(uitleg)}'>"
+                f"<span class='draait'>{merk}</span> running</span>")
     except Exception:                                   # noqa: BLE001
         return ""
 
