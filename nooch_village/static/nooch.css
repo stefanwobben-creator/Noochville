@@ -159,25 +159,19 @@ ul.clean li:last-child{border-bottom:none}
 .pcard:active{cursor:grabbing}
 .ptitle{font-weight:600}
 .clabel{height:7px;border-radius:4px;margin:-.1rem 0 .35rem}
-/* Systeemstatus op een lopende kaart. Kleur draagt de ERNST, het teken draagt de betekenis: wie
-   geen kleurverschil ziet leest ⟳ ◔ ⚠ ○ 🙋 en het woord ernaast, en weet het nog steeds. */
+/* NOG ÉÉN VAKJE, EN DAT IS DE UITKOMST VAN 7 SEPTEMBER. Hier stonden er vijf: werkt, wacht, vast,
+   onbemand, menswerk. Vier ervan beweerden iets dat het scherm niet kon waarmaken, en het scherpst
+   was `⟳ running`: `ProjectLedger.start()` zet die status en NIETS zet hem ooit terug, dus het woord
+   bleef staan tot een mens de kaart versleepte. Een statusveld is een bewering die iemand moet
+   intrekken, en als juist het intrekken uitvalt staat de leugen er permanent.
+
+   Wat overblijft is het geval dat geen bewering is maar een defect: geen mens in de rol én geen
+   runner, dus hier gebeurt gegarandeerd nooit iets. Rood en vet, want dit is het enige dat je
+   moet zien. Dát er wél gewerkt wordt, laat de projectpagina zien door de vinkjes te tonen die
+   omvallen (scope 23) en niet door er een woord over te schrijven. */
 .pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:.66rem;
   padding:.05rem .4rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray)}
-/* `draait` heeft BEWUST geen koppelteken: de prefix-ratchet telt alles vóór het eerste streepje
-   als een familie, dus `pstatus-ic` maakte er stilletjes een nieuwe aan. De klasse staat in de CSS
-   alleen onder `.pstatus.is-werkt`, dus hij kan nergens anders iets doen.
-
-   Het ⟳ DRAAIT ECHT als de rol eraan werkt. Een stilstaand draai-teken is een tegenspraak: het
-   belooft beweging en toont stilstand, en dan geloof je het vakje ook niet als het wél iets zegt.
-   Alleen deze ene status beweegt — 'wacht' en 'vast' horen juist stil te staan. */
-.pstatus.is-werkt{background:var(--green-tint);color:var(--green-dark)}
-.pstatus.is-werkt .draait{display:inline-block;animation:pstatus-draai 1.6s linear infinite}
-@keyframes pstatus-draai{to{transform:rotate(360deg)}}
-.pstatus.is-vast{background:var(--error-tint);color:var(--coral)}
-/* Onbemand is geen waarschuwing maar een DOODLOPENDE WEG, en dat verdient het zwaarste teken op de
-   kaart: hier gebeurt nooit iets tot een mens de rol bemant. */
 .pstatus.is-onbemand{background:var(--coral);color:#fff;font-weight:600}
-.pstatus.is-mens{background:var(--yellow-light);color:var(--ink)}
 .pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
@@ -990,7 +984,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* WIE GEEN BEWEGING WIL, KRIJGT ZE NIET. Dit is geen extraatje maar de voorwaarde om überhaupt te
    mogen bewegen: alles hierboven is versiering op informatie die ook zonder de animatie klopt. */
 @media (prefers-reduced-motion: reduce){
-  .pstatus.is-werkt .draait{animation:none}
   .checklist.ck-vers .ck-item,.ck-item .btn.ghost.sm{animation:none}
   .ck-item{transition:none}
   /* Het ademen valt weg, het dimmen blijft: dat laatste is de status zelf en geen versiering. */

@@ -550,8 +550,23 @@ class Secretary:
         }, "Secretary"))
 
 
-def bemand(record, *, class_map=None, registry=None, context=None) -> tuple[bool, str]:
+def heeft_runner(record, *, class_map=None, registry=None, context=None) -> tuple[bool, str]:
     """Krijgt deze rol een DRAAIENDE inwoner? Geeft (ja/nee, reden).
+
+    DEZE FUNCTIE HEETTE `bemand`, EN DIE NAAM WAS DE FOUT. Overal elders in dit systeem betekent
+    "bemand": er zit een mens (of persona) in de rol, en dat staat in `assignments.json`. Hier
+    betekende het iets anders: start de Reconciler een thread. Voor een rol die Lotte vervult zijn
+    die twee antwoorden TEGENGESTELD, en het cockpit koos de verkeerde en zette het woord van de
+    andere eronder: "unmanned" op een rol waar gewoon iemand in zit.
+
+    Het is niet de eerste keer. In de docstring van `assignments.bemand` staat dat dezelfde
+    verwarring al twee keer had gebeten, met 37 valse "[rol X onbemand]"-berichten als gevolg. Zolang
+    twee modules een functie `bemand` hebben, pakt er ooit weer iemand de verkeerde. De naam stelt
+    nu zijn eigen vraag, en dat is de fix die niet vergeten kan worden.
+
+    Wie wil weten of er iemand in de rol zit: `assignments.bemand` (mens of persona) of
+    `assignments.door_mens_bemand` (alleen een mens). Wie wil weten of er ooit iets gebeurt met werk
+    dat bij deze rol ligt: `wordt_opgepakt` hieronder, want dat is mens ÓF runner.
 
     Deze regel stond alleen in `Reconciler._bouw`, en dus alleen in de daemon. Het cockpit kon hem
     niet stellen, en daardoor kon het bord ook niet tonen dat een project bij een rol ligt waar
@@ -586,6 +601,49 @@ def bemand(record, *, class_map=None, registry=None, context=None) -> tuple[bool
     if any(registry.get(s) is not None for s in actief):
         return True, "actieve skill"
     return False, "geen CLASS_MAP entry en geen actieve skills"
+
+
+def wordt_opgepakt(role_id: str, *, records=None, assignments=None,
+                   class_map=None, registry=None, context=None) -> tuple[bool, str]:
+    """Gebeurt er ooit iets met werk dat bij deze rol ligt? Geeft (ja/nee, reden).
+
+    Stefans regel, 7 september 2026, letterlijk: "als er geen mens en geen runner is gebeurt er
+    niets. Zodra er een mens is wel, want die is verantwoordelijk voor afronding van het project."
+
+        een MENS vervult de rol   -> het loopt; die mens draagt de afronding
+        er draait een RUNNER      -> het loopt; de daemon werkt de lijst af
+        geen van beide            -> doodlopend; hier gebeurt gegarandeerd nooit iets
+
+    EEN PERSONA TELT HIER NIET ALS MENS, en dat is een keuze en geen slordigheid. `assignments.bemand`
+    telt mens ÉN persona, want voor "zit er iemand in de rol" is dat de juiste vraag. Maar een
+    persona is een stem, geen paar handen: hij draagt geen verantwoordelijkheid voor afronding en
+    werkt geen checklist af. Een rol met alleen een persona en zonder runner is juist het
+    doodlopende geval. Vandaar `door_mens_bemand` en niet `bemand`.
+
+    FAIL-OPEN, EN DE RICHTING IS BEWUST. Kunnen we het niet vaststellen (geen store, kapotte store),
+    dan zeggen we JA. Een project ten onrechte doodverklaren jaagt een mens op een probleem dat er
+    niet is; andersom zien we hooguit iets niet dat zonder ons ook niet zichtbaar was."""
+    if not role_id:
+        return True, "geen rol (individueel initiatief)"
+    rec = None
+    if records is not None:
+        try:
+            rec = records.get(role_id)
+        except Exception:                                # noqa: BLE001 — kapotte store ≠ oordeel
+            return True, "onbekend (records niet leesbaar)"
+        if rec is None:
+            return False, "deze rol bestaat niet meer in governance"
+    if assignments is None:
+        return True, "onbekend (geen assignments-store)"
+    from nooch_village.assignments import door_mens_bemand
+    if door_mens_bemand(role_id, assignments, records):
+        return True, "een mens vervult deze rol"
+    if rec is None:
+        return True, "onbekend (geen records)"
+    leeft, reden = heeft_runner(rec, class_map=class_map, registry=registry, context=context)
+    if leeft:
+        return True, f"draait: {reden}"
+    return False, f"geen mens in de rol, en {reden}"
 
 
 class Reconciler:
@@ -634,8 +692,8 @@ class Reconciler:
         # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
         inh_cls = self.class_map.get(record.id)
         if inh_cls is None:
-            leeft, reden = bemand(record, class_map=self.class_map, registry=self.registry,
-                                  context=self.context)
+            leeft, reden = heeft_runner(record, class_map=self.class_map, registry=self.registry,
+                                        context=self.context)
             if not leeft:
                 self.unmanned[record.id] = record
                 log.info("rol '%s' onbemand [source=%s] (%s)", record.id, record.source, reden)
