@@ -3746,6 +3746,51 @@ def _act_notif_processed(c):
         return c.nxt, "✓ verwerkt"
 
 
+def _act_goedkeur(c):
+        """Eén antwoord op een goedkeuring, vanuit de inbox-lade.
+
+        DE POORT ZIT HIER, IN CODE, EN NIET IN DE KNOP. De view tekent geen ja-knop waar het niet
+        mag, maar een view is een verzoek en geen garantie: een POST kan met de hand gestuurd
+        worden. `goedkeuring.mag_ja` beslist, en hij faalt closed — een type dat niemand heeft
+        afgewogen krijgt geen ja.
+
+        Nee en later mogen altijd, op elk type. Dat is de hele reden dat deze rij nu in het cockpit
+        staat: een weigering schept niets, dus er is geen grens die hij kan overschrijden. Zou dat
+        per type geregeld zijn, dan bestaat er ooit een type waarop je niet eens nee kunt zeggen, en
+        dan groeit de rij weer dicht — precies wat er zeventig dagen lang gebeurde."""
+        from nooch_village import goedkeuring, inbox_actions
+        from nooch_village.human_inbox import HumanInbox
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        # AUTHZ: alleen een herkende mens beslist. Dezelfde poort als bij means_gap-melden: `guest`
+        # mag lezen, niet beslissen.
+        if username == "guest" or (username and st.people.by_email(username) is None):
+            return nxt, "No access — user not recognised"
+        iid, besluit = (g("iid") or "").strip(), (g("besluit") or "").strip()
+        if not iid or besluit not in ("approved", "rejected", "deferred"):
+            return nxt, "✗ unknown decision"
+        hi = HumanInbox(os.path.join(st.dd, "human_inbox.json"))
+        item = next((i for i in hi.all() if i.get("id") == iid), None)
+        if item is None:
+            return nxt, "✗ item not found"
+        if besluit == "approved" and not goedkeuring.mag_ja(item):
+            # Niet stil weigeren: de mens moet weten WAAROM en WAAR het dan wel kan.
+            return nxt, f"✗ {goedkeuring.waarom_niet(item)} — run it from the command line"
+        reden = f"via cockpit door {username}"
+        if item.get("type") == "verband":
+            r = inbox_actions.decide_verband(hi, st.notes, iid, besluit, reason=reden)
+        elif item.get("type") == "keyword" and besluit in ("approved", "rejected"):
+            r = inbox_actions.decide_keyword(hi, st.library, iid,
+                                             "approve" if besluit == "approved" else "reject",
+                                             reason=reden)
+        else:
+            r = inbox_actions.weiger_of_stel_uit(hi, iid, besluit, reason=reden) \
+                if besluit in goedkeuring.ALTIJD else {"ok": False, "error": "not supported here"}
+        if not r.get("ok"):
+            return nxt, f"✗ {r.get('error') or 'could not save that'}"
+        woord = {"approved": "✓ approved", "rejected": "✓ rejected", "deferred": "✓ deferred"}[besluit]
+        return nxt, woord
+
+
 def _act_notif_delete(c):
         # Prullenbak: ruis die je niet wilt verwerken uit de wachtrij halen (zacht, dismissed-vlag).
         ok = c.st.notif.delete_item(c.g("nid"))
@@ -5753,6 +5798,7 @@ ACTIONS = {
     "notif_processed": _act_notif_processed,
     "notif_outcome": _act_notif_outcome,
     "notif_klaar": _act_notif_klaar,
+    "goedkeur": _act_goedkeur,
     "notif_delete": _act_notif_delete,
     "notif_add": _act_notif_add,
     "notif_archive": _act_notif_archive,

@@ -668,3 +668,50 @@ def confirm_item(inbox, iid: str, by_human: str = "mens") -> dict:
     if inbox.confirm_resolution(iid, by_human=by_human):
         return {"ok": True, "status": "approved"}
     return {"ok": False, "error": "kon niet bevestigen (al gesloten?)"}
+
+
+# ── De goedkeuringsrij vanuit het cockpit ────────────────────────────────────────────────────────
+#
+# ÉÉN PAD, TWEE INGANGEN. `_approve_verband` stond in `inbox/__main__.py` en was daarmee alleen voor
+# de CLI bereikbaar. Hij staat nu hier, waar deze module voor bedoeld is ("één gevalideerd pad voor
+# CLI én cockpit"), en de CLI roept dezelfde functie aan. Twee kopieën van een beslissing lopen na
+# één wijziging uit de pas, en dan keurt het ene oppervlak iets anders goed dan het andere.
+
+def decide_verband(inbox, notes, iid: str, decision: str, *, reason: str = "") -> dict:
+    """Menselijk besluit op een verband-voorstel (3c): sluit het item, en bij 'approved' schrijft het
+    ook het touwtje tussen de twee kaartjes.
+
+    Het item gaat ALTIJD dicht, ook als de link niet gelegd kon worden (een kaartje verdwenen). Zou
+    het openblijven, dan komt hetzelfde onbeslisbare voorstel morgen terug en groeit de rij die we
+    juist leeghalen. `link_gelegd` zegt wat er echt gebeurd is."""
+    item = next((i for i in inbox.all() if i.get("id") == iid), None)
+    if item is None:
+        return {"ok": False, "error": f"onbekend item: {iid}"}
+    if item.get("type") != "verband":
+        return {"ok": False, "error": f"item is geen verband ({item.get('type')})"}
+    if decision not in ("approved", "rejected", "deferred"):
+        return {"ok": False, "error": f"ongeldig besluit: {decision}"}
+    if not inbox.resolve(iid, decision, reason=reason):
+        return {"ok": False, "error": "item bestond niet meer of was al gesloten"}
+    if decision != "approved":
+        return {"ok": True, "link_gelegd": False}
+    ctx = item.get("context") or {}
+    a, b = ctx.get("kaart_a_id"), ctx.get("kaart_b_id")
+    gelegd = bool(a and b and notes is not None and notes.link(a, b) is not None)
+    return {"ok": True, "link_gelegd": gelegd}
+
+
+def weiger_of_stel_uit(inbox, iid: str, decision: str, *, reason: str = "") -> dict:
+    """Nee of later, op WELK type dan ook.
+
+    DIT IS DE VEILIGE HELFT, en daarom staat hij bewust los van elk type. Een weigering schept
+    niets: ze sluit of verplaatst een item en laat de wereld verder met rust. Precies daarom mag het
+    cockpit dit altijd, ook bij een activatie die het niet mag goedkeuren.
+
+    Zou dit per type geregeld zijn, dan bestaat er ooit een type waarop je niet eens nee kunt zeggen,
+    en dan groeit de rij weer dicht — wat de reden was dat er 78 items zeventig dagen bleven staan."""
+    if decision not in ("rejected", "deferred"):
+        return {"ok": False, "error": f"alleen weigeren of uitstellen hier, niet: {decision}"}
+    if not inbox.resolve(iid, decision, reason=reason):
+        return {"ok": False, "error": "onbekend item, of het was al gesloten"}
+    return {"ok": True}

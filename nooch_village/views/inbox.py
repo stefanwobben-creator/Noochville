@@ -855,15 +855,93 @@ def _ibx_row(st, n: dict) -> str:
             f"onclick=\"event.stopPropagation();ibxTrash('{_e(nid)}')\">&#128465;</button></div>")
 
 
+
+# ── De goedkeuringsrij, in dezelfde lade ─────────────────────────────────────────────────────────
+#
+# WAAROM HIER EN NIET OP EEN EIGEN PAGINA. Er waren twee inboxen en een mens kon er bij één; de
+# tweede stond zeventig dagen stil met 78 items. Een tweede pagina had dat probleem gehalveerd, niet
+# opgelost: je moet dan nog steeds wéten dat hij bestaat. Eén lade, één telling, één plek waar je 's
+# ochtends kijkt.
+#
+# De rij ziet er anders uit dan een spanning en dat is met opzet. Een spanning open je om te
+# verwerken; een goedkeuring beantwoord je ter plekke met ja, nee of later. Een modaal scherm voor
+# een ja/nee-vraag is een klik te veel, en bij 78 items is dat 78 klikken te veel.
+
+def _gk_row(st, item: dict, csrf: str = "") -> str:
+    """Eén goedkeuring. Ja alleen waar het mag; nee en later altijd, want die scheppen niets."""
+    from nooch_village import goedkeuring
+    iid = item.get("id", "")
+    t = str(item.get("type") or "?")
+    vraag = _e(goedkeuring.vraag_van(item))
+    wat = _e(goedkeuring.samenvatting(item))
+    dagen = ""
+    try:
+        import time as _t
+        ts = float(item.get("created_at") or item.get("at") or 0)
+        if ts:
+            dagen = f" &middot; {int((_t.time() - ts) // 86400)}d"
+    except (TypeError, ValueError):
+        pass
+
+    def _knop(besluit, label, klasse=""):
+        return (f"<button class='ibx-btn {klasse}' "
+                f"onclick=\"event.stopPropagation();gkBeslis('{_e(iid)}','{besluit}')\">"
+                f"{label}</button>")
+
+    if goedkeuring.mag_ja(item):
+        knoppen = _knop("approved", "yes", "ja") + _knop("rejected", "no") + _knop("deferred", "later")
+        staart = ""
+    else:
+        # DE JA STAAT ER NIET, MAAR DE WEG ERNAARTOE WEL. "Dit kan alleen op de commandoregel" zonder
+        # de regel erbij is een doodlopende weg, en dat was precies de fout die deze rij oplost.
+        knoppen = _knop("rejected", "no") + _knop("deferred", "later")
+        staart = (f"<div class='ibx-cli' title='{_e(goedkeuring.waarom_niet(item))}'>"
+                  f"yes runs on the command line — "
+                  f"<code>{_e(goedkeuring.cli_regel(item))}</code></div>")
+    return (f"<div class='ibx-row gk' data-iid='{_e(iid)}'>"
+            f"<span class='ibx-dot gk'></span>"
+            f"<div class='ibx-rb'><div class='ibx-title'>{vraag}</div>"
+            f"<div class='ibx-meta'>{_e(t)}{dagen}</div>"
+            f"<div class='ibx-wat'>{wat}</div>{staart}</div>"
+            f"<div class='ibx-acties'>{knoppen}</div></div>")
+
+
+def _gk_items(st):
+    """De openstaande goedkeuringen. Fail-soft: gaat de goedkeuringsrij stuk, dan blijft de
+    spanningen-lade gewoon werken. De ene inbox slopen om de andere te tonen is geen verbetering."""
+    try:
+        from nooch_village import goedkeuring
+        from nooch_village.human_inbox import HumanInbox
+        import os
+        return goedkeuring.open_items(HumanInbox(os.path.join(st.dd, "human_inbox.json")))
+    except Exception:                                    # noqa: BLE001
+        return []
+
+
 def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
     """Het dynamische deel van de drawer: telling + rijen, opgehaald via /inbox?frag=1. Geen page-shell
     (de shell is de chrome). De drawer-JS leest data-count/data-sub en vult de lijst."""
     items = st.notif.open_for_targets(targets)
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
-    rows = "".join(_ibx_row(st, n) for n in items) or \
-        "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Your inbox is empty.</div>"
-    sub = f"{len(items)} open, of which {nieuw} new" if items else "All processed — enjoy it."
-    return f"<div data-count='{len(items)}' data-sub='{_e(sub)}'>{rows}</div>"
+    rows = "".join(_ibx_row(st, n) for n in items)
+
+    # De goedkeuringsrij eronder, met een eigen kop. Onder en niet ertussen: een spanning vraagt om
+    # verwerken, een goedkeuring om één antwoord — die door elkaar husselen maakt van twee soorten
+    # werk één onduidelijke stapel.
+    gk = _gk_items(st)
+    if gk:
+        from nooch_village import goedkeuring
+        per = ", ".join(f"{n} {t}" for t, n in goedkeuring.tel_per_type(gk))
+        rows += (f"<div class='ibx-sectie'>Waiting for your approval &middot; {len(gk)}"
+                 f"<span class='ibx-sectie-sub'>{_e(per)}</span></div>")
+        rows += "".join(_gk_row(st, i, csrf_token) for i in gk)
+
+    totaal = len(items) + len(gk)
+    if not rows:
+        rows = "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Your inbox is empty.</div>"
+    deel = f"{len(items)} tensions" + (f", {len(gk)} approvals" if gk else "")
+    sub = f"{totaal} open ({deel}), of which {nieuw} new" if totaal else "All processed — enjoy it."
+    return f"<div data-count='{totaal}' data-sub='{_e(sub)}'>{rows}</div>"
 
 
 def _person_role_options(st, targets) -> str:
@@ -956,6 +1034,14 @@ function ibxAddSubmit(){var t=document.getElementById('ibx-addtext'),r=document.
     t.value='';ibxAddToggle();ibxRefresh();}).catch(function(){/* melding staat er al; tekst blijft
     staan zodat de mens hem niet opnieuw hoeft te typen */});}
 function ibxTrash(nid){ibxPost('notif_delete',{nid:nid}).then(ibxRefresh);}
+/* Een goedkeuring is één antwoord, geen wizard: ja/nee/later ter plekke. `ibxPost` doet het zware
+   werk (CSRF, 403-melding, inhoudelijke weigering lezen), dus dit is alleen de knop eromheen.
+   De rij verdwijnt pas als de server hem echt gesloten heeft — ibxRefresh haalt de waarheid op in
+   plaats van de rij optimistisch weg te halen. */
+function gkBeslis(iid,besluit){var r=document.querySelector("[data-iid='"+iid+"']");
+  if(r)r.classList.add('bezig');
+  ibxPost('goedkeur',{iid:iid,besluit:besluit}).then(ibxRefresh)
+    .catch(function(){if(r)r.classList.remove('bezig');});}
 function ibxThumb(){var t=document.getElementById('ibx-thumb');t.classList.add('on');
   setTimeout(function(){t.classList.remove('on');},900);}
 function ibxBindSwipe(){var rows=document.querySelectorAll('.ibx-row.done');

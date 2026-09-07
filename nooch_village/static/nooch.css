@@ -553,6 +553,33 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ibx-row.done{background:var(--green-tint);border-color:var(--green);cursor:grab;touch-action:pan-y}
 .ibx-kader{margin-top:.35rem;font-size:12.5px;color:var(--green-dark)}
 .ibx-swipe{position:absolute;right:.6rem;top:.55rem;font-size:11px;color:var(--green-dark);opacity:.5}
+/* ── De goedkeuringsrij in de inbox-lade ──────────────────────────────────────────────────────
+   BINNEN DE `ibx-`-FAMILIE, geen eigen `gk-*`. Dat stond er eerst wel en de prefix-ratchet ving het:
+   een nieuw prefix is een nieuw privé-stylesheet, en dit IS de inbox-lade. `.gk` blijft alleen als
+   MODIFIER op een bestaande rij (`.ibx-row.gk`), zoals `.done` dat ook doet.
+   Bestaande tokens, geen nieuwe kleuren: een goedkeuring is een ANDER SOORT rij, geen ander merk.
+   Hij is niet klikbaar als geheel (default cursor) omdat het antwoord in de knoppen zit; een rij
+   die overal klikt suggereert een detailscherm dat er niet is. */
+.ibx-sectie{margin:.9rem .2rem .2rem;font-size:12px;font-weight:600;color:var(--subtle);
+  text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;gap:.5rem}
+.ibx-sectie-sub{font-weight:400;text-transform:none;letter-spacing:0;opacity:.8;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibx-row.gk{cursor:default;align-items:center}
+.ibx-row.gk:hover{border-color:var(--border);box-shadow:none}
+.ibx-dot.gk{background:var(--gray)}
+.ibx-wat{color:var(--subtle);font-size:12.5px;margin-top:.2rem}
+/* De CLI-regel mag lelijk zijn: hij is om te KOPIEREN, niet om te lezen. Vandaar `user-select:all`
+   — één klik selecteert het hele commando. */
+.ibx-cli{margin-top:.35rem;font-size:11.5px;color:var(--subtle)}
+.ibx-cli code{user-select:all;word-break:break-all;background:var(--cream);padding:.05rem .2rem;border-radius:4px}
+.ibx-acties{display:flex;gap:.3rem;flex:0 0 auto;align-self:center}
+.ibx-btn{font:inherit;font-size:12px;padding:.25rem .55rem;border:1px solid var(--border);
+  border-radius:7px;background:var(--surface);cursor:pointer;color:var(--gray)}
+.ibx-btn:hover{border-color:var(--green);color:var(--ink)}
+.ibx-btn.ja{border-color:var(--green);color:var(--green-dark);font-weight:600}
+/* Bezig: de rij blijft staan tot de server hem echt gesloten heeft. Optimistisch weghalen zou een
+   geweigerde POST als succes tonen — dezelfde blinde vlek als bij ibxPost. */
+.ibx-row.gk.bezig{opacity:.45;pointer-events:none}
 .ibx-empty{padding:2rem 1rem;text-align:center;color:var(--subtle)}
 .ibx-empty .ibx-party{font-size:32px}
 .ibx-scrim{position:fixed;inset:0;background:rgba(27,27,27,.34);z-index:1220;display:none;align-items:flex-start;justify-content:center;padding:3vh 1rem;overflow:auto}
