@@ -165,7 +165,15 @@ def test_een_stukke_store_breekt_het_paneel_niet():
     assert uit == ""
 
 
-# ── 4. De kaart zegt wat er gebeurt ──────────────────────────────────────────
+# ── 4. De kaart meldt alleen nog het doodlopende geval ───────────────────────
+#
+# Hier stonden vijf statussen op de kaart: werkt, wacht, vast, onbemand, menswerk. Stefan haalde ze
+# één voor één onderuit, en bij het nalezen van de code klopte elk bezwaar. De scherpste staat in
+# `ProjectLedger.start()`: die ZET `running` en niets zet die status ooit terug, dus het woord bleef
+# staan tot een mens de kaart versleepte. Een statusveld is een bewering die iemand moet intrekken.
+#
+# Wat overblijft is het ene geval dat geen bewering is maar een defect: geen mens in de rol én geen
+# runner, dus hier gebeurt gegarandeerd nooit iets.
 
 class _Rec:
     def __init__(self, rid, skills=(), slaapt=False):
@@ -179,40 +187,54 @@ class _Reg:
     def get(self, s): return object() if s in self._b else None
 
 
-def test_een_slapende_rol_is_onbemand_met_zijn_eigen_reden():
+class _Assign:
+    """Minimale assignments-store: rol-id -> lijst filler-types ('person' of 'persona')."""
+    def __init__(self, per_rol=None): self._p = dict(per_rol or {})
+    def fillers_of(self, role_id, record=None):
+        return [type("F", (), {"type": t})() for t in self._p.get(role_id, [])]
+
+
+# ── 4a. heeft_runner — draait er code voor deze rol? ─────────────────────────
+#
+# Deze functie heette `bemand`, en dat was de bug. Overal elders betekent "bemand" dat er iemand in
+# de rol zit; hier betekende het dat de Reconciler een thread start. Voor een rol die Lotte vervult
+# zijn die antwoorden tegengesteld, en de kaart koos de verkeerde en schreef het woord van de andere
+# eronder. Derde keer dat die woordverwarring toesloeg (zie `assignments.bemand`, 37 valse meldingen).
+
+def test_een_slapende_rol_heeft_geen_runner_met_zijn_eigen_reden():
     rec = _Rec("r1", ["web_zoek"], slaapt=True)
     rec.slaap_reden = "afgeslankt op 5 sept"
-    leeft, reden = governance.bemand(rec, registry=_Reg(["web_zoek"]))
+    leeft, reden = governance.heeft_runner(rec, registry=_Reg(["web_zoek"]))
     assert leeft is False and "afgeslankt" in reden
 
 
-def test_een_rol_zonder_bekende_skill_is_onbemand():
-    leeft, _ = governance.bemand(_Rec("r1", ["bestaat_niet"]), registry=_Reg(["web_zoek"]))
+def test_een_rol_zonder_bekende_skill_heeft_geen_runner():
+    leeft, _ = governance.heeft_runner(_Rec("r1", ["bestaat_niet"]), registry=_Reg(["web_zoek"]))
     assert leeft is False
 
 
-def test_een_rol_met_een_actieve_skill_leeft():
-    leeft, reden = governance.bemand(_Rec("r1", ["web_zoek"]), registry=_Reg(["web_zoek"]))
+def test_een_rol_met_een_actieve_skill_heeft_een_runner():
+    leeft, reden = governance.heeft_runner(_Rec("r1", ["web_zoek"]), registry=_Reg(["web_zoek"]))
     assert leeft is True and reden == "actieve skill"
 
 
-def test_een_class_map_entry_leeft_altijd():
-    leeft, _ = governance.bemand(_Rec("r1"), class_map={"r1": object}, registry=_Reg())
+def test_een_class_map_entry_draait_altijd():
+    leeft, _ = governance.heeft_runner(_Rec("r1"), class_map={"r1": object}, registry=_Reg())
     assert leeft is True
 
 
 def test_zonder_registry_verklaren_we_niemand_dood():
-    """FAIL-OPEN, en dit is de belangrijkste tak. Een rol ten onrechte 'onbemand' noemen op het bord
-    is erger dan zwijgen: de lezer gooit dan werk weg dat wél zou lopen."""
-    leeft, reden = governance.bemand(_Rec("r1", ["web_zoek"]), registry=None)
+    """FAIL-OPEN, en dit is de belangrijkste tak. Een rol ten onrechte dood noemen op het bord is
+    erger dan zwijgen: de lezer gooit dan werk weg dat wél zou lopen."""
+    leeft, reden = governance.heeft_runner(_Rec("r1", ["web_zoek"]), registry=None)
     assert leeft is True and "onbekend" in reden
 
 
 def test_de_rugzakken_tellen_hier_niet_mee():
     """Bewust, en het staat in de docstring. Zou een rugzak meetellen, dan is elke rol per definitie
-    bemand en komt elke slapende rol weer tot leven — het tegenovergestelde van de afslanking."""
+    bemand en komt elke slapende rol weer tot leven, het tegenovergestelde van de afslanking."""
     import inspect
-    bron = inspect.getsource(governance.bemand)
+    bron = inspect.getsource(governance.heeft_runner)
     assert "rugzak" in bron.lower(), "de uitzondering hoort uitgeschreven te staan"
     # Op de CODE toetsen, niet op de docstring — die noemt `skillset.effectief` juist om uit te
     # leggen waarom hij hier NIET gebruikt wordt. Een assert die de uitleg voor de uitvoering
@@ -222,9 +244,87 @@ def test_de_rugzakken_tellen_hier_niet_mee():
     assert "skill_links" in code                       # DNA ∪ koppelingen: dát is de juiste set
 
 
+def test_de_oude_naam_bestaat_niet_meer():
+    """Zolang twee modules een functie `bemand` hebben pakt er ooit weer iemand de verkeerde. Een
+    alias laten staan zou die val gewoon openhouden."""
+    assert not hasattr(governance, "bemand")
+    from nooch_village import assignments
+    assert hasattr(assignments, "bemand")              # dáár hoort het woord wel thuis
+
+
+# ── 4b. wordt_opgepakt — gebeurt er ooit iets met dit werk? ──────────────────
+#
+# Stefans regel: "als er geen mens en geen runner is gebeurt er niets. Zodra er een mens is wel,
+# want die is verantwoordelijk voor afronding van het project."
+
+def _opgepakt(rol, rollen=None, fillers=None, skills=()):
+    return governance.wordt_opgepakt(
+        rol, records=_Map(rollen if rollen is not None else {rol: _Rec(rol, skills)}),
+        assignments=_Assign(fillers or {}), registry=_Reg(["web_zoek"]))
+
+
+def test_een_mens_in_de_rol_is_genoeg_ook_zonder_runner():
+    """DE BUG VAN 7 SEPTEMBER, in één regel. Lotte en Matthijs vervullen rollen zonder eigen skill
+    en zonder CLASS_MAP-entry. Die stonden op het bord als 'unmanned'."""
+    loopt, reden = _opgepakt("r1", fillers={"r1": ["person"]})
+    assert loopt is True and "mens" in reden
+
+
+def test_een_runner_is_genoeg_ook_zonder_mens():
+    loopt, reden = _opgepakt("r1", skills=["web_zoek"])
+    assert loopt is True and "draait" in reden
+
+
+def test_geen_mens_en_geen_runner_is_doodlopend():
+    loopt, reden = _opgepakt("r1", skills=["bestaat_niet"])
+    assert loopt is False and "geen mens" in reden
+
+
+def test_een_persona_telt_niet_als_mens():
+    """`assignments.bemand` telt mens ÉN persona, en voor 'zit er iemand in de rol' klopt dat. Maar
+    een persona is een stem, geen paar handen: hij draagt geen afronding en werkt geen lijst af.
+    Alleen een persona en geen runner is juist wél het doodlopende geval."""
+    loopt, _ = _opgepakt("r1", fillers={"r1": ["persona"]}, skills=["bestaat_niet"])
+    assert loopt is False
+
+
+def test_een_rol_die_niet_meer_bestaat_is_doodlopend():
+    loopt, reden = _opgepakt("weg", rollen={})
+    assert loopt is False and "bestaat niet meer" in reden
+
+
+def test_zonder_assignments_store_zeggen_we_ja():
+    """Fail-open, en de richting is bewust: een project ten onrechte doodverklaren jaagt een mens op
+    een probleem dat er niet is."""
+    loopt, reden = governance.wordt_opgepakt("r1", records=_Map({"r1": _Rec("r1")}),
+                                             assignments=None, registry=_Reg())
+    assert loopt is True and "onbekend" in reden
+
+
+def test_kapotte_records_leveren_geen_oordeel():
+    class Stuk:
+        def get(self, _): raise RuntimeError("stuk")
+    loopt, reden = governance.wordt_opgepakt("r1", records=Stuk(), assignments=_Assign())
+    assert loopt is True and "onbekend" in reden
+
+
+def test_zonder_rol_valt_er_niets_te_verwijten():
+    loopt, _ = governance.wordt_opgepakt("", records=_Map({}), assignments=_Assign())
+    assert loopt is True
+
+
+# ── 4c. Wat de kaart er dan mee doet ─────────────────────────────────────────
+
 def _kaart(p, st=None):
     from nooch_village.views.projects import _kaart_status
     return _kaart_status(st, p)
+
+
+class _KaartSt:
+    """Wat `_kaart_status` van `st` nodig heeft: records en assign, meer niet."""
+    def __init__(self, rollen=None, fillers=None):
+        self.records = _Map(rollen or {})
+        self.assign = _Assign(fillers or {})
 
 
 def test_de_lopende_statussen_komen_uit_de_kolomdefinitie():
@@ -239,66 +339,67 @@ def test_de_lopende_statussen_komen_uit_de_kolomdefinitie():
     assert "active" not in _ACTIEF_STATUSSEN         # de kolom heet zo, de status niet
 
 
-def test_queued_zegt_dat_het_in_de_rij_staat():
-    """Het onderscheid tussen 'ermee bezig' en 'wacht op de puls' hoefde niet verzonnen: het staat
-    al in de status. Ik schreef eerst dat daar een hartslag voor nodig was, en keek ernaast."""
-    p = {"status": "queued", "owner": "",
+def test_een_rol_met_een_mens_erin_krijgt_geen_vakje():
+    """De regressietest op de bug zelf: hier hoort NIETS te staan."""
+    p = {"status": "running", "owner": "r1",
+         "checklists": [{"items": [{"id": "1", "text": "x"}]}]}
+    st = _KaartSt(rollen={"r1": _Rec("r1")}, fillers={"r1": ["person"]})
+    assert _kaart(p, st) == ""
+
+
+def test_geen_mens_en_geen_runner_krijgt_het_vakje():
+    p = {"status": "running", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
-    assert "queued" in _kaart(p)
+    uit = _kaart(p, _KaartSt(rollen={"r1": _Rec("r1", ["bestaat_niet"])}))
+    assert "pstatus" in uit and "nothing will happen" in uit
 
 
-def test_alleen_een_lopende_kaart_krijgt_een_status():
+def test_alleen_een_lopende_kaart_krijgt_een_vakje():
+    """Op Active is 'er gebeurt niets' een TEGENSPRAAK. Op Future is hetzelfde feit geen nieuws."""
     p = {"status": "future", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x"}]}]}
-    assert _kaart(p) == ""
+    assert _kaart(p, _KaartSt(rollen={"r1": _Rec("r1")})) == ""
 
 
 def test_een_kaart_zonder_open_items_zegt_niets_extras():
     p = {"status": "running", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x", "done": True}]}]}
-    assert _kaart(p) == ""
+    assert _kaart(p, _KaartSt(rollen={"r1": _Rec("r1")})) == ""
 
 
-def test_vastgelopen_wint_van_looptdoor():
-    p = {"status": "running", "owner": "",
-         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek", "fails": 3}]}]}
-    uit = _kaart(p)
-    assert "stuck (3×)" in uit
-
-
-def test_alleen_menswerk_zegt_dat_jij_aan_zet_bent():
-    p = {"status": "running", "owner": "",
-         "checklists": [{"items": [{"id": "1", "text": "bel de leverancier"}]}]}
-    assert "your turn" in _kaart(p)
-
-
-def test_een_verdwenen_eigenaar_rol_zegt_geen_eigenaar():
-    """GEVONDEN DOOR TE RENDEREN, niet door te lezen. Een project waarvan de eigenaar-rol niet meer
-    in governance staat kreeg 'running' — de ergste leugen die dit vakje kan vertellen: daar gebeurt
-    gegarandeerd nooit meer iets."""
-    class Leeg:
-        records = _Map({})
+def test_een_verdwenen_eigenaar_rol_is_het_zwaarste_geval():
     p = {"status": "running", "owner": "verdwenen_rol",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
-    uit = _kaart(p, Leeg())
-    assert "no owner" in uit and "running" not in uit
+    assert "nothing will happen" in _kaart(p, _KaartSt())
 
 
 def test_een_individueel_initiatief_heeft_geen_rol_en_dus_geen_verwijt():
-    """`ii:<cirkel>` is geen rol maar een persoonlijk initiatief. Die 'onbemand' noemen zou elke
-    eigen actie op het bord rood kleuren."""
+    """`ii:<cirkel>` is geen rol maar een persoonlijk initiatief. Die doodverklaren zou elke eigen
+    actie op het bord rood kleuren."""
     from nooch_village.views.projects import _II_PREFIX
-    class Leeg:
-        records = _Map({})
     p = {"status": "running", "owner": f"{_II_PREFIX}nooch",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
-    assert "running" in _kaart(p, Leeg())
+    assert _kaart(p, _KaartSt()) == ""
 
 
-def test_een_lopend_project_met_skill_zegt_running():
-    p = {"status": "running", "owner": "",
-         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
-    assert "running" in _kaart(p)
+def test_de_vier_woord_badges_zijn_weg_en_blijven_weg():
+    """`running`, `queued`, `your turn` en `stuck` beweerden iets dat het scherm niet waarmaakte.
+    Deze test rendert de vormen die ze vroeger opriepen en eist stilte."""
+    st = _KaartSt(rollen={"r1": _Rec("r1", ["web_zoek"])}, fillers={"r1": ["person"]})
+    vormen = [
+        {"status": "running", "owner": "r1",
+         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]},
+        {"status": "queued", "owner": "r1",
+         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]},
+        {"status": "running", "owner": "r1",                       # vroeger: your turn
+         "checklists": [{"items": [{"id": "1", "text": "bel de leverancier"}]}]},
+        {"status": "running", "owner": "r1",                       # vroeger: stuck (3×)
+         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek", "fails": 3}]}]},
+    ]
+    for p in vormen:
+        uit = _kaart(p, st)
+        for woord in ("running", "queued", "your turn", "stuck"):
+            assert woord not in uit, f"{woord!r} staat nog op de kaart: {uit!r}"
 
 
 def test_de_badge_valt_nooit_om():
@@ -312,17 +413,18 @@ def test_de_badge_valt_nooit_om():
     assert _kaart(p, Stuk()) == ""
 
 
-def test_onbemand_heeft_zijn_eigen_zwaarste_opmaak():
-    """Kleur draagt de ernst, maar het teken draagt de betekenis — anders leest een kaart verkeerd
-    voor wie geen kleurverschil ziet."""
+def test_het_doodlopende_geval_heeft_de_zwaarste_opmaak():
+    """Kleur draagt de ernst, maar het teken draagt de betekenis: wie geen kleurverschil ziet leest
+    het teken en het woord ernaast, en weet het nog steeds."""
     import os
     from nooch_village import views
     css = open(os.path.join(os.path.dirname(views.__file__), "..", "static", "nooch.css"),
                encoding="utf-8").read()
     assert ".pstatus.is-onbemand{background:var(--coral)" in css
-    from nooch_village.views.projects import _STATUS_UIT
-    tekens = [v[0] for v in _STATUS_UIT.values()]
-    assert len(set(tekens)) == len(tekens), "elke status heeft een eigen teken, niet alleen een kleur"
+    # De opmaak van de verdwenen statussen hoort ook echt weg te zijn, anders blijft er dode CSS
+    # staan die de volgende lezer als "bestaat nog" leest.
+    for weg in ("is-werkt", "is-wacht", "is-vast", "is-mens", "pstatus-draai"):
+        assert weg not in css, f"dode regel {weg} staat er nog"
 
 
 # ── 5. Vloeiend, niet luid ───────────────────────────────────────────────────
@@ -450,11 +552,128 @@ def test_het_dimmen_blijft_ook_zonder_beweging():
     assert "opacity" not in blok, "reduced motion mag het dimmen niet meenemen"
 
 
-def test_het_draai_teken_maakt_geen_nieuwe_klassefamilie():
-    """De prefix-ratchet telt alles vóór het eerste koppelteken als familie, dus `pstatus-ic` maakte
-    er stilletjes een nieuwe aan. Vandaar een klasse zonder streepje."""
-    from nooch_village.views.projects import _kaart_status
-    p = {"status": "running", "owner": "",
-         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
-    uit = _kaart_status(None, p)
-    assert "class='draait'" in uit and "-ic" not in uit
+# `test_het_draai_teken_maakt_geen_nieuwe_klassefamilie` stond hier. Hij toetste de klasse `draait`
+# op het ⟳ van de running-badge, en die badge bestaat niet meer (zie sectie 4). De LES blijft staan
+# waar hij hoort: `test_ui_ratchets.py::test_geen_nieuwe_klasse_prefixen` bewaakt project-breed dat
+# een nieuwe prefix-familie niet ongemerkt binnenkomt. Die hier nog eens dunnetjes overdoen zou de
+# tweede plek zijn waar hetzelfde feit woont.
+
+
+# ── 6. De lijst werkt voor je ogen ───────────────────────────────────────────
+#
+# "Working is alleen interessant als je echt activiteit ziet, zoals een progressbar. Working is de
+# enige actie waar je continu feedback wil." Dat is geen verzoek om het woord te verbeteren maar om
+# het waar te maken: de vinkjes vallen om terwijl je kijkt.
+#
+# WAAROM HIER GEEN STATUSVELD IN ZIT. `ProjectLedger.start()` zet `status` op 'running' en niets zet
+# hem ooit terug. Verandering is het signaal, en die kan niet verlopen.
+#
+# Het GEDRAG is in een echte browser gemeten (playwright, de echte renderer voor beide fragmenten):
+# één item afgevinkt in het fragment gaf precies één vervangen item en precies één fade, en een item
+# met een open paneel plus focus bleef staan terwijl een ander item wél bijwerkte. Deze tests
+# bewaken de bedrading en de getallen; het gedrag zelf is niet uit de bron te lezen.
+
+def _waak_js(waak=True):
+    from nooch_village.views.checklists import _ck_sleep_js
+    return _ck_sleep_js("tok", "/project?pid=p1&back=%2F", waak=waak)
+
+
+def _mag(p, st=None):
+    from nooch_village.views.checklists import _mag_waken
+    return _mag_waken(p, st)
+
+
+def _proj(status="running", skill="web_zoek", done=False, owner="r1"):
+    return {"id": "p1", "status": status, "owner": owner, "checklists": [
+        {"id": "cl1", "items": [{"id": "i1", "text": "x", "skill": skill, "done": done}]}]}
+
+
+def test_er_wordt_alleen_gewaakt_als_een_rol_kan_werken():
+    """Drie voorwaarden, en de derde is `heeft_runner` en niet `wordt_opgepakt`: een MENS in de rol
+    laat de vinkjes niet vanzelf omvallen, die vinkt aan in deze browser."""
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(), St()) is True
+
+
+def test_een_kaart_die_niet_loopt_wordt_niet_bekeken():
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(status="future"), St()) is False
+
+
+def test_zonder_open_skill_item_valt_er_niets_te_zien():
+    """De daemon draait alleen items MET een skill, en alleen van de uitvoerlijst. Een lijst vol
+    menswerk beweegt niet uit zichzelf, dus ernaar kijken is bandbreedte zonder opbrengst."""
+    class St:
+        records = _Map({"r1": _Rec("r1", ["web_zoek"])})
+    assert _mag(_proj(skill=None), St()) is False
+    assert _mag(_proj(done=True), St()) is False
+
+
+def test_zonder_runner_wordt_er_niet_gewaakt():
+    class St:
+        records = _Map({"r1": _Rec("r1", ["bestaat_niet"])})
+    assert _mag(_proj(), St()) is False
+
+
+def test_waken_faalt_dicht():
+    """Andersom dan de badge op de kaart, en dat is bewust: daar is zwijgen het risico, hier is
+    kijken-om-niets het risico."""
+    class Stuk:
+        @property
+        def records(self): raise RuntimeError("stuk")
+    assert _mag(_proj(), Stuk()) is False
+    assert _mag(_proj(), None) is False
+
+
+def test_de_pagina_kijkt_alleen_mee_als_de_server_dat_zegt():
+    assert "waak=true" in _waak_js(True)
+    assert "waak=false" in _waak_js(False)
+
+
+def test_alleen_het_veranderde_item_wordt_vervangen():
+    """Zou de hele lijst bij elke verandering meebewegen, dan is het een knipperlicht en zie je
+    juist niet meer wélk vinkje omviel."""
+    js = _waak_js()
+    assert "ckSmelt" in js
+    assert "data-item" in js                       # per item vergelijken, niet per lijst
+    assert "a[j].innerHTML===b[j].innerHTML" in js.replace(" ", "")
+
+
+def test_wat_de_mens_onder_handen_heeft_blijft_staan():
+    """Een item met de focus erin of een open paneel vervangen wist wat hij aan het typen is."""
+    js = _waak_js()
+    assert "ckBezet" in js
+    assert "document.activeElement" in js and "details[open]" in js
+
+
+def test_er_wordt_niet_gekeken_naar_een_tabblad_dat_niemand_ziet():
+    js = _waak_js()
+    assert "document.hidden" in js
+    assert "visibilitychange" in js                 # terug op het scherm is een nieuw moment
+
+
+def test_het_waken_gaat_niet_dwars_door_een_eigen_post_heen():
+    """`ckPost` zet zo meteen zelf de nieuwe stand neer; er middendoor vervangen laat de rij
+    springen en kan de bezig-stand wissen."""
+    assert ".ck-item.bezig" in _waak_js()
+
+
+def test_het_ritme_en_de_stilte_grens_komen_uit_de_echte_uitvoering():
+    """DE GETALLEN ZIJN GEEN GEVOEL. Een rol werkt de open items achter elkaar af op zijn eigen
+    thread; per item is dat een echte netwerk-aanroep (10 tot 30s in de skills) en een LLM-stap kan
+    tot 180s duren. Zou de stilte-grens daaronder liggen, dan haakt de pagina middenin een trage
+    stap af en mis je precies het moment waarvoor dit gebouwd is."""
+    js = _waak_js()
+    for getal in ("3000", "10000", "20000", "240000"):
+        assert getal in js, f"ritme-getal {getal} ontbreekt"
+    traagste_enkele_stap_ms = 180000               # llm.py: Anthropic-timeout
+    assert 240000 > traagste_enkele_stap_ms
+
+
+def test_het_waken_stopt_uit_zichzelf():
+    """Een poller die eeuwig doorloopt is een tweede soort leugen: hij suggereert dat er nog iets
+    te gebeuren staat."""
+    js = _waak_js()
+    assert "W.aan=false" in js.replace(" ", "")

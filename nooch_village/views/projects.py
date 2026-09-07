@@ -269,88 +269,69 @@ _ACTIEF_STATUSSEN = next((s for _lbl, key, s in _PROJ_COLS if key == "actief"), 
 #: uit — titel, trekker, ouderdom, balkje — en dat is precies de heuristiek die hier faalde:
 #: zichtbaarheid van systeemstatus. Je kon niet zien of er iemand mee bezig was, of het wachtte, of
 #: het vastliep, of dat er nooit meer iets zou gebeuren.
+# ÉÉN TOESTAND, EN DAT IS DE UITKOMST VAN 7 SEPTEMBER. Hier stonden er vijf (werkt, wacht, vast,
+# onbemand, menswerk). Stefan haalde ze één voor één onderuit, en bij het nalezen van de code klopte
+# elk bezwaar:
+#
+#   "actief is gewoon actief"          `running` als woord draagt nul informatie.
+#   "wacht op mensen zie ik zelf"      staat al op itemniveau (`_cl_item_state`), mét een handvat.
+#   "working is of heel snel of hij    en dat is in de code te zien: `ProjectLedger.start()` ZET
+#    loopt vast en past de status       status op 'running' (projects.py) en NIETS zet hem ooit
+#    niet meer aan"                     terug. Het woord blijft staan tot een mens de kaart
+#                                       versleept. Precies de stilstaande wijzer die hij beschreef.
+#
+# De regel eronder: EEN STATUSVELD IS EEN BEWERING DIE IEMAND MOET INTREKKEN, en als juist het
+# intrekken uitvalt staat de leugen er permanent. Wat overblijft is het ene geval dat geen bewering
+# is maar een defect: hier gebeurt gegarandeerd nooit iets. Dat de kaart LAAT ZIEN dat er gewerkt
+# wordt, doet scope 23 op de projectpagina: geen woord maar de vinkjes die omvallen.
 _STATUS_UIT = {
-    "werkt":    ("⟳", "the role is working on this",        "is-werkt"),
-    "wacht":    ("◔", "waiting for the next pulse",         "is-wacht"),
-    "vast":     ("⚠", "stuck — retried without result",     "is-vast"),
-    "onbemand": ("○", "nobody fills this role — nothing will happen", "is-onbemand"),
-    "mens":     ("🙋", "your turn — no skill can do this",  "is-mens"),
+    "dood": ("○", "nothing will happen here", "is-onbemand"),
 }
 
 
 def _kaart_status(st, p: dict) -> str:
-    """Wat gebeurt er met dit project? Eén woord, met de reden in de tooltip.
+    """Gaat hier ooit iets gebeuren? Eén vakje, en alleen als het antwoord nee is.
 
-    ALLEEN OP EEN LOPENDE KAART. Voor Waiting/Done/Future zegt de kolom het al; daar zou dit ruis
-    zijn. De volgorde hieronder is de volgorde van ERNST, niet van waarschijnlijkheid: onbemand
-    eerst, want dat is de enige toestand waarin het antwoord "nooit" is en elke andere uitleg een
-    valse hoop.
+    ALLEEN OP EEN LOPENDE KAART, en juist daar is het een TEGENSPRAAK die het meldt: de kolom heet
+    Active, en er gebeurt niets. Op Future is precies hetzelfde feit geen nieuws, want daar hoort
+    nog niets te gebeuren.
 
     WELKE STATUS 'LOPEND' IS, KOMT UIT `_PROJ_COLS` EN NERGENS ANDERS. Mijn eerste versie toetste op
-    `status in ("active", "actief")` — geraden, niet gecontroleerd. De kolom HEET Active maar bevat
+    `status in ("active", "actief")`: geraden, niet gecontroleerd. De kolom HEET Active maar bevat
     `running` en `queued`, dus de badge verscheen op geen enkele van de 21 kaarten. En de test die
-    ik erbij schreef gebruikte `status="active"`: dezelfde aanname, dus hij bevestigde hem in plaats
-    van hem te toetsen. Een tweede lijst statussen is precies het soort kopie waar
-    `reference, don't copy` over gaat.
+    ik erbij schreef gebruikte `status="active"`, dezelfde aanname, dus hij bevestigde hem in plaats
+    van hem te toetsen.
+
+    DE VRAAG WORDT ÉÉN KEER GESTELD, in `governance.wordt_opgepakt`. Hier stond eerst een eigen
+    ladder die `governance.bemand` (nu `heeft_runner`) aanriep en er het woord "unmanned" onder zette.
+    Die functie beantwoordt "start er een thread", niet "zit er iemand in de rol", en dus stond er
+    "unmanned" op rollen waar Lotte en Matthijs gewoon in zitten. Derde keer dat die woordverwarring
+    toesloeg; zie de docstring van `heeft_runner`.
 
     ALLES FAIL-SOFT. Dit is versiering op een kaart; een bord dat niet laadt omdat een badge
     struikelt is oneindig veel erger dan een bord zonder badge."""
     try:
-        status = str(p.get("status") or "")
-        if status not in _ACTIEF_STATUSSEN:
+        if str(p.get("status") or "") not in _ACTIEF_STATUSSEN:
             return ""
         items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
-        open_items = [it for it in items
-                      if not it.get("done") and not it.get("skipped")]
-        if not open_items:
+        if not any(not it.get("done") and not it.get("skipped") for it in items):
             return ""                                   # niets open: het balkje vertelt de rest
-
-        # 1. ONBEMAND. De duurste toestand om níet te zien.
-        #
-        # DRIE GEVALLEN, en het middelste vond ik pas door de badge te RENDEREN: een project waarvan
-        # de eigenaar-rol niet meer in governance staat, kreeg 'running'. Dat is de ergste leugen
-        # die dit vakje kan vertellen — daar gebeurt gegarandeerd nooit meer iets, en het scherm zei
-        # dat er iemand aan werkte. In de code was dat niet te zien; op het plaatje meteen.
         rol = str(p.get("owner") or "")
-        if rol and not rol.startswith(_II_PREFIX):     # een individueel initiatief heeft geen rol
-            rec = st.records.get(rol) if st is not None else None
-            if rec is None:
-                merk, _uitleg, kls = _STATUS_UIT["onbemand"]
-                return (f"<span class='pstatus {kls}' title='{_e(rol)}: this role no longer exists "
-                        f"in governance'>{merk} no owner</span>")
-            from nooch_village import governance
-            from nooch_village.registry_factory import shared_registry
-            from nooch_village.village import CLASS_MAP
-            leeft, reden = governance.bemand(rec, class_map=CLASS_MAP,
-                                             registry=shared_registry(), context=None)
-            if not leeft:
-                merk, _uitleg, kls = _STATUS_UIT["onbemand"]
-                return (f"<span class='pstatus {kls}' title='{_e(rol)}: {_e(reden)}'>"
-                        f"{merk} unmanned</span>")
-
-        # 2. VASTGELOPEN. Een oplopende fail-teller is een feit, geen vermoeden.
-        fails = max((int(it.get("fails") or 0) for it in open_items), default=0)
-        if fails >= 2:
-            merk, uitleg, kls = _STATUS_UIT["vast"]
-            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} stuck ({fails}×)</span>"
-
-        # 3. MENSWERK. Geen enkele skill op de open items → dit wacht op jou, niet op de daemon.
-        if not any(it.get("skill") for it in open_items):
-            merk, uitleg, kls = _STATUS_UIT["mens"]
-            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} your turn</span>"
-
-        # 4. LOOPT of WACHT — en die twee hoeven we niet te verzinnen, want de STATUS zegt het al.
-        #    Ik schreef hier eerst dat het onderscheid een hartslag vroeg die er niet is. Dat was
-        #    mis: de Active-kolom bundelt `running` en `queued`, en dat verschil is precies "de rol
-        #    is ermee bezig" tegenover "het staat in de rij". Het stond er dus al; ik keek ernaast.
-        if status == "queued":
-            merk, uitleg, kls = _STATUS_UIT["wacht"]
-            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} queued</span>"
-        merk, uitleg, kls = _STATUS_UIT["werkt"]
-        # Het teken in een eigen span: alleen ⟳ draait, het woord ernaast staat stil. Zou de hele
-        # chip draaien, dan is hij onleesbaar en is de beweging een grap in plaats van informatie.
-        return (f"<span class='pstatus {kls}' title='{_e(uitleg)}'>"
-                f"<span class='draait'>{merk}</span> running</span>")
+        if not rol or rol.startswith(_II_PREFIX):       # individueel initiatief: geen rol, geen verwijt
+            return ""
+        if st is None:
+            return ""
+        from nooch_village import governance
+        from nooch_village.registry_factory import shared_registry
+        from nooch_village.village import CLASS_MAP
+        loopt, reden = governance.wordt_opgepakt(
+            rol, records=getattr(st, "records", None), assignments=getattr(st, "assign", None),
+            class_map=CLASS_MAP, registry=shared_registry(), context=None)
+        if loopt:
+            return ""
+        merk, uitleg, kls = _STATUS_UIT["dood"]
+        return (f"<span class='pstatus {kls}' title='{_e(rol)}: {_e(reden)}'>"
+                f"{merk} {uitleg}</span>")
     except Exception:                                   # noqa: BLE001
         return ""
 
