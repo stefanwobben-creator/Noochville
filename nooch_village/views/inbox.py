@@ -77,7 +77,10 @@ def _herkomst_html(st, tekst: str) -> str:
                 return pid
         except Exception:                                    # noqa: BLE001
             return pid
-        return f"<a href='/project?pid={_e(pid)}'>{_e(pid)}</a>"
+        # `target=_top` OMDAT DEZE PAGINA ALS IFRAME IN DE INBOX-LADE DRAAIT. Zonder dat opende de
+        # hele site zich in een strook van 460 pixels: het projectbord met chrome en al, in de modal.
+        # De regel stond al bij de wizard-link hieronder; deze twee waren vergeten.
+        return f"<a target='_top' href='/project?pid={_e(pid)}'>{_e(pid)}</a>"
     return _PID_IN_TEKST.sub(_vervang, _e(tekst))
 
 
@@ -87,7 +90,7 @@ def _source_link(st, n: dict) -> str:
     if p is not None:
         from nooch_village.notifications import preview
         scope = preview(str(p.get("scope") or "project"), 60)
-        return f"<a href='/project?pid={_e(pid)}'>{_e(scope)}</a>"
+        return f"<a target='_top' href='/project?pid={_e(pid)}'>{_e(scope)}</a>"
     pag = dict(n.get("pagina") or {})
     if pag.get("aid"):
         # De bron van een pagina-voorstel is de pagina zelf, niet de afzender: dat is waar de lezer

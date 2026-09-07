@@ -56,18 +56,28 @@ def _payload_ok(skill_name: str, payload: dict, registry) -> bool:
     return not ontbrekende_velden(req, payload)
 
 
-def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:
-    """Voor elk van `texts`: {skill, payload, payload_ok} als een DNA-skill het item kan oppakken, anders
-    None. `owner_record` is het governance-Record van de owner-rol (met .definition.skills). None-record,
-    geen skills of een lege lijst → alles None. Fail-closed op elke fout."""
+def plan_offers(owner_record, texts, registry, *, name: str = "", context=None) -> list:
+    """Voor elk van `texts`: {skill, payload, payload_ok} als een skill van deze rol het item kan
+    oppakken, anders None. `owner_record` is het governance-Record van de owner-rol. None-record,
+    geen skills of een lege lijst → alles None. Fail-closed op elke fout.
+
+    DE VOLLE SET, NIET ALLEEN HET DNA. Dit las `definition.skills` en zag dus geen rugzak. Gemeten op
+    het echte bord van 7 september: het mens-getypte item "check savon de potasse suppliers in europe"
+    kreeg "no skill · needs a human", terwijl `web_zoek` bestaat, in rugzak `buiten` zit en dus voor
+    élke rol beschikbaar is. Het gereedschap lag er; de vraag kwam er alleen nooit bij. Derde keer
+    dat deze verwarring toesloeg — zie `skillset.py` voor waarom het antwoord daar nu woont.
+
+    `context` is optioneel: zonder context blijft dit precies het DNA, zodat elke oudere aanroeper
+    zich gedraagt als voorheen."""
     texts = list(texts or [])
     if owner_record is None or not texts:
         return [None] * len(texts)
     try:
+        from nooch_village import skillset
         dna = owner_record.definition
-        skills = list(getattr(dna, "skills", []) or [])
+        skills = sorted(skillset.van_record(owner_record, context=context))
         if not skills:
-            refuse("OFFER_NO_DNA", "owner-rol heeft geen skills in DNA", name=name)
+            refuse("OFFER_NO_DNA", "owner-rol heeft geen skills (DNA noch rugzak)", name=name)
             return [None] * len(texts)
         catalog = _catalog(skills, registry)
         accts = list(getattr(dna, "accountabilities", []) or [])

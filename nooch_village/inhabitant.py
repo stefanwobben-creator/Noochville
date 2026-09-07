@@ -2288,15 +2288,11 @@ class Inhabitant(threading.Thread):
         Fail-soft: een context zonder `rugzakken` (de meeste tests, en elke oudere caller) gedraagt
         zich exact als voorheen.
         """
-        dna = set(self.dna.skills)
-        if self._skill_links_active():
-            from nooch_village import skill_links
-            dna |= skill_links.linked_skills(getattr(self.context, "links", None), self.id)
-        rugzakken = getattr(self.context, "rugzakken", None)
-        if rugzakken:
-            from nooch_village import rugzak
-            dna |= rugzak.alle_skills(rugzakken)
-        return dna
+        # HET ANTWOORD STAAT IN `skillset`, NIET HIER. Het woonde als methode op deze klasse, en het
+        # cockpit heeft geen Inwoner — dus wie het daar nodig had schreef het over, en liep uit de
+        # pas. Drie keer inmiddels (zie skillset.py). Nu is de Inwoner één van de aanroepers.
+        from nooch_village import skillset
+        return skillset.effectief(self.dna.skills, rol_id=self.id, context=self.context)
 
     def _domein_weigering(self, capability: str) -> str:
         """Verdediging in de diepte: een skill die BESLIST in een domein wordt geweigerd voor

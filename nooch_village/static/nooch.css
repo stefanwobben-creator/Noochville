@@ -580,6 +580,12 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* Bezig: de rij blijft staan tot de server hem echt gesloten heeft. Optimistisch weghalen zou een
    geweigerde POST als succes tonen — dezelfde blinde vlek als bij ibxPost. */
 .ibx-row.gk.bezig{opacity:.45;pointer-events:none}
+/* Doorgeven: één veld naast één knop. Het vorige formulier had drie velden en perste de itemtekst
+   ernaast samen tot één woord per regel. `min-width:0` op het veld en `flex-wrap` zorgen dat het
+   uitklap-blok binnen zijn eigen breedte blijft in plaats van de rij open te duwen. */
+.ck-doorgeef{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin-top:.35rem;max-width:100%}
+.ck-doorgeef input{flex:1 1 11rem;min-width:0;font:inherit;font-size:12.5px;padding:.25rem .45rem;
+  border:1px solid var(--border);border-radius:7px;background:var(--surface)}
 .ibx-empty{padding:2rem 1rem;text-align:center;color:var(--subtle)}
 .ibx-empty .ibx-party{font-size:32px}
 .ibx-scrim{position:fixed;inset:0;background:rgba(27,27,27,.34);z-index:1220;display:none;align-items:flex-start;justify-content:center;padding:3vh 1rem;overflow:auto}

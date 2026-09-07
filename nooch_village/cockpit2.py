@@ -64,7 +64,31 @@ from nooch_village.radar_clusters import ClusterBesluitStore
 from nooch_village.radar_store import RadarStore
 from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
+from functools import lru_cache
 from nooch_village.skill_match import plan_offers
+
+
+@lru_cache(maxsize=4)
+def _context_of(_dd: str):
+    """De dorpscontext (settings, koppelingen, rugzakken) vanuit het COCKPIT-proces.
+
+    Waarom dit nodig is: het cockpit heeft geen Inwoner en dus geen `self.context`, en juist daardoor
+    las `plan_offers` alleen het rol-DNA. Zonder rugzak zag de matcher `web_zoek` niet, en kreeg een
+    mens-getypt item "no skill · needs a human" terwijl het gereedschap er lag.
+
+    Gecachet op de datamap: `load_context` leest drie bestanden van schijf en dat hoeft niet bij elke
+    toetsaanslag. Wijzig je `config/rugzakken.json`, dan pakt het cockpit dat op na een herstart —
+    hetzelfde als bij `shared_registry` hierboven, en rugzakken wijzigen is geen dagelijks werk.
+
+    Fail-soft: lukt het laden niet, dan None, en dan gedraagt de matcher zich als voorheen (alleen
+    DNA). Een cockpit dat niet opstart omdat een configbestand scheef staat is erger dan een matcher
+    die een rugzak mist."""
+    try:
+        from nooch_village.config import load_context
+        return load_context(os.path.dirname(os.path.abspath(_dd.rstrip("/"))))
+    except Exception:                                     # noqa: BLE001
+        logging.getLogger("cockpit2.context").debug("dorpscontext niet geladen", exc_info=True)
+        return None
 from nooch_village.util import refuse
 from nooch_village.ai_tasks import AITaskStore, KIND_MIDDEL
 from nooch_village import skill_labels
@@ -621,7 +645,8 @@ def _dna_skill_for(st: _Stores, role, ask_text: str):
     if role is None or org.is_circle(role) or not (ask_text or "").strip():
         return None
     try:
-        offers = plan_offers(role, [ask_text], shared_registry(), name=_name(role))
+        offers = plan_offers(role, [ask_text], shared_registry(), name=_name(role),
+                             context=_context_of(st.dd))
     except Exception:
         return None
     return offers[0] if offers else None
@@ -2212,7 +2237,8 @@ def _offer_skill(st, pj, pid: str, clid: str) -> bool:
     if orec is None:                                     # owner-id matcht geen record → geen DNA-lookup mogelijk
         return refuse("OFFER_NO_RECORD", "owner-record niet gevonden in records", pid=pid, owner=owner)
     _load_env()                                          # LLM-keys beschikbaar maken (zoals bij _ai_reply)
-    offers = plan_offers(orec, [item.get("text", "")], shared_registry(), name=_name(orec))
+    offers = plan_offers(orec, [item.get("text", "")], shared_registry(), name=_name(orec),
+                         context=_context_of(st.dd))
     off = offers[0] if offers else None
     if not off:                                          # geen match (plan_offers logt LLM-None/-exceptie apart)
         return refuse("OFFER_NO_MATCH", "geen DNA-skill matcht het item", pid=pid, owner=owner,
@@ -2293,18 +2319,61 @@ def _act_check_unskip(c):
         return nxt, msg
 
 
+def _checklist_item(pj, pid: str, clid: str, item_id: str) -> dict | None:
+    """Eén item uit een checklist. Fail-soft: onbekend project, lijst of item → None."""
+    p = pj.get(pid) or {}
+    for cl in (p.get("checklists") or []):
+        if cl.get("id") == clid:
+            return next((i for i in (cl.get("items") or []) if i.get("id") == item_id), None)
+    return None
+
+
 def _act_check_handoff(c):
-        # AUTHZ: rolvervuller of Circle Lead — werk uit het EIGEN project doorgeven; de ontvangende rol
-        # krijgt een gewoon queued project op haar bord (zelfde poort als de projectverzoek-skill).
+        """Eén checklist-item doorgeven aan een rol of persoon.
+
+        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
+        een queued project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
+        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
+
+        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
+        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
+        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
+        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
+        uit de pas lopen en werk stil op de verkeerde plek laten landen.
+
+        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
+        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
+        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        pid = g("pid")
+        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
+        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
+        if not getypt:
+            return nxt, "✗ pick a role or person to hand this to"
+        from nooch_village.views.inbox import _at_doelen
+        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
+        if doel is None:
+            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
+
+        it = _checklist_item(pj, pid, g("clid"), g("item"))
+        tekst = (it or {}).get("text", "") if it else ""
+        if not tekst:
+            return nxt, "✗ item not found"
+        soort, ref = route_werk(st, tekst=tekst,
+                                rol=doel["id"] if doel["kind"] == "role" else "",
+                                persoon=doel["id"] if doel["kind"] == "person" else "",
+                                herkomst=f"↳ doorgegeven uit project {pid}",
+                                door=username or "", opdrachtgever=username or "",
+                                bron_project=pid, van_mens=True)
+        if soort == "keuze":
+            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
+                         f"pick the person instead of the role")
         from nooch_village import project_items
-        _ok, msg = project_items.resolve_item(pj, g("pid"), g("clid"), g("item"), "handoff",
-                                              reason=g("reason"), by=username or "",
-                                              naar_rol=g("naar_rol"), records=st.records)
-        return nxt, msg
+        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
+                                              by=username or "", naar_label=doel["label"])
+        return nxt, (msg + (f" ({soort})" if soort else ""))
 
 
 def _act_check_remove(c):
