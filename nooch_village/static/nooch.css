@@ -159,6 +159,16 @@ ul.clean li:last-child{border-bottom:none}
 .pcard:active{cursor:grabbing}
 .ptitle{font-weight:600}
 .clabel{height:7px;border-radius:4px;margin:-.1rem 0 .35rem}
+/* Systeemstatus op een lopende kaart. Kleur draagt de ERNST, het teken draagt de betekenis: wie
+   geen kleurverschil ziet leest ⟳ ◔ ⚠ ○ 🙋 en het woord ernaast, en weet het nog steeds. */
+.pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:.66rem;
+  padding:.05rem .4rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray)}
+.pstatus.is-werkt{background:var(--green-tint);color:var(--green-dark)}
+.pstatus.is-vast{background:var(--error-tint);color:var(--coral)}
+/* Onbemand is geen waarschuwing maar een DOODLOPENDE WEG, en dat verdient het zwaarste teken op de
+   kaart: hier gebeurt nooit iets tot een mens de rol bemant. */
+.pstatus.is-onbemand{background:var(--coral);color:#fff;font-weight:600}
+.pstatus.is-mens{background:var(--yellow-light);color:var(--ink)}
 .pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
@@ -570,6 +580,12 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ibx-wat{color:var(--subtle);font-size:12.5px;margin-top:.2rem}
 /* De CLI-regel mag lelijk zijn: hij is om te KOPIEREN, niet om te lezen. Vandaar `user-select:all`
    — één klik selecteert het hele commando. */
+/* "Dit staat al op het bord": de deur naar bestaand werk, boven de flows. Groene rand omdat dit
+   het ANTWOORD is en niet nog een keuze — de rest van dit paneel bestaat uit vragen. */
+.ibx-alaan{background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius);
+  padding:.6rem .75rem;margin-bottom:.6rem}
+.ibx-alaan .btn{margin-left:.5rem}
+.ibx-alaan p{margin:.4rem 0 0;font-size:.78rem}
 .ibx-cli{margin-top:.35rem;font-size:11.5px;color:var(--subtle)}
 .ibx-cli code{user-select:all;word-break:break-all;background:var(--cream);padding:.05rem .2rem;border-radius:4px}
 .ibx-acties{display:flex;gap:.3rem;flex:0 0 auto;align-self:center}

@@ -1629,6 +1629,32 @@ def _act_proj_unarchive(c):
         return nxt, msg
 
 
+def _na_verwijderen(nxt: str, pid: str) -> str:
+    """Waar ga je heen als de pagina waar je stond zojuist is weggegooid?
+
+    DIT IS DE ENIGE ACTIE MET DAT PROBLEEM. Elke andere knop brengt je terug naar waar je was;
+    verwijderen vernietigt waar je was. Gemeten op 7 september: na 'Delete' landde je op
+    `/project?pid=<net verwijderd>` met "Project not found" op een pagina zonder stylesheet.
+
+    De oorzaak zat niet in de actie maar in het formulier: `hid()` zet er al een `next` in die naar
+    het project zélf wijst, en de delete-knop plakte er nóg een achter met het bord erin. `g()` leest
+    `(form.get(k) or [""])[0]` — de eerste — dus won de projectpagina en deed het tweede veld niets.
+    Twee velden met dezelfde naam en tegengestelde bedoeling: het formulier was het al met zichzelf
+    oneens vóór de server iets deed.
+
+    Daarom repareert deze functie het bij de ACTIE en niet alleen bij dat ene formulier. De terugweg
+    staat namelijk al ín de URL die we krijgen (`/project?pid=…&back=<het bord>`), dus die halen we
+    er gewoon uit. Bouwt een volgende view het formulier weer scheef, dan gaat het hier alsnog goed."""
+    if not nxt or (pid and f"pid={pid}" not in nxt):
+        return nxt or "/"                       # wijst nergens naar dit project: laat maar staan
+    try:
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(nxt).query)
+        terug = (q.get("back") or [""])[0].strip()
+    except Exception:                           # noqa: BLE001 — een rare URL is geen reden tot 500
+        terug = ""
+    return terug or "/"
+
+
 def _act_proj_delete(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -1653,7 +1679,7 @@ def _act_proj_delete(c):
             logging.getLogger("village.project_docs").info(
                 "cascade: einddocument verwijderd bij project-delete %s", pid)
         msg = "🗑 removed"
-        return nxt, msg
+        return _na_verwijderen(nxt, pid), msg
 
 
 def _act_proj_edit(c):

@@ -260,6 +260,81 @@ def _due_overdue(due: str) -> bool:
         return False
 
 
+#: De vier toestanden waarin een kaart in ACTIVE kan staan. Ze zagen er tot 7 september identiek
+#: uit — titel, trekker, ouderdom, balkje — en dat is precies de heuristiek die hier faalde:
+#: zichtbaarheid van systeemstatus. Je kon niet zien of er iemand mee bezig was, of het wachtte, of
+#: het vastliep, of dat er nooit meer iets zou gebeuren.
+_STATUS_UIT = {
+    "werkt":    ("⟳", "the role is working on this",        "is-werkt"),
+    "wacht":    ("◔", "waiting for the next pulse",         "is-wacht"),
+    "vast":     ("⚠", "stuck — retried without result",     "is-vast"),
+    "onbemand": ("○", "nobody fills this role — nothing will happen", "is-onbemand"),
+    "mens":     ("🙋", "your turn — no skill can do this",  "is-mens"),
+}
+
+
+def _kaart_status(st, p: dict) -> str:
+    """Wat gebeurt er met dit project? Eén woord, met de reden in de tooltip.
+
+    ALLEEN OP EEN LOPENDE KAART. Voor Waiting/Done/Future zegt de kolom het al; daar zou dit ruis
+    zijn. De volgorde hieronder is de volgorde van ERNST, niet van waarschijnlijkheid: onbemand
+    eerst, want dat is de enige toestand waarin het antwoord "nooit" is en elke andere uitleg een
+    valse hoop.
+
+    ALLES FAIL-SOFT. Dit is versiering op een kaart; een bord dat niet laadt omdat een badge
+    struikelt is oneindig veel erger dan een bord zonder badge."""
+    try:
+        if str(p.get("status") or "").lower() not in ("active", "actief"):
+            return ""
+        items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
+        open_items = [it for it in items
+                      if not it.get("done") and not it.get("skipped")]
+        if not open_items:
+            return ""                                   # niets open: het balkje vertelt de rest
+
+        # 1. ONBEMAND. De duurste toestand om níet te zien.
+        #
+        # DRIE GEVALLEN, en het middelste vond ik pas door de badge te RENDEREN: een project waarvan
+        # de eigenaar-rol niet meer in governance staat, kreeg 'running'. Dat is de ergste leugen
+        # die dit vakje kan vertellen — daar gebeurt gegarandeerd nooit meer iets, en het scherm zei
+        # dat er iemand aan werkte. In de code was dat niet te zien; op het plaatje meteen.
+        rol = str(p.get("owner") or "")
+        if rol and not rol.startswith(_II_PREFIX):     # een individueel initiatief heeft geen rol
+            rec = st.records.get(rol) if st is not None else None
+            if rec is None:
+                merk, _uitleg, kls = _STATUS_UIT["onbemand"]
+                return (f"<span class='pstatus {kls}' title='{_e(rol)}: this role no longer exists "
+                        f"in governance'>{merk} no owner</span>")
+            from nooch_village import governance
+            from nooch_village.registry_factory import shared_registry
+            from nooch_village.village import CLASS_MAP
+            leeft, reden = governance.bemand(rec, class_map=CLASS_MAP,
+                                             registry=shared_registry(), context=None)
+            if not leeft:
+                merk, _uitleg, kls = _STATUS_UIT["onbemand"]
+                return (f"<span class='pstatus {kls}' title='{_e(rol)}: {_e(reden)}'>"
+                        f"{merk} unmanned</span>")
+
+        # 2. VASTGELOPEN. Een oplopende fail-teller is een feit, geen vermoeden.
+        fails = max((int(it.get("fails") or 0) for it in open_items), default=0)
+        if fails >= 2:
+            merk, uitleg, kls = _STATUS_UIT["vast"]
+            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} stuck ({fails}×)</span>"
+
+        # 3. MENSWERK. Geen enkele skill op de open items → dit wacht op jou, niet op de daemon.
+        if not any(it.get("skill") for it in open_items):
+            merk, uitleg, kls = _STATUS_UIT["mens"]
+            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} your turn</span>"
+
+        # 4. LOOPT. Onderscheid tussen 'nu bezig' en 'wacht op de puls' vraagt om een hartslag die
+        #    er niet is; `last_tended` is het dichtstbijzijnde dat we hebben en zegt alleen IETS als
+        #    het van vandaag is. Liever één eerlijke 'running' dan twee verzonnen toestanden.
+        merk, uitleg, kls = _STATUS_UIT["werkt"]
+        return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} running</span>"
+    except Exception:                                   # noqa: BLE001
+        return ""
+
+
 def _progress_badge(p: dict) -> str:
     pr = _proj_progress(p)
     if not pr:
@@ -291,7 +366,8 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
     meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
             f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
-    inner = f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}"
+    inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
+             f"{meta}{_kaart_status(st, p)}{_progress_badge(p)}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
@@ -1158,7 +1234,15 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if p is None:
         if fragment:
             return "<p class='muted'>Project no longer exists.</p>"
-        return _page("Not found", "<p>Project not found.</p><p><a href='/'>← home</a></p>")
+        # MÉT `_DS_LINK` en nav, zoals `views/wiki.py` het voor zijn eigen niet-gevonden-pagina doet.
+        # Zonder de component-laag krijg je alleen de tokens uit `web_base._CSS`: een kale pagina met
+        # een losse inbox-lade eronder, die er stuk uitziet in plaats van leeg. Een lezer die daar
+        # landt denkt dat de app kapot is, niet dat dit project weg is — en na een delete is dat
+        # precies de verkeerde conclusie.
+        return _page("Not found",
+                     f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
+                     f"<p>This project no longer exists.</p>"
+                     f"<p><a class='btn' href='/'>← back to the board</a></p></div></div>")
     if not back.startswith("/"):
         back = "/"
     orec = st.records.get(p.get("owner"))
@@ -1182,13 +1266,16 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # staat dit project" is er één te veel.
     terminaal = ""
     if rw:
+        # GEEN TWEEDE `next`. Hier stond er één, ná die van `hid()`, met het bord erin — de bedoeling
+        # was goed maar het effect nul: `g()` leest de EERSTE waarde, en dat is die van `hid()` (de
+        # projectpagina zelf). Twee velden met dezelfde naam en tegengestelde bedoeling lezen als een
+        # werkende terugweg terwijl er geen was. De terugweg zit al in de URL van `hid()`
+        # (`?back=…`); `_na_verwijderen` in cockpit2 haalt hem daar uit.
         terminaal = (f"<div class='menu-sep'></div>"
                      f"<form method='post' action='/action'>{hid()}"
-                     f"<input type='hidden' name='next' value='{_e(back)}'>"
                      f"<button class='menuitem' type='submit' name='action' value='proj_archive'>"
                      f"Archive</button></form>"
                      f"<form method='post' action='/action'>{hid()}"
-                     f"<input type='hidden' name='next' value='{_e(back)}'>"
                      f"<button class='menuitem danger' type='submit' name='action' "
                      f"value='proj_delete' "
                      f"onclick=\"return confirm('Delete permanently? Archiving keeps the project.')\">"

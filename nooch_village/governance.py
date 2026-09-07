@@ -550,6 +550,44 @@ class Secretary:
         }, "Secretary"))
 
 
+def bemand(record, *, class_map=None, registry=None, context=None) -> tuple[bool, str]:
+    """Krijgt deze rol een DRAAIENDE inwoner? Geeft (ja/nee, reden).
+
+    Deze regel stond alleen in `Reconciler._bouw`, en dus alleen in de daemon. Het cockpit kon hem
+    niet stellen, en daardoor kon het bord ook niet tonen dat een project bij een rol ligt waar
+    nooit iemand naar gaat kijken. Precies dat overkwam Stefan op 6 september: een project naar
+    ACTIEF gesleept, en er gebeurde niets — zonder melding, want `_on_project_activated` is een
+    methode óp de inwoner, en juist als er geen inwoner is, is er niemand om het te melden.
+
+    Vandaar hier, en niet nog een kopie in het cockpit. Dat is dezelfde beweging als `skillset.py`:
+    het antwoord woonde op één klasse, en wie het elders nodig had moest het overschrijven.
+
+    DE RUGZAKKEN TELLEN HIER NIET MEE, en dat is geen vergissing. `skillset.effectief` leest DNA ∪
+    koppelingen ∪ rugzakken; deze poort leest DNA ∪ koppelingen. Zou een rugzak meetellen, dan is
+    elke rol in de cirkel per definitie 'bemand' en komt elke slapende rol weer tot leven — het
+    tegenovergestelde van de afslanking. Capaciteit is iets anders dan bestaan.
+
+    Zonder registry valt er niets te toetsen; dan is het antwoord onbekend en zeggen we dat ook,
+    in plaats van 'onbemand' te gokken. Een rol ten onrechte dood verklaren is erger dan zwijgen."""
+    if record is None:
+        return False, "geen record"
+    if getattr(record, "slaapt", False):
+        return False, (getattr(record, "slaap_reden", "") or "slaapt")
+    if (class_map or {}).get(getattr(record, "id", "")):
+        return True, "eigen implementatie"
+    if registry is None:
+        return True, "onbekend (geen registry)"          # fail-open: niet dood verklaren op niets
+    from nooch_village import skill_links
+    dna = getattr(record, "definition", None)
+    actief = set(getattr(dna, "skills", []) or [])
+    settings = getattr(context, "settings", None) or {}
+    if str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja"):
+        actief |= skill_links.linked_skills(getattr(context, "links", None), record.id)
+    if any(registry.get(s) is not None for s in actief):
+        return True, "actieve skill"
+    return False, "geen CLASS_MAP entry en geen actieve skills"
+
+
 class Reconciler:
     """Bouwt het levende dorp uit de records en houdt het in lijn na governance-wijzigingen."""
 
@@ -596,18 +634,11 @@ class Reconciler:
         # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
         inh_cls = self.class_map.get(record.id)
         if inh_cls is None:
-            # Levensteken: heeft de rol een actieve skill? Lees de EFFECTIEVE set, anders
-            # blijft een rol die alléén via koppelingen werkt onterecht onbemand.
-            from nooch_village import skill_links
-            actief = set(record.definition.skills)
-            settings = getattr(self.context, "settings", None) or {}
-            if str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja"):
-                actief |= skill_links.linked_skills(getattr(self.context, "links", None), record.id)
-            has_active = any(self.registry.get(s) is not None for s in actief)
-            if not has_active:
+            leeft, reden = bemand(record, class_map=self.class_map, registry=self.registry,
+                                  context=self.context)
+            if not leeft:
                 self.unmanned[record.id] = record
-                log.info("rol '%s' onbemand [source=%s] (geen CLASS_MAP entry en geen actieve skills)",
-                         record.id, record.source)
+                log.info("rol '%s' onbemand [source=%s] (%s)", record.id, record.source, reden)
                 return None
             inh_cls = Inhabitant
         inh = inh_cls(record, self.bus, self.registry, self.context)
