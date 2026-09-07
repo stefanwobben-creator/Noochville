@@ -227,6 +227,26 @@ def _kaart(p, st=None):
     return _kaart_status(st, p)
 
 
+def test_de_lopende_statussen_komen_uit_de_kolomdefinitie():
+    """DE TEST DIE ER EERST NIET WAS, en zonder hem faalde de badge stil op productie. Ik toetste op
+    `status == "active"` omdat de kolom Active heet; de statussen heten `running` en `queued`. Mijn
+    test gebruikte diezelfde geraden waarde en bevestigde dus mijn aanname in plaats van de code te
+    toetsen. Nu wordt de lijst AFGELEID uit `_PROJ_COLS` en toetst deze test dát."""
+    from nooch_village.views.projects import _ACTIEF_STATUSSEN, _PROJ_COLS
+    uit_kolom = next(s for _l, k, s in _PROJ_COLS if k == "actief")
+    assert _ACTIEF_STATUSSEN == uit_kolom
+    assert "running" in _ACTIEF_STATUSSEN and "queued" in _ACTIEF_STATUSSEN
+    assert "active" not in _ACTIEF_STATUSSEN         # de kolom heet zo, de status niet
+
+
+def test_queued_zegt_dat_het_in_de_rij_staat():
+    """Het onderscheid tussen 'ermee bezig' en 'wacht op de puls' hoefde niet verzonnen: het staat
+    al in de status. Ik schreef eerst dat daar een hartslag voor nodig was, en keek ernaast."""
+    p = {"status": "queued", "owner": "",
+         "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
+    assert "queued" in _kaart(p)
+
+
 def test_alleen_een_lopende_kaart_krijgt_een_status():
     p = {"status": "future", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x"}]}]}
@@ -234,20 +254,20 @@ def test_alleen_een_lopende_kaart_krijgt_een_status():
 
 
 def test_een_kaart_zonder_open_items_zegt_niets_extras():
-    p = {"status": "active", "owner": "r1",
+    p = {"status": "running", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x", "done": True}]}]}
     assert _kaart(p) == ""
 
 
 def test_vastgelopen_wint_van_looptdoor():
-    p = {"status": "active", "owner": "",
+    p = {"status": "running", "owner": "",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek", "fails": 3}]}]}
     uit = _kaart(p)
     assert "stuck (3×)" in uit
 
 
 def test_alleen_menswerk_zegt_dat_jij_aan_zet_bent():
-    p = {"status": "active", "owner": "",
+    p = {"status": "running", "owner": "",
          "checklists": [{"items": [{"id": "1", "text": "bel de leverancier"}]}]}
     assert "your turn" in _kaart(p)
 
@@ -258,7 +278,7 @@ def test_een_verdwenen_eigenaar_rol_zegt_geen_eigenaar():
     gegarandeerd nooit meer iets."""
     class Leeg:
         records = _Map({})
-    p = {"status": "active", "owner": "verdwenen_rol",
+    p = {"status": "running", "owner": "verdwenen_rol",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
     uit = _kaart(p, Leeg())
     assert "no owner" in uit and "running" not in uit
@@ -270,13 +290,13 @@ def test_een_individueel_initiatief_heeft_geen_rol_en_dus_geen_verwijt():
     from nooch_village.views.projects import _II_PREFIX
     class Leeg:
         records = _Map({})
-    p = {"status": "active", "owner": f"{_II_PREFIX}nooch",
+    p = {"status": "running", "owner": f"{_II_PREFIX}nooch",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
     assert "running" in _kaart(p, Leeg())
 
 
 def test_een_lopend_project_met_skill_zegt_running():
-    p = {"status": "active", "owner": "",
+    p = {"status": "running", "owner": "",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
     assert "running" in _kaart(p)
 
@@ -287,7 +307,7 @@ def test_de_badge_valt_nooit_om():
     class Stuk:
         @property
         def records(self): raise RuntimeError("stuk")
-    p = {"status": "active", "owner": "r1",
+    p = {"status": "running", "owner": "r1",
          "checklists": [{"items": [{"id": "1", "text": "x", "skill": "web_zoek"}]}]}
     assert _kaart(p, Stuk()) == ""
 
