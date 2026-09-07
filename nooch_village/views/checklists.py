@@ -247,10 +247,19 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
     # niet meer hoeft, vink je af of haal je weg. Twee knoppen voor één gedachte maakt de keuze
     # zwaarder dan de handeling. De `skipped`-STAAT blijft bestaan (oude items dragen hem nog en
     # `checklist_progress` telt hem correct niet mee); alleen de knop om hem te zetten is weg.
+    # ÉÉN VELD, GEEN PROJECTFORMULIER. Hier stonden een rol-dropdown en een 'done when…' naast
+    # elkaar, en die bouwden een heel project op het bord van de ontvanger. Twee dingen mis: het
+    # vroeg om een projectdoel terwijl de bedoeling "@iemand, kijk jij hier even naar" is, en de drie
+    # velden naast de itemtekst persten die tekst op het scherm samen tot één woord per regel.
+    #
+    # Nu: één `@`-veld met dezelfde doelenlijst als de inbox (rollen én personen), en de server
+    # routeert het langs `route_werk`. `ck-doorgeef` is een modifier binnen de bestaande `ck-`-familie,
+    # geen nieuw prefix — zie de klasse-ratchet.
     hand = (f"<details class='fedit'><summary class='flink'>📤 hand off</summary>"
-            f"<form method='post' action='/action'>{hid}{clitem}"
-            f"<select name='naar_rol'>{role_opts}</select>"
-            f"<input name='reason' placeholder='done when…'>"
+            f"<form method='post' action='/action' class='ck-doorgeef'>{hid}{clitem}"
+            f"<input name='naar' list='ck-doelen' autocomplete='off' "
+            f"placeholder='@role or person'>"
+            f"<datalist id='ck-doelen'>{role_opts}</datalist>"
             f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
             f"hand off</button></form></details>") if role_opts else ""
     return f"<span class='ck-resolve'>{hand}</span>"
@@ -277,12 +286,15 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
     # niets te kiezen en zou de melding ruis zijn.
     _uit_id = (uitvoerlijst(p) or {}).get("id")
     _meerdere = len(p.get("checklists") or []) > 1
-    # Rol-opties voor de overdracht: dezelfde bron als het wall-outcome-formulier (reference, don't copy).
+    # Doelen voor het doorgeven: ROLLEN ÉN PERSONEN, uit dezelfde bron die het `@`-veld in de inbox
+    # voedt (reference, don't copy). Stond hier eerst op `_wall_outcome_opts`, dat alleen rollen geeft
+    # — terwijl je een item meestal aan een PERSOON wilt geven.
     role_opts = ""
     if rw and st is not None:
         try:
-            from nooch_village.views.feed import _wall_outcome_opts
-            role_opts = _wall_outcome_opts(st)[0]
+            from nooch_village.views.inbox import _at_doelen
+            role_opts = "".join(f"<option value='{_e(d['label'])}'></option>"
+                                for d in _at_doelen(st))
         except Exception:
             role_opts = ""
     out = ""

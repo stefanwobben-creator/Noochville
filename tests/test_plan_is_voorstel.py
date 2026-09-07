@@ -378,3 +378,60 @@ def test_s_na_akkoord_blijft_staan_wat_van_jou_is(tmp_path, ledger):
     assert "approved by stefan" in html
     assert "the role runs" not in html                      # niets meer te draaien
     assert "1 for you (hands-on)" in html and "1 nobody can run yet" in html
+
+
+# ── Geen bericht over een scherm waar je zelf staat ─────────────────────────────────────────────
+
+def _inw_met_ledger(tmp_path):
+    from types import SimpleNamespace
+    from nooch_village.event_bus import EventBus
+    from nooch_village.inhabitant import Inhabitant
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    from nooch_village.projects import ProjectLedger
+    from nooch_village.skills import SkillRegistry
+    led = ProjectLedger(str(tmp_path / "p.json"))
+    rec = Record(id="the_source", type=RecordType.ROLE, parent="noochville",
+                 definition=RoleDefinition(purpose="p", skills=["escaleer"]), source="seed")
+    ctx = SimpleNamespace(settings={"reflect_interval_seconds": "0"}, data_dir=str(tmp_path),
+                          projects=led, rugzakken={})
+    return Inhabitant(rec, EventBus(name="test"), SkillRegistry(), ctx), led
+
+
+def _plan_klaar(inw, led, monkeypatch, *, net_gevraagd):
+    """Bereid één project voor en geef terug welke berichten er naar een rol gingen."""
+    from nooch_village.inhabitant import Inhabitant
+    monkeypatch.setattr(Inhabitant, "_plan_checklist",
+                        lambda self, goal, **kw: {"items": [
+                            {"text": "zoek iets op", "skill": "escaleer", "payload": {}}]})
+    gestuurd = []
+    monkeypatch.setattr(Inhabitant, "_notify_rol",
+                        lambda self, rol, pid, tekst: gestuurd.append(tekst))
+    pid = led.create("the_source", "een doel", "human", status="queued")
+    inw.prepare_project(pid, net_gevraagd=net_gevraagd)
+    return gestuurd
+
+
+def test_geen_inbox_bericht_als_je_zelf_net_op_actief_klikte(tmp_path, monkeypatch):
+    """DE KERNTEST. Gemeten op het echte bord van 7 september: van de twaalf openstaande inbox-items
+    waren er ZES een "Uitvoerplan klaar voor X". Je sleept een project naar ACTIEF, je staat op die
+    kaart, en het dorp stuurt je een bericht dát er iets op die kaart staat. Dat item kan in de inbox
+    nooit dichtgaan, want de knop zit elders."""
+    inw, led = _inw_met_ledger(tmp_path)
+    assert _plan_klaar(inw, led, monkeypatch, net_gevraagd=True) == []
+
+
+def test_de_dagpuls_meldt_wel(tmp_path, monkeypatch):
+    """Het verschil is of iemand erom vroeg. Bij de puls heeft niemand dat gedaan en weet je het
+    anders niet — dán is een bericht precies goed."""
+    inw, led = _inw_met_ledger(tmp_path)
+    gestuurd = _plan_klaar(inw, led, monkeypatch, net_gevraagd=False)
+    assert len(gestuurd) == 1 and "go ahead" in gestuurd[0]
+
+
+def test_alleen_de_bord_drag_zwijgt():
+    """`_on_project_activated` IS de bord-drag; `_tend_projects` is de puls. Alleen de eerste geeft
+    de vlag mee — zou de tweede dat ook doen, dan wordt een plan dat 's nachts ontstaat onzichtbaar."""
+    import inspect
+    from nooch_village.inhabitant import Inhabitant
+    assert "net_gevraagd=True" in inspect.getsource(Inhabitant._on_project_activated)
+    assert "net_gevraagd" not in inspect.getsource(Inhabitant._tend_projects)

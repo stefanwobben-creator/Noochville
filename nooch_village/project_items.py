@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from nooch_village.projects import checklist_progress, not_answered_note
 
-_ACTIES = ("done", "skip", "unskip", "handoff")
+_ACTIES = ("done", "skip", "unskip", "handoff", "doorgeven")
 
 
 def _checklist_of(project: dict, clid: str) -> dict | None:
@@ -124,7 +124,8 @@ def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
 
 
 def resolve_item(ledger, pid: str, clid: str, item_id: str, actie: str, *,
-                 reason: str = "", by: str = "", naar_rol: str = "", records=None) -> tuple[bool, str]:
+                 reason: str = "", by: str = "", naar_rol: str = "", records=None,
+                 naar_label: str = "") -> tuple[bool, str]:
     """Los één open checklist-item op namens de mens. Geeft (gelukt, bericht voor de mens).
 
     Elke uitkomst laat een systeem-regel op de kaart achter (wie, wat, waarom) én controleert daarna
@@ -170,6 +171,27 @@ def resolve_item(ledger, pid: str, clid: str, item_id: str, actie: str, *,
         ledger.add_feed_entry(pid, f"↩ Overslaan teruggedraaid: {tekst}",
                               kind="system", author_type="human", author_id=wie)
         return True, "↩ item telt weer mee"                    # kan het project nooit áf maken
+    elif actie == "doorgeven":
+        # DOORGEVEN ≠ HANDOFF, en dat verschil is de hele reden dat dit een eigen actie is.
+        #
+        # `handoff` maakt een PROJECT op het bord van de ontvanger. Dat is goed als een ROL werk
+        # belegt bij een andere rol (de projectverzoek-skill, de escalatie-router): daar gaat het om
+        # een stuk werk met een eigen doel. Maar een MENS die één checklist-item doorgeeft wil geen
+        # project, hij wil dat iemand het ziet. Gemeten op het echte bord van 7 sept: de hand-off-knop
+        # vroeg om een 'done when…' en zette er een heel project neer, terwijl de bedoeling was
+        # "@iemand, kijk jij hier even naar".
+        #
+        # De ROUTERING gebeurt hier niet maar in het cockpit, via `route_werk` — de gedeelde regel
+        # die ook het werkoverleg en de inbox gebruiken (mens-vervulde rol → inbox bij die mens,
+        # AI-rol → project). Twee kopieën van die regel lopen na één wijziging uit de pas. Deze
+        # functie doet dus alleen wat ze hier hoort te doen: het item afsluiten en vastleggen waar
+        # het heen ging.
+        waarheen = (naar_label or naar_rol or "iemand anders").strip()
+        ledger.set_item_skipped(pid, clid, item_id, True, f"doorgegeven aan {waarheen}")
+        ledger.add_feed_entry(pid, f"📤 Doorgegeven aan {waarheen}: {tekst}. "
+                                   f"Dit item telt hier niet meer mee.",
+                              kind="system", author_type="human", author_id=wie)
+        msg = f"📤 doorgegeven aan {waarheen}"
     else:                                                      # handoff
         res = handoff(ledger, naar_rol, it.get("text", ""), done_criterium=reason,
                       records=records, van_pid=pid)
