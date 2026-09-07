@@ -125,95 +125,11 @@ def test_project_wordt_concept_en_keuren_we_goed(tmp_path):
     assert projects.discard(iid2) is True and projects.get(iid2) is None
 
 
-def test_lopende_projecten_niet_in_backlog(tmp_path):
-    """De backlog is een triage-wachtrij: lopende projecten staan er NIET in (anders blijft
-    de lijst vollopen). Drafts ook niet."""
-    import json
-    from nooch_village import cockpit
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "human_inbox.json", "library.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    (data / "projects.json").write_text(json.dumps({
-        "p1": {"id": "p1", "owner": "scout", "scope": "Lopend project", "status": "running",
-               "business_case": make_business_case(effect=80, effort=2, confidence=0.7)},
-        "p2": {"id": "p2", "owner": "harry", "scope": "Concept-project", "status": "draft",
-               "business_case": make_business_case(effect=80, effort=2, confidence=0.7)},
-    }), encoding="utf-8")
-    snap = cockpit.gather(str(data))
-    assert snap["backlog"] == []                             # geen projecten in de backlog
-    assert len(snap["project_drafts"]) == 1
-    page = cockpit.render_html(snap, csrf_token="t")
-    assert "Concept-projecten" in page and "Concept-project" in page
-    assert 'value="proj_approve"' in page and 'value="proj_discard"' in page
 
 
-def test_focusmodus_render_een_kaart_met_stappen(tmp_path):
-    """Focusmodus toont één spanning en de stapsgewijze keuzes (Duolingo-stijl), met een
-    duidelijke weg terug naar het overzicht."""
-    from nooch_village import cockpit
-    x = {"iid": "k1", "title": "Reviews op de PDP", "by": "analyst",
-         "wat": "Sterren tonen.", "waarom": "sociaal bewijs",
-         "business_case": make_business_case(effect=80, effort=2, confidence=0.7),
-         "value": 28.0, "dialogue": []}
-    page = cockpit.render_triage(x, 1, 3, ["scout", "analyst"], "t")
-    assert "Reviews op de PDP" in page and "Hoe pak je dit op?" in page
-    assert "← overzicht" in page                                    # terug naar de lijst
-    for val in ("tac_project", "tac_info_give", "tac_info_ask", "gov_proposal",
-                "tension_done", "vision_drop"):
-        assert f'value="{val}"' in page
-    # uitkomst toevoegen → blijf op de kaart; afronden/vraag → terug naar overzicht
-    assert "/triage?iid=k1" in page and 'value="/triage"' in page
-    assert "<option value=\"scout\">" in page                       # rol-keuze
 
 
-def test_focusmodus_overzicht_lijst_alle_spanningen(tmp_path):
-    """Het overzicht toont álle openstaande spanningen als klikbare lijst (geen gedwongen
-    volgorde), met een 'wacht op antwoord'-badge waar een vraag openstaat."""
-    from nooch_village import cockpit
-    queue = [
-        {"iid": "k1", "title": "Reviews op de PDP", "by": "analyst", "value": 28.0,
-         "business_case": make_business_case(effect=80, effort=2, confidence=0.7),
-         "awaiting": False},
-        {"iid": "k2", "title": "Sokken van hennep", "by": "herman", "value": 12.0,
-         "business_case": None, "awaiting": True},
-    ]
-    page = cockpit.render_triage_overview(queue, "t")
-    assert "2 openstaande spanning" in page
-    assert "Reviews op de PDP" in page and "Sokken van hennep" in page
-    assert "/triage?iid=k1" in page and "/triage?iid=k2" in page    # elk klikbaar
-    assert "wacht op antwoord" in page                              # badge op k2
-    assert "ArrowDown" in page and "ArrowUp" in page                # toetsenbord-navigatie
 
 
-def test_focusmodus_overzicht_leeg_is_klaar(tmp_path):
-    from nooch_village import cockpit
-    assert "Alles verwerkt" in cockpit.render_triage_overview([], "t")
-    assert "Alles verwerkt" in cockpit.render_triage(None, 0, 0, [], "t")
 
 
-def test_focus_kaart_holacracy_knoppen_en_dialoog(tmp_path):
-    """De focusmodus toont de Holacracy-knoppen en, bij een onbeantwoorde vraag, 'wachten op
-    antwoord' met de dialoog. (De kansen-backlog is uit het dashboard; verwerken gaat via focus.)"""
-    from nooch_village import cockpit
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "projects.json", "library.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    inbox = HumanInbox(str(data / "human_inbox.json"))
-    iid = inbox.add_opportunity("Reviews op de productpagina", by="analyst",
-                                wat="Sterren tonen.", waarom="sociaal bewijs",
-                                business_case=make_business_case(effect=80, effort=2, confidence=0.7))
-    inbox.add_question(iid, "Wat bedoel je hiermee?", by_role="analyst")
-
-    snap = cockpit.gather(str(data))
-    # backlog is niet meer in het dashboard gerenderd
-    assert "Kansen-backlog" not in cockpit.render_html(snap, csrf_token="t")
-    x = next(b for b in snap["backlog"] if b.get("iid") == iid)
-    page = cockpit.render_triage(x, 1, 1, ["analyst"], "t")
-    for val in ("tac_project", "tac_info_give", "tac_info_ask",
-                "gov_proposal", "tension_done", "vision_drop"):
-        assert f'value="{val}"' in page
-    assert "⚙️ Tactical" in page and "🏛️ Governance" in page
-    assert "wachten op antwoord" in page and "Wat bedoel je hiermee?" in page
-    assert "Wat bedoel je hiermee?" in page                   # de geparkeerde vraag

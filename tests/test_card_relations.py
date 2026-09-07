@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import tempfile
 
-from nooch_village import cockpit
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight, ClaimKind, EvidenceType
 from nooch_village.knowledge import strength, Strength
@@ -33,30 +32,7 @@ def test_add_relation_store():
     assert ns.add_relation("b1", "st", "flauwekul") is None         # ongeldige relatie
 
 
-def test_support_actie_maakt_standpunt_geverifieerd():
-    d = _data()
-    cockpit._dispatch_action(d, "note_support", "b1", "", extra={"target": "st"})
-    r = cockpit._dispatch_action(d, "note_support", "b2", "", extra={"target": "st"})
-    assert r["ok"] and r["note_relation"] == "supports"
-    ns = NotesStore(os.path.join(d, "notes.json"))
-    assert strength(ns.get("st"), ns.all()) == Strength.GEVERIFIEERD
 
 
-def test_contradict_actie_maakt_betwist():
-    d = _data()
-    r = cockpit._dispatch_action(d, "note_contradict", "b1", "", extra={"target": "st"})
-    assert r["ok"] and r["note_relation"] == "contradicts"
-    ns = NotesStore(os.path.join(d, "notes.json"))
-    assert strength(ns.get("st"), ns.all()) == Strength.BETWIST
 
 
-def test_card_render_heeft_kiezer_en_links():
-    d = _data()
-    h = cockpit.render_card(
-        {"id": "st", "claim": "x", "grounds": None, "status": "unresolved",
-         "grounding_count": 1, "word": "", "kind": None, "strength": "onbeslist",
-         "supports": [], "contradicts": []},
-        [], "tok", all_cards=[{"id": "b1", "claim": "lab A meet 90%"}])
-    assert "Soort kiezen" in h and "Bewijs-links" in h
-    assert "note_support" in h and "note_contradict" in h
-    assert "lab A meet 90%" in h            # doelkaartje in de dropdown

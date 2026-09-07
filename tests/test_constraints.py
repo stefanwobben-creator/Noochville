@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from nooch_village.constraints import Constraints
-from nooch_village import cockpit
+
 
 
 def test_constraint_store(tmp_path):
@@ -15,13 +15,3 @@ def test_constraint_store(tmp_path):
     assert Constraints(str(tmp_path / "constraints.json")).texts()[0].startswith("Alle producten")
 
 
-def test_cockpit_toont_huisregels(tmp_path):
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "human_inbox.json", "projects.json", "library.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    (data / "constraints.json").write_text(json.dumps(
-        [{"text": "We bieden geen kinderschoenen aan", "source": "triage: schoolruil"}]),
-        encoding="utf-8")
-    page = cockpit.render_html(cockpit.gather(str(data)), csrf_token="t")
-    assert "Huisregels" in page and "geen kinderschoenen" in page

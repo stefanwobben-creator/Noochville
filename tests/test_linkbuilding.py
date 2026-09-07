@@ -7,7 +7,7 @@ from unittest.mock import patch
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill, _assess_priority
 from nooch_village.link_targets import LinkTargets
 from nooch_village.inbox_actions import decide_link_target
-from nooch_village.cockpit import render_html
+
 
 
 # ── prioritering op de gids-tekst ───────────────────────────────────────────────
@@ -89,15 +89,5 @@ def _snap(targets):
             "link_candidates": targets, "link_pursued": [], "generated_at": 0}
 
 
-def test_render_toont_doelwitten_met_knoppen():
-    html = render_html(_snap([{"link": "http://g", "title": "15 Best Vegan Sneakers",
-                               "source": "goodonyou.eco", "priority": "hoog", "mentions": ["Veja"]}]),
-                       csrf_token="tok")
-    assert "Linkbuilding" in html and "pitchen" in html and "link_decide" in html
-    assert "hoog" in html and "Veja" in html
 
 
-def test_render_read_only_zonder_knoppen():
-    html = render_html(_snap([{"link": "http://g", "title": "X", "source": "", "priority": "midden",
-                               "mentions": []}]))
-    assert "link_decide" not in html

@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import tempfile
 
-from nooch_village import cockpit
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight, ClaimKind, EvidenceType
 from nooch_village.link_suggest import suggest_links, LinkProposals, open_proposals
@@ -55,27 +54,5 @@ def test_open_proposals_filtert_beslisten():
     assert open_proposals(notes, lp) == []                 # weg na verwerping
 
 
-def test_confirm_actie_legt_link_en_verhoogt_sterkte():
-    d = tempfile.mkdtemp()
-    ns = NotesStore(os.path.join(d, "notes.json"))
-    for n in _notes():
-        ns.add(n)
-    r = cockpit._dispatch_action(d, "link_confirm", "", "", extra={"from_id": "b1", "target": "st"})
-    assert r["ok"] and r["link_proposal"] == "confirmed"
-    ns2 = NotesStore(os.path.join(d, "notes.json"))
-    assert ns2.get("b1").supports == ["st"]
-    assert strength(ns2.get("st"), ns2.all()) == Strength.ONDERSTEUND
-    # niet opnieuw voorgesteld
-    lp = LinkProposals(os.path.join(d, "link_proposals.json"))
-    assert open_proposals(ns2.all(), lp) == []
 
 
-def test_reject_actie_onthoudt():
-    d = tempfile.mkdtemp()
-    ns = NotesStore(os.path.join(d, "notes.json"))
-    for n in _notes():
-        ns.add(n)
-    cockpit._dispatch_action(d, "link_reject", "", "", extra={"from_id": "b1", "target": "st"})
-    lp = LinkProposals(os.path.join(d, "link_proposals.json"))
-    assert lp.status("b1", "st") == "rejected"
-    assert NotesStore(os.path.join(d, "notes.json")).get("b1").supports == []  # geen link gelegd

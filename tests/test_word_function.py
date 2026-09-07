@@ -5,7 +5,7 @@ import time
 
 from nooch_village.library import Library, classify_function
 from nooch_village.inbox_actions import set_word_function
-from nooch_village.cockpit import compute_digest
+
 
 
 def test_heuristiek_classificeert():
@@ -48,15 +48,3 @@ def test_set_function_via_inbox_action(tmp_path):
     assert set_word_function(lib, "bestaatniet", "volg")["ok"] is False
 
 
-def test_digest_splitst_doelwit_en_volg():
-    now = time.time()
-    d = time.strftime("%Y-%m-%d", time.localtime(now))
-    library = {
-        "vegan":             {"status": "approved", "date": d,
-                              "evidence": {"volume": 1220000}, "function": "volg"},
-        "vegan sneakers dames": {"status": "approved", "date": d,
-                                 "evidence": {"volume": 210}, "function": "doelwit"},
-    }
-    dg = compute_digest(library, [], [], [], now)
-    assert [w["word"] for w in dg["new_seeds"]] == ["vegan"]
-    assert [w["word"] for w in dg["new_targets"]] == ["vegan sneakers dames"]

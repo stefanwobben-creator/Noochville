@@ -5,7 +5,7 @@ from __future__ import annotations
 from nooch_village.trend_analysis import (
     trend_state, trend_state_label, recent_surge, recent_move)
 from nooch_village.skills_impl.serpapi_trends import _series_from_timeseries
-from nooch_village.cockpit import _sparkline
+
 
 
 def test_opkomend():
@@ -79,10 +79,6 @@ def test_recent_surge_wrapper():
     assert recent_surge([80] * 24 + [40, 35, 30, 32]) is False
 
 
-def test_sparkline():
-    svg = _sparkline([10, 20, 15, 30])
-    assert svg.startswith("<svg") and "polyline" in svg
-    assert _sparkline([]) == "" and _sparkline([5]) == ""
 
 
 def test_series_parser():

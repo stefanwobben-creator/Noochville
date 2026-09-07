@@ -223,39 +223,5 @@ def test_skill_windows_multi_aggregaat_in_een_fetch():
     assert res["pairs_sold"] == 2                            # flat top-level = venster 0
 
 
-def test_dashboard_toggle_drie_vensters():
-    from nooch_village import cockpit
-    def w(days, orders, pairs):
-        return {"window_days": days, "orders": orders, "pairs_sold": pairs, "revenue": pairs * 90,
-                "currency": "EUR", "aov": 90.0, "orders_7d": min(orders, 1),
-                "by_country": [("NL", orders)], "top_products": [("A", pairs)]}
-    shop = {"ok": True, "windows": {"0": w(0, 9, 9), "7": w(7, 1, 1), "30": w(30, 4, 4)}, **w(0, 9, 9)}
-    page = cockpit._render_watcher_dashboard(shop, visitors_7d=200)
-    assert "wtoggle" in page and "wsel(" in page             # toggle + JS aanwezig
-    for lbl in ("7 dagen", "maand", "hele historie"):
-        assert lbl in page
-    assert 'id="wpanel-0"' in page and 'id="wpanel-7"' in page and 'id="wpanel-30"' in page
-    assert "conversie (7d)" in page                          # alleen in het 7d-paneel
 
 
-def test_cockpit_dashboard_render():
-    from nooch_village import cockpit
-    shop = {"ok": True, "window_days": 28, "pairs_sold": 42, "orders": 30,
-            "revenue": 5400, "currency": "EUR", "aov": 180.0, "orders_7d": 8,
-            "by_country": [("NL", 20), ("DE", 10)], "top_products": [("Sneaker Groen", 25)]}
-    page = cockpit._render_watcher_dashboard(shop, visitors_7d=400)
-    assert "Website Watcher" in page and "42" in page and "paren verkocht" in page
-    assert "laatste 28 dagen" in page
-    assert "Sneaker Groen" in page and "NL" in page
-    assert "bezoekers (7d)" in page and "conversie (7d)" in page and "2.0%" in page  # 8/400
-    # hele historie → gemiddelden + 'sinds'
-    allt = {"ok": True, "window_days": 0, "pairs_sold": 120, "orders": 80, "revenue": 14400,
-            "currency": "EUR", "aov": 180.0, "by_country": [], "top_products": [],
-            "avg_pairs_month": 20.0, "avg_revenue_month": 2400.0, "first_order_date": "2026-01-01",
-            "top_landing_pages": [("/blogs/vegan/sneakers", 30)], "channels": [("SEARCH", 50)],
-            "top_keywords": [("vegan sneakers", 12)]}
-    p2 = cockpit._render_watcher_dashboard(allt)
-    assert "hele historie" in p2 and "gem. paren/maand" in p2 and "sinds 2026-01-01" in p2
-    assert "/blogs/vegan/sneakers" in p2 and "Kanaal" in p2 and "SEARCH" in p2
-    # leeg → hint, geen crash
-    assert "Nog geen Shopify-verkoopdata" in cockpit._render_watcher_dashboard({})

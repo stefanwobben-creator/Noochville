@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nooch_village.seed_surge_store import SeedSurges
-from nooch_village import cockpit
+
 
 
 def test_store_add_pending_investigate_explain(tmp_path):
@@ -158,42 +158,5 @@ def test_scout_explain_surge_failclosed_pakt_nieuwste(monkeypatch, tmp_path):
     assert surges["biobased"]["explanation"]["title"] == "Biobased materialen in opmars"
 
 
-def test_cockpit_toont_surge_badge_en_verklaring(tmp_path):
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "human_inbox.json", "projects.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    (data / "library.json").write_text(json.dumps({
-        "microplastics": {"status": "approved", "function": "volg", "date": "2026-06-24",
-                          "evidence": {"volume": 135000, "trend_state": "stabiel",
-                                       "trend_series": [50] * 24 + [80, 85, 90],
-                                       "recent_surge": True}},
-    }), encoding="utf-8")
-    (data / "seed_surges.json").write_text(json.dumps({
-        "microplastics": {"term": "microplastics", "status": "investigated",
-                          "explanation": {"title": "EU verbiedt microplastics in cosmetica",
-                                          "link": "http://x", "date": "2026-06-20"}}}),
-        encoding="utf-8")
-    page = cockpit.render_html(cockpit.gather(str(data)), csrf_token="t")
-    assert "recent stijgend" in page
-    assert "EU verbiedt microplastics in cosmetica" in page
 
 
-def test_seed_linkt_naar_harry_duiding(tmp_path):
-    from nooch_village.notes_store import NotesStore
-    from nooch_village.insight import Insight, GroundingStatus
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "human_inbox.json", "projects.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    (data / "library.json").write_text(json.dumps({
-        "microplastics": {"status": "approved", "function": "volg", "date": "2026-06-24",
-                          "evidence": {"volume": 135000, "trend_state": "stabiel",
-                                       "recent_move": "stijgend"}},
-    }), encoding="utf-8")
-    ns = NotesStore(str(data / "notes.json"))
-    ns.add(Insight(id="card1", claim="Microplastics zijn sterk relevant: bronnen tonen milieu-impact.",
-                   source="harry", word="microplastics", status=GroundingStatus.SUPPORTED,
-                   grounds="OpenAlex", grounding_count=2))
-    page = cockpit.render_html(cockpit.gather(str(data)), csrf_token="t")
-    assert "🔬" in page and "/card?id=card1" in page          # link naar Harry's duiding

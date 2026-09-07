@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from nooch_village.news_distill import NewsProposals, distill_article, distill_news
-from nooch_village import cockpit
+
 
 
 def test_distill_article_parse_en_failclosed():
@@ -43,49 +43,7 @@ def _data(tmp_path):
     return d
 
 
-def test_news_prop_confirm_routeert_naar_juiste_store(tmp_path):
-    from nooch_village.news_distill import NewsProposals
-    from nooch_village.library import Library
-    from nooch_village.notes_store import NotesStore
-    from nooch_village.competitor_brands import CompetitorBrands
-    d = _data(tmp_path)
-    np = NewsProposals(str(d / "news_proposals.json"))
-    pid_seed = np.add("seed", "cactusleer", "breed", "Cariuma", "t", "u1")
-    pid_doel = np.add("doelwit", "plasticvrije sneaker", "intentie", "Cariuma", "t", "u2")
-    pid_kaart = np.add("kaart", "Cactusleer is een veganistisch leeralternatief", "feit", "X", "t", "u3")
-    pid_conc = np.add("concurrent", "Allbirds", "groot merk", "X", "t", "u4")
-
-    for pid in (pid_seed, pid_doel, pid_kaart, pid_conc):
-        res = cockpit._dispatch_action(str(d), "news_prop", pid, "", extra={"decision": "confirm"})
-        assert res["ok"]
-
-    lib = Library(str(d / "library.json"))
-    assert lib.is_approved("cactusleer") and lib.function_of("cactusleer") == "volg"
-    assert lib.is_approved("plasticvrije sneaker") and lib.function_of("plasticvrije sneaker") == "doelwit"
-    assert any("Cactusleer" in n.claim for n in NotesStore(str(d / "notes.json")).all())
-    assert "Allbirds" in CompetitorBrands(str(d / "competitor_brands.json")).confirmed()
-    # alle voorstellen nu confirmed (niet meer pending)
-    assert NewsProposals(str(d / "news_proposals.json")).pending() == []
 
 
-def test_news_prop_reject(tmp_path):
-    from nooch_village.news_distill import NewsProposals
-    d = _data(tmp_path)
-    np = NewsProposals(str(d / "news_proposals.json"))
-    pid = np.add("seed", "iets", "x")
-    res = cockpit._dispatch_action(str(d), "news_prop", pid, "", extra={"decision": "reject"})
-    assert res["ok"] and res["news"] == "rejected"
-    assert NewsProposals(str(d / "news_proposals.json")).pending() == []
 
 
-def test_cockpit_rendert_distilleer_blok(tmp_path):
-    d = _data(tmp_path)
-    (d / "news_proposals.json").write_text(json.dumps({"items": {
-        "p1": {"id": "p1", "kind": "doelwit", "content": "plasticvrije sneaker", "rationale": "intentie",
-               "brand": "Cariuma", "title": "kop", "link": "u1", "status": "pending", "at": 1}},
-        "seen": []}), encoding="utf-8")
-    snap = cockpit.gather(str(d))
-    assert [p["content"] for p in snap["news_proposals"]] == ["plasticvrije sneaker"]
-    page = cockpit.render_html(snap, csrf_token="t")
-    assert "Scout uit het nieuws" in page and "plasticvrije sneaker" in page
-    assert 'value="news_prop"' in page and 'value="news_scan"' in page

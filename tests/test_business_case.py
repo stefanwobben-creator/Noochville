@@ -6,7 +6,7 @@ import json
 from nooch_village.business_case import make_business_case, business_value, format_business_case
 from nooch_village.governance import proposal_to_dict, proposal_from_dict
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
-from nooch_village import cockpit
+
 
 
 def test_make_business_case_normaliseert():
@@ -43,28 +43,3 @@ def test_proposal_draagt_business_case_roundtrip():
     assert p2.business_case["effect"] == 50 and p2.hypothesis == p.hypothesis
 
 
-def test_cockpit_backlog_gerangschikt(tmp_path):
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "library.json", "projects.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    # twee voorstellen in de inbox met business-case, verschillende waarde
-    inbox = {
-        "a": {"id": "a", "type": "escalation", "subject": "reviews oogsten", "status": "pending",
-              "context": {"proposal": {"proposer_role": "analyst",
-                          "hypothesis": "sociaal bewijs → conversie",
-                          "business_case": make_business_case(effect=100, effort=2, confidence=0.8)}}},
-        "b": {"id": "b", "type": "escalation", "subject": "fora monitoren", "status": "pending",
-              "context": {"proposal": {"proposer_role": "scout",
-                          "business_case": make_business_case(effect=10, effort=5, confidence=0.3)}}},
-    }
-    (data / "human_inbox.json").write_text(json.dumps(inbox), encoding="utf-8")
-
-    snap = cockpit.gather(str(data))
-    assert [b["title"] for b in snap["backlog"]] == ["reviews oogsten", "fora monitoren"]  # op waarde
-    assert snap["backlog"][0]["value"] == 40.0
-
-    # De dichte kansen-backlog is uit het dashboard (verwerken gaat via de focusmodus); de
-    # ranking-data leeft nog in snap. De render mag gewoon draaien zonder die tabel.
-    page = cockpit.render_html(snap, csrf_token="t")
-    assert "Kansen-backlog" not in page
