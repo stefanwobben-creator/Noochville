@@ -260,6 +260,11 @@ def _due_overdue(due: str) -> bool:
         return False
 
 
+#: Welke statussen in de Active-kolom vallen — AFGELEID uit `_PROJ_COLS`, nooit een tweede lijst.
+#: Precies de fout die hieronder in de docstring staat: de kolom heet Active, de statussen heten
+#: `running` en `queued`, en wie dat overtypt raakt vroeg of laat uit de pas met de kolom zelf.
+_ACTIEF_STATUSSEN = next((s for _lbl, key, s in _PROJ_COLS if key == "actief"), ())
+
 #: De vier toestanden waarin een kaart in ACTIVE kan staan. Ze zagen er tot 7 september identiek
 #: uit — titel, trekker, ouderdom, balkje — en dat is precies de heuristiek die hier faalde:
 #: zichtbaarheid van systeemstatus. Je kon niet zien of er iemand mee bezig was, of het wachtte, of
@@ -281,10 +286,18 @@ def _kaart_status(st, p: dict) -> str:
     eerst, want dat is de enige toestand waarin het antwoord "nooit" is en elke andere uitleg een
     valse hoop.
 
+    WELKE STATUS 'LOPEND' IS, KOMT UIT `_PROJ_COLS` EN NERGENS ANDERS. Mijn eerste versie toetste op
+    `status in ("active", "actief")` — geraden, niet gecontroleerd. De kolom HEET Active maar bevat
+    `running` en `queued`, dus de badge verscheen op geen enkele van de 21 kaarten. En de test die
+    ik erbij schreef gebruikte `status="active"`: dezelfde aanname, dus hij bevestigde hem in plaats
+    van hem te toetsen. Een tweede lijst statussen is precies het soort kopie waar
+    `reference, don't copy` over gaat.
+
     ALLES FAIL-SOFT. Dit is versiering op een kaart; een bord dat niet laadt omdat een badge
     struikelt is oneindig veel erger dan een bord zonder badge."""
     try:
-        if str(p.get("status") or "").lower() not in ("active", "actief"):
+        status = str(p.get("status") or "")
+        if status not in _ACTIEF_STATUSSEN:
             return ""
         items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
         open_items = [it for it in items
@@ -326,11 +339,18 @@ def _kaart_status(st, p: dict) -> str:
             merk, uitleg, kls = _STATUS_UIT["mens"]
             return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} your turn</span>"
 
-        # 4. LOOPT. Onderscheid tussen 'nu bezig' en 'wacht op de puls' vraagt om een hartslag die
-        #    er niet is; `last_tended` is het dichtstbijzijnde dat we hebben en zegt alleen IETS als
-        #    het van vandaag is. Liever één eerlijke 'running' dan twee verzonnen toestanden.
+        # 4. LOOPT of WACHT — en die twee hoeven we niet te verzinnen, want de STATUS zegt het al.
+        #    Ik schreef hier eerst dat het onderscheid een hartslag vroeg die er niet is. Dat was
+        #    mis: de Active-kolom bundelt `running` en `queued`, en dat verschil is precies "de rol
+        #    is ermee bezig" tegenover "het staat in de rij". Het stond er dus al; ik keek ernaast.
+        if status == "queued":
+            merk, uitleg, kls = _STATUS_UIT["wacht"]
+            return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} queued</span>"
         merk, uitleg, kls = _STATUS_UIT["werkt"]
-        return f"<span class='pstatus {kls}' title='{_e(uitleg)}'>{merk} running</span>"
+        # Het teken in een eigen span: alleen ⟳ draait, het woord ernaast staat stil. Zou de hele
+        # chip draaien, dan is hij onleesbaar en is de beweging een grap in plaats van informatie.
+        return (f"<span class='pstatus {kls}' title='{_e(uitleg)}'>"
+                f"<span class='draait'>{merk}</span> running</span>")
     except Exception:                                   # noqa: BLE001
         return ""
 

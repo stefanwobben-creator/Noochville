@@ -163,7 +163,16 @@ ul.clean li:last-child{border-bottom:none}
    geen kleurverschil ziet leest ⟳ ◔ ⚠ ○ 🙋 en het woord ernaast, en weet het nog steeds. */
 .pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:.66rem;
   padding:.05rem .4rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray)}
+/* `draait` heeft BEWUST geen koppelteken: de prefix-ratchet telt alles vóór het eerste streepje
+   als een familie, dus `pstatus-ic` maakte er stilletjes een nieuwe aan. De klasse staat in de CSS
+   alleen onder `.pstatus.is-werkt`, dus hij kan nergens anders iets doen.
+
+   Het ⟳ DRAAIT ECHT als de rol eraan werkt. Een stilstaand draai-teken is een tegenspraak: het
+   belooft beweging en toont stilstand, en dan geloof je het vakje ook niet als het wél iets zegt.
+   Alleen deze ene status beweegt — 'wacht' en 'vast' horen juist stil te staan. */
 .pstatus.is-werkt{background:var(--green-tint);color:var(--green-dark)}
+.pstatus.is-werkt .draait{display:inline-block;animation:pstatus-draai 1.6s linear infinite}
+@keyframes pstatus-draai{to{transform:rotate(360deg)}}
 .pstatus.is-vast{background:var(--error-tint);color:var(--coral)}
 /* Onbemand is geen waarschuwing maar een DOODLOPENDE WEG, en dat verdient het zwaarste teken op de
    kaart: hier gebeurt nooit iets tot een mens de rol bemant. */
@@ -594,8 +603,8 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ibx-btn:hover{border-color:var(--green);color:var(--ink)}
 .ibx-btn.ja{border-color:var(--green);color:var(--green-dark);font-weight:600}
 /* Bezig: de rij blijft staan tot de server hem echt gesloten heeft. Optimistisch weghalen zou een
-   geweigerde POST als succes tonen — dezelfde blinde vlek als bij ibxPost. */
-.ibx-row.gk.bezig{opacity:.45;pointer-events:none}
+   geweigerde POST als succes tonen — dezelfde blinde vlek als bij ibxPost.
+   De vorm van `bezig` staat één keer beschreven, bij `.ck-item.bezig` onderaan dit bestand. */
 /* Doorgeven: één veld naast één knop. Het vorige formulier had drie velden en perste de itemtekst
    ernaast samen tot één woord per regel. `min-width:0` op het veld en `flex-wrap` zorgen dat het
    uitklap-blok binnen zijn eigen breedte blijft in plaats van de rij open te duwen. */
@@ -952,6 +961,41 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-bewerk[open]>summary{opacity:1}
 .ck-item.sleept{opacity:.45}
 .ck-item.erover{box-shadow:inset 0 2px 0 0 var(--green)}
+/* ── Vloeiend, niet luid ────────────────────────────────────────────────────────────────────────
+   Het aanbod van een rol om werk over te nemen voelde statisch: klik, hele pagina weg, hele pagina
+   terug. Deze drie regels doen het werk, en meer is het niet.
+
+   `bezig` is de eerlijke wachtstand: de rij dimt en neemt geen klikken meer aan, maar hij VERANDERT
+   nog niet — dat doet pas de server. Optimistisch afvinken zou een geweigerde POST als succes tonen,
+   en dat is de blinde vlek die in `ibxPost` staat uitgeschreven. */
+.ck-item{transition:opacity .18s ease}
+/* Eén vorm voor "de server is hiermee bezig", op beide plekken waar dat kan gebeuren (checklist-rij
+   en inbox-rij). Twee keer dezelfde opacity uitschrijven is precies het feit-op-twee-plekken dat
+   uiteendrijft zodra iemand er één aanpast. */
+.ck-item.bezig,.ibx-row.gk.bezig{opacity:.45;pointer-events:none;
+  animation:ck-wacht 1.1s ease-in-out .5s infinite}
+/* DE VERTRAGING IS HET ONTWERP, niet een detail. Een antwoord binnen een halve seconde voelt als
+   direct: dan hoort er geen wachtteken te verschijnen, want een indicator die oplicht en meteen weer
+   weg is, is drukte. Duurt het langer, dan is stilte de leugen — dan lijkt je klik niet aangekomen.
+   Dus: de eerste 0,5s alleen dimmen, daarna pas ademen. Nielsen's grens tussen "voelt instant" en
+   "moet zeggen dat hij bezig is", maar dan zonder spinner die de aandacht opeist. */
+@keyframes ck-wacht{50%{opacity:.26}}
+/* Wat terugkomt van de server komt op, niet aan. Kort genoeg om niet in de weg te zitten als je
+   vijf items achter elkaar afvinkt. */
+.checklist.ck-vers .ck-item{animation:ck-op .32s ease both}
+@keyframes ck-op{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+/* Het skill-aanbod verschijnt zonder aankondiging tussen de items. Even laten opkomen maakt het
+   een uitnodiging in plaats van een sprong. */
+.ck-item .btn.ghost.sm{animation:ck-op .32s ease both}
+/* WIE GEEN BEWEGING WIL, KRIJGT ZE NIET. Dit is geen extraatje maar de voorwaarde om überhaupt te
+   mogen bewegen: alles hierboven is versiering op informatie die ook zonder de animatie klopt. */
+@media (prefers-reduced-motion: reduce){
+  .pstatus.is-werkt .draait{animation:none}
+  .checklist.ck-vers .ck-item,.ck-item .btn.ghost.sm{animation:none}
+  .ck-item{transition:none}
+  /* Het ademen valt weg, het dimmen blijft: dat laatste is de status zelf en geen versiering. */
+  .ck-item.bezig,.ibx-row.gk.bezig{animation:none}
+}
 .attcard{display:flex;align-items:center;gap:.55rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;margin-bottom:.4rem}
 .att-ic{flex:0 0 auto;color:var(--gray);display:inline-flex}
 .att-ic svg{width:16px;height:16px}
