@@ -88,12 +88,12 @@ def test_synthese_geeft_ongegronde_taken_mee_en_vangt_fabricage(caplog):
 
     assert ok is True
     # 1) de ongegronde taak is expliciet aan de synthese meegegeven met de harde regel
-    assert "TAKEN ZONDER GEGROND RESULTAAT" in captured["prompt"]
+    assert "TASKS WITHOUT A GROUNDED RESULT" in captured["prompt"]
     assert "Prijsanalyse van merken" in captured["prompt"]
-    assert "HARDE GRONDINGS-REGEL" in captured["prompt"]
+    assert "HARD GROUNDING RULE" in captured["prompt"]
     # 2) de fabricage-vangst sloeg aan: luide log + zichtbare wall-waarschuwing
     assert "DOC_FABRICATION_SUSPECT" in caplog.text
-    assert any("ONGEGRONDE data" in m for m in projects.msgs)
+    assert any("UNGROUNDED data" in m for m in projects.msgs)
 
 
 def test_synthese_geen_valse_alarm_bij_schoon_document():

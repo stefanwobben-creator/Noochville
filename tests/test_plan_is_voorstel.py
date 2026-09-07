@@ -174,7 +174,7 @@ def test_i_plan_klaar_meldt_zich_bij_de_eigenaar_rol(tmp_path, ledger, monkeypat
     n = NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", "harry_hemp")])
     assert len(n) == 1
     tekst = n[0].get("tekst") or n[0]["snippet"]
-    assert "Uitvoerplan" in tekst and "go ahead" in tekst          # wat er ligt, en wat jij moet doen
+    assert "Execution plan" in tekst and "go ahead" in tekst       # wat er ligt, en wat jij moet doen
 
 
 def test_j_volledig_mens_plan_vraagt_geen_akkoord(tmp_path, ledger, monkeypatch):

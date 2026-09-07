@@ -157,7 +157,7 @@ def test_awaiting_review_finale_pass_en_note(tmp_path):
     p = ledger.get(pid)
     assert p["status"] == "blocked" and p["blocked_on"] == "review"
     assert p.get("critic_verdict") == "afgewezen"          # geen SCHONE review
-    assert any(e.get("text", "").startswith("📄 Einddocument bijgewerkt") for e in p.get("log", []))
+    assert any(e.get("text", "").startswith("📄 Final document updated") for e in p.get("log", []))
     assert any("Missie-critic" in e.get("text", "") for e in p.get("log", []))
 
 
@@ -202,7 +202,8 @@ def test_volledige_inhoud_en_structuur_en_hogere_cap(tmp_path):
         inh._synthesize_einddocument(ledger.get(pid), done=1, total=1, force_final=True)
     prompt = m.call_args[0][0]
     assert big in prompt                                          # volledige inhoud, niet op 500 afgekapt
-    assert "FEITELIJKE BEVINDINGEN" in prompt and "elke taak" in prompt.lower()   # taak/bevindingen-structuur
+    # Prompt is Engels sinds 06-09-2026; de STRUCTUUR-eis is ongewijzigd gebleven.
+    assert "FACTUAL FINDINGS" in prompt and "every task" in prompt.lower()
     assert m.call_args[1]["max_tokens"] == 8000                   # ruimere output-cap (default)
 
 
@@ -328,7 +329,7 @@ def test_terugval_wordt_vastgelegd_als_herkomst(tmp_path, caplog):
     assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": True}
     assert "DOC_TERUGVAL" in caplog.text
     muur = " ".join(m.get("text", "") for m in ledger.get(pid).get("log", []))
-    assert "terugval" in muur and "mistral:m1" in muur      # de reviewer ziet het op de muur
+    assert "fallback" in muur and "mistral:m1" in muur      # de reviewer ziet het op de muur
 
 
 def test_gevraagd_model_is_geen_terugval(tmp_path):

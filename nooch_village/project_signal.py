@@ -69,8 +69,16 @@ def _is_placeholder(tekst: str) -> bool:
     return (t == "" or is_procedureel(t) or _is_boilerplate(t)
             or bool(re.match(r"(?i)^afgerond:", t)))
 # Koppen die in een einddocument doorgaans de conclusie/uitkomst markeren (case-insensitive).
+#
+# TWEETALIG SINDS 06-09-2026. De einddocument-prompt schrijft nu '## Conclusion'; alle documenten
+# van vóór vandaag hebben '## Conclusie'. Vertaal je alleen de prompt, dan vindt deze functie in een
+# nieuw document geen conclusie meer en valt het projectsignaal stil ZONDER foutmelding — de kaart
+# toont dan gewoon niets. Prompt en parser gaan samen; de oude taal blijft staan voor de bestaande
+# documenten. Zelfde afweging als bij de triage-parser in cockpit2 (zie test_i18n_prompt_grens.py).
 _CONCLUSIE_KOPPEN = ("conclusie", "uitkomst", "samenvatting", "antwoord", "bevinding",
-                     "bevindingen", "resultaat", "resultaten", "slotsom", "kernboodschap")
+                     "bevindingen", "resultaat", "resultaten", "slotsom", "kernboodschap",
+                     "conclusion", "outcome", "summary", "finding", "findings", "result",
+                     "results", "key message", "bottom line")
 
 
 def is_procedureel(tekst: str) -> bool:

@@ -220,7 +220,7 @@ def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
     logtxt = " ".join(e["text"] for e in p.get("log", []))
     # De skill zei zélf `no_data` → dat is een gerapporteerde uitkomst, geen kennisgat. De wall
     # zegt dat nu ook zo; '📭' blijft het merk voor gemeld-leeg (🕳 is het merk voor een echt gat).
-    assert "📭" in logtxt and "gerapporteerd, niets gevonden" in logtxt
+    assert "📭" in logtxt and "reported, nothing found" in logtxt
     assert "niet gelukt" not in logtxt                               # geen ⚠️: het is geen mislukking
 
 

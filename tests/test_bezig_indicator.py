@@ -89,14 +89,61 @@ def test_bezig_balk_draagt_een_haakje_voor_de_frontend():
     assert "the role is working" in src
 
 
-def test_de_kaart_blijft_na_go_ahead_zelf_kijken():
-    """Zeven verversingen met oplopende tussenpozen, en ze doven uit.
-
-    Een eeuwige poller is de makkelijke fout hier: de kaart kan uren openstaan. Daarom een eindige
-    reeks, en elke tik controleert eerst of de overlay nog open is."""
+def _projects_src():
     import inspect
     from nooch_village.views import projects as P
-    src = inspect.getsource(P)
-    assert "if(act==='plan_akkoord')" in src
-    assert "[2000,5000,9000,15000,30000,60000,120000]" in src
-    assert "if(ov.style.display!=='none')reopen()" in src          # niet blijven pollen na sluiten
+    return inspect.getsource(P)
+
+
+def test_de_kaart_kijkt_naar_het_WERK_en_niet_naar_de_klok():
+    """DE KERNTEST, en een gerepareerde fout.
+
+    Hier stond eerst [2000,5000,9000,15000,30000,60000,120000]: zeven vaste momenten die na twee
+    minuten uitdoofden. Gemeten op 6 september bij het eerste echte gebruik: een plan met
+    site_health + haal_pagina + plausible_stats duurt lánger dan twee minuten. De kaart viel dus
+    halverwege stil en je moest alsnog zelf verversen — precies de klacht die #466 had moeten
+    oplossen. Een timer weet niet of het werk klaar is; de bezig-vlag wel."""
+    src = _projects_src()
+    assert "if(act==='plan_akkoord'){volgStart();}" in src
+    assert "[2000,5000,9000,15000,30000,60000,120000]" not in src, "de klok-versie is terug"
+    assert "function volgActief(){return !!bd.querySelector('[data-bezig]');}" in src
+
+
+def test_de_poller_heeft_drie_stopgronden():
+    """Een poller die blijft draaien is erger dan geen poller: de kaart kan uren openstaan.
+
+    Drie uitgangen, en ze dekken verschillende dingen. Overlay dicht = je kijkt niet meer. Vlag weg
+    = het werk is klaar. Bovengrens = er hangt iets, en blijven pollen repareert dat niet."""
+    src = _projects_src()
+    assert "if(ov.style.display==='none'||Date.now()>volgTot){volgStop();return;}" in src
+    assert "else{volgStop();}" in src                              # vlag weg → klaar
+    assert "Date.now()+900000" in src                              # harde bovengrens: 15 minuten
+
+
+def test_de_aanloop_is_apart_geregeld():
+    """Direct na 'go ahead' staat de bezig-vlag er nog NIET: de bordpuls moet het project eerst
+    oppakken. Zou de poller meteen op de vlag beslissen, dan stopt hij bij de eerste tik en heb je
+    weer niets. Daarom de eerste 30 seconden onvoorwaardelijk."""
+    src = _projects_src()
+    assert "Date.now()-volgStartTs<30000" in src
+
+
+def test_ook_bij_het_OPENEN_van_een_draaiende_kaart():
+    """Anders werkt het volgen alleen in het tabblad waarin je zelf op 'go ahead' klikte. Sluit je
+    de kaart en kom je terug, dan sta je weer naar een stilstaand beeld te kijken."""
+    src = _projects_src()
+    assert "if(volgActief())volgStart();" in src
+
+
+def test_geen_twee_pollers_tegelijk():
+    """`wire()` draait na élke reopen, en reopen wordt dóór de poller aangeroepen. Zonder rem start
+    elke tik een tweede ketting en verdubbelt het aantal fetches per ronde.
+
+    DE REM STAAT OP EEN VLAG EN NIET OP HET TIMER-HANDLE, en dat is het hele punt van deze test. Een
+    tik zet zijn eigen handle op null vóórdat hij reopen() aanroept; stond de rem daarop, dan is hij
+    op precies dat moment leeg en laat hij de tweede ketting er gewoon langs. Die versie stond hier
+    even in en deze test kwam er groen doorheen — vandaar dat hij nu de vlag noemt."""
+    src = _projects_src()
+    assert "function volgStart(){if(volgAan)return;volgAan=true;" in src
+    assert "function volgStop(){volgAan=false;" in src
+    assert "function volgStart(){if(volgT)return;" not in src

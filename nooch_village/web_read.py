@@ -66,6 +66,46 @@ def _zonder_markering(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s or "")).strip()
 
 
+_BRAVE_SLEUTEL_PREFIX = "BSA"
+
+
+def _brave_fout(resp, key: str) -> str:
+    """De foutmelding die Brave zélf geeft, plus de aanwijzing die hem bruikbaar maakt.
+
+    GEMETEN AANLEIDING (6 september 2026). Brave gaf 422 op elk verzoek. `raise_for_status()` levert
+    dan "422 Client Error: for url: …" en verder niets, want de reden staat in de RESPONSE BODY die
+    hij weggooit. Die body zei letterlijk `SUBSCRIPTION_TOKEN_INVALID`. In de sleutel in `.env` was
+    bij het plakken een teken meegekomen: hij begon met `jBSA` in plaats van `BSA`.
+
+    Dat kostte een los diagnose-script en drie rondes voor iets wat de API in één zin had verteld.
+    De statuscode alleen stuurde bovendien de verkeerde kant op: 422 leest als "mijn verzoek klopt
+    niet" terwijl het hier authenticatie was — de meeste API's geven daar 401 voor.
+
+    De prefix-hint staat er alleen bij een AUTHENTICATIE-fout, en de sleutel wordt nooit afgekeurd op
+    zijn vorm: de API is de autoriteit over geldigheid, wij maken de melding alleen bruikbaar. Zou dit
+    vooraf weigeren, dan breekt het zodra Brave zijn sleutelformaat wijzigt.
+    """
+    detail = code = ""
+    try:
+        fout = (resp.json() or {}).get("error") or {}
+        code = str(fout.get("code") or "")
+        detail = str(fout.get("detail") or "")
+    except Exception:
+        detail = (resp.text or "")[:200]
+    melding = f"Brave gaf {resp.status_code}"
+    if code or detail:
+        melding += f" — {code}{': ' if code and detail else ''}{detail}"
+    if "TOKEN" in code.upper() or "auth" in detail.lower():
+        gezien = f"{key[:4]}…" if key else "(leeg)"
+        melding += (f" · de sleutel begint met {gezien} en zou met "
+                    f"'{_BRAVE_SLEUTEL_PREFIX}' moeten beginnen; controleer BRAVE_API_KEY in .env op "
+                    f"een meegeplakt teken"
+                    if not key.startswith(_BRAVE_SLEUTEL_PREFIX) else
+                    " · de sleutelvorm klopt, dus controleer of het abonnement op 'Data for Search' "
+                    "actief is")
+    return melding
+
+
 def brave_search(query: str, key: str, *, num: int = 10, gl: str = "", hl: str = "") -> list[dict]:
     """Brave's EIGEN index → [{title, link, snippet}], dezelfde vorm als `serpapi_search`.
 
@@ -87,7 +127,8 @@ def brave_search(query: str, key: str, *, num: int = 10, gl: str = "", hl: str =
         params["search_lang"] = hl
     resp = requests.get(_BRAVE_ENDPOINT, params=params, timeout=20,
                         headers={"X-Subscription-Token": key, "Accept": "application/json"})
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        raise RuntimeError(_brave_fout(resp, key))
     data = resp.json()
     out = []
     for item in ((data.get("web") or {}).get("results") or []):

@@ -985,8 +985,8 @@ class Inhabitant(threading.Thread):
             # project zonder uitleg. Naar de ROL, niet de persoon, zodat de melding een wisseling van
             # vervuller overleeft.
             self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte)", pid)
-            self._notify_rol(self.id, pid, "📋 Ik kon geen uitvoerplan maken voor dit project. Het staat "
-                                           "stil tot het doel scherper is of je de stappen zelf toevoegt.")
+            self._notify_rol(self.id, pid, "📋 I could not build an execution plan for this project. It stays "
+                                           "put until the goal is sharper, or you add the steps yourself.")
             return
         # akkoord=False: het plan is een VOORSTEL. `_execute_checklist` slaat 'm over tot een mens
         # op de projectkaart 'go ahead' klikt. Plannen is goedkoop en omkeerbaar, uitvoeren kost
@@ -1033,9 +1033,9 @@ class Inhabitant(threading.Thread):
             else:
                 n_skill += 1
         ledger.add_role_message(pid, (
-            f"📋 Uitvoerplan voor '{goal}'. Deliverable: {plan.get('deliverable','')}. "
-            f"{n_skill} item(s) uitvoerbaar, {n_open} zonder skill, {n_mens} mens-taak/taken "
-            f"(tellen niet mee in de klaar-telling), {n_invalid} met onvolledige payload"
+            f"📋 Execution plan for '{goal}'. Deliverable: {plan.get('deliverable','')}. "
+            f"{n_skill} item(s) runnable, {n_open} without a skill, {n_mens} human task(s) "
+            f"(they do not count towards done), {n_invalid} with an incomplete payload"
             + (": " + "; ".join(opens) if opens else "") + "."))
         self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d mens-taak, "
                       "%d onvolledige payload", pid, n_skill, n_open, n_mens, n_invalid)
@@ -1044,8 +1044,8 @@ class Inhabitant(threading.Thread):
         # abedbc1aa448): niemand kan er ooit iets aan afvinken. Meteen zichtbaar bij de mens neerleggen.
         if n_mens and not (n_skill or n_open or n_invalid):
             ledger.add_role_message(pid, (
-                "🙋 Dit hele uitvoerplan is mens- of extern werk — ik kan hier niets van uitvoeren. "
-                "Dit hoort een mens-project te zijn (of het doel moet kleiner: welk stuk kan ík doen?)."))
+                "🙋 This whole execution plan is human or external work — I can run none of it. "
+                "This should be a human project (or the goal needs to be smaller: which part can I do?)."))
             ledger.block(pid, "mens-project: geen enkel item is door een rol uit te voeren")
             self._notify_founder(pid, f"🙋 Project van {self.display_name} is volledig mens-werk: "
                                       f"'{goal[:80]}' — geen AI-project, wacht op jou.")
@@ -1054,9 +1054,9 @@ class Inhabitant(threading.Thread):
         # Het plan ligt er; nu pas de vraag. Naar de EIGENAAR-ROL, niet de founder: wie het project
         # activeerde beoordeelt het plan, en een rol als adres overleeft een wisseling van vervuller.
         self._notify_rol(p.get("owner") or self.id, pid,
-                         f"📋 Uitvoerplan klaar voor '{goal[:80]}' — {n_skill} van de "
-                         f"{n_skill + n_open + n_mens + n_invalid} item(s) kan ik draaien. Ik doe niets "
-                         f"tot jij op de projectkaart 'go ahead' klikt.")
+                         f"📋 Execution plan ready for '{goal[:80]}' — {n_skill} of the "
+                         f"{n_skill + n_open + n_mens + n_invalid} item(s) I can run. I do nothing "
+                         f"until you click 'go ahead' on the project card.")
 
     def _raadpleeg_kennis(self, pid: str, goal: str, ledger) -> str:
         """Kennis-eerst: raadpleeg vóór het plannen Lara's kennislaag (kaartjes + inzichten +
@@ -1609,7 +1609,7 @@ class Inhabitant(threading.Thread):
                 why = result.get("reason") or "onderzocht, niets gevonden"
                 merk = "📭" if bron == "gemeld" else "🕳"
                 ledger.add_role_message(pid, f"{merk} '{item.get('text','')}' via {src_label}: "
-                                             f"{'gerapporteerd, niets gevonden' if bron == 'gemeld' else 'geen resultaat'} — {why}")
+                                             f"{'reported, nothing found' if bron == 'gemeld' else 'no result'} — {why}")
                 # Afvinken MOET (anders haalt het project de review-gate nooit en herprobeert het
                 # eeuwig een lege bron), maar niet SCHOON: `leeg` markeert dat dit item is
                 # uitgevoerd zonder antwoord. Zonder die markering leest 4/4 als "alles
@@ -1645,9 +1645,9 @@ class Inhabitant(threading.Thread):
                 ledger.mark_awaiting_review(pid)
                 from nooch_village.projects import not_answered_note
                 weg = not_answered_note(fresh_cl)     # 4/4 mag niet lezen als "alles gedaan"
-                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review."
-                                        + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is "
-                                           f"NIET beantwoord." if weg else ""))
+                ledger.add_role_message(pid, "✅ Checklist complete — ready for review."
+                                        + (f"\n⤳ NOTE: {weg}. This part of the project goal is "
+                                           f"NOT answered." if weg else ""))
                 self.bus.publish(Event("project_awaiting_review",
                                        {"project_id": pid, "owner": self.id,
                                         "critic": (ledger.get(pid) or {}).get("critic_verdict", "geslaagd")},
@@ -2641,11 +2641,11 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         except Exception as e:                              # noqa: BLE001 — document gaat vóór
             log.warning("citeerbare velden overgeslagen: %s", e)
         head = (_vorige_versie(store, pid, current, recs, log)
-                + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
-                + (f"CITEERBARE FEITEN UIT DE SKILL-UITVOER (skill | veld = waarde). Dit is de enige "
-                   f"plek waar cijfers, stoplichten, statussen en categorieën vandaan mogen komen:\n"
+                + (f"STEERING FROM THE HUMAN (#task-comments, follow this): {steer}\n\n" if steer else "")
+                + (f"CITABLE FACTS FROM THE SKILL OUTPUT (skill | field = value). This is the ONLY "
+                   f"place numbers, traffic lights, statuses and categories may come from:\n"
                    f"{cite}\n\n" if cite else "")
-                + "OPGELEVERDE DELIVERABLES (per taak):\n")
+                + "DELIVERABLES PRODUCED (per task):\n")
         cap = int(settings.get("einddocument_input_max_chars", "40000"))
         kept, used, dropped = [], len(head), 0
         for b in d_blocks:
@@ -2660,25 +2660,25 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         ungrounded = _ungrounded_tasks(project, recs)
         gap_rule = ""
         if ungrounded:
-            gap_rule = ("TAKEN ZONDER GEGROND RESULTAAT (géén deliverable — je hebt hier GEEN data over):\n"
+            gap_rule = ("TASKS WITHOUT A GROUNDED RESULT (no deliverable — you have NO data on these):\n"
                         + "\n".join(f"- {t}" for t in ungrounded)
-                        + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Niet onderzocht — geen "
-                          "gegrond resultaat.' Verzin voor deze taken GEEN getallen, prijzen, percentages, "
-                          "tabellen of bronnen, en claim NOOIT een herkomst zoals 'op basis van handmatig "
-                          "onderzoek'.\n\n")
+                        + "\nUnder the heading of EACH of these tasks write EXACTLY: 'Not researched — no "
+                          "grounded result.' Invent NO numbers, prices, percentages, tables or sources for "
+                          "these tasks, and NEVER claim a provenance such as 'based on manual "
+                          "research'.\n\n")
         # Overgeslagen taken zijn een mens-BESLUIT, geen kennisgat: ze krijgen hun eigen, stelligere
         # instructie zodat een rapport nooit als volledig-beantwoord leest terwijl een kernitem
         # bewust is laten vallen. Dit is de rem op valse voltooiing.
         overgeslagen = _skipped_tasks(project)
         if overgeslagen:
-            gap_rule += ("NIET BEANTWOORDE TAKEN (bewust overgeslagen, of mens-/extern werk dat nog "
-                         "open staat — dit deel van het projectdoel is dus NIET beantwoord):\n"
-                         + "\n".join(f"- {t} (reden: {r})" for t, r in overgeslagen)
-                         + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Overgeslagen op besluit "
-                           "van de mens — reden: <de reden>. Dit deel van het projectdoel is niet "
-                           "beantwoord.' Verzin er geen bevindingen bij. Benoem in de conclusie "
-                           "EXPLICIET dat dit project afrondt zonder deze ta(a)k(en), zodat de lezer "
-                           "niet denkt dat de vraag volledig beantwoord is.\n\n")
+            gap_rule += ("UNANSWERED TASKS (deliberately skipped, or human/external work still open — "
+                         "so this part of the project goal is NOT answered):\n"
+                         + "\n".join(f"- {t} (reason: {r})" for t, r in overgeslagen)
+                         + "\nUnder the heading of EACH of these tasks write EXACTLY: 'Skipped by human "
+                           "decision — reason: <the reason>. This part of the project goal is not "
+                           "answered.' Do not invent findings for them. State EXPLICITLY in the "
+                           "conclusion that this project closes without these task(s), so the reader "
+                           "does not think the question was fully answered.\n\n")
         # Grounding vóór de synthese: grondwet, Kroniek, inzichten mét falsifier, eerdere
         # projecten. Het einddocument is het stuk dat de mens leest en waarop hij beslist — als
         # ergens een verzonnen zekerheid binnenkomt, dan hier. De grondings-regel hieronder verbood
@@ -2694,33 +2694,34 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         prompt = (
             (persona.strip() + "\n\n" if persona and persona.strip() else "")
             + (grond + "\n\n" if grond else "")
-            + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
-            f"Projectdoel: {scope_txt}\n\n" + variable + gap_rule
-            + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
-            "traceerbaarheid): geef voor ELKE taak een kop (begin de regel met '## ') met de TAAK, en "
-            "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. HARDE "
-            "GRONDINGS-REGEL: elk getal, elke prijs en elke tabel MOET letterlijk uit een deliverable komen; "
-            "staat het daar niet, dan bestaat het niet — schrijf dan 'Niet onderzocht — geen gegrond "
-            "resultaat' en verzin niets, ook geen herkomst. Dat geldt ÓÓK voor een score, een status, "
-            "een percentage, een certificering en een wetsartikel of bepaling: noem er geen die niet "
-            "letterlijk bij de CITEERBARE FEITEN of in een deliverable staat. Zo verscheen op "
-            "productie 'Annex I 2a' als specifieke bepaling in een rapport terwijl geen enkele skill "
-            "dat teruggaf. MAAR: precies zijn is juist de bedoeling, vaag worden niet. Heb je het "
-            "specifieke niet, zeg dan wát je wél hebt, mét bron — 'claims_check vlagt planet-safe "
-            "rood (categorie Generiek); claim_evidence vond geen LCA of certificering; conclusie: "
-            "niet houdbaar' is goed en gegrond. Terugvallen op 'er zijn mogelijk zorgen' is FOUT: "
-            "dat is geen grondering maar ontwijken. Verbied jezelf het verzinnen, niet het concreet "
-            "zijn. WAT EEN SIGNAAL BETEKENT: een stoplicht uit een term-scan is een SIGNAAL, geen "
-            "juridisch of veiligheidsoordeel. 'green' betekent 'geen gevlagde term gevonden' — niet "
-            "'veilig te gebruiken', niet 'mag zonder wijziging blijven staan', niet 'goedgekeurd'. "
-            "Schrijf het signaal op als wat het is, met de bron erbij, en trek er geen vrijwaring "
-            "uit. Voor compliance is die categoriefout gevaarlijker dan een gemist signaal. "
-            "Beantwoord elke taak expliciet; is er niets "
-            "gevonden, schrijf dat expliciet. Sluit ALTIJD af met twee aparte secties, elk met een "
-            "'## '-kop: '## Conclusie' (een korte synthese in gewone taal van wat dit project heeft "
-            "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"
-            + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
-            + ". Geef alleen het document terug, geen meta-uitleg.")
+            + f"You are working on the running final document for this project in NoochVille "
+            f"(Nooch.earth). Project goal: {scope_txt}\n\n" + variable + gap_rule
+            + "Write the COMPLETE, updated final document in markdown, in ENGLISH, whatever language "
+            "the goal and the deliverables above are written in. STRUCTURE (mandatory, for "
+            "traceability): give EVERY task a heading (start the line with '## ') naming the TASK, and "
+            "below it the FACTUAL FINDINGS from the deliverables that answer that task. HARD "
+            "GROUNDING RULE: every number, every price and every table MUST come literally from a "
+            "deliverable; if it is not there, it does not exist — then write 'Not researched — no "
+            "grounded result' and invent nothing, not even a provenance. That applies EQUALLY to a "
+            "score, a status, a percentage, a certification and a legal article or provision: name "
+            "none that is not literally in the CITABLE FACTS or in a deliverable. This is how "
+            "'Annex I 2a' once appeared in a production report as a specific provision while no skill "
+            "had returned it. BUT: being precise is exactly the point, going vague is not. If you do "
+            "not have the specific thing, say what you DO have, with its source — 'claims_check flags "
+            "planet-safe red (category Generic); claim_evidence found no LCA or certification; "
+            "conclusion: not defensible' is good and grounded. Falling back on 'there may be concerns' "
+            "is WRONG: that is not grounding but evasion. Forbid yourself invention, not "
+            "concreteness. WHAT A SIGNAL MEANS: a traffic light from a term scan is a SIGNAL, not a "
+            "legal or safety judgement. 'green' means 'no flagged term found' — not 'safe to use', not "
+            "'may stay as it is', not 'approved'. Write the signal down as what it is, with its "
+            "source, and draw no indemnity from it. For compliance that category error is more "
+            "dangerous than a missed signal. Answer every task explicitly; if nothing was found, write "
+            "that explicitly. ALWAYS close with two separate sections, each with a '## ' heading: "
+            "'## Conclusion' (a short synthesis in plain language of what this project produced) and "
+            "'## Recommendations' (concrete next steps as a '- ' list)"
+            + (". State explicitly in the conclusion that the project is ready for review"
+               if force_final else "")
+            + ". Return the document only, no meta-explanation.")
         # De persona van de schrijvende rol mag het model kiezen; None = de dorpsladder. De voorkeur
         # is een KOP met de dorpsladder als staart, dus een wegvallende leverancier levert alsnog een
         # document — `_gevraagd` legt de KOP van de opgeloste ladder vast, zodat we hieronder kunnen
@@ -2749,9 +2750,9 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         log.warning("DOC_FABRICATION_SUSPECT: project=%s — mogelijk ONGEGRONDE data (tabel/prijzen zonder "
                     "deliverable) in taak/taken: %s", pid, "; ".join(suspects))
         if projects is not None:
-            projects.add_role_message(pid, "⚠️ Mogelijk ONGEGRONDE data in het einddocument (getallen/tabel "
-                                           "zonder deliverable): " + "; ".join(suspects)
-                                           + ". Controleer dit handmatig — de synthese hoort hier 'niet "
+            projects.add_role_message(pid, "⚠️ Possibly UNGROUNDED data in the final document "
+                                           "(numbers/table without a deliverable): " + "; ".join(suspects)
+                                           + ". Check this by hand — the synthesis should have written 'not "
                                              "onderzocht' te schrijven.")
     # Terugval = er WAS een kop gevraagd, maar het antwoord kwam van iets eronder. Dat mag nooit
     # stil doorgaan voor een premium exemplaar: het gaat mee als herkomst naar de sidecar (de
@@ -2767,9 +2768,9 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         log.warning("DOC_TERUGVAL: project=%s einddocument geschreven door %s i.p.v. de gevraagde "
                     "kop %s", pid, _tier, _gevraagd)
         if projects is not None:
-            projects.add_role_message(pid, f"⚠️ Einddocument geschreven door de goedkope terugval "
+            projects.add_role_message(pid, f"⚠️ Final document written by the cheap fallback "
                                            f"({_tier}) — niet door het gevraagde model. Lees het als "
                                            f"een concept en genereer opnieuw als de voorkeur weer werkt.")
     if force_final:
-        projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
+        projects.add_role_message(pid, "📄 Final document updated — ready for review.")
     return True

@@ -329,15 +329,21 @@ def guess_impact(idee: str, *, rol: str = "", reason_fn=reason) -> dict:
 
 def title_from(dod: str, *, reason_fn=reason) -> str:
     """Leid een korte, outcome-gerichte titel (max ~8 woorden) af uit de uitgebreide DoD.
-    Fail-soft: valt de LLM weg, dan het eerste zinsdeel, ingekort."""
+    Fail-soft: valt de LLM weg, dan het eerste zinsdeel, ingekort.
+
+    DE PROMPT IS ENGELS SINDS 06-09-2026, en dat was een gemiste plek in #466. `sharpen_outcome`
+    hierboven ging wél om ("Always answer in English"), deze niet. Het gevolg stond meteen op het
+    bord: een Engelse uitkomst ging erin en er kwam "Barefoot sneaker trend onderzoek afgerond" uit,
+    half Engels half Nederlands. Een model antwoordt in de taal waarin je het vraagt, ook als de
+    invoer een andere taal heeft — de invoer is voor hem materiaal, de prompt is de opdracht."""
     dod = (dod or "").strip()
     if not dod:
         return ""
     out = reason_fn(
-        "Vat deze project-uitkomst samen in een KORTE titel van maximaal 8 woorden. "
-        "Outcome-gericht en concreet, geen werkwoord-opdracht, geen punt aan het eind, geen "
-        "aanhalingstekens.\n\n"
-        f"UITKOMST: {dod}\n\nOUTPUT: alleen de titel.",
+        "Summarize this project outcome as a SHORT title of at most 8 words. Outcome-oriented and "
+        "concrete, not a verb instruction, no full stop at the end, no quotation marks. Always "
+        "answer in English, whatever language the outcome below is written in.\n\n"
+        f"OUTCOME: {dod}\n\nOUTPUT: the title only.",
         max_tokens=30, call_site="wizard_title")
     t = re.sub(r"\s+", " ", (out or "")).strip().strip('"“”‘’. ').strip()
     if not t:
@@ -374,34 +380,44 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
     # Geheugen-eerst: het (al gerenderde, gecapte) 'wat weten we al'-blok komt vóór de skills, met
     # de instructie om voort te bouwen i.p.v. opnieuw te verzamelen. Leeg → geen sectie.
     kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
+    # DE PROMPT IS ENGELS SINDS 06-09-2026 (tweede ronde na #466). Dit is de prompt die de
+    # checklist-items schrijft, dus hij bepaalt de taal van het meest gelezen stuk tekst in het hele
+    # dorp: de stappen op de projectkaart. Hij stond nog volledig in het Nederlands, en dat was bij
+    # het eerste echte gebruik meteen zichtbaar — Engelse kop, Nederlandse stappen eronder.
+    #
+    # De JSON-SLEUTELS blijven Nederlands ("tekst"). Dat is een parse-token dat `_normaliseer` en de
+    # callers lezen; die gaan pas mee als het geheel omgaat (2E), en een half omgezet paar valt stil
+    # zonder foutmelding. Zie tests/test_i18n_prompt_grens.py voor die afspraak.
     prompt = (
-        "Je breekt een projectdoel op in 2 tot 5 concrete stappen voor een zelfsturende rol.\n\n"
-        f"DOEL (de uitkomst):\n\"{goal}\"\n\n"
+        "You break a project goal down into 2 to 5 concrete steps for a self-managing role.\n\n"
+        f"GOAL (the outcome):\n\"{goal}\"\n\n"
         f"{kennis_section}"
-        f"De skills van deze rol (de ENIGE tools), met hun input-vorm:\n{_catalog_block(catalog)}\n\n"
-        + ("GEHEUGEN-EERST: er staat hierboven al kennis of eerder onderzoek. Bouw daarop VOORT: "
-           "herhaal geen bestaand onderzoek en verzamel niet opnieuw wat er al ligt. Begin bij een "
-           "SYNTHESE-stap (lees en combineer wat we al weten) en plan daarna alleen het écht "
-           "ontbrekende stuk.\n"
+        f"This role's skills (the ONLY tools available), with their input shape:\n"
+        f"{_catalog_block(catalog)}\n\n"
+        + ("MEMORY FIRST: knowledge or earlier research is already listed above. BUILD ON IT: do not "
+           "repeat research that exists and do not gather again what is already there. Start with a "
+           "SYNTHESIS step (read and combine what we already know) and only then plan the part that "
+           "is genuinely missing.\n"
            # DE HERKOMST VAN DAT BLOK MOET ERBIJ. Het is EXTERN onderzoek — patenten, papers,
            # radar-signalen — en géén inventaris van wat Nooch gebruikt. Zonder deze zin las het
            # model 'PHA, PBAT, algae-based' onder het kopje 'wat we al weten' en schreef het terug
            # als ONZE materialen, inclusief 'recycled' — een claim die wij niet zomaar mogen maken.
-           "LET OP: dat blok is EXTERN ONDERZOEK (patenten, papers, marktsignalen), GEEN lijst van "
-           "materialen of leveranciers die wij gebruiken. Schrijf nooit dat een materiaal uit dat "
-           "blok van ons is, en neem er geen materiaalnamen uit over in de stappen.\n"
+           "IMPORTANT: that block is EXTERNAL RESEARCH (patents, papers, market signals), NOT a list "
+           "of materials or suppliers we use. Never write that a material from that block is ours, "
+           "and do not carry material names out of it into the steps.\n"
            if kennis_section else "")
-        + "Voor ELK item: als één van deze skills het kan uitvoeren, geef de exacte skill-naam ÉN een "
-        "'payload'-object dat voldoet aan de 'input'-vorm van die skill. Kan geen enkele skill het, "
-        "zet skill=null en payload={} (dan wordt het een menselijke taak).\n"
+        + "For EACH item: if one of these skills can carry it out, give the exact skill name AND a "
+        "'payload' object matching that skill's 'input' shape. If no skill can do it, set skill=null "
+        "and payload={} (it then becomes a human task).\n"
         # VORM, expliciet en met een voorbeeld: de gemeten suggesties waren 25-40 woorden lang.
-        f"VORM VAN EEN STAP: begint met een werkwoord, is ÉÉN handeling, en is hoogstens "
-        f"{_MAX_STAP_WOORDEN} woorden. Geen toelichting, geen opsomming tussen haakjes. "
-        "Goed: 'vraag drie leveranciers om technische specs'. "
-        "Fout: 'Synthetiseer de bestaande inzichten en bevestigde bevindingen om de huidige "
-        "kennis over plantaardige zolen te structureren'.\n"
-        "Antwoord UITSLUITEND met JSON:\n"
-        '{"items":[{"tekst":"...","skill":"skillnaam of null","payload":{}}]}')
+        f"SHAPE OF A STEP: starts with a verb, is ONE action, and is at most {_MAX_STAP_WOORDEN} "
+        "words. No explanation, no parenthetical lists. "
+        "Good: 'ask three suppliers for technical specs'. "
+        "Bad: 'Synthesise the existing insights and confirmed findings in order to structure our "
+        "current knowledge of plant-based soles'.\n"
+        "Write every step in ENGLISH, whatever language the goal above is written in.\n"
+        "Answer with JSON ONLY:\n"
+        '{"items":[{"tekst":"...","skill":"skill name or null","payload":{}}]}')
     raw = reason_fn(prompt, max_tokens=900, json_mode=True, call_site="wizard_plan",
                     ladder=ladder)
     data = _extract(raw)

@@ -143,8 +143,8 @@ def test_open_mens_taak_reist_mee_naar_de_review(tmp_path):
     _inh(tmp_path, ledger)._execute_checklist(ledger.get(pid), "2026-07-29")
     p = ledger.get(pid)
 
-    melding = [e["text"] for e in p.get("log", []) if "klaar voor review" in e["text"]][-1]
-    assert "bel de leverancier" in melding and "NIET beantwoord" in melding
+    melding = [e["text"] for e in p.get("log", []) if "ready for review" in e["text"]][-1]
+    assert "bel de leverancier" in melding and "NOT answered" in melding
     assert "bel de leverancier" in not_answered_note(p)
     assert [t for t, _r in _skipped_tasks(p)] == ["bel de leverancier"]   # ook in het einddocument
     assert len(human_task_items(p)) == 1
@@ -178,7 +178,7 @@ def test_volledig_mens_plan_gaat_meteen_naar_de_mens(tmp_path):
 
     assert p["status"] == "blocked"
     assert "mens-project" in (p["blocked_on"] or "")
-    assert any("volledig mens" in e["text"] or "mens- of extern werk" in e["text"]
+    assert any("human or external work" in e["text"] or "human project" in e["text"]
                for e in p.get("log", []))
     assert checklist_progress(_cl(p)) == (0, 0)          # niets voor de rol te doen
 

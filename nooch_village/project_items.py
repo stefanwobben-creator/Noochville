@@ -58,8 +58,8 @@ def maybe_finish(ledger, pid: str, clid: str) -> bool:
     # De review-melding draagt de overgeslagen taken mee: 4/4 mag nooit lezen als "alles gedaan"
     # wanneer een kernitem bewust is laten vallen. Valse voltooiing is erger dan onaffe voortgang.
     weg = not_answered_note(cl)
-    ledger.add_role_message(pid, f"✅ Checklist voltooid ({done}/{telbaar}) — klaar voor review."
-                            + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is NIET beantwoord."
+    ledger.add_role_message(pid, f"✅ Checklist complete ({done}/{telbaar}) — ready for review."
+                            + (f"\n⤳ NOTE: {weg}. This part of the project goal is NOT answered."
                                if weg else ""))
     return ledger.mark_awaiting_review(pid)
 

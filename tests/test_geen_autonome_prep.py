@@ -134,5 +134,5 @@ def test_mislukt_plan_meldt_dat_aan_de_rol(tmp_path, monkeypatch):
     assert len(meldingen) == 1
     rol, gemeld_pid, snippet = meldingen[0]
     assert rol == "harry" and gemeld_pid == pid
-    assert "uitvoerplan" in snippet.lower()
+    assert "execution plan" in snippet.lower()
     assert ledger.get(pid).get("checklists") in (None, [])                 # niets half aangemaakt
