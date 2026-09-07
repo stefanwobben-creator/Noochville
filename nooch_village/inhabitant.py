@@ -890,7 +890,8 @@ class Inhabitant(threading.Thread):
         if ledger is not None:
             p = ledger.get(pid)
             if p is not None and self._project_checklist(p) is None:
-                self.prepare_project(pid)                    # idempotent: mét checklist doet dit niets
+                # `net_gevraagd`: dit IS de bord-drag. De mens staat op de kaart, dus geen bericht.
+                self.prepare_project(pid, net_gevraagd=True)   # idempotent: mét checklist doet dit niets
         self._claim_run_complete(pid)
 
     _PREP_CHECKLIST_TITLE = PREP_CHECKLIST_TITLE          # gedeelde bron (nooch_village.projects)
@@ -959,8 +960,12 @@ class Inhabitant(threading.Thread):
                 self._claim_run_complete(p["id"])
 
     # ── DEEL A: voorbereiding (alleen voor een string-scope project in TOEKOMST) ──────────────
-    def prepare_project(self, pid: str) -> None:
+    def prepare_project(self, pid: str, *, net_gevraagd: bool = False) -> None:
         """Breek het projectdoel op in een checklist: per item een skill-referentie OF 'geen skill' + reden.
+
+        `net_gevraagd` = een MENS heeft dit project zojuist naar ACTIEF gesleept en kijkt dus naar
+        de kaart waarop het plan verschijnt. Dan hoeft er geen bericht naar zijn inbox; zie de
+        melding onderaan deze functie.
         Draait voor een string-scope project in TOEKOMST, óf voor een ACTIEF (queued/running) project dat
         nog GEEN checklist heeft (herstelpad na een bord-drag naar actief zonder voorbereiding). Voert
         niets uit; de status blijft ongewijzigd (uitvoeren gebeurt daarna in DEEL B)."""
@@ -1053,6 +1058,19 @@ class Inhabitant(threading.Thread):
             return                                       # geen akkoord vragen op een plan dat ik niet draai
         # Het plan ligt er; nu pas de vraag. Naar de EIGENAAR-ROL, niet de founder: wie het project
         # activeerde beoordeelt het plan, en een rol als adres overleeft een wisseling van vervuller.
+        #
+        # MAAR NIET ALS HIJ ER AL NAAR KIJKT. Gemeten op het echte bord van 7 september: van de twaalf
+        # openstaande inbox-items waren er ZES een "Uitvoerplan klaar voor X". Je sleept een project
+        # naar ACTIEF, je staat op die kaart, en het dorp stuurt je een bericht dat er iets op die
+        # kaart staat — met een knop die daar al staat en hier niet zit. Dat item kan in de inbox
+        # nooit dichtgaan, dus het bleef staan tot iemand het archiveerde.
+        #
+        # De dagpuls-route meldt WÉL, en dat is het hele verschil: daar heeft niemand erom gevraagd
+        # en weet je het anders niet. Een inbox-item bestaat alleen als er een beslissing voor een
+        # mens in zit; een melding over een scherm waar je zelf net was, is dat niet.
+        if net_gevraagd:
+            self.log.info("📋 project '%s': plan klaar, geen inbox-bericht (de mens staat op de kaart)", pid)
+            return
         self._notify_rol(p.get("owner") or self.id, pid,
                          f"📋 Execution plan ready for '{goal[:80]}' — {n_skill} of the "
                          f"{n_skill + n_open + n_mens + n_invalid} item(s) I can run. I do nothing "

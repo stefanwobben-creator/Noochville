@@ -43,7 +43,9 @@ def _build(tmp_path, monkeypatch, *, persona_id="persona-1"):
                           projects=ledger, records=_Recs([circle, role]), att=att)
     inh = Inhabitant(role, EventBus(name="t"), SkillRegistry(), ctx)
     prep, run = [], []
-    monkeypatch.setattr(inh, "prepare_project", lambda pid: prep.append(pid))
+    # `**kw` want de bord-drag geeft sinds 07-09 `net_gevraagd=True` mee: de mens staat op de kaart,
+    # dus dat plan hoeft geen inbox-bericht. Deze test gaat over het VOORBEREIDEN, niet over de melding.
+    monkeypatch.setattr(inh, "prepare_project", lambda pid, **kw: prep.append(pid))
     monkeypatch.setattr(inh, "_claim_run_complete", lambda pid: run.append(pid))
     return inh, ledger, prep, run
 
