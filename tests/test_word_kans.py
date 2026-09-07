@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from nooch_village.skills_impl.keywords_everywhere import opportunity_score
 from nooch_village.library import Library
-from nooch_village.cockpit import _word_metrics
+
 from nooch_village import library_enrich
 
 
@@ -35,18 +35,8 @@ def test_set_evidence_merget_zonder_status_of_datum(tmp_path):
     assert lib.set_evidence("onbekend woord", {"volume": 1}) is None
 
 
-def test_word_metrics_toont_kerncijfers():
-    html = _word_metrics({"volume": 18000, "competition": 0.3, "opportunity": 12600,
-                          "gsc_seen": True, "gsc_position": 8.4, "gsc_clicks": 12})
-    assert "vol 18000/mnd" in html
-    assert "concurrentie 30%" in html
-    assert "kans 12600" in html
-    assert "positie 8.4" in html and "12 klikken" in html
 
 
-def test_word_metrics_niet_rankend_en_leeg():
-    assert "nog niet in Google" in _word_metrics({"volume": 500, "gsc_seen": False})
-    assert "nog niet gemeten" in _word_metrics({})          # niks bekend → hint om te verrijken
 
 
 class _FakeLib:

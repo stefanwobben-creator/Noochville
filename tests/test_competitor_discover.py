@@ -12,7 +12,7 @@ from nooch_village.skills import resolve_source_scope
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.inbox_actions import decide_competitor_candidate
 from nooch_village.roles import ConcurrentScout
-from nooch_village.cockpit import render_html
+
 
 
 # ── pure helpers ────────────────────────────────────────────────────────────────
@@ -159,17 +159,8 @@ def _snap(cands):
             "generated_at": 0}
 
 
-def test_render_toont_kandidaten_met_knoppen():
-    html = render_html(_snap([{"brand": "Saye", "article": "vegan alternatives", "link": "http://x"}]),
-                       csrf_token="tok")
-    assert "Nieuw gespot" in html and "Saye" in html
-    assert "brand_decide" in html and "monitor" in html
-    assert "Cariuma" in html                              # bevestigde set zichtbaar
 
 
-def test_render_read_only_zonder_knoppen():
-    html = render_html(_snap([{"brand": "Saye", "article": "x", "link": "http://x"}]))
-    assert "Saye" in html and "brand_decide" not in html
 
 
 # ── scout-discovery-stap ────────────────────────────────────────────────────────

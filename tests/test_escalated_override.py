@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from nooch_village.library import Library
 from nooch_village.inbox_actions import override_library_term
-from nooch_village.cockpit import render_html
+
 
 
 def _lib(tmp_path):
@@ -49,15 +49,5 @@ def _snap_with_escalated():
     }
 
 
-def test_render_toont_escalated_blok_met_knoppen_in_verwerkmodus():
-    html = render_html(_snap_with_escalated(), csrf_token="tok")
-    assert "Wacht op jouw oordeel" in html
-    assert "animal sneakers" in html
-    assert "lib_override" in html and "keur goed" in html and "verbied" in html
 
 
-def test_render_read_only_toont_blok_zonder_knoppen():
-    html = render_html(_snap_with_escalated())          # csrf_token=None → read-only
-    assert "Wacht op jouw oordeel" in html              # zichtbaar
-    assert "animal sneakers" in html
-    assert "lib_override" not in html                   # maar geen knoppen

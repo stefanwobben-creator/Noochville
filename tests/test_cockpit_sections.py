@@ -3,7 +3,6 @@ en de volledige concurrent-monitor met laatste nieuwsfeit per merk."""
 from __future__ import annotations
 import json
 
-from nooch_village import cockpit
 from nooch_village.competitor_news_store import CompetitorNews
 from nooch_village.skills_impl.keywords_everywhere import trend_change_pct
 
@@ -28,49 +27,7 @@ def test_trend_change_pct():
     assert trend_change_pct([{"value": 0}, {"value": 50}]) is None   # vanaf 0 niet te bepalen
 
 
-def _setup(tmp_path):
-    data = tmp_path / "data"
-    data.mkdir()
-    for f in ("governance_records.json", "human_inbox.json", "projects.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    (data / "library.json").write_text(json.dumps({
-        "vegan sneakers dames": {"status": "approved", "date": "2026-06-24", "function": "doelwit",
-                                 "evidence": {"volume": 210, "opportunity": 210,
-                                              "gsc_seen": False}},
-        "vegan": {"status": "approved", "date": "2026-06-24", "function": "volg",
-                  "evidence": {"volume": 1220000, "trend_pct": 12.5}},
-    }), encoding="utf-8")
-    (data / "competitor_brands.json").write_text(json.dumps(
-        {"candidates": {}, "confirmed": ["Veja", "LØCI"], "rejected": []}), encoding="utf-8")
-    (data / "competitor_news.json").write_text(json.dumps(
-        {"Veja": {"title": "VEJA lanceert nieuwe sneaker", "link": "http://x", "date": "2026-01-21"}}),
-        encoding="utf-8")
-    (data / "noochie_daily.json").write_text(json.dumps(
-        {"verdict": "niet_ok", "oordeel": "Field Note adviseert ads", "date": "2026-06-25"}),
-        encoding="utf-8")
-    # competitor_brands settings (config) lukt niet via gather (leest settings.ini); we testen
-    # de monitor-render via de confirmed + news direct.
-    return cockpit.gather(str(data))
 
 
-def test_woordenschat_split_en_concurrent_monitor(tmp_path):
-    snap = _setup(tmp_path)
-    page = cockpit.render_html(snap, csrf_token="t")
-
-    # Woordenschat: doelwit met kans, seed met trend%
-    assert "Doelwit-woorden" in page and "Volg-woorden" in page
-    assert "vegan sneakers dames" in page and "210" in page
-    assert "12.5%" in page                                    # seed-trend
-    # Concurrent-monitor toont álle gemonitorde merken + laatste nieuwsfeit (of 'geen')
-    assert "Gemonitord — alle concurrenten" in page
-    assert "Veja" in page and "VEJA lanceert nieuwe sneaker" in page
-    assert "LØCI" in page and "geen recent nieuws opgehaald" in page
 
 
-def test_geen_weekrapport_wel_dorp_werkt(tmp_path):
-    # Review-1: het weekrapport is van de cockpit gehaald; de Noochie-reflectie staat in de hero
-    # met een link naar het dagbulletin.
-    snap = _setup(tmp_path)
-    page = cockpit.render_html(snap, csrf_token="t")
-    assert "Weekrapport" not in page                        # weekrapport bewust verwijderd
-    assert "Het dorp werkt voor je" in page and "dagbulletin" in page

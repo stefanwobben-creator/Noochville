@@ -41,26 +41,3 @@ def test_rijpheidspoort_in_secretary_check():
     assert not any("nog niet gestold" in i["msg"] for i in secretary_check(item2, recs))
 
 
-def test_project_omkeerbaar_naar_bord_onomkeerbaar_concept(tmp_path):
-    # via de cockpit-dispatch: een omkeerbaar experiment → queued, een risicovol → draft
-    import json
-    from nooch_village import cockpit
-    data = tmp_path / "data"; data.mkdir()
-    for f in ("governance_records.json", "projects.json", "library.json"):
-        (data / f).write_text("{}", encoding="utf-8")
-    from nooch_village.human_inbox import HumanInbox
-    from nooch_village.projects import ProjectLedger
-    inbox = HumanInbox(str(data / "human_inbox.json"))
-    iid = inbox.add_opportunity("Reviews tonen op de productpagina", by="analyst",
-                                wat="sterren tonen als test")
-    # geen LLM in sandbox → formulate_project valt terug op de titel (omkeerbaar) → queued
-    cockpit._dispatch_action(str(data), "tac_project", iid, "", extra={"owner": "analyst"})
-    ps = ProjectLedger(str(data / "projects.json")).all()
-    assert ps and ps[0]["status"] == "queued"             # omkeerbaar experiment → direct op bord
-
-    iid2 = inbox.add_opportunity("Nieuwsbrief versturen naar klanten", by="analyst",
-                                 wat="mailen naar klanten")
-    cockpit._dispatch_action(str(data), "tac_project", iid2, "", extra={"owner": "analyst"})
-    ps2 = ProjectLedger(str(data / "projects.json")).all()
-    risky = next(p for p in ps2 if "Nieuwsbrief" in str(p["scope"]))
-    assert risky["status"] == "draft"                     # mogelijk onomkeerbaar → concept

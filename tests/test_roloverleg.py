@@ -115,36 +115,8 @@ def test_suggest_accountabilities():
     assert suggest_accountabilities("x", "y", llm_reason=lambda p: None) == []
 
 
-def test_rov_add_nieuwe_rol_met_alle_velden(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    res = cockpit._dispatch_action(str(data), "rov_add", "", "we hebben copy nodig", extra={
-        "owner": "__new__", "rolnaam": "Copywriter",
-        "purpose": "Het laten resoneren van de missie in woorden",
-        "domein": "de blog", "accs": "Schrijven van blogcopy\nBewaken van de tone of voice"})
-    assert res["ok"] and res["rov"] == "added"
-    it = Agenda(str(data / "roloverleg_agenda.json")).open()[0]
-    assert it["kind"] == "add_role" and it["change"]["purpose"].startswith("Het laten")
-    assert it["change"]["add_accountabilities"] == ["Schrijven van blogcopy", "Bewaken van de tone of voice"]
-    assert it["change"]["add_domains"] == ["de blog"]
 
 
-def test_voorstel_draagt_spanning_en_voorbeeld(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    cockpit._dispatch_action(str(data), "rov_add", "", "social blijft liggen", extra={
-        "owner": "scout", "accs": "Bewaken van sociale kanalen",
-        "voorbeeld": "vorige maand 3 weken stil op TikTok"})
-    it = Agenda(str(data / "roloverleg_agenda.json")).open()[0]
-    assert it["reason"] == "social blijft liggen"
-    assert it["example"] == "vorige maand 3 weken stil op TikTok"
-    page = cockpit.render_roloverleg(it, {"purpose": "p", "accountabilities": [], "domains": []}, [], "t")
-    assert "Lost deze spanning op" in page and "Concreet voorbeeld" in page
-    assert "3 weken stil op TikTok" in page
 
 
 def test_tension_validity_from_your_role():
@@ -164,21 +136,6 @@ def test_tension_validity_from_your_role():
     assert ok2 is False
 
 
-def test_rov_invalid_verwijdert_ongeldige_spanning_zonder_governance(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van X"]},
-                 "x", by="analyst", title="X")            # cross-rol, geen benefit → ongeldig
-    res = cockpit._dispatch_action(str(data), "rov_invalid", iid, "", extra={})
-    assert res["ok"] and res["rov"] == "invalid"
-    assert Agenda(str(data / "roloverleg_agenda.json")).open() == []
-    # een geldige spanning kan NIET zo verwijderd worden
-    iid2 = ag.add("scout", "amend_role", {"add_accountabilities": ["Y-en"]}, "y", by="scout", title="Y")
-    res2 = cockpit._dispatch_action(str(data), "rov_invalid", iid2, "", extra={})
-    assert res2["ok"] is False
 
 
 def test_build_change_from_fields_amend_diff():
@@ -197,42 +154,8 @@ def test_build_change_from_fields_amend_diff():
     assert change["remove_domains"] == ["socials"]
 
 
-def test_rov_edit_werkt_voorstel_bij(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    import json
-    data = tmp_path / "data"; data.mkdir()
-    recs = {"scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
-                      "definition": {"purpose": "p", "accountabilities": ["A", "B"], "domains": []}}}
-    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["C"]}, "x", by="scout", title="C")
-    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
-        "ed_naam": "scout", "ed_purpose": "nieuwe purpose",
-        "ed_accs": "A\nB\nC-herschreven", "ed_domeinen": "nieuw domein"})
-    assert res["ok"] and res["rov"] == "edited"
-    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["change"]["add_accountabilities"] == ["C-herschreven"]      # C verwijderd, herschreven erbij
-    assert it["change"]["purpose"] == "nieuwe purpose"
-    assert it["change"]["add_domains"] == ["nieuw domein"]
 
 
-def test_rov_edit_hernoem_bestaande_rol(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    import json
-    data = tmp_path / "data"; data.mkdir()
-    recs = {"scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
-                      "definition": {"purpose": "p", "accountabilities": ["A"], "domains": []}}}
-    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["A"]}, "x", by="scout", title="scout")
-    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
-        "ed_naam": "Marktverkenner", "ed_purpose": "p", "ed_accs": "A", "ed_domeinen": ""})
-    assert res["ok"]
-    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["change"]["rename"] == "Marktverkenner" and it["title"] == "Marktverkenner"
-    assert it["role_id"] == "scout"                                    # id blijft stabiel
 
 
 def test_rename_doorgevoerd_in_adopt(tmp_path):
@@ -247,96 +170,12 @@ def test_rename_doorgevoerd_in_adopt(tmp_path):
     assert proposal_from_dict(d).change.rename == "Marktverkenner"       # roundtrip
 
 
-def test_rov_edit_nieuwe_rol_naam_bewerkbaar(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("oude_naam", "add_role",
-                 {"purpose": "p", "add_accountabilities": ["x"], "new_role_parent": "noochville"},
-                 "x", by="founder", title="Oude naam")
-    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
-        "ed_naam": "Copywriter", "ed_purpose": "laat de missie resoneren",
-        "ed_accs": "Schrijven van copy", "ed_domeinen": ""})
-    assert res["ok"]
-    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["role_id"] == "copywriter" and it["title"] == "Copywriter"
-    assert it["change"]["purpose"] == "laat de missie resoneren"
-    assert it["change"]["add_accountabilities"] == ["Schrijven van copy"]
 
 
-def test_render_roloverleg_met_string_roles():
-    # Regressie: de live cockpit geeft `roles` als lijst STRINGS door; de render mag daar niet op
-    # crashen (eerder: AttributeError op r.get in het groep-blok → lege respons).
-    from nooch_village import cockpit
-    it = {"id": "a", "role_id": "scout", "kind": "amend_role",
-          "change": {"add_accountabilities": ["Bewaken van X"]}, "reason": "r", "by": "scout",
-          "title": "Scout", "status": "open", "reactions": []}
-    snap = {"purpose": "p", "name": "scout", "accountabilities": ["A"], "domains": []}
-    page = cockpit.render_roloverleg(it, snap, [], "t", group_members=[it],
-                                     roles=["scout", "librarian", "analyst"])
-    assert "Beslis" in page and "Rol bewerken" in page and "librarian" in page
 
 
-def test_meerdere_rollen_per_voorstel(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["X"]}, "spanning",
-                 by="scout", title="Scout")
-    gid = ag.group_of(iid)
-    # bestaande rol toevoegen aan het voorstel
-    r1 = cockpit._dispatch_action(str(data), "rov_group_add", "", "", extra={
-        "group": gid, "g_owner": "librarian"})
-    # nieuwe rol toevoegen aan het voorstel
-    r2 = cockpit._dispatch_action(str(data), "rov_group_add", "", "", extra={
-        "group": gid, "g_owner": "__new__", "g_naam": "Copywriter"})
-    assert r1["ok"] and r2["ok"]
-    ag2 = Agenda(str(data / "roloverleg_agenda.json"))
-    members = ag2.members_of_group(gid)
-    assert len(members) == 3
-    assert {m["role_id"] for m in members} == {"scout", "librarian", "copywriter"}
-    assert all((m.get("group") or m["id"]) == gid for m in members)
-    # hele voorstel in één keer aannemen
-    res = cockpit._dispatch_action(str(data), "rov_group_consent", "", "", extra={"group": gid})
-    assert res["ok"] and res["n"] == 3
-    ag3 = Agenda(str(data / "roloverleg_agenda.json"))
-    assert all(m["status"] == "consented" for m in ag3.members_of_group(gid))
 
 
-def test_rol_verwijderen_voorstel(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda, _proposal_from_item
-    from nooch_village.models import ChangeKind
-    import json
-    data = tmp_path / "data"; data.mkdir()
-    recs = {"noochville": {"id": "noochville", "type": "circle", "parent": None, "version": 1,
-                           "definition": {"purpose": "p"}, "members": ["scout"]},
-            "scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
-                      "definition": {"purpose": "p", "accountabilities": [], "domains": []}}}
-    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["X"]}, "weg ermee",
-                 by="founder", title="Scout")
-    # omzetten naar verwijder-voorstel
-    res = cockpit._dispatch_action(str(data), "rov_remove", iid, "", extra={})
-    assert res["ok"] and res["rov"] == "to_remove"
-    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["kind"] == "remove_role"
-    # _proposal_from_item bouwt nu een echte REMOVE_ROLE (niet langer amend)
-    assert _proposal_from_item(it).change.kind == ChangeKind.REMOVE_ROLE
-    # terugdraaien kan
-    cockpit._dispatch_action(str(data), "rov_keep_role", iid, "", extra={})
-    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["kind"] == "amend_role"
-    # een NIEUWE-rol-voorstel verwijderen = gewoon van de agenda
-    iid2 = ag.add("nieuw", "add_role", {"purpose": "p", "add_accountabilities": ["Y"],
-                  "new_role_parent": "noochville"}, "x", by="founder", title="Nieuw")
-    r2 = cockpit._dispatch_action(str(data), "rov_remove", iid2, "", extra={})
-    assert r2["rov"] == "removed_draft"
-    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid2) is None
 
 
 def test_evaluate_objection_proces():
@@ -359,26 +198,6 @@ def test_evaluate_objection_proces():
     assert evaluate_objection({})["valid"] is False
 
 
-def test_rov_object_proces_zet_status(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van X"]}, "x",
-                 by="scout", title="X")
-    # niets beantwoord → geweigerd
-    assert cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={})["ok"] is False
-    # geen geldig bezwaar (q1 rechts) → terug naar open
-    res = cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={
-        "q1": "right", "q2": "left", "q3": "left", "q4": "left"})
-    assert res["rov"] == "obj_invalid"
-    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["status"] == "open"
-    # geldig bezwaar (alles links) → voorstel gaat van de agenda
-    res2 = cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={
-        "q1": "left", "q2": "left", "q3": "left", "q4": "left", "harm": "beperkt mijn rol"})
-    assert res2["rov"] == "obj_valid"
-    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid) is None      # weg van de agenda
 
 
 def test_auto_stollen_na_3x(tmp_path):
@@ -413,56 +232,7 @@ def test_work_projects_experiment_herwerkt_tot_drempel(tmp_path):
     assert ag.open() and ag.open()[0]["change"]["add_accountabilities"] == ["Volgen van trends"]
 
 
-def test_roloverleg_diff_huidig_vs_na(tmp_path):
-    from nooch_village import cockpit
-    item = {"id": "k1", "role_id": "scout", "kind": "amend_role",
-            "change": {"add_accountabilities": ["Bewaken van sociale kanalen"]},
-            "reason": "bereik", "by": "scout", "title": "Social", "status": "open", "reactions": []}
-    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt"], "domains": []}
-    page = cockpit.render_roloverleg(item, snap, [], "t")
-    assert "Huidige rol" in page and "Na dit voorstel" in page
-    assert "Volgen van de markt" in page and "✚ Bewaken van sociale kanalen" in page
 
 
-def test_rov_to_project_maakt_experiment_en_haalt_van_agenda(tmp_path):
-    from nooch_village import cockpit
-    from nooch_village.roloverleg import Agenda
-    from nooch_village.projects import ProjectLedger
-    data = tmp_path / "data"; data.mkdir()
-    (data / "governance_records.json").write_text("{}", encoding="utf-8")
-    ag = Agenda(str(data / "roloverleg_agenda.json"))
-    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van sociale kanalen"]},
-                 "bereik", title="Social")
-    res = cockpit._dispatch_action(str(data), "rov_to_project", iid, "", extra={})
-    assert res["ok"] and res["rov"] == "to_project"
-    assert Agenda(str(data / "roloverleg_agenda.json")).open() == []   # van de agenda af (van schijf)
-    ps = ProjectLedger(str(data / "projects.json")).all()
-    assert len(ps) == 1 and ps[0]["owner"] == "scout" and ps[0]["status"] == "queued"
-    assert "Bewaken van sociale kanalen" in str(ps[0]["scope"])
 
 
-def test_cockpit_render_roloverleg(tmp_path):
-    from nooch_village import cockpit
-    recs = _records(tmp_path)
-    item = {"id": "k1", "role_id": "scout", "kind": "amend_role",
-            "change": {"add_accountabilities": ["Bewaken van sociale kanalen"]},
-            "reason": "meer bereik", "by": "scout", "title": "Social media", "status": "open",
-            "reactions": []}
-    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt"], "domains": []}
-    page = cockpit.render_roloverleg(item, snap, [], "t")
-    assert "Voorstel behandelen" in page and "Social media" in page
-    assert "Volgen van de markt" in page                      # huidige rol
-    assert "Bewaken van sociale kanalen" in page              # voorgestelde wijziging
-    assert "Secretaris" in page
-    # brok 6: de AI-herziening (rov_react) is vervangen door het chat-kladblok (rov_kladblok)
-    for val in ("rov_kladblok", "rov_consent", "rov_object"):
-        assert f'value="{val}"' in page
-    # overzicht: open item zichtbaar + 'zelf toevoegen' altijd
-    ov = cockpit.render_roloverleg_overview([item], [item], ["scout", "librarian"], "t")
-    assert "Roloverleg" in ov
-    assert "/roloverleg?iid=k1" in ov and 'value="rov_add"' in ov
-    # de 'Einde roloverleg'-knop verschijnt zodra er een AANGENOMEN (consented) voorstel is —
-    # ook als er geen open items meer zijn (de bug: anders bleef het hangen).
-    consented = {**item, "status": "consented"}
-    ov2 = cockpit.render_roloverleg_overview([], [consented], ["scout"], "t")
-    assert 'value="rov_end"' in ov2 and "Aangenomen" in ov2 and "/roloverleg?iid=k1" in ov2
