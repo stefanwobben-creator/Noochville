@@ -255,14 +255,22 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
     # Nu: één `@`-veld met dezelfde doelenlijst als de inbox (rollen én personen), en de server
     # routeert het langs `route_werk`. `ck-doorgeef` is een modifier binnen de bestaande `ck-`-familie,
     # geen nieuw prefix — zie de klasse-ratchet.
-    hand = (f"<details class='fedit'><summary class='flink'>📤 hand off</summary>"
+    # HET UITKLAP-BLOK IS DE `ck-resolve` ZELF, en niet iets in een span eromheen. Alleen zo kan de
+    # CSS op `[open]` zien dat het paneel openstaat en het over de volle breedte ONDER de tekst
+    # zetten. Stond het in een wikkel, dan had je `:has()` nodig om vanaf de ouder naar het kind te
+    # kijken, en dat is een omweg om een structuurfout heen.
+    hand = (f"<details class='fedit ck-resolve'><summary class='flink'>📤 hand off</summary>"
             f"<form method='post' action='/action' class='ck-doorgeef'>{hid}{clitem}"
+            # `@` STAAT IN DE OPTIEWAARDEN, niet alleen in de placeholder. Een datalist filtert op de
+            # waarde: stonden daar kale namen, dan matcht de eerste `@` die je typt niets en lijkt
+            # het veld stuk. De server strippen we hem er weer af (`lstrip("@")`), dus dit is puur
+            # de kant die de mens ziet — en het is dezelfde vorm als het `@`-veld in de inbox.
             f"<input name='naar' list='ck-doelen' autocomplete='off' "
-            f"placeholder='@role or person'>"
+            f"placeholder='type @ to pick a role or person'>"
             f"<datalist id='ck-doelen'>{role_opts}</datalist>"
             f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
             f"hand off</button></form></details>") if role_opts else ""
-    return f"<span class='ck-resolve'>{hand}</span>"
+    return hand
 
 
 #: De lege checklist. "no items yet" CONSTATEERT; dit NODIGT UIT — en zegt erbij waar een eerste
@@ -271,6 +279,63 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
 #: dragen geen ruimte of toon.
 _CL_LEEG = ("<li class='cl-empty'>No actions yet. Put the first step from the meeting "
             "here — or split the end document into what still needs doing.</li>")
+
+
+#: Slepen om te herordenen. Zelfde idioom als de statements-lijst in de kennisbank en het
+#: projectbord: een ⠿-greep die `draggable` is, gedelegeerde listeners, en een formulier dat pas bij
+#: de drop gebouwd wordt. Bewust géén optimistische verplaatsing in de DOM: zou de POST geweigerd
+#: worden (rol-poort, verlopen csrf), dan staat het item op het scherm ergens waar het in de data
+#: niet staat. Dezelfde blinde vlek die `ibxPost` had.
+#:
+#: DE RICHTING BEPAALT HET ANKER, en dat is het enige stukje rekenwerk hier. Sleep je omhoog, dan
+#: kom je vóór het item waar je loslaat. Sleep je omlaag, dan verwacht je ONDER dat item te landen —
+#: het anker is dan zijn buurman. Zonder dat onderscheid komt elk item bij omlaag slepen één plek te
+#: hoog terecht, en dat voelt als een bug in plaats van als een regel.
+#: `json.dumps` en niet `_e` voor csrf en next: dit is een SCRIPT-context, geen HTML-context.
+#: HTML-escapen maakt van `&back=` een `&amp;back=`, en dan post de sleep naar een URL die niet
+#: bestaat. Zelfde keuze als in `projects.py`, om dezelfde reden.
+def _ck_sleep_js(csrf: str, nxt: str) -> str:
+    import json
+    return _CK_SLEEP_JS_ROMP.replace("__VARS__",
+                                     f"var csrf={json.dumps(csrf)},nxt={json.dumps(nxt)},bron=null;")
+
+
+_CK_SLEEP_JS_ROMP = (
+    "<script>(function(){"
+    "__VARS__"
+    "function li(e){return e.target&&e.target.closest?e.target.closest('.ck-item'):null;}"
+    "document.addEventListener('dragstart',function(e){"
+    "if(!e.target||!e.target.classList||!e.target.classList.contains('ck-greep'))return;"
+    "bron=e.target.closest('.ck-item');if(!bron)return;"
+    "bron.classList.add('sleept');e.dataTransfer.effectAllowed='move';"
+    "try{e.dataTransfer.setData('text/plain',bron.getAttribute('data-item')||'');}catch(_){}"
+    "});"
+    "document.addEventListener('dragend',function(){bron=null;"
+    "document.querySelectorAll('.ck-item.sleept,.ck-item.erover').forEach(function(x){"
+    "x.classList.remove('sleept','erover');});});"
+    "document.addEventListener('dragover',function(e){var d=li(e);"
+    "if(!d||!bron||d===bron)return;"
+    "if(d.getAttribute('data-clid')!==bron.getAttribute('data-clid'))return;"   # niet tussen lijsten
+    "e.preventDefault();d.classList.add('erover');});"
+    "document.addEventListener('dragleave',function(e){var d=li(e);if(d)d.classList.remove('erover');});"
+    "document.addEventListener('drop',function(e){var d=li(e);"
+    "if(!d||!bron||d===bron)return;"
+    "if(d.getAttribute('data-clid')!==bron.getAttribute('data-clid'))return;"
+    "e.preventDefault();d.classList.remove('erover');"
+    "var rij=[].slice.call(d.parentNode.querySelectorAll('.ck-item'));"
+    "var vanaf=rij.indexOf(bron),naar=rij.indexOf(d);if(vanaf<0||naar<0)return;"
+    "var anker=d;"
+    "if(vanaf<naar){anker=rij[naar+1]||null;}"                                  # omlaag → onder d
+    "var f=document.createElement('form');f.method='post';f.action='/action';"
+    "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;"
+    "f.appendChild(i);}"
+    "a('csrf',csrf);a('next',nxt);a('action','check_move');"
+    "a('pid',bron.getAttribute('data-pid')||'');"
+    "a('clid',bron.getAttribute('data-clid')||'');"
+    "a('item',bron.getAttribute('data-item')||'');"
+    "a('voor',anker?(anker.getAttribute('data-item')||''):'');"
+    "document.body.appendChild(f);f.submit();});"
+    "})();</script>")
 
 
 def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Stores = None) -> str:
@@ -293,7 +358,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
     if rw and st is not None:
         try:
             from nooch_village.views.inbox import _at_doelen
-            role_opts = "".join(f"<option value='{_e(d['label'])}'></option>"
+            role_opts = "".join(f"<option value='@{_e(d['label'])}'></option>"
                                 for d in _at_doelen(st))
         except Exception:
             role_opts = ""
@@ -343,6 +408,21 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                    f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
             rm = (f"<form method='post' action='/action'>{hid()}{clitem}"
                   f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
+            # ⠿ SLEEPGREEP, NIET DE HELE REGEL. Een `draggable` <li> vecht met tekstselectie en met
+            # het ✓-vakje: elke poging om een woord te selecteren wordt een sleep. Een greep is
+            # hetzelfde idioom als de statements-lijst in de kennisbank, dus geen nieuwe interactie
+            # om te leren. Alleen zichtbaar bij hover, net als de ✕ ernaast.
+            greep = (f"<span class='ck-greep' draggable='true' title='drag to reorder'>⠿</span>"
+                     if rw else "")
+            # BEWERKEN WAS ER NIET, alleen weggooien. Wie een tikfout wilde herstellen moest het item
+            # verwijderen en opnieuw typen — en gooide daarmee de skill en payload weg die eraan
+            # hingen. Zelfde `fedit`-uitklap als de hand-off, en dus ook onder de tekst.
+            edit = (f"<details class='fedit ck-bewerk'><summary class='flink' title='edit text'>✎</summary>"
+                    f"<form method='post' action='/action' class='ck-doorgeef'>{hid()}{clitem}"
+                    f"<input name='text' value='{_e(it['text'])}' autocomplete='off' "
+                    f"aria-label='item text'>"
+                    f"<button class='btn sm' type='submit' name='action' value='check_rename'>"
+                    f"save</button></form></details>") if rw else ""
             txt = (f"<span class='ck-txt'><span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>"
                    f"{_cl_item_meta(state, skill, it)}</span>")
             # Stil skill-aanbod (cockpit-match): alleen als het item nog geen skill heeft. Klik = accepteren
@@ -359,7 +439,11 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             unskip = (f"<form method='post' action='/action' class='emo-f'>{hid()}{clitem}"
                       f"<button class='flink' type='submit' name='action' value='check_unskip'>"
                       f"undo skip</button></form>") if (rw and state == "skipped") else ""
-            rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{resolve}{unskip}{rm}</li>"
+            # `data-item`/`data-clid` dragen de sleep: de JS leest ze bij drop en post ze terug.
+            # Ze staan op de <li> en niet op de greep, want de drop-doelen zijn de REGELS.
+            rows += (f"<li class='ck-item' data-pid='{_e(pid)}' data-item='{_e(it['id'])}' "
+                     f"data-clid='{_e(cl['id'])}'>"
+                     f"{greep}{chk}{txt}{offer_html}{edit}{resolve}{unskip}{rm}</li>")
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                # EEN PLACEHOLDER IS EEN UITNODIGING OF EEN GRIJS VLAK. "add item…" beschrijft het
@@ -390,4 +474,6 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 + (f"<span class='cl-title'>{_e(_titel)}</span>" if _titel else "")
                 + f"{delc}</div>"
                 f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
+    if rw and out:
+        out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""))
     return out

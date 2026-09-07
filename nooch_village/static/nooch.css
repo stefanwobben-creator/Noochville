@@ -899,8 +899,43 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-box.b-skip{border-style:dotted;opacity:.6}
 .ck-human{font-size:.68rem;color:var(--gray);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-box.b-human{border-color:var(--green);border-style:dashed}
-.ck-resolve{display:inline-flex;align-items:center;gap:.4rem;flex:0 0 auto}
-.ck-item form{display:contents}
+/* Uitklap-panelen (hand off, ✎ bewerken) op een checklist-regel.
+
+   DICHT = een chip in de rij. OPEN = een eigen regel eronder, over de volle breedte.
+
+   Dat tweede is de fix voor wat er op het scherm gebeurde: `.ck-resolve` stond op `flex:0 0 auto`
+   naast `.ck-txt`, dus het opengeklapte formulier nam de breedte die het nodig had en weigerde te
+   krimpen. De itemtekst kreeg wat overbleef en wikkelde tot één woord per regel. Een formulier
+   hoort een regel niet samen te persen; het hoort eronder te staan.
+
+   `[open]` op het element zelf, niet `:has()` op een ouder — daarom IS de <details> de
+   `.ck-resolve`. Werkt daarmee ook in oudere Safari. */
+.ck-item{flex-wrap:wrap}
+/* `flex-basis:0` en niet `auto`. Met `auto` is de basismaat de VOLLE tekstbreedte, en zodra de rij
+   mag wrappen springt een lange itemtekst dus naar een eigen regel onder het ✓-vakje in plaats van
+   ernaast te krimpen. Gevonden door de rij te renderen en op te meten, niet door te redeneren. */
+.ck-txt{flex:1 1 0}
+.ck-resolve,.ck-bewerk{flex:0 0 auto}
+/* `order:1` zet het open paneel achter ALLE andere onderdelen van de regel, ook achter de ✕. Zonder
+   dat duwt een paneel van 100% breed de ✕ naar een derde regel, waar hij als een losse dwaler onder
+   het formulier hangt. Ook gevonden op de gerenderde regel, niet in de code. */
+.ck-resolve[open],.ck-bewerk[open]{flex:1 1 100%;display:block;margin-top:.15rem;order:1;
+  padding-left:2.75rem}                    /* ⠿ + ✓ + hun gaps: het paneel lijnt uit met de tekst */
+/* `display:contents` maakt van een form een doorzichtige doos, wat klopt voor de losse knopjes
+   (✓, ✕, aanbod) maar niet voor de uitklapformulieren: die hebben hun eigen flex-indeling nodig.
+   Vandaar de uitzondering in plaats van een tweede regel die 'm weer terugzet. */
+.ck-item form:not(.ck-doorgeef){display:contents}
+/* ⠿ en ✎ gedragen zich als de ✕: onzichtbaar tot je over de regel gaat, zodat een lijst in rust
+   een lijst blijft en geen bedieningspaneel. Wél altijd zichtbaar zodra het paneel openstaat —
+   anders verdwijnt de knop waarmee je 'm net geopend hebt. */
+.ck-greep{flex:0 0 auto;cursor:grab;color:var(--subtle);font-size:.85rem;line-height:1.2;
+  margin-top:.15rem;opacity:0;user-select:none}
+.ck-item:hover .ck-greep,.ck-item:hover .ck-bewerk>summary{opacity:1}
+.ck-greep:active{cursor:grabbing}
+.ck-bewerk>summary{opacity:0;font-size:.8rem;color:var(--subtle)}
+.ck-bewerk[open]>summary{opacity:1}
+.ck-item.sleept{opacity:.45}
+.ck-item.erover{box-shadow:inset 0 2px 0 0 var(--green)}
 .attcard{display:flex;align-items:center;gap:.55rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;margin-bottom:.4rem}
 .att-ic{flex:0 0 auto;color:var(--gray);display:inline-flex}
 .att-ic svg{width:16px;height:16px}
