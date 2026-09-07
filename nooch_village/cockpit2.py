@@ -2386,6 +2386,39 @@ def _act_check_remove(c):
         return nxt, msg
 
 
+def _act_check_rename(c):
+        """De tekst van één item bijschaven.
+
+        WAAROM DIT ER MOET ZIJN: verwijderen was het enige wat een mens met een item kon. Wie een
+        formulering wilde corrigeren moest hem dus weggooien en opnieuw typen — en daarmee ging de
+        skill en de payload die eraan hingen mee de prullenbak in. Een tikfout kostte zo een
+        uitvoer-primitief. Bijschaven is de goedkope handeling; die hoort niet duurder te zijn dan
+        weggooien."""
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        tekst = (g("text") or "").strip()
+        if not tekst:
+            return nxt, "✗ an item needs text — remove it instead if it can go"
+        ok = pj.set_item_text(g("pid"), g("clid"), g("item"), tekst)
+        return nxt, ("✎ item updated" if ok else "· nothing changed")
+
+
+def _act_check_move(c):
+        """Volgorde binnen één checklist. `voor` = het id waar dit item vóór komt; leeg = naar het eind.
+
+        De volgorde is geen smaak: `uitvoerlijst` laat de rol de items van boven naar beneden
+        afwerken. Omhoog slepen betekent dus "dit eerst", en dat was tot nu toe alleen te bereiken
+        door alles eronder te verwijderen en opnieuw te typen."""
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        ok = pj.move_item(g("pid"), g("clid"), g("item"), (g("voor") or "").strip())
+        return nxt, ("↕ order updated" if ok else "· nothing moved")
+
+
 def _act_role_assign(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -5896,6 +5929,8 @@ ACTIONS = {
     "check_unskip": _act_check_unskip,
     "check_handoff": _act_check_handoff,
     "check_remove": _act_check_remove,
+    "check_rename": _act_check_rename,
+    "check_move": _act_check_move,
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
     "role_focus": _act_role_focus,

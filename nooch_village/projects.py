@@ -788,6 +788,67 @@ class ProjectLedger:
         self._touch(p); self._save()
         return True
 
+    def set_item_text(self, pid: str, clid: str, item_id: str, text: str) -> bool:
+        """Hernoem één item. ALLEEN de tekst — skill, payload en staat blijven staan.
+
+        Waarom dat laatste expliciet: een item is niet zijn tekst maar zijn afspraak. Wie een
+        formulering bijschaaft ("suppliers" → "European suppliers") verwacht niet dat hij daarmee de
+        skill kwijtraakt die eraan hangt. Zou dit het item vervangen in plaats van bewerken, dan
+        verdwijnt bij elke tekstcorrectie stilletjes het uitvoer-primitief.
+
+        Dezelfde `[:200]`-kap als `check_add`, zodat een item niet via de achterdeur langer kan
+        worden dan via de voordeur."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        text = (text or "").strip()
+        if cl is None or not text:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                if it.get("text") == text[:200]:
+                    return False                      # niets veranderd → geen schrijfactie, geen touch
+                it["text"] = text[:200]
+                p.pop("review_raised", None)          # checklist-mutatie → review-vlag wissen (Q2)
+                self._touch(p); self._save()
+                return True
+        return False
+
+    def move_item(self, pid: str, clid: str, item_id: str, voor_id: str = "") -> bool:
+        """Verplaats één item binnen zijn eigen lijst: vóór `voor_id`, of naar het eind als die leeg is.
+
+        DE VOLGORDE IS BETEKENIS, geen smaak. `uitvoerlijst` laat de rol de items van boven naar
+        beneden afwerken, dus wie een item omhoog sleept zegt "dit eerst". Daarom verhuist hier de
+        POSITIE en niets anders: geen kopie, geen nieuw id, geen aangeraakte staat.
+
+        Alleen binnen dezelfde checklist. Tussen lijsten slepen zou een item van uitvoerlijst
+        wisselen, en dat is een ander besluit dan volgorde — dat hoort niet aan een sleep te hangen."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None or not item_id or item_id == voor_id:
+            return False
+        # OP EEN KOPIE REKENEN, dan pas toewijzen. `cl.get("items")` geeft de lijst zelf terug, dus
+        # een pop() erop is al een mutatie — en dan kun je achteraf niet meer vaststellen of er iets
+        # veranderd is, noch netjes terug als het anker onbekend blijkt.
+        oud = list(cl.get("items", []))
+        bron = next((i for i, x in enumerate(oud) if x["id"] == item_id), -1)
+        if bron < 0:
+            return False
+        nieuw = list(oud)
+        it = nieuw.pop(bron)
+        if voor_id:
+            doel = next((i for i, x in enumerate(nieuw) if x["id"] == voor_id), -1)
+            if doel < 0:                              # onbekend anker → geen gok, geen schrijfactie
+                return False
+            nieuw.insert(doel, it)
+        else:
+            nieuw.append(it)
+        if [x["id"] for x in nieuw] == [x["id"] for x in oud]:
+            return False                              # al op zijn plek → geen touch, geen save
+        cl["items"] = nieuw
+        p.pop("review_raised", None)
+        self._touch(p); self._save()
+        return True
+
     def check_remove(self, pid: str, clid: str, item_id: str) -> bool:
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
@@ -1339,6 +1400,7 @@ _WRITE_METHODS = (
     "mark_formalized", "to_future", "mark_scope_nudge", "mark_scope_nudge_checked",
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "set_item_human", "set_item_payload",
+    "set_item_text", "move_item",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
