@@ -139,21 +139,35 @@ def samenvatting(item: dict, max_len: int = 220) -> str:
     return (s if len(s) <= max_len else s[: max_len - 1] + "…") or "(no description recorded)"
 
 
-def open_items(inbox, *, limiet: int = 200) -> list[dict]:
-    """De openstaande goedkeuringen, oudste eerst — want dat is de volgorde waarin ze pijn doen.
+def open_items_of_fout(inbox, *, limiet: int = 200) -> tuple[list[dict], str]:
+    """De openstaande goedkeuringen (oudste eerst) én, als het misging, waaróm.
 
-    Fail-soft: geen inbox, een stukke store of een onverwachte vorm levert een lege lijst. De
-    spanningen-inbox mag NOOIT stukgaan omdat de goedkeuringsrij iets raars doet; dat zou de ene
-    werkende inbox slopen om de andere te tonen."""
+    DE FAIL-SOFT BLIJFT, DE STILTE NIET. Deze functie ving elke fout op en gaf een lege lijst terug,
+    en dat is precies de goede keuze: de spanningen-inbox mag niet sneuvelen omdat de
+    goedkeuringsrij iets raars doet. Maar het gevolg was dat "kapot" en "leeg" hetzelfde plaatje
+    gaven, en het scherm zei "your inbox is empty" terwijl er items lagen. Een lezer kan die twee
+    niet uit elkaar houden, en dus vertrouwt hij de rij ook niet meer als hij wél klopt.
+
+    Dat is dezelfde familie als de badge die "running" bleef zeggen: een toestand die niet van de
+    goede toestand te onderscheiden is, is geen informatie. Vandaar de tweede returnwaarde: leeg
+    betekent leeg, en anders staat er wat er misging."""
     if inbox is None:
-        return []
+        return [], ""
     try:
         items = list(inbox.pending())
-    except Exception:                                     # noqa: BLE001
-        return []
-    items = [i for i in items if isinstance(i, dict)]
-    items.sort(key=lambda i: float(i.get("created_at") or i.get("at") or 0) or 0.0)
-    return items[:limiet]
+    except Exception as e:                                # noqa: BLE001
+        return [], f"{type(e).__name__}: {e}"
+    try:
+        items = [i for i in items if isinstance(i, dict)]
+        items.sort(key=lambda i: float(i.get("created_at") or i.get("at") or 0) or 0.0)
+    except Exception as e:                                # noqa: BLE001
+        return [], f"{type(e).__name__}: {e}"
+    return items[:limiet], ""
+
+
+def open_items(inbox, *, limiet: int = 200) -> list[dict]:
+    """Alleen de items. Wie ook wil weten of het misging, gebruikt `open_items_of_fout`."""
+    return open_items_of_fout(inbox, limiet=limiet)[0]
 
 
 def tel_per_type(items) -> list[tuple[str, int]]:

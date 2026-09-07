@@ -321,14 +321,24 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
                                      gesloten.get("target_id")) in set(targets):
             items = [gesloten] + items
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
-    body = (_poort_secties(st, items, csrf_token, done) if items
-            else "<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions you, "
-                 "it appears here.</p>")
+    # DEZELFDE GOEDKEURINGSRIJ ALS IN DE LADE. Deze pagina liet hem weg, en dus stond er "Your inbox
+    # is empty" op een scherm waar 78 items achter zaten. Eén blok, twee deuren.
+    gk_html, gk_n, gk_fout = _gk_blok(st, csrf_token)
+    body = _poort_secties(st, items, csrf_token, done) if items else ""
+    body += gk_html
+    if not body:
+        body = ("<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions "
+                "you, it appears here.</p>")
+    totaal = len(items) + gk_n
     kop = f"Inbox{(' — ' + _e(naam)) if naam else ''}"
-    telling = (f"<p class='muted'>{len(items)} open, of which {nieuw} new. Handle one right here, "
-               f"open More… for the full picture, or throw it away.</p>")
+    deel = f"{len(items)} tensions" + (f", {gk_n} approvals" if gk_n else "")
+    telling = (f"<p class='muted'>{totaal} open ({deel}), of which {nieuw} new. Handle one right "
+               f"here, open More… for the full picture, or throw it away.</p>"
+               if totaal else
+               ("<p class='muted'>Approvals could not be loaded — not necessarily empty.</p>"
+                if gk_fout else "<p class='muted'>All processed — enjoy it.</p>"))
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>{kop} <span class='chip'>{len(items)}</span></h1>{telling}"
+            f"<h1>{kop} <span class='chip'>{totaal}</span></h1>{telling}"
             f"<div class='rdr-tool'>{body}</div></div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
@@ -964,16 +974,51 @@ def _gk_row(st, item: dict, csrf: str = "") -> str:
             f"<div class='ibx-acties'>{knoppen}</div></div>")
 
 
-def _gk_items(st):
-    """De openstaande goedkeuringen. Fail-soft: gaat de goedkeuringsrij stuk, dan blijft de
-    spanningen-lade gewoon werken. De ene inbox slopen om de andere te tonen is geen verbetering."""
+def _gk_items(st) -> tuple[list, str]:
+    """De openstaande goedkeuringen, plus de reden als ze niet te laden waren.
+
+    Fail-soft blijft: gaat de goedkeuringsrij stuk, dan werkt de spanningen-lade gewoon door. De ene
+    inbox slopen om de andere te tonen is geen verbetering.
+
+    MAAR NIET MEER STIL. Hier stond `except Exception: return []`, en daardoor zag een kapotte rij er
+    op het scherm precies zo uit als een lege: "your inbox is empty". Dat is de duurste soort fout,
+    want hij vraagt niets van je. Nu komt de reden mee en zet de lade er een regel over neer."""
     try:
         from nooch_village import goedkeuring
         from nooch_village.human_inbox import HumanInbox
         import os
-        return goedkeuring.open_items(HumanInbox(os.path.join(st.dd, "human_inbox.json")))
-    except Exception:                                    # noqa: BLE001
-        return []
+        pad = os.path.join(st.dd, "human_inbox.json")
+        return goedkeuring.open_items_of_fout(HumanInbox(pad))
+    except Exception as e:                               # noqa: BLE001
+        return [], f"{type(e).__name__}: {e}"
+
+
+def _gk_blok(st, csrf_token: str = "") -> tuple[str, int, str]:
+    """De goedkeuringsrij als HTML, plus hoeveel het er zijn en of het laden misging.
+
+    ÉÉN BLOK VOOR BEIDE DEUREN. De lade (`render_inbox_frag`) toonde de goedkeuringen wél en de
+    losse pagina (`render_inbox`) niet, want die riep `_gk_items` nooit aan. Ga je naar `/inbox`,
+    dan las je "Your inbox is empty" terwijl er 78 items wachtten. Twee ingangen naar dezelfde
+    inbox waarvan er één de helft verzwijgt is precies het vindprobleem dat scope 14 moest
+    wegnemen, teruggekomen via een tweede deur.
+
+    Onder de spanningen en niet ertussen: een spanning vraagt om verwerken, een goedkeuring om één
+    antwoord, en die door elkaar husselen maakt van twee soorten werk één onduidelijke stapel."""
+    gk, fout = _gk_items(st)
+    if gk:
+        from nooch_village import goedkeuring
+        per = ", ".join(f"{n} {t}" for t, n in goedkeuring.tel_per_type(gk))
+        html = (f"<div class='ibx-sectie'>Waiting for your approval &middot; {len(gk)}"
+                f"<span class='ibx-sectie-sub'>{_e(per)}</span></div>")
+        html += "".join(_gk_row(st, i, csrf_token) for i in gk)
+        return html, len(gk), ""
+    if fout:
+        # KAPOT MAG NOOIT ALS LEEG RENDEREN. Zonder deze regel leest een stukke rij als "niets te
+        # doen", en dat is de enige uitkomst die je nergens toe aanzet.
+        return ("<div class='ibx-sectie'>Approvals could not be loaded"
+                f"<span class='ibx-sectie-sub'>{_e(fout)} &middot; this is not the same as empty; "
+                f"check with <code>python -m nooch_village.inbox</code></span></div>"), 0, fout
+    return "", 0, ""
 
 
 def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
@@ -986,19 +1031,18 @@ def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
     # De goedkeuringsrij eronder, met een eigen kop. Onder en niet ertussen: een spanning vraagt om
     # verwerken, een goedkeuring om één antwoord — die door elkaar husselen maakt van twee soorten
     # werk één onduidelijke stapel.
-    gk = _gk_items(st)
-    if gk:
-        from nooch_village import goedkeuring
-        per = ", ".join(f"{n} {t}" for t, n in goedkeuring.tel_per_type(gk))
-        rows += (f"<div class='ibx-sectie'>Waiting for your approval &middot; {len(gk)}"
-                 f"<span class='ibx-sectie-sub'>{_e(per)}</span></div>")
-        rows += "".join(_gk_row(st, i, csrf_token) for i in gk)
-
-    totaal = len(items) + len(gk)
+    gk_html, gk_n, gk_fout = _gk_blok(st, csrf_token)
+    rows += gk_html
+    totaal = len(items) + gk_n
     if not rows:
         rows = "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Your inbox is empty.</div>"
-    deel = f"{len(items)} tensions" + (f", {len(gk)} approvals" if gk else "")
-    sub = f"{totaal} open ({deel}), of which {nieuw} new" if totaal else "All processed — enjoy it."
+    deel = f"{len(items)} tensions" + (f", {gk_n} approvals" if gk_n else "")
+    if totaal:
+        sub = f"{totaal} open ({deel}), of which {nieuw} new"
+    elif gk_fout:
+        sub = "Approvals could not be loaded, not necessarily empty"
+    else:
+        sub = "All processed — enjoy it."
     return f"<div data-count='{totaal}' data-sub='{_e(sub)}'>{rows}</div>"
 
 

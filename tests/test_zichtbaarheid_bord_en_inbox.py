@@ -677,3 +677,111 @@ def test_het_waken_stopt_uit_zichzelf():
     te gebeuren staat."""
     js = _waak_js()
     assert "W.aan=false" in js.replace(" ", "")
+
+
+# ── 7. Kapot mag nooit als leeg renderen ─────────────────────────────────────
+#
+# Het scherm zei "Your inbox is empty" terwijl er 78 goedkeuringen lagen. De keten die stil kan
+# breken is kort:
+#
+#     _gk_items -> goedkeuring.open_items -> HumanInbox.pending()
+#
+# en `pending()` deed `i["status"]` als HARDE index. Eén item zonder dat veld gooit een KeyError,
+# `open_items` ving die op en gaf [] terug, en 77 gezonde items werden onzichtbaar. Nagespeeld met
+# een store van twee items; `pending()` gooide, `open_items()` gaf nul.
+#
+# De fail-soft blijft (de spanningen-lade mag niet sneuvelen omdat de goedkeuringsrij iets raars
+# doet), maar de stilte niet. Dezelfde familie als de badge die "running" bleef zeggen: een toestand
+# die niet van de goede toestand te onderscheiden is, is geen informatie.
+
+def _inbox_met(items: dict, tmp_path):
+    from nooch_village.human_inbox import HumanInbox
+    import json
+    p = tmp_path / "human_inbox.json"
+    p.write_text(json.dumps(items), encoding="utf-8")
+    return HumanInbox(str(p))
+
+
+def test_een_item_zonder_status_sloopt_de_rest_niet(tmp_path):
+    """DE KERNTEST. Vóór de fix gooide dit een KeyError over de hele lijst."""
+    inbox = _inbox_met({"a": {"status": "pending", "type": "verband", "created_at": 1},
+                        "b": {"type": "kapot"},                 # geen status-veld
+                        "c": {"status": "pending", "type": "keyword", "created_at": 2}}, tmp_path)
+    assert len(inbox.pending()) == 2
+
+
+def test_een_item_dat_geen_dict_is_telt_ook_niet_mee(tmp_path):
+    inbox = _inbox_met({"a": {"status": "pending", "created_at": 1}, "b": "rommel"}, tmp_path)
+    assert len(inbox.pending()) == 1
+
+
+def test_open_items_zegt_nu_ook_of_het_misging():
+    from nooch_village import goedkeuring
+    class Stuk:
+        def pending(self): raise RuntimeError("store weg")
+    items, fout = goedkeuring.open_items_of_fout(Stuk())
+    assert items == [] and "store weg" in fout
+    # De oude vorm blijft werken voor wie alleen de items wil.
+    assert goedkeuring.open_items(Stuk()) == []
+
+
+def test_leeg_en_kapot_zijn_niet_hetzelfde():
+    from nooch_village import goedkeuring
+    class Leeg:
+        def pending(self): return []
+    assert goedkeuring.open_items_of_fout(Leeg()) == ([], "")
+
+
+class _InbSt:
+    """Wat de inbox-views van `st` nodig hebben, met een dd die naar een kapotte store wijst."""
+    def __init__(self, dd, notifs=()):
+        self.dd = dd
+        self.notif = type("N", (), {
+            "open_for_targets": staticmethod(lambda _t: list(notifs)),
+            "status_of": staticmethod(lambda n: n.get("status", "nieuw")),
+            "all": staticmethod(lambda: list(notifs))})()
+
+
+def test_de_lade_zegt_dat_laden_misging_en_niet_dat_je_klaar_bent(tmp_path):
+    """Zonder deze regel leest een stukke rij als 'niets te doen', en dat is de enige uitkomst die
+    je nergens toe aanzet."""
+    from nooch_village.views.inbox import render_inbox_frag
+    (tmp_path / "human_inbox.json").write_text('["dit is geen dict"]', encoding="utf-8")
+    uit = render_inbox_frag(_InbSt(str(tmp_path)), [], csrf_token="tok")
+    assert "could not be loaded" in uit
+    assert "All processed" not in uit and "inbox is empty" not in uit
+
+
+def test_een_echt_lege_inbox_zegt_gewoon_dat_hij_leeg_is(tmp_path):
+    from nooch_village.views.inbox import render_inbox_frag
+    (tmp_path / "human_inbox.json").write_text("{}", encoding="utf-8")
+    uit = render_inbox_frag(_InbSt(str(tmp_path)), [], csrf_token="tok")
+    assert "inbox is empty" in uit and "could not be loaded" not in uit
+
+
+def test_de_losse_pagina_toont_dezelfde_goedkeuringen_als_de_lade(tmp_path):
+    """TWEE DEUREN NAAR DEZELFDE INBOX. `render_inbox` riep `_gk_items` nooit aan, dus wie naar
+    /inbox navigeerde las 'Your inbox is empty' terwijl er items wachtten. Nu bouwen beide hun rij
+    uit hetzelfde blok."""
+    from nooch_village.views.inbox import render_inbox, render_inbox_frag
+    import json
+    (tmp_path / "human_inbox.json").write_text(json.dumps({
+        "a": {"id": "a", "status": "pending", "type": "verband", "created_at": 1}}), encoding="utf-8")
+    st = _InbSt(str(tmp_path))
+    lade = render_inbox_frag(st, [], csrf_token="tok")
+    pagina = render_inbox(st, [], csrf_token="tok")
+    assert "Waiting for your approval" in lade
+    assert "Waiting for your approval" in pagina
+    assert "inbox is empty" not in pagina
+
+
+def test_de_losse_pagina_telt_de_goedkeuringen_mee(tmp_path):
+    """De chip zei 0 terwijl er items lagen; dat getal is precies waar je op afgaat."""
+    from nooch_village.views.inbox import render_inbox
+    import json
+    (tmp_path / "human_inbox.json").write_text(json.dumps({
+        "a": {"id": "a", "status": "pending", "type": "verband", "created_at": 1},
+        "b": {"id": "b", "status": "pending", "type": "keyword", "created_at": 2}}), encoding="utf-8")
+    uit = render_inbox(_InbSt(str(tmp_path)), [], csrf_token="tok")
+    assert "2 approvals" in uit
+    assert "<span class='chip'>2</span>" in uit

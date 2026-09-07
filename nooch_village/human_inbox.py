@@ -569,7 +569,19 @@ class HumanInbox:
     # ── lezen ─────────────────────────────────────────────────────────────────
 
     def pending(self) -> list[dict]:
-        return [i for i in self._items.values() if i["status"] == "pending"]
+        """De openstaande items.
+
+        `.get("status")` EN NIET `i["status"]`, en dat is geen stijlkwestie. Met de harde index gooit
+        ÉÉN item zonder dat veld een KeyError over de hele lijst; `goedkeuring.open_items` vangt die
+        op en geeft [] terug, en het scherm zegt dan "your inbox is empty" terwijl er 78 items
+        liggen. Nagespeeld: een store met één goed en één veldloos item gaf `pending()` KeyError en
+        `open_items()` nul.
+
+        Elke `add_*` schrijft `status: "pending"`, dus een item zonder dat veld is stuk (handmatig
+        bewerkt, half weggeschreven, of van een oudere vorm). Zo'n item niet als openstaand tellen is
+        de juiste keuze; er 77 gezonde items mee onzichtbaar maken is dat niet."""
+        return [i for i in self._items.values()
+                if isinstance(i, dict) and i.get("status") == "pending"]
 
     def all(self) -> list[dict]:
         return list(self._items.values())
