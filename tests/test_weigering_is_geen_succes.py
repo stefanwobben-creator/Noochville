@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 
+from nooch_village import cockpit2
 from nooch_village.cockpit2 import is_weigering
 
 
@@ -34,18 +35,60 @@ def test_een_geslaagde_actie_is_geen_weigering():
         assert not is_weigering(ok), ok
 
 
-def test_alle_weigeringsvormen_uit_de_code_worden_herkend():
-    """Geteld in cockpit2: ✗ 119×, ⛔ 17×, 'No access…'/'Not …' 41×. Zou een vorm hier ontbreken,
-    dan rendert die als succes — precies de bug."""
+#: De tekens waarmee een GESLAAGDE actie begint. Deze lijst staat hier en niet in `cockpit2`,
+#: want hij bestaat alleen om de test hieronder een onafhankelijk oordeel te geven: een teken dat
+#: niet in `_WEIGERING_TEKENS` staat en niet hier, is een teken dat NIEMAND heeft ingedeeld.
+_SUCCES_TEKENS = frozenset("✓🔗🗑📥➕📄▶🧩✨↩○↻📦🤖🏷")
+
+
+def _meldingen() -> set[str]:
     import pathlib
-    src = pathlib.Path("nooch_village/cockpit2.py").read_text(encoding="utf-8")
-    meldingen = {m.group(1).strip()
-                 for m in re.finditer(r'return [\w.]+, (?:f?)"([^"]{2,80})"', src)}
-    weigeringen = [m for m in meldingen if m[0] in ("✗", "⛔") or m.lower().startswith(
-        ("no access", "not linked", "no accountability", "not logged in", "csrf"))]
-    assert len(weigeringen) > 40, len(weigeringen)
-    niet_herkend = [m for m in weigeringen if not is_weigering(m)]
-    assert niet_herkend == [], niet_herkend
+    src = pathlib.Path(cockpit2.__file__).read_text(encoding="utf-8")
+    return {m.group(1).strip()
+            for m in re.finditer(r'return [\w.]+, (?:f?)"([^"]{2,80})"', src)}
+
+
+def test_alle_weigeringsvormen_uit_de_code_worden_herkend():
+    """Zou een weigeringsvorm hier ontbreken, dan rendert die als succes — precies de bug.
+
+    DEZE TEST TYPTE DE LIJST OVER EN KON DAARDOOR NIETS NIEUWS ZIEN. Hij selecteerde de
+    kandidaten met zijn eigen kopie `("✗", "⛔")` en toetste ze daarna met `is_weigering`, die
+    dezelfde tekens gebruikt. Twee gevolgen: de kopie was al uit de pas gelopen (`⚠` ontbrak, en
+    "csrf" stond er afgekapt in), en — erger — een NIEUW weigeringsteken werd door de selectie
+    niet eens opgepikt, dus de test bleef groen terwijl de melding als succes op het scherm kwam.
+    Een test die zijn eigen bewijsmateriaal kiest met de regel die hij toetst, toetst niets.
+
+    De selectie hangt nu aan iets ONAFHANKELIJKS: elke melding die met een symbool begint. Dat
+    symbool moet vervolgens ingedeeld zijn — als weigering (via `cockpit2._WEIGERING_TEKENS`) of
+    als succes (`_SUCCES_TEKENS` hierboven). Een verzonnen teken zit in geen van beide en valt om,
+    met de vraag erbij welke van de twee het is."""
+    meldingen = _meldingen()
+    ingedeeld = set(cockpit2._WEIGERING_TEKENS) | _SUCCES_TEKENS
+    onbekend = sorted({m[0]: m for m in meldingen
+                       if m and not m[0].isalnum() and m[0] not in "\"'(<{[/.-—“"
+                       and m[0] not in ingedeeld}.values())
+    assert not onbekend, (
+        "meldingen met een teken dat niemand heeft ingedeeld: " + " · ".join(onbekend) +
+        ". Zet het teken in cockpit2._WEIGERING_TEKENS (nee) of in _SUCCES_TEKENS (ja) — zolang "
+        "het in geen van beide staat, leest een weigering op het scherm als een succes.")
+
+
+def test_de_woordvormen_komen_uit_de_bron_en_niet_uit_een_kopie():
+    """De tweede helft van dezelfde fout: de woordenlijst stond hier overgetypt, afgekapt en
+    verouderd. Nu wordt hij geïmporteerd, en toetsen we dat élk woord uit de bron ook echt een
+    weigering oplevert (anders staat er een dode regel in `is_weigering`)."""
+    for woord in cockpit2._WEIGERING_WOORDEN:
+        assert is_weigering(f"{woord} — iets meer tekst"), woord
+        assert is_weigering(woord.upper() + " — hoofdletters tellen ook"), woord
+    for teken in cockpit2._WEIGERING_TEKENS:
+        assert is_weigering(f"{teken} iets"), teken
+
+
+def test_er_zitten_echt_weigeringen_in_de_bron():
+    """Waarneembaarheid: als de regex ooit niets meer matcht, is de test hierboven leeg-groen."""
+    meldingen = _meldingen()
+    assert len(meldingen) > 100, len(meldingen)
+    assert len([m for m in meldingen if is_weigering(m)]) > 40
 
 
 def test_de_client_leest_de_markering_en_niet_de_emoji():

@@ -83,7 +83,16 @@ def test_er_komt_geen_vierde_postbus_bij():
 # creatie-vorm: twee tekstvelden en een groene knop. De telling zei nul, het scherm zei anders.
 # Daarom telt hij nu de VORM: elk veld waarmee je een project zou beschrijven bij het aanmaken.
 # Een volgende poging met andere veldnamen valt dan alsnog op.
-PROJ_FORM_PLAFOND: dict[str, int] = {}
+#: De bekende, BEWUSTE voorkomens — met hun aantal, zodat de telling nooit meer nul kan zijn
+#: zonder dat iemand het merkt. Als `proj_add` ooit verdwijnt, valt de "schuld opgeruimd"-regel
+#: onderaan om en zegt hij dat je dit getal moet verlagen. Dát is wat een lege dict niet kon.
+PROJ_FORM_PLAFOND: dict[str, int] = {
+    # De dispatch-tabel + de handler zelf: `proj_add` is de OUDE directe actie, die nog leeft voor
+    # de kolom-ingang op het bord. Geen formulier — een actienaam.
+    "cockpit2.py": 1,
+    # De project-JS reageert op de actienaam (sluit de kolom na een toevoeging). Ook geen formulier.
+    "views/projects.py": 1,
+}
 
 # `done_when` als formulierveld = de creatie-vorm: alleen bij het AANMAKEN vraag je vooraf "hoe
 # weet je dat dit klaar is". `proj_add` = de oude directe actie.
@@ -92,17 +101,29 @@ PROJ_FORM_PLAFOND: dict[str, int] = {}
 # project (de titel wijzigen), en dat is iets anders dan een project aanmaken. Een patroon dat
 # beide vangt zou de ratchet permanent rood zetten, en een rode ratchet die je moet negeren is
 # geen poort meer.
-_VORMEN = (re.compile(r"value='proj_add'"),
-           re.compile(r"name='done_when'"))
+#
+# DE PATRONEN ZIJN OP 8 SEPTEMBER GEREPAREERD, WANT ZE TELDEN NUL. Ze zochten naar letterlijke
+# HTML in de BRONTEKST (`value='proj_add'`, `name='done_when'`), en die staat er niet meer: sinds
+# de `web_base._field()`-helper worden formuliervelden GEGENEREERD, met dubbele aanhalingstekens
+# en met de naam als functieargument. De actie `proj_add` leeft gewoon (`cockpit2.py:6004`) en het
+# veld `done_when` ook (`cockpit2.py:1299`) — de ratchet zag alleen de vorm van vroeger.
+#
+# Dat is dezelfde fout die deze poort zelf al twee keer heeft gedocumenteerd ("de poort bewaakt
+# alleen wat hij telt"), nu een laag dieper: hij bewaakte de SCHRIJFWIJZE in plaats van het
+# resultaat. De patronen zijn daarom quote-agnostisch en er staat een tweede test onder die de
+# ECHTE HTML rendert — als de generator morgen weer verandert, valt die om en deze niet.
+_VORMEN = (re.compile(r"""["']proj_add["']"""),
+           re.compile(r"""name=["']done_when["']|_field\([^)]*["']done_when["']"""))
 
 
 def _creatie_vormen() -> dict[str, int]:
     uit: dict[str, int] = {}
     for f in sorted(ROOT.rglob("*.py")):
+        rel = str(f.relative_to(ROOT))
         tekst = f.read_text(encoding="utf-8")
         n = sum(len(r.findall(tekst)) for r in _VORMEN)
         if n:
-            uit[str(f.relative_to(ROOT))] = n
+            uit[rel] = n
     return uit
 
 
@@ -117,6 +138,62 @@ def test_geen_tweede_projectcreatie_vorm():
     assert te_hoog == {}, f"plafond overschreden (nu, max): {te_hoog}"
     gedaald = {k: (nu.get(k, 0), v) for k, v in PROJ_FORM_PLAFOND.items() if nu.get(k, 0) < v}
     assert gedaald == {}, f"schuld opgeruimd — verlaag PROJ_FORM_PLAFOND: {gedaald}"
+
+
+def test_de_ratchet_meet_iets():
+    """HANDHAVING VEREIST WAARNEEMBAARHEID — nu op de ratchet zelf toegepast.
+
+    Een telling die nul teruggeeft is niet te onderscheiden van een telling die niets kán zien, en
+    tussen de `_field()`-migratie en 8 september was dit precies dat: beide patronen matchten
+    nergens meer, want de HTML wordt sindsdien gegenereerd (dubbele quotes, naam als argument) en
+    de wizard is bovendien een JS-form dat zijn body zelf opbouwt. De poort stond op groen en keek
+    nergens naar.
+
+    Deze test eist dat de telling NIET-NUL is. Dat is de goedkoopste vorm van waarneembaarheid:
+    zolang `PROJ_FORM_PLAFOND` bekende voorkomens noemt, zegt een nul dat de patronen blind zijn
+    geworden — en dan valt de "schuld opgeruimd"-regel hierboven óók om, met de instructie erbij."""
+    nu = _creatie_vormen()
+    assert nu, ("_VORMEN matcht nergens meer — de ratchet is blind, niet schoon. Kijk hoe de "
+                "creatie-vorm nu geschreven wordt (`web_base._field()`? een JS-form?) en pas de "
+                "patronen aan voordat je deze test groen maakt.")
+    assert sum(nu.values()) >= len(PROJ_FORM_PLAFOND)
+
+
+#: De plekken waar een MENS een project aanmaakt. Twee wegen, allebei bewust: de wizard is de
+#: hoofdingang, `proj_add` is de kolom-ingang op het bord die dezelfde regels toepast (de
+#: cardinaliteitswet staat in beide, met in `/wizard/create` letterlijk de comment "een regel die
+#: maar op één van de twee geldt is geen regel").
+_MENS_CREATIE = {
+    "cockpit2.py:_act_proj_add",
+    "cockpit2.py:/wizard/create",
+}
+
+
+def test_er_zijn_precies_twee_wegen_waarop_een_mens_een_project_maakt():
+    """De vraag waar de vorm-telling een pròxy voor is, nu direct gesteld.
+
+    De vorm-ratchet telt formuliervelden; dit telt CREATIE-AANROEPEN met `trigger="human"`. Een
+    derde weg is precies wat de conventie verbiedt, en die glipt langs een veld-telling heen zodra
+    hij andere veldnamen gebruikt — wat de wizard letterlijk deed (`uitkomst` in plaats van
+    `done_when`) en waardoor niemand doorhad dat de telling nul stond."""
+    import re as _re
+    bron = (ROOT / "cockpit2.py").read_text(encoding="utf-8")
+    regels = bron.splitlines()
+    # `create(..., "human")` op de projectstore. Niet elke aanroep is een MENS-formulier: de
+    # kanaal- en spanning-routes maken ook projecten, maar via een bestaand pad met een vaste vorm.
+    creaties = [i + 1 for i, r in enumerate(regels)
+                if _re.search(r'\b(pj|st\.projects|projects)\.create\(', r)]
+    assert creaties, "geen enkele projectcreatie gevonden — het patroon is verouderd"
+    # De twee MENS-ingangen dragen allebei `trigger="human"` ÉN een done-when uit een formulier.
+    # De andere creaties zijn afgeleide routes met een andere trigger (`founder_flow` bij de
+    # radar, `human` zonder done-when bij de kanaal-route) — die hebben geen eigen invulscherm.
+    met_formulier = [n for n in creaties
+                     if any('"human"' in r for r in regels[n - 1:n + 4])
+                     and any("done_when=" in r for r in regels[n - 1:n + 4])]
+    assert len(met_formulier) == len(_MENS_CREATIE), (
+        f"{len(met_formulier)} creatie-aanroepen met een eigen done-when op regel(s) "
+        f"{met_formulier} — verwacht {len(_MENS_CREATIE)}: {sorted(_MENS_CREATIE)}. Een derde weg "
+        f"om als mens een project te maken is de tweede vorm die deze conventie verbiedt.")
 
 
 def test_het_bord_toont_zelf_geen_formulier():

@@ -33,16 +33,40 @@ def test_toont_kandidaten_en_pitch_ignore(tmp_path):
     # pitchen verplaatst naar 'pursued'
     cockpit2.dispatch(dd, "link_pursue",
                       {"link": ["https://gids.nl/beste-barefoot"], "next": ["/linkbuilding"]},
-                      username="stefan")
+                      username="guest")
     st = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
     assert st.status("https://gids.nl/beste-barefoot") == "pursued"
     html2 = cockpit2.render_linkbuilding(dd, csrf_token="t")
     assert "Being pitched (1)" in html2
 
 
-def test_gast_mag_niet_beslissen(tmp_path):
+def test_een_onbekende_gebruiker_mag_niet_beslissen(tmp_path):
+    """DEZE TEST STOND OMGEKEERD, en hij hield daarmee de bug op zijn plek.
+
+    Hij heette `test_gast_mag_niet_beslissen` en eiste dat `username="guest"` werd geweigerd,
+    terwijl `username="stefan"` — een string die geen enkel account is — gewoon mocht. Dat is
+    precies de faalrichting die de handler had:
+
+        if c.username in (None, "guest"): return "✗ not allowed"
+
+    Weigert de guest (auth UIT, dus per definitie alles mag) en laat élke ingelogde naam door,
+    ook een die nergens bestaat. De gedocumenteerde regel staat in elke gate-helper en in
+    CLAUDE.md: guest mag alles, ingelogd-maar-onbekend wordt geweigerd. Deze test toetst nu díe
+    regel, in beide richtingen.
+
+    Zie ook `tests/test_authz_faalrichting.py`, die de vorm project-breed bewaakt."""
     dd = _dd(tmp_path)
-    store = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
-    store.add_candidate("https://x.nl/a", "A", "s", "midden")
-    cockpit2.dispatch(dd, "link_pursue", {"link": ["https://x.nl/a"], "next": ["/"]}, username="guest")
-    assert LinkTargets(os.path.join(dd, "linkbuilding_targets.json")).status("https://x.nl/a") == "candidate"
+    pad = os.path.join(dd, "linkbuilding_targets.json")
+    LinkTargets(pad).add_candidate("https://x.nl/a", "A", "s", "midden")
+
+    # Ingelogd maar onbekend: geweigerd.
+    _nxt, msg = cockpit2.dispatch(dd, "link_pursue",
+                                  {"link": ["https://x.nl/a"], "next": ["/"]},
+                                  username="niemand@nergens.nl")
+    assert "No access" in msg
+    assert LinkTargets(pad).status("https://x.nl/a") == "candidate"
+
+    # Guest (auth uit): mag.
+    cockpit2.dispatch(dd, "link_pursue", {"link": ["https://x.nl/a"], "next": ["/"]},
+                      username="guest")
+    assert LinkTargets(pad).status("https://x.nl/a") == "pursued"

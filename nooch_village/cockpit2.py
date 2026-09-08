@@ -410,6 +410,35 @@ def _person_targets(st: _Stores, username: str) -> list:
     return targets
 
 
+def _notif_gate(st: _Stores, username: str | None, nid: str) -> str | None:
+    """Mag deze mens iets doen met dít inbox-item? Geeft een foutmelding terug, anders None.
+
+    DE POORT ZAT IN DE KNOP EN NIET IN DE CODE. `render_inbox` toont uitsluitend items uit
+    `open_for_targets(_person_targets(...))`, dus op het scherm zie je alleen je eigen wachtrij.
+    De handlers eronder namen echter een kale `nid` aan en deden hun werk: lezen, verwerken,
+    archiveren, weggooien. Een POST met een vreemd id kon dus de wachtrij van iemand anders
+    opschonen, en juist bij deze zes acties merkt de eigenaar dat niet — het item is gewoon weg,
+    zonder spoor op zijn scherm.
+
+    Dat is exact het patroon waar `_act_goedkeur` zelf voor waarschuwt: "een view is een verzoek en
+    geen garantie: een POST kan met de hand gestuurd worden."
+
+    De doelverzameling is dezelfde als die van het scherm (`_person_targets`): jezelf als persoon
+    plus elke rol die je vervult. Guest (auth uit) mag alles; een item dat niet bestaat laten we
+    door, zodat de handler zelf zijn eigen "item not found" kan geven en deze poort geen tweede
+    bron van waarheid wordt over wat er bestaat."""
+    if username == "guest":
+        return None
+    if st.people.by_email(username) is None:
+        return "No access — user not recognised"
+    n = st.notif._find((nid or "").strip())
+    if n is None:
+        return None                                      # bestaat niet: de handler zegt dat zelf
+    if (n.get("target_type"), n.get("target_id")) in set(_person_targets(st, username)):
+        return None
+    return "No access — this item is not in your inbox"
+
+
 def _scoped_project_opts(st: _Stores, n) -> str:
     """Projectlijst voor de actie-uitkomst, GESCOPET op de rol die bij deze spanning hoort (de doel-rol
     van de mention, anders de eigenaar van het bron-project). Alleen díe projecten — niet alles van
@@ -1698,8 +1727,9 @@ def _act_proj_edit(c):
 def _act_proj_comment(c):
         nxt, g, pj = c.nxt, c.g, c.pj
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         if pj.add_comment(g("pid"), g("comment")):
             msg = "💬 geplaatst"
         return nxt, msg
@@ -2098,8 +2128,9 @@ def _act_attach_remove(c):
 def _act_react_add(c):
         nxt, g, pj = c.nxt, c.g, c.pj
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         if pj.add_reaction(g("pid"), g("item"), g("emoji")):
             msg = "✓ reactie geplaatst"
         return nxt, msg
@@ -2108,8 +2139,9 @@ def _act_react_add(c):
 def _act_feed_edit(c):
         nxt, g, pj = c.nxt, c.g, c.pj
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         if pj.feed_edit(g("pid"), g("item"), g("text")):
             msg = "✓ comment edited"
         return nxt, msg
@@ -2118,8 +2150,9 @@ def _act_feed_edit(c):
 def _act_feed_remove(c):
         nxt, g, pj = c.nxt, c.g, c.pj
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment removed"
         return nxt, msg
 
@@ -2127,8 +2160,9 @@ def _act_feed_remove(c):
 def _act_ai_reply(c):
         nxt, st, g = c.nxt, c.st, c.g
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         _load_env()
         msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
                else "no AI reply (no AI inhabitant on the role or no LLM key)")
@@ -2138,8 +2172,9 @@ def _act_ai_reply(c):
 def _act_proj_feed(c):
         nxt, st, g, pj = c.nxt, c.st, c.g, c.pj
         msg = ""
-        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
-        # (de sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
+        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
+        # sessie-check in do_POST dekt "ingelogd = mag".
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
         kind = "comment" if atype == "human" else "update"
@@ -2593,6 +2628,9 @@ def _act_radar_koppel(c):
 
 
 def _act_kb_stage_koppel(c):
+        # AUTHZ: iedereen-ingelogd — zelfde regel als de andere kb_-takken hierboven: permissieve
+        # intake, strenge uitgang. Koppelen voegt herkomst toe aan een bestaand kaartje en maakt
+        # niets nieuws; de poort staat bij het GEBRUIK van kennis, niet bij de ingang.
         """MECE-knop in de staging-review: dit voorstel is hetzelfde inzicht als een bestaand
         kaartje — koppel het als extra bron (stack_provenance, grounding +1) in plaats van
         een tweede kaartje te maken. Signaal-voorstellen krijgen meteen hun promoted-marker."""
@@ -3865,11 +3903,20 @@ def _act_wall_outcome(c):
 
 
 def _act_notif_read(c):
+        # AUTHZ: rolvervuller of Circle Lead — via `_notif_gate`: het item moet aan JOU of aan een
+        # rol die jij vervult zijn gericht. Zie de docstring van die poort.
+        deny = _notif_gate(c.st, c.username, c.g("nid"))
+        if deny:
+            return c.nxt, deny
         c.st.notif.mark_item_read(c.g("nid"))
         return c.nxt, "✓ marked as read"
 
 
 def _act_notif_processed(c):
+        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`.
+        deny = _notif_gate(c.st, c.username, c.g("nid"))
+        if deny:
+            return c.nxt, deny
         c.st.notif.mark_item_processed(c.g("nid"))
         return c.nxt, "✓ verwerkt"
 
@@ -3921,6 +3968,11 @@ def _act_goedkeur(c):
 
 def _act_notif_delete(c):
         # Prullenbak: ruis die je niet wilt verwerken uit de wachtrij halen (zacht, dismissed-vlag).
+        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Juist hier is de poort nodig: een
+        # weggegooid item verdwijnt van het scherm van de eigenaar zonder enig spoor.
+        deny = _notif_gate(c.st, c.username, c.g("nid"))
+        if deny:
+            return c.nxt, deny
         ok = c.st.notif.delete_item(c.g("nid"))
         return c.nxt, ("🗑 weggegooid" if ok else "✗ item not found")
 
@@ -3935,18 +3987,25 @@ def _act_metrics2_fav(c):
         return nxt, ("★ on your dashboard" if tile else "✗ could not add")
 
 
+# De metrics2-tegels: AUTHZ: circle-member of iedereen-ingelogd — een tegel is een WEERGAVE op je
+# eigen dashboard, geen meting en geen structuur. `_act_metrics2_fav` (toevoegen) draait wel een
+# `_member_gate` op de node; wisselen en weghalen van een bestaande tegel raakt geen nieuwe data en
+# blijft bewust vrij.
+
 def _act_metrics2_unfav(c):
         ok = c.st.metrics.remove_tile(c.g("node"), c.g("tid"))
         return c.nxt, ("removed from your dashboard" if ok else "✗ not found")
 
 
 def _act_metrics2_form(c):
+        # AUTHZ: circle-member of iedereen-ingelogd — zie het metrics2-blok hierboven.
         # Weergave-schakelaar: de vorm van een tegel wisselen (view losgekoppeld van data).
         ok = c.st.metrics.set_tile_form(c.g("node"), c.g("tid"), c.g("form"))
         return c.nxt, ("display changed" if ok else "✗ not found")
 
 
 def _act_metrics2_dim(c):
+        # AUTHZ: circle-member of iedereen-ingelogd — zie het metrics2-blok hierboven.
         # Segmentatie: de dimensie van een tegel wisselen (bv. per land / per product / over tijd).
         # De view stuurt een passende vorm mee (segmentatie bepaalt welke weergaves kloppen).
         ok = c.st.metrics.set_tile_dim(c.g("node"), c.g("tid"), c.g("dim"), c.g("form"))
@@ -3954,6 +4013,7 @@ def _act_metrics2_dim(c):
 
 
 def _act_metrics2_compare(c):
+        # AUTHZ: circle-member of iedereen-ingelogd — zie het metrics2-blok hierboven.
         # Metric-vs-metric: een tweede meting koppelen (combo staaf+lijn) of leeg → vergelijking eraf.
         g = c.g
         ok = c.st.metrics.set_tile_compare(g("node"), g("tid"), g("cmp_source"),
@@ -3963,8 +4023,16 @@ def _act_metrics2_compare(c):
 
 def _act_acc_check(c):
         # Dorpsbrede accountability-check (dubbelingen + formulering) via één LLM-call; bewaart de uitkomst.
-        if c.username in (None, "guest"):
-            return c.nxt, "✗ not allowed"
+        # AUTHZ: anchor-lead — dit leest de accountabilities van ELKE rol in het dorp en schrijft één
+        # org-breed oordeel weg. Dat is dezelfde reikwijdte als persona-beheer, dus dezelfde poort.
+        #
+        # DE OUDE CHECK STOND OMGEKEERD: `if c.username in (None, "guest"): return "✗ not allowed"`
+        # weigerde juist guest (= auth uit, mag per definitie alles) en liet élke ingelogde
+        # gebruiker door. Beide helften waren fout, in tegengestelde richting, en de tak had geen
+        # AUTHZ-label dat het verschil zichtbaar maakte.
+        _deny = _anchor_gate(c.st, c.username)
+        if _deny:
+            return c.nxt, f"✗ {_deny}"
         from nooch_village.skills_impl.accountability_check import check_accountabilities
         from nooch_village.views.accountabilities import roles_with_accountabilities
         from nooch_village import llm
@@ -3980,10 +4048,15 @@ def _act_acc_check(c):
         return c.nxt, f"check klaar: {n} aandachtspunt(en)"
 
 
+# De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze
+# doelwitten (skill `linkbuilding_targets`) en het oordeel "wel/niet achteraan" is operationeel werk
+# binnen die rol. Ook hier stond de omgekeerde check; zie `_act_acc_check` voor wat daar mis aan was.
+
 def _act_link_pursue(c):
         # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
-        if c.username in (None, "guest"):
-            return c.nxt, "✗ not allowed"
+        deny = _role_gate("concurrent_scout", c.username, c.st)
+        if deny:
+            return c.nxt, f"✗ {deny}"
         from nooch_village.link_targets import LinkTargets
         store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
         ok = store.pursue((c.g("link") or "").strip())
@@ -3991,27 +4064,40 @@ def _act_link_pursue(c):
 
 
 def _act_link_ignore(c):
-        if c.username in (None, "guest"):
-            return c.nxt, "✗ not allowed"
+        # AUTHZ: rolvervuller of Circle Lead — zie het blok hierboven.
+        deny = _role_gate("concurrent_scout", c.username, c.st)
+        if deny:
+            return c.nxt, f"✗ {deny}"
         from nooch_village.link_targets import LinkTargets
         store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
         ok = store.ignore((c.g("link") or "").strip())
         return c.nxt, ("genegeerd" if ok else "✗ not found")
 
 
+# De twee bron-takken: AUTHZ: anchor-lead — een bron aanzetten bepaalt welke externe API's het HELE
+# dorp bij elke pulse aanroept, met de sleutels van de organisatie. Dat is org-breed, niet
+# rol-operationeel. Ook hier stond de omgekeerde check.
+
 def _act_source_activate(c):
         # Externe bron aanzetten (mens-gated). Haalt pas bij de volgende pulse data op.
         src = (c.g("source") or "").strip()
-        if not src or c.username in (None, "guest"):
-            return c.nxt, "✗ not allowed"
+        _deny = _anchor_gate(c.st, c.username)
+        if _deny:
+            return c.nxt, f"✗ {_deny}"
+        if not src:
+            return c.nxt, "✗ no source given"
         c.st.sources.set_active(src, True)
         return c.nxt, f"✓ {src} staat aan (data volgt bij de volgende pulse)"
 
 
 def _act_source_deactivate(c):
+        # AUTHZ: anchor-lead — zie het blok hierboven.
         src = (c.g("source") or "").strip()
-        if not src or c.username in (None, "guest"):
-            return c.nxt, "✗ not allowed"
+        _deny = _anchor_gate(c.st, c.username)
+        if _deny:
+            return c.nxt, f"✗ {_deny}"
+        if not src:
+            return c.nxt, "✗ no source given"
         c.st.sources.set_active(src, False)
         return c.nxt, f"○ {src} staat uit"
 
@@ -4034,6 +4120,9 @@ def _act_metrics2_formula(c):
 def _act_notif_add(c):
         # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
+        # AUTHZ: iedereen-ingelogd — een spanning voelen mag iedereen, en hij landt in je EIGEN
+        # wachtrij (de handler bepaalt het doel zelf uit `username`, niet uit het formulier). De
+        # poort die ertoe doet zit op het verwerken ervan; zie `_notif_gate`.
         st, g, username = c.st, c.g, c.username
         text = (g("text") or "").strip()
         role = (g("role") or "").strip()
@@ -4084,7 +4173,13 @@ def _act_notif_klaar(c):
         # 'Klaar met deze spanning': het ENIGE sluitmodel. Sloot je met nul uitkomsten, dan legt de handler
         # zelf 'geen uitkomst' vast (zichtbaar voor de raadsvergadering). Redirect naar de inbox met de
         # zojuist-verwerkte spanning gemarkeerd — een klein viermoment.
+        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Sluiten is de zwaarste van de
+        # zes: het haalt de spanning uit de wachtrij van de eigenaar én legt een uitkomst vast op
+        # zijn naam.
         st, nid = c.st, c.g("nid")
+        deny = _notif_gate(st, c.username, nid)
+        if deny:
+            return c.nxt, deny
         n = st.notif._find(nid)
         actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
         by = _person_name(st, actor.id) if actor else ""
@@ -4137,9 +4232,14 @@ def _act_notif_outcome(c):
         # Eén uitkomst vastleggen vanuit de verwerk-wizard: maak 'm via dezelfde _outcome_*-helpers als de
         # wall (met de bron-spanning als herkomst) ÉN voeg 'm toe aan het verwerk-record. Sluit het item
         # NIET — zo kun je meerdere uitkomsten op één spanning stapelen; 'Klaar' sluit pas.
+        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Een uitkomst hangt aan de
+        # spanning van de eigenaar en verschijnt op zijn naam in de raadsvergadering.
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         from nooch_village.inbox_wizard import intent_of, OTYPE_LABEL
         nid = g("nid")
+        deny = _notif_gate(st, username, nid)
+        if deny:
+            return nxt, deny
         n = st.notif._find(nid)
         if n is None:
             return nxt, "✗ tension not found"
@@ -4251,6 +4351,10 @@ def _act_notif_outcome(c):
 
 
 def _act_notif_archive(c):
+        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`.
+        deny = _notif_gate(c.st, c.username, c.g("nid"))
+        if deny:
+            return c.nxt, deny
         ok = c.st.notif.archive_item(c.g("nid"))
         return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ only processed items can be archived")
 
@@ -4273,8 +4377,9 @@ def _act_wo_checkout(c):
 def _act_noochie_send(c):
         nxt, st, g = c.nxt, c.st, c.g
         msg = ""
-        # noochie_* (send/reset/ctx) BEWUST ongated: de assistent-chat mag elke ingelogde
-        # gebruiker gebruiken (sessie-check in do_POST dekt "ingelogd = mag").
+        # AUTHZ: iedereen-ingelogd — noochie_* (send/reset/ctx) is de assistent-chat: praten, geen
+        # mutatie van andermans data. Bewust ongated; de sessie-check in do_POST dekt
+        # "ingelogd = mag".
         s = st.noochie
         if g("text").strip():
             ph = s.phase
@@ -4297,6 +4402,7 @@ def _act_noochie_send(c):
 
 
 def _act_noochie_reset(c):
+        # AUTHZ: iedereen-ingelogd — zie `_act_noochie_send`.
         nxt, st = c.nxt, c.st
         msg = ""
         st.noochie.reset(); msg = "↺ Noochie opnieuw"
@@ -4304,6 +4410,7 @@ def _act_noochie_reset(c):
 
 
 def _act_noochie_ctx(c):
+        # AUTHZ: iedereen-ingelogd — zie `_act_noochie_send`.
         nxt, st, g = c.nxt, c.st, c.g
         msg = ""
         st.noochie.set_field("ctx", g("ctx")); msg = "✓ context updated"
@@ -5637,13 +5744,26 @@ def _act_kw_nom_reject(c):
 
 
 # ── Woordenschat-beheer (/woordenschat): de mens cureert de Library vanuit cockpit 2 ────────
-# AUTHZ: iedereen-ingelogd — de sessie-check in do_POST dekt "ingelogd = mag" (zelfde regel als
-# de andere beheer-schrijfacties zonder extra rolcheck). Schrijven loopt uitsluitend via de
-# domein-methodes (inbox_actions → Library.curate), nooit in de json. Bewust minimaal:
-# alleen verbied + heractiveer/goedkeuren; functie (doelwit/volg) bepaalt de heuristiek zelf.
+# AUTHZ: rolvervuller of Circle Lead — de Library IS het domein van de Librarian, en curatie is
+# volgens de domeinregel het exclusieve recht van de eigenaar (CLAUDE.md: "lezen is vrij;
+# cureren/wijzigen is het exclusieve recht van de eigenaar").
+#
+# HIER STOND "iedereen-ingelogd", EN DAT WAS EEN GAT. Twintig regels hoger zit
+# `_act_kw_nom_reject`, die precies hetzelfde domein raakt en wél `_role_gate("librarian")`
+# draait. Dezelfde store, dezelfde beslissing, twee verschillende poorten — en de zwakste van de
+# twee kon een woord permanent op `forbidden` zetten, wat betekent dat GEEN ENKELE bron het ooit
+# nog voorstelt (`lib.status(term) is not None` blokkeert hervoorstel voor alle statussen). Eén
+# klik door een willekeurige ingelogde persoon sloot dus een zoekwoord voorgoed uit de
+# ontdekkingslus, zonder dat de eigenaar van het domein er iets van zag.
+#
+# De rechtvaardiging ("de sessie-check in do_POST dekt ingelogd = mag") gold voor beheeracties
+# zonder domein-eigenaar. Deze heeft er een.
 
 def _act_ws_curate(c, status: str, ok_msg: str):
     # Gedeelde kern voor pauzeer/verbied/heractiveer: curatie via curate_library_term.
+    deny = _role_gate("librarian", c.username, c.st)
+    if deny:
+        return c.nxt, f"✗ {deny}"
     from nooch_village.inbox_actions import curate_library_term
     res = curate_library_term(c.st.library, c.g("word"), status,
                               reason=c.g("reason"), by=_kb_actor(c))
