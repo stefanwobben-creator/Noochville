@@ -90,6 +90,33 @@ class HaalPaginaSkill(Skill):
         # in safe_fetch zelf.
         self._haal = haal or safe_fetch.haal_tekst_geduldig
 
+    def validate_payload(self, payload: dict, context) -> list:
+        """Is dit een URL, of een belofte dat er ooit een URL komt?
+
+        HET GEVAL, 8 september 2026. De planner schreef letterlijk
+        `{"url": "PLACEHOLDER — to be filled with each candidate URL found in prior steps"}` en zette
+        er de reden bij dat hij hem nog niet kon weten: die stap gebruikt de uitkomst van een
+        eerdere stap, en het planformaat kent die afhankelijkheid niet. Dus verzon hij een
+        plaatshouder en hoopte dat iemand hem zou invullen.
+
+        Beide bestaande poorten lieten dat door. `_missing_required` kijkt alleen of het VELD er is,
+        en dat is een niet-lege string. `_payload_issues` roept déze methode aan, maar die bestond
+        hier niet en de basisklasse geeft `[]` terug. Er stond dus iemand bij de deur die nooit iets
+        tegenhield. Gevolg: het item werd uitvoerbaar bevonden, faalde in 0,00 seconden, bleef open,
+        en het project bleef "the role is working" tonen.
+
+        Fail-fast bij het PLANNEN is hier het hele punt: dan staat de reden op de kaart en weet de
+        mens dat die stap op hem wacht, in plaats van dat er elke dag iets stilletjes omvalt."""
+        rauw = (payload or {}).get("url")
+        url = str(rauw or "").strip()
+        if not url:
+            return []                                    # afwezigheid dekt `required_payload` al
+        if not url.lower().startswith(("http://", "https://")):
+            kort = url if len(url) <= 60 else url[:57] + "…"
+            return [f"'url' is geen adres maar tekst ({kort!r}) — een stap die de URL pas uit een "
+                    f"eerdere stap kan halen, hoort een mens-taak te zijn of te wachten"]
+        return []
+
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
         url = (payload.get("url") or "").strip()

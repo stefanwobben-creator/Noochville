@@ -913,6 +913,9 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-warn{font-size:.68rem;color:var(--coral);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-noskill{font-size:.68rem;color:var(--gray);background:var(--sand);padding:.02rem .35rem;border-radius:5px}
 .ck-skip{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
+/* Uitgevoerd-maar-leeg: zelfde vorm als .ck-skip (het is dezelfde soort mededeling:
+   dit item telt anders dan het lijkt), maar apart zodat de twee later los kunnen. */
+.ck-leeg{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
 .ck-box.b-warn{border-color:var(--coral)}
 .ck-box.b-noskill{border-color:var(--subtle);border-style:dashed}
 .ck-box.b-skip{border-style:dotted;opacity:.6}

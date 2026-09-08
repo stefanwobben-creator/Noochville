@@ -215,7 +215,23 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
     """De meta-regel onder een checklist-item: skill-naam + payload, en per state het ⚠/○-signaal.
     ⚠ (coral) en ○ (grijs) verschillen bewust visueel — ze vragen om verschillende actie."""
     if state == "done":
-        return ""                                # afgerond → geen ruis; het resultaat staat in de wall
+        # AFGEVINKT IS NIET HETZELFDE ALS BEANTWOORD. `set_item_leeg` markeert een item dat draaide
+        # maar niets opleverde — het wordt bewust wél afgevinkt (anders haalt het project de
+        # review-gate nooit), en die markering stond nergens op het scherm. Op 8 september kwam de
+        # belangrijkste zoekopdracht van een leveranciers-onderzoek leeg terug, en op het bord stond
+        # hij doorgestreept naast twee die wél iets vonden: niet te onderscheiden. De uitvoerlaag
+        # legde het verschil zorgvuldig vast en de weergave gooide het weg.
+        #
+        # `leeg_bron` scheidt twee dingen die je niet mag verwarren: 'gemeld' is een ANTWOORD (de
+        # bron zei zelf: niets gevonden), 'geen_inhoud' is een GAT (er kwam iets terug waar niets
+        # in zat). Alleen het tweede is ontbrekende kennis.
+        if not it.get("leeg"):
+            return ""                            # afgerond mét resultaat → geen ruis; het staat in de wall
+        why = (it.get("leeg_reden") or "").strip()
+        gemeld = it.get("leeg_bron") == "gemeld"
+        merk = "📭 searched, nothing found" if gemeld else "🕳 ran, but returned nothing"
+        return (f"<span class='ck-meta'><span class='ck-leeg'>{merk} — this step has no answer"
+                f"{' · ' + _e(why) if why else ''}</span></span>")
     if state == "skipped":
         why = (it.get("skip_reason") or "").strip()
         return (f"<span class='ck-meta'><span class='ck-skip'>⤳ skipped — does not count"
