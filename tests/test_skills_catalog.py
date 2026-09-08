@@ -42,7 +42,30 @@ def test_domein_en_zwaar_markering(tmp_path):
     rows = {r["skill"]: r for r in skills_catalog.uitvoerbaar(st.records.all(), st.ai)}
     kr = rows["keyword_review"]
     assert kr["domein"] == "bibliotheek" and kr["zwaar"] is True
-    assert kr["suggestie_tegenhanger"] == "keyword_nominatie"
+    # `suggestie_tegenhanger` wees naar `keyword_nominatie`, een skill die nooit bestond: geen
+    # registry-entry, geen bestand, geen rol-DNA. De weigeringsreden van `koppelbaar()` noemde hem
+    # wél ("Wel beschikbaar: de suggestie-variant …") en die tekst ging via vier schermen naar de
+    # mens. Nomineren loopt via de cockpit (`kw_nominate`), niet via een skill.
+    assert not kr.get("suggestie_tegenhanger")
+
+
+def test_geen_enkele_skill_verwijst_naar_iets_dat_niet_bestaat():
+    """DE INVARIANT ONDER DE VORIGE REGEL. `skill_meta` mag alleen skills noemen die de registry
+    ook echt kent — anders belooft het scherm gereedschap dat er niet is, en dat merkt iemand pas
+    als hij het probeert. Zelfde fout als de ja-knop op een kans."""
+    from nooch_village import skill_meta
+    from nooch_village.registry_factory import build_skill_registry
+    bestaand = set(build_skill_registry().names())
+    verwezen = set()
+    for naam, spec in skill_meta.META.items():
+        verwezen.add(naam)
+        for sleutel in ("suggestie_tegenhanger", "suggestie_van"):
+            if spec.get(sleutel):
+                verwezen.add(spec[sleutel])
+    spoken = sorted(verwezen - bestaand)
+    assert not spoken, (
+        f"skill_meta noemt skills die de registry niet kent: {spoken}. Registreer ze, of haal de "
+        f"verwijzing weg — een gereserveerde naam is niet gratis zolang hij op het scherm komt.")
 
 
 def test_gebruikers_toont_dna_en_koppeling(tmp_path):

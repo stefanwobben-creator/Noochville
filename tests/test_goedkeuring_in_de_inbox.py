@@ -68,10 +68,41 @@ def test_wie_mag_ja_zeggen():
     kennislaag; een rol activeren geeft hem een thread."""
     assert goedkeuring.mag_ja("verband") is True
     assert goedkeuring.mag_ja("keyword") is True
-    assert goedkeuring.mag_ja("opportunity") is True
     assert goedkeuring.mag_ja("activation") is False
     assert goedkeuring.mag_ja("escalation") is False
     assert goedkeuring.mag_ja("means_gap") is False
+
+
+def test_elk_type_met_een_ja_heeft_ook_een_handler():
+    """DE POORT MOET WAAR ZIJN, NIET ALLEEN CONSISTENT. `opportunity` stond op `ja: True` met de
+    belofte "routes it onward", maar `_act_goedkeur` heeft alleen takken voor `verband` en
+    `keyword`. Op Ja klikken gaf dus `✗ not supported here`, elke keer, en het item bleef staan.
+    Kansen worden wél aangemaakt (village.py), dus die dode knop stond er echt in de inbox.
+
+    Deze test leest de handler-bron en eist dat elk type met `ja: True` daar ook genoemd wordt.
+    Een volgende `ja: True` zonder tak valt om in plaats van pas op het scherm."""
+    import inspect
+    from nooch_village import cockpit2
+    bron = inspect.getsource(cockpit2._act_goedkeur)
+    for typ, spec in goedkeuring.TYPES.items():
+        if not spec.get("ja"):
+            continue
+        assert f'"{typ}"' in bron, (
+            f"type {typ!r} belooft een ja-knop, maar `_act_goedkeur` heeft er geen tak voor — "
+            f"de knop geeft dan '✗ not supported here'. Bouw de tak, of zet `ja` op False met "
+            f"een `waarom_niet`.")
+
+
+def test_een_type_zonder_ja_wijst_naar_een_werkende_route():
+    """De tegenhanger: `ja: False` toont "yes runs on the command line" met de regel erbij. Die
+    regel moet ergens landen, anders is het een tweede doodlopende weg. De CLI heeft een eerlijk
+    vangnet (sluiten mét de melding dat er niets is uitgevoerd), dus dat klopt — maar de REDEN
+    moet er staan, want zonder reden is het een muur."""
+    for typ, spec in goedkeuring.TYPES.items():
+        if spec.get("ja"):
+            continue
+        assert spec.get("waarom_niet"), f"{typ} heeft geen waarom_niet — dan staat er een muur"
+        assert goedkeuring.waarom_niet(typ) != "this type has not been cleared for the cockpit"
 
 
 def test_een_onbekend_type_krijgt_geen_ja():

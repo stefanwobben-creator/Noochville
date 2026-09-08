@@ -22,19 +22,26 @@ META: dict[str, dict] = {
     "keyword_review": {
         "schrijft_in_domein": "bibliotheek",
         "zwaar": True,
-        "suggestie_tegenhanger": "keyword_nominatie",
-    },
-    # Naamvariant uit de ontwerpnotitie; nog geen registry-implementatie, wel alvast
-    # gemarkeerd zodat hij nooit per ongeluk vrij koppelbaar wordt.
-    "library_curate": {
-        "schrijft_in_domein": "bibliotheek",
-        "zwaar": True,
-        "suggestie_tegenhanger": "keyword_nominatie",
-    },
-    "keyword_nominatie": {
-        "suggestie_van": "keyword_review",
+        # Geen `suggestie_tegenhanger` meer: die wees naar `keyword_nominatie`, dat niet bestaat.
+        # Zie het blok onder deze dict. Nomineren gaat via de cockpit-acties `kw_nominate` /
+        # `kw_nom_accept` / `kw_nom_reject` (`keyword_nominations.py`), niet via een skill.
     },
 }
+
+# WEGGEHAALD OP 8 SEPTEMBER: `library_curate` en `keyword_nominatie`.
+#
+# Allebei "naamvariant uit de ontwerpnotitie, nog geen registry-implementatie". Ze stonden hier
+# als reservering, en dat leek gratis. Dat was het niet: `koppelbaar()` gaf als weigeringsreden
+# "Wel beschikbaar: de suggestie-variant 'keyword_nominatie'" — een tekst die via vier schermen
+# naar de mens ging en een gereedschap noemde dat niet bestaat. Op de /skills-kaart stond
+# bovendien "Suggestion counterpart: keyword_nominatie — other roles suggest, the domain owner
+# decides." Dat is dezelfde fout als de ja-knop op een kans: het scherm belooft iets wat er niet
+# is, en pas als iemand het probeert blijkt het.
+#
+# De FUNCTIE bestaat trouwens wel, onder een andere naam: `keyword_nominations.py` met
+# `NominationQueue`/`NominationKroniek` en de cockpit-acties `kw_nominate` / `kw_nom_accept` /
+# `kw_nom_reject`. Er viel dus niets te bouwen — er stond een tweede naam voor iets dat al leefde,
+# en dat is precies wat "reference, don't copy" verbiedt.
 
 
 def _entry(skill: str) -> dict:

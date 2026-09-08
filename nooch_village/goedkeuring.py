@@ -45,8 +45,21 @@ TYPES: dict[str, dict] = {
     },
     "opportunity": {
         "vraag": "Pick this opportunity up?",
-        "ja": True,
-        "wat": "routes it onward",
+        # STOND OP `True` EN TEKENDE EEN KNOP DIE NOOIT WERKTE. `_act_goedkeur` heeft takken voor
+        # `verband` en `keyword`; alles anders valt in de `else`, en "approved" zit niet in
+        # `ALTIJD`. Op Ja klikken gaf dus `✗ not supported here`, elke keer, en het item bleef
+        # staan. Kansen worden wél aangemaakt (`village.py:271`), dus die knop stond er echt.
+        #
+        # De route die hem zou moeten afhandelen bestaat (`inbox_actions.decide_opportunity`),
+        # maar heeft geen enkele productie-aanroeper: hij vraagt een BESTEMMING (project of
+        # knowledge) en dat veld zit niet op het ja/nee/later-formulier. Dat aansluiten is een
+        # ontwerpstap, geen bugfix — tot dan is `False` de eerlijke waarde, want de CLI-regel
+        # hieronder werkt wél: die legt de beslissing vast en zegt er zelf bij dat er niets is
+        # uitgevoerd. Een knop die niets doet is erger dan geen knop; een knop die "✓" zegt en
+        # niets doet is het ergst.
+        "ja": False,
+        "waarom_niet": ("approving has to pick a destination (project or knowledge) and that "
+                        "field is not on this form yet"),
     },
     "suggestion": {
         "vraag": "Is this suggestion worth acting on?",
