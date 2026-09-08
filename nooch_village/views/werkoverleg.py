@@ -111,14 +111,20 @@ def _agenda_substeps(st, crec, open_iid: str = "") -> str:
 
     Geen microcopy, geen knoppen — dit is een inhoudsopgave. Weghalen en verwerken doe je op de
     stap zelf. De klassen (`wo-substeps`, `rov-item`, `rov-title`) stonden nog in het
-    designsysteem; alleen de markup was weg."""
-    from nooch_village.views.vangst import _open_nxt
+    designsysteem; alleen de markup was weg.
+
+    Sinds de agenda-stap één punt tegelijk toont is deze lijst ook de NAVIGATIE. Welk punt
+    'aan' staat leest hij daarom uit dezelfde `actief_punt` als het vlak ernaast: zou elk van de
+    twee het zelf bepalen, dan markeert het menu punt A terwijl rechts punt B openstaat."""
+    from nooch_village.views.vangst import _open_nxt, actief_punt
 
     base = f"/werkoverleg?circle={crec.id}&step=agenda"
+    punten = st.werk.punten(crec.id)
+    actief = actief_punt(punten, open_iid)
     rijen = ""
-    for it in st.werk.punten(crec.id):
+    for it in punten:
         klaar = it.get("status") == "done"
-        aan = " on" if it.get("id") == open_iid else ""
+        aan = " on" if str(it.get("id") or "") == actief else ""
         url = _open_nxt(base, str(it.get("id") or ""))
         rijen += (f"<div class='rov-item{aan}{' done' if klaar else ''}'>"
                   f"<a class='js-modal rov-link' href='{url}' data-href='{url}'>"
@@ -180,9 +186,13 @@ def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
     from nooch_village.views.vangst import render_vangst_frag
 
     nxt = f"/werkoverleg?circle={crec.id}&step=agenda"
-    lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt)
-    return (f"<div class='c2-sec'><p class='muted'>Klik <em>verwerken</em> onder een punt om er "
-            f"uitkomsten onder te leggen; er mogen er meerdere zijn, elk naar een andere rol.</p>"
+    # `enkel=True`: spanning voor spanning. De volledige lijst staat links in het stappenmenu; hier
+    # stond hij een tweede keer, met alle rijen onder elkaar. Wie meekeek in een scherm-deling zag
+    # daardoor een lijst waar hij door moest scrollen in plaats van het punt dat behandeld wordt.
+    lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt, enkel=True)
+    return (f"<div class='c2-sec'><p class='muted'>Eén punt per keer; kies links een ander punt. "
+            f"Klik <em>verwerken</em> om er uitkomsten onder te leggen; er mogen er meerdere zijn, "
+            f"elk naar een andere rol.</p>"
             f"</div><div class='rdr-tool' id='vang-lijst'>{lijst}</div>")
 
 
@@ -273,7 +283,8 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
 
 
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
-                       fragment: bool = False, iid: str = "", kpi: str = "", mw: str = "maand") -> str:
+                       fragment: bool = False, iid: str = "", kpi: str = "", mw: str = "maand",
+                       group: str = "") -> str:
     """Werkoverleg-modal: links de vaste stap-navigatie, rechts de inhoud per stap. De inhoud
     HERGEBRUIKT de bestaande schermen (members/checklists/metrics/projecten). Alleen de secretaris
     opent en sluit. Brok 1: frame + ingebedde schermen; de overleg-specifieke stappen volgen."""
@@ -335,7 +346,10 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         content = _wo_metrics(st, crec, csrf_token, kpi, win=mw)
     elif cur == "projecten":
         # In het overleg worden projecten via de triage (agenda) toegevoegd, niet hier los.
-        content = _projects_tab_html(st, crec, csrf_token, group="", add=False)
+        # `nav`: het bord staat in de modal, dus zijn links en formulieren keren hier terug en niet
+        # op de node-pagina. Zonder dit klapte het overleg dicht zodra je op 'by person' klikte.
+        content = _projects_tab_html(st, crec, csrf_token, group=group, add=False,
+                                     nav=f"{base}&step=projecten")
     elif cur == "agenda":
         content = _wo_agenda(st, crec, csrf_token, iid)
     elif cur == "checkout":

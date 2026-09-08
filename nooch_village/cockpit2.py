@@ -6772,7 +6772,12 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     iid=((qs.get("iid") or [""])[0]
                                                          or (qs.get("open") or [""])[0]),
                                                     kpi=(qs.get("kpi") or [""])[0],
-                                                    mw=(qs.get("mw") or ["maand"])[0]), fr))
+                                                    mw=(qs.get("mw") or ["maand"])[0],
+                                                    # `group`: de projectstap onthoudt zijn
+                                                    # groepering binnen het overleg. Zonder deze
+                                                    # doorgifte wees 'by person' naar de
+                                                    # node-pagina en verliet je de modal.
+                                                    group=(qs.get("group") or [""])[0]), fr))
                 return
             if path == "/callbar":
                 # AUTHZ: iedereen-ingelogd — de route levert alleen de bar-UI (iframe-body); de
