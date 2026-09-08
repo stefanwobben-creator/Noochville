@@ -54,6 +54,99 @@ BRONNEN: dict[str, str] = {
 
 _MAX_STAPPEN = 6
 
+#: Bronnen die het OPEN web bevragen. Daar geldt de breed-eerst-regel; een corpus-bron (OpenAlex,
+#: patenten) heeft juist baat bij een precieze technische term.
+_OPEN_WEB = ("web_zoek", "community_listening", "google_trends")
+
+#: Boven dit aantal woorden is een open-web-term geen zoekopdracht meer maar een specificatie.
+#: Gemeten aan het geval dat dit veroorzaakte: "Savon de Potasse fabricant fournisseur Europe savon
+#: liquide potassique industriel" is negen woorden en zes eisen tegelijk, en levert de pagina's die
+#: op de FORMULERING matchen in plaats van op de behoefte.
+_BREED_MAX_WOORDEN = 5
+
+#: Woorden die de kern niet dragen maar de query wel versmallen. Bewust kort en handmatig: dit is
+#: geen stopwoordenlijst voor taal, het zijn de EISEN die een zoeker eraan plakt.
+_EISWOORDEN = frozenset({
+    "manufacturer", "manufacturers", "supplier", "suppliers", "fabricant", "fabricants",
+    "fournisseur", "fournisseurs", "hersteller", "lieferant", "leverancier", "leveranciers",
+    "producent", "producer", "producers", "industrial", "industriel", "industrieel",
+    "wholesale", "bulk", "b2b", "company", "companies", "bedrijf", "firma",
+    "europe", "european", "europa", "europese", "eu", "nederland", "dutch", "france",
+    "germany", "duitsland", "italy", "spain", "liquide", "liquid", "vloeibaar",
+})
+
+
+def _lessen(context) -> list[str]:
+    """De zoeklessen die de mens eerder heeft vastgelegd. Read-only, fail-soft → [].
+
+    Dit is de LEESKANT van de leerlus, en hij ontbrak. Op 8 september bleek een leveranciers-
+    onderzoek in zijn eigen eindrapport op te schrijven wat het anders had moeten doen ("verbreed
+    voorbij het Frans", "gebruik B2B-registers in plaats van algemeen webzoeken") — correcte
+    diagnose, in een document dat niets terugleest. De volgende zoektocht begon weer bij nul.
+
+    De store is dezelfde als die van de huis-regels bij de kansen, met een ander domein; zie
+    `constraints.py` voor waarom dat één mechanisme is en geen twee."""
+    dd = getattr(context, "data_dir", None)
+    if not dd:
+        return []
+    import os
+    pad = os.path.join(dd, "constraints.json")
+    if not os.path.exists(pad):
+        return []
+    try:
+        from nooch_village.constraints import ZOEKEN, Constraints
+        return Constraints(pad).texts(ZOEKEN)
+    except Exception as exc:                             # noqa: BLE001 — nooit de strategie breken
+        log.warning("zoeklessen niet leesbaar (%s)", exc)
+        return []
+
+
+def _breed_voor_smal(stappen: list[dict]) -> list[dict]:
+    """Zet vóór elke te smalle open-web-stap zijn brede variant. Hooguit één per strategie, want
+    twee brede stappen is dubbel werk en de cap op `_MAX_STAPPEN` is er niet voor niets."""
+    uit: list[dict] = []
+    toegevoegd = False
+    for stap in stappen:
+        if not toegevoegd and stap.get("bron") in _OPEN_WEB:
+            breed = verbreed(stap.get("term", ""))
+            if breed:
+                uit.append({"bron": stap["bron"], "term": breed, "taal": stap.get("taal", "en"),
+                            "waarom": "de brede vorm eerst: de woorden die een mens zou typen",
+                            "verbreed_van": stap["term"]})
+                toegevoegd = True
+        uit.append(stap)
+    return uit[:_MAX_STAPPEN]
+
+
+def verbreed(term: str) -> str:
+    """De korte versie van een te lange zoekterm: de kern, zonder de eisen eromheen.
+
+    WAAROM DIT DETERMINISTISCH IS EN GEEN PROMPTREGEL. De prompt zegt sinds 8 september "start
+    broad", en dat helpt. Maar een promptregel is een belofte: hij houdt zich er meestal aan en
+    precies de keer dat hij dat niet doet, mislukt het onderzoek zonder dat iemand het merkt. Deze
+    functie maakt de brede stap een EIGENSCHAP van de strategie in plaats van een intentie.
+
+    De aanpak is bewust dom: gooi de eiswoorden weg, houd de eerste paar overgebleven woorden. Dat
+    is niet slim, maar het is voorspelbaar en het is precies wat een mens doet als hij opnieuw
+    begint. Geeft een lege of ongewijzigde kern terug, dan was de term al breed en gebeurt er
+    niets."""
+    woorden = [w.strip(",.;:()[]\"'") for w in (term or "").split()]
+    woorden = [w for w in woorden if w]
+    kern, gezien = [], set()
+    for w in woorden:
+        laag = w.lower()
+        if laag in _EISWOORDEN or laag in gezien:
+            continue                                     # eis of herhaling: draagt de kern niet
+        gezien.add(laag)
+        kern.append(w)
+    if not kern:
+        return ""
+    if len(kern) == len(woorden) and len(woorden) <= _BREED_MAX_WOORDEN:
+        return ""                                        # was al kort en zonder eisen
+    kort = " ".join(kern[:_BREED_MAX_WOORDEN - 1])
+    return kort if kort.lower() != (term or "").strip().lower() else ""
+
+
 # Een reden is een EIGENSCHAP van de bron ("English-language corpus"), geen uitsluiting ("not the
 # Dutch term"). Zie `_bevestigend` voor waarom dat verschil de moeite van een vangrail waard is.
 _ONTKENNING = re.compile(
@@ -85,15 +178,31 @@ class ZoekstrategieSkill(Skill):
         keuze = [b for b in ((payload or {}).get("bronnen") or []) if b in BRONNEN] or list(BRONNEN)
 
         catalogus = "\n".join(f"- {b}: {BRONNEN[b]}" for b in keuze)
+        lessen = _lessen(context)
+        lessen_txt = ""
+        if lessen:
+            lessen_txt = ("\nLESSONS FROM EARLIER SEARCHES (the human recorded these; respect "
+                          "them):\n" + "\n".join(f"- {l}" for l in lessen[:10]) + "\n")
         prompt = (
             "You are planning HOW to research a question, before any searching happens.\n\n"
             f"QUESTION: {vraag}\n"
             + (f"\nALREADY KNOWN (do not research again):\n{bekend[:1500]}\n" if bekend else "")
+            + lessen_txt
             + f"\nAVAILABLE SOURCES:\n{catalogus}\n\n"
             "Pick 2 to 4 sources. For EACH one give the exact search term you would use and the "
             "language of that term.\n\n"
             "THE RULE THAT MATTERS MOST: match the term to the corpus. An English-language corpus "
             "takes an English term even when the question is Dutch.\n\n"
+            "THE SECOND RULE: START BROAD. For open-web sources your FIRST term is SHORT — two to "
+            "four words, the words a person would actually type. Stacking every requirement into "
+            "one query ('X manufacturer supplier Europe industrial liquid') returns the pages that "
+            "match the phrasing, not the pages that match the need. Narrow on the NEXT step, once "
+            "you have seen what comes back.\n\n"
+            "WHEN YOU ARE LOOKING FOR COMPANIES (suppliers, manufacturers, distributors), general "
+            "web search and guide articles are the wrong instrument: they surface articles about "
+            "the thing, not the firms that make it. Reach for trade registers and B2B directories "
+            "by name in the term (Kompass, Europages, national trade associations), and for the "
+            "plain buying phrase a customer would use.\n\n"
             "WRITE THE PLAN AS WHAT YOU WILL DO. Every sentence names a move you are making. State "
             "a reason as a property of the source you are using — \"English-language corpus\", "
             "\"European register\", \"the words people use themselves\" — never as what you are "
@@ -133,6 +242,12 @@ class ZoekstrategieSkill(Skill):
                             "waarom": _bevestigend(str(s.get("waarom") or "").strip()[:160])})
         if not stappen:
             return {"error": "strategie noemde geen bruikbare bron uit de catalogus"}
+
+        # DE BREDE STAP WORDT ERVOOR GEZET, NIET GEVRAAGD. Is de eerste open-web-term een
+        # specificatie in plaats van een zoekopdracht, dan komt de korte versie ervóór te staan. De
+        # smalle stap blijft: die is niet fout, hij was alleen te vroeg. Zo loopt de strategie van
+        # breed naar smal, ook als het model de promptregel deze keer negeerde.
+        stappen = _breed_voor_smal(stappen)
 
         strategie = str(data.get("strategie") or "").strip()[:900]
         bij_nul = str(data.get("bij_nul_treffers") or "").strip()[:300]

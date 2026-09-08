@@ -77,9 +77,14 @@ def test_lees_nul_geeft_alleen_de_lijst():
 def test_lees_boven_het_maximum_wordt_afgetopt():
     """Elke gelezen pagina is een fetch en context; 'lees: 50' is geen zoekopdracht meer maar een
     crawl. De bovengrens staat in code zodat een payload hem niet kan omzeilen."""
+    from nooch_village.skills_impl.web_zoek import _MAX_LEES
     uit = _skill([{"title": f"n{i}", "link": f"https://x{i}.example/"} for i in range(20)]).run(
         {"term": "t", "lees": 50, "aantal": 20}, CTX)
-    assert uit["gelezen"] == 5
+    # Afgeleid uit de constante en niet overgetypt: op 8 september ging de cap van 5 naar 10 (zes
+    # ongelezen treffers droegen de conclusie van een heel onderzoek), en een test die het getal
+    # overtypt zegt dan dat de VERANDERING fout is in plaats van de grens.
+    assert uit["gelezen"] == _MAX_LEES
+    assert uit["volledig_gelezen"] is False, "20 treffers, 10 gelezen — dat is geen volledige dekking"
 
 
 def test_aantal_en_taalvoorkeur_gaan_mee_naar_de_zoekmachine():
@@ -459,3 +464,41 @@ def test_web_zoek_geeft_de_bruikbare_melding_door():
         raise RuntimeError("Brave gaf 422 — SUBSCRIPTION_TOKEN_INVALID: …")
     uit = WebZoekSkill(zoek=_stuk).run({"term": "t"}, _ctx(BRAVE_API_KEY="b"))
     assert "SUBSCRIPTION_TOKEN_INVALID" in uit["error"]
+
+
+# ── De dekking is een feit, geen voetnoot ─────────────────────────────────────────────────────
+
+def test_onvolledige_dekking_staat_in_de_tekst_die_het_model_leest():
+    """DE BUG VAN 8 SEPTEMBER, in één test.
+
+    Een leveranciers-onderzoek vond negen treffers, las er drie, en concludeerde dat er geen
+    Europese leverancier bestond. Tussen de zes ongelezen treffers zat savon-atlantique.fr. De
+    data was eerlijk (`gelezen: False` per treffer), maar de WALLTEKST — het enige wat de
+    rapport-schrijver leest — zei alleen "9 results". Wie negen ziet en er drie kent, concludeert
+    over negen.
+
+    De onvolledigheid staat nu in dezelfde zin als het aantal, met de gevolgtrekking erbij."""
+    uit = _skill([{"title": f"n{i}", "link": f"https://x{i}.example/"} for i in range(9)]).run(
+        {"term": "savon de potasse", "lees": 3, "aantal": 9}, CTX)
+    assert uit["aantal_treffers"] == 9 and uit["gelezen"] == 3
+    assert uit["volledig_gelezen"] is False
+    tekst = uit["text"]
+    assert "COVERAGE IS INCOMPLETE" in tekst
+    assert "6 result(s) were listed but NOT read" in tekst
+    assert "Absence in this list is not evidence of absence" in tekst
+
+
+def test_volledige_dekking_zwijgt_erover():
+    """De tegenhanger. Zou de waarschuwing er altijd staan, dan leert de lezer hem negeren."""
+    uit = _skill([{"title": f"n{i}", "link": f"https://x{i}.example/"} for i in range(3)]).run(
+        {"term": "t", "lees": 5, "aantal": 3}, CTX)
+    assert uit["volledig_gelezen"] is True
+    assert "INCOMPLETE" not in uit["text"]
+
+
+def test_nul_treffers_blijft_no_data_en_geen_dekkingsklacht():
+    """Geen treffers is een ANTWOORD (`no_data`), geen onvolledige dekking. Die twee door elkaar
+    halen zou 'de zoekmachine gaf niets' laten lezen als 'ik heb niet goed gekeken'."""
+    uit = _skill([]).run({"term": "t"}, CTX)
+    assert uit["no_data"] is True
+    assert "INCOMPLETE" not in uit["text"]
