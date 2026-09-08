@@ -605,14 +605,25 @@ class Inhabitant(threading.Thread):
         return out
 
     def _house_constraints(self) -> list[str]:
-        """Lees de vaste huis-regels (uit triage) zodat de reflex er niet tegenin gaat. Read-only."""
+        """Lees de vaste huis-regels (uit triage) zodat de reflex er niet tegenin gaat. Read-only.
+
+        ALLEEN HET KANSEN-DOMEIN. Sinds 8 september draagt een huis-regel een domein, want dezelfde
+        store bedient ook de zoekstrategie (zie `constraints.py`). Zonder dit filter zou een
+        zoekles ("verbreed voorbij het Frans") als organisatie-regel in de kans-prompt landen, en
+        dat is een ander soort uitspraak. Regels zonder domein zijn van vóór die datum en tellen
+        als kansen — daarom leest `Constraints.texts` ze gewoon mee."""
         data_dir = getattr(self.context, "data_dir", None)
         if not data_dir:
             return []
         path = os.path.join(data_dir, "constraints.json")
         if not os.path.exists(path):
             return []
-        return [c.get("text", "") for c in read_json(path, [], expect=list) if c.get("text")]
+        from nooch_village.constraints import KANSEN, Constraints
+        try:
+            return Constraints(path).texts(KANSEN)
+        except Exception as e:                           # noqa: BLE001 — nooit de puls breken
+            self.log.warning("huis-regels niet leesbaar (%s: %s)", type(e).__name__, e)
+            return []
 
     def _training_signals(self) -> str:
         """Zachte oordeel-signalen van de mens (leuk idee / zachte nee / nu niet / elders) als

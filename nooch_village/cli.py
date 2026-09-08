@@ -1668,6 +1668,50 @@ def main() -> None:
             print("DRY-RUN \u2014 er is niets verzonden en niets vastgelegd. "
                   "Draai opnieuw met --apply.")
 
+    elif mode == "les":
+        # DE SCHRIJFKANT VAN DE LEERLUS. De leeskant draaide al (de kans-reflex las huis-regels, de
+        # zoekstrategie leest sinds 8 september zoeklessen), maar er was geen enkele productie-weg
+        # om er één in te zetten: `Constraints.add` zat alleen in `decide_opportunity`, en die
+        # functie heeft geen aanroeper. Het dorp vroeg dus om een oordeel en kon het niet bewaren.
+        #
+        # Bewust de commandoregel en niet het cockpit: het cockpit-formulier raakt de
+        # goedkeuringsrij, en die vorm is een besluit dat de mens eerst moet maken (CLAUDE.md, UI).
+        # Dit is de kleinste route die de lus vandaag sluit.
+        from nooch_village.constraints import DOMEINEN, KANSEN, Constraints
+        dd = load_context(BASE_DIR).data_dir
+        cons = Constraints(os.path.join(dd, "constraints.json"))
+        args = argv[1:]
+        if args and args[0] == "list":
+            domein = args[1] if len(args) > 1 else None
+            regels = cons.all(domein)
+            if not regels:
+                print(f"Geen huis-regels{' voor domein ' + domein if domein else ''}.")
+            for r in regels:
+                d = r.get("domein") or KANSEN
+                print(f"[{d:7}] {r.get('text')}   ({r.get('by', '?')}, {r.get('date', '?')})")
+            return
+        if args and args[0] == "remove":
+            if len(args) < 2:
+                print("Gebruik: village les remove \"<tekst>\" [domein]"); sys.exit(1)
+            weg = cons.remove(args[1], domein=(args[2] if len(args) > 2 else None))
+            print("🗑 ingetrokken" if weg else "✗ die regel staat er niet")
+            return
+        if not args:
+            print(f"Gebruik: village les \"<de les>\" [{'|'.join(DOMEINEN)}]")
+            print("         village les list [domein]")
+            print("         village les remove \"<tekst>\" [domein]")
+            sys.exit(1)
+        tekst = args[0]
+        domein = args[1] if len(args) > 1 else KANSEN
+        if domein not in DOMEINEN:
+            print(f"✗ onbekend domein {domein!r} — kies uit {', '.join(DOMEINEN)}"); sys.exit(1)
+        nieuw_ = cons.add(tekst, by="human", source="cli", domein=domein)
+        if nieuw_:
+            print(f"✓ vastgelegd in domein '{domein}'. De volgende "
+                  f"{'kans-reflex' if domein == KANSEN else 'zoekstrategie'} leest hem mee.")
+        else:
+            print("· stond er al (of leeg) — niets veranderd")
+
     elif mode == "sluitronde":
         # Autonome triage van de kansen-inbox (founder 22 jul): verval + dubbel-check + raadspanel
         # → project of expliciete 'nee'; onomkeerbaar → escaleer naar de mens. Standaard DRY (toont
@@ -1856,6 +1900,6 @@ def main() -> None:
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
-              "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
+              "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les",
               file=sys.stderr)
         sys.exit(1)

@@ -70,7 +70,11 @@ _WHITELIST = {
                              "verhuisd uit roles.py toen de cadans uit de facilitator kwam"),
     "village.py":        (1, "daemon single-writer: role_status.json (cockpit leest read-only)"),
     # ── dormant/legacy: alleen legacy cockpit1 of demo/CLI — geen live concurrente schrijver ──
-    "constraints.py":    (1, "dormant: legacy cockpit1"),
+    # `constraints.py` stond hier als "dormant: legacy cockpit1" en is op 8 september juist LEVEND
+    # geworden: hij draagt sindsdien de leerlus voor zowel de kansen als het zoeken, geschreven
+    # vanaf de commandoregel en gelezen door de daemon. Twee processen op één bestand, dus hij erft
+    # nu van `JsonStore` en hoort niet meer op deze lijst. Dat de ratchet dit zelf opmerkte in
+    # plaats van stil door te gaan, is precies waarvoor `test_whitelist_is_actueel` bestaat.
     "feedback.py":       (1, "dormant: legacy cockpit1"),
     "governance_examples.py": (1, "dormant: legacy cockpit1 + handmatige CLI"),
     "link_suggest.py":   (1, "dormant: legacy cockpit1"),

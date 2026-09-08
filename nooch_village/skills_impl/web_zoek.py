@@ -42,9 +42,15 @@ from nooch_village.skills import Skill
 log = logging.getLogger("village.skill.web_zoek")
 
 _DEFAULT_AANTAL = 8
-_DEFAULT_LEES = 3
+# NEGEN GEVONDEN, DRIE GELEZEN, EN EEN CONCLUSIE ALSOF DE DEKKING COMPLEET WAS. Op 8 september
+# strandde het leveranciers-onderzoek precies daarop: van negen treffers werden er drie gelezen, en
+# tussen de zes ongelezen zat savon-atlantique.fr — een Franse zeepmaker, in een rapport dat
+# concludeerde dat er geen Europese leverancier bestond. De cap was niet fout, de STILTE eromheen
+# wel; zie `volledig_gelezen` hieronder. Vijf naar tien, drie naar vijf: een fetch is goedkoop
+# vergeleken met een verkeerde conclusie.
+_DEFAULT_LEES = 5
 _MAX_AANTAL = 20
-_MAX_LEES = 5
+_MAX_LEES = 10
 _TEKST_PER_PAGINA = 3000            # genoeg om de strekking te zien, niet genoeg om de context te vullen
 _FRAGMENT = 300
 
@@ -115,14 +121,18 @@ class WebZoekSkill(Skill):
     input_schema = ("term: str (verplicht — de zoekterm, in de taal waarin je verwacht dat er "
                     "over geschreven wordt); "
                     "aantal: int (optioneel, default 8, max 20 — hoeveel treffers); "
-                    "lees: int (optioneel, default 3, max 5 — hoeveel van de bovenste treffers ook "
-                    "opgehaald worden; 0 = alleen de lijst); "
+                    "lees: int (optioneel, default 5, max 10 — hoeveel van de bovenste treffers "
+                    "ook opgehaald worden; 0 = alleen de lijst. Zoek je naar het BESTAAN van iets "
+                    "(leveranciers, spelers, bronnen), zet dit dan hoog: een ongelezen treffer "
+                    "telt niet als gecontroleerd); "
                     "land: str (optioneel, bv. 'nl' — landvoorkeur van de zoekmachine); "
                     "taal: str (optioneel, bv. 'en' — taalvoorkeur van de zoekmachine)")
     required_payload = ("term",)
     output_schema = ("ok, term, bron (serpapi|brave), aantal_treffers, "
                      "treffers[{titel, url, domein, fragment, tekst, gelezen, reden}], "
-                     "gelezen (int), text (voor de wall), teruggevallen_van[] (als de eerste motor "
+                     "gelezen (int), volledig_gelezen (bool — False betekent dat er treffers "
+                     "ONGELEZEN bleven; trek dan geen conclusie over de hele lijst), "
+                     "text (voor de wall), teruggevallen_van[] (als de eerste motor "
                      "faalde), no_data + reason (nul treffers) | error")
 
     def __init__(self, zoek=None, haal=None):
@@ -175,8 +185,14 @@ class WebZoekSkill(Skill):
             t["gelezen"] = bool(t["tekst"])
 
         gelezen = sum(1 for t in treffers if t["gelezen"])
+        # DEKKING IS EEN FEIT, GEEN VOETNOOT. Dezelfde regel als `claims_site_scan.volledig`: wie
+        # een conclusie trekt uit een deelverzameling moet kunnen zien DAT het een deelverzameling
+        # was. Het stond al in de data (`gelezen` per treffer), maar niet in de tekst die de
+        # rapport-schrijver leest, en dus kwam het niet in de conclusie terecht.
+        volledig = gelezen == len(treffers)
         uit = {"ok": True, "term": term, "bron": bron, "aantal_treffers": len(treffers),
-               "treffers": treffers, "gelezen": gelezen, "text": _als_tekst(term, treffers, bron)}
+               "treffers": treffers, "gelezen": gelezen, "volledig_gelezen": volledig,
+               "text": _als_tekst(term, treffers, bron, gelezen=gelezen)}
         if fouten:
             # Er is teruggevallen. Dat mag, maar niet stil: twee motoren geven verschillende
             # antwoorden, en wie de uitkomst leest moet kunnen zien dat de andere aan de beurt was.
@@ -230,7 +246,7 @@ class WebZoekSkill(Skill):
         return tekst[:_TEKST_PER_PAGINA], ""
 
 
-def _als_tekst(term: str, treffers: list, bron: str = "") -> str:
+def _als_tekst(term: str, treffers: list, bron: str = "", gelezen: int | None = None) -> str:
     """De vorm die op de projectwall landt: wat er gezocht is, waar, wat er staat, en van welk domein.
 
     De motor staat er expliciet bij. Twee zoekmachines geven verschillende antwoorden, en zonder die
@@ -239,7 +255,18 @@ def _als_tekst(term: str, treffers: list, bron: str = "") -> str:
     Bewust de fragmenten en niet de volledige paginateksten: de wall is om te lezen, de tekst is om
     mee te werken. Wie de hele pagina wil, heeft hem in `treffers[i]["tekst"]`."""
     waar = f" via {bron}" if bron else ""
-    regels = [f"Searched the open web for “{term}”{waar} — {len(treffers)} results."]
+    if gelezen is None:
+        gelezen = sum(1 for t in treffers if t.get("gelezen"))
+    kop = f"Searched the open web for “{term}”{waar} — {len(treffers)} results"
+    if gelezen < len(treffers):
+        # DE ZIN DIE ONTBRAK. Zonder deze regel leest een rapport-schrijver "9 results" en trekt hij
+        # een conclusie over negen, terwijl hij er drie kent. Met deze regel staat de onvolledigheid
+        # in dezelfde adem als het aantal, en kan hij niet meer per ongeluk over het hoofd worden
+        # gezien. Zelfde reparatie als `volledig=False` bij de claims-scan.
+        kop += (f", of which {gelezen} were read in full. COVERAGE IS INCOMPLETE: "
+                f"{len(treffers) - gelezen} result(s) were listed but NOT read, so nothing can be "
+                f"concluded about them. Absence in this list is not evidence of absence")
+    regels = [kop + "."]
     for t in treffers:
         kop = f"• {t['titel'] or t['url']} ({t['domein']})"
         staart = t["fragment"] or ("read in full" if t["gelezen"] else t["reden"])
