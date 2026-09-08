@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json, os, logging, dataclasses, time
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, JsonStore
 from nooch_village.models import (
     Record, RoleDefinition, RecordType,
     Proposal, GovernanceChange, ChangeKind,
@@ -230,15 +230,37 @@ class Gate:
         return True, ""
 
 
-class Records:
-    """De governance-records: de enige bron van waarheid over wie bestaat en wat ze mogen."""
+class Records(JsonStore):
+    """De governance-records: de enige bron van waarheid over wie bestaat en wat ze mogen.
 
-    def __init__(self, path: str):
-        self.path = path
-        self._data: dict[str, Record] = {}
-        self._load()
+    DE BRON VAN WAARHEID HAD DE MINSTE BESCHERMING, en dat is de tegenspraak die deze klasse op
+    8 september onder `JsonStore` bracht. Twee processen schrijven dit bestand: de Secretary in de
+    daemon, en het cockpit (`_ensure_facilitator_health`, plus het roloverleg dat een rol amendeert).
+    Beide serialiseerden de HELE dict vanuit hun eigen geheugenbeeld, dus wie het laatst schreef won
+    en een rol-amendement uit het roloverleg verdween zodra de daemon iets adopteerde.
+
+    ERGER NOG: `_load()` werd precies één keer aangeroepen, vanuit `__init__`. De daemon las de
+    records bij het opstarten en daarna nooit meer; er was geen enkele herlees-route.
+
+    `synchronized` lost allebei op: elke schrijver neemt het bestandsslot en leest ONDER dat slot
+    vers van schijf. Wat overblijft is dat de daemon zijn LEVENDE inwoners niet herbouwt na een
+    wijziging van buiten. Dat is een tweede stap (een reconcile-trigger op mtime), niet deze.
+
+    TWEE DINGEN DIE HIERUIT VOLGEN, en die je moet weten als je deze klasse aanraakt:
+
+    1. `_load` RESET nu eerst. Hij vulde `self._data` bij zonder te wissen, ongevaarlijk zolang hij
+       één keer draaide. Onder het slot draait hij bij elke schrijf, en dan zou een record dat een
+       ander proces verwijderde stilletjes blijven staan.
+    2. `get()` geeft een LEVEND object terug, en een schrijf ertussen vervangt `_data` met verse
+       objecten van schijf. Muteer dus nooit een record dat je vóór een `put()` hebt opgehaald;
+       haal hem opnieuw op. Alle paden in `Secretary._adopt` doen dat al goed (get, muteren,
+       en het GEMUTEERDE object aan `put` meegeven), maar het is een scherpe rand."""
+
+    _STATE = "_data"
+    _WRITE_METHODS = ("put", "set_holder", "set_persona")
 
     def _load(self) -> None:
+        self._data: dict[str, Record] = {}
         if not os.path.exists(self.path):
             return
         raw = json.load(open(self.path))
@@ -268,13 +290,19 @@ class Records:
             except Exception as exc:                      # nooit de start blokkeren
                 log.warning("records: migratie acc-ids kon niet opslaan: %s", exc)
 
-    def save(self) -> None:
+    def _save(self) -> None:
+        """De enige schrijfroute, zoals `JsonStore` voorschrijft. Overschreven omdat de state hier
+        `Record`-objecten zijn en geen kale json: serialiseren hoort vlak vóór het schrijven."""
         out = {}
         for rid, r in self._data.items():
             d = dataclasses.asdict(r)
             d["type"] = r.type.value
             out[rid] = d
         atomic_write_json(self.path, out)
+
+    def save(self) -> None:
+        """Publieke naam, historisch; achttien aanroepers gebruiken hem."""
+        self._save()
 
     def all(self):
         return list(self._data.values())

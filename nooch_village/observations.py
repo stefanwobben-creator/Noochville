@@ -10,6 +10,8 @@ de waarde en welke bron heeft 'm geleverd. `record_daily` bewaakt "één datapun
 """
 from __future__ import annotations
 import json, logging, os, re, time
+
+from nooch_village.util import synchronized
 from datetime import datetime, timezone
 
 from nooch_village.meetcatalog import cadence_of
@@ -34,25 +36,61 @@ class ObservationStore:
     incrementeel bijgewerkt bij `record`. Zo is `record_daily` O(1) i.p.v. een lineaire scan per write
     (was O(N·rijen) = kwadratisch bij N dimensie-reeksen/dag) en herlezen we het bestand niet per call.
     De twee herschrijf-migraties (rename_metric, normalize_source_role_ids) invalideren de index.
-    Aanname: één schrijvende instance per proces (collector = één `obs`; cockpit = verse store per
-    request). Geen gedeelde langlevende instance met een externe schrijver."""
+
+    DIE AANNAME KLOPTE NIET, en dat is wat hier op 8 september is rechtgezet. De docstring zei:
+    "één schrijvende instance per proces, geen gedeelde langlevende instance met een externe
+    schrijver". In werkelijkheid schrijven de collector (daemon) én het cockpit
+    (`record_werk_daily`, plus twee `remove_bron`-aanroepen bij bootstrap) hetzelfde bestand. En
+    `migrate_data_sources` draait bij ELKE start van BEIDE services, terwijl het deploy-protocol ze
+    in één regel herstart. Vier van de schrijfmethoden herschrijven het hele bestand met
+    `open(path,"w")`: geen slot, geen atomic replace, dus een gelijktijdige lezer kan een
+    afgekapt bestand zien.
+
+    GEEN `JsonStore` HIER, en dat is bewust: dit is jsonl met een append-pad, geen json-document.
+    Wat hij wél overneemt is het slot, via `synchronized`. Dat vraagt alleen `self.path` en een
+    `self._load()`.
+
+    `_load` KIJKT NAAR DE MTIME in plaats van blind te invalideren. Blind zou de index bij elke
+    schrijf weggooien en de dedup-check van O(1) terug naar O(rijen) brengen — precies wat deze
+    klasse ooit is gebouwd om te vermijden. Nu wordt de index alleen herbouwd als het bestand
+    sinds de laatste opbouw echt is veranderd, en dat is meteen de cross-proces-correctie: een rij
+    die het andere proces schreef telt vanaf nu mee in de idempotentie-check."""
+
+    _WRITE_METHODS = ("record", "record_daily", "rename_metric", "remove_metric",
+                      "remove_bron", "normalize_source_role_ids")
 
     def __init__(self, path: str):
         self.path = path
         self._rows = None        # lazy cache: alle rijen (list[dict])
         self._dedup = None       # set van (role_id, metric, bron, datum) → O(1) idempotentie
         self._by_mb = None       # {(metric, bron): [rows]} → O(1) daily_series op metric+bron
+        self._stempel = None     # (mtime, grootte) van het bestand toen de index werd opgebouwd
+
+    def _stat(self):
+        try:
+            st = os.stat(self.path)
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+
+    def _load(self) -> None:
+        """Wat `synchronized` onder het slot aanroept vóór elke schrijf. Alleen invalideren als het
+        bestand sinds onze laatste opbouw is veranderd; anders blijft de index staan."""
+        if self._rows is not None and self._stat() != self._stempel:
+            self._invalidate()
 
     def _ensure_cache(self) -> None:
         if self._rows is not None:
             return
-        self._rows, self._dedup, self._by_mb = [], set(), {}
+        stempel = self._stat()                # vóór het lezen, zodat een schrijf tijdens het lezen
+        self._rows, self._dedup, self._by_mb = [], set(), {}   # de volgende keer wél invalideert
         if os.path.exists(self.path):
             with open(self.path) as f:
                 for line in f:
                     line = line.strip()
                     if line:
                         self._index(json.loads(line))
+        self._stempel = stempel
 
     @staticmethod
     def _dedup_key(role_id, metric, bron, datum, event_id=""):
@@ -74,6 +112,7 @@ class ObservationStore:
     def _invalidate(self) -> None:
         """Na een herschrijf van het bestand (in-place mutatie): index opnieuw opbouwen bij volgend gebruik."""
         self._rows = self._dedup = self._by_mb = None
+        self._stempel = None
 
     def record(self, role_id: str, metric: str, value,
                ts: float | None = None, meta: dict | None = None,
@@ -94,6 +133,11 @@ class ObservationStore:
             f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
         if self._rows is not None:
             self._index(row)
+            # ONZE EIGEN SCHRIJF IS GEEN REDEN OM TE INVALIDEREN. We hebben de rij zojuist zelf
+            # geïndexeerd, dus het stempel mag mee naar de nieuwe toestand. Zonder deze regel ziet
+            # de volgende `_load()` een veranderde mtime, gooit de index weg, en is de O(1)-dedup
+            # terug bij een volledige bestandslezing per schrijf.
+            self._stempel = self._stat()
 
     def rename_metric(self, old_metric: str, new_metric: str, bron: str | None = None) -> int:
         """Hernoem een metric-sleutel in alle bestaande rijen (optioneel per bron); herschrijft het
@@ -306,3 +350,12 @@ def record_werk_daily(store: "ObservationStore", circle: str, snap: dict) -> Non
 
 # NB: de Shopify-dagwaarden lopen nu via de generieke collector (DataSourceSkill.daily_values →
 # record_daily onder shopify_<field>_day). SHOPIFY_DAILY blijft de sleutel-map voor de tegel-lezer.
+
+
+# HET SLOT AANBRENGEN. `ObservationStore` erft niet van `JsonStore` (jsonl is geen json-document),
+# dus de automatische wrapping uit `__init_subclass__` gaat hier niet op. Dezelfde lijst, dezelfde
+# wrapper, één plek: `synchronized` neemt het bestandsslot en roept `_load()` aan (mtime-bewust)
+# vóór elke schrijf, zodat de collector en het cockpit elkaars rijen niet meer kwijtraken.
+for _naam in ObservationStore._WRITE_METHODS:
+    setattr(ObservationStore, _naam, synchronized(getattr(ObservationStore, _naam)))
+del _naam

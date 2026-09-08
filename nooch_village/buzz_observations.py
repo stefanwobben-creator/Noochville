@@ -20,7 +20,7 @@ import os
 import time
 import uuid
 
-from nooch_village.util import JsonStore, refuse
+from nooch_village.util import JsonStore, refuse, synchronized
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +80,26 @@ FIELDS = ("id", "platform", "subreddit", "permalink", "title", "fragment",
 
 
 class BuzzObservationStore:
-    """Append-only JSONL met lazy dedup-index op `permalink` (de canonieke bron-sleutel)."""
+    """Append-only JSONL met lazy dedup-index op `permalink` (de canonieke bron-sleutel).
+
+    HET SLOT OP DE APPEND (8 sept). Dit was de laatste store die naar zijn eigen pad schreef zonder
+    enige serialisatie: `record_observation` deed een kale append terwijl de daemon (`village.py`)
+    en de CLI (`village buzz`) allebei kunnen schrijven. Een append van één korte regel is op POSIX
+    meestal atomair, maar deze rijen dragen het volledige schema en zijn dat niet gegarandeerd; twee
+    schrijvers kunnen dan halve regels door elkaar heen zetten, en de lezer van een JSONL faalt
+    daarop. Bovendien is de dedup een lees-dan-schrijf: zonder slot kunnen twee processen dezelfde
+    permalink allebei als nieuw zien.
+
+    Geen `JsonStore` (dat is voor json-documenten), wel dezelfde garantie via `synchronized`. Zie
+    `ObservationStore` voor hetzelfde patroon, en `tests/test_stores_schrijven_gelockt.py` voor de
+    regel die dit vasthoudt."""
+
+    _WRITE_METHODS = ("record_observation",)
+
+    def _load(self) -> None:
+        """Wat `synchronized` onder het slot aanroept: de index opnieuw laten opbouwen, zodat een rij
+        die een ander proces schreef meetelt in de dedup."""
+        self._rows = self._seen = None
 
     def __init__(self, path: str):
         self.path = path
@@ -153,3 +172,11 @@ class BuzzObservationStore:
                 if platform is None or r.get("platform") == platform]
         rows.sort(key=lambda r: (r.get("score") or 0), reverse=True)
         return rows[:limit]
+
+
+# Zelfde constructie als bij `ObservationStore`: deze store is geen json-document, dus hij erft de
+# automatische wrapping van `JsonStore` niet en krijgt het slot hier expliciet.
+for _naam in BuzzObservationStore._WRITE_METHODS:
+    setattr(BuzzObservationStore, _naam,
+            synchronized(getattr(BuzzObservationStore, _naam)))
+del _naam

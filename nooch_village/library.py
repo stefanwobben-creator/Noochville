@@ -1,7 +1,6 @@
 from __future__ import annotations
-import json, os
 from datetime import datetime
-from nooch_village.util import atomic_write_json
+from nooch_village.util import JsonStore
 
 # Een goedgekeurd woord heeft een FUNCTIE in de ontdekkingslus:
 #   "volg"    = seed: te breed om op te ranken, maar voedt de radar (Trends/SerpAPI/ngram)
@@ -20,24 +19,23 @@ def classify_function(word: str, evidence: dict | None = None) -> str:
     return "doelwit"
 
 
-class Library:
+class Library(JsonStore):
     """De woordenschat-bibliotheek: een DOMEIN dat de Librarian beheert.
     Lezen is vrij voor iedereen; cureren (schrijven) is voorbehouden aan de Librarian.
     Een entry draagt niet alleen een oordeel maar ook het WAAROM (het is een ontologie,
-    geen blocklist)."""
+    geen blocklist).
 
-    def __init__(self, path: str):
-        self.path = path
-        self._data: dict[str, dict] = {}
-        self._load()
+    HET DOMEIN HEEFT TWEE SCHRIJVERS, en dat is de reden voor `JsonStore`. De Librarian
+    cureert vanuit de daemon; het cockpit cureert via de woordenschat-knoppen. Beide
+    schreven het hele bestand terug vanuit hun eigen geheugenkopie, dus een curatie op het
+    scherm verdween bij de eerstvolgende Librarian-beslissing. De guard-test noemde deze
+    store nog "single-writer: alleen de Librarian-daemon"; dat klopte niet meer.
 
-    def _load(self) -> None:
-        if os.path.exists(self.path):
-            self._data = json.load(open(self.path))
+    Domein-eigenaarschap en concurrency zijn twee verschillende dingen: dat alléén de
+    Librarian MAG cureren maakt niet dat er maar één proces schrijft."""
 
-    def _save(self) -> None:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        atomic_write_json(self.path, self._data)
+    _STATE = "_data"
+    _WRITE_METHODS = ("curate", "set_function", "set_evidence", "link_concept")
 
     # --- lezen (vrij) ---
     def status(self, word: str) -> dict | None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
-import json, os, re
+import re
 from nooch_village.insight import Insight
+from nooch_village.util import JsonStore
 
 
 def _woorden(tekst: str) -> set[str]:
@@ -16,21 +17,40 @@ def subject_van_tags(tags: list[str]) -> str:
     return ""
 
 
-class NotesStore:
+class NotesStore(JsonStore):
+    """De kaartjes van de kennisbank.
+
+    DIT BESTAND HAD DE MINSTE BESCHERMING VAN ALLEMAAL, en werd toch door twee processen
+    geschreven: de Librarian in de daemon, en elf kb-knoppen in het cockpit. `_save` deed
+    een kale `open(path,"w")` plus `json.dump`, zonder slot en zonder `os.replace`, vanaf
+    zeventien plekken. Twee dingen konden daardoor misgaan:
+
+      - lost update: wie het laatst schreef gooide het werk van de ander weg;
+      - een HALF bestand, want zonder atomic replace laat een onderbreking midden in de
+        dump een kapotte json achter. `util.read_json` faalt daar bewust luid op, dus de
+        eerstvolgende lezer krijgt een RuntimeError. Het deploy-protocol herstart beide
+        services in één regel, dus dat venster is niet theoretisch.
+
+    De guard-test zag dit bestand niet, omdat zijn regex alleen naar de nette schrijfroute keek
+    en deze store de kale variant gebruikte. Een guard die alleen de beleefde overtreding telt,
+    telt de gevaarlijke niet. (En hij telt op tekst, dus ook in een docstring als deze; vandaar
+    dat hier geen letterlijke aanroep-vorm staat.)
+
+    DE ZEVENTIEN SCHRIJVERS ZIJN BLADEREN: geen ervan roept een andere schrijver aan (met
+    AST gecontroleerd). `purge`, `purge_archived` en `merge` schrijven zelf niet maar
+    delegeren, en blijven daarom ONgewrapt: het slot is reentrant, maar `synchronized` doet
+    bij elke acquire een verse `_load()`, en een wrapper om een delegator zou de mutaties
+    van zijn eigen delegatie kunnen weggooien. `merge` is dus niet atomair over `add` +
+    `archive` heen; dat was hij nooit, en dat oplossen is een andere beslissing dan deze."""
+
+    _STATE = "_notes"
+    _WRITE_METHODS = ("add", "remove", "set_kind", "set_reference", "propagate_reference",
+                      "stack_provenance", "verrijk_herkomst", "add_tags", "retag", "archive",
+                      "edit_note", "add_related", "supersede", "merge_into", "add_relation",
+                      "enrich", "link")
+
     def __init__(self, path: str = "data/notes.json"):
-        self._path = path
-        self._notes: dict[str, dict] = self._load()
-
-    def _load(self) -> dict:
-        if not os.path.exists(self._path):
-            return {}
-        with open(self._path, encoding="utf-8") as f:
-            return json.load(f)
-
-    def _save(self) -> None:
-        os.makedirs(os.path.dirname(self._path) or ".", exist_ok=True)
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._notes, f, indent=2, ensure_ascii=False)
+        super().__init__(path)
 
     def add(self, note: Insight) -> None:
         if note.id in self._notes:
