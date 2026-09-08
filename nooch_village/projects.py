@@ -90,7 +90,49 @@ OVERGESLAGEN = "overgeslagen"
 RESULTAAT_WAARDEN = (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
 
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
-_TERMINAL       = {"done"}
+
+# ── DE PROJECTSTATUSSEN ────────────────────────────────────────────────────────────────────────
+#
+# EEN FEIT LEEFT OP ÉÉN PLEK, en dit feit leefde op elf. Vóór 8 september somde elke consument de
+# statussen zelf op, en ze waren het onderling niet eens:
+#
+#   views/projects._PROJ_COLS       running, queued            (de enige die klopte)
+#   tensie_poort.LEVEND             + review, todo, active     (drie die NIET BESTAAN)
+#   tensie_poort (dedup)            queued, running, blocked, future
+#   relaunch_park                   idem + review
+#   projects_cli._status_icon       4 van de 7; de rest werd "?"
+#   views/metrics._PROJ_STATUS_LABEL 6 van de 7; `proposed` viel er rauw uit op het scherm
+#
+# Twee dingen gingen daar echt mis. `tensie_poort.LEVEND` MIST `draft` en `proposed`, dus een
+# spanning die aan zo'n project hangt valt door `geborgd()` heen, wordt behandeld alsof er geen
+# project bij hoort, en komt bij de founder terecht. Dat is de notificatiestapel die al twee keer
+# met de hand is weggeveegd. En het woord `"active"` daarin is exact het woord waarop de
+# projectbadge op 7 september strandde: de KOLOM heet Active, de STATUS niet.
+#
+# De vier afgeleide sets hieronder beantwoorden elk een andere vraag; ze hebben allemaal minstens
+# twee aanroepers. Wie een vijfde nodig heeft, leidt hem hier af en somt hem niet elders op.
+STATUSSEN = ("draft", "proposed", "queued", "running", "blocked", "future", "done")
+
+#: Waarmee een project mag BEGINNEN (`create` weigert de rest).
+START_STATUSSEN = ("queued", "draft", "future", "proposed")
+
+#: Klaar; hier beweegt niets meer.
+KLAAR = frozenset({"done"})
+
+#: Alles wat nog kan bewegen. Het complement van KLAAR, dus per constructie sluitend.
+LEVEND = frozenset(STATUSSEN) - KLAAR
+
+#: De rol kan er NU aan werken. Dit is wat de Active-kolom bundelt.
+LOPEND = ("running", "queued")
+
+#: Begonnen werk: staat op het bord, af of niet. Sluit `future`, `draft` en `proposed` uit, want
+#: dat is werk dat nog niet eens begonnen is.
+OP_HET_BORD = ("queued", "running", "blocked")
+
+#: Begonnen of ingepland. `OP_HET_BORD` plus wat nog in de wacht staat.
+INGEPLAND = OP_HET_BORD + ("future",)
+
+_TERMINAL       = KLAAR
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
 # ongelabeld project mag elke statuswissel maken). De guard weigert alleen een niet-lege ongeldige waarde.
 _MISSIE_IMPACT   = {"versterkt", "neutraal", "verzwakt"}
@@ -144,7 +186,7 @@ class ProjectLedger:
                keyword: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
-        if status not in ("queued", "draft", "future", "proposed"):
+        if status not in START_STATUSSEN:
             raise ValueError(f"ongeldige start-status: '{status}'")
         if missie_impact and missie_impact not in _MISSIE_IMPACT:
             raise ValueError(f"ongeldige missie_impact: '{missie_impact}'")

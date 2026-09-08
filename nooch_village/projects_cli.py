@@ -17,8 +17,16 @@ def _fmt_ts(ts) -> str:
     return datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
 
 
+#: Eén teken per status. VOLLEDIG, want dat was hij niet: `future`, `draft` en `proposed` misten
+#: en werden op de commandoregel een "?". De test hieronder eist dat elke status uit
+#: `projects.STATUSSEN` hier een teken heeft, zodat een achtste status luid omvalt in plaats van
+#: stil als vraagteken te verschijnen.
+_STATUS_ICON = {"draft": "✎", "proposed": "🗳", "queued": "⏳", "running": "▶️ ",
+                "blocked": "🔒", "future": "🕓", "done": "✅"}
+
+
 def _status_icon(s: str) -> str:
-    return {"queued": "⏳", "running": "▶️ ", "blocked": "🔒", "done": "✅"}.get(s, "?")
+    return _STATUS_ICON.get(s, "?")
 
 
 def _print_summary(p: dict) -> None:

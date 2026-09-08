@@ -1291,7 +1291,8 @@ def main() -> None:
         live = "--live" in sys.argv
         # De recente spanningen: wat er op de borden staat plus wat er in de inbox binnenkwam.
         bron = []
-        for status in ("queued", "running", "blocked"):
+        from nooch_village.projects import OP_HET_BORD
+        for status in OP_HET_BORD:
             for p_ in st.projects.by_status(status):
                 if p_.get("owner"):
                     bron.append((p_["owner"], " ".join(str(p_.get("scope") or "").split())))

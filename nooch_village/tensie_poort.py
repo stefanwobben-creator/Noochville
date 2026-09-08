@@ -75,8 +75,26 @@ class Besluit:
 
 # ── 1. Geborgd ──────────────────────────────────────────────────────────────
 
-LEVEND = frozenset({"queued", "running", "blocked", "future", "review", "todo", "active"})
-KLAAR  = frozenset({"done", "cancelled", "archived"})
+# AFGELEID, NIET OVERGETYPT (8 sept). Hier stond een eigen lijst met zeven waarden, en die had twee
+# fouten die allebei geld kostten:
+#
+#   `review`, `todo` en `active` BESTAAN NIET. Geen enkele schrijver in `projects.py` zet ze. Het
+#   woord `active` is precies waarop de projectbadge op 7 september strandde: de KOLOM heet Active,
+#   de status heet `running` of `queued`.
+#
+#   `draft` en `proposed` ONTBRAKEN. Een spanning die aan zo'n project hangt viel daardoor door
+#   `geborgd()` heen, werd behandeld alsof er geen project bij hoorde, en kwam bij de founder
+#   terecht. Dat is de vorm van de notificatiestapel die al twee keer met de hand is weggeveegd.
+#
+# En de test parametriseerde over vier met de hand getypte statussen: precies de doorsnede van de
+# oude lijst met de werkelijkheid. Groen, en toch fout. `LEVEND` zelf kwam in nul tests voor.
+from nooch_village.projects import (KLAAR as _P_KLAAR, LEVEND as _P_LEVEND,
+                                    INGEPLAND as _INGEPLAND)
+
+LEVEND = _P_LEVEND
+# `cancelled` en `archived` zijn geen projectstatussen maar komen wel voor als tensie-uitkomst; ze
+# blijven hier staan zodat de poort ze als 'klaar' herkent, náást de echte projectstatus.
+KLAAR  = _P_KLAAR | frozenset({"cancelled", "archived"})
 
 
 def _park_redenen(project: dict) -> set[str]:
@@ -412,8 +430,7 @@ def _bestaand_project(projects, rol: str, tekst: str) -> str:
     wegnemen, dan een laag dieper."""
     kern = " ".join((tekst or "").split())[:60].lower()
     try:
-        lopend = [p for st in ("queued", "running", "blocked", "future")
-                  for p in projects.by_status(st)]
+        lopend = [p for st in _INGEPLAND for p in projects.by_status(st)]
     except Exception:                                  # noqa: BLE001 — geen by_status = geen dedup
         return ""
     for p in lopend:

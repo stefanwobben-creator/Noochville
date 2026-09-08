@@ -136,7 +136,10 @@ def park(data_dir: str, *, projects=None, notif=None, targets=None, door: str = 
     rijen, gepakt = [], {"projecten": 0, "notificaties": 0, "per_soort": {}}
 
     if projects is not None:
-        for status in ("queued", "running", "blocked", "future", "review"):
+        # `review` stond hier en is geen projectstatus; niets schrijft hem. Zie de
+        # statuslijst in projects.py, waar deze set nu vandaan komt.
+        from nooch_village.projects import INGEPLAND
+        for status in INGEPLAND:
             for p in projects.by_status(status):
                 tekst = " ".join(str(p.get("scope") or "").split())
                 s = soort(tekst)
