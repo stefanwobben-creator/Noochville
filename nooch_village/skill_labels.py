@@ -62,7 +62,6 @@ LABELS: dict[str, str] = {
 
     # ── Ordering knowledge ───────────────────────────────────────────────────
     "curate": "Cuts raw input into separate, sharp insight cards",
-    "atomic_insights": "Pulls the pattern behind the individual data points",
     "verband_voorstel": "Sees whether two cards have anything to do with each other",
     "onderzoeksvraag": "Derives from a trend the question of why that trend exists",
 
@@ -164,7 +163,6 @@ MATCH_NL: dict[str, str] = {
     "field_note": "Duidt de cijfers van vandaag tegen de missie",
     "voorstel_schrijven": "Werkt een vaag gevoel uit tot een concreet voorstel",
     "curate": "Snijdt ruwe input tot losse, scherpe inzicht-kaartjes",
-    "atomic_insights": "Haalt het patroon achter de losse datapunten vandaan",
     "verband_voorstel": "Ziet of twee kaartjes iets met elkaar te maken hebben",
     "onderzoeksvraag": "Leidt uit een trend de vraag af waarom die trend er is",
     "weten_we_dit_al": "Kijkt eerst of we het antwoord al ergens hebben liggen",
