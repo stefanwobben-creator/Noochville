@@ -53,7 +53,8 @@ def maybe_finish(ledger, pid: str, clid: str) -> bool:
     # Alleen een project dat daadwerkelijk in uitvoering is (of geparkeerd wacht) gaat naar review.
     # Een future/draft/proposed project mag niet door het afvinken van vakjes de review-gate in worden
     # geduwd — dat is werk dat nog niet eens begonnen is.
-    if p.get("status") not in ("running", "queued", "blocked"):
+    from nooch_village.projects import OP_HET_BORD
+    if p.get("status") not in OP_HET_BORD:
         return False
     # De review-melding draagt de overgeslagen taken mee: 4/4 mag nooit lezen als "alles gedaan"
     # wanneer een kernitem bewust is laten vallen. Valse voltooiing is erger dan onaffe voortgang.

@@ -25,7 +25,12 @@ _ALLOWED = {"util.py"}
 # Categorieën uit het Fase-1-rapport. Ratchet naar 0 bij migratie naar JsonStore.
 _WHITELIST = {
     # ── (a) BEIDE processen schrijven — hoogste prioriteit (fase 4, batch 1) ──
-    "governance.py":     (1, "(a) cross-proces: daemon-Secretary + cockpit-roloverleg (de waarheid)"),
+    # 8 SEPT: library.py en source_status.py stonden hier met de reden "single-writer", en die was
+    # niet meer waar — het cockpit schreef er allang in. Een reden die verjaart is erger dan geen
+    # reden: de ratchet bleef groen terwijl de schuld groeide. Beide zijn nu naar JsonStore
+    # gemigreerd, net als notes_store.py (dat deze ratchet nooit zag, zie test_stores_schrijven_gelockt).
+    "governance.py":     (1, "Records._save serialiseert Record-objecten naar json; de klasse erft "
+                             "JsonStore en deze ENIGE call zit in _save zelf, dus onder het slot"),
     "human_inbox.py":    (1, "(a) cross-proces: daemon-Village + inbox-CLI (approval-oppervlak)"),
     "ai_match.py":       (1, "(a) cross-proces: cockpit2 serve + het match-subcommando"),
     # ── al gelockt via synchronized; convergeren naar JsonStore in fase 4, batch 0 ──
@@ -47,8 +52,6 @@ _WHITELIST = {
     "strategy_store.py": (1, "(b) cockpit-concurrent (_Stores)"),
     "snake.py":          (1, "(b) cockpit-only game-scores (triviaal)"),
     # ── (c) alleen daemon, single-writer (puls/collector/skills) — laag risico ──
-    "source_status.py":  (1, "single-writer: alleen de collector-daemon (cockpit leest)"),
-    "library.py":        (1, "single-writer: alleen de Librarian-daemon"),
     "lexicon.py":        (1, "single-writer: seed + Librarian-daemon"),
     "monitoring.py":     (1, "single-writer: alleen de daemon"),
     "competitor_brands.py":     (1, "single-writer: alleen de daemon"),

@@ -56,7 +56,6 @@ from nooch_village.skills_impl.escaleer import EscaleerSkill
 from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
 from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
-from nooch_village.skills_impl.atomic_insights import AtomicInsightsSkill
 from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
 from nooch_village.skills_impl.web_zoek import WebZoekSkill
 from nooch_village.skills_impl.zoekstrategie import ZoekstrategieSkill
@@ -101,7 +100,6 @@ def build_skill_registry() -> SkillRegistry:
         EscaleerSkill(),
         TegenspraakSkill(),
         ProjectverzoekSkill(),
-        AtomicInsightsSkill(),
         # Sid's eerste stap: bepaal HOE je zoekt voordat je zoekt. Zijn resultaat laat
         # `_herplan_na_strategie` de volgende uitvoerlijst schrijven.
         ZoekstrategieSkill(),

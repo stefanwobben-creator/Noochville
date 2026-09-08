@@ -8,19 +8,24 @@ Structuur: {"<source>": {"active": bool, "configured": bool|None}}.
               Voedt de aparte 'niet geconfigureerd'-status, los van 'dood' (geconfigureerd maar geen data).
 """
 from __future__ import annotations
-import json
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import JsonStore
 
 
-class SourceStatusStore:
-    def __init__(self, path: str):
-        self.path = path
-        try:
-            with open(path, encoding="utf-8") as f:
-                self._d = json.load(f) or {}
-        except Exception:
-            self._d = {}
+class SourceStatusStore(JsonStore):
+    """TWEE SCHRIJVERS, ÉÉN BESTAND. De collector (daemon) zet `configured` bij elke dag-puls; jij zet
+    `active` aan en uit in het cockpit. Dat zijn twee processen op dezelfde `sources.json`.
+
+    Vóór 8 september hield elk proces zijn eigen kopie in geheugen en schreef het hele bestand terug
+    vanuit die kopie. Wie het laatst schreef won, en de ander merkte niets: je zette een bron uit, en
+    bij de volgende puls schreef de daemon zijn oude snapshot terug en stond de bron weer aan.
+
+    `JsonStore` lost dat op: elke schrijfmethode neemt het bestandsslot en leest ONDER dat slot vers
+    van schijf. De guard-test `test_geen_ongelockte_write.py` noemde deze store nog "single-writer",
+    en dat klopte al niet meer sinds het cockpit `set_active` kreeg."""
+
+    _STATE = "_d"
+    _WRITE_METHODS = ("set_active", "set_configured")
 
     def active(self, source: str) -> bool:
         return bool((self._d.get(source) or {}).get("active", False))
@@ -39,6 +44,3 @@ class SourceStatusStore:
 
     def all(self) -> dict:
         return dict(self._d)
-
-    def _save(self) -> None:
-        atomic_write_json(self.path, self._d)

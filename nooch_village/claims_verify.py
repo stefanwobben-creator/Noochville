@@ -89,9 +89,24 @@ def verifieer(db: dict, paginateksten: dict[str, str], nu: float | None = None,
             continue
         if huidig in (claims_db.AUTO_OPGELOST,) or huidig in _MENS_OPGELOST:
             continue                                    # al opgelost, niets te melden
+        # DE DATUM HOORT IN DE REDEN, NIET IN DE STATUS. Hier stond
+        # `f"{AUTO_OPGELOST[:-1]} {datum})"` — een status met de scandatum erin gebakken, dus een
+        # nieuwe, verzonnen statuswaarde per dag. `overlay_set_status` laat alleen de vaste
+        # `AUTO_STATUSSEN` toe en weigerde die string met een ValueError; de aanroeper ving dat op
+        # met een kale `continue`. Netto: sinds de seed/overlay-splitsing is NOOIT één auto-opgelost
+        # weggeschreven, en niemand kon dat zien, want de scan meldde de wijziging gewoon als succes.
+        #
+        # De tweede helft is erger dan de eerste. De regressiedetectie hieronder vraagt
+        # `huidig == AUTO_OPGELOST`; tegen een gedateerde variant matcht dat nooit. Een claim die
+        # de scanner zelf had afgemeld en die dáárna terugkwam op de site, zou dus niet als
+        # regressie zijn herkend — precies het signaal waarvoor deze module bestaat.
+        #
+        # Zelfde fout als scope 27: een statusvocabulaire is een gesloten verzameling, en niets mag
+        # er zelf een lid bij verzinnen.
         voorstellen.append({"nr": item.get("nr"), "van": huidig,
-                            "naar": f"{claims_db.AUTO_OPGELOST[:-1]} {datum})",
-                            "reden": "de claim is niet meer aanwezig op de gescande pagina",
+                            "naar": claims_db.AUTO_OPGELOST,
+                            "reden": f"de claim is niet meer aanwezig op de gescande pagina "
+                                     f"(gescand {datum})",
                             "frase": frases[0]})
     return voorstellen
 

@@ -284,11 +284,11 @@ def mens_kandidaten(records, assign, *, exclude: set) -> list[dict]:
     from nooch_village.assignments import door_mens_bemand
     uit = []
     for k in roster(records, exclude=exclude):
-        try:
-            if door_mens_bemand(k["id"], assign, records):
-                uit.append(k)
-        except Exception:                            # noqa: BLE001 — onbekend = geen kandidaat
-            continue
+        # bij_twijfel=False: een rol waarvan we niet kunnen vaststellen dat er een mens op zit, is
+        # geen kandidaat. Hier is dat de veilige kant: werk bij een onzekere rol neerleggen is
+        # precies het stranden dat deze functie moet voorkomen.
+        if door_mens_bemand(k["id"], assign, records, bij_twijfel=False):
+            uit.append(k)
     return uit
 
 

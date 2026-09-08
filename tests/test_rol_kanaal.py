@@ -23,7 +23,7 @@ from types import SimpleNamespace
 import pytest
 
 from nooch_village import claims_board
-from nooch_village.assignments import (Assignments, bemand, door_mens_bemand,
+from nooch_village.assignments import (Assignments, bemand, bemensing, door_mens_bemand,
                                        migrate_persona_bindings)
 from nooch_village.governance import Records
 from nooch_village.models import Record, RecordType, RoleDefinition
@@ -56,33 +56,76 @@ def _snippets(omg):
 
 def test_persona_in_de_assignments_store_telt_als_bemand(tmp_path):
     omg = _omg(tmp_path, fillers=[("persona", "a1")])
-    assert bemand("rolx", omg.assign, omg.records) is True
-    assert door_mens_bemand("rolx", omg.assign, omg.records) is False   # wél: geen mens
+    assert bemand("rolx", omg.assign, omg.records, bij_twijfel=False) is True
+    assert door_mens_bemand("rolx", omg.assign, omg.records, bij_twijfel=False) is False
 
 
 def test_persona_in_de_legacy_laag_telt_ook_als_bemand(tmp_path):
     """Compliance zat alléén hier. Zonder deze regel las de rol dubbel-onbemand."""
     omg = _omg(tmp_path, persona_id="a1")
     assert omg.assign.fillers_of("rolx") == []            # niets in de store...
-    assert bemand("rolx", omg.assign, omg.records) is True  # ...maar wel bemand
+    assert bemand("rolx", omg.assign, omg.records, bij_twijfel=False) is True  # ...wel bemand
 
 
 def test_mens_telt_als_bemand_en_als_mens(tmp_path):
     omg = _omg(tmp_path, fillers=[("person", "p1")])
-    assert bemand("rolx", omg.assign, omg.records) is True
-    assert door_mens_bemand("rolx", omg.assign, omg.records) is True
+    assert bemand("rolx", omg.assign, omg.records, bij_twijfel=False) is True
+    assert door_mens_bemand("rolx", omg.assign, omg.records, bij_twijfel=False) is True
 
 
 def test_zonder_filler_is_onbemand(tmp_path):
     omg = _omg(tmp_path)
-    assert bemand("rolx", omg.assign, omg.records) is False
+    assert bemand("rolx", omg.assign, omg.records, bij_twijfel=True) is False
+
+
+class _Stuk:
+    """Een store die niet te lezen is. Niet 'leeg' — ONLEESBAAR, en dat is iets anders."""
+
+    def fillers_of(self, *a, **k):
+        raise RuntimeError("stuk")
 
 
 def test_check_valt_zacht_bij_kapotte_stores():
-    class _Stuk:
+    """Geen crash in het hete pad. De faalrichting kiest de aanroeper, niet de functie."""
+    assert bemand("x", _Stuk(), None, bij_twijfel=False) is False
+    assert bemand("x", _Stuk(), None, bij_twijfel=True) is True
+
+
+def test_kapotte_store_geeft_onbekend_en_niet_onbemand():
+    """DE KERNTEST. Hiervoor gaf een leesfout een kale `False` terug, en `False` is hier niet
+    "ik weet het niet" maar "er zit niemand in die rol" — een bewering over de organisatie.
+    `claims_board` hing daar een bericht aan, dus één seconde leesfout werd een regel in de
+    stapel van de founder die daarna niet meer van een echte onbemande rol te onderscheiden was."""
+    ja, reden = bemensing("x", _Stuk(), None)
+    assert ja is None, "een onleesbare store is 'onbekend', niet 'onbemand'"
+    assert "niet leesbaar" in reden
+
+    class _StukkeRecords:
+        def get(self, *a, **k):
+            raise RuntimeError("records stuk")
+
+    ja, reden = bemensing("x", _Stuk(), _StukkeRecords())
+    assert ja is None and "records niet leesbaar" in reden
+
+
+def test_lege_store_is_wel_gewoon_onbemand():
+    """De tegenhanger: 'niemand erin' blijft een echt `False`. Zou dit ook `None` worden, dan was
+    het vangnet naar de Circle Lead stilgevallen en dat is het punt niet."""
+    class _Leeg:
         def fillers_of(self, *a, **k):
-            raise RuntimeError("stuk")
-    assert bemand("x", _Stuk(), None) is False            # geen crash in het hete pad
+            return []
+    ja, reden = bemensing("x", _Leeg(), None)
+    assert ja is False and reden == "niemand in de rol"
+
+
+def test_geen_faalrichting_meegeven_is_een_fout():
+    """`bij_twijfel` heeft bewust geen default: een aanroeper die er niet over nadenkt, erft
+    anders opnieuw stilzwijgend een gok. Dit is de ratchet op die keuze."""
+    import pytest
+    with pytest.raises(TypeError):
+        bemand("x", _Stuk(), None)                        # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        door_mens_bemand("x", _Stuk(), None)              # type: ignore[call-arg]
 
 
 # ── De migratie: één bron van waarheid ──────────────────────────────────────
@@ -92,7 +135,7 @@ def test_migratie_verplaatst_de_legacy_binding(tmp_path):
     assert migrate_persona_bindings(omg.records, omg.assign) == 1
     assert [(f.type, f.id) for f in omg.assign.fillers_of("rolx")] == [("persona", "a1")]
     # ...en daarmee klopt de kale lezing, zónder record=. Dát is het punt van de migratie.
-    assert bemand("rolx", omg.assign, None) is True
+    assert bemand("rolx", omg.assign, None, bij_twijfel=False) is True
 
 
 def test_migratie_is_idempotent(tmp_path):
@@ -165,6 +208,21 @@ def test_echt_onbemande_rol_valt_nog_steeds_aan_de_circle_lead(tmp_path):
     doelen = claims_board.bericht_aan_rol(omg, "rolx", "Doe dit")
     assert "cirkel__circle_lead" in doelen
     assert any("onbemand" in s for s in _snippets(omg))
+
+
+def test_onleesbare_store_beweert_niet_dat_de_rol_onbemand_is(tmp_path):
+    """Twijfel zwijgt. Een leesfout mag geen '[rol X onbemand]' in de inbox van de Circle Lead
+    zetten: dat bericht blijft staan als de store weer leest, en is dan niet van een échte
+    onbemande rol te onderscheiden. Zelfde vorm als de 37 kopieën van 14 augustus, andere oorzaak.
+
+    Het bericht aan de rol zelf gaat WEL door — dat is de audittrail 'dit is doorgegeven' en die
+    is waar, ongeacht wie er in de rol zit."""
+    omg = _omg(tmp_path, fillers=[("person", "p1")])
+    omg.assign = _Stuk()
+    doelen = claims_board.bericht_aan_rol(omg, "rolx", "Doe dit")
+    assert "rolx" in doelen
+    assert "cirkel__circle_lead" not in doelen
+    assert not any("onbemand" in s for s in _snippets(omg))
 
 
 def test_bericht_faalt_nog_steeds_zacht():

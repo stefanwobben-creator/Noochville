@@ -21,8 +21,12 @@ from nooch_village.inbox_wizard import FLOWS, GOVERNANCE, OTYPE_LABEL
 from nooch_village.notifications import MENS_GETYPT, volledig as _volledig
 from nooch_village.systeemtaal import ontjargon
 
+# VIER, NIET DRIE. `NotifStore.status_of` kan `klaar`, `verwerkt`, `gelezen` of `nieuw` geven; deze
+# map kende er drie. De lookup viel terug op `_STATUS["nieuw"]`, dus een AFGEHANDELDE spanning kreeg
+# een groene "● new"-chip: precies het omgekeerde van wat er was gebeurd. De test die dit had moeten
+# vangen heet `test_status_of_drie_toestanden` en dekte de vierde niet.
 _STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
-           "verwerkt": ("✓ handled", "chip outline")}
+           "verwerkt": ("✓ handled", "chip outline"), "klaar": ("✓ done", "chip outline")}
 
 
 #: Een project-id in lopende tekst: 12 hex-tekens. Smal genoeg om geen gewone woorden te raken.

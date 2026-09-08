@@ -10,10 +10,13 @@ lijst, zodat bestaande data blijft werken.
 """
 from __future__ import annotations
 import json
+import logging
 import os
 from dataclasses import dataclass
 
 from nooch_village.util import atomic_write_json, read_json
+
+log = logging.getLogger("village.assignments")
 
 _VALID_TYPES = ("person", "persona")
 
@@ -105,41 +108,75 @@ class Assignments:
 
 # ── Bemensing: één definitie, één bron van waarheid ─────────────────────────────────────────
 
-def bemand(role_id: str, assignments, records=None) -> bool:
-    """Is deze rol bemand — door een MENS of door een PERSONA?
+def bemensing(role_id: str, assignments, records=None,
+              *, alleen_mensen: bool = False) -> tuple[bool | None, str]:
+    """(ja / nee / ONBEKEND, reden) — zit er iemand in deze rol? `None` = niet vast te stellen.
 
-    Bestond niet, en dat heeft twee keer gebeten. `claims_board._mensen_op` vroeg naar type
-    "person" en las de assignments-store zónder `record=`. Gevolg: elke AI-bemande rol las als
-    onbemand, en `compliance` — die alleen in de legacy `record.persona_id`-laag zat — als dubbel
-    onbemand. Elk bericht kreeg daardoor een kopie naar de Circle Lead met "[rol X onbemand]",
-    ook al draaide de rol gewoon.
+    DE DERDE WAARDE IS DE HELE POINTE. Hiervoor gaven `bemand` en `door_mens_bemand` een kale
+    `False` terug zodra de store niet te lezen was. Het commentaar boven de `except` zei al
+    "een kapotte store ≠ onbemand-oordeel" — en de regel eronder deed precies dat: hij gaf het
+    onbemand-oordeel. `claims_board` hing daar een BERICHT aan ("[rol X onbemand]" naar de Circle
+    Lead), dus een leesfout van één seconde werd een bewering over de organisatie die daarna in
+    de stapel van de founder bleef staan. Dat is dezelfde vorm als de 37 kopieën die op 14
+    augustus met de hand zijn weggeveegd, alleen met een andere oorzaak.
 
-    Deze functie is DE plek waar die vraag beantwoord wordt. Hij leest beide lagen; dat is geen
-    besluiteloosheid maar een vangnet ná de migratie (`migrate_persona_bindings`): de data is
-    uitgelijnd, en mocht er ooit tóch een legacy-binding opduiken, dan ziet precies deze ene
-    functie 'm — niet elke aanroeper apart, want dát was de val."""
+    "Ik weet het niet" is een antwoord dat een aanroeper kan wegen; `False` is dat niet. Elke
+    aanroeper kiest daarom zelf zijn faalrichting, en moet die opschrijven (`bij_twijfel` op
+    `bemand`/`door_mens_bemand` is verplicht). Hier is geen goede default: bij `claims_board`
+    moet twijfel zwijgen, bij `escalation_router` moet twijfel géén kandidaat opleveren, en dat
+    zijn tegengestelde richtingen op dezelfde vraag.
+
+    `alleen_mensen=True` beperkt tot type "person". Een PERSONA telt dan niet mee: die is een
+    stem, geen paar handen (zie `governance.wordt_opgepakt`).
+
+    Deze functie is DE plek waar de bemensingsvraag beantwoord wordt. Hij leest beide lagen (de
+    assignments-store én het legacy `record.persona_id`-veld); dat is geen besluiteloosheid maar
+    een vangnet ná de migratie (`migrate_persona_bindings`): de data is uitgelijnd, en mocht er
+    ooit tóch een legacy-binding opduiken, dan ziet precies deze ene functie 'm — niet elke
+    aanroeper apart, want dát was de val."""
+    if not role_id:
+        return None, "geen rol opgegeven"
+    if assignments is None:
+        return None, "geen assignments-store"
+    rec = None
+    if records is not None:
+        try:
+            rec = records.get(role_id)
+        except Exception as e:                           # noqa: BLE001 — kapotte store ≠ oordeel
+            log.warning("bemensing(%s): records niet leesbaar (%s: %s)", role_id, type(e).__name__, e)
+            return None, f"records niet leesbaar ({type(e).__name__})"
     try:
-        rec = records.get(role_id) if records is not None else None
-    except Exception:                                    # noqa: BLE001 — een kapotte store ≠ onbemand-oordeel
-        rec = None
-    try:
-        return bool(assignments.fillers_of(role_id, record=rec))
-    except Exception:                                    # noqa: BLE001
-        return False
+        fillers = list(assignments.fillers_of(role_id, record=rec))
+    except Exception as e:                               # noqa: BLE001
+        log.warning("bemensing(%s): assignments niet leesbaar (%s: %s)", role_id, type(e).__name__, e)
+        return None, f"assignments niet leesbaar ({type(e).__name__})"
+    if alleen_mensen:
+        mensen = [f for f in fillers if f.type == "person"]
+        if mensen:
+            return True, f"{len(mensen)} mens(en) in de rol"
+        return False, ("wel vervuld, maar niet door een mens" if fillers else "niemand in de rol")
+    if fillers:
+        return True, f"{len(fillers)} vervuller(s)"
+    return False, "niemand in de rol"
 
 
-def door_mens_bemand(role_id: str, assignments, records=None) -> bool:
+def bemand(role_id: str, assignments, records=None, *, bij_twijfel: bool) -> bool:
+    """Is deze rol bemand — door een MENS of door een PERSONA? Zie `bemensing`.
+
+    `bij_twijfel` is VERPLICHT en heeft bewust geen default: het is de enige plek waar de
+    aanroeper zegt wat een onleesbare store betekent voor zíjn beslissing. Een default zou die
+    keuze weer onzichtbaar maken, en onzichtbaar is precies hoe de kale `False` hier drie jaar
+    kon blijven staan."""
+    ja, _reden = bemensing(role_id, assignments, records)
+    return bij_twijfel if ja is None else ja
+
+
+def door_mens_bemand(role_id: str, assignments, records=None, *, bij_twijfel: bool) -> bool:
     """Vervult een MENS deze rol? Voor de paar plekken waar dat écht de vraag is (een mens-inbox
     heeft een mens nodig). Onderscheiden van `bemand`, want die twee zijn niet hetzelfde en het
-    door elkaar halen is precies wat misging."""
-    try:
-        rec = records.get(role_id) if records is not None else None
-    except Exception:                                    # noqa: BLE001
-        rec = None
-    try:
-        return any(f.type == "person" for f in assignments.fillers_of(role_id, record=rec))
-    except Exception:                                    # noqa: BLE001
-        return False
+    door elkaar halen is precies wat misging. `bij_twijfel`: zie `bemand`."""
+    ja, _reden = bemensing(role_id, assignments, records, alleen_mensen=True)
+    return bij_twijfel if ja is None else ja
 
 
 def migrate_persona_bindings(records, assignments) -> int:

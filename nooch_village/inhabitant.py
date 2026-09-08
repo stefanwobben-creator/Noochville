@@ -946,7 +946,8 @@ class Inhabitant(threading.Thread):
         for p in ledger.by_status("blocked"):
             if p.get("owner") == self.id and heropen(ledger, p):
                 self._claim_run_complete(p["id"])
-        for status in ("queued", "running"):                     # ACTIEF → uitvoeren (DEEL B)
+        from nooch_village.projects import LOPEND
+        for status in LOPEND:                                    # ACTIEF → uitvoeren (DEEL B)
             for p in ledger.by_status(status):
                 if p.get("owner") != self.id:
                     continue
@@ -975,8 +976,9 @@ class Inhabitant(threading.Thread):
         p = ledger.get(pid)
         if p is None or not isinstance(p.get("scope"), str):
             return
+        from nooch_village.projects import LOPEND
         status = p.get("status")
-        actief_zonder_checklist = status in ("queued", "running") and self._project_checklist(p) is None
+        actief_zonder_checklist = status in LOPEND and self._project_checklist(p) is None
         if status != "future" and not actief_zonder_checklist:
             return                                                # alleen TOEKOMST of actief-zonder-plan
         goal = self._scope_text(p)

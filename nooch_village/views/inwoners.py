@@ -194,7 +194,13 @@ def _llm_blok(st, persona, csrf_token: str, kan_bewerken: bool) -> str:
              f"{rijen}</table>" if rijen else
              "<p class='muted'>No preference per task yet — everything runs via the village ladder.</p>")
 
-    budget = float((st.settings or {}).get("persona_llm_budget_eur", 5) if hasattr(st, "settings") else 5)
+    # DE BALK DRAAIDE DRIE MAANDEN OP EEN CONSTANTE. Hier stond
+    # `(st.settings or {}).get(...) if hasattr(st, "settings") else 5` — en `_Stores` heeft nooit
+    # een `settings`-attribuut gehad, dus de `hasattr` was altijd False en het budget altijd 5.
+    # Een instelbare grens die niet instelbaar is, is een grens die niemand kan verleggen; erger,
+    # hij ziet eruit alsof het al kan. De sleutel wordt nu ECHT gelezen (uit `config/settings.ini`
+    # via de gecachte dorpscontext) met dezelfde 5 als default.
+    budget = _budget_uit_config(getattr(st, "dd", "."))
     balk = _budgetbalk(cijfers["totaal_eur"], budget, cijfers["onbekende_calls"])
 
     beheer = ""
@@ -221,6 +227,24 @@ def _model_cel(model: str | None) -> str:
 
 def _pertaak_tekst(per_taak: dict) -> str:
     return "\n".join(f"{k}={v}" for k, v in sorted(per_taak.items()))
+
+
+#: De grens waarboven de balk rood kleurt, in euro's per 14 dagen. Instelbaar via
+#: `persona_llm_budget_eur` in `config/settings.ini`; 5 als niemand iets heeft gezet.
+_BUDGET_DEFAULT = 5.0
+
+
+def _budget_uit_config(data_dir: str) -> float:
+    """Het LLM-budget uit `config/settings.ini`. Fail-soft: een scheve of ontbrekende waarde geeft
+    de default, want een cockpit dat niet rendert omdat een configregel niet klopt is erger dan
+    een balk met een standaardgrens."""
+    from nooch_village.cockpit2 import _context_of
+    try:
+        ctx = _context_of(data_dir)
+        waarde = (getattr(ctx, "settings", None) or {}).get("persona_llm_budget_eur")
+        return float(waarde) if waarde not in (None, "") else _BUDGET_DEFAULT
+    except Exception:                                    # noqa: BLE001 — zie docstring
+        return _BUDGET_DEFAULT
 
 
 def _budgetbalk(besteed: float, budget: float, onbekend: int) -> str:

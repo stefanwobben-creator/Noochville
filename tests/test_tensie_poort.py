@@ -77,10 +77,15 @@ def _llm(antwoord):
 
 # ── 1. Geborgd ──────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("status", ["running", "blocked", "queued", "future"])
+@pytest.mark.parametrize("status", sorted(tp.LEVEND))
 def test_een_levend_project_pingt_niemand(status):
     """De 'Project van X vastgelopen'-klasse: het werk is belegd, dus het hoort niet als verse
-    tensie terug te komen. Ook `blocked` — juist die spuwde zichzelf uit."""
+    tensie terug te komen. Ook `blocked` — juist die spuwde zichzelf uit.
+
+    PARAMETRISEERT OVER `tp.LEVEND`, niet over vier met de hand getypte waarden. Dat was de oude
+    vorm, en hij toetste precies de doorsnede van de toenmalige lijst met de werkelijkheid: de twee
+    statussen die ONTBRAKEN (`draft`, `proposed`) kwamen er nooit in voor, en de drie die niet
+    bestonden evenmin. Een test die dezelfde aanname gebruikt als de code, toetst niets."""
     b = tp.poort(_n("Project van Harry vastgelopen", "p1"),
                  projects=_Projects({"p1": {"status": status}}), records=RECS, gebruik_llm=False)
     assert b.deur == tp.GEBORGD and "p1" in b.bewijs

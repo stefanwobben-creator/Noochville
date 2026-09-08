@@ -250,3 +250,95 @@ def test_actie_gekoppeld_aan_een_project_wordt_een_checklist_stap(tmp_path):
     p = cockpit2._Stores(dd).projects.get(src)
     stappen = [i.get("text") for cl in (p.get("checklists") or []) for i in (cl.get("items") or [])]
     assert "de bron nog even nakijken" in stappen
+
+
+# ── De poort op de wachtrij: alleen jouw eigen items ──────────────────────────────────────────
+
+def _tweede_mens(st, email="wytse@nooch.earth"):
+    """Een tweede ingelogde persoon, die géén rol met de eerste deelt."""
+    p = st.people.add("Iemand Anders")
+    st.people.update(p.id, email=email)
+    return st.people.get(p.id)
+
+
+def test_een_ander_kan_jouw_spanning_niet_weggooien(tmp_path):
+    """DE POORT ZAT IN DE KNOP EN NIET IN DE CODE. `render_inbox` toont alleen items uit
+    `open_for_targets(_person_targets(...))`, dus op het scherm zie je uitsluitend je eigen
+    wachtrij. De handlers eronder namen een kale `nid` aan en deden gewoon hun werk, en een POST
+    kun je met de hand sturen. Juist bij weggooien merkt de eigenaar dat niet: het item is weg,
+    zonder spoor op zijn scherm.
+
+    Dezelfde waarschuwing die `_act_goedkeur` al in zijn eigen docstring heeft staan."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    ik = _mens(st)
+    _, _, n = _spanning(st, ik)
+    ander = _tweede_mens(st)
+
+    _nxt, msg = cockpit2.dispatch(dd, "notif_delete",
+                                  {"nid": [n["id"]], "next": ["/inbox"]}, username=ander.email)
+    assert "No access" in msg
+    st2 = cockpit2._Stores(dd)
+    assert st2.notif._find(n["id"]) is not None
+    assert not st2.notif._find(n["id"]).get("deleted"), "het item mag niet zijn weggegooid"
+
+
+def test_de_eigenaar_mag_het_wel(tmp_path):
+    """De tegenhanger. Zonder deze test is "niemand mag iets" ook een geslaagde poort."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    ik = _mens(st)
+    _, _, n = _spanning(st, ik)
+
+    _nxt, msg = cockpit2.dispatch(dd, "notif_delete",
+                                  {"nid": [n["id"]], "next": ["/inbox"]}, username=ik.email)
+    assert "No access" not in msg
+    assert cockpit2._Stores(dd).notif._find(n["id"]).get("deleted")
+
+
+def test_een_item_voor_een_rol_die_jij_vervult_is_van_jou(tmp_path):
+    """De doelverzameling is dezelfde als die van het scherm: jezelf ÉN elke rol die je vervult.
+    Zou de poort alleen op `person` matchen, dan kon niemand meer een rol-spanning verwerken —
+    en dat is het grootste deel van de wachtrij."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    ik = _mens(st)
+    st.assign.assign(_OWNER, "person", ik.id)
+    src = st.projects.create(_OWNER, "Rolwerk", "human")
+    n = st.notif.add("role", _OWNER, src, by="test", snippet="voor de rol")
+
+    _nxt, msg = cockpit2.dispatch(dd, "notif_read",
+                                  {"nid": [n["id"]], "next": ["/inbox"]}, username=ik.email)
+    assert "No access" not in msg
+    assert cockpit2._Stores(dd).notif._find(n["id"]).get("read")
+
+
+def test_guest_mag_alles_want_dan_staat_auth_uit(tmp_path):
+    """De faalrichting van het huis: guest = auth uit = alles mag. De hele suite draait op
+    `username="guest"`, dus als dit omvalt vallen er honderd tests met 'm om — deze test zegt
+    waaróm dat de bedoeling is."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    _, _, n = _spanning(st, _mens(st))
+    _nxt, msg = cockpit2.dispatch(dd, "notif_delete",
+                                  {"nid": [n["id"]], "next": ["/inbox"]}, username="guest")
+    assert "No access" not in msg
+
+
+def test_alle_zes_de_wachtrij_acties_zitten_achter_dezelfde_poort(tmp_path):
+    """Niet één handler maar de hele familie. Een poort op vijf van de zes is geen poort: wie
+    `notif_klaar` mag misbruiken heeft `notif_delete` niet nodig."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    ik = _mens(st)
+    ander = _tweede_mens(st)
+    velden = {
+        "notif_read": {}, "notif_processed": {}, "notif_archive": {}, "notif_delete": {},
+        "notif_klaar": {}, "notif_outcome": {"otype": ["actie"], "content": ["iets"]},
+    }
+    for actie, extra in velden.items():
+        _, _, n = _spanning(st, ik, snippet=f"@jij {actie}")
+        _nxt, msg = cockpit2.dispatch(dd, actie,
+                                      {"nid": [n["id"]], "next": ["/inbox"], **extra},
+                                      username=ander.email)
+        assert "No access" in msg, f"{actie} laat een vreemde door"

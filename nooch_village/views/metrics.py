@@ -508,10 +508,14 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff, end=No
 
 # ── Interne bronnen: projecten-doorstroom, inbox/spanningen, LLM-gebruik & CO₂ ──────────────────
 # Deze rekenen LIVE uit de stores (geen aparte observatie-schrijf nodig), dus ze hebben meteen data.
+from nooch_village.projects import STATUSSEN as _P_STATUSSEN
+
 # Fail-loud: geen data in het venster → lege reeks (→ 'geen data'), nooit een verzonnen nul.
 # Display-mapping: de sleutels blijven de opgeslagen projectstatussen.
-_PROJ_STATUS_LABEL = {"draft": "draft", "queued": "queued", "running": "running",
-                      "blocked": "blocked", "future": "future", "done": "done"}
+# AFGELEID, want deze map miste `proposed` en dan viel de rauwe sleutel op het scherm. De labels
+# zijn (voorlopig) gelijk aan de sleutels; de waarde van deze map zit in de VOLLEDIGHEID, en die
+# staat nu vast omdat hij uit `projects.STATUSSEN` komt.
+_PROJ_STATUS_LABEL = {s: s for s in _P_STATUSSEN}
 
 
 def _project_scope(st: _Stores, node: str) -> set:

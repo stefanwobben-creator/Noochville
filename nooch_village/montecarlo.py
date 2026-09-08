@@ -55,7 +55,15 @@ def base_records(path: str) -> Records:
         recs.put(Record(id=rid, type=RecordType.ROLE, parent="noochville",
                         definition=RoleDefinition(purpose=pur, accountabilities=accs, domains=doms),
                         source="seed"))
-    recs.save = lambda: None        # in-memory voor snelheid tijdens de stresstest
+    # IN-MEMORY VOOR SNELHEID, maar nu eerlijk. Hier stond `recs.save = lambda: None`, en dat was
+    # stil kapot zodra `Records` onder `JsonStore` kwam (8 sept): elke schrijfmethode leest sindsdien
+    # VERS van schijf onder het bestandsslot, en met een save die niets doet las de stresstest elke
+    # ronde de vier zaad-records terug en gooide alles weg wat hij had opgebouwd. De invariant-check
+    # zag dan een member zonder record en meldde een schending die niet in de code zat maar in de
+    # steiger. Beide kanten uitzetten in plaats van één: dan is "in-memory" ook echt in-memory.
+    recs._save = lambda: None
+    recs._load = lambda: None
+    recs.save = lambda: None
     return recs
 
 
