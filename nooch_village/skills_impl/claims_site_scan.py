@@ -21,6 +21,7 @@ hele week opnieuw.
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 
@@ -36,6 +37,8 @@ from nooch_village import (
 )
 from nooch_village.checklists import period_key
 from nooch_village.skills import Skill
+
+log = logging.getLogger("village.claims_scan")
 
 MARKER = "claims_site_scan_last_week.json"
 
@@ -256,36 +259,61 @@ class ClaimsSiteScanSkill(Skill):
                     "dekking · herstart: bool om de dekking van deze week weg te gooien)")
     output_schema = ("ok, week, skipped, gescand, gedekt[], paginas, volledig, nieuw, aangemaakt[], "
                      "overgeslagen, fouten[{label,url,reden,tijdelijk}], model_gevonden, "
-                     "modelpas_ok, modelpas_mislukt, gewhitelist[], gaten[], headsup, escalate")
+                     "modelpas_ok, modelpas_mislukt, statussen[], statussen_mislukt[], "
+                     "gewhitelist[], gaten[], headsup, escalate")
 
     def _verifieer_werklijst(self, context, db: dict, paginateksten: dict,
-                             volledig: bool = True) -> list[dict]:
+                             volledig: bool = True) -> tuple[list[dict], list[str]]:
         """Toets de werklijst tegen wat we net zagen en sla de uitkomst op.
+        Geeft `(daadwerkelijk_geschreven, niet_geschreven_redenen)`.
 
         Dit is de enige plek waar een skill de claims-database schrijft, en alleen het
         status-veld: termen, herformuleringen en landenregels blijven compliance-domein.
         Elke automatische wijziging krijgt `status_bron: auto`, zodat een mens altijd kan zien
-        wie wat vond."""
+        wie wat vond.
+
+        ALLEEN GESCHREVEN WIJZIGINGEN TELLEN, en dat is een correctie. Hiervoor sloeg een
+        mislukte `overlay_set_status` over met een kale `continue`, maar de wijziging bleef in
+        `gewijzigd` staan. Drie dingen gingen daardoor tegelijk mis: de scan-dict werd meegetrokken
+        alsof het gelukt was, de regressie-melding ("staat weer op de site") ging de deur uit voor
+        een status die nergens is opgeslagen, en `statussen` in het resultaat telde de mislukking
+        mee als succes. Een mislukte schrijfactie meldde dus succes én stuurde een bericht — en
+        volgende week gebeurde precies hetzelfde nog een keer, want er was niets veranderd.
+
+        De faalrichting is nu: niet geschreven = niet gebeurd. De mislukking verdwijnt niet, hij
+        gaat als reden naar boven en komt in het scan-resultaat te staan."""
         data_dir = getattr(context, "data_dir", ".")
         voorstellen = claims_verify.verifieer(db, paginateksten, volledig=volledig)
         if not voorstellen:
-            return []
+            return [], []
         try:
             levend = claims_db.load(data_dir=data_dir)   # effectief (seed + overlay), verse kopie
-        except claims_db.ClaimsDbError:
-            return []
+        except claims_db.ClaimsDbError as e:
+            log.warning("werklijst-verificatie: claims-db niet leesbaar (%s) — %d voorstel(len) "
+                        "niet verwerkt", e, len(voorstellen))
+            return [], [f"claims-database niet leesbaar: {e}"]
         gewijzigd = claims_verify.pas_toe(levend, voorstellen)
         if not gewijzigd:
-            return []
+            return [], []
         # Statuswijzigingen landen in de runtime-overlay, niet in de getrackte seed (machine=True:
         # de auto-scan mag de AUTO_STATUSSEN zetten). Zo blijft config/claims_database.json schoon.
+        geschreven, mislukt = [], []
         for v in gewijzigd:
             try:
                 claims_db.overlay_set_status(data_dir, v["nr"], v["naar"], machine=True)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, OSError) as e:
+                log.warning("werklijst #%s → %s NIET opgeslagen (%s: %s) — telt niet als wijziging",
+                            v.get("nr"), v.get("naar"), type(e).__name__, e)
+                mislukt.append(f"#{v.get('nr')} → {v.get('naar')}: {type(e).__name__}: {e}")
                 continue
-        claims_verify.pas_toe(db, voorstellen)           # de scan-dict meetrekken
-        for v in gewijzigd:
+            geschreven.append(v)
+        if not geschreven:
+            return [], mislukt
+        # De scan-dict alleen meetrekken voor wat écht is opgeslagen, anders divergeert het beeld
+        # in deze run van de opgeslagen waarheid.
+        claims_verify.pas_toe(db, [p for p in voorstellen
+                                   if any(p.get("nr") == v.get("nr") for v in geschreven)])
+        for v in geschreven:
             if v["naar"] != claims_db.AUTO_REGRESSIE:
                 continue
             # Een regressie gaat naar wie hem gefixt had én altijd naar compliance.
@@ -294,7 +322,7 @@ class ClaimsSiteScanSkill(Skill):
             if eigenaar:
                 claims_board.bericht_aan_rol(context, eigenaar, tekst)
             claims_board.bericht_aan_rol(context, "compliance", tekst)
-        return gewijzigd
+        return geschreven, mislukt
 
     def _kroniek(self, context):
         """De Kroniek waartegen de bewijs-vraag wordt gesteld. Zelfde resolutie-idioom als
@@ -376,8 +404,8 @@ class ClaimsSiteScanSkill(Skill):
         vastgelopen = not dekking_compleet and zonder_voortgang >= MAX_PULSEN_ZONDER_VOORTGANG
         # De werklijst-verificatie mag alleen 'opgelost' concluderen als de hele set gezien is: een
         # claim die 'sitewide' staat kan op een pagina zitten die deze week nog niet gehaald is.
-        statussen = self._verifieer_werklijst(context, db, paginateksten,
-                                              volledig=dekking_compleet)
+        statussen, status_mislukt = self._verifieer_werklijst(context, db, paginateksten,
+                                                              volledig=dekking_compleet)
         markeer_week(data_dir, week, {"nieuw": len(verslag["aangemaakt"]),
                                       "overgeslagen": verslag["overgeslagen"],
                                       "gescand": len(paginateksten),
@@ -409,14 +437,16 @@ class ClaimsSiteScanSkill(Skill):
         # Een schone scan is een ANTWOORD ("de site is compliant"), geen kennisgat. Zonder dit
         # leest een geslaagde scan zonder bevindingen als ontbrekende kennis — en dat is precies
         # het soort valse gat waar de missie-critic op zakt.
+        # `status_mislukt` telt mee: een run die een status niet kon wegschrijven is niet schoon,
+        # want "geen bevindingen" zou dan mede kunnen komen doordat het opslaan faalde.
         schoon = (not verslag["aangemaakt"] and not bevindingen and not fouten
-                  and not tijdelijk and not permanent)
+                  and not tijdelijk and not permanent and not status_mislukt)
         extra = ({"no_data": True,
                   "reason": (f"{len(paginateksten)} pagina('s) gescand, geen enkele claim-bevinding "
                              f"en geen bronfout — de site is op deze punten schoon")}
                  if schoon else {})
         return {"ok": True, "week": week, "skipped": False, "headsup": headsup, **extra,
-                "statussen": statussen,
+                "statussen": statussen, "statussen_mislukt": status_mislukt,
                 "gescand": len(paginateksten), "gedekt": nieuw_gedekt, "paginas": len(paginas),
                 "fouten": fouten,
                 "volledig": dekking_compleet or vastgelopen, "vastgelopen": vastgelopen,

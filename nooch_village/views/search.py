@@ -7,12 +7,15 @@ fail-soft per store."""
 from __future__ import annotations
 
 import difflib
+import logging
 import re
 from urllib.parse import quote
 
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _nav, _DS_LINK, _name
 from nooch_village import org
+
+log = logging.getLogger("village.zoek")
 
 
 def _woorden(tekst: str) -> list[str]:
@@ -87,18 +90,19 @@ def _people(st, termen):
             for f in st.assign.fillers_of(r.id, record=r):
                 if getattr(f, "type", "") == "person":
                     rollen_van.setdefault(f.id, []).append(_name(r))
-    except Exception:
+    except Exception:                                     # noqa: BLE001
+        # BEWUST SOFT, en dit is het verschil met de rest van dit bestand: deze lus vult alleen de
+        # SNIPPET ("vervult rol X"). Faalt hij, dan kloppen de treffers nog steeds en valt de
+        # snippet terug op het e-mailadres. Een groep die zijn TREFFERS half oplevert is iets
+        # anders; die opvang staat daarom in `_zoek`.
         pass
     uit = []
-    try:
-        for p in st.people.all():
-            if _match(p.name, termen):
-                rollen = rollen_van.get(p.id, [])
-                snip = ", ".join(rollen[:5]) if rollen else (p.email or "no role yet")
-                uit.append({"url": f"/person?id={p.id}", "kind": "person",
-                            "titel": p.name, "snip": snip})
-    except Exception:
-        pass
+    for p in st.people.all():
+        if _match(p.name, termen):
+            rollen = rollen_van.get(p.id, [])
+            snip = ", ".join(rollen[:5]) if rollen else (p.email or "no role yet")
+            uit.append({"url": f"/person?id={p.id}", "kind": "person",
+                        "titel": p.name, "snip": snip})
     return uit
 
 
@@ -106,30 +110,24 @@ def _accountabilities(st, termen):
     """Losse accountabilities die matchen: waar is deze verantwoordelijkheid belegd (welke rol) en
     door wie wordt die rol vervuld? Klik opent de rol-pagina. Dit beantwoordt 'waar is X belegd?'."""
     uit = []
-    try:
-        for r in st.records.all():
-            if getattr(r, "archived", False):
-                continue
-            d = getattr(r, "definition", None)
-            accs = (getattr(d, "accountabilities", []) or []) if d else []
-            namen = None
-            for acc in accs:
-                if _match(acc, termen):
-                    if namen is None:
-                        namen = _vervuller_namen(st, r)
-                    uit.append({"url": f"/node?id={r.id}", "kind": "acc", "titel": acc,
-                                "snip": f"{_name(r)} · {_wie_snip(namen)}"})
-    except Exception:
-        pass
+    for r in st.records.all():
+        if getattr(r, "archived", False):
+            continue
+        d = getattr(r, "definition", None)
+        accs = (getattr(d, "accountabilities", []) or []) if d else []
+        namen = None
+        for acc in accs:
+            if _match(acc, termen):
+                if namen is None:
+                    namen = _vervuller_namen(st, r)
+                uit.append({"url": f"/node?id={r.id}", "kind": "acc", "titel": acc,
+                            "snip": f"{_name(r)} · {_wie_snip(namen)}"})
     return uit
 
 
 def _projects(st, termen):
     uit = []
-    try:
-        alle = st.projects.all()
-    except Exception:
-        return uit
+    alle = st.projects.all()
     for p in alle:
         scope = str(p.get("scope") or "")
         if _match(scope, termen):
@@ -153,55 +151,43 @@ def _pages(st, termen):
     dat érin staat ("Ecovative", "geldig tot 2030"). Zonder dat blijft de pagina onvindbaar totdat
     je al weet dat hij bestaat."""
     uit = []
-    try:
-        from nooch_village import wiki
-        for a in wiki.paginas(st.att):
-            feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
-            if _match(f"{a.title} {a.body} {feiten}", termen):
-                uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
-                            "titel": a.title or a.id,
-                            "snip": _snip(a.body or feiten)})
-    except Exception:
-        pass
+    from nooch_village import wiki
+    for a in wiki.paginas(st.att):
+        feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
+        if _match(f"{a.title} {a.body} {feiten}", termen):
+            uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
+                        "titel": a.title or a.id,
+                        "snip": _snip(a.body or feiten)})
     return uit
 
 
 def _insights(st, termen):
     uit = []
-    try:
-        for k in st.kennisbank.all():
-            if _match(f"{k.get('title','')} {k.get('why','')}", termen):
-                uit.append({"url": f"/kennisbank?id={k.get('id')}", "kind": "insight",
-                            "titel": k.get("title", ""), "snip": k.get("why", "")})
-    except Exception:
-        pass
+    for k in st.kennisbank.all():
+        if _match(f"{k.get('title','')} {k.get('why','')}", termen):
+            uit.append({"url": f"/kennisbank?id={k.get('id')}", "kind": "insight",
+                        "titel": k.get("title", ""), "snip": k.get("why", "")})
     return uit
 
 
 def _signals(st, termen):
     uit = []
-    try:
-        for a in st.notes.all():
-            if getattr(a, "archived", False):
-                continue
-            claim = getattr(a, "claim", "")
-            if _match(claim, termen):
-                uit.append({"url": _kaartje_url(claim), "kind": "signal",
-                            "titel": claim, "snip": getattr(a, "source", "") or ""})
-    except Exception:
-        pass
+    for a in st.notes.all():
+        if getattr(a, "archived", False):
+            continue
+        claim = getattr(a, "claim", "")
+        if _match(claim, termen):
+            uit.append({"url": _kaartje_url(claim), "kind": "signal",
+                        "titel": claim, "snip": getattr(a, "source", "") or ""})
     return uit
 
 
 def _words(st, termen):
     uit = []
-    try:
-        for w, e in (st.library.all() or {}).items():
-            if _match(w, termen):
-                uit.append({"url": "/woordenschat", "kind": "word",
-                            "titel": w, "snip": str(e.get("status") or "")})
-    except Exception:
-        pass
+    for w, e in (st.library.all() or {}).items():
+        if _match(w, termen):
+            uit.append({"url": "/woordenschat", "kind": "word",
+                        "titel": w, "snip": str(e.get("status") or "")})
     return uit
 
 
@@ -213,8 +199,37 @@ _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accoun
             ("Signals", _signals), ("Words", _words))
 
 
-def _zoek(st, termen):
-    return [(label, fn(st, termen)) for label, fn in _GROEPEN]
+def _zoek(st, termen) -> tuple[list, list]:
+    """Zoek per groep. Geeft (resultaten, fouten): de treffers, én de groepen die niet te laden waren.
+
+    DE OPVANG STAAT HIER, EN NIET MEER IN DE HANDLERS. Elke groep had een eigen
+    `except Exception: pass`, en die stond BUITEN de lus. Een store die halverwege stukging liet dus
+    staan wat al verzameld was, en het scherm toonde een groepskop met een TE LAAG aantal. Dat is
+    erger dan een lege lijst: een halve trefferlijst is niet van een volledige te onderscheiden, en
+    de lezer concludeert "die persoon bestaat niet in de organisatie".
+
+    Eén niveau hoger is het alles-of-niets: de groep slaagt volledig, of hij is leeg en er staat bij
+    waarom. De fail-soft blijft (één kapotte store sloopt de zoekpagina niet), de stilte niet.
+    Zelfde beweging als bij `goedkeuring.open_items_of_fout` en `_gk_blok` in de inbox."""
+    resultaten, fouten = [], []
+    for label, fn in _GROEPEN:
+        try:
+            resultaten.append((label, fn(st, termen)))
+        except Exception as e:                            # noqa: BLE001 — bewust breed, mét reden
+            resultaten.append((label, []))
+            fouten.append((label, f"{type(e).__name__}: {e}"))
+            log.warning("zoeken: groep %r kon niet worden geladen: %s", label, e)
+    return resultaten, fouten
+
+
+def _fouten_html(fouten: list) -> str:
+    """Wat er niet geladen kon worden, in de taal van de lezer: niet "0 treffers" maar "niet
+    geladen". Zonder deze regel is een kapotte bron niet te onderscheiden van een lege."""
+    if not fouten:
+        return ""
+    namen = ", ".join(_e(label) for label, _reden in fouten)
+    return (f"<div class='gs-empty'>Could not load: {namen}. "
+            f"These groups are not empty, they failed to load.</div>")
 
 
 def _vocab(st) -> set:
@@ -274,7 +289,7 @@ def render_search_fragment(st, q: str = "") -> str:
     termen = [t for t in (q or "").lower().split() if t]
     if len(q.strip()) < 2:
         return ""
-    resultaten = _zoek(st, termen)
+    resultaten, fouten = _zoek(st, termen)
     totaal = sum(len(h) for _, h in resultaten)
     blokken = []
     for label, hits in resultaten:
@@ -283,10 +298,11 @@ def render_search_fragment(st, q: str = "") -> str:
             meer = (f"<span class='gs-more'>+{len(hits) - 4} more</span>" if len(hits) > 4 else "")
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)}){meer}</h2>{rijen}</div>")
     sug = _suggestie_html(_suggestie(st, q, totaal))
+    fout = _fouten_html(fouten)
     if not blokken:
-        return sug + "<div class='gs-empty'>no hits</div>" if sug else "<div class='gs-empty'>no hits</div>"
+        return sug + fout + "<div class='gs-empty'>no hits</div>"
     alle = f"<a class='gs-all' href='/search?q={quote(q)}'>All results →</a>"
-    return sug + "".join(blokken) + alle
+    return sug + fout + "".join(blokken) + alle
 
 
 def render_search(st, q: str = "") -> str:
@@ -298,7 +314,7 @@ def render_search(st, q: str = "") -> str:
                 "accountabilities, projects and the knowledge base in one go.</p></div>")
         return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
-    resultaten = _zoek(st, termen)
+    resultaten, fouten = _zoek(st, termen)
     totaal = sum(len(h) for _, h in resultaten)
     blokken = []
     for label, hits in resultaten:
@@ -307,7 +323,7 @@ def render_search(st, q: str = "") -> str:
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)})</h2>{rijen}</div>")
     if not blokken:
         blokken.append("<p class='muted'>Nothing found. Try another word.</p>")
-    sug = _suggestie_html(_suggestie(st, q, totaal))
+    sug = _suggestie_html(_suggestie(st, q, totaal)) + _fouten_html(fouten)
 
     main = (f"<div class='c2-main'><h1>Search for “{_e(q)}”</h1>"
             f"<p class='muted'>{totaal} hit(s) in people, roles, accountabilities, projects "

@@ -663,9 +663,15 @@ def wordt_opgepakt(role_id: str, *, records=None, assignments=None,
             return False, "deze rol bestaat niet meer in governance"
     if assignments is None:
         return True, "onbekend (geen assignments-store)"
-    from nooch_village.assignments import door_mens_bemand
-    if door_mens_bemand(role_id, assignments, records):
+    from nooch_village.assignments import bemensing
+    mens, waarom = bemensing(role_id, assignments, records, alleen_mensen=True)
+    if mens:
         return True, "een mens vervult deze rol"
+    if mens is None:
+        # Fail-open zoals de rest van deze functie, maar mét de echte reden. Zou hier
+        # `bij_twijfel=True` staan, dan kwam er "een mens vervult deze rol" op het scherm terwijl
+        # niemand dat heeft vastgesteld — een fail-open die zich voordoet als een bevinding.
+        return True, f"onbekend ({waarom})"
     if rec is None:
         return True, "onbekend (geen records)"
     leeft, reden = heeft_runner(rec, class_map=class_map, registry=registry, context=context)

@@ -255,10 +255,17 @@ def ontvanger(anchor: str, records, assignments) -> dict:
     omvattende cirkel, die via dezelfde artefact-poort ook mág schrijven. Het verzoek verandert niet
     van inhoud, alleen van postbus, en de reden staat erbij zodat niemand hoeft te raden."""
     from nooch_village import artefacts
-    from nooch_village.assignments import door_mens_bemand
+    from nooch_village.assignments import bemensing
 
-    if door_mens_bemand(anchor, assignments, records):
+    mens, waarom = bemensing(anchor, assignments, records, alleen_mensen=True)
+    if mens:
         return {"rol": anchor, "reden": ""}
+    if mens is None:
+        # Niet vast te stellen. Dan NIET omleiden: omleiden zegt tegen de eigenaar "jij hebt geen
+        # mens", en dat is een bewering over de organisatie die we op dit moment niet kunnen doen.
+        # Bij de eigenaar laten mét de echte reden erbij is eerlijk en corrigeert zichzelf zodra
+        # de store weer leest.
+        return {"rol": anchor, "reden": f"could not check who fills this role ({waarom})"}
     cirkel = artefacts.circle_of(anchor, records)
     lead = f"{cirkel}__circle_lead" if cirkel else ""
     if lead and records.get(lead) is not None:

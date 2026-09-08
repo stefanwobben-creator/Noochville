@@ -63,7 +63,9 @@ def stale_onbemand(notif, records, assignments, *, fix_ts: float = FIX_TS) -> li
                         "niet opgeruimd (%s)", m.group(1), FIX_REF, n.get("id"))
             continue
         rol = _rol_id(m.group(1), records)
-        if not rol or not bemand(rol, assignments, records):
+        # bij_twijfel=False → dit item blijft staan. Archiveren is onomkeerbaar wegkijken; dat mag
+        # alleen als de bewering AANTOONBAAR onwaar is, niet als we haar niet konden toetsen.
+        if not rol or not bemand(rol, assignments, records, bij_twijfel=False):
             continue                                   # rol is écht onbemand → geen grafsteen
         uit.append(n)
     return uit

@@ -74,7 +74,9 @@ def _is_mens_lezer(n: dict, data_dir: str) -> bool:
             from nooch_village.governance import Records
             recs = Records(os.path.join(data_dir, "governance_records.json"))
             assign = Assignments(os.path.join(data_dir, "assignments.json"))
-            return bool(door_mens_bemand(tid, assign, recs))
+            # bij_twijfel=False: niet verrijken als we het niet weten. Verrijken is een
+            # herschrijving van andermans tekst; dat doe je niet op een gok.
+            return bool(door_mens_bemand(tid, assign, recs, bij_twijfel=False))
     except Exception:                                # noqa: BLE001 — onbekend = niet verrijken
         return False
     return False

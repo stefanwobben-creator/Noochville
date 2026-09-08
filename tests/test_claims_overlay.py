@@ -162,3 +162,141 @@ def test_database_tab_toont_intrek_knop_alleen_voor_curator(tmp_path, monkeypatc
     assert "claims_term_retract" not in zonder
     met = render_claims(csrf_token="t", tab="database", kan_cureren=True, data_dir=dd)
     assert "claims_term_retract" in met and "Retract" in met
+
+
+# ── 5. Een mislukte schrijfactie meldt geen succes ────────────────────────────────────────────
+
+def _scan_omgeving(tmp_path, monkeypatch, *, laat_schrijven_falen: bool):
+    """Een `_verifieer_werklijst`-opstelling waarin één claim-frase op de pagina staat terwijl het
+    item al op 'opgelost' stond. Dat is een REGRESSIE: het pad met een bericht eraan vast."""
+    from nooch_village import claims_db as cdb
+    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
+
+    _pad, dd = _kopie_seed(tmp_path)
+    db = cdb.load(data_dir=dd)
+    item = next(i for i in db["werklijst"] if _frase(i))
+    frase = _frase(item)
+    cdb.overlay_set_status(dd, item["nr"], cdb.AUTO_OPGELOST, machine=True)
+    db = cdb.load(data_dir=dd)
+
+    if laat_schrijven_falen:
+        def _kapot(*a, **k):
+            raise OSError("schijf vol")
+        monkeypatch.setattr(cdb, "overlay_set_status", _kapot)
+
+    berichten = []
+    monkeypatch.setattr("nooch_village.claims_board.bericht_aan_rol",
+                        lambda ctx, rol, tekst, **k: berichten.append((rol, tekst)) or [rol])
+
+    class _Ctx:
+        data_dir = dd
+        projects = None
+
+    uit = ClaimsSiteScanSkill()._verifieer_werklijst(_Ctx(), db, {"home": f"... {frase} ..."})
+    return uit, berichten, dd, item["nr"]
+
+
+def _frase(item):
+    from nooch_village.claims_verify import claim_frases
+    fr = claim_frases(item)
+    return fr[0] if fr else ""
+
+
+def test_geslaagde_statuswijziging_telt_en_meldt(tmp_path, monkeypatch):
+    """De referentie: als het schrijven lukt, gaat alles zoals het hoort."""
+    (geschreven, mislukt), berichten, dd, nr = _scan_omgeving(tmp_path, monkeypatch,
+                                                              laat_schrijven_falen=False)
+    assert mislukt == [], "geen enkele statuswijziging mag stilletjes stranden"
+    assert nr in [v["nr"] for v in geschreven]
+    assert any("staat weer op de site" in t for _rol, t in berichten)
+    eff = claims_db.load(data_dir=dd)
+    assert next(i for i in eff["werklijst"] if i["nr"] == nr)["status"] == claims_db.AUTO_REGRESSIE
+
+
+def test_mislukte_statuswijziging_meldt_geen_succes_en_stuurt_geen_bericht(tmp_path, monkeypatch):
+    """DE BUG. `overlay_set_status` faalde met een kale `continue`, maar de wijziging bleef in
+    `gewijzigd` staan. Gevolg: het regressie-bericht ('staat weer op de site') ging de deur uit
+    voor een status die nergens is opgeslagen, `statussen` telde de mislukking als succes, en de
+    volgende scan deed exact hetzelfde nog eens — er was immers niets veranderd.
+
+    Niet geschreven = niet gebeurd. De mislukking verdwijnt niet: hij komt als reden naar boven."""
+    (geschreven, mislukt), berichten, dd, nr = _scan_omgeving(tmp_path, monkeypatch,
+                                                              laat_schrijven_falen=True)
+    assert geschreven == [], "een niet-opgeslagen wijziging is geen wijziging"
+    assert any(f"#{nr} " in m and "OSError" in m for m in mislukt)
+    assert not berichten, "geen bericht over een status die nergens staat"
+    eff = claims_db.load(data_dir=dd)
+    assert next(i for i in eff["werklijst"] if i["nr"] == nr)["status"] == claims_db.AUTO_OPGELOST
+
+
+def test_onleesbare_claims_db_geeft_de_reden_mee(tmp_path, monkeypatch):
+    """Fail-soft blijft, maar stil is het niet meer: de reden reist mee naar de aanroeper."""
+    from nooch_village import claims_db as cdb
+    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
+
+    _pad, dd = _kopie_seed(tmp_path)
+    db = cdb.load(data_dir=dd)
+    item = next(i for i in db["werklijst"] if _frase(i))
+    monkeypatch.setattr(cdb, "load", lambda *a, **k: (_ for _ in ()).throw(
+        cdb.ClaimsDbError("kapot bestand")))
+
+    class _Ctx:
+        data_dir = dd
+        projects = None
+
+    geschreven, mislukt = ClaimsSiteScanSkill()._verifieer_werklijst(
+        _Ctx(), db, {"home": f"... {_frase(item)} ..."})
+    assert geschreven == []
+    assert mislukt and "niet leesbaar" in mislukt[0]
+
+
+def test_de_scan_verzint_geen_statuswaarden(tmp_path):
+    """DE REGRESSIETEST OP EEN LIVE BUG. `claims_verify` bouwde de auto-opgelost-status als
+    `f"{AUTO_OPGELOST[:-1]} {datum})"`: een nieuwe statuswaarde per dag. `overlay_set_status`
+    kent alleen de vaste `AUTO_STATUSSEN` en weigerde die met een ValueError, die de aanroeper
+    met een kale `continue` opat. Sinds de seed/overlay-splitsing is er dus geen enkele
+    auto-oplossing weggeschreven, terwijl de scan hem elke week als wijziging meldde.
+
+    Erger nog: de regressiedetectie vergelijkt `huidig == AUTO_OPGELOST`, en tegen een gedateerde
+    variant matcht dat nooit. Een claim die de scanner zelf had afgemeld en die daarna terugkwam
+    op de site, was daarmee onzichtbaar geworden voor precies de module die hem moet zien.
+
+    De invariant, niet de inhoud: elke status die `verifieer` voorstelt moet een BESTAANDE waarde
+    zijn — een die `overlay_set_status(machine=True)` ook accepteert."""
+    from nooch_village import claims_verify
+
+    _pad, dd = _kopie_seed(tmp_path)
+    db = claims_db.load(data_dir=dd)
+    tekst = " ".join(_frase(i) for i in db["werklijst"] if _frase(i))
+    geldig = set(claims_db.werk_statussen(claims_db.load_seed())) | set(claims_db.AUTO_STATUSSEN)
+
+    for volledig in (True, False):
+        for paginas in ({"home": tekst}, {"home": "niets van dit alles"}):
+            for v in claims_verify.verifieer(db, paginas, volledig=volledig):
+                assert v["naar"] in geldig, (
+                    f"verzonnen status {v['naar']!r} — overlay_set_status weigert die, en de "
+                    f"weigering is eerder een jaar lang opgegeten")
+
+
+def test_auto_opgelost_wordt_ook_echt_opgeslagen(tmp_path, monkeypatch):
+    """Het end-to-end bewijs van hierboven: de auto-oplossing landt nu in de overlay."""
+    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
+
+    _pad, dd = _kopie_seed(tmp_path)
+    db = claims_db.load(data_dir=dd)
+    item = next(i for i in db["werklijst"] if _frase(i) and i.get("status") == "open")
+    monkeypatch.setattr("nooch_village.claims_board.bericht_aan_rol",
+                        lambda *a, **k: [])
+
+    class _Ctx:
+        data_dir = dd
+        projects = None
+
+    # Een pagina zonder de frase: de claim is weg → auto-opgelost.
+    geschreven, mislukt = ClaimsSiteScanSkill()._verifieer_werklijst(
+        _Ctx(), db, {"home": "een pagina zonder enige claim"})
+    assert mislukt == []
+    eff = claims_db.load(data_dir=dd)
+    assert next(i for i in eff["werklijst"] if i["nr"] == item["nr"])["status"] \
+        == claims_db.AUTO_OPGELOST
+    assert item["nr"] in [v["nr"] for v in geschreven]

@@ -87,8 +87,10 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
             assignments = Assignments(os.path.join(data_dir, "assignments.json"))
 
         is_werk = (not project_id) if werk is None else bool(werk)
-        mens = door_mens_bemand(rol_id, assignments, records)
-        ai = (not mens) and bemand(rol_id, assignments, records)
+        # bij_twijfel=False: bij een onleesbare store géén project aanmaken op een gok. Het bericht
+        # hieronder gaat dan gewoon door — dat is de audittrail en die is altijd waar.
+        mens = door_mens_bemand(rol_id, assignments, records, bij_twijfel=False)
+        ai = (not mens) and bemand(rol_id, assignments, records, bij_twijfel=False)
 
         pid = ""
         if is_werk and ai and ledger is not None:
@@ -99,7 +101,12 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
         notif.add("role", rol_id, project_id or pid, by=door, snippet=snippet[:_SNIPPET_MAX])
         doelen.append(rol_id)
 
-        if not bemand(rol_id, assignments, records):
+        # bij_twijfel=True ("doe alsof bemand") en dus GEEN bericht. Dit is de plek waar een
+        # leesfout een BEWERING werd: "[rol X onbemand]" in de inbox van de Circle Lead. Zo'n
+        # bewering blijft staan nadat de store weer leest, en is dan niet van een echte
+        # onbemande rol te onderscheiden — precies de stapel die op 14 aug met de hand is
+        # weggeveegd. Zwijgen bij twijfel kost hooguit één gemist signaal; beweren kost een mens.
+        if not bemand(rol_id, assignments, records, bij_twijfel=True):
             lead = _circle_lead_van(rol_id, records)
             if lead and lead != rol_id:
                 notif.add("role", lead, project_id or pid, by=door,
