@@ -151,7 +151,10 @@ def test_gate_guest_mag_toewijzen(tmp_path):
     dd, st = _st(tmp_path)
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="guest")
-    assert "toegewezen" in msg
+    # Op de server-side waarheid toetsen, niet op de woordkeuze: `is_weigering` IS het verschil
+    # tussen ja en nee (de client mag daar nooit naar raden). De melding zelf is Engels sinds de
+    # dorpstaal dat is; deze test gaat over de poort, niet over de tekst.
+    assert not cockpit2.is_weigering(msg), msg
     assert _GATE_ROLE in cockpit2._Stores(dd).assign.roles_of("person", target.id)
 
 
@@ -161,7 +164,7 @@ def test_gate_circle_lead_mag_toewijzen(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van de ouder-cirkel
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="lead@nooch.earth")
-    assert "toegewezen" in msg
+    assert not cockpit2.is_weigering(msg), msg
     assert _GATE_ROLE in cockpit2._Stores(dd).assign.roles_of("person", target.id)
 
 

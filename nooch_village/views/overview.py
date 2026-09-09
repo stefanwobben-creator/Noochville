@@ -262,7 +262,9 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
                      + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul></div>")
     if not is_c:
-        parts.append(f"<div class='c2-sec'><h3>Role Fillers</h3>{_filler_html(st, rec.id, rec)}</div>")
+        parts.append(f"<div class='c2-sec'><h3>Role Fillers "
+                     f"{_manage_fillers_ico(rec.id, csrf_token)}</h3>"
+                     f"{_filler_html(st, rec.id, rec)}</div>")
     return "".join(parts)
 
 
@@ -321,14 +323,25 @@ def _fillers_block(st: _Stores, role) -> str:
     return f"<div class='fillers'>{rows}</div>"
 
 
+def _manage_fillers_ico(role_id: str, csrf_token: str) -> str:
+    """De ingang naar het vervullers-scherm — één definitie, twee plekken.
+
+    Stond alleen in `_role_row`, dus alleen op de Roles-tab van de CIRKEL. Wie op de rol zelf
+    stond zag onder 'Role Fillers' alleen 'Not filled yet.' en geen enkele knop; de rol was daar
+    niet te bemensen en dat las als "het kan niet". Zelfde control, zelfde URL, nu ook waar je
+    hem zoekt. Geen csrf-token (uitgelogd/publieke render) = geen beheer-affordance, precies
+    zoals de rij op de cirkelpagina dat al deed."""
+    if not csrf_token:
+        return ""
+    url = f"/rolefillers?role={_e(role_id)}"
+    return (f"<a class='manage-ico js-modal' href='{url}' data-href='{url}' "
+            f"title='manage role fillers'>{_ICON_ADD_PERSON}</a>")
+
+
 def _role_row(st: _Stores, role, csrf_token: str) -> str:
     purpose = role.definition.purpose or ""
     pur = f"<div class='muted rrole-pur'>{_e(purpose)}</div>" if purpose else ""
-    assign = ""
-    if csrf_token:
-        url = f"/rolefillers?role={_e(role.id)}"
-        assign = (f"<a class='manage-ico js-modal' href='{url}' data-href='{url}' "
-                  f"title='manage role fillers'>{_ICON_ADD_PERSON}</a>")
+    assign = _manage_fillers_ico(role.id, csrf_token)
     return (f"<div class='rrole'>"
             f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}</div>"
             f"<div class='rrole-fill'>{_fillers_block(st, role)}</div>"

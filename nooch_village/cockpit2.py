@@ -2503,9 +2503,16 @@ def _act_role_assign(c):
             return nxt, "No access — user not recognised"
         person, agent = _parse_trekker(g("filler"))
         if person and st.assign.assign(g("role"), "person", person):
-            msg = "✓ toegewezen"
+            msg = "✓ assigned"
         elif agent and st.assign.assign(g("role"), "persona", agent):
-            msg = "🤖 AI toegewezen"
+            msg = "🤖 AI assigned"
+        else:
+            # STIL MISLUKKEN IS HIER HET DUURST. Bleef de keuzelijst op '— pick person —' staan,
+            # dan viel deze tak door met msg="": geen vervuller, geen melding, geen reden. Dat
+            # leest als "deze rol is niet te bemensen" terwijl er niets kapot is. De server zegt
+            # nu zelf NEE — `⚠` markeert de redirect met ok=0 (is_weigering), dus de modal toont
+            # de reden in plaats van een geslaagd ogende stilte.
+            msg = "⚠ no one selected — nothing was assigned"
         return nxt, msg
 
 
@@ -2520,11 +2527,14 @@ def _act_role_unassign(c):
         if actor is None and username != "guest":
             return nxt, "No access — user not recognised"
         person, agent = _parse_trekker(g("filler"))
+        # Zelfde regel als hierboven: "✓ removed" stond hier onvoorwaardelijk, óók als er niets
+        # te verwijderen viel. Een bevestiging van werk dat niet gebeurde is erger dan stilte.
+        weg = False
         if person:
-            st.assign.unassign(g("role"), "person", person)
+            weg = st.assign.unassign(g("role"), "person", person)
         elif agent:
-            st.assign.unassign(g("role"), "persona", agent)
-        msg = "✓ removed"
+            weg = st.assign.unassign(g("role"), "persona", agent)
+        msg = "✓ removed" if weg else "⚠ nothing removed — this filler was not on the role"
         return nxt, msg
 
 
