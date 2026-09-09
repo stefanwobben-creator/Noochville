@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import types
 
-from nooch_village.views.overview import _role_tools_html, _ROLE_TOOLS
+from nooch_village import claims_db
+from nooch_village.views.overview import _role_tools_html, _ROLE_TOOLS, _DOMAIN_TOOLS
 
 
 def _rec(rid):
     return types.SimpleNamespace(id=rid)
+
+
+def _rec_met_domein(rid, domein=claims_db.DOMEIN):
+    return types.SimpleNamespace(id=rid, definition=types.SimpleNamespace(domains=[domein]))
 
 
 def test_role_tools_kaarten_per_eigenaar_rol():
@@ -38,9 +43,13 @@ def test_registry_dekt_de_eigenaar_rollen():
     # mother_earth__nooch is de eerste CIRKEL in dit register, en dat is een bewuste keuze: de
     # copy-policies wonen bij Community & Email, maar ze gelden voor iedereen die voor Nooch
     # schrijft. Hing het gereedschap aan de eigenaar-rol, dan zou de copywriter het niet vinden.
+    #
+    # `compliance` staat hier NIET meer: dat gereedschap hangt aan het claims-domein
+    # (`_DOMAIN_TOOLS`), zodat het meeverhuist als de rol die het domein bezit verandert.
     assert set(_ROLE_TOOLS) == {
         "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp",
-        "compliance", "mother_earth__nooch__website_developer", "mother_earth__nooch"}
+        "mother_earth__nooch__website_developer", "mother_earth__nooch"}
+    assert set(_DOMAIN_TOOLS) == {claims_db.DOMEIN}
 
 
 def test_copy_gereedschap_hangt_onder_de_nooch_cirkel():
@@ -56,9 +65,16 @@ def test_backlog_builder_hangt_onder_de_website_rol():
     assert "Backlog Builder" in sid and "/backlog" in sid
 
 
-def test_claims_checker_hangt_onder_compliance_en_niet_onder_de_website_rol():
-    """De claims-toets is compliance-domein. De website-rol krijgt hem expliciet niet."""
-    assert "/claims" in _role_tools_html(_rec("compliance"))
+def test_claims_checker_hangt_aan_het_domein_en_niet_aan_een_rol_id():
+    """De claims-toets is claims-DOMEIN, niet 'de rol die toevallig compliance heet'.
+
+    Stond als `_ROLE_TOOLS["compliance"]`. Die rol verhuisde naar de Nooch-cirkel en kreeg een
+    nieuw id; de kaart verdween daarmee zonder één foutmelding. Nu volgt het gereedschap het
+    domein, dus het verhuist mee met wie het domein via governance bezit."""
+    assert "/claims" in _role_tools_html(_rec_met_domein("mother_earth__nooch__compliance"))
+    assert "/claims" in _role_tools_html(_rec_met_domein("een_heel_andere_naam"))
+    # Alleen het domein geeft toegang: de oude naam op zichzelf niet meer.
+    assert "/claims" not in _role_tools_html(_rec("compliance"))
     for ander in ("website_watcher", "mother_earth__nooch__website_developer",
                   "mother_earth__nooch__marketing_lead"):
         assert "/claims" not in _role_tools_html(_rec(ander))

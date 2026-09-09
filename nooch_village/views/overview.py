@@ -20,7 +20,8 @@ from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links, skill_labels, wiki
+from nooch_village import (org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links,
+                           skill_labels, wiki, claims_db)
 from nooch_village.ai_tasks import KIND_AUTONOOM, KIND_MIDDEL
 from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
@@ -720,10 +721,6 @@ _ROLE_TOOLS = {
         ("Keywords — analysis", "Opportunity + suggestions, ranked", "/keywords?lens=trends")],
     "harry_hemp": [
         ("Long-term trends", "Structural rise versus blip (trend reindexing)", "/keywords?lens=scientist")],
-    # De claims-toets hoort bij compliance, niet bij de website-rol: cureren van de
-    # claims-database en de wekelijkse site-check zijn compliance-domein (claims-database).
-    "compliance": [
-        ("Claims-checker", "EmpCo/ACM check on text or page — red, orange, green", "/claims")],
     # De Backlog Builder stond op de Notes-tab van deze rol. Een gereedschap hoort onder Tools,
     # naast de andere rol-tools — en zo houdt de rol zijn eigen notes/wiki-pagina's.
     # De copy-policies wonen bij Community & Email, maar ze gelden voor iedereen die voor Nooch
@@ -738,10 +735,30 @@ _ROLE_TOOLS = {
 }
 
 
+# Tools die bij een DOMEIN horen in plaats van bij een rol-id. De claims-toets stond hier als
+# `_ROLE_TOOLS["compliance"]`; die rol verhuisde naar de Nooch-cirkel en kreeg een nieuw id,
+# waarna de kaart zonder één foutmelding van de rol verdween. Een domein is governance-eigendom
+# en verhuist mee met de rol die het bezit, dus de tools hangen daaraan. `{rol}` wordt vervangen
+# door het id van de rol die het domein nú bezit.
+_DOMAIN_TOOLS = {
+    claims_db.DOMEIN: [
+        ("Claims checker", "EmpCo/ACM check on text or page: red, orange, green", "/claims"),
+        # `&amp;` en niet `&`: de kaart zet de href ongeëscapet in het attribuut (de bestaande
+        # tool-URLs hebben geen tweede parameter), dus de escaping hoort hier in de waarde.
+        ("Claim pages", "One wiki page per claim, with its evidence or what is still missing",
+         "/node?id={rol}&amp;tab=notes")],
+}
+
+
 def _role_tools_html(rec) -> str:
     """De tool-schermen die onder deze rol wonen, als kaarten bovenaan de Tools-tab. Geen
-    eigenaar-mapping → lege string (dan toont de tab alleen radar + artefact-tools)."""
-    tools = _ROLE_TOOLS.get(getattr(rec, "id", ""), [])
+    eigenaar-mapping en geen domein-mapping → lege string (dan toont de tab alleen radar +
+    artefact-tools)."""
+    rid = getattr(rec, "id", "")
+    tools = list(_ROLE_TOOLS.get(rid, []))
+    for d in (getattr(getattr(rec, "definition", None), "domains", None) or []):
+        for label, desc, href in _DOMAIN_TOOLS.get(" ".join(str(d).split()).lower(), []):
+            tools.append((label, desc, href.replace("{rol}", _e(rid))))
     if not tools:
         return ""
     cards = "".join(

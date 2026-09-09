@@ -1235,10 +1235,19 @@ def main() -> None:
         from nooch_village.config import load_context
         from nooch_village.village import BASE_DIR
 
+        from nooch_village import claims_db, org
+
         MATERIAAL_ROL = "mother_earth__nooch__creator_of_shoes"
-        CLAIM_ROL = "compliance"
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
+        # De claim-eigenaar wordt AFGELEID uit governance, niet hier genoemd. Stond hier als
+        # "compliance"; die rol is inmiddels verhuisd en het oude record is gearchiveerd — en een
+        # archief-record bestaat nog, dus de zaaier zou zijn 20 pagina's dáár hebben neergezet.
+        _claim_rec = org.role_for_domain(st.records.all(), claims_db.DOMEIN)
+        CLAIM_ROL = _claim_rec.id if _claim_rec is not None else ""
+        if not CLAIM_ROL:
+            print(f"⚠ geen levende rol met domein '{claims_db.DOMEIN}' — de claimpagina's worden "
+                  f"overgeslagen. Ken het domein via governance toe aan een rol.")
         apply = "--apply" in sys.argv
         rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
                                        eigenaar_materiaal=MATERIAAL_ROL,

@@ -159,10 +159,22 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
     """Zet één set pagina's bij één eigenaar. Geeft een rapportregel per pagina.
 
     `apply=False` (default) schrijft niets — dan is dit een dry-run die precies laat zien wat er
-    zou gebeuren. Zonder de eigenaar-rol gebeurt er niets: fail-closed, met de reden erbij."""
-    if records is not None and records.get(eigenaar) is None:
-        return [{"soort": soort, "eigenaar": eigenaar, "titel": "—", "actie": "overgeslagen",
-                 "reden": f"rol '{eigenaar}' bestaat niet in dit dorp"}]
+    zou gebeuren. Zonder de eigenaar-rol gebeurt er niets: fail-closed, met de reden erbij.
+
+    GEARCHIVEERD IS OOK GEEN EIGENAAR. De poort stond op `records.get(eigenaar) is None`, en een
+    archief-record bestaat nog gewoon — dus die check zei ja voor een rol die uit het dorp weg is,
+    en de pagina's waren aangemaakt op een plek die niemand opent. Stil op de verkeerde plek is
+    erger dan zichtbaar overgeslagen."""
+    if records is not None:
+        rec = records.get(eigenaar)
+        reden = ""
+        if rec is None:
+            reden = f"rol '{eigenaar}' bestaat niet in dit dorp"
+        elif getattr(rec, "archived", False):
+            reden = f"rol '{eigenaar}' is gearchiveerd — pagina's daar ziet niemand"
+        if reden:
+            return [{"soort": soort, "eigenaar": eigenaar, "titel": "—",
+                     "actie": "overgeslagen", "reden": reden}]
     rapport = []
     for p in paginas:
         if _bestaat(store, eigenaar, p["titel"]):

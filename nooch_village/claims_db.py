@@ -21,6 +21,11 @@ log = logging.getLogger("village.claims")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "config", "claims_database.json")
 
+#: Het governance-domein waaronder deze database valt. Wie hem cureert is DAARVAN af te leiden
+#: (`org.role_for_domain`), en staat nergens als rol-id in code: een rol-id is een naam die
+#: verhuist, een domein is het feit dat governance vastlegt.
+DOMEIN = "claims"
+
 # De runtime-overlay: curatie die op de server ontstaat (termen toevoegen/intrekken, werklijst-
 # statussen) landt hier, NIET in de getrackte seed. Zo blijft config/claims_database.json schoon
 # t.o.v. git (het ff-only-deploymodel blokkeert niet op runtime-writes) en blijft de seed de
