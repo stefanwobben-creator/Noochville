@@ -29,6 +29,29 @@ class ProjectverzoekSkill(Skill):
     required_payload = ("naar_rol", "titel")
     output_schema = "ok, pid, naar_rol, titel | error"
 
+    def validate_payload(self, payload: dict, context) -> list:
+        """Bestaat de rol waar dit werk naartoe gaat écht?
+
+        `naar_rol` is een VERWIJZING, en dat is precies het veld waar een planner er een kan
+        verzinnen. Op 8 september gebeurde dat bij `haal_pagina` met een URL ("PLACEHOLDER — to be
+        filled…") en niets hield het tegen: `_missing_required` kijkt of het veld er is, en
+        `validate_payload` gaf in de basisklasse `[]` terug. Deze skill had hetzelfde gat.
+
+        Een verzonnen rol-id levert anders een projectverzoek dat naar niemand gaat: `handoff`
+        faalt live, het item blijft open, en het bord blijft "de rol werkt eraan" tonen. Fail-soft
+        op een ontbrekende records-store: dan weten we het niet, en niet-weten is geen bezwaar."""
+        rol = str((payload or {}).get("naar_rol") or "").strip()
+        recs = getattr(context, "records", None)
+        if not rol or recs is None:
+            return []                                    # afwezig dekt required_payload; geen store = geen oordeel
+        try:
+            if recs.get(rol) is None:
+                return [f"'naar_rol' verwijst naar een rol die niet bestaat ({rol!r}) — werk kan "
+                        f"niet naar een verzonnen ontvanger"]
+        except Exception:                                # noqa: BLE001 — een kapotte store is geen bezwaar
+            return []
+        return []
+
     def run(self, payload: dict, context=None) -> dict:
         # De overdracht zelf leeft in project_items.handoff — gedeeld met de mens-knop in de cockpit,
         # zodat een projectverzoek er altijd hetzelfde uitziet, ongeacht wie 'm plaatst.

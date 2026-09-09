@@ -141,6 +141,25 @@ class WebZoekSkill(Skill):
         self._zoek = zoek
         self._haal = haal or safe_fetch.haal_tekst_geduldig
 
+    def validate_payload(self, payload: dict, context) -> list:
+        """Is dit een zoekopdracht, of een filter-constructie die geen enkele motor aankan?
+
+        HET GEVAL, 8 september 2026. Het plan schreef als term:
+        `kaliumzeep fabrikant Europages Kompass site:europages.nl OR site:kompass.com` — vrije
+        tekst plus twee site-filters plus een OR. Dat kwam LEEG terug, en juist die stap moest de
+        registers met telefoonnummers opleveren. Hij stond daarna afgevinkt op het bord.
+
+        De oorzaak is een goede instructie, verkeerd uitgevoerd: "gebruik Kompass en Europages"
+        werd vertaald naar `site:`-operatoren, terwijl je een register bevraagt door zijn naam
+        gewoon in de term te zetten (of door het register zelf te openen). Eén `site:` is een
+        precisie-instrument; twee met een OR is geen zoekopdracht meer.
+
+        De reden staat er bij het PLANNEN op, dus de mens ziet wat er mis is voordat er een credit
+        aan opgaat."""
+        from nooch_village.zoektermen import gestapeld
+        reden = gestapeld(str((payload or {}).get("term") or ""))
+        return [reden] if reden else []
+
     # ── de skill ────────────────────────────────────────────────────────────
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}

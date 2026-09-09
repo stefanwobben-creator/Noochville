@@ -1012,6 +1012,11 @@ class Inhabitant(threading.Thread):
         cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False)
         if cl is None:
             return
+        # BREED VOOR SMAL, DETERMINISTISCH. De promptregel helpt, maar hij is een belofte: precies
+        # de keer dat het model hem negeert mislukt het onderzoek zonder dat iemand het merkt. Dit
+        # zet de brede vorm ervóór als het plan met een specificatie begint. Zie `zoektermen.py`.
+        from nooch_village.zoektermen import verbreed_planitems
+        plan["items"] = verbreed_planitems(plan["items"])
         n_skill = n_open = n_invalid = n_mens = 0
         opens = []
         for it in plan["items"]:
@@ -1271,6 +1276,21 @@ class Inhabitant(threading.Thread):
         opdracht_section = self._opdracht_section(description)   # mens-opdracht: stuurt de planning
         # Kennis-eerst: het (al gecapte) 'REEDS BEKEND'-blok uit de kennislaag — vul aan, herhaal niet.
         kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
+        # DE LESSEN, EN DIT WAS HET GAT. De leerlus is op 8 september gebouwd in
+        # `skills_impl/zoekstrategie`, maar DIT is het pad dat de zoekopdrachten van een project
+        # écht schrijft — en het riep die skill niet eens aan. Gevolg: het tweede plan stapelde
+        # opnieuw ("kaliumzeep fabrikant Europages Kompass site:… OR site:…") en kwam leeg terug.
+        # Dat het eerste plan wél beter was kwam door de omschrijving van de MENS, niet doordat het
+        # dorp iets had geleerd. Nu leest de planner dezelfde lessen als de strategie-skill.
+        lessen_section = ""
+        try:
+            from nooch_village.skills_impl.zoekstrategie import _lessen
+            _l = _lessen(self.context)
+            if _l:
+                lessen_section = ("LESSONS THE HUMAN RECORDED EARLIER (respect these when you write "
+                                  "search terms):\n" + "\n".join(f"- {x}" for x in _l[:10]) + "\n\n")
+        except Exception as e:                               # noqa: BLE001 — nooit de planning breken
+            self.log.warning("zoeklessen niet gelezen bij het plannen (%s: %s)", type(e).__name__, e)
         # Rol-roster (alleen als deze rol 'projectverzoek' heeft): een deel-item dat bij een andere rol
         # hoort geef je door i.p.v. het dood te laten lopen op 'geen skill'. Fail-soft.
         roster_section = ""
@@ -1300,6 +1320,7 @@ class Inhabitant(threading.Thread):
             f"Your accountabilities: {list(self.dna.accountabilities) or '(none)'}\n\n"
             f"{memory_section}"
             f"{kennis_section}"
+            f"{lessen_section}"
             f"{roster_section}"
             "Break the goal down into 2 to 5 concrete sub-items. For EVERY item: if one of your skills can "
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
