@@ -23,11 +23,22 @@ def _rov_children(st: _Stores, circle_id: str):
 
 
 def _rov_items(st: _Stores, circle_id: str):
-    """Alle agendapunten van DEZE cirkel (open + behandeld), voor de lijst en de groene knop."""
+    """Alle agendapunten van DEZE cirkel (open + behandeld), NIEUWSTE EERST.
+
+    `Agenda.add` doet `append`, dus de store levert ze op invoervolgorde: wat je zojuist inbracht
+    stond onderaan, achter alles wat er al lag. Twee gevolgen, allebei op het scherm gezien
+    (8 september): je moest scrollen naar het punt dat je net had toegevoegd, en `render_roloverleg2`
+    selecteert `items_open[0]` — dus na het toevoegen sprong de editor naar het OUDSTE open punt.
+
+    Hier en niet in de store: volgorde is een leesbeslissing van dit scherm, en `_rov_open` én
+    `_rov_groups` lezen allebei hieruit, dus één plek (reference, don't copy). De store houdt zijn
+    invoervolgorde, want die is het feit."""
     cids = {r.id for r in _rov_children(st, circle_id)}
-    return [it for it in st.agenda.all()
-            if it.get("status") in ("open", "objected", "consented")
-            and (it.get("role_id") in cids or it.get("change", {}).get("new_role_parent") == circle_id)]
+    passend = [it for it in st.agenda.all()
+               if it.get("status") in ("open", "objected", "consented")
+               and (it.get("role_id") in cids
+                    or it.get("change", {}).get("new_role_parent") == circle_id)]
+    return sorted(passend, key=lambda i: -(i.get("created_at") or 0))
 
 
 def _rov_open(st: _Stores, circle_id: str):
@@ -37,7 +48,9 @@ def _rov_open(st: _Stores, circle_id: str):
 
 def _rov_groups(st: _Stores, circle_id: str):
     """Agendapunten gegroepeerd per voorstel (GlassFrog: één voorstel kan meerdere rol-wijzigingen
-    bevatten). Geeft [(group_id, [members])], in agenda-volgorde, leden op aanmaaktijd."""
+    bevatten). Geeft [(group_id, [members])], nieuwste voorstel eerst (de volgorde van
+    `_rov_items`), leden binnen een voorstel op aanmaaktijd — die horen bij elkaar en lees je
+    van boven naar beneden zoals ze zijn toegevoegd."""
     order, groups = [], {}
     for it in _rov_items(st, circle_id):
         gid = it.get("group") or it["id"]

@@ -814,9 +814,18 @@ def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True,
-                       username: str | None = None) -> str:
+                       username: str | None = None, nav: str = "") -> str:
+    """`nav` = het bord draait IN een modal (het werkoverleg); dan is dát de terugkeer-URL.
+
+    Zonder deze parameter wees alles hier naar `/node?id=…&tab=projects`. De overlay onderschept
+    alleen `a.js-modal[data-href]`, dus "Group by → by person" navigeerde de hele pagina weg en het
+    overleg klapte dicht — precies wat er op 8 september tijdens een overleg gebeurde. Formulieren
+    hadden hetzelfde: hun `next` bracht je na een sleepbeweging ook het overleg uit.
+
+    Zelfde recept als `_metrics_tab_html` (nav → js-modal + data-href, anders een gewone link); geen
+    tweede mechaniek, en buiten een modal verandert er niets."""
     allp = st.projects.all()
-    back_base = f"/node?id={rec.id}&tab=projects"
+    back_base = nav or f"/node?id={rec.id}&tab=projects"
 
     addlink = _wizard_addlink(rec, csrf_token) if add else ""
 
@@ -857,10 +866,13 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         sub_html = (f"<div class='c2-sec'><h3>Subcircles</h3>"
                     f"<p class='muted' style='font-size:.8rem'>A subcircle has its own "
                     f"project board.</p><ul class='clean'>{lis}</ul></div>")
-    on = lambda v: " on" if g == v else ""
+    def _vbtn(v: str, lbl: str) -> str:
+        u = f"{back_base}&group={v}"
+        cls = "vbtn js-modal" if nav else "vbtn"
+        dh = f" data-href='{_e(u)}'" if nav else ""
+        return f"<a class='{cls}{' on' if g == v else ''}' href='{_e(u)}'{dh}>{lbl}</a>"
     switch = (f"<div class='vswitch'>Group by: "
-              f"<a class='vbtn{on('rol')}' href='{back_base}&group=rol'>by role</a>"
-              f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>by person</a></div>")
+              f"{_vbtn('rol', 'by role')}{_vbtn('persoon', 'by person')}</div>")
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
             f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
             f"<div><h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>"

@@ -41,6 +41,37 @@ def _open_nxt(nxt: str, iid: str) -> str:
     return f"{nxt}{'&' if '?' in nxt else '?'}open={iid}"
 
 
+def actief_punt(punten: list, open_iid: str = "") -> str:
+    """Welk punt staat er NU op het scherm. Eén bron voor de lijst én het vlak ernaast.
+
+    Zonder deze functie bepaalt elk van de twee het zelf, en dan markeert het menu punt A terwijl
+    rechts punt B open staat. Dezelfde regel als `render_roloverleg2`: het meegegeven punt wint,
+    anders het eerste nog niet afgetikte, anders het eerste dat er is (een lijst met alleen
+    afgetikte punten toont er één, niet niets).
+
+    Een `open_iid` die niet in de lijst voorkomt (weggegooid punt, oude URL) telt niet mee: dan
+    zou het scherm leeg blijven met een link die nergens heen wijst."""
+    if open_iid and any(p.get("id") == open_iid for p in punten):
+        return open_iid
+    for p in punten:
+        if p.get("status") != "done":
+            return str(p.get("id") or "")
+    return str(punten[0].get("id") or "") if punten else ""
+
+
+def _volgend_open(punten: list, actief: str) -> str:
+    """Het volgende nog niet afgetikte punt na `actief`; wikkelt om naar het begin. Leeg als er
+    geen ánder open punt is — dan hoort er geen 'volgende'-knop te staan die niets doet."""
+    open_ids = [str(p.get("id") or "") for p in punten
+                if p.get("status") != "done" and p.get("id")]
+    if not [i for i in open_ids if i != actief]:
+        return ""
+    if actief in open_ids:
+        na = open_ids[open_ids.index(actief) + 1:]
+        return na[0] if na else open_ids[0]                  # om naar het begin
+    return open_ids[0]
+
+
 def _hid(csrf: str, circle: str, nxt: str, **velden) -> str:
     rijen = [f"<input type='hidden' name='csrf' value='{_e(csrf)}'>",
              f"<input type='hidden' name='circle' value='{_e(circle)}'>",
@@ -507,15 +538,40 @@ def _punt_rij(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = ""
 # nooit de focus, dus er valt geen gat om iets in te verliezen. Zonder JavaScript blijft het een
 # gewoon formulier dat post en herlaadt — de vangst werkt dan trager, niet minder.
 def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = "",
-                       nxt: str = "") -> str:
+                       nxt: str = "", enkel: bool = False) -> str:
     """Alleen de lijst. Dezelfde rijen als de volle pagina — één bron, geen tweede vorm.
 
     `nxt` is waar de formulieren naartoe terugkeren. De aanroeper bepaalt dat: in het werkoverleg
     is dat de agenda-stap, niet /vangst. Zonder deze parameter werd je na elke uitkomst het overleg
-    uit gegooid — de component werkte, maar hij nam je mee naar zijn eigen huis."""
+    uit gegooid — de component werkte, maar hij nam je mee naar zijn eigen huis.
+
+    `enkel=True`: TOON ÉÉN PUNT. In het overleg staat de puntenlijst al links in het stappenmenu
+    (`_agenda_substeps`), dus alle rijen rechts eronder was een tweede kopie van diezelfde lijst.
+    Wie meekeek moest meescrollen om te zien waar het over ging, in plaats van te kijken. Eén punt
+    per keer maakt het scherm volgbaar; de lijst links blijft de navigatie, en 'volgende spanning'
+    is de weg vooruit zonder eerst terug te moeten.
+
+    Op `/vangst` blijft de volle lijst staan (`enkel=False`), want daar is snel-scannen-en-vangen
+    de functie en is er geen tweede lijst die de navigatie doet.
+
+    De tellers gaan in BEIDE gevallen over álle punten: ze spiegelen naar de teller boven het
+    vangveld, en die telt het overleg, niet wat er toevallig op het scherm staat."""
     nxt = nxt or f"/vangst?circle={circle}"
     punten = st.werk.punten(circle)
-    rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid) for p in punten)
+    if enkel and punten:
+        actief = actief_punt(punten, open_iid)
+        gekozen = [p for p in punten if str(p.get("id") or "") == actief]
+        rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, actief) for p in gekozen)
+        volgend = _volgend_open(punten, actief)
+        if volgend:
+            # `js-modal` + `data-href`: binnen de overlay onderschept de modal-controller precies
+            # deze combinatie. Zonder allebei navigeert de klik het overleg uit — dezelfde fout als
+            # de 'Group by'-knoppen op het projectenbord.
+            u = _open_nxt(nxt, volgend)
+            rijen += (f"<div class='wo-next'><a class='btn js-modal' href='{_e(u)}' "
+                      f"data-href='{_e(u)}'>volgende spanning →</a></div>")
+    else:
+        rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid) for p in punten)
     return (tellers(punten) + rijen) if rijen else (
         tellers(punten) + "<div class='card muted'>Nog niets gevangen. Typ hierboven een regel en "
         "druk op Enter — dat is de hele handeling.</div>")
