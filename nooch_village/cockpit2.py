@@ -1508,7 +1508,18 @@ def _act_proj_status(c):
         to = g("to")
         pj.reopen(g("pid"))   # was het 'done', haal dat er eerst af zodat heractiveren kan
         if to == "actief":
+            # SLEPEN NAAR ACTIEF IS EEN ANTWOORD, geen statuswijziging alleen. Stond dit project
+            # geparkeerd op een stap die alleen een mens kan doen, dan zegt deze handeling "ja, ik
+            # ben ermee bezig". Leggen we dat niet vast, dan loopt de rol bij de volgende puls op
+            # hetzelfde item vast en parkeert opnieuw — de lus die Stefan op 9 september meldde.
+            # Alleen hier, want dit is de MENS-route; `board_loop` start projecten ook, en die
+            # claimt niets namens iemand.
+            _actor = st.people.by_email(username) if username and username != "guest" else None
+            _mijn = pj.claim_human_items(g("pid"), door=(_actor.id if _actor else (username or "")))
             pj.start(g("pid"))
+            if _mijn:
+                return nxt, (f"✓ verplaatst · {len(_mijn)} stap"
+                             f"{'' if len(_mijn) == 1 else 'pen'} staat nu op jou")
         elif to == "wacht":
             pj.block(g("pid"), "—")
         elif to == "toekomst":

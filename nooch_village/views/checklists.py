@@ -249,6 +249,13 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
             parts.append(f"<span class='ck-payload'>{_e(pl)}</span>")
     if state == "warn":
         parts.append(f"<span class='ck-warn'>⚠ payload incomplete{': ' + _e(reason) if reason else ''}</span>")
+    elif state == "noskill" and it.get("geclaimd"):
+        # Je nam deze stap zelf op je (project uit WACHT terug naar ACTIEF gesleept). Zonder dit
+        # merkteken ziet hij eruit als elk ander "○ no skill"-item en is niet te zien wáárom de rol
+        # er niet meer naar vraagt. `ck-human` hergebruikt, geen nieuwe klasse: dit is dezelfde
+        # soort mededeling (dit ligt bij een mens), alleen op een ander moment ontstaan.
+        parts.append("<span class='ck-human'>🙋 you picked this up — the role stopped asking, "
+                     "and it still counts towards done</span>")
     elif state == "noskill":
         parts.append(f"<span class='ck-noskill'>○ no skill{' · ' + _e(reason) if reason else ' · needs a human'}</span>")
     return f"<span class='ck-meta'>{' '.join(parts)}</span>" if parts else ""
