@@ -56,6 +56,28 @@ def descendants(records, node_id: str) -> list:
     return out
 
 
+def role_for_domain(records, domain: str):
+    """De LEVENDE rol (of cirkel) die dit domein bezit, of None.
+
+    Waarom dit bestaat: een rol-id is een naam die verhuist, een domein is het feit dat
+    governance vastlegt — en G1 bewaakt dat een domein bij precies één rol ligt. Toen de
+    compliance-rol van de noochville-subcirkel naar de Nooch-cirkel verhuisde, bleef overal het
+    oude id `"compliance"` staan: de Tools-kaart verdween van de rol, en de wiki-zaaier zou zijn
+    claimpagina's op het GEARCHIVEERDE record hebben gezet.
+
+    Gearchiveerd telt daarom niet mee. Dat is precies het gat in `records.get(id) is None` als
+    poort: een archief-record bestaat nog, dus die check zegt ja terwijl niemand de uitkomst ooit
+    ziet. Vergelijken op naam, niet op aanwezigheid."""
+    doel = " ".join((domain or "").split()).lower()
+    if not doel:
+        return None
+    for r in _live(records):
+        for d in (getattr(getattr(r, "definition", None), "domains", None) or []):
+            if " ".join(str(d).split()).lower() == doel:
+                return r
+    return None
+
+
 def breadcrumb(records, node_id: str) -> list[str]:
     """Pad van de wortel naar de node (lijst van ids, wortel eerst). Cyclus-veilig."""
     by_id = {r.id: r for r in records}

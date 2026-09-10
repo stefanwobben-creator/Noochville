@@ -1720,8 +1720,14 @@ class Inhabitant(threading.Thread):
         # Mens-taken tellen hier NIET als open: ze zijn bij het plannen al uit de klaar-telling
         # gehaald en horen bij de mens, niet bij deze rol. Zouden ze wel meetellen, dan parkeert het
         # project op de eerste mens-taak — precies de zombie die deel 3 juist voorkomt.
+        # `geclaimd` staat hier om dezelfde reden als `human_task`, maar het antwoord komt van een
+        # ander moment: de mens sleepte dit geparkeerde project terug naar ACTIEF, en dát is het
+        # antwoord op "kun jij dit doen?" (zie ProjectLedger.claim_human_items). Zonder deze regel
+        # parkeert de rol precies het item dat de mens zojuist op zich nam, en zit je in de lus:
+        # slepen, parkeren, slepen, parkeren.
         open_items = [it for it in items
-                      if not it.get("done") and not it.get("skipped") and not it.get("human_task")]
+                      if not it.get("done") and not it.get("skipped")
+                      and not it.get("human_task") and not it.get("geclaimd")]
         blokkades = {it["id"]: self._blocking_reason(it, limit) for it in open_items}
         if open_items and all(blokkades.values()):           # niemand kan nog vooruit → parkeren
             if succeeded:

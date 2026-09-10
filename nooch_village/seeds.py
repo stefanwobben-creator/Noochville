@@ -325,6 +325,27 @@ def migrate_records(records: Records) -> None:
     # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
     if _zorg_skill(records, records.get("harry_hemp"), "onderzoeksvraag"):
         changed = True
+    # ── De twee periodieke compliance-skills volgen het CLAIMS-DOMEIN ─────────
+    # Gemeten op 10 september 2026: `/skills` meldde "Nobody wields this means yet" voor allebei.
+    # De vorige houder was gearchiveerd, en daarmee draaide er geen inwoner meer die ze kon
+    # uitvoeren — twaalf dagen vóór de EmpCo-handhaving, terwijl de wekelijkse site-scan op
+    # 15 september aan de beurt was. De orphan-check in `village._meld_verweesde_pulse_skills`
+    # heeft daar niets over gezegd; waarom niet is nog open.
+    #
+    # Aan het DOMEIN en niet aan een rol-id, om precies de reden die deze week drie keer beet:
+    # een rol-id is een naam die verhuist. `role_for_domain` slaat gearchiveerde records over, dus
+    # dit kan de oude rol nooit weer tot leven wekken.
+    #
+    # BEWUST TIJDELIJK. Zodra de geplande-taak-mechaniek er is horen deze twee daar thuis en niet
+    # op een DNA-grant. Intrekken gaat dan met `afslanken.skill_intrekken`; die zet de intrek-guard
+    # en `_zorg_skill` respecteert die, dus de seed zet ze niet stilletjes terug.
+    from nooch_village import claims_db, org
+    _claims_rol = org.role_for_domain(records.all(), claims_db.DOMEIN)
+    for _periodiek in ("claims_site_scan", "regulation_watch"):
+        if _zorg_skill(records, _claims_rol, _periodiek):
+            log.info("seed: '%s' toegekend aan '%s' (houder van domein '%s')",
+                     _periodiek, _claims_rol.id, claims_db.DOMEIN)
+            changed = True
     # ── Noochie absorbeert Ronnie's bulletin-mandaat ──────────────────────────
     noochie = records.get("noochie")
     if noochie is not None:

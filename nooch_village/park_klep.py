@@ -50,6 +50,11 @@ def opgelost(project: dict, park: dict) -> tuple[bool, str]:
             continue
         if it.get("done") or it.get("skipped"):
             continue
+        if it.get("geclaimd"):
+            continue                                     # een mens nam deze stap op zich (zie
+            # ProjectLedger.claim_human_items). Claimen wist normaal de park-reden, dus dit pad
+            # geldt voor een project dat daarna opnieuw parkeerde op iets anders: de geclaimde stap
+            # mag het dan niet alsnog vasthouden.
         if i.get("reden") == "payload" and it.get("payload_ok") is not False:
             continue                                     # payload hersteld
         open_nog.append(str(it.get("text") or "")[:60])

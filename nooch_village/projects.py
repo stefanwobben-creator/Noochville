@@ -488,6 +488,52 @@ class ProjectLedger:
         park = (p or {}).get("park")
         return dict(park) if isinstance(park, dict) else {}
 
+    def claim_human_items(self, pid: str, *, door: str = "") -> list:
+        """Een MENS zet dit geparkeerde project terug op actief → de mens-blokkade is beantwoord.
+
+        HET GEVAL, 9 september 2026. Een checklist-item dat alleen een mens kan doen parkeert het
+        project (`_blocking_reason` → "human"). Terecht: de rol kan niet verder en moet dat één keer
+        zeggen. Maar het slepen naar ACTIEF is precies het ANTWOORD op die vraag — "ja, ik ben ermee
+        bezig" — en dat antwoord werd nergens vastgelegd. Dus draaide de rol bij de eerstvolgende
+        puls opnieuw, liep op hetzelfde item vast, parkeerde opnieuw en pingde opnieuw. Stefan sleepte
+        terug, en het begon van voren af aan: een lus tussen een mens en een daemon die het over
+        hetzelfde eens waren.
+
+        Wat dit vastlegt is dus geen nieuwe staat maar een gegeven antwoord: deze stappen zijn van de
+        mens, en de rol vraagt er niet meer naar. Het `park`-feit vervalt daarmee, want de blokkade
+        waar het over ging is beantwoord.
+
+        GEEN `human_task`, en dat is de hele subtiliteit. `human_task` haalt een item uit de
+        klaar-telling (`_NIET_TELBAAR`), en dan zou dit project met alleen nog mens-stappen meteen
+        "checklist compleet → klaar voor review" worden: dezelfde lus in een ander jasje, want review
+        is óók `blocked`. Een geclaimde stap is echt werk dat echt af moet; hij telt gewoon mee.
+
+        Geeft de geclaimde item-ids terug (leeg = er viel niets te claimen)."""
+        p = self._projects.get(pid)
+        if p is None:
+            return []
+        park = p.get("park")
+        if not isinstance(park, dict):
+            return []
+        wil = {str(i.get("id") or "") for i in (park.get("items") or [])
+               if i.get("reden") == "human"} - {""}
+        if not wil:
+            return []
+        geclaimd = []
+        for cl in (p.get("checklists") or []):
+            for it in (cl.get("items") or []):
+                if it.get("id") in wil and not it.get("done") and not it.get("skipped"):
+                    it["geclaimd"] = True
+                    it["geclaimd_door"] = (door or "")[:120]
+                    it["geclaimd_at"] = time.time()
+                    geclaimd.append(it["id"])
+        if not geclaimd:
+            return []
+        p.pop("park", None)                  # de vraag is beantwoord; de park-reden vervalt mee
+        self._touch(p)
+        self._save()
+        return geclaimd
+
     def complete(self, pid: str, outcome: str | None = None) -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
@@ -933,6 +979,11 @@ class ProjectLedger:
         for it in cl.get("items", []):
             if it["id"] == item_id and it.get("offer"):
                 off = it.pop("offer")
+                # Teruggegeven aan de rol: een geclaimde stap die alsnog een skill krijgt is niet
+                # langer mens-werk. Zou de claim blijven staan, dan slaat de vastloop-klep dit item
+                # over terwijl de rol het juist wél kan draaien.
+                for veld in ("geclaimd", "geclaimd_door", "geclaimd_at"):
+                    it.pop(veld, None)
                 it["skill"] = off.get("skill")
                 pl = off.get("payload")
                 if isinstance(pl, dict) and pl:
@@ -1441,7 +1492,8 @@ _WRITE_METHODS = (
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "mark_scope_nudge_checked",
     "note_item_fail", "reset_item_fails",
-    "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "set_item_human", "set_item_payload",
+    "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
+    "set_item_human", "set_item_payload",
     "set_item_text", "move_item",
 )
 for _m in _WRITE_METHODS:
