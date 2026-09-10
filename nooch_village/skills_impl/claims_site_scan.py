@@ -245,6 +245,17 @@ def _wie_fixte(ledger, nr: int) -> str | None:
     return None
 
 
+
+def _claims_rol(context) -> str:
+    """De levende rol die het claims-domein bezit ("" = niemand).
+
+    Stond op vier plekken in dit bestand als de letterlijke naam "compliance". Die rol is verhuisd
+    en het oude record is gearchiveerd, waardoor die vier berichten naar een rol gingen waar
+    niemand meer naar kijkt. Het domein is wat governance vastlegt; de naam niet."""
+    from nooch_village import claims_board
+    return claims_board.claims_rol(getattr(context, "records", None))
+
+
 class ClaimsSiteScanSkill(Skill):
     name = "claims_site_scan"
     cost = "free"
@@ -321,7 +332,7 @@ class ClaimsSiteScanSkill(Skill):
             eigenaar = _wie_fixte(context.projects, v["nr"])
             if eigenaar:
                 claims_board.bericht_aan_rol(context, eigenaar, tekst)
-            claims_board.bericht_aan_rol(context, "compliance", tekst)
+            claims_board.bericht_aan_rol(context, _claims_rol(context), tekst)
         return geschreven, mislukt
 
     def _kroniek(self, context):
@@ -419,7 +430,7 @@ class ClaimsSiteScanSkill(Skill):
                                       "fouten": fout_tekst(fouten, 5)})
         for f in permanent:
             claims_board.bericht_aan_rol(
-                context, "compliance",
+                context, _claims_rol(context),
                 f"🧭 Scan-lijst: '{f['label']}' is niet meer op te halen ({f['reden']}) — "
                 f"werk meta.scan_paginas bij ({f['url']})")
 
@@ -427,11 +438,12 @@ class ClaimsSiteScanSkill(Skill):
             # Eén bericht aan compliance, met de pagina's die vanaf de server niet leesbaar zijn.
             # Compliance bezit de scan-lijst; dit is hun beslissing (andere bron, andere route).
             claims_board.bericht_aan_rol(
-                context, "compliance",
+                context, _claims_rol(context),
                 f"🚧 Site-scan blijft blind op {len(tijdelijk)} pagina('s): "
                 f"{', '.join(f['label'] for f in tijdelijk)} — {fout_tekst(tijdelijk, 1)}. "
                 f"Al {MAX_PULSEN_ZONDER_VOORTGANG} pulsen geen enkele nieuwe pagina erbij.")
-        gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen, tijdelijk, vastgelopen)
+        gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen, tijdelijk,
+                                  vastgelopen, rol=_claims_rol(context))
         headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen,
                                 len(nieuw_gedekt), len(paginas))
         # Een schone scan is een ANTWOORD ("de site is compliant"), geen kennisgat. Zonder dit
@@ -468,7 +480,7 @@ class ClaimsSiteScanSkill(Skill):
 
     def _oogst_gaten(self, data_dir: str, signalen: dict, verslag: dict, bevindingen: list[dict],
                      tijdelijk: list[dict] | None = None,
-                     vastgelopen: bool = False) -> list[dict]:
+                     vastgelopen: bool = False, rol: str = "") -> list[dict]:
         """Leg per onbeslisbaar geval één capaciteitsgat vast in de gat-ledger van de Codie-backlog.
 
         Het project-id van de taak die uit de bevinding kwam gaat mee waar dat kan: `gap_ledger`
@@ -479,7 +491,7 @@ class ClaimsSiteScanSkill(Skill):
 
         def leg_vast(capability: str, tekst: str, gevonden: str = "") -> dict | None:
             return gap_ledger.record(
-                data_dir, role="compliance", item_text=tekst,
+                data_dir, role=rol, item_text=tekst,
                 project_id=pid_van.get(claims_board.normaliseer(gevonden), ""),
                 reason=gap_ledger.MISSING_CAPABILITY, capability=capability)
 

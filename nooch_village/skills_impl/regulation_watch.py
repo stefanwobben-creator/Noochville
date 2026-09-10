@@ -294,11 +294,16 @@ class RegulationWatchSkill(Skill):
             if (p.get("origin") == ORIGIN and p.get("status") != "done"
                     and str(p.get("keyword", "")).startswith(basis)):
                 return None
-        pid = ledger.create("compliance", titel[:200], "role", status="future", origin=ORIGIN,
+        from nooch_village import claims_board
+        rol = claims_board.claims_rol(getattr(context, "records", None))
+        if not rol:
+            # Geen levende rol bezit het claims-domein: geen eigenaarloze taak aanmaken en geen
+            # bericht naar een naam die niemand draagt.
+            return None
+        pid = ledger.create(rol, titel[:200], "role", status="future", origin=ORIGIN,
                             keyword=sleutel, description=beschrijving,
                             dod_outcome="de impact op de claims-database is beoordeeld",
                             done_when="de database is bijgewerkt of expliciet ongewijzigd gelaten",
-                            goes_to="compliance")
-        from nooch_village import claims_board
-        claims_board.bericht_aan_rol(context, "compliance", titel, pid)
+                            goes_to=rol)
+        claims_board.bericht_aan_rol(context, rol, titel, pid)
         return pid

@@ -4934,11 +4934,38 @@ def _claims_scan(form: dict, data_dir: str | None = None) -> tuple[dict, str]:
     return uitslag, bron
 
 
+def _claims_gate(st, username: str | None) -> str | None:
+    """Poort voor claims-curatie: None = mag, anders de weigering.
+
+    De rol wordt AFGELEID uit het claims-domein en staat hier niet als id. Acht dispatch-takken
+    riepen `_role_gate("compliance", …)` los aan; toen die rol verhuisde en het oude record werd
+    gearchiveerd, hingen die acht poorten aan een naam die niemand meer draagt. Ze werkten alleen
+    nog doordat `resolve_circle_id` via het archief-record bij de oude cirkel uitkwam — verdwijnt
+    die cirkel, dan weigeren ze iedereen zonder dat iets zegt waaróm.
+
+    Bezit geen levende rol het domein, dan zegt de poort dát, in plaats van "alleen de rolvervuller
+    of Circle Lead mag dit" — dat laatste stuurt de lezer een uur de verkeerde kant op.
+
+    De guest-regel blijft ONGEWIJZIGD gelden: auth uit = mag alles, precies zoals bij elke andere
+    poort. Mijn eerste versie weigerde vóór `_role_gate` en brak daarmee stil de enige modus waarin
+    het dorp zonder login draait — een nieuwe poort mag geen bestaande regel omduwen als bijvangst."""
+    rol = _claims_rol(st)
+    if not rol and username != "guest":
+        return (f"⛔ No access — no live role owns the '{_claims_db.DOMEIN}' domain. "
+                f"Assign it to a role via governance first.")
+    return _role_gate(rol, username, st)
+
+
+def _claims_rol(st) -> str:
+    """Het record-id van de levende rol die het claims-domein bezit ("" = niemand)."""
+    return _claims_board.claims_rol(getattr(st, "records", None))
+
+
 def _claims_gate_open(st, username: str | None) -> bool:
     """Mag deze gebruiker de claims-database cureren? Eén definitie voor zowel het tonen van de
     schrijfknoppen als het toestaan van de mutatie — de knop kan dus nooit iets beloven wat de
     dispatch-tak weigert (reference, don't copy)."""
-    return _role_gate("compliance", username, st) is None
+    return _claims_gate(st, username) is None
 
 
 def _claims_audit(st, username: str | None, event: str, **velden) -> None:
@@ -4955,7 +4982,7 @@ def _act_claims_term_add(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance-domein: alleen de domein-eigenaar cureert
         # de claims-database.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         try:
@@ -4976,7 +5003,7 @@ def _act_claims_work_status(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance-domein: de werklijst-status van een
         # site-fix is een compliance-oordeel, geen open bord.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         try:
@@ -4992,7 +5019,7 @@ def _act_claims_term_retract(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance-domein: intrekken is curatie, net als
         # toevoegen; alleen de domein-eigenaar mag het.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         try:
@@ -5021,7 +5048,7 @@ def _act_claims_bewijs_link(c):
         # AUTHZ: rolvervuller of Circle Lead — vaststellen dát een claim onderbouwd is, is een
         # compliance-oordeel met juridisch gevolg; het is dezelfde poort als termen cureren.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         from nooch_village import claims_substantiatie
@@ -5045,7 +5072,7 @@ def _act_claims_vondst_whitelist(c):
         # AUTHZ: rolvervuller of Circle Lead — een vlag wegwuiven is een compliance-oordeel; dezelfde
         # poort als termen cureren. Een verkeerde uitzondering maakt de site stil blind.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         from nooch_village import claims_labels
@@ -5071,7 +5098,7 @@ def _act_claims_regel_uit_vondst(c):
         # AUTHZ: rolvervuller of Circle Lead — een nieuwe regel in de claims-database is curatie van
         # het compliance-domein, ook als hij hier met één veld ontstaat.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         from nooch_village import claims_labels
@@ -5103,7 +5130,7 @@ def _act_claims_to_board(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance zet bevindingen om in werk; andere
         # rollen zien de knop niet (en de poort weigert ze hier alsnog).
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate("compliance", username, st)
+        _deny = _claims_gate(st, username)
         if _deny:
             return nxt, _deny
         try:

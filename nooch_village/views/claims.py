@@ -6,7 +6,7 @@ staat in de PR. Waar het prototype een eigen vormtaal had (eigen kleurenpalet, s
 gekleurde markeringen), wint het designsysteem — CLAUDE.md.
 
 De data komt uit `claims_db` (config/claims_database.json). Deze view leest alleen; cureren
-loopt via de dispatch-takken achter `_role_gate("compliance")`.
+loopt via de dispatch-takken achter `_claims_gate`, die de rol uit het claims-domein afleidt.
 """
 from __future__ import annotations
 

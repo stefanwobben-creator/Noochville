@@ -220,5 +220,17 @@ def nooch_poc_org() -> dict:
              "accountabilities": ["Building new features", "Optimzing website performance",
                                   "Fixing bugs", "Maintaining a backlog of issues"],
              "fillers": ["Stefan Wobben", "Dan Morgan"]},
+            # Compliance bezit het claims-domein. Die rol stond hier NIET, en daardoor kende het
+            # test-dorp geen enkele houder van `claims` — terwijl de hele claims-keten (de poort op
+            # de curatie, de routing naar het bord) daarop leunt. De tests draaiden dus tegen een
+            # dorp dat op dít punt niet op productie leek, en dat is precies waar een fixture voor
+            # bestaat. Overgenomen uit governance zoals hij op 9 september is aangemaakt.
+            {"name": "Compliance", "parent": "Nooch", "purpose": "A greenwashing proof brand",
+             "domains": ["claims"],
+             "accountabilities": [
+                 "Verifying biodegradability and sustainability claims against evidence "
+                 "(certification, standards, laboratory results) and recording their status.",
+                 "Tests text against the European rules for sustainability claims"],
+             "fillers": ["Stefan Wobben"]},
         ],
     }
