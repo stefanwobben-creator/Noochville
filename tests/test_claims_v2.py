@@ -215,12 +215,24 @@ def test_rolroutering(categorie, verwacht):
     assert rol_voor(categorie) == verwacht
 
 
-def test_onbekende_rol_valt_terug_op_compliance():
-    """Liever bij de domein-eigenaar dan bij een dood record-id."""
+def test_onbekende_rol_valt_terug_op_de_houder_van_het_domein():
+    """Liever bij de domein-eigenaar dan bij een dood record-id.
+
+    De eigenaar wordt uit het CLAIMS-DOMEIN afgeleid, niet uit een naam. Deze test eiste eerst
+    letterlijk "compliance"; die rol is inmiddels verhuisd en het oude record gearchiveerd, dus
+    die assert zou groen blijven terwijl het werk naar niemand ging."""
+    from types import SimpleNamespace as _NS
+    eigenaar = _NS(id="de_domein_eigenaar", parent="cirkel", archived=False,
+                   definition=_NS(domains=[claims_db.DOMEIN]))
+
     class GeenRecords:
-        def get(self, _):
-            return None
-    assert claims_board.rol_id_voor("copywriter", GeenRecords()) == "compliance"
+        def get(self, rid):
+            return eigenaar if rid == eigenaar.id else None
+
+        def all(self):
+            return [eigenaar]
+
+    assert claims_board.rol_id_voor("copywriter", GeenRecords()) == "de_domein_eigenaar"
 
 
 def test_dispatch_bord_weigert_andere_rollen(tmp_path):
@@ -234,12 +246,34 @@ def test_dispatch_bord_weigert_andere_rollen(tmp_path):
 def test_dispatch_bord_maakt_taken(tmp_path, monkeypatch):
     dd = tmp_path / "data"
     dd.mkdir()
+    # Het dorp moet bestaan. Deze test draaide op een LEEG datamap en kreeg toch een taak, omdat
+    # de eigenaar toen een hardgecodeerd rol-id was: er werd werk aangemaakt voor een rol die in
+    # dat dorp niet bestond. Nu leidt de routing de eigenaar af uit het claims-domein, en dus moet
+    # er ook echt een rol zijn die dat domein bezit — zoals in productie.
+    cockpit2._bootstrap(str(dd))
     payload = json.dumps({"bevindingen": [_bev(term="gifvrij", gevonden=["volstrekt gifvrij"])]})
     _, msg = cockpit2.dispatch(str(dd), "claims_to_board",
                                {"bevindingen": [payload], "bron": ["https://nooch.earth/"],
                                 "next": ["/claims"]}, "guest")
     assert msg.startswith("✓ 1 task")
-    assert len(ProjectLedger(str(dd / "projects.json")).all()) == 1
+    taken = ProjectLedger(str(dd / "projects.json")).all()
+    assert len(taken) == 1
+    assert taken[0]["owner"] == "mother_earth__nooch__compliance"
+
+
+def test_dispatch_bord_maakt_geen_taak_zonder_domein_eigenaar(tmp_path):
+    """Bezit geen levende rol het claims-domein, dan komt er GEEN eigenaarloze taak op het bord.
+
+    Een taak zonder eigenaar staat er wel, telt mee in de rapportage, en niemand kijkt ernaar.
+    Dat is de stille variant van werk kwijtraken."""
+    dd = tmp_path / "leeg"
+    dd.mkdir()
+    payload = json.dumps({"bevindingen": [_bev(term="gifvrij", gevonden=["volstrekt gifvrij"])]})
+    _, msg = cockpit2.dispatch(str(dd), "claims_to_board",
+                               {"bevindingen": [payload], "bron": ["https://nooch.earth/"],
+                                "next": ["/claims"]}, "guest")
+    assert not msg.startswith("✓ 1 task")
+    assert ProjectLedger(str(dd / "projects.json")).all() == []
 
 
 # ── Taak 5: de wekelijkse zelfscan ──────────────────────────────────────────

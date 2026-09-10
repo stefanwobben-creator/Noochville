@@ -89,7 +89,7 @@ def test_import_nooch_org(tmp_path):
     asg = Assignments(str(tmp_path / "assign.json"))
     summary = import_org(nooch_poc_org(), recs, ppl, asg)
 
-    assert summary["circles"] == 2 and summary["roles"] == 20
+    assert summary["circles"] == 2 and summary["roles"] == 21
     # 6 mensen: Lotte, Stefan, Nina, Matthijs, Wytse, Dan
     assert summary["people"] == 6
     # nesting: Mother Earth is wortel, Nooch hangt eronder

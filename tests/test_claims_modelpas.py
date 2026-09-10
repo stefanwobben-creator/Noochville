@@ -35,12 +35,24 @@ _PAGINA = f"""<html><head><title>Nooch</title></head><body>
 </body></html>"""
 
 
+def _records_dubbel(claims_eigenaar="compliance"):
+    """Records-dubbel met een houder van het claims-domein.
+
+    Stond op `records=None`. Dat volstond zolang de routing een hardgecodeerd rol-id gebruikte;
+    sinds ze het DOMEIN leest, is een dorp zonder domein-houder een dorp waarin terecht geen taak
+    wordt aangemaakt — en dan meet de test niets meer."""
+    eigenaar = SimpleNamespace(id=claims_eigenaar, parent="cirkel", archived=False,
+                               definition=SimpleNamespace(domains=[claims_db.DOMEIN]))
+    return SimpleNamespace(all=lambda: [eigenaar],
+                           get=lambda rid: eigenaar if rid == claims_eigenaar else None)
+
+
 def _ctx(tmp_path, monkeypatch=None, ledger=None):
     if monkeypatch is not None:
         kopie = tmp_path / "claims_database.json"
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
         monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
-    return SimpleNamespace(data_dir=str(tmp_path), settings={}, records=None,
+    return SimpleNamespace(data_dir=str(tmp_path), settings={}, records=_records_dubbel(),
                            projects=ProjectLedger(str(tmp_path / "projects.json")),
                            evidence_ledger=ledger)
 

@@ -26,7 +26,18 @@ def _stores(tmp_path):
     return cockpit2._Stores(dd)
 
 
+def _ontneem_domein(st, role_id: str):
+    """Haal het claims-domein weg bij een rol. De bootstrap-fixture heeft sinds scope 38 een
+    Compliance-rol die het domein bezit, net als productie; wie in een test een ándere houder
+    wil toetsen, moet die eerst loslaten."""
+    rec = st.records.get(role_id)
+    if rec is not None:
+        rec.definition.domains = []
+        st.records.put(rec)
+
+
 def _geef_domein(st, role_id: str):
+    _ontneem_domein(st, "mother_earth__nooch__compliance")
     rec = st.records.get(role_id)
     rec.definition.domains = [claims_db.DOMEIN]
     st.records.put(rec)
@@ -69,6 +80,7 @@ def test_een_gearchiveerde_rol_wordt_niet_gewekt(tmp_path):
 def test_zonder_houder_gebeurt_er_niets(tmp_path):
     """Geen levende rol met het domein: geen crash, geen grant, geen willekeurige rol."""
     st = _stores(tmp_path)
+    _ontneem_domein(st, "mother_earth__nooch__compliance")   # het dorp zonder domein-houder
     assert org.role_for_domain(st.records.all(), claims_db.DOMEIN) is None
     migrate_records(st.records)
     for rec in st.records.all():

@@ -9,7 +9,12 @@ opnieuw op het bord en is het bord binnen een week onbruikbaar.
 """
 from __future__ import annotations
 
+import logging
 import re
+
+from nooch_village import claims_db, org
+
+log = logging.getLogger("village.claims_board")
 
 ORIGIN = "claims_fix"          # herkomst-stempel: hieraan herkennen we onze eigen taken terug
 
@@ -19,10 +24,38 @@ ROL_IDS = {
     "copywriter": "mother_earth__nooch__noochville__copywriter",
     "visual designer": "mother_earth__nooch__brand_visual_designer",
     "marketeer": "mother_earth__nooch__marketing_lead",
-    "compliance": "compliance",
     "copywriter + compliance": "mother_earth__nooch__noochville__copywriter",
 }
-FALLBACK_ROL = "compliance"
+
+#: Het LABEL waarmee een bevinding naar de domein-eigenaar wijst. Het record-id dat daarbij hoort
+#: staat bewust nergens meer als literal — `claims_rol()` leidt het af uit governance.
+COMPLIANCE_LABEL = "compliance"
+
+
+def claims_rol(records=None) -> str:
+    """Het record-id van de LEVENDE rol die het claims-domein bezit, of "" als niemand het heeft.
+
+    Stond hier als `FALLBACK_ROL = "compliance"`. Die rol is verhuisd en het oude record is
+    gearchiveerd, en toen bleef dit stil naar een dood id wijzen: de bestaande poort hieronder
+    toetste `records.get(kandidaat) is None`, en een archief-record bestáát nog. Werk werd dus
+    toegewezen aan een rol waar niemand meer naar kijkt.
+
+    Het domein is wat governance vastlegt en het verhuist mee met de rol die het bezit; het id is
+    een naam. Geen levende houder → "" en de aanroeper besluit, want een taak zonder eigenaar
+    aanmaken is erger dan er geen aanmaken.
+
+    Fail-soft op de VORM van `records`: een aanroeper mag hier een store, een lijst of iets
+    store-achtigs binnenbrengen. Kan er niet uit gelezen worden, dan is het antwoord onbekend en
+    dus leeg. Een resolver die een exception gooit legt de hele claims-keten plat, en dat is een
+    veel duurdere fout dan een lege uitkomst die de aanroeper zichtbaar afhandelt."""
+    if records is None:
+        return ""
+    try:
+        rijen = list(records.all()) if hasattr(records, "all") else list(records)
+    except Exception:                                  # noqa: BLE001
+        return ""
+    rec = org.role_for_domain(rijen, claims_db.DOMEIN)
+    return rec.id if rec is not None else ""
 
 _NIET_WOORD = re.compile(r"[^a-z0-9]+")
 
@@ -207,14 +240,19 @@ def rol_id_voor(rol_label: str, records=None, stoplicht: str = "", herkomst: str
     Een model-gevonden kandidaat gaat om dezelfde reden naar compliance: er zit geen lijstterm en
     geen wetsartikel achter, dus het eerste werk is een oordeel, geen herformulering.
 
-    Bestaat de rol niet (meer) in de records, dan gaat het werk naar compliance in plaats van
-    naar een dood id."""
+    Bestaat de rol niet MEER of is hij GEARCHIVEERD, dan gaat het werk naar de domein-eigenaar in
+    plaats van naar een dood id. Die tweede helft ontbrak: de check was `records.get(kandidaat) is
+    None`, en een gearchiveerd record komt daar gewoon uit — dus een opgeheven rol gold als levende
+    kandidaat."""
     from nooch_village.claims_db import ESCALEREN
-    if stoplicht == ESCALEREN or herkomst == "model":
-        return FALLBACK_ROL
-    kandidaat = ROL_IDS.get(rol_label, FALLBACK_ROL)
-    if records is not None and records.get(kandidaat) is None:
-        return FALLBACK_ROL
+    eigenaar = claims_rol(records)
+    if stoplicht == ESCALEREN or herkomst == "model" or rol_label == COMPLIANCE_LABEL:
+        return eigenaar
+    kandidaat = ROL_IDS.get(rol_label, eigenaar)
+    if records is not None:
+        rec = records.get(kandidaat)
+        if rec is None or getattr(rec, "archived", False):
+            return eigenaar
     return kandidaat
 
 
@@ -346,7 +384,7 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
     ledger = omgeving.projects
     records = getattr(omgeving, "records", None)
     bestaand = _bestaande_sleutels(ledger, db)
-    aangemaakt, overgeslagen, lopend = [], 0, []
+    aangemaakt, overgeslagen, lopend, zonder_eigenaar = [], 0, [], []
     from nooch_village.claims_db import ESCALEREN
     for b in bevindingen:
         if b.get("stoplicht") not in ("red", "orange", ESCALEREN):
@@ -361,6 +399,14 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
         titel, beschrijving = taak_tekst(b, b.get("url") or bron)
         eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records, b.get("stoplicht", ""),
                                b.get("herkomst", ""))
+        if not eigenaar:
+            # Geen levende rol bezit het claims-domein. Een taak zonder eigenaar aanmaken is erger
+            # dan er geen aanmaken: hij staat op het bord, telt mee in de rapportage, en niemand
+            # kijkt ernaar. Overslaan én zeggen dát je overslaat.
+            zonder_eigenaar.append(titel)
+            log.warning("claims-bord: '%s' niet aangemaakt — geen levende rol bezit het "
+                        "claims-domein '%s'", titel[:80], claims_db.DOMEIN)
+            continue
         pid = ledger.create(eigenaar, titel, trigger, status="future", origin=ORIGIN,
                             keyword=sleutel, description=beschrijving,
                             dod_outcome="de claim staat compliant op de site",
@@ -378,6 +424,7 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
         bestaand.add(sleutel)                          # binnen één run niet dubbel
         bestaand.update(_zoektermen(b))
     return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,
+            "zonder_eigenaar": zonder_eigenaar,
             "rood": sum(1 for t in aangemaakt if t["stoplicht"] == "red")}
 
 
