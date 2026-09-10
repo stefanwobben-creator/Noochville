@@ -36,7 +36,15 @@ log = logging.getLogger("village.founder_taken")
 # Wie het werk krijgt als de founder corrigeert of doorzet. Eén plek, zodat de routing van de
 # flow niet uiteen kan lopen met die van de claims-checker.
 SCIENTIST_ROL = "harry_hemp"                  # "grounded in undeniable scientific truth"
-COMPLIANCE_ROL = "compliance"
+# Stond hier als `COMPLIANCE_ROL = "compliance"`. Dat is een NAAM, en die verhuist: de rol ging
+# naar een andere cirkel en het oude record werd gearchiveerd, waarna dit stil naar niemand wees.
+# Het claims-domein is wat governance vastlegt; `claims_board.claims_rol` leidt de rol daaruit af.
+
+
+def compliance_rol(st) -> str:
+    """De levende rol die het claims-domein bezit, of "" als niemand het heeft."""
+    from nooch_village import claims_board
+    return claims_board.claims_rol(getattr(st, "records", None))
 FIELD_NOTE_ROL = "website_watcher"            # schrijft de dagelijkse Field Note (seeds.py)
 # De rol die een goedgekeurd voorstel UITVOERT. De onderzoekende rol (compliance) stelt de gegronde
 # substantie en richting voor; de copy schrijft hij niet. Die rolgrens is de reden dat er na
@@ -278,13 +286,18 @@ def _claim_effect(st, data_dir: str, item: str, oordeel: str) -> str:
         melding = (f"✓ copy fix on the board ({len(verslag['aangemaakt'])} task(s))"
                    if verslag["aangemaakt"] else "✓ copy fix — work was already running")
     elif oordeel == "bewijs":
-        claims_board.bericht_aan_rol(
-            st, COMPLIANCE_ROL,
-            f"Leg het bewijs vast voor: {claim} — bron en letterlijk citaat in de Kroniek.",
-            door="founder-flow",
-            done_when=f"vastgesteld of de claim {claim} houdbaar is, met bron en citaat in de "
-                      f"Kroniek of een concreet correctievoorstel")
-        melding = "✓ handed to compliance to bank the evidence"
+        _rol = compliance_rol(st)
+        if _rol:
+            claims_board.bericht_aan_rol(
+                st, _rol,
+                f"Leg het bewijs vast voor: {claim} — bron en letterlijk citaat in de Kroniek.",
+                door="founder-flow",
+                done_when=f"vastgesteld of de claim {claim} houdbaar is, met bron en citaat in de "
+                          f"Kroniek of een concreet correctievoorstel")
+            melding = "✓ handed to compliance to bank the evidence"
+        else:
+            # Niet stil doorsturen naar een naam die niemand draagt: zeggen dat het NIET is belegd.
+            melding = "⚠ no live role owns the claims domain — nothing was handed over"
     elif oordeel == "scientist":
         claims_board.bericht_aan_rol(
             st, SCIENTIST_ROL,
@@ -412,7 +425,9 @@ def _content_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     soort, _, sleutel = item.partition(":")
     if oordeel == "publiceer":
         return "✓ approved — recorded as a label"
-    rol = FIELD_NOTE_ROL if soort == "fieldnote" else COMPLIANCE_ROL
+    rol = FIELD_NOTE_ROL if soort == "fieldnote" else compliance_rol(st)
+    if not rol:
+        return "⚠ no live role owns the claims domain — the correction was not routed"
     wat = f"Field Note {sleutel}" if soort == "fieldnote" else f"proof entry {sleutel}"
     claims_board.bericht_aan_rol(
         st, rol, f"The founder asks for a correction on {wat}.", door="founder-flow",

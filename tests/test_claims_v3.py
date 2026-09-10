@@ -36,8 +36,12 @@ _BRONNEN = ("\nA | EU-richtlijn 2024/825 | https://eur-lex.europa.eu/x\n"
 
 
 def _ctx(tmp_path, bronnen=_BRONNEN):
+    # `records=None` volstond zolang de skill de eigenaar als naam kende. Sinds hij de rol uit het
+    # CLAIMS-DOMEIN afleidt, moet het dorp in deze dubbel ook echt een houder van dat domein hebben
+    # — anders maakt de skill terecht geen eigenaarloze taak aan en meet de test niets.
     return SimpleNamespace(data_dir=str(tmp_path), settings={"regulation_sources": bronnen},
-                           projects=ProjectLedger(str(tmp_path / "p.json")), records=None)
+                           projects=ProjectLedger(str(tmp_path / "p.json")),
+                           records=_records_dubbel())
 
 
 def _fetch(inhoud: str, ctype: str = "text/html"):
@@ -258,12 +262,32 @@ class _Assign:
         return self._m.get(rid, [])
 
 
-def _omg(tmp_path, fillers=None, ouder="cirkel"):
+def _records_dubbel(ouder="cirkel", claims_eigenaar="compliance"):
+    """Records-dubbel dat óók de vraag "wie bezit het claims-domein" kan beantwoorden.
+
+    Kende alleen `get`. Dat volstond zolang de routing een hardgecodeerd rol-id gebruikte; sinds
+    ze het DOMEIN leest, kan een dubbel zonder `all()` die vraag niet beantwoorden en luidt het
+    antwoord "niemand" — waarna er geen enkele taak meer werd aangemaakt en de tests faalden op
+    een dubbel dat niet meer op de echte store leek."""
+    eigenaar = SimpleNamespace(id=claims_eigenaar, parent=ouder, archived=False,
+                               definition=SimpleNamespace(domains=[claims_db.DOMEIN]))
+
     class _Records:
         def get(self, rid):
-            return SimpleNamespace(id=rid, parent=ouder)
+            if rid == claims_eigenaar:
+                return eigenaar
+            return SimpleNamespace(id=rid, parent=ouder, archived=False,
+                                   definition=SimpleNamespace(domains=[]))
+
+        def all(self):
+            return [eigenaar]
+
+    return _Records()
+
+
+def _omg(tmp_path, fillers=None, ouder="cirkel"):
     return SimpleNamespace(projects=ProjectLedger(str(tmp_path / "p.json")),
-                           records=_Records(), assign=_Assign(fillers or {}),
+                           records=_records_dubbel(ouder), assign=_Assign(fillers or {}),
                            data_dir=str(tmp_path))
 
 
@@ -493,13 +517,24 @@ def test_escaleren_telt_niet_mee_in_de_score():
     assert uitslag["score"] == 100
 
 
-def test_escaleren_gaat_altijd_naar_compliance():
-    """Ook als de categorie naar een andere rol zou wijzen: er valt te oordelen, niet uit te voeren."""
+def test_escaleren_gaat_altijd_naar_de_houder_van_het_claims_domein():
+    """Ook als de categorie naar een andere rol zou wijzen: er valt te oordelen, niet uit te voeren.
+
+    Toetst de REGEL, niet de naam. Deze test eiste letterlijk `== "compliance"` en bevroor daarmee
+    het rol-id dat de code juist niet meer hoort te kennen; hij zou groen blijven terwijl het werk
+    naar een gearchiveerde rol ging."""
     from nooch_village.views.claims import rol_voor
+    recs = _records_dubbel(claims_eigenaar="wie_dan_ook")
     assert rol_voor("Labels") == "visual designer"                  # normaal
-    assert claims_board.rol_id_voor("visual designer", None,
-                                    claims_db.ESCALEREN) == "compliance"
-    assert claims_board.rol_id_voor("marketeer", None, "red") != "compliance"
+    assert claims_board.rol_id_voor("visual designer", recs,
+                                    claims_db.ESCALEREN) == "wie_dan_ook"
+    assert claims_board.rol_id_voor("marketeer", recs, "red") != "wie_dan_ook"
+
+
+def test_zonder_houder_van_het_domein_wijst_de_routing_niemand_aan():
+    """Geen levende rol met het claims-domein: geen willekeurige rol, en geen dood id."""
+    assert claims_board.rol_id_voor("visual designer", None, claims_db.ESCALEREN) == ""
+    assert claims_board.claims_rol(None) == ""
 
 
 def test_escaleren_wordt_een_beoordeel_taak(tmp_path):

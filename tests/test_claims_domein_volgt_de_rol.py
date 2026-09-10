@@ -28,7 +28,20 @@ def _stores(tmp_path):
     return cockpit2._Stores(dd)
 
 
+def _ontneem_domein(st, role_id: str):
+    """Haal het claims-domein weg bij een rol. De bootstrap-fixture heeft sinds scope 38 een
+    Compliance-rol die het domein bezit, net als productie; wie in een test een ándere houder
+    wil toetsen, moet die eerst loslaten."""
+    rec = st.records.get(role_id)
+    if rec is not None:
+        rec.definition.domains = []
+        st.records.put(rec)
+
+
 def _geef_domein(st, role_id: str, domein: str = CLAIMS):
+    # De fixture bevat sinds scope 38 zelf een Compliance-rol met dit domein (zoals productie).
+    # Die moet eerst loslaten, anders toetst deze test op twee kandidaten in plaats van één.
+    _ontneem_domein(st, "mother_earth__nooch__compliance")
     rec = st.records.get(role_id)
     rec.definition.domains = [domein]
     st.records.put(rec)
