@@ -38,7 +38,7 @@ def test_een_geslaagde_actie_is_geen_weigering():
 #: De tekens waarmee een GESLAAGDE actie begint. Deze lijst staat hier en niet in `cockpit2`,
 #: want hij bestaat alleen om de test hieronder een onafhankelijk oordeel te geven: een teken dat
 #: niet in `_WEIGERING_TEKENS` staat en niet hier, is een teken dat NIEMAND heeft ingedeeld.
-_SUCCES_TEKENS = frozenset("✓🔗🗑📥➕📄▶🧩✨↩○↻📦🤖🏷")
+_SUCCES_TEKENS = frozenset("✓🔗🗑📥➕📄▶🧩✨↩○↻📦🤖🏷🎯")   # 🎯 = doelen (scope 46): gekoppeld/aangemaakt
 
 
 def _meldingen() -> set[str]:

@@ -764,7 +764,7 @@ def _radar_verwijzing(st: _Stores, rec) -> str:
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
-                van: str = "", tot: str = "", compare: bool = False) -> str:
+                van: str = "", tot: str = "", compare: bool = False, goal: str = "") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Not found", "<p>Node not found.</p><p><a href='/'>← home</a></p>")
@@ -811,7 +811,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
-        content = _projects_tab_html(st, rec, csrf_token, group=group, username=username)
+        content = _projects_tab_html(st, rec, csrf_token, group=group, username=username, goal=goal)
     elif tab == "policies":
         content = _artefact_tab_html(st, rec, "policy", csrf_token, username,
                                      titel="Policies", leeg="No policies on this role/circle yet.")

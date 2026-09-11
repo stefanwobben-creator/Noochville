@@ -63,3 +63,25 @@ het detail. Roll-up: project → activiteit → doel. De urenstaat is een afgele
 ## Referentie
 Inhoud/uren/rollen: `MITH_projectenlijst_Barefoot.md`. Mockups: `MITH_doelen_incockpit.html` (leidend),
 `MITH_doelen_prototype.html`, `MITH_prototype.html`, `MITH_kanban_prototype.html`.
+
+## Gebouwd — scope 46, 11 september 2026
+
+Stefan: "tijd om die functionaliteit te bouwen; onder goals hangen weer projecten, we willen voortgang
+zien, en het kritieke pad." Zijn keuzes: afhankelijkheden per project (ja), deadline op het doel, uren
+later. Het model hierboven is gebouwd zoals beschreven; wat afwijkt staat hieronder expliciet.
+
+| prototype (`MITH_doelen_incockpit.html`) | live | opmerking |
+|---|---|---|
+| `.pill` / `.pill.on` (doel-filterbalk) | `.cl-filter.pill` / `.on` in `.vswitch` | bestaande filter-pillen, plus "all goals →" |
+| `.objhead` (paarse doelkop) | `.card.doel` | nieuwe tint-tokens `--goal`/`--goal-tint`; variant heet `doel` omdat `.goal` al bestaat (metrics-balk) |
+| `.bar` (voortgang in de kop) | `<progress class='pbar wide'>` | zelfde balk als de kaart, als `<progress>` zodat de breedte geen inline style is |
+| `.glabel` (doel-label op de kaart) | `.chip.doel` (link naar `/goal`) | |
+| `.kcard .pbar` (voortgang op de kaart) | bestaande `.pbadge`/`.pbar` | ongewijzigd |
+| "◎ Goals"-knop + `.goalbox` in de modal | rail-regels **Goal · Work package · Depends on** (`_meta_rij`, `mform`, autosave) | bewust anders: sinds de rail-herindeling woont alle meta in de rail; een box achter een knop was een tweede huis |
+| Budget / Werkelijke uren | niet gebouwd | uren = scope 47, zodra de subsidie-administratie het vraagt; `doel_id`/`activiteit` staan er al |
+| Doel-pagina (roll-up + bord gefilterd) | `/goal?id=` met roll-up, **kritieke pad**, projecten per status, bulk koppelen, bewerken; `/goals` als overzicht (footer-navigatie) | kritieke pad is nieuw t.o.v. de notitie |
+| Nederlandse labels ("Doel") | Engelse chrome ("Goal", "Goals") | sinds #466 is de cockpit-chrome Engels; de notitie dateert van daarvoor |
+
+Voortgang = (afgerond × 1 + open × checklist-ratio) / aantal, in `doelen.voortgang`. Kritieke pad in
+`doelen.kritieke_pad`: langste keten van open projecten via `depends_on`, knelpunt, wachtend, vrij,
+deadline-vlaggen; een kring is een invoerfout. Zaad: `village doelen_zaad --apply` (vijf doelen).
