@@ -11,12 +11,23 @@ from __future__ import annotations
 import datetime
 import types
 
+import pytest
+
 from nooch_village import cockpit2
 from nooch_village.collector import collect_daily_observations
 from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill, _METRICS, _fase_zin, _kort_element
 
 URL = "https://nooch.earth/"
+
+
+@pytest.fixture(autouse=True)
+def _geen_key_uit_de_omgeving(monkeypatch):
+    """Hermetisch, zoals `_isolate_llm_keys` in conftest: `load_context` zet .env in os.environ
+    (setdefault) en dat blijft de hele suite plakken. Met een echte PAGESPEED_API_KEY in een lokale
+    .env faalden de drie zonder-key-tests (Stefan, 11 september 2026: 3 failed, in de cloud en in CI
+    groen omdat daar geen .env staat). De key komt in deze tests alleen uit de context."""
+    monkeypatch.delenv("PAGESPEED_API_KEY", raising=False)
 
 
 def _psi(*, met_veld: bool = True, origin_fallback: bool = False) -> dict:
