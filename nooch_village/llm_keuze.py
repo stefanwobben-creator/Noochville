@@ -76,6 +76,7 @@ HOOG_INZET: frozenset[str] = frozenset({
     "skill_bulletin",            # mens-facing
     "skill_voorstel",            # de mens beslist hierop
     "noochie_weigh_in",          # de brug naar The Source
+    "noochie_memo",              # mens-facing: de memo aan de founder — één call, hier telt het oordeel
 })
 
 # ── En de tegenhanger: waar goedkoop de JUISTE keuze is ──────────────────────────────────────

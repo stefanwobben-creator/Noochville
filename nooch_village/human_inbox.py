@@ -26,14 +26,22 @@ FOUNDER_ROLE_ID = os.getenv("FOUNDER_ROLE_ID",
                             "mother_earth__nooch__strategic_lead_founder_steward")
 
 
-def _notify_founder(inbox_path: str, *, by: str, snippet: str) -> None:
+def _notify_founder(inbox_path: str, *, by: str, snippet: str, extra: dict | None = None) -> None:
     """Zet een HEADS-UP-notificatie voor de founder naast de human_inbox (zelfde data/-map).
-    Nooit een approve-knop — alleen context + verwijzing terug naar het CLI-oppervlak. Fail-soft."""
+    Nooit een approve-knop — alleen context + verwijzing terug naar het CLI-oppervlak. Fail-soft.
+
+    `extra` gaat ongewijzigd door naar `NotifStore.add`. Eén reden om het mee te geven: een item dat
+    zijn `type` al bij het ontstaan kent, gaat NIET langs de herschrijf-poort. Die poort is er om
+    een rauwe één-regel-signalering te typeren en, bij een niet-menselijke schrijver, te
+    HERSCHRIJVEN met een goedkoop model. Voor een memo van 250 woorden die al mens-facing is
+    (`noochie_memo`) is dat geen verrijking maar verminking — en een stille: de lezer ziet dan
+    tekst die Noochie niet schreef, onder haar naam. Zonder `extra` verandert er niets voor de
+    bestaande aanroepers."""
     try:
         from nooch_village.notifications import NotifStore
         pad = os.path.join(os.path.dirname(inbox_path) or ".", "notifications.json")
         # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
-        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet)
+        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet, extra=extra)
     except Exception:
         pass
 
