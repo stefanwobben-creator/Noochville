@@ -154,6 +154,10 @@ ul.clean li:last-child{border-bottom:none}
 .cat-tags{display:inline-flex;gap:.3rem;align-items:center}
 .cat-card.hide{display:none}
 .card.arch{opacity:.6}
+/* doelen (scope 46): de variant heet 'doel', want '.goal' bestaat al (metrics: de doel-balk, flex-kolom) */
+.card.doel{background:var(--goal-tint);border-color:#d9ccef}
+.card.doel progress.pbar::-webkit-progress-value{background:var(--goal)}
+.card.doel progress.pbar::-moz-progress-bar{background:var(--goal)}
 .pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
 .pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
 .pcard:active{cursor:grabbing}
@@ -175,6 +179,12 @@ ul.clean li:last-child{border-bottom:none}
 .pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
+/* doelen (scope 46): dezelfde balk als <progress>, zodat de breedte geen inline style hoeft te zijn */
+progress.pbar{appearance:none;-webkit-appearance:none;border:none;display:inline-block;vertical-align:middle}
+progress.pbar::-webkit-progress-bar{background:var(--border);border-radius:999px}
+progress.pbar::-webkit-progress-value{background:var(--green);border-radius:999px}
+progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
+.pbar.wide{width:180px;height:8px}
 .pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
 /* override de basis-details-stijl (wit kaartje) → ghost in de kolomkleur, Trello-stijl */
 .qadd{margin-top:.15rem;padding:0}
@@ -220,6 +230,8 @@ ul.clean li:last-child{border-bottom:none}
    van de goedkope terugval-trede kwam i.p.v. het gevraagde model. Bewust anders dan coral (kapotte
    API) en muted (geen data) — er IS een resultaat, het is alleen niet wat er gevraagd werd. */
 .chip.amber{background:var(--yellow-light);color:#8a6d0b;border:1px solid var(--yellow)}
+.chip.doel{background:var(--goal-tint);color:var(--goal);text-decoration:none}
+.chip.doel:hover{background:var(--goal);color:#fff}
 .chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
 /* Impact-pills (scope 2): klikbare optie-chips met semantische kleur; elke pill toont z'n kleur (gedempt),
    de gekozen pill (.on) staat vol + met inset-ring. Kleuren per spec: g=groen, n=grijs, r=rood, l=lichtgrijs. */

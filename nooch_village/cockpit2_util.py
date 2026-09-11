@@ -506,6 +506,7 @@ _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 # hun inhoud verhuist in latere fasen. "Reference, don't copy": één bron voor de nav.
 # Kennisbank woont sinds de IA-opruiming onder de Librarian-rol (Tools-tab), niet in de top-nav.
 _NAV_ITEMS = (
+    ("/goals", "Goals"),
     ("/metrics2", "Metrics"),
     ("/admin", "People"),
 )

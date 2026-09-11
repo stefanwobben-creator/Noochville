@@ -243,6 +243,11 @@ class ProjectLedger:
             "opdrachtgever": opdrachtgever or "",
             "cluster":     cluster,             # cluster-root id (master-switch werkt hierop)
             "waiting_on":  None,                # project/briefje waarop dit wacht (resume-trigger)
+            # Het doel waar dit project aan bijdraagt (`doelen.py`), optioneel met werkpakket; en de
+            # projecten waar dit project op wacht (planning, los van de runtime-status hierboven).
+            "doel_id":     None,
+            "activiteit":  None,
+            "depends_on":  [],
         }
         self._save()
         return pid
@@ -321,6 +326,34 @@ class ProjectLedger:
         if p is None:
             return False
         p["due"] = (due or "").strip() or None
+        self._touch(p)
+        self._save()
+        return True
+
+    def set_doel(self, pid: str, doel_id: str, activiteit: str = "") -> bool:
+        """Koppel het project aan een doel (of ontkoppel: leeg doel). Het werkpakket hoort bij het
+        doel, dus zonder doel geen werkpakket. Het project blijft van zijn rol."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["doel_id"] = (doel_id or "").strip() or None
+        p["activiteit"] = ((activiteit or "").strip() or None) if p["doel_id"] else None
+        self._touch(p)
+        self._save()
+        return True
+
+    def set_depends_on(self, pid: str, pids) -> bool:
+        """Zet de lijst projecten waar dit project op wacht (planning). Nooit zichzelf, geen
+        dubbelen, alleen bestaande projecten; de volgorde blijft die van de invoer."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        schoon: list[str] = []
+        for d in (pids or []):
+            d = str(d or "").strip()
+            if d and d != pid and d in self._projects and d not in schoon:
+                schoon.append(d)
+        p["depends_on"] = schoon
         self._touch(p)
         self._save()
         return True
@@ -1494,7 +1527,7 @@ _WRITE_METHODS = (
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
     "set_item_human", "set_item_payload",
-    "set_item_text", "move_item",
+    "set_item_text", "move_item", "set_doel", "set_depends_on",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

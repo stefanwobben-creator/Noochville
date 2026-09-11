@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.project_essentie import essentie_van
 from nooch_village.projects import heeft_seed_vorm
+from nooch_village import doelen as _D
 from nooch_village.cockpit2_util import (
     _DS_LINK,
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
@@ -35,6 +36,7 @@ _PROJ_CHIP = {   # opgeslagen status-sleutel -> (Engels label, chip-kleur-modifi
 # ook in geen enkele kolom van _PROJ_COLS — deze constante maakt dat expliciet in plaats van
 # impliciet, zodat de telling "Projects (N)" eerlijk blijft.
 _OFF_BOARD = ("draft", "proposed")
+from nooch_village.projects import KLAAR as _P_KLAAR   # afgerond = geen schakel meer
 
 
 def _proj_chip(status: str) -> str:
@@ -358,6 +360,46 @@ def _scope_text(p) -> str:
     return str(scope or "—")
 
 
+def _doel_chip(st: _Stores, p: dict) -> str:
+    """Het doel-etiket op de kaart (prototype: `.glabel` → `.chip.doel`). Alleen het korte label;
+    de kaart blijft minimaal, de rest staat op de doelpagina."""
+    d = st.doelen.get(p.get("doel_id") or "") if p.get("doel_id") else None
+    if not d:
+        return ""
+    return f"<a class='chip doel' href='/goal?id={_e(d['id'])}' title='{_e(d['titel'])}'>{_e(d['label'])}</a>"
+
+
+def _doel_pills(st: _Stores, base: str, goal: str, nav: str = "") -> str:
+    """Doel-filterbalk boven het bord (prototype: `.pill` → `.cl-filter.pill`). Leeg zonder doelen.
+    In een modal (werkoverleg) reizen de links als js-modal, zoals de group-by-knoppen."""
+    doelen = [d for d in st.doelen.all() if d.get("status") == "open"]
+    if not doelen:
+        return ""
+    def _lnk(v: str, lbl: str) -> str:
+        u = base if not v else f"{base}&goal={urllib.parse.quote(v)}"
+        cls = "cl-filter pill js-modal" if nav else "cl-filter pill"
+        dh = f" data-href='{_e(u)}'" if nav else ""
+        return f"<a class='{cls}{' on' if goal == v else ''}' href='{_e(u)}'{dh}>{_e(lbl)}</a>"
+    pills = _lnk("", "All") + "".join(_lnk(d["id"], d["label"]) for d in doelen)
+    return (f"<div class='vswitch'>Goal: {pills} "
+            f"<a class='cl-filter' href='/goals'>all goals →</a></div>")
+
+
+def _doel_kop(st: _Stores, goal: str) -> str:
+    """De doelkop boven het gefilterde bord (prototype: `.objhead` → `.card.doel`): titel, deadline,
+    af x/y met de balk. De cijfers komen uit `doelen.voortgang`, nergens anders vandaan."""
+    d = st.doelen.get(goal) if goal else None
+    if not d:
+        return ""
+    v = _D.voortgang(d, st.projects.all())
+    dl = f"<span class='chip outline'>{_IC_CLOCK}{_e(_fmt_due(d['deadline']) or d['deadline'])}</span>" if d.get("deadline") else "<span class='muted'>no deadline</span>"
+    return (f"<div class='card doel'><div class='cl-head'><h3>🎯 {_e(d['titel'])}</h3>"
+            f"<span class='kc-actions'>{dl} <a class='btn sm' href='/goal?id={_e(d['id'])}'>open goal</a></span></div>"
+            f"<div class='pbadge' title='{v['punten']} of {v['totaal']} (done counts 1, open projects their checklist ratio)'>"
+            f"<progress class='pbar wide' value='{v['pct']}' max='100'></progress>"
+            f"<span>{v['pct']}% · {v['af']}/{v['totaal']} done</span></div></div>")
+
+
 def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     pid = p["id"]
     href = f"/project?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
@@ -367,7 +409,7 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
     meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
             f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
-    inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
+    inner = (f"{bar}{_doel_chip(st, p)}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
              f"{meta}{_kaart_status(st, p)}{_progress_badge(p)}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
@@ -814,7 +856,7 @@ def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True,
-                       username: str | None = None, nav: str = "") -> str:
+                       username: str | None = None, nav: str = "", goal: str = "") -> str:
     """`nav` = het bord draait IN een modal (het werkoverleg); dan is dát de terugkeer-URL.
 
     Zonder deze parameter wees alles hier naar `/node?id=…&tab=projects`. De overlay onderschept
@@ -826,22 +868,28 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     tweede mechaniek, en buiten een modal verandert er niets."""
     allp = st.projects.all()
     back_base = nav or f"/node?id={rec.id}&tab=projects"
+    # Het doel-filter (`?goal=`): de kaarten van één doel, met de doelkop erboven. Onbekend doel =
+    # geen filter, geen foutmelding.
+    goal = goal if goal and st.doelen.get(goal) else ""
+    pills = _doel_pills(st, back_base, goal, nav)
+    kop = _doel_kop(st, goal)
 
     addlink = _wizard_addlink(rec, csrf_token) if add else ""
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
         mine = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
-        projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
+        projs = [p for p in mine if p.get("status") not in _OFF_BOARD and (not goal or p.get("doel_id") == goal)]
         drafts = [p for p in mine if p.get("status") == "draft"]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
-        board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
+        back_rol = f"{back_base}&goal={urllib.parse.quote(goal)}" if goal else back_base
+        board = _projects_board(st, projs, rec.id, csrf_token, back_rol, "persoon", quickadd=add)
         if not board:
             board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
                      else "<p class='muted'>No projects yet.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>")
-        return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
+        return (f"<div class='c2-sec'>{head}{pills}{kop}{_drafts_html(st, drafts, csrf_token, back_base)}"
                 f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 
     # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
@@ -851,9 +899,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     rids = {r.id for r in direct}
     ii = f"{_II_PREFIX}{rec.id}"
     mine = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
-    projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
+    projs = [p for p in mine if p.get("status") not in _OFF_BOARD and (not goal or p.get("doel_id") == goal)]
     drafts = [p for p in mine if p.get("status") == "draft"]
-    back = f"{back_base}&group={g}"
+    back = f"{back_base}&group={g}" + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
         board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
@@ -867,7 +915,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                     f"<p class='muted' style='font-size:.8rem'>A subcircle has its own "
                     f"project board.</p><ul class='clean'>{lis}</ul></div>")
     def _vbtn(v: str, lbl: str) -> str:
-        u = f"{back_base}&group={v}"
+        u = f"{back_base}&group={v}" + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
         cls = "vbtn js-modal" if nav else "vbtn"
         dh = f" data-href='{_e(u)}'" if nav else ""
         return f"<a class='{cls}{' on' if g == v else ''}' href='{_e(u)}'{dh}>{lbl}</a>"
@@ -885,7 +933,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                    and (o := p.get("owner")) and not o.startswith(_II_PREFIX)
                    and st.records.get(o) is None]
         orphans_html = _orphans_html(st, orphans, csrf_token, back_base)
-    return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back)}"
+    return (f"<div class='c2-sec'>{head}{pills}{kop}{_drafts_html(st, drafts, csrf_token, back)}"
             f"{board}{sub_html}</div>{orphans_html}")
 
 
@@ -1219,6 +1267,74 @@ def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "", terminaal: str = "
     return "".join(uit)
 
 
+def _doel_rijen(st, p, rw: bool, hid) -> str:
+    """Goal · Work package · Depends on, als rail-regels (zelfde `mform`/`ctrl`/autosave als impact).
+
+    Goal: een select over de open doelen (`proj_goal`). Work package: alleen als het doel er
+    werkpakketten heeft. Depends on: de projecten waar dit op wacht als chips met een ×, plus een
+    select om er één toe te voegen (`proj_depends`); kandidaten = de open projecten van hetzelfde
+    doel, want een keten loopt binnen een doel (en zonder doel is er geen keten)."""
+    doelen = [d for d in st.doelen.all() if d.get("status") == "open" or d["id"] == p.get("doel_id")]
+    cur = st.doelen.get(p.get("doel_id") or "") if p.get("doel_id") else None
+    uit = []
+    if not rw or hid is None:
+        uit.append(_meta_rij("Goal", f"<span class='ctrl'>{_e(cur['label']) if cur else '—'}</span>"))
+        if cur and p.get("activiteit"):
+            uit.append(_meta_rij("Work package", f"<span class='ctrl'>{_e(p['activiteit'])}</span>"))
+    else:
+        # alleen het korte label in de select: de rail is smal, de titel staat in de tooltip
+        opts = "".join(f"<option value='{_e(d['id'])}' title='{_e(d['titel'])}'{' selected' if cur and d['id'] == cur['id'] else ''}>"
+                       f"{_e(d['label'])}</option>" for d in doelen)
+        act_hidden = f"<input type='hidden' name='activiteit' value='{_e(p.get('activiteit') or '')}'>"
+        uit.append(_meta_rij("Goal",
+                             f"<form method='post' action='/action' class='mform'>{hid()}"
+                             f"<input type='hidden' name='action' value='proj_goal'>{act_hidden}"
+                             f"<select class='ctrl' name='doel_id' onchange='{_AUTOSAVE}'>"
+                             f"<option value=''>—</option>{opts}</select></form>"))
+        if cur and cur.get("activiteiten"):
+            aopts = "".join(f"<option value='{_e(a)}'{' selected' if a == p.get('activiteit') else ''}>{_e(a)}</option>"
+                            for a in cur["activiteiten"])
+            uit.append(_meta_rij("Work package",
+                                 f"<form method='post' action='/action' class='mform'>{hid()}"
+                                 f"<input type='hidden' name='action' value='proj_goal'>"
+                                 f"<input type='hidden' name='doel_id' value='{_e(cur['id'])}'>"
+                                 f"<select class='ctrl' name='activiteit' onchange='{_AUTOSAVE}'>"
+                                 f"<option value=''>—</option>{aopts}</select></form>"))
+    # afhankelijkheden
+    per_id = {q["id"]: q for q in st.projects.all()}
+    deps = [d for d in (p.get("depends_on") or []) if d in per_id]
+    chips = ""
+    for d in deps:
+        q = per_id[d]
+        klaar = q.get("status") in _P_KLAAR
+        naam = _e(_scope_text(q)[:34])
+        rm = ""
+        if rw and hid is not None:
+            rm = (f"<form method='post' action='/action' class='pf'>{hid()}"
+                  f"<input type='hidden' name='action' value='proj_depends'>"
+                  f"<input type='hidden' name='remove' value='{_e(d)}'>"
+                  f"<button class='dellink' type='submit' title='remove dependency'>×</button></form>")
+        # één regel per afhankelijkheid: chip (groen = af, amber = nog niet) en de ×
+        chips += (f"<div class='fieldform'><span class='chip {'green' if klaar else 'amber'}' "
+                  f"title='{_e(_scope_text(q))} · {'done' if klaar else 'not done yet'}'>"
+                  f"<a href='/project?pid={_e(d)}'>{naam}</a></span>{rm}</div>")
+    add = ""
+    if rw and hid is not None:
+        if cur:
+            kandidaten = [q for q in _D.projecten_van(cur["id"], st.projects.all())
+                          if q["id"] != p["id"] and q["id"] not in deps and q.get("status") not in _P_KLAAR]
+            kopts = "".join(f"<option value='{_e(q['id'])}'>{_e(_scope_text(q)[:70])}</option>" for q in kandidaten)
+            add = (f"<form method='post' action='/action' class='mform'>{hid()}"
+                   f"<input type='hidden' name='action' value='proj_depends'>"
+                   f"<select class='ctrl' name='add' onchange='{_AUTOSAVE}'>"
+                   f"<option value=''>+ waits on…</option>{kopts}</select></form>") if kandidaten else ""
+        else:
+            add = "<span class='muted'>link to a goal first</span>" if not deps else ""
+    if chips or add:
+        uit.append(_meta_rij("Depends on", f"{chips}{add}" or "—"))
+    return "".join(uit)
+
+
 def _eigenaar_control(st, p, rw: bool = False, hid=None, trekker_opts: str = "") -> str:
     """De trekker als rail-control: wie het DOET. De rol (waar het hangt) staat een regel lager.
 
@@ -1412,9 +1528,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     cl_inner = (checklists_html or "<p class='muted'>No checklist yet.</p>") + cl_new
     checklist_panel = _psec(_IC_CHECK, "Checklist", cl_inner)
 
-    # 3) Doel & relaties — placeholder (functie later)
-    goal_knop = (f"<button type='button' class='rail-btn' disabled>{_IC_TARGET}"
-                 f"<span>Link to goal · soon</span></button>")
+    # 3) Doel & afhankelijkheden — in de rail, als meta (zie _doel_rijen). Het prototype had hier
+    # een aparte goalbox achter een knop; sinds de rail alle meta in één huis heeft, hoort dit
+    # erbij en niet erachter.
+    goal_knop = ""
     # ═══ DE RAIL: licht, één regel per veld, waarde rechts ════════════════════════════
     # De meta stond in .dcol-rijen die de kolom zwaar maakten. Wat naar de header verhuisde
     # (impact, business, inzet, status, trekker) staat hier NIET meer — twee plekken voor hetzelfde
@@ -1432,6 +1549,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             + _meta_rijen(st, p, rw, hid, _trekker_opts_html, terminaal)
             + _meta_rij("Role", rol_v)
             + _meta_rij("Deadline", due_head or "—")
+            + _doel_rijen(st, p, rw, hid)
             + _meta_rij("Visible", vis_v)
             + _meta_rij("Created", _created_full(p.get("created_at")))
             + f"<div class='railsplit'></div>"

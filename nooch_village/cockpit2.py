@@ -112,6 +112,7 @@ from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_ca
 from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
 from nooch_village import notifications
 from nooch_village.notifications import NotifStore
+from nooch_village.doelen import DoelStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
 from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
@@ -161,6 +162,7 @@ class _Stores:
         self.defs = DefinitionStore(os.path.join(dd, "definitions.json"))
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
+        self.doelen = DoelStore(os.path.join(dd, "doelen.json"))          # Doelen: waar het werk naartoe gaat (doelen.py)
         # Welke rollen bewust meetellen in de copy-prompt-stack van een andere rol. Erfenis loopt
         # omhoog; een zusterrol insluiten is een besluit en staat daarom vastgelegd.
         self.copy_stack = CopyStackConfig(os.path.join(dd, "copy_stack.json"))
@@ -327,6 +329,7 @@ from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.site_audit import render_site_audit
+from nooch_village.views.doelen import render_goals, render_goal
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village import founder_kaart as _founder_kaart
@@ -2089,6 +2092,83 @@ def _act_proj_setdue(c):
         if pj.set_due(g("pid"), g("due")):
             msg = "📅 date saved" if g("due") else "✓ date removed"
         return nxt, msg
+
+
+def _act_proj_goal(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        # AUTHZ: rolvervuller of Circle Lead — het project blijft van zijn rol; aan welk doel het
+        # bijdraagt is een operationele keuze van die rol (zelfde poort als de deadline).
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        doel = g("doel_id")
+        if doel and st.doelen.get(doel) is None:
+            return nxt, "✗ goal not found"
+        if pj.set_doel(g("pid"), doel, g("activiteit")):
+            return nxt, ("🎯 linked to goal" if doel else "✓ unlinked from goal")
+        return nxt, ""
+
+
+def _act_proj_depends(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        # AUTHZ: rolvervuller of Circle Lead — de planning van het eigen project (waar wacht ik op).
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        p = pj.get(g("pid")) or {}
+        huidig = list(p.get("depends_on") or [])
+        if g("add"):
+            huidig.append(g("add"))
+        if g("remove"):
+            huidig = [d for d in huidig if d != g("remove")]
+        if pj.set_depends_on(g("pid"), huidig):
+            return nxt, ("✓ dependency added" if g("add") else "✓ dependency removed")
+        return nxt, ""
+
+
+def _act_goal_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        # AUTHZ: anchor-lead — een doel is intentielaag (founder-eigendom), geen rol-werk.
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        try:
+            d = st.doelen.add(g("titel"), label=g("label"), dod=g("dod"), deadline=g("deadline"),
+                              activiteiten=[a for a in (g("activiteiten") or "").splitlines()], by=username or "")
+        except ValueError as exc:
+            return nxt, f"✗ {exc}"
+        return f"/goal?id={d['id']}", "🎯 goal created"
+
+
+def _act_goal_edit(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        # AUTHZ: anchor-lead — zie goal_add.
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        velden = {k: g(k) for k in ("titel", "label", "dod", "deadline", "status") if k in c.form}
+        if "activiteiten" in c.form:
+            velden["activiteiten"] = [a for a in (g("activiteiten") or "").splitlines()]
+        if st.doelen.update(g("id"), **velden):
+            return nxt, "✓ goal saved"
+        return nxt, "✗ goal not found"
+
+
+def _act_goal_link(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        # AUTHZ: anchor-lead — in bulk projecten van allerlei rollen aan een doel hangen is
+        # org-breed; per project doet de rol het zelf via proj_goal.
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        doel = g("id")
+        if st.doelen.get(doel) is None:
+            return nxt, "✗ goal not found"
+        n = 0
+        for pid in c.form.get("pids") or []:
+            if pj.set_doel(pid, doel):
+                n += 1
+        return nxt, f"🎯 {n} project(s) linked" if n else "nothing selected"
 
 
 def _act_attach_add(c):
@@ -5983,6 +6063,11 @@ ACTIONS = {
     "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,
     "proj_setprivate": _act_proj_setprivate,
     "proj_setdue": _act_proj_setdue,
+    "proj_goal": _act_proj_goal,
+    "proj_depends": _act_proj_depends,
+    "goal_add": _act_goal_add,
+    "goal_edit": _act_goal_edit,
+    "goal_link": _act_goal_link,
     "attach_add": _act_attach_add,
     "attach_remove": _act_attach_remove,
     "react_add": _act_react_add,
@@ -6366,6 +6451,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_node(st, nid, ntab, csrf_token=effective_csrf,
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
+                                       goal=(qs.get("goal") or [""])[0],
                                        clf=(qs.get("clf") or ["due"])[0],
                                        mw=(qs.get("mw") or ["7d"])[0],
                                        van=(qs.get("van") or [""])[0],
@@ -6503,6 +6589,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 except Exception:
                     _hi = None
                 self._send(render_skills(st, _hi))
+                return
+            if path == "/goals":
+                # AUTHZ: iedereen-ingelogd — de doelen zijn de richting van het hele dorp, dus
+                # net zo leesbaar als het bord; schrijven zit achter de anchor-poort in de takken.
+                self._send(render_goals(st, csrf_token=effective_csrf, username=username,
+                                        msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/goal":
+                # AUTHZ: iedereen-ingelogd — zie /goals.
+                self._send(render_goal(st, (qs.get("id") or [""])[0], csrf_token=effective_csrf,
+                                       username=username, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/site-audit":
                 # De lampjes van de shop (bereikbaar, Lighthouse, claims) uit de laatste run van

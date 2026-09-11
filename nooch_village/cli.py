@@ -1321,6 +1321,21 @@ def main() -> None:
             print("gewisseld sinds de vorige run: " + ", ".join(f"{w['naam']} {w['was']}→{w['nu']}" for w in wissels))
         print("bekijk: /site-audit" + ("?doel=dev" if doel == "dev" else "") + " (Website Developer → Tools)")
 
+    elif mode == "doelen_zaad":
+        # De vijf doelen van 11 september 2026 (doelen.ZAAD), idempotent op label. Dry-run default;
+        # --apply schrijft. Deadline en definition of done vult de founder daarna in op /goal.
+        from nooch_village import doelen
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv[2:]
+        for r in doelen.zaai(st.doelen, apply=apply):
+            print(f"  {r['actie']:<12} {r['label']:<14} {r['titel']}" + (f"  ({r['id']})" if r["id"] else ""))
+        print("bekijk: /goals" if apply else "DRY-RUN — niets geschreven. Draai opnieuw met --apply.")
+
     elif mode == "wiki_broncheck":
         # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
         # Haalt op (read-only) en toont het rapport; pas met --apply wordt de waarneming
@@ -1975,6 +1990,6 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit",
+              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit | doelen_zaad",
               file=sys.stderr)
         sys.exit(1)
