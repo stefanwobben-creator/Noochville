@@ -140,7 +140,14 @@ def _meld_commando(n: dict) -> None:
     strijken een keer niet gebeurt merkt niemand het — je ziet het pas in je inbox.
 
     Zelfde vorm als 'handhaving vereist waarneembaarheid', nu op de leesbaarheidslaag. Geen blokkade:
-    een melding tegenhouden is duurder dan een lelijke melding doorlaten."""
+    een melding tegenhouden is duurder dan een lelijke melding doorlaten.
+
+    De ene uitzondering is de memo van Noochie (`type: memo`): daar is een opdracht om te plakken
+    (Claude Code, terminal) de bedoeling, expliciet gevraagd door de founder (11 sep 2026). De
+    inbox rendert dat type als document zonder de commando-swap, dus het alarm zou hier elke week
+    afgaan over iets dat klopt."""
+    if str(n.get("type") or "") == "memo":
+        return
     tekst = volledig(n)
     if not tekst or not _COMMANDO_IN_TEKST.search(tekst):
         return

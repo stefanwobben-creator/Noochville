@@ -786,6 +786,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    het op /rapport, waar `.einddoc-vol` de cap toch al ophief. Wat overbleef was een geneste
    scrollbak die het muiswiel opslokt — en dan is de knop eronder onbereikbaar. */
 .einddoc-body{line-height:1.6}
+/* Een codeblok IN een document: de Claude Code-opdracht of het commando dat Noochie's memo
+   meegeeft om te plakken (scope 42a). Zelfde monospace-recept als `.kn-prompt`; pre-wrap zodat
+   een lange regel de kolom niet openbreekt, en een rand zodat je ziet waar het plakwerk begint
+   en eindigt. Element-selector onder de bestaande familie, geen nieuwe klasse. */
+.einddoc-body pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.4;
+ padding:.5rem .6rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);
+ white-space:pre-wrap;overflow-x:auto;margin:.4rem 0 .8rem}
 /* De essentie op de kaart: één of twee zinnen, iets groter dan lopende tekst want dit is het
    enige wat een scanner leest. `einddoc-` en geen eigen prefix — het IS het einddocument, alleen
    ingekort; een nieuwe familie zou een privé-stylesheet voor twee regels zijn. */
