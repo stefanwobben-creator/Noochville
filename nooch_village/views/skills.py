@@ -10,7 +10,7 @@ Vormgeving: hergebruikt het patroon van `views/bronnen.py` (één `.card` per mi
 from __future__ import annotations
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _nav
+from nooch_village.cockpit2_util import _DS_LINK, _nav, _age
 from nooch_village import skills_catalog
 
 
@@ -28,11 +28,45 @@ def _sleutel_regel(sleutels: dict) -> str:
     return f"<div class='muted'>{' · '.join(parts)}</div>"
 
 
+def _draai_regel(draai: dict | None) -> str:
+    """Wat dit gereedschap heeft gedaan. Het belangrijkste veld op de kaart.
+
+    Drie toestanden, en ze zeggen alle drie iets anders:
+    - niet gemeten (None) → we zwijgen; een bewering zonder meting is wat we hier opruimen
+    - nooit gedraaid      → dát is de bouwlijst, en het mag met zoveel woorden op het scherm
+    - wel gedraaid        → wanneer, en wanneer er voor het LAATST iets uitkwam
+
+    Die laatste twee uit elkaar houden is het punt: een skill die elke dag draait en elke dag niets
+    vindt ziet er op 'laatst gedraaid' springlevend uit."""
+    if draai is None:
+        return ""
+    totaal = int(draai.get("totaal") or 0)
+    if not totaal:
+        return ("<div class='muted'>○ No trace yet: this means has never run since the village "
+                "started keeping score.</div>")
+    laatst = float(draai.get("laatst") or 0)
+    opbrengst = float(draai.get("laatste_opbrengst") or 0)
+    tel = (f"{totaal}× · {int(draai.get('gelukt') or 0)} produced, "
+           f"{int(draai.get('leeg') or 0)} empty, {int(draai.get('fout') or 0)} failed")
+    if opbrengst:
+        kern = f"Last produced something {_age(opbrengst)}"
+    else:
+        kern = (f"Ran {_age(laatst)}, but has <b>never</b> produced anything: "
+                f"only empty results or errors")
+    return f"<div class='muted'>{kern} · {tel}</div>"
+
+
 def _gebruikers_regel(gebruikers: list[dict]) -> str:
-    """Wie voert dit middel — en via welke route. De belofte staat erbij bij een koppeling:
-    dát is waar het middel voor dient."""
+    """Aan welke rollen dit middel is TOEGEKEND — via DNA of via een koppeling.
+
+    Let op wat hier NIET in zit: de rugzakken (`config/rugzakken.json`) geven élke rol 37 van de
+    50 skills, en die staan hier niet in. Een lege lijst betekent dus 'niet apart toegekend', niet
+    'niemand kan hem gebruiken'. De oude tekst ("Nobody wields this means yet") beweerde dat
+    laatste, en dat is op 10 september live tot verwarring geleid bij een skill die gewoon draaide.
+    """
     if not gebruikers:
-        return "<div class='muted'>Nobody wields this means yet.</div>"
+        return ("<div class='muted'>Not separately granted to any role (every role reaches it "
+                "through the backpacks).</div>")
     delen = []
     for g in gebruikers:
         if g["route"] == "koppeling":
@@ -63,8 +97,12 @@ def _skill_card(row: dict) -> str:
         tegen = (f"<div class='muted'>Suggestion variant of "
                  f"<code>{_e(row['suggestie_van'])}</code>; the output lands in the queue "
                  f"of the domain owner.</div>")
+    # De eigen beschrijving van de skill staat BOVENAAN, vóór de capability en de sleutels: dat is
+    # wat een mens wil weten ("wat doet dit"), en het stond er tot nu toe helemaal niet.
+    wat = f"<div>{_e(row.get('beschrijving') or '')}</div>" if row.get("beschrijving") else ""
     return (f"<div class='card'><div class='cl-head'><h3>{_e(row['label'])}</h3>"
             f"<span class='kc-actions'>{_markering(row)}</span></div>"
+            f"{wat}{_draai_regel(row.get('draai'))}"
             f"<div class='muted'>capability: <code>{_e(row['skill'])}</code>{extra}</div>"
             f"{_sleutel_regel(row['sleutels'])}{tegen}"
             f"{_gebruikers_regel(row['gebruikers'])}</div>")
@@ -104,7 +142,15 @@ def _gewenst_card(row: dict) -> str:
 # ── De pagina ────────────────────────────────────────────────────────────────
 
 def render_skills(st, human_inbox=None) -> str:
-    data = skills_catalog.catalogus(st.records.all(), st.ai, human_inbox)
+    # De draaistaat hoort erbij: zonder die meting zwijgt de kaart over wat een middel heeft
+    # gedaan, en dan lees je weer een belofte in plaats van een spoor. Fail-soft — een onleesbare
+    # staat maakt de pagina niet stuk, hij zegt er dan niets over.
+    try:
+        from nooch_village import draaistaat as _draaistaat
+        _draai = _draaistaat.Draaistaat(_draaistaat.pad_voor(st.dd))
+    except Exception:                                  # noqa: BLE001
+        _draai = None
+    data = skills_catalog.catalogus(st.records.all(), st.ai, human_inbox, _draai)
 
     uit = data["uitvoerbaar"]
     kaarten = "".join(_skill_card(r) for r in uit) or "<p class='muted'>No skills found.</p>"
@@ -123,14 +169,19 @@ def render_skills(st, human_inbox=None) -> str:
         "means.</p>")
 
     gedekt = sum(1 for r in uit if r["gebruikers"])
+    # De twee getallen die de catalogus van een bezettingslijst onderscheiden.
+    gedraaid = sum(1 for r in uit if (r.get("draai") or {}).get("totaal"))
+    opgeleverd = sum(1 for r in uit if (r.get("draai") or {}).get("laatste_opbrengst"))
     main = (f"<div class='c2-main'><h1>Skills — what can the village already do?</h1>"
             f"<p class='muted'>A skill is a shared village resource: one implementation, one "
             f"key, one limiter, however many roles wield it. It hangs on a commitment "
             f"(accountability), not on a role. A means that <b>decides</b> inside a domain "
             f"can only sit with the domain owner; others get the suggestion variant.</p>"
             f"<h2>Executable</h2>"
-            f"<p class='muted'>{len(uit)} means with an implementation, of which {gedekt} "
-            f"are actually wielded.</p>{kaarten}"
+            f"<p class='muted'>{len(uit)} means with an implementation · actually run: "
+            f"<b>{gedraaid}</b> · ever produced something: <b>{opgeleverd}</b> · granted to a "
+            f"role by name: {gedekt} (every role reaches the rest through the backpacks).</p>"
+            f"{kaarten}"
             f"<h2>Named but not covered</h2>"
             f"<p class='muted'>Named in DNA or in a link without an implementation, plus "
             f"calls in code without a grant.</p>{blok2}"

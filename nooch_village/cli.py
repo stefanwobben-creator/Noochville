@@ -1256,6 +1256,30 @@ def main() -> None:
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
 
+    elif mode == "noochie_memo":
+        # Eén memo van Noochie aan de founder, op afroep. De toets van de pijp (scope 41): komt er
+        # iets van haar in de cockpit-inbox? Default DRY-RUN: de memo staat in de terminal; met
+        # --apply wordt hij ook bezorgd. Fail-closed: zonder LLM-antwoord geen memo en geen sjabloon.
+        from nooch_village import noochie_memo
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        print("📝 Noochie schrijft een memo aan de founder…", flush=True)
+        r = noochie_memo.memo(st, ctx.data_dir, apply=apply)
+        if not r["ok"]:
+            print(f"⚠ {r['reden']}")
+            return
+        print("\n" + r["tekst"] + "\n")
+        if apply:
+            print("✅ bezorgd in de cockpit-inbox van de founder (afzender: noochie)."
+                  if r["bezorgd"] else f"⚠ {r['reden']}")
+        else:
+            print("DRY-RUN — niet bezorgd. Draai opnieuw met --apply om hem in je inbox te zetten.")
+
     elif mode == "wiki_broncheck":
         # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
         # Haalt op (read-only) en toont het rapport; pas met --apply wordt de waarneming
@@ -1909,6 +1933,7 @@ def main() -> None:
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
-              "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les",
+              "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
+              "wiki_zaad | wiki_broncheck | noochie_memo",
               file=sys.stderr)
         sys.exit(1)

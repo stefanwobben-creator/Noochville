@@ -54,11 +54,17 @@ def test_hoog_inzet_sites_staan_vast():
     `verslag_assemblage` kwam er 5 sep 2026 bij, en om dezelfde reden als `einddocument`: het is
     hetzelfde stuk, maar dán. Het verschil is wat erna gebeurt — een mens BEVESTIGT het, en daarmee
     wordt het orgkennis. Een zwakke samenvatting die je bevestigt is erger dan geen samenvatting:
-    daarna kun je hem niet meer wantrouwen, want er staat een handtekening onder."""
+    daarna kun je hem niet meer wantrouwen, want er staat een handtekening onder.
+
+    `noochie_memo` kwam er 11 sep 2026 bij: de memo van Noochie aan de founder, op afroep. Mens-facing
+    om dezelfde reden als `skill_bulletin`, en met een extra: het is de eerste keer dat zij hem
+    rechtstreeks bereikt, en dat oordeel over haar (blijft ze of niet) wordt op deze tekst geveld.
+    Eén call per keer; kosten zijn hier geen overweging."""
     assert lk.HOOG_INZET == {
         "einddocument", "verslag_assemblage", "plan_checklist", "plan_checklist_retry",
         "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
-        "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in"}
+        "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
+        "noochie_memo"}
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():

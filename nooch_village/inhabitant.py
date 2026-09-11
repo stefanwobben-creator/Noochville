@@ -2318,7 +2318,13 @@ class Inhabitant(threading.Thread):
         if skill is None:
             return False, f"skill '{capability}' niet geregistreerd"
         try:
-            return True, skill.run(payload, self.context)
+            # De draaistaat noteert de aanroep zelf (de registry heeft `run` omwikkeld); hier zetten
+            # we alleen het label, want alleen de aanroeper weet wie hij is. Zonder dit staat er in
+            # de staat wél dát de skill draaide, maar niet door wie — en juist dat is de vraag zodra
+            # je gaat snoeien.
+            from nooch_village import draaistaat
+            with draaistaat.aanroeper(self.id):
+                return True, skill.run(payload, self.context)
         except Exception as e:
             self.log.error("skill '%s' faalde: %s", capability, e)
             return False, str(e)
