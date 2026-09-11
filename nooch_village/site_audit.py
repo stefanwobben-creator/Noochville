@@ -53,6 +53,8 @@ CLS_GROEN, CLS_ORANJE = 0.1, 0.25
 TBT_GROEN_MS, TBT_ORANJE_MS = 200, 600
 #: Een claims-scan ouder dan dit is "over tijd" (twee weekperiodes, zoals role_rhythm).
 CLAIMS_SCAN_MAX_WEKEN = 2
+#: Bevindingen per lampje op het scherm; de volledige lijst staat in de bron (skill-uitvoer, /claims).
+MAX_BEVINDINGEN = 16
 
 
 def pad_voor(data_dir: str) -> str:
@@ -93,7 +95,7 @@ def _ergste(kleuren) -> str:
 def _lamp(sleutel: str, naam: str, kleur: str, *, waarde: str = "", uitleg: str = "",
           bevindingen: list | None = None, eigenaar: str = "", bron: str = "") -> dict:
     return {"sleutel": sleutel, "naam": naam, "kleur": kleur if kleur in KLEUREN else "grijs",
-            "waarde": waarde, "uitleg": uitleg, "bevindingen": list(bevindingen or [])[:12],
+            "waarde": waarde, "uitleg": uitleg, "bevindingen": list(bevindingen or [])[:MAX_BEVINDINGEN],
             "eigenaar": eigenaar, "bron": bron}
 
 
@@ -148,25 +150,33 @@ def _check_mobiel(registry, ctx, url: str, eigenaar: str) -> list[dict]:
     for sleutel, naam, cat in namen:
         score = scores.get(cat)
         uitleg = f"Lighthouse {cat.replace('_', ' ')} {score if score is not None else '?'} van 100 (groen vanaf {LIGHTHOUSE_GROEN}, rood onder {LIGHTHOUSE_ORANJE})."
-        bev = per_cat.get(cat, [])
+        bev = list(per_cat.get(cat, []))
         if cat == "performance":
             lcp, cls, tbt = (lab.get("lcp_ms") or {}), (lab.get("cls") or {}), (lab.get("tbt_ms") or {})
             delen = [f"LCP {lcp.get('weergave') or '?'} ({lamp_lcp(lcp.get('waarde'))}, goed ≤ 2,5 s)",
                      f"CLS {cls.get('weergave') or '?'} ({lamp_cls(cls.get('waarde'))}, goed ≤ 0,1)",
                      f"TBT {tbt.get('weergave') or '?'} ({lamp_tbt(tbt.get('waarde'))}, goed ≤ 200 ms)"]
             uitleg += " " + " · ".join(delen) + "."
+            # Volgorde van de bevindingen: eerst wat je kunt DOEN (de LCP-checklist van Lighthouse 13:
+            # niet "LCP is traag" maar "de banner staat op loading=lazy"; dan de kansen met gemeten
+            # winst), daarna de falende audits. De lijst is begrensd, dus het bruikbaarste vooraan.
+            voorop: list[str] = []
             le = r.get("lcp_element") or {}
             if le.get("element"):
-                fases = le.get("fases_ms") or {}
-                zw = max(fases.items(), key=lambda kv: kv[1])[0] if fases else ""
-                uitleg += f" LCP-element: {le['element']}" + (f", meeste tijd in {zw}." if zw else ".")
+                from nooch_village.skills_impl.mobiel_audit import _fase_zin   # één zin, één plek
+                uitleg += f" LCP-element: {le['element']}{_fase_zin(le)}."
+                voorop += [f"LCP-afbeelding: {a}" for a in le.get("aanwijzingen") or []]
             v = r.get("veld") or {}
             uitleg += (" Velddata (echte gebruikers, p75): " + str(v.get("oordeel") or "?") + "."
                        if v.get("bron") else " Geen velddata van echte gebruikers (te weinig Chrome-verkeer).")
+            kans_titels = set()
             for k in r.get("kansen") or []:
                 if k.get("winst_ms") or k.get("winst_bytes"):
                     w = f"{k['winst_ms']} ms" if k.get("winst_ms") else f"{k['winst_bytes'] // 1024} KiB"
-                    bev.append(f"Kans: {k['titel']} ({w})")
+                    voorop.append(f"Kans: {k['titel']} ({w})")
+                    kans_titels.add(k["titel"])
+            # een audit die al als kans staat (met winst) niet nog eens als kale titel
+            bev = voorop + [b for b in bev if b.split(" (")[0] not in kans_titels]
         uit.append(_lamp(sleutel, naam, lamp_score(score), waarde=str(score if score is not None else "-"),
                          uitleg=uitleg, bevindingen=bev, eigenaar=eigenaar, bron="mobiel_audit"))
     return uit

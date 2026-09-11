@@ -14,7 +14,7 @@ import types
 from nooch_village import cockpit2
 from nooch_village.collector import collect_daily_observations
 from nooch_village.skills import SkillRegistry
-from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill, _METRICS
+from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill, _METRICS, _fase_zin, _kort_element
 
 URL = "https://nooch.earth/"
 
@@ -150,7 +150,8 @@ def test_run_parst_scores_lab_veld_kansen_en_mobiel():
     le = r["lcp_element"]
     assert le["element"] == "Nooch 269 in het gras" and le["selector"] == "div.hero > img"
     assert le["fases_ms"] == {"TTFB": 400, "Load Delay": 15200, "Load Time": 3900, "Render Delay": 800}
-    assert "LCP-element: Nooch 269 in het gras (meeste tijd: Load Delay)" in r["text"]
+    assert "LCP-element: Nooch 269 in het gras, meeste tijd in Load Delay (75%)." in r["text"]
+    assert "Aanwijzingen:" not in r["text"], "de checklist bestaat pas sinds Lighthouse 13"
     assert "Falende audits: performance 3, best_practices 2" in r["text"]
     # de aanvraag: mobiel, alle vier categorieën, de key als parameter en nergens in de uitvoer
     p = s._gezien[0]
@@ -313,3 +314,66 @@ def test_geregistreerd_en_in_de_rugzak():
     assert build_skill_registry().get("mobiel_audit") is not None
     rz = json.load(open("config/rugzakken.json", encoding="utf-8"))
     assert "mobiel_audit" in rz["onze_cijfers"]["skills"]
+
+
+def test_lighthouse_13_lcp_element_uit_de_insight_audits():
+    """Lighthouse 13 (PSI sinds 2026) heeft `largest-contentful-paint-element` niet meer; het element,
+    de fases en een checklist zitten in `lcp-breakdown-insight` en `lcp-discovery-insight`. Dit is de
+    vorm zoals gemeten op nooch.earth op 11 september 2026 (ingekort), niet zoals gedocumenteerd."""
+    node = {"type": "node", "lhId": "page-6-IMG",
+            "selector": "section#shopify-section-x__image_banner > div#Banner-x > div.banner__media > img",
+            "nodeLabel": "section#shopify-section-x__image_banner > div#Banner-x > div.banner__media > img",
+            "snippet": '<img src="https://nooch.earth/cdn/shop/files/VWYF-HEADER-WEB.png?v=1762447017&amp;width=1100" loading="lazy">',
+            "path": "1,HTML,1,BODY,6,MAIN,0,SECTION,3,DIV,0,DIV,0,IMG"}
+    audits = {
+        "lcp-breakdown-insight": {"score": 1, "scoreDisplayMode": "informative", "title": "LCP breakdown",
+            "details": {"type": "list", "items": [
+                {"type": "table", "headings": [{"key": "label", "valueType": "text"}, {"key": "duration", "valueType": "ms"}],
+                 "items": [{"subpart": "timeToFirstByte", "label": "Time to first byte", "duration": 4.239},
+                           {"subpart": "resourceLoadDelay", "label": "Resource load delay", "duration": 773.948},
+                           {"subpart": "resourceLoadDuration", "label": "Resource load duration", "duration": 42.331},
+                           {"subpart": "elementRenderDelay", "label": "Element render delay", "duration": 108.597}]},
+                dict(node)]}},
+        "lcp-discovery-insight": {"score": 0, "scoreDisplayMode": "numeric", "title": "LCP request discovery",
+            "details": {"type": "list", "items": [
+                {"type": "checklist", "items": {
+                    "priorityHinted": {"label": "fetchpriority=high should be applied", "value": False},
+                    "requestDiscoverable": {"label": "Request is discoverable in initial document", "value": True},
+                    "eagerlyLoaded": {"label": "LCP resources should not use loading=lazy", "value": False}}},
+                dict(node)]}},
+    }
+    le = MobielAuditSkill._lcp_element(audits)
+    # een img zonder alt heeft als nodeLabel de hele selector; dan is de bestandsnaam de naam
+    assert le["element"] == "afbeelding VWYF-HEADER-WEB.png"
+    assert le["selector"].endswith("div.banner__media > img")
+    assert le["fases_ms"] == {"Time to first byte": 4, "Resource load delay": 773,
+                              "Resource load duration": 42, "Element render delay": 108}
+    assert le["fases_bron"] == "waargenomen"
+    assert [c["check"] for c in le["checks"] if not c["ok"]] == ["priorityHinted", "eagerlyLoaded"]
+    assert le["aanwijzingen"] == ["de LCP-afbeelding heeft geen fetchpriority=high",
+                                  "de LCP-afbeelding staat op loading=lazy (de browser stelt hem uit)"]
+    assert _fase_zin(le) == ", meeste tijd in Resource load delay (83%)"
+    # de tekst van de skill noemt beide: waar de tijd zat, en wat je eraan doet
+    data = _psi()
+    lh = data["lighthouseResult"]
+    lh["audits"].pop("largest-contentful-paint-element")
+    lh["audits"].update(audits)
+    lh["lighthouseVersion"] = "13.4.1"
+    r = _skill(data).run({"url": URL}, _ctx())
+    assert r["ok"] and r["lighthouse_versie"] == "13.4.1"
+    assert "LCP-element: afbeelding VWYF-HEADER-WEB.png, meeste tijd in Resource load delay (83%)." in r["text"]
+    assert "Aanwijzingen: de LCP-afbeelding heeft geen fetchpriority=high; de LCP-afbeelding staat op loading=lazy" in r["text"]
+    # zonder beide insight-audits: geen element, geen fout
+    assert MobielAuditSkill._lcp_element({"largest-contentful-paint": {"score": 0}}) is None
+    # een lege fase-tabel: geen zin, geen deling door nul
+    assert _fase_zin({"fases_ms": {"a": 0, "b": 0}}) == "" and _fase_zin({}) == ""
+
+
+def test_kort_element_kiest_een_naam_die_een_mens_herkent():
+    assert _kort_element({"nodeLabel": "Nooch 269 in het gras", "selector": "div.hero > img"}) == "Nooch 269 in het gras"
+    assert _kort_element({"nodeLabel": "div.a > img", "selector": "div.a > img",
+                          "snippet": '<img src="https://x/cdn/files/hero.png?v=1">'}) == "afbeelding hero.png"
+    assert _kort_element({"nodeLabel": "main > div.a > p", "selector": "main > div.a > p",
+                          "snippet": "<p>tekst</p>"}) == "div.a > p"
+    assert _kort_element({}) == ""
+

@@ -57,7 +57,8 @@ def _lighthouse(perf=57, lcp=21200, cls=0.019, tbt=340, **extra):
                 {"categorie": "seo", "audit": "image-alt", "titel": "Image elements do not have [alt] attributes",
                  "score": 0.0, "weergave": "", "gewicht": 1}],
             "lcp_element": {"element": "Nooch 269 in het gras", "selector": "div.hero > img",
-                            "fases_ms": {"TTFB": 400, "Load Delay": 15200, "Load Time": 3900, "Render Delay": 800}},
+                            "fases_ms": {"TTFB": 400, "Load Delay": 15200, "Load Time": 3900, "Render Delay": 800},
+                            "aanwijzingen": ["de LCP-afbeelding staat op loading=lazy (de browser stelt hem uit)"]},
             "mobiel": [], "waarschuwingen": [], "lighthouse_versie": "13.4.1", **extra}
 
 
@@ -102,9 +103,13 @@ def test_run_geeft_zes_lampjes_met_uitleg_en_eigenaar(tmp_path):
     assert per["bereikbaar"]["kleur"] == "groen" and "HTTP 200" in per["bereikbaar"]["uitleg"]
     assert per["snelheid"]["kleur"] == "oranje" and per["snelheid"]["waarde"] == "57"
     assert "LCP 21.2 s (rood" in per["snelheid"]["uitleg"] and "CLS 0.019 (groen" in per["snelheid"]["uitleg"]
-    assert "LCP-element: Nooch 269 in het gras, meeste tijd in Load Delay" in per["snelheid"]["uitleg"]
+    assert "LCP-element: Nooch 269 in het gras, meeste tijd in Load Delay (75%)." in per["snelheid"]["uitleg"]
+    # de checklist van Lighthouse 13 wordt een bevinding: dat is het repo-werk, niet de score
+    assert "LCP-afbeelding: de LCP-afbeelding staat op loading=lazy (de browser stelt hem uit)" in per["snelheid"]["bevindingen"]
     assert "Geen velddata" in per["snelheid"]["uitleg"]
-    assert any(b.startswith("Kans: Improve image delivery (2204 KiB)") for b in per["snelheid"]["bevindingen"])
+    # het bruikbaarste vooraan: de LCP-checklist, dan de kansen met winst, dan de falende audits
+    assert per["snelheid"]["bevindingen"][:2] == ["LCP-afbeelding: de LCP-afbeelding staat op loading=lazy (de browser stelt hem uit)",
+                                                  "Kans: Improve image delivery (2204 KiB)"]
     assert "LCP request discovery" in per["snelheid"]["bevindingen"]
     assert per["best_practices"]["kleur"] == "oranje" and per["best_practices"]["bevindingen"] == ["Uses third-party cookies (5 cookies found)"]
     assert per["seo"]["kleur"] == "groen" and per["seo"]["bevindingen"] == ["Image elements do not have [alt] attributes"]
@@ -114,7 +119,7 @@ def test_run_geeft_zes_lampjes_met_uitleg_en_eigenaar(tmp_path):
     assert per["claims"]["eigenaar"] == "mother_earth__nooch__compliance"
     assert "20 claims op de werklijst: 11 rood en 9 oranje nog niet live, 0 live" in per["claims"]["uitleg"]
     assert "2024/825" in per["claims"]["uitleg"] and "nog niet gedraaid" in per["claims"]["uitleg"]
-    assert len(per["claims"]["bevindingen"]) == 12, "begrensd, de werklijst zelf staat op /claims"
+    assert len(per["claims"]["bevindingen"]) == site_audit.MAX_BEVINDINGEN, "begrensd, de werklijst zelf staat op /claims"
     assert snap["totaal"] == "rood" and snap["url"] == "https://nooch.earth/" and "duur_s" in snap
 
 

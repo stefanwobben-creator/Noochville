@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 
 from nooch_village import safe_fetch
@@ -75,6 +76,14 @@ _VELD = (("veld_lcp_ms", "LARGEST_CONTENTFUL_PAINT_MS", 1),
 #: één, dan staat hij er gewoon niet in — we verzinnen geen oordeel voor een audit die niet draaide.
 _MOBIEL = ("viewport", "content-width", "font-size", "tap-targets", "target-size", "meta-viewport")
 
+#: De checklist van `lcp-discovery-insight` (Lighthouse 13) in mensentaal, per sleutel. Een check
+#: die faalt is een concrete aanwijzing voor het thema; een onbekende sleutel houdt Google's label.
+_LCP_AANWIJZING = {
+    "priorityHinted": "de LCP-afbeelding heeft geen fetchpriority=high",
+    "eagerlyLoaded": "de LCP-afbeelding staat op loading=lazy (de browser stelt hem uit)",
+    "requestDiscoverable": "de LCP-afbeelding staat niet in de eerste HTML (komt pas via CSS of JS)",
+}
+
 #: De meetreeks: de score en de drie Core Web Vitals-achtige labwaarden, plus wat het veld zegt.
 _METRICS = ("performance", "lcp_ms", "cls", "tbt_ms", "veld_lcp_ms", "veld_inp_ms", "veld_cls")
 
@@ -84,6 +93,34 @@ def _num(x):
         return None if x is None else float(x)
     except (TypeError, ValueError):
         return None
+
+
+def _fase_zin(le: dict) -> str:
+    """', meeste tijd in <fase> (83%)' — de zwaarste fase van het LCP-element als aandeel, want
+    bij Lighthouse 13 zijn de fases waargenomen tijden die niet optellen tot de gesimuleerde LCP;
+    het aandeel is in beide vormen betekenisvol. Leeg als er geen fases zijn."""
+    fases = le.get("fases_ms") or {}
+    totaal = sum(v for v in fases.values() if isinstance(v, (int, float)) and v > 0)
+    if not fases or totaal <= 0:
+        return ""
+    naam, ms = max(fases.items(), key=lambda kv: kv[1])
+    return f", meeste tijd in {naam} ({round(100 * ms / totaal)}%)"
+
+
+def _kort_element(node: dict) -> str:
+    """Een naam voor het LCP-element die een mens herkent. Lighthouse geeft als `nodeLabel` de
+    alt-tekst of de tekst van het element; bij een afbeelding zonder alt is dat de hele selector
+    (gemeten: 'section#shopify-section-…__image_banner_… > … > img'). Dan liever de bestandsnaam
+    uit de snippet, en anders het staartje van de selector."""
+    label = str(node.get("nodeLabel") or "")
+    sel = str(node.get("selector") or "")
+    snip = str(node.get("snippet") or "")
+    if label and label != sel:
+        return label[:160]
+    m = re.search(r'src="([^"?]+)', snip)
+    if m:
+        return f"afbeelding {m.group(1).rsplit('/', 1)[-1]}"[:160]
+    return (" > ".join(sel.split(" > ")[-2:]) or snip)[:160]
 
 
 def _score100(s):
@@ -125,7 +162,8 @@ class MobielAuditSkill(DataSourceSkill):
                      "veld{bron: url|origin, oordeel, lcp_ms, inp_ms, cls, fcp_ms} of veld{bron: None, reden}, "
                      "kansen[{audit, titel, winst_ms}], mobiel[{audit, titel, geslaagd, weergave}], "
                      "bevindingen[{categorie, audit, titel, score, weergave, gewicht}] (falende audits, "
-                     "per categorie gewogen), lcp_element{element, selector, snippet, fases_ms}, "
+                     "per categorie gewogen), lcp_element{element, selector, snippet, fases_ms, "
+                     "fases_bron?, checks[]?, aanwijzingen[]?} (LH 13: checklist van lcp-discovery), "
                      "waarschuwingen[], text | error + tijdelijk")
 
     def __init__(self, haal=None, controleer=None):
@@ -303,24 +341,65 @@ class MobielAuditSkill(DataSourceSkill):
     def _lcp_element(audits: dict) -> dict | None:
         """Wélk element de LCP is, en waar de tijd in ging (TTFB, laadvertraging, laadtijd,
         rendervertraging). Dit is het antwoord op "waarom 20 seconden"; zonder dit is LCP een
-        getal. Vorm van Lighthouse 10+: details.items[0] = tabel met de node, items[1] = tabel
-        met fases. Fail-soft: een andere vorm geeft None, geen fout."""
+        getal. Twee vormen, want Lighthouse verhuisde dit:
+
+        - t/m 12: `largest-contentful-paint-element`, details.items[0] = tabel met de node,
+          items[1] = tabel met fases (`phase`, `timing`).
+        - 13 (PSI sinds 2026, gemeten op nooch.earth 11 sep 2026): de insight-audits.
+          `lcp-breakdown-insight` = tabel met fases (`label`, `duration`) + een node-item;
+          `lcp-discovery-insight` = een checklist (fetchpriority, vindbaar in de HTML, niet lazy)
+          + dezelfde node. De fases daar zijn WAARGENOMEN tijden (zonder throttling) en tellen dus
+          niet op tot de gesimuleerde LCP; de verhouding klopt wel, en dat is wat je wilt weten.
+
+        Fail-soft: een andere vorm geeft None, geen fout."""
         a = audits.get("largest-contentful-paint-element") or {}
         items = (a.get("details") or {}).get("items") or []
-        if not items:
+        if items:
+            uit = {}
+            try:
+                node = ((items[0].get("items") or [{}])[0].get("node") or {})
+                uit["element"] = _kort_element(node)
+                uit["selector"] = str(node.get("selector") or "")[:160]
+                uit["snippet"] = str(node.get("snippet") or "")[:200]
+            except (AttributeError, IndexError, TypeError):
+                pass
+            try:
+                fases = (items[1].get("items") or []) if len(items) > 1 else []
+                uit["fases_ms"] = {str(f.get("phase") or "?"): int(_num(f.get("timing")) or 0) for f in fases}
+            except (AttributeError, TypeError):
+                pass
+            return uit or None
+        return MobielAuditSkill._lcp_element_lh13(audits)
+
+    @staticmethod
+    def _lcp_element_lh13(audits: dict) -> dict | None:
+        bd = ((audits.get("lcp-breakdown-insight") or {}).get("details") or {}).get("items") or []
+        disc = ((audits.get("lcp-discovery-insight") or {}).get("details") or {}).get("items") or []
+        if not bd and not disc:
             return None
-        uit = {}
+        uit: dict = {}
         try:
-            node = ((items[0].get("items") or [{}])[0].get("node") or {})
-            uit["element"] = str(node.get("nodeLabel") or node.get("snippet") or "")[:160]
-            uit["selector"] = str(node.get("selector") or "")[:160]
-            uit["snippet"] = str(node.get("snippet") or "")[:200]
-        except (AttributeError, IndexError, TypeError):
-            pass
-        try:
-            fases = (items[1].get("items") or []) if len(items) > 1 else []
-            uit["fases_ms"] = {str(f.get("phase") or "?"): int(_num(f.get("timing")) or 0) for f in fases}
-        except (AttributeError, TypeError):
+            node = next((it for it in list(bd) + list(disc)
+                         if isinstance(it, dict) and it.get("type") == "node"), None)
+            if node:
+                uit["element"] = _kort_element(node)
+                uit["selector"] = str(node.get("selector") or "")[:160]
+                uit["snippet"] = str(node.get("snippet") or "")[:200]
+            tabel = next((it for it in bd if isinstance(it, dict) and it.get("type") == "table"), None)
+            if tabel:
+                uit["fases_ms"] = {str(f.get("label") or f.get("subpart") or "?"): int(_num(f.get("duration")) or 0)
+                                   for f in (tabel.get("items") or []) if isinstance(f, dict)}
+                uit["fases_bron"] = "waargenomen"
+            lijst = next((it for it in disc if isinstance(it, dict) and it.get("type") == "checklist"), None)
+            if lijst:
+                checks = []
+                for sleutel, c in (lijst.get("items") or {}).items():
+                    if isinstance(c, dict) and "value" in c:
+                        checks.append({"check": str(sleutel), "label": str(c.get("label") or sleutel)[:120],
+                                       "ok": bool(c.get("value"))})
+                uit["checks"] = checks
+                uit["aanwijzingen"] = [_LCP_AANWIJZING.get(c["check"], c["label"]) for c in checks if not c["ok"]]
+        except (AttributeError, TypeError, ValueError):
             pass
         return uit or None
 
@@ -361,9 +440,9 @@ class MobielAuditSkill(DataSourceSkill):
             regels.append("Veld: " + v.get("reden", "geen velddata") + ".")
         le = u.get("lcp_element") or {}
         if le.get("element"):
-            fases = le.get("fases_ms") or {}
-            zwaarste = max(fases.items(), key=lambda kv: kv[1])[0] if fases else ""
-            regels.append(f"LCP-element: {le['element']}" + (f" (meeste tijd: {zwaarste})." if zwaarste else "."))
+            regels.append(f"LCP-element: {le['element']}" + _fase_zin(le) + ".")
+            if le.get("aanwijzingen"):
+                regels.append("Aanwijzingen: " + "; ".join(le["aanwijzingen"]) + ".")
         if u["kansen"]:
             k = u["kansen"][0]
             regels.append(f"Grootste kans: {k['titel']} ({k['winst_ms']} ms).")
