@@ -242,12 +242,6 @@ ul.clean li:last-child{border-bottom:none}
 .vz-h{font-weight:700;color:var(--coral);margin-bottom:.1rem}
 .vz-t{color:var(--gray);font-size:.85rem;margin-bottom:.5rem}
 .vz-form{margin:0}
-.ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
-.ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}
-.ai-on:hover{opacity:1}
-.ai-ov{margin:.2rem 0 .7rem}
-.ai-ov-h{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}
-.ai-ov-list li{padding:.12rem 0}
 .chiplink{text-decoration:none}
 /* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
    plus twee modifiers. Geen losse knop-varianten meer elders. */
@@ -867,11 +861,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .editbox{margin:0 0 .5rem}
 .editbox>summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--green-dark)}
 .actrow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
-.sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
-.sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
-.bagadd{padding:0;margin-top:.8rem}
-.bagadd>summary{cursor:pointer;color:var(--subtle);font-size:.82rem;list-style:none}
-.bagadd>summary:hover{color:#5b3fa6}
 .frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
 .ffocus{padding:0;margin:0}
 .ffocus>summary{list-style:none;cursor:pointer}

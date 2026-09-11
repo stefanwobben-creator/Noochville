@@ -117,7 +117,6 @@ from nooch_village.roloverleg import Agenda
 from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
 from nooch_village.strategy_store import StrategyStore
 from nooch_village.backlog import BacklogStore
-from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
 
@@ -158,7 +157,6 @@ class _Stores:
             migrate_persona_bindings(self.records, self.assign)
         except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
             pass
-        self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
@@ -280,12 +278,11 @@ def _bootstrap(dd: str) -> None:
 
 from nooch_village.views.overview import (
     _filler_html, _members_of_circle, _tree_html,
-    _ai_chip, _suggest_for_acc, _acc_row,
-    _role_ai_overview, _overview_html, _fillsummary,
+    _acc_row, _overview_html, _fillsummary,
     _fillers_block, _role_row, _roles_html,
     _members_html, _att_html,
     render_node, render_person, render_patterns, render_admin,
-    render_rolefillers, render_aitask,
+    render_rolefillers, render_middelen,
     _CORE_ROLE_NAMES, _ICON_ADD_PERSON,
 )
 
@@ -2689,40 +2686,15 @@ def _acc_id_param(st, role_id: str, qs) -> str:
     return acc_ids.acc_id_at(rec.definition, idx) if idx >= 0 else ""
 
 
-def _act_aitask_add(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        # ── Autorisatie: Circle Lead van de directe ouder-cirkel ──
-        actor = st.people.by_email(username) if username != "guest" else None
-        rec = st.records.get(g("role"))
-        circle_id = rec.parent if rec else None
-        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "No access — only the Circle Lead may link AI tasks"
-        if actor is None and username != "guest":
-            return nxt, "No access — user not recognised"
-        # ── einde autorisatie ──
-        # Stabiel acc_id (fail-soft terugval op de oude index, zie _acc_id_param).
-        aid = g("acc_id")
-        if not aid:
-            rec_a = st.records.get(g("role"))
-            try:
-                acc_i = int(g("acc"))
-            except (TypeError, ValueError):
-                acc_i = -1
-            aid = acc_ids.acc_id_at(rec_a.definition, acc_i) if (rec_a and acc_i >= 0) else ""
-        pick = g("pick")
-        if "::" in pick:
-            agent, skill = pick.split("::", 1)
-        else:
-            agent, skill = g("agent"), g("wat")   # fallback (legacy)
-        if agent and aid and st.ai.add(g("role"), aid, agent, skill, gelegd_door=username):
-            msg = "🤖 AI linked to accountability"
-        return nxt, msg
+# AUTHZ: Circle Lead — een middel losmaken is dezelfde beslissing als het leggen, dus dezelfde
+# poort als `skilllink_add`. Bewust identiek.
+#
+# Heette tot scope 39 `aitask_remove` en bediende twee soorten koppeling: de autonome AI-taak én
+# het dorpsmiddel. De autonome soort is weg (hij beloofde uitvoering die nergens draaide), dus dit
+# is nu de enige weg om een gelegd middel weer los te maken.
 
-
-def _act_aitask_remove(c):
+def _act_middel_remove(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
         # ── Autorisatie: Circle Lead van de ouder-cirkel van de rol ──
         actor = st.people.by_email(username) if username != "guest" else None
         _task = next((t for t in st.ai.all() if t.id == g("tid")), None)
@@ -2733,11 +2705,15 @@ def _act_aitask_remove(c):
         if actor is None and username != "guest":
             return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
-        if _task is not None and _task.kind == KIND_MIDDEL:
+        # Een actie die niets deed moet dat zeggen: een onbekende of al verwijderde tid mag geen
+        # "✓ removed" opleveren, want dan leest de gebruiker een succes dat er niet was.
+        if _task is None:
+            return nxt, "⚠ nothing removed — this resource is no longer linked"
+        if _task.kind == KIND_MIDDEL:
             st.link_kroniek.record(action="verwijderd", role_id=_task.role, acc_id=_task.acc_id,
                                    skill=_task.skill, door=username)
-        st.ai.remove(g("tid")); msg = "✓ removed"
-        return nxt, msg
+        st.ai.remove(_task.id)
+        return nxt, "✓ removed"
 
 
 # ── Skill-links: het dorpsmiddel aan een belofte ────────────────────────────
@@ -2930,21 +2906,6 @@ def _finetune_voorstellen(persona) -> list:
                 if tekst:
                     uit.append({"naam": naam, "tekst": tekst})
     return uit
-
-
-def _act_persona_skill_add(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
-        actor = st.people.by_email(username) if username != "guest" else None
-        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "No access — only the anchor lead may add persona skills"
-        if actor is None and username != "guest":
-            return nxt, "No access — user not recognised"
-        # ── einde autorisatie ──
-        if st.personas.add_skill(g("agent"), g("skill")):
-            msg = "✓ skill added to the backpack"
-        return nxt, msg
 
 
 def _act_rov2_add(c):
@@ -6134,11 +6095,9 @@ ACTIONS = {
     "radar_merge": _act_radar_merge,
     "radar_koppel": _act_radar_koppel,
     "kb_stage_koppel": _act_kb_stage_koppel,
-    "aitask_add": _act_aitask_add,
-    "aitask_remove": _act_aitask_remove,
+    "middel_remove": _act_middel_remove,
     "skilllink_add": _act_skilllink_add,
     "means_gap_add": _act_means_gap_add,
-    "persona_skill_add": _act_persona_skill_add,
     "rov2_add": _act_rov2_add,
     "rov2_add_to_group": _act_rov2_add_to_group,
     "rov2_remove": _act_rov2_remove,
@@ -6550,12 +6509,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(_frag(render_rolefillers(st, (qs.get("role") or [""])[0],
                                                     csrf_token=effective_csrf, fragment=fr), fr))
                 return
-            if path == "/aitask":
+            if path == "/middelen":
                 role_id = (qs.get("role") or [""])[0]
                 aid = _acc_id_param(st, role_id, qs)
                 fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_aitask(st, role_id, aid,
-                                               csrf_token=effective_csrf, fragment=fr), fr))
+                self._send(_frag(render_middelen(st, role_id, aid,
+                                                 csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0],
@@ -7565,70 +7524,15 @@ def _load_env() -> None:
                 os.environ.setdefault(k.strip(), v.strip())
 
 
-def refresh_matches(data_dir: str | None = None, ask=None, progress=None) -> int:
-    """Achtergrond-pas: laat de LLM per (accountability, skill) oordelen en cache het, zodat het
-    cadeautje semantisch matcht. Zonder key/`ask` is dit een no-op (fail-closed); de render valt
-    dan terug op lexicaal + concept. `ask` is injecteerbaar voor tests."""
-    dd = data_dir or _default_data_dir()
-    _bootstrap(dd)
-    st = _Stores(dd)
-    if ask is None:
-        try:
-            from nooch_village import llm
-        except Exception:
-            return 0
-
-        def ask(acc: str, skill: str):
-            prompt = ("Ondersteunt de vaardigheid een verantwoordelijkheid? Antwoord met enkel "
-                      f"'ja' of 'nee'.\nVerantwoordelijkheid: {acc}\nVaardigheid: {skill}")
-            out = llm.reason(prompt, ladder=_match_ladder(), call_site="cockpit_match_pair")
-            if not out:
-                return None
-            o = out.strip().lower()
-            if o.startswith("ja") or o.startswith("yes"):
-                return True
-            if o.startswith("nee") or o.startswith("no"):
-                return False
-            return None
-
-    skills = sorted({s for p in st.personas.all() for s in (p.skills or [])})
-    accs = sorted({a for r in st.records.all() if not org.is_circle(r)
-                   for a in (r.definition.accountabilities or [])})
-    pairs = [(a, s) for a in accs for s in skills]
-    return ai_match.refresh_semantic(pairs, ask, st.match, skip_cached=True, progress=progress)
-
-
 def main(argv=None) -> None:
     import argparse
     ap = argparse.ArgumentParser(prog="nooch_village.cockpit2")
-    ap.add_argument("cmd", nargs="?", default="serve", choices=["serve", "match"],
-                    help="serve = cockpit; match = achtergrond semantische matcher vullen")
+    ap.add_argument("cmd", nargs="?", default="serve", choices=["serve"],
+                    help="serve = cockpit")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--data-dir", default=None)
     a = ap.parse_args(argv)
-    if a.cmd == "match":
-        _load_env()   # zorg dat .env-keys beschikbaar zijn voor de losse CLI
-        # Snelle key-check: zonder LLM-key heeft de achtergrond-pas niets te doen.
-        try:
-            from nooch_village import llm
-            has_key = bool(llm.reason("antwoord met 'ok'", ladder=_match_ladder(), call_site="cockpit_match_keycheck"))
-        except Exception:
-            has_key = False
-        if not has_key:
-            print("No working LLM key found. The matcher already runs on lexical + concept "
-                  "(code ~ feature, bug ~ testscript); the semantic layer only adds something "
-                  "with an Anthropic or Gemini key in .env. Nothing to do.")
-            return
-
-        def progress(i, total, acc, skill):
-            print(f"  [{i}/{total}] {acc[:40]} ↔ {skill[:30]}", flush=True)
-
-        print("Semantic matcher: fetching verdicts (already-cached pairs are skipped)…",
-              flush=True)
-        n = refresh_matches(a.data_dir, progress=progress)
-        print(f"Done: {n} new pairs determined and cached.")
-        return
     serve(host=a.host, port=a.port, data_dir=a.data_dir)
 
 

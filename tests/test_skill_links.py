@@ -131,7 +131,7 @@ def test_ontkoppelen_logt_ook(tmp_path):
                       username="guest")
     st2 = cockpit2._Stores(dd)
     tid = st2.ai.links_for_role(_ROLE)[0].id
-    _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [tid], "next": ["/x"]}, username="guest")
+    _, msg = cockpit2.dispatch(dd, "middel_remove", {"tid": [tid], "next": ["/x"]}, username="guest")
     assert ("removed" in msg or "Removed" in msg)
 
     st3 = cockpit2._Stores(dd)
@@ -155,7 +155,7 @@ def test_koppelen_geweigerd_voor_niet_circle_lead(tmp_path):
 
 def test_dialoog_biedt_middelen_aan_maar_niet_de_beslisskill(tmp_path):
     dd, st = _st(tmp_path)
-    frag = cockpit2.render_aitask(st, _ROLE, _first_acc(st), csrf_token="t", fragment=True)
+    frag = cockpit2.render_middelen(st, _ROLE, _first_acc(st), csrf_token="t", fragment=True)
     assert "skilllink_add" in frag
     assert "site_health" in frag                        # vrij koppelbaar middel
     assert "keyword_review" not in frag                 # beslis-skill: niet eens aangeboden
@@ -164,7 +164,7 @@ def test_dialoog_biedt_middelen_aan_maar_niet_de_beslisskill(tmp_path):
 def test_dialoog_biedt_beslisskill_wel_aan_bij_domeinhouder(tmp_path):
     dd, st = _st(tmp_path)
     _hoeder(st)
-    frag = cockpit2.render_aitask(st, "hoeder", _first_acc(st, "hoeder"),
+    frag = cockpit2.render_middelen(st, "hoeder", _first_acc(st, "hoeder"),
                                   csrf_token="t", fragment=True)
     assert "keyword_review" in frag
 
