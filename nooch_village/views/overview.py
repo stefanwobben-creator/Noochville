@@ -688,7 +688,9 @@ _ROLE_TOOLS = {
         ("Copy checker", "Check a text against the copy policies — layer 1, then the judgement",
          "/copy-check")],
     WEBSITE_DEVELOPER_ROLE: [
-        ("Backlog Builder", "Bugs, wishes and ideas → a prioritised backlog", "/backlog")],
+        ("Backlog Builder", "Bugs, wishes and ideas → a prioritised backlog", "/backlog"),
+        ("Site audit", "Green, orange, red for reachability, speed, accessibility, SEO and claims "
+         "of the shop, with the reasons behind each light", "/site-audit")],
 }
 
 
