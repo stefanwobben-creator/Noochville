@@ -113,6 +113,31 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "Beschikbaarheid (Site health)", "source": "site_health", "unit": "%", "direction": "up",
      "cadence": "uur", "meettype": "venster", "window": "30d",
      "definition": "Aandeel checks met HTTP 200 over het venster (uptime)."},
+    # Mobiele kwaliteit van de shop (Lighthouse via PageSpeed Insights, strategy=mobile). Wekelijks één
+    # meting op `mobiel_audit_url` (settings). Lab = wat Google's testtoestel meet (schommelt per run);
+    # veld = de p75 van echte Chrome-gebruikers over 28 dagen (traag, maar de waarheid, en wat Google
+    # als ranking-signaal weegt). Geen velddata = te weinig verkeer, geen fout.
+    {"name": "Performance mobiel (Lighthouse)", "source": "mobiel_audit", "unit": "pt", "direction": "up",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Lighthouse performance-score (0-100) op mobiel voor de geconfigureerde pagina."},
+    {"name": "LCP mobiel, lab (Lighthouse)", "source": "mobiel_audit", "unit": "ms", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Largest Contentful Paint op Google's mobiele testtoestel; goed onder 2500 ms."},
+    {"name": "CLS mobiel, lab (Lighthouse)", "source": "mobiel_audit", "unit": "score", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Cumulative Layout Shift op mobiel (lab); goed onder 0,1."},
+    {"name": "TBT mobiel, lab (Lighthouse)", "source": "mobiel_audit", "unit": "ms", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Total Blocking Time op mobiel (lab); goed onder 200 ms."},
+    {"name": "LCP mobiel, veld (CrUX p75)", "source": "mobiel_audit", "unit": "ms", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "LCP van echte Chrome-gebruikers, 75e percentiel over 28 dagen; goed onder 2500 ms."},
+    {"name": "INP mobiel, veld (CrUX p75)", "source": "mobiel_audit", "unit": "ms", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Interaction to Next Paint van echte gebruikers, p75; goed onder 200 ms."},
+    {"name": "CLS mobiel, veld (CrUX p75)", "source": "mobiel_audit", "unit": "score", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "CLS van echte gebruikers, p75; goed onder 0,1."},
     # Concurrentie-monitoring
     {"name": "Nieuwsitems concurrenten", "source": "competitor_news", "unit": "n", "direction": "",
      "cadence": "week", "meettype": "venster", "window": "7d",
@@ -401,6 +426,13 @@ _GROUNDING: dict[str, dict] = {
     "Hoge-prioriteit linkdoelen": {"standaard": "intern (SEO-prioritering)", "tijd": "leading", "bruikbaar": "actionable"},
     # IT-infra
     "Beschikbaarheid (Site health)": {"standaard": "SRE / SLO (uptime)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "SLO vaak 99,9%"},
+    "Performance mobiel (Lighthouse)": {"standaard": "Lighthouse (Google)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "groen vanaf 90"},
+    "LCP mobiel, lab (Lighthouse)": {"standaard": "Core Web Vitals (Google)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "goed < 2500 ms"},
+    "CLS mobiel, lab (Lighthouse)": {"standaard": "Core Web Vitals (Google)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "goed < 0,1"},
+    "TBT mobiel, lab (Lighthouse)": {"standaard": "Lighthouse (Google)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "goed < 200 ms"},
+    "LCP mobiel, veld (CrUX p75)": {"standaard": "Core Web Vitals (CrUX)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed < 2500 ms"},
+    "INP mobiel, veld (CrUX p75)": {"standaard": "Core Web Vitals (CrUX)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed < 200 ms"},
+    "CLS mobiel, veld (CrUX p75)": {"standaard": "Core Web Vitals (CrUX)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed < 0,1"},
     # Supply chain / inkoop (SCOR / ASCM)
     "Leverbetrouwbaarheid": {"standaard": "SCOR / OTIF (ASCM)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed: 95-99% (OTIF)"},
     "Voorraadrotatie": {"standaard": "SCOR (asset management, ASCM)", "tijd": "lagging", "bruikbaar": "actionable"},
@@ -488,6 +520,10 @@ _SEED_VELD = {
     "Vertoningen (GSC)": "impressions", "Klikken (GSC)": "clicks",
     "CTR (GSC)": "ctr", "Gemiddelde positie (GSC)": "position",
     "Academische werken (OpenAlex)": "works", "Gem. citaties (OpenAlex)": "citations",
+    "Performance mobiel (Lighthouse)": "performance", "LCP mobiel, lab (Lighthouse)": "lcp_ms",
+    "CLS mobiel, lab (Lighthouse)": "cls", "TBT mobiel, lab (Lighthouse)": "tbt_ms",
+    "LCP mobiel, veld (CrUX p75)": "veld_lcp_ms", "INP mobiel, veld (CrUX p75)": "veld_inp_ms",
+    "CLS mobiel, veld (CrUX p75)": "veld_cls",
 }
 
 # Groepering per bron — vult de categorie op bestaande definities zodat de KPI-wizard categorie-eerst
@@ -497,7 +533,7 @@ _SOURCE_CATEGORIE = {
     "werkoverleg": "Werkoverleg", "finance": "Financieel", "budget": "Financieel",
     "erp": "Supply chain", "impact": "Impact",
     "survey": "Team & klant", "hris": "Team & klant", "support": "Team & klant",
-    "monitoring": "IT", "site_health": "IT",
+    "monitoring": "IT", "site_health": "IT", "mobiel_audit": "Website",
     "trends": "Onderzoek", "keywords_everywhere": "Onderzoek", "ngram": "Onderzoek",
     "openalex": "Onderzoek", "semantic_scholar": "Onderzoek",
     "competitor_news": "Marketing", "linkbuilding": "Marketing",
