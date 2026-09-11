@@ -16,7 +16,7 @@ import json
 import re
 
 from nooch_village.web_base import _e, _page, _field
-from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav
+from nooch_village.cockpit2_util import _name, _rol_labels, _BUILD, _stamp, _DS_LINK, _nav, _md_doc
 from nooch_village.inbox_wizard import FLOWS, GOVERNANCE, OTYPE_LABEL
 from nooch_village.notifications import MENS_GETYPT, volledig as _volledig
 from nooch_village.systeemtaal import ontjargon
@@ -151,7 +151,11 @@ def _btn(csrf: str, nid: str, action: str, label: str, cls: str = "flink", nxt: 
 # dump), en wat er van je gevraagd wordt (het type). Zonder dat tweede zien veertien regels er
 # hetzelfde uit en moet je ze één voor één openen om te weten welke een besluit is.
 _TYPE_CHIP = {"founder": "besluit", "naar_rol": "verzoek", "governance": "governance",
-              "actie": "actie"}
+              "actie": "actie", "memo": "memo"}
+
+#: Het type van Noochie's memo (`noochie_memo.TYPE`). Hier als literal om geen import van de
+#: memo-module in de view te trekken; de test `test_noochie_memo` houdt de twee gelijk.
+_MEMO = "memo"
 
 
 def _leesbaar(n: dict, tekst: str) -> str:
@@ -268,10 +272,15 @@ def _poort_secties(st, items, csrf_token, done) -> str:
         return str((n.get("poort") or {}).get("deur") or "")
 
     groepen: dict[str, list] = {}
-    ongetagd = []
+    ongetagd, memos = [], []
     for n in items:
         d = _deur(n)
-        if not d:
+        if str(n.get("type") or "") == _MEMO:
+            # Een memo gaat bewust NIET langs de poort (hij is al mens-facing), dus hij heeft geen
+            # deur — maar "not yet through the gate" is de verkeerde kop boven een stuk dat je
+            # gewoon moet lezen. Eigen kop, bovenaan: wat Noochie je wil vertellen vóór de wachtrij.
+            memos.append(n)
+        elif not d:
             ongetagd.append(n)
         else:
             sleutel = str((n.get("poort") or {}).get("sleutel") or d)
@@ -283,6 +292,9 @@ def _poort_secties(st, items, csrf_token, done) -> str:
     volgorde = [tp.DEUR_BESLUIT, tp.DEUR_ROL, tp.DEUR_SKILL, tp.MENS_WERK, tp.ONBESLIST]
 
     uit = []
+    if memos:
+        uit.append("<h2 class='ptitle'>Memo's van Noochie</h2>")
+        uit.append("".join(_inbox_row(st, n, csrf_token, done_nid=done) for n in memos))
     for deur in volgorde:
         mijn = {k: v for k, v in groepen.items() if k.split("|")[0] == deur}
         if not mijn:
@@ -377,7 +389,7 @@ def _type_van(n: dict) -> str:
     # deze regel toonde een verse spanning wél de kaart maar niet de bijbehorende knoppen — de
     # linkerkant wist zijn type en de rechterkant niet.
     eigen = str(n.get("type") or "")
-    if eigen in (zv.NAAR_ROL, zv.GOVERNANCE, zv.FOUNDER, zv.ACTIE):
+    if eigen in (zv.NAAR_ROL, zv.GOVERNANCE, zv.FOUNDER, zv.ACTIE, _MEMO):
         return eigen
     deur = str((n.get("poort") or {}).get("deur") or "")
     if deur == tp.DEUR_BESLUIT:
@@ -397,6 +409,17 @@ def _type_van(n: dict) -> str:
     return ""
 
 
+def _memo_html(n: dict) -> str:
+    """Noochie's memo is een DOCUMENT, geen spanning. Dus geen founder-kaart ("X werpt dit op",
+    "wat ik van jou nodig heb"), en geen `_leesbaar`: die laag strijkt terminalopdrachten weg, en
+    een opdracht om te plakken (voor Claude Code, voor de terminal) is precies wat de founder in
+    deze memo vroeg (11 sep 2026: "hij zou kunnen zeggen hier de terminal instructie of de
+    instructie voor Claude Code"). Dezelfde leeslaag als het einddocument op /rapport, inclusief
+    het codeblok."""
+    return (f"<p class='chip'>memo van Noochie</p>"
+            f"<div class='einddoc-body'>{_md_doc(_volledig(n))}</div>")
+
+
 def _kaart_html(st, n: dict) -> str:
     """De vier-regel-kaart voor een spanning die de founder bereikt. "" als het geen kaart-item is.
 
@@ -409,6 +432,8 @@ def _kaart_html(st, n: dict) -> str:
         # je bord", die hier juist NIET klopt. Twee tegengestelde zinnen op één scherm is precies
         # wat deze kaart moest wegnemen.
         return ""
+    if str(n.get("type") or "") == _MEMO:
+        return _memo_html(n)
     try:
         from nooch_village import founder_kaart as fkaart, tensie_poort as tp, zelf_verwerking as zv
 
@@ -712,6 +737,7 @@ def _verzoek_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
 # alles zonder eigen type blijft "tension".
 _TYPE_WOORDEN = {
     "actie": {"kop": "Actie afronden", "paneel": "Actie", "klaar": "Actie afgerond"},
+    "memo":  {"kop": "Memo van Noochie", "paneel": "Memo", "klaar": "Gelezen"},
 }
 _STANDAARD_WOORDEN = {"kop": "Process tension", "paneel": "Tension",
                       "klaar": "Done with this tension"}
@@ -822,6 +848,12 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     if _type_van(n) == "naar_rol" and n.get("pagina"):
         return ("<div class='rdr-pane'><h3>Wat doe je met dit voorstel?</h3>"
                 + _verzoek_knoppen(n, csrf) + klaar + "</div>")
+
+    # EEN MEMO VRAAGT NIETS. Er valt niets te accepteren of te routeren: je leest hem, en de enige
+    # handeling is hem sluiten. Wat je ermee doet (een opdracht plakken, een mail sturen) gebeurt
+    # buiten dit scherm — en dat een 'nee' Noochie iets leert, is scope 43, niet deze knop.
+    if _type_van(n) == _MEMO:
+        return f"<div class='rdr-pane'><h3>Gelezen?</h3>{klaar}</div>"
 
     # EEN ACTIE IS AL AFGESPROKEN. De flows vragen "wat doe je hiermee?" en dat is hier de verkeerde
     # vraag: het besluit is al genomen. Twee handelingen blijven over — afvinken, of erkennen dat

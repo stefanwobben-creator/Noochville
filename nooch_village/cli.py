@@ -1260,6 +1260,7 @@ def main() -> None:
         # Eén memo van Noochie aan de founder, op afroep. De toets van de pijp (scope 41): komt er
         # iets van haar in de cockpit-inbox? Default DRY-RUN: de memo staat in de terminal; met
         # --apply wordt hij ook bezorgd. Fail-closed: zonder LLM-antwoord geen memo en geen sjabloon.
+        import json
         from nooch_village import noochie_memo
         from nooch_village.cockpit2 import _Stores
         from nooch_village.config import load_context
@@ -1268,12 +1269,22 @@ def main() -> None:
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
         apply = "--apply" in sys.argv
+        if "--feiten" in sys.argv:
+            # Wat Noochie te zien krijgt, zonder LLM-call: om te controleren of de invoer klopt
+            # vóór je een memo leest die erop bouwt (scope 42a: de inhoud, niet de tellingen).
+            feiten = noochie_memo.verzamel(st, ctx.data_dir)
+            print(json.dumps(feiten, ensure_ascii=False, indent=1))
+            print("\nomvang:", json.dumps(noochie_memo.omvang(feiten)), file=sys.stderr)
+            return
         print("📝 Noochie schrijft een memo aan de founder…", flush=True)
         r = noochie_memo.memo(st, ctx.data_dir, apply=apply)
         if not r["ok"]:
             print(f"⚠ {r['reden']}")
             return
         print("\n" + r["tekst"] + "\n")
+        o = noochie_memo.omvang(r["feiten"])
+        print(f"(invoer: {o['projecten_met_inhoud']} projecten met inhoud, {o['pdfs_gelezen']} pdf's "
+              f"gelezen, {o['wiki_paginas']} wiki-pagina's, ~{o['tokens_ongeveer']} tokens)")
         if apply:
             print("✅ bezorgd in de cockpit-inbox van de founder (afzender: noochie)."
                   if r["bezorgd"] else f"⚠ {r['reden']}")

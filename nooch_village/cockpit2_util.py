@@ -247,18 +247,31 @@ def _md_doc(text: str) -> str:
     """Vollere markdown-render voor het einddocument (leesbaar i.p.v. rauw). Kent kop-niveaus
     (# .. ###### -> h3..h6), **vet**/*cursief*/~~doorhalen~~, geordende (1.) en ongeordende (- )
     lijsten, [tekst](url)-links (alleen http(s)), alinea's en regelafbrekingen. Omringende
-    codefences (```), waar de LLM het document soms in wikkelt, worden gestript. XSS-veilig: de
-    tekst wordt eerst ge-escaped (`_e`), pas daarna draaien de opmaak-regexes. Losstaand van `_md`
-    (de lichte comment-formatter blijft ongemoeid)."""
+    codefences (```), waar de LLM het document soms in wikkelt, worden gestript; een codefence
+    BINNEN het document (een opdracht om te plakken, een commando) wordt een `<pre>`-blok waarin
+    niets wordt opgemaakt — sinds Noochie's memo (scope 42a) die een Claude Code-opdracht kan
+    dragen. XSS-veilig: de tekst wordt eerst ge-escaped (`_e`), pas daarna draaien de
+    opmaak-regexes; een codeblok wordt apart ge-escaped. Losstaand van `_md` (de lichte
+    comment-formatter blijft ongemoeid)."""
     import re
     s = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-    if s.startswith("```"):                                   # LLM-codefence om het hele document -> strippen
+    fences = sum(1 for ln in s.split("\n") if ln.strip().startswith("```"))
+    if s.startswith("```") and fences <= 2:                   # LLM-codefence om het hele document -> strippen
         lines = s.split("\n")[1:]
         while lines and not lines[-1].strip():
             lines.pop()
         if lines and lines[-1].strip().startswith("```"):
             lines.pop()
         s = "\n".join(lines)
+    # Codeblokken eerst uit de tekst halen: wat erin staat is letterlijk (geen vet, geen lijst,
+    # geen link), dus het mag niet door de regexes hieronder. Ze komen aan het eind terug als <pre>.
+    blokken: list[str] = []
+
+    def _vang(m):
+        blokken.append(m.group(1))
+        return f"\n\x00CODE{len(blokken) - 1}\x00\n"
+
+    s = re.sub(r"```[^\n]*\n(.*?)\n?```", _vang, s, flags=re.S)
     s = _e(s)                                                 # eerst escapen (fail-closed tegen XSS)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet vóór cursief
     s = re.sub(r"~~(.+?)~~", r"<del>\1</del>", s)
@@ -306,7 +319,10 @@ def _md_doc(text: str) -> str:
             out.append(f"<p>{ln}</p>")
     if mode:
         out.append("</ul>" if mode == "ul" else "</ol>")
-    return "".join(out)
+    html = "".join(out)
+    for i, code in enumerate(blokken):
+        html = html.replace(f"<p>\x00CODE{i}\x00</p>", f"<pre>{_e(code)}</pre>")
+    return html
 
 
 # De guarded wrapSel-definitie: één authoritatieve bron (`_WRAPSEL_DEF`), gebruikt door zowel de
