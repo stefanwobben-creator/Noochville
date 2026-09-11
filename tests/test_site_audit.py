@@ -213,3 +213,65 @@ def test_route_bestaat(tmp_path):
     import re
     src = open("nooch_village/cockpit2.py", encoding="utf-8").read()
     assert re.search(r'path == "/site-audit"', src) and "render_site_audit" in src
+
+
+# ── dev op afroep: eigen reeks, eigen URL, nooit door elkaar met live ─────────
+
+def test_dev_is_een_eigen_reeks_en_wisselt_nooit_tegen_live(tmp_path):
+    """Stefan, 11 sep: "dev op afroep, maak dat." Een dev-run naast een live-run zou een valse
+    'gewisseld' geven; daarom twee bestanden, en `verschil` vergelijkt alleen binnen een doel."""
+    import types
+    dd, st = _st(tmp_path)
+    ctx = types.SimpleNamespace(settings={"PAGESPEED_API_KEY": "k",
+                                          "mobiel_audit_dev_url": "https://nooch.earth/?preview_theme_id=42"}, data_dir=dd)
+    live, _ = site_audit.run_en_bewaar(st, ctx, _reg(mobiel=_Mobiel(_lighthouse(perf=57))))
+    dev, wissels = site_audit.run_en_bewaar(st, ctx, _reg(mobiel=_Mobiel(_lighthouse(perf=92))), doel="dev")
+    assert live["doel"] == "live" and live["url"] == "https://nooch.earth/"
+    assert dev["doel"] == "dev" and dev["url"] == "https://nooch.earth/?preview_theme_id=42"
+    assert wissels == [], "de eerste dev-run heeft geen vorige dev-run; live telt niet als vorige"
+    assert site_audit.SiteAuditStaat(site_audit.pad_voor(dd, "live")).alles()[-1]["lampjes"][1]["waarde"] == "57"
+    assert site_audit.SiteAuditStaat(site_audit.pad_voor(dd, "dev")).alles()[-1]["lampjes"][1]["waarde"] == "92"
+    assert site_audit.pad_voor(dd, "dev").endswith("site_audit_dev.jsonl") and site_audit.pad_voor(dd).endswith("site_audit.jsonl")
+    # tweede dev-run: nu wél een wissel, binnen dev
+    _, wissels = site_audit.run_en_bewaar(st, ctx, _reg(mobiel=_Mobiel(_lighthouse(perf=40))), doel="dev")
+    assert [(w["sleutel"], w["was"], w["nu"]) for w in wissels] == [("snelheid", "groen", "rood")]
+
+
+def test_dev_zonder_url_meet_niets_en_zegt_wat_er_mist(tmp_path):
+    import pytest
+    dd, st = _st(tmp_path)
+    with pytest.raises(site_audit.GeenDevUrl, match="mobiel_audit_dev_url"):
+        site_audit.draai(st, _ctx(dd), _reg(), doel="dev")
+    assert not __import__("os").path.exists(site_audit.pad_voor(dd, "dev"))
+    with pytest.raises(ValueError):
+        site_audit.draai(st, _ctx(dd), _reg(), doel="staging")
+
+
+def test_preview_die_niet_herkend_is_staat_op_alle_vier_de_lampjes(tmp_path):
+    """Een preview-URL waarvan de skill het preview-thema niet terugzag: dan is mogelijk live
+    gemeten, en dat hoort op de lampjes, niet in een log."""
+    dd, st = _st(tmp_path)
+    uit = _lighthouse(perf=92, preview={"gevraagd": True, "herkend": False})
+    per = {l["sleutel"]: l for l in site_audit.draai(st, _ctx(dd), _reg(mobiel=_Mobiel(uit)))["lampjes"]}
+    for k in ("snelheid", "toegankelijkheid", "best_practices", "seo"):
+        assert "preview-thema niet herkend" in per[k]["uitleg"], k
+    uit = _lighthouse(perf=92, preview={"gevraagd": True, "herkend": True})
+    per = {l["sleutel"]: l for l in site_audit.draai(st, _ctx(dd), _reg(mobiel=_Mobiel(uit)))["lampjes"]}
+    assert "preview-thema" not in per["snelheid"]["uitleg"]
+
+
+def test_scherm_toont_live_en_dev_als_twee_reeksen(tmp_path):
+    import types
+    dd, st = _st(tmp_path)
+    html = render_site_audit(st, doel="dev")
+    assert "site_audit --dev" in html and "mobiel_audit_dev_url" in html and "class='seg'" in html
+    assert "href='/site-audit'" in html and "href='/site-audit?doel=dev'" in html
+    ctx = types.SimpleNamespace(settings={"PAGESPEED_API_KEY": "k",
+                                          "mobiel_audit_dev_url": "https://nooch.earth/?preview_theme_id=42"}, data_dir=dd)
+    site_audit.run_en_bewaar(st, ctx, _reg(mobiel=_Mobiel(_lighthouse(perf=92))), doel="dev")
+    st = cockpit2._Stores(dd)
+    dev = render_site_audit(st, doel="dev")
+    assert "preview_theme_id=42" in dev and "preview-balk" in dev and "class='on' href='/site-audit?doel=dev'" in dev
+    assert "Nog geen run" in render_site_audit(st), "live blijft leeg: de dev-run hoort daar niet"
+    assert "Nog geen run" in render_site_audit(st, doel="onzin"), "onbekend doel valt terug op live"
+    assert "style=" not in dev

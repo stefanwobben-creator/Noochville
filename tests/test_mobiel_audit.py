@@ -388,3 +388,23 @@ def test_kort_element_kiest_een_naam_die_een_mens_herkent():
                           "snippet": "<p>tekst</p>"}) == "div.a > p"
     assert _kort_element({}) == ""
 
+
+
+def test_preview_herkenning_kijkt_naar_shopifys_preview_balk_niet_naar_de_gevraagde_url():
+    """Een preview-URL draagt de parameter altijd, ook als Shopify daarna het live thema serveert.
+    Herkenning = de preview-balk van Shopify in de netwerkrequests; anders een waarschuwing."""
+    data = _psi()
+    audits = data["lighthouseResult"]["audits"]
+    audits["network-requests"] = {"details": {"items": [{"url": "https://nooch.earth/?preview_theme_id=42"},
+                                                        {"url": "https://cdn.shopify.com/s/files/1/x.js"}]}}
+    dev = "https://nooch.earth/?preview_theme_id=42"
+    r = _skill(data).run({"url": dev}, _ctx())
+    assert r["preview"] == {"gevraagd": True, "herkend": False}
+    assert any("preview-thema niet herkend" in w for w in r["waarschuwingen"])
+    audits["network-requests"]["details"]["items"].append({"url": "https://cdn.shopify.com/shopifycloud/preview-bar/1/preview-bar.js"})
+    r = _skill(data).run({"url": dev}, _ctx())
+    assert r["preview"] == {"gevraagd": True, "herkend": True}
+    assert not any("preview" in w for w in r["waarschuwingen"])
+    # live: niets gevraagd, niets te herkennen
+    r = _skill(_psi()).run({"url": URL}, _ctx())
+    assert r["preview"] == {"gevraagd": False, "herkend": None}

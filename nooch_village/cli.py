@@ -1302,15 +1302,24 @@ def main() -> None:
 
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
+        # `--dev` = het preview-thema (mobiel_audit_dev_url), eigen reeks; anders live. Een losse
+        # URL als argument wint van beide, maar landt in de reeks van het gekozen doel.
+        doel = "dev" if "--dev" in sys.argv[2:] else "live"
         url = next((a for a in sys.argv[2:] if a.startswith("http")), "")
-        print(f"🔎 site audit op {url or site_audit._url(ctx)} … (de Lighthouse-run duurt 20-60 s)", flush=True)
-        snapshot, wissels = site_audit.run_en_bewaar(st, ctx, build_skill_registry(), url=url)
+        try:
+            print(f"🔎 site audit [{doel}] op {url or site_audit._url(ctx, doel)} … (de Lighthouse-run duurt 20-60 s)",
+                  flush=True)
+            snapshot, wissels = site_audit.run_en_bewaar(st, ctx, build_skill_registry(), url=url, doel=doel)
+        except site_audit.GeenDevUrl as exc:
+            print(f"⚠ {exc}")
+            sys.exit(1)
         for l in snapshot["lampjes"]:
             print(f"  {l['kleur']:>6}  {l['naam']:<22} {l['waarde']:<8} {l['uitleg'][:110]}")
-        print(f"\ntotaal: {snapshot['totaal']} · {snapshot['duur_s']} s · bewaard in data/{site_audit.BESTAND}")
+        bestand = site_audit.BESTAND_DEV if doel == "dev" else site_audit.BESTAND
+        print(f"\ntotaal: {snapshot['totaal']} · {snapshot['duur_s']} s · bewaard in data/{bestand}")
         if wissels:
             print("gewisseld sinds de vorige run: " + ", ".join(f"{w['naam']} {w['was']}→{w['nu']}" for w in wissels))
-        print("bekijk: /site-audit (Website Developer → Tools)")
+        print("bekijk: /site-audit" + ("?doel=dev" if doel == "dev" else "") + " (Website Developer → Tools)")
 
     elif mode == "wiki_broncheck":
         # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
