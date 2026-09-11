@@ -29,7 +29,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
 # een tweede store is een besluit, geen bijvangst.
 STORES = {
     "agenda", "ai", "assign", "att", "backlog", "checklists", "copy_stack", "defs",
-    "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "match", "metrics",
+    "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "metrics",
     "nom_kroniek", "nominations", "noochie", "notes", "notif", "observations", "people",
     "personas", "project_docs", "projects", "radar", "radar_besluiten", "records", "sources",
     "spel", "staging", "strategies", "werk",

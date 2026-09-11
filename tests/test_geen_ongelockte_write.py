@@ -32,7 +32,6 @@ _WHITELIST = {
     "governance.py":     (1, "Records._save serialiseert Record-objecten naar json; de klasse erft "
                              "JsonStore en deze ENIGE call zit in _save zelf, dus onder het slot"),
     "human_inbox.py":    (1, "(a) cross-proces: daemon-Village + inbox-CLI (approval-oppervlak)"),
-    "ai_match.py":       (1, "(a) cross-proces: cockpit2 serve + het match-subcommando"),
     # ── al gelockt via synchronized; convergeren naar JsonStore in fase 4, batch 0 ──
     "projects.py":       (1, "gelockt via synchronized; converge naar JsonStore (fase 4 batch 0)"),
     "attachments.py":    (1, "gelockt via file_lock; converge naar JsonStore (fase 4 batch 0)"),

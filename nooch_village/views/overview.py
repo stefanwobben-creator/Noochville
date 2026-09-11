@@ -20,9 +20,8 @@ from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import (org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links,
+from nooch_village import (org, artefacts, epic, acc_ids, skill_meta, skill_links,
                            skill_labels, wiki, claims_db)
-from nooch_village.ai_tasks import KIND_AUTONOOM, KIND_MIDDEL
 from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
 from nooch_village.cockpit2_util import _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
@@ -98,13 +97,6 @@ def _tree_html(st: _Stores, current_id: str) -> str:
     return f"<div class='tree'><h3>Organization</h3><ul>{body}</ul></div>"
 
 
-def _ai_chip(st: _Stores, t) -> str:
-    pa = st.personas.get(t.agent)
-    nm = pa.name if pa else t.agent
-    skill = f" · {_e(t.wat)}" if t.wat else ""
-    return f"<span class='chip'>🤖 {_e(nm)}{skill}</span>"
-
-
 def _link_chip(t) -> str:
     """Een gekoppeld dorpsmiddel: mensentaal voorop, de technische capability eronder."""
     dom = skill_meta.schrijft_in_domein(t.skill)
@@ -141,70 +133,36 @@ def _middel_picker(st: _Stores, rec, role_id: str, acc_id: str, hid) -> str:
             f"Link resource</button></form></div>")
 
 
-def _suggest_for_acc(st: _Stores, role_id: str, acc_id: str, acc_text: str):
-    """Welke (AI, skill) past bij deze accountability en is nog niet gekoppeld. Voedt het cadeautje.
-    Matching loopt via ai_match (lexicaal + concept + optioneel gecachet LLM-oordeel)."""
-    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_id)}
-    return ai_match.suggest(st.personas.all(), acc_text, attached, st.match)
-
-
 def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
-    """Eén accountability-regel. Is er AI op gekoppeld, dan tonen we dat SUBTIEL (één 🤖-marker,
-    klikbaar om te beheren); het 'wat' staat gebundeld in het AI-overzicht onder de rol. Zo niet
-    dubbel. Het 🎁 verschijnt alleen als er een passende, nog niet gekoppelde AI-skill is."""
+    """Eén accountability-regel: de belofte, de dorpsmiddelen die eraan hangen, en de ingang naar
+    het beheer daarvan.
+
+    Sinds scope 39 staat hier GEEN autonome AI-laag meer. Die beloofde dat een AI de belofte
+    zelfstandig uitvoert, maar `kind="autonoom"` werd nergens buiten deze view gelezen: er was geen
+    daemon, geen puls en geen planner die er ooit iets mee deed. Een scherm dat uitvoering belooft
+    die niet bestaat, is dezelfde fout als een skill die 'gelukt' meldt zonder iets te doen.
+
+    Wat een rol kan uitvoeren komt uit zijn DNA plus de rugzakken (`skillset.py`) — standaard
+    beschikbaar voor elke rol, niet per belofte te koppelen. Hulp aanbieden doen de stagiairs
+    langs de bestaande verzoek-route."""
     aid = acc_ids.acc_id_at(rec.definition, i)
-    alle = st.ai.for_acc(rec.id, aid)
-    tasks = [t for t in alle if t.kind == KIND_AUTONOOM]
-    links = [t for t in alle if t.kind == KIND_MIDDEL]
-    url = f"/aitask?role={_e(rec.id)}&acc_id={_e(aid)}"
-    marker = ""
-    if tasks:
-        if csrf_token:
-            marker = (f"<a class='ai-on js-modal' href='{url}' data-href='{url}' "
-                      f"title='AI-empowered — manage'>🤖</a>")
-        else:
-            marker = "<span class='ai-on' title='AI-empowered'>🤖</span>"
-    aff = ""
-    if csrf_token and _suggest_for_acc(st, rec.id, aid, text):
-        aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
-               f"title='An AI skill can carry out this accountability autonomously'>🎁</a>")
+    links = skill_links.links_for_acc(st.ai, rec.id, aid)
     # De middelen onder de belofte: mensentaal voorop, de technische capability klein erachter.
     mid = ""
     if links:
         chips = "".join(f"<span class='chip'>🔗 {_e(skill_labels.label(t.skill))}</span>"
                         f"<span class='muted'> {_e(t.skill)}</span>" for t in links)
         mid = f"<div class='muted'>{chips}</div>"      # bestaande klasse; geen nieuwe CSS
+    # Ingang naar het middelenbeheer. Stond hier eerder als 🎁 ("een AI kan dit zelfstandig"); het
+    # is nu wat het altijd al was: welke dorpsmiddelen dienen deze belofte. Zonder csrf (auth uit,
+    # leesweergave) tonen we geen beheerknop.
+    beheer = ""
+    if csrf_token:
+        url = f"/middelen?role={_e(rec.id)}&acc_id={_e(aid)}"
+        beheer = (f"<a class='manage-ico js-modal' href='{url}' data-href='{url}' "
+                  f"title='Village resources on this commitment'>🔗</a>")
     return (f"<div class='accrow'><div class='acc-text'>{_e(text)}{mid}</div>"
-            f"<div class='acc-ai'>{marker}{aff}</div></div>")
-
-
-def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
-    """Overzicht (één keer, niet per accountability herhaald): wat doet elke AI autonoom in DEZE rol.
-    Gegroepeerd per agent -> per skill de accountabilities die hij dekt."""
-    tasks = [t for t in st.ai.for_role(rec.id) if t.kind == KIND_AUTONOOM]
-    if not tasks:
-        return ""
-    by_agent: dict[str, dict[str, list]] = {}
-    for t in tasks:
-        acc_txt = acc_ids.text_for(rec.definition, t.acc_id) or "—"
-        by_agent.setdefault(t.agent, {}).setdefault(t.wat or "—", []).append(acc_txt)
-    blocks = ""
-    for agent, skills in by_agent.items():
-        pa = st.personas.get(agent)
-        nm = pa.name if pa else agent
-        rows = ""
-        for wat, acclist in skills.items():
-            uniq = ", ".join(dict.fromkeys(acclist))
-            rows += f"<li><b>{_e(wat)}</b> <span class='muted'>· {_e(uniq)}</span></li>"
-        manage = ""
-        if csrf_token:
-            first = acc_ids.acc_id_at(rec.definition, 0)
-            url = f"/aitask?role={_e(rec.id)}&acc_id={_e(first)}"
-            manage = f" <a class='flink js-modal' href='{url}' data-href='{url}'>manage</a>"
-        blocks += (f"<div class='ai-ov'><div class='ai-ov-h'>{_avatar(nm, True)}"
-                   f"<b>{_e(nm)}</b> <span class='muted'>does autonomously in this role:</span>{manage}</div>"
-                   f"<ul class='clean ai-ov-list'>{rows}</ul></div>")
-    return f"<div class='c2-sec'><h3>AI in this role</h3>{blocks}</div>"
+            f"<div class='acc-ai'>{beheer}</div></div>")
 
 
 def _epic_earth_html() -> str:
@@ -258,7 +216,6 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
                      + ("".join(_acc_row(st, rec, i, a, csrf_token) for i, a in enumerate(accs))
                         if accs else "<span class='muted'>No accountabilities.</span>") + "</div>")
-        parts.append(_role_ai_overview(st, rec, csrf_token))
     elif accs:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
                      + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul></div>")
@@ -1123,8 +1080,18 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
     return _page("Role fillers", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 
 
-def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
-                  fragment: bool = False) -> str:
+def render_middelen(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
+                    fragment: bool = False) -> str:
+    """Welke dorpsmiddelen dienen deze ene belofte, en het beheer daarvan.
+
+    Heette tot scope 39 `render_aitask` en deed twee dingen tegelijk: een AI aan een belofte hangen
+    die hem 'zelfstandig uitvoert', en een dorpsmiddel koppelen. Het eerste was een belofte zonder
+    uitvoering (`kind="autonoom"` werd buiten de view nergens gelezen) en is weg. Wat overblijft is
+    het middel: welke capability uit de registry staat deze belofte ter beschikking.
+
+    Het roloverleg heeft zijn eigen koppelknop in het uitvoerbaarheids-stoplicht; dit scherm is de
+    plek waar je een gelegde koppeling ook weer LOS kunt maken, en die is er verder niet.
+    """
     rec = st.records.get(role_id)
     acc_text = acc_ids.text_for(rec.definition, acc_id) if rec else ""
     back = f"/node?id={role_id}&tab=overview"
@@ -1135,77 +1102,32 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
                 f"<input type='hidden' name='acc_id' value='{_e(acc_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
 
-    def pickform(agent: str, skill: str, label: str, cls: str) -> str:
-        return (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-                f"<input type='hidden' name='pick' value='{_e(agent)}::{_e(skill)}'>"
-                f"<button class='{cls}' type='submit' name='action' value='aitask_add'>{label}</button></form>")
-
-    # 1) Voorgesteld: (AI, skill) die lexicaal bij deze accountability past (het cadeautje).
-    sugg = _suggest_for_acc(st, role_id, acc_id, acc_text)
-    sugg_html = ""
-    if sugg:
-        items = "".join(f"<div class='frow'><span style='flex:1'>🤖 {_e(p.name)} · {_e(sk)}</span>"
-                        f"{pickform(p.id, sk, 'link', 'btn ok')}</div>" for p, sk in sugg)
-        sugg_html = (f"<div class='sugg'><div class='sugg-h'>🎁 Suggested</div>{items}</div>")
-
-    # 2) Al gekoppeld: verwijderbaar. Autonome AI-taken en dorpsmiddelen delen dezelfde
-    #    verwijder-route; het chip-label verschilt.
     def delform(tid: str) -> str:
         return (f"<form method='post' action='/action' style='display:inline'>"
                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='tid' value='{_e(tid)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='dellink' type='submit' name='action' value='aitask_remove'>remove</button>"
+                f"<button class='dellink' type='submit' name='action' value='middel_remove'>remove</button>"
                 f"</form>")
 
     rows = ""
-    for t in st.ai.for_acc(role_id, acc_id):
-        chip = _link_chip(t) if t.kind == KIND_MIDDEL else _ai_chip(st, t)
-        rows += (f"<div class='frow'><span style='flex:1'>{chip}</span>{delform(t.id)}</div>")
+    for t in skill_links.links_for_acc(st.ai, role_id, acc_id):
+        rows += f"<div class='frow'><span style='flex:1'>{_link_chip(t)}</span>{delform(t.id)}</div>"
+    if not rows:
+        rows = "<p class='muted'>No village resource is linked to this commitment yet.</p>"
 
-    # 2b) Middelen koppelen: registry-skills die deze rol nog niet voert. De domeinpoort filtert
-    #     beslis-skills weg bij een rol die het domein niet houdt — geen uitzonderingsroute.
+    # De picker: registry-skills die deze rol nog niet via deze belofte voert. De domeinpoort
+    # filtert beslis-skills weg bij een rol die het domein niet houdt.
     middel = _middel_picker(st, rec, role_id, acc_id, hid)
 
-    # 3) Selecteren uit een rugzakje (geen vrije tekst): combinaties AI · skill, niet al gekoppeld.
-    personas = st.personas.all()
-    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_id)}
-    combos = [(p, sk) for p in personas for sk in (p.skills or []) if (p.id, sk) not in attached]
-    if combos:
-        opts = "".join(f"<option value='{_e(p.id)}::{_e(sk)}'>🤖 {_e(p.name)} · {_e(sk)}</option>"
-                       for p, sk in combos)
-        select = (f"<div class='pf'><form method='post' action='/action'>{hid()}"
-                  f"<label>Pick a skill from an AI's backpack</label>"
-                  f"<select name='pick'>{opts}</select>"
-                  f"<button class='btn ok' type='submit' name='action' value='aitask_add' "
-                  f"style='margin-top:.4rem'>Link</button></form></div>")
-    elif personas:
-        select = "<p class='muted'>All AI skills are already linked here, or the backpacks are empty.</p>"
-    else:
-        select = ("<p class='muted'>There are no AI inhabitants yet. Create one first, "
-                  "then you can link a skill.</p>")
-
-    # 4) Rugzak uitbreiden (set-up): een nieuwe skill aan een AI toevoegen.
-    bag = ""
-    if personas:
-        popts = "".join(f"<option value='{_e(p.id)}'>🤖 {_e(p.name)}</option>" for p in personas)
-        bag = (f"<details class='bagadd'><summary>Expand an AI's backpack</summary>"
-               f"<form method='post' action='/action'>"
-               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-               f"<input type='hidden' name='next' value='{_e(back + '&_aitask=' + acc_id)}'>"
-               f"<label>AI inhabitant</label><select name='agent'>{popts}</select>"
-               f"<label>New skill</label><input name='skill' placeholder='e.g. writes the code'>"
-               f"<button class='btn' type='submit' name='action' value='persona_skill_add' "
-               f"style='margin-top:.4rem'>Add to backpack</button></form></details>")
-
-    frag = (f"<h2 style='margin-top:0'>AI on this accountability</h2>"
+    frag = (f"<h2 style='margin-top:0'>Village resources on this commitment</h2>"
             f"<p class='muted'>Accountability: {_e(acc_text) or '—'}</p>"
-            f"<p style='font-size:.82rem;color:var(--gray)'>The human stays responsible; the AI "
-            f"autonomously runs a skill from its backpack. You type nothing, you "
-            f"<b>select</b> a skill.</p>{sugg_html}{rows}{middel}{select}{bag}")
+            f"<p style='font-size:.82rem;color:var(--gray)'>A resource says this village capability "
+            f"serves this commitment. It never changes the TEXT of the accountability, and it never "
+            f"runs by itself: the role filler stays responsible.</p>{rows}{middel}")
     if fragment:
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← back</a></div>{frag}</div>")
-    return _page("AI on accountability", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
+    return _page("Village resources", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 

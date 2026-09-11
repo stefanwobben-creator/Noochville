@@ -274,4 +274,4 @@ def test_de_labelschuld_daalt_monotoon():
 
 
 #: Bestaande labelschuld (takken mét poort, zónder comment). Mag alleen DALEN.
-_LABELSCHULD = 69
+_LABELSCHULD = 66
