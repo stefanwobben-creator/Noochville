@@ -36,6 +36,8 @@ _BEWUST_ZONDER_SLOT = {
     "EvidenceLedger": "append-only kroniek; neemt file_lock expliciet met de hand rond de append",
     "NominationKroniek": "append-only kroniek; neemt file_lock expliciet met de hand",
     "SkillLinkKroniek": "append-only kroniek; neemt file_lock expliciet met de hand",
+    "Draaistaat": "append-only staat van skill-aanroepen; neemt file_lock expliciet met de hand "
+                  "rond de append, zoals de Kroniek",
 }
 
 _SCHRIJF_MODI = ("w", "a", "w+", "a+", "wb", "ab")

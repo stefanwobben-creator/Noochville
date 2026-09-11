@@ -195,6 +195,14 @@ class SkillRegistry:
         self._skills: dict[str, Skill] = {}
 
     def register(self, skill: Skill) -> None:
+        # Elke geregistreerde skill noteert voortaan zelf dát hij draaide (draaistaat.omwikkel
+        # vervangt de gebonden `run`). Hier en niet bij `get()`: dan loopt ook `registry.all()`,
+        # de onderzoekspas, de CLI en elke demo langs dezelfde teller, en er is één plek waar het
+        # gebeurt. Het OBJECT blijft ongemoeid, dus de vijf `isinstance(..., DataSourceSkill)`-
+        # checks elders blijven werken. Fail-soft: een skill die zich niet laat wikkelen draait
+        # gewoon, ongelogd.
+        from nooch_village import draaistaat
+        draaistaat.omwikkel(skill)
         self._skills[skill.name] = skill
         log.info("skill geregistreerd: %s", skill.name)
 

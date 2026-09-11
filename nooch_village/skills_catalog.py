@@ -94,8 +94,20 @@ def _sleutels(skill) -> dict:
 
 # ── De drie blokken ──────────────────────────────────────────────────────────
 
-def uitvoerbaar(records, ai) -> list[dict]:
-    """Blok 1: registry-skills met een implementatie."""
+def uitvoerbaar(records, ai, draai=None) -> list[dict]:
+    """Blok 1: registry-skills met een implementatie.
+
+    `draai` is een `Draaistaat` of None. Drie toestanden, en het verschil is de hele reden dat dit
+    veld bestaat:
+
+    - `draai is None`  → **niet gemeten**; de aanroeper leverde geen staat. Het scherm zegt er dan
+      niets over, want "geen spoor" beweren zonder gekeken te hebben is precies de leugen die deze
+      scope opruimt.
+    - staat, geen rijen → **nog geen spoor**: dit gereedschap heeft aantoonbaar nooit gedraaid.
+    - staat met rijen   → wanneer voor het laatst, en wanneer het voor het laatst iets ópleverde.
+      Die twee zijn verschillend: een skill die vanmorgen draaide en niets vond is iets anders dan
+      een skill die vanmorgen iets vond.
+    """
     reg = _registry()
     door = gebruikers(records, ai)
     rows = []
@@ -104,6 +116,15 @@ def uitvoerbaar(records, ai) -> list[dict]:
         rows.append({
             "skill": naam,
             "label": skill_labels.label(naam, reg),
+            # De skill zegt in zijn eigen woorden wat hij doet. Stond er al als veld op `Skill` en
+            # werd nergens getoond: het scherm liet alleen de bijnaam zien.
+            "beschrijving": (getattr(skill, "description", "") or "").strip(),
+            "draai": None if draai is None else {
+                "laatst": (draai.laatste(naam) or {}).get("ts", 0.0),
+                "laatste_opbrengst": (draai.laatste_opbrengst(naam) or {}).get("ts", 0.0),
+                **{k: v for k, v in (draai.samenvatting().get(naam) or {}).items()
+                   if k in ("totaal", "gelukt", "leeg", "fout")},
+            },
             "sleutels": _sleutels(skill),
             "domein": skill_meta.schrijft_in_domein(naam),
             "zwaar": skill_meta.is_zwaar(naam),
@@ -197,11 +218,11 @@ def uitvoerbaarheid(acc_text: str, rec, ai) -> dict:
     return {"kleur": "rood", "skill": "", "reden": reden, "koppelbaar": False}
 
 
-def catalogus(records, ai, human_inbox=None) -> dict:
+def catalogus(records, ai, human_inbox=None, draai=None) -> dict:
     """Alle drie de blokken in één keer — de datalaag onder /skills."""
     recs = list(records)
     return {
-        "uitvoerbaar": uitvoerbaar(recs, ai),
+        "uitvoerbaar": uitvoerbaar(recs, ai, draai),
         "niet_gedekt": niet_gedekt(recs, ai),
         "gewenst": gewenst(human_inbox),
     }
