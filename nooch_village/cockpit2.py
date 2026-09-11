@@ -6507,7 +6507,8 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/site-audit":
                 # De lampjes van de shop (bereikbaar, Lighthouse, claims) uit de laatste run van
                 # `village site_audit`. Puur leeswerk; de run zelf draait nooit in het cockpit.
-                self._send(render_site_audit(st))
+                # `?doel=dev` toont de reeks van het preview-thema (`village site_audit --dev`).
+                self._send(render_site_audit(st, doel=(qs.get("doel") or ["live"])[0]))
                 return
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).

@@ -84,6 +84,12 @@ _LCP_AANWIJZING = {
     "requestDiscoverable": "de LCP-afbeelding staat niet in de eerste HTML (komt pas via CSS of JS)",
 }
 
+#: Het spoor van een Shopify-thema-preview in de netwerkrequests: de preview-balk die Shopify bij
+#: een thema-preview meelaadt vanaf zijn CDN (twee generaties: `preview_bar_injector` en
+#: `shopifycloud/preview-bar`). Bewust NIET de gevraagde URL zelf: die draagt de parameter altijd,
+#: ook als Shopify daarna gewoon het live thema serveert.
+_PREVIEW_SPOOR = re.compile(r"cdn\.shopify\.com/.*preview[-_]bar", re.I)
+
 #: De meetreeks: de score en de drie Core Web Vitals-achtige labwaarden, plus wat het veld zegt.
 _METRICS = ("performance", "lcp_ms", "cls", "tbt_ms", "veld_lcp_ms", "veld_inp_ms", "veld_cls")
 
@@ -164,6 +170,7 @@ class MobielAuditSkill(DataSourceSkill):
                      "bevindingen[{categorie, audit, titel, score, weergave, gewicht}] (falende audits, "
                      "per categorie gewogen), lcp_element{element, selector, snippet, fases_ms, "
                      "fases_bron?, checks[]?, aanwijzingen[]?} (LH 13: checklist van lcp-discovery), "
+                     "preview{gevraagd, herkend} (Shopify-preview: is het preview-thema echt gerenderd?), "
                      "waarschuwingen[], text | error + tijdelijk")
 
     def __init__(self, haal=None, controleer=None):
@@ -302,8 +309,26 @@ class MobielAuditSkill(DataSourceSkill):
                "kansen": kansen[:MAX_KANSEN], "mobiel": mobiel, "bevindingen": bevindingen,
                "lcp_element": lcp_element,
                "waarschuwingen": [str(w)[:200] for w in (lh.get("runWarnings") or [])[:3]]}
+        uit["preview"] = MobielAuditSkill._preview(audits, url)
+        if uit["preview"]["gevraagd"] and not uit["preview"]["herkend"]:
+            uit["waarschuwingen"].append("preview-thema niet herkend in de netwerkrequests (geen Shopify "
+                                         "preview-balk geladen); mogelijk is het live thema gemeten")
         uit["text"] = MobielAuditSkill._tekst(uit)
         return uit
+
+    @staticmethod
+    def _preview(audits: dict, url: str) -> dict:
+        """Is er een Shopify-preview gevraagd (`preview_theme_id` in de URL), en is die ook echt
+        gerenderd? Shopify laadt bij een thema-preview zijn preview-balk mee; die staat in de
+        netwerkrequests van Lighthouse. Ontbreekt hij, dan zeggen we dat, in plaats van een score van
+        het live thema als dev-score te presenteren. Geen preview gevraagd = niets te herkennen."""
+        gevraagd = "preview_theme_id=" in str(url or "")
+        if not gevraagd:
+            return {"gevraagd": False, "herkend": None}
+        items = ((audits.get("network-requests") or {}).get("details") or {}).get("items") or []
+        urls = [str(it.get("url") or "") for it in items if isinstance(it, dict)]
+        herkend = any(_PREVIEW_SPOOR.search(u) for u in urls)
+        return {"gevraagd": True, "herkend": herkend}
 
     @staticmethod
     def _bevindingen(lh: dict) -> list[dict]:

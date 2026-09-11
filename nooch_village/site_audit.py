@@ -39,7 +39,12 @@ import time
 
 log = logging.getLogger("village.site_audit")
 
+#: Twee doelen, twee reeksen. `live` is de shop zoals klanten hem krijgen (de wekelijkse reeks en de
+#: lampjes); `dev` is het preview-thema op afroep (`village site_audit --dev`), met een eigen bestand,
+#: zodat een dev-run nooit als "gewisseld" naast een live-run komt te staan.
+DOELEN = ("live", "dev")
 BESTAND = "site_audit.jsonl"
+BESTAND_DEV = "site_audit_dev.jsonl"
 KLEUREN = ("groen", "oranje", "rood", "grijs")
 #: Hoeveel runs het scherm als verloop toont.
 VERLOOP = 12
@@ -57,8 +62,8 @@ CLAIMS_SCAN_MAX_WEKEN = 2
 MAX_BEVINDINGEN = 16
 
 
-def pad_voor(data_dir: str) -> str:
-    return os.path.join(data_dir, BESTAND)
+def pad_voor(data_dir: str, doel: str = "live") -> str:
+    return os.path.join(data_dir, BESTAND_DEV if doel == "dev" else BESTAND)
 
 
 # ── drempels ─────────────────────────────────────────────────────────────────
@@ -142,6 +147,11 @@ def _check_mobiel(registry, ctx, url: str, eigenaar: str) -> list[dict]:
         return [_lamp(s, n, "grijs", uitleg=reden, eigenaar=eigenaar, bron="mobiel_audit") for s, n, _ in namen]
     scores = r.get("scores") or {}
     lab = r.get("lab") or {}
+    # Een preview-URL waarvan de skill het preview-thema niet in de requests terugzag: dan is het
+    # mogelijk gewoon live gemeten. Dat hoort op alle vier de lampjes, niet in een logregel.
+    pv = r.get("preview") or {}
+    let_op = (" Let op: preview-thema niet herkend in de netwerkrequests; mogelijk is live gemeten."
+              if pv.get("gevraagd") and not pv.get("herkend") else "")
     per_cat: dict[str, list] = {}
     for b in r.get("bevindingen") or []:
         per_cat.setdefault(b.get("categorie"), []).append(
@@ -149,7 +159,8 @@ def _check_mobiel(registry, ctx, url: str, eigenaar: str) -> list[dict]:
     uit = []
     for sleutel, naam, cat in namen:
         score = scores.get(cat)
-        uitleg = f"Lighthouse {cat.replace('_', ' ')} {score if score is not None else '?'} van 100 (groen vanaf {LIGHTHOUSE_GROEN}, rood onder {LIGHTHOUSE_ORANJE})."
+        uitleg = (f"Lighthouse {cat.replace('_', ' ')} {score if score is not None else '?'} van 100 "
+                  f"(groen vanaf {LIGHTHOUSE_GROEN}, rood onder {LIGHTHOUSE_ORANJE}).{let_op}")
         bev = list(per_cat.get(cat, []))
         if cat == "performance":
             lcp, cls, tbt = (lab.get("lcp_ms") or {}), (lab.get("cls") or {}), (lab.get("tbt_ms") or {})
@@ -227,14 +238,27 @@ def _check_claims(st, data_dir: str, records) -> list[dict]:
 
 # ── de run ───────────────────────────────────────────────────────────────────
 
-def _url(ctx) -> str:
+class GeenDevUrl(ValueError):
+    """`--dev` zonder `mobiel_audit_dev_url`: niets meten, niets bewaren, wél zeggen wat er mist."""
+
+
+def _url(ctx, doel: str = "live") -> str:
     from nooch_village.skills_impl.mobiel_audit import DEFAULT_URL
-    return str(((getattr(ctx, "settings", {}) or {}).get("mobiel_audit_url")) or DEFAULT_URL).strip()
+    settings = getattr(ctx, "settings", {}) or {}
+    if doel == "dev":
+        url = str(settings.get("mobiel_audit_dev_url") or "").strip()
+        if not url:
+            raise GeenDevUrl("geen mobiel_audit_dev_url in config/settings.ini: plak daar de share-preview-link "
+                             "van het thema (https://nooch.earth/?preview_theme_id=…)")
+        return url
+    return str(settings.get("mobiel_audit_url") or DEFAULT_URL).strip()
 
 
-def draai(st, ctx, registry, *, url: str = "", eigenaar_site: str = "") -> dict:
+def draai(st, ctx, registry, *, url: str = "", eigenaar_site: str = "", doel: str = "live") -> dict:
     """Eén audit-run: alle checks, elk fail-soft, één snapshot. Geeft de snapshot terug."""
-    url = url or _url(ctx)
+    if doel not in DOELEN:
+        raise ValueError(f"onbekend doel {doel!r}; kies uit {DOELEN}")
+    url = url or _url(ctx, doel)
     if not eigenaar_site:
         from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE   # één plek voor dat id
         eigenaar_site = WEBSITE_DEVELOPER_ROLE
@@ -243,7 +267,7 @@ def draai(st, ctx, registry, *, url: str = "", eigenaar_site: str = "") -> dict:
     lampjes += _check_bereikbaar(registry, ctx, url, eigenaar_site)
     lampjes += _check_mobiel(registry, ctx, url, eigenaar_site)
     lampjes += _check_claims(st, getattr(st, "dd", "") or getattr(ctx, "data_dir", ""), getattr(st, "records", None))
-    snapshot = {"ts": time.time(), "datum": time.strftime("%Y-%m-%d"), "url": url,
+    snapshot = {"ts": time.time(), "datum": time.strftime("%Y-%m-%d"), "url": url, "doel": doel,
                 "lampjes": lampjes, "totaal": _ergste([l["kleur"] for l in lampjes if l["kleur"] != "grijs"]),
                 "duur_s": round(time.time() - t0, 1)}
     return snapshot
@@ -295,11 +319,11 @@ def verschil(vorige: dict | None, nu: dict) -> list[dict]:
     return uit
 
 
-def run_en_bewaar(st, ctx, registry, *, url: str = "") -> tuple[dict, list[dict]]:
-    """De CLI- en (later) klok-ingang: draai, vergelijk met de vorige, bewaar."""
-    staat = SiteAuditStaat(pad_voor(getattr(st, "dd", "") or getattr(ctx, "data_dir", "data")))
+def run_en_bewaar(st, ctx, registry, *, url: str = "", doel: str = "live") -> tuple[dict, list[dict]]:
+    """De CLI- en (later) klok-ingang: draai, vergelijk met de vorige run van HETZELFDE doel, bewaar."""
+    staat = SiteAuditStaat(pad_voor(getattr(st, "dd", "") or getattr(ctx, "data_dir", "data"), doel))
     vorige = staat.laatste()
-    snapshot = draai(st, ctx, registry, url=url)
+    snapshot = draai(st, ctx, registry, url=url, doel=doel)
     wissels = verschil(vorige, snapshot)
     snapshot["wissels"] = wissels
     staat.noteer(snapshot)
