@@ -60,14 +60,30 @@ def _verloop_html(runs: list[dict]) -> str:
     return f"<h2>Verloop</h2><p class='muted'>De laatste {len(runs)} runs, nieuwste bovenaan.</p>{rijen}"
 
 
-def render_site_audit(st) -> str:
-    staat = site_audit.SiteAuditStaat(site_audit.pad_voor(st.dd))
+_DOEL_LABEL = {"live": "Live", "dev": "Dev (preview)"}
+
+
+def _doel_seg(doel: str) -> str:
+    """Live · Dev als segment-balk (zelfde `.seg` als het tijdvenster op /metrics): twee reeksen,
+    één scherm, nooit door elkaar."""
+    links = "".join(f"<a class='{'on' if d == doel else ''}' href='/site-audit{'' if d == 'live' else '?doel=dev'}'>"
+                    f"{_e(_DOEL_LABEL[d])}</a>" for d in site_audit.DOELEN)
+    return f"<span class='seg'>{links}</span>"
+
+
+def render_site_audit(st, doel: str = "live") -> str:
+    doel = doel if doel in site_audit.DOELEN else "live"
+    staat = site_audit.SiteAuditStaat(site_audit.pad_voor(st.dd, doel))
     laatste = staat.laatste()
+    cmd = "python -m nooch_village.village site_audit" + (" --dev" if doel == "dev" else "")
     if laatste is None:
-        main = ("<div class='c2-main'><h1>Site audit</h1>"
-                "<p class='muted'>Nog geen run. Draai <code>python -m nooch_village.village site_audit</code> "
-                "op de server; dan staan hier de lampjes van de shop: bereikbaar, snelheid, "
-                "toegankelijkheid, best practices, SEO en claims.</p></div>")
+        uitleg = ("dan staan hier de lampjes van het preview-thema (<code>mobiel_audit_dev_url</code> in "
+                  "<code>config/settings.ini</code>): een eigen reeks, los van live, want een dev-run naast een "
+                  "live-run zou een valse wissel zijn." if doel == "dev" else
+                  "dan staan hier de lampjes van de shop: bereikbaar, snelheid, toegankelijkheid, best "
+                  "practices, SEO en claims.")
+        main = (f"<div class='c2-main'><h1>Site audit {_doel_seg(doel)}</h1>"
+                f"<p class='muted'>Nog geen run. Draai <code>{_e(cmd)}</code> op de server; {uitleg}</p></div>")
     else:
         wissels = laatste.get("wissels") or []
         wissel_html = ""
@@ -77,12 +93,14 @@ def render_site_audit(st) -> str:
                            f"<ul class='fbul'>{regels}</ul></div>")
         kaarten = "".join(_lamp_card(st, l) for l in laatste.get("lampjes") or [])
         wanneer = _age(float(laatste.get("ts") or 0)) if laatste.get("ts") else "?"
+        dev_noot = (" Dit is het preview-thema, mét Shopify's preview-balk; vergelijk dev met live nooit op "
+                    "één run, de labscore schommelt tientallen punten." if doel == "dev" else "")
         main = (f"<div class='c2-main'><h1>Site audit "
-                f"{_chip(laatste.get('totaal') or 'grijs')}</h1>"
+                f"{_chip(laatste.get('totaal') or 'grijs')} {_doel_seg(doel)}</h1>"
                 f"<p class='muted'>{_e(laatste.get('url') or '')} · laatste run {_e(wanneer)} "
                 f"({_e(laatste.get('datum') or '')}, {laatste.get('duur_s', '?')} s). Het slechtste lampje "
                 f"bepaalt de kleur bovenaan; grijs is niet gemeten en telt niet mee. Een lampje dat van "
-                f"kleur wisselt is het signaal, de stand is het scherm.</p>"
+                f"kleur wisselt is het signaal, de stand is het scherm.{dev_noot}</p>"
                 f"{wissel_html}<h2>Lampjes</h2>{kaarten}{_verloop_html(staat.verloop())}</div>")
     from nooch_village.views.overview import _tree_html
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
