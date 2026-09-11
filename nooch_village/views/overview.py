@@ -688,7 +688,8 @@ _ROLE_TOOLS = {
         ("Copy checker", "Check a text against the copy policies — layer 1, then the judgement",
          "/copy-check")],
     WEBSITE_DEVELOPER_ROLE: [
-        ("Backlog Builder", "Bugs, wishes and ideas → a prioritised backlog", "/backlog")],
+        ("Site audit", "Green, orange, red for reachability, speed, accessibility, SEO and claims "
+         "of the shop, with the reasons behind each light", "/site-audit")],
 }
 
 
@@ -792,8 +793,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "members":
         content = _members_html(st, rec, csrf_token)
     elif tab == "notes":
-        # De Website Developer had hier gÉÉn notes maar de Backlog Builder. Die is een gereedschap
-        # en woont nu onder Tools (/backlog, zie _ROLE_TOOLS); daardoor heeft ook deze rol gewoon
+        # De Website Developer had hier gÉÉn notes maar de Backlog Builder. Die verhuisde naar Tools
+        # en is op 11 september 2026 verwijderd (niet gebruikt); daardoor heeft ook deze rol gewoon
         # notes — en dus wiki-pagina's, waar hij als enige rol van uitgesloten was.
         content = _artefact_tab_html(st, rec, "note", csrf_token, username,
                                      titel="Notes", leeg="No notes on this role/circle yet.")

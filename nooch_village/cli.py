@@ -1291,6 +1291,27 @@ def main() -> None:
         else:
             print("DRY-RUN — niet bezorgd. Draai opnieuw met --apply om hem in je inbox te zetten.")
 
+    elif mode == "site_audit":
+        # De lampjes van de shop: bereikbaar, Lighthouse (mobiel), claims. Eén run, één snapshot
+        # (append-only), en de wissels sinds de vorige run. Scope 45; de weekklok is scope 47.
+        from nooch_village import site_audit
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.registry_factory import build_skill_registry
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        url = next((a for a in sys.argv[2:] if a.startswith("http")), "")
+        print(f"🔎 site audit op {url or site_audit._url(ctx)} … (de Lighthouse-run duurt 20-60 s)", flush=True)
+        snapshot, wissels = site_audit.run_en_bewaar(st, ctx, build_skill_registry(), url=url)
+        for l in snapshot["lampjes"]:
+            print(f"  {l['kleur']:>6}  {l['naam']:<22} {l['waarde']:<8} {l['uitleg'][:110]}")
+        print(f"\ntotaal: {snapshot['totaal']} · {snapshot['duur_s']} s · bewaard in data/{site_audit.BESTAND}")
+        if wissels:
+            print("gewisseld sinds de vorige run: " + ", ".join(f"{w['naam']} {w['was']}→{w['nu']}" for w in wissels))
+        print("bekijk: /site-audit (Website Developer → Tools)")
+
     elif mode == "wiki_broncheck":
         # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
         # Haalt op (read-only) en toont het rapport; pas met --apply wordt de waarneming
@@ -1945,6 +1966,6 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | noochie_memo",
+              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit",
               file=sys.stderr)
         sys.exit(1)

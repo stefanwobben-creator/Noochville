@@ -116,14 +116,10 @@ from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
 from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
 from nooch_village.strategy_store import StrategyStore
-from nooch_village.backlog import BacklogStore
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-
-
 
 
 def _default_data_dir() -> str:
@@ -165,7 +161,6 @@ class _Stores:
         self.defs = DefinitionStore(os.path.join(dd, "definitions.json"))
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
-        self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
         # Welke rollen bewust meetellen in de copy-prompt-stack van een andere rol. Erfenis loopt
         # omhoog; een zusterrol insluiten is een besluit en staat daarom vastgelegd.
         self.copy_stack = CopyStackConfig(os.path.join(dd, "copy_stack.json"))
@@ -287,7 +282,6 @@ from nooch_village.views.overview import (
 )
 
 
-
 from nooch_village.views.projects import (
     _proj_chip, _trekker_html, _trekker_options,
     _proj_progress, _due_overdue, _progress_badge,
@@ -332,6 +326,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
+from nooch_village.views.site_audit import render_site_audit
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village import founder_kaart as _founder_kaart
@@ -343,7 +338,6 @@ from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.wiki import render_pagina
 from nooch_village.views.rapport import render_projectrapport
-from nooch_village.views.backlog import render_backlog
 from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
@@ -371,8 +365,6 @@ from nooch_village.views.vangst import render_vangst, render_vangst_frag
 
 
 _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z'/>")
-
-
 
 
 def _owner_ai(st: _Stores, orec):
@@ -1005,19 +997,6 @@ def _member_gate(circle_id: str, username: str | None, st) -> str | None:
     if is_circle_member(actor.id, circle_id, st.records, st.assign):
         return None
     return "No access — only members of this circle may do this"
-
-
-def _wd_gate(username: str | None, st) -> str | None:
-    """Poort voor het beheer van de Backlog Builder: alleen de rolvervuller van de Website
-    Developer-rol. Foutmelding bij weigering, anders None. "guest" (auth uit) mag alles."""
-    if username == "guest":
-        return None
-    actor = st.people.by_email(username)
-    if actor is None:
-        return "No access — user not recognised"
-    if is_role_filler(actor.id, WEBSITE_DEVELOPER_ROLE, st.assign):
-        return None
-    return "No access — only the Website Developer may manage the backlog"
 
 
 class Forbidden(Exception):
@@ -3383,10 +3362,6 @@ def _act_vangst_verwerk(c):
         return nxt, "✗ unknown outcome"
 
 
-
-
-
-
 # ── Gedeelde uitkomst-routes (reference, don't copy) ───────────────────────────────
 # Eén plek waar een uitkomst naar de BESTAANDE stores schrijft. Gebruikt door zowel het
 # werkoverleg (via de vangst-uitkomsten) als de wall-outcome-flow (_act_wall_outcome). `provenance`
@@ -3785,7 +3760,6 @@ def _outcome_roloverleg(st, circle: str, name: str, title: str, detail: str,
                           "purpose": "", "add_accountabilities": []},
                          detail, by=by or "werkoverleg", title=title or (detail or "")[:60],
                          example=provenance)
-
 
 
 def _act_wall_outcome(c):
@@ -4732,42 +4706,6 @@ def _act_rov2_set(c):   # + rov2_acc_add, rov2_acc_remove, rov2_dom_add, rov2_do
                         pass
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ proposal updated"
-        return nxt, msg
-
-
-def _act_backlog_add(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        # AUTHZ: iedereen-ingelogd — elke ingelogde gebruiker mag een backlog-item indienen
-        # (de sessie-check in do_POST dekt "ingelogd = mag"; guest = auth uit = mag ook)
-        actor = st.people.by_email(username) if username != "guest" else None
-        if st.backlog.add(g("titel"), g("beschrijving"), g("type"), g("domein"),
-                          actor.id if actor else ""):
-            msg = "✓ submitted to the backlog"
-        return nxt, msg
-
-
-def _act_backlog_update_staat(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        # AUTHZ: rolvervuller website_developer — beheer van de backlog (staat verplaatsen)
-        _deny = _wd_gate(username, st)
-        if _deny:
-            return nxt, _deny
-        if st.backlog.update_staat(g("bid"), g("staat")):
-            msg = "✓ state updated"
-        return nxt, msg
-
-
-def _act_backlog_update_prioriteit(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        # AUTHZ: rolvervuller website_developer — beheer van de backlog (impact/effort)
-        _deny = _wd_gate(username, st)
-        if _deny:
-            return nxt, _deny
-        if st.backlog.update_prioriteit(g("bid"), g("impact"), g("effort")):
-            msg = "✓ priority updated"
         return nxt, msg
 
 
@@ -6142,9 +6080,6 @@ ACTIONS = {
     "rov2_acc_remove": _act_rov2_set,
     "rov2_dom_add": _act_rov2_set,
     "rov2_dom_remove": _act_rov2_set,
-    "backlog_add": _act_backlog_add,
-    "backlog_update_staat": _act_backlog_update_staat,
-    "backlog_update_prioriteit": _act_backlog_update_prioriteit,
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
     "lk_mute": _act_lk_mute,
@@ -6438,13 +6373,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                        compare=(qs.get("compare") or [""])[0] == "1",
                                        username=username))
                 return
-            if path == "/backlog":
-                # AUTHZ: iedereen-ingelogd — inbrengen mag iedereen (dat is het punt van een
-                # backlog). Beheren (staat, prioriteit) zit achter `_wd_gate` in de dispatch-takken,
-                # niet hier; deze route toont alleen wat je mag zien.
-                self._send(render_backlog(st, csrf=effective_csrf, username=username,
-                                          msg=(qs.get("msg") or [""])[0]))
-                return
             if path == "/rapport":
                 # AUTHZ: iedereen-ingelogd — het rapport IS het einddocument van een project, dus
                 # exact dezelfde read-scope als /project (die de kaart toont, waar het rapport tot
@@ -6575,6 +6503,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 except Exception:
                     _hi = None
                 self._send(render_skills(st, _hi))
+                return
+            if path == "/site-audit":
+                # De lampjes van de shop (bereikbaar, Lighthouse, claims) uit de laatste run van
+                # `village site_audit`. Puur leeswerk; de run zelf draait nooit in het cockpit.
+                self._send(render_site_audit(st))
                 return
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).

@@ -39,6 +39,7 @@ CATALOG = [
     ("trends_ratio_*_day",                "trends",             "weekly",    "active"),   # incl. scope 3 slow÷fast
     ("keywordseverywhere_*_day",          "keywordseverywhere", "weekly",    "active"),
     ("alphavantage_*_day",                "alphavantage",       "daily",     "active"),
+    ("mobiel_audit_*_day",                "mobiel_audit",       "weekly",    "active"),   # Lighthouse mobiel (PSI)
     ("werk_duur_day",                     "werkoverleg",        "irregular", "active"),   # per overleg → geen N-check
     ("werk_tevredenheid_day",             "werkoverleg",        "irregular", "active"),
     ("gdelt_*_day",                       "gdelt_tone",         "daily",     "inactive"),

@@ -37,7 +37,8 @@ Product-backlog van NoochVille, geordend per thema. Near-term tech-taken staan i
 ## Deploy & samenwerking
 - Als website developer wil ik gemakkelijk maar ook veilig naar de server kunnen deployen
 - Als website developer wil ik een functionaliteit zodat mensen suggesties kunnen plaatsen die ik kan verwerken in een backlog die inzichtelijk is voor iedereen
-  → uitgewerkt ontwerp: `docs/ONTWERP_backlog_builder.md` (bouw gepland).
+  → gebouwd als Backlog Builder (`/backlog`), op 11 september 2026 weer verwijderd: niet gebruikt
+  (op de server bestond `data/backlog.json` niet). Suggesties lopen via de werkoverleg-backlog (vangst).
 
 ## Noochie
 - Als gebruiker van Noochie wil ik dat Noochie ook bij alle dingen kan die ik als gebruiker zie, LLM toepast en goede adviezen geeft zodat ik mijn werk beter kan uitvoeren

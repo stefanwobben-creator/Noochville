@@ -60,9 +60,13 @@ def test_copy_gereedschap_hangt_onder_de_nooch_cirkel():
     assert "Copy prompt generator" in html and "Copy checker" in html
 
 
-def test_backlog_builder_hangt_onder_de_website_rol():
+def test_site_audit_hangt_onder_de_website_rol():
+    """De Backlog Builder hing hier tot 11 september 2026 en is verwijderd (Stefan: "die gebruiken
+    we niet"; op de server bestond data/backlog.json niet eens). Het gereedschap van de rol is nu
+    de site audit."""
     sid = _role_tools_html(_rec("mother_earth__nooch__website_developer"))
-    assert "Backlog Builder" in sid and "/backlog" in sid
+    assert "Site audit" in sid and "/site-audit" in sid
+    assert "Backlog Builder" not in sid and "/backlog" not in sid
 
 
 def test_claims_checker_hangt_aan_het_domein_en_niet_aan_een_rol_id():

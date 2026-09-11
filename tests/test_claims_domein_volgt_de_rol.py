@@ -116,7 +116,7 @@ def test_id_gesleutelde_tools_blijven_werken(tmp_path):
     """De domein-laag komt naast de id-laag, niet ervoor in de plaats."""
     st = _stores(tmp_path)
     page = cockpit2.render_node(st, ROL, "tools", csrf_token="t")
-    assert "Backlog Builder" in page
+    assert "Site audit" in page
 
 
 # ── de zaaier ────────────────────────────────────────────────────────────────────────────────
