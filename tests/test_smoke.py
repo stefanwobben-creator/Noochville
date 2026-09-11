@@ -27,7 +27,7 @@ def dd(tmp_path):
 
 
 def test_smoke_stores(dd):
-    """Kern-datalaag: records, catalogus-definities, dag-observaties, backlog, werkoverleg."""
+    """Kern-datalaag: records, catalogus-definities, dag-observaties, notificaties, werkoverleg."""
     st = cockpit2._Stores(dd)
     assert st.records.get(CIRCLE) is not None                     # governance
     assert len(st.defs.all()) > 0                                 # catalogus geseed
@@ -35,7 +35,7 @@ def test_smoke_stores(dd):
                                  bron="plausible", datum="2026-07-05")
     rows = st.observations.daily_series("visitors_day", bron="plausible")
     assert rows and rows[-1]["value"] == 42                       # observatie round-trip
-    assert isinstance(st.backlog.all(), list)
+    assert isinstance(st.notif.all(), list)
     assert st.werk.get(CIRCLE) in (None,) or isinstance(st.werk.get(CIRCLE), dict)
 
 
@@ -59,7 +59,7 @@ def test_smoke_render_hoofdviews(dd):
 
 
 def test_smoke_dispatch_happy_paths(dd):
-    """De ACTIONS-registry routeert en muteert: proj_add + backlog_add + onbekende actie (no-op)."""
+    """De ACTIONS-registry routeert en muteert: proj_add + proj_feed + onbekende actie (no-op)."""
     # onbekende actie → fall-through no-op (registry-contract)
     assert cockpit2.dispatch(dd, "__bestaat_niet__", {"next": ["/"]}, "guest") == ("/", "")
 
@@ -71,8 +71,7 @@ def test_smoke_dispatch_happy_paths(dd):
                       "guest")
     assert len(cockpit2._Stores(dd).projects.all()) == voor_proj + 1
 
-    voor_bl = len(st.backlog.all())
-    cockpit2.dispatch(dd, "backlog_add",
-                      {"titel": ["Smoke-item"], "beschrijving": ["x"], "type": ["taak"],
-                       "domein": ["algemeen"], "next": ["/"]}, "guest")
-    assert len(cockpit2._Stores(dd).backlog.all()) == voor_bl + 1
+    pid = [p for p in cockpit2._Stores(dd).projects.all() if p.get("scope") == "Smoke-project"][0]["id"]
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["Smoke-comment"], "author": ["human:"],
+                                        "next": ["/"]}, "guest")
+    assert any("Smoke-comment" in str(e.get("text")) for e in cockpit2._Stores(dd).projects.get(pid).get("log") or [])

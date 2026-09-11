@@ -28,7 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
 # Voeg je er één toe, zet hem hier ERBIJ met een reden in de commit. Dat is de hele bedoeling:
 # een tweede store is een besluit, geen bijvangst.
 STORES = {
-    "agenda", "ai", "assign", "att", "backlog", "checklists", "copy_stack", "defs",
+    "agenda", "ai", "assign", "att", "checklists", "copy_stack", "defs",
     "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "metrics",
     "nom_kroniek", "nominations", "noochie", "notes", "notif", "observations", "people",
     "personas", "project_docs", "projects", "radar", "radar_besluiten", "records", "sources",

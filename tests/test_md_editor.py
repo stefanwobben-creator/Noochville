@@ -3,11 +3,12 @@ wrapSel wordt nooit dubbel gedefinieerd (guarded), en een geconverteerd veld too
 from __future__ import annotations
 
 from nooch_village import cockpit2
-from nooch_village.cockpit2_util import md_editor
+from nooch_village.cockpit2_util import md_editor, _md
 from nooch_village.views.projects import _modal_html
-from nooch_village.views.backlog import render_backlog, _item_beheer
+from nooch_village.views.rapport import render_projectrapport
 
 CIRCLE = "mother_earth__nooch"
+ROLE = "mother_earth__nooch__website_developer"
 
 
 def _dd(tmp_path):
@@ -29,10 +30,15 @@ def test_md_editor_rendert_en_escapet_value():
 
 
 def test_editor_werkt_op_pagina_zonder_modal_html(tmp_path):
-    """Het backlog-scherm laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee)."""
-    st = cockpit2._Stores(_dd(tmp_path))
-    tab = render_backlog(st, csrf="t", username="x@y.nl")
+    """Het rapport-scherm laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee).
+    (Tot 11 september 2026 was het backlog-scherm hier het voertuig; dat is verwijderd.)"""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create(ROLE, "Eén document", "human", status="queued", done_when="af")
+    st.projects.start(pid)
+    tab = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="t")
     assert "class='editor'" in tab and "if(!window.wrapSel)" in tab
+    assert "wrapSel=function" not in tab.replace("if(!window.wrapSel){window.wrapSel=function", "")
     # de modal definieert wrapSel nu WÉL (guarded): een <script> in een fragment draait niet bij
     # innerHTML, dus zonder deze definitie deden de WYSIWYG-knoppen in de modal niets.
     assert "window.wrapSel=" in _modal_html() and "if(!window.wrapSel)" in _modal_html()
@@ -45,15 +51,10 @@ def test_wrapsel_nooit_dubbel_gedefinieerd():
     assert "window.wrapSel=function" not in two.replace("if(!window.wrapSel){window.wrapSel=function", "")
 
 
-def test_geconverteerd_veld_toont_markdown_veilig(tmp_path):
-    """Backlog-beschrijving ging van _e (plat) naar _md (opmaak): markdown wordt gerenderd en HTML blijft
-    ge-escaped (geen rauwe opmaaktekens, geen onveilige HTML)."""
-    dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "backlog_add",
-                      {"titel": ["T"], "beschrijving": ["**vet** en <script>x</script>"],
-                       "type": ["taak"], "domein": ["algemeen"], "next": ["/"]}, "guest")
-    st = cockpit2._Stores(dd)
-    it = st.backlog.all()[0]
-    html = _item_beheer(it, "t")
+def test_geconverteerd_veld_toont_markdown_veilig():
+    """Een veld dat van _e (plat) naar _md (opmaak) gaat: markdown wordt gerenderd en HTML blijft
+    ge-escaped (geen rauwe opmaaktekens, geen onveilige HTML). Dit is de eigenschap van `_md` zelf;
+    het backlog-scherm dat hem eerst droeg is weg."""
+    html = _md("**vet** en <script>x</script>")
     assert "<strong>vet</strong>" in html and "**vet**" not in html     # markdown gerenderd
     assert "&lt;script&gt;" in html and "<script>x" not in html          # HTML ge-escaped (veilig)

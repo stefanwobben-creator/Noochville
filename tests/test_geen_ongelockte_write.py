@@ -39,7 +39,6 @@ _WHITELIST = {
     # ── (b) alleen cockpit, maar ThreadingHTTPServer = concurrente requests (fase 4, batch 2) ──
     "ai_tasks.py":       (1, "(b) cockpit-concurrent (_Stores)"),
     "assignments.py":    (1, "(b) cockpit-concurrent (_Stores)"),
-    "backlog.py":        (1, "(b) cockpit-concurrent (_Stores)"),
     "checklists.py":     (1, "(b) cockpit-concurrent (_Stores)"),
     "definitions.py":    (1, "(b) cockpit-concurrent (_Stores)"),
     "metrics.py":        (1, "(b) cockpit-concurrent (_Stores)"),
