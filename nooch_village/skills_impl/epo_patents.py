@@ -26,6 +26,16 @@ Wat er werkelijk naar OPS ging staat in `gezocht`.
 
 Records: `url` naar Espacenet per patent (klikbaar in note en verslag), abstract tot 2000 tekens (boven de
 leesextract-drempel van 600), en een `text` als leeswijzer.
+
+TITEL+ABSTRACT, NIET ALLEEN TITEL (scope 59, was sinds het begin `ti=`/`ti any`). Een patenttitel is
+juridisch/generiek ("Method for footwear assembly"); het gezochte concept ("adhesive-free",
+"lijmvrij") staat vaak pas in de samenvatting. `onderzoekskwaliteit_zoekskills.md` (12 sep) diagnosticeerde
+hierop een 0-treffers-zoektocht en noemde met zoveel woorden dat `ta=`/`txt=` bestaan en niet gebruikt
+werden. `_cql` zoekt nu op `ta` (OPS' titel-of-abstract-veld) i.p.v. `ti`; de twee-woorden-grens en de
+`any`-vorm tegen 404's (zie `_cql`) blijven ongewijzigd — dat is een lengte-kwestie, geen veld-kwestie.
+De ladder (evidence_ledger.SKILL_LADDERS) viel al door naar google_patents op zowel een fout ALS een
+eerlijke leeg/no_data-uitkomst (`run_with_ladder` stopt alleen op 'bevestigd'); dat mechanisme stond al
+goed, dus deze fix is puur het zoekveld van epo_patents zelf verbreden, niet de ladder.
 """
 from __future__ import annotations
 import base64
@@ -95,18 +105,19 @@ class EpoPatentsSkill(DataSourceSkill):
     kind = "snapshot"
     cost = "rate_limited"                  # OAuth + fair-use (~4GB/week), bescheiden Range
     needs_secret = True
-    input_schema = ("term: str (required — searched in patent TITLES: use the words a patent title "
-                    "would use, e.g. 'shoe sole attachment' or 'stitched footwear sole', never a "
-                    "research question; 1-2 words = exact title phrase, more = any of the words in the "
-                    "title. Join alternatives with ' OR ': each clause is searched separately (max 3) "
+    input_schema = ("term: str (required — searched in patent TITLE AND ABSTRACT: use the words a "
+                    "patent's title or abstract would use, e.g. 'shoe sole attachment' or 'stitched "
+                    "footwear sole', never a research question; 1-2 words = exact phrase, more = any of "
+                    "the words. Join alternatives with ' OR ': each clause is searched separately (max 3) "
                     "and the results merged). Optional: limit: int (default 5, max 10 — Range 1-limit)")
     output_schema = ("list: total: int, patents: list[{title, url (Espacenet), publication_number, "
                      "publication_date, abstract (up to 2000 chars), applicants, inventors}], gezocht "
                      "(the CQL that went to OPS), text (summary for the wall) | no_data + reason | error")
-    description = ("Worldwide patents via the EPO Open Patent Services (title search): give the words a "
-                   "patent title would use, 1-2 words as an exact phrase, more as any-of. Returns "
-                   "title, Espacenet link, number, date, abstract and parties per patent; 'no_data' "
-                   "when the register has nothing. OAuth from EPO_CONSUMER_KEY + EPO_CONSUMER_SECRET.")
+    description = ("Worldwide patents via the EPO Open Patent Services (title+abstract search, scope 59 — "
+                   "was title-only): give the words a patent's title or abstract would use, 1-2 words as "
+                   "an exact phrase, more as any-of. Returns title, Espacenet link, number, date, "
+                   "abstract and parties per patent; 'no_data' when the register has nothing. OAuth from "
+                   "EPO_CONSUMER_KEY + EPO_CONSUMER_SECRET.")
 
     def __init__(self):
         self._token: str | None = None
@@ -165,7 +176,7 @@ class EpoPatentsSkill(DataSourceSkill):
 
     @staticmethod
     def _normalize_term(term: str) -> str:
-        """Reduceer een (LLM-)zoekstring tot een kernfrase die EPO's CQL title-search (ti="…") aankan.
+        """Reduceer een (LLM-)zoekstring tot een kernfrase die EPO's CQL titel+abstract-search (ta="…") aankan.
         Complexe boolean-strings ('X OR Y', '"A" AND ("B" OR "C")') geven anders een HTTP 400/404 (de
         operators/haakjes/quotes breken de CQL). We nemen de eerste OR-clausule (de dominante frase) en
         strippen quotes/haakjes/AND → een schone woordfrase. Leeg na normalisatie → val terug op de ruwe
@@ -199,13 +210,20 @@ class EpoPatentsSkill(DataSourceSkill):
     @staticmethod
     def _cql(clausule: str, term: str = "") -> str:
         """De CQL voor één (genormaliseerde) clausule. De vorm hangt af van de lengte: EPO's exacte
-        titel-frase ti="a b" werkt tot ~2 woorden, maar 404't bij ≥3 (empirisch). ti any "…" (elk woord
-        in de titel) werkt voor élke lengte zonder 404 — breder, maar levert kandidaten i.p.v. een
-        doodloper. Zo blijft een korte query precies en rondt een lange query af i.p.v. eeuwig te falen.
-        Eén plek voor de CQL, zodat `gezocht` in het resultaat precies is wat er naar OPS ging."""
+        frase ta="a b" werkt tot ~2 woorden, maar 404't bij ≥3 (empirisch). ta any "…" (elk woord in
+        titel-óf-abstract) werkt voor élke lengte zonder 404 — breder, maar levert kandidaten i.p.v.
+        een doodloper. Zo blijft een korte query precies en rondt een lange query af i.p.v. eeuwig te
+        falen. Eén plek voor de CQL, zodat `gezocht` in het resultaat precies is wat er naar OPS ging.
+
+        SCOPE 59 (skill-review 12-09-2026, was `ti=`/`ti any`, titel-only): `onderzoekskwaliteit_
+        zoekskills.md` diagnosticeerde het lijmvrij-onderzoek van Harry Hemp op nul treffers — de
+        titel van een patent noemt zelden het gezochte concept letterlijk ("Method for footwear
+        assembly" i.p.v. "adhesive-free"), terwijl de samenvatting dat woord vaak wél draagt. `ta`
+        is OPS' eigen gecombineerde titel-of-abstract-veld: dezelfde twee-woorden-grens, dezelfde
+        404-vermijding via `any`, alleen een breder veld. Geen andere logica hier verandert."""
         words = (clausule or "").split()
         inner = " ".join(words) or (term or "")
-        return f'ti="{inner}"' if len(words) <= 2 else f'ti any "{inner}"'
+        return f'ta="{inner}"' if len(words) <= 2 else f'ta any "{inner}"'
 
     # ── search/biblio → (total, [patent-dicts]) via XML-parse ───────────────
     def _search(self, token, term, limit, *, _get=None):
