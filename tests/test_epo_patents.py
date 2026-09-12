@@ -115,7 +115,7 @@ def test_b_search_en_run(monkeypatch):
     monkeypatch.setattr(sk, "_default_get", _fake_get)
     # _search bouwt de URL (q + Range) en parset de XML
     r = sk.run({"term": "barefoot shoes", "limit": 5}, _ctx())
-    assert 'q=ti%3D%22barefoot%20shoes%22' in seen["url"] and "Range=1-5" in seen["url"]   # titel-frase-CQL
+    assert 'q=ta%3D%22barefoot%20shoes%22' in seen["url"] and "Range=1-5" in seen["url"]   # titel+abstract-frase-CQL (scope 59)
     assert r["total"] == 42 and len(r["patents"]) == 1 and r["patents"][0]["title"] == "Barefoot shoe"
 
 
@@ -168,8 +168,8 @@ def test_g_normalize_term():
     assert n('"only quotes"') == "only quotes"                      # leeg-na-normalisatie-fallback
 
 
-# ── h. CQL-vorm: ≤2 woorden = exacte titel-frase; ≥3 woorden = ti any (frase 404't anders) ─────────
-def test_h_lange_query_gebruikt_ti_any(monkeypatch):
+# ── h. CQL-vorm: ≤2 woorden = exacte ta-frase; ≥3 woorden = ta any (frase 404't anders) ─────────
+def test_h_lange_query_gebruikt_ta_any(monkeypatch):
     sk = EpoPatentsSkill()
     seen = []
     monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
@@ -178,8 +178,9 @@ def test_h_lange_query_gebruikt_ti_any(monkeypatch):
     with patch("time.sleep"):
         r = sk.run({"term": '"barefoot shoes" biodegradable sole OR compostable', "limit": 3}, _ctx())
     # Scope 54: elke OR-clausule gaat apart naar OPS (tot dan alleen de eerste, stil). De lange
-    # eerste clausule als ti any "…" (geen exacte frase), de korte tweede als exacte titel-frase.
+    # eerste clausule als ta any "…" (geen exacte frase), de korte tweede als exacte ta-frase.
+    # Scope 59: veld ti → ta (titel+abstract i.p.v. alleen titel); de lengte-grens zelf ongewijzigd.
     assert len(seen) == 2
-    assert "ti%20any%20" in seen[0] and "ti%3D%22" not in seen[0]
-    assert "ti%3D%22compostable%22" in seen[1]
-    assert r["gezocht"] == 'ti any "barefoot shoes biodegradable sole" | ti="compostable"'
+    assert "ta%20any%20" in seen[0] and "ta%3D%22" not in seen[0]
+    assert "ta%3D%22compostable%22" in seen[1]
+    assert r["gezocht"] == 'ta any "barefoot shoes biodegradable sole" | ta="compostable"'

@@ -48,9 +48,9 @@ BRONNEN: dict[str, str] = {
     "openalex_evidence": ("academic literature, ENGLISH-language corpus — use an English term of 1-3 "
                           "words; falls through to Semantic Scholar (one-sentence paper summaries) "
                           "when it comes back empty"),
-    "epo_patents": ("European patent register, searched on patent titles, English/German/French — use "
-                    "English technical terms; falls through to Google Patents (worldwide) when OPS "
-                    "fails"),
+    "epo_patents": ("European patent register, searched on patent title AND abstract, "
+                    "English/German/French — use English technical terms; falls through to Google "
+                    "Patents (worldwide) when OPS fails or comes back empty"),
     "openlibrary_search_inside": ("passages from inside scanned books that contain the term, mostly "
                                   "English — use the exact wording a book would use"),
     "ngram_culture": "word frequency in books over decades, per language corpus — pick the corpus",

@@ -265,7 +265,7 @@ def test_epo_404_en_no_results_lezen_als_no_data_niet_als_fout():
         raise _http(404, "Not Found", b"<fault><message>No results found</message></fault>")
     uit = _epo(vierhonderdvier).run({"term": "zzxq sole"}, SimpleNamespace(settings={}))
     assert uit["no_data"] is True and "error" not in uit
-    assert uit["gezocht"] == 'ti="zzxq sole"' and "searched: ti=" in uit["reason"]
+    assert uit["gezocht"] == 'ta="zzxq sole"' and "searched: ta=" in uit["reason"]
     assert Inhabitant._classify_result(uit)[0] == "leeg"
 
     def fault(url, token):
@@ -286,8 +286,8 @@ def test_epo_record_met_espacenet_link_lang_abstract_en_text():
     p = uit["patents"][0]
     assert p["url"] == "https://worldwide.espacenet.com/patent/search?q=pn%3DEP777A1"
     assert len(p["abstract"]) > 600
-    assert uit["gezocht"] == 'ti="shoe sole"'
-    assert uit["text"] == ("3 patent(s) via EPO OPS for 'shoe sole' (searched: ti=\"shoe sole\"); "
+    assert uit["gezocht"] == 'ta="shoe sole"'
+    assert uit["text"] == ("3 patent(s) via EPO OPS for 'shoe sole' (searched: ta=\"shoe sole\"); "
                            "first: “Glue-free shoe” (EP777A1, 20210101).")
     t = project_verslag.inhoud_tekst(uit)
     assert "• Glue-free shoe (https://worldwide.espacenet.com/patent/search?q=pn%3DEP777A1) — woord0" in t
@@ -305,7 +305,7 @@ def test_epo_or_keten_mengt_leeg_en_treffers_en_faalt_bij_storing_zonder_treffer
     with patch("time.sleep"):
         uit = _epo(half).run({"term": "zzxq OR shoe sole"}, SimpleNamespace(settings={}))
     assert len(gezien) == 2 and len(uit["patents"]) == 1 and "error" not in uit
-    assert uit["gezocht"] == 'ti="zzxq" | ti="shoe sole"'
+    assert uit["gezocht"] == 'ta="zzxq" | ta="shoe sole"'
 
     def stuk_en_leeg(url, token):
         gezien.append(url)
