@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.project_essentie import essentie_van
 from nooch_village.projects import heeft_seed_vorm
+from nooch_village import projects as _PJ                 # tijdlijn (scope 48)
 from nooch_village import doelen as _D
 from nooch_village.cockpit2_util import (
     _DS_LINK,
@@ -1272,6 +1273,23 @@ def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "", terminaal: str = "
     return "".join(uit)
 
 
+def _tijdlijn_rijen(p) -> str:
+    """Started · Done in de rail, uit `projects.tijdlijn` (afgeleid uit status_log, scope 48). Alleen
+    wat bekend is; een benaderde datum (project van vóór het log) krijgt een ≈ en een tooltip, want
+    een geschatte datum die als exact leest is erger dan geen datum."""
+    tl = _PJ.tijdlijn(p)
+    uit = ""
+    if tl.get("gestart"):
+        uit += _meta_rij("Started", _created_full(tl["gestart"]))
+    if tl.get("afgerond"):
+        if tl.get("bron") == "benadering":
+            uit += _meta_rij("Done", f"<span title='approximate: no status history before 12 Sep 2026, "
+                                     f"this is the last edit'>≈ {_e(_created_full(tl['afgerond']))}</span>")
+        else:
+            uit += _meta_rij("Done", _created_full(tl["afgerond"]))
+    return uit
+
+
 def _doel_rijen(st, p, rw: bool, hid) -> str:
     """Goal · Work package · Depends on, als rail-regels (zelfde `mform`/`ctrl`/autosave als impact).
 
@@ -1557,6 +1575,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             + _doel_rijen(st, p, rw, hid)
             + _meta_rij("Visible", vis_v)
             + _meta_rij("Created", _created_full(p.get("created_at")))
+            + _tijdlijn_rijen(p)
             + f"<div class='railsplit'></div>"
             + f"<div class='rail-acties'>{goal_knop}</div>"
             )

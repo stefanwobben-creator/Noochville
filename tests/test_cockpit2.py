@@ -11,7 +11,8 @@ def _een_vervuller(dd, rol="mother_earth__nooch__website_developer") -> str:
     `website_developer` heeft in de fixture TWEE vervullers (test_poc_datamodel bevriest dat), en
     de cardinaliteitswet eist dan een expliciete keuze vóór een project op het bord mag. Deze tests
     gaan niet over eigenaarschap, dus ze kiezen er gewoon één — precies zoals de andere
-    proj_add-tests `done_when` invullen sinds díe poort er is (zie test_proj_add_eist_done_when).
+    proj_add-tests `done_when` invullen (de poort van 19 jul; sinds 12 sep 2026 optioneel, zie
+    test_proj_add_zonder_done_when_neemt_de_titel).
     """
     st = cockpit2._Stores(dd)
     f = st.assign.fillers_of(rol, record=st.records.get(rol))[0]
@@ -163,17 +164,20 @@ def test_dispatch_geeft_bevestiging(tmp_path):
     assert ("added" in msg or "Added" in msg)
 
 
-def test_proj_add_eist_done_when(tmp_path):
-    """De intake-poort (founder, 19 jul): een mens-project zonder done_when wordt geweigerd —
-    'waar herken je aan dat dit klaar is?' hoort vooraf beantwoord, niet achteraf gerepareerd.
-    Deze test bewaakt de poort zelf; de andere proj_add-tests vullen het veld daarom gewoon."""
+def test_proj_add_zonder_done_when_neemt_de_titel(tmp_path):
+    """De intake-poort van 19 jul weigerde een project zonder done_when. Op 12 sep 2026 ingetrokken
+    (Stefan: "de projectformuleringen zijn al zo geschreven dat het gewenste resultaat beschreven
+    is"): de titel ís de uitkomst. Een meegegeven done-when blijft welkom; zonder wordt het de
+    titel, dezelfde regel als /wizard/create. De andere proj_add-tests vullen het veld nog gewoon."""
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     nxt, msg = cockpit2.dispatch(dd, "proj_add", {
         "trekker": [_een_vervuller(dd)],
         "owner": ["mother_earth__nooch__website_developer"], "scope": ["Zonder criterium"],
         "col": ["actief"], "next": ["/"]}, username="guest")
-    assert "done-when" in msg and cockpit2._Stores(dd).projects.all() == []
+    assert "added" in msg
+    (p,) = cockpit2._Stores(dd).projects.all()
+    assert p["scope"] == "Zonder criterium" and p["done_when"] == "Zonder criterium"
 
 
 def test_project_toevoegen_en_koppeling(tmp_path):

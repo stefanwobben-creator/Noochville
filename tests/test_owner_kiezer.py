@@ -1,11 +1,15 @@
-"""Tak 2 heeft nu een zichtbaar oppervlak: bij meerdere vervullers kun je de owner kiezen.
+"""Tak 2 heeft een zichtbaar oppervlak: bij meerdere vervullers kun je de owner kiezen.
 
 CONTEXT. #431 gaf het projectformulier een owner-default: één vervuller → voorgekozen, geen
 vervuller → "no owner". Tak 2 — meerdere vervullers — kreeg bewust géén stille gok, maar had ook
 geen oppervlak: de wizard heeft sinds #371 geen trekker-kiezer meer. Die viel daar niet af omdat hij
 fout was, maar omdat hij niet op het twee-tik-pad hoorde ("idee, uitkomst, rol, opslaan").
 
-Vandaar de plaats: in de OPGEVOUWEN laag (`Who could pick this up`), niet op de snelle route.
+Hij stond daarom in de opgevouwen laag ("Who could pick this up"). Die laag is op 12 september 2026
+op Stefans verzoek verwijderd ("die stap kan ook weg"); de kiezer zelf kon niet mee, want de server
+weigert een project bij een rol met twee vervullers zonder owner. Sindsdien staat hij op de snelle
+route, direct onder de rol, en alleen als er echt iets te kiezen valt. Dat respecteert #371 nog
+steeds: bij één of geen vervuller is er niets te zien.
 """
 from __future__ import annotations
 
@@ -68,23 +72,14 @@ def test_bij_een_of_geen_vervuller_rendert_hij_niet():
 
 
 def test_de_kiezer_is_ondubbelzinnig_de_EIGENAAR():
-    """GUARD. Eronder staat 'Or assign a step yourself', en dat wijst een STAP toe aan een rol.
-    Zonder eigen kop kiest iemand daar een stap-uitvoerder in de veronderstelling dat hij de
-    eigenaar zet."""
+    """GUARD. "Owner" is hetzelfde woord als op de projectkaart — één term voor één ding — en de
+    kop zegt waarom hij er staat (meer dan één persoon op de rol)."""
     html = _js(role="rol_a", vervullers={"rol_a": [{"v": "person:p1", "n": "Nina"},
                                                    {"v": "person:p2", "n": "Lotte"}]})
-    blok = html[html.index("function eigenaarBlok"):]
-    blok = blok[:blok.index("function taak(")]
-    assert '<div class="wz-clab">Owner</div>' in blok     # zelfde term als de projectkaart
-    assert "Pick who owns the project" in blok
-    # en hij eindigt met een eigen kop voor het stap-blok, zodat de twee niet in elkaar overlopen
-    assert '<div class="wz-clab">Hand out steps</div>' in blok
-
-
-def test_de_owner_kiezer_staat_boven_het_stap_blok():
-    html = _js(role="rol_a", vervullers={"rol_a": [{"v": "person:p1", "n": "Nina"},
-                                                   {"v": "person:p2", "n": "Lotte"}]})
-    assert html.index("eigenaarBlok()") < html.index("Or assign a step yourself")
+    blok = html[html.index("function toonOwner"):]
+    blok = blok[:blok.index("async function maak(")]
+    assert '<div class="wz-clab">Owner ' in blok             # zelfde term als de projectkaart
+    assert "this role has more than one person" in blok
 
 
 def test_niets_kiezen_blijft_geldig():
@@ -94,15 +89,16 @@ def test_niets_kiezen_blijft_geldig():
     assert "— no owner —" in html
 
 
-def test_hij_zit_in_de_opgevouwen_laag_en_niet_op_de_snelle_route():
-    """#371 klapte de wizard in tot idee → uitkomst → rol → opslaan. De kiezer terugzetten op die
-    route zou dat terugdraaien; in de details-laag respecteert hij hem."""
+def test_hij_staat_onder_de_rol_en_volgt_de_rolkeuze():
+    """De kiezer hoort waar de rol gekozen wordt: een rolwissel tekent hem opnieuw (of haalt hem
+    weg als de nieuwe rol één of geen vervuller heeft) en maakt de oude owner-keuze leeg, want een
+    persoon van rol A is geen owner voor rol B."""
     html = _js(role="rol_a", vervullers={"rol_a": [{"v": "person:p1", "n": "Nina"},
                                                    {"v": "person:p2", "n": "Lotte"}]})
-    # het blok wordt gerenderd door drawRollen(), en dat draait pas als de details opengaat
-    assert 'ontoggle="if(this.open)rollen()"' in html
     snelle_route = html[html.index('class="wz-clab">Your project'):html.index("box-details")]
-    assert "wz-owner" not in snelle_route
+    assert 'id="wz-ownerwrap"' in snelle_route
+    assert snelle_route.index('id="wz-role"') < snelle_route.index('id="wz-ownerwrap"')
+    assert "S.trekker='';toonWie();toonOwner()" in html
 
 
 # ── een cirkel hoort niet in de kiezer ─────────────────────────────────────────────────────────

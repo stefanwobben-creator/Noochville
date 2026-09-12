@@ -3,6 +3,14 @@ from __future__ import annotations
 import sys
 
 
+def _iso(ts) -> str:
+    """Epoch → 'YYYY-MM-DD HH:MM' (lokale tijd van de server), leeg als er niets is."""
+    if not ts:
+        return ""
+    import datetime
+    return datetime.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+
+
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else "demo"
 
@@ -1336,6 +1344,36 @@ def main() -> None:
             print(f"  {r['actie']:<12} {r['label']:<14} {r['titel']}" + (f"  ({r['id']})" if r["id"] else ""))
         print("bekijk: /goals" if apply else "DRY-RUN — niets geschreven. Draai opnieuw met --apply.")
 
+    elif mode == "status_log":
+        # De status-historie van alle projecten als CSV op stdout (scope 48): één regel per overgang,
+        # met doel en werkpakket erbij, zodat een rapportage per doel een spreadsheet-vraag is en geen
+        # bouwvraag. `village status_log > historie.csv`. Alleen lezen.
+        import csv
+        from nooch_village import projects as _P
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        doelen = {d["id"]: d for d in st.doelen.all()}
+        w = csv.writer(sys.stdout)
+        w.writerow(["pid", "titel", "rol", "doel", "werkpakket", "van", "naar", "wanneer", "door", "bron"])
+        for p in st.projects.all():
+            d = doelen.get(p.get("doel_id") or "")
+            kop = [p["id"], (p.get("scope") or "")[:120], p.get("owner") or "",
+                   (d or {}).get("label") or "", p.get("activiteit") or ""]
+            log = [e for e in (p.get("status_log") or []) if isinstance(e, dict)]
+            if not log:                                     # van vóór het log: alleen wat we weten
+                tl = _P.tijdlijn(p)
+                w.writerow(kop + ["", p.get("status") or "", _iso(tl["aangemaakt"]), "", "aangemaakt"])
+                if tl["afgerond"]:
+                    w.writerow(kop + ["", "done", _iso(tl["afgerond"]), "", "benadering"])
+                continue
+            for e in log:
+                w.writerow(kop + [e.get("van") or "", e.get("naar") or "", _iso(e.get("at")),
+                                  e.get("door") or "", "log"])
+
     elif mode == "wiki_broncheck":
         # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
         # Haalt op (read-only) en toont het rapport; pas met --apply wordt de waarneming
@@ -1990,6 +2028,6 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit | doelen_zaad",
+              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit | doelen_zaad | status_log",
               file=sys.stderr)
         sys.exit(1)
