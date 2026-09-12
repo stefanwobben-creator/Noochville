@@ -82,7 +82,6 @@ class Inhabitant(threading.Thread):
         self._reflect_interval: float = float(
             self.context.settings.get("reflect_interval_seconds", str(7 * 24 * 3600)))
         self._setup_events()
-        self.react("project_queued", self._on_project_queued)
         # Uitvoer-primitief: elke dag mijn eigen projecten verzorgen (TOEKOMST=voorbereiden,
         # ACTIEF=uitvoeren). Universeel gewired (niet in _setup_events, dat subklassen overschrijven).
         self.react("dag_begint", self._tend_projects)
@@ -863,25 +862,8 @@ class Inhabitant(threading.Thread):
 
     # ── Project-afhandeling ─────────────────────────────────────────────────────
 
-    def _scan_queued_projects(self, event: Event) -> None:
-        """Herstelpad: pik bij dag_begint queued-projecten op die via een extern proces
-        zijn aangemaakt en waarvoor het project_queued-event gemist is.
-        """
-        ledger = getattr(self.context, "projects", None)
-        if ledger is None:
-            return
-        for p in ledger.by_status("queued"):
-            if p.get("owner") == self.id:
-                self._claim_run_complete(p["id"])
-
-    def _on_project_queued(self, event: Event) -> None:
-        """Reageer op project_queued: alleen als ik de eigenaar ben."""
-        if event.data.get("owner") != self.id:
-            return
-        pid = event.data.get("project_id")
-        if pid is None:
-            return
-        self._claim_run_complete(pid)
+    # `_on_project_queued` en `_scan_queued_projects` zijn weg (scope 49): een nieuw project is
+    # slapend (future) tot een mens het naar Active sleept, en dát is `project_activated`.
 
     def _on_project_activated(self, event: Event) -> None:
         """Reageer op project_activated (statuswijziging → ACTIEF, meestal een bord-drag): alleen als
@@ -940,7 +922,7 @@ class Inhabitant(threading.Thread):
         return uitvoerlijst(project)
 
     def _tend_projects(self, event: "Event | None" = None) -> None:
-        """Dagelijkse verzorging van mijn EIGEN projecten: uitvoeren wat in ACTIEF staat (queued/running)
+        """Dagelijkse verzorging van mijn EIGEN projecten: uitvoeren wat in ACTIEF staat (LOPEND)
         en geparkeerd werk heropenen. Andere kolommen ongemoeid.
 
         TOEKOMST wordt NIET meer voorbereid. Sinds het drie-stagiairs-besluit (5 sept 2026) zijn er geen
@@ -951,7 +933,7 @@ class Inhabitant(threading.Thread):
         if ledger is None:
             return
         # De parkeer-klep (DEEL A2): een geparkeerd project werd nooit meer bekeken, want deze lus
-        # las alleen queued/running. Nu keert het terug zodra de VASTGELEGDE blokkade weg is — niet
+        # las alleen LOPEND. Nu keert het terug zodra de VASTGELEGDE blokkade weg is — niet
         # zodra de items er runnable uitzien, want die schijn ontstaat door `reset_item_fails`.
         from nooch_village.park_klep import heropen
         for p in ledger.by_status("blocked"):
@@ -978,7 +960,7 @@ class Inhabitant(threading.Thread):
         `net_gevraagd` = een MENS heeft dit project zojuist naar ACTIEF gesleept en kijkt dus naar
         de kaart waarop het plan verschijnt. Dan hoeft er geen bericht naar zijn inbox; zie de
         melding onderaan deze functie.
-        Draait voor een string-scope project in TOEKOMST, óf voor een ACTIEF (queued/running) project dat
+        Draait voor een string-scope project in TOEKOMST, óf voor een ACTIEF (LOPEND) project dat
         nog GEEN checklist heeft (herstelpad na een bord-drag naar actief zonder voorbereiding). Voert
         niets uit; de status blijft ongewijzigd (uitvoeren gebeurt daarna in DEEL B)."""
         ledger = getattr(self.context, "projects", None)
@@ -1520,7 +1502,7 @@ class Inhabitant(threading.Thread):
             ledger.complete(pid, outcome)
             # Levenscyclus-event: de ENIGE autonome DONE-route (de guard hierboven is de idempotentie —
             # een tweede passage op een al-done project valt buiten 'status==running' en vuurt niets).
-            # Sleutel heet project_id (conform project_queued/needs_preparation; NIET 'pid').
+            # Sleutel heet project_id (conform needs_preparation; NIET 'pid').
             dstore = getattr(self.context, "deliverables", None)
             deliverable_ids = [r["id"] for r in dstore.for_project(pid)] if dstore is not None else []
             # Markeer als autonoom aangekondigd zodat de board-watch deze done niet dubbel vuurt.

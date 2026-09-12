@@ -118,7 +118,7 @@ def test_project_wordt_concept_en_keuren_we_goed(tmp_path):
     d = projects.drafts()
     assert len(d) == 1 and d[0]["status"] == "draft" and d[0]["owner"] == "scout"
     assert projects.approve(d[0]["id"]) is True
-    assert projects.get(d[0]["id"])["status"] == "queued"    # nu op het bord
+    assert projects.get(d[0]["id"])["status"] == "future"    # goedgekeurd: bij de rol, slapend tot de sleep
     assert projects.drafts() == []
     # discard werkt alleen op drafts
     iid2 = projects.create("scout", "x", "human", status="draft")

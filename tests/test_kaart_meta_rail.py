@@ -32,7 +32,7 @@ def _kaart(tmp_path, **kw):
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     f = st.assign.fillers_of(ROLE, record=st.records.get(ROLE))[0]
-    pid = st.projects.create(ROLE, "Meta-rail", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Meta-rail", "human", status="running", done_when="af")
     st.projects.start(pid)
     st.projects.set_due(pid, "2026-10-01")
     cockpit2.dispatch(dd, "proj_settrekker", {"pid": [pid], "trekker": [f"person:{f.id}"],

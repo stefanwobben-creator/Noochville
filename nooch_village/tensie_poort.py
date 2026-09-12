@@ -80,7 +80,7 @@ class Besluit:
 #
 #   `review`, `todo` en `active` BESTAAN NIET. Geen enkele schrijver in `projects.py` zet ze. Het
 #   woord `active` is precies waarop de projectbadge op 7 september strandde: de KOLOM heet Active,
-#   de status heet `running` of `queued`.
+#   de status heet `running`.
 #
 #   `draft` en `proposed` ONTBRAKEN. Een spanning die aan zo'n project hangt viel daardoor door
 #   `geborgd()` heen, werd behandeld alsof er geen project bij hoorde, en kwam bij de founder

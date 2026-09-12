@@ -120,9 +120,14 @@ def _datum(v) -> str:
 # ── de projecten van een doel ────────────────────────────────────────────────
 
 def projecten_van(doel_id: str, alle_projecten) -> list[dict]:
-    """Niet-gearchiveerde projecten die naar dit doel verwijzen. Concepten (draft) tellen mee zodra
-    ze gekoppeld zijn: wie een concept aan een doel hangt, zegt dat het erbij hoort."""
-    return [p for p in alle_projecten if p.get("doel_id") == doel_id and not p.get("archived")]
+    """De projecten die naar dit doel verwijzen: alles wat niet gearchiveerd is, plús wat afgerond
+    én gearchiveerd is. Sinds scope 49 verlaat een project het bord zodra zijn verslag bevestigd is;
+    dat is een opruiming van het bord, geen uitschrijving uit het doel — een afgerond project blijft
+    meetellen in de voortgang. Een gearchiveerd project dat NIET af is (opgegeven) telt niet mee.
+    Concepten (draft) tellen mee zodra ze gekoppeld zijn: wie een concept aan een doel hangt, zegt
+    dat het erbij hoort."""
+    return [p for p in alle_projecten if p.get("doel_id") == doel_id
+            and (not p.get("archived") or p.get("status") in _P.KLAAR)]
 
 
 def project_score(p: dict) -> float:

@@ -1039,7 +1039,7 @@ def main() -> None:
         print(format_report(run(n, seed=seed)))
 
     elif mode == "work_projects":
-        # Rollen werken (omkeerbaar, met eigen skills) aan hun queued projecten.
+        # Rollen werken (omkeerbaar, met eigen skills) aan hun actieve projecten.
         import os
         from nooch_village.config import load_context
         from nooch_village.projects import ProjectLedger
@@ -1946,7 +1946,7 @@ def main() -> None:
             elif actie == "project":
                 scope = (b.get("scope") or rep_titel)[:200]
                 try:
-                    pid = pj.create(owner, scope, "role", status="queued",
+                    pid = pj.create(owner, scope, "role", status="future",
                                     done_when=scope, origin="sluitronde")
                     try:
                         docs.write(pid, seed_document(scope))

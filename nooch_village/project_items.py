@@ -86,7 +86,7 @@ def verzoekkaart(*, van_rol: str, van_accountability: str, spanning: str, vraag:
 def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
             records=None, van_pid: str = "", van_rol: str = "", van_accountability: str = "",
             spanning: str = "", vraag: str = "") -> dict:
-    """Draag werk over aan een andere rol: een queued project op háár bord, met terugverwijzing.
+    """Draag werk over aan een andere rol: een project in TOEKOMST op háár bord, met terugverwijzing.
 
     Dit is de gedeelde kern van het projectverzoek-patroon: de `projectverzoek`-skill (de rol doet het
     zelf) en de mens-knop in de cockpit lopen allebei hierlangs, zodat een overdracht er altijd
@@ -105,7 +105,7 @@ def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
         return {"error": f"onbekende doelrol: '{naar}'"}
     done = (done_criterium or "").strip() or titel
     try:
-        pid = ledger.create(naar, titel[:200], "tension", status="queued",
+        pid = ledger.create(naar, titel[:200], "tension", status="future",
                             done_when=done[:200], origin="projectverzoek",
                             links=[van_pid] if van_pid else None)
     except Exception as e:                     # noqa: BLE001 — nette fout terug, geen stacktrace omhoog

@@ -40,7 +40,7 @@ def _antwoord(role="NONE", kind="missing_capability", capability=""):
 
 
 def _project(ledger, owner="harry", tekst="bouw de QR-landingspagina", trail=None):
-    pid = ledger.create(owner, "QR-codes op de schoenen", "human", status="queued")
+    pid = ledger.create(owner, "QR-codes op de schoenen", "human", status="running")
     ledger.start(pid)
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], tekst, skill=None, reason="geen skill hiervoor")
@@ -107,7 +107,7 @@ def test_het_spoor_reist_mee_naar_het_nieuwe_project(tmp_path):
     assert res["actie"] == "handoff" and res["naar_rol"] == "website_dev"
     nieuw = ledger.get(res["pid"])
     assert trail_of(nieuw) == ["harry"]
-    assert nieuw["owner"] == "website_dev" and nieuw["status"] == "queued"
+    assert nieuw["owner"] == "website_dev" and nieuw["status"] == "future"
 
 
 # ── GUARD 2: zichtbaar doodlopen ───────────────────────────────────────────────

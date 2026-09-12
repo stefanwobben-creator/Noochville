@@ -73,9 +73,9 @@ def test_a_board_watch_detecteert_activatie(tmp_path):
 def test_b_eigenaar_voert_alleen_dat_project_uit(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, led)
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     _prep(led, pid, [("studies", "openalex_evidence", "barefoot")])
-    ander = led.create("harry_hemp", "ander doel", "human", status="queued")
+    ander = led.create("harry_hemp", "ander doel", "human", status="running")
     _prep(led, ander, [("studies", "openalex_evidence", "vegan")])
 
     inh._on_project_activated(Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch"))
@@ -83,7 +83,7 @@ def test_b_eigenaar_voert_alleen_dat_project_uit(tmp_path):
     assert inh._project_checklist(led.get(ander))["items"][0]["done"] is False   # het andere niet
 
     # owner-mismatch: niet mijn project → geen uitvoering, geen crash
-    vreemd = led.create("iemand_anders", "doel", "human", status="queued")
+    vreemd = led.create("iemand_anders", "doel", "human", status="running")
     _prep(led, vreemd, [("s", "openalex_evidence", "x")])
     inh._on_project_activated(Event("project_activated", {"pid": vreemd, "owner": "iemand_anders"}, "board_watch"))
     assert inh._project_checklist(led.get(vreemd))["items"][0]["done"] is False
@@ -95,7 +95,7 @@ def test_c_geen_checklist_signaal_geen_uitvoering(tmp_path):
     inh = _inhabitant(tmp_path, led)
     signals = []
     inh.bus.subscribe("project_needs_preparation", lambda e: signals.append(e.data))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")   # geen _prep → geen checklist
+    pid = led.create("harry_hemp", "doel", "human", status="running")   # geen _prep → geen checklist
     inh._on_project_activated(Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch"))
     p = led.get(pid)
     assert p["status"] != "done" and p.get("outcome") != "stub:done"
@@ -106,7 +106,7 @@ def test_c_geen_checklist_signaal_geen_uitvoering(tmp_path):
 def test_d_tweede_activatie_idempotent(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, led)
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     _prep(led, pid, [("studies", "openalex_evidence", "barefoot")])
     ev = Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch")
     inh._on_project_activated(ev)

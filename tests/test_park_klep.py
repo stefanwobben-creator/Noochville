@@ -28,7 +28,7 @@ _REASON = "nooch_village.llm.reason"
 def _p(tmp_path, items):
     """Project met checklist; `items` = [(tekst, skill, payload_ok)]."""
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("rol", "doel", "human", status="queued")
+    pid = led.create("rol", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     for tekst, skill, ok in items:
         led.check_add(pid, cl["id"], tekst, skill=skill, payload_ok=ok)
@@ -115,8 +115,8 @@ def test_een_verwijderd_item_is_geen_blokkade_meer(tmp_path):
 
 def test_de_klep_raakt_niet_geparkeerde_projecten_niet_aan(tmp_path):
     led, pid, _clid, items = _p(tmp_path, [("bel", None, True)])
-    assert heropen(led, led.get(pid)) is None            # status queued, geen blokkade
-    assert led.get(pid)["status"] == "queued"
+    assert heropen(led, led.get(pid)) is None            # status running, geen blokkade
+    assert led.get(pid)["status"] == "running"
 
 
 def test_een_kapotte_park_reden_breekt_de_puls_niet(tmp_path):

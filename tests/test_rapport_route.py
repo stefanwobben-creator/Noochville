@@ -29,7 +29,7 @@ def _st(tmp_path):
 
 def _project(dd, st, doc: str = "", done_when: str = ""):
     pid = st.projects.create(ROLE, "Hemp canvas bij een tweede leverancier", "human",
-                             status="queued")
+                             status="running")
     if done_when:
         st.projects.set_dod(pid, "done_when", done_when)
     if doc:
@@ -148,7 +148,7 @@ def test_de_claims_renderer_blijft_zijn_eigen_functie():
 
 # ── één rapport per pagina ───────────────────────────────────────────────────
 def _met(dd, st, *, doc="", concept=""):
-    pid = st.projects.create(ROLE, "Of-of", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Of-of", "human", status="running", done_when="af")
     st.projects.start(pid)
     s2 = cockpit2._Stores(dd)
     if doc:

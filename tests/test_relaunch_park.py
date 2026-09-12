@@ -83,11 +83,11 @@ class _Notif:
 
 def _omgeving():
     projects = _Projects([
-        {"id": "p1", "status": "queued", "owner": "compliance",
+        {"id": "p1", "status": "running", "owner": "compliance",
          "scope": "Locate the Plant Based Treaty-logo on Nooch.earth footer"},
         {"id": "p2", "status": "blocked", "owner": "compliance",
          "scope": "Extract the literal quote from the FAQ page"},
-        {"id": "p3", "status": "queued", "owner": "harry_hemp",
+        {"id": "p3", "status": "running", "owner": "harry_hemp",
          "scope": "Onderzoek draagcomfort van myceliumleer"},          # niet site-afhankelijk
     ])
     notif = _Notif([

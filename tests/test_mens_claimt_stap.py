@@ -54,7 +54,7 @@ def _inh(tmp_path, ledger, **settings):
 
 def _project(ledger, items):
     pid = ledger.create("compliance", "Subsidieadministratie kloppend maken", "human",
-                        status="queued")
+                        status="running")
     ledger.start(pid)
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     for tekst, skill in items:

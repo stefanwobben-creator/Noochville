@@ -160,7 +160,7 @@ def test_kroniek_is_opt_in(tmp_path):
     from nooch_village.evidence_ledger import EvidenceLedger
     ctx, recs, radar, dd = _setup(tmp_path)
     ctx.projects.start(ctx.projects.create("harry", "onderzoek barefoot", "human",
-                                          status="queued", keyword="barefoot"))
+                                          status="running", keyword="barefoot"))
     ev = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))
     ev.record(role_id="harry", skill="openalex_evidence", query="barefoot soles", source="openalex",
               status="leeg", result_ref="0 hits")
@@ -179,8 +179,8 @@ def test_kroniek_is_opt_in(tmp_path):
 def test_lopende_onderwerpen_negeren_afgeronde_en_voorgestelde_projecten(tmp_path):
     ctx, recs, radar, dd = _setup(tmp_path)
     led = ctx.projects
-    led.create("harry", "loopt", "human", status="queued", keyword="barefoot")
-    klaar = led.create("harry", "klaar", "human", status="queued", keyword="afgerond thema")
+    led.create("harry", "loopt", "human", status="running", keyword="barefoot")
+    klaar = led.create("harry", "klaar", "human", status="running", keyword="afgerond thema")
     led.complete(klaar)
     led.create("harry", "voorstel", "role", status="proposed", keyword="voorgesteld thema")
 

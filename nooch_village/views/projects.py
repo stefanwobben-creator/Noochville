@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 _PROJ_CHIP = {   # opgeslagen status-sleutel -> (Engels label, chip-kleur-modifier). Sleutels = logica.
     "running": ("Active", "green"),
-    "queued": ("Queue", "muted"),
     "future": ("Future", "muted"),
     "blocked": ("Waiting", "coral"),
     "draft": ("Draft", "muted"),
@@ -135,7 +134,7 @@ def _owner_options(st: _Stores, sel_owner="", circle: str | None = None) -> str:
 
 # Label = weergave (Engels); de tweede waarde ('actief'/'wacht'/…) is de kolom-SLEUTEL die als
 # form-value 'col' naar de dispatch gaat en daar wordt vergeleken — die blijft dus Nederlands.
-_PROJ_COLS = [("Active", "actief", ("running", "queued")), ("Waiting", "wacht", ("blocked",)),
+_PROJ_COLS = [("Active", "actief", ("running",)), ("Waiting", "wacht", ("blocked",)),
               ("Done", "done", ("done",)), ("Future", "toekomst", ("future",))]
 
 
@@ -265,7 +264,7 @@ def _due_overdue(due: str) -> bool:
 
 #: Welke statussen in de Active-kolom vallen — AFGELEID uit `_PROJ_COLS`, nooit een tweede lijst.
 #: Precies de fout die hieronder in de docstring staat: de kolom heet Active, de statussen heten
-#: `running` en `queued`, en wie dat overtypt raakt vroeg of laat uit de pas met de kolom zelf.
+#: `running` (tot 12 sep 2026 ook `queued`), en wie dat overtypt raakt vroeg of laat uit de pas met de kolom zelf.
 _ACTIEF_STATUSSEN = next((s for _lbl, key, s in _PROJ_COLS if key == "actief"), ())
 
 #: De vier toestanden waarin een kaart in ACTIVE kan staan. Ze zagen er tot 7 september identiek
@@ -301,7 +300,7 @@ def _kaart_status(st, p: dict) -> str:
 
     WELKE STATUS 'LOPEND' IS, KOMT UIT `_PROJ_COLS` EN NERGENS ANDERS. Mijn eerste versie toetste op
     `status in ("active", "actief")`: geraden, niet gecontroleerd. De kolom HEET Active maar bevat
-    `running` en `queued`, dus de badge verscheen op geen enkele van de 21 kaarten. En de test die
+    `running` (destijds ook `queued`), dus de badge verscheen op geen enkele van de 21 kaarten. En de test die
     ik erbij schreef gebruikte `status="active"`, dezelfde aanname, dus hij bevestigde hem in plaats
     van hem te toetsen.
 
@@ -442,8 +441,9 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
     vraag = {"role": owner}
     # DE KOLOM REIST MEE. Tot 12 sep 2026 niet: "+ add project" onder Future maakte een project in
     # Active (de wizard kende alleen queued), terwijl het oude formulier hier wél `col` doorgaf.
-    # Stefan: "dan neemt ie dat niet over." Active blijft de default, dus alleen de twee andere.
-    if col in ("toekomst", "wacht"):
+    # Stefan: "dan neemt ie dat niet over." Sinds scope 49 is slapend (Future) de default en maakt
+    # alleen de deur ónder Active meteen actief, dus alle drie de kolommen reizen mee.
+    if col in ("actief", "toekomst", "wacht"):
         vraag["col"] = col
     if trekker:
         vraag["trekker"] = trekker

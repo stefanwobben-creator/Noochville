@@ -34,7 +34,7 @@ def test_editor_werkt_op_pagina_zonder_modal_html(tmp_path):
     (Tot 11 september 2026 was het backlog-scherm hier het voertuig; dat is verwijderd.)"""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
-    pid = st.projects.create(ROLE, "Eén document", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Eén document", "human", status="running", done_when="af")
     st.projects.start(pid)
     tab = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="t")
     assert "class='editor'" in tab and "if(!window.wrapSel)" in tab

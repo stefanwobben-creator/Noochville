@@ -26,7 +26,7 @@ def lijst(tmp_path):
     """Vier items, in bekende volgorde, met een skill op het eerste — zodat een test kan zien of
     bewerken het uitvoer-primitief laat staan."""
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("the_source", "doel", "human", status="queued")
+    pid = led.create("the_source", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     led.check_add(pid, cl["id"], "een", skill="web_zoek", payload={"term": "x"})
     for t in ("twee", "drie", "vier"):
@@ -47,7 +47,7 @@ def test_bewerken_laat_de_skill_en_payload_staan():
     uitvoer-primitief — en precies dát was de reden dat mensen items lieten staan zoals ze waren."""
     import tempfile, os
     led = ProjectLedger(os.path.join(tempfile.mkdtemp(), "p.json"))
-    pid = led.create("the_source", "doel", "human", status="queued")
+    pid = led.create("the_source", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="L")
     led.check_add(pid, cl["id"], "suppliers", skill="web_zoek", payload={"term": "soap"})
     iid = led.get(pid)["checklists"][0]["items"][0]["id"]

@@ -53,7 +53,7 @@ def test_work_projects_injecteert_gekoppelde_inwoner():
     recs.put(Record(id="scout", type=RecordType.ROLE, parent=None,
                     definition=RoleDefinition(purpose="speur concurrenten"), persona_id=bo.id))
     led = ProjectLedger(os.path.join(d, "p.json"))
-    pid = led.create("scout", "kijk naar concurrent X", "human", status="queued")
+    pid = led.create("scout", "kijk naar concurrent X", "human", status="running")
     seen = {}
     work_projects(led, recs, llm_reason=lambda pr: seen.update(p=pr) or "LEVER: gedaan",
                   personas=ps)

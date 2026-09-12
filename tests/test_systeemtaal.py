@@ -101,7 +101,7 @@ def test_woordsoort_klopt():
     """Een swap die de zin grammaticaal breekt levert het model rommel aan. `niet-uitvoering` is een
     zelfstandig naamwoord, dus het doel is dat ook."""
     assert st.ontjargon("mogelijk niet-uitvoering") == "mogelijk niet gestart"
-    assert st.ontjargon("Het project is queued.") == "Het project is in de wachtrij."
+    assert st.ontjargon("Het was een dry-run.") == "Het was een proefdraai."
 
 
 def test_hoofdletter_reist_mee():

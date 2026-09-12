@@ -96,7 +96,7 @@ _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 # EEN FEIT LEEFT OP ÉÉN PLEK, en dit feit leefde op elf. Vóór 8 september somde elke consument de
 # statussen zelf op, en ze waren het onderling niet eens:
 #
-#   views/projects._PROJ_COLS       running, queued            (de enige die klopte)
+#   views/projects._PROJ_COLS       running, queued            (de enige die klopte; queued is sinds 12 sep 2026 weg)
 #   tensie_poort.LEVEND             + review, todo, active     (drie die NIET BESTAAN)
 #   tensie_poort (dedup)            queued, running, blocked, future
 #   relaunch_park                   idem + review
@@ -111,10 +111,18 @@ _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 #
 # De vier afgeleide sets hieronder beantwoorden elk een andere vraag; ze hebben allemaal minstens
 # twee aanroepers. Wie een vijfde nodig heeft, leidt hem hier af en somt hem niet elders op.
-STATUSSEN = ("draft", "proposed", "queued", "running", "blocked", "future", "done")
+STATUSSEN = ("draft", "proposed", "running", "blocked", "future", "done")
 
-#: Waarmee een project mag BEGINNEN (`create` weigert de rest).
-START_STATUSSEN = ("queued", "draft", "future", "proposed")
+# GEEN `queued` MEER (scope 49, 12 september 2026). Die status was "op het bord, nog niet begonnen"
+# en diende de autonome AI-rollen; sinds het stagiairs-besluit van 5 september start een MENS werk
+# door naar Active te slepen. Stefan: "als ik een project toevoeg staat hij op queued en moet ik hem
+# handmatig op actief zetten. Kan die hele queue-functie weg? Een project staat standaard op future,
+# en als je hem naar actief sleept maak je hem van slapend naar actief." Bestaande queued-projecten
+# worden bij het laden actief (`migreer_queued`), met een regel in hun status_log.
+
+#: Waarmee een project mag BEGINNEN (`create` weigert de rest). Standaard `future`: slapend, tot een
+#: mens het naar Active sleept. `running` alleen voor de "+ add project"-deur ónder Active.
+START_STATUSSEN = ("future", "running", "draft", "proposed")
 
 #: Klaar; hier beweegt niets meer.
 KLAAR = frozenset({"done"})
@@ -123,16 +131,19 @@ KLAAR = frozenset({"done"})
 LEVEND = frozenset(STATUSSEN) - KLAAR
 
 #: De rol kan er NU aan werken. Dit is wat de Active-kolom bundelt.
-LOPEND = ("running", "queued")
+LOPEND = ("running",)
 
 #: Begonnen werk: staat op het bord, af of niet. Sluit `future`, `draft` en `proposed` uit, want
 #: dat is werk dat nog niet eens begonnen is.
-OP_HET_BORD = ("queued", "running", "blocked")
+OP_HET_BORD = ("running", "blocked")
 
 #: Begonnen of ingepland. `OP_HET_BORD` plus wat nog in de wacht staat.
 INGEPLAND = OP_HET_BORD + ("future",)
 
 _TERMINAL       = KLAAR
+
+#: De status die per scope 49 verdwenen is; alleen de migratie kent hem nog.
+_VERVALLEN_STATUS = "queued"
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
 # ongelabeld project mag elke statuswissel maken). De guard weigert alleen een niet-lege ongeldige waarde.
 _MISSIE_IMPACT   = {"versterkt", "neutraal", "verzwakt"}
@@ -149,6 +160,23 @@ class ProjectLedger:
         self._projects: dict[str, dict] = {}
         self._mtime: float = 0.0
         self._load()
+        # Eenmalig, alleen als er nog iets te migreren valt (lock-vrije check; de migratie zelf loopt
+        # onder het slot en kijkt opnieuw). Na de eerste schrijf is dit een lege lus.
+        if any(p.get("status") == _VERVALLEN_STATUS for p in self._projects.values()):
+            self.migreer_queued()
+
+    def migreer_queued(self) -> int:
+        """`queued` bestaat niet meer (scope 49): een project dat er nog op staat stond in de kolom
+        Active en wordt dus `running`, met een regel in zijn status_log zodat een rapport ziet dat dit
+        een migratie was en geen sleep. Idempotent; geeft het aantal gemigreerde projecten terug."""
+        n = 0
+        for p in self._projects.values():
+            if p.get("status") == _VERVALLEN_STATUS:
+                self._zet_status(p, "running", "migratie: queued weg (scope 49)")
+                n += 1
+        if n:
+            self._save()
+        return n
 
     def _load(self) -> None:
         self._projects = read_json(self.path, {})
@@ -190,7 +218,7 @@ class ProjectLedger:
 
     def create(self, owner: str, scope, trigger: str,
                hypothesis: str = "", business_case: dict | None = None,
-               status: str = "queued", origin: str = "",
+               status: str = "future", origin: str = "",
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
                links: list[str] | None = None, parent: str | None = None,
                opdrachtgever: str = "",
@@ -1083,12 +1111,13 @@ class ProjectLedger:
         return True
 
     def approve(self, pid: str, door: str = "") -> bool:
-        """Keur een concept-project (draft) goed → het komt op het bord van de rol (queued).
-        Alleen drafts. Zo zie je eerst de (AI-)formulering en geef je akkoord vóór het live gaat."""
+        """Keur een concept-project (draft) goed → het komt bij de rol in TOEKOMST te staan; een mens
+        sleept het naar Active als het aan de beurt is. Alleen drafts. Zo zie je eerst de
+        (AI-)formulering en geef je akkoord vóór het op het bord staat."""
         p = self._projects.get(pid)
         if p is None or p.get("status") != "draft":
             return False
-        self._zet_status(p, "queued", door)
+        self._zet_status(p, "future", door)
         self._touch(p)
         self._save()
         return True
@@ -1138,7 +1167,7 @@ class ProjectLedger:
     # ── de voorstel-baan (status 'proposed') ───────────────────────────────────
     # Een voorstel is GEEN project op het bord: het is een vraag aan de mens. De status staat
     # daarom bewust buiten élke autonome lus — `activate_pulse` kijkt alleen naar future/blocked,
-    # `_tend_projects` naar future/queued/running en `project_worker._eligible` naar queued/running.
+    # `_tend_projects` naar LOPEND en `project_worker._eligible` naar running-en-nog-niet-gewerkt.
     # Zo kan een voorstel niet stilletjes uitgevoerd, voorbereid of geactiveerd worden. De mens is
     # de enige poort. (tests/test_proposed_veiligheid.py bevriest die garantie.)
 
@@ -1176,8 +1205,9 @@ class ProjectLedger:
 
     def record_progress(self, pid: str, note: str) -> bool:
         """Leg autonome voortgang vast: een rol heeft (omkeerbaar, met eigen skills) aan dit
-        project gewerkt. Zet status queued→running, bewaart de uitkomst en markeert 'worked'
-        (idempotent: niet nog eens oppakken). Done-projecten blijven ongemoeid."""
+        project gewerkt. Bewaart de uitkomst en markeert 'worked' (idempotent: niet nog eens
+        oppakken). De status verandert niet: werk gebeurt alleen aan een project dat een mens
+        actief maakte. Done-projecten blijven ongemoeid."""
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
@@ -1185,8 +1215,6 @@ class ProjectLedger:
         p.setdefault("log", []).append({"who": "rol", "text": note, "at": time.time()})
         p["worked"] = True
         p["executions"] = int(p.get("executions", 0)) + 1   # telt mee voor 'stollen na 3x'
-        if p["status"] == "queued":
-            self._zet_status(p, "running", "rol")        # de rol pakte het zelf op
         self._touch(p)
         self._save()
         return True
@@ -1590,7 +1618,7 @@ _WRITE_METHODS = (
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
     "set_item_human", "set_item_payload",
-    "set_item_text", "move_item", "set_doel", "set_depends_on",
+    "set_item_text", "move_item", "set_doel", "set_depends_on", "migreer_queued",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

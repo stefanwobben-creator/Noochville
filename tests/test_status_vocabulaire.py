@@ -109,7 +109,7 @@ def test_elke_status_heeft_een_label_op_het_metrics_scherm():
 #: genoemde waarde bestaat).
 _MAG_OPSOMMEN = {"projects.py", "views/projects.py", "systeemtaal.py"}
 
-_KERN = {"queued", "running", "blocked"}
+_KERN = {"future", "running", "blocked"}
 
 
 def test_geen_enkele_module_somt_de_statussen_nog_zelf_op():

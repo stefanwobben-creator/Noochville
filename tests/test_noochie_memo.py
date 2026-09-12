@@ -52,7 +52,7 @@ def _founder_items(dd):
 
 
 def _project(st, titel, *, status="running", owner=ROL):
-    pid = st.projects.create(owner, titel, "human", status="queued")
+    pid = st.projects.create(owner, titel, "human", status="running")
     if status in ("running", "blocked", "done"):
         st.projects.start(pid)
     if status == "blocked":
@@ -181,7 +181,7 @@ def test_net_afgeronde_projecten_tellen_mee_en_future_niet(tmp_path):
     de 58 future-projecten zijn per definitie nog niet aan de orde en tellen alleen."""
     dd, st = _st(tmp_path)
     klaar = _project(st, "Cristian from Apolo qualified as a sourcing partner", status="done")
-    toekomst = st.projects.create(ROL, "Ooit een winkel in Alicante", "human", status="queued")
+    toekomst = st.projects.create(ROL, "Ooit een winkel in Alicante", "human", status="running")
     st.projects.to_future(toekomst)
     pr = noochie_memo.verzamel(st, dd)["projecten"]
     titels = [r["titel"] for r in pr["inhoud"]]

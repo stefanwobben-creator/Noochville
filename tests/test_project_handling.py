@@ -79,16 +79,20 @@ def test_run_project_zonder_checklist_geeft_geen_stub(inhabitant, ledger):
     assert inhabitant.run_project(ledger.get(pid)) is None
 
 
-def test_on_project_queued_skips_wrong_owner(inhabitant, ledger):
+def test_een_nieuw_project_slaapt_en_de_rol_raakt_het_niet_aan(inhabitant, ledger):
+    """Scope 49: er is geen `project_queued`-reactie meer. Een nieuw project staat in TOEKOMST en
+    blijft daar tot een mens het naar Active sleept (`project_activated`); de dagpuls loopt alleen
+    LOPEND langs. De rol heeft dus geen ingang meer om ongevraagd aan nieuw werk te beginnen."""
+    assert not hasattr(inhabitant, "_on_project_queued") and not hasattr(inhabitant, "_scan_queued_projects")
     pid = ledger.create("website_watcher", "werk", "human")
-    event = Event("project_queued", {"project_id": pid, "owner": "trends"}, "village")
-    inhabitant._on_project_queued(event)
-    assert ledger.get(pid)["status"] == "queued"
+    assert ledger.get(pid)["status"] == "future"
+    inhabitant._tend_projects(None)
+    assert ledger.get(pid)["status"] == "future" and not ledger.get(pid).get("worked")
 
 
-def test_on_project_queued_zonder_checklist_geen_valse_done(inhabitant, ledger):
+def test_on_project_activated_zonder_checklist_geen_valse_done(inhabitant, ledger):
     # correcte eigenaar, maar geen voorbereiding → geen valse done (niet meer de oude stub:done-flow)
-    pid = ledger.create("website_watcher", "werk", "human")
-    event = Event("project_queued", {"project_id": pid, "owner": "website_watcher"}, "village")
-    inhabitant._on_project_queued(event)
+    pid = ledger.create("website_watcher", "werk", "human", status="running")
+    event = Event("project_activated", {"pid": pid, "owner": "website_watcher"}, "village")
+    inhabitant._on_project_activated(event)
     assert ledger.get(pid)["status"] != "done"

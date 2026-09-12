@@ -21,7 +21,7 @@ def _fmt_ts(ts) -> str:
 #: en werden op de commandoregel een "?". De test hieronder eist dat elke status uit
 #: `projects.STATUSSEN` hier een teken heeft, zodat een achtste status luid omvalt in plaats van
 #: stil als vraagteken te verschijnen.
-_STATUS_ICON = {"draft": "✎", "proposed": "🗳", "queued": "⏳", "running": "▶️ ",
+_STATUS_ICON = {"draft": "✎", "proposed": "🗳", "running": "▶️ ",
                 "blocked": "🔒", "future": "🕓", "done": "✅"}
 
 

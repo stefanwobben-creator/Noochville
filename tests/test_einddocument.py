@@ -107,7 +107,7 @@ def _prep(ledger, pid, items):
 def test_item_slaagt_document_bijgewerkt(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot"), ("mens-taak", None, "")])   # 2e blijft open
     with patch(_REASON, side_effect=_reason_mock("# Einddocument\nEerste bevindingen.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
@@ -119,7 +119,7 @@ def test_item_slaagt_document_bijgewerkt(tmp_path):
 def test_twee_items_zelfde_puls_een_call(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _prep(ledger, pid, [("a", "openalex_evidence", "x"), ("b", "openalex_evidence", "y"),
                         ("open", None, "")])                     # 2 slagen, 1 blijft open → niet all-done
     with patch(_REASON, side_effect=_reason_mock("doc")) as m:
@@ -132,7 +132,7 @@ def test_llm_faalt_document_intact(tmp_path, caplog):
     ledger, ds, docs = _stores(tmp_path)
     docs.write("p", "OUD DOCUMENT")                             # bestaand document
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     # gebruik hetzelfde pid als het voorgeschreven document
     docs.write(pid, "OUD DOCUMENT")
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
@@ -146,7 +146,7 @@ def test_llm_faalt_document_intact(tmp_path, caplog):
 def test_awaiting_review_finale_pass_en_note(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot")])   # één item → all-done
     with patch(_REASON, side_effect=_reason_mock("# Afgerond\nKlaar.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
@@ -166,7 +166,7 @@ def test_cap_fail_loud(tmp_path, caplog):
     ledger, ds, docs = _stores(tmp_path)
     docs_pid_seed = "x" * 500
     inh = _inh(tmp_path, ledger, ds, docs, cap="50")           # heel kleine cap
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     docs.write(pid, docs_pid_seed)                             # groot huidig document → input > 50
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
     with caplog.at_level(logging.WARNING), patch(_REASON, side_effect=_reason_mock("doc")):
@@ -180,7 +180,7 @@ def test_persona_stem_in_prompt(tmp_path):
     personas = PersonaStore(str(tmp_path / "personas.json"))
     sid = personas.add("Sid", mbti="INTP", instructions="Wees bondig en warm.")
     inh = _inh(tmp_path, ledger, ds, docs, persona_id=sid.id, personas=personas)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
     with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
@@ -193,7 +193,7 @@ def test_persona_stem_in_prompt(tmp_path):
 def test_volledige_inhoud_en_structuur_en_hogere_cap(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     big = "BEVINDING-" + "x" * 1200            # > 500 (oude preview-cap), < 3000 (nieuwe per-deliverable cap)
     ds.add(project_id=pid, role="sid", skill="openalex_evidence", checklist_item="i1",
            title="Zoek X", content={"detail": big},
@@ -221,7 +221,7 @@ def test_atomic_write_nooit_half_bestand(tmp_path):
 def test_task_in_documenttekst_geen_parsing(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     docs.write(pid, "# Doc\n#task herschrijf de intro")        # #task in het document, GEEN comment
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
     with patch(_REASON, side_effect=_reason_mock("doc")) as m:
@@ -323,7 +323,7 @@ def test_terugval_wordt_vastgelegd_als_herkomst(tmp_path, caplog):
     """Antwoord van de goedkope staart terwijl de persona iets duurders vroeg → gemarkeerd."""
     ledger, ds, docs = _stores(tmp_path)
     personas, sid = _sid_met_voorkeur(tmp_path)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     with caplog.at_level(logging.WARNING):
         assert _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1") is True
     assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": True}
@@ -335,7 +335,7 @@ def test_terugval_wordt_vastgelegd_als_herkomst(tmp_path, caplog):
 def test_gevraagd_model_is_geen_terugval(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     personas, sid = _sid_met_voorkeur(tmp_path)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "anthropic:sonnet")
     assert _herkomst(docs, pid) == {"tier": "anthropic:sonnet", "terugval": False}
 
@@ -354,7 +354,7 @@ def test_zonder_persona_voorkeur_geldt_de_dorpsbrede_kop(tmp_path):
     ledger, ds, docs = _stores(tmp_path)
     personas = PersonaStore(str(tmp_path / "personas.json"))
     sid = personas.add("Sid")
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1")
     assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": True}
 
@@ -367,7 +367,7 @@ def test_de_kop_zelf_is_nooit_een_terugval(tmp_path):
     personas = PersonaStore(str(tmp_path / "personas.json"))
     sid = personas.add("Candy")
     personas.update(sid.id, llm={"default": "anthropic:claude-haiku-4-5", "per_taak": {}})
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, hoog_inzet_ladder())
     assert _herkomst(docs, pid)["terugval"] is False
 

@@ -335,7 +335,7 @@ def test_de_lopende_statussen_komen_uit_de_kolomdefinitie():
     from nooch_village.views.projects import _ACTIEF_STATUSSEN, _PROJ_COLS
     uit_kolom = next(s for _l, k, s in _PROJ_COLS if k == "actief")
     assert _ACTIEF_STATUSSEN == uit_kolom
-    assert "running" in _ACTIEF_STATUSSEN and "queued" in _ACTIEF_STATUSSEN
+    assert "running" in _ACTIEF_STATUSSEN and "queued" not in _ACTIEF_STATUSSEN   # queued is weg (scope 49)
     assert "active" not in _ACTIEF_STATUSSEN         # de kolom heet zo, de status niet
 
 

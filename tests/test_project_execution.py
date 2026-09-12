@@ -98,7 +98,7 @@ def test_a3_geen_llm_geen_checklist_blijft_toekomst(tmp_path, ledger, monkeypatc
 # b. ACTIEF met checklist → afvinkbaar item uitgevoerd, note per item, afgevinkt
 def test_b_uitvoering_vinkt_af_met_note(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     p = ledger.get(pid)
@@ -110,13 +110,13 @@ def test_b_uitvoering_vinkt_af_met_note(tmp_path, ledger):
 # c. alle items af → DONE; open item → blijft ACTIEF (eerlijke voortgang)
 def test_c_alle_af_done_open_blijft_actief(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
-    pid1 = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid1 = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid1, [("s", "openalex_evidence", "x", "")])
     inh._claim_run_complete(pid1)
     p1 = ledger.get(pid1)
     assert p1["status"] == "blocked" and p1["blocked_on"] == "review"  # review-gate: alles af → WACHT, niet done
 
-    pid2 = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid2 = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid2, [("s", "openalex_evidence", "x", ""), ("p", None, "", "geen patent-skill")])
     inh._claim_run_complete(pid2)
     p2 = ledger.get(pid2)
@@ -130,7 +130,7 @@ def test_d_geen_checklist_signaal_geen_valse_done(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
     signals = []
     inh.bus.subscribe("project_needs_preparation", lambda e: signals.append(e.data))
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     inh._claim_run_complete(pid)
     p = ledger.get(pid)
     assert p["status"] != "done" and p.get("outcome") != "stub:done"
@@ -140,7 +140,7 @@ def test_d_geen_checklist_signaal_geen_valse_done(tmp_path, ledger):
 # e. idempotent: tweede puls dezelfde dag dupliceert niets
 def test_e_idempotent_tweede_puls(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("s", "openalex_evidence", "x", ""), ("p", None, "", "geen skill")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     n1 = len(ledger.get(pid).get("log", []))
@@ -151,7 +151,7 @@ def test_e_idempotent_tweede_puls(tmp_path, ledger):
 # f. skill-fout → item open + reden zichtbaar, geen stille skip
 def test_f_skill_fout_item_open_met_reden(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     p = ledger.get(pid)
@@ -162,7 +162,7 @@ def test_f_skill_fout_item_open_met_reden(tmp_path, ledger):
 
 # h. ledger: fail-teller optellen en resetten
 def test_h_note_en_reset_item_fails(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, "cl")
     ledger.check_add(pid, cl["id"], "item", skill="openalex_evidence")
     iid = ledger.get(pid)["checklists"][0]["items"][0]["id"]
@@ -178,7 +178,7 @@ def test_i_vastgelopen_na_grens_naar_waiting(tmp_path, ledger, monkeypatch):
     monkeypatch.setattr(llm, "reason", lambda *a, **k: "Kan iemand een alternatieve bron voor 'boom' aandragen?")
     inh = _inhabitant(tmp_path, ledger)
     inh.context.settings["item_fail_limit"] = "3"
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
     events = []
     inh.bus.subscribe("project_stuck", lambda e: events.append(e.data))
@@ -186,7 +186,7 @@ def test_i_vastgelopen_na_grens_naar_waiting(tmp_path, ledger, monkeypatch):
     for day in ("2026-07-08", "2026-07-09"):                       # 2 pogingen < grens 3
         inh._execute_checklist(ledger.get(pid), day)
     p = ledger.get(pid)
-    assert p["status"] == "queued" and p["checklists"][0]["items"][0]["fails"] == 2
+    assert p["status"] == "running" and p["checklists"][0]["items"][0]["fails"] == 2
 
     inh._execute_checklist(ledger.get(pid), "2026-07-10")          # 3e poging → grens geraakt → WAITING
     p = ledger.get(pid)
@@ -201,18 +201,18 @@ def test_i_vastgelopen_na_grens_naar_waiting(tmp_path, ledger, monkeypatch):
 def test_j_grens_nul_zet_klep_uit(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
     inh.context.settings["item_fail_limit"] = "0"
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
     for day in ("2026-07-08", "2026-07-09", "2026-07-10"):
         inh._execute_checklist(ledger.get(pid), day)
-    assert ledger.get(pid)["status"] == "queued"                  # nooit geblokkeerd, blijft ACTIEF
+    assert ledger.get(pid)["status"] == "running"                 # nooit geblokkeerd, blijft ACTIEF
 
 
 # g. skill uitgevoerd maar leeg → item AF (no-data is een uitkomst), 📭 op de wall zodat de mens kan
 #    beoordelen of het project klaar is (De Kroniek B3: leeg is een feit, geen mislukking).
 def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("leeg-item", "openalex_evidence", "leeg", "")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     p = ledger.get(pid)
@@ -238,7 +238,7 @@ def test_tend_prepareert_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
     monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
     inh = _inhabitant(tmp_path, ledger)
     # simuleer een bord-drag: project staat 'running' zonder checklist
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
     ledger.start(pid)
     assert ledger.get(pid)["status"] == "running" and inh._project_checklist(ledger.get(pid)) is None
     inh._tend_projects(None)                                   # de dagelijkse verzorging
@@ -254,7 +254,7 @@ def test_prepare_project_verruimd_voor_actief_zonder_checklist(tmp_path, ledger,
     plan = '{"deliverable":"x","items":[{"text":"t","skill":"openalex_evidence","query":"q","reason":""}]}'
     monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     ledger.start(pid)                                          # → running, geen checklist
     inh.prepare_project(pid)
     assert inh._project_checklist(ledger.get(pid)) is not None

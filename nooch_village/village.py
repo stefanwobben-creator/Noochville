@@ -582,10 +582,10 @@ class Village:
         return proposal.id
 
     def queue_project(self, owner: str, scope, trigger: str = "human") -> str:
-        """Maak een project aan in het grootboek en notificeer de eigenaar via de bus."""
-        pid = self.context.projects.create(owner, scope, trigger)
-        self.bus.publish(Event("project_queued", {"project_id": pid, "owner": owner}, "village"))
-        return pid
+        """Maak een project aan in het grootboek. Het staat dan in TOEKOMST (slapend); een mens
+        sleept het naar Active, en dát is het signaal waar de rol op reageert (project_activated).
+        Er gaat hier dus geen event meer uit (scope 49: het `project_queued`-event is weg)."""
+        return self.context.projects.create(owner, scope, trigger)
 
     def _prime_board_watch(self) -> None:
         """Zaad de board-watch met de projecten die bij het opstarten AL 'running' zijn. Zo vuurt de
