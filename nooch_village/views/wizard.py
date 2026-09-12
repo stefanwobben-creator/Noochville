@@ -81,21 +81,6 @@ def _name_of(st, cid: str) -> str:
     return _name(rec) if rec is not None else cid
 
 
-def _trekker_options(st) -> str:
-    opts = ["<option value=''>— nog niemand</option>"]
-    for pr in st.people.all():
-        opts.append(f"<option value='person:{_e(pr.id)}'>{_e(pr.name)}</option>")
-    for pid, p in (st.personas.all() if hasattr(st.personas, "all") else {}).items() \
-            if not isinstance(st.personas.all(), list) else []:
-        pass
-    try:
-        for p in st.personas.all().values():
-            opts.append(f"<option value='persona:{_e(p.get('id'))}'>{_e(p.get('name'))} (AI)</option>")
-    except Exception:
-        pass
-    return "".join(opts)
-
-
 def _js(tekst: str) -> str:
     """Een string veilig in een JS-literal zetten. `_e` is voor HTML-attributen; hier staat de
     waarde IN een script, en daar is een aanhalingsteken of een regeleinde het probleem."""
@@ -120,16 +105,18 @@ def _doel_options(st) -> tuple[str, str]:
 
 
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
-                  ruw: str = "", uitkomst: str = "", trekker: str = "", nid: str = "",
+                  ruw: str = "", trekker: str = "", nid: str = "",
                   vervullers: dict | None = None,
                   eigen: list | None = None, col: str = "") -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
     gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
 
-    `ruw` en `uitkomst` zijn VOORVULLING uit de plek waar je vandaan komt: het bord geeft de titel
-    en de done-when mee, een inbox-spanning geeft zijn tekst als zaad. Wat de mens al heeft
-    ingetypt hoort hij niet over te tikken — dat is de reden dat die kale formulieren bestonden.
+    `ruw` is VOORVULLING uit de plek waar je vandaan komt: een inbox-spanning geeft zijn tekst als
+    zaad. Wat de mens al heeft ingetypt hoort hij niet over te tikken — dat is de reden dat die
+    kale formulieren bestonden. Er is GEEN apart done-when-veld meer (Stefan, 12 sep 2026: "de
+    projectformuleringen zijn al zo geschreven dat het gewenste resultaat beschreven is"): de titel
+    ís de uitkomst, en /wizard/create zet hem ook als done-when.
 
     Er zijn geen stappen meer: alles staat in één form, met de snelle route bovenaan en de
     verrijking opgevouwen eronder. De voorvulling landt in de velden; opslaan kan meteen.
@@ -141,7 +128,6 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
     hangen die het stylesheet nog niet had). Dezelfde URL = één download, geen dubbele kost."""
     role_opts = _role_options(st, circle=ii_cirkel(role), eigen=eigen)
-    trek_opts = _trekker_options(st)
     doel_opts, doel_wps = _doel_options(st)
     col = col if col in KOLOMMEN else ""
     # EEN `ii:<cirkel>`-EIGENAAR IS EEN GELDIGE VOORSELECTIE. Hij staat niet in de records (het is
@@ -153,7 +139,7 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     else:
         pre = role if role and st.records.get(role) is not None \
             and not org.is_circle(st.records.get(role)) else ""
-    ruw, uitkomst = (ruw or "").strip(), (uitkomst or "").strip()
+    ruw = (ruw or "").strip()
     # De spanning waar dit project uit voortkomt, als die er is. Reist mee tot aan
     # /wizard/create, die hem sluit zodra het project bestaat.
     nid = (nid or "").strip()
@@ -161,11 +147,9 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     # opslaan-knop staat er meteen — dat is het verschil met de zes stappen die je moest doorlopen.
     body = _WIZ_HTML.replace("__CSRF__", _e(csrf_token)) \
                     .replace("__ROLES__", role_opts) \
-                    .replace("__TREK__", trek_opts) \
                     .replace("__RUW__", _js(ruw)) \
                     .replace("__NID__", _js(nid)) \
                     .replace("__VERVULLERS__", json.dumps(vervullers or {})) \
-                    .replace("__UIT__", _js(uitkomst)) \
                     .replace("__TREKKER__", _js(trekker)) \
                     .replace("__DOELEN__", doel_opts) \
                     .replace("__DOELWPS__", doel_wps) \
@@ -188,7 +172,7 @@ _WIZ_HTML = r"""
 <script data-modal-run>
 (function(){
 const CSRF="__CSRF__";
-const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__", DOELOPTS="__DOELEN__";
+const ROLEOPTS="__ROLES__", PREROLE="__ROLE__", DOELOPTS="__DOELEN__";
 // Werkpakketten per doel (id → {w:[…]}), en de uren achter de AI-gok (1u/1d/2d/1w → uren), allebei
 // uit de server: één tabel, geen tweede in de browser.
 const DOELWPS=__DOELWPS__, EFFORT_UREN=__EFFORT_UREN__;
@@ -197,12 +181,12 @@ const DOELWPS=__DOELWPS__, EFFORT_UREN=__EFFORT_UREN__;
 const VERVULLERS=__VERVULLERS__;
 // EEN FORM, SNELLE ROUTE EERST. Dit was een flow van zes stappen: je moest er doorheen om één
 // project op het bord te krijgen, en elke stap was een plek om te blijven hangen. Nu staat de
-// hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
+// hele snelle route bovenaan — project, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
-const S={ruw:"__RUW__",ruwEigen:"",uitkomst:"__UIT__",nid:"__NID__",titel:"",checklist:[],planfout:"",
+const S={ruw:"__RUW__",ruwEigen:"",nid:"__NID__",titel:"",checklist:[],planfout:"",
          uren:"",eenheid:"uren",missie:"",
          business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,col:"__COL__",doel:"",wp:"",
+         role:PREROLE,col:"__COL__",doel:"",wp:"",
          trekker:"__TREKKER__",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -236,7 +220,7 @@ const PLAN_TIMEOUT_MS=45000;
 
 function lees(){
   const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
-  S.ruw=g('wz-ruw'); S.uitkomst=g('wz-uit'); S.role=g('wz-role')||S.role;
+  S.ruw=g('wz-ruw'); S.role=g('wz-role')||S.role;
 }
 function kanOpslaan(){return !!(document.getElementById('wz-ruw')||{}).value.trim() && !!S.role;}
 function stelKnop(){
@@ -279,13 +263,10 @@ function form(){
     <button type="button" id="wz-ai" onclick="scherp()">✨ suggest</button></div>
   <p class="wz-hint" id="wz-aihint"></p>
 
-  <div class="wz-clab">Done when <span class="wz-hint">— optional</span></div>
-  <input id="wz-uit" value="${esc(S.uitkomst)}"
-      placeholder="you'll know it's done when…" oninput="stelKnop()">
-
   <div class="wz-clab">For which role?</div>
-  <select id="wz-role" onchange="S.role=this.value;toonWie();stelKnop()">
+  <select id="wz-role" onchange="S.role=this.value;S.trekker='';toonWie();toonOwner();stelKnop()">
     <option value="">Pick a role…</option>${ROLEOPTS}</select>
+  <div id="wz-ownerwrap"></div>
   ${DOELOPTS?`<div class="wz-clab">Goal <span class="wz-hint">— optional</span></div>
   <select id="wz-goal" onchange="S.doel=this.value;S.wp='';toonWp()">
     <option value="">— no goal —</option>${DOELOPTS}</select>
@@ -297,13 +278,11 @@ function form(){
     <div id="wz-impact"></div></details>
   <details class="box-details" ontoggle="if(this.open)checklist()"><summary>Checklist <span class="wz-hint">(optional)</span></summary>
     <div id="wz-check"><p class="wz-hint">Open this to write steps. ✨ suggests some while you type; leaving it empty is fine.</p></div></details>
-  <details class="box-details" ontoggle="if(this.open)rollen()"><summary>Who could pick this up <span class="wz-hint">(optional)</span></summary>
-    <div id="wz-rollen"></div></details>
   `;
   const sel=document.getElementById('wz-role');
   if(S.role){sel.value=S.role;}
   const gs=document.getElementById('wz-goal'); if(gs&&S.doel){gs.value=S.doel;}
-  toonWie(); toonWp(); impact(); stelKnop();
+  toonWie(); toonOwner(); toonWp(); impact(); stelKnop();
   const t=document.getElementById('wz-ruw'); if(t&&!S.ruw)t.focus();
 }
 function toonWie(){
@@ -326,7 +305,7 @@ function toonWp(){
 async function schat(){
   if(S.geschat)return; S.geschat=true;
   lees();
-  const idee=(S.uitkomst||S.ruw); if(!idee){impact('Type your idea first.');return;}
+  const idee=S.ruw; if(!idee){impact('Type your project first.');return;}
   impact('✨ estimating…');
   const r=await post('/wizard/impact',{idee:idee,role:S.role},AI_TIMEOUT_MS);
   if(r&&r.__fout){impact('✨ '+r.__fout+' — set it yourself, or leave it empty.');return;}
@@ -376,7 +355,7 @@ async function checklist(){
 }
 async function suggesties(){
   lees();
-  const idee=(S.uitkomst||S.ruw); if(!idee){S.planfout='type your project first';drawSug();return;}
+  const idee=S.ruw; if(!idee){S.planfout='type your project first';drawSug();return;}
   if(S.sugBezig)return;
   S.sugBezig=true; drawSug();
   const r=await post('/wizard/plan',{uitkomst:idee,role:S.role},PLAN_TIMEOUT_MS);
@@ -420,68 +399,24 @@ function addI(){const i=document.getElementById('wz-ni');const v=i.value.trim();
   S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});
   i.value=''; draw();}
 
-// WIE KAN DIT OPPAKKEN. Gegrond, niet geraden: de match komt van de skills die een rol écht
-// heeft, tegen de stap die de planner al een skill gaf. Er valt hier niets te fantaseren, dus
-// werkt het ook zonder model — en zonder stappen-met-skill is de sectie gewoon leeg.
-//
-// Toewijzen gebruikt dezelfde routing als het werkoverleg (`route_werk`): een mens-vervulde rol
-// krijgt het in zijn inbox, een AI-vervulde rol krijgt een project. Een AI-rol leest de NotifStore
-// nooit, dus een bericht daarheen zou "verstuurd is kwijt" betekenen.
-async function rollen(){
-  const el=document.getElementById('wz-rollen'); if(!el)return;
-  if(!S.rollenInit){
-    S.rollenInit=true;
-    el.innerHTML='<p class="wz-hint">✨ looking who has the skills…</p>';
-    const r=await post('/wizard/rollen',{items:JSON.stringify(S.checklist)},AI_TIMEOUT_MS);
-    S.rollen=(r&&r.rollen)||[]; S.rollenfout=(r&&r.__fout)||'';
-  }
-  drawRollen();
-}
-function drawRollen(){
-  const el=document.getElementById('wz-rollen'); if(!el)return;
-  const kaarten=S.rollen.map((r,i)=>`<div class="wz-item">
-    <div class="wz-itxt"><strong>${esc(r.naam)}</strong>
-      <span class="wz-hint">can do: ${esc((r.stappen||[]).join(' · '))}</span></div>
-    <button type="button" class="wz-chip" onclick="taak(${i})">＋ add as task</button></div>`).join('');
-  const leeg=S.rollen.length?'':`<p class="wz-hint">${S.rollenfout?('✨ '+esc(S.rollenfout)+' — ')
-    :'No role has a matching skill for these steps — '}assign one yourself below.</p>`;
-  const gekozen=S.taken.map((t,i)=>`<div class="wz-item"><div class="wz-itxt">→ ${esc(t.naam)}: ${esc(t.tekst)}</div>
-    <button class="wz-rm" onclick="S.taken.splice(${i},1);drawRollen()">✕</button></div>`).join('');
-  el.innerHTML=`${eigenaarBlok()}${leeg}${kaarten}
-   <div class="wz-clab">Or assign a step yourself</div>
-   <input id="wz-tt" placeholder="what should they do?">
-   <div class="wz-add"><select id="wz-tr">${ROLEOPTS}</select>
-     <button onclick="taakZelf()">＋ add</button></div>
-   ${gekozen?`<div class="wz-clab">Tasks to hand out when you save</div>${gekozen}`:''}`;
-}
-/* DE OWNER-KIEZER. Alleen als de gekozen rol MEER DAN ÉÉN vervuller heeft: bij één staat hij al
-   als default in S.trekker (onzichtbaar, want er valt niets te kiezen) en bij nul blijft "no owner".
-
-   Hij staat BOVENAAN deze sectie en met zijn eigen kop, los van "Or assign a step yourself"
-   eronder. Dat onderscheid is niet cosmetisch: dat tweede blok wijst een STAP toe aan een rol, dit
-   zet de EIGENAAR van het project. Zonder de scheiding kiest iemand een stap-uitvoerder in de
-   veronderstelling dat hij de eigenaar zet, en dan borgt het scherm stil de verkeerde intentie.
+/* DE OWNER-KIEZER, op de snelle route, direct onder de rol. Alleen als de gekozen rol MEER DAN
+   ÉÉN vervuller heeft: bij één staat hij al als default in S.trekker (onzichtbaar, want er valt niets
+   te kiezen) en bij nul blijft "no owner". Hij stond in de opgevouwen sectie "Who could pick this up",
+   samen met rolsuggesties en het uitdelen van stappen; Stefan (12 sep 2026): "die stap kan ook weg."
+   De kiezer zelf niet, want de server weigert een project bij een rol met twee vervullers zonder
+   owner (toewijzing_bij_aanmaak) — dus hij hoort waar de rol gekozen wordt.
 
    "Owner" is bewust hetzelfde woord als op de projectkaart (views/projects.py, `<span class='dk'>
    Owner</span>`) — één term voor één ding. */
-function eigenaarBlok(){
+function toonOwner(){
+  const el=document.getElementById('wz-ownerwrap'); if(!el)return;
   const opties=VERVULLERS[S.role]||[];
-  if(opties.length<2)return '';
+  if(opties.length<2){el.innerHTML='';return;}
   const rijen=opties.map(o=>`<option value="${esc(o.v)}"${S.trekker===o.v?' selected':''}>${esc(o.n)}</option>`).join('');
-  return `<div class="wz-clab">Owner</div>
-   <p class="wz-hint">This role has more than one person. Pick who owns the project, or leave it open.</p>
+  el.innerHTML=`<div class="wz-clab">Owner <span class="wz-hint">— this role has more than one person</span></div>
    <select id="wz-owner" onchange="S.trekker=this.value">
-     <option value="">— no owner —</option>${rijen}</select>
-   <div class="wz-clab">Hand out steps</div>`;
+     <option value="">— no owner —</option>${rijen}</select>`;
 }
-function taak(i){const r=S.rollen[i]; if(!r)return;
-  S.taken.push({rol:r.rol,naam:r.naam,tekst:(r.stappen||[])[0]||''}); drawRollen();}
-function taakZelf(){
-  const t=document.getElementById('wz-tt'), sel=document.getElementById('wz-tr');
-  const tekst=(t.value||'').trim(), rol=sel.value;
-  if(!tekst||!rol||rol.indexOf('ii:')===0)return;      // een taak hoort bij een ROL, niet bij "geen rol"
-  S.taken.push({rol:rol,naam:sel.selectedOptions[0].text,tekst:tekst});
-  t.value=''; drawRollen();}
 
 async function maak(){
   lees();
@@ -489,11 +424,11 @@ async function maak(){
   S.bezig=true; stelKnop();
   const b=document.getElementById('wz-save'); if(b)b.textContent='Putting it on the board…';
   // DE TITEL IS WAT ER IN HET VELD STAAT, letterlijk: de server herschrijft niets meer (Stefan, 12 sep:
-  // "dat moet nooit mogen"). Geen done-when is geen blokkade: dan valt hij terug op de titel.
-  const r=await post('/wizard/create',{role:S.role,titel:S.ruw,uitkomst:S.uitkomst,
+  // "dat moet nooit mogen"). De titel is ook de done-when: er is geen tweede veld.
+  const r=await post('/wizard/create',{role:S.role,titel:S.ruw,
     trekker:S.trekker,uren:S.uren,eenheid:S.eenheid,missie:S.missie,business:S.business,nid:S.nid||'',
     col:S.col,doel_id:S.doel,activiteit:S.wp,
-    items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken),
+    items:JSON.stringify(S.checklist),
     sug_aan:String(S.sugAan||0),sug_over:String(S.sugOver||0),sug_eigen:String(S.sugEigen||0)});
   S.bezig=false;
   if(r&&r.url){S.klaar=r; if(window.__ovlDirty)window.__ovlDirty(); gereed();return;}
@@ -503,22 +438,19 @@ async function maak(){
 }
 function gereed(){
   const r=S.klaar;
-  const taken=(r.taken||[]).map(t=>`<div class="wz-item"><div class="wz-itxt">${esc(t.ref)}</div></div>`).join('');
   card().innerHTML=`<div class="wz-cheer"><div class="big">🎉</div><h2>On the board!</h2>
    <p class="wz-hint">${esc(r.titel||'')}</p></div>
-   ${taken?`<div class="wz-clab">Handed out</div>${taken}`:''}
    <div class="wz-foot"><a class="wz-btn ghost" href="${esc(r.url)}">View on the board</a>
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
-function restart(){Object.assign(S,{ruw:"",ruwEigen:"",uitkomst:"",titel:"",checklist:[],planfout:"",uren:"",
+function restart(){Object.assign(S,{ruw:"",ruwEigen:"",titel:"",checklist:[],planfout:"",uren:"",
   eenheid:"uren",doel:"",wp:"",missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-  rollen:[],rollenInit:false,rollenfout:"",taken:[],trekker:"",bezig:false,klaar:null}); form();}
+  trekker:"",bezig:false,klaar:null}); form();}
 
 window.S=S;window.scherp=scherp;window.terug=terug;window.maak=maak;window.impact=impact;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
 window.schat=schat;window.neem=neem;window.drawSug=drawSug;
-window.rollen=rollen;window.drawRollen=drawRollen;window.taak=taak;window.taakZelf=taakZelf;
-window.toonWie=toonWie;window.toonWp=toonWp;window.suggesties=suggesties;
+window.toonWie=toonWie;window.toonWp=toonWp;window.toonOwner=toonOwner;window.suggesties=suggesties;
 form();
 })();
 </script>

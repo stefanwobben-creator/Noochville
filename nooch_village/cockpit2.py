@@ -1272,12 +1272,11 @@ def _act_proj_add(c):
             person, agent, _weiger = toewijzing_bij_aanmaak(st, owner)
             if _weiger:
                 return nxt, _weiger
-        # Vang de vage intake bij de bron (founder, 19 jul): een mens-project vereist één
-        # zin done_when — "waar herken je aan dat dit klaar is?" De reparatie die de rol
-        # anders stilletjes in zijn checklist doet, gebeurt zo vooraf, samen met de mens.
-        done_when = (g("done_when") or "").strip()
-        if owner and scope and not done_when:
-            return nxt, "✗ also fill in how you recognise this is done (done-when)"
+        # De intake-poort van 19 jul ("waar herken je aan dat dit klaar is?") vroeg een aparte
+        # done-when. Sinds 12 sep 2026 is de titel zelf de uitkomst (Stefan: "de projectformuleringen
+        # zijn al zo geschreven dat het gewenste resultaat beschreven is"): een meegegeven done-when
+        # blijft welkom, zonder wordt het de titel. Zelfde regel als /wizard/create.
+        done_when = (g("done_when") or "").strip() or scope
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
                             done_when=done_when[:200],
@@ -1485,7 +1484,10 @@ def _act_proj_status(c):
         if _deny:
             return nxt, _deny
         to = g("to")
-        pj.reopen(g("pid"))   # was het 'done', haal dat er eerst af zodat heractiveren kan
+        # WIE het verplaatste gaat het status_log in (scope 48): de persoon, anders de loginnaam.
+        _wie = st.people.by_email(username) if username and username != "guest" else None
+        door = _wie.id if _wie else (username or "")
+        pj.reopen(g("pid"), door)   # was het 'done', haal dat er eerst af zodat heractiveren kan
         if to == "actief":
             # SLEPEN NAAR ACTIEF IS EEN ANTWOORD, geen statuswijziging alleen. Stond dit project
             # geparkeerd op een stap die alleen een mens kan doen, dan zegt deze handeling "ja, ik
@@ -1493,16 +1495,15 @@ def _act_proj_status(c):
             # hetzelfde item vast en parkeert opnieuw — de lus die Stefan op 9 september meldde.
             # Alleen hier, want dit is de MENS-route; `board_loop` start projecten ook, en die
             # claimt niets namens iemand.
-            _actor = st.people.by_email(username) if username and username != "guest" else None
-            _mijn = pj.claim_human_items(g("pid"), door=(_actor.id if _actor else (username or "")))
-            pj.start(g("pid"))
+            _mijn = pj.claim_human_items(g("pid"), door=door)
+            pj.start(g("pid"), door)
             if _mijn:
                 return nxt, (f"✓ verplaatst · {len(_mijn)} stap"
                              f"{'' if len(_mijn) == 1 else 'pen'} staat nu op jou")
         elif to == "wacht":
-            pj.block(g("pid"), "—")
+            pj.block(g("pid"), "—", door)
         elif to == "toekomst":
-            pj.to_future(g("pid"))
+            pj.to_future(g("pid"), door)
         msg = "✓ verplaatst"
         return nxt, msg
 
@@ -1547,7 +1548,8 @@ def _act_proj_done(c):
                        + (f" · {weg} — this part is NOT answered" if weg else ""))
         else:
             outcome = "approved after review"
-        pj.complete(pid, outcome); msg = "✓ afgerond"
+        _wie = st.people.by_email(username) if username and username != "guest" else None
+        pj.complete(pid, outcome, door=(_wie.id if _wie else (username or ""))); msg = "✓ afgerond"
         # HET VERSLAG STELT ZICHZELF SAMEN — één keer, hier, niet elke puls. Uit wat er al ligt:
         # definitie + checklist + gesprek + het bestaande document. Het resultaat is een CONCEPT
         # dat naast het document wacht tot een mens het bevestigt (zie project_doc_store).
@@ -6502,7 +6504,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_wizard(st, effective_csrf,
                                          role=(qs.get("role") or [""])[0], fragment=fr,
                                          ruw=(qs.get("ruw") or [""])[0],
-                                         uitkomst=(qs.get("uitkomst") or [""])[0],
                                          nid=(qs.get("nid") or [""])[0],
                                          col=(qs.get("col") or [""])[0],       # de bordkolom van de deur
                                          # Expliciete trekker wint; anders de vervuller van de
@@ -7008,8 +7009,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
-            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact",
-                            "/wizard/rollen", "/wizard/create"):
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
                     self._send_json({"error": "not logged in"}, 403); return
@@ -7030,31 +7030,6 @@ def make_handler(data_dir: str, csrf_token: str,
                         # Fail-soft: geen model = een leeg antwoord, en de chips blijven leeg.
                         from nooch_village.wizard import guess_impact
                         self._send_json(guess_impact(g1("idee"), rol=g1("role")))
-                        return
-                    if path == "/wizard/rollen":
-                        # GEGROND, niet geraden: de match komt uit de effectieve skillset van een
-                        # WAKKERE rol tegen de skill die de planner al aan een stap hing. Daarom
-                        # werkt dit ook zonder model — er valt niets te fantaseren, alleen op te
-                        # zoeken. Geen stappen met een skill = een lege sectie, geen blokkade.
-                        from nooch_village import skill_links
-                        from nooch_village.wizard import roles_for
-                        try:
-                            _items = json.loads(g1("items") or "[]")
-                        except ValueError:
-                            _items = []
-                        # Twee tredes: eerst de gratis skill-opzoeking, en alleen als die leeg
-                        # is één begrensd modelrondje over de roster. De ladder komt via dezelfde
-                        # ingang als elders (`llm_voorkeur`), zodat er geen tweede modelbeleid
-                        # ontstaat. Fail-open: geen model → lege lijst → 'wijs zelf toe'.
-                        try:
-                            from nooch_village.llm_keuze import llm_voorkeur
-                            _lad = llm_voorkeur(st, g1("role"), "rol_match")
-                        except Exception:
-                            _lad = None
-                        self._send_json({"rollen": roles_for(
-                            _items if isinstance(_items, list) else [],
-                            records=st.records, ai=st.ai, skills_of=skill_links.effectief,
-                            ladder=_lad)})
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items
@@ -7127,7 +7102,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     titel = g1("titel").strip()[:200]
                     if not titel:
                         self._send_json({"error": "geen titel"}, 400); return
-                    uitkomst = (g1("uitkomst").strip() or titel)[:200]     # zelfde plafond als proj_add
+                    # De titel is ook de done-when. Er was een apart veld; Stefan (12 sep): "kan weg,
+                    # de projectformuleringen zijn al zo geschreven dat het gewenste resultaat
+                    # beschreven is." Eén tekst, één plek, en het einddocument krijgt hem als kop.
+                    uitkomst = titel
                     person, agent = _parse_trekker(g1("trekker"))
                     # Dezelfde cardinaliteitswet als bij proj_add — de wizard is de andere weg naar
                     # het bord, en een regel die maar op één van de twee geldt is geen regel.
@@ -7223,30 +7201,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                              skill=(it.get("skill") or None),
                                              payload=(it.get("payload") if isinstance(it.get("payload"), dict) else None),
                                              payload_ok=bool(it.get("ok", True)))
-                    # TAKEN NAAR ROLLEN, pas nu — het project moet eerst bestaan, anders heeft
-                    # de taak niets om naar terug te wijzen en kan de lus niet sluiten.
-                    actor = st.people.by_email(username) if username and username != "guest" else None
-                    aid = actor.id if actor else ""
-                    taken_ref = []
-                    try:
-                        taken = json.loads(g1("taken") or "[]")
-                    except ValueError:
-                        taken = []
-                    for t in (taken if isinstance(taken, list) else []):
-                        if not isinstance(t, dict):
-                            continue
-                        t_rol = str(t.get("rol") or "").strip()
-                        t_tekst = str(t.get("tekst") or "").strip()
-                        if not t_rol or not t_tekst:
-                            continue
-                        trec = st.records.get(t_rol)
-                        if trec is None or org.is_circle(trec) or getattr(trec, "slaapt", False) \
-                                or getattr(trec, "archived", False):
-                            continue          # fail-closed: geen werk naar een rol die stilstaat
-                        _s, _ref = route_werk(st, tekst=t_tekst, rol=t_rol,
-                                              herkomst=f"↳ gevraagd bij het aanmaken van {titel}",
-                                              door=aid, opdrachtgever=aid, bron_project=pid)
-                        taken_ref.append({"rol": t_rol, "ref": _ref})
                     # WERKT DE SUGGESTIE EIGENLIJK? Eén regel per project, dom geteld, zodat
                     # kill-of-houden over een week op een getal gaat en niet op een gevoel.
                     # Fail-soft: meten mag een aanmaak nooit blokkeren.
@@ -7258,8 +7212,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                           pid=pid)
                     except Exception:
                         logging.getLogger("cockpit2.wizard").exception("acceptatie-spoor faalde")
-                    self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel,
-                                     "taken": taken_ref})
+                    self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel})
                     return
                 except Exception as e:
                     logging.getLogger("cockpit2.wizard").exception("wizard-endpoint %s faalde", path)

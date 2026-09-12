@@ -172,6 +172,20 @@ class ProjectLedger:
     def _touch(self, project: dict) -> None:
         project["updated_at"] = time.time()
 
+    def _zet_status(self, project: dict, naar: str, door: str = "") -> None:
+        """DE ENIGE PLEK waar een status verandert, en elke verandering laat een regel achter in
+        `status_log`: {van, naar, at, door}. Stefan (12 sep 2026): "houden we bij wanneer een project
+        is aangemaakt, naar actief gaat en completed? Daarmee kunnen we per doel een admin uitrollen."
+        Tot dan was er alleen `updated_at`, dat elke aanraking overschrijft. Geen aparte
+        `started_at`/`done_at`-velden: die zijn afgeleid (`tijdlijn`), zodat ze nooit uit de pas
+        lopen met het log. Zelfde status = geen regel (een no-op is geen gebeurtenis)."""
+        van = project.get("status")
+        if van == naar:
+            return
+        project.setdefault("status_log", []).append(
+            {"van": van, "naar": naar, "at": time.time(), "door": (door or "")[:120]})
+        project["status"] = naar
+
     # ── schrijven ──────────────────────────────────────────────────────────────
 
     def create(self, owner: str, scope, trigger: str,
@@ -248,6 +262,9 @@ class ProjectLedger:
             "doel_id":     None,
             "activiteit":  None,
             "depends_on":  [],
+            # De geboorte is de eerste regel van de historie: zo staat "wanneer aangemaakt, in welke
+            # kolom" op dezelfde plek als elke latere overgang (zie _zet_status).
+            "status_log":  [{"van": None, "naar": status, "at": now, "door": ""}],
         }
         self._save()
         return pid
@@ -310,11 +327,11 @@ class ProjectLedger:
             p["scope_nudge_check"] = vinger
             self._save()
 
-    def start(self, pid: str) -> bool:
+    def start(self, pid: str, door: str = "") -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "running"
+        self._zet_status(p, "running", door)
         p["blocked_on"] = None
         self._touch(p)
         self._save()
@@ -449,33 +466,33 @@ class ProjectLedger:
                 return True
         return False
 
-    def reopen(self, pid: str) -> bool:
+    def reopen(self, pid: str, door: str = "") -> bool:
         """Heropen een afgerond project: haal 'done' eraf zodat het weer naar actief/wacht/toekomst
         kan. No-op als het project niet bestaat of niet afgerond is."""
         p = self._projects.get(pid)
         if p is None or p["status"] not in _TERMINAL:
             return False
-        p["status"] = "running"
+        self._zet_status(p, "running", door)
         p["outcome"] = None
         self._touch(p)
         self._save()
         return True
 
-    def block(self, pid: str, on_role: str) -> bool:
+    def block(self, pid: str, on_role: str, door: str = "") -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "blocked"
+        self._zet_status(p, "blocked", door)
         p["blocked_on"] = on_role
         self._touch(p)
         self._save()
         return True
 
-    def unblock(self, pid: str) -> bool:
+    def unblock(self, pid: str, door: str = "") -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "running"
+        self._zet_status(p, "running", door)
         p["blocked_on"] = None
         p.pop("park", None)                             # de blokkade is opgeheven; de reden vervalt mee
         self._touch(p)
@@ -567,11 +584,11 @@ class ProjectLedger:
         self._save()
         return geclaimd
 
-    def complete(self, pid: str, outcome: str | None = None) -> bool:
+    def complete(self, pid: str, outcome: str | None = None, door: str = "") -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "done"
+        self._zet_status(p, "done", door)
         p["outcome"] = outcome
         # blocked_on blijft bewust staan: een review-goedkeuring is 'done' MÉT blocked_on=="review".
         # De board-watch (village._poll_board) leest die marker om cross-proces project_completed te vuren.
@@ -587,7 +604,7 @@ class ProjectLedger:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "blocked"
+        self._zet_status(p, "blocked", "review")
         p["blocked_on"] = "review"
         p["review_raised"] = True
         self._touch(p)
@@ -1065,13 +1082,13 @@ class ProjectLedger:
         self._save()
         return True
 
-    def approve(self, pid: str) -> bool:
+    def approve(self, pid: str, door: str = "") -> bool:
         """Keur een concept-project (draft) goed → het komt op het bord van de rol (queued).
         Alleen drafts. Zo zie je eerst de (AI-)formulering en geef je akkoord vóór het live gaat."""
         p = self._projects.get(pid)
         if p is None or p.get("status") != "draft":
             return False
-        p["status"] = "queued"
+        self._zet_status(p, "queued", door)
         self._touch(p)
         self._save()
         return True
@@ -1139,7 +1156,7 @@ class ProjectLedger:
         p = self._projects.get(pid)
         if p is None or p.get("status") != "proposed":
             return False
-        p["status"] = "future"
+        self._zet_status(p, "future", person or "")
         if person:
             p["person"] = person
         self._touch(p)
@@ -1169,7 +1186,7 @@ class ProjectLedger:
         p["worked"] = True
         p["executions"] = int(p.get("executions", 0)) + 1   # telt mee voor 'stollen na 3x'
         if p["status"] == "queued":
-            p["status"] = "running"
+            self._zet_status(p, "running", "rol")        # de rol pakte het zelf op
         self._touch(p)
         self._save()
         return True
@@ -1295,7 +1312,7 @@ class ProjectLedger:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "blocked"
+        self._zet_status(p, "blocked", "scheduler")
         p["blocked_on"] = need or "wacht"
         p["waiting_on"] = on_id or None
         self._touch(p)
@@ -1343,13 +1360,13 @@ class ProjectLedger:
         self._save()
         return True
 
-    def to_future(self, pid: str) -> bool:
+    def to_future(self, pid: str, door: str = "") -> bool:
         """Park een project als 'future' (later oppakken als er ruimte is). Niet-terminaal:
         het kan later weer naar running/blocked. Done-projecten blijven done."""
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
-        p["status"] = "future"
+        self._zet_status(p, "future", door)
         p["blocked_on"] = None
         self._touch(p)
         self._save()
@@ -1453,6 +1470,52 @@ def checklist_progress(cl_or_items) -> tuple[int, int]:
     items = cl_or_items.get("items", []) if isinstance(cl_or_items, dict) else (cl_or_items or [])
     telbaar = [it for it in items if not any(it.get(v) for v in _NIET_TELBAAR)]
     return sum(1 for it in telbaar if it.get("done")), len(telbaar)
+
+
+# ── de tijdlijn van een project: afgeleid uit status_log, nooit opgeslagen ──────────────────
+
+def tijdlijn(p: dict, now: float | None = None) -> dict:
+    """Wanneer aangemaakt, voor het eerst actief, voor het laatst afgerond — uit `status_log`
+    (zie `ProjectLedger._zet_status`), plus de bron van die datums.
+
+    `bron` = "log" als de historie er is. Projecten van vóór 12 september 2026 hebben geen log:
+    `aangemaakt` is dan `created_at` (dat was er altijd al), `gestart` blijft leeg (nooit gokken), en
+    `afgerond` is bij een afgerond project `updated_at` als BENADERING, als zodanig gemarkeerd
+    (`bron` = "benadering"). Een rapport hoort dat verschil te tonen, niet weg te poetsen."""
+    log = [e for e in (p.get("status_log") or []) if isinstance(e, dict) and e.get("at") is not None]
+    uit = {"aangemaakt": p.get("created_at"), "gestart": None, "afgerond": None, "bron": "log"}
+    for e in log:
+        if e.get("naar") == "running" and uit["gestart"] is None:
+            uit["gestart"] = e["at"]
+        if e.get("naar") in KLAAR:
+            uit["afgerond"] = e["at"]                       # de laatste keer af (na heropenen)
+        elif uit["afgerond"] is not None and e.get("van") in KLAAR:
+            uit["afgerond"] = None                          # heropend, dus nu niet af
+    if not log:
+        uit["bron"] = "benadering"
+        if p.get("status") in KLAAR:
+            uit["afgerond"] = p.get("updated_at")
+    return uit
+
+
+def dagen_per_status(p: dict, now: float | None = None) -> dict:
+    """Hoeveel dagen het project in elke status stond, uit `status_log`. De periode vóór de eerste
+    logregel begint bij `created_at` in de status die die regel als `van` noemt (die kennen we dus
+    wél); een project zonder log staat sinds `created_at` in zijn huidige status. Open project:
+    de lopende periode telt tot `now`. Nooit opgeslagen."""
+    now = now if now is not None else time.time()
+    log = sorted((e for e in (p.get("status_log") or []) if isinstance(e, dict) and e.get("at") is not None),
+                 key=lambda e: e["at"])
+    dagen: dict = {}
+    t = p["created_at"] if p.get("created_at") is not None else (log[0]["at"] if log else now)
+    status = (log[0].get("van") if log else p.get("status")) or p.get("status") or "?"
+    for e in log:
+        if e["at"] > t:
+            dagen[status] = dagen.get(status, 0.0) + (e["at"] - t) / 86400
+        t, status = e["at"], e.get("naar") or status
+    if status not in KLAAR and now > t:
+        dagen[status] = dagen.get(status, 0.0) + (now - t) / 86400
+    return {k: round(v, 2) for k, v in dagen.items()}
 
 
 def seed_document(dod: str) -> str:

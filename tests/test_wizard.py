@@ -65,8 +65,9 @@ def test_de_wizard_neemt_voorvulling_mee(tmp_path):
     from nooch_village.views.wizard import render_wizard
     st = _st(tmp_path)
     rid = "mother_earth__nooch__website_developer"
-    h = render_wizard(st, "t", role=rid, ruw="doos scheurt", uitkomst="geen klachten meer")
-    assert 'ruw:"doos scheurt"' in h and 'uitkomst:"geen klachten meer"' in h
+    h = render_wizard(st, "t", role=rid, ruw="doos scheurt")
+    assert 'ruw:"doos scheurt"' in h
+    assert "wz-uit" not in h and "Done when" not in h    # geen apart done-when-veld meer (12 sep)
     assert f'__ROLE__' not in h and rid in h             # de rol is ingevuld, niet de placeholder
     assert "step:" not in h                              # geen stappen meer
 
@@ -81,7 +82,7 @@ def test_de_snelle_route_is_twee_tikken(tmp_path):
     # de opslaan-knop staat BOVEN de opgevouwen verrijking, niet erachter
     assert h.index('id="wz-save"') < h.index("Impact and effort")
     assert h.index('id="wz-save"') < h.index("Checklist")
-    assert "(S.uitkomst||S.ruw)" in h                    # geen uitkomst → het idee telt
+    assert "S.uitkomst" not in h                         # de titel is de uitkomst, één veld
 
 
 def test_alleen_wakkere_rollen_plus_individuele_actie(tmp_path):
@@ -228,36 +229,6 @@ def test_de_stappen_zijn_bewerkbaar_en_gaan_naar_de_project_checklist(tmp_path):
 
 
 # ── B4: wie kan dit oppakken, en de lus terug ───────────────────────────────
-
-def test_rolsuggesties_zijn_gegrond_op_skills_niet_geraden(tmp_path):
-    """Er valt hier niets te fantaseren: een rol kan een stap als hij de skill heeft die de planner
-    er al aan hing. Daarom werkt dit ook zonder model."""
-    from nooch_village import skill_links
-    from nooch_village.wizard import roles_for
-    st = _st(tmp_path)
-    rid = "mother_earth__nooch__website_developer"
-    rec = st.records.get(rid); rec.definition.skills = ["site_health"]; st.records.put(rec)
-    items = [{"tekst": "site nakijken", "skill": "site_health"},
-             {"tekst": "iets zonder skill", "skill": None}]
-    uit = roles_for(items, records=st.records, ai=st.ai, skills_of=skill_links.effectief)
-    assert [r["rol"] for r in uit] == [rid]
-    assert uit[0]["stappen"] == ["site nakijken"]
-    # Zonder skill valt hij door naar de purpose-trede (één begrensd modelrondje over de roster).
-    # Geen model → lege sectie, geen blokkade; het scherm zegt dan 'wijs zelf toe'.
-    assert roles_for([{"tekst": "los idee"}], records=st.records, ai=st.ai,
-                     skills_of=skill_links.effectief, reason_fn=lambda *a, **k: None) == []
-
-
-def test_een_slapende_rol_krijgt_geen_werk_aangeboden(tmp_path):
-    from nooch_village import skill_links
-    from nooch_village.wizard import roles_for
-    st = _st(tmp_path)
-    rid = "mother_earth__nooch__website_developer"
-    rec = st.records.get(rid); rec.definition.skills = ["site_health"]; rec.slaapt = True
-    st.records.put(rec)
-    assert roles_for([{"tekst": "x", "skill": "site_health"}], records=st.records, ai=st.ai,
-                     skills_of=skill_links.effectief) == []
-
 
 def test_toewijzen_gebruikt_dezelfde_routing_als_het_werkoverleg(tmp_path):
     """Geen tweede routing. Een mens-vervulde rol krijgt het in zijn inbox; een AI-vervulde rol
@@ -444,8 +415,7 @@ def test_de_suggestie_staat_naast_je_idee_en_landt_erin(tmp_path):
     from nooch_village.views.wizard import render_wizard
     h = render_wizard(_st(tmp_path), "t")
     form = h[h.index('id="wz-ruw"'):h.index('id="wz-role"')]
-    assert form.index('id="wz-ai"') < form.index('id="wz-uit"')        # knop bij het eerste veld
-    assert form.count('id="wz-ai"') == 1                               # en nergens anders
+    assert form.count('id="wz-ai"') == 1                               # de knop, bij het eerste veld
     scherp = h[h.index("async function scherp"):h.index("function form")]
     assert "getElementById('wz-ruw')" in scherp and "getElementById('wz-uit')" not in scherp
     assert "S.ruwEigen=S.ruw" in scherp and "put your own words back" in scherp
@@ -460,7 +430,7 @@ def test_de_titel_komt_letterlijk_op_het_bord(tmp_path, monkeypatch):
     teken voor teken, en er wordt bij het opslaan geen model meer aangeroepen."""
     from nooch_village.views.wizard import render_wizard
     h = render_wizard(_st(tmp_path), "t")
-    assert "titel:S.ruw,uitkomst:S.uitkomst," in h                      # het veld, niet een afleiding
+    assert "titel:S.ruw," in h and "uitkomst:S." not in h              # het veld, niet een afleiding
 
     def _geen_model(*a, **k):
         raise AssertionError("het model werd aangeroepen bij het opslaan")
@@ -473,12 +443,12 @@ def test_de_titel_komt_letterlijk_op_het_bord(tmp_path, monkeypatch):
     assert r.get("pid") and r.get("titel") == titel, r
     p = cockpit2._Stores(st.dd).projects.get(r["pid"])
     assert p["scope"] == titel
-    assert p["done_when"] == titel                       # geen done-when → de titel is de done-when
-    # mét een eigen done-when blijft die apart, ook letterlijk
+    assert p["done_when"] == titel                       # de titel is de done-when: één tekst
+    # een meegestuurde uitkomst wordt genegeerd: er is geen tweede veld meer
     r2 = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Header af", "uitkomst": "no complaints",
                                          "trekker": wie})
     p2 = cockpit2._Stores(st.dd).projects.get(r2["pid"])
-    assert p2["scope"] == "Header af" and p2["done_when"] == "no complaints"
+    assert p2["scope"] == "Header af" and p2["done_when"] == "Header af"
     # zonder titel geen project (400, dus urllib gooit)
     import pytest, urllib.error
     voor = len(cockpit2._Stores(st.dd).projects.all())
@@ -565,3 +535,20 @@ def test_een_doel_kies_je_al_in_de_wizard(tmp_path, monkeypatch):
     with pytest.raises(urllib.error.HTTPError) as exc:
         _post(st.dd, "/wizard/create", {"role": rid, "titel": "X", "doel_id": "nope", "trekker": wie})
     assert exc.value.code == 400
+
+
+def test_de_sectie_wie_kan_dit_oppakken_is_weg_maar_de_owner_kiezer_niet(tmp_path):
+    """Stefan (12 sep): "de stap 'who could pick this up' kan ook weg." Rolsuggesties, stappen
+    uitdelen en het endpoint /wizard/rollen zijn eruit. De owner-kiezer niet: de server weigert een
+    project bij een rol met twee vervullers zonder owner, dus die staat nu op de snelle route, direct
+    onder de rol, en alleen als er echt iets te kiezen valt."""
+    from nooch_village.views.wizard import render_wizard
+    st = _st(tmp_path)
+    h = render_wizard(st, "t")
+    assert "<summary>Who could pick this up" not in h and "/wizard/rollen" not in h
+    assert 'class="wz-clab">Hand out steps' not in h and "taken:" not in h and "function rollen" not in h
+    assert "function toonOwner()" in h and 'id="wz-ownerwrap"' in h
+    assert h.index('id="wz-ownerwrap"') < h.index('id="wz-save"')       # op de snelle route
+    assert "opties.length<2" in h                                       # alleen bij ≥ 2 vervullers
+    from nooch_village import wizard
+    assert not hasattr(wizard, "roles_for") and not hasattr(wizard, "roles_for_tekst")
