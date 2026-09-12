@@ -149,11 +149,12 @@ def voorzet_result(project: dict) -> tuple[str, str]:
 _DELIVERABLE_CAP = 3000          # per stuk; anders bepaalt één lange oplevering de hele invoer
 _RECORD_MAX = 8                  # records per deliverable in het verslag
 _STREKKING_MAX = 300             # het extract of het abstract per record
-_TITELVELDEN = ("title", "titel", "term", "query", "brand", "name", "word", "key")
+_TITELVELDEN = ("title", "titel", "term", "query", "brand", "name", "naam", "word", "key", "criterium")
 _ADRESVELDEN = ("url", "link", "domein", "domain", "publication_number")
 # In volgorde van voorkeur: het extract (wat de tekst zégt, scope 50) wint van het abstract, dat wint
-# van de snippet van de zoekmachine, en de ruwe tekst komt pas als er niets beters is.
-_STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "fragment", "snippet", "tekst", "text")
+# van de snippet van de zoekmachine, en de ruwe tekst komt pas als er niets beters is. `citaat` is
+# de vorm van een beoordeling (scope 51): het zinnetje van de pagina dat het oordeel draagt.
+_STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "fragment", "snippet", "citaat", "tekst", "text")
 
 
 def _records_in(inhoud: dict):
@@ -199,6 +200,13 @@ def inhoud_tekst(inhoud) -> str:
         adres = next((str(r[k]) for k in _ADRESVELDEN if isinstance(r.get(k), str) and r[k].strip()), "")
         strekking = next((str(r[k]) for k in _STREKKINGVELDEN
                           if isinstance(r.get(k), str) and r[k].strip()), "")
+        # Een beoordeling (scope 51) draagt een oordeel náást het citaat: "yes — “…”". Zonder het
+        # oordeel zou de regel het citaat tonen en verzwijgen wat de rol ervan vond.
+        oordeel = r.get("oordeel")
+        if isinstance(oordeel, str) and oordeel.strip() and titel:
+            strekking = oordeel.strip() + (f" — “{_kort(strekking, 200)}”" if strekking else "")
+            if r.get("volgende_stap"):
+                strekking += f" (next: {r['volgende_stap']})"
         kop = _kort(titel, 120) or _kort(adres, 120) or "(untitled)"
         if adres and titel:
             kop += f" ({_kort(adres, 100)})"

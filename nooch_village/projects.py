@@ -650,7 +650,7 @@ class ProjectLedger:
         return None
 
     def checklist_add(self, pid: str, title: str = "", *, akkoord: bool | None = None,
-                      herplan_van: str = "") -> dict | None:
+                      herplan_van: str = "", ronde_twee_van: str = "") -> dict | None:
         """Voeg een checklist toe. `akkoord=False` markeert 'm als VOORSTEL: een plan dat een mens eerst
         moet goedkeuren (zie `plan_wacht_op_akkoord`). Default None laat de sleutel weg, zodat een met de
         hand gemaakte checklist blijft doen wat hij altijd deed.
@@ -663,7 +663,10 @@ class ProjectLedger:
            die rem kan een strategie een lijst opleveren die weer een strategie bevat, en dan plant het
            dorp door zonder ooit iets te zoeken.
         2. **Herkomst.** Je kunt teruglezen wélke stap dit plan voorstelde. Dat is precies wat een
-           onderzoek navolgbaar maakt: niet alleen wat er gezocht is, maar op wiens voorstel."""
+           onderzoek navolgbaar maakt: niet alleen wat er gezocht is, maar op wiens voorstel.
+
+        `ronde_twee_van` = de uitvoerlijst waarvan de leads komen (zie `ronde_twee.py`, scope 51).
+        Zelfde twee redenen: één ronde (bestaat er al zo'n lijst, dan geen derde), en herkomst."""
         p = self._projects.get(pid)
         if p is None:
             return None
@@ -672,6 +675,8 @@ class ProjectLedger:
             cl["akkoord"] = bool(akkoord)
         if herplan_van:
             cl["herplan_van"] = str(herplan_van)[:64]
+        if ronde_twee_van:
+            cl["ronde_twee_van"] = str(ronde_twee_van)[:64]
         self._checklists(p).append(cl)
         p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()
