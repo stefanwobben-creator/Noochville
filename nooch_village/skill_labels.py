@@ -48,6 +48,7 @@ LABELS: dict[str, str] = {
     "web_zoek": "Searches the open web and reads the pages it finds",
     "mobiel_audit": "Measures how fast and usable a page is on a phone (Lighthouse)",
     "zoekstrategie": "Decides which sources to search, with which term and in which language",
+    "lead_beoordeling": "Looks up a lead's website, reads it and says with a quote whether it fits",
 
     # ── Writing and checking ─────────────────────────────────────────────
     "content_schrijven": "Writes website copy in the brand's voice",
@@ -154,6 +155,7 @@ MATCH_NL: dict[str, str] = {
     "web_zoek": "Zoekt op het open web en leest de paginas die hij vindt",
     "mobiel_audit": "Meet hoe snel en bruikbaar een pagina is op een telefoon (Lighthouse)",
     "zoekstrategie": "Bepaalt welke bronnen doorzocht worden, met welke term en in welke taal",
+    "lead_beoordeling": "Zoekt de site van een lead op, leest hem en zegt met een citaat of hij past",
     "content_schrijven": "Schrijft website-tekst in de stem van het merk",
     "content_check": "Leest publieke tekst na op verboden en onbewezen claims",
     "claims_check": "Toetst tekst aan de Europese regels voor duurzaamheidsclaims",

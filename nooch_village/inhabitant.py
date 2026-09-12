@@ -1243,6 +1243,69 @@ class Inhabitant(threading.Thread):
                          f"🔁 Strategy decided, {len(plan['items'])} steps planned. "
                          f"Waiting for your go-ahead before anything runs.")
 
+    def _ronde_twee(self, project: dict, ledger, clid: str, cl: dict, oogst: list) -> bool:
+        """De namen uit de vondsten nalopen: een tweede lijst met `lead_beoordeling` per lead.
+
+        Wordt aangeroepen op het moment dat de uitvoerlijst af is en het project anders naar review
+        zou gaan. True = er staat nu een tweede lijst (als voorstel) en de review wacht; False = niets
+        gebeurd, ga door zoals altijd. Zie `ronde_twee.py` voor het waarom van elke regel.
+
+        Fail-soft in elke tak: uit, al gedaan, geen skill, geen materiaal, geen leads, geen model →
+        False, en het project gaat gewoon naar review."""
+        pid = project["id"]
+        settings = getattr(self.context, "settings", None) or {}
+        if str(settings.get("ronde_twee_enabled", "1")).strip().lower() not in ("1", "true", "yes", "ja", "on"):
+            return False
+        p = ledger.get(pid) or {}
+        # Één ronde, in code en niet in een prompt. Dit is óók de rem voor een project dat van
+        # review terugkomt: `review_raised` is dan al gewist door de eerste item-toggle, en juist
+        # zo'n teruggestuurd project mag zijn leads alsnog nalopen als dat nog niet gebeurd is.
+        if any(c.get("ronde_twee_van") for c in (p.get("checklists") or [])):
+            return False
+        from nooch_village import ronde_twee
+        try:
+            if (ronde_twee.SKILL not in self.effective_skills()
+                    or self._domein_weigering(ronde_twee.SKILL)):
+                return False
+            materiaal = (ronde_twee.materiaal_uit_store(getattr(self.context, "deliverables", None), pid)
+                         or ronde_twee.materiaal_uit_resultaten(oogst))
+            if not materiaal:
+                return False
+            goal = self._scope_text(p) or ""
+            opdracht = str(p.get("description") or "")
+            try:
+                max_leads = int(settings.get("ronde_twee_max", ronde_twee.MAX_LEADS_DEFAULT))
+            except (TypeError, ValueError):
+                max_leads = ronde_twee.MAX_LEADS_DEFAULT
+            leads, criteria = ronde_twee.leads_uit(
+                goal, opdracht, materiaal, max_leads=max_leads,
+                ladder=_persona_ladder(self.context, self.id, "ronde_twee_leads"))
+        except Exception as e:                            # noqa: BLE001 — nooit de puls breken
+            self.log.warning("🔁 ronde twee mislukt voor '%s' (%s: %s) — door naar review",
+                             pid, type(e).__name__, e)
+            return False
+        if not leads:
+            self.log.info("🔁 project '%s': geen leads in de vondsten — door naar review", pid)
+            return False
+        nieuw = ledger.checklist_add(pid, title=ronde_twee.TITEL, akkoord=False, ronde_twee_van=clid)
+        if nieuw is None:
+            return False
+        for it in ronde_twee.plan_items(leads, goal, opdracht, criteria):
+            ledger.check_add(pid, nieuw["id"], it["text"], skill=it["skill"], payload=it["payload"],
+                             reason=it["reason"], payload_ok=True)
+        # De rol werkt vanaf nu deze lijst (exclusief, zie projects.set_checklist_uitvoer); de eerste
+        # is af en blijft staan als wat hij is: ronde één.
+        ledger.set_checklist_uitvoer(pid, nieuw["id"])
+        namen = ", ".join(l["naam"] for l in leads)
+        lat = (" against: " + ", ".join(criteria)) if criteria else ""
+        ledger.add_role_message(pid, f"🔁 Round one done. Names worth a closer look: {namen}. I will "
+                                     f"look up each site and assess it{lat}. Waiting for your go-ahead.")
+        self._notify_rol(p.get("owner") or self.id, pid,
+                         f"🔁 Round one done, {len(leads)} lead(s) to look up and assess. Waiting for "
+                         f"your go-ahead on the project card.")
+        self.log.info("🔁 project '%s': ronde twee met %d lead(s), wacht op akkoord", pid, len(leads))
+        return True
+
     def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "",
                         description: str = "", kennis: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
@@ -1641,6 +1704,7 @@ class Inhabitant(threading.Thread):
             return None                                          # idempotent: al vandaag uitgevoerd
         clid = cl["id"]
         succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
+        oogst: list = []                                         # (item-tekst, resultaat) van deze puls, voor ronde twee
         fail_reasons: dict = {}                                  # item_id → laatste foutreden (voor de hulpvraag)
         for pos, item in enumerate(cl["items"]):
             if item.get("done") or item.get("skipped") or item.get("human_task"):
@@ -1674,6 +1738,7 @@ class Inhabitant(threading.Thread):
                     ledger.clear_item_leeg(pid, clid, item["id"])
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
+                oogst.append((item.get("text", ""), result))
                 self.log.info("✅ project '%s': item '%s' via %s afgerond (inhoud uit '%s')", pid,
                               item.get("text", "")[:40], src_label,
                               (archetype[1] if archetype else "?"))
@@ -1711,6 +1776,11 @@ class Inhabitant(threading.Thread):
         from nooch_village.projects import checklist_progress
         done, total = checklist_progress(fresh_cl)       # overgeslagen items tellen niet mee
         if total and done == total:
+            # RONDE TWEE VÓÓR DE REVIEW (scope 51). De lijst is af; wat een mens nu doet is de namen
+            # uit de vondsten nalopen. Levert dat leads op, dan komt er een tweede lijst (als
+            # voorstel, wacht op go ahead) en gaat dit project nog níet naar review. Eén keer.
+            if self._ronde_twee(project, ledger, clid, fresh_cl, oogst):
+                return None
             # Review-gate: checklist volledig af → status 'wacht' (blocked, blocked_on='review'), NIET done.
             # De outcome-marker wordt pas bij Done-toekenning (mens sleept wacht→done) gezet. Alleen op een
             # VERSE all-done-overgang (review_raised nog niet gezet) — zo herblokkeert een afgewezen-en-
