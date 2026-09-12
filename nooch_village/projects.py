@@ -691,7 +691,12 @@ class ProjectLedger:
         uitgevoerd plan dat er onaangeraakt uitziet.
 
         Raakt `review_raised` NIET aan: akkoord geven verandert geen enkel item, dus de review-vlag
-        (die over de INHOUD van de checklist gaat) hoort te blijven staan."""
+        (die over de INHOUD van de checklist gaat) hoort te blijven staan.
+
+        WIST WÉL `last_tended` (scope 52). Die dagrem voorkomt dat één lijst twee keer op een dag
+        draait; een zojuist goedgekeurd plan heeft nog nooit gedraaid, dus daar is niets om te
+        remmen. Zonder deze regel lag een go ahead op ronde twee (of een herplan na de strategie)
+        tot de volgende dag stil, terwijl de knop "the role picks it up within seconds" belooft."""
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
         if cl is None or cl.get("akkoord") is not False:
@@ -699,6 +704,7 @@ class ProjectLedger:
         cl["akkoord"] = True
         if door:
             cl["akkoord_door"] = str(door)[:80]           # wie het zei - de wall vertelt wanneer
+        p.pop("last_tended", None)
         self._touch(p); self._save()
         return True
 

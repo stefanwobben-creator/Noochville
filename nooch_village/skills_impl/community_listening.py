@@ -30,6 +30,22 @@ def _refuse(code: str, reason: str, **ctx) -> dict:
     return {"ok": False, "refuse": code, "error": reason, **ctx}
 
 
+#: Hoeveel nieuwe observaties er in het RESULTAAT meereizen (de store krijgt ze allemaal). Dertig
+#: is genoeg om thema's uit te halen en past in de deliverable-caps van einddocument en verslag.
+_MAX_OBSERVATIES = 30
+_OBS_FRAGMENT = 400
+
+
+def _observatie(row: dict) -> dict:
+    """De leesbare vorm van één rij: wat er gezegd werd, waar, en de link. Geen oordeel."""
+    return {"platform": str(row.get("platform") or ""),
+            "fragment": str(row.get("fragment") or row.get("title") or "")[:_OBS_FRAGMENT],
+            "context": str(row.get("context_title") or row.get("subreddit") or "")[:120],
+            "url": str(row.get("permalink") or ""),
+            "score": row.get("score") or 0,
+            "query": str(row.get("query") or "")[:80]}
+
+
 def _dedup_ci(items) -> list[str]:
     """Case-insensitive, gestripte dedup met behoud van volgorde (handmatige queries eerst)."""
     seen, out = set(), []
@@ -69,7 +85,9 @@ class CommunityListeningSkill(Skill):
         "voor de tag). optioneel (beide modi): time_window: str (default '7d', alleen Reddit)")
     required_payload = ()   # voorwaardelijk: óf query_set_id óf queries — validate_payload bewaakt dit
     output_schema = ("ok: bool, count/new: int (nieuwe rijen totaal), counts: {platform: int|'inactief'}, "
-                     "summary: str, query_set_id: str (in discovery-modus een 'discover:<slug>'-tag) "
+                     "summary: str, query_set_id: str (in discovery-modus een 'discover:<slug>'-tag), "
+                     "observaties: [{platform, fragment, context, url, score, query}] (de nieuwe rijen van "
+                     "deze ronde, max 30; observaties_afgekapt: int als er meer waren) "
                      "| refuse-dict met code BUZZ_*")
 
     def validate_payload(self, payload, context) -> list:
@@ -178,6 +196,13 @@ class CommunityListeningSkill(Skill):
         summary: list[str] = []
         total_new = 0
         first_refuse = None
+        # DE OBSERVATIES ZELF REIZEN MEE (scope 52). Tot nu toe gaf deze skill alleen tellingen
+        # terug; de rijen gingen naar de observatie-store en verder nergens heen. Een onderzoeks-
+        # project kreeg dus "18 nieuw" in zijn deliverable en kon in het einddocument niet zeggen
+        # wát er gezegd werd — letterlijk: "no further breakdown of sentiment content, themes, or
+        # specific quotes ... was provided" (barefoot-project, 12 september). De store blijft de
+        # reeks; dit is de oogst van déze ronde, gecapt zodat een monitor-puls de wall niet vult.
+        observaties: list[dict] = []
         # Bekende platforms eerst (stabiele volgorde), daarna eventueel onbekende uit de set.
         ordered = [p for p in PLATFORM_ORDER if p in platforms] + \
                   [p for p in platforms if p not in PLATFORM_ORDER]
@@ -199,6 +224,8 @@ class CommunityListeningSkill(Skill):
             for row in res.get("rows", []):
                 if store.record_observation(row):
                     new += 1
+                    if len(observaties) < _MAX_OBSERVATIES:
+                        observaties.append(_observatie(row))
             total_new += new
             counts[platform] = new
             label = f"{platform}: {new} nieuw"
@@ -214,7 +241,9 @@ class CommunityListeningSkill(Skill):
         # `summary` draagt altijd het antwoord — ook "het was stil". Daarmee landt een lege ronde
         # als een gerapporteerd resultaat en niet als kennisgat; er is hier dus geen no_data nodig.
         out = {"ok": True, "count": total_new, "new": total_new, "counts": counts,
-               "summary": summary_str, "query_set_id": set_id}
+               "summary": summary_str, "query_set_id": set_id, "observaties": observaties}
+        if total_new > len(observaties):
+            out["observaties_afgekapt"] = total_new - len(observaties)   # de rest staat in de store
         if first_refuse:
             out["refuse"] = first_refuse       # informatief; de puls slaagde (fail-loud per platform)
         return out

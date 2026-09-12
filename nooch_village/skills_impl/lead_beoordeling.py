@@ -112,6 +112,9 @@ def _prompt(naam: str, url: str, vraag: str, opdracht: str, criteria: list[str],
         f"LEAD: {_kort(naam, 120) or '(unnamed)'} — {url}\n\n"
         f"PAGE TEXT (truncated):\n{tekst[:_MAX_TEKST]}\n\n"
         + crit +
+        "FIT means how much this lead helps answer the QUESTION: high = directly relevant with "
+        "evidence on the page, medium = relevant but the page is thin, low = off-topic or generic. "
+        "Judge by the question and the assignment only, not by any brand values of your own.\n"
         "HARD RULES: a 'yes' or 'no' needs a verbatim sentence from the page as its quote; without "
         "one, answer 'unknown'. Do not invent names, numbers or claims. If the page does not address "
         "the question, say so in what_is_this and set fit to low. Write in English; quotes stay in "

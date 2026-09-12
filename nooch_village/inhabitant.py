@@ -1243,12 +1243,14 @@ class Inhabitant(threading.Thread):
                          f"🔁 Strategy decided, {len(plan['items'])} steps planned. "
                          f"Waiting for your go-ahead before anything runs.")
 
-    def _ronde_twee(self, project: dict, ledger, clid: str, cl: dict, oogst: list) -> bool:
+    def _ronde_twee(self, project: dict, ledger, clid: str, cl: dict, oogst: list,
+                    open_items: list | None = None) -> bool:
         """De namen uit de vondsten nalopen: een tweede lijst met `lead_beoordeling` per lead.
 
-        Wordt aangeroepen op het moment dat de uitvoerlijst af is en het project anders naar review
-        zou gaan. True = er staat nu een tweede lijst (als voorstel) en de review wacht; False = niets
-        gebeurd, ga door zoals altijd. Zie `ronde_twee.py` voor het waarom van elke regel.
+        Wordt aangeroepen zodra de rol niets meer zelf kan draaien: de uitvoerlijst is af, óf alles
+        wat nog open staat is mens-werk of een bron die niet meewerkt (`open_items`). True = er
+        staat nu een tweede lijst (als voorstel) en review of parkeren wacht; False = niets gebeurd,
+        ga door zoals altijd. Zie `ronde_twee.py` voor het waarom van elke regel.
 
         Fail-soft in elke tak: uit, al gedaan, geen skill, geen materiaal, geen leads, geen model →
         False, en het project gaat gewoon naar review."""
@@ -1298,8 +1300,14 @@ class Inhabitant(threading.Thread):
         ledger.set_checklist_uitvoer(pid, nieuw["id"])
         namen = ", ".join(l["naam"] for l in leads)
         lat = (" against: " + ", ".join(criteria)) if criteria else ""
-        ledger.add_role_message(pid, f"🔁 Round one done. Names worth a closer look: {namen}. I will "
-                                     f"look up each site and assess it{lat}. Waiting for your go-ahead.")
+        rest = ""
+        if open_items:
+            rest = (f" {len(open_items)} item(s) on the first list stay open for a human: "
+                    + "; ".join(str(it.get("text") or "")[:60] for it in open_items[:3])
+                    + ("…" if len(open_items) > 3 else "") + ".")
+        ledger.add_role_message(pid, f"🔁 Round one done as far as I can take it.{rest} Names worth a "
+                                     f"closer look: {namen}. I will look up each site and assess "
+                                     f"it{lat}. Waiting for your go-ahead.")
         self._notify_rol(p.get("owner") or self.id, pid,
                          f"🔁 Round one done, {len(leads)} lead(s) to look up and assess. Waiting for "
                          f"your go-ahead on the project card.")
@@ -1405,6 +1413,24 @@ class Inhabitant(threading.Thread):
             "(openalex_evidence, epo_patents, google_patents, semscholar_tldr) gets a SHORT "
             "technical phrase of 2 to 3 words, never the whole question. Search terms follow the "
             "corpus or the market, not the English rule below.\n"
+            # HET VRAAGTYPE BEPAALT HET BEWIJS (scope 52). Het barefoot-project plande een Shopify-
+            # check voor schoenen die we niet verkopen en een "synthesize all research"-stap die het
+            # einddocument al doet; twee van vier items konden nooit draaien. De planner wist niet
+            # wat voor vraag dit was. Stefan: "voor onderzoek hoeft het niet langs de vijf
+            # kernwaarden van Nooch, dat is pas relevant als we zelf gaan ontwikkelen."
+            "RESEARCH FRAME. First decide what kind of goal this is. (a) An ASSESSMENT ('should we', "
+            "'is there potential', 'is it worth it', 'compare'): plan the evidence that answers it — "
+            "market size and growth (web search in trade vocabulary), demand over time (keywords, "
+            "trends), the competitive field (who, positioning, price, where made), what customers "
+            "say (community listening), and science where it bears on the question. Internal figures "
+            "(our sales, our traffic) only when the assignment asks for them or the goal is about "
+            "something we already do; for something we do not make or sell yet there is nothing "
+            "internal to check. (b) A SEARCH for a supplier, material or solution: leads first (who "
+            "makes or offers it), then the assignment's requirements per lead. (c) A CHECK of a claim "
+            "or page: the verification skills. Judge leads and findings by the question and the "
+            "assignment, not by our own brand values unless the assignment names them. NEVER plan a "
+            "step that synthesizes, summarizes or reports on the other steps: the final document is "
+            "assembled automatically from the deliverables.\n"
             "Break the goal down into 2 to 5 concrete sub-items (up to 6 when the three search "
             "vocabularies are all needed). For EVERY item: if one of your skills can "
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
@@ -1837,7 +1863,11 @@ class Inhabitant(threading.Thread):
             # hieronder gewoon — zo sterft een doodgelopen doorverwijzing nooit stil.
             open_items, geland = self._route_stuck_items(project, clid, open_items)
             if not open_items:
-                # Alles doorgegeven. Misschien is dit project daarmee klaar voor review.
+                # Alles doorgegeven. Eerst ronde twee (scope 52: de rol kan zelf niets meer, dus
+                # dít is het moment om de leads na te lopen), dan pas review.
+                if self._ronde_twee(project, ledger, clid, fresh_cl, oogst):
+                    return None
+                # Misschien is dit project daarmee klaar voor review.
                 from nooch_village.project_items import maybe_finish
                 if maybe_finish(ledger, pid, clid):
                     self.log.info("📤 project '%s': alle vastgelopen items doorgegeven → review", pid)
@@ -1858,6 +1888,14 @@ class Inhabitant(threading.Thread):
                                   pid, len(hersteld))
                     return None
                 blokkades = {k: v for k, v in blokkades.items() if k not in hersteld}
+            # RONDE TWEE VÓÓR HET PARKEREN (scope 52). De rol kan niets meer zelf draaien; wat er
+            # open staat is mens-werk of een skill die niet meewerkt. Het barefoot-project (12 sep)
+            # bleef hier hangen: twee items zonder skill hielden de lijst open, dus "pas als de
+            # lijst af is" kwam nooit. Zijn er leads in wat wél gelukt is, dan lopen we die eerst
+            # na; het parkeren komt daarna vanzelf als ronde twee klaar is en de items nog open
+            # staan. De open items blijven zichtbaar op de eerste lijst.
+            if self._ronde_twee(project, ledger, clid, fresh_cl, oogst, open_items=open_items):
+                return None
             stuck = list(open_items)
             # DRIE redenen, niet twee. `!= "fails"` lumpte een payload-gebrek bij het mens-werk, en
             # dan komt een planfout van de rol bij de mens binnen als "wacht op een externe partij".
@@ -2805,16 +2843,23 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         recs = dstore.for_project(pid) if dstore is not None else []
         dc = int(settings.get("einddocument_deliverable_chars", "3000"))
         d_blocks = []
+        # DEZELFDE RENDERER ALS HET VERSLAG (scope 52). Hier stond `str(content)[:dc]`: de dict-repr
+        # van het resultaat, afgekapt. Bij competitor_discover met 69 treffers zag het document de
+        # eerste 3000 tekens repr en verder niets; bij web_zoek het fragment van de eerste treffer.
+        # Scope 50 repareerde dat in het verslag met `inhoud_tekst` (records als titel, adres,
+        # strekking, mét extract en dekking); het einddocument heeft zijn eigen pad en liep achter.
+        # Eén renderer voor beide, anders weet het ene stuk meer dan het andere.
+        from nooch_village.project_verslag import inhoud_tekst
         for r in recs:
             block = f"- {r.get('summary', '')}"
             content = dstore.content_for(r["id"]) if dstore is not None else None
             if content is not None:
-                body = str(content)
+                body = inhoud_tekst(content)
                 if len(body) > dc:
                     log.warning("DOC_DELIVERABLE_CAP: deliverable %s ingekort %d>%d tekens | project=%s",
                                 r.get("id"), len(body), dc, pid)
                     body = body[:dc] + " …[ingekort]"
-                block += f"\n  (inhoud: {body})"
+                block += "\n  (inhoud:\n  " + body.replace("\n", "\n  ") + ")"
             d_blocks.append(block)
         steer = " · ".join(c.get("text", "") for c in project.get("comments", []) if c.get("text"))
         scope = project.get("scope")

@@ -175,7 +175,7 @@ def test_lijst_af_geeft_ronde_twee_als_voorstel_en_nog_geen_review(tmp_path, mon
     assert twee["items"][0]["payload"]["criteria"] == ["plastic-free", "vegan", "proven in footwear"]
     assert twee["items"][0]["payload"]["vraag"] == "Glue-free joining"
     logtxt = " ".join(e["text"] for e in p.get("log", []))
-    assert "🔁 Round one done. Names worth a closer look: Kiilto Biomelt, acib, Ghost Corp" in logtxt
+    assert "🔁 Round one done as far as I can take it. Names worth a closer look: Kiilto Biomelt, acib, Ghost Corp" in logtxt
     assert "Checklist complete" not in logtxt
 
 

@@ -148,10 +148,12 @@ def _prompt(goal: str, description: str, materiaal: str, max_leads: int) -> str:
         f"FINDINGS:\n{materiaal}\n\n"
         f"Give at most {max_leads} leads, best first. For each: the name as it appears, what kind of "
         "thing it is, the URL of its OWN site only if a finding gives it (else empty), and one clause "
-        "why it is worth a look. Also list the criteria the assignment or goal implies for judging "
-        f"a lead (at most {MAX_CRITERIA}, short noun phrases such as 'plastic-free', 'proven in "
-        "footwear', 'available in the EU'). Do not invent names that are not in the findings. Write "
-        "in English; names stay as they are.\n\n"
+        "why it is worth a look. Also list the criteria the GOAL and ASSIGNMENT imply for judging a "
+        f"lead (at most {MAX_CRITERIA}, short noun phrases). For a market or competitor assessment "
+        "think price range, positioning, materials, production country, target group, channels; for "
+        "a supplier or solution search, the assignment's requirements. Do not add our own brand "
+        "values unless the assignment names them. Do not invent names that are not in the findings. "
+        "Write in English; names stay as they are.\n\n"
         "Answer ONLY with JSON, exactly this shape:\n"
         '{"leads": [{"naam": "...", "soort": "company|product|institute|brand|project", '
         '"url": "", "waarom": "..."}], "criteria": ["..."]}'
