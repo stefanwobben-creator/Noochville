@@ -6,11 +6,14 @@ Locale-model:
   Valt terug op keywords.txt + Library-goedkeuringen.
 
 Output: `rows` (locale-bewust) + `keywords` (backward compat, eerste geo).
-  Elke row: {term, locale, geo, interest_latest, direction, top_related}
-        of: {term, locale, geo, no_data: True, reason: str}
-  "geen data" is expliciet onderscheiden van een echte nul of interest=0.
+  Elke row: {term, locale, geo, interest_latest, direction, top_related, rising_related, tekst}
+        of: {term, locale, geo, no_data: True, reason: str}      (bevraagd, geen data)
+        of: {term, locale, geo, error: str}                       (de bron faalde: 429, netwerk)
+  "geen data" is expliciet onderscheiden van een echte nul of interest=0, én van een fout.
 
-Fail-closed per geo×term: netwerk-/rate-limit-fout faalt alleen dat segment.
+Fail-closed per geo×term, en op topniveau (scope 55): álle rijen fout → `ok: False, error` (een
+429-dag leest als ⚠️, niet als ✅); álle rijen leeg → `no_data: True`. De ladder in
+evidence_ledger.SKILL_LADDERS valt bij een fout door naar `serpapi_trends` (zelfde payload).
 """
 from __future__ import annotations
 import os, json, time, random, logging, datetime
@@ -105,6 +108,67 @@ def rotate_window(items: list, cursor: int, size: int) -> tuple[list, int]:
     return window, (start + size) % n
 
 
+def payload_terms(payload: dict) -> list[str]:
+    """De gevraagde termen uit een Trends-payload: `keywords` (lijst of komma-string) óf `term`
+    (één string). Eén lezer voor google_trends én serpapi_trends, zodat de ladder dezelfde payload
+    aan beide treden kan geven. Leeg → [] (de aanroeper kiest dan zijn eigen zaad)."""
+    payload = payload or {}
+    raw = payload.get("keywords")
+    if isinstance(raw, str):
+        raw = [t for t in raw.replace(";", ",").split(",")]
+    terms = [str(t).strip() for t in (raw or []) if str(t).strip()]
+    term = str(payload.get("term") or "").strip()
+    if not terms and term:
+        terms = [term]
+    return list(dict.fromkeys(terms))
+
+
+def row_tekst(row: dict) -> str:
+    """Eén leesbare zin per term ("interest 62 (stijgend); top: barefoot shoes women, …; rising:
+    …") — de strekking voor note en verslag. Zonder dit veld toonde het verslag alleen "• term"."""
+    delen = [f"interest {row.get('interest_latest')} ({row.get('direction', '?')})"]
+    top = [r.get("query") for r in (row.get("top_related") or []) if isinstance(r, dict) and r.get("query")]
+    if top:
+        delen.append("top: " + ", ".join(top[:5]))
+    rising = [f"{r.get('query')}{' (breakout)' if r.get('breakout') else ''}"
+              for r in (row.get("rising_related") or []) if isinstance(r, dict) and r.get("query")]
+    if rising:
+        delen.append("rising: " + ", ".join(rising[:5]))
+    return "; ".join(delen)
+
+
+def finish_rows(rows: list, legacy: dict, geos: list, first_geo: str, *, timeframe: str = "",
+                source: str = "") -> dict:
+    """De topniveau-uitkomst uit de rijen (scope 55), gedeeld door google_trends en serpapi_trends:
+    álle rijen fout → `ok: False, error` (de bron faalde, item blijft open); álle rijen leeg →
+    `no_data: True` (bevraagd, niets); anders de rijen met een `text` erboven. Een mix van data en
+    fouten is gelukt, mét de fouten in de `text`."""
+    from nooch_village.sleutelmasker import masker
+    out = {"rows": rows, "keywords": legacy, "geos": geos, "geo": first_geo}
+    if source:
+        out["source"] = source
+    fout = [r for r in rows if r.get("error")]
+    leeg = [r for r in rows if r.get("no_data") and not r.get("error")]
+    goed = [r for r in rows if not r.get("error") and not r.get("no_data")]
+    if rows and len(fout) == len(rows):
+        redenen = sorted({masker(r["error"])[:120] for r in fout})
+        out["ok"] = False
+        out["error"] = (f"all {len(rows)} lookup(s) failed: " + " | ".join(redenen[:3]))
+        return out
+    if not goed:
+        out["no_data"] = True
+        out["reason"] = (f"no interest data for {', '.join(dict.fromkeys(r.get('term', '') for r in rows))}"
+                         f" (geo {', '.join(g or 'worldwide' for g in geos)}"
+                         + (f", {timeframe}" if timeframe else "") + ")") if rows else "no terms to look up"
+        return out
+    kop = "; ".join(f"{r['term']} {r.get('interest_latest')} ({r.get('direction')})" for r in goed[:5])
+    out["text"] = (f"{len(goed)} of {len(rows)} term(s) with Google Trends data"
+                   + (f" ({timeframe})" if timeframe else "") + f": {kop}"
+                   + (f"; {len(leeg)} without data" if leeg else "")
+                   + (f"; {len(fout)} failed" if fout else ""))
+    return out
+
+
 # Geo-code → taal (uitbreidbaar)
 _GEO_LOCALE: dict[str, str] = {
     "NL": "nl",
@@ -183,9 +247,20 @@ class TrendsSkill(DataSourceSkill):
         "twelve months. A month says nothing and twelve months only shows the season — ask for "
         "24 or 36 months before calling anything a trend. Set `timeframe` (Google's own syntax: "
         "'today 12-m', 'today 5-y', 'all'); default is 'today 12-m', which is the SHORTEST "
-        "defensible window. Words per geo come from the multilingual Lexicon. Fail-closed per "
-        "geo×term."
+        "defensible window. Looks up the terms you pass (`keywords` or `term`). Fail-closed per "
+        "geo×term; falls back to SerpApi when Google blocks."
     )
+    input_schema = ("keywords: list[str] (the terms to look up; `term`: str is accepted as alias for one "
+                    "term) · geos: list[str] (optional, country codes like 'NL', 'US'; '' = worldwide; "
+                    "default settings.trends_geo) · timeframe: str (optional, Google syntax, default "
+                    "'today 12-m') · hl: str (optional, interface language, default 'nl-NL')")
+    # Of-of: de planlaag geeft een term-skill `{term}` (zoektermen.OPEN_WEB), de demo's geven
+    # `keywords`. Tot scope 55 negeerde run() `term` en draaide het roterende Lexicon-venster —
+    # het item onderzocht dan iets anders dan de planner vroeg, als 'gelukt'.
+    required_payload = (("keywords", "term"),)
+    output_schema = ("rows: list[{term, locale, geo, interest_latest, direction, top_related, "
+                     "rising_related, tekst}], keywords: {term: …} (first geo), text: str "
+                     "| no_data: True, reason | ok: False, error")
 
     def available_metrics(self, context=None) -> list[str]:
         """DYNAMISCHE velden: één ratio-veld per stemming-paar uit `trends_pairs`. Zonder context, of bij een
@@ -367,10 +442,11 @@ class TrendsSkill(DataSourceSkill):
         raise RuntimeError(f"max retries voor '{keyword}' (geo={geo})")
 
     def run(self, payload: dict, context) -> dict:
+        payload = payload or {}
         try:
             from pytrends.request import TrendReq
         except ImportError:
-            return {"error": "pytrends niet geinstalleerd (pip install pytrends)",
+            return {"ok": False, "error": "pytrends niet geinstalleerd (pip install pytrends)",
                     "keywords": {}, "rows": []}
 
         # Welke geo's worden bevraagd?
@@ -380,6 +456,7 @@ class TrendsSkill(DataSourceSkill):
         geos: list[str] = list(dict.fromkeys(geos_raw))  # dedup, volgorde behouden
         timeframe = payload.get("timeframe", "today 12-m")
         hl        = payload.get("hl", "nl-NL")
+        gevraagd  = payload_terms(payload)               # keywords óf term; leeg = het roterende venster
 
         pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
                             requests_args={"headers": {"User-Agent": _USER_AGENT}})
@@ -390,8 +467,8 @@ class TrendsSkill(DataSourceSkill):
 
         for geo in geos:
             locale   = _geo_to_locale(geo)
-            if payload.get("keywords"):
-                keywords = payload["keywords"]          # expliciet meegegeven: respecteer volledig
+            if gevraagd:
+                keywords = gevraagd                     # expliciet meegegeven: respecteer volledig
             else:
                 keywords = self._select_window(_keywords_for_locale(locale, context), context)
 
@@ -430,6 +507,7 @@ class TrendsSkill(DataSourceSkill):
                             "top_related":     top_related,
                             "rising_related":  rising_related,
                         }
+                        row["tekst"] = row_tekst(row)
                         if geo == first_geo:
                             legacy[kw] = {
                                 "interest_latest": latest,
@@ -450,12 +528,13 @@ class TrendsSkill(DataSourceSkill):
                     rows.append(row)
 
                 except Exception as e:
+                    # Een fout (429, netwerk) is GEEN 'geen data': de rij zegt `error`, zodat de
+                    # topniveau-uitkomst hieronder een geblokkeerde dag als fout kan melden.
                     row = {
                         "term":    kw,
                         "locale":  locale,
                         "geo":     geo,
-                        "no_data": True,
-                        "reason":  str(e),
+                        "error":   str(e),
                     }
                     rows.append(row)
                     if geo == first_geo:
@@ -463,9 +542,4 @@ class TrendsSkill(DataSourceSkill):
 
                 time.sleep(1)   # vriendelijk voor Google
 
-        return {
-            "rows":     rows,          # locale-bewust (nieuw)
-            "keywords": legacy,        # backward compat (eerste geo)
-            "geos":     geos,
-            "geo":      first_geo,     # backward compat veld
-        }
+        return finish_rows(rows, legacy, geos, first_geo, timeframe=timeframe)

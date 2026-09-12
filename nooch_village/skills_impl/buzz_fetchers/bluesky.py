@@ -64,7 +64,7 @@ class BlueskyFetcher(BuzzFetcher):
         made = 0
         did_request = False
         for q in queries:
-            key = f"bluesky::q::{q}"
+            key = f"bluesky::q::{set_id}::{q}"      # per set (scope 55), zie youtube.py
             if now - cache.ts(key) < CACHE_TTL:
                 continue
             if did_request:

@@ -249,7 +249,9 @@ def test_community_listening_validate_payload(tmp_path):
     ctx = SimpleNamespace(data_dir=str(tmp_path), buzz_query_sets=qs)
     sk = CommunityListeningSkill()
     assert sk.validate_payload({"query_set_id": "bestaat"}, ctx) == []
-    assert sk.validate_payload({"query_set_id": "verzonnen"}, ctx) == ["query-set 'verzonnen' bestaat niet"]
+    # scope 55: de reden noemt de bestaande sets, zodat de herplanner zichzelf kan corrigeren
+    assert sk.validate_payload({"query_set_id": "verzonnen"}, ctx) == [
+        "query-set 'verzonnen' bestaat niet; bestaande sets: bestaat — of geef `queries` (discovery)"]
     assert sk.validate_payload({"queries": ["barefoot slijtage"]}, ctx) == []             # discovery: inline termen zijn gegrond
     assert sk.validate_payload({}, ctx) == [                                              # geen scope → niet uitvoerbaar
         "geef een bestaande query_set_id (monitor) of discovery-queries op"]

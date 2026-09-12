@@ -70,7 +70,7 @@ class RedditFetcher(BuzzFetcher):
         did_request = False
         for sub in subs:
             for q in queries:
-                key = f"reddit::{sub}::{q}"
+                key = f"reddit::{set_id}::{sub}::{q}"     # per set (scope 55), zie youtube.py
                 if now - cache.ts(key) < CACHE_TTL:
                     continue
                 if did_request:

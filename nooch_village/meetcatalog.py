@@ -52,6 +52,19 @@ CATALOG = [
 _TS_THRESH = {"daily": 2 * 86400 + 43200, "weekly": 8 * 86400, "monthly": 35 * 86400}
 
 
+def actieve_bronnen(catalog=CATALOG, *, cadansen=("daily", "weekly", "monthly")) -> list[str]:
+    """De bron-ids die volgens dit contract horen te LEVEREN: status 'active' met een vaste cadans, in
+    catalogusvolgorde, ontdubbeld. 'irregular' (werkoverleg) levert per gebeurtenis en is dus nooit
+    'verwacht maar afwezig'. Eén bron van waarheid voor wie een bron als verwacht opsomt (het
+    tweewekelijkse rapport): tot scope 55 hield biweekly_report een eigen lijst bij die gdelt_tone
+    (hier inactief) en trends_categorie (hier onbekend) nog verwachtte — twee waarheden."""
+    uit: list[str] = []
+    for (_pat, bron, cadans, status) in catalog:
+        if status == "active" and cadans in cadansen and bron not in uit:
+            uit.append(bron)
+    return uit
+
+
 def _in_catalog(metric: str, bron: str) -> bool:
     return any(bron == pb and fnmatch.fnmatch(metric, pat) for (pat, pb, _c, _s) in CATALOG)
 

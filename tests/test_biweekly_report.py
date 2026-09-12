@@ -23,7 +23,11 @@ def test_report_delta_gronden_en_geen_data(tmp_path):
     assert "Bi-weekly bevindingen" in md and "2026-06-30 → 2026-07-14" in md
     assert "Web-analytics (Plausible)" in md and "▲ 15" in md          # 25 − 10
     assert "te weinig voor een trend" in md                            # alphavantage: 1 punt
-    assert "Nieuwstoon (GDELT)" in md and "Geen observaties" in md      # verwacht maar afwezig → benoemd
+    # Scope 55: 'verwacht' komt uit de meetcatalogus (actieve bronnen met vaste cadans). GSC is
+    # actief en ontbreekt in de fixture → benoemd; GDELT staat in de catalogus op inactief en wordt
+    # dus NIET meer als 'verwachte bron zonder data' gemeld (tot 12-09-2026 bevroor deze test dat).
+    assert "Zoekprestaties (Search Console)" in md and "Geen observaties" in md
+    assert "Nieuwstoon (GDELT)" not in md
     assert "geen verzonnen duiding" in md                              # discipline expliciet
 
 

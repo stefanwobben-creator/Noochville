@@ -41,6 +41,10 @@ STATUSES = ("bevestigd", "leeg", "fout")
 SKILL_LADDERS = {
     "epo_patents": ["epo_patents", "google_patents"],       # OPS faalt → keyless Google Patents
     "openalex_evidence": ["openalex_evidence", "semscholar_tldr"],   # OpenAlex leeg/fout → Semantic Scholar
+    # pytrends is vanaf datacenter-IP's hard 429-geblokkeerd (trend_reindex.py); SerpApi haalt
+    # dezelfde Trends-data op met dezelfde payload (`keywords`/`term`). Tot scope 55 noemde
+    # config/rugzakken.json deze trede al, maar stond hij hier niet.
+    "google_trends": ["google_trends", "serpapi_trends"],
 }
 
 

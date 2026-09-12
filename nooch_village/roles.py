@@ -660,8 +660,17 @@ class ConcurrentScout(Inhabitant):
         return CompetitorNews(os.path.join(self.context.data_dir, "competitor_news.json"))
 
     def _run_news(self, monitored: list[str]) -> None:
+        if not monitored:
+            # Eerlijk overslaan (scope 55): de skill kent geen code-default merkenlijst meer. Geen
+            # `competitor_brands` in de config en geen bevestigde concurrent → er is niets te
+            # scannen, en dat is een configuratiefeit, geen mislukte scan.
+            self.log.info("🔭 concurrent-scan overgeslagen: geen merken (competitor_brands leeg, geen "
+                          "bevestigde concurrenten)")
+            self.bus.publish(Event("competitor_pulse_completed",
+                {"by": self.id, "ok": False, "error": "geen merken geconfigureerd"}, self.id))
+            return
         self.log.info("🔭 concurrent-scan gestart (%d merken)", len(monitored))
-        res = self.use_skill("competitor_news", {"brands": monitored} if monitored else {})
+        res = self.use_skill("competitor_news", {"brands": monitored})
         if not res.get("ok"):
             self.log.warning("⚠️ concurrent-scan mislukt: %s", res.get("error"))
             self.bus.publish(Event("competitor_pulse_completed",
@@ -723,6 +732,8 @@ class ConcurrentScout(Inhabitant):
         doelwit-store met prioriteit (concurrenten-zonder-Nooch = hoog)."""
         if "linkbuilding_targets" not in self.dna.skills:
             return
+        if not str((getattr(self.context, "settings", {}) or {}).get("linkbuilding_query", "")).strip():
+            return      # geen onderwerp geconfigureerd → radar uit (scope 55: geen code-default meer, zie _run_discovery)
         res = self.use_skill("linkbuilding_targets", {"brands": monitored})
         if not res.get("ok"):
             self.log.info("🔗 linkbuilding overgeslagen: %s", res.get("error"))
@@ -1568,7 +1579,11 @@ class HarryHemp(Inhabitant):
         except Exception:
             pass
         result = self.use_skill("trend_reindex", {})
-        if not isinstance(result, dict) or result.get("error"):
+        # Een escalatie zonder geëvalueerde term is sinds scope 55 óók `ok: False, error` (voor het
+        # projectpad); voor deze puls blijft `escalate` leidend — dat is de founder-heads-up
+        # hieronder. Alleen een resultaat ZONDER escalatie én met een fout (use_skill-weigering,
+        # crash) is 'geen bruikbaar resultaat'.
+        if not isinstance(result, dict) or (result.get("error") and not result.get("escalate")):
             self.log.warning("trend_reindex: geen bruikbaar resultaat (%s)",
                              (result or {}).get("error") if isinstance(result, dict) else result)
             return

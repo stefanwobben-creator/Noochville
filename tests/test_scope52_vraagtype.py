@@ -49,13 +49,16 @@ def test_community_listening_geeft_de_observaties_mee(tmp_path, monkeypatch):
     assert uit["ok"] is True and uit["new"] == 35
     assert len(uit["observaties"]) == cl._MAX_OBSERVATIES and uit["observaties_afgekapt"] == 5
     o = uit["observaties"][0]
-    assert o == {"platform": "youtube", "fragment": "Comment 0: my feet never felt better",
-                 "context": "Barefoot review", "url": "https://www.youtube.com/watch?v=v&lc=0",
+    # scope 55: `context` heet `title` — de videotitel is de titel van het record, zodat de
+    # verslagregel ermee begint i.p.v. met de zoekterm
+    assert o == {"platform": "youtube", "title": "Barefoot review",
+                 "fragment": "Comment 0: my feet never felt better",
+                 "url": "https://www.youtube.com/watch?v=v&lc=0",
                  "score": 0, "query": "barefoot sneakers"}
-    # en het verslag/einddocument kan ze lezen: records met adres en strekking
+    # en het verslag/einddocument kan ze lezen: records met titel, adres en strekking
     from nooch_village.project_verslag import inhoud_tekst
     t = inhoud_tekst(uit)
-    assert "(https://www.youtube.com/watch?v=v&lc=0) — Comment 0: my feet never felt better" in t
+    assert "• Barefoot review (https://www.youtube.com/watch?v=v&lc=0) — Comment 0: my feet never felt better" in t
 
 
 # ── 2: het einddocument op dezelfde renderer ─────────────────────────────────

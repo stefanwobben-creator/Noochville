@@ -24,6 +24,9 @@ def _fake_inhabitant(tmp_path, results):
         registry=types.SimpleNamespace(get=lambda name: None),   # geen skill-obj → geen evidence_records-brug
     )
     self._calls = calls
+    # Een trede (niet-kop) loopt sinds scope 55 via _run_rung (geautoriseerd door de kop, alleen de
+    # domeinpoort); in deze fake is dat dezelfde opzoek-functie, zodat de aanroepvolgorde meetbaar blijft.
+    self._run_rung = use_skill
     # De Kroniek-brug draait in het niet-ladder-pad; bind de echte methode zodat het pad realistisch is
     # (geen skill-obj → niets geschreven, conform 'geen ladder → geen log').
     self._record_skill_evidence = lambda skill, result: Inhabitant._record_skill_evidence(self, skill, result)

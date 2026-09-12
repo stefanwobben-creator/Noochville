@@ -1,5 +1,5 @@
 from __future__ import annotations
-import logging, os
+import logging, os, re
 import requests
 from nooch_village.skills import DataSourceSkill
 
@@ -94,11 +94,48 @@ def trend_change_pct(trend) -> float | None:
     return round((vals[-1] - vals[0]) / vals[0] * 100, 1)
 
 
+def _normalize_kw(raw) -> list[str]:
+    """`kw` als schone lijst termen. Een planner geeft nogal eens één string ("barefoot shoes" of
+    "a, b, c"); die werd tot scope 55 TEKEN VOOR TEKEN verstuurd (14 credits, 14 letters terug).
+    Een string splitst op komma, puntkomma of regeleinde; een lijst wordt gestript en ontdubbeld."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = re.split(r"[,;\n]+", raw)
+    elif not isinstance(raw, (list, tuple, set)):
+        raw = [raw]
+    seen, out = set(), []
+    for t in raw:
+        term = str(t or "").strip()
+        if term and term.lower() not in seen:
+            seen.add(term.lower())
+            out.append(term)
+    return out
+
+
+def _rij_tekst(row: dict) -> str:
+    """Eén leesbare regel per keyword ("12100/mo, cpc 0.42, trend +22%"): de strekking die het
+    verslag en de note tonen. Zonder deze regel las het verslag de rij als ruwe JSON."""
+    delen = [f"{int(row.get('vol') or 0)}/mo"]
+    if row.get("cpc"):
+        delen.append(f"cpc {row['cpc']:.2f}")
+    if row.get("competition"):
+        delen.append(f"competition {row['competition']:.2f}")
+    tp = trend_change_pct(row.get("trend"))
+    if tp is not None:
+        delen.append(f"trend {tp:+.0f}% over 12 months")
+    return ", ".join(delen)
+
+
 class KeywordsEverywhereSkill(DataSourceSkill):
     name = "keywords_everywhere"
-    input_schema = "kw: list[str] (keywords, max 100 per call). optioneel: country: str (leeg=global), currency, data_source ('gkp'/'cli'; default uit settings, synoniemen ok, onbekend valt terug)"
+    input_schema = ("kw: list[str] (REQUIRED — the keywords to look up, max 100 per call; a comma-separated "
+                    "string is accepted) · country: str (optional, ISO code like 'nl'; empty = global) · "
+                    "currency: str (optional, default 'eur') · data_source: 'gkp' | 'cli' (optional; default "
+                    "from the settings, synonyms like 'google' accepted, unknown falls back)")
     required_payload = ("kw",)
-    output_schema = "lijst: keywords: dict{keyword: {vol, cpc, competition, trend}} | error"
+    output_schema = ("keywords: list[{term, keyword, vol, cpc, competition, trend, tekst}], text: str, "
+                     "credits_consumed, credits_remaining | no_data: True, reason | raises on no key/HTTP error")
     SOURCE = "keywordseverywhere"
     # Flux-bron: zoekvolume is een niveau (geen cumulatieve stand) → de tegel toont de waarde/lijn zelf.
     # Weekly: KE-volume is een maand-gemiddelde, weekly meten is ruim voldoende.
@@ -182,7 +219,7 @@ class KeywordsEverywhereSkill(DataSourceSkill):
         if not key:
             raise RuntimeError("KEYWORDS_EVERYWHERE_API_KEY ontbreekt in .env — skill faalt bewust closed")
 
-        kw: list[str] = payload.get("kw", [])
+        kw: list[str] = _normalize_kw(payload.get("kw"))
         if not kw:
             raise ValueError("payload['kw'] mag niet leeg zijn")
         if len(kw) > 100:
@@ -212,18 +249,20 @@ class KeywordsEverywhereSkill(DataSourceSkill):
         r.raise_for_status()
         raw = r.json()
 
-        keywords = [
-            {
+        keywords = []
+        for item in raw.get("data", []):
+            row = {
+                "term":        item["keyword"],            # titelveld voor verslag en note
                 "keyword":     item["keyword"],
                 "vol":         int(item.get("vol") or 0),
                 "cpc":         float((item.get("cpc") or {}).get("value") or 0),
                 "competition": float(item.get("competition") or 0),
                 "trend":       item.get("trend", []),
             }
-            for item in raw.get("data", [])
-        ]
+            row["tekst"] = _rij_tekst(row)
+            keywords.append(row)
 
-        return {
+        out = {
             "source":             "keywords_everywhere",
             "country":            country,
             "currency":           currency,
@@ -232,3 +271,14 @@ class KeywordsEverywhereSkill(DataSourceSkill):
             "credits_remaining":  int(raw.get("credits", 0)),
             "keywords":           keywords,
         }
+        if not keywords:
+            # Bevraagd, geen volume: een antwoord (📭). Tot scope 55 droegen `currency`/`data_source`
+            # hier de "inhoud" en las de wall "eur" als resultaat.
+            out["no_data"] = True
+            out["reason"] = f"no search volume for {', '.join(kw[:5])}{'…' if len(kw) > 5 else ''}"
+            return out
+        top = sorted(keywords, key=lambda r: -r["vol"])[:3]
+        out["text"] = (f"{len(keywords)} keyword(s) with search volume"
+                       f"{' (' + country + ')' if country else ' (global)'}; top: "
+                       + "; ".join(f"{r['term']} {r['vol']}/mo" for r in top))
+        return out

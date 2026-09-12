@@ -1704,7 +1704,14 @@ class Inhabitant(threading.Thread):
 
         led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
         query = str(payload.get("term") or payload.get("query") or "")
-        rungs = [(name, (lambda name=name: self.use_skill(name, payload))) for name in rung_names]
+        # De KOP loopt door de volledige poort (use_skill); een TREDE niet door de DNA-/rugzak-check.
+        # Een trede is geen aparte keuze (config/rugzakken.json: "die hangen als alternatief onder
+        # een andere skill in SKILL_LADDERS") en zit dus in geen rugzak — wie de kop mag voeren,
+        # mag de trede voeren. Tot scope 55 weigerde use_skill de trede met "niet in zijn DNA", de
+        # ladder las dat als 'fout' en wekte de mens voor een pad dat nooit gelopen was. De
+        # domeinpoort blijft ook voor een trede absoluut (zie _run_rung).
+        rungs = [(name, (lambda name=name: self.use_skill(name, payload) if name == skill
+                         else self._run_rung(name, payload))) for name in rung_names]
 
         def _escalate(*, skill, query, trail):
             try:                                             # best-effort: escalatie mag de puls nooit breken
@@ -1720,6 +1727,17 @@ class Inhabitant(threading.Thread):
         outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
                                   rungs=rungs, classify=classify_result, escalate=_escalate)
         return (outcome.get("result") or {}), (outcome.get("source") or skill)   # (resultaat, echte bron)
+
+    def _run_rung(self, name: str, payload: dict) -> dict:
+        """Eén trede van een skill-ladder uitvoeren, geautoriseerd door de kop (zie
+        _use_skill_with_ladder). Alleen de domeinpoort blijft staan: een trede die in een domein
+        beslist wordt geweigerd voor een rol zonder dat domein, precies als de kop."""
+        reden = self._domein_weigering(name)
+        if reden:
+            self.log.warning("⛔ domeinpoort (trede): %s", reden)
+            return {"error": reden}
+        ok, result = self._execute_skill(name, payload)
+        return result if ok else {"error": result}
 
     def _record_skill_evidence(self, skill: str, result) -> None:
         """De Kroniek-brug voor niet-ladder skills: als de skill zijn resultaat naar bewijs-records mapt

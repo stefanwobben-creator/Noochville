@@ -239,6 +239,24 @@ def generate_candidates(anchors, watchlist, *, mission="", cap=5, reason_fn=None
 # Curate-hand-off (de Librarian is de enige schrijfweg naar de NotesStore)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def signal_tekst(term: str, m: dict) -> str:
+    """Eén leesbare zin per geëvalueerde term, óók voor peak/flat (signal_to_fuzzy kent alleen de
+    twee signaal-soorten). Dit is de strekking die note en verslag tonen; zonder dit veld stond er
+    "• barefoot shoes" en verdween het oordeel achter de 8-velden-cap van de note."""
+    st = m.get("signal_type")
+    if st == "emergence":
+        return (f"emerges from a near-zero baseline: recent level {m.get('recent_sustained')} on the "
+                f"0-100 scale (baseline year {m.get('base_year')})")
+    if st == "trend":
+        return (f"trend: ~{m.get('index_latest')}x its {m.get('base_year')} baseline, holds across "
+                f"{', '.join(m.get('recent_months') or [])} (re-indexed, not a single-week peak)")
+    if st == "peak":
+        return (f"peak, not a trend: once reached {m.get('peak')} against a {m.get('base_year')} "
+                f"baseline of {m.get('baseline')}, but recently ~{m.get('index_latest')}x and not sustained")
+    return (f"flat: ~{m.get('index_latest')}x its {m.get('base_year')} baseline "
+            f"({m.get('baseline')}), peak {m.get('peak')} — no signal")
+
+
 def signal_to_fuzzy(term: str, m: dict) -> str:
     """Zet een gemarkeerd signaal om naar één regel ruwe curate-input. Bewust NEUTRAAL en
     zonder levertiming-framing: het is zoekinteresse, geen verkoop, geen inkoopmoment."""
@@ -389,9 +407,9 @@ class TrendReindexSkill(Skill):
         "keep: int (hoeveel op de watchlist houden, default 10)."
     )
     output_schema = (
-        "{evaluated: [{term, ...reindex}], signals: [{term, ...}], watchlist: [term], "
-        "candidates_source: 'llm'|'watchlist_only', fuzzy: str (curate-input), "
-        "escalate: {reason}|None}"
+        "{evaluated: [{term, signal_type, tekst, ...reindex}], signals: [{term, ...}], watchlist: [term], "
+        "candidates_source: 'llm'|'watchlist_only', fuzzy: str (curate-input), text: str, "
+        "escalate: {reason}|None} | ok: False, error (escalate without a single evaluated term)"
     )
 
     # ── configuratie ──
@@ -472,10 +490,9 @@ class TrendReindexSkill(Skill):
         # 2) fetch-poort. Geen pytrends → hard fail-closed + zichtbaar escaleren.
         fetch = payload.get("_fetch") or self._make_fetch(cfg)
         if fetch is None:
-            return {"evaluated": [], "signals": [], "watchlist": watch_terms,
-                    "candidates_source": source, "fuzzy": "",
-                    "escalate": {"reason": "pytrends niet beschikbaar/initialiseerbaar — "
-                                           "trend_reindex kan geen data ophalen (fail-closed)."}}
+            return self._uitkomst([], [], watch_terms, source, "",
+                                  {"reason": "pytrends niet beschikbaar/initialiseerbaar — "
+                                             "trend_reindex kan geen data ophalen (fail-closed)."})
 
         # 3) her-indexeer elke term (kandidaten + bestaande watchlist), elk MET de ankerset
         to_eval, seen = [], set()
@@ -503,7 +520,9 @@ class TrendReindexSkill(Skill):
                 if real:
                     time.sleep(1.0)
                 continue
-            row = {"term": term, **m}
+            # `signal_type` en `tekst` vóór de cijfers: de note kapt op 8 velden en toonde tot
+            # scope 55 "sustained: True" als laatste, zonder het oordeel zelf.
+            row = {"term": term, "signal_type": m["signal_type"], "tekst": signal_tekst(term, m), **m}
             evaluated.append(row)
             _append_signal(data_dir, {"term": term, "geo": cfg["geo"],
                                       "timeframe": cfg["timeframe"], **m})
@@ -531,14 +550,38 @@ class TrendReindexSkill(Skill):
         # 5) curate-hand-off voor de signalen (Librarian schrijft, niet Sid)
         fuzzy = "\n".join(signal_to_fuzzy(r["term"], r) for r in signals)
 
-        return {
+        return self._uitkomst(evaluated, signals, [w["term"] for w in merged], source, fuzzy, escalate)
+
+    @staticmethod
+    def _uitkomst(evaluated, signals, watchlist, source, fuzzy, escalate) -> dict:
+        """De drie uitkomsten (scope 55). Escalatie ZONDER één geëvalueerde term = de bron faalde:
+        `ok: False, error` (het checklist-item blijft open met de echte reden; tot nu toe won de oude
+        `watchlist` als inhoud en kreeg het item een vinkje). `escalate` blijft erbij staan voor de
+        dagpuls van HarryHemp, die er de founder-heads-up van maakt."""
+        out = {
             "evaluated": evaluated,
             "signals": signals,
-            "watchlist": [w["term"] for w in merged],
+            "watchlist": watchlist,
             "candidates_source": source,
             "fuzzy": fuzzy,
             "escalate": escalate,
         }
+        if escalate and not evaluated:
+            out["ok"] = False
+            out["error"] = escalate.get("reason") or "trend_reindex kon niets her-indexeren"
+            return out
+        if not evaluated:
+            out["no_data"] = True
+            out["reason"] = "no terms could be re-indexed"
+            return out
+        per_type = {}
+        for r in evaluated:
+            per_type[r.get("signal_type", "?")] = per_type.get(r.get("signal_type", "?"), 0) + 1
+        out["text"] = (f"{len(evaluated)} term(s) re-indexed ({source}): "
+                       + ", ".join(f"{n} {t}" for t, n in per_type.items())
+                       + (f"; signals: {', '.join(r['term'] for r in signals)}" if signals else "; no sustained signal")
+                       + (f"; watchlist {len(watchlist)}" if watchlist else ""))
+        return out
 
 
 def _int_or_none(v):
