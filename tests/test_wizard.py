@@ -186,15 +186,17 @@ def test_het_label_is_afgeleid_en_wordt_niet_opgeslagen(tmp_path):
 
 def test_de_checklist_opent_als_invoerveld_niet_als_wachtscherm(tmp_path):
     """Hier stond een spinner van maximaal twaalf seconden vóór je iets kon. Dat is de AI vóór
-    de mens zetten bij een lijstje afvinken. Openen is typen."""
+    de mens zetten bij een lijstje afvinken. Openen is typen. En sinds 12 sep (Stefan: "met een
+    knop de AI-suggestie in werking zetten") draait openen ook geen model meer: de suggesties komen
+    alleen op de knop."""
     from nooch_village.views.wizard import render_wizard
     h = render_wizard(_st(tmp_path), "t")
     assert "type a step and press Enter" in h
     assert "makes a checklist and checks it against your skills" not in h   # het wachtscherm
-    # de suggestie-call wordt NIET ge-await voordat de lijst er staat
-    body = h.split("async function checklist()")[1][:400]
-    assert "draw();" in body and "suggesties();" in body
-    assert "await suggesties" not in body
+    body = h.split("async function checklist()")[1].split("async function suggesties()")[0]
+    assert "draw();" in body and "suggesties" not in body                  # openen = alleen tekenen
+    assert 'id="wz-sugbtn" onclick="suggesties()"' in h                    # de knop
+    assert "await suggesties" not in h
 
 
 def test_suggesties_komen_erbij_en_blokkeren_niet(tmp_path):
@@ -430,4 +432,136 @@ def test_de_niet_blokkerende_suggestie_krijgt_een_eigen_budget(tmp_path):
     assert "/wizard/plan',{uitkomst:idee,role:S.role},PLAN_TIMEOUT_MS)" in h
     # de blokkerende stappen houden hun korte budget
     assert "/wizard/sharpen',{ruw:S.ruw},AI_TIMEOUT_MS)" in h
-    assert "suggesties();" in h and "await suggesties()" not in h   # nog steeds niet ge-await
+    assert 'onclick="suggesties()"' in h and "await suggesties()" not in h   # op de knop, niet ge-await
+
+
+# ── Jouw woorden komen op het bord (12 september 2026) ──────────────────────
+
+def test_de_suggestie_staat_naast_je_idee_en_landt_erin(tmp_path):
+    """Stefan: "nu kan ik niet zien welke ik toevoeg." ✨ stond naast het kleine Done-when-veld en
+    schreef daarin; het idee zelf ging nergens heen. Nu staat de knop achter het EERSTE veld en zet
+    hij de suggestie dáár, met een weg terug naar je eigen woorden."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    form = h[h.index('id="wz-ruw"'):h.index('id="wz-role"')]
+    assert form.index('id="wz-ai"') < form.index('id="wz-uit"')        # knop bij het eerste veld
+    assert form.count('id="wz-ai"') == 1                               # en nergens anders
+    scherp = h[h.index("async function scherp"):h.index("function form")]
+    assert "getElementById('wz-ruw')" in scherp and "getElementById('wz-uit')" not in scherp
+    assert "S.ruwEigen=S.ruw" in scherp and "put your own words back" in scherp
+    assert "function terug()" in h and "window.terug=terug" in h
+    # het veld zegt wat het is: precies deze tekst komt op het bord
+    assert "on the board exactly as written" in h
+
+
+def test_de_titel_komt_letterlijk_op_het_bord(tmp_path, monkeypatch):
+    """"Als ik het toevoeg laat AI de formulering nog een keer aanpassen, dat moet nooit mogen."
+    Er zat een `title_from` in /wizard/create. Nu: wat de client als titel stuurt is de scope,
+    teken voor teken, en er wordt bij het opslaan geen model meer aangeroepen."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "titel:S.ruw,uitkomst:S.uitkomst," in h                      # het veld, niet een afleiding
+
+    def _geen_model(*a, **k):
+        raise AssertionError("het model werd aangeroepen bij het opslaan")
+    monkeypatch.setattr("nooch_village.llm.reason", _geen_model)
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    wie = f"person:{st.people.all()[0].id}"                # de rol heeft twee vervullers: kies er één
+    titel = "Onderzoek naar afbreekbare zolen, precies zoals ik het typte"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": titel, "uitkomst": "", "trekker": wie})
+    assert r.get("pid") and r.get("titel") == titel, r
+    p = cockpit2._Stores(st.dd).projects.get(r["pid"])
+    assert p["scope"] == titel
+    assert p["done_when"] == titel                       # geen done-when → de titel is de done-when
+    # mét een eigen done-when blijft die apart, ook letterlijk
+    r2 = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Header af", "uitkomst": "no complaints",
+                                         "trekker": wie})
+    p2 = cockpit2._Stores(st.dd).projects.get(r2["pid"])
+    assert p2["scope"] == "Header af" and p2["done_when"] == "no complaints"
+    # zonder titel geen project (400, dus urllib gooit)
+    import pytest, urllib.error
+    voor = len(cockpit2._Stores(st.dd).projects.all())
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        _post(st.dd, "/wizard/create", {"role": rid, "titel": "  ", "uitkomst": "x", "trekker": wie})
+    assert exc.value.code == 400
+    assert len(cockpit2._Stores(st.dd).projects.all()) == voor
+
+
+def test_de_kolom_van_de_deur_reist_mee(tmp_path, monkeypatch):
+    """"+ add project" onder Future maakte een project in Active: de wizard kende alleen queued.
+    Stefan (12 sep): "dan neemt ie dat niet over." Nu draagt de deur zijn kolom, en de wizard
+    vertaalt hem precies zoals het kale formulier dat deed: toekomst → future, wacht → geblokkeerd."""
+    from nooch_village.views.projects import _quickadd
+    rid = "mother_earth__nooch__website_developer"
+    assert "col=toekomst" in _quickadd(rid, "toekomst", "t", "/x")
+    assert "col=wacht" in _quickadd(rid, "wacht", "t", "/x")
+    assert "col=" not in _quickadd(rid, "actief", "t", "/x")          # actief is de default
+    from nooch_village.views.wizard import render_wizard
+    st = _st(tmp_path)
+    h = render_wizard(st, "t", role=rid, col="toekomst")
+    assert 'col:"toekomst"' in h and "' · Future'" in h              # de kop zegt waar het landt
+    assert 'col:""' in render_wizard(st, "t", role=rid, col="onzin")  # onbekend = actief
+    monkeypatch.setattr("nooch_village.llm.reason", lambda *a, **k: None)
+    wie = f"person:{st.people.all()[0].id}"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Later", "col": "toekomst", "trekker": wie})
+    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "future"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Wacht", "col": "wacht", "trekker": wie})
+    p = cockpit2._Stores(st.dd).projects.get(r["pid"])
+    assert p["status"] == "blocked" and p["blocked_on"] == "—"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Nu", "trekker": wie})
+    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "queued"
+
+
+def test_tijd_is_een_getal_met_uren_of_dagen(tmp_path, monkeypatch):
+    """De vier chips (1 hour · 1 day · 2 days · 1 week) zijn weg: Stefan wil "een invoerveld en
+    erachter uren of dagen", en zo staat het al in de rail. Eén conversieregel (`uren_uit`) voor
+    beide; de AI-gok levert nog een bucket en wordt via dezelfde tabel naar uren vertaald."""
+    from nooch_village.views.wizard import render_wizard
+    from nooch_village.views.projects import _EFFORT_ENUM_HOURS
+    st = _st(tmp_path)
+    h = render_wizard(st, "t")
+    assert 'id="wz-uren"' in h and 'id="wz-eenheid"' in h and "1 week" not in h
+    assert "EFFORT_UREN=" + json.dumps(_EFFORT_ENUM_HOURS) in h          # de servertabel, één bron
+    assert "uren:S.uren,eenheid:S.eenheid" in h
+    assert cockpit2.uren_uit("2", "dagen") == 16 and cockpit2.uren_uit("3", "uren") == 3
+    assert cockpit2.uren_uit("", "uren") is None and cockpit2.uren_uit("0", "dagen") is None
+    monkeypatch.setattr("nooch_village.llm.reason", lambda *a, **k: None)
+    rid = "mother_earth__nooch__website_developer"
+    wie = f"person:{st.people.all()[0].id}"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Twee dagen", "uren": "2",
+                                        "eenheid": "dagen", "trekker": wie})
+    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["effort"] == {"hours": 16}
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Ongeschat", "uren": "", "trekker": wie})
+    assert not cockpit2._Stores(st.dd).projects.get(r["pid"]).get("effort")
+
+
+def test_een_doel_kies_je_al_in_de_wizard(tmp_path, monkeypatch):
+    """Stefan: "hier ook alvast de koppeling met een doel kunnen maken." De open doelen staan in de
+    wizard; het werkpakket verschijnt alleen als het doel er heeft; create koppelt via dezelfde
+    `set_doel` als de rail. Een onbekend doel is een 400, geen half project."""
+    from nooch_village.views.wizard import render_wizard
+    st = _st(tmp_path)
+    assert 'DOELOPTS="";' in render_wizard(st, "t")                     # geen open doel = geen keuze
+    d = st.doelen.add("Rapport MITH", label="MITH", activiteiten=["WP1", "WP2"])
+    dicht = st.doelen.add("Oud doel", label="Oud"); st.doelen.update(dicht["id"], status="behaald")
+    h = render_wizard(st, "t")
+    assert f"value='{d['id']}'" in h and "MITH · Rapport MITH" in h
+    assert f"value='{dicht['id']}'" not in h                              # alleen open doelen
+    assert json.dumps({d["id"]: {"w": ["WP1", "WP2"]}}) in h
+    assert "label:" not in h                                             # geen state-veld (zie label-test)
+    monkeypatch.setattr("nooch_village.llm.reason", lambda *a, **k: None)
+    rid = "mother_earth__nooch__website_developer"
+    wie = f"person:{st.people.all()[0].id}"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Sectie 1", "doel_id": d["id"],
+                                        "activiteit": "WP1", "trekker": wie})
+    p = cockpit2._Stores(st.dd).projects.get(r["pid"])
+    assert p["doel_id"] == d["id"] and p["activiteit"] == "WP1"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Los", "doel_id": d["id"],
+                                        "activiteit": "bestaat niet", "trekker": wie})
+    p = cockpit2._Stores(st.dd).projects.get(r["pid"])
+    assert p["doel_id"] == d["id"] and p["activiteit"] is None           # onbekend werkpakket valt af
+    import pytest, urllib.error
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        _post(st.dd, "/wizard/create", {"role": rid, "titel": "X", "doel_id": "nope", "trekker": wie})
+    assert exc.value.code == 400

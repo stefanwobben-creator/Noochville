@@ -57,7 +57,7 @@ from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
-                                    _BUSINESS_IMPACT, _EFFORT)
+                                    _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_clusters import ClusterBesluitStore
@@ -2025,6 +2025,17 @@ def _act_proj_setimpact(c):
         return nxt, ""
 
 
+def uren_uit(number: str, unit: str) -> int | None:
+    """Getal + eenheid → uren: '2' + 'dagen' = 16 (8-urige werkdag). Leeg of ≤ 0 → None (niet geschat);
+    geen getal → ValueError. ÉÉN conversieregel, voor de rail (proj_seteffort) én de wizard."""
+    raw = (number or "").strip().replace(",", ".")
+    if not raw:
+        return None
+    n = float(raw)                                            # ValueError bij onzin, voor de aanroeper
+    hours = int(round(n * (8 if unit == "dagen" else 1)))
+    return hours if hours > 0 else None
+
+
 def _act_proj_seteffort(c):
         # AUTHZ: rolvervuller of Circle Lead — effort-inschatting is operationeel projectwerk (zelfde gate
         # als proj_setimpact). Effort wordt canoniek in uren opgeslagen ({"hours": N}); leeg = wissen.
@@ -2032,16 +2043,11 @@ def _act_proj_seteffort(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        raw = (g("number") or "").strip().replace(",", ".")
-        if not raw:                                          # leeg getal → wissen (ongeschat)
-            pj.edit(g("pid"), allow_done=True, effort="")
-            return nxt, "✓ effort leeggemaakt"
         try:
-            n = float(raw)
+            hours = uren_uit(g("number"), g("unit"))
         except ValueError:
             return nxt, "ongeldige effort-waarde"
-        hours = int(round(n * (8 if g("unit") == "dagen" else 1)))   # dagen → uren (8-urige werkdag)
-        if hours <= 0:
+        if hours is None:                                    # leeg of ≤ 0 → wissen (ongeschat)
             pj.edit(g("pid"), allow_done=True, effort="")
             return nxt, "✓ effort leeggemaakt"
         pj.edit(g("pid"), allow_done=True, effort={"hours": hours})
@@ -6498,6 +6504,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                          ruw=(qs.get("ruw") or [""])[0],
                                          uitkomst=(qs.get("uitkomst") or [""])[0],
                                          nid=(qs.get("nid") or [""])[0],
+                                         col=(qs.get("col") or [""])[0],       # de bordkolom van de deur
                                          # Expliciete trekker wint; anders de vervuller van de
                                          # rol als default (één vervuller → voorgekozen).
                                          trekker=((qs.get("trekker") or [""])[0]
@@ -7110,9 +7117,17 @@ def make_handler(data_dir: str, csrf_token: str,
                     _deny = _role_gate(role, username, st)
                     if _deny:
                         self._send_json({"error": _deny}, 403); return
-                    uitkomst = g1("uitkomst").strip()
-                    if not uitkomst:
-                        self._send_json({"error": "geen uitkomst"}, 400); return
+                    # DE TITEL IS LETTERLIJK WAT DE MENS TYPTE. Hier stond `title_from(uitkomst)`: een
+                    # tweede modelrondje dat de formulering nog eens samenvatte, ook als ✨ nooit was
+                    # aangeraakt. Stefan (12 sep): "als ik het toevoeg laat AI de formulering nog een
+                    # keer aanpassen, dat moet nooit mogen." Het model mag VÓÓR het opslaan een
+                    # suggestie in het veld zetten (zichtbaar, weg te klikken); wat er bij het opslaan
+                    # in het veld staat, komt zo op het bord. Geen done-when = de titel is de done-when,
+                    # net als bij het kale formulier.
+                    titel = g1("titel").strip()[:200]
+                    if not titel:
+                        self._send_json({"error": "geen titel"}, 400); return
+                    uitkomst = (g1("uitkomst").strip() or titel)[:200]     # zelfde plafond als proj_add
                     person, agent = _parse_trekker(g1("trekker"))
                     # Dezelfde cardinaliteitswet als bij proj_add — de wizard is de andere weg naar
                     # het bord, en een regel die maar op één van de twee geldt is geen regel.
@@ -7123,16 +7138,40 @@ def make_handler(data_dir: str, csrf_token: str,
                             self._send_json({"error": _weiger}, 400); return
                     missie = g1("missie") if g1("missie") in _MISSIE_IMPACT else ""
                     business = g1("business") if g1("business") in _BUSINESS_IMPACT else ""
-                    effort = g1("tijd") if g1("tijd") in _EFFORT else ""
-                    # Kort = de titel (scope), uitgebreid = de DoD (done_when + kop van het einddocument).
-                    from nooch_village.wizard import title_from
+                    # Uren: getal + eenheid, dezelfde regel als de rail (proj_seteffort). Onzin is een
+                    # 400 vóór er iets bestaat, niet een half project.
+                    try:
+                        hours = uren_uit(g1("uren"), g1("eenheid"))
+                    except ValueError:
+                        self._send_json({"error": "ongeldige effort-waarde"}, 400); return
+                    # Het doel, als er een gekozen is: bestaan is een voorwaarde (zelfde regel als
+                    # proj_goal), het werkpakket alleen als het doel het kent.
+                    doel_id = g1("doel_id").strip()
+                    activiteit = ""
+                    if doel_id:
+                        _doel = st.doelen.get(doel_id)
+                        if _doel is None:
+                            self._send_json({"error": "goal not found"}, 400); return
+                        activiteit = g1("activiteit").strip()
+                        if activiteit not in (_doel.get("activiteiten") or []):
+                            activiteit = ""
+                    # De kolom van de deur: Future → future, Waiting → geblokkeerd, anders actief.
+                    # Zelfde vertaling als proj_add had, want dit is de andere weg naar hetzelfde bord.
+                    col = g1("col")
+                    # Titel = scope, done-when = de DoD (én de kop van het einddocument).
                     from nooch_village.projects import seed_document
-                    titel = title_from(uitkomst) or uitkomst[:80]
                     pj = st.projects
-                    pid = pj.create(role, titel[:200], "human", status="queued",
+                    pid = pj.create(role, titel, "human",
+                                    status=("future" if col == "toekomst" else "queued"),
                                     done_when=uitkomst, person=person or None,
                                     agent=agent or None, missie_impact=missie,
-                                    business_impact=business, effort=effort)
+                                    business_impact=business)
+                    if col == "wacht":
+                        pj.block(pid, "—")
+                    if hours:
+                        pj.edit(pid, allow_done=True, effort={"hours": hours})
+                    if doel_id:
+                        pj.set_doel(pid, doel_id, activiteit)
                     # DE LUS SLUITEN. Kwam dit project uit een spanning, dan is het project DE
                     # uitkomst van die spanning: leg hem vast met een verwijzing naar het pid en
                     # sluit de bron. Deed de wizard dit niet, dan bleef de spanning open terwijl het
