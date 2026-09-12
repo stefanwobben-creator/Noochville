@@ -170,7 +170,7 @@ def test_uitvoerlus_verrijkt_voor_note_en_store(tmp_path, monkeypatch):
     reg = SkillRegistry()
     reg.register(_ZoekSkill())
     inw = _inwoner(tmp_path, ledger, reg)
-    inw.context.deliverables = DeliverableStore(str(tmp_path / "d"))
+    inw.context.deliverables = DeliverableStore(str(tmp_path / "deliverables.json"))
     pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "Find hot melts", skill="web_zoek", payload={"term": "bio-based hot melt"})

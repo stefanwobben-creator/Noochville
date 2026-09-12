@@ -60,6 +60,7 @@ from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
 from nooch_village.skills_impl.web_zoek import WebZoekSkill
 from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill
 from nooch_village.skills_impl.zoekstrategie import ZoekstrategieSkill
+from nooch_village.skills_impl.lead_beoordeling import LeadBeoordelingSkill
 
 
 def build_skill_registry() -> SkillRegistry:
@@ -107,6 +108,9 @@ def build_skill_registry() -> SkillRegistry:
         # De bron die het dorp niet had: vrij zoeken op het open web. SerpAPI zat er drie keer
         # in, elke keer vastgeklonken aan één doel; dit is de losse toegang.
         WebZoekSkill(),
+        # De stap die een mens ná het zoeken doet: een naam opzoeken, de site lezen en zeggen of
+        # hij past, met een citaat (scope 51). Ronde twee van een onderzoek plant hem per lead.
+        LeadBeoordelingSkill(),
         MobielAuditSkill(),           # Lighthouse op mobiel via PageSpeed Insights; ook meetbron (wekelijks)
         Co2VillageSource(),
     ):

@@ -45,8 +45,11 @@ MARKER = "🔎 For you, the human"
 
 
 def _term(item: dict) -> str:
+    """De zoekterm van een item. `term` is de vorm van web_zoek en de corpora, `topic` die van
+    competitor_discover (het barefoot-project had alleen zo'n item en kreeg daardoor geen
+    zoekstap voor de mens, scope 52), `query` de legacy-vorm."""
     payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
-    return str(payload.get("term") or item.get("query") or "").strip()
+    return str(payload.get("term") or payload.get("topic") or item.get("query") or "").strip()
 
 
 def is_onderzoeksplan(items) -> bool:

@@ -204,6 +204,11 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
         "(set 'taal' and 'land' in the payload). A corpus source (openalex_evidence, epo_patents) "
         "gets a SHORT technical phrase of 2 to 3 words, never the whole question. Search terms "
         "follow the corpus or the market, not the English rule below.\n"
+        "RESEARCH FRAME: for an assessment ('should we', 'is there potential') plan the evidence "
+        "that answers it (market size and growth, demand over time, the competitive field, what "
+        "customers say, science where relevant); internal figures only when the goal is about "
+        "something we already do. Never plan a step that synthesizes or reports on the other steps: "
+        "the final document is assembled automatically.\n"
         # VORM, expliciet en met een voorbeeld: de gemeten suggesties waren 25-40 woorden lang.
         f"SHAPE OF A STEP: starts with a verb, is ONE action, and is at most {_MAX_STAP_WOORDEN} "
         "words. No explanation, no parenthetical lists. "
