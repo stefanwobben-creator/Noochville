@@ -29,7 +29,7 @@ def test_guard_geen_voorstellen_blok_meer_op_de_projecten_tab(tmp_path):
     """DE guard. Beide takken: de rol-tab én de cirkel-tab tonen alleen nog echte projecten."""
     dd, st = _st(tmp_path)
     _voorstel(st)
-    st.projects.create(ROLE, "Gewoon bordwerk", "human", status="queued")
+    st.projects.create(ROLE, "Gewoon bordwerk", "human", status="running")
     for node in (ROLE, "mother_earth__nooch"):
         html = P._projects_tab_html(cockpit2._Stores(dd), st.records.get(node), "TOK")
         assert "awaiting your judgement" not in html, node
@@ -124,8 +124,8 @@ def test_afwijzen_via_dispatch_en_het_komt_niet_terug(tmp_path):
 def test_dispatch_raakt_een_gewoon_project_niet(tmp_path):
     """De twee acties werken uitsluitend op een voorstel — nooit op werk dat al op het bord staat."""
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Gewoon bordwerk", "human", status="queued")
+    pid = st.projects.create(ROLE, "Gewoon bordwerk", "human", status="running")
 
     cockpit2.dispatch(dd, "proj_proposal_reject", {"pid": [pid], "next": ["/"]}, username="guest")
 
-    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "queued"
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "running"

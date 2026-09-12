@@ -201,7 +201,7 @@ def _werk_project(ledger, rol_id: str, tekst: str, door: str, done_when: str = "
         for p in ledger.all():
             if p.get("keyword") == sleutel and p.get("status") != "done" and not p.get("archived"):
                 return ""                                # loopt al
-        return ledger.create(rol_id, tekst[:200], "role", status="queued",
+        return ledger.create(rol_id, tekst[:200], "role", status="future",
                              origin=ORIGIN_BERICHT, keyword=sleutel,
                              description=f"Doorgegeven door {door}. {tekst}",
                              done_when=(done_when or _done_when_uit(tekst))[:200])

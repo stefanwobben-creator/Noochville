@@ -21,7 +21,7 @@ def _st(tmp_path):
 
 def test_proj_settrekker_wijzigt_persoon(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     person = st.people.all()[0]
     cockpit2.dispatch(dd, "proj_settrekker", {"pid": [pid], "trekker": [f"person:{person.id}"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["person"] == person.id
@@ -29,7 +29,7 @@ def test_proj_settrekker_wijzigt_persoon(tmp_path):
 
 def test_detail_modal_heeft_trekker_form_in_schrijfmodus(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
     assert "proj_settrekker" in rw and "name='trekker'" in rw
@@ -40,14 +40,14 @@ def test_detail_modal_heeft_trekker_form_in_schrijfmodus(tmp_path):
 
 def test_proj_setowner_verplaatst_naar_andere_rol(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2
 
 
 def test_proj_setowner_weigert_cirkel(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [CIRCLE], "next": ["/"]}, username="guest")
     assert "circle" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE   # ongewijzigd
@@ -55,7 +55,7 @@ def test_proj_setowner_weigert_cirkel(tmp_path):
 
 def test_proj_setowner_weigert_onbekende_rol(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": ["nietbestaand"], "next": ["/"]}, username="guest")
     assert "unknown" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE
@@ -80,7 +80,7 @@ def test_proj_approve_zet_draft_op_bord(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Concept", "human", status="draft")
     cockpit2.dispatch(dd, "proj_approve", {"pid": [pid], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "queued"
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "future"   # goedgekeurd = slapend (scope 49)
 
 
 def test_proj_discard_verwijdert_draft(tmp_path):
@@ -100,7 +100,7 @@ def test_draft_sectie_zichtbaar_met_knoppen(tmp_path):
 
 def test_draft_telt_niet_mee_in_bord_aantal(tmp_path):
     dd, st = _st(tmp_path)
-    st.projects.create(ROLE, "Op bord", "human", status="queued")
+    st.projects.create(ROLE, "Op bord", "human", status="running")
     st.projects.create(ROLE, "Concept", "human", status="draft")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
@@ -110,7 +110,7 @@ def test_draft_telt_niet_mee_in_bord_aantal(tmp_path):
 # ── wees-projecten (dangling owner) zichtbaar maken ──────────────────────────
 
 def _make_orphan(dd, st):
-    pid = st.projects.create(ROLE, "Wees project", "human", status="queued")
+    pid = st.projects.create(ROLE, "Wees project", "human", status="running")
     st.projects.edit(pid, owner="ghost_role", allow_done=True)
     return pid
 
@@ -144,7 +144,7 @@ def test_kaart_is_link_in_publieke_view(tmp_path):
     """Read-only (geen csrf): geen modal-JS, dus de kaart moet een <a> zijn die naar /project
     navigeert (server redirect dan naar /login). Anders is de kaart een dode div."""
     dd, st = _st(tmp_path)
-    st.projects.create(ROLE, "Visible", "human", status="queued")
+    st.projects.create(ROLE, "Visible", "human", status="running")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="", add=False)
     assert "<a class='card pcard' href='/project?pid=" in html
@@ -153,7 +153,7 @@ def test_kaart_is_link_in_publieke_view(tmp_path):
 
 def test_kaart_is_modal_div_ingelogd(tmp_path):
     dd, st = _st(tmp_path)
-    st.projects.create(ROLE, "Visible", "human", status="queued")
+    st.projects.create(ROLE, "Visible", "human", status="running")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
     assert "<div class='card pcard' data-pid=" in html and "draggable=" in html
@@ -209,7 +209,7 @@ def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
     import re
     dd, st = _st(tmp_path)
     me = st.people.add("Ingelogd Persoon", "ingelogd@nooch.earth")     # bezet ROLE2 níet
-    pid = st.projects.create(ROLE2, "Scope-check", "human", status="queued")
+    pid = st.projects.create(ROLE2, "Scope-check", "human", status="running")
     page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     # De select draagt nu ook class='ctrl' (rail-control); het attribuut ervóór meenemen in de
     # regex maakt hem broos, dus matchen op de naam waar hij ook staat.
@@ -224,7 +224,7 @@ def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
 # ── impact-pills (scope 2): missie_impact / business_impact ──────────────────────────────────────
 def test_proj_setimpact_zet_missie_en_business(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     cockpit2.dispatch(dd, "proj_setimpact",
                       {"pid": [pid], "kind": ["missie"], "value": ["versterkt"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "proj_setimpact",
@@ -235,7 +235,7 @@ def test_proj_setimpact_zet_missie_en_business(tmp_path):
 
 def test_proj_setimpact_leegmaken(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="verzwakt")
+    pid = st.projects.create(ROLE, "Test", "human", status="running", missie_impact="verzwakt")
     cockpit2.dispatch(dd, "proj_setimpact",
                       {"pid": [pid], "kind": ["missie"], "value": [""], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["missie_impact"] == ""   # toggle-off → ongelabeld
@@ -243,7 +243,7 @@ def test_proj_setimpact_leegmaken(tmp_path):
 
 def test_proj_setimpact_weigert_ongeldige_waarde(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     _, msg = cockpit2.dispatch(dd, "proj_setimpact",
                                {"pid": [pid], "kind": ["missie"], "value": ["banaan"], "next": ["/"]}, username="guest")
     assert "ongeldig" in msg.lower()
@@ -252,7 +252,7 @@ def test_proj_setimpact_weigert_ongeldige_waarde(tmp_path):
 
 def test_proj_setimpact_onbekend_veld(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    pid = st.projects.create(ROLE, "Test", "human", status="running")
     _, msg = cockpit2.dispatch(dd, "proj_setimpact",
                                {"pid": [pid], "kind": ["xyz"], "value": ["hoog"], "next": ["/"]}, username="guest")
     assert "onbekend" in msg.lower()
@@ -260,7 +260,7 @@ def test_proj_setimpact_onbekend_veld(tmp_path):
 
 def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="neutraal")
+    pid = st.projects.create(ROLE, "Test", "human", status="running", missie_impact="neutraal")
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
     # De control zit nu in de rail (class 'ctrl'); dezelfde dispatch, dezelfde auto-opslag.
@@ -276,19 +276,19 @@ def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
 def test_missie_stip_op_bordkaart(tmp_path):
     """Mission impact als kleurstip op de bordkaart; business-impact NIET op de kaart, geen pills/tekst."""
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued",
+    pid = st.projects.create(ROLE, "T", "human", status="running",
                              missie_impact="versterkt", business_impact="hoog")
     card = P._proj_card(st, st.projects.get(pid), "TOK", "/")
     assert "mdot g" in card                        # groene stip = versterkt
     assert "imp-pill" not in card and "hoog" not in card    # geen pills/business op de kaart
-    pid_r = st.projects.create(ROLE, "R", "human", status="queued", missie_impact="verzwakt")
+    pid_r = st.projects.create(ROLE, "R", "human", status="running", missie_impact="verzwakt")
     assert "mdot r" in P._proj_card(st, st.projects.get(pid_r), "TOK", "/")   # rood = verzwakt
-    pid_n = st.projects.create(ROLE, "N", "human", status="queued", missie_impact="neutraal")
+    pid_n = st.projects.create(ROLE, "N", "human", status="running", missie_impact="neutraal")
     assert "mdot n" in P._proj_card(st, st.projects.get(pid_n), "TOK", "/")   # grijs = neutraal
     # business-only → GEEN stip; ongelabeld → GEEN stip
-    pid_b = st.projects.create(ROLE, "B", "human", status="queued", business_impact="laag")
+    pid_b = st.projects.create(ROLE, "B", "human", status="running", business_impact="laag")
     assert "mdot" not in P._proj_card(st, st.projects.get(pid_b), "TOK", "/")
-    pid_0 = st.projects.create(ROLE, "O", "human", status="queued")
+    pid_0 = st.projects.create(ROLE, "O", "human", status="running")
     assert "mdot" not in P._proj_card(st, st.projects.get(pid_0), "TOK", "/")
 
 
@@ -298,25 +298,25 @@ _VZ_TXT = "Mission weakened. You decide as role filler."
 
 def test_verzwakt_kaart_rode_rand(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    pid = st.projects.create(ROLE, "T", "human", status="running", missie_impact="verzwakt")
     assert "pcard verzwakt" in P._proj_card(st, st.projects.get(pid), "TOK", "/")
-    pid2 = st.projects.create(ROLE, "T2", "human", status="queued", missie_impact="versterkt")
+    pid2 = st.projects.create(ROLE, "T2", "human", status="running", missie_impact="versterkt")
     assert "pcard verzwakt" not in P._proj_card(st, st.projects.get(pid2), "TOK", "/")   # alleen bij verzwakt
 
 
 def test_verzwakt_modal_infoblok_en_knop(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    pid = st.projects.create(ROLE, "T", "human", status="running", missie_impact="verzwakt")
     modal = P.render_project(st, pid, csrf_token="TOK")
     assert _VZ_TXT in modal and "Add to tactical meeting" in modal and "proj_agendeer_verzwakt" in modal
     # niet-verzwakt → geen infoblok (toets op de bloktekst, niet de CSS-klasse)
-    pid2 = st.projects.create(ROLE, "T2", "human", status="queued", missie_impact="versterkt")
+    pid2 = st.projects.create(ROLE, "T2", "human", status="running", missie_impact="versterkt")
     assert _VZ_TXT not in P.render_project(st, pid2, csrf_token="TOK")
 
 
 def test_agendeer_verzwakt_landt_in_backlog_zonder_overleg_te_openen(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Vegan-pagina", "human", status="queued", missie_impact="verzwakt")
+    pid = st.projects.create(ROLE, "Vegan-pagina", "human", status="running", missie_impact="verzwakt")
     _, msg = cockpit2.dispatch(dd, "proj_agendeer_verzwakt", {"pid": [pid], "next": ["/"]}, username="guest")
     w = cockpit2._Stores(dd).werk
     assert w.is_open(CIRCLE) is False                               # géén overleg geopend
@@ -332,14 +332,14 @@ def test_agendeer_verzwakt_landt_in_backlog_zonder_overleg_te_openen(tmp_path):
 def test_verzwakt_geen_blokkade_op_statuswissel(tmp_path):
     """Signaal, geen blokkade: een verzwakt project mag gewoon naar running (geen verstopte guard)."""
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    pid = st.projects.create(ROLE, "T", "human", status="running", missie_impact="verzwakt")
     assert st.projects.start(pid) is True
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "running"
 
 
 def test_proj_seteffort_zet_leegmaakt_en_weigert(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued")
+    pid = st.projects.create(ROLE, "T", "human", status="running")
     cockpit2.dispatch(dd, "proj_seteffort", {"pid": [pid], "number": ["2"], "unit": ["dagen"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["effort"] == {"hours": 16}   # 2 dagen × 8u
     cockpit2.dispatch(dd, "proj_seteffort", {"pid": [pid], "number": [""], "unit": ["uren"], "next": ["/"]}, username="guest")
@@ -350,7 +350,7 @@ def test_proj_seteffort_zet_leegmaakt_en_weigert(tmp_path):
 
 def test_effort_rij_in_impact_blok(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "T", "human", status="queued", effort="2d")
+    pid = st.projects.create(ROLE, "T", "human", status="running", effort="2d")
     modal = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     # legacy "2d" (16u) rendert als numeriek veld (getal 2 + dagen-toggle), geen pills meer
     assert "Effort" in modal and "value='proj_seteffort'" in modal

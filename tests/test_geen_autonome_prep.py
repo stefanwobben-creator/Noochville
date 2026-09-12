@@ -68,14 +68,14 @@ def test_tend_bereidt_geen_enkel_toekomst_project_voor(tmp_path, monkeypatch):
 def test_tend_voert_actief_werk_nog_steeds_uit(tmp_path, monkeypatch):
     """ACTIEF is wél toegewezen werk: dat blijft doorlopen."""
     inh, ledger, _prep, run = _build(tmp_path, monkeypatch)
-    pid = ledger.create("harry", "doel", "human", status="queued")
+    pid = ledger.create("harry", "doel", "human", status="running")
     inh._tend_projects()
     assert run == [pid]
 
 
 def test_tend_raakt_projecten_van_een_ander_niet(tmp_path, monkeypatch):
     inh, ledger, prep, run = _build(tmp_path, monkeypatch)
-    ledger.create("iemand_anders", "doel", "human", status="queued")
+    ledger.create("iemand_anders", "doel", "human", status="running")
     _future(ledger, 3, owner="iemand_anders")
     inh._tend_projects()
     assert prep == [] and run == []
@@ -90,7 +90,7 @@ def _activated(pid, owner="harry"):
 def test_activatie_bereidt_alsnog_voor_en_voert_uit(tmp_path, monkeypatch):
     """Zonder deze stap zou de mens na het slepen tot de volgende dagpuls (04:32) niets zien."""
     inh, ledger, prep, run = _build(tmp_path, monkeypatch)
-    pid = ledger.create("harry", "doel", "human", status="queued")
+    pid = ledger.create("harry", "doel", "human", status="running")
     inh._on_project_activated(_activated(pid))
     assert prep == [pid]
     assert run == [pid]
@@ -98,7 +98,7 @@ def test_activatie_bereidt_alsnog_voor_en_voert_uit(tmp_path, monkeypatch):
 
 def test_activatie_bereidt_niet_opnieuw_voor_met_bestaande_checklist(tmp_path, monkeypatch):
     inh, ledger, prep, run = _build(tmp_path, monkeypatch)
-    pid = ledger.create("harry", "doel", "human", status="queued")
+    pid = ledger.create("harry", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "item")
     inh._on_project_activated(_activated(pid))
@@ -108,7 +108,7 @@ def test_activatie_bereidt_niet_opnieuw_voor_met_bestaande_checklist(tmp_path, m
 
 def test_activatie_van_andermans_project_doet_niets(tmp_path, monkeypatch):
     inh, ledger, prep, run = _build(tmp_path, monkeypatch)
-    pid = ledger.create("iemand_anders", "doel", "human", status="queued")
+    pid = ledger.create("iemand_anders", "doel", "human", status="running")
     inh._on_project_activated(_activated(pid, owner="iemand_anders"))
     assert prep == [] and run == []
 

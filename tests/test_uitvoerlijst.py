@@ -101,7 +101,7 @@ def test_f_geen_lijsten_geen_uitvoerlijst(p):
 
 def test_g_aanwijzen_is_exclusief(tmp_path, ledger):
     """Twee vlaggen zou betekenen dat de volgorde in het bestand bepaalt welke lijst draait."""
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     a = ledger.checklist_add(pid, title="Functionaliteiten")
     b = ledger.checklist_add(pid, title="Acties uit overleg")
     assert ledger.set_checklist_uitvoer(pid, a["id"]) is True
@@ -114,7 +114,7 @@ def test_g_aanwijzen_is_exclusief(tmp_path, ledger):
 
 
 def test_h_aanwijzen_van_iets_dat_niet_bestaat(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title="Lijst")
     assert ledger.set_checklist_uitvoer(pid, "bestaat-niet") is False
     assert ledger.set_checklist_uitvoer("geen-project", cl["id"]) is False
@@ -132,7 +132,7 @@ def test_i_aanwijzen_is_een_schrijfpad(tmp_path, ledger):
 def test_j_de_rol_draait_een_hernoemde_lijst(tmp_path, ledger):
     """Nina's route: haar lijst heet anders, zij accepteert een aanbod, de rol pakt het op."""
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title="Acties uit overleg")
     ledger.check_add(pid, cl["id"], "bel de fabriek")                 # mens-item, geen skill
     assert inh._project_checklist(ledger.get(pid)) is None            # nog geen werk voor de rol
@@ -155,7 +155,7 @@ def test_k_geen_akkoord_poort_op_een_handgemaakte_lijst(tmp_path, ledger):
     draagt geen akkoord-vraag en hoort er ook geen te krijgen."""
     from nooch_village.projects import plan_wacht_op_akkoord
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title="What's needed")
     ledger.check_add(pid, cl["id"], "zoek uit", skill="openalex_evidence", payload={"term": "x"})
     assert plan_wacht_op_akkoord(ledger.get(pid)) is False
@@ -167,7 +167,7 @@ def test_l_het_plan_wint_van_een_los_lijstje(tmp_path, ledger):
     """Een project met zowel een gegenereerd plan als een eigen lijstje: de rol werkt het plan af,
     en de akkoord-poort blijft dus staan."""
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     eigen = ledger.checklist_add(pid, title="Acties uit overleg")
     ledger.check_add(pid, eigen["id"], "zoek uit", skill="openalex_evidence", payload={"term": "x"})
     plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE, akkoord=False)
@@ -189,7 +189,7 @@ def _html(ledger, pid, rw=True):
 
 
 def test_m_bij_een_lijst_geen_ruis(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title="Acties uit overleg")
     ledger.check_add(pid, cl["id"], "zoek uit", skill="openalex_evidence")
     html = _html(ledger, pid)
@@ -200,7 +200,7 @@ def test_m_bij_een_lijst_geen_ruis(tmp_path, ledger):
 def test_n_de_stille_valkuil_wordt_zichtbaar(tmp_path, ledger):
     """Zonder deze melding accepteer je een aanbod op de verkeerde lijst en gebeurt er nooit iets,
     zonder enig spoor. Dit raakt vandaag drie projecten."""
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, plan["id"], "a", skill="openalex_evidence")
     eigen = ledger.checklist_add(pid, title="Acties uit overleg")
@@ -222,7 +222,7 @@ def test_n_de_stille_valkuil_wordt_zichtbaar(tmp_path, ledger):
 
 def test_o_een_lijst_zonder_skill_items_krijgt_geen_knop(tmp_path, ledger):
     """De knop hoort alleen te staan waar hij iets oplost: een lijst met werk dat blijft liggen."""
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, plan["id"], "a", skill="openalex_evidence")
     notities = ledger.checklist_add(pid, title="Notities")
@@ -234,7 +234,7 @@ def test_o_een_lijst_zonder_skill_items_krijgt_geen_knop(tmp_path, ledger):
 
 
 def test_p_leesmodus_toont_de_stand_zonder_knop(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, plan["id"], "a", skill="openalex_evidence")
     eigen = ledger.checklist_add(pid, title="Acties uit overleg")

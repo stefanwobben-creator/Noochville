@@ -1,5 +1,5 @@
 """Autonome project-uitvoering: een rol werkt (omkeerbaar, tekst-only, met eigen capaciteit) aan
-z'n queued projecten. Nieuwe capaciteit/onomkeerbaar → KAN NIET → geblokkeerd voor de mens."""
+z'n actieve projecten. Nieuwe capaciteit/onomkeerbaar → KAN NIET → geblokkeerd voor de mens."""
 from __future__ import annotations
 
 from nooch_village.projects import ProjectLedger
@@ -24,10 +24,11 @@ def test_work_one_failclosed():
 
 def test_work_projects_voert_uit_blokkeert_en_is_idempotent(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
-    p_do = led.create("analyst", "Blog schrijven over veganisme", "human")       # queued
-    p_no = led.create("analyst", "Adverteren op Google", "human")                # queued
-    led.create("scout", "Iets afgeronds", "human", status="queued")
+    p_do = led.create("analyst", "Blog schrijven over veganisme", "human", status="running")   # actief
+    p_no = led.create("analyst", "Adverteren op Google", "human", status="running")            # actief
+    led.create("scout", "Iets anders", "human", status="running")                # actief, ook aan de beurt
     led.complete(led.create("librarian", "klaar", "human"))                      # done → niet oppakken
+    led.create("analyst", "Slaapt nog", "human")                                 # future → niet oppakken (scope 49)
 
     def fake_llm(prompt):
         return ("KAN NIET: advertentiebudget en een advertentietool"
@@ -46,6 +47,6 @@ def test_work_projects_voert_uit_blokkeert_en_is_idempotent(tmp_path):
 def test_work_projects_respecteert_limit(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
     for i in range(4):
-        led.create("analyst", f"project {i}", "human")     # queued
+        led.create("analyst", f"project {i}", "human", status="running")     # actief
     res = work_projects(led, records=None, llm_reason=lambda p: "LEVER: gedaan", limit=2)
     assert res["worked"] == 2 and res["skipped"] == 2

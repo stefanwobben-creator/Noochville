@@ -1258,7 +1258,8 @@ def _act_proj_add(c):
         scope = g("scope").strip()
         person, agent = _parse_trekker(g("trekker"))
         col = g("col")
-        create_status = "future" if col == "toekomst" else "queued"
+        # Alleen de deur ónder Active maakt meteen actief; alles anders begint slapend (scope 49).
+        create_status = "running" if col == "actief" else "future"
         orec = st.records.get(owner)
         if orec is not None and org.is_circle(orec):
             # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individueel Initiatief.
@@ -1617,27 +1618,35 @@ def _act_proj_dod(c):
         return nxt, "✓ saved"
 
 
+def archiveer(st, pj, pid: str) -> str:
+    """Een project het bord af, mét zijn signaal. ÉÉN plek, twee ingangen: de archiveer-knop en het
+    bevestigde (of bewust overgeslagen) verslag (scope 49: "als ik het rapport gemaakt heb, moet ie
+    eigenlijk worden gearchiveerd"). Geeft de melding terug.
+
+    Archiveren is het moment waarop een project echt het bord verlaat — dán hoort het (ook) als
+    signal op /signals te staan (founder, 19 jul). Idempotent: bestond het signaal al (done-hook of
+    eerdere archivering), dan gebeurt er niets; is het al verwerkt naar Oracle, dan komt het niet
+    terug (MECE — de inhoud telt al mee)."""
+    pj.archive(pid)
+    msg = "🗄 gearchiveerd (blijft bestaan)"
+    try:
+        from nooch_village.project_signal import signal_from_project
+        p = pj.get(pid)
+        if (p is not None and p.get("status") == "done"
+                and signal_from_project(st.radar, p)):
+            msg += " · 📡 placed as a signal on /signals"
+    except Exception:
+        logging.getLogger("cockpit2.signals").exception(
+            "project→signaal bij archiveren mislukt (pid=%s)", pid)
+    return msg
+
+
 def _act_proj_archive(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.archive(g("pid")); msg = "🗄 gearchiveerd (blijft bestaan)"
-        # Archiveren is het moment waarop een project echt het bord verlaat — dán hoort het
-        # (ook) als signal op /signals te staan (founder, 19 jul). Idempotent: bestond het
-        # signaal al (done-hook of eerdere archivering), dan gebeurt er niets; is het al
-        # verwerkt naar Oracle, dan komt het niet terug (MECE — de inhoud telt al mee).
-        try:
-            from nooch_village.project_signal import signal_from_project
-            p = pj.get(g("pid"))
-            if (p is not None and p.get("status") == "done"
-                    and signal_from_project(st.radar, p)):
-                msg += " · 📡 placed as a signal on /signals"
-        except Exception:
-            logging.getLogger("cockpit2.signals").exception(
-                "project→signaal bij archiveren mislukt (pid=%s)", g("pid"))
-        return nxt, msg
+        return nxt, archiveer(st, pj, g("pid"))
 
 
 def _act_proj_unarchive(c):
@@ -1810,7 +1819,10 @@ def _bevestig_met(c, oordeel: str):
         return nxt, "✗ unknown result value"
     if not store.confirm_concept(pid):
         return nxt, "✗ nothing to confirm"
-    return nxt, "✓ report confirmed"
+    # HET BEVESTIGDE VERSLAG SLUIT HET PROJECT AF (scope 49). Stefan: "als ik een project op done
+    # sleep kan ik het rapport maken; als ik dat gedaan heb moet ie eigenlijk worden gearchiveerd."
+    # De kolom Done toont daarmee precies de projecten waarvan het verslag nog moet.
+    return nxt, "✓ report confirmed · " + archiveer(st, st.projects, pid)
 
 
 def _act_verslag_bevestig_behaald(c):
@@ -1847,7 +1859,8 @@ def _act_verslag_overslaan(c):
                         bronnen=concept.get("bronnen") or [],
                         voorzet=concept.get("voorzet") or "")
     store.confirm_concept(pid)
-    return nxt, "✓ closed without a recorded result"
+    # Overslaan is ook een afsluiting: ook dan verlaat het project het bord (scope 49).
+    return nxt, "✓ closed without a recorded result · " + archiveer(st, st.projects, pid)
 
 
 def _act_verslag_bijwerken(c):
@@ -2468,7 +2481,7 @@ def _act_check_handoff(c):
         """Eén checklist-item doorgeven aan een rol of persoon.
 
         DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
-        een queued project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
+        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
         project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
 
         Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
@@ -5980,7 +5993,7 @@ def _act_ff_cluster(c):
             # Hetzelfde aanmaakpad als het projectenbord: een radar-onderwerp levert een echt
             # project op, geen aparte soort werk.
             ref = st.projects.create(rol, f"Onderzoek opkomend onderwerp: {onderwerp[:160]}",
-                                     "founder_flow", status="queued", origin="radar_cluster",
+                                     "founder_flow", status="future", origin="radar_cluster",
                                      done_when="we weten of dit onderwerp iets voor Nooch betekent",
                                      description=g("bewijs")[:600])
         st.radar_besluiten.zet(sleutel, keuze, onderwerp=onderwerp, door=username or "?", ref=ref)
@@ -7133,14 +7146,15 @@ def make_handler(data_dir: str, csrf_token: str,
                         activiteit = g1("activiteit").strip()
                         if activiteit not in (_doel.get("activiteiten") or []):
                             activiteit = ""
-                    # De kolom van de deur: Future → future, Waiting → geblokkeerd, anders actief.
-                    # Zelfde vertaling als proj_add had, want dit is de andere weg naar hetzelfde bord.
+                    # De kolom van de deur: Active → actief, Waiting → geblokkeerd, anders slapend
+                    # (Future). Zelfde vertaling als proj_add, want dit is de andere weg naar
+                    # hetzelfde bord. Slapend is de default (scope 49): een mens sleept naar Active.
                     col = g1("col")
                     # Titel = scope, done-when = de DoD (én de kop van het einddocument).
                     from nooch_village.projects import seed_document
                     pj = st.projects
                     pid = pj.create(role, titel, "human",
-                                    status=("future" if col == "toekomst" else "queued"),
+                                    status=("running" if col == "actief" else "future"),
                                     done_when=uitkomst, person=person or None,
                                     agent=agent or None, missie_impact=missie,
                                     business_impact=business)

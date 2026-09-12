@@ -56,7 +56,7 @@ def _inh(tmp_path, ledger, **settings):
 
 def _project(ledger, items):
     """items = [(tekst, skill|None)] — bouwt een ACTIEF project met een uitvoerplan."""
-    pid = ledger.create("compliance", "QR-codes op alle schoenen", "human", status="queued")
+    pid = ledger.create("compliance", "QR-codes op alle schoenen", "human", status="running")
     ledger.start(pid)
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     for tekst, skill in items:
@@ -132,7 +132,7 @@ def test_onuitvoerbare_payload_telt_ook_als_kansloos(tmp_path):
     """Zelfde zombie-familie: een item mét skill maar met payload_ok=False wordt door de uitvoerlus
     overgeslagen, dus het kan uit zichzelf nooit vooruit."""
     ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid = ledger.create("compliance", "doel", "human", status="queued")
+    pid = ledger.create("compliance", "doel", "human", status="running")
     ledger.start(pid)
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "onvolledig item", skill="claims_check", payload_ok=False)
@@ -216,7 +216,7 @@ def test_overdragen_maakt_een_project_bij_de_andere_rol(tmp_path):
 
     assert ok and "website_developer" in msg
     nieuw = [p for p in ledger.all() if p["owner"] == "website_developer"]
-    assert len(nieuw) == 1 and nieuw[0]["status"] == "queued"
+    assert len(nieuw) == 1 and nieuw[0]["status"] == "future"      # overgedragen werk slaapt tot de sleep (scope 49)
     assert nieuw[0]["origin"] == "projectverzoek" and pid in nieuw[0]["links"]
     assert _cl(ledger.get(pid), clid)["items"][0]["skipped"] is True   # telt hier niet meer mee
 
@@ -288,7 +288,7 @@ def _cockpit(tmp_path):
 
 
 def _mensproject(st):
-    pid = st.projects.create(ROLE, "iets met een mens-taak", "human", status="queued")
+    pid = st.projects.create(ROLE, "iets met een mens-taak", "human", status="running")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     st.projects.check_add(pid, cl["id"], "controleer de tekst", skill="content_check")

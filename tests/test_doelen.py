@@ -22,10 +22,10 @@ def _st(tmp_path):
     return dd, cockpit2._Stores(dd)
 
 
-def _proj(st, titel, status="queued", owner=ROL):
-    pid = st.projects.create(owner, titel, "human", status="queued", done_when="af")
-    if status == "running":
-        st.projects.start(pid)
+def _proj(st, titel, status="running", owner=ROL):
+    """`status`: "running" (actief) of iets anders (slapend in future) — geen queued meer (scope 49)."""
+    pid = st.projects.create(owner, titel, "human", status=("running" if status == "running" else "future"),
+                             done_when="af")
     return pid
 
 
@@ -81,7 +81,7 @@ def test_voortgang_is_afgeleid_uit_af_en_checklist_ratio(tmp_path):
     d = st.doelen.add("Batch 4", label="Batch 4")
     a = _proj(st, "Tongue label")           # af
     b = _proj(st, "Doos", "running")         # checklist 1 van 2
-    c = _proj(st, "Pers", "queued")          # niets meetbaars
+    c = _proj(st, "Pers", "future")          # niets meetbaars
     st.projects.set_doel(a, d["id"]); st.projects.set_doel(b, d["id"]); st.projects.set_doel(c, d["id"])
     st.projects.start(a); st.projects.complete(a)
     cl = st.projects.checklist_add(b, "tasks")["id"]

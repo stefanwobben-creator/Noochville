@@ -36,8 +36,8 @@ def test_elke_overgang_laat_een_regel_achter_met_wie(tmp_path):
     pl.start(pid, "stefan")
     pl.complete(pid, "af", door="stefan")
     log = pl.get(pid)["status_log"]
-    assert [e["naar"] for e in log] == ["queued", "running", "blocked", "running", "future", "running", "done"]
-    assert [e["van"] for e in log][1:] == ["queued", "running", "blocked", "running", "future", "running"]
+    assert [e["naar"] for e in log] == ["future", "running", "blocked", "running", "future", "running", "done"]
+    assert [e["van"] for e in log][1:] == ["future", "running", "blocked", "running", "future", "running"]
     assert log[3]["door"] == "lotte" and log[-1]["door"] == "stefan"
     assert all(e["at"] > 0 for e in log)
     # heropenen is ook een overgang
@@ -51,25 +51,25 @@ def test_dezelfde_status_is_geen_gebeurtenis(tmp_path):
     pl = _pl(tmp_path)
     pid = pl.create("rol", "Iets", "human")
     pl.start(pid); pl.start(pid)
-    assert [e["naar"] for e in pl.get(pid)["status_log"]] == ["queued", "running"]
+    assert [e["naar"] for e in pl.get(pid)["status_log"]] == ["future", "running"]
 
 
 def test_ook_de_machine_overgangen_lopen_door_de_setter(tmp_path):
-    """De rol die zelf begint (record_progress), de review-parkeerplaats, de scheduler (wait_for),
-    approve en accept_proposal: allemaal via `_zet_status`. De bron bewaakt dat er geen tweede
-    schrijfpad voor `status` bestaat."""
+    """De review-parkeerplaats, de scheduler (wait_for), approve en accept_proposal: allemaal via
+    `_zet_status`. De bron bewaakt dat er geen tweede schrijfpad voor `status` bestaat. De rol die
+    werkt (record_progress) verandert de status NIET meer: werk gebeurt aan een project dat een mens
+    actief maakte (scope 49)."""
     bron = inspect.getsource(P.ProjectLedger)
     assert bron.count('p["status"] = ') == 0, "een status-schrijf buiten _zet_status om"
     pl = _pl(tmp_path)
-    pid = pl.create("rol", "Iets", "human")
-    pl.record_progress(pid, "gedaan")                      # queued → running door de rol zelf
-    assert pl.get(pid)["status_log"][-1]["naar"] == "running"
-    assert pl.get(pid)["status_log"][-1]["door"] == "rol"
+    pid = pl.create("rol", "Iets", "human", status="running")
+    pl.record_progress(pid, "gedaan")                      # werk laat de status met rust
+    assert [e["naar"] for e in pl.get(pid)["status_log"]] == ["running"]
     pl.mark_awaiting_review(pid)
     assert pl.get(pid)["status_log"][-1] == {**pl.get(pid)["status_log"][-1], "naar": "blocked", "door": "review"}
     d = pl.create("rol", "Concept", "human", status="draft")
     pl.approve(d, "stefan")
-    assert pl.get(d)["status_log"][-1]["naar"] == "queued"
+    assert pl.get(d)["status_log"][-1]["naar"] == "future"        # goedgekeurd = slapend, tot de sleep
     v = pl.create("rol", "Voorstel", "role", status="proposed")
     pl.accept_proposal(v, person="p1")
     assert pl.get(v)["status_log"][-1] == {**pl.get(v)["status_log"][-1], "naar": "future", "door": "p1"}
@@ -106,17 +106,17 @@ def test_een_project_van_voor_het_log_gokt_niet(tmp_path):
 def test_dagen_per_status_telt_de_periodes(tmp_path):
     dag = 86400.0
     p = {"id": "z", "status": "done", "created_at": 0.0,
-         "status_log": [{"van": None, "naar": "queued", "at": 0.0},
-                        {"van": "queued", "naar": "running", "at": 2 * dag},
+         "status_log": [{"van": None, "naar": "future", "at": 0.0},
+                        {"van": "future", "naar": "running", "at": 2 * dag},
                         {"van": "running", "naar": "blocked", "at": 5 * dag},
                         {"van": "blocked", "naar": "running", "at": 6 * dag},
                         {"van": "running", "naar": "done", "at": 10 * dag}]}
-    assert P.dagen_per_status(p, now=20 * dag) == {"queued": 2.0, "running": 7.0, "blocked": 1.0}
+    assert P.dagen_per_status(p, now=20 * dag) == {"future": 2.0, "running": 7.0, "blocked": 1.0}
     # open project: de lopende periode telt tot nu
     q = {"id": "q", "status": "running", "created_at": 0.0,
-         "status_log": [{"van": None, "naar": "queued", "at": 0.0},
-                        {"van": "queued", "naar": "running", "at": 1 * dag}]}
-    assert P.dagen_per_status(q, now=4 * dag) == {"queued": 1.0, "running": 3.0}
+         "status_log": [{"van": None, "naar": "future", "at": 0.0},
+                        {"van": "future", "naar": "running", "at": 1 * dag}]}
+    assert P.dagen_per_status(q, now=4 * dag) == {"future": 1.0, "running": 3.0}
     # een oud project waarvan het log pas later begint: de periode ervóór krijgt de status die de
     # eerste regel als `van` noemt, vanaf created_at
     r = {"id": "r", "status": "done", "created_at": 0.0,
@@ -177,7 +177,7 @@ def test_de_export_geeft_een_regel_per_overgang(tmp_path, monkeypatch, capsys):
     cli.main()
     rijen = list(csv.DictReader(io.StringIO(capsys.readouterr().out)))
     mijn = [r for r in rijen if r["pid"] == pid]
-    assert [r["naar"] for r in mijn] == ["queued", "running", "done"]
+    assert [r["naar"] for r in mijn] == ["future", "running", "done"]
     assert mijn[0]["doel"] == "MITH" and mijn[0]["werkpakket"] == "WP1" and mijn[-1]["door"] == "stefan"
     assert all(r["bron"] == "log" and r["wanneer"] for r in mijn)
     oude = [r for r in rijen if r["pid"] == oud]

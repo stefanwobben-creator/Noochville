@@ -145,7 +145,6 @@ class WebsiteWatcherWorker(Inhabitant):
         finally:
             self._busy = False
         self._maybe_reflect(None)
-        self._scan_queued_projects(None)
 
     def _surface_locale(self, plausible: dict) -> None:
         """Duid de bezoekersdata per locale (Plausible country-breakdown). De capaciteit zit al

@@ -10,11 +10,11 @@ def ledger(tmp_path):
     return ProjectLedger(str(tmp_path / "projects.json"))
 
 
-def test_human_create_queued(ledger):
+def test_human_create_future(ledger):
     pid = human_create(ledger, "website_watcher", "schrijf vegan-pagina")
     p = ledger.get(pid)
     assert p is not None
-    assert p["status"]  == "queued"
+    assert p["status"]  == "future"
     assert p["owner"]   == "website_watcher"
     assert p["scope"]   == "schrijf vegan-pagina"
     assert p["trigger"] == "human"

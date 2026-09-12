@@ -3,7 +3,7 @@
 Twee bronnen worden omgezet in voorgestelde projecten. Een voorstel komt NOOIT vanzelf op het
 actieve bord: het krijgt status `proposed`, en die status staat bewust buiten élke autonome lus
 (`board_loop.activate_pulse` kijkt alleen naar future/blocked, `Inhabitant._tend_projects` naar
-future/queued/running, `project_worker._eligible` naar queued/running). De mens accepteert of wijst
+future/running, `project_worker._eligible` naar running-en-nog-niet-gewerkt). De mens accepteert of wijst
 af in de review-baan van de cockpit.
 
 Bron 1 — **radar** (default aan): signalen met status `goedgekeurd` die nog geen voorstel opleverden.

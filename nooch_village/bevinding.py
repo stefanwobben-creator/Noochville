@@ -38,7 +38,7 @@ CALL_SITE = "bevinding_herschrijf"
 JARGON = (
     "payload", "checklist-item", "hop-limiet", "capability", "deliverable", "done-when",
     "done_when", "required_payload", "no_data", "fail-closed", "dry-run", "ledger", "store",
-    "queued", "blocked", "notificatie", "escalatie", "poort", "dispatch", "record-id",
+    "blocked", "notificatie", "escalatie", "poort", "dispatch", "record-id",
     "project_id", "skill-run", "match", "roster", "kern", "snippet",
 )
 

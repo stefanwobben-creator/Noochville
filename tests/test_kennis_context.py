@@ -115,7 +115,7 @@ def _project_setup(tmp_path, scope):
     recs = Records(str(tmp_path / "gov.json"))
     recs.put(Record(id="scout", type=RecordType.ROLE, parent=None,
                     definition=RoleDefinition(purpose="speur")))
-    pid = led.create("scout", scope, "human", status="queued")
+    pid = led.create("scout", scope, "human", status="running")
     return led, recs, pid
 
 

@@ -95,7 +95,7 @@ def _inhabitant(tmp_path, ledger, **settings):
 
 
 def _seed_done(ledger, owner, scope, keyword, note_text):
-    pid = ledger.create(owner, scope, "human", status="queued", keyword=keyword)
+    pid = ledger.create(owner, scope, "human", status="running", keyword=keyword)
     ledger.add_role_message(pid, note_text)
     ledger.get(pid)["status"] = "done"
     ledger._save()

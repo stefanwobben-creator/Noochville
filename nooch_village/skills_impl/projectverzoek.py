@@ -3,7 +3,7 @@
 De knel: een rol raakt in een project een deel-item dat geen van haar skills kan uitvoeren maar dat
 duidelijk binnen een andere rol valt (bv. Compliance die een QR-code + webpagina nodig heeft — werk
 van de website-rol). Er was geen toegepaste manier om die spanning door te geven, dus het project liep
-dood op 'geen skill'. Deze skill maakt de handoff waar: hij zet een queued project op het bord van de
+dood op 'geen skill'. Deze skill maakt de handoff waar: hij zet een slapend project op het bord van de
 doelrol, met een terugverwijzing. Die rol pakt het via haar eigen ritme op; de vragende rol heeft haar
 deel gedaan (doorgegeven) en kan verder. Zo bewegen spanningen eindelijk tússen rollen i.p.v. alleen
 naar de founder.
@@ -20,7 +20,7 @@ class ProjectverzoekSkill(Skill):
     cost = "free"
     side_effect_free = False        # zet een project op het bord van een andere rol
     description = ("Draag een deel-item dat bij een ANDERE rol hoort over als projectverzoek: zet een "
-                   "queued project op het bord van die rol, met een terugverwijzing. Gebruik dit voor een "
+                   "project in Future op het bord van die rol, met een terugverwijzing. Gebruik dit voor een "
                    "item dat geen van jouw skills kan uitvoeren maar binnen een andere bestaande rol valt "
                    "(geef de rol-id in naar_rol). Zo loopt een project niet dood op werk dat elders hoort.")
     input_schema = ("naar_rol: str (verplicht — de rol-id die dit werk oppakt); "

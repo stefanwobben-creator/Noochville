@@ -278,7 +278,7 @@ class _Ledger(_Projects):
         # dat kwam pas op prod boven. Het dubbel toetst het nu ook.
         assert trigger in {"clock", "human", "noochie", "tension", "role"}, trigger
         pid = f"new{len(self.gemaakt)}"
-        self._p[pid] = {"id": pid, "owner": owner, "scope": scope, "status": "queued"}
+        self._p[pid] = {"id": pid, "owner": owner, "scope": scope, "status": "future"}
         self.gemaakt.append((owner, scope, trigger, origin))
         return pid
 

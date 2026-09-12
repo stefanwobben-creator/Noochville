@@ -192,7 +192,7 @@ def test_geslaagde_herdraai_wist_de_oude_leeg_markering(tmp_path):
     dat is een gat dat inmiddels gedicht is."""
     from nooch_village.projects import ProjectLedger
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("rol", "doel", "human", status="queued")
+    pid = led.create("rol", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="t")
     led.check_add(pid, cl["id"], "taak", skill="x")
     iid = led.get(pid)["checklists"][0]["items"][0]["id"]

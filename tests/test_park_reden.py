@@ -18,7 +18,7 @@ from nooch_village.projects import ProjectLedger
 
 def _project(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("rol", "doel", "human", status="queued")
+    pid = led.create("rol", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     led.check_add(pid, cl["id"], "haal de patenten op", skill="epo_patents")
     led.check_add(pid, cl["id"], "bel de fabriek")
@@ -139,7 +139,7 @@ def test_een_item_kan_alsnog_als_mens_werk_gemarkeerd_worden(tmp_path):
     labwerk. Zonder deze setter is de enige uitweg het hele project naar de backlog schuiven — en
     dan verdwijnt ook het deel dat een rol wél kan oppakken."""
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("rol", "doel", "human", status="queued")
+    pid = led.create("rol", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     led.check_add(pid, cl["id"], "ontwerp een testprotocol")
     led.check_add(pid, cl["id"], "voer 5 testrondes uit")
@@ -159,7 +159,7 @@ def test_een_mens_taak_telt_niet_mee_in_de_klaar_telling(tmp_path):
     """Anders houdt hij het project eeuwig onaf — precies de zombie die de klep moet voorkomen."""
     from nooch_village.projects import checklist_progress
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("rol", "doel", "human", status="queued")
+    pid = led.create("rol", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     led.check_add(pid, cl["id"], "rol-werk", skill="x")
     led.check_add(pid, cl["id"], "labwerk")

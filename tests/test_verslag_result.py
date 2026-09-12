@@ -27,7 +27,7 @@ def _st(tmp_path):
 
 
 def _afgesloten(dd, st, *, doc="", items=(("A", True),)):
-    pid = st.projects.create(ROLE, "Sluitstuk", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Sluitstuk", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     for tekst, _ in items:
@@ -599,7 +599,7 @@ def test_een_enkele_post_legt_het_oordeel_vast_en_bevestigt(tmp_path):
 
 def test_zonder_wachtend_concept_een_nette_weigering(tmp_path):
     dd, st = _st(tmp_path)
-    pid = st.projects.create(ROLE, "Leeg", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Leeg", "human", status="running", done_when="af")
     _, msg = cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]},
                                username="guest")
     assert cockpit2.is_weigering(msg), msg

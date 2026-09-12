@@ -5,7 +5,7 @@ experiment zolang het OMKEERBAAR is en geen domein van een ander schendt. Een ac
 daarvoor NIET nodig (accountability = verwachting, geen toestemming).
 
 Grenzen die hier hard bewaakt worden:
-- Alleen `queued` projecten (die zijn door de omkeerbaarheidspoort als omkeerbaar gemarkeerd).
+- Alleen ACTIEVE projecten (`running`) die nog niet gewerkt zijn; een mens zette ze actief.
 - De rol levert UITSLUITEND tekst (een deliverable / next action / analyse) met zijn BESTAANDE
   capaciteit (LLM-redenering). Geen externe write-API's, geen code, geen nieuwe skills, niets
   onomkeerbaars — dat blijft mens-gated (geboren-vs-bemenst).
@@ -15,6 +15,8 @@ Grenzen die hier hard bewaakt worden:
 """
 from __future__ import annotations
 import re
+
+from nooch_village.projects import LOPEND
 
 # Het CONTRACT met de prompt is nu de Engelse marker "CANNOT:" — de prompt is Engels, dus vecht je
 # niet langer tegen het model (i18n 2C). De markers zijn puur vluchtige parse-tokens: `work_one`
@@ -90,11 +92,11 @@ def _persona_for(rec, personas) -> str:
 def _eligible(p, threshold: int) -> bool:
     """Wie pakt de rol op deze puls op? Gewone projecten één keer (idempotent via 'worked').
     Experimenten elke puls opnieuw, tot ze de stol-drempel halen — zo telt de herhaling mee."""
-    if p.get("status") not in ("queued", "running"):
+    if p.get("status") not in LOPEND:
         return False
     if p.get("origin") == "experiment":
         return not p.get("formalized") and int(p.get("executions", 0)) < threshold
-    return p.get("status") == "queued" and not p.get("worked")
+    return not p.get("worked")                 # één keer; `worked` is het idempotentie-anker
 
 
 def _raadpleeg_kennis(ledger, p: dict, owner: str, data_dir, bus) -> str:
