@@ -8,6 +8,11 @@ voor die per item tegen de skills van de rol wordt getoetst. Deze module is puur
 Bewust in het cockpit synchroon (de mens wacht en verwacht dat de AI meedenkt — zoals spelvraag),
 niet op de daemon. Fail-soft: valt de LLM weg, dan krijg je het ruwe idee / een leeg plan terug
 i.p.v. een fout, en kan de mens alsnog handmatig verder.
+
+HET MODEL PRAAT ALLEEN VÓÓR HET OPSLAAN. `sharpen_outcome` zet een suggestie in het veld dat de
+mens ziet; wat er bij het opslaan in dat veld staat is de titel, letterlijk. Er was hier een
+`title_from` dat bij /wizard/create de formulering nog eens samenvatte, ongevraagd en onzichtbaar
+tot het op het bord stond; die is op 12 september 2026 verwijderd (Stefan: "dat moet nooit mogen").
 """
 from __future__ import annotations
 
@@ -325,30 +330,6 @@ def guess_impact(idee: str, *, rol: str = "", reason_fn=reason) -> dict:
     if waarom:
         uit["waarom"] = waarom[:160]
     return uit
-
-
-def title_from(dod: str, *, reason_fn=reason) -> str:
-    """Leid een korte, outcome-gerichte titel (max ~8 woorden) af uit de uitgebreide DoD.
-    Fail-soft: valt de LLM weg, dan het eerste zinsdeel, ingekort.
-
-    DE PROMPT IS ENGELS SINDS 06-09-2026, en dat was een gemiste plek in #466. `sharpen_outcome`
-    hierboven ging wél om ("Always answer in English"), deze niet. Het gevolg stond meteen op het
-    bord: een Engelse uitkomst ging erin en er kwam "Barefoot sneaker trend onderzoek afgerond" uit,
-    half Engels half Nederlands. Een model antwoordt in de taal waarin je het vraagt, ook als de
-    invoer een andere taal heeft — de invoer is voor hem materiaal, de prompt is de opdracht."""
-    dod = (dod or "").strip()
-    if not dod:
-        return ""
-    out = reason_fn(
-        "Summarize this project outcome as a SHORT title of at most 8 words. Outcome-oriented and "
-        "concrete, not a verb instruction, no full stop at the end, no quotation marks. Always "
-        "answer in English, whatever language the outcome below is written in.\n\n"
-        f"OUTCOME: {dod}\n\nOUTPUT: the title only.",
-        max_tokens=30, call_site="wizard_title")
-    t = re.sub(r"\s+", " ", (out or "")).strip().strip('"“”‘’. ').strip()
-    if not t:
-        t = re.split(r"[.,:;]", dod)[0].strip()
-    return (t or dod)[:80]
 
 
 def _catalog_block(catalog: list[dict]) -> str:

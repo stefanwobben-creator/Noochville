@@ -156,19 +156,16 @@ def test_elk_thema_kent_beide_talen():
 
 # ── De laatste Nederlandse prompt, en de vangrail eronder ────────────────────────────────────────
 
-def test_wizard_title_vraagt_in_het_engels():
-    """GEMETEN AANLEIDING (6 sept, eerste echte gebruik na #466). `sharpen_outcome` ging om, maar
-    `title_from` niet. Er ging een Engelse uitkomst in en er kwam "Barefoot sneaker trend onderzoek
-    afgerond" uit: half Engels, half Nederlands, boven aan de projectkaart.
-
-    Een model antwoordt in de taal waarin je het VRAAGT, ook als de invoer een andere taal heeft.
-    De invoer is materiaal, de prompt is de opdracht. Daarom staat de taalregel expliciet in de
-    prompt en niet impliciet in de invoer."""
+def test_de_wizard_vat_de_titel_niet_meer_samen():
+    """`title_from` bestond: een tweede modelrondje bij /wizard/create dat de formulering samenvatte
+    tot een titel, ongevraagd en pas zichtbaar op het bord (6 sept: "Barefoot sneaker trend onderzoek
+    afgerond", half Engels half Nederlands). Op 12 september is dat weggehaald, want de titel is wat
+    de mens in het veld liet staan. Deze test houdt de deur dicht: geen samenvat-stap terug, onder
+    welke naam dan ook."""
     s = _src("wizard.py")
-    blok = s.split("def title_from")[1].split("def ")[0]
-    assert "Always answer in English" in blok
-    assert "OUTCOME:" in blok and "UITKOMST:" not in blok
-    assert "Vat deze" not in blok
+    assert "def title_from" not in s
+    assert "wizard_title" not in s and "wizard_title" not in _src("cockpit2.py")
+    assert "SHORT title" not in s and "Summarize this project outcome" not in s
 
 
 def test_geen_nederlandse_prompt_meer_bij_een_reason_aanroep():

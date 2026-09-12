@@ -439,6 +439,11 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         return ""
     from urllib.parse import urlencode
     vraag = {"role": owner}
+    # DE KOLOM REIST MEE. Tot 12 sep 2026 niet: "+ add project" onder Future maakte een project in
+    # Active (de wizard kende alleen queued), terwijl het oude formulier hier wél `col` doorgaf.
+    # Stefan: "dan neemt ie dat niet over." Active blijft de default, dus alleen de twee andere.
+    if col in ("toekomst", "wacht"):
+        vraag["col"] = col
     if trekker:
         vraag["trekker"] = trekker
     href = "/project/nieuw?" + urlencode(vraag)

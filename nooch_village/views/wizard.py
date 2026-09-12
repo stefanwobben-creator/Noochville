@@ -15,6 +15,7 @@ from nooch_village.web_base import _e, _page
 
 
 from nooch_village.cockpit2_util import _name, _rol_labels    # één naamregel, geen tweede vorm
+from nooch_village.views.projects import _EFFORT_ENUM_HOURS    # één uren-tabel, ook voor de AI-gok
 
 
 II_PREFIX = "ii:"          # Individueel Initiatief: werk onder de cirkel, zonder rol
@@ -101,10 +102,27 @@ def _js(tekst: str) -> str:
     return json.dumps(tekst or "")[1:-1]
 
 
+KOLOMMEN = ("toekomst", "wacht")   # de kolommen die de wizard van het bord overneemt (actief = default)
+
+
+def _doel_options(st) -> tuple[str, str]:
+    """De open doelen als <option>s plus de werkpakketten per doel als JSON, voor de Goal-keuze in de
+    wizard (Stefan, 12 sep: "hier ook alvast de koppeling met een doel kunnen maken"). Korte sleutels
+    in de JSON (`w`), geen `label:` — de wizard-pagina mag dat woord niet als state dragen."""
+    try:
+        open_ = [d for d in st.doelen.all() if d.get("status") == "open"]
+    except Exception:                                    # noqa: BLE001 — geen doelen is geen fout
+        open_ = []
+    opts = "".join(f"<option value='{_e(d['id'])}' title='{_e(d['titel'])}'>"
+                   f"{_e(d.get('label') or d['titel'])} · {_e(d['titel'][:60])}</option>" for d in open_)
+    wps = {d["id"]: {"w": list(d.get("activiteiten") or [])} for d in open_}
+    return opts, json.dumps(wps)
+
+
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
                   ruw: str = "", uitkomst: str = "", trekker: str = "", nid: str = "",
                   vervullers: dict | None = None,
-                  eigen: list | None = None) -> str:
+                  eigen: list | None = None, col: str = "") -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
     gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
@@ -116,11 +134,16 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     Er zijn geen stappen meer: alles staat in één form, met de snelle route bovenaan en de
     verrijking opgevouwen eronder. De voorvulling landt in de velden; opslaan kan meteen.
 
+    `col` is de bordkolom waar de "+ add project"-deur stond (`toekomst` of `wacht`): die neemt
+    het project over, precies zoals het kale formulier dat deed. Zonder kolom: actief.
+
     De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
     hangen die het stylesheet nog niet had). Dezelfde URL = één download, geen dubbele kost."""
     role_opts = _role_options(st, circle=ii_cirkel(role), eigen=eigen)
     trek_opts = _trekker_options(st)
+    doel_opts, doel_wps = _doel_options(st)
+    col = col if col in KOLOMMEN else ""
     # EEN `ii:<cirkel>`-EIGENAAR IS EEN GELDIGE VOORSELECTIE. Hij staat niet in de records (het is
     # geen rol), dus de check hieronder wees hem af en je viel terug op "Pick a role…" — precies de
     # context die het bord al wist, weggegooid bij de klik.
@@ -144,6 +167,10 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__VERVULLERS__", json.dumps(vervullers or {})) \
                     .replace("__UIT__", _js(uitkomst)) \
                     .replace("__TREKKER__", _js(trekker)) \
+                    .replace("__DOELEN__", doel_opts) \
+                    .replace("__DOELWPS__", doel_wps) \
+                    .replace("__EFFORT_UREN__", json.dumps(_EFFORT_ENUM_HOURS)) \
+                    .replace("__COL__", _e(col)) \
                     .replace("__ROLE__", _e(pre))
     if fragment:
         return _DS_LINK + body
@@ -161,7 +188,10 @@ _WIZ_HTML = r"""
 <script data-modal-run>
 (function(){
 const CSRF="__CSRF__";
-const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
+const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__", DOELOPTS="__DOELEN__";
+// Werkpakketten per doel (id → {w:[…]}), en de uren achter de AI-gok (1u/1d/2d/1w → uren), allebei
+// uit de server: één tabel, geen tweede in de browser.
+const DOELWPS=__DOELWPS__, EFFORT_UREN=__EFFORT_UREN__;
 // Alleen rollen met TWEE of meer vervullers (cockpit2.vervullers_map). Bij één is er
 // niets te kiezen — die staat al als default in S.trekker — en bij nul niets te tonen.
 const VERVULLERS=__VERVULLERS__;
@@ -169,9 +199,10 @@ const VERVULLERS=__VERVULLERS__;
 // project op het bord te krijgen, en elke stap was een plek om te blijven hangen. Nu staat de
 // hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
-const S={ruw:"__RUW__",uitkomst:"__UIT__",nid:"__NID__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
+const S={ruw:"__RUW__",ruwEigen:"",uitkomst:"__UIT__",nid:"__NID__",titel:"",checklist:[],planfout:"",
+         uren:"",eenheid:"uren",missie:"",
          business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,
+         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,col:"__COL__",doel:"",wp:"",
          trekker:"__TREKKER__",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -181,7 +212,10 @@ async function post(url,obj,ms){
     const b=new URLSearchParams({csrf:CSRF,...obj});
     const r=await fetch(url,{method:'POST',signal:ctl.signal,
       headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
-    if(!r.ok)return {__fout:'the assistant could not be reached'};
+    // Een 4xx draagt een reden ("this role has 2 fillers — pick an owner"): die hoort de mens te
+    // lezen, niet "could not be reached". Alleen zonder reden valt hij terug op de generieke tekst.
+    if(!r.ok){let e='';try{e=String((await r.json()).error||'');}catch(_){}
+      return {__fout:e||('the assistant could not be reached ('+r.status+')')};}
     return await r.json();
   }catch(e){return {__fout:(e&&e.name==='AbortError')?'the assistant took too long':'the assistant could not be reached'};}
   finally{if(t)clearTimeout(t);}
@@ -210,36 +244,52 @@ function stelKnop(){
   b.disabled=!kanOpslaan()||S.bezig;
 }
 
+// DE SUGGESTIE LANDT IN HET VELD WAAR JE TYPT, en dat veld is wat op het bord komt. Stefan (12 sep):
+// "nu kan ik niet zien welke ik toevoeg" — de suggestie stond in het kleine Done-when-veld (één regel,
+// dus half zichtbaar) en het idee zelf ging nergens heen. Nu: ✨ herschrijft je idee ter plekke, je
+// leest precies wat er op het bord komt, en je eigen woorden staan één klik verderop (`terug()`).
 async function scherp(){
   lees();
   if(!S.ruw)return;
-  const veld=document.getElementById('wz-uit'), knop=document.getElementById('wz-ai');
+  const veld=document.getElementById('wz-ruw'), knop=document.getElementById('wz-ai');
   if(knop){knop.disabled=true;knop.textContent='✨ thinking…';}
   const r=await post('/wizard/sharpen',{ruw:S.ruw},AI_TIMEOUT_MS);
   if(knop){knop.disabled=false;knop.textContent='✨ suggest';}
   const hint=document.getElementById('wz-aihint');
   if(r&&r.__fout){if(hint)hint.textContent='✨ '+r.__fout+' — type it yourself, saving still works.';return;}
-  if(hint)hint.textContent='';
-  if(veld&&r&&r.uitkomst){veld.value=r.uitkomst;S.uitkomst=r.uitkomst;stelKnop();}
+  if(veld&&r&&r.uitkomst){
+    if(!S.ruwEigen)S.ruwEigen=S.ruw;          // jouw woorden, bewaard voor de terugweg
+    veld.value=r.uitkomst;S.ruw=r.uitkomst;stelKnop();
+    if(hint)hint.innerHTML='✨ suggestion written above — edit it, or <a href="#" onclick="terug();return false;">put your own words back</a>.';
+  }else if(hint){hint.textContent='';}
+}
+function terug(){
+  const veld=document.getElementById('wz-ruw'), hint=document.getElementById('wz-aihint');
+  if(!S.ruwEigen)return;
+  if(veld)veld.value=S.ruwEigen; S.ruw=S.ruwEigen; S.ruwEigen=""; if(hint)hint.textContent=''; stelKnop();
 }
 
 function form(){
   card().innerHTML=`
   <div class="wz-k">New project</div>
   <h2>What do you want to achieve?</h2>
-  <div class="wz-clab">Your idea</div>
-  <textarea id="wz-ruw" rows="2" placeholder="e.g. look into biodegradable soles"
+  <div class="wz-clab">Your project <span class="wz-hint">— on the board exactly as written</span></div>
+  <div class="wz-add"><textarea id="wz-ruw" rows="2" placeholder="e.g. biodegradable soles explored"
     oninput="stelKnop()">${esc(S.ruw)}</textarea>
-
-  <div class="wz-clab">Done when <span class="wz-hint">— optional, ✨ can suggest one</span></div>
-  <div class="wz-add"><input id="wz-uit" value="${esc(S.uitkomst)}"
-      placeholder="you'll know it's done when…" oninput="stelKnop()">
     <button type="button" id="wz-ai" onclick="scherp()">✨ suggest</button></div>
   <p class="wz-hint" id="wz-aihint"></p>
 
+  <div class="wz-clab">Done when <span class="wz-hint">— optional</span></div>
+  <input id="wz-uit" value="${esc(S.uitkomst)}"
+      placeholder="you'll know it's done when…" oninput="stelKnop()">
+
   <div class="wz-clab">For which role?</div>
-  <select id="wz-role" onchange="S.role=this.value;stelKnop()">
+  <select id="wz-role" onchange="S.role=this.value;toonWie();stelKnop()">
     <option value="">Pick a role…</option>${ROLEOPTS}</select>
+  ${DOELOPTS?`<div class="wz-clab">Goal <span class="wz-hint">— optional</span></div>
+  <select id="wz-goal" onchange="S.doel=this.value;S.wp='';toonWp()">
+    <option value="">— no goal —</option>${DOELOPTS}</select>
+  <div id="wz-wp"></div>`:''}
 
   <div class="wz-foot"><button class="wz-btn" id="wz-save" onclick="maak()">Put on the board</button></div>
 
@@ -252,12 +302,23 @@ function form(){
   `;
   const sel=document.getElementById('wz-role');
   if(S.role){sel.value=S.role;}
-  toonWie(); impact(); stelKnop();
+  const gs=document.getElementById('wz-goal'); if(gs&&S.doel){gs.value=S.doel;}
+  toonWie(); toonWp(); impact(); stelKnop();
   const t=document.getElementById('wz-ruw'); if(t&&!S.ruw)t.focus();
 }
 function toonWie(){
+  // De kop zegt waar het landt: de rol, en de kolom als de deur niet in "Active" stond.
   const sel=document.getElementById('wz-role'), w=document.getElementById('wzwho');
-  if(sel&&w)w.textContent=(sel.selectedOptions[0]&&sel.value)?sel.selectedOptions[0].text:'';
+  const kol=S.col==='toekomst'?' · Future':(S.col==='wacht'?' · Waiting':'');
+  if(sel&&w)w.textContent=((sel.selectedOptions[0]&&sel.value)?sel.selectedOptions[0].text:'')+kol;
+}
+// HET WERKPAKKET HOORT BIJ HET DOEL: de keuzelijst verschijnt alleen als het gekozen doel er heeft.
+function toonWp(){
+  const el=document.getElementById('wz-wp'); if(!el)return;
+  const w=(DOELWPS[S.doel]||{}).w||[];
+  if(!S.doel||!w.length){el.innerHTML='';S.wp='';return;}
+  el.innerHTML=`<div class="wz-clab">Work package</div><select id="wz-wpsel" onchange="S.wp=this.value">
+    <option value="">—</option>${w.map(x=>`<option value="${esc(x)}"${S.wp===x?' selected':''}>${esc(x)}</option>`).join('')}</select>`;
 }
 
 // De GOK laadt pas als je de sectie opent — net als de checklist. Geen model betekent lege chips
@@ -270,14 +331,22 @@ async function schat(){
   const r=await post('/wizard/impact',{idee:idee,role:S.role},AI_TIMEOUT_MS);
   if(r&&r.__fout){impact('✨ '+r.__fout+' — set it yourself, or leave it empty.');return;}
   // Alleen overnemen wat de mens nog niet zelf koos: een gok mag geen keuze overschrijven.
-  ['tijd','missie','business'].forEach(k=>{if(!S[k]&&r&&r[k])S[k]=r[k];});
+  ['missie','business'].forEach(k=>{if(!S[k]&&r&&r[k])S[k]=r[k];});
+  // De gok komt als bucket (1u/1d/2d/1w); het veld is een getal. Vertalen via de servertabel.
+  if(!S.uren&&r&&r.tijd&&EFFORT_UREN[r.tijd]){S.uren=String(EFFORT_UREN[r.tijd]);S.eenheid='uren';}
   S.waarom=(r&&r.waarom)||'';
   impact();
 }
+function uren(){
+  // Het getal in het veld, in uren (dagen × 8, zoals proj_seteffort). Leeg of onzin → 0.
+  const n=parseFloat(String(S.uren||'').replace(',','.')); if(!(n>0))return 0;
+  return Math.round(n*(S.eenheid==='dagen'?8:1));
+}
 function label(){
   // Afgeleid, nooit opgeslagen: als het getal verandert verandert het label vanzelf mee.
-  if((S.tijd==='1u'||S.tijd==='1d')&&S.business==='hoog')return 'Quick win';
-  if(S.tijd==='1w'&&S.business==='laag')return 'Slow burner';
+  const h=uren();
+  if(h&&h<=8&&S.business==='hoog')return 'Quick win';
+  if(h>=40&&S.business==='laag')return 'Slow burner';
   return '';
 }
 function impact(melding){
@@ -288,7 +357,10 @@ function impact(melding){
     :(S.waarom?`<p class="wz-hint">${kop}✨ guessed: ${esc(S.waarom)} — one tap to change.</p>`
               :(lbl?`<p class="wz-hint">${kop}</p>`:''));
   el.innerHTML=`${uitleg}
-   <div class="wz-clab">Time</div><div class="wz-chips">${chip('tijd','1u','1 hour')}${chip('tijd','1d','1 day')}${chip('tijd','2d','2 days')}${chip('tijd','1w','1 week')}</div>
+   <div class="wz-clab">Time <span class="wz-hint">— a number, in hours or days</span></div>
+   <div class="wz-add"><input type="number" id="wz-uren" min="0" step="1" placeholder="0" value="${esc(S.uren)}"
+     oninput="S.uren=this.value" onchange="impact()">
+     <select id="wz-eenheid" onchange="S.eenheid=this.value;impact()"><option value="uren"${S.eenheid==='uren'?' selected':''}>hours</option><option value="dagen"${S.eenheid==='dagen'?' selected':''}>days</option></select></div>
    <div class="wz-clab">Mission impact</div><div class="wz-chips">${chip('missie','versterkt','Strengthens')}${chip('missie','neutraal','Neutral')}${chip('missie','verzwakt','Weakens')}</div>
    <div class="wz-clab">Business impact</div><div class="wz-chips">${chip('business','hoog','High')}${chip('business','medium','Medium')}${chip('business','laag','Low')}</div>`;
 }
@@ -296,17 +368,16 @@ function impact(melding){
 // OPENEN IS TYPEN. Hier stond een wachtscherm: "✨ maakt een checklist…" met een spinner van
 // maximaal twaalf seconden, en pas daarna kon je iets. Dat is de AI vóór de mens zetten bij een
 // lijstje afvinken. Nu is de lijst meteen bruikbaar — het invoerveld staat er direct, met de
-// cursor erin — en komen de suggesties er los bij als "tik om toe te voegen".
-//
-// De AI blokkeert dus nooit meer: hij haalt je in, of hij haalt je niet in. Beide zijn goed.
+// cursor erin — en de suggesties komen er ALLEEN OP VERZOEK bij (Stefan, 12 sep: "met een knop de
+// AI-suggestie in werking zetten"), als "tik om toe te voegen". Openen draait dus geen model.
 async function checklist(){
   if(S.checkInit)return; S.checkInit=true;
   draw();
-  suggesties();                       // BEWUST niet ge-await: de lijst is al bruikbaar
 }
 async function suggesties(){
   lees();
-  const idee=(S.uitkomst||S.ruw); if(!idee)return;
+  const idee=(S.uitkomst||S.ruw); if(!idee){S.planfout='type your project first';drawSug();return;}
+  if(S.sugBezig)return;
   S.sugBezig=true; drawSug();
   const r=await post('/wizard/plan',{uitkomst:idee,role:S.role},PLAN_TIMEOUT_MS);
   S.sugBezig=false;
@@ -326,12 +397,14 @@ function draw(){
   el.innerHTML=`<div id="wz-rows">${rows}</div>
    <div class="wz-add"><input id="wz-ni" placeholder="type a step and press Enter…"
      onkeydown="if(event.key==='Enter'){event.preventDefault();addI();}"><button onclick="addI()">+ add</button></div>
+   <div class="wz-chips"><button type="button" class="wz-chip" id="wz-sugbtn" onclick="suggesties()">✨ suggest steps</button></div>
    <div id="wz-sug"></div>`;
   const i=document.getElementById('wz-ni'); if(i)i.focus();
   drawSug();
 }
 function drawSug(){
-  const el=document.getElementById('wz-sug'); if(!el)return;
+  const el=document.getElementById('wz-sug'), kn=document.getElementById('wz-sugbtn'); if(!el)return;
+  if(kn){kn.disabled=S.sugBezig;kn.textContent=S.sugBezig?'✨ thinking…':'✨ suggest steps';}
   if(S.sugBezig){el.innerHTML='<p class="wz-hint">✨ thinking along — you can keep typing.</p>';return;}
   if(S.planfout){el.innerHTML=`<p class="wz-hint">✨ ${esc(S.planfout)} — your own steps work fine.</p>`;return;}
   if(!S.suggesties.length){el.innerHTML='';return;}
@@ -415,9 +488,11 @@ async function maak(){
   if(!kanOpslaan())return;
   S.bezig=true; stelKnop();
   const b=document.getElementById('wz-save'); if(b)b.textContent='Putting it on the board…';
-  // GEEN UITKOMST IS GEEN BLOKKADE: dan is je idee de uitkomst, en scherp je hem later aan.
-  const r=await post('/wizard/create',{role:S.role,uitkomst:(S.uitkomst||S.ruw),
-    trekker:S.trekker,tijd:S.tijd,missie:S.missie,business:S.business,nid:S.nid||'',
+  // DE TITEL IS WAT ER IN HET VELD STAAT, letterlijk: de server herschrijft niets meer (Stefan, 12 sep:
+  // "dat moet nooit mogen"). Geen done-when is geen blokkade: dan valt hij terug op de titel.
+  const r=await post('/wizard/create',{role:S.role,titel:S.ruw,uitkomst:S.uitkomst,
+    trekker:S.trekker,uren:S.uren,eenheid:S.eenheid,missie:S.missie,business:S.business,nid:S.nid||'',
+    col:S.col,doel_id:S.doel,activiteit:S.wp,
     items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken),
     sug_aan:String(S.sugAan||0),sug_over:String(S.sugOver||0),sug_eigen:String(S.sugEigen||0)});
   S.bezig=false;
@@ -435,14 +510,15 @@ function gereed(){
    <div class="wz-foot"><a class="wz-btn ghost" href="${esc(r.url)}">View on the board</a>
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
-function restart(){Object.assign(S,{ruw:"",uitkomst:"",titel:"",checklist:[],planfout:"",tijd:"",
-  missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
+function restart(){Object.assign(S,{ruw:"",ruwEigen:"",uitkomst:"",titel:"",checklist:[],planfout:"",uren:"",
+  eenheid:"uren",doel:"",wp:"",missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
   rollen:[],rollenInit:false,rollenfout:"",taken:[],trekker:"",bezig:false,klaar:null}); form();}
 
-window.S=S;window.scherp=scherp;window.maak=maak;window.impact=impact;window.draw=draw;
+window.S=S;window.scherp=scherp;window.terug=terug;window.maak=maak;window.impact=impact;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
 window.schat=schat;window.neem=neem;window.drawSug=drawSug;
 window.rollen=rollen;window.drawRollen=drawRollen;window.taak=taak;window.taakZelf=taakZelf;
+window.toonWie=toonWie;window.toonWp=toonWp;window.suggesties=suggesties;
 form();
 })();
 </script>

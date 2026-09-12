@@ -101,7 +101,7 @@ def test_hij_zit_in_de_opgevouwen_laag_en_niet_op_de_snelle_route():
                                                    {"v": "person:p2", "n": "Lotte"}]})
     # het blok wordt gerenderd door drawRollen(), en dat draait pas als de details opengaat
     assert 'ontoggle="if(this.open)rollen()"' in html
-    snelle_route = html[html.index('class="wz-clab">Your idea'):html.index("box-details")]
+    snelle_route = html[html.index('class="wz-clab">Your project'):html.index("box-details")]
     assert "wz-owner" not in snelle_route
 
 
