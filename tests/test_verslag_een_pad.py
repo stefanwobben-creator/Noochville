@@ -24,7 +24,7 @@ def _st(tmp_path):
 
 
 def _project(dd, st, *, doc=""):
-    pid = st.projects.create(ROLE, "Eén pad", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Eén pad", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     st.projects.check_add(pid, cl, "Eerste stap")

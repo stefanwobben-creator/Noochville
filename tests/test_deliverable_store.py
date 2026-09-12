@@ -113,7 +113,7 @@ def test_statuswijziging_laat_records_staan_delete_ruimt_op(tmp_path):
 def test_execute_schrijft_record_met_volledige_content_en_wall_link(tmp_path):
     ledger, ds = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     recs = ds.for_project(pid)
@@ -141,7 +141,7 @@ def test_checklist_item_zonder_id_valt_terug_op_positie(tmp_path, caplog):
 def test_faalnote_geen_record(tmp_path):
     ledger, ds = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
     inh._execute_checklist(ledger.get(pid), TODAY)
     assert ds.for_project(pid) == []                          # faal → geen record
@@ -151,7 +151,7 @@ def test_faalnote_geen_record(tmp_path):
 def test_store_fout_laat_wall_note_intact(tmp_path):
     ledger, ds = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
     def _boom(**k):
         raise RuntimeError("store kapot")
@@ -169,7 +169,7 @@ def test_project_completed_draagt_deliverable_ids(tmp_path):
     from nooch_village.village import Village
     ledger, ds = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
     inh._claim_run_complete(pid)                            # → deliverable geschreven, project in WACHT
     did = ds.for_project(pid)[0]["id"]

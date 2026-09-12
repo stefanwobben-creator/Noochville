@@ -33,7 +33,7 @@ def _ctx(**kw):
 @pytest.fixture()
 def project(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("the_source", "doel", "human", status="queued")
+    pid = led.create("the_source", "doel", "human", status="running")
     cl = led.checklist_add(pid, title="Uitvoerplan")
     led.check_add(pid, cl["id"], "check savon de potasse suppliers in europe")
     return led, pid, cl["id"], led.get(pid)["checklists"][0]["items"][0]["id"]

@@ -23,7 +23,7 @@ def test_add_comment_en_herpak():
 
 def test_steer_komt_in_de_prompt():
     led = ProjectLedger(os.path.join(tempfile.mkdtemp(), "p.json"))
-    pid = led.create("harry_hemp", "Zoek elastaan-vervanger", "human")
+    pid = led.create("harry_hemp", "Zoek elastaan-vervanger", "human", status="running")
     led.add_comment(pid, "focus op natuurlijke elastaan-vervanger")
     seen = {}
     work_projects(led, llm_reason=lambda pr: (seen.__setitem__("p", pr) or "LEVER: ok"))

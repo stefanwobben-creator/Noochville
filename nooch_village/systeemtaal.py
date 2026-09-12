@@ -55,7 +55,6 @@ SWAPS: tuple[tuple[str, str], ...] = (
     # toestand
     ("no_data", "geen gegevens"),
     ("dry-run", "proefdraai"),
-    ("queued", "in de wachtrij"),
     ("timeout", "duurde te lang"),
 )
 

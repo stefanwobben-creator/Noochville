@@ -66,7 +66,7 @@ def test_1_checklist_af_wacht_op_review(tmp_path):
     inh = _inhabitant(tmp_path, ledger)
     done_evt = _capture(inh, "project_completed")
     review_evt = _capture(inh, "project_awaiting_review")
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studie", "openalex_evidence", "barefoot")])
     inh._claim_run_complete(pid)
     p = ledger.get(pid)
@@ -82,7 +82,7 @@ def test_2_onvolledig_geen_event(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, ledger)
     got = _capture(inh)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studie", "openalex_evidence", "x"), ("mens-taak", None, "")])  # no-skill blijft open
     inh._claim_run_complete(pid)
     assert ledger.get(pid)["status"] != "done"
@@ -94,7 +94,7 @@ def test_3_terugsleep_herblokkeert_niet_zonder_mutatie(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, ledger)
     review_evt = _capture(inh, "project_awaiting_review")
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studie", "openalex_evidence", "x")])
     inh._claim_run_complete(pid)                            # → wacht, review_raised gezet
     assert len(review_evt) == 1 and ledger.get(pid)["review_raised"] is True
@@ -114,7 +114,7 @@ def test_3_terugsleep_herblokkeert_niet_zonder_mutatie(tmp_path):
 # 3b. Mens sleept wacht→done → board-watch vuurt project_completed MÉT deliverable_ids (#10-fix)
 def test_3b_mens_done_via_board_watch(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     ledger.start(pid)                                       # → running
     ledger.mark_awaiting_review(pid)                        # checklist af → wacht (blocked_on=review)
     ledger.complete(pid, "checklist voltooid (1/1) — goedgekeurd na review")   # mens kent Done toe
@@ -134,7 +134,7 @@ def test_3b_mens_done_via_board_watch(tmp_path):
 # 3d. Direct Actief→Done (mens sleept zonder de gate) → één project_completed, route="direct", geen deliverables
 def test_3d_direct_actief_done(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     ledger.start(pid)                                       # actief (running), blocked_on leeg
     ledger.complete(pid, "handmatig afgerond")             # mens sleept Actief→Done (geen review-marker)
     bus = EventBus(name="test"); got = []
@@ -151,7 +151,7 @@ def test_3c_reopen_geen_vals_completed(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, ledger)
     done_evt = _capture(inh, "project_completed")
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _prep(ledger, pid, [("studie", "openalex_evidence", "x")])
     inh._claim_run_complete(pid)                            # → WACHT, review_raised gezet
     ledger.complete(pid, "checklist voltooid (1/1) — goedgekeurd na review")   # mens: Done

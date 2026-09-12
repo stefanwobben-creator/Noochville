@@ -155,7 +155,7 @@ def test_guard_werk_aan_een_ai_rol_wordt_een_project(tmp_path):
     projecten = ProjectLedger(os.path.join(str(tmp_path), "projects.json")).all()
     assert len(projecten) == 1
     p = projecten[0]
-    assert p["owner"] == "rolx" and p["status"] == "queued"
+    assert p["owner"] == "rolx" and p["status"] == "future"
     assert p["origin"] == claims_board.ORIGIN_BERICHT
     assert "Bank the evidence" in str(p["scope"])
 

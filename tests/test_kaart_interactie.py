@@ -16,7 +16,7 @@ def _kaart(tmp_path, *, rw=True):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    pid = st.projects.create(ROLE, "Interactie", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Interactie", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     # TWEE items: met één item maakt afvinken de checklist compleet, en dán schrijft de
@@ -144,7 +144,7 @@ def test_comment_en_concept_delen_hetzelfde_edit_component(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    pid = st.projects.create(ROLE, "Eén component", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Eén component", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     st.projects.check_add(pid, cl, "A")
@@ -170,7 +170,7 @@ def test_de_toggle_knop_vindt_zijn_eigen_blok(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    pid = st.projects.create(ROLE, "Grens", "human", status="queued", done_when="af")
+    pid = st.projects.create(ROLE, "Grens", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     st.projects.check_add(pid, cl, "A")

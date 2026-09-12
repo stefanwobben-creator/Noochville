@@ -247,7 +247,7 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
 def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
                        remember_constraint: bool = False, scope_override: str = "",
-                       info: str = "", project_status: str = "queued", examples_block: str = "",
+                       info: str = "", project_status: str = "future", examples_block: str = "",
                        projects=None, notes=None, constraints=None, records=None,
                        feedback=None, agenda=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,

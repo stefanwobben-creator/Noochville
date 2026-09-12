@@ -30,7 +30,7 @@ def _st(tmp_path):
 
 def _project(dd, st, *, doc="", items=(), gesprek=()):
     pid = st.projects.create(ROLE, "Hemp canvas bij een tweede leverancier", "human",
-                             status="queued", done_when="Er ligt een shortlist van drie.")
+                             status="running", done_when="Er ligt een shortlist van drie.")
     st.projects.start(pid)
     if items:
         # `checklist_add` geeft een dict terug en `check_add` een bool — niet de id's. De id's

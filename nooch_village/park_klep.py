@@ -1,6 +1,6 @@
 """De parkeer-klep: wanneer keert een geparkeerd project terug in de stroom?
 
-`_tend_projects` pakt alleen `queued` en `running` op. Een project dat naar `blocked` ging werd
+`_tend_projects` pakt alleen `running` op. Een project dat naar `blocked` ging werd
 daarna nooit meer bekeken — en omdat `reset_item_fails` bij het parkeren de tellers op nul zet,
 lázen de items daarna als "kan gewoon vooruit" terwijl het project stil bleef staan. Vier projecten
 stonden zo tot vijftien dagen te wachten op niets.

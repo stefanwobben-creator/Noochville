@@ -202,7 +202,7 @@ def test_herplan_maakt_een_tweede_lijst_die_op_akkoord_wacht(rol, monkeypatch):
                         lambda self, goal, **kw: {"items": [
                             {"text": "Search OpenAlex for 'vegan shoes'",
                              "skill": "openalex_evidence", "payload": {"term": "vegan shoes"}}]})
-    pid = led.create("sid", "waarom groeien vegan schoenen", "role", status="queued")
+    pid = led.create("sid", "waarom groeien vegan schoenen", "role", status="running")
     cl = led.checklist_add(pid, title="Strategie")
     led.check_add(pid, cl["id"], "bepaal de strategie", skill="zoekstrategie")
     item = led.get(pid)["checklists"][0]["items"][0]
@@ -225,7 +225,7 @@ def test_maar_een_ronde(rol, monkeypatch):
     monkeypatch.setattr(Inhabitant, "_plan_checklist",
                         lambda self, goal, **kw: {"items": [{"text": "x", "skill": "openalex_evidence",
                                                              "payload": {"term": "t"}}]})
-    pid = led.create("sid", "doel", "role", status="queued")
+    pid = led.create("sid", "doel", "role", status="running")
     cl = led.checklist_add(pid, title="Strategie")
     led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
     item = led.get(pid)["checklists"][0]["items"][0]
@@ -244,7 +244,7 @@ def test_het_plan_krijgt_de_term_mee_met_verbod_om_te_vertalen(rol, monkeypatch)
     monkeypatch.setattr(Inhabitant, "_plan_checklist",
                         lambda self, goal, **kw: gezien.setdefault("d", kw.get("description")) and None
                         or {"items": [{"text": "x", "skill": "openalex_evidence", "payload": {}}]})
-    pid = led.create("sid", "doel", "role", status="queued")
+    pid = led.create("sid", "doel", "role", status="running")
     cl = led.checklist_add(pid, title="Strategie")
     led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
     inw._herplan_na_strategie(pid, led.get(pid)["checklists"][0]["items"][0], _resultaat(), led)
@@ -258,7 +258,7 @@ def test_het_plan_krijgt_de_term_mee_met_verbod_om_te_vertalen(rol, monkeypatch)
 def test_zonder_stappen_gebeurt_er_niets(rol):
     """Herplannen is een dienst, geen voorwaarde: de strategie staat toch op de wall."""
     inw, led = rol
-    pid = led.create("sid", "doel", "role", status="queued")
+    pid = led.create("sid", "doel", "role", status="running")
     cl = led.checklist_add(pid, title="Strategie")
     led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
     item = led.get(pid)["checklists"][0]["items"][0]
@@ -269,7 +269,7 @@ def test_zonder_stappen_gebeurt_er_niets(rol):
 def test_mislukt_plan_laat_het_project_heel(rol, monkeypatch):
     inw, led = rol
     monkeypatch.setattr(Inhabitant, "_plan_checklist", lambda self, goal, **kw: None)
-    pid = led.create("sid", "doel", "role", status="queued")
+    pid = led.create("sid", "doel", "role", status="running")
     cl = led.checklist_add(pid, title="Strategie")
     led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
     item = led.get(pid)["checklists"][0]["items"][0]

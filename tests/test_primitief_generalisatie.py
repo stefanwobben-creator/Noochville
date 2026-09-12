@@ -94,7 +94,7 @@ def test_a_prep_prompt_bevat_input_schemas(tmp_path, ledger, monkeypatch):
 def test_b_kw_payload_juist_doorgegeven(tmp_path, ledger):
     kw = _KwSkill()
     inh = _inhabitant(tmp_path, ledger, [kw], ["keywords_everywhere"])
-    pid = ledger.create("rol", "doel", "human", status="queued")
+    pid = ledger.create("rol", "doel", "human", status="running")
     _prep(ledger, pid, [("volumes", "keywords_everywhere", {"kw": ["barefoot shoes"]})])
     inh._execute_checklist(ledger.get(pid), TODAY)
     assert kw.last == {"kw": ["barefoot shoes"]}                                  # geen {term}!
@@ -105,7 +105,7 @@ def test_b_kw_payload_juist_doorgegeven(tmp_path, ledger):
 def test_c_brands_payload_juist_doorgegeven(tmp_path, ledger):
     br = _BrandSkill()
     inh = _inhabitant(tmp_path, ledger, [br], ["competitor_discover"])
-    pid = ledger.create("rol", "doel", "human", status="queued")
+    pid = ledger.create("rol", "doel", "human", status="running")
     _prep(ledger, pid, [("concurrenten", "competitor_discover", {"brands": ["Nooch"], "limit": 4})])
     inh._execute_checklist(ledger.get(pid), TODAY)
     assert br.last == {"brands": ["Nooch"], "limit": 4}

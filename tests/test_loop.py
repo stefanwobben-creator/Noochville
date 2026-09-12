@@ -2,7 +2,7 @@
 
 Runt analyst + Noochie op echte threads met gemockte skills.
 Verifieert de volledige keten:
-  queued → (analyst) running → blocked(noochie) → (Noochie adviseert)
+  running → (analyst) → blocked(noochie) → (Noochie adviseert)
   → blocked(analyst) → (analyst verwerkt advies) → done.
 """
 from __future__ import annotations
@@ -95,6 +95,7 @@ def test_discovery_loop(loop_setup):
                 "website_watcher",
                 {"kind": "discovery", "skill": "plausible_stats"},
                 "human",
+                status="running",            # een mens zette het actief (scope 49: nieuw = slapend)
             )
             s.bus.publish(Event("dag_begint", {"label": "test"}, "test"))
 

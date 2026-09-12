@@ -223,7 +223,7 @@ def test_work_projects_experiment_herwerkt_tot_drempel(tmp_path):
     from nooch_village.roloverleg import Agenda
     from nooch_village.project_worker import work_projects
     led = ProjectLedger(str(tmp_path / "projects.json"))
-    pid = led.create("scout", "Volgen van trends", "human", origin="experiment")
+    pid = led.create("scout", "Volgen van trends", "human", origin="experiment", status="running")
     ag = Agenda(str(tmp_path / "ag.json"))
     out = None
     for _ in range(4):                                        # vier pulsen

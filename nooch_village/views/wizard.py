@@ -87,7 +87,7 @@ def _js(tekst: str) -> str:
     return json.dumps(tekst or "")[1:-1]
 
 
-KOLOMMEN = ("toekomst", "wacht")   # de kolommen die de wizard van het bord overneemt (actief = default)
+KOLOMMEN = ("actief", "toekomst", "wacht")   # de kolommen die de wizard van het bord overneemt
 
 
 def _doel_options(st) -> tuple[str, str]:
@@ -121,8 +121,9 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     Er zijn geen stappen meer: alles staat in één form, met de snelle route bovenaan en de
     verrijking opgevouwen eronder. De voorvulling landt in de velden; opslaan kan meteen.
 
-    `col` is de bordkolom waar de "+ add project"-deur stond (`toekomst` of `wacht`): die neemt
-    het project over, precies zoals het kale formulier dat deed. Zonder kolom: actief.
+    `col` is de bordkolom waar de "+ add project"-deur stond (`actief`, `toekomst` of `wacht`): die
+    neemt het project over. Zonder kolom (de knop op een rolpagina): slapend in Future, tot een mens
+    het naar Active sleept (scope 49). Alleen de deur ónder Active maakt meteen actief.
 
     De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
@@ -288,7 +289,7 @@ function form(){
 function toonWie(){
   // De kop zegt waar het landt: de rol, en de kolom als de deur niet in "Active" stond.
   const sel=document.getElementById('wz-role'), w=document.getElementById('wzwho');
-  const kol=S.col==='toekomst'?' · Future':(S.col==='wacht'?' · Waiting':'');
+  const kol=S.col==='actief'?' · Active':(S.col==='toekomst'?' · Future':(S.col==='wacht'?' · Waiting':' · Future'));
   if(sel&&w)w.textContent=((sel.selectedOptions[0]&&sel.value)?sel.selectedOptions[0].text:'')+kol;
 }
 // HET WERKPAKKET HOORT BIJ HET DOEL: de keuzelijst verschijnt alleen als het gekozen doel er heeft.

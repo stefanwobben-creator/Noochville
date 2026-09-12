@@ -66,7 +66,7 @@ def _cl(inh, ledger, pid):
 def test_a_voorbereiding_levert_een_voorstel_geen_opdracht(tmp_path, ledger, monkeypatch):
     _mock_plan(monkeypatch)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
     ledger.start(pid)                                            # bord-drag naar ACTIEF
     inh.prepare_project(pid)
     cl = _cl(inh, ledger, pid)
@@ -77,7 +77,7 @@ def test_a_voorbereiding_levert_een_voorstel_geen_opdracht(tmp_path, ledger, mon
 def test_b_zonder_akkoord_draait_er_niets(tmp_path, ledger, monkeypatch):
     _mock_plan(monkeypatch)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
     ledger.start(pid)
     inh._tend_projects(None)                                     # voorbereiden ÉN (niet) uitvoeren
     p = ledger.get(pid)
@@ -89,7 +89,7 @@ def test_b_zonder_akkoord_draait_er_niets(tmp_path, ledger, monkeypatch):
 def test_c_na_akkoord_draait_het_wel(tmp_path, ledger, monkeypatch):
     _mock_plan(monkeypatch)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
     ledger.start(pid)
     inh.prepare_project(pid)
     clid = _cl(inh, ledger, pid)["id"]
@@ -110,7 +110,7 @@ def test_d_handgemaakte_checklist_blijft_gewoon_draaien(tmp_path, ledger):
     """De deploy mag geen enkel bestaand project stilzetten. Een checklist zonder `akkoord`-sleutel
     is met de hand gemaakt of stamt van vóór deze regel: die doet wat hij altijd deed."""
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)   # geen akkoord-argument
     assert "akkoord" not in cl
     ledger.check_add(pid, cl["id"], "studies", skill="openalex_evidence", payload={"term": "barefoot"})
@@ -131,7 +131,7 @@ def test_e_alleen_expliciet_false_blokkeert(waarde, wacht):
 # ── c. de akkoord-knop zelf ────────────────────────────────────────────────────────────────────
 
 def test_f_akkoord_is_eenmalig_en_noemt_de_naam(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     assert ledger.plan_akkoord(pid, cl["id"], door="stefan") is True
     cl2 = ledger.get(pid)["checklists"][0]
@@ -142,7 +142,7 @@ def test_f_akkoord_is_eenmalig_en_noemt_de_naam(tmp_path, ledger):
 
 
 def test_g_akkoord_op_iets_wat_niet_wacht_doet_niets(tmp_path, ledger):
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)    # geen akkoord-vraag
     assert ledger.plan_akkoord(pid, cl["id"]) is False
     assert ledger.plan_akkoord(pid, "bestaat-niet") is False
@@ -152,7 +152,7 @@ def test_g_akkoord_op_iets_wat_niet_wacht_doet_niets(tmp_path, ledger):
 def test_h_akkoord_raakt_de_review_vlag_niet(tmp_path, ledger):
     """Akkoord geven verandert geen enkel ITEM, dus de review-vlag (die over de inhoud van de
     checklist gaat) hoort te blijven staan. check_add/check_toggle wissen 'm wél — die veranderen wel."""
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     ledger.mark_awaiting_review(pid)                              # zet de vlag langs het echte pad
     assert ledger.get(pid)["review_raised"] is True
@@ -168,7 +168,7 @@ def test_i_plan_klaar_meldt_zich_bij_de_eigenaar_rol(tmp_path, ledger, monkeypat
     from nooch_village.notifications import NotifStore
     _mock_plan(monkeypatch)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
     ledger.start(pid)
     inh.prepare_project(pid)
     n = NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", "harry_hemp")])
@@ -185,7 +185,7 @@ def test_j_volledig_mens_plan_vraagt_geen_akkoord(tmp_path, ledger, monkeypatch)
     _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"bel de fabriek","skill":null,'
                             '"kind":"human_external","reason":""}]}')
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "bel de fabriek", "human", status="queued")
+    pid = ledger.create("harry_hemp", "bel de fabriek", "human", status="running")
     ledger.start(pid)
     inh.prepare_project(pid)
     assert ledger.get(pid)["status"] == "blocked"
@@ -218,7 +218,7 @@ def test_k_de_hele_route_over_de_board_watch(tmp_path, ledger, monkeypatch):
     04:32 de volgende ochtend niets."""
     _mock_plan(monkeypatch)
     inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human")          # slapend (future)
     v, events = _watch(ledger)
     Village._prime_board_watch(v)
 
@@ -242,7 +242,7 @@ def test_l_zonder_plan_verandert_er_niets_aan_de_watch(tmp_path):
     """Een project zonder uitvoerplan (of met een handgemaakte checklist) gedraagt zich als
     vanouds: één event bij de activatie, en niet meer."""
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human")                           # slapend (future)
     v, events = _watch(led)
     Village._poll_board(v)
     led.start(pid)
@@ -254,7 +254,7 @@ def test_l_zonder_plan_verandert_er_niets_aan_de_watch(tmp_path):
 
 def test_m_herstart_vuurt_goedgekeurde_plannen_niet_opnieuw(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     cl = led.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     led.start(pid)
     led.plan_akkoord(pid, cl["id"], door="stefan")
@@ -267,7 +267,7 @@ def test_m2_herstart_pakt_een_wachtend_plan_niet_stiekem_op(tmp_path):
     """Het spiegelbeeld: een plan dat vóór de herstart nog wachtte, hoort ná de herstart nog steeds
     te wachten. Een daemon-herstart is geen akkoord."""
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     led.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     led.start(pid)
     v, events = _watch(led)
@@ -289,7 +289,7 @@ def test_n_cockpit_actie_is_geregistreerd_en_gelabeld():
 def test_o_wachtend_plan_toont_de_knop(tmp_path):
     from nooch_village.views.checklists import _checklists_html
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     cl = led.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     led.check_add(pid, cl["id"], "studies", skill="openalex_evidence")
 
@@ -315,7 +315,7 @@ def test_o_wachtend_plan_toont_de_knop(tmp_path):
 def test_p_leesmodus_toont_de_stand_zonder_knop(tmp_path):
     from nooch_village.views.checklists import _checklists_html
     led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("harry_hemp", "doel", "human", status="queued")
+    pid = led.create("harry_hemp", "doel", "human", status="running")
     cl = led.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     led.check_add(pid, cl["id"], "studies", skill="openalex_evidence")
     html = _checklists_html(led.get(pid), "", pid, "/projects", False)   # rw=False
@@ -342,7 +342,7 @@ def test_q_de_balk_vertelt_wat_de_knop_doet(tmp_path, ledger):
     uitvoert'. Die informatie stond verspreid over vier items met elk een eigen labeltje. Nu staat
     het antwoord op de plek waar de vraag gesteld wordt."""
     from nooch_village.views.checklists import _checklists_html
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     _plan_met_alle_soorten(ledger, pid)
     html = _checklists_html(ledger.get(pid), "csrf", pid, "/projects", True)
 
@@ -356,7 +356,7 @@ def test_r_geen_knop_als_er_niets_te_draaien_valt(tmp_path, ledger):
     """'go ahead' op een plan dat de rol niet kan draaien is een lege belofte. Dan geen knop, wel
     de reden — anders klik je en gebeurt er niets, zonder uitleg."""
     from nooch_village.views.checklists import _checklists_html
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE, akkoord=False)
     ledger.check_add(pid, cl["id"], "bel de fabriek", human_task=True, reason="telefoon")
     html = _checklists_html(ledger.get(pid), "csrf", pid, "/projects", True)
@@ -368,7 +368,7 @@ def test_s_na_akkoord_blijft_staan_wat_van_jou_is(tmp_path, ledger):
     """Als de rol klaar is wil je weten wat er nog op jouw bord ligt. Dezelfde samenvatting, maar
     de gedraaide items tellen niet meer mee."""
     from nooch_village.views.checklists import _checklists_html
-    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
     cl = _plan_met_alle_soorten(ledger, pid)
     ledger.plan_akkoord(pid, cl["id"], door="stefan")
     for it in ledger.get(pid)["checklists"][0]["items"][:2]:
@@ -406,7 +406,7 @@ def _plan_klaar(inw, led, monkeypatch, *, net_gevraagd):
     gestuurd = []
     monkeypatch.setattr(Inhabitant, "_notify_rol",
                         lambda self, rol, pid, tekst: gestuurd.append(tekst))
-    pid = led.create("the_source", "een doel", "human", status="queued")
+    pid = led.create("the_source", "een doel", "human", status="running")
     inw.prepare_project(pid, net_gevraagd=net_gevraagd)
     return gestuurd
 

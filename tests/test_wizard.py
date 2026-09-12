@@ -466,7 +466,7 @@ def test_de_kolom_van_de_deur_reist_mee(tmp_path, monkeypatch):
     rid = "mother_earth__nooch__website_developer"
     assert "col=toekomst" in _quickadd(rid, "toekomst", "t", "/x")
     assert "col=wacht" in _quickadd(rid, "wacht", "t", "/x")
-    assert "col=" not in _quickadd(rid, "actief", "t", "/x")          # actief is de default
+    assert "col=actief" in _quickadd(rid, "actief", "t", "/x")        # de deur onder Active maakt actief
     from nooch_village.views.wizard import render_wizard
     st = _st(tmp_path)
     h = render_wizard(st, "t", role=rid, col="toekomst")
@@ -479,8 +479,10 @@ def test_de_kolom_van_de_deur_reist_mee(tmp_path, monkeypatch):
     r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Wacht", "col": "wacht", "trekker": wie})
     p = cockpit2._Stores(st.dd).projects.get(r["pid"])
     assert p["status"] == "blocked" and p["blocked_on"] == "—"
-    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Nu", "trekker": wie})
-    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "queued"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Nu", "col": "actief", "trekker": wie})
+    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "running"
+    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Zonder deur", "trekker": wie})
+    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "future"   # default: slapend (scope 49)
 
 
 def test_tijd_is_een_getal_met_uren_of_dagen(tmp_path, monkeypatch):

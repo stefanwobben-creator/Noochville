@@ -373,7 +373,7 @@ def test_guard_off_mission_rapport_bereikt_geen_schone_review(tmp_path):
     inh = _inh(tmp_path, ledger, ds, docs)
     events = []
     inh.bus.subscribe("critic_rejected", lambda e: events.append(e.data))
-    pid = ledger.create("sid", "Onderzoek iets", "human", status="queued")
+    pid = ledger.create("sid", "Onderzoek iets", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "Onderzoek iets", skill="openalex_evidence", query="x")
     off_mission = "# R\n\n## Onderzoek iets\n" + "Een verhandeling over kantoorpanden. " * 30
@@ -391,7 +391,7 @@ def test_guard_leeg_project_wordt_gevlagd(tmp_path):
     """DE tweede guard. Alle taken draaiden, geen enkele leverde iets op."""
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs, leeg=True)              # de skill geeft no_data
-    pid = ledger.create("sid", "Onderzoek iets", "human", status="queued")
+    pid = ledger.create("sid", "Onderzoek iets", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "Onderzoek iets", skill="openalex_evidence", query="x")
     with patch(_REASON, side_effect=_reason_mock(GOED_DOC)):
@@ -411,7 +411,7 @@ def test_leeg_item_vinkt_niet_meer_schoon_af(tmp_path):
     review-gate nooit) maar draagt `leeg`, zodat 4/4 niet als 'alles beantwoord' leest."""
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs, leeg=True)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
     with patch(_REASON, side_effect=_reason_mock("doc")):
@@ -424,7 +424,7 @@ def test_goed_rapport_haalt_wel_een_schone_review(tmp_path):
     """De tegenhanger: zonder deze test weet je niet of de critic iets doorlaat of alles tegenhoudt."""
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued",
+    pid = ledger.create("sid", "doel", "human", status="running",
                         done_when="de zool kan plasticvrij en vegan")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "Onderzoek plasticvrije materialen voor de zool",
@@ -443,7 +443,7 @@ def test_herkans_pas_gebeurt_in_dezelfde_puls(tmp_path):
     en levert niets op wat nu al kan."""
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
     with patch(_REASON, side_effect=_reason_mock("te kort")) as m:
@@ -461,7 +461,7 @@ def test_kapotte_critic_blokkeert_de_oplevering_niet(tmp_path, monkeypatch):
     ledger, ds, docs = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds, docs)
     monkeypatch.setattr(mc, "beoordeel", lambda **k: (_ for _ in ()).throw(RuntimeError("stuk")))
-    pid = ledger.create("sid", "doel", "human", status="queued")
+    pid = ledger.create("sid", "doel", "human", status="running")
     cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
     with patch(_REASON, side_effect=_reason_mock("doc")):

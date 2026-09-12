@@ -45,7 +45,7 @@ def _seed(tmp_path):
     (data / "projects.json").write_text(json.dumps({
         "p1p1p1p1p1p1": {
             "id": "p1p1p1p1p1p1", "owner": "website_watcher", "scope": "GSC menukaart",
-            "trigger": "human", "status": "queued", "blocked_on": None,
+            "trigger": "human", "status": "running", "blocked_on": None,
             "created_at": time.time(), "updated_at": time.time(), "outcome": None,
         },
     }), encoding="utf-8")
@@ -108,7 +108,7 @@ def test_projectledger_edit(tmp_path):
     assert pl.edit(pid, scope="Bezoekersdata per locale analyseren", owner="website_watcher")
     p = pl.get(pid)
     assert p["scope"] == "Bezoekersdata per locale analyseren" and p["owner"] == "website_watcher"
-    assert p["status"] == "queued"                     # status ongemoeid
+    assert p["status"] == "future"                     # status ongemoeid
     pl.complete(pid)
     assert pl.edit(pid, scope="x") is False            # done vergrendeld
 

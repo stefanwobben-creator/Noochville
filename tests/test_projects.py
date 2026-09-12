@@ -9,7 +9,7 @@ def ledger(tmp_path):
     return ProjectLedger(str(tmp_path / "projects.json"))
 
 
-def test_create_returns_id_and_queued(ledger):
+def test_create_returns_id_and_future(ledger):
     pid = ledger.create("website_watcher", {"doel": "vegan-pagina"}, "clock")
     p = ledger.get(pid)
     assert p is not None
@@ -17,7 +17,7 @@ def test_create_returns_id_and_queued(ledger):
     assert p["owner"] == "website_watcher"
     assert p["scope"] == {"doel": "vegan-pagina"}
     assert p["trigger"] == "clock"
-    assert p["status"] == "queued"
+    assert p["status"] == "future"                      # slapend tot een mens het naar Active sleept (scope 49)
     assert p["blocked_on"] is None
     assert p["outcome"] is None
 
@@ -66,7 +66,7 @@ def test_by_status(ledger):
     p2 = ledger.create("trends",   "b", "human")
     ledger.start(p1)
     assert any(p["id"] == p1 for p in ledger.by_status("running"))
-    assert any(p["id"] == p2 for p in ledger.by_status("queued"))
+    assert any(p["id"] == p2 for p in ledger.by_status("future"))
 
 
 def test_invalid_trigger_raises(ledger):
