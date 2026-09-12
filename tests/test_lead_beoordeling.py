@@ -105,7 +105,10 @@ def test_beoordeling_bevat_wat_is_dit_criteria_en_oordeel():
     assert uit["oordeel"] == "high" and uit["volgende_stap"] == "contact"
     assert uit["wat_is_dit"].startswith("German plastic-free")
     rijen = uit["beoordeling"]
-    assert rijen[0] == {"criterium": "what is this", "oordeel": uit["wat_is_dit"], "citaat": ""}
+    # Scope 54: de eerste rij draagt ook naam en url van de lead, zodat het verslag (dat records
+    # rendert) het adres van de beoordeelde site toont.
+    assert rijen[0] == {"naam": "nahtur-design", "criterium": "what is this", "oordeel": uit["wat_is_dit"],
+                        "citaat": "", "url": uit["url"]}
     assert rijen[1] == {"criterium": "plastic-free", "oordeel": "yes",
                         "citaat": "Die Sohle besteht aus Eco-Rubber, einer Naturkautschukmischung."}
     assert rijen[-1]["criterium"] == "fit" and rijen[-1]["oordeel"].startswith("high — Stitched")

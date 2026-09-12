@@ -12,12 +12,27 @@ namespace-agnostische matching ({*}) zodat een schema-prefix-wijziging het parse
 Fail-closed: ontbrekende/ongeldige credentials → ERROR, geen kale call. Lege set → geldige "0 patenten".
 API-fout/timeout/403 fair-use → gat + ERROR, geen crash. Credentials UITSLUITEND uit de env
 (EPO_CONSUMER_KEY + EPO_CONSUMER_SECRET / EPO_CONSUMER_SECRET_KEY) — nooit hardcoded.
+
+"NIETS GEVONDEN" IS GEEN FOUT (scope 54). OPS meldt een lege trefferset niet als 200 met nul
+documenten maar als HTTP 404 met de fault "No results found". Tot scope 54 werd élke exceptie uit de
+search een `error`: de Kroniek boekte "fout", de ladder liep door naar google_patents met het label
+"fallback voor epo_patents", en `consecutive_failures` telde op — voor een gewone "niets gevonden". De
+juli-meting telde 12× "Not Found" op precies die manier. Nu leest een 404/"No results" als `no_data`.
+
+OR-KETENS (scope 54). Een ' OR '-keten wordt per clausule apart gezocht (max 3) en de uitkomsten
+samengevoegd (dedup op publicatienummer) — dezelfde vorm als openalex/semscholar, zodat een term op elke
+trede hetzelfde betekent. Tot dan werd alleen de eerste clausule gezocht zonder dat de uitkomst dat zei.
+Wat er werkelijk naar OPS ging staat in `gezocht`.
+
+Records: `url` naar Espacenet per patent (klikbaar in note en verslag), abstract tot 2000 tekens (boven de
+leesextract-drempel van 600), en een `text` als leeswijzer.
 """
 from __future__ import annotations
 import base64
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -31,6 +46,33 @@ _AUTH_URL = "https://ops.epo.org/3.2/auth/accesstoken"
 # biblio-constituent op de search: levert de bibliografische velden (titel/datum/partijen/abstract) inline,
 # in één call — i.p.v. search (alleen doc-nummers) + N losse biblio-calls. Fair-use-vriendelijk.
 _SEARCH_BIBLIO_URL = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio"
+_ESPACENET_URL = "https://worldwide.espacenet.com/patent/search?q=pn%3D"
+_ABSTRACT_MAX = 2000
+_MAX_OR_CLAUSES = 3            # fair use: elke clausule is een OPS-call
+# Hoe OPS "niets gevonden" zegt: een 404 (urllib.error.HTTPError.code) of de fault-tekst.
+_LEEG_RE = re.compile(r"no results found|entitynotfound|http error 404|\bhttp 404\b", re.I)
+
+
+def _is_leeg(exc: BaseException) -> bool:
+    """Is deze exceptie OPS' manier om 'geen treffers' te zeggen? 404 of de fault-tekst."""
+    if getattr(exc, "code", None) == 404:
+        return True
+    return bool(_LEEG_RE.search(str(exc) or ""))
+
+
+def _als_tekst(term: str, total: int, patents: list, gezocht: str) -> str:
+    """De leeswijzer voor de wall: hoeveel patenten, welke CQL er werkelijk naar OPS ging, het eerste."""
+    kop = f"{total} patent(s) via EPO OPS for '{term}' (searched: {gezocht})"
+    eerste = patents[0] if patents else None
+    if not eerste:
+        return kop + "."
+    detail = f"“{str(eerste.get('title') or '').strip()[:120]}”"
+    if eerste.get("publication_number"):
+        detail += f" ({eerste['publication_number']}"
+        if eerste.get("publication_date"):
+            detail += f", {eerste['publication_date']}"
+        detail += ")"
+    return f"{kop}; first: {detail}."
 
 
 def _dedup(names) -> list[str]:
@@ -53,15 +95,18 @@ class EpoPatentsSkill(DataSourceSkill):
     kind = "snapshot"
     cost = "rate_limited"                  # OAuth + fair-use (~4GB/week), bescheiden Range
     needs_secret = True
-    input_schema = ("term: str (searched in patent TITLES: use the words a patent title would use, "
-                    "e.g. 'shoe sole attachment' or 'stitched footwear sole', not a research "
-                    "question; 1-2 words = exact title phrase, more = any of the words). "
-                    "optioneel: limit: int (default 5, max 10 — Range 1-limit)")
-    output_schema = ("lijst: total: int, patents: list[{title, abstract, publication_date, "
-                     "publication_number, applicants, inventors}] | no_data | error")
-    description = ("Zoekt wereldwijde patenten via de EPO Open Patent Services (OPS, XML-interface): "
-                   "OAuth-token uit EPO_CONSUMER_KEY + EPO_CONSUMER_SECRET, published-data search/biblio. "
-                   "Fail-closed.")
+    input_schema = ("term: str (required — searched in patent TITLES: use the words a patent title "
+                    "would use, e.g. 'shoe sole attachment' or 'stitched footwear sole', never a "
+                    "research question; 1-2 words = exact title phrase, more = any of the words in the "
+                    "title. Join alternatives with ' OR ': each clause is searched separately (max 3) "
+                    "and the results merged). Optional: limit: int (default 5, max 10 — Range 1-limit)")
+    output_schema = ("list: total: int, patents: list[{title, url (Espacenet), publication_number, "
+                     "publication_date, abstract (up to 2000 chars), applicants, inventors}], gezocht "
+                     "(the CQL that went to OPS), text (summary for the wall) | no_data + reason | error")
+    description = ("Worldwide patents via the EPO Open Patent Services (title search): give the words a "
+                   "patent title would use, 1-2 words as an exact phrase, more as any-of. Returns "
+                   "title, Espacenet link, number, date, abstract and parties per patent; 'no_data' "
+                   "when the register has nothing. OAuth from EPO_CONSUMER_KEY + EPO_CONSUMER_SECRET.")
 
     def __init__(self):
         self._token: str | None = None
@@ -138,16 +183,36 @@ class EpoPatentsSkill(DataSourceSkill):
         t = _re.sub(r"\s+", " ", t).strip()
         return t or (term or "").replace('"', " ").strip()
 
+    @staticmethod
+    def _clausules(term: str) -> list[str]:
+        """De OR-clausules van een term, elk genormaliseerd (`_normalize_term`), lege weg, max
+        `_MAX_OR_CLAUSES`. Geen ' OR ' → één clausule (het oude gedrag)."""
+        import re as _re
+        delen = _re.split(r"\s+OR\s+", term or "", flags=_re.IGNORECASE)
+        uit = []
+        for d in delen:
+            n = EpoPatentsSkill._normalize_term(d)
+            if n and n not in uit:
+                uit.append(n)
+        return uit[:_MAX_OR_CLAUSES]
+
+    @staticmethod
+    def _cql(clausule: str, term: str = "") -> str:
+        """De CQL voor één (genormaliseerde) clausule. De vorm hangt af van de lengte: EPO's exacte
+        titel-frase ti="a b" werkt tot ~2 woorden, maar 404't bij ≥3 (empirisch). ti any "…" (elk woord
+        in de titel) werkt voor élke lengte zonder 404 — breder, maar levert kandidaten i.p.v. een
+        doodloper. Zo blijft een korte query precies en rondt een lange query af i.p.v. eeuwig te falen.
+        Eén plek voor de CQL, zodat `gezocht` in het resultaat precies is wat er naar OPS ging."""
+        words = (clausule or "").split()
+        inner = " ".join(words) or (term or "")
+        return f'ti="{inner}"' if len(words) <= 2 else f'ti any "{inner}"'
+
     # ── search/biblio → (total, [patent-dicts]) via XML-parse ───────────────
     def _search(self, token, term, limit, *, _get=None):
+        """Eén OPS-call voor één clausule (`term` is hier al genormaliseerd door `_clausules`, of een
+        ruwe term — `_normalize_term` is idempotent)."""
         get = _get or (lambda u: self._default_get(u, token))
-        # De term wordt genormaliseerd (boolean/quotes strippen). CQL-vorm hangt af van de lengte: EPO's
-        # exacte titel-frase ti="a b" werkt tot ~2 woorden, maar 404't bij ≥3 (empirisch). ti any "…" (elk
-        # woord in de titel) werkt voor élke lengte zonder 404 — breder, maar levert kandidaten i.p.v. een
-        # doodloper. Zo blijft een korte query precies en rondt een lange query af i.p.v. eeuwig te falen.
-        words = self._normalize_term(term).split()
-        inner = " ".join(words) or (term or "")
-        cql = f'ti="{inner}"' if len(words) <= 2 else f'ti any "{inner}"'
+        cql = self._cql(self._normalize_term(term), term)
         url = f"{_SEARCH_BIBLIO_URL}?q={urllib.parse.quote(cql)}&Range=1-{limit}"
         return self._parse_patents(get(url))
 
@@ -194,8 +259,12 @@ class EpoPatentsSkill(DataSourceSkill):
             applicants = _party_names(ed, "applicant")
             inventors = _party_names(ed, "inventor")
             rec = {"title": title, "publication_number": pub_no, "publication_date": pub_date}
+            if pub_no:
+                # Deterministisch adres: Espacenet op publicatienummer. Zonder link toonde het
+                # verslag "• titel (EP1234A1) — abstract" en kon een mens niet doorklikken.
+                rec["url"] = f"{_ESPACENET_URL}{urllib.parse.quote(pub_no)}"
             if abstract:
-                rec["abstract"] = abstract[:400]
+                rec["abstract"] = abstract[:_ABSTRACT_MAX]
             if applicants:
                 rec["applicants"] = applicants
             if inventors:
@@ -205,20 +274,55 @@ class EpoPatentsSkill(DataSourceSkill):
 
     # ── run ─────────────────────────────────────────────────────────────────
     def run(self, payload: dict, context) -> dict:
-        term = (payload.get("term") or "").strip()
+        from nooch_village.sleutelmasker import masker
+        term = str((payload or {}).get("term") or "").strip()
         if not term:
             return {"error": "geen term opgegeven", "patents": []}
-        limit = max(1, min(int(payload.get("limit", 5)), 10))
+        try:
+            limit = max(1, min(int((payload or {}).get("limit", 5)), 10))
+        except (TypeError, ValueError):
+            limit = 5
         try:
             token = self._get_token(context)
         except Exception as exc:
-            return {"error": str(exc), "patents": []}          # fail-closed: geen creds/token
-        try:
-            total, patents = self._search(token, term, limit)
-        except Exception as exc:
-            log.warning("EPO OPS search faalde (%s): %s", term, exc)
-            return {"error": f"EPO OPS search: {exc}", "patents": []}   # 403/timeout/parse → gat + error
+            return {"error": masker(exc), "patents": []}       # fail-closed: geen creds/token
+        clausules = self._clausules(term) or [term]
+        gezocht = " | ".join(self._cql(c, term) for c in clausules)
+        patents: list[dict] = []
+        gezien: set[str] = set()
+        fouten: list[str] = []
+        total = 0
+        for i, clausule in enumerate(clausules):
+            try:
+                deel_total, deel = self._search(token, clausule, limit)
+            except Exception as exc:
+                if _is_leeg(exc):
+                    # OPS zegt "geen treffers" als 404/"No results found": een antwoord, geen storing.
+                    log.info("EPO OPS: geen treffers voor %r (%s)", clausule, exc)
+                    continue
+                log.warning("EPO OPS search faalde (%s): %s", clausule, masker(exc))
+                fouten.append(f"'{clausule}': {masker(exc)}")   # 403/timeout/parse → gat + error
+                continue
+            total += int(deel_total or 0)
+            for p in deel:
+                sleutel = p.get("publication_number") or p.get("title") or repr(p)
+                if sleutel in gezien:
+                    continue
+                gezien.add(sleutel)
+                patents.append(p)
+            if i < len(clausules) - 1:
+                time.sleep(0.5)                                  # fair use tussen deel-calls
         if not patents:
-            return {"term": term, "total": 0, "patents": [], "no_data": True,
-                    "reason": "geen patenten gevonden voor deze term"}
-        return {"term": term, "total": total or len(patents), "patents": patents}
+            if fouten:
+                # Geen enkele clausule leverde iets én er ging er minstens één stuk: dan is "niets
+                # gevonden" niet te claimen — het item blijft open (fail-closed).
+                return {"error": "EPO OPS search: " + "; ".join(fouten), "patents": [],
+                        "term": term, "gezocht": gezocht}
+            return {"term": term, "total": 0, "patents": [], "no_data": True, "gezocht": gezocht,
+                    "reason": f"geen patenten gevonden voor deze term (searched: {gezocht})"}
+        patents = patents[:limit]
+        uit = {"term": term, "total": total or len(patents), "patents": patents, "gezocht": gezocht,
+               "text": _als_tekst(term, total or len(patents), patents, gezocht)}
+        if fouten:
+            uit["_fouten"] = fouten                              # deel-clausules die faalden: metadata
+        return uit

@@ -59,6 +59,11 @@ _MAX_AANTAL = 20
 _MAX_LEES = 10
 _TEKST_PER_PAGINA = 3000            # genoeg om de strekking te zien, niet genoeg om de context te vullen
 _FRAGMENT = 300
+# ÉÉN WACHTBUDGET PER RUN (scope 54). `haal_tekst_geduldig` wacht per pagina tot drie keer, en een host
+# die `Retry-After: 90` stuurt krijgt dat ook — ×10 pagina's kon één item zo een half uur blokkeren.
+# Het budget is de derde weg uit safe_fetch: wacht zolang het zin heeft, en laat de rest als tijdelijke
+# fout terugvallen (de treffer blijft staan met zijn fragment en reden).
+_WACHTBUDGET_S = 60.0
 
 # ── De motoren ───────────────────────────────────────────────────────────────
 # Twee zoekmachines, één vorm. `web_read` normaliseert allebei naar
@@ -144,9 +149,19 @@ class WebZoekSkill(Skill):
 
     def __init__(self, zoek=None, haal=None):
         # Injecteerbaar zodat een test dit kan bewijzen zonder netwerk en zonder credits, net als
-        # `_haal` in haal_pagina. `zoek=None` betekent: kies de motor op basis van de settings.
+        # `_haal` in haal_pagina. `zoek=None` betekent: kies de motor op basis van de settings;
+        # `haal=None`: safe_fetch.haal_tekst_geduldig met één wachtbudget per run (zie `_lezer`).
         self._zoek = zoek
-        self._haal = haal or safe_fetch.haal_tekst_geduldig
+        self._haal = haal
+
+    def _lezer(self):
+        """De leesfunctie voor DEZE run: de geïnjecteerde, of safe_fetch met één `Wachtbudget` dat
+        alle pagina's van de run delen. Per run en niet per skill-object, want de skill leeft de hele
+        puls en het budget hoort bij één zoekopdracht."""
+        if self._haal is not None:
+            return self._haal
+        budget = safe_fetch.Wachtbudget(_WACHTBUDGET_S)
+        return lambda url: safe_fetch.haal_tekst_geduldig(url, budget=budget)
 
     def validate_payload(self, payload: dict, context) -> list:
         """Is dit een zoekopdracht, of een filter-constructie die geen enkele motor aankan?
@@ -207,8 +222,9 @@ class WebZoekSkill(Skill):
                     "reason": f"geen organische treffers voor '{term}' via {bron}",
                     "text": f"No results on the open web for “{term}” ({bron})."}
 
+        lezer = self._lezer()
         for t in treffers[:lees]:
-            t["tekst"], t["reden"] = self._lees(t["url"])
+            t["tekst"], t["reden"] = self._lees(t["url"], lezer)
             t["gelezen"] = bool(t["tekst"])
 
         gelezen = sum(1 for t in treffers if t["gelezen"])
@@ -256,12 +272,12 @@ class WebZoekSkill(Skill):
             return self._zoek
         return web_read.brave_search if motor == "brave" else web_read.serpapi_search
 
-    def _lees(self, url: str) -> tuple[str, str]:
+    def _lees(self, url: str, lezer=None) -> tuple[str, str]:
         """(tekst, reden). Fail-soft: een pagina die niet meewerkt kost zijn eigen regel, niet de
         hele zoekopdracht. De reden staat er wél bij, want 'geen tekst' zonder uitleg leest als
         'de pagina was leeg' en dat is bijna nooit wat er aan de hand is."""
         try:
-            gehaald = self._haal(url)
+            gehaald = (lezer or self._lezer())(url)
         except safe_fetch.FetchGeweigerd as e:
             return "", f"geweigerd: {e}"
         except safe_fetch.FetchMislukt as e:

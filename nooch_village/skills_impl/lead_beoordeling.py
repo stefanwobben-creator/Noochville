@@ -45,6 +45,8 @@ _MAX_TEKST = 6000                 # meer dan web_zoek per pagina (3000): hier ga
 _MAX_CRITERIA = 8
 _MAX_CITAAT = 300
 _ZOEK_AANTAL = 5
+_WACHTBUDGET_S = 60.0             # één Wachtbudget per run, zoals web_zoek (scope 54): een host met
+                                  # Retry-After 90 mag één lead niet minutenlang laten hangen
 
 #: Verzamelsites: een treffer hiervandaan is zelden de eigen site van de lead. De eerste treffer
 #: die hier NIET in staat wint; staan ze er allemaal in, dan de eerste met `site_onzeker`.
@@ -156,8 +158,16 @@ class LeadBeoordelingSkill(Skill):
         # en zonder model — dezelfde afspraak als `web_zoek` (zoek, haal) en `deliverable_kop`
         # (reason_fn). `zoek` is de web_zoek-skill of iets met dezelfde `run`.
         self._zoek = zoek
-        self._haal = haal or safe_fetch.haal_tekst_geduldig
+        self._haal = haal                 # None = safe_fetch met één wachtbudget per run (`_lezer`)
         self._reason = reason_fn
+
+    def _lezer(self):
+        """De leesfunctie voor DEZE run: de geïnjecteerde, of safe_fetch.haal_tekst_geduldig met een
+        `Wachtbudget` — dezelfde afspraak als `web_zoek._lezer`."""
+        if self._haal is not None:
+            return self._haal
+        budget = safe_fetch.Wachtbudget(_WACHTBUDGET_S)
+        return lambda url: safe_fetch.haal_tekst_geduldig(url, budget=budget)
 
     def validate_payload(self, payload: dict, context) -> list:
         """Een url die geen adres is (de PLACEHOLDER van 8 september) wordt bij het PLANNEN al
@@ -198,7 +208,7 @@ class LeadBeoordelingSkill(Skill):
             return {"error": "geen oordeel: het model gaf geen bruikbaar antwoord", "naam": naam,
                     "url": url, "gevonden_via": gevonden_via}
 
-        rijen, teruggezet = _rijen(data, criteria)
+        rijen, teruggezet = _rijen(data, criteria, naam=naam or web_read.domain_of(url), url=url)
         oordeel = str(data.get("fit") or "").strip().lower()
         oordeel = oordeel if oordeel in FIT else "low"
         volgende = str(data.get("next_step") or "").strip().lower()
@@ -235,7 +245,7 @@ class LeadBeoordelingSkill(Skill):
 
     def _lees(self, url: str) -> tuple[str, str]:
         try:
-            gehaald = self._haal(url)
+            gehaald = self._lezer()(url)
         except safe_fetch.FetchGeweigerd as e:
             return "", f"geweigerd: {e}"
         except safe_fetch.FetchMislukt as e:
@@ -265,10 +275,19 @@ class LeadBeoordelingSkill(Skill):
         return data if isinstance(data, dict) else None
 
 
-def _rijen(data: dict, criteria: list[str]) -> tuple[list[dict], int]:
+def _rijen(data: dict, criteria: list[str], *, naam: str = "", url: str = "") -> tuple[list[dict], int]:
     """De beoordeling als records: eerst 'what is this', dan per criterium, dan het oordeel. Een
-    ja/nee zonder citaat wordt hier 'unknown' — dit is de vangrail, niet de prompt."""
-    rijen = [{"criterium": "what is this", "oordeel": _kort(data.get("what_is_this"), 240), "citaat": ""}]
+    ja/nee zonder citaat wordt hier 'unknown' — dit is de vangrail, niet de prompt.
+
+    De eerste rij draagt `naam` en `url` van de lead (scope 54): die stonden alleen op topniveau,
+    en het verslag rendert records — dus het adres van de beoordeelde site haalde het einddocument
+    niet. Nu leest de eerste regel "• Kiilto (https://kiilto.com) — Finnish adhesive maker"."""
+    eerste = {"criterium": "what is this", "oordeel": _kort(data.get("what_is_this"), 240), "citaat": ""}
+    if naam:
+        eerste = {"naam": naam, **eerste}
+    if url:
+        eerste["url"] = url
+    rijen = [eerste]
     teruggezet = 0
     gezien = set()
     for c in (data.get("criteria") or [])[:_MAX_CRITERIA]:

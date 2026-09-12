@@ -114,16 +114,37 @@ def controleer_url(url: str) -> str:
     return url
 
 
+# Wat de HTML-stripper aankan. Alles wat hier niet in staat (PDF, beelden, zip) leverde tot scope 54
+# HTML-gestripte binaire ruis op als "tekst" — die belandde in de note en de store, en `haal_pagina`
+# meldde dan een geslaagde lezing. Een ontbrekende Content-Type laten we door: veel servers sturen hem
+# niet, en een geïnjecteerde `_fetch` in tests kent hem niet.
+TEKST_TYPES = ("text/html", "application/xhtml+xml", "text/plain", "text/xml", "application/xml")
+
+
+def _tekst_type(content_type: str) -> bool:
+    """Mag dit door de stripper? Alleen het mediatype telt (zonder charset e.d.)."""
+    mt = (content_type or "").split(";", 1)[0].strip().lower()
+    return not mt or mt in TEKST_TYPES
+
+
 def haal_tekst(url: str, _fetch=None) -> dict:
     """Haal de pagina op en geef `{url, status, titel, tekst}` terug.
 
-    `_fetch` is injecteerbaar voor tests: een callable(url) -> (status_code, html).
-    Zonder injectie wordt `requests` gebruikt — en dan pas, zodat de import geen
-    netwerkafhankelijkheid oplegt aan wie alleen de guardrail nodig heeft."""
+    `_fetch` is injecteerbaar voor tests: een callable(url) -> (status_code, html), of met een derde
+    element `content_type` om de type-controle te bewijzen. Zonder injectie wordt `requests`
+    gebruikt — en dan pas, zodat de import geen netwerkafhankelijkheid oplegt aan wie alleen de
+    guardrail nodig heeft.
+
+    Een bron die geen tekst is (Content-Type application/pdf e.d.) is een `FetchMislukt` MET de
+    HTTP-status: `is_tijdelijk` leest die als permanent, zodat niemand een PDF drie keer opnieuw
+    probeert. Wie de bytes wil, gebruikt `haal_ruw`."""
     veilig = controleer_url(url)
     wacht = None
+    ctype = ""
     if _fetch is not None:
-        status, html = _fetch(veilig)
+        uit = _fetch(veilig)
+        status, html = uit[0], uit[1]
+        ctype = str(uit[2] or "") if len(uit) > 2 else ""
     else:
         import requests
         try:
@@ -133,10 +154,14 @@ def haal_tekst(url: str, _fetch=None) -> dict:
                                                                     errors="replace")
             status = r.status_code
             wacht = _retry_after(r.headers)
+            ctype = str(r.headers.get("Content-Type", "") or "")
         except Exception as e:                       # requests-fouten zijn een familie; één vangnet
             raise FetchMislukt(f"ophalen mislukt: {e}") from e
     if status >= 400:
         raise FetchMislukt(f"de pagina gaf HTTP {status}", status=status, retry_after=wacht)
+    if not _tekst_type(ctype):
+        raise FetchMislukt(f"de bron is geen webpagina maar {ctype.split(';', 1)[0].strip()} — "
+                           f"niet als tekst te lezen", status=status)
     titel, tekst = naar_tekst(html)
     return {"url": veilig, "status": status, "titel": titel, "tekst": tekst}
 

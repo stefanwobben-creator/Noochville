@@ -1,7 +1,9 @@
 """OpenAlexSkill — capability "openalex_evidence".
 
 Zoekt academische werken op via de OpenAlex API.
-Authenticatie via OPENALEX_API_KEY (vereist — skill faalt bewust closed zonder key).
+Authenticatie via OPENALEX_API_KEY (vereist — `run` faalt bewust closed zonder key, en sinds scope 54
+zegt `is_configured` hetzelfde: de skill staat zonder sleutel niet in de planner-catalogus, i.p.v.
+"scherp" te heten en dan bij elke run te falen).
 Polite pool: mailto-adres in de User-Agent voor hogere rate-limit.
 Mailto komt uit context.settings["openalex_mailto"] (settings.ini of .env).
 
@@ -9,6 +11,11 @@ Segmentatie:
   Elke aanroep draagt een `locale`-sleutel door in de output.
   Resultaten gesorteerd op citaties (meest geciteerd eerst).
   `no_data: True` onderscheidt "API werkt, maar niets gevonden" van een echte fout.
+
+Records (scope 54, skill-review 12-09-2026): elk werk draagt `url` (het OpenAlex work-id, een
+klikbaar adres) en `doi`, en het abstract tot 2000 tekens — genoeg voor `leesextract` om er twee, drie
+zinnen uit te halen die op het checklist-item slaan (de oude cap van 400 lag onder zijn drempel van
+600, dus geen enkel OpenAlex-record werd ooit verrijkt). Een `text` vat de uitkomst samen voor de wall.
 
 Rate-limit-gedrag:
   Bij HTTP 429: exponentiële backoff (2**attempt + jitter), max 4 pogingen.
@@ -32,8 +39,14 @@ from nooch_village.skills import DataSourceSkill
 log = logging.getLogger(__name__)
 
 _BASE   = "https://api.openalex.org/works"
-_SELECT = ("id,title,publication_year,cited_by_count,"
+_SELECT = ("id,doi,title,publication_year,cited_by_count,"
            "abstract_inverted_index,primary_topic,authorships")
+
+# HET ABSTRACT WAS OP 400 TEKENS GEKAPT, en `leesextract` leest pas vanaf 600 (`LANG_TEKST`): geen
+# enkel OpenAlex-record kreeg dus ooit een extract, en het verslag toonde de eerste 300 tekens van een
+# afgebroken eerste alinea. 2000 is ruim voor een abstract (de meeste zijn 150-350 woorden) en klein
+# genoeg om de note en de store niet te vullen.
+_ABSTRACT_MAX = 2000
 
 # OpenAlex' vrije `search=` kent GEEN boolean OR-operator (patent-bronnen als EPO/Google Patents wél).
 # Een boolean-keten die als één exacte frase wordt gezocht (bv. `"a OR b OR c"`) matcht dus NOOIT — de
@@ -102,7 +115,22 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
     for word, positions in inverted_index.items():
         for pos in positions:
             words[pos] = word
-    return " ".join(words[p] for p in sorted(words.keys()))[:400]
+    return " ".join(words[p] for p in sorted(words.keys()))[:_ABSTRACT_MAX]
+
+
+def _als_tekst(term: str, total: int, hits: list, zoekwijze: str) -> str:
+    """De leeswijzer voor de wall en het verslag: hoeveel werken, op welke term, en het meest
+    geciteerde erbij — de kerncijfers in één zin, Engels zoals de hele inhoudslaag."""
+    hoe = "exact phrase, most-cited first" if zoekwijze == "frase" else "relevance search on the loose words"
+    kop = f"{total} work(s) on OpenAlex for '{term}' ({hoe})"
+    top = hits[0] if hits else None
+    if not top:
+        return kop + "."
+    detail = f"“{str(top.get('title') or '').strip()[:120]}”"
+    if top.get("year"):
+        detail += f", {top['year']}"
+    detail += f", {int(top.get('citations') or 0)} citations"
+    return f"{kop}; top cited: {detail}."
 
 
 _WORKS = "https://api.openalex.org/works"
@@ -198,22 +226,23 @@ def _build_filter(payload: dict) -> tuple[str, str | None]:
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
     input_schema = (
-        "term: str (English search term. Up to 3 words = exact phrase, most-cited first — the precise "
-        "form, e.g. 'adhesives footwear'; 4+ words = relevance search on the loose words. Join "
-        "alternatives with ' OR '. Never a whole research question as one term). "
-        "optioneel (elk leeg → filter valt weg): "
-        "work_type: str (OpenAlex type-filter, aanbevolen 'article' voor peer-reviewed; leeg = alle types) · "
-        "journal_only: bool (alleen tijdschriften: primary_location.source.type:journal) · "
-        "exclude_retracted: bool (sluit ingetrokken werken uit: is_retracted:false; aanbevolen true) · "
-        "abstract_terms: list[str] (elk woord moet in het abstract voorkomen — OR binnen één filter: "
-        "abstract.search:a|b|c) · "
-        "from_year: int / to_year: int (publicatiejaar-grenzen → from/to_publication_date) · "
-        "min_citations: int (minimaal aantal citaties: cited_by_count:>n) · "
-        "limit: int · locale: str"
+        "term: str (required — an ENGLISH search term. Up to 3 words = exact phrase, most-cited first — "
+        "the precise form, e.g. 'adhesives footwear'; 4+ words = relevance search on the loose words. "
+        "Join alternatives with ' OR ' (each clause is searched separately and the results merged). "
+        "Never a whole research question as one term). "
+        "Optional (an empty field drops its filter): "
+        "work_type: str (OpenAlex type filter; 'article' recommended for peer-reviewed work; empty = all "
+        "types) · journal_only: bool (journals only: primary_location.source.type:journal) · "
+        "exclude_retracted: bool (drop retracted works: is_retracted:false; recommended true) · "
+        "abstract_terms: list[str] (words that must occur in the abstract — OR within one filter: "
+        "abstract.search:a|b|c) · from_year: int / to_year: int (publication-year bounds) · "
+        "min_citations: int (cited_by_count:>n) · limit: int (default 5) · locale: str (echoed back)"
     )
     required_payload = ("term",)
-    output_schema = ("lijst: total: int, hits: list[{title, authors, year, citations, topic, abstract}], "
-                     "filter: str (de gebruikte OpenAlex-filter — leeg als filterloos) | no_data | error")
+    output_schema = ("list: total: int, hits: list[{title, url (OpenAlex work id), doi, authors, year, "
+                     "citations, topic, abstract (up to 2000 chars)}], text (summary for the wall), "
+                     "filter: str (the OpenAlex filter used — empty when unfiltered), zoekwijze "
+                     "(frase|relevantie) | no_data + reason | error")
     SOURCE = "openalex"
     CATALOG_LABEL = "OpenAlex (academische tellers)"
     # Flow-bron: per puls tellen we de works die in een 90-daags publicatievenster VERSCHENEN (niet de
@@ -224,18 +253,23 @@ class OpenalexSkill(DataSourceSkill):
     cost = "rate_limited"
     required_env = ("OPENALEX_API_KEY",)
     optional_env = ("openalex_mailto",)
+    # De planner leest de eerste 160 tekens: daar moet staan WAT de bron is en HOE je hem vraagt.
     description = (
-        "Academische evidentie via OpenAlex (polite pool, backoff bij 429, fail-closed) + wekelijkse "
-        "works-flow per gepind concept in een 90/30-venster (collect_series)."
+        "Academic papers via OpenAlex: give an English term of 1-3 words (exact phrase, most-cited "
+        "first) or 4+ words (relevance search). Returns title, link, DOI, authors, year, citations and "
+        "the abstract per work; 'no_data' when the corpus has nothing on the term. Also the weekly "
+        "works-flow per pinned concept for the observation store (collect_series)."
     )
 
     def available_metrics(self, context=None) -> list[str]:
         """Eén nominaal veld; de echte reeksen (openalex_works_90d::<concept>) schrijft collect_series zelf."""
         return ["works_90d"]
 
-    def is_configured(self, context) -> bool:
-        """OpenAlex is keyless (polite pool via mailto) → altijd oproepbaar."""
-        return True
+    # `is_configured` is bewust NIET overschreven (scope 54). Hij zei "altijd True, keyless", terwijl
+    # `required_env` de sleutel eist en `run` er zonder faalt. Twee waarheden over dezelfde vraag: het
+    # opstartrapport en de bronnen-view meldden "scherp", en de configuratiepoort van scope 53 liet de
+    # skill in de planner-catalogus staan om hem daarna bij elke run te zien falen. Nu geldt de
+    # generieke regel van DataSourceSkill: geconfigureerd = de sleutel staat in settings of env.
 
     def daily_values(self, context, datum: str) -> dict:
         """OpenAlex schrijft via collect_series (eigen pad met custom venster/label/meta), niet via het
@@ -366,10 +400,14 @@ class OpenalexSkill(DataSourceSkill):
             ]
             topic    = (work.get("primary_topic") or {}).get("display_name", "")
             abstract = _reconstruct_abstract(work.get("abstract_inverted_index"))
+            # Het adres: het work-id (https://openalex.org/W…) is klikbaar en stabiel; de DOI erbij
+            # als die er is. Zonder adres toonde het verslag "• titel — abstract" zonder link.
             hits.append({
                 "source":    "openalex",
                 "locale":    locale,
                 "title":     work.get("title") or "",
+                "url":       str(work.get("id") or ""),
+                "doi":       str(work.get("doi") or ""),
                 "authors":   [a for a in authors if a],
                 "year":      work.get("publication_year"),
                 "citations": work.get("cited_by_count", 0),
@@ -379,7 +417,7 @@ class OpenalexSkill(DataSourceSkill):
 
         time.sleep(0.5)
         return {"term": term, "locale": locale, "total": total, "hits": hits, "filter": filter_str,
-                "zoekwijze": zoekwijze}
+                "zoekwijze": zoekwijze, "text": _als_tekst(term, total, hits, zoekwijze)}
 
     def _search_results(self, phrase: str, limit: int, filter_str: str,
                         mailto: str, key: str, ua: str):

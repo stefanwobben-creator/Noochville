@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 import types
+from unittest.mock import patch
 
 from nooch_village import cockpit2
 from nooch_village.skills import DataSourceSkill, SkillRegistry
@@ -177,7 +178,10 @@ def test_expected_period_weekly_en_monthly():
 
 # ── OpenAlex: 90/30-flow-venster per gepind concept (collect_series) ──────────────────────────────
 def _oa_ctx(concepts="mycelium:C133479454, ecodesign:C2779439448"):
-    return types.SimpleNamespace(settings={"openalex_concepts": concepts})
+    # Mét sleutel: sinds scope 54 is OpenAlex pas 'geconfigureerd' als OPENALEX_API_KEY er staat
+    # (zoals `run` altijd al eiste), en de collector slaat een niet-geconfigureerde bron over.
+    return types.SimpleNamespace(settings={"openalex_concepts": concepts,
+                                           "OPENALEX_API_KEY": "test-sentinel"})
 
 
 def _oa_fetch(count):
@@ -193,7 +197,12 @@ def test_openalex_contract_en_config():
     from nooch_village.skills_impl.openalex import OpenalexSkill, _parse_concepts
     sk = OpenalexSkill()
     assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "openalex" and sk.kind == "flux"
-    assert sk.frequency("x") == "weekly" and sk.is_configured(_ctx()) and sk.available_metrics() == ["works_90d"]
+    # Scope 54: `is_configured` volgt `required_env` (OPENALEX_API_KEY), zoals `run` het al eiste —
+    # tot dan zei hij "altijd True" en las de configuratiepoort een lege .env als "scherp".
+    met_key = types.SimpleNamespace(settings={"OPENALEX_API_KEY": "test-sentinel"})
+    assert sk.frequency("x") == "weekly" and sk.is_configured(met_key) and sk.available_metrics() == ["works_90d"]
+    with patch.dict("os.environ", {}, clear=True):
+        assert not sk.is_configured(_ctx())
     assert _parse_concepts("mycelium:C133479454, ecodesign:C2779439448") == \
         [("mycelium", "C133479454"), ("ecodesign", "C2779439448")]
 
