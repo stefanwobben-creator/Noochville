@@ -20,32 +20,44 @@ def _run(kaart_a, kaart_b, reason_return):
         return skill.run({"kaart_a": kaart_a, "kaart_b": kaart_b}, context=None)
 
 
+# Scope 57 (skill-review 12-09-2026): drie oorzaken, drie antwoorden. Deze tests legden vast dat
+# geen model, rommel én een echt nee hetzelfde `{"verband": False}` gaven — waardoor LLM-uitval op
+# de wall als "geen verband" las. Het contract is nu Engels (CONNECTION: yes|no); de Nederlandse
+# vorm blijft als overgangs-tolerantie herkend.
+
 def test_verband_ja_geeft_claim():
     """LLM bevestigt verband → verband True, claim gevuld."""
     uitslag = _run(_KAART_A, _KAART_B,
+                   "CONNECTION: yes | CLAIM: Both cards are about plastic-free shoe material.")
+    assert uitslag["verband"] is True
+    assert uitslag["claim"] == "Both cards are about plastic-free shoe material."
+
+
+def test_verband_nederlands_antwoord_blijft_herkend():
+    uitslag = _run(_KAART_A, _KAART_B,
                    "VERBAND: ja | CLAIM: Beide kaarten gaan over plasticvrij schoenmateriaal.")
     assert uitslag["verband"] is True
-    assert uitslag["claim"] == "Beide kaarten gaan over plasticvrij schoenmateriaal."
 
 
-def test_verband_nee_geeft_false():
-    """LLM zegt nee → verband False, geen claim."""
-    uitslag = _run(_KAART_A, _KAART_C, "VERBAND: nee | CLAIM: geen")
-    assert uitslag["verband"] is False
-    assert "claim" not in uitslag
+def test_verband_nee_is_no_data_met_reden():
+    """LLM zegt nee → een echt antwoord: verband False, `no_data` (📭 op de wall), geen claim."""
+    uitslag = _run(_KAART_A, _KAART_C, "CONNECTION: no")
+    assert uitslag["verband"] is False and uitslag["no_data"] is True and uitslag["reason"]
+    assert "claim" not in uitslag and "error" not in uitslag
+    assert _run(_KAART_A, _KAART_C, "VERBAND: nee | CLAIM: geen")["verband"] is False
 
 
-def test_verband_geen_llm_fail_closed():
-    """Geen LLM-key (reason returns None) → fail-closed, verband False."""
+def test_verband_geen_llm_is_een_fout():
+    """Geen LLM-key (reason returns None) → `error`, en de Librarian-lus leest géén verband."""
     uitslag = _run(_KAART_A, _KAART_B, None)
-    assert uitslag["verband"] is False
-    assert "claim" not in uitslag
+    assert "error" in uitslag and not uitslag.get("verband")
+    assert "claim" not in uitslag and "no_data" not in uitslag
 
 
-def test_verband_onparseerbaar_fail_closed():
-    """Rommel-output van LLM → fail-closed, verband False."""
+def test_verband_onparseerbaar_is_een_fout():
+    """Rommel-output van LLM → `error` (niet 'geen verband'), geen claim."""
     uitslag = _run(_KAART_A, _KAART_B, "Dit is totaal onleesbare output zonder formaat.")
-    assert uitslag["verband"] is False
+    assert "error" in uitslag and not uitslag.get("verband")
     assert "claim" not in uitslag
 
 
@@ -104,7 +116,7 @@ def test_dag_eindigt_publiceert_human_decision_bij_verband(tmp_path):
     gepubliceerd = []
     bus.subscribe("human_decision_needed", lambda e: gepubliceerd.append(e))
 
-    llm_antwoord = "VERBAND: ja | CLAIM: Beide kaarten gaan over plasticvrij schoenmateriaal."
+    llm_antwoord = "CONNECTION: yes | CLAIM: Beide kaarten gaan over plasticvrij schoenmateriaal."
     with patch("nooch_village.llm.reason", return_value=llm_antwoord):
         librarian._on_dag_eindigt(_dag_eindigt_event())
 
@@ -129,7 +141,7 @@ def test_dag_eindigt_geen_event_bij_geen_verband(tmp_path):
     gepubliceerd = []
     bus.subscribe("human_decision_needed", lambda e: gepubliceerd.append(e))
 
-    with patch("nooch_village.llm.reason", return_value="VERBAND: nee | CLAIM: geen"):
+    with patch("nooch_village.llm.reason", return_value="CONNECTION: no"):
         librarian._on_dag_eindigt(_dag_eindigt_event())
 
     assert gepubliceerd == []

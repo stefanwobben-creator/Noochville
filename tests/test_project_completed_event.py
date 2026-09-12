@@ -189,12 +189,21 @@ def test_4_bulletin_bevat_afrondingsregel(tmp_path):
 # 5. project_completed voor een onvindbaar project → regel overgeslagen, geen exception
 def test_5_onvindbaar_project_regel_overgeslagen(tmp_path):
     ledger = ProjectLedger(str(tmp_path / "p.json"))
+    # Eén vindbaar project ernaast (scope 57: bulletin_schrijven slaat een LEGE events-lijst over
+    # met no_data — dat moet hier niet gebeuren, want dan wordt llm.reason nooit aangeroepen en
+    # test deze case niets meer). Met een echt project ernaast blijft `events` na filtering
+    # niet-leeg, en toetst de assert alsnog dat het onvindbare project geen regel krijgt.
+    pid = ledger.create("harry_hemp", "Onderzoek naar hennepvezel", "human", status="future")
     noochie = _make_noochie(tmp_path, ledger)
-    noochie._events_today = [{"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": "bestaat-niet"}]
+    noochie._events_today = [
+        {"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": pid},
+        {"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": "bestaat-niet"},
+    ]
     with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock:
         noochie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))   # geen crash
     prompt = mock.call_args[0][0]
-    assert "rondde af" not in prompt                       # onvindbaar → regel overgeslagen (fail-closed)
+    assert "rondde af: Onderzoek naar hennepvezel" in prompt   # het vindbare project staat er wél
+    assert prompt.count("rondde af") == 1                      # onvindbaar → regel overgeslagen (fail-closed)
 
 
 # 6. Bulletin bevat de 'wacht op review'-regel (naast 'rondde af'), scope uit de ledger

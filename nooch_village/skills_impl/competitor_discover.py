@@ -5,11 +5,15 @@ een lezer niet doorheen komt). Per gevonden gids: pagina lezen, en de LLM de gen
 merknamen laten extraheren ('15 Best Vegan Sneaker Brands' → Veja, Vesica Piscis, Etiko, ...).
 Dependency-vrij (requests + stdlib) + de gedeelde LLM-ladder.
 
-Fail-closed: geen SerpAPI-key, geen leesbare pagina of geen LLM → géén kandidaten (geen rommel).
-Liever niets dan een verkeerde merknaam; de mens bevestigt de rest in de cockpit.
+Fail-closed, drie uitkomsten (scope 55): geen SerpAPI-key of geen model → `ok: False, error`
+(de bron/het model faalde, het item blijft open); gidsen gelezen maar geen merknaam →
+`no_data: True, reason` (onderzocht, niets gevonden); anders records mét het zinnetje uit de
+gids dat de merknaam draagt. Liever niets dan een verkeerde merknaam; de mens bevestigt de rest
+in de cockpit.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -18,14 +22,25 @@ from nooch_village.skills import Skill, resolve_source_scope
 
 log = logging.getLogger("village.skill.discover")
 
+# Engels, met een grounding-regel en een JSON-vorm (skill-review 12-09-2026: de prompt was
+# Nederlands, vrije tekst en zonder token-plafond). De namen moeten LETTERLIJK in de tekst staan;
+# `_zin_rond` toetst dat daarna nog eens deterministisch, zodat een naam uit het geheugen van het
+# model nooit als kandidaat landt.
 _PROMPT = (
-    "Hieronder staat de tekst van een artikel over {topic}.\n"
-    "Geef UITSLUITEND de namen van schoenmerken die het artikel presenteert als voorbeeld binnen "
-    "'{topic}'. Neem GEEN merken mee die alleen ter vergelijking, contrast of zijdelings genoemd worden "
-    "(bijvoorbeeld een mainstream-merk dat als tegenpool dient). Geen publicatienamen, geen auteurs, geen "
-    "algemene woorden, niet 'Nooch'. Kommagescheiden lijst. Niets gevonden → antwoord precies: NONE.\n\n"
-    "Artikel:\n{text}"
+    "Below is the text of an article about {topic}.\n"
+    "List ONLY the names of shoe brands that the article presents as examples within "
+    "'{topic}'. Do NOT include brands that are mentioned only for comparison, contrast or in "
+    "passing (for example a mainstream brand used as a counterexample). No publication names, "
+    "no authors, no generic words, not 'Nooch'. Use only names that literally appear in the "
+    "text below; never add a brand from your own knowledge.\n"
+    "Return ONLY a JSON array of strings, no prose, no code fences. Nothing found → []\n\n"
+    "Article:\n{text}"
 )
+# Ruim genoeg voor een lange gids ('25 best …'): de merken onderaan vielen bij 6000 tekens buiten
+# beeld, omdat strip_html het menu en de boilerplate vooraan laat staan.
+_TEXT_CAP = 12000
+_MAX_TOKENS = 400            # een JSON-lijst van hooguit enkele tientallen korte namen
+_CITAAT_MAX = 240
 
 _NOT_A_BRAND = {
     "none", "best", "top", "guide", "sustainable", "ethical", "vegan", "sneakers",
@@ -40,10 +55,23 @@ def _strip_html(html: str) -> str:
 
 
 def _parse_brand_list(llm_out: str, known: list[str]) -> list[str]:
-    """LLM-output → schone, ontdubbelde merknamenlijst, gefilterd op ruis + bekende merken."""
+    """LLM-output → schone, ontdubbelde merknamenlijst, gefilterd op ruis + bekende merken.
+
+    Leest de JSON-array van de huidige prompt én de kommagescheiden vorm van de oude (een model
+    dat de JSON-instructie negeert levert nog steeds bruikbare namen op)."""
     if not llm_out or llm_out.strip().upper().startswith("NONE"):
         return []
-    raw = re.split(r"[,\n;]+", llm_out)
+    raw: list = []
+    cleaned = re.sub(r"```(?:json)?", "", llm_out).strip()
+    start, end = cleaned.find("["), cleaned.rfind("]")
+    if start != -1 and end > start:
+        try:
+            data = json.loads(cleaned[start:end + 1])
+            raw = [str(x) for x in data if isinstance(x, (str, int, float))] if isinstance(data, list) else []
+        except (ValueError, TypeError):
+            raw = []
+    if not raw:
+        raw = re.split(r"[,\n;]+", llm_out)
     known_l = {k.lower() for k in known}
     seen, out = set(), []
     for part in raw:
@@ -57,18 +85,53 @@ def _parse_brand_list(llm_out: str, known: list[str]) -> list[str]:
     return out
 
 
+_ZINGRENS = re.compile(r"(?<=[.!?])\s+")
+
+
+def _zin_rond(text: str, name: str) -> str:
+    """De zin uit de gids waarin de merknaam staat (deterministisch, uit de tekst zelf — niet van het
+    model). Leeg als de naam niet in de tekst voorkomt: dan is het geen kandidaat uit DEZE gids."""
+    if not text or not name:
+        return ""
+    low = text.lower()
+    pos = low.find(name.lower())
+    if pos == -1:
+        return ""
+    # de dichtstbijzijnde zinsgrens vóór en na de naam, binnen een venster van 300 tekens; zonder
+    # zinsgrens (een lijstje, een kop) een woordgrens op hooguit 120 tekens vóór en 160 erna
+    begin = max(0, pos - 300)
+    voor = text[begin:pos]
+    grenzen = [m.end() for m in _ZINGRENS.finditer(voor)]
+    if grenzen:
+        zin_start = begin + grenzen[-1]
+    else:
+        kort = text[max(0, pos - 120):pos]
+        zin_start = pos - len(kort) + (kort.find(" ") + 1 if " " in kort and pos > 120 else 0)
+    na = text[pos:pos + 300]
+    m = _ZINGRENS.search(na)
+    if m:
+        zin_eind = pos + m.start()
+    else:
+        kort = na[:160]
+        zin_eind = pos + (kort.rfind(" ") if " " in kort and len(na) > 160 else len(kort))
+    zin = " ".join(text[zin_start:zin_eind].split())
+    return zin if len(zin) <= _CITAAT_MAX else zin[:_CITAAT_MAX - 1] + "…"
+
+
 class CompetitorDiscoverSkill(Skill):
     name = "competitor_discover"
     cost = "credits"               # SerpAPI-zoekopdracht
     side_effect_free = True
     required_env = ("SERPAPI_API_KEY",)
-    description = ("Vindt gids-artikelen via SerpAPI (echte URLs), leest ze, en laat de LLM "
-                   "de genoemde merknamen extraheren als kandidaat-concurrenten. Fail-closed.")
-    input_schema = ("topic: str (het onderwerp — de categorie merken om te ontdekken, AFGELEID uit het "
-                    "projectdoel, bv. 'best barefoot shoe brands'; als 'query' gegeven wordt telt die ook; "
-                    "weglaten = de staande categorie uit de config) · brands: list[str] (OPTIONEEL — bekende "
-                    "merken die uit de kandidaten worden gefilterd; leeg = niets filteren) · limit: int "
-                    "(aantal gidsen)")
+    description = ("Discovers candidate competitor brands: finds guide articles ('best X brands') "
+                   "via SerpAPI, reads each page and lets the model extract the brand names that "
+                   "literally appear in the text, each with the sentence that names it. Fail-closed: "
+                   "no key or no model is an error; guides without brand names is 'nothing found'.")
+    input_schema = ("topic: str (the subject — the category of brands to discover, DERIVED from the "
+                    "project goal, e.g. 'best barefoot shoe brands'; `query` is accepted as alias; "
+                    "omitted = the standing category from the config `discover_query`) · brands: "
+                    "list[str] (OPTIONAL — known brands filtered out of the candidates; empty = filter "
+                    "nothing) · limit: int (number of guides to read, default 4)")
     # Geen hard-verplicht payload-veld: `brands` is een optioneel filter, en het onderwerp (topic/query)
     # heeft een config-fallback (discover_query). run() weigert bij de bron zichtbaar als noch onderwerp
     # noch config een categorie geeft (resolve_source_scope), dus die grens ligt op de uitvoer, niet in een
@@ -78,7 +141,9 @@ class CompetitorDiscoverSkill(Skill):
     # geldige config-only-aanroep blokkeren. Daarom bewaakt `validate_payload` het, met de config
     # erbij; dat is dezelfde route die `community_listening` voor zijn of-of-eis gebruikt.
     required_payload = ()
-    output_schema = "ok: bool, candidates: list[{brand, article, link}], query: str | error"
+    output_schema = ("ok: bool, candidates: list[{brand, article, link, citaat}], text: str (the summary), "
+                     "query: str, gescand: int (guides found), gelezen: int (guides readable) "
+                     "| no_data: True, reason | ok: False, error")
 
     def validate_payload(self, payload: dict, context) -> list:
         """Is er een onderwerp? Uit de payload of uit de config — anders is dit item niet uitvoerbaar.
@@ -112,23 +177,57 @@ class CompetitorDiscoverSkill(Skill):
         try:
             guides = self._serpapi_guides(context, query)
         except Exception as exc:
-            log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", exc)
-            return {"ok": False, "error": str(exc)}
+            from nooch_village.sleutelmasker import masker      # een ConnectionError draagt de URL mét api_key
+            log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", masker(exc))
+            return {"ok": False, "error": masker(exc)}
+        if not guides:
+            # Onderzocht, niets gevonden: de zoekmachine gaf geen gids terug. Dat is een antwoord
+            # (📭), geen bronfout — de bron werkte, er is alleen niets over dit onderwerp.
+            return {"ok": True, "no_data": True, "candidates": [], "gescand": 0, "gelezen": 0,
+                    "query": query, "reason": f"no guide articles found for '{query}'"}
 
         from nooch_village.llm import reason
+        ladder = (str(payload.get("ladder") or "").strip() or None)   # zelfde afspraak als tegenspraak
         seen, candidates = set(), []
+        gelezen = 0
         for g in guides[:limit]:
             text = self._fetch_text(g["link"])
             if len(text) < 200:                          # niet leesbaar → overslaan
                 continue
-            out = reason(_PROMPT.format(topic=query, text=text[:6000]),
-                         call_site="skill_competitor_discover")
+            gelezen += 1
+            out = reason(_PROMPT.format(topic=query, text=text[:_TEXT_CAP]),
+                         call_site="skill_competitor_discover", max_tokens=_MAX_TOKENS,
+                         json_mode=True, ladder=ladder)
+            if out is None:
+                # "Geen model" is ALTIJD een fout, nooit een lege lijst: tot scope 55 maakte
+                # `_parse_brand_list(None)` hier stil `[]` van en las de wall dat als "4" (gelukt).
+                return {"ok": False, "error": "no model available (all LLM tiers failed or no key) — "
+                                              f"{gelezen} of {len(guides)} guides read, none extracted",
+                        "gescand": len(guides), "gelezen": gelezen, "query": query}
             for name in _parse_brand_list(out, brands):
                 if name.lower() in seen:
                     continue
+                citaat = _zin_rond(text, name)
+                if not citaat:
+                    # Grounding: de naam staat niet in de gids → uit het geheugen van het model,
+                    # geen kandidaat uit deze bron.
+                    log.info("competitor_discover: '%s' staat niet in de tekst van %s — overgeslagen",
+                             name, g["link"][:60])
+                    continue
                 seen.add(name.lower())
-                candidates.append({"brand": name, "article": g["title"], "link": g["link"]})
-        return {"ok": True, "candidates": candidates, "guides": len(guides), "query": query}
+                candidates.append({"brand": name, "article": g["title"], "link": g["link"],
+                                   "citaat": citaat})
+        if not candidates:
+            return {"ok": True, "no_data": True, "candidates": [], "gescand": len(guides),
+                    "gelezen": gelezen, "query": query,
+                    "reason": f"{gelezen} of {len(guides)} guides read, no brand names"}
+        namen = ", ".join(c["brand"] for c in candidates[:8])
+        if len(candidates) > 8:
+            namen += f", … (+{len(candidates) - 8})"
+        return {"ok": True, "candidates": candidates, "gescand": len(guides), "gelezen": gelezen,
+                "query": query,
+                "text": (f"{len(candidates)} candidate brand(s) from {gelezen} of {len(guides)} guides "
+                         f"read for '{query}': {namen}")}
 
     def _serpapi_guides(self, context, query: str) -> list[dict]:
         from nooch_village import web_read

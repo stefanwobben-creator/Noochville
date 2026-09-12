@@ -32,6 +32,9 @@ def test_normalizes_response():
         mock_post.return_value = _mock_response()
         result = skill.run({"kw": ["digital marketing"]}, _ctx())
 
+    # Scope 55: per rij een `term` (titel) en een `tekst` (strekking), en een `text` bovenaan —
+    # anders rendert het verslag de rij als ruwe JSON. De oorspronkelijke velden blijven.
+    assert result.pop("text").startswith("1 keyword(s) with search volume (global); top: digital marketing 90500/mo")
     assert result == {
         "source":             "keywords_everywhere",
         "country":            "",                     # default leeg = global (geen 'nl'-default meer)
@@ -41,11 +44,13 @@ def test_normalizes_response():
         "credits_remaining":  148520,
         "keywords": [
             {
+                "term":        "digital marketing",
                 "keyword":     "digital marketing",
                 "vol":         90500,
                 "cpc":         9.96,
                 "competition": 0.62,
                 "trend":       [{"month": "January", "year": 2026, "value": 110000}],
+                "tekst":       "90500/mo, cpc 9.96, competition 0.62",
             }
         ],
     }

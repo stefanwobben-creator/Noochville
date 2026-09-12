@@ -165,12 +165,14 @@ def onderzoek(inhabitant, vraag: str, *, term: str = "") -> dict:
             continue
         kroniek_id = _naar_kroniek(inhabitant, skill, vraag, res)
         for _s, veld, waarde in velden_van(skill, res)[:6]:
-            if veld.startswith("betekenis"):
+            if veld.startswith(("betekenis", "toelichting")):
                 continue                                     # apart, hieronder, mét label
             uit["bewijs"].append({"bron": skill, "citaat": f"{veld} = {waarde}", "kroniek": kroniek_id})
         # De bron levert zijn eigen betekenis: wat deze cijfers NIET vaststellen. Regel-gebaseerd
-        # (zie claims_check.betekenis_van) — geen model dat interpreteert.
-        for regel in (res.get("betekenis") or []):
+        # (zie claims_check.betekenis_van) — geen model dat interpreteert. Sinds scope 56 heet die
+        # lijst `toelichting` (metadata voor de uitvoerlaag, zodat hij de bevindingen niet meer
+        # wegduwt in de wall-note); `betekenis` blijft leesbaar voor een oudere uitvoer.
+        for regel in (res.get("toelichting") or res.get("betekenis") or []):
             uit["bewijs"].append({"bron": f"{skill} (betekenis)", "citaat": str(regel),
                                   "kroniek": kroniek_id})
 

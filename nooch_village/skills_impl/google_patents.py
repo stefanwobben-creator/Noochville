@@ -22,6 +22,24 @@ log = logging.getLogger(__name__)
 
 _ENDPOINT = "https://patents.google.com/xhr/query"
 _UA = "Mozilla/5.0 (compatible; NoochVille/1.0; +https://nooch.earth)"   # zonder UA geeft het endpoint 403
+_PATENT_URL = "https://patents.google.com/patent/"
+# Boven de leesextract-drempel van 600 (scope 54); de oude cap van 400 maakte elk extract onmogelijk.
+_ABSTRACT_MAX = 2000
+
+
+def _als_tekst(term: str, total: int, patents: list) -> str:
+    """De leeswijzer voor de wall: hoeveel patenten, op welke term, en het eerste erbij."""
+    kop = f"{total} patent(s) on Google Patents for '{term}'"
+    eerste = patents[0] if patents else None
+    if not eerste:
+        return kop + "."
+    detail = f"“{str(eerste.get('title') or '').strip()[:120]}”"
+    if eerste.get("publication_number"):
+        detail += f" ({eerste['publication_number']}"
+        if eerste.get("publication_date"):
+            detail += f", {eerste['publication_date']}"
+        detail += ")"
+    return f"{kop}; first: {detail}."
 
 
 class GooglePatentsSkill(DataSourceSkill):
@@ -30,11 +48,15 @@ class GooglePatentsSkill(DataSourceSkill):
     kind = "snapshot"
     cost = "rate_limited"                  # ongedocumenteerd endpoint — bescheiden gebruik
     needs_secret = False                   # keyless (het alternatieve pad naast het key-vereisende EPO)
-    input_schema = "term: str (zoekterm). optioneel: limit: int (default 5, max 10)"
-    output_schema = ("lijst: total: int, patents: list[{title, abstract, publication_date, "
-                     "publication_number, assignee, inventors}] | no_data | error")
-    description = ("Zoekt wereldwijde patenten via het keyless xhr-endpoint van Google Patents. Het "
-                   "alternatieve pad voor de skill-ladder als EPO OPS faalt. Fail-closed.")
+    input_schema = ("term: str (required — the words a patent title or abstract would use, English; "
+                    "' OR ' is passed through as Google Patents understands it). Optional: limit: int "
+                    "(default 5, max 10)")
+    output_schema = ("list: total: int, patents: list[{title, url (patents.google.com), "
+                     "publication_number, publication_date, abstract (up to 2000 chars), assignee, "
+                     "inventors}], text (summary for the wall) | no_data + reason | error")
+    description = ("Worldwide patents via the keyless query endpoint of Google Patents: the second rung "
+                   "under epo_patents when EPO OPS fails. Returns title, link, number, date, abstract "
+                   "and assignee per patent; 'no_data' when nothing matches. Fail-closed.")
 
     _MIN_INTERVAL = 1.2                    # min. seconden tussen calls (burst-throttle); test zet 0
     _last_call_ts = 0.0                    # class-state: tijdstip laatste call, over de puls-burst heen
@@ -104,14 +126,20 @@ class GooglePatentsSkill(DataSourceSkill):
                 p = (item or {}).get("patent") or {}
                 if not p:
                     continue
+                pub_no = (p.get("publication_number") or "").strip()
                 rec = {
                     "title": (p.get("title") or "").strip(),
-                    "publication_number": (p.get("publication_number") or "").strip(),
+                    "publication_number": pub_no,
                     "publication_date": (p.get("publication_date") or p.get("priority_date") or "").strip(),
                 }
+                if pub_no:
+                    # Deterministisch adres: de patentpagina op publicatienummer. Zonder link kon een
+                    # mens vanuit note of verslag niet doorklikken — ook niet als deze skill als
+                    # fallback voor EPO draaide.
+                    rec["url"] = f"{_PATENT_URL}{urllib.parse.quote(pub_no)}"
                 abstract = (p.get("snippet") or p.get("abstract") or "").strip()
                 if abstract:
-                    rec["abstract"] = abstract[:400]
+                    rec["abstract"] = abstract[:_ABSTRACT_MAX]
                 assignee = p.get("assignee")
                 if assignee:
                     rec["assignee"] = assignee if isinstance(assignee, list) else [assignee]
@@ -123,17 +151,22 @@ class GooglePatentsSkill(DataSourceSkill):
 
     # ── run ─────────────────────────────────────────────────────────────────
     def run(self, payload: dict, context) -> dict:
-        term = (payload.get("term") or "").strip()
+        term = str((payload or {}).get("term") or "").strip()
         if not term:
             return {"error": "geen term opgegeven", "patents": []}
-        limit = max(1, min(int(payload.get("limit", 5)), 10))
+        try:
+            limit = max(1, min(int((payload or {}).get("limit", 5)), 10))
+        except (TypeError, ValueError):
+            limit = 5
         try:
             data = self._fetch(term, limit)
         except Exception as exc:
-            log.warning("Google Patents query faalde (%s): %s", term, exc)
-            return {"error": f"Google Patents: {exc}", "patents": []}     # netwerk/HTTP/parse → gat + error
+            from nooch_village.sleutelmasker import masker
+            log.warning("Google Patents query faalde (%s): %s", term, masker(exc))
+            return {"error": f"Google Patents: {masker(exc)}", "patents": []}   # netwerk/HTTP/parse → gat + error
         total, patents = self._parse(data)
         if not patents:
             return {"term": term, "total": 0, "patents": [], "no_data": True,
                     "reason": "geen patenten gevonden voor deze term"}
-        return {"term": term, "total": total or len(patents), "patents": patents}
+        return {"term": term, "total": total or len(patents), "patents": patents,
+                "text": _als_tekst(term, total or len(patents), patents)}

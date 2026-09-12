@@ -171,9 +171,15 @@ def test_g_normalize_term():
 # ── h. CQL-vorm: ≤2 woorden = exacte titel-frase; ≥3 woorden = ti any (frase 404't anders) ─────────
 def test_h_lange_query_gebruikt_ti_any(monkeypatch):
     sk = EpoPatentsSkill()
-    seen = {}
+    seen = []
     monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
     monkeypatch.setattr(sk, "_default_get",
-                        lambda url, token: (seen.__setitem__("url", url), _OPS_XML)[1])
-    sk.run({"term": '"barefoot shoes" biodegradable sole OR compostable', "limit": 3}, _ctx())
-    assert "ti%20any%20" in seen["url"] and "ti%3D%22" not in seen["url"]   # ti any "…", geen exacte frase
+                        lambda url, token: (seen.append(url), _OPS_XML)[1])
+    with patch("time.sleep"):
+        r = sk.run({"term": '"barefoot shoes" biodegradable sole OR compostable', "limit": 3}, _ctx())
+    # Scope 54: elke OR-clausule gaat apart naar OPS (tot dan alleen de eerste, stil). De lange
+    # eerste clausule als ti any "…" (geen exacte frase), de korte tweede als exacte titel-frase.
+    assert len(seen) == 2
+    assert "ti%20any%20" in seen[0] and "ti%3D%22" not in seen[0]
+    assert "ti%3D%22compostable%22" in seen[1]
+    assert r["gezocht"] == 'ti any "barefoot shoes biodegradable sole" | ti="compostable"'

@@ -44,8 +44,10 @@ class RuisCheckSkill(Skill):
         if not query or raw in (None, ""):
             return {"error": "ontbrekende parameter: 'query' en 'aantal' zijn beide verplicht"}
         try:
-            aantal = int(raw)
-        except (TypeError, ValueError):
+            # `int(float(...))`: een planner-payload schrijft een teller nogal eens als "5000.0" of
+            # "5e3" (JSON uit een model), en dat is geen reden voor een ⚠️ op de wall (scope 54).
+            aantal = int(float(raw)) if not isinstance(raw, bool) else int(raw)
+        except (TypeError, ValueError, OverflowError):
             return {"error": f"'aantal' is geen getal: {raw!r}"}
         drempel = self._drempel(context, payload)
         te_breed = aantal > drempel

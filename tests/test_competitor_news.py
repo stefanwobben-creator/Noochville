@@ -85,9 +85,19 @@ def test_run_schrijft_rapport_en_geeft_items(tmp_path):
     with patch("requests.get", return_value=_resp(_RSS)):
         res = CompetitorNewsSkill().run({}, ctx)
     assert res["ok"] and res["total"] == 1
-    assert res["brands"] == ["Veja"]
+    assert res["_brands"] == ["Veja"]       # scope 55: de echo van de invoer is metadata (_-prefix)
     import os
     assert os.path.exists(res["path"])
+
+
+def test_run_zonder_merken_weigert_zichtbaar(tmp_path):
+    """Scope 55: geen code-default merkenlijst meer. Zonder `brands` in de payload én zonder
+    `competitor_brands` in de config is er niets te scannen — en dat zegt de skill, i.p.v.
+    Veja/Moea/… voor elk project te gokken."""
+    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={})
+    with patch("requests.get", side_effect=AssertionError("mag niet ophalen")):
+        res = CompetitorNewsSkill().run({}, ctx)
+    assert res["ok"] is False and "competitor_brands" in res["error"]
 
 
 def test_run_fail_closed_als_alle_merken_falen(tmp_path):

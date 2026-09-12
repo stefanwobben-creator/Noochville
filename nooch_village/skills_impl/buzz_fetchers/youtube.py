@@ -18,6 +18,7 @@ import os
 from datetime import datetime, timezone
 
 from nooch_village.util import refuse
+from nooch_village.sleutelmasker import masker
 from nooch_village.skills_impl.buzz_fetchers.base import BuzzFetcher, UA, CACHE_TTL, FRAGMENT_MAX
 
 _API = "https://www.googleapis.com/youtube/v3"
@@ -53,7 +54,11 @@ class YouTubeFetcher(BuzzFetcher):
         import requests
         resp = requests.get(f"{_API}/{endpoint}", params=params,
                             headers={"User-Agent": UA}, timeout=20)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Niet `raise_for_status()`: die zet de URL mét `key=…` in de melding, en die melding
+            # ging via refuse(...) het log en de skill-uitkomst in (skill-review 12-09-2026).
+            from nooch_village.sleutelmasker import http_fout
+            raise RuntimeError(http_fout(resp, "YouTube Data API"))
         return resp.json() or {}
 
     def _spend(self, units: int) -> None:
@@ -103,7 +108,11 @@ class YouTubeFetcher(BuzzFetcher):
         if resp.status_code == 403 and "commentsDisabled" in resp.text:
             refuse("BUZZ_COMMENTS_DISABLED", "comments uitgeschakeld op video", video_id=vid)
             return []
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Het tweede pad naast `_get` (scope 55): `raise_for_status()` zette hier nog de URL mét
+            # `key=…` in de melding, en die ging via refuse() het log in.
+            from nooch_village.sleutelmasker import http_fout
+            raise RuntimeError(http_fout(resp, "YouTube Data API"))
         rows = []
         for it in (resp.json() or {}).get("items", []):
             top = ((it.get("snippet") or {}).get("topLevelComment") or {})
@@ -136,7 +145,8 @@ class YouTubeFetcher(BuzzFetcher):
             except _QuotaExceeded:
                 raise
             except Exception as e:
-                refuse("BUZZ_FETCH_FAILED", str(e), video_id=v.get("videoId"))
+                # Gemaskeerd: een ConnectionError draagt de URL mét `key=…` (scope 55).
+                refuse("BUZZ_FETCH_FAILED", masker(e), video_id=v.get("videoId"))
 
     # ── orchestratie ────────────────────────────────────────────────────────────
     def fetch(self, set_id: str, cfg: dict, context, cache, opts: dict) -> dict:
@@ -154,8 +164,12 @@ class YouTubeFetcher(BuzzFetcher):
         made = 0
         try:
             # a) kanaal-modus (voorrang)
+            # Cache-sleutel PER SET (scope 55): tot nu toe deelden monitor-set en discovery-set
+            # dezelfde sleutel per query, dus een project met "barefoot shoes review" kreeg 0 rijen
+            # als de monitor-puls die query vandaag al had opgehaald. Een dubbele search kost 100
+            # units; dat is de prijs voor een project dat zijn eigen materiaal krijgt.
             for ch in channels:
-                ckey = f"youtube::ch::{ch}"
+                ckey = f"youtube::ch::{set_id}::{ch}"
                 if now - cache.ts(ckey) < CACHE_TTL:
                     continue
                 try:
@@ -163,14 +177,14 @@ class YouTubeFetcher(BuzzFetcher):
                 except _QuotaExceeded:
                     raise
                 except Exception as e:
-                    refuse("BUZZ_FETCH_FAILED", str(e), channel_id=ch)
+                    refuse("BUZZ_FETCH_FAILED", masker(e), channel_id=ch)
                     continue
                 made += 1
                 cache.mark(ckey, now, len(videos))
                 self._harvest(videos, f"channel:{ch}", set_id, key, rows)
             # b) query-modus
             for q in queries:
-                qkey = f"youtube::q::{q}"
+                qkey = f"youtube::q::{set_id}::{q}"
                 if now - cache.ts(qkey) < CACHE_TTL:
                     continue
                 try:
@@ -178,7 +192,7 @@ class YouTubeFetcher(BuzzFetcher):
                 except _QuotaExceeded:
                     raise
                 except Exception as e:
-                    refuse("BUZZ_FETCH_FAILED", str(e), query=q)
+                    refuse("BUZZ_FETCH_FAILED", masker(e), query=q)
                     continue
                 made += 1
                 cache.mark(qkey, now, len(videos))

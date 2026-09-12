@@ -7,15 +7,30 @@ de Field Note en _propose_related ongewijzigd blijven werken.
 
 Zuinig: een roterend venster bevraagt maar een paar keywords per run; de cadans (wekelijks)
 zit in de aanroeper. Faalt closed zonder SERPAPI_API_KEY.
+
+Sinds scope 55 de TREDE onder `google_trends` in evidence_ledger.SKILL_LADDERS: een pytrends-429
+valt door naar deze skill met dezelfde payload (`keywords` of `term`), en de uitkomst heeft
+dezelfde drie vormen (ok/no_data/error, via trends.finish_rows). Niet in een rugzak: een trede is
+geen aparte keuze voor de planner.
 """
 from __future__ import annotations
 import os, json
 import requests
 from nooch_village.skills import Skill
-from nooch_village.skills_impl.trends import _keywords_for_locale, _geo_to_locale
+from nooch_village.skills_impl.trends import (
+    _keywords_for_locale, _geo_to_locale, payload_terms, row_tekst, finish_rows)
 from nooch_village.keyword_scheduler import SeedScheduler
 
 _ENDPOINT = "https://serpapi.com/search.json"
+
+
+def _key(context) -> str:
+    """De SerpApi-sleutel: settings kennen twee schrijfwijzen (`SERPAPI_API_KEY` uit .env,
+    `serpapi_api_key` uit settings.ini — trend_reindex en web_zoek lezen allebei), dan de env.
+    Tot scope 55 las `series()` alleen de kleine en `run()` alleen de grote naam."""
+    s = getattr(context, "settings", {}) or {}
+    return str(s.get("SERPAPI_API_KEY") or s.get("serpapi_api_key")
+               or os.environ.get("SERPAPI_API_KEY") or "").strip()
 
 
 def _parse_timeseries(resp: dict) -> tuple[int | None, str]:
@@ -77,23 +92,31 @@ class SerpapiTrendsSkill(Skill):
     cost = "credits"
     required_env = ("SERPAPI_API_KEY",)
     description = (
-        "Google Trends via SerpApi (betrouwbaar, betaald): interest-over-time + "
-        "top/rising related queries per keyword. Roterend venster, fail-closed zonder key."
+        "Google Trends via SerpApi (reliable, paid): interest over time plus top/rising related "
+        "queries per keyword, same output as google_trends. The fallback rung when Google blocks "
+        "pytrends; without terms it rotates over the seed words. Fail-closed without a key."
     )
+    input_schema = ("keywords: list[str] (the terms to look up; `term`: str accepted as alias) · geos: "
+                    "list[str] (optional, '' = worldwide; default settings.trends_geo) · date: str "
+                    "(optional, Google Trends syntax, default 'today 12-m'; `timeframe` accepted)")
+    required_payload = (("keywords", "term"),)   # zelfde payload als google_trends (de ladder-kop)
+    output_schema = ("rows: list[{term, locale, geo, interest_latest, direction, top_related, "
+                     "rising_related, tekst}], keywords: {term: …}, source: 'serpapi', text: str "
+                     "| no_data: True, reason | ok: False, error")
 
     def _get(self, params: dict) -> dict:
         """Eén SerpApi-search. Geïsoleerd zodat tests dit kunnen vervangen."""
         r = requests.get(_ENDPOINT, params=params, timeout=20)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            from nooch_village.sleutelmasker import http_fout   # geen URL (mét api_key) in de melding
+            raise RuntimeError(http_fout(r, "SerpApi"))
         return r.json()
 
     def series(self, term: str, context, *, geo: str | None = None,
                timeframe: str = "today 5-y") -> list[int]:
         """Eén TIMESERIES-call: de meerjarige interesse-reeks voor één term (voor trend-toestand).
         Faalt closed: lege lijst bij geen key of API-fout."""
-        import os as _os
-        key = (getattr(context, "settings", {}) or {}).get("serpapi_api_key") \
-            or _os.environ.get("SERPAPI_API_KEY")
+        key = _key(context)
         if not key or not term:
             return []
         geo = geo or (getattr(context, "settings", {}) or {}).get("trends_geo", "NL")
@@ -128,7 +151,8 @@ class SerpapiTrendsSkill(Skill):
         return any(lib.status(q) is None for q in on_domain)
 
     def run(self, payload: dict, context) -> dict:
-        key = context.settings.get("SERPAPI_API_KEY") or os.getenv("SERPAPI_API_KEY")
+        payload = payload or {}
+        key = _key(context)
         if not key:
             raise RuntimeError("SERPAPI_API_KEY ontbreekt in .env — skill faalt bewust closed")
 
@@ -136,8 +160,9 @@ class SerpapiTrendsSkill(Skill):
         if isinstance(geos_raw, str):
             geos_raw = [geos_raw]
         geos = list(dict.fromkeys(geos_raw))
-        date = payload.get("date") or payload.get("timeframe", "today 12-m")
+        date = payload.get("date") or payload.get("timeframe") or "today 12-m"
         first_geo = geos[0] if geos else ""
+        gevraagd = payload_terms(payload)              # keywords óf term (de ladder geeft de payload van google_trends door)
 
         rows: list[dict] = []
         legacy: dict = {}
@@ -146,14 +171,14 @@ class SerpapiTrendsSkill(Skill):
         # Spaced-repetition-scheduler bepaalt welke zaadwoorden deze run aan de beurt zijn
         # (nieuw/productief vaak, uitgekauwd zelden). Bij een vaste keywords-payload niet.
         sched = None
-        if not payload.get("keywords"):
+        if not gevraagd:
             sched = self._scheduler(context)
             sched.tick()
 
         for geo in geos:
             locale = _geo_to_locale(geo)
-            if payload.get("keywords"):
-                keywords = payload["keywords"]
+            if gevraagd:
+                keywords = gevraagd
             else:
                 keywords = sched.select(_keywords_for_locale(locale, context))
 
@@ -179,6 +204,7 @@ class SerpapiTrendsSkill(Skill):
                             "interest_latest": latest, "direction": direction,
                             "top_related": top_related, "rising_related": rising_related,
                         }
+                        row["tekst"] = row_tekst(row)
                         if geo == first_geo:
                             legacy[kw] = {
                                 "interest_latest": latest, "direction": direction,
@@ -188,13 +214,14 @@ class SerpapiTrendsSkill(Skill):
                             sched.record(kw, self._produced_new(top_related, rising_related, lib))
                     rows.append(row)
                 except Exception as e:
-                    rows.append({"term": kw, "locale": locale, "geo": geo,
-                                 "no_data": True, "reason": str(e)})
+                    from nooch_village.sleutelmasker import masker
+                    # Een fout is geen 'geen data' (scope 55): de rij zegt `error`, zodat een dag
+                    # waarop alles faalde als fout leest en niet als "N results".
+                    rows.append({"term": kw, "locale": locale, "geo": geo, "error": masker(e)})
                     if geo == first_geo:
-                        legacy[kw] = {"error": str(e)}
+                        legacy[kw] = {"error": masker(e)}
                     # Fout = transiënt, niet 'saai': geen record → volgende run opnieuw proberen.
 
         if sched is not None:
             sched.save()
-        return {"rows": rows, "keywords": legacy, "geos": geos,
-                "geo": first_geo, "source": "serpapi"}
+        return finish_rows(rows, legacy, geos, first_geo, timeframe=date, source="serpapi")

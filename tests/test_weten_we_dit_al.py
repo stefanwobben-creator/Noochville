@@ -3,7 +3,10 @@ ja/nee. Borgingen: (1) een sterke match over meerdere lagen → bekend=True met 
 per laag; (2) geen directe match maar wel aangrenzend materiaal → bekend=False mét
 context (bij N krijg je mee wat het dorp wél al weet); (3) niets → onontgonnen terrein;
 (4) de Kroniek-brug logt bevestigd bij een direct antwoord en leeg bij een gat — context
-telt bewust niet als bekend."""
+telt bewust niet als bekend.
+
+Scope 57: de samenvatting is Engels (zoals wall en verslag) en staat ook als `text`; lege
+Kroniek-bakken blijven weg; "niets gevonden" is `no_data`. De taal-asserts zijn mee omgezet."""
 from __future__ import annotations
 
 import json
@@ -52,7 +55,9 @@ def test_bekend_ja_over_meerdere_lagen(tmp_path):
     # het project raakt maar één vraagwoord (barefoot) → eerlijk als context, mét antwoord
     proj = [c for c in res["context"] if c["laag"] == "project"]
     assert proj and proj[0]["antwoord"].startswith("327 studies")
-    assert res["samenvatting"].startswith("Ja")
+    assert res["samenvatting"].startswith("Yes") and res["text"] == res["samenvatting"]
+    assert "leeg" not in res["kroniek"] and "fout" not in res["kroniek"]   # lege bakken weg
+    assert not res.get("no_data")
 
 
 def test_bekend_nee_maar_met_context(tmp_path):
@@ -63,7 +68,8 @@ def test_bekend_nee_maar_met_context(tmp_path):
     assert res["ok"] and res["bekend"] is False
     assert res["context"], "bij N hoort mee wat het dorp wél al weet"
     assert any(c["laag"] == "kaart" and "PFAS" in c["claim"] for c in res["context"])
-    assert res["samenvatting"].startswith("Nee") and "context" in res["samenvatting"]
+    assert res["samenvatting"].startswith("No") and "context" in res["samenvatting"]
+    assert not res.get("no_data")                          # context is een antwoord, geen nul
 
 
 def test_onontgonnen_terrein_en_kroniek_brug(tmp_path):
@@ -72,7 +78,8 @@ def test_onontgonnen_terrein_en_kroniek_brug(tmp_path):
     sk = WetenWeDitAlSkill()
     leeg = sk.run({"vraag": "kwantumcomputers voor veters"}, ctx)
     assert leeg["ok"] and leeg["bekend"] is False and not leeg["context"]
-    assert "onontgonnen" in leeg["samenvatting"]
+    assert "uncharted" in leeg["samenvatting"]
+    assert leeg["no_data"] is True and leeg["reason"] == leeg["samenvatting"]   # 📭 op de wall
     # Kroniek-brug: direct antwoord → bevestigd; gat → leeg (context telt niet als bekend)
     ja = sk.run({"vraag": "barefoot schoenen voetspieren"}, ctx)
     assert sk.evidence_records(ja, role_id="noochie")[0]["status"] == "bevestigd"

@@ -38,7 +38,8 @@ def _run(brands, *, guides, body, settings=None):
     ctx = SimpleNamespace(settings=settings if settings is not None else {"SERPAPI_API_KEY": "k"})
     with patch("nooch_village.web_read.serpapi_search", return_value=guides), \
          patch("nooch_village.web_read.fetch_text", return_value=body):
-        return skill.run({"brands": brands}, ctx)
+        # scope 55: het onderwerp komt uit het project (topic); zonder topic/config weigert de skill
+        return skill.run({"brands": brands, "topic": "best vegan sneaker brands"}, ctx)
 
 
 def test_skill_prioriteert_op_body_en_bron():
@@ -60,8 +61,8 @@ def test_skill_fail_closed_bij_serpapi_fout():
     skill = LinkbuildingTargetsSkill()
     ctx = SimpleNamespace(settings={"SERPAPI_API_KEY": "k"})
     with patch("nooch_village.web_read.serpapi_search", side_effect=RuntimeError("weg")):
-        res = skill.run({"brands": []}, ctx)
-    assert not res["ok"]
+        res = skill.run({"brands": [], "topic": "barefoot"}, ctx)
+    assert not res["ok"] and "weg" in res["error"]
 
 
 # ── store + beslissing ──────────────────────────────────────────────────────────

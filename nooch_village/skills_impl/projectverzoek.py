@@ -13,21 +13,23 @@ side_effect: maakt een project aan. Fail-soft: onbekende rol of ontbrekende stor
 from __future__ import annotations
 
 from nooch_village.skills import Skill
+from nooch_village.skills_impl.escaleer import rol_id_voor
 
 
 class ProjectverzoekSkill(Skill):
     name = "projectverzoek"
     cost = "free"
     side_effect_free = False        # zet een project op het bord van een andere rol
-    description = ("Draag een deel-item dat bij een ANDERE rol hoort over als projectverzoek: zet een "
-                   "project in Future op het bord van die rol, met een terugverwijzing. Gebruik dit voor een "
-                   "item dat geen van jouw skills kan uitvoeren maar binnen een andere bestaande rol valt "
-                   "(geef de rol-id in naar_rol). Zo loopt een project niet dood op werk dat elders hoort.")
-    input_schema = ("naar_rol: str (verplicht — de rol-id die dit werk oppakt); "
-                    "titel: str (verplicht — de over te dragen uitkomst, één zin); "
-                    "done_criterium: str (optioneel — waaraan de andere rol ziet dat het klaar is)")
+    description = ("Hand a sub-item that belongs to ANOTHER role over as a project request: a Future "
+                   "project on that role's board, linked back to this one. Use it for an item none of "
+                   "your skills can do but that falls within an existing role (give its role id in "
+                   "naar_rol) — so the project does not die on work that lives elsewhere.")
+    input_schema = ("naar_rol: str (required — the role id that takes this on; 'founder' is accepted "
+                    "for the Founding Farmer, and a unique short name matches the id that ends in it); "
+                    "titel: str (required — the outcome to hand over, one sentence); "
+                    "done_criterium: str (optional — how the other role sees that it is done)")
     required_payload = ("naar_rol", "titel")
-    output_schema = "ok, pid, naar_rol, titel | error"
+    output_schema = "ok, pid, naar_rol, titel, kaart | error"
 
     def validate_payload(self, payload: dict, context) -> list:
         """Bestaat de rol waar dit werk naartoe gaat écht?
@@ -39,13 +41,18 @@ class ProjectverzoekSkill(Skill):
 
         Een verzonnen rol-id levert anders een projectverzoek dat naar niemand gaat: `handoff`
         faalt live, het item blijft open, en het bord blijft "de rol werkt eraan" tonen. Fail-soft
-        op een ontbrekende records-store: dan weten we het niet, en niet-weten is geen bezwaar."""
+        op een ontbrekende records-store: dan weten we het niet, en niet-weten is geen bezwaar.
+
+        Dezelfde lezer als `handoff` (`rol_id_voor`): founder-aliassen en een unieke suffix-naam
+        ('copywriter' → 'mother_earth__nooch__noochville__copywriter') tellen als bestaand. Live
+        werden zeven van zeven verzoeken aan 'mother_earth__nooch__copywriter' en 'founder' hier
+        geweigerd terwijl escaleer dezelfde namen wél aannam (skill-review 12-09-2026)."""
         rol = str((payload or {}).get("naar_rol") or "").strip()
         recs = getattr(context, "records", None)
         if not rol or recs is None:
             return []                                    # afwezig dekt required_payload; geen store = geen oordeel
         try:
-            if recs.get(rol) is None:
+            if not rol_id_voor(rol, recs):
                 return [f"'naar_rol' verwijst naar een rol die niet bestaat ({rol!r}) — werk kan "
                         f"niet naar een verzonnen ontvanger"]
         except Exception:                                # noqa: BLE001 — een kapotte store is geen bezwaar
@@ -54,13 +61,15 @@ class ProjectverzoekSkill(Skill):
 
     def run(self, payload: dict, context=None) -> dict:
         # De overdracht zelf leeft in project_items.handoff — gedeeld met de mens-knop in de cockpit,
-        # zodat een projectverzoek er altijd hetzelfde uitziet, ongeacht wie 'm plaatst.
+        # zodat een projectverzoek er altijd hetzelfde uitziet, ongeacht wie 'm plaatst. Het eigen
+        # project-id reist mee (run-context uit `_execute_checklist`) als terugverwijzing.
         from nooch_village.project_items import handoff
         return handoff(getattr(context, "projects", None),
                        ((payload or {}).get("naar_rol") or ""),
                        ((payload or {}).get("titel") or ""),
                        done_criterium=((payload or {}).get("done_criterium") or ""),
-                       records=getattr(context, "records", None))
+                       records=getattr(context, "records", None),
+                       van_pid=str((payload or {}).get("_project_id") or ""))
 
     def evidence_records(self, result: dict, *, role_id: str) -> list:
         """Een geplaatst projectverzoek is een Kroniek-feit: 'bevestigd' (de overdracht is gedaan).

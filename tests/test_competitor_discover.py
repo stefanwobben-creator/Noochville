@@ -34,7 +34,7 @@ def test_strip_html():
 
 # ── skill run (gids lezen + LLM-extractie) ──────────────────────────────────────
 
-def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma"):
+def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma. Also Wills Vegan Store is nice."):
     skill = CompetitorDiscoverSkill()
     with patch.object(skill, "_serpapi_guides",
                       return_value=[{"title": "15 Best Vegan Sneakers - Good On You", "link": "http://g"}]), \
@@ -46,6 +46,8 @@ def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma"):
 
 
 def test_run_extraheert_echte_merken_uit_gids():
+    # Scope 55: de tekst moet de namen zelf dragen — een naam die niet in de gids staat is uit het
+    # geheugen van het model en valt af (grounding), daarom staat 'Wills Vegan Store' nu in de tekst.
     res = _run_with("Veja, Cariuma, Wills Vegan Store")
     namen = [c["brand"] for c in res["candidates"]]
     assert res["ok"]
@@ -53,13 +55,15 @@ def test_run_extraheert_echte_merken_uit_gids():
 
 
 def test_run_fail_closed_zonder_llm():
+    # Scope 55: "geen model" is een FOUT (item blijft open), geen lege lijst die als gelukt leest.
+    # Tot 12-09-2026 bevroor deze test het oude gedrag (`ok: True, candidates: []`).
     res = _run_with(None)
-    assert res["ok"] and res["candidates"] == []        # geen LLM → geen rommel
+    assert res["ok"] is False and "no model" in res["error"]
 
 
 def test_run_slaat_lege_pagina_over():
     res = _run_with("Veja, Cariuma", text="te kort")     # <200 tekens → overslaan
-    assert res["ok"] and res["candidates"] == []
+    assert res["ok"] and res["candidates"] == [] and res["no_data"]   # onderzocht, niets leesbaar
 
 
 def test_run_gidsen_ophalen_faalt():

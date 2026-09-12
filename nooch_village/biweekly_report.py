@@ -10,6 +10,8 @@ from __future__ import annotations
 import collections
 import datetime
 
+from nooch_village.meetcatalog import actieve_bronnen
+
 # Leesbare bron-namen (bron-id → label). Onbekende bronnen vallen terug op de id.
 _BRON_LABEL = {
     "plausible": "Web-analytics (Plausible)",
@@ -21,10 +23,17 @@ _BRON_LABEL = {
     "semanticscholar": "Academische tellers (Semantic Scholar)",
     "keywordseverywhere": "Zoekvolume (Keywords Everywhere)",
     "trends": "Zoekinteresse anker-ratio (Trends)",
+    "mobiel_audit": "Mobiele prestaties (Lighthouse)",
     "werkoverleg": "Werkoverleg",
 }
-# Bronnen die we in het rapport verwachten (zodat 'geen data' opvalt).
-_VERWACHT = ["plausible", "alphavantage", "trends_categorie", "gsc", "openalex", "gdelt_tone"]
+
+
+def _verwacht() -> list[str]:
+    """Bronnen die we in het rapport verwachten (zodat 'geen data' opvalt): de ACTIEVE bronnen met een
+    vaste cadans uit de meetcatalogus — reference, don't copy. Een eigen opsomming hier verwachtte
+    tot scope 55 nog gdelt_tone (catalogus: inactief) en trends_categorie (niet gecatalogiseerd), en
+    meldde die elke twee weken als 'verwachte bron zonder data'."""
+    return actieve_bronnen()
 
 
 def _num(v):
@@ -59,7 +68,8 @@ def build_biweekly_report(st, today: datetime.date, window_days: int = 14) -> st
          f"alleen wat de data draagt (geen verzonnen duiding). Vergelijking met de vorige {window_days} dagen.",
          f""]
 
-    bronnen = sorted(set(list(by_bron) + _VERWACHT), key=lambda b: (b not in _VERWACHT, b))
+    verwacht = _verwacht()
+    bronnen = sorted(set(list(by_bron) + verwacht), key=lambda b: (b not in verwacht, b))
     for bron in bronnen:
         label = _BRON_LABEL.get(bron, bron)
         metrics = by_bron.get(bron, {})

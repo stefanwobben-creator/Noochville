@@ -341,9 +341,19 @@ def test_guard_triage_landt_niet_op_sonnet(tmp_path, monkeypatch):
     ("nooch_village/skills_impl/voorstel.py", "skill_voorstel"),
 ])
 def test_skill_sites_vragen_de_hoog_inzet_ladder(bestand, site):
+    """Scope 57: de helper heette `_hoog_inzet_ladder` en stond vijfmaal identiek in de vijf
+    modules (copy in plaats van reference). Hij leeft nu één keer als `llm_keuze.skill_ladder`;
+    elke skill importeert hem en vraagt er zijn eigen site mee op — geen lokale kopie meer."""
     src = open(bestand, encoding="utf-8").read()
-    assert "_hoog_inzet_ladder" in src, bestand
-    assert f'_hoog_inzet_ladder("{site}")' in src, bestand
+    assert "from nooch_village.llm_keuze import skill_ladder" in src, bestand
+    assert f'skill_ladder("{site}")' in src, bestand
+    assert "def _hoog_inzet_ladder" not in src, f"{bestand}: lokale kopie van de ladder-helper"
+
+
+def test_skill_ladder_is_de_dorpsbrede_keuze_zonder_persona():
+    """Dezelfde uitkomst als `ladder_voor` zonder persona; en fail-soft (None) als de keuze stuk gaat."""
+    assert lk.skill_ladder("skill_voorstel") == lk.ladder_voor("skill_voorstel")
+    assert lk.skill_ladder("een_onbekende_site") is None
 
 
 def test_rolgebonden_sites_gaan_via_de_persona_hook():

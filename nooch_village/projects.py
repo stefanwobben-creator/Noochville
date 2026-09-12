@@ -870,7 +870,8 @@ class ProjectLedger:
                 return True
         return False
 
-    def set_item_human(self, pid: str, clid: str, item_id: str, human: bool = True) -> bool:
+    def set_item_human(self, pid: str, clid: str, item_id: str, human: bool = True,
+                       reden: str = "") -> bool:
         """Markeer één item alsnog als mens-/extern werk (of haal die markering weg).
 
         `check_add` kon dit alleen bij het aanmaken, en de planner ziet het niet altijd goed: een
@@ -879,7 +880,11 @@ class ProjectLedger:
         de backlog schuiven, en dan verdwijnt ook het deel dat een rol wél kan oppakken.
 
         Een mens-taak telt niet mee in de klaar-telling (`_NIET_TELBAAR`) maar blijft zichtbaar
-        openstaan — zo houdt het project geen zombie-status en raakt het werk niet zoek."""
+        openstaan — zo houdt het project geen zombie-status en raakt het werk niet zoek.
+
+        `reden` (scope 57): WAAROM dit bij een mens ligt — bij een escaleer-beslissing de vraag
+        zelf. Het komt in `reason` op het item, waar `not_answered_note` het bij de review toont;
+        zonder reden las de review-melding alleen de item-tekst en niet wat er gevraagd wordt."""
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
         if cl is None:
@@ -888,6 +893,8 @@ class ProjectLedger:
             if it["id"] == item_id:
                 if human:
                     it["human_task"] = True
+                    if reden:
+                        it["reason"] = str(reden)[:300]
                 else:
                     it.pop("human_task", None)
                 self._touch(p)

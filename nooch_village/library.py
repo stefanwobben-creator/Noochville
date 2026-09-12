@@ -7,6 +7,12 @@ from nooch_village.util import JsonStore
 #   "doelwit" = rank-target: specifiek, intentie, hier maken we content voor en willen we ranken
 _HEAD_VOLUME = 100000   # mega-breed zoekvolume → bijna altijd een seed, geen rank-doel
 
+# De statussen die een woord in de bibliotheek kan dragen — DE bron voor elke enum-check (de
+# `library_list`-skill toont hem aan de planner en toetst een gevraagde status eraan). Stond
+# alleen als comment bij `curate`; `insight_statement` is de historische tweede default van
+# `library_list` en blijft geldig zolang de data hem kan dragen.
+VALID_STATUSES = ("approved", "forbidden", "avoid", "escalated", "insight_statement")
+
 
 def classify_function(word: str, evidence: dict | None = None) -> str:
     """Heuristiek voor de functie van een woord. Mega-volume of één generiek woord → 'volg';

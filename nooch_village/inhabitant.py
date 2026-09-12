@@ -888,6 +888,9 @@ class Inhabitant(threading.Thread):
         self._claim_run_complete(pid)
 
     _PREP_CHECKLIST_TITLE = PREP_CHECKLIST_TITLE          # gedeelde bron (nooch_village.projects)
+    # Zekering op de rol-roster in de planner-prompt (zie `_plan_checklist`): geen keuze-cap maar
+    # een grens tegen een records-store die uit zijn voegen groeit. 29 rollen live; 60 = ruim.
+    _ROSTER_MAX = 60
 
     @staticmethod
     def _extract_json(text):
@@ -1125,7 +1128,13 @@ class Inhabitant(threading.Thread):
         VERWIJZENDE velden aarden tegen de werkelijkheid — bestaat de query-set / het merk / de
         deliverable echt? Een verzonnen verwijzing → een reden, waardoor het item niet-uitvoerbaar wordt
         i.p.v. live te sterven. Skills zonder validate_payload → geen extra check (fail-soft, ongewijzigd).
-        Een kapotte validator mag de prep nooit breken."""
+        Een kapotte validator mag de prep nooit breken.
+
+        Eerst de CONFIGURATIE: een skill zonder sleutel is nooit uitvoerbaar, wat de payload ook
+        zegt (zie `_config_ontbreekt`)."""
+        config = self._config_ontbreekt(skill)
+        if config:
+            return [config]
         obj = self.registry.get(skill) if self.registry else None
         vp = getattr(obj, "validate_payload", None)
         if not callable(vp):
@@ -1135,6 +1144,37 @@ class Inhabitant(threading.Thread):
         except Exception as e:
             self.log.warning("payload-grondingscheck faalde voor %s: %s", skill, e)
             return []
+
+    def _config_ontbreekt(self, skill: str) -> str:
+        """Is deze skill in DIT dorp te draaien? Geeft de reden terug als zijn sleutels ontbreken,
+        anders "".
+
+        GEMETEN AANLEIDING (skill-review 12-09-2026): shopify_sales werd vijf keer gepland zonder
+        SHOPIFY_TOKEN in .env, en elke keer stond er "⚠️ niet gelukt (fout, poging n)" op de wall —
+        de planner ziet alleen description en input_schema, `is_configured` bereikte alleen de
+        collector en de bronnen-view. Nu telt dezelfde vraag op twee momenten: de catalogus voor de
+        planner laat de skill weg, en een gepland item wordt 'niet uitvoerbaar' met de sleutelnaam
+        als reden, zodat de mens weet wat hij moet invullen.
+
+        Fail-soft in elke tak: een skill zonder `is_configured`, zonder `required_env`, of een
+        context zonder settings → "" (uitvoerbaar, precies zoals voorheen)."""
+        obj = self.registry.get(skill) if self.registry else None
+        if obj is None:
+            return ""
+        vereist = tuple(getattr(obj, "required_env", ()) or ())
+        check = getattr(obj, "is_configured", None)
+        if not vereist or not callable(check):
+            return ""
+        try:
+            if check(self.context):
+                return ""
+        except Exception as e:                            # noqa: BLE001 — een kapotte check blokkeert niets
+            self.log.warning("configuratiecheck faalde voor %s: %s", skill, e)
+            return ""
+        # Een skill met een of-of-eis (Shopify: token óf client-id+secret) zegt zelf wat er mist;
+        # de platte sleutellijst zou dan "SHOPIFY_STORE missing" melden terwijl de store er staat.
+        hint = str(getattr(obj, "config_hint", "") or "").strip()
+        return f"{skill} is not configured in this village ({hint or (' / '.join(vereist) + ' missing in .env')})"
 
     def _opdracht_section(self, description) -> str:
         """De opdracht van de mens (p['description']) als prompt-sectie — die stuurt de planning.
@@ -1215,11 +1255,22 @@ class Inhabitant(threading.Thread):
         for it in plan["items"]:
             skill = it.get("skill")
             payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
-            ok = True
-            if skill and self._missing_required(skill, payload or {}):
-                ok = False
+            ok, reden = True, it.get("reason", "")
+            if skill:
+                # DEZELFDE TWEE POORTEN ALS HET EERSTE PLAN (scope 57). Dit pad keek alleen naar
+                # `_missing_required`; `_payload_issues` (validate_payload: bestaat de rol, de
+                # query-set, de enum-waarde?) werd overgeslagen. Een verzonnen ontvanger in de
+                # tweede uitvoerlijst werd dus pas live geweigerd — precies de fout die de poort
+                # op de eerste lijst al tegenhield. Zelfde redenvorm als in `prepare_project`.
+                missing = self._missing_required(skill, payload or {})
+                if missing:
+                    ok, reden = False, f"payload onvolledig: {', '.join(missing)} ontbreekt"
+                else:
+                    issues = self._payload_issues(skill, payload or {})
+                    if issues:
+                        ok, reden = False, "; ".join(issues)
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
-                             payload_ok=ok, reason=it.get("reason", ""))
+                             payload_ok=ok, reason=reden)
         # De mens-zoekstap hoort ook op déze lijst, als hij er nog nergens op het project staat: een
         # eerste plan dat alleen uit de strategie-skill bestond had nog geen zoekterm, en dus geen
         # queries voor de mens. Nu wel. Zelfde vorm als in prepare_project (scope 50c).
@@ -1335,7 +1386,10 @@ class Inhabitant(threading.Thread):
         # hoort niet in de prompt. Anders plant het model hem in en sterft het item pas bij de
         # uitvoering — een omweg die de mens als 'er gebeurt niets' ziet. Zelfde poort als bij de
         # uitvoering, dus er kan geen tweede oordeel ontstaan dat uiteenloopt.
-        skills = sorted(s for s in self.effective_skills() if not self._domein_weigering(s))
+        # …en de configuratiepoort: een skill zonder sleutel in dit dorp staat niet in de catalogus.
+        # Anders plant het model hem (shopify_sales: vijf keer) en sterft het item pas live.
+        skills = sorted(s for s in self.effective_skills()
+                        if not self._domein_weigering(s) and not self._config_ontbreekt(s))
         catalog = rugzak.catalogus(getattr(self.context, "rugzakken", None), skills, self.registry)
         # Geheugen-laag (fase 1): bestaande deliverables als context. Config-geschakeld, fail-closed —
         # een leeg blok laat de sectie volledig weg (geen lege kop in de prompt).
@@ -1373,21 +1427,29 @@ class Inhabitant(threading.Thread):
         roster_section = ""
         if "projectverzoek" in skills:
             try:
-                from nooch_village import org as _org
+                # DEZELFDE ROSTER ALS DE ESCALATIE-ROUTER (reference, don't copy): niet gearchiveerd,
+                # niet slapend, geen cirkel, niet ikzelf. Een slapende rol stond hier wél en bij de
+                # router niet — werk erheen sturen laat het verdwijnen bij iemand die niet draait.
+                #
+                # GEEN CAP VAN 18 MEER (skill-review 12-09-2026). Live stonden er 29 rollen; de
+                # copywriter was #26 en compliance #29, dus de planner zag ze nooit en verzon ids
+                # ('mother_earth__nooch__copywriter', 7×) die de poort daarna weigerde — het werk
+                # kwam nergens aan. Alle rollen tonen kost ~30 regels van ≤ ~260 tekens (id + twee
+                # ingekorte accountabilities), ruim binnen wat de skill-catalogus in dezelfde prompt
+                # al is. `_ROSTER_MAX` is alleen een zekering tegen een op hol geslagen records-store.
+                from nooch_village.escalation_router import roster as _roster
                 recs = getattr(self.context, "records", None)
                 lijnen = []
-                for r in (recs.all() if recs is not None else []):
-                    if getattr(r, "archived", False) or r.id == self.id or _org.is_circle(r):
-                        continue
-                    d = getattr(r, "definition", None)
-                    accs = list(getattr(d, "accountabilities", []) or [])[:2] if d else []
-                    lijnen.append(f"- {r.id}: {', '.join(accs) or (getattr(d, 'purpose', '') or '')[:70]}")
+                for r in _roster(recs, exclude={self.id}):
+                    accs = [str(a)[:110] for a in (r.get("accountabilities") or [])[:2]]
+                    lijnen.append(f"- {r['id']}: {', '.join(accs) or (r.get('purpose') or '')[:70]}")
                 if lijnen:
                     roster_section = (
                         "OTHER ROLES (for 'projectverzoek'): does a sub-item clearly belong to one of "
                         "these roles and can none of your skills do it? Then use skill 'projectverzoek' with "
                         'payload {"naar_rol":"<role id below>","titel":"...","done_criterium":"..."} instead of '
-                        "skill=null — that keeps the project from dying.\n" + "\n".join(lijnen[:18]) + "\n\n")
+                        "skill=null — that keeps the project from dying.\n"
+                        + "\n".join(lijnen[:self._ROSTER_MAX]) + "\n\n")
             except Exception:
                 roster_section = ""
         prompt = (
@@ -1582,7 +1644,8 @@ class Inhabitant(threading.Thread):
             if uitslag.get("skipped"):
                 telling["overgeslagen"] += 1
                 self.log.info("⏱ periodieke skill '%s' overgeslagen — %s", naam,
-                              uitslag.get("reden") or "ritme zegt: deze periode al gedaan")
+                              uitslag.get("reden") or uitslag.get("reason")
+                              or "ritme zegt: deze periode al gedaan")
                 continue
             escalatie = uitslag.get("escalate")
             if escalatie or not uitslag.get("ok", True):
@@ -1667,7 +1730,14 @@ class Inhabitant(threading.Thread):
 
         led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
         query = str(payload.get("term") or payload.get("query") or "")
-        rungs = [(name, (lambda name=name: self.use_skill(name, payload))) for name in rung_names]
+        # De KOP loopt door de volledige poort (use_skill); een TREDE niet door de DNA-/rugzak-check.
+        # Een trede is geen aparte keuze (config/rugzakken.json: "die hangen als alternatief onder
+        # een andere skill in SKILL_LADDERS") en zit dus in geen rugzak — wie de kop mag voeren,
+        # mag de trede voeren. Tot scope 55 weigerde use_skill de trede met "niet in zijn DNA", de
+        # ladder las dat als 'fout' en wekte de mens voor een pad dat nooit gelopen was. De
+        # domeinpoort blijft ook voor een trede absoluut (zie _run_rung).
+        rungs = [(name, (lambda name=name: self.use_skill(name, payload) if name == skill
+                         else self._run_rung(name, payload))) for name in rung_names]
 
         def _escalate(*, skill, query, trail):
             try:                                             # best-effort: escalatie mag de puls nooit breken
@@ -1683,6 +1753,17 @@ class Inhabitant(threading.Thread):
         outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
                                   rungs=rungs, classify=classify_result, escalate=_escalate)
         return (outcome.get("result") or {}), (outcome.get("source") or skill)   # (resultaat, echte bron)
+
+    def _run_rung(self, name: str, payload: dict) -> dict:
+        """Eén trede van een skill-ladder uitvoeren, geautoriseerd door de kop (zie
+        _use_skill_with_ladder). Alleen de domeinpoort blijft staan: een trede die in een domein
+        beslist wordt geweigerd voor een rol zonder dat domein, precies als de kop."""
+        reden = self._domein_weigering(name)
+        if reden:
+            self.log.warning("⛔ domeinpoort (trede): %s", reden)
+            return {"error": reden}
+        ok, result = self._execute_skill(name, payload)
+        return result if ok else {"error": result}
 
     def _record_skill_evidence(self, skill: str, result) -> None:
         """De Kroniek-brug voor niet-ladder skills: als de skill zijn resultaat naar bewijs-records mapt
@@ -1744,10 +1825,31 @@ class Inhabitant(threading.Thread):
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
                 payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
+            # RUN-CONTEXT NAAST DE PAYLOAD (scope 57). Een skill die iets buiten het project neerlegt
+            # — escaleer zet een notificatie, projectverzoek een project op een ander bord — moet
+            # kunnen terugwijzen naar dít project. De `_`-prefix zegt: administratie, geen inhoud
+            # (zelfde conventie als in de resultaten). Zonder dit droeg de beslissings-notificatie
+            # geen project_id, en maakte de tensie-poort er een nieuw rol-project van dat opnieuw
+            # een escaleer-item plande (skill-review 12-09-2026: 8 van zulke lussen live).
+            payload = {**payload, "_project_id": pid}
             result, used_source = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
             # label toont een reroute: 'google_patents (fallback voor epo_patents)'. Zonder ladder = de skill zelf.
             src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
+            if status == "gelukt" and self._wacht_op_mens(result):
+                # EEN BESLISSING IS GEEN AFGEROND ITEM. De skill draaide goed (de vraag ligt bij een
+                # mens), maar het werk is pas af als die mens antwoordt. Afvinken zou het project
+                # naar review duwen met een onbeantwoorde vraag als 'uitkomst' — precies wat live
+                # gebeurde (20 beslissingen, alle 20 afgevinkt). Het item wordt een mens-taak: het
+                # telt niet mee in de klaar-telling, blijft zichtbaar open, wordt morgen niet
+                # opnieuw gedraaid (geen tweede notificatie), en `not_answered_note` noemt de vraag
+                # bij de review. De vraag zelf staat op de wall, niet het woord 'beslissing'.
+                vraag = str(result.get("text") or result.get("reden") or "").strip()
+                ledger.add_role_message(pid, f"⤴ '{item.get('text', '')}' via {src_label}: {vraag}")
+                ledger.set_item_human(pid, clid, item["id"], reden=vraag)
+                self.log.info("⤴ project '%s': item '%s' via %s wacht op een mens: %s", pid,
+                              item.get("text", "")[:40], src_label, vraag[:80])
+                continue
             if status == "gelukt":
                 # EERST LEZEN, DAN PAS RENDEREN. Het extract per gelezen pagina komt in het
                 # resultaat zelf, zodat de note, de conclusie én het verslag hetzelfde lezen. Zonder
@@ -1775,7 +1877,7 @@ class Inhabitant(threading.Thread):
                 # mislukking: schrijf 't naar de wall ÉN vink af, zodat het project de review-gate haalt en
                 # de mens kan beoordelen of het klaar is (i.p.v. eeuwig een lege bron te herproberen).
                 bron = self._leeg_bron(result)
-                why = result.get("reason") or "onderzocht, niets gevonden"
+                why = result.get("reason") or result.get("reden") or "onderzocht, niets gevonden"
                 merk = "📭" if bron == "gemeld" else "🕳"
                 ledger.add_role_message(pid, f"{merk} '{item.get('text','')}' via {src_label}: "
                                              f"{'reported, nothing found' if bron == 'gemeld' else 'no result'} — {why}")
@@ -1789,7 +1891,7 @@ class Inhabitant(threading.Thread):
                 self.log.info("📭 project '%s': item '%s' via %s afgerond zonder resultaat", pid,
                               item.get("text", "")[:40], src_label)
             else:   # fout: de bron faalde (niet 'niets gevonden') → item blijft open; poging tellen
-                why = result.get("error") or result.get("reason") or "skill leverde geen resultaat"
+                why = self._foutreden(result)
                 fail_reasons[item["id"]] = why                  # bewaar voor de concrete hulpvraag bij vastlopen
                 n_fail = ledger.note_item_fail(pid, clid, item["id"])   # retry-teller: bounded, niet eeuwig
                 ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt "
@@ -2253,12 +2355,25 @@ class Inhabitant(threading.Thread):
         "week", "at", "ts", "datum", "day", "maand", "versie", "version", "id", "skill", "source",
         "bron", "locale", "corpus", "query", "term", "vraag_id", "role_id", "project_id",
         "gescand", "overgeslagen", "nieuw", "volledig", "vastgelopen", "force", "estimated",
+        # Skill-review 12-09-2026: de ECHO VAN DE INVOER en de RUN-ADMINISTRATIE wonnen bij elf
+        # skills van de (lege) uitkomst — competitor_news toonde de vier merknamen die de planner
+        # zelf meegaf als "4 results", gsc de site-id, keywords_everywhere "eur", gsc_report een
+        # bestandspad. Wat de mens erin stopte of wat de run over zichzelf zegt, is geen resultaat.
+        "queries", "brands", "brand", "topic", "onderwerp", "word", "naam",
+        "url", "site", "site_id", "period", "periode", "window", "window_days", "windows",
+        "timeframe", "strategie", "strategy", "geo", "geos", "taal", "land",
+        "path", "pad", "today", "date", "generated_at", "currency", "data_source",
+        "credits_remaining", "aard", "naar", "kind", "gevonden_via", "zoekwijze", "gezocht",
+        "candidates_source", "engine", "motor", "notif_id",
+        "year_start", "year_end", "year", "jaar", "base_year",
     })
     # Sleutelnamen die per definitie een TELLER zijn: een getal daarin is geen bevinding maar een
     # samenvatting van bevindingen die elders staan.
     _TELLER_KEYS = frozenset({
         "total", "totaal", "count", "counts", "aantal", "n", "treffers", "calls", "tokens",
         "rood", "oranje", "groen", "escaleren", "gedekt", "evaluated",
+        "guides", "scanned", "new", "bekend", "event_count", "pages", "paginas", "gelezen",
+        "total_new", "bytes", "status_code", "fetch_failed", "credits", "hits_total",
     })
     _TRIVIALE_TEKST = frozenset({"", "-", "n/a", "geen", "none", "null", "ok"})
     # Alleen voor de OPMAAK van de note, niet voor de detectie: een dict onder deze sleutels is een
@@ -2275,12 +2390,48 @@ class Inhabitant(threading.Thread):
         if isinstance(waarde, bool) or waarde is None:
             return False                                  # een vlag is een status, geen uitkomst
         if isinstance(waarde, (list, tuple, set, dict)):
-            return len(waarde) > 0
+            return cls._verzameling_draagt_inhoud(waarde)
         if isinstance(waarde, str):
             return waarde.strip().lower() not in cls._TRIVIALE_TEKST
         if isinstance(waarde, (int, float)):
             return sleutel not in cls._TELLER_KEYS        # score: 88 telt, total: 5 niet
         return True                                       # onbekend type met een waarde: inhoud
+
+    @classmethod
+    def _verzameling_draagt_inhoud(cls, waarde) -> bool:
+        """Een lijst of dict is pas inhoud als er iets IN zit dat inhoud is.
+
+        Skill-review 12-09-2026, twee gemeten vormen van "vol maar leeg":
+        - een lijst rijen die elk `no_data`/`error` melden (ngram, google_trends: elke term een
+          time-out → 48 runs 'gelukt' zonder één cijfer);
+        - een dict waarvan alle waarden None of leeg zijn (trends_categorie `values`, een lege
+          bucket-telling).
+        Beide lazen als 'gelukt' en werden afgevinkt. Een rij die zelf zegt dat er niets is, is
+        geen bevinding — en een dict vol None's evenmin."""
+        if not waarde:
+            return False
+        if isinstance(waarde, dict):
+            return any(cls._elementaire_inhoud(v) for v in waarde.values())
+        return any(cls._elementaire_inhoud(v) for v in waarde)
+
+    @classmethod
+    def _elementaire_inhoud(cls, v) -> bool:
+        """Draagt dit ELEMENT van een verzameling inhoud? Een dict-rij die zichzelf als leeg of fout
+        aanmerkt niet; een lege/None-waarde niet; al het andere wel (een string, een getal, een
+        gevulde rij)."""
+        if v is None or isinstance(v, bool):
+            return False
+        if isinstance(v, dict):
+            if v.get("no_data") or v.get("error"):
+                return False
+            return any(x not in (None, "", [], {}) for x in v.values())
+        if isinstance(v, (list, tuple, set)):
+            return len(v) > 0
+        if isinstance(v, str):
+            return bool(v.strip())
+        if isinstance(v, (int, float)):
+            return v != 0                                 # een telling van louter nullen is niets
+        return True
 
     @classmethod
     def _classify_result(cls, result):
@@ -2319,6 +2470,35 @@ class Inhabitant(threading.Thread):
         if beste is None:
             return "leeg", None                           # niets substantieels → eerlijk leeg
         return "gelukt", beste
+
+    @classmethod
+    def _wacht_op_mens(cls, result) -> bool:
+        """Zegt dit (geslaagde) resultaat dat het antwoord van een MENS moet komen? Twee signalen:
+        het expliciete `wacht_op_mens` (de afspraak sinds scope 57) en de escaleer-aard 'beslissing'
+        (de oude vorm, zodat een skill-versie zonder de vlag hetzelfde leest)."""
+        if not isinstance(result, dict):
+            return False
+        return bool(result.get("wacht_op_mens")) or result.get("aard") == "beslissing"
+
+    @classmethod
+    def _foutreden(cls, result) -> str:
+        """De reden die een mens op de wall leest als een skill faalde. Leest `error`, `reason` én
+        `reden` (drie skills zeggen 'reden'; de wall las alleen 'reason' en toonde dan "skill
+        leverde geen resultaat" terwijl de skill wél had gezegd wat er mis was). Een `ok: False`
+        zonder tekst wordt eerlijk benoemd. En ALTIJD gemaskeerd: een requests-fout draagt de URL
+        mét `api_key=…`, en deze tekst gaat naar wall, store en log (skill-review 12-09-2026)."""
+        from nooch_village.sleutelmasker import masker
+        if not isinstance(result, dict):
+            return masker(result) if result else "skill leverde geen resultaat"
+        why = result.get("error") or result.get("reason") or result.get("reden")
+        if not why and isinstance(result.get("escalate"), dict):
+            # De periodieke skills (site-scan, wetscheck) zeggen hun reden in `escalate.reason` —
+            # de pulslaag leest die, maar op het checklist-pad stond tot scope 56 "ok=False zonder
+            # reden" op de wall terwijl de skill wél had gezegd wat er mis was.
+            why = result["escalate"].get("reason")
+        if not why and result.get("ok") is False:
+            why = "skill meldde ok=False zonder reden"
+        return masker(why or "skill leverde geen resultaat")
 
     @classmethod
     def _leeg_bron(cls, result) -> str:
@@ -2392,6 +2572,16 @@ class Inhabitant(threading.Thread):
             body = f"{head}:\n{self._format_metric(result.get(key))}"
         else:
             body = f"{head}: {self._format_record(result)}"
+        # DE EIGEN SAMENVATTING VAN DE SKILL KOMT DIRECT ONDER DE KOP. Een skill die naast zijn
+        # records een `text` meegeeft (web_zoek de dekking, mobiel_audit de scores, tegenspraak het
+        # oordeel) zegt daarmee wat een mens als eerste moet lezen — en dat veld haalde de note
+        # nooit, omdat de lijst met records de vorm bepaalt (skill-review 12-09-2026: "performance
+        # 58 · LCP 20,3 s" stond nergens, wel de vijf zwaarste audits). De records blijven eronder
+        # staan: die zijn het bewijs, de `text` is de leeswijzer.
+        leeswijzer = Inhabitant._leeswijzer(result, archetype)   # via de klasse: zie de stub-opmerking boven
+        if leeswijzer:
+            kop_regel, _, rest = body.partition("\n")
+            body = f"{kop_regel}\n{leeswijzer}" + (f"\n{rest}" if rest else "")
 
         # De conclusiezin komt NA het renderen, want het model vat samen wat de mens straks ziet —
         # niet het ruwe resultaat-object. Zo kan er geen feit in de conclusie staan dat niet in het
@@ -2411,6 +2601,24 @@ class Inhabitant(threading.Thread):
             return body
         kop_regel, _, rest = body.partition("\n")
         return f"{kop_regel}\n➜ {zin}" + (f"\n{rest}" if rest else "")
+
+    _LEESWIJZER_MAX = 600
+
+    @classmethod
+    def _leeswijzer(cls, result, archetype) -> str:
+        """De `text` van een skill als leeswijzer boven zijn records — alleen als die tekst NIET al
+        de inhoud zelf is (archetype 'text' toont hem al) en niet triviaal is. Gecapt, want de
+        records staan eronder en de wall-note kent zijn eigen grens."""
+        if not isinstance(result, dict):
+            return ""
+        vorm, sleutel = archetype if archetype else (None, None)
+        if vorm == "text":
+            return ""
+        t = result.get("text")
+        if not isinstance(t, str) or t.strip().lower() in cls._TRIVIALE_TEKST:
+            return ""
+        t = " ".join(t.split())
+        return t if len(t) <= cls._LEESWIJZER_MAX else t[:cls._LEESWIJZER_MAX - 1] + "…"
 
     def _lees_extracten(self, item: dict, result, archetype) -> int:
         """Per gelezen record een extract van twee, drie zinnen IN het resultaat (`leesextract`).
@@ -2445,7 +2653,8 @@ class Inhabitant(threading.Thread):
         if not isinstance(rec, dict):
             return str(rec)[:200]
         from nooch_village.leesextract import TEKSTVELDEN
-        first = [k for k in ("title", "titel", "term", "query", "brand", "name", "word", "key") if k in rec]
+        first = [k for k in ("title", "titel", "term", "query", "brand", "name", "naam", "word", "key",
+                             "keyword", "criterium", "metric", "label", "symbol", "page") if k in rec]
         heeft_extract = bool(str(rec.get("extract") or "").strip())
         if heeft_extract:
             first.append("extract")
@@ -2493,8 +2702,11 @@ class Inhabitant(threading.Thread):
             with draaistaat.aanroeper(self.id):
                 return True, skill.run(payload, self.context)
         except Exception as e:
-            self.log.error("skill '%s' faalde: %s", capability, e)
-            return False, str(e)
+            from nooch_village.sleutelmasker import masker
+            # Gemaskeerd, want een requests-fout draagt de URL mét sleutel en dit is de tekst die
+            # als `error` op de wall en in de Kroniek belandt (skill-review 12-09-2026).
+            self.log.error("skill '%s' faalde: %s", capability, masker(e))
+            return False, masker(e)
 
     # ── De middelen-poort ────────────────────────────────────────────────────
 

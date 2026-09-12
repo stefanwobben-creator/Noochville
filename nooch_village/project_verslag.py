@@ -149,12 +149,25 @@ def voorzet_result(project: dict) -> tuple[str, str]:
 _DELIVERABLE_CAP = 3000          # per stuk; anders bepaalt één lange oplevering de hele invoer
 _RECORD_MAX = 8                  # records per deliverable in het verslag
 _STREKKING_MAX = 300             # het extract of het abstract per record
-_TITELVELDEN = ("title", "titel", "term", "query", "brand", "name", "naam", "word", "key", "criterium")
-_ADRESVELDEN = ("url", "link", "domein", "domain", "publication_number")
+_TITELVELDEN = ("title", "titel", "term", "query", "brand", "name", "naam", "word", "key", "criterium",
+                "keyword", "metric", "label", "symbol", "page")
+_ADRESVELDEN = ("url", "link", "permalink", "doi", "domein", "domain", "publication_number")
 # In volgorde van voorkeur: het extract (wat de tekst zégt, scope 50) wint van het abstract, dat wint
 # van de snippet van de zoekmachine, en de ruwe tekst komt pas als er niets beters is. `citaat` is
 # de vorm van een beoordeling (scope 51): het zinnetje van de pagina dat het oordeel draagt.
-_STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "fragment", "snippet", "citaat", "tekst", "text")
+# `evidence`/`waarom` (skill-review 12-09-2026): het citaat van claim_evidence en het waarom van een
+# claims-bevinding zijn strekking; zonder deze namen toonde het verslag alleen de merknaam.
+# `claim` (scope 57): de bevinding van tegenspraak ({label, claim}) en een kaart van weten_we_dit_al
+# ({id, claim}) hebben geen ander strekking-veld; zonder deze naam kwam zo'n record als JSON-dump in
+# het verslag. Achteraan, zodat een record mét evidence/citaat dat blijft tonen.
+_STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "samenvatting", "fragment", "snippet",
+                    "citaat", "evidence", "waarom", "tekst", "text", "claim")
+# Wat een resultaat ZONDER records nog kan zeggen: de tekst die de skill zelf schreef. Dezelfde
+# voorkeur als de note (Inhabitant._classify_result kiest de langste tekst); hier expliciet, zodat
+# een voorstel, een oordeel of een conclusie in het verslag komt als tekst en niet als JSON-dump.
+_TEKSTVELDEN_TOP = ("text", "tekst", "voorstel", "conclusie", "oordeel", "samenvatting", "summary",
+                    "draft", "rapport", "verslag", "antwoord", "content", "body")
+_LEESWIJZER_MAX = 600
 
 
 def _records_in(inhoud: dict):
@@ -176,6 +189,53 @@ def _kort(s, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _top_tekst(inhoud: dict, velden) -> str:
+    """De eerste niet-triviale tekst onder `velden` op topniveau van een resultaat, of ""."""
+    for k in velden:
+        v = inhoud.get(k)
+        if isinstance(v, str) and v.strip() and v.strip().lower() not in ("-", "n/a", "none", "ok"):
+            return v
+    return ""
+
+
+def _kort_tekst(s, n: int) -> str:
+    """Als `_kort`, maar met behoud van regeleinden: een voorstel (SCOPE/APPROACH/TRADE-OFF) of een
+    conclusie verliest anders zijn structuur in het verslag."""
+    regels = [" ".join(r.split()) for r in str(s or "").splitlines()]
+    t = "\n".join(r for r in regels if r)
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
+def _zonder_records(inhoud: dict) -> str:
+    """Een resultaat zonder lijst van records: de tekst die de skill zelf schreef (voorstel,
+    oordeel, conclusie), dan een meetreeks als 'k=v'-regels, en pas als er echt niets leesbaars in
+    zit de compacte JSON. Tot 12-09-2026 kreeg het einddocument hier ALTIJD de JSON-dump — ook van
+    een voorstel_schrijven-tekst van 1500 tekens, met aanhalingstekens en \\n erin."""
+    tekst = _top_tekst(inhoud, _TEKSTVELDEN_TOP)
+    if tekst:
+        return _kort_tekst(tekst, _DELIVERABLE_CAP)
+    # de langste overige tekst (bv. `rationale`, `wat_is_dit`): dezelfde keuze als de note
+    kandidaten = [(len(v), v) for k, v in inhoud.items()
+                  if isinstance(v, str) and not str(k).startswith("_") and len(v.strip()) >= 40]
+    if kandidaten:
+        return _kort_tekst(max(kandidaten)[1], _DELIVERABLE_CAP)
+    reeksen = [(k, v) for k, v in inhoud.items()
+               if isinstance(v, dict) and v and not str(k).startswith("_")
+               and all(not isinstance(x, (dict, list)) for x in v.values())]
+    if reeksen:
+        regels = []
+        for k, v in reeksen[:3]:
+            paren = "; ".join(f"{a}={b}" for a, b in list(v.items())[:12] if b not in (None, ""))
+            if paren:
+                regels.append(f"{k}: {paren}")
+        if regels:
+            return _kort("\n".join(regels), _DELIVERABLE_CAP)
+    try:
+        return _kort(json.dumps(inhoud, ensure_ascii=False), _DELIVERABLE_CAP)
+    except (TypeError, ValueError):
+        return _kort(inhoud, _DELIVERABLE_CAP)
+
+
 def inhoud_tekst(inhoud) -> str:
     """De inhoud van een deliverable zoals een mens hem zou overschrijven: per record de titel, het
     adres en de strekking. Geen records → compacte JSON. Altijd gecapt op `_DELIVERABLE_CAP`.
@@ -189,12 +249,15 @@ def inhoud_tekst(inhoud) -> str:
         return _kort(inhoud, _DELIVERABLE_CAP)
     gevonden = _records_in(inhoud)
     if not gevonden:
-        try:
-            return _kort(json.dumps(inhoud, ensure_ascii=False), _DELIVERABLE_CAP)
-        except (TypeError, ValueError):
-            return _kort(inhoud, _DELIVERABLE_CAP)
+        return _zonder_records(inhoud)
     _key, recs = gevonden
     regels = []
+    # DE EIGEN SAMENVATTING VAN DE SKILL EERST (skill-review 12-09-2026). Een `text` naast de records
+    # is de leeswijzer — de dekking van web_zoek, de scores van mobiel_audit, het oordeel van
+    # tegenspraak — en het verslag las alleen de records. Zelfde regel als in de wall-note.
+    leeswijzer = _top_tekst(inhoud, ("text",))
+    if leeswijzer:
+        regels.append(_kort(leeswijzer, _LEESWIJZER_MAX))
     for r in recs[:_RECORD_MAX]:
         titel = next((str(r[k]) for k in _TITELVELDEN if isinstance(r.get(k), str) and r[k].strip()), "")
         adres = next((str(r[k]) for k in _ADRESVELDEN if isinstance(r.get(k), str) and r[k].strip()), "")

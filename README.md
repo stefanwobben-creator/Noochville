@@ -11,7 +11,7 @@ Geen simulatie, geen mock: de skills doen echt I/O.
 - **Inhabitant** (leaf, een rol per inwoner) en **Circle** (composite): van buiten een rol, van binnen een dorp. Het dorp zelf is de wortelcirkel, dus een subcirkel nest later gratis.
 - **Matchmaker**: routeert "wie kan dit?" naar de inbox van een capabele inwoner.
 - **Governance**: `Records` (de waarheid) + `Secretary` (records bijhouden, geen veto) + `Reconciler` (bouwt het levende dorp uit de records, herlaadt DNA bij wijziging).
-- **Skills**: `SiteHealthSkill` (echte GET), `BudgetSkill` (echte mutatie op disk), `PlausibleSkill` (echte Plausible API).
+- **Skills**: `SiteHealthSkill` (echte GET), `PlausibleSkill` (echte Plausible API) — en de rest van `skills_impl/`.
 
 ## Draaien op je MacBook
 
@@ -29,10 +29,11 @@ Zonder key faalt die skill bewust "closed" (geen mock), de rest draait gewoon do
 
 1. `site_health` doet een echte GET op nooch.earth (status 200, echte paginatitel).
 2. `plausible_stats` doet de echte API-call en faalt closed zonder key.
-3. `budget_adjust` faalt eerst, want analyst heeft die skill nog niet.
-4. Een governance-voorstel kent analyst de budget-skill toe terwijl hij draait (DNA -> v2).
-5. `budget_adjust` schrijft daarna een echte mutatie naar `data/budget.json`.
-6. Een inwoner senst een spanning op het marktplein.
+3. Een governance-voorstel kent een inwoner een skill toe terwijl hij draait (DNA -> v2).
+4. Een inwoner senst een spanning op het marktplein.
+
+(De vroegere demo-stappen met `budget_adjust` zijn weg: die skill hing sinds de registry-factory
+aan geen enkele rol meer en is in scope 58 verwijderd.)
 
 Alle resultaten gaan naar `data/system_log.jsonl` (audit-trail).
 

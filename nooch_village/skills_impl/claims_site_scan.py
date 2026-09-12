@@ -18,6 +18,19 @@ Vier regels:
 Twee handmatige duwtjes, met verschillende betekenis: `force` slaat de week-poort over maar
 respecteert de dekking (hij helpt de scan vooruit), `herstart` gooit de dekking weg en doet de
 hele week opnieuw.
+
+Uitvoervorm (scope 56) — wat de uitvoerlaag (wall-note, verslag, pulslaag) ervan maakt:
+  skipped (week al gedaan)        `skipped` + `no_data` + `reason` uit de weekmarker: 📭 "this week's
+                                  scan: 5 pages, 0 new findings" — geen kennisgat meer (dat was hij tot
+                                  scope 56, omdat de skipped-vorm alleen `ok`/`reden` droeg)
+  escalate (db/lijst/alles stuk)  `ok: False` — het item blijft open met de reden
+  0 nieuwe bevindingen            `no_data` + `reason`, ook bij bronfouten ("3 van 5 pagina's, 0
+                                  bevindingen, 2 niet opgehaald") — een deelrun las tot scope 56 als
+                                  'gelukt' met de paginalabels als "2 results"
+  nieuwe bevindingen              `aangemaakt[]` = de records (term, stoplicht, pagina, url, oordeel,
+                                  citaat) + `text` als leeswijzer
+De run-administratie (gedekt, fouten, statussen, gewhitelist, gaten, …) staat onder `_scan`: een
+`_`-sleutel is voor de uitvoerlaag altijd metadata, dus hij kan de bevindingen niet meer wegduwen.
 """
 from __future__ import annotations
 
@@ -246,6 +259,82 @@ def _wie_fixte(ledger, nr: int) -> str | None:
 
 
 
+class _LeegContext:
+    """Een context zonder stores maar mét de standaard data_dir — voor een aanroep zonder context."""
+    data_dir = "."
+
+
+def skip_uitkomst(week: str, reden: str, marker: dict | None = None) -> dict:
+    """De skipped-uitkomst, mét wat de weekmarker over deze week weet.
+
+    `skipped` + `reden` blijven staan voor de pulslaag (drie toestanden: overgeslagen / escalate /
+    gedraaid). `no_data` + `reason` zijn er voor het checklist-pad: tot scope 56 las een gepland
+    scan-item dat de week al gedaan bleek als 🕳 "no result — onderzocht, niets gevonden", en telde
+    de missie-critic dat als kennisgat. Er is niets onderzocht én er is niets mis — de reden zegt
+    wat de scan van deze week wél opleverde."""
+    m = marker or {}
+    delen = [reden]
+    if m.get("last_week") == week:
+        gedekt = len(m.get("gedekt") or [])
+        paginas = m.get("paginas")
+        delen.append(f"this week's scan: {gedekt}" + (f" of {paginas}" if paginas else "")
+                     + f" page(s) covered, {int(m.get('nieuw') or 0)} new finding(s)")
+        if m.get("volledig") is False:
+            delen.append("coverage not yet complete")
+        if m.get("fouten"):
+            delen.append(f"source errors: {str(m['fouten'])[:160]}")
+    reason = " — ".join(delen)
+    return {"ok": True, "week": week, "skipped": True, "reden": reden,
+            "no_data": True, "reason": reason, "text": reason}
+
+
+def taak_record(taak: dict, bevindingen: list[dict]) -> dict:
+    """Eén aangemaakte taak als RECORD voor de uitvoerlaag: mét `url`, `oordeel` en `citaat`, zodat
+    het verslag "• 🔴 Vervang: eco-friendly (https://…/) — red — “eco-friendly” (home) — …" leest en
+    niet alleen de titel. De bron-bevinding wordt op (gevonden, pagina) teruggezocht — dezelfde
+    koppeling als `_oogst_gaten` gebruikt."""
+    sleutel = (claims_board.normaliseer(taak.get("gevonden", "")), taak.get("pagina") or "")
+    bron = next((b for b in bevindingen
+                 if (claims_board.normaliseer((b.get("gevonden") or [""])[0]),
+                     b.get("pagina") or "") == sleutel), {})
+    stoplicht = str(taak.get("stoplicht") or "")
+    oordeel = stoplicht + (f" — source {bron['bron']}" if bron.get("bron") else "")
+    if taak.get("onderbouwing"):
+        oordeel += f" — evidence: {taak['onderbouwing']}"
+    citaat = f"'{taak.get('gevonden') or '?'}' on page '{taak.get('pagina') or '?'}'"
+    if bron.get("waarom"):
+        citaat += f" — {bron['waarom']}"
+    return {**taak, "term": bron.get("term", ""), "url": bron.get("url", ""),
+            "oordeel": oordeel, "citaat": citaat}
+
+
+def kop_tekst(uit: dict, gevonden: int, tijdelijk: list, permanent: list, statussen: list) -> str:
+    """De leeswijzer: dekking, nieuwe bevindingen en wat er niet gehaald is, in één zin."""
+    gescand, paginas = int(uit.get("gescand") or 0), int(uit.get("paginas") or 0)
+    gedekt = len((uit.get("_scan") or {}).get("gedekt") or [])
+    kop = (f"{gescand} page(s) scanned this pulse, {gedekt} of {paginas} covered this week; "
+           f"{int(uit.get('nieuw') or 0)} new finding(s)")
+    if uit.get("rood"):
+        kop += f" ({uit['rood']} red)"
+    al = gevonden - int(uit.get("nieuw") or 0)
+    if al > 0:
+        kop += f", {al} already on the board or in the work list"
+    if statussen:
+        kop += f", {len(statussen)} work-list status(es) updated"
+    if tijdelijk:
+        kop += (f"; {len(tijdelijk)} page(s) not fetched ("
+                + ", ".join(f['label'] for f in tijdelijk[:3]) + ")"
+                + (" — the scan is stuck" if uit.get("vastgelopen") else " — next pulse retries"))
+    if permanent:
+        kop += f"; {len(permanent)} page(s) no longer exist (update the scan list)"
+    mislukt = (uit.get("_scan") or {}).get("statussen_mislukt") or []
+    if mislukt:
+        kop += f"; {len(mislukt)} status change(s) could not be saved"
+    if not gevonden and not tijdelijk and not permanent and not mislukt:
+        kop += " — no claim finding and no source error: the site is clean on these points"
+    return kop
+
+
 def _claims_rol(context) -> str:
     """De levende rol die het claims-domein bezit ("" = niemand).
 
@@ -261,17 +350,20 @@ class ClaimsSiteScanSkill(Skill):
     cost = "free"
     side_effect_free = False           # maakt taken aan op het bord
     required_env = ()
-    description = ("Scant de vaste pagina-set van nooch.earth tegen de claims-database en zet "
-                   "alleen NIEUWE rode/oranje bevindingen als taak bij de juiste rol. Eén volledige "
-                   "dekking per ISO-week, desnoods verdeeld over meerdere pulsen als de host "
-                   "pagina's tijdelijk weigert; wat al in de werklijst of op het bord staat wordt "
-                   "overgeslagen.")
-    input_schema = ("geen (optioneel: force: bool om de week-poort over te slaan met behoud van de "
-                    "dekking · herstart: bool om de dekking van deze week weg te gooien)")
-    output_schema = ("ok, week, skipped, gescand, gedekt[], paginas, volledig, nieuw, aangemaakt[], "
-                     "overgeslagen, fouten[{label,url,reden,tijdelijk}], model_gevonden, "
-                     "modelpas_ok, modelpas_mislukt, statussen[], statussen_mislukt[], "
-                     "gewhitelist[], gaten[], headsup, escalate")
+    description = ("Weekly self-scan of the fixed page set of nooch.earth against the claims "
+                   "database (EmpCo + ACM) plus the evidence question to the Kroniek: only NEW "
+                   "red/orange findings become tasks for the right role; what is already on the "
+                   "board or in the work list is skipped. One full coverage per ISO week, spread over "
+                   "pulses if the host throttles; an already-covered week is reported as such.")
+    input_schema = ("no fields required · force: bool (optional — skip the week gate but keep this "
+                    "week's coverage) · herstart: bool (optional — discard this week's coverage and "
+                    "rescan every page) · modelpas: bool (optional, default true — also run the LLM "
+                    "recall pass for claims without a listed term)")
+    output_schema = ("ok, week, skipped, text, nieuw, rood, gescand, paginas, volledig, vastgelopen, "
+                     "aangemaakt[{pid, owner, titel, stoplicht, gevonden, pagina, url, oordeel, "
+                     "citaat}], headsup, escalate, no_data+reason (nothing new), _scan{gedekt[], "
+                     "fouten[], statussen[], statussen_mislukt[], gewhitelist[], gaten[], "
+                     "overgeslagen, model_gevonden, modelpas_ok, modelpas_mislukt}")
 
     def _verifieer_werklijst(self, context, db: dict, paginateksten: dict,
                              volledig: bool = True) -> tuple[list[dict], list[str]]:
@@ -336,25 +428,18 @@ class ClaimsSiteScanSkill(Skill):
         return geschreven, mislukt
 
     def _kroniek(self, context):
-        """De Kroniek waartegen de bewijs-vraag wordt gesteld. Zelfde resolutie-idioom als
-        `weten_we_dit_al`: een injectie uit de context wint, anders het bestand naast de stores.
-        Lukt zelfs dat niet, dan is er geen bewijs — en dan is niets onderbouwd (fail-closed)."""
-        ledger = getattr(context, "evidence_ledger", None) or getattr(context, "evidence", None)
-        if ledger is not None:
-            return ledger
-        try:
-            from nooch_village.evidence_ledger import EvidenceLedger
-            return EvidenceLedger(os.path.join(getattr(context, "data_dir", "."),
-                                               "evidence_ledger.jsonl"))
-        except Exception:                                # noqa: BLE001
-            return None
+        """De Kroniek waartegen de bewijs-vraag wordt gesteld: de gedeelde resolver (injectie uit de
+        context wint, anders het bestand naast de stores). Lukt zelfs dat niet, dan is er geen
+        bewijs — en dan is niets onderbouwd (fail-closed)."""
+        from nooch_village.evidence_ledger import van_context
+        return van_context(context if context is not None else _LeegContext())
 
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
         data_dir = getattr(context, "data_dir", ".")
         week = period_key("week")
         if not (payload.get("force") or payload.get("herstart")) and week_gedaan(data_dir, week):
-            return {"ok": True, "week": week, "skipped": True, "reden": "deze week al gescand"}
+            return skip_uitkomst(week, "deze week al gescand", laatste_run(data_dir))
 
         try:
             db = claims_db.load(data_dir=data_dir)
@@ -375,8 +460,7 @@ class ClaimsSiteScanSkill(Skill):
         if not te_doen:
             markeer_week(data_dir, week, {"gedekt": [p.get("label") or p["url"] for p in paginas],
                                           "paginas": len(paginas), "volledig": True})
-            return {"ok": True, "week": week, "skipped": True,
-                    "reden": "alle pagina's zijn deze week al gedekt"}
+            return skip_uitkomst(week, "alle pagina's zijn deze week al gedekt", laatste_run(data_dir))
 
         bevindingen, fouten, paginateksten, signalen = verzamel(
             te_doen, db, _fetch=payload.get("_fetch"), ledger=self._kroniek(context),
@@ -385,7 +469,7 @@ class ClaimsSiteScanSkill(Skill):
             modelpas=payload.get("modelpas", True))
         if len(fouten) == len(te_doen) and not gedekt:
             # Niets gelukt én niets eerder gedekt: dat is geen 'schone site', dat is een kapotte scan.
-            return {"ok": False, "week": week, "gescand": 0, "fouten": fouten,
+            return {"ok": False, "week": week, "gescand": 0, "_scan": {"fouten": fouten},
                     "escalate": {"reason": "geen enkele pagina kon worden opgehaald: "
                                            + fout_tekst(fouten)}}
 
@@ -446,29 +530,33 @@ class ClaimsSiteScanSkill(Skill):
                                   vastgelopen, rol=_claims_rol(context))
         headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen,
                                 len(nieuw_gedekt), len(paginas))
-        # Een schone scan is een ANTWOORD ("de site is compliant"), geen kennisgat. Zonder dit
-        # leest een geslaagde scan zonder bevindingen als ontbrekende kennis — en dat is precies
-        # het soort valse gat waar de missie-critic op zakt.
-        # `status_mislukt` telt mee: een run die een status niet kon wegschrijven is niet schoon,
-        # want "geen bevindingen" zou dan mede kunnen komen doordat het opslaan faalde.
-        schoon = (not verslag["aangemaakt"] and not bevindingen and not fouten
-                  and not tijdelijk and not permanent and not status_mislukt)
-        extra = ({"no_data": True,
-                  "reason": (f"{len(paginateksten)} pagina('s) gescand, geen enkele claim-bevinding "
-                             f"en geen bronfout — de site is op deze punten schoon")}
-                 if schoon else {})
-        return {"ok": True, "week": week, "skipped": False, "headsup": headsup, **extra,
-                "statussen": statussen, "statussen_mislukt": status_mislukt,
-                "gescand": len(paginateksten), "gedekt": nieuw_gedekt, "paginas": len(paginas),
-                "fouten": fouten,
-                "volledig": dekking_compleet or vastgelopen, "vastgelopen": vastgelopen,
-                "nieuw": len(verslag["aangemaakt"]), "aangemaakt": verslag["aangemaakt"],
-                "overgeslagen": verslag["overgeslagen"], "rood": verslag["rood"],
-                "model_gevonden": signalen["model_gevonden"],
-                "modelpas_ok": signalen["modelpas_ok"],
-                "modelpas_mislukt": signalen["modelpas_mislukt"],
-                "gewhitelist": signalen["gewhitelist"], "gaten": gaten,
-                "escalate": None}
+        aangemaakt = [taak_record(t, bevindingen) for t in verslag["aangemaakt"]]
+        uit = {"ok": True, "week": week, "skipped": False, "headsup": headsup,
+               "gescand": len(paginateksten), "paginas": len(paginas),
+               "volledig": dekking_compleet or vastgelopen, "vastgelopen": vastgelopen,
+               "nieuw": len(aangemaakt), "rood": verslag["rood"], "aangemaakt": aangemaakt,
+               # De run-administratie onder één `_`-sleutel: voor de uitvoerlaag is dat metadata, dus
+               # de paginalabels of de statuslijst kunnen de bevindingen niet meer wegduwen — en een
+               # deelrun zonder bevindingen leest niet meer als 'gelukt · 2 results'.
+               "_scan": {"gedekt": nieuw_gedekt, "fouten": fouten,
+                         "statussen": statussen, "statussen_mislukt": status_mislukt,
+                         "overgeslagen": verslag["overgeslagen"],
+                         "model_gevonden": signalen["model_gevonden"],
+                         "modelpas_ok": signalen["modelpas_ok"],
+                         "modelpas_mislukt": signalen["modelpas_mislukt"],
+                         "gewhitelist": signalen["gewhitelist"], "gaten": gaten},
+               "escalate": None}
+        uit["text"] = kop_tekst(uit, len(bevindingen), tijdelijk, permanent, statussen)
+        if not aangemaakt:
+            # Geen nieuwe bevinding is een ANTWOORD ("niets nieuws op de site"), geen kennisgat — ook
+            # als er pagina's niet gehaald zijn: dan zegt de reden precies hoeveel, zodat "niets
+            # gevonden" nooit stil "niet gekeken" betekent. Tot scope 56 gold dat alleen voor de
+            # volledig schone scan; een deelrun met één 429 boekte als 'gelukt' met de paginalabels
+            # als resultaat. `status_mislukt` en `bevindingen` (al op het bord) staan in de reden:
+            # een run die een status niet kon wegschrijven is niet schoon.
+            uit["no_data"] = True
+            uit["reason"] = uit["text"]
+        return uit
 
     # ── De gat-oogst: opschrijven waar de tool zwak is, op het moment dat het pijn doet ──────────
     # Drie soorten onvermogen, alle drie `missing_capability` (software zou dit kunnen). De bevinding

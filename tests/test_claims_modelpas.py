@@ -101,11 +101,12 @@ def test_pas_die_op_een_pagina_klapt_wordt_niet_als_heel_mislukt_gerapporteerd(t
                                            "categorie": "Framing", "zeker": True}]})
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": wisselvallig}, ctx)
-    assert uit["modelpas_ok"] and uit["modelpas_mislukt"]      # beide kanten eerlijk geteld
-    assert uit["model_gevonden"] >= 1
+    scan = uit["_scan"]                                        # run-administratie (scope 56)
+    assert scan["modelpas_ok"] and scan["modelpas_mislukt"]    # beide kanten eerlijk geteld
+    assert scan["model_gevonden"] >= 1
     gat = [g for g in gap_ledger.alle(str(tmp_path))
            if g["capability"] == ClaimsSiteScanSkill.GAT_GEEN_MODELPAS][0]
-    assert f"op {uit['modelpas_mislukt']} van" in gat["item_text"]
+    assert f"op {scan['modelpas_mislukt']} van" in gat["item_text"]
 
 
 def test_kapot_llm_antwoord_is_ook_fail_soft(tmp_path):
@@ -278,7 +279,7 @@ def test_uitzondering_onderdrukt_de_taak_maar_niet_de_bevinding(tmp_path, monkey
     claims_db.overlay_uitzondering(str(tmp_path), "These shoes are eco-friendly",
                                    waarom="citaat uit een klantvraag", door="stefan")
     uit = ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": _stil}, ctx)
-    gewhitelist = uit["gewhitelist"]
+    gewhitelist = uit["_scan"]["gewhitelist"]
     assert gewhitelist, "de weggewuifde bevinding moet zichtbaar blijven"
     assert gewhitelist[0]["uitzondering"]["door"] == "stefan"
     assert gewhitelist[0]["term"]                             # mét de bevinding zelf, niet alleen een telling

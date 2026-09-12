@@ -38,12 +38,21 @@ log = logging.getLogger("village.skill.zoekstrategie")
 
 # De bronnen die Sid kan raadplegen, met hun taal-eigenaardigheid erbij. Deze lijst staat hier en niet
 # in de prompt-tekst zelf, zodat een nieuwe bron één regel is in plaats van een prompt-herschrijving.
+#
+# ALLEEN SKILLS DIE DE PLANNER KAN PLANNEN (scope 54). `google_patents` en `semscholar_tldr` stonden
+# hier als eigen bron, maar het zijn ladder-TREDEN onder epo_patents en openalex_evidence
+# (evidence_ledger.SKILL_LADDERS) en ze zitten in geen enkele rugzak: een stap ernaartoe werd in
+# `_plan_checklist` "geen skill" — een dood item in de herplan-lijst. Ze staan nu bij hun bovenliggende
+# skill vermeld, want daar komen ze vanzelf langs als die leeg of stuk is.
 BRONNEN: dict[str, str] = {
-    "openalex_evidence": "academic literature, ENGLISH-language corpus — use an English term",
-    "epo_patents": "European patent register, English/German/French — use English technical terms",
-    "google_patents": "patents worldwide, English",
-    "semscholar_tldr": "one-sentence summaries of papers, English",
-    "openlibrary_search_inside": "full text of books, mostly English",
+    "openalex_evidence": ("academic literature, ENGLISH-language corpus — use an English term of 1-3 "
+                          "words; falls through to Semantic Scholar (one-sentence paper summaries) "
+                          "when it comes back empty"),
+    "epo_patents": ("European patent register, searched on patent titles, English/German/French — use "
+                    "English technical terms; falls through to Google Patents (worldwide) when OPS "
+                    "fails"),
+    "openlibrary_search_inside": ("passages from inside scanned books that contain the term, mostly "
+                                  "English — use the exact wording a book would use"),
     "ngram_culture": "word frequency in books over decades, per language corpus — pick the corpus",
     "community_listening": "what people say on Bluesky/YouTube — the language people actually use",
     "competitor_news": "news about known competitor brands, keyless",

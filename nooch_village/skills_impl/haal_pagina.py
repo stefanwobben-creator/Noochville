@@ -14,21 +14,28 @@ Grenzen, in dezelfde geest als de rest:
 - **Fail-closed.** Een netwerkfout is een fout, geen lege uitkomst; `tijdelijk` zegt of opnieuw
   proberen zin heeft. Nooit verzonnen tekst.
 - **`no_data` ≠ nul.** Pagina opgehaald maar de term staat er niet is iets anders dan de pagina
-  niet kunnen ophalen. Het eerste is een antwoord, het tweede is een storing.
+  niet kunnen ophalen. Het eerste is een antwoord, het tweede is een storing. En een pagina ZONDER
+  leesbare tekst (JavaScript-only, een leeg document) is óók `no_data` — tot scope 54 kwam die terug
+  als `{"ok": True, "tekst": ""}`, en dan werd de URL-string "het antwoord" en het item afgevinkt.
 - **Geen oordeel.** Deze skill vindt en citeert; of een claim mag, bepaalt `claims_check` onder de
   domeinhouder.
+
+Records (scope 54): elke treffer draagt `titel` en `url` van de pagina en een `fragment` (de regel
+mét zijn context), zodat het verslag "• FAQ (url) — regel" toont en geen JSON; een `text` vat de
+uitkomst samen voor de wall.
 """
 from __future__ import annotations
 
 import re
 
-from nooch_village import safe_fetch
+from nooch_village import safe_fetch, web_read
 from nooch_village.skills import Skill
 
 _DEFAULT_CONTEXT_REGELS = 2
 _DEFAULT_MAX_TREFFERS = 10
 _DEFAULT_MAX_TEKENS = 4000
 _MAX_REGEL = 600                    # één regel in de uitvoer; langer is geen citaat meer
+_MAX_FRAGMENT = 600                 # regel + context in het verslag; langer is geen strekking meer
 
 
 def _int(waarde, default: int, *, minimum: int = 0, maximum: int = 10_000) -> int:
@@ -57,33 +64,50 @@ def zoek_treffers(tekst: str, term: str, *, context_regels: int, max_treffers: i
     treffers = []
     for i, regel in enumerate(regels):
         if naald and naald in regel.casefold():
+            voor = [_kort(r, 200) for r in regels[max(0, i - context_regels):i]]
+            na = [_kort(r, 200) for r in regels[i + 1:i + 1 + context_regels]]
             treffers.append({
                 "regel": _kort(regel),
                 "regelnummer": i + 1,
-                "voor": [_kort(r, 200) for r in regels[max(0, i - context_regels):i]],
-                "na": [_kort(r, 200) for r in regels[i + 1:i + 1 + context_regels]],
+                "voor": voor,
+                "na": na,
+                # De strekking voor het verslag: de regel mét zijn context als één zin. `regel` op
+                # zichzelf is geen strekkingveld (bij copycheck betekent 'regel' een regel/rule).
+                "fragment": _kort(" · ".join(voor + [_kort(regel)] + na), _MAX_FRAGMENT),
             })
             if len(treffers) >= max_treffers:
                 break
     return treffers
 
 
+def _als_tekst(titel: str, url: str, term: str, treffers: list[dict]) -> str:
+    """De leeswijzer voor de wall: welke pagina, hoeveel regels met de term, en de eerste."""
+    naam = titel or url
+    kop = f"{naam} ({web_read.domain_of(url)}): {len(treffers)} line(s) with '{term}'"
+    if not treffers:
+        return kop + "."
+    return f"{kop}; first: “{_kort(treffers[0].get('regel') or '', 200)}”."
+
+
 class HaalPaginaSkill(Skill):
     name = "haal_pagina"
     cost = "rate_limited"          # publieke pagina, beleefde backoff via safe_fetch
     side_effect_free = True        # leest alleen; schrijft niets, publiceert niets
-    description = ("Haalt een publieke webpagina op en geeft de leesbare tekst terug, of, met een "
-                   "term erbij, elke regel waarin die term voorkomt met de regels eromheen als "
-                   "context. Alleen lezen, fail-closed, geen oordeel over de inhoud.")
-    input_schema = ("url: str (verplicht — http(s), publiek adres); "
-                    "term: str (optioneel — geef alleen de regels rond deze term); "
-                    "context_regels: int (optioneel, default 2); "
-                    "max_treffers: int (optioneel, default 10); "
-                    "max_tekens: int (optioneel, default 4000 — alleen zonder term)")
+    description = ("Reads ONE public web page you already have the URL of and returns its readable "
+                   "text, or, with a term, every line that contains the term with the lines around "
+                   "it as context. Read-only, fail-closed, no judgement about the content; a page "
+                   "without readable text or without the term is 'no_data'.")
+    input_schema = ("url: str (required — a real http(s) address, never a placeholder); "
+                    "term: str (optional — return only the lines around this term, case-insensitive); "
+                    "context_regels: int (optional, default 2 — lines of context on each side); "
+                    "max_treffers: int (optional, default 10); "
+                    "max_tekens: int (optional, default 4000 — only without a term)")
     required_payload = ("url",)
     output_schema = ("ok, url, status, titel, term, aantal_treffers, "
-                     "treffers[{regel, regelnummer, voor[], na[]}], tekst (alleen zonder term), "
-                     "afgekapt, no_data + reason (term niet gevonden), error + tijdelijk (bij storing)")
+                     "treffers[{titel, url, regel, regelnummer, voor[], na[], fragment}], text (summary "
+                     "for the wall, with a term), tekst (only without a term), afgekapt, "
+                     "no_data + reason (term not on the page, or no readable text), "
+                     "error + tijdelijk (on failure)")
 
     def __init__(self, haal=None):
         # Injecteerbaar zodat een test de skill kan bewijzen zonder netwerk, net als `_fetch`
@@ -136,9 +160,18 @@ class HaalPaginaSkill(Skill):
             return {"error": f"onverwachte fout bij ophalen: {type(e).__name__}: {e}",
                     "url": url, "tijdelijk": False}
 
+        gehaald = gehaald if isinstance(gehaald, dict) else {}
         tekst = gehaald.get("tekst") or ""
-        basis = {"ok": True, "url": gehaald.get("url") or url, "status": gehaald.get("status"),
-                 "titel": gehaald.get("titel") or ""}
+        gelezen_url = gehaald.get("url") or url
+        titel = gehaald.get("titel") or ""
+        basis = {"ok": True, "url": gelezen_url, "status": gehaald.get("status"), "titel": titel}
+
+        if not tekst.strip():
+            # Opgehaald, maar er staat niets leesbaars op (JavaScript-only, leeg document). Een
+            # antwoord ("hier is niets te lezen"), geen storing — en zeker geen geslaagde lezing
+            # met de URL als inhoud, wat het tot scope 54 was.
+            return {**basis, "no_data": True, "tekst": "",
+                    "reason": "pagina zonder leesbare tekst (waarschijnlijk JavaScript-only of leeg)"}
 
         if not term:
             maxt = _int(payload.get("max_tekens"), _DEFAULT_MAX_TEKENS, minimum=200, maximum=100_000)
@@ -150,7 +183,11 @@ class HaalPaginaSkill(Skill):
             context_regels=_int(payload.get("context_regels"), _DEFAULT_CONTEXT_REGELS, maximum=10),
             max_treffers=_int(payload.get("max_treffers"), _DEFAULT_MAX_TREFFERS, minimum=1, maximum=100),
         )
-        uit = {**basis, "term": term, "aantal_treffers": len(treffers), "treffers": treffers}
+        # Elke treffer draagt het adres en de titel van de pagina: in het verslag wordt dat
+        # "• FAQ (url) — regel" in plaats van een JSON-dump van {regel, regelnummer, voor, na}.
+        treffers = [{"titel": titel, "url": gelezen_url, **t} for t in treffers]
+        uit = {**basis, "term": term, "aantal_treffers": len(treffers), "treffers": treffers,
+               "text": _als_tekst(titel, gelezen_url, term, treffers)}
         if not treffers:
             # De pagina is opgehaald; de term staat er niet. Dat is een ANTWOORD, geen storing.
             uit["no_data"] = True

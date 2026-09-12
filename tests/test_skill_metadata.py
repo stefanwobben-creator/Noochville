@@ -27,7 +27,6 @@ def test_cost_values_are_valid_literals():
     from nooch_village.skills_impl.trends import TrendsSkill
     from nooch_village.skills_impl.field_note import FieldNoteSkill
     from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
-    from nooch_village.skills_impl.budget import BudgetSkill
     from nooch_village.skills_impl.site_health import SiteHealthSkill
     from nooch_village.skills_impl.gsc import GscPerformanceSkill
     from nooch_village.skills_impl.gsc_report import GscReportSkill
@@ -40,7 +39,7 @@ def test_cost_values_are_valid_literals():
     )
     skills = [
         PlausibleSkill, TrendsSkill, FieldNoteSkill, BulletinSchrijvenSkill,
-        BudgetSkill, SiteHealthSkill, GscPerformanceSkill, GscReportSkill,
+        SiteHealthSkill, GscPerformanceSkill, GscReportSkill,
         NgramCultureSkill, OpenalexSkill, SemanticScholarSkill,
         OpenlibrarySearchInsideSkill, LibraryListSkill, LibraryLookupSkill,
         KeywordReviewSkill,
@@ -52,11 +51,12 @@ def test_cost_values_are_valid_literals():
 
 
 def test_file_writing_skills_are_not_side_effect_free():
-    """Skills die een bestand wegschrijven zijn niet side-effect-free."""
-    from nooch_village.skills_impl.budget import BudgetSkill
+    """Skills die een bestand wegschrijven zijn niet side-effect-free. (budget_adjust is in scope 58
+    verwijderd; gsc_report schrijft de zoekverkeer-nota en declareert dat sindsdien ook.)"""
+    from nooch_village.skills_impl.gsc_report import GscReportSkill
     from nooch_village.skills_impl.field_note import FieldNoteSkill
     from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
-    for cls in (BudgetSkill, FieldNoteSkill, BulletinSchrijvenSkill):
+    for cls in (GscReportSkill, FieldNoteSkill, BulletinSchrijvenSkill):
         assert cls.side_effect_free is False, (
             f"{cls.__name__}.side_effect_free moet False zijn (schrijft bestanden)"
         )

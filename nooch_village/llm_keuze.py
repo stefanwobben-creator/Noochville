@@ -92,6 +92,11 @@ GOEDKOOP: frozenset[str] = frozenset({
     "classify_tension", "cockpit_mention_triage", "escalation_route", "escaleer_keuze",
     "escaleer_classify", "scope_nudge_match", "governance_target_pick", "news_driver_pick",
     "cockpit_match_pair", "cockpit_match_keycheck",
+    # De verband-vraag van de Librarian ("hangen deze twee kaarten écht samen?") is triage: een
+    # ja/nee met een goedkope fout, want de uitkomst gaat als voorstel naar de human-inbox en een
+    # mens beslist. Stond tot scope 57 nergens (onbekende site = dorpsladder, stil); hier zodat de
+    # keuze zichtbaar is en 'dorpsbreed premium' hem niet per ongeluk meeneemt.
+    "skill_verband",
 })
 
 # De dorpsbrede kop voor hoog-inzet: Sonnet, met de dorpsladder als staart (via `met_dorpsstaart`).
@@ -431,6 +436,25 @@ def llm_voorkeur(omgeving, role_id: str, call_site: str) -> str | None:
     # dorpsbrede hoog-inzet-kop erbij zodra de persona zelf niets kiest. Eén ingang, geen tweede
     # plek waar de default opnieuw bedacht wordt.
     return ladder_voor(call_site, persona_van_rol(omgeving, role_id))
+
+
+def skill_ladder(call_site: str) -> str | None:
+    """De dorpsbrede ladder voor een SKILL-call-site (content_schrijven, bulletin, voorstel,
+    synthesize, tegenspraak). None = de dorpsladder.
+
+    Bewust ZONDER persona-override: een skill kent zijn rol niet (de context die hij krijgt draagt
+    geen role_id), dus die keuze is hier niet te maken. De persona-override werkt wél op de
+    rol-gebonden sites (plan_checklist, einddocument, noochie_weigh_in) via `_persona_ladder`.
+
+    Stond tot scope 57 vijfmaal identiek als `_hoog_inzet_ladder` in vijf skill-modules
+    (skill-review 12-09-2026: copy in plaats van reference). Eén exemplaar hier, zodat een
+    wijziging in de keuze-regel — de cap, de kop, de staart — alle vijf tegelijk raakt.
+
+    Fail-soft: gaat de keuze stuk, dan de dorpsladder — een ladder mag een call nooit blokkeren."""
+    try:
+        return ladder_voor(call_site)
+    except Exception:                                    # noqa: BLE001
+        return None
 
 
 # ── De rekening ─────────────────────────────────────────────────────────────

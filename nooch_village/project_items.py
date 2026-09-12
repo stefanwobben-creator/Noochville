@@ -101,8 +101,14 @@ def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
         return {"error": "ontbrekende parameter: 'naar_rol' en 'titel' zijn beide verplicht"}
     if ledger is None:
         return {"error": "geen projectledger in context — kan geen projectverzoek plaatsen"}
-    if records is not None and records.get(naar) is None:
-        return {"error": f"onbekende doelrol: '{naar}'"}
+    # Dezelfde lezer als projectverzoek.validate_payload en escaleer: 'founder' → the_source, een
+    # unieke korte naam → de id die erop eindigt. Eén waarheid voor "welke rol bedoel je", anders
+    # keurt de poort iets goed dat hier alsnog "onbekende doelrol" wordt (of andersom).
+    from nooch_village.skills_impl.escaleer import rol_id_voor
+    if records is not None:
+        naar = rol_id_voor(naar, records)
+        if not naar:
+            return {"error": f"onbekende doelrol: '{naar_rol.strip()}'"}
     done = (done_criterium or "").strip() or titel
     try:
         pid = ledger.create(naar, titel[:200], "tension", status="future",

@@ -112,13 +112,21 @@ def _normalize(node: dict) -> dict:
             "utm_term": (utm.get("term") or "")}
 
 
-def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, max_pages: int = 20) -> list[dict]:
-    """Haal (genormaliseerde) orders op, met paginatie. `since_iso=None` → hele historie (geen
-    datumfilter). `_post` injecteerbaar voor tests."""
+#: Pagina's van 100 orders per fetch; daarboven stopt de skill en zegt hij dat (`truncated`).
+MAX_PAGES = 20
+
+
+def fetch_orders_pages(store: str, token: str, since_iso: str | None, *, _post=None,
+                       max_pages: int = MAX_PAGES) -> tuple[list[dict], bool]:
+    """Haal (genormaliseerde) orders op, met paginatie: (orders, truncated). `since_iso=None` → hele
+    historie (geen datumfilter). `truncated` = True als de laatste pagina nog `hasNextPage` had: de
+    historie is dan afgekapt op max_pages × 100 orders, en dat hoort in de uitkomst te staan in
+    plaats van stil als 'alles' door te gaan (skill-review 12-09-2026). `_post` injecteerbaar."""
     post = _post or (lambda q, v: _post_graphql(store, token, q, v))
     out: list[dict] = []
     cursor = None
     q = f"created_at:>={since_iso}" if since_iso else None
+    truncated = False
     for _ in range(max_pages):
         data = post(_ORDERS_QUERY, {"cursor": cursor, "q": q})
         if (data or {}).get("errors"):
@@ -126,10 +134,16 @@ def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, m
         conn = ((data or {}).get("data") or {}).get("orders") or {}
         out.extend(_normalize(n) for n in conn.get("nodes", []))
         page = conn.get("pageInfo") or {}
-        if not page.get("hasNextPage"):
+        truncated = bool(page.get("hasNextPage"))
+        if not truncated:
             break
         cursor = page.get("endCursor")
-    return out
+    return out, truncated
+
+
+def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, max_pages: int = MAX_PAGES) -> list[dict]:
+    """Als `fetch_orders_pages`, alleen de orders (de bestaande aanroepvorm: daily_values, tests)."""
+    return fetch_orders_pages(store, token, since_iso, _post=_post, max_pages=max_pages)[0]
 
 
 def _parse_dt(created_at: str, now: datetime):
@@ -222,11 +236,30 @@ class ShopifySalesSkill(DataSourceSkill):
     SOURCE = "shopify"
     CATALOG_LABEL = "Shopify (verkoop)"
     cost = "free"
-    required_env = ("SHOPIFY_STORE", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET")
+    # `required_env` = wat ALTIJD moet: de winkel. De auth-weg is een of-of (statisch SHOPIFY_TOKEN óf
+    # SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET) die een platte lijst niet kan uitdrukken; tot scope 58
+    # stonden hier client-id + secret, waardoor de bronnen-view bij een token-configuratie "connected"
+    # én "missing SHOPIFY_CLIENT_ID/SECRET" tegelijk toonde. `is_configured` toetst de echte eis;
+    # `config_hint` zegt hem in mensentaal aan de planner-poort.
+    required_env = ("SHOPIFY_STORE",)
+    optional_env = ("SHOPIFY_TOKEN", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET")
+    config_hint = ("SHOPIFY_STORE plus SHOPIFY_TOKEN or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET "
+                   "needed in .env")
     description = (
-        "Read-only verkoopindicatoren uit Shopify (Admin GraphQL): paren verkocht, orders, omzet, "
-        "AOV, per land en topproducten over een venster. Uitsluitend geaggregeerd, geen PII."
+        "Sales figures from the Nooch Shopify store (read-only Admin GraphQL): pairs sold, orders, revenue "
+        "and average order value over a window, with breakdowns per country, product, landing page, "
+        "channel and UTM term. Aggregated only, no customer data. Returns `rows` (headline figures first) "
+        "and a one-line `text`; a stub run says 'stub' in that text. Needs SHOPIFY_STORE and a token."
     )
+    input_schema = ("window_days: int (optional, default 0 = all history; 7, 30, …) OR windows: list[int] "
+                    "(optional, e.g. [0, 7, 30] = several windows from one fetch; the flat figures are then "
+                    "the first window, usually all history). Nothing else.")
+    output_schema = ("ok, text, rows[{period, metric, waarde, text} — pairs_sold, orders, revenue, aov, "
+                     "orders_7d, pairs_7d, then {period, metric, dimension, name, waarde, text} per country/"
+                     "product/landing page/channel/utm term], pairs_sold, orders, revenue, currency, aov, "
+                     "by_country, top_products, top_landing_pages, channels, top_keywords, orders_7d, "
+                     "pairs_7d, first_order_date, span_days, avg_*_month, window_days, truncated, "
+                     "windows{…} (windows-form), stub + live:false (stub) | no_data + reason (0 orders) | error")
 
     def available_metrics(self, context=None) -> list[str]:
         """De scalaire verkoopindicatoren die aggregate_orders oplevert (voor het koppelscherm)."""
@@ -281,32 +314,166 @@ class ShopifySalesSkill(DataSourceSkill):
     def _truthy(v) -> bool:
         return str(v).strip().lower() in ("1", "true", "yes", "ja", "on")
 
+    def validate_payload(self, payload: dict, context) -> list:
+        """Twee poorten bij het PLANNEN. (1) Configuratie: zonder winkel + auth-weg is elke payload
+        onuitvoerbaar — vijf keer "⚠️ niet gelukt (fout, poging n)" op de wall was de meting die
+        hierachter zit; de reden noemt de sleutelNAMEN. (2) Vorm: `window_days` een getal ≥ 0,
+        `windows` een lijst getallen; iets anders (een datum, een productnaam) strandt hier."""
+        uit = []
+        if context is not None and getattr(context, "settings", None) is not None:
+            try:
+                if not self.is_configured(context):
+                    uit.append(f"Shopify not configured ({self.config_hint})")
+            except Exception:                              # noqa: BLE001 — bij twijfel geen oordeel
+                pass
+        p = payload or {}
+        if p.get("window_days") not in (None, ""):
+            try:
+                if int(p["window_days"]) < 0:
+                    uit.append("'window_days' must be 0 (all history) or a positive number of days")
+            except (TypeError, ValueError):
+                uit.append(f"'window_days' is not a number ({p['window_days']!r})")
+        if p.get("windows") not in (None, ""):
+            ws = p["windows"]
+            if not isinstance(ws, (list, tuple)):
+                uit.append("'windows' must be a list of day counts, e.g. [0, 7, 30]")
+            else:
+                try:
+                    if any(int(w) < 0 for w in ws):
+                        uit.append("'windows' may only contain 0 (all history) or positive day counts")
+                except (TypeError, ValueError):
+                    uit.append(f"'windows' is not a list of numbers ({ws!r})")
+        return uit
+
+    @staticmethod
+    def _label(window_days: int, agg: dict) -> str:
+        if window_days <= 0:
+            eerste = agg.get("first_order_date")
+            return f"all history (since {eerste})" if eerste else "all history"
+        return {7: "the last 7 days", 30: "the last 30 days"}.get(window_days, f"the last {window_days} days")
+
+    @staticmethod
+    def _n(n, enkel: str, meer: str) -> str:
+        """'1 order' / '3 orders' — een note die "1 orders" zegt leest als een machine."""
+        return f"{n} {enkel if n == 1 else meer}"
+
+    @staticmethod
+    def _geld(bedrag, currency: str) -> str:
+        cur = (currency or "").upper()
+        return f"€{bedrag:,.2f}" if cur == "EUR" else f"{bedrag:,.2f} {cur}".strip()
+
+    def _rows(self, agg: dict, window_days: int) -> list:
+        """De kopcijfers eerst, dan de verdelingen als één lijst. Zonder deze lijst won `by_country`
+        (een lijst tuples) van `pairs_sold`, en opende de note met "('NL', 2) • ('DE', 1)" zonder paren
+        of omzet (skill-review 12-09-2026)."""
+        label = self._label(window_days, agg)
+        periode = "all" if window_days <= 0 else f"{window_days}d"
+        cur = agg.get("currency") or ""
+        rows = [
+            {"period": periode, "metric": "pairs_sold", "waarde": agg.get("pairs_sold", 0),
+             "text": f"{self._n(agg.get('pairs_sold', 0), 'pair', 'pairs')} sold in {label}"},
+            {"period": periode, "metric": "orders", "waarde": agg.get("orders", 0),
+             "text": f"{self._n(agg.get('orders', 0), 'order', 'orders')} in {label}"},
+            {"period": periode, "metric": "revenue", "waarde": agg.get("revenue", 0.0),
+             "text": f"{self._geld(agg.get('revenue', 0.0), cur)} revenue in {label}"},
+            {"period": periode, "metric": "aov", "waarde": agg.get("aov", 0.0),
+             "text": f"average order value {self._geld(agg.get('aov', 0.0), cur)} in {label}"},
+        ]
+        if window_days <= 0 or window_days > 7:
+            rows.append({"period": "7d", "metric": "orders_7d", "waarde": agg.get("orders_7d", 0),
+                         "text": f"{self._n(agg.get('orders_7d', 0), 'order', 'orders')} and "
+                                 f"{self._n(agg.get('pairs_7d', 0), 'pair', 'pairs')} in the last 7 days"})
+        for sleutel, dim, eenheid, frase in (("by_country", "country", "orders", "from {}"),
+                                              ("top_products", "product", "pairs", "of {}"),
+                                              ("top_landing_pages", "landing_page", "pairs", "via landing page {}"),
+                                              ("channels", "channel", "orders", "via channel {}"),
+                                              ("top_keywords", "utm_term", "pairs", "via utm term {}")):
+            for naam, n in agg.get(sleutel) or []:
+                rows.append({"period": periode, "metric": eenheid, "dimension": dim, "name": str(naam),
+                             "waarde": n,
+                             "text": f"{self._n(n, eenheid[:-1], eenheid)} {frase.format(naam)} in {label}"})
+        return rows
+
+    def _tekst(self, agg: dict, window_days: int, *, stub: bool = False, truncated: bool = False,
+               wins: dict | None = None) -> str:
+        label = self._label(window_days, agg)
+        cur = agg.get("currency") or ""
+        kop = (f"{self._n(agg.get('pairs_sold', 0), 'pair', 'pairs')} in "
+               f"{self._n(agg.get('orders', 0), 'order', 'orders')}, "
+               f"{self._geld(agg.get('revenue', 0.0), cur)} (AOV {self._geld(agg.get('aov', 0.0), cur)}) in {label}")
+        if window_days <= 0 and agg.get("avg_pairs_month"):
+            kop += f", ≈{agg['avg_pairs_month']} pairs/month"
+        delen = [kop + "."]
+        extra = []
+        for w, a in sorted(((int(k), v) for k, v in (wins or {}).items()), key=lambda kv: kv[0]):
+            if w == window_days or not isinstance(a, dict):
+                continue
+            extra.append(f"{self._label(w, a)}: {self._n(a.get('pairs_sold', 0), 'pair', 'pairs')} in "
+                         f"{self._n(a.get('orders', 0), 'order', 'orders')}")
+        if extra:
+            delen.append("; ".join(extra).capitalize() + ".")
+        elif window_days <= 0 or window_days > 7:
+            delen.append(f"Last 7 days: {self._n(agg.get('orders_7d', 0), 'order', 'orders')}, "
+                         f"{self._n(agg.get('pairs_7d', 0), 'pair', 'pairs')}.")
+        top = (agg.get("top_products") or [None])[0]
+        if top:
+            delen.append(f"Top product: {top[0]} ({top[1]} pairs).")
+        if truncated:
+            delen.append(f"Truncated: only the first {MAX_PAGES * 100} orders were read (older history missing).")
+        if stub:
+            delen.insert(0, "STUB — fixture data, not live (Shopify not configured):")
+        return " ".join(delen)
+
     def _stub_result(self) -> dict:
-        """Gemarkeerde fixture-uitkomst: NIET live. Alleen via de expliciete stub-modus."""
+        """Gemarkeerde fixture-uitkomst: NIET live. Alleen via de expliciete stub-modus. Het woord
+        'stub' staat in de `text` en in elke rij, zodat fixture-verkoop nooit als echt op de wall komt."""
         agg = aggregate_orders(_STUB_ORDERS, 0)
+        rows = self._rows(agg, 0)
+        for r in rows:
+            r["text"] = "stub: " + r["text"]
         return {"ok": True, "live": False, "stub": True,
                 "note": "STUB — Shopify-OAuth staat geparkeerd; dit is fixture-data, niet live.",
-                **agg}
+                "text": self._tekst(agg, 0, stub=True), "rows": rows, **agg}
+
+    def _uitkomst(self, agg: dict, window_days: int, *, truncated: bool, wins: dict | None = None) -> dict:
+        """Eén vorm voor beide routes: ok + text + rows + de platte aggregatie (+ windows)."""
+        uit = {"ok": True, "text": self._tekst(agg, window_days, truncated=truncated, wins=wins),
+               "rows": self._rows(agg, window_days), **agg, "truncated": truncated}
+        if wins is not None:
+            uit["windows"] = wins
+        if not agg.get("orders"):
+            # Nul orders is onderzocht-en-niets, geen succes: tot scope 58 won `generated_at` en
+            # toonde de note een Unix-timestamp als antwoord (skill-review 12-09-2026). `ok` blijft
+            # True (de bron antwoordde); `no_data` zegt wat het is.
+            uit["no_data"] = True
+            uit["reason"] = f"Shopify: 0 orders in {self._label(window_days, agg)}"
+        return uit
 
     def run(self, payload: dict, context) -> dict:
-        s = context.settings
-        # Expliciete stub-modus: payload {"stub": True} of settings shopify_stub. Draait alleen als
-        # er GEEN live token is — zo houdt de echte route voorrang en wordt niets dood-gecodeerd.
-        stub_requested = bool(payload.get("stub")) or self._truthy(s.get("shopify_stub", ""))
-        has_static_token = bool((s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip())
-        if stub_requested and not has_static_token:
-            return self._stub_result()
+        payload = payload or {}
+        s = getattr(context, "settings", None) or {}
         store = (s.get("SHOPIFY_STORE") or s.get("shopify_store", "")).strip()
-        if not store:
-            return {"error": "SHOPIFY_STORE ontbreekt in .env -> skill faalt closed"}
-        # Token: statisch (oude apps) óf via Client ID/secret (Dev Dashboard, client-credentials).
         token = (s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip()
+        cid = (s.get("SHOPIFY_CLIENT_ID") or s.get("shopify_client_id", "")).strip()
+        csec = (s.get("SHOPIFY_CLIENT_SECRET") or s.get("shopify_client_secret", "")).strip()
+        # Expliciete stub-modus: payload {"stub": True} of settings shopify_stub. Draait alleen als
+        # er GEEN live route is — statisch token óf client-credentials — zo houdt de echte route
+        # voorrang en wordt niets dood-gecodeerd. (Tot scope 58 telde alleen het statische token, en
+        # won de stub van een echte client-credentials-configuratie.)
+        stub_requested = bool(payload.get("stub")) or self._truthy(s.get("shopify_stub", ""))
+        has_live_route = bool(token or (cid and csec))
+        if stub_requested and not has_live_route:
+            return self._stub_result()
+        # Bewust geen 'ontbreekt'/'verplicht' in deze zinnen: dat is de woordkeus van een
+        # PAYLOAD-klacht (test_payload_declaratie), en dit is config, geen payload. De planner-poort
+        # vangt dit al vóór de uitvoering (validate_payload / config_hint); dit is de tweede laag.
+        if not store:
+            return {"error": "SHOPIFY_STORE not set in .env -> skill fails closed"}
+        # Token: statisch (oude apps) óf via Client ID/secret (Dev Dashboard, client-credentials).
         if not token:
-            cid = (s.get("SHOPIFY_CLIENT_ID") or s.get("shopify_client_id", "")).strip()
-            csec = (s.get("SHOPIFY_CLIENT_SECRET") or s.get("shopify_client_secret", "")).strip()
             if not (cid and csec):
-                return {"error": "SHOPIFY_TOKEN of SHOPIFY_CLIENT_ID+SHOPIFY_CLIENT_SECRET "
-                                 "ontbreekt in .env -> skill faalt closed"}
+                return {"error": "SHOPIFY_TOKEN or SHOPIFY_CLIENT_ID+SHOPIFY_CLIENT_SECRET "
+                                 "not set in .env -> skill fails closed"}
             try:
                 token = get_access_token(store, cid, csec, _post=payload.get("_token_post"))
             except Exception as e:
@@ -318,7 +485,7 @@ class ShopifySalesSkill(DataSourceSkill):
         windows = payload.get("windows")
         if windows:
             try:
-                orders = fetch_orders(store, token, None, _post=payload.get("_post"))
+                orders, truncated = fetch_orders_pages(store, token, None, _post=payload.get("_post"))
             except Exception as e:
                 return {"error": f"Shopify-call mislukt: {e} -> skill faalt closed"}
             now = datetime.now(timezone.utc)
@@ -328,13 +495,13 @@ class ShopifySalesSkill(DataSourceSkill):
                 subset = orders if w <= 0 else [o for o in orders
                                                 if _within_days(o.get("created_at", ""), now, w)]
                 wins[str(w)] = aggregate_orders(subset, w, now=now)
-            base = wins.get("0") or next(iter(wins.values()))
-            return {"ok": True, "windows": wins, **base}
-        window = int(payload.get("window_days", 0))      # 0 = hele historie (geen datumfilter)
+            base_key = "0" if "0" in wins else next(iter(wins))
+            return self._uitkomst(wins[base_key], int(base_key), truncated=truncated, wins=wins)
+        window = int(payload.get("window_days") or 0)      # 0 = hele historie (geen datumfilter)
         since = None if window <= 0 else (
             datetime.now(timezone.utc) - timedelta(days=window)).date().isoformat()
         try:
-            orders = fetch_orders(store, token, since, _post=payload.get("_post"))
+            orders, truncated = fetch_orders_pages(store, token, since, _post=payload.get("_post"))
         except Exception as e:
             return {"error": f"Shopify-call mislukt: {e} -> skill faalt closed"}
-        return {"ok": True, **aggregate_orders(orders, window)}
+        return self._uitkomst(aggregate_orders(orders, window), window, truncated=truncated)

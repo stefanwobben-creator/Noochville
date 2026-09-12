@@ -522,9 +522,14 @@ class TrendsWorker(Inhabitant):
         now = time.time()
         if self._nota_interval > 0 and now - self._last_nota < self._nota_interval:
             return
-        self._last_nota = now
         r = self.use_skill("gsc_report", result)
-        path = r.get("path", "?")
+        path = r.get("path")
+        if not path:
+            # Geen rijen (no_data) of geen bruikbare payload (error): er is geen nota, dus ook geen
+            # `gsc_nota_written` en geen stempel — morgen mag hij opnieuw, zodra Google wél data geeft.
+            self.log.info("📋 GSC-nota niet geschreven: %s", r.get("reason") or r.get("error") or "geen pad")
+            return
+        self._last_nota = now
         self.log.info("📋 GSC-nota geschreven → %s", path)
         self.bus.publish(Event("gsc_nota_written", {"by": self.id, "path": path}, self.id))
 
@@ -660,8 +665,17 @@ class ConcurrentScout(Inhabitant):
         return CompetitorNews(os.path.join(self.context.data_dir, "competitor_news.json"))
 
     def _run_news(self, monitored: list[str]) -> None:
+        if not monitored:
+            # Eerlijk overslaan (scope 55): de skill kent geen code-default merkenlijst meer. Geen
+            # `competitor_brands` in de config en geen bevestigde concurrent → er is niets te
+            # scannen, en dat is een configuratiefeit, geen mislukte scan.
+            self.log.info("🔭 concurrent-scan overgeslagen: geen merken (competitor_brands leeg, geen "
+                          "bevestigde concurrenten)")
+            self.bus.publish(Event("competitor_pulse_completed",
+                {"by": self.id, "ok": False, "error": "geen merken geconfigureerd"}, self.id))
+            return
         self.log.info("🔭 concurrent-scan gestart (%d merken)", len(monitored))
-        res = self.use_skill("competitor_news", {"brands": monitored} if monitored else {})
+        res = self.use_skill("competitor_news", {"brands": monitored})
         if not res.get("ok"):
             self.log.warning("⚠️ concurrent-scan mislukt: %s", res.get("error"))
             self.bus.publish(Event("competitor_pulse_completed",
@@ -723,6 +737,8 @@ class ConcurrentScout(Inhabitant):
         doelwit-store met prioriteit (concurrenten-zonder-Nooch = hoog)."""
         if "linkbuilding_targets" not in self.dna.skills:
             return
+        if not str((getattr(self.context, "settings", {}) or {}).get("linkbuilding_query", "")).strip():
+            return      # geen onderwerp geconfigureerd → radar uit (scope 55: geen code-default meer, zie _run_discovery)
         res = self.use_skill("linkbuilding_targets", {"brands": monitored})
         if not res.get("ok"):
             self.log.info("🔗 linkbuilding overgeslagen: %s", res.get("error"))
@@ -944,7 +960,10 @@ class Librarian(Inhabitant):
         })
         cards = res.get("cards", [])
         if not cards:
-            self.log.info("🗂️ curate: geen geldige kaartjes uit input van %s", source)
+            # Drie oorzaken, drie meldingen (scope 57): geen model / geen JSON is een `error`,
+            # geen complete kaart een `no_data` met reden. Voorheen las alles als "geen geldige".
+            self.log.info("🗂️ curate: geen kaartjes uit input van %s — %s", source,
+                          res.get("error") or res.get("reason") or "geen geldige kaartjes")
             return
         from nooch_village.ingest import ingest_insights
         r = ingest_insights(self.context.notes, cards)
@@ -1568,7 +1587,11 @@ class HarryHemp(Inhabitant):
         except Exception:
             pass
         result = self.use_skill("trend_reindex", {})
-        if not isinstance(result, dict) or result.get("error"):
+        # Een escalatie zonder geëvalueerde term is sinds scope 55 óók `ok: False, error` (voor het
+        # projectpad); voor deze puls blijft `escalate` leidend — dat is de founder-heads-up
+        # hieronder. Alleen een resultaat ZONDER escalatie én met een fout (use_skill-weigering,
+        # crash) is 'geen bruikbaar resultaat'.
+        if not isinstance(result, dict) or (result.get("error") and not result.get("escalate")):
             self.log.warning("trend_reindex: geen bruikbaar resultaat (%s)",
                              (result or {}).get("error") if isinstance(result, dict) else result)
             return
@@ -2300,6 +2323,11 @@ class Noochie(Inhabitant):
         if "error" in result:
             self.log.warning("⚠️ bulletin niet geschreven: %s", result["error"])
             return
+        if result.get("no_data"):
+            # Een dag zonder events (in de praktijk: een herstart halverwege de dag, want
+            # `dag_begint` wordt altijd verzameld) — de skill schrijft dan bewust niets (scope 57).
+            self.log.info("📋 geen bulletin: %s", result.get("reason", "geen events"))
+            return
 
         self.bus.publish(Event("bulletin_geschreven",
                                {"path": result["path"], "by": self.id,
@@ -2364,7 +2392,9 @@ class ContentStrategist(Inhabitant):
             "seed_id":           seed_id,
             "kind":              kind,
             "text":              text,
-            "claim_insight_ids": res.get("claim_insight_ids", []),
+            # Sinds scope 57 run-administratie van de skill (`_`-prefix: de wall leest het niet,
+            # de claim-poort wel); het event houdt zijn eigen naam, die leest de inbox.
+            "claim_insight_ids": res.get("_claim_insight_ids") or [],
             "by":                self.id,
         }, self.id))
         self.log.info("✍️ draft klaar voor '%s' (%s)", seed_id, kind)

@@ -27,18 +27,36 @@ import re
 from nooch_village.skills import Skill
 
 _MIN_WOORD = 4          # matchwoorden: alleen betekenisdragers, geen lidwoorden
+_MIN_ACRONIEM = 2       # …behalve een afkorting in HOOFDLETTERS (PHA, MOQ, EVA, TPU): die is betekenis
 _PER_BAK = 8            # max treffers per geheugenlaag — genoeg om te weten dat het er is
 
-# Nederlandse functiewoorden van ≥4 tekens die anders als 'betekenis' meetellen — substring-
-# matchen is bewust (schoenen ⊂ schoenenindustrie), dus deze ruis moet er expliciet uit.
+# Functiewoorden van ≥4 tekens die anders als 'betekenis' meetellen — substring-matchen is bewust
+# (schoenen ⊂ schoenenindustrie), dus deze ruis moet er expliciet uit. Nederlands én Engels: de
+# inhoudslaag is sinds 06-09-2026 Engels, en "What do we already know about MOQ for EVA soles"
+# telde what/already/know/about als betekenis en liet MOQ/EVA vallen (skill-review 12-09-2026).
 _STOP = {"voor", "over", "naar", "deze", "onze", "zijn", "wordt", "worden", "heeft",
          "hebben", "maar", "niet", "alle", "andere", "tussen", "door", "weten", "welke",
-         "over", "ook", "zonder", "moet", "moeten", "gaat", "gaan", "veel", "meer"}
+         "over", "ook", "zonder", "moet", "moeten", "gaat", "gaan", "veel", "meer",
+         # Engels
+         "what", "about", "from", "already", "know", "known", "check", "anything", "does",
+         "with", "that", "this", "have", "there", "which", "when", "where", "their", "them",
+         "they", "would", "could", "should", "than", "then", "into", "also", "some", "such",
+         "been", "were", "will", "your", "ours", "more", "most", "very", "just", "only",
+         "whether", "please", "find", "look", "search", "village", "know", "still"}
 
 
 def _woorden(vraag: str) -> list[str]:
-    return [w for w in re.findall(r"[\w-]+", (vraag or "").lower())
-            if len(w) >= _MIN_WOORD and w not in _STOP]
+    """De betekenisdragers van een vraag: woorden van ≥4 tekens buiten de stoplijst, plus korte
+    afkortingen die in de vraag in HOOFDLETTERS staan (PHA, MOQ, EVA). Een materiaalvraag bestaat
+    vaak alleen uit zulke afkortingen ('PHA PLA TPU') en gaf voorheen "geen betekenisvol woord"."""
+    uit = []
+    for w in re.findall(r"[\w-]+", vraag or ""):
+        low = w.lower()
+        if low in _STOP:
+            continue
+        if len(low) >= _MIN_WOORD or (len(low) >= _MIN_ACRONIEM and w.isupper() and w.isalpha()):
+            uit.append(low)
+    return uit
 
 
 def _score(tekst: str, woorden: list[str]) -> int:
@@ -56,14 +74,16 @@ class WetenWeDitAlSkill(Skill):
     cost = "free"                  # lokale I/O, deterministisch, geen externe call en geen LLM
     side_effect_free = True        # leest vier stores, schrijft niets (het Kroniek-record
     #                                beschrijft hij alleen; de inhabitant schrijft het)
-    description = ("Geheugen-eerst: weten we dit al (ja/nee)? Doorzoekt kennisbank, "
-                   "kaarten-bibliotheek, De Kroniek en projecten. Bij nee komt wat het dorp "
-                   "wél al weet over het onderwerp mee als context. Deterministisch, geen LLM.")
-    input_schema = "vraag: str (verplicht — waar wil je van weten of het dorp het al weet)"
+    description = ("Memory first: do we already know this (yes/no)? Searches the knowledge base, "
+                   "the card library, the Chronicle and the projects for the words of the question. "
+                   "On no, what the village does know about the adjacent topic comes along as context. "
+                   "Deterministic, no model.")
+    input_schema = ("vraag: str (required — the question or topic, in a few content words; "
+                    "acronyms in capitals such as PHA or MOQ count as words)")
     required_payload = ("vraag",)
-    output_schema = ("ok: bool, bekend: bool, vraag: str, inzichten: list, kaarten: list, "
-                     "kroniek: {bevestigd, leeg, fout}, projecten: list, context: list, "
-                     "treffers: int, samenvatting: str | error")
+    output_schema = ("ok: bool, bekend: bool, text/samenvatting: str, inzichten: list, kaarten: list, "
+                     "kroniek: {bevestigd|leeg|fout: list} (only non-empty buckets), projecten: list, "
+                     "context: list, treffers: int | no_data+reason (nothing known, no context) | error")
 
     def _dd(self, context) -> str:
         return getattr(context, "data_dir", ".") or "."
@@ -72,7 +92,8 @@ class WetenWeDitAlSkill(Skill):
         vraag = ((payload or {}).get("vraag") or "").strip()
         woorden = _woorden(vraag)
         if not woorden:
-            return {"ok": False, "error": "geef een vraag met minstens één betekenisvol woord"}
+            return {"ok": False, "error": "geef een vraag ('vraag' is verplicht) met minstens één "
+                                          "betekenisvol woord"}
         drempel = 2 if len(woorden) >= 2 else 1        # sterk = meerdere vraagwoorden raken
         dd = self._dd(context)
         context_bak: list[tuple[int, dict]] = []       # zwakke treffers, per laag gelabeld
@@ -151,20 +172,30 @@ class WetenWeDitAlSkill(Skill):
         treffers = len(uit_inz) + len(uit_kaart) + len(uit_proj) + n_kroniek
         bekend = treffers > 0
         uit_context = _top(context_bak) if not bekend else _top(context_bak)[:_PER_BAK]
+        n_bev, n_leeg, n_fout = (len(kroniek["bevestigd"]), len(kroniek["leeg"]), len(kroniek["fout"]))
+        # Alleen de gevulde Kroniek-bakken: drie lege lijsten lazen op de wall als inhoud ("usable
+        # (8)") en wonnen van de echte treffers — en van een eerlijk "nee" (skill-review 12-09-2026).
+        kroniek = {k: v for k, v in kroniek.items() if v}
         if bekend:
-            samenvatting = (f"Ja — {len(uit_inz)} inzicht(en), {len(uit_kaart)} kaart(en), "
-                            f"{n_kroniek} Kroniek-regel(s) ({len(kroniek['bevestigd'])} bevestigd, "
-                            f"{len(kroniek['leeg'])} leeg, {len(kroniek['fout'])} fout) en "
-                            f"{len(uit_proj)} project(en) raken deze vraag direct.")
+            samenvatting = (f"Yes — {len(uit_inz)} insight(s), {len(uit_kaart)} card(s), "
+                            f"{n_kroniek} Chronicle record(s) ({n_bev} confirmed, {n_leeg} empty, "
+                            f"{n_fout} failed) and {len(uit_proj)} project(s) touch this question "
+                            f"directly.")
         elif uit_context:
-            samenvatting = (f"Nee — geen direct antwoord. Wel {len(uit_context)} aangrenzende "
-                            f"treffer(s) als context: begin dáár, niet bij nul.")
+            samenvatting = (f"No — no direct answer. {len(uit_context)} adjacent hit(s) come along as "
+                            f"context: start there, not from zero.")
         else:
-            samenvatting = "Nee — niets gevonden; dit is onontgonnen terrein voor het dorp."
-        return {"ok": True, "bekend": bekend, "vraag": vraag,
-                "inzichten": uit_inz, "kaarten": uit_kaart, "kroniek": kroniek,
-                "projecten": uit_proj, "context": uit_context,
-                "treffers": treffers, "samenvatting": samenvatting}
+            samenvatting = "No — nothing found; this is uncharted territory for the village."
+        uit = {"ok": True, "bekend": bekend, "vraag": vraag, "text": samenvatting,
+               "inzichten": uit_inz, "kaarten": uit_kaart, "kroniek": kroniek,
+               "projecten": uit_proj, "context": uit_context,
+               "treffers": treffers, "samenvatting": samenvatting}
+        if not bekend and not uit_context:
+            # Niets bekend en niets aangrenzends: een eerlijk "nee" is een gemelde nul (📭), geen
+            # succes met de vraag als enige inhoud. `ok` blijft True: de pre-flight en de radar
+            # lezen `bekend` en `treffers` ongewijzigd.
+            uit.update({"no_data": True, "reason": samenvatting})
+        return uit
 
     def evidence_records(self, result: dict, *, role_id: str) -> list:
         """Elke geheugen-greep is zelf een Kroniek-feit: bevestigd = direct antwoord aanwezig,
