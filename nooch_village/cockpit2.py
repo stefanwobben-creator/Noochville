@@ -7215,6 +7215,17 @@ def make_handler(data_dir: str, csrf_token: str,
                                              skill=(it.get("skill") or None),
                                              payload=(it.get("payload") if isinstance(it.get("payload"), dict) else None),
                                              payload_ok=bool(it.get("ok", True)))
+                            # DE MENS-ZOEKSTAP, ook hier. De wizard is de andere weg naar het
+                            # bord; de daemon zet hem bij het voorbereiden (prepare_project), en
+                            # een regel die maar op één van de twee wegen geldt is geen regel.
+                            from nooch_village import mens_zoekstap
+                            _mens = mens_zoekstap.item_voor_de_mens(
+                                [it for it in items if isinstance(it, dict)])
+                            if _mens:
+                                pj.check_add(pid, cl["id"], _mens["text"], skill=None, payload=None,
+                                             reason=_mens["reason"], human_task=True)
+                                pj.add_role_message(pid, mens_zoekstap.bericht_voor_de_mens(
+                                    titel, "", mens_zoekstap.queries(items)))
                     # WERKT DE SUGGESTIE EIGENLIJK? Eén regel per project, dom geteld, zodat
                     # kill-of-houden over een week op een getal gaat en niet op een gevoel.
                     # Fail-soft: meten mag een aanmaak nooit blokkeren.

@@ -41,6 +41,25 @@ _SELECT = ("id,title,publication_year,cited_by_count,"
 # de losse deelconcepten wél treffen. Daarom splitsen we op ' OR ' en zoeken elke deel-frase apart.
 _MAX_OR_CLAUSES = 10          # dek-plafond: verhindert dat een enorme keten tientallen calls afvuurt
 
+# TWEE ZOEKWIJZEN, EN DE LENGTE VAN DE TERM KIEST. Sinds 8 juli gaat een term als EXACTE frase
+# (`"barefoot shoes"`: 204 on-topic werken i.p.v. 14.906 losse-woord-hits, gesorteerd op citaties).
+# Dat was de goede fix voor een korte term — en de verkeerde voor een lange. Op 12 september zocht
+# het lijmvrij-onderzoek op een onderzoeksvraag van vijf, zes woorden ("glue-free bio-based joining
+# footwear"): die frase staat in geen enkel abstract letterlijk, dus nul, terwijl de losse begrippen
+# (adhesives · footwear · bio-based) samen honderden relevante werken hebben.
+#
+# Daarom: tot en met drie woorden blijft het een frase met citatie-sortering (precisie); vanaf vier
+# woorden gaat de term ongequote mee en sorteert OpenAlex op relevantie (zijn default bij `search`),
+# want bij losse woorden is "meest geciteerd" precies de sortering die de off-topic klassiekers
+# bovenaan zet. De uitkomst zegt welke van de twee het was (`zoekwijze`), zodat een lezer een
+# relevantielijst niet leest als een frasematch.
+_FRASE_MAX_WOORDEN = 3
+
+
+def _zoekwijze(clause: str) -> str:
+    """'frase' (≤ 3 woorden: exact, citaties) of 'relevantie' (langer: losse woorden, relevantie)."""
+    return "frase" if len((clause or "").split()) <= _FRASE_MAX_WOORDEN else "relevantie"
+
 
 def _split_or(term: str) -> list[str]:
     """Splits een boolean-keten op ' OR ' (het patent-conventie-woord, hoofdletters) in losse deel-frases.
@@ -179,7 +198,9 @@ def _build_filter(payload: dict) -> tuple[str, str | None]:
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
     input_schema = (
-        "term: str (zoekterm, wordt als exacte frase gezocht via search). "
+        "term: str (English search term. Up to 3 words = exact phrase, most-cited first — the precise "
+        "form, e.g. 'adhesives footwear'; 4+ words = relevance search on the loose words. Join "
+        "alternatives with ' OR '. Never a whole research question as one term). "
         "optioneel (elk leeg → filter valt weg): "
         "work_type: str (OpenAlex type-filter, aanbevolen 'article' voor peer-reviewed; leeg = alle types) · "
         "journal_only: bool (alleen tijdschriften: primary_location.source.type:journal) · "
@@ -311,6 +332,7 @@ class OpenalexSkill(DataSourceSkill):
         # on-topic i.p.v. 14.906 losse-woord-hits). De unie (dedup op work-id, meest geciteerd eerst)
         # is het antwoord. Eén clause → precies het oude gedrag (één call, één frase-zoek).
         clauses = _split_or(term)
+        zoekwijze = _zoekwijze(clauses[0] if clauses else term)
         if len(clauses) <= 1:
             results, total = self._search_results(clauses[0] if clauses else term,
                                                   limit, filter_str, mailto, key, ua)
@@ -329,9 +351,10 @@ class OpenalexSkill(DataSourceSkill):
             merged.sort(key=lambda w: w.get("cited_by_count", 0), reverse=True)
             results = merged[:limit]
             total = len(results)
+            zoekwijze = "frase" if all(_zoekwijze(c) == "frase" for c in clauses) else "relevantie"
 
         if total == 0 or not results:
-            return {"term": term, "locale": locale, "total": 0,
+            return {"term": term, "locale": locale, "total": 0, "zoekwijze": zoekwijze,
                     "no_data": True, "reason": "geen werken gevonden voor deze term",
                     "hits": [], "filter": filter_str}
 
@@ -355,17 +378,24 @@ class OpenalexSkill(DataSourceSkill):
             })
 
         time.sleep(0.5)
-        return {"term": term, "locale": locale, "total": total, "hits": hits, "filter": filter_str}
+        return {"term": term, "locale": locale, "total": total, "hits": hits, "filter": filter_str,
+                "zoekwijze": zoekwijze}
 
     def _search_results(self, phrase: str, limit: int, filter_str: str,
                         mailto: str, key: str, ua: str):
-        """Eén EXACTE-frase-zoekopdracht op OpenAlex → (results-lijst, meta-count). De frase gaat tussen
-        aanhalingstekens (de 8-juli-fix tegen off-topic losse-woord-hits). Fail-soft: een lege respons
-        geeft ([], 0). DE plek waar de search-URL wordt gebouwd — één bron van waarheid."""
-        q   = urllib.parse.quote(f'"{phrase}"')
+        """Eén zoekopdracht op OpenAlex → (results-lijst, meta-count). Tot drie woorden als EXACTE
+        frase tussen aanhalingstekens met citatie-sortering (de 8-juli-fix tegen off-topic
+        losse-woord-hits); langer ongequote op relevantie (zie `_zoekwijze`). Fail-soft: een lege
+        respons geeft ([], 0). DE plek waar de search-URL wordt gebouwd — één bron van waarheid."""
+        if _zoekwijze(phrase) == "frase":
+            q = urllib.parse.quote(f'"{phrase}"')
+            sortering = "&sort=cited_by_count:desc"
+        else:
+            q = urllib.parse.quote(phrase)
+            sortering = ""                                  # geen sort = OpenAlex' relevantie-score
         url = (f"{_BASE}?search={q}"
                f"&per_page={limit}"
-               f"&sort=cited_by_count:desc"
+               f"{sortering}"
                f"&select={_SELECT}")
         if filter_str:                                            # leeg = filterloos = huidige zoekopdracht
             url += f"&filter={urllib.parse.quote(filter_str, safe=':|,><.-')}"

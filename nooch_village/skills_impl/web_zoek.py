@@ -48,7 +48,13 @@ _DEFAULT_AANTAL = 8
 # concludeerde dat er geen Europese leverancier bestond. De cap was niet fout, de STILTE eromheen
 # wel; zie `volledig_gelezen` hieronder. Vijf naar tien, drie naar vijf: een fetch is goedkoop
 # vergeleken met een verkeerde conclusie.
-_DEFAULT_LEES = 5
+#
+# EN OP 12 SEPTEMBER: ALLES LEZEN, TENZIJ ANDERS GEVRAAGD. Stefan vond zijn leveranciers door door
+# te klikken; het dorp las vijf van acht en concludeerde over acht. Een ongelezen treffer is geen
+# gecontroleerde treffer, en het verschil tussen drie fetches meer en een verkeerd verslag is niet
+# in het voordeel van de fetches. De default volgt nu `aantal` (tot `_MAX_LEES`); wie alleen de
+# lijst wil, zegt `lees: 0`.
+_DEFAULT_LEES = None            # None = evenveel als `aantal` (gecapt op _MAX_LEES)
 _MAX_AANTAL = 20
 _MAX_LEES = 10
 _TEKST_PER_PAGINA = 3000            # genoeg om de strekking te zien, niet genoeg om de context te vullen
@@ -118,15 +124,16 @@ class WebZoekSkill(Skill):
         "answers a question instead of producing a list of links to open later. Read-only, no "
         "judgement about what it finds."
     )
-    input_schema = ("term: str (verplicht — de zoekterm, in de taal waarin je verwacht dat er "
+    input_schema = ("term: str (verplicht — de zoekterm: 2 tot 5 woorden, de woorden die een mens "
+                    "zou typen, in de taal van de markt of de vakliteratuur waarin je verwacht dat er "
                     "over geschreven wordt); "
                     "aantal: int (optioneel, default 8, max 20 — hoeveel treffers); "
-                    "lees: int (optioneel, default 5, max 10 — hoeveel van de bovenste treffers "
-                    "ook opgehaald worden; 0 = alleen de lijst. Zoek je naar het BESTAAN van iets "
-                    "(leveranciers, spelers, bronnen), zet dit dan hoog: een ongelezen treffer "
-                    "telt niet als gecontroleerd); "
-                    "land: str (optioneel, bv. 'nl' — landvoorkeur van de zoekmachine); "
-                    "taal: str (optioneel, bv. 'en' — taalvoorkeur van de zoekmachine)")
+                    "lees: int (optioneel, default = aantal, max 10 — hoeveel van de bovenste "
+                    "treffers ook opgehaald worden; 0 = alleen de lijst. Een ongelezen treffer telt "
+                    "niet als gecontroleerd); "
+                    "land: str (optioneel, bv. 'de' — landvoorkeur van de zoekmachine; zet dit bij "
+                    "een term in de taal van een markt); "
+                    "taal: str (optioneel, bv. 'de' — taalvoorkeur van de zoekmachine)")
     required_payload = ("term",)
     output_schema = ("ok, term, bron (serpapi|brave), aantal_treffers, "
                      "treffers[{titel, url, domein, fragment, tekst, gelezen, reden}], "
@@ -176,7 +183,8 @@ class WebZoekSkill(Skill):
                              f"zou hier gelezen worden als 'er staat niets over op het web'"}
 
         aantal = _int(payload.get("aantal"), _DEFAULT_AANTAL, minimum=1, maximum=_MAX_AANTAL)
-        lees = _int(payload.get("lees"), _DEFAULT_LEES, minimum=0, maximum=_MAX_LEES)
+        lees = _int(payload.get("lees"), min(aantal, _MAX_LEES) if _DEFAULT_LEES is None else _DEFAULT_LEES,
+                    minimum=0, maximum=_MAX_LEES)
         rauw, bron, fouten = self._zoeken(term, met_sleutel, aantal, payload)
         if bron is None:
             return {"error": "zoeken mislukt: " + "; ".join(fouten), "term": term}

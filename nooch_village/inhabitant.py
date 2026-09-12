@@ -999,6 +999,13 @@ class Inhabitant(threading.Thread):
         # zet de brede vorm ervóór als het plan met een specificatie begint. Zie `zoektermen.py`.
         from nooch_village.zoektermen import verbreed_planitems
         plan["items"] = verbreed_planitems(plan["items"])
+        # DE MENS-ZOEKSTAP (scope 50c). Een onderzoeksplan krijgt er één mens-taak bij: de
+        # Google-queries en de deep-research-prompt staan op de wall, de gevonden links komen op
+        # het project. Deterministisch en zonder modelronde; zie `mens_zoekstap.py`.
+        from nooch_village import mens_zoekstap
+        mens_item = mens_zoekstap.item_voor_de_mens(plan["items"])
+        if mens_item:
+            plan["items"].append(mens_item)
         n_skill = n_open = n_invalid = n_mens = 0
         opens = []
         for it in plan["items"]:
@@ -1042,6 +1049,9 @@ class Inhabitant(threading.Thread):
             f"{n_skill} item(s) runnable, {n_open} without a skill, {n_mens} human task(s) "
             f"(they do not count towards done), {n_invalid} with an incomplete payload"
             + (": " + "; ".join(opens) if opens else "") + "."))
+        if mens_item:
+            ledger.add_role_message(pid, mens_zoekstap.bericht_voor_de_mens(
+                goal, p.get("description") or "", mens_zoekstap.queries(plan["items"])))
         self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d mens-taak, "
                       "%d onvolledige payload", pid, n_skill, n_open, n_mens, n_invalid)
         # Is het HELE plan mens-werk, dan is dit geen AI-project. Het als AI-project laten staan
@@ -1185,7 +1195,8 @@ class Inhabitant(threading.Thread):
             "A search strategy has already been decided for this project. Turn it into the execution "
             "plan, ONE item per source below, using EXACTLY the given search term — do not translate "
             "it, do not improve it. The term was chosen to match that source's corpus, and changing "
-            "it is the failure this step exists to prevent.\n\n"
+            "it is the failure this step exists to prevent. A term in another language than English "
+            "gets that language in the payload ('taal', and 'land' for the market).\n\n"
             f"{regels}\n"
             + (f"\nNext term if the first runs thin: {result.get('bij_nul_treffers')}\n"
                if result.get("bij_nul_treffers") else ""))
@@ -1209,6 +1220,19 @@ class Inhabitant(threading.Thread):
                 ok = False
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
                              payload_ok=ok, reason=it.get("reason", ""))
+        # De mens-zoekstap hoort ook op déze lijst, als hij er nog nergens op het project staat: een
+        # eerste plan dat alleen uit de strategie-skill bestond had nog geen zoekterm, en dus geen
+        # queries voor de mens. Nu wel. Zelfde vorm als in prepare_project (scope 50c).
+        from nooch_village import mens_zoekstap
+        al_aanwezig = any(str(it.get("text") or "").startswith("🔎")
+                          for c in (p.get("checklists") or []) for it in (c.get("items") or []))
+        mens_item = None if al_aanwezig else mens_zoekstap.item_voor_de_mens(plan["items"])
+        if mens_item:
+            ledger.check_add(pid, cl["id"], mens_item["text"], skill=None, payload=None,
+                             reason=mens_item["reason"], human_task=True)
+            ledger.add_role_message(pid, mens_zoekstap.bericht_voor_de_mens(
+                self._scope_text(p) or "", p.get("description") or "",
+                mens_zoekstap.queries(plan["items"])))
         # De rol werkt vanaf nu deze lijst, niet meer de strategie-lijst (exclusief, zie
         # projects.set_checklist_uitvoer). Zonder dit zou `uitvoerlijst` op titel terugvallen en
         # zijn er twee lijsten met dezelfde naam — dan bepaalt de volgorde in het bestand wat draait.
@@ -1304,7 +1328,22 @@ class Inhabitant(threading.Thread):
             f"{kennis_section}"
             f"{lessen_section}"
             f"{roster_section}"
-            "Break the goal down into 2 to 5 concrete sub-items. For EVERY item: if one of your skills can "
+            # DRIE WOORDENSCHATTEN, in code als promptregel en in `mens_zoekstap` als vangnet. Het
+            # lijmvrij-onderzoek (12 september) zocht met de conceptwoorden van de vraag en kreeg de
+            # SEO-pagina's van de grote lijmfabrikanten; de vondsten van de dag kwamen uit
+            # productwoorden ("bio based hot melt") en uit een Duitse consumentenquery. Een corpus
+            # kreeg de hele vraag als frase en gaf nul.
+            "SEARCH TERMS, when the goal asks to find, research or compare something. Plan the "
+            "open-web search (web_zoek) in THREE vocabularies, one item each, and set 'taal' and "
+            "'land' in the payload when the term is not English: (1) the trade vocabulary of the "
+            "field (the words a supplier's product page or a paper uses), (2) the buyer's words "
+            "(what a person types who wants to buy or find it), (3) the language of the market "
+            "where this is made or sold (German, Portuguese, Spanish, French). A corpus source "
+            "(openalex_evidence, epo_patents, google_patents, semscholar_tldr) gets a SHORT "
+            "technical phrase of 2 to 3 words, never the whole question. Search terms follow the "
+            "corpus or the market, not the English rule below.\n"
+            "Break the goal down into 2 to 5 concrete sub-items (up to 6 when the three search "
+            "vocabularies are all needed). For EVERY item: if one of your skills can "
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
             "'input' shape of that skill (e.g. a term skill wants {\"term\": \"...\"}, keywords_everywhere wants "
             "{\"kw\": [\"...\"]}, a brands skill wants {\"brands\": [\"...\"]}). If no skill can carry out the "
@@ -1620,6 +1659,11 @@ class Inhabitant(threading.Thread):
             src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
+                # EERST LEZEN, DAN PAS RENDEREN. Het extract per gelezen pagina komt in het
+                # resultaat zelf, zodat de note, de conclusie én het verslag hetzelfde lezen. Zonder
+                # deze stap hield de note 160 tekens per pagina over van de 3000 die gelezen waren
+                # (scope 50, de leesketen).
+                self._lees_extracten(item, result, archetype)
                 summary = self._deliverable_note(item, result, archetype, source=used_source,
                                                  lijst=str(cl.get("title") or ""))
                 wall_note_id = ledger.add_role_message(pid, summary)
@@ -2260,20 +2304,53 @@ class Inhabitant(threading.Thread):
         kop_regel, _, rest = body.partition("\n")
         return f"{kop_regel}\n➜ {zin}" + (f"\n{rest}" if rest else "")
 
+    def _lees_extracten(self, item: dict, result, archetype) -> int:
+        """Per gelezen record een extract van twee, drie zinnen IN het resultaat (`leesextract`).
+
+        SCHAKELBAAR om dezelfde reden als de conclusiezin: dit is één modelronde per opgeleverd item
+        met gelezen materiaal. Het dorp heeft al eens stilgestaan op een uitgeputte quota; dan wil
+        je één setting kunnen omzetten. Fail-soft in elke tak: geen extract is het oude gedrag."""
+        settings = getattr(getattr(self, "context", None), "settings", None) or {}
+        if str(settings.get("lees_extract_enabled", "1")).strip().lower() not in (
+                "1", "true", "yes", "ja", "on"):
+            return 0
+        try:
+            from nooch_village import leesextract
+            n = leesextract.verrijk(item.get("text", ""), result, archetype,
+                                    ladder=_persona_ladder(self.context, self.id, "lees_extract"))
+        except Exception as e:                               # noqa: BLE001 — nooit de puls breken
+            self.log.warning("leesextract mislukt (%s: %s) — note zonder extracten", type(e).__name__, e)
+            return 0
+        if n:
+            self.log.info("📖 %d extract(en) gelezen voor '%s'", n, item.get("text", "")[:40])
+        return n
+
     @staticmethod
     def _format_record(rec) -> str:
-        """Elk record met zijn EIGEN velden (title-achtig veld eerst), rauw maar leesbaar, gecapt."""
+        """Elk record met zijn EIGEN velden (title-achtig veld eerst), rauw maar leesbaar, gecapt.
+
+        HET EXTRACT KOMT DIRECT NA DE TITEL en verdringt de gelezen ruwe tekst. Die ruwe tekst
+        (3000 tekens) paste toch niet: hij werd op 160 tekens afgekapt en las dan als een half
+        fragment. Het volledige materiaal staat nog in de deliverable-store; de note toont wat de
+        tekst zégt. De andere ruwe velden (url, fragment van de zoekmachine, jaar, citaties) blijven
+        staan — die zijn het bewijs, het extract is de leeswijzer."""
         if not isinstance(rec, dict):
             return str(rec)[:200]
+        from nooch_village.leesextract import TEKSTVELDEN
         first = [k for k in ("title", "titel", "term", "query", "brand", "name", "word", "key") if k in rec]
-        rest = [k for k in rec if k not in first and k not in ("source", "locale")]
+        heeft_extract = bool(str(rec.get("extract") or "").strip())
+        if heeft_extract:
+            first.append("extract")
+        weg = {"source", "locale", "extract"} | (set(TEKSTVELDEN) if heeft_extract else set())
+        rest = [k for k in rec if k not in first and k not in weg]
         out = []
         for k in first + rest:
             v = rec.get(k)
             if v in (None, "", [], {}):
                 continue
             if isinstance(v, str):
-                v = (v[:160] + "…") if len(v) > 160 else v
+                cap = 400 if k == "extract" else 160
+                v = (v[:cap] + "…") if len(v) > cap else v
             elif isinstance(v, (list, dict)):
                 s = json.dumps(v, ensure_ascii=False)
                 v = (s[:120] + "…") if len(s) > 120 else s

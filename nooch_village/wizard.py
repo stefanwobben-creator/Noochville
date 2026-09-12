@@ -196,6 +196,14 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
         + "For EACH item: if one of these skills can carry it out, give the exact skill name AND a "
         "'payload' object matching that skill's 'input' shape. If no skill can do it, set skill=null "
         "and payload={} (it then becomes a human task).\n"
+        # Dezelfde zoekregel als in de daemon-planner (scope 50b): de wizard is de andere weg naar
+        # het bord, en de zoektermen die hier ontstaan draaien straks precies zo.
+        "SEARCH TERMS, when the goal asks to find, research or compare something: plan the "
+        "open-web search (web_zoek) in THREE vocabularies, one step each — the trade vocabulary of "
+        "the field, the buyer's words, and the language of the market where this is made or sold "
+        "(set 'taal' and 'land' in the payload). A corpus source (openalex_evidence, epo_patents) "
+        "gets a SHORT technical phrase of 2 to 3 words, never the whole question. Search terms "
+        "follow the corpus or the market, not the English rule below.\n"
         # VORM, expliciet en met een voorbeeld: de gemeten suggesties waren 25-40 woorden lang.
         f"SHAPE OF A STEP: starts with a verb, is ONE action, and is at most {_MAX_STAP_WOORDEN} "
         "words. No explanation, no parenthetical lists. "

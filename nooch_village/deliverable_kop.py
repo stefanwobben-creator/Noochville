@@ -98,7 +98,10 @@ def conclusie(vraag: str, samenvatting: str, *, reason_fn=None, ladder=None) -> 
         "HARD RULE: use only what is literally in the result. Add no numbers, names, dates or "
         "conclusions that are not there. Found nothing? Then say that plainly.\n"
         "Do not repeat the item text and do not open with 'The result shows'. Max 25 words.\n\n"
-        f"ITEM: {vraag[:300]}\n\nRESULT:\n{samenvatting[:2000]}\n\n"
+        # 3500 en niet 2000: sinds de leesextracten (scope 50) draagt een note met vijf gelezen
+        # pagina's ~2500 tekens. Bij 2000 zag de conclusie de laatste twee pagina's niet, en dat
+        # was precies de stilte die deze zin moet opheffen.
+        f"ITEM: {vraag[:300]}\n\nRESULT:\n{samenvatting[:3500]}\n\n"
         "OUTPUT: the sentence only, no quotes, no preamble."
     )
     try:

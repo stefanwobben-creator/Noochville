@@ -53,7 +53,10 @@ class EpoPatentsSkill(DataSourceSkill):
     kind = "snapshot"
     cost = "rate_limited"                  # OAuth + fair-use (~4GB/week), bescheiden Range
     needs_secret = True
-    input_schema = "term: str (zoekterm). optioneel: limit: int (default 5, max 10 — Range 1-limit)"
+    input_schema = ("term: str (searched in patent TITLES: use the words a patent title would use, "
+                    "e.g. 'shoe sole attachment' or 'stitched footwear sole', not a research "
+                    "question; 1-2 words = exact title phrase, more = any of the words). "
+                    "optioneel: limit: int (default 5, max 10 — Range 1-limit)")
     output_schema = ("lijst: total: int, patents: list[{title, abstract, publication_date, "
                      "publication_number, applicants, inventors}] | no_data | error")
     description = ("Zoekt wereldwijde patenten via de EPO Open Patent Services (OPS, XML-interface): "
@@ -121,11 +124,17 @@ class EpoPatentsSkill(DataSourceSkill):
         Complexe boolean-strings ('X OR Y', '"A" AND ("B" OR "C")') geven anders een HTTP 400/404 (de
         operators/haakjes/quotes breken de CQL). We nemen de eerste OR-clausule (de dominante frase) en
         strippen quotes/haakjes/AND → een schone woordfrase. Leeg na normalisatie → val terug op de ruwe
-        term zonder quotes."""
+        term zonder quotes.
+
+        KOPPELTEKENS EN SCHUINE STREPEN WORDEN SPATIES. "glue-free bio-based joining" (12 september)
+        ging als één woordreeks met koppeltekens de CQL in; in een titel-index staat "glue free" of
+        "adhesive-free" en een koppelteken is daar geen woordgrens. Uit elkaar halen kost niets en de
+        losse woorden matchen wél."""
         import re as _re
         t = _re.split(r"\s+OR\s+", term or "", flags=_re.IGNORECASE)[0]
         t = t.replace('"', " ").replace("(", " ").replace(")", " ")
         t = _re.sub(r"\s+AND\s+", " ", t, flags=_re.IGNORECASE)
+        t = _re.sub(r"[-/–]", " ", t)
         t = _re.sub(r"\s+", " ", t).strip()
         return t or (term or "").replace('"', " ").strip()
 

@@ -30,6 +30,7 @@ vaak hele rol-dumps van meer dan 1000 tekens) en een nieuw (`{kind, author, text
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 
@@ -140,7 +141,80 @@ def voorzet_result(project: dict) -> tuple[str, str]:
     return ONBEKEND, f"{len(af)} of {len(items)} items done — too little to conclude from"
 
 
-_DELIVERABLE_CAP = 1200          # per stuk; anders bepaalt één lange oplevering de hele invoer
+# DE CAP KNIPTE HET LEZEN WEG. Tot scope 50 kreeg het verslag hier `str(inhoud)[:1200]`: 1200 tekens
+# van een Python-dict-repr, en bij een web_zoek-resultaat is dat grofweg het fragment van de eerste
+# treffer; de vier pagina's daarna, elk 3000 tekens gelezen, kwamen nooit aan. Het lijmvrij-verslag
+# van 12 september noemde daardoor vier merknamen en verder niets. Nu worden de records gerenderd
+# (titel, adres, strekking) en pas daarna gecapt; de cap staat ruimer omdat er nu inhoud in zit.
+_DELIVERABLE_CAP = 3000          # per stuk; anders bepaalt één lange oplevering de hele invoer
+_RECORD_MAX = 8                  # records per deliverable in het verslag
+_STREKKING_MAX = 300             # het extract of het abstract per record
+_TITELVELDEN = ("title", "titel", "term", "query", "brand", "name", "word", "key")
+_ADRESVELDEN = ("url", "link", "domein", "domain", "publication_number")
+# In volgorde van voorkeur: het extract (wat de tekst zégt, scope 50) wint van het abstract, dat wint
+# van de snippet van de zoekmachine, en de ruwe tekst komt pas als er niets beters is.
+_STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "fragment", "snippet", "tekst", "text")
+
+
+def _records_in(inhoud: dict):
+    """De grootste lijst van dicts in een resultaat: (sleutel, records), of None. Dezelfde keuze
+    als `Inhabitant._classify_result` (de rijkste lijst wint), zonder er een tweede waarheid van te
+    maken: wie hier iets vindt, vindt precies wat de note ook toonde."""
+    beste = None
+    for k, v in inhoud.items():
+        if str(k).startswith("_"):
+            continue
+        if isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
+            if beste is None or len(v) > len(beste[1]):
+                beste = (k, v)
+    return beste
+
+
+def _kort(s, n: int) -> str:
+    s = " ".join(str(s or "").split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def inhoud_tekst(inhoud) -> str:
+    """De inhoud van een deliverable zoals een mens hem zou overschrijven: per record de titel, het
+    adres en de strekking. Geen records → compacte JSON. Altijd gecapt op `_DELIVERABLE_CAP`.
+
+    Dekking staat erbij als het resultaat die kent (`volledig_gelezen`, `gelezen`): een verslag dat
+    uit vijf van negen treffers concludeert moet dat kunnen zien, dezelfde regel als in de
+    web_zoek-note zelf."""
+    if isinstance(inhoud, dict) and inhoud.get("_truncated"):
+        return _kort(inhoud.get("preview") or "", _DELIVERABLE_CAP)
+    if not isinstance(inhoud, dict):
+        return _kort(inhoud, _DELIVERABLE_CAP)
+    gevonden = _records_in(inhoud)
+    if not gevonden:
+        try:
+            return _kort(json.dumps(inhoud, ensure_ascii=False), _DELIVERABLE_CAP)
+        except (TypeError, ValueError):
+            return _kort(inhoud, _DELIVERABLE_CAP)
+    _key, recs = gevonden
+    regels = []
+    for r in recs[:_RECORD_MAX]:
+        titel = next((str(r[k]) for k in _TITELVELDEN if isinstance(r.get(k), str) and r[k].strip()), "")
+        adres = next((str(r[k]) for k in _ADRESVELDEN if isinstance(r.get(k), str) and r[k].strip()), "")
+        strekking = next((str(r[k]) for k in _STREKKINGVELDEN
+                          if isinstance(r.get(k), str) and r[k].strip()), "")
+        kop = _kort(titel, 120) or _kort(adres, 120) or "(untitled)"
+        if adres and titel:
+            kop += f" ({_kort(adres, 100)})"
+        regel = f"• {kop}"
+        if strekking:
+            regel += f" — {_kort(strekking, _STREKKING_MAX)}"
+        elif not titel and not adres:
+            regel = "• " + _kort(json.dumps(r, ensure_ascii=False), _STREKKING_MAX)
+        regels.append(regel)
+    if len(recs) > _RECORD_MAX:
+        regels.append(f"… and {len(recs) - _RECORD_MAX} more record(s) not shown here")
+    if inhoud.get("volledig_gelezen") is False:
+        regels.append(f"COVERAGE INCOMPLETE: {inhoud.get('gelezen', '?')} of {len(recs)} results were "
+                      "read in full; nothing can be concluded about the unread ones")
+    tekst = "\n".join(regels)
+    return tekst if len(tekst) <= _DELIVERABLE_CAP else tekst[:_DELIVERABLE_CAP] + " …[ingekort]"
 
 
 def deliverable_blokken(deliverables, pid: str) -> list[str]:
@@ -149,7 +223,11 @@ def deliverable_blokken(deliverables, pid: str) -> list[str]:
 
     DEZE BRON KWAM VAN DE OUDE SYNTHESE. Die las hem al (652 deliverables over 197 projecten); hem
     niet overnemen zou betekenen dat het nieuwe pad mínder weet dan het oude, en dan is "de oude
-    synthese vervangen" in werkelijkheid informatieverlies."""
+    synthese vervangen" in werkelijkheid informatieverlies.
+
+    Per deliverable: de kop van de note (het item, de bron, het oordeel en de conclusiezin) plus de
+    inhoud als records. Heeft de inhoud records, dan vervangen die de record-regels van de note, want
+    het zijn dezelfde records en de inhoud is completer (alle records, mét extract)."""
     if deliverables is None or not pid:
         return []
     try:
@@ -159,15 +237,20 @@ def deliverable_blokken(deliverables, pid: str) -> list[str]:
         return []
     uit = []
     for r in recs:
-        body = (r.get("summary") or "").strip()
+        summary = (r.get("summary") or "").strip()
         try:
             inhoud = deliverables.content_for(r["id"])
         except Exception:                                       # noqa: BLE001
             inhoud = None
         if inhoud:
-            tekst = str(inhoud)
-            body += "\n  " + (tekst[:_DELIVERABLE_CAP] + " …[ingekort]"
-                              if len(tekst) > _DELIVERABLE_CAP else tekst)
+            if isinstance(inhoud, dict) and _records_in(inhoud):
+                # de kopregels van de note (tot de eerste record-bullet) + de records uit de inhoud
+                kop = summary.split("\n•", 1)[0].strip()
+                body = (kop + "\n  " if kop else "") + inhoud_tekst(inhoud).replace("\n", "\n  ")
+            else:
+                body = summary + "\n  " + inhoud_tekst(inhoud).replace("\n", "\n  ")
+        else:
+            body = summary
         if body.strip():
             uit.append(body.strip())
     return uit

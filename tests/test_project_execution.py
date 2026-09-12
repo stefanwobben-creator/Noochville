@@ -67,9 +67,11 @@ def test_a_voorbereiding_genereert_checklist(tmp_path, ledger, monkeypatch):
     p = ledger.get(pid)
     assert p["status"] == "future"                                   # niet uitgevoerd, blijft TOEKOMST
     cl = inh._project_checklist(p)
-    assert cl and len(cl["items"]) == 2
+    # Drie, niet twee: een plan met een zoekstap krijgt de mens-zoekstap erbij (scope 50c), als
+    # mens-taak die niet meetelt. De twee geplande items staan er onveranderd in.
+    assert cl and len(cl["items"]) == 3 and cl["items"][2].get("human_task") is True
     skilled = [it for it in cl["items"] if it.get("skill")]
-    open_it = [it for it in cl["items"] if not it.get("skill")]
+    open_it = [it for it in cl["items"] if not it.get("skill") and not it.get("human_task")]
     assert skilled[0]["skill"] == "openalex_evidence" and skilled[0]["query"] == "barefoot shoes"
     assert open_it[0]["reason"] == "geen patent-skill"
 
