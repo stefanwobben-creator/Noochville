@@ -12,6 +12,12 @@ zodat de geschiedenis van elke bron terug te lezen is. Hash anders dan de vorige
 
 Fail-closed met geheugen: één onbereikbare maand is geen alarm (sites haperen), twee maanden
 achtereen wél — dan is de bewaking stuk en dat moet iemand weten.
+
+De maand-poort telt alleen GESLAAGDE metingen (scope 56). Tot dan sloot één timeout op de eerste
+puls van de maand die maand af: de bron werd pas de volgende maand opnieuw geprobeerd, zonder
+melding, en het alarm kwam op zijn vroegst na twee kalendermaanden blindheid. Nu krijgt een bron die
+faalt bij de volgende puls een nieuwe kans, tot `MAX_POGINGEN_PER_MAAND`, en hoort compliance het
+bij de eerste misser én bij het opgeven.
 """
 from __future__ import annotations
 
@@ -35,6 +41,14 @@ PROXY_MARKERING = "PROXY"
 # Mijlpaal: vanaf deze datum handhaaft de EmpCo-richtlijn. De maand ervoor wil compliance een
 # expliciete opdracht zien, niet een herinnering in iemands hoofd.
 HANDHAVING_MAAND = "2026-09"
+
+# Hoe vaak een bron die faalt binnen één maand opnieuw geprobeerd wordt (één poging per dagpuls).
+# Vijf, want: de puls is dagelijks, dus vijf pogingen beslaan een werkweek — een weekend-storing of
+# een eenmalige timeout kost daarmee geen maand meer (dat kostte hij tot scope 56). Méér pogingen
+# levert niets op: een bron die vijf dagen op rij niet antwoordt is structureel weg voor deze maand,
+# en dertig fout-regels per bron per maand maken het append-only log onleesbaar. Bij het opgeven
+# hoort compliance het; de teller start elke kalendermaand opnieuw.
+MAX_POGINGEN_PER_MAAND = 5
 
 
 # ── Pure helpers ────────────────────────────────────────────────────────────
@@ -115,20 +129,55 @@ def laatste_meting(rijen: list[dict], url: str, alleen_geslaagd: bool = True) ->
     return None
 
 
-def opeenvolgende_fouten(rijen: list[dict], url: str) -> int:
-    """Hoeveel metingen op rij zijn misgegaan sinds de laatste geslaagde?"""
-    n = 0
+def maanden_zonder_meting(rijen: list[dict], url: str) -> set[str]:
+    """De KALENDERMAANDEN waarin deze bron sinds zijn laatste geslaagde meting alleen maar faalde.
+
+    Niet 'pogingen op rij': sinds een bron binnen één maand meerdere kansen krijgt, zou het aantal
+    mislukte pogingen "twee maanden achtereen" al na twee dagen melden. Het alarm gaat over maanden."""
+    maanden: set[str] = set()
     for rij in reversed(rijen):
         if rij.get("url") != url or rij.get("soort") != "meting":
             continue
         if rij.get("status") == "ok":
             break
-        n += 1
-    return n
+        maanden.add(str(rij.get("maand") or ""))
+    return maanden
 
 
-def maand_gedaan(rijen: list[dict], maand: str) -> bool:
-    return any(r.get("maand") == maand and r.get("soort") == "meting" for r in rijen)
+def gemeten_deze_maand(rijen: list[dict], url: str, maand: str) -> bool:
+    """Heeft deze bron deze maand een GESLAAGDE meting? Een mislukte telt niet — die krijgt bij de
+    volgende puls een nieuwe kans."""
+    return any(r.get("url") == url and r.get("maand") == maand and r.get("soort") == "meting"
+               and r.get("status") == "ok" for r in rijen)
+
+
+def pogingen_deze_maand(rijen: list[dict], url: str, maand: str) -> int:
+    """Hoeveel MISLUKTE metingen deze bron deze maand al had (de teller onder MAX_POGINGEN_PER_MAAND)."""
+    return sum(1 for r in rijen if r.get("url") == url and r.get("maand") == maand
+               and r.get("soort") == "meting" and r.get("status") != "ok")
+
+
+def opgegeven(rijen: list[dict], url: str, maand: str) -> bool:
+    """Deze bron is deze maand niet gemeten én de pogingen zijn op: de maand is voor hem dicht."""
+    return (not gemeten_deze_maand(rijen, url, maand)
+            and pogingen_deze_maand(rijen, url, maand) >= MAX_POGINGEN_PER_MAAND)
+
+
+def te_meten(rijen: list[dict], bronnen: list[dict], maand: str) -> list[dict]:
+    """De bronnen die deze puls aan de beurt zijn: nog niet geslaagd deze maand en nog pogingen over."""
+    return [b for b in bronnen
+            if not gemeten_deze_maand(rijen, b["url"], maand) and not opgegeven(rijen, b["url"], maand)]
+
+
+def maand_gedaan(rijen: list[dict], maand: str, bronnen: list[dict] | None = None) -> bool:
+    """Is deze maand gedaan? Mét bronnen: elke bron is geslaagd óf opgegeven. Zonder bronnen (oudere
+    aanroepers, het ritme-scherm): er is minstens één GESLAAGDE meting deze maand.
+
+    Tot scope 56 telde élke meting, ook een mislukte — één timeout op de eerste puls sloot de maand."""
+    if bronnen is not None:
+        return not te_meten(rijen, bronnen, maand)
+    return any(r.get("maand") == maand and r.get("soort") == "meting" and r.get("status") == "ok"
+               for r in rijen)
 
 
 def mijlpaal_gedaan(rijen: list[dict], sleutel: str) -> bool:
@@ -152,12 +201,16 @@ class RegulationWatchSkill(Skill):
     cost = "free"
     side_effect_free = False           # maakt taken aan en schrijft de meetreeks
     required_env = ()
-    description = ("Controleert maandelijks of de bronteksten van de claim-regelgeving "
-                   "(EmpCo-richtlijn, ACM-leidraad, FOD-gids, NL-omzetting) zijn gewijzigd. "
-                   "Detecteert alleen: elke wijziging wordt een taak voor compliance om de "
-                   "impact te beoordelen. Wijzigt zelf nooit de claims-database.")
-    input_schema = "geen (optioneel: force: bool om de maand-gate over te slaan)"
-    output_schema = "ok, maand, skipped, gemeten, gewijzigd[], fouten[], nieuw, headsup, escalate"
+    description = ("Monthly check whether the source texts of the claims regulation (EmpCo directive, "
+                   "ACM guideline, FOD guide, NL transposition) have changed, by hashing each source. "
+                   "Detects only: every change becomes a task for compliance to judge the impact; "
+                   "never edits the claims database, no model. A source that fails is retried on the "
+                   f"next pulse, up to {MAX_POGINGEN_PER_MAAND} times a month.")
+    input_schema = ("no fields required · force: bool (optional — re-measure every source now, "
+                    "skipping the month gate)")
+    output_schema = ("ok, maand, skipped, text, gemeten, gewijzigd[{label, url, letter, vorige_hash, "
+                     "nieuwe_hash}], fouten[], nieuw, aangemaakt[{pid, titel, label}], headsup, "
+                     "escalate | no_data+reason (nothing changed / month done)")
 
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
@@ -169,16 +222,27 @@ class RegulationWatchSkill(Skill):
         # je met iets anders bezig bent.
         maand = payload.get("_maand") or period_key("maand")
         rijen = lees_log(data_dir)
-        if not payload.get("force") and maand_gedaan(rijen, maand):
-            return {"ok": True, "maand": maand, "skipped": True, "reden": "deze maand al gemeten"}
-
         bronnen = parse_bronnen(getattr(context, "settings", {}))
         if not bronnen:
             return {"ok": False, "maand": maand,
                     "escalate": {"reason": "geen regulation_sources geconfigureerd in settings.ini"}}
 
-        gewijzigd, fouten, stukke_bewaking = [], [], []
-        for bron in bronnen:
+        # Per bron, niet per maand: wie deze maand al lukte wordt niet opnieuw gehaald, wie faalde
+        # krijgt een nieuwe kans tot de pogingen op zijn. `force` meet alles opnieuw (de handmatige duw).
+        beurt = bronnen if payload.get("force") else te_meten(rijen, bronnen, maand)
+        if not beurt:
+            gemeten = sum(1 for b in bronnen if gemeten_deze_maand(rijen, b["url"], maand))
+            weg = [b["label"] for b in bronnen if opgegeven(rijen, b["url"], maand)]
+            reden = f"deze maand al gemeten ({gemeten} van {len(bronnen)} bronnen)"
+            if weg:
+                reden += (f"; opgegeven na {MAX_POGINGEN_PER_MAAND} pogingen: " + ", ".join(weg))
+            # `no_data` + `reason` voor het checklist-pad (📭 in plaats van een kennisgat), `skipped`
+            # + `reden` voor de pulslaag — zelfde regel als bij claims_site_scan.
+            return {"ok": True, "maand": maand, "skipped": True, "reden": reden,
+                    "no_data": True, "reason": reden, "text": reden}
+
+        gewijzigd, fouten, stukke_bewaking, hapert, opgegeven_nu = [], [], [], [], []
+        for bron in beurt:
             uitkomst = meet(bron, _fetch=payload.get("_fetch"))
             vorige = laatste_meting(rijen, bron["url"])
             if "fout" in uitkomst:
@@ -187,8 +251,18 @@ class RegulationWatchSkill(Skill):
                                          "status": "fout", "reden": uitkomst["fout"],
                                          "at": time.time()})
                 fouten.append(f"{bron['label']}: {uitkomst['fout']}")
-                # Eén misser is geen alarm; twee maanden op rij betekent dat de bewaking stuk is.
-                if opeenvolgende_fouten(rijen, bron["url"]) >= 1:
+                poging = pogingen_deze_maand(rijen, bron["url"], maand) + 1
+                # Eén misser is geen alarm, wél een melding: de bron krijgt morgen een nieuwe kans en
+                # compliance ziet dat NU, niet pas na twee maanden. Bij het opgeven nog één keer.
+                # Tussendoor stil (alleen het log), anders krijgt de founder vijf dagen dezelfde regel.
+                if poging >= MAX_POGINGEN_PER_MAAND:
+                    opgegeven_nu.append(f"{bron['label']} ({uitkomst['fout'][:60]})")
+                elif poging == 1:
+                    hapert.append(f"{bron['label']} ({uitkomst['fout'][:60]}) — poging "
+                                  f"{poging}/{MAX_POGINGEN_PER_MAAND}, morgen opnieuw")
+                # Twee KALENDERMAANDEN op rij zonder geslaagde meting: de bewaking is stuk. `rijen`
+                # is het log van vóór deze run, dus de huidige maand telt hier expliciet mee.
+                if len(maanden_zonder_meting(rijen, bron["url"]) | {maand}) >= 2:
                     stukke_bewaking.append(bron["label"])
                 continue
             schrijf_regel(data_dir, {"soort": "meting", "maand": maand, "url": bron["url"],
@@ -213,18 +287,36 @@ class RegulationWatchSkill(Skill):
                        + " is gewijzigd — beoordeel de impact op de claims-database")
         elif taken:
             headsup = f"📜 Wetscheck: {len(taken)} punt(en) voor compliance"
+        # Een enkele falende bron is een regel in de heads-up, geen alarm — maar ook geen stilte.
+        # Tot scope 56 stond hij alleen in `fouten` en las niemand hem.
+        for regel in ([f"⚠️ Wetscheck: bron niet gemeten — {h}" for h in hapert]
+                      + [f"⚠️ Wetscheck: bron deze maand opgegeven na {MAX_POGINGEN_PER_MAAND} "
+                         f"pogingen — {o}" for o in opgegeven_nu]):
+            headsup = f"{headsup} · {regel}" if headsup else regel
 
         escalatie = None
         if stukke_bewaking:
             escalatie = {"reason": "twee maanden achtereen onbereikbaar: "
                                    + ", ".join(stukke_bewaking)}
         elif len(fouten) == len(bronnen):
+            # Op ALLE geconfigureerde bronnen, niet op de beurt: een herkansing waarin alleen de
+            # haperende bron aan de beurt is, is geen "niets bereikbaar" — de rest lukte deze maand
+            # al. Anders escaleert elke herkansing naar de founder, vijf dagen op rij.
             escalatie = {"reason": "geen enkele bron kon worden opgehaald: " + "; ".join(fouten[:3])}
 
-        return {"ok": escalatie is None, "maand": maand, "skipped": False,
-                "gemeten": len(bronnen) - len(fouten), "gewijzigd": gewijzigd,
-                "fouten": fouten, "nieuw": len(taken), "aangemaakt": taken,
-                "headsup": headsup, "escalate": escalatie}
+        gemeten = len(beurt) - len(fouten)
+        uit = {"ok": escalatie is None, "maand": maand, "skipped": False,
+               "gemeten": gemeten, "gewijzigd": gewijzigd,
+               "fouten": fouten, "nieuw": len(taken), "aangemaakt": taken,
+               "headsup": headsup, "escalate": escalatie}
+        uit["text"] = (f"{gemeten} of {len(beurt)} source(s) measured for {maand}: "
+                       f"{len(gewijzigd)} changed, {len(taken)} task(s) for compliance"
+                       + (f"; {len(fouten)} not reachable" if fouten else ""))
+        if escalatie is None and not gewijzigd and not taken:
+            # Niets veranderd is een antwoord ("de wet ligt er nog zo"), geen kennisgat.
+            uit["no_data"] = True
+            uit["reason"] = uit["text"] + " — no source text changed"
+        return uit
 
     # ── taken (alleen signaleren, nooit duiden) ──────────────────────────────
 
@@ -243,7 +335,8 @@ class RegulationWatchSkill(Skill):
                 f"Wat te doen: lees de wijziging en beoordeel of termen, werklijst of landenregels "
                 f"in de claims-database aangepast moeten worden.\n"
                 f"De tool duidt bewust niet — dit is een compliance-oordeel.")
-            pid = self._taak(context, titel, beschrijving, sleutel=f"{bron['url']}|{maand}")
+            pid = self._taak(context, titel, beschrijving, sleutel=f"{bron['url']}|{maand}",
+                             dedupe=bron["url"])
             if pid:
                 uit.append({"pid": pid, "titel": titel, "label": bron["label"]})
         return uit
@@ -283,13 +376,20 @@ class RegulationWatchSkill(Skill):
                 uit.append({"pid": pid, "titel": titel, "label": "mijlpaal"})
         return uit
 
-    def _taak(self, context, titel: str, beschrijving: str, sleutel: str) -> str | None:
-        """Eén taak voor compliance. Dedupe: zolang de vorige taak voor dezelfde bron open
-        staat komt er geen tweede bij."""
+    def _taak(self, context, titel: str, beschrijving: str, sleutel: str,
+              dedupe: str | None = None) -> str | None:
+        """Eén taak voor compliance. Dedupe: zolang een open taak bestaat waarvan de sleutel met
+        `dedupe` begint, komt er geen tweede bij. Default = de volledige sleutel.
+
+        Tot scope 56 dedupliceerde dit op `sleutel.split("|")[0]`; beide mijlpalen delen de basis
+        "mijlpaal", dus zolang de EmpCo-handhavingstaak open stond werd de NL-omzettingsmijlpaal
+        nooit aangemaakt (en ook niet gelogd). Een bron-taak dedupliceert bewust op de URL (zie
+        `_taken`): dezelfde bron die in een volgende maand wéér wijzigt terwijl de vorige taak nog
+        open staat, hoort geen stapel duplicaten op te leveren."""
         ledger = getattr(context, "projects", None)
         if ledger is None:
             return None
-        basis = sleutel.split("|")[0]
+        basis = dedupe if dedupe is not None else sleutel
         for p in ledger.all():
             if (p.get("origin") == ORIGIN and p.get("status") != "done"
                     and str(p.get("keyword", "")).startswith(basis)):

@@ -31,19 +31,22 @@ def test_prompt_bevat_alle_accountabilities():
 
 
 def test_parse_faalt_closed_op_rommel():
-    assert parse_check(None) == {"duplicates": [], "weak": []}
-    assert parse_check("geen json hier") == {"duplicates": [], "weak": []}
+    """Scope 56: geen/onleesbaar antwoord is None (een storing), niet de lege check — die twee
+    waren tot dan dezelfde dict en het scherm zei bij een storing "No duplicates found."."""
+    assert parse_check(None) is None
+    assert parse_check("geen json hier") is None
     got = parse_check("```json\n" + _FAKE + "\n```")
     assert len(got["duplicates"]) == 1 and len(got["weak"]) == 1
 
 
 def test_check_gebruikt_reason_fn():
     res = check_accountabilities(_ROLES, reason_fn=lambda p: _FAKE)
-    assert res["ok"] and res["n_roles"] == 2
+    assert res["ok"] and res["n_roles"] == 2 and res["at"] > 0
     assert res["duplicates"][0]["accountability"] == "site monitoren"
-    # geen LLM (reason_fn gooit) → fail-closed lege check, geen crash
+    # geen LLM (reason_fn gooit) → fail-closed: geen bevindingen, geen crash, en `ok: False` mét reden
     res2 = check_accountabilities(_ROLES, reason_fn=lambda p: (_ for _ in ()).throw(RuntimeError()))
     assert res2["duplicates"] == [] and res2["weak"] == []
+    assert res2["ok"] is False and "kon niet draaien" in res2["reden"]
 
 
 def _dd(tmp_path):

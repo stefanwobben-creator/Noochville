@@ -78,7 +78,11 @@ def _wetscheck(data_dir: str) -> dict | None:
                 "overtijd": False, "overtijd_tekst": ""}
     laatste_maand = rijen[-1].get("maand", "")
     vandeze = [r for r in rijen if r.get("maand") == laatste_maand]
-    fout = [r for r in vandeze if r.get("status") != "ok"]
+    # Per BRON, niet per regel: sinds scope 56 krijgt een falende bron binnen de maand meerdere
+    # kansen, dus één bron kan vijf fout-regels hebben — en een bron die daarna alsnog lukte is
+    # niet 'onbereikbaar'.
+    gelukt = {r.get("url") for r in vandeze if r.get("status") == "ok"}
+    fout = sorted({r.get("url") for r in vandeze if r.get("status") != "ok"} - gelukt)
     # "Gewijzigd" = deze maand een andere hash dan de vorige geslaagde meting van diezelfde bron.
     gewijzigd = 0
     for r in vandeze:
@@ -93,7 +97,7 @@ def _wetscheck(data_dir: str) -> dict | None:
     if gewijzigd:
         uitkomst = f"{gewijzigd} bron(nen) gewijzigd — beoordeling staat als taak"
     else:
-        uitkomst = f"{len(vandeze) - len(fout)} bron(nen) ongewijzigd"
+        uitkomst = f"{len(gelukt)} bron(nen) ongewijzigd"
     if fout:
         uitkomst += f" · {len(fout)} onbereikbaar"
     return {"naam": "Maandelijkse wetscheck", "cadans": "maand",

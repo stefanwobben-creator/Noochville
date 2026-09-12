@@ -34,6 +34,8 @@ from __future__ import annotations
 import logging
 import re
 
+from nooch_village.claims_substantiatie import EIGEN_RUNS  # noqa: F401 — re-export, één waarheid
+
 log = logging.getLogger("village.claim_oordeel")
 
 COMPLIANT     = "compliant"
@@ -68,36 +70,18 @@ def _clausule(bevinding: dict) -> str:
     return f"{BRON_NAAM[bron]} — {detail}" if detail else BRON_NAAM[bron]
 
 
-# Bewijs mag niet uit onszelf komen. Een Kroniek-record met als bron een eigen skill-run
-# ('claims_check', 'escaleer', 'projectverzoek', 'tegenspraak') zegt dat wíj iets gedraaid hebben,
-# niet dat een externe bron de claim draagt. Gezien in de eerste prod-dry-run: drie claims kregen
-# 'compliant' op precies zulke records. Een claim onderbouwen met je eigen logboek is de mooiste
-# vorm van cirkelredenering die er is.
-EIGEN_RUNS = frozenset({"claims_check", "claims_site_scan", "escaleer", "projectverzoek",
-                        "tegenspraak", "kroniek_interpret", "onderzoekspas", "claim_evidence"})
+# Bewijs mag niet uit onszelf komen, en een goedkeuring mag zijn bewijs niet overleven. Beide
+# filters wonen sinds scope 56 in `claims_substantiatie` — de ene lezer van de Kroniek voor de
+# bewijs-vraag, gedeeld met de site-scan. Hier alleen een verwijzing (reference, don't copy): toen
+# de filters alleen hier stonden, gronde een `source=claims_check`-record en een verlopen
+# certificaat op de site wél een claim, en op de founder-kaart niet.
 
 
 def externe_records(bewijs: dict, *, vandaag: str = "") -> list[dict]:
-    """De bewijs-records die NIET uit een eigen skill-run komen ÉN nog geldig zijn.
-
-    De geldigheid wordt hier ELKE keer opnieuw vergeleken, niet ooit één keer gestempeld: een
-    goedkeuring mag zijn bewijs niet overleven. Verloopt het certificaat, dan valt de claim vanzelf
-    terug naar niet-onderbouwd — zonder dat iemand daar een taak voor hoeft te onthouden."""
-    from nooch_village import cert_register as cr
-
-    uit = []
-    for r in bewijs.get("records") or []:
-        bron = str(r.get("source") or r.get("bron") or "").strip().lower()
-        if not bron or bron in EIGEN_RUNS:
-            continue
-        if bron == cr.EXTERN:
-            cert = dict(r.get("meta") or {})
-            if cr.verlopen(cert, vandaag=vandaag) is not False:
-                log.info("claim-oordeel: certificaat %s verlopen of ongedateerd (geldig_tot=%r) — "
-                         "telt niet meer als onderbouwing", r.get("id"), cert.get("geldig_tot"))
-                continue
-        uit.append(r)
-    return uit
+    """De bewijs-records die NIET uit een eigen skill-run komen ÉN nog geldig zijn — dezelfde
+    functie als in `claims_substantiatie`, hier op de `{records}`-vorm van een bewijs-dict."""
+    from nooch_village import claims_substantiatie as subst
+    return subst.externe_records(bewijs.get("records") or [], vandaag=vandaag)
 
 
 def _bewijs_id(bewijs: dict) -> str:

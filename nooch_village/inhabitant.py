@@ -1619,7 +1619,8 @@ class Inhabitant(threading.Thread):
             if uitslag.get("skipped"):
                 telling["overgeslagen"] += 1
                 self.log.info("⏱ periodieke skill '%s' overgeslagen — %s", naam,
-                              uitslag.get("reden") or "ritme zegt: deze periode al gedaan")
+                              uitslag.get("reden") or uitslag.get("reason")
+                              or "ritme zegt: deze periode al gedaan")
                 continue
             escalatie = uitslag.get("escalate")
             if escalatie or not uitslag.get("ok", True):
@@ -2435,6 +2436,11 @@ class Inhabitant(threading.Thread):
         if not isinstance(result, dict):
             return masker(result) if result else "skill leverde geen resultaat"
         why = result.get("error") or result.get("reason") or result.get("reden")
+        if not why and isinstance(result.get("escalate"), dict):
+            # De periodieke skills (site-scan, wetscheck) zeggen hun reden in `escalate.reason` —
+            # de pulslaag leest die, maar op het checklist-pad stond tot scope 56 "ok=False zonder
+            # reden" op de wall terwijl de skill wél had gezegd wat er mis was.
+            why = result["escalate"].get("reason")
         if not why and result.get("ok") is False:
             why = "skill meldde ok=False zonder reden"
         return masker(why or "skill leverde geen resultaat")

@@ -157,10 +157,13 @@ def test_de_skill_schrijft_het_record_en_meldt_wat_ontbreekt():
 
 
 def test_de_skill_weigert_een_cert_zonder_datum():
+    """Sinds scope 56 is 'niet geschreven' óók `ok: False`: de `cert`-dict won anders de inhoudsrace
+    van de uitvoerlaag en het item werd afgevinkt met een lege cert als deliverable."""
     from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
     led = _Ledger()
     uit = CertEvidenceSkill().run({"text": "Certifies that: iets zonder datum"}, _Ctx(led))
     assert not uit["geschreven"] and "geldig_tot" in uit["reason"]
+    assert uit["ok"] is False and "geldig_tot" in uit["error"]
 
 
 def test_de_skill_meldt_een_cert_zonder_claim_koppeling():

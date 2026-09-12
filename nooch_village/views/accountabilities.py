@@ -11,7 +11,7 @@ import json
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _name, _nav
+from nooch_village.cockpit2_util import _DS_LINK, _name, _nav, _stamp
 
 
 def roles_with_accountabilities(st) -> list[dict]:
@@ -74,8 +74,20 @@ def render_accountabilities(st, data_dir: str, csrf_token: str = "") -> str:
                 f"<button class='btn ok sm' name='action' value='acc_check'>Run check</button></form>")
     result_block = ""
     if res:
-        result_block = (f"<h2>Duplicates ({len(res.get('duplicates') or [])})</h2>{_dup_block(res.get('duplicates') or [])}"
-                        f"<h2>Wording ({len(res.get('weak') or [])})</h2>{_weak_block(res.get('weak') or [])}")
+        # Versheid en reikwijdte staan erbij: een maand oud oordeel over twintig rollen las tot
+        # scope 56 als actueel oordeel over alle rollen.
+        wanneer = _stamp(res.get("at"))
+        meta = (f"<p class='muted'>Last run: {_e(wanneer) if wanneer else 'unknown'}"
+                + (f" · {int(res.get('n_roles'))} roles checked" if res.get("n_roles") is not None else "")
+                + "</p>")
+        if res.get("ok") is False:
+            # Een storing is geen "No duplicates found." — dat las als een schoon oordeel.
+            result_block = (f"{meta}<p class='muted'>⚠️ The check could not run: "
+                            f"{_e(str(res.get('reden') or 'unknown reason'))}. Run it again.</p>")
+        else:
+            result_block = (f"{meta}"
+                            f"<h2>Duplicates ({len(res.get('duplicates') or [])})</h2>{_dup_block(res.get('duplicates') or [])}"
+                            f"<h2>Wording ({len(res.get('weak') or [])})</h2>{_weak_block(res.get('weak') or [])}")
     main = (f"<div class='c2-main'><div class='cl-head'><h1>Accountability check</h1>"
             f"<span class='kc-actions'>{knop}</span></div>"
             f"<p class='muted'>Checks all {len(roles)} roles with accountabilities for duplicate "

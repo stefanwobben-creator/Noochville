@@ -126,13 +126,25 @@ def test_leeg_bron_scheidt_antwoord_van_gat():
 
 def test_content_check_meldt_een_schone_tekst_expliciet():
     """Zonder deze regel leest een geslaagde controle die niets vond als ontbrekende kennis — en
-    sinds de missie-critic telt dat mee op de substantieel-as."""
+    sinds de missie-critic telt dat mee op de substantieel-as.
+
+    Scope 56: 'schoon' is alleen een antwoord als ÉLKE laag draaide. Deze test legde het fail-open
+    gedrag vast (context=None → geen model, geen copy_rules → tóch `no_data` "geen verboden
+    woorden"); nu is dat `ok: False` "niet getoetst", en de schone uitkomst vraagt een context mét
+    copy_rules en een model dat antwoordt."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
     from nooch_village.skills_impl.content_check import ContentCheckSkill
-    uit = ContentCheckSkill().run({"text": "Wij maken schoenen in Portugal."}, None)
-    if not (uit.get("forbidden_words") or uit.get("claim_issues") or uit.get("suggestions")):
-        assert uit.get("no_data") is True
-        assert "geen verboden woorden" in uit.get("reason", "")
-        assert I._leeg_bron(uit) == "gemeld"
+    zonder = ContentCheckSkill().run({"text": "Wij maken schoenen in Portugal."}, None)
+    assert zonder["ok"] is False and "niet getoetst" in zonder["error"]
+    assert I._classify_result(zonder)[0] == "fout"                    # blijft open, mét reden
+    ctx = SimpleNamespace(copy_rules="REGELS", data_dir=None)
+    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
+        uit = ContentCheckSkill().run({"text": "Wij maken schoenen in Portugal."}, ctx)
+    assert not (uit.get("forbidden_words") or uit.get("claim_issues") or uit.get("suggestions"))
+    assert uit.get("no_data") is True
+    assert "no forbidden words" in uit.get("reason", "")
+    assert I._leeg_bron(uit) == "gemeld"
 
 
 def test_critic_telt_een_gerapporteerde_lege_taak_niet_als_gat():

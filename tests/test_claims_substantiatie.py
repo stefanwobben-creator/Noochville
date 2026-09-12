@@ -316,9 +316,9 @@ def test_dekking_schuift_op_over_pulsen_tot_de_week_rond_is(tmp_path, monkeypatc
         fetch.reset()
         uit = ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None},
                                         ctx)
-        nieuw = [g for g in uit["gedekt"] if g not in gezien]
+        nieuw = [g for g in uit["_scan"]["gedekt"] if g not in gezien]
         assert nieuw, f"puls {puls} moet nieuwe pagina's dekken, geen herhaling"
-        gezien = list(uit["gedekt"])
+        gezien = list(uit["_scan"]["gedekt"])
     assert len(gezien) == totaal                        # 5 van 5, verdeeld over drie pulsen
     assert uit["volledig"] is True
     assert css.week_gedaan(str(tmp_path), css.period_key("week"))
@@ -359,7 +359,7 @@ def test_herstart_dekt_de_week_opnieuw(tmp_path, monkeypatch):
     opnieuw = ClaimsSiteScanSkill().run(
         {"herstart": True, "_fetch": fetch, "_sleep": lambda s: None}, ctx)
     assert opnieuw["skipped"] is False
-    assert len(opnieuw["gedekt"]) == len(css.scan_paginas(claims_db.load(data_dir=str(tmp_path))))
+    assert len(opnieuw["_scan"]["gedekt"]) == len(css.scan_paginas(claims_db.load(data_dir=str(tmp_path))))
 
 
 def test_een_pagina_wordt_niet_geretryd_binnen_een_run(tmp_path):

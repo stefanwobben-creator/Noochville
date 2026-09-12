@@ -124,6 +124,9 @@ def test_maand_idempotent(tmp_path):
 
 
 def test_een_misser_is_geen_alarm_twee_wel(tmp_path):
+    """Twee KALENDERMAANDEN, niet twee pogingen. Tot scope 56 simuleerde deze test de tweede maand
+    met een `force`-run in dezelfde maand; sinds een bron binnen een maand meerdere kansen krijgt
+    (MAX_POGINGEN_PER_MAAND) zou dat 'twee maanden achtereen' al na twee dagen melden."""
     from nooch_village import safe_fetch
 
     def kapot(url):
@@ -131,7 +134,9 @@ def test_een_misser_is_geen_alarm_twee_wel(tmp_path):
     ctx = _ctx(tmp_path, bronnen="A | Wet | https://eur-lex.europa.eu/x\n")
     eerste = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "_fetch": kapot}, ctx)
     assert eerste["escalate"]["reason"].startswith("geen enkele bron")   # alles stuk deze run
-    tweede = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": kapot}, ctx)
+    zelfde_maand = RegulationWatchSkill().run({"_maand": VASTE_MAAND, "force": True, "_fetch": kapot}, ctx)
+    assert "twee maanden" not in zelfde_maand["escalate"]["reason"]      # nog dezelfde maand
+    tweede = RegulationWatchSkill().run({"_maand": "2026-07", "_fetch": kapot}, ctx)
     assert "twee maanden achtereen" in tweede["escalate"]["reason"]
 
 
@@ -458,7 +463,7 @@ def test_scan_werkt_de_status_bij_en_meldt_regressie(tmp_path, monkeypatch):
     ctx.settings = {}
     pagina = "<html><body>PLANET-FRIENDLY. sneakers</body></html>"
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina)}, ctx)
-    assert any(s["naar"] == claims_db.AUTO_REGRESSIE for s in uit["statussen"])
+    assert any(s["naar"] == claims_db.AUTO_REGRESSIE for s in uit["_scan"]["statussen"])
     # De auto-status landt in de overlay (data_dir), niet in de getrackte seed → lees effectief.
     assert claims_db.load(str(pad), data_dir=ctx.data_dir)["werklijst"][0]["status"] == claims_db.AUTO_REGRESSIE
     assert claims_db.load_seed(str(pad))["werklijst"][0]["status"] == "live"   # seed ongemoeid

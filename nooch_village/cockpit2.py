@@ -4090,19 +4090,26 @@ def _act_acc_check(c):
         _deny = _anchor_gate(c.st, c.username)
         if _deny:
             return c.nxt, f"✗ {_deny}"
-        from nooch_village.skills_impl.accountability_check import check_accountabilities
+        from nooch_village.skills_impl.accountability_check import (MAX_TOKENS,
+                                                                    check_accountabilities)
         from nooch_village.views.accountabilities import roles_with_accountabilities
         from nooch_village import llm
         roles = roles_with_accountabilities(c.st)
+        # `max_tokens`/`json_mode`: één JSON-object over ~30 rollen paste niet in de default van 700
+        # tokens; een afgekapt antwoord parste niet en las als "0 aandachtspunten" (scope 56).
         res = check_accountabilities(
-            roles, lambda p: llm.reason(p, call_site="cockpit_accountability_check"))
+            roles, lambda p: llm.reason(p, call_site="cockpit_accountability_check",
+                                        max_tokens=MAX_TOKENS, json_mode=True))
         try:
             with open(os.path.join(c.data_dir, "accountability_check.json"), "w", encoding="utf-8") as f:
                 json.dump(res, f, ensure_ascii=False)
         except Exception:
             pass
+        if res.get("ok") is False:
+            # Een storing is geen oordeel: niet "check klaar: 0", maar de reden.
+            return c.nxt, f"✗ check kon niet draaien: {res.get('reden') or 'onbekende reden'}"
         n = len(res.get("duplicates") or []) + len(res.get("weak") or [])
-        return c.nxt, f"check klaar: {n} aandachtspunt(en)"
+        return c.nxt, f"check klaar: {n} aandachtspunt(en) over {res.get('n_roles', len(roles))} rollen"
 
 
 # De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze

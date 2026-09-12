@@ -86,11 +86,16 @@ def test_de_betekenis_is_regel_gebaseerd_geen_model():
 
 
 def test_claims_check_levert_de_betekenis_zelf_mee():
+    """Sinds scope 56 heet de lijst `toelichting` (metadata voor de uitvoerlaag): als `betekenis`
+    won hij als 'langste lijst' van de bevindingen en toonde de wall-note vier disclaimers in plaats
+    van de rode treffer. En een lege run is `no_data` mét de lege-run-regel als reden — 📭 "reported,
+    nothing found", geen geslaagd resultaat met een disclaimer als antwoord."""
     from unittest.mock import patch
     from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
     with patch("nooch_village.claims_db.check_tekst", lambda *a, **k: dict(LEEG)):
         uit = ClaimsCheckSkill().run({"text": "iets"}, None)
-    assert uit["ok"] is True and "lege run" in " ".join(uit["betekenis"])
+    assert uit["ok"] is True and "lege run" in " ".join(uit["toelichting"])
+    assert uit["no_data"] is True and "GEEN goedkeuring" in uit["reason"]
 
 
 # ── 1. `overgeslagen` als citeerbaar feit ───────────────────────────────────

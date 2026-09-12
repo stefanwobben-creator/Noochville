@@ -143,24 +143,76 @@ def _match(varianten: list[str], rij: dict) -> str | None:
     return None
 
 
-def bewijs_voor(bevinding: dict, index: list[dict], merken: set[str]) -> dict:
+# ── Wat NIET als bewijs telt, ook al staat er 'bevestigd' ─────────────────────────────────────────
+# Twee filters, en ze wonen HIER omdat dit de enige lezer van de Kroniek voor de bewijs-vraag is.
+# Tot scope 56 stonden ze in `claim_oordeel` (de founder-kaart) en niet in deze module (de
+# site-scan): een record `source=claims_check, status=bevestigd` — zoals de onderzoekspas er bij élke
+# run een schreef — maakte op de site een groene claim "onderbouwd", en een certificaat met
+# `geldig_tot=2020-01-01` ook. Twee Kroniek-lezers, twee waarheden (skill-review 12-09-2026).
+#
+# 1. Bewijs mag niet uit onszelf komen. Een Kroniek-record met als bron een eigen skill-run zegt dat
+#    wíj iets gedraaid hebben, niet dat een externe bron de claim draagt. Gezien in de eerste
+#    prod-dry-run: drie claims kregen 'compliant' op precies zulke records. Een claim onderbouwen met
+#    je eigen logboek is de mooiste vorm van cirkelredenering die er is. `claims_db` staat erbij
+#    sinds claims_check zijn eigen Kroniek-records schrijft (source=claims_db).
+# 2. Een goedkeuring mag zijn bewijs niet overleven: `geldig_tot` van een certificaat wordt bij ELKE
+#    toets opnieuw met vandaag vergeleken. Verloopt het, dan valt de claim vanzelf terug naar
+#    niet-onderbouwd — zonder dat iemand daar een taak voor hoeft te onthouden.
+EIGEN_RUNS = frozenset({"claims_check", "claims_db", "claims_site_scan", "escaleer", "projectverzoek",
+                        "tegenspraak", "kroniek_interpret", "onderzoekspas", "claim_evidence"})
+
+
+def weigering(record: dict, *, vandaag: str = "") -> str:
+    """Waarom dit record GEEN bewijs is, of "" als het mag meetellen (extern én nog geldig)."""
+    from nooch_village import cert_register as cr
+
+    bron = str(record.get("source") or record.get("bron") or "").strip().lower()
+    if not bron:
+        return "record zonder bron"
+    if bron in EIGEN_RUNS:
+        return f"eigen skill-run ({bron}) — zegt dat wij iets draaiden, niet dat een externe bron de claim draagt"
+    if bron == cr.EXTERN:
+        cert = dict(record.get("meta") or {})
+        if cr.verlopen(cert, vandaag=vandaag) is not False:
+            tot = cert.get("geldig_tot") or "onbekend"
+            log.info("bewijs: certificaat %s verlopen of ongedateerd (geldig_tot=%r) — telt niet "
+                     "meer als onderbouwing", record.get("id"), cert.get("geldig_tot"))
+            return f"certificaat verlopen of ongedateerd (geldig_tot {tot})"
+    return ""
+
+
+def externe_records(records, *, vandaag: str = "") -> list[dict]:
+    """De records die NIET uit een eigen skill-run komen ÉN nog geldig zijn. Eén filter voor beide
+    lezers: `bewijs_voor` (de site-scan) en `claim_oordeel` (de founder-kaart) — reference, don't copy."""
+    return [r for r in (records or []) if isinstance(r, dict) and not weigering(r, vandaag=vandaag)]
+
+
+def bewijs_voor(bevinding: dict, index: list[dict], merken: set[str], *, vandaag: str = "") -> dict:
     """De bewijs-vraag voor één bevinding: `{onderbouwing, reden, records}`.
 
     Volle match op ons eigen subject met status `bevestigd` → onderbouwd. Een halve match (het
     subject klopt, de claim maar gedeeltelijk) → `ambigu`: dat is geen bewijs, maar wél een signaal
-    dat een mens ernaar moet kijken. Al het andere → ontbreekt."""
+    dat een mens ernaar moet kijken. Al het andere → ontbreekt — en als er wél passende records waren
+    die alleen niet TELLEN (eigen run, verlopen certificaat), zegt de reden dat, zodat compliance
+    weet wat er ligt en waarom het niet volstaat."""
     varianten = _varianten(bevinding)
     if not varianten:
         return {"onderbouwing": ONTBREEKT, "records": [],
                 "reden": "geen concrete claim-frase om bewijs bij te zoeken"}
 
-    volledig, gedeeltelijk = [], []
+    volledig, gedeeltelijk, geweigerd = [], [], []
     for rij in index:
         if not _van_ons(rij, merken):
             continue                                 # bewijs over een ánder merk zegt niets over ons
         if rij["status"] != "bevestigd":
             continue                                 # leeg/fout is onderzocht-en-niets, geen bewijs
         dekking = _match(varianten, rij)
+        if dekking is None:
+            continue
+        waarom_niet = weigering(rij["record"], vandaag=vandaag)
+        if waarom_niet:
+            geweigerd.append(waarom_niet)            # past wel, telt niet — en dat staat in de reden
+            continue
         if dekking == "vol":
             volledig.append(rij["record"])
         elif dekking == "deel":
@@ -179,6 +231,11 @@ def bewijs_voor(bevinding: dict, index: list[dict], merken: set[str]) -> dict:
         return {"onderbouwing": AMBIGU, "records": gedeeltelijk,
                 "reden": (f"{len(gedeeltelijk)} bevestigd record raakt deze claim gedeeltelijk — "
                           f"een machine kan niet vaststellen of het dezelfde claim onderbouwt")}
+    if geweigerd:
+        uniek = list(dict.fromkeys(geweigerd))
+        return {"onderbouwing": ONTBREEKT, "records": [],
+                "reden": (f"geen geldig extern bewijs — {len(geweigerd)} passend record telt niet: "
+                          + "; ".join(uniek[:2]))}
     return {"onderbouwing": ONTBREEKT, "records": [],
             "reden": "geen bevestigd record in de Kroniek voor deze claim op onze eigen site"}
 

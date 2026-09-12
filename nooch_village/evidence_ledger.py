@@ -135,6 +135,35 @@ class EvidenceLedger:
         return n
 
 
+LEDGER_BESTAND = "evidence_ledger.jsonl"
+
+
+def van_context(context) -> "EvidenceLedger | None":
+    """De Kroniek waarmee een skill in DEZE context werkt. Eén resolutie-idioom voor elke lezer en
+    schrijver: een injectie uit de context wint (`evidence_ledger`, dan `evidence` — het cockpit hangt
+    hem als `evidence` aan `_Stores`), anders het bestand naast de andere stores in `data_dir`.
+
+    Waarom dit hier staat en niet per skill: `cert_evidence` las UITSLUITEND `context.evidence`, en de
+    daemon-`Context` heeft dat attribuut niet (config.py hangt er geen aan). Dus schreef `village
+    certs --ingest` in productie nooit een record — "✘ geen ledger beschikbaar" — terwijl
+    `claims_site_scan` dezelfde vraag wél goed oploste met precies deze fallback (skill-review
+    12-09-2026). Twee resolvers, één die het goed doet, is hoe zo'n gat ontstaat.
+
+    None alleen als er geen context én geen data_dir is; de aanroeper faalt dan closed."""
+    if context is None:
+        return None
+    ledger = getattr(context, "evidence_ledger", None) or getattr(context, "evidence", None)
+    if ledger is not None:
+        return ledger
+    data_dir = getattr(context, "data_dir", None)
+    if not data_dir:
+        return None
+    try:
+        return EvidenceLedger(os.path.join(str(data_dir), LEDGER_BESTAND))
+    except Exception:                                    # noqa: BLE001 — geen ledger = geen bewijs
+        return None
+
+
 # ── skill-ladder: dode route → alternatief pad, escaleren als LÁÁTSTE tree (leren, De Kroniek) ──
 def classify_result(result) -> str:
     """Standaard-classificatie van een skill-resultaat → Kroniek-status. fout = de bron faalde
