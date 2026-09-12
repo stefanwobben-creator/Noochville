@@ -23,6 +23,27 @@ import pytest
 from nooch_village.registry_factory import build_skill_registry
 from nooch_village.skills import ontbrekende_velden
 
+
+@pytest.fixture(autouse=True)
+def _geen_netwerk(monkeypatch):
+    """De sweep draait élke skill met een lege payload — OFFLINE.
+
+    Gemeten (skill-review 12-09-2026): `site_health.run({}, None)` deed een echte GET op nooch.earth.
+    Een declaratie-test hoort geen netwerk te raken: elke socket-/HTTP-ingang gaat hier dicht. Een
+    skill die dan een netwerkfout meldt, meldt geen payload-klacht — precies wat `_klacht` al zo
+    leest — en de uitkomst hangt niet meer af van een DNS-server of van nooch.earth zelf."""
+    def _dicht(*a, **k):
+        raise RuntimeError("no network in the declaration sweep")
+    import socket
+    import urllib.request
+    import requests
+    monkeypatch.setattr(socket, "getaddrinfo", _dicht)
+    monkeypatch.setattr(socket, "create_connection", _dicht)
+    monkeypatch.setattr(urllib.request, "urlopen", _dicht)
+    for naam in ("get", "post", "put", "head", "request"):
+        monkeypatch.setattr(requests, naam, _dicht)
+    monkeypatch.setattr(requests.Session, "request", _dicht)
+
 # Een klacht over ontbrekende invoer, zoals skills die formuleren.
 _MIST = re.compile(r"(ontbrekende parameter|geef\s+'?\w|verplicht|is verplicht|opgeven|"
                    r"niet-leeg|ontbreekt|vereist|required)", re.I)
@@ -68,9 +89,14 @@ def _validate_vangt(obj) -> bool:
         return False
 
 
-def test_elke_runtime_payload_eis_staat_ook_in_een_poort():
+def test_elke_runtime_payload_eis_staat_ook_in_een_poort(tmp_path, monkeypatch):
     """De sweep. Klaagt een skill bij een lege payload over ontbrekende invoer, dan moet
-    `required_payload` dat óók zeggen — anders geeft de poort groen en weigert de skill alsnog."""
+    `required_payload` dat óók zeggen — anders geeft de poort groen en weigert de skill alsnog.
+
+    In een tmp-werkmap: `gsc_report.run({}, None)` schreef tot scope 58 een lege
+    `data/output/gsc_nota_<vandaag>.md` in de repo (zes bestanden, 409 bytes elk); nu stopt hij
+    zonder rows, en een skill die tóch een relatief `data/`-pad schrijft raakt de repo niet meer."""
+    monkeypatch.chdir(tmp_path)
     gaten = []
     for naam, obj in _skills():
         if obj is None:

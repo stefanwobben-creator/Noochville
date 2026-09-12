@@ -522,9 +522,14 @@ class TrendsWorker(Inhabitant):
         now = time.time()
         if self._nota_interval > 0 and now - self._last_nota < self._nota_interval:
             return
-        self._last_nota = now
         r = self.use_skill("gsc_report", result)
-        path = r.get("path", "?")
+        path = r.get("path")
+        if not path:
+            # Geen rijen (no_data) of geen bruikbare payload (error): er is geen nota, dus ook geen
+            # `gsc_nota_written` en geen stempel — morgen mag hij opnieuw, zodra Google wél data geeft.
+            self.log.info("📋 GSC-nota niet geschreven: %s", r.get("reason") or r.get("error") or "geen pad")
+            return
+        self._last_nota = now
         self.log.info("📋 GSC-nota geschreven → %s", path)
         self.bus.publish(Event("gsc_nota_written", {"by": self.id, "path": path}, self.id))
 

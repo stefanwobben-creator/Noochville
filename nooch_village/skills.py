@@ -46,6 +46,12 @@ class Skill(ABC):
     """Env-/settings-sleutels die de skill VERBETEREN maar niet vereist zijn (hogere limiet,
     courtesy-mailto). Afwezig = de skill werkt nog, in beperkte modus."""
 
+    config_hint: str = ""
+    """Wat er in .env moet staan als `required_env` dat niet als platte lijst kan zeggen — een
+    of-of, zoals Shopify (een statisch token óf client-id + secret). De configuratiepoort
+    (`Inhabitant._config_ontbreekt`) toont dit in plaats van de sleutellijst. Leeg = de lijst
+    volstaat. Alleen NAMEN van sleutels, nooit waarden."""
+
     cost: str | None = None
     """Puls-veiligheid en gemeten externe call-kost die de (toekomstige) puls-gate bewaakt.
     Verplicht voor elke concrete subklasse; None is niet toegestaan in productie.

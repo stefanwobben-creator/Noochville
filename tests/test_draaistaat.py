@@ -204,9 +204,12 @@ def _kaart(page: str, skill: str) -> str:
 
 
 def test_de_kaart_toont_de_eigen_beschrijving(tmp_path):
-    """Het veld bestond al op `Skill` en werd nergens getoond: je zag alleen de bijnaam."""
+    """Het veld bestond al op `Skill` en werd nergens getoond: je zag alleen de bijnaam.
+    (Scope 58: de description van site_health is Engels geworden voor de planner; de kaart toont
+    nog steeds de eigen description, dus de toets leest de tekst uit de skill zelf.)"""
+    from nooch_village.skills_impl.site_health import SiteHealthSkill
     page = _pagina(tmp_path)
-    assert "Checkt of een site live is" in _kaart(page, "site_health")
+    assert SiteHealthSkill.description[:40] in _kaart(page, "site_health")
 
 
 def test_zonder_spoor_zegt_het_scherm_dat(tmp_path):

@@ -122,7 +122,9 @@ def _check_bereikbaar(registry, ctx, url: str, eigenaar: str) -> list[dict]:
     elif 300 <= code < 500:
         kleur, uitleg = "oranje", f"HTTP {code}: de pagina antwoordt, maar niet met inhoud"
     else:
-        kleur, uitleg = "rood", f"HTTP {code or 'geen antwoord'}"
+        # Sinds scope 58 vangt site_health een netwerkfout zelf (`error` + status_code 0); de reden
+        # hoort op het lampje, niet alleen in het skill-resultaat.
+        kleur, uitleg = "rood", f"HTTP {code or 'geen antwoord'}" + (f": {str(r.get('error'))[:160]}" if r.get("error") else "")
     return [_lamp("bereikbaar", "Bereikbaar", kleur, waarde=str(code or "-"), uitleg=uitleg,
                   eigenaar=eigenaar, bron="site_health")]
 

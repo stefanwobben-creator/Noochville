@@ -171,7 +171,8 @@ class MobielAuditSkill(DataSourceSkill):
                      "per categorie gewogen), lcp_element{element, selector, snippet, fases_ms, "
                      "fases_bron?, checks[]?, aanwijzingen[]?} (LH 13: checklist van lcp-discovery), "
                      "preview{gevraagd, herkend} (Shopify-preview: is het preview-thema echt gerenderd?), "
-                     "waarschuwingen[], text | error + tijdelijk")
+                     "waarschuwingen[], text, rows[{metric|key, waarde, weergave, text} — scores, lab, field, "
+                     "LCP element, opportunities, failing audits] | error + tijdelijk")
 
     def __init__(self, haal=None, controleer=None):
         # Injecteerbaar zodat een test dit bewijst zonder netwerk en zonder quota, net als `_haal`
@@ -212,12 +213,18 @@ class MobielAuditSkill(DataSourceSkill):
 
     def validate_payload(self, payload: dict, context) -> list:
         """Een 'url' die geen adres is (een plaatshouder van de planner) hoort bij het PLANNEN al te
-        stranden, niet pas bij Google. Zelfde poort als haal_pagina."""
-        url = str((payload or {}).get("url") or "").strip()
+        stranden, niet pas bij Google. Zelfde poort als haal_pagina. En een verzonnen strategie
+        ('tablet') strandt hier óók, niet pas in run()."""
+        p = payload or {}
+        uit = []
+        url = str(p.get("url") or "").strip()
         if url and not url.lower().startswith(("http://", "https://")):
             kort = url if len(url) <= 60 else url[:57] + "…"
-            return [f"'url' is geen adres maar tekst ({kort!r})"]
-        return []
+            uit.append(f"'url' is geen adres maar tekst ({kort!r})")
+        strategie = str(p.get("strategie") or p.get("strategy") or "").strip().lower()
+        if strategie and strategie not in STRATEGIEEN:
+            uit.append(f"onbekende strategie {strategie!r}; kies uit {', '.join(STRATEGIEEN)}")
+        return uit
 
     def _meet(self, url: str, strategie: str, context) -> dict:
         """Eén PageSpeed-run. Geeft óf een geparste uitkomst (ok=True) óf een error-dict."""
@@ -314,7 +321,64 @@ class MobielAuditSkill(DataSourceSkill):
             uit["waarschuwingen"].append("preview-thema niet herkend in de netwerkrequests (geen Shopify "
                                          "preview-balk geladen); mogelijk is het live thema gemeten")
         uit["text"] = MobielAuditSkill._tekst(uit)
+        # ÉÉN LIJST MET DE KOPCIJFERS EERST (skill-review 12-09-2026). De uitvoerlaag laat de grootste
+        # lijst winnen, en dat was `bevindingen`: de note opende met de vijf zwaarste falende audits
+        # en de scores stonden nergens. `rows` is nu de grootste lijst — scores, lab, veld, LCP-
+        # element, kansen, bevindingen — zodat de eerste regels de score en LCP zijn. De bestaande
+        # sleutels blijven ongemoeid voor site_audit.py en de collector.
+        uit["rows"] = MobielAuditSkill._rows(uit)
         return uit
+
+    @staticmethod
+    def _rows(u: dict) -> list:
+        strategie = u.get("strategie") or "mobile"
+        rows = []
+        for cat in ("performance", "accessibility", "best_practices", "seo"):
+            sc = (u.get("scores") or {}).get(cat)
+            if sc is None:
+                continue
+            rows.append({"metric": cat, "waarde": sc, "weergave": f"{sc}/100",
+                         "text": f"Lighthouse {cat.replace('_', ' ')} score {sc} of 100 ({strategie})"})
+        for veld, _audit, _eenheid in _LAB:
+            m = (u.get("lab") or {}).get(veld) or {}
+            if m.get("waarde") is None:
+                continue
+            naam = veld.replace("_ms", "").upper().replace("SPEED_INDEX", "Speed Index").replace("TTI", "TTI")
+            rows.append({"metric": veld, "waarde": m["waarde"], "weergave": m.get("weergave") or "",
+                         "text": f"{naam} {m.get('weergave') or m['waarde']} (lab, {strategie})"})
+        v = u.get("veld") or {}
+        if v.get("bron"):
+            for veld, _psi, _deler in _VELD:
+                if v.get(veld) is None:
+                    continue
+                naam = veld.replace("veld_", "").replace("_ms", "").upper()
+                oordeel = v.get(veld + "_oordeel") or ""
+                rows.append({"metric": veld, "waarde": v[veld], "weergave": _pct(v[veld]) + ("" if veld.endswith("cls") else " ms"),
+                             "text": f"{naam} {_pct(v[veld])}{'' if veld.endswith('cls') else ' ms'} for real Chrome users "
+                                     f"(p75, {v['bron']}{', ' + oordeel if oordeel else ''})"})
+        le = u.get("lcp_element") or {}
+        if le.get("element"):
+            tekst = f"LCP element: {le['element']}" + _fase_zin(le)
+            if le.get("aanwijzingen"):
+                tekst += "; " + "; ".join(le["aanwijzingen"])
+            rows.append({"metric": "lcp_element", "waarde": le["element"], "weergave": le.get("selector") or "",
+                         "text": tekst})
+        for k in u.get("kansen") or []:
+            winst = f"{k['winst_ms']} ms" if k.get("winst_ms") else f"{(k.get('winst_bytes') or 0) // 1024} KiB"
+            rows.append({"key": k.get("audit", ""), "title": k.get("titel", ""), "waarde": k.get("winst_ms", 0),
+                         "weergave": winst, "text": f"opportunity: {k.get('titel', '')} ({winst})"})
+        for b in u.get("bevindingen") or []:
+            rows.append({"key": b.get("audit", ""), "title": b.get("titel", ""), "categorie": b.get("categorie", ""),
+                         "waarde": b.get("score"), "weergave": b.get("weergave") or "",
+                         "text": f"{b.get('categorie', '')}: {b.get('titel', '')}"
+                                 + (f" ({b['weergave']})" if b.get("weergave") else "")})
+        for m in u.get("mobiel") or []:
+            if m.get("geslaagd") is False:
+                rows.append({"key": m.get("audit", ""), "title": m.get("titel", ""), "waarde": 0,
+                             "weergave": m.get("weergave") or "",
+                             "text": f"mobile check failed: {m.get('titel', '')}"
+                                     + (f" ({m['weergave']})" if m.get("weergave") else "")})
+        return rows
 
     @staticmethod
     def _preview(audits: dict, url: str) -> dict:

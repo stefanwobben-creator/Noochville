@@ -142,7 +142,9 @@ def test_get_access_token_geinjecteerd():
 def test_skill_failclosed_zonder_credentials():
     ctx = SimpleNamespace(settings={}, data_dir="/tmp")
     assert ShopifySalesSkill().run({}, ctx).get("ok") is None
-    assert "ontbreekt" in ShopifySalesSkill().run({}, ctx)["error"]
+    # scope 58: de config-fout zegt 'not set' en niet meer 'ontbreekt' — dat woord is de vorm van
+    # een PAYLOAD-klacht (test_payload_declaratie leest het zo), en dit is config.
+    assert "SHOPIFY_STORE" in ShopifySalesSkill().run({}, ctx)["error"]
     # store maar geen token/credentials → ook fail-closed
     ctx2 = SimpleNamespace(settings={"SHOPIFY_STORE": "x.myshopify.com"}, data_dir="/tmp")
     assert "CLIENT_ID" in ShopifySalesSkill().run({}, ctx2)["error"]

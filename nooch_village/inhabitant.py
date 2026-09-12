@@ -1171,7 +1171,10 @@ class Inhabitant(threading.Thread):
         except Exception as e:                            # noqa: BLE001 — een kapotte check blokkeert niets
             self.log.warning("configuratiecheck faalde voor %s: %s", skill, e)
             return ""
-        return f"{skill} is not configured in this village ({' / '.join(vereist)} missing in .env)"
+        # Een skill met een of-of-eis (Shopify: token óf client-id+secret) zegt zelf wat er mist;
+        # de platte sleutellijst zou dan "SHOPIFY_STORE missing" melden terwijl de store er staat.
+        hint = str(getattr(obj, "config_hint", "") or "").strip()
+        return f"{skill} is not configured in this village ({hint or (' / '.join(vereist) + ' missing in .env')})"
 
     def _opdracht_section(self, description) -> str:
         """De opdracht van de mens (p['description']) als prompt-sectie — die stuurt de planning.

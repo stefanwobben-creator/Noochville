@@ -42,8 +42,11 @@ def _bron_sources(st, ctx):
         req = [k for k in (getattr(s, "required_env", ()) or ())]
         missing = [k for k in req if not (ctx.settings.get(k) or os.getenv(k))]
         label = getattr(cls, "CATALOG_LABEL", "") or _SRC_LABEL.get(src, src)
+        # Een bron met een of-of-eis (Shopify: token óf client-id+secret) heeft alle `required_env`
+        # maar is toch niet geconfigureerd; dan zegt de hint wat er nog in .env moet (scope 58).
+        hint = str(getattr(s, "config_hint", "") or "") if not configured else ""
         out.append({"src": src, "label": label, "active": st.sources.active(src),
-                    "configured": configured, "req": req, "missing": missing})
+                    "configured": configured, "req": req, "missing": missing, "hint": hint})
     out.sort(key=lambda x: (not x["active"], not x["configured"], x["label"].lower()))
     return out
 
@@ -65,7 +68,10 @@ def _keys_line(it) -> str:
     for k in it["req"]:
         ok = k not in it["missing"]
         parts.append(f"<code>{_e(k)}</code> {'✓' if ok else '✗ missing'}")
-    return "<div class='muted'>Keys: " + ", ".join(parts) + "</div>"
+    regel = "<div class='muted'>Keys: " + ", ".join(parts) + "</div>"
+    if it.get("hint"):
+        regel += f"<div class='muted'>{_e(it['hint'])}</div>"
+    return regel
 
 
 def _bron_row(it, csrf: str) -> str:

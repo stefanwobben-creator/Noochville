@@ -980,10 +980,15 @@ _SOURCE_GRONDSLAG = {
     "shopify|orders": ("Number of paid orders.", "orders", "Shopify", "up"),
     "shopify|revenue": ("Revenue from paid orders.", "EUR", "Shopify", "up"),
     "shopify|aov": ("Average order value (revenue ÷ orders).", "EUR", "Shopify", "up"),
-    "co2|gram_co2e": ("Estimated CO₂ emissions of all LLM calls in the village.", "g CO₂e",
-                      "co2_village (llm_usage.jsonl)", "down"),
+    # Richting "" (skill-review 12-09-2026): de skill zegt "context-KPI, geen 'lager = beter'" —
+    # nul calls is een dood dorp, niet een schoon dorp. De tegel zei "down" en las een stil dorp als
+    # winst. `ongeschat_calls` = calls op een model ZONDER emissiefactor (config/co2_factoren.json),
+    # niet 'zonder token-telling': die zin stond hier verkeerd.
+    "co2|gram_co2e": ("Estimated CO₂ emissions of all LLM calls in the village (context KPI: not "
+                      "'lower is better'; no ISO claim).", "g CO₂e", "co2_village (llm_usage.jsonl)", ""),
     "co2|calls": ("Number of LLM calls in the village.", "calls", "co2_village (llm_usage.jsonl)", ""),
-    "co2|ongeschat_calls": ("LLM calls without a token count (estimate).", "calls",
+    "co2|ongeschat_calls": ("LLM calls on a model without an emission factor in config/co2_factoren.json "
+                            "(not estimated — counted separately, never as zero).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),
 }
 _PROJECT_GRONDSLAG = {

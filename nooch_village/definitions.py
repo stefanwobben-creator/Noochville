@@ -146,7 +146,11 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "Hoge-prioriteit linkdoelen", "source": "linkbuilding", "unit": "n", "direction": "up",
      "cadence": "maand", "meettype": "snapshot",
      "definition": "Aantal gidsen met prioriteit 'hoog' om in genoemd te worden."},
-    # Budget
+    # Budget — NIETS VULT DEZE REEKS. De budget_adjust-skill (data/budget.json) is in scope 58
+    # verwijderd (hij hing sinds de registry-factory aan geen enkele rol) en er is geen
+    # DataSourceSkill voor 'budget'. De definitie blijft staan omdat productie hem al in
+    # data/definitions.json heeft (seed voegt alleen toe, verwijdert nooit); een bron ervoor is
+    # mens-werk (boekhouding), geen skill. Zie test_scope58_eigen_cijfers.
     {"name": "Besteed budget", "source": "budget", "unit": "EUR", "direction": "down",
      "cadence": "maand", "meettype": "cumulatief",
      "definition": "Totaal besteed bedrag over alle budgetlijnen."},
