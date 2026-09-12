@@ -1,3 +1,10 @@
+"""field_note — de groei-data duiden tegen de missie en de Field Note schrijven.
+
+Periodiek (de website-watcher, elke ochtendpuls) — géén rugzak-skill. Live werd hij zevenmaal als
+checklist-item gepland met een payload zonder data (null, of `{topic, content}`); elke run
+overschreef de echte Field Note en de `pulse_raw` van die dag met niets. Sinds scope 57 is
+`plausible` verplicht en levert data zonder `results` `no_data` op: er wordt dan niets geschreven.
+"""
 from __future__ import annotations
 import os, json
 from datetime import datetime
@@ -18,18 +25,40 @@ class FieldNoteSkill(Skill):
     name = "field_note"
     cost = "free"
     side_effect_free = False
-    description = "Duidt de groei-data tegen de Nooch-missie en schrijft een Field Note. Senst verval."
+    description = ("Interpret today's growth data (Plausible visitors, trends) against the Nooch "
+                   "mission and write the Field Note to data/output/field_note_<date>.md; senses a "
+                   "visitor drop of 15% or more against the previous pulse. Periodic: the website "
+                   "watcher runs it each morning with real Plausible data.")
+    input_schema = ("plausible: dict (required — the plausible_stats result with a 'results' block; "
+                    "without it nothing is written); trends: dict (optional — the trends result); "
+                    "prose: bool (optional, default true — false skips the model narrative and only "
+                    "records the day's raw data and the tension check)")
+    required_payload = ("plausible",)
+    output_schema = ("path, text (the note), tension, reason, grounded, issues, prose | "
+                     "no_data+reason (no results in the data) | error")
 
     def run(self, payload: dict, context) -> dict:
-        plausible = payload.get("plausible", {})
-        trends = payload.get("trends", {})
+        p = payload or {}
+        plausible = p.get("plausible") or {}
+        trends = p.get("trends") or {}
         # `prose` poort de dure LLM-duiding. Standaard True (backward-compat); de puls zet 'm wekelijks.
-        prose = payload.get("prose", True)
+        prose = p.get("prose", True)
         today = datetime.now().strftime("%Y-%m-%d")
 
+        # GEEN DATA, GEEN NOTE. Een payload zonder `results` (een planner-aanroep met een thema, of
+        # een Plausible-fout) heeft niets om te duiden; doorschrijven overschreef de echte dagnote.
+        if not isinstance(plausible, dict) or not isinstance(plausible.get("results"), dict) \
+                or not plausible.get("results"):
+            fout = plausible.get("error") if isinstance(plausible, dict) else None
+            return {"no_data": True, "path": None, "tension": False, "prose": bool(prose),
+                    "reason": ("no Plausible results in the payload"
+                               + (f" (source error: {str(fout)[:120]})" if fout else "")
+                               + " — no Field Note written, nothing overwritten")}
+
+        dd = getattr(context, "data_dir", ".") or "."
         # --- tension-detectie: vergelijk bezoekers met de vorige puls (ALTIJD, goedkoop, geen LLM) ---
         visitors = self._visitors(plausible)
-        baseline_path = os.path.join(context.data_dir, "last_pulse.json")
+        baseline_path = os.path.join(dd, "last_pulse.json")
         last = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
         last_visitors = last.get("visitors")
         tension, reason_txt = False, ""
@@ -42,7 +71,7 @@ class FieldNoteSkill(Skill):
             json.dump({"visitors": visitors, "date": today}, open(baseline_path, "w"))
 
         # --- ruwe data ALTIJD wegschrijven (goedkoop, bouwt dagelijks historie op) ---
-        out_dir = os.path.join(context.data_dir, "output")
+        out_dir = os.path.join(dd, "output")
         os.makedirs(out_dir, exist_ok=True)
         raw_path = os.path.join(out_dir, f"pulse_raw_{today}.json")
         with open(raw_path, "w") as f:
@@ -53,7 +82,7 @@ class FieldNoteSkill(Skill):
             return {"path": None, "tension": tension, "reason": reason_txt,
                     "grounded": None, "issues": [], "prose": False}
 
-        body = self._compose(plausible, trends, visitors, last_visitors, tension, reason_txt)
+        body = self._compose(plausible, trends, visitors, last_visitors, tension, reason_txt, context)
 
         # Grondings-poort (De Kroniek): een LLM-duiding mag geen cijfers/datums verzinnen die niet uit de
         # data volgen. Ongegrond → MARKEREN i.p.v. schoon publiceren (de mens ziet dat 't onbetrouwbaar is).
@@ -68,14 +97,15 @@ class FieldNoteSkill(Skill):
 
         # Onthouden: leg de grondings-uitkomst vast in de Kroniek (fail-safe — nooit de puls breken).
         try:
-            led = EvidenceLedger(os.path.join(context.data_dir, "evidence_ledger.jsonl"))
+            led = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))
             led.record(role_id="website_watcher", skill="field_note", query=today, source="grounding",
                        status="fout" if issues else "bevestigd", result_ref=os.path.basename(path),
                        meta={"issues": issues} if issues else None)
         except Exception:
             pass
 
-        return {"path": path, "tension": tension, "reason": reason_txt,
+        # `text` = de note zelf: het pad alleen is geen inhoud (de wall toonde een bestandsnaam).
+        return {"path": path, "text": body, "tension": tension, "reason": reason_txt,
                 "grounded": not issues, "issues": issues, "prose": True}
 
     # --- helpers ---
@@ -88,7 +118,7 @@ class FieldNoteSkill(Skill):
     def _data_block(self, plausible, trends):
         return json.dumps({"plausible": plausible, "trends": trends}, ensure_ascii=False, indent=2)
 
-    def _compose(self, plausible, trends, visitors, last_visitors, tension, reason_txt):
+    def _compose(self, plausible, trends, visitors, last_visitors, tension, reason_txt, context=None):
         today = datetime.now().strftime("%Y-%m-%d")
         # 1. Probeer LLM-redenering
         prompt = (
@@ -106,8 +136,10 @@ class FieldNoteSkill(Skill):
             "(2) What this means for mission-driven growth — grounded in the numbers from point 1.\n"
             "(3) The most important action for tomorrow."
         )
-        # Grounding-call: de Field Note is de stem van de rol die hem schrijft, dus zijn
-        # persona mag het model kiezen.
+        # Grounding-call: de Field Note is de stem van de rol die hem schrijft, dus zijn persona mag
+        # het model kiezen. `context` komt sinds scope 57 als parameter mee: hiervoor verwees deze
+        # regel naar een naam die hier niet bestond (NameError, stil gevangen), dus de ladder-keuze
+        # draaide nooit en de note kwam altijd van de dorpsladder.
         _ladder = None
         try:
             from nooch_village.llm_keuze import llm_voorkeur

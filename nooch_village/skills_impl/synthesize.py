@@ -6,16 +6,24 @@ ontstaat als je twee losse inzichten naast elkaar legt. Fail-closed: zonder LLM 
 from __future__ import annotations
 import logging
 from nooch_village.skills import Skill
+from nooch_village.llm_keuze import skill_ladder
 
 log = logging.getLogger(__name__)
 
 
 class SynthesizeCardsSkill(Skill):
+    """NIET geregistreerd in de registry: alleen bereikbaar via `village synthesize` (CLI →
+    synthesist.synthesize_once). Een dorpsrol plant hem dus nooit; de metadata hieronder staat er
+    zodat hij, mocht hij ooit geregistreerd worden, de guards (cost, payload-declaratie) haalt."""
     name = "synthesize_cards"
-    cost = "llm"
+    cost = "free"                  # begrensde LLM-tokenkost; "llm" was geen geldige cost-waarde
     side_effect_free = True
     description = ("Legt een creatieve, niet-voor-de-hand-liggende verbinding tussen twee "
                   "kennis-kaartjes en formuleert de emergente hypothese (geen samenvatting).")
+    input_schema = ("card_a: str (required — the text of the first card); "
+                    "card_b: str (required — the text of the second card)")
+    required_payload = ("card_a", "card_b")
+    output_schema = "synthese: str, waarom: str | error: str"
 
     def run(self, payload: dict, context) -> dict:
         from nooch_village.llm import reason
@@ -37,7 +45,7 @@ class SynthesizeCardsSkill(Skill):
             "WAAROM: <één zin: waarom dit voor Nooch relevant is>"
         )
         out = reason(prompt, call_site="skill_synthesize",
-                     ladder=_hoog_inzet_ladder("skill_synthesize"))
+                     ladder=skill_ladder("skill_synthesize"))
         if not out:
             return {"error": "geen LLM beschikbaar (fail-closed)"}
         synthese, waarom = "", ""
@@ -52,17 +60,3 @@ class SynthesizeCardsSkill(Skill):
             return {"error": "onverstaanbaar antwoord (fail-closed)"}
         return {"synthese": synthese[:240], "waarom": waarom[:240]}
 
-
-def _hoog_inzet_ladder(call_site: str):
-    """De dorpsbrede hoog-inzet-ladder voor deze call-site.
-
-    Bewust ZONDER persona-override: een skill kent zijn rol niet (de context die hij krijgt draagt
-    geen role_id), dus die keuze is hier niet te maken. De persona-override werkt wél op de
-    rol-gebonden sites (plan_checklist, einddocument, noochie_weigh_in) via `_persona_ladder`.
-
-    Fail-soft: gaat de keuze stuk, dan de dorpsladder — een ladder mag een call nooit blokkeren."""
-    try:
-        from nooch_village.llm_keuze import ladder_voor
-        return ladder_voor(call_site)
-    except Exception:                                # noqa: BLE001
-        return None

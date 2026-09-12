@@ -206,28 +206,31 @@ def _missie(document: str) -> tuple[bool, str]:
 # draagt het rapport aan, dus dat telt mee) versus wat het als onderzoeksobject aanhaalt. Een
 # conclusie die de onderbouwing niet dekt zakt nog steeds, ook als die conclusie luidt dat iets
 # niet deugt. Anders zou "beoordeel de eigen conclusie" een vrijbrief worden.
+#
+# Engels sinds scope 57, samen met de prompt van de tegenspraak-skill waar dit kader in wordt
+# geplakt: een Engelse prompt met een Nederlands kader erin is precies de mengtaal die het model
+# laat doorschieten. De regels zelf zijn onveranderd (zie de tests: elke regel heeft zijn ijkzin).
 _KADER = (
-    "Je toetst een RAPPORT. Onderscheid twee soorten tekst erin:\n"
-    "(a) wat het rapport ZELF beweert of aandraagt — de conclusies, aanbevelingen, cijfers en "
-    "oordelen, en ook copy of formuleringen die het rapport voorstelt om te gaan gebruiken;\n"
-    "(b) materiaal dat het rapport als ONDERZOEKSOBJECT aanhaalt — een claim die het toetst, een "
-    "bron die het beoordeelt, een uitspraak die het bespreekt.\n"
-    "Toets uitsluitend (a) tegen de onderbouwing. Dat materiaal uit (b) ongegrond blijkt is een "
-    "BEVINDING van het rapport, geen gebrek eraan: reken die niet als ongegronde bewering.\n"
-    "Concludeert het rapport iets dat de onderbouwing niet dekt, dan is dat WEL ongegrond — ook "
-    "als het plausibel klinkt, en ook als de conclusie luidt dat iets niet deugt. De vraag blijft: "
-    "dekt wat de skills ophaalden het oordeel dat het rapport velt?\n"
-    "AFWEZIGHEID VAN BEWIJS IS GEEN BEWERING. Schrijft het stuk dat het iets NIET heeft kunnen "
-    "vaststellen, dat een bron niets opleverde, of dat een gegeven ontbreekt en van iemand anders "
-    "moet komen — dan is dat een eerlijke niet-bevinding, gegrond in het simpele feit dat geen "
-    "deliverable het opleverde. Reken dat NIET als ongegronde claim, en vraag er geen bewijs voor: "
-    "'ik kon X niet vaststellen' is iets anders dan 'X bestaat niet'. Alleen als het stuk de "
-    "afwezigheid omzet in een STELLIGE uitspraak over de wereld ('er bestaat geen X', 'niemand "
-    "gebruikt X') heb je een bewering die onderbouwing nodig heeft.\n"
-    "De lijst 'ongegrond' is ALLEEN voor beweringen die de onderbouwing niet dekt. Een opmerking "
-    "over vorm, stijl, volgorde of een nuance die je wilt toevoegen hoort NIET in die lijst — zet "
-    "die in 'revisie'. Constateer je dat iets juist wél klopt met de onderbouwing, noem het dan "
-    "niet ongegrond."
+    "You are reviewing a REPORT. Distinguish two kinds of text in it:\n"
+    "(a) what the report ITSELF asserts or puts forward — its conclusions, recommendations, figures "
+    "and judgements, and also copy or wording the report proposes to start using;\n"
+    "(b) material the report cites as its OBJECT OF STUDY — a claim it tests, a source it assesses, "
+    "a statement it discusses.\n"
+    "Test only (a) against the evidence. That material from (b) turns out unsupported is a FINDING "
+    "of the report, not a flaw in it: do not count it as an unsupported statement.\n"
+    "If the report concludes something the evidence does not cover, that IS unsupported — even if it "
+    "sounds plausible, and even if the conclusion is that something is not sound. The question "
+    "remains: does what the skills retrieved cover the judgement the report makes?\n"
+    "ABSENCE OF EVIDENCE IS NOT A CLAIM. If the piece writes that it could NOT establish something, "
+    "that a source yielded nothing, or that a datum is missing and must come from someone else — "
+    "that is an honest non-finding, grounded in the simple fact that no deliverable produced it. Do "
+    "NOT count it as an unsupported claim, and do not ask for evidence of it: 'I could not establish "
+    "X' is different from 'X does not exist'. Only when the piece turns the absence into a FIRM "
+    "statement about the world ('there is no X', 'nobody uses X') do you have a claim that needs "
+    "support.\n"
+    "The 'unsupported' list is ONLY for statements the evidence does not cover. A remark about form, "
+    "style, order, or a nuance you would like to add does NOT belong in that list — put it in "
+    "'revision'. If you find that something does agree with the evidence, do not call it unsupported."
 )
 
 
@@ -271,17 +274,20 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
     ongegrond = [str(x) for x in (uit.get("ongegrond") or []) if str(x).strip()]
     if ongegrond:
         return False, ("niet gegrond in de deliverables: " + "; ".join(ongegrond[:3])[:400])
-    if str(uit.get("oordeel") or "").strip().lower() == "moet bij":
-        # ...maar alleen als er ook écht iets ongegronds is. Een 'moet bij' met een LEGE
+    # De oordeelwaarde is Engels sinds scope 57 ('needs revision'); 'moet bij' blijft herkend als
+    # overgangs-tolerantie (prompt en parser horen bij elkaar — zie test_i18n_prompt_grens).
+    if str(uit.get("oordeel") or "").strip().lower() in ("needs revision", "moet bij"):
+        # ...maar alleen als er ook écht iets ongegronds is. Een 'needs revision' met een LEGE
         # ongegrond-lijst is een verbetersuggestie ("voeg een zin toe die…"), geen grondingsfout, en
         # daarop degraderen straft een volledig gegrond voorstel voor een stilistische wens.
         # Gemeten: 549f8e98404f zakte hierop terwijl de lijst leeg was.
         revisie = str(uit.get("revisie") or "")[:200]
-        log.info("grondings-toets: 'moet bij' zonder ongegronde bewering — telt als gegrond, "
+        log.info("grondings-toets: 'needs revision' zonder ongegronde bewering — telt als gegrond, "
                  "de suggestie reist mee: %s", revisie[:120])
         return True, (f"gegrond; de toets suggereert nog wel: {revisie}" if revisie
                       else "gegrond (de toets had een verbetersuggestie zonder ongegronde bewering)")
-    return True, str(uit.get("samenvatting") or "houdt stand")
+    # `text` is de leeswijzer van de skill (het oordeel voorop); `samenvatting` de oude naam.
+    return True, str(uit.get("text") or uit.get("samenvatting") or "holds")
 
 
 # ── Hulpjes ──────────────────────────────────────────────────────────────────────────────────

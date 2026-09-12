@@ -33,9 +33,10 @@ def _make(tmp_path, draft_result=None):
     notes.add(Insight(id="b", claim="barefoot is gezond", source="t",
                       word="barefoot health", grounding_count=1, links_to=["trend"]))
     registry = SkillRegistry()
+    # Sinds scope 57 geeft de skill de ids als run-administratie terug (`_claim_insight_ids`).
     registry.register(_Stub("content_schrijven",
         draft_result if draft_result is not None
-        else {"text": "EERSTE DRAFT", "claim_insight_ids": ["trend", "b"], "kind": "blog"}))
+        else {"text": "EERSTE DRAFT", "_claim_insight_ids": ["trend", "b"], "_kind": "blog"}))
     ctx = SimpleNamespace(settings={"content_budget": "2", "reflect_interval_seconds": "0"},
                           data_dir=str(tmp_path), records=None, notes=notes)
     record = Record(id="content_strategist", type=RecordType.ROLE, parent="noochville",
@@ -66,7 +67,7 @@ def test_goedgekeurde_suggestie_levert_draft(tmp_path):
 
 
 def test_geen_draft_zonder_tekst(tmp_path):
-    cs, bus = _make(tmp_path, draft_result={"text": None, "claim_insight_ids": [], "kind": "blog"})
+    cs, bus = _make(tmp_path, draft_result={"error": "no draft: the model gave no answer"})
     drafts = []
     bus.subscribe("content_draft_ready", lambda e: drafts.append(dict(e.data)))
     cs._on_suggestion_approved(Event("content_suggestion_approved",

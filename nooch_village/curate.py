@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 import re
 
-from nooch_village.llm import reason
-
 _VALID_EVIDENCE = {"measured", "reported", "claimed", "certified", "peer_reviewed"}
 
 
@@ -82,15 +80,50 @@ def finalize_card(d: dict, source: str, source_date: str) -> dict:
     }
 
 
+# Antwoordbudget: meerdere kaarten mét grounds en links in één JSON-array. De default (700) kapte
+# de array bij drie, vier kaarten af, waarna `parse_cards` niets vond en de run 'leeg' las
+# (skill-review 12-09-2026: "8 runs, 8 leeg"). json_mode dwingt bij Gemini/Mistral de vorm af.
+_MAX_TOKENS = 2000
+
+
+def curate_uitkomst(fuzzy: str, *, source: str, source_date: str,
+                    existing_ids: list[str] | None = None, reason_fn=None) -> dict:
+    """Fuzzy input → {cards} met drie eerlijke uitkomsten in plaats van één lege lijst.
+
+    - `{"error": …, "cards": []}`      — het model gaf niets, of iets dat geen JSON-array is
+                                          (de bron faalde: een item hoort open te blijven);
+    - `{"no_data": True, "reason": …}`  — het model gaf kaarten, maar geen enkele was compleet
+                                          (onderzocht, niets bruikbaars: afvinken met leeg-markering);
+    - `{"cards": [...]}`               — gelukt.
+
+    Roept de LLM aan (reason_fn, default llm.reason), parseert, valideert en finaliseert. Een
+    geïnjecteerde `reason_fn` krijgt alleen de prompt (tests); de default krijgt budget en json_mode."""
+    import functools
+    from nooch_village.llm import reason      # lazy, zoals elke skill: patchbaar via nooch_village.llm
+    rf = reason_fn or functools.partial(reason, call_site="curate_cards", max_tokens=_MAX_TOKENS,
+                                        json_mode=True)
+    out = rf(build_curate_prompt(fuzzy, existing_ids))
+    if not out or not str(out).strip():
+        return {"error": "no answer from the model — nothing curated (fail-closed)", "cards": []}
+    ruw = parse_cards(out)
+    if not ruw:
+        return {"error": (f"the model's answer ({len(str(out))} chars) is not a JSON array of cards "
+                          f"(truncated or prose?) — nothing curated"), "cards": []}
+    cards = [finalize_card(d, source, source_date) for d in ruw if validate_card(d)]
+    if not cards:
+        return {"no_data": True, "cards": [],
+                "reason": (f"{len(ruw)} card(s) proposed, none complete — a card needs a slug id, "
+                           f"one claim and grounds")}
+    return {"cards": cards}
+
+
 def curate(fuzzy: str, *, source: str, source_date: str,
            existing_ids: list[str] | None = None, reason_fn=None) -> list[dict]:
     """Fuzzy input → lijst goedgevormde kaart-dicts (Engels, atomair, compleet).
 
-    Roept de LLM aan (reason_fn, default llm.reason), parseert, valideert en finaliseert.
-    Fail-closed op elke stap: geen LLM/onparseerbaar/ongeldig → die kaartjes vervallen.
+    De lijst-vorm voor aanroepers die alleen de kaarten willen; de drie oorzaken van een lege lijst
+    staan in `curate_uitkomst`. Fail-closed op elke stap: geen LLM/onparseerbaar/ongeldig → die
+    kaartjes vervallen.
     """
-    import functools
-    rf = reason_fn or functools.partial(reason, call_site="curate_cards")
-    out = rf(build_curate_prompt(fuzzy, existing_ids))
-    cards = parse_cards(out)
-    return [finalize_card(d, source, source_date) for d in cards if validate_card(d)]
+    return curate_uitkomst(fuzzy, source=source, source_date=source_date,
+                           existing_ids=existing_ids, reason_fn=reason_fn)["cards"]

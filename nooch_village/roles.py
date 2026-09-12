@@ -955,7 +955,10 @@ class Librarian(Inhabitant):
         })
         cards = res.get("cards", [])
         if not cards:
-            self.log.info("🗂️ curate: geen geldige kaartjes uit input van %s", source)
+            # Drie oorzaken, drie meldingen (scope 57): geen model / geen JSON is een `error`,
+            # geen complete kaart een `no_data` met reden. Voorheen las alles als "geen geldige".
+            self.log.info("🗂️ curate: geen kaartjes uit input van %s — %s", source,
+                          res.get("error") or res.get("reason") or "geen geldige kaartjes")
             return
         from nooch_village.ingest import ingest_insights
         r = ingest_insights(self.context.notes, cards)
@@ -2315,6 +2318,11 @@ class Noochie(Inhabitant):
         if "error" in result:
             self.log.warning("⚠️ bulletin niet geschreven: %s", result["error"])
             return
+        if result.get("no_data"):
+            # Een dag zonder events (in de praktijk: een herstart halverwege de dag, want
+            # `dag_begint` wordt altijd verzameld) — de skill schrijft dan bewust niets (scope 57).
+            self.log.info("📋 geen bulletin: %s", result.get("reason", "geen events"))
+            return
 
         self.bus.publish(Event("bulletin_geschreven",
                                {"path": result["path"], "by": self.id,
@@ -2379,7 +2387,9 @@ class ContentStrategist(Inhabitant):
             "seed_id":           seed_id,
             "kind":              kind,
             "text":              text,
-            "claim_insight_ids": res.get("claim_insight_ids", []),
+            # Sinds scope 57 run-administratie van de skill (`_`-prefix: de wall leest het niet,
+            # de claim-poort wel); het event houdt zijn eigen naam, die leest de inbox.
+            "claim_insight_ids": res.get("_claim_insight_ids") or [],
             "by":                self.id,
         }, self.id))
         self.log.info("✍️ draft klaar voor '%s' (%s)", seed_id, kind)

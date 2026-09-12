@@ -888,6 +888,9 @@ class Inhabitant(threading.Thread):
         self._claim_run_complete(pid)
 
     _PREP_CHECKLIST_TITLE = PREP_CHECKLIST_TITLE          # gedeelde bron (nooch_village.projects)
+    # Zekering op de rol-roster in de planner-prompt (zie `_plan_checklist`): geen keuze-cap maar
+    # een grens tegen een records-store die uit zijn voegen groeit. 29 rollen live; 60 = ruim.
+    _ROSTER_MAX = 60
 
     @staticmethod
     def _extract_json(text):
@@ -1249,11 +1252,22 @@ class Inhabitant(threading.Thread):
         for it in plan["items"]:
             skill = it.get("skill")
             payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
-            ok = True
-            if skill and self._missing_required(skill, payload or {}):
-                ok = False
+            ok, reden = True, it.get("reason", "")
+            if skill:
+                # DEZELFDE TWEE POORTEN ALS HET EERSTE PLAN (scope 57). Dit pad keek alleen naar
+                # `_missing_required`; `_payload_issues` (validate_payload: bestaat de rol, de
+                # query-set, de enum-waarde?) werd overgeslagen. Een verzonnen ontvanger in de
+                # tweede uitvoerlijst werd dus pas live geweigerd — precies de fout die de poort
+                # op de eerste lijst al tegenhield. Zelfde redenvorm als in `prepare_project`.
+                missing = self._missing_required(skill, payload or {})
+                if missing:
+                    ok, reden = False, f"payload onvolledig: {', '.join(missing)} ontbreekt"
+                else:
+                    issues = self._payload_issues(skill, payload or {})
+                    if issues:
+                        ok, reden = False, "; ".join(issues)
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
-                             payload_ok=ok, reason=it.get("reason", ""))
+                             payload_ok=ok, reason=reden)
         # De mens-zoekstap hoort ook op déze lijst, als hij er nog nergens op het project staat: een
         # eerste plan dat alleen uit de strategie-skill bestond had nog geen zoekterm, en dus geen
         # queries voor de mens. Nu wel. Zelfde vorm als in prepare_project (scope 50c).
@@ -1410,21 +1424,29 @@ class Inhabitant(threading.Thread):
         roster_section = ""
         if "projectverzoek" in skills:
             try:
-                from nooch_village import org as _org
+                # DEZELFDE ROSTER ALS DE ESCALATIE-ROUTER (reference, don't copy): niet gearchiveerd,
+                # niet slapend, geen cirkel, niet ikzelf. Een slapende rol stond hier wél en bij de
+                # router niet — werk erheen sturen laat het verdwijnen bij iemand die niet draait.
+                #
+                # GEEN CAP VAN 18 MEER (skill-review 12-09-2026). Live stonden er 29 rollen; de
+                # copywriter was #26 en compliance #29, dus de planner zag ze nooit en verzon ids
+                # ('mother_earth__nooch__copywriter', 7×) die de poort daarna weigerde — het werk
+                # kwam nergens aan. Alle rollen tonen kost ~30 regels van ≤ ~260 tekens (id + twee
+                # ingekorte accountabilities), ruim binnen wat de skill-catalogus in dezelfde prompt
+                # al is. `_ROSTER_MAX` is alleen een zekering tegen een op hol geslagen records-store.
+                from nooch_village.escalation_router import roster as _roster
                 recs = getattr(self.context, "records", None)
                 lijnen = []
-                for r in (recs.all() if recs is not None else []):
-                    if getattr(r, "archived", False) or r.id == self.id or _org.is_circle(r):
-                        continue
-                    d = getattr(r, "definition", None)
-                    accs = list(getattr(d, "accountabilities", []) or [])[:2] if d else []
-                    lijnen.append(f"- {r.id}: {', '.join(accs) or (getattr(d, 'purpose', '') or '')[:70]}")
+                for r in _roster(recs, exclude={self.id}):
+                    accs = [str(a)[:110] for a in (r.get("accountabilities") or [])[:2]]
+                    lijnen.append(f"- {r['id']}: {', '.join(accs) or (r.get('purpose') or '')[:70]}")
                 if lijnen:
                     roster_section = (
                         "OTHER ROLES (for 'projectverzoek'): does a sub-item clearly belong to one of "
                         "these roles and can none of your skills do it? Then use skill 'projectverzoek' with "
                         'payload {"naar_rol":"<role id below>","titel":"...","done_criterium":"..."} instead of '
-                        "skill=null — that keeps the project from dying.\n" + "\n".join(lijnen[:18]) + "\n\n")
+                        "skill=null — that keeps the project from dying.\n"
+                        + "\n".join(lijnen[:self._ROSTER_MAX]) + "\n\n")
             except Exception:
                 roster_section = ""
         prompt = (
@@ -1800,10 +1822,31 @@ class Inhabitant(threading.Thread):
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
                 payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
+            # RUN-CONTEXT NAAST DE PAYLOAD (scope 57). Een skill die iets buiten het project neerlegt
+            # — escaleer zet een notificatie, projectverzoek een project op een ander bord — moet
+            # kunnen terugwijzen naar dít project. De `_`-prefix zegt: administratie, geen inhoud
+            # (zelfde conventie als in de resultaten). Zonder dit droeg de beslissings-notificatie
+            # geen project_id, en maakte de tensie-poort er een nieuw rol-project van dat opnieuw
+            # een escaleer-item plande (skill-review 12-09-2026: 8 van zulke lussen live).
+            payload = {**payload, "_project_id": pid}
             result, used_source = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
             # label toont een reroute: 'google_patents (fallback voor epo_patents)'. Zonder ladder = de skill zelf.
             src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
+            if status == "gelukt" and self._wacht_op_mens(result):
+                # EEN BESLISSING IS GEEN AFGEROND ITEM. De skill draaide goed (de vraag ligt bij een
+                # mens), maar het werk is pas af als die mens antwoordt. Afvinken zou het project
+                # naar review duwen met een onbeantwoorde vraag als 'uitkomst' — precies wat live
+                # gebeurde (20 beslissingen, alle 20 afgevinkt). Het item wordt een mens-taak: het
+                # telt niet mee in de klaar-telling, blijft zichtbaar open, wordt morgen niet
+                # opnieuw gedraaid (geen tweede notificatie), en `not_answered_note` noemt de vraag
+                # bij de review. De vraag zelf staat op de wall, niet het woord 'beslissing'.
+                vraag = str(result.get("text") or result.get("reden") or "").strip()
+                ledger.add_role_message(pid, f"⤴ '{item.get('text', '')}' via {src_label}: {vraag}")
+                ledger.set_item_human(pid, clid, item["id"], reden=vraag)
+                self.log.info("⤴ project '%s': item '%s' via %s wacht op een mens: %s", pid,
+                              item.get("text", "")[:40], src_label, vraag[:80])
+                continue
             if status == "gelukt":
                 # EERST LEZEN, DAN PAS RENDEREN. Het extract per gelezen pagina komt in het
                 # resultaat zelf, zodat de note, de conclusie én het verslag hetzelfde lezen. Zonder
@@ -2424,6 +2467,15 @@ class Inhabitant(threading.Thread):
         if beste is None:
             return "leeg", None                           # niets substantieels → eerlijk leeg
         return "gelukt", beste
+
+    @classmethod
+    def _wacht_op_mens(cls, result) -> bool:
+        """Zegt dit (geslaagde) resultaat dat het antwoord van een MENS moet komen? Twee signalen:
+        het expliciete `wacht_op_mens` (de afspraak sinds scope 57) en de escaleer-aard 'beslissing'
+        (de oude vorm, zodat een skill-versie zonder de vlag hetzelfde leest)."""
+        if not isinstance(result, dict):
+            return False
+        return bool(result.get("wacht_op_mens")) or result.get("aard") == "beslissing"
 
     @classmethod
     def _foutreden(cls, result) -> str:

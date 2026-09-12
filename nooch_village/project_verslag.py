@@ -157,8 +157,11 @@ _ADRESVELDEN = ("url", "link", "permalink", "doi", "domein", "domain", "publicat
 # de vorm van een beoordeling (scope 51): het zinnetje van de pagina dat het oordeel draagt.
 # `evidence`/`waarom` (skill-review 12-09-2026): het citaat van claim_evidence en het waarom van een
 # claims-bevinding zijn strekking; zonder deze namen toonde het verslag alleen de merknaam.
+# `claim` (scope 57): de bevinding van tegenspraak ({label, claim}) en een kaart van weten_we_dit_al
+# ({id, claim}) hebben geen ander strekking-veld; zonder deze naam kwam zo'n record als JSON-dump in
+# het verslag. Achteraan, zodat een record mét evidence/citaat dat blijft tonen.
 _STREKKINGVELDEN = ("extract", "abstract", "tldr", "summary", "samenvatting", "fragment", "snippet",
-                    "citaat", "evidence", "waarom", "tekst", "text")
+                    "citaat", "evidence", "waarom", "tekst", "text", "claim")
 # Wat een resultaat ZONDER records nog kan zeggen: de tekst die de skill zelf schreef. Dezelfde
 # voorkeur als de note (Inhabitant._classify_result kiest de langste tekst); hier expliciet, zodat
 # een voorstel, een oordeel of een conclusie in het verslag komt als tekst en niet als JSON-dump.

@@ -10,15 +10,21 @@ geen voorstel (de mens moet niet op een verzonnen plan kunnen afgaan).
 from __future__ import annotations
 
 from nooch_village.skills import Skill
+from nooch_village.llm_keuze import skill_ladder
 
 
 class VoorstelSchrijvenSkill(Skill):
     name = "voorstel_schrijven"
-    description = ("Werk een vage spanning uit tot een concreet voorstel (scope, aanpak, "
-                   "afweging) dat de mens kan beoordelen.")
+    description = ("Turn a vague tension into a concrete proposal the founder can judge: SCOPE, "
+                   "APPROACH and TRADE-OFF in three lines, grounded in the constitution, the "
+                   "Chronicle and earlier projects. Fail-closed: no model, no proposal.")
     cost = "free"            # begrensde LLM-tokenkost, zoals bulletin_schrijven
     side_effect_free = True  # leest + geeft terug; schrijft zelf niets
-    input_schema = "tension: str (verplicht), role: str, gap_key: str"
+    input_schema = ("tension: str (required — the felt tension or gap, in one to three sentences); "
+                    "role: str (optional — the role that felt it); gap_key: str (optional)")
+    # Stond leeg terwijl het schema 'verplicht' zei: een lege tension werd pas live een ⚠️ op de
+    # wall. Nu houdt de poort het item bij het plannen open (scope 57).
+    required_payload = ("tension",)
     output_schema = "ok: bool, voorstel: str | error: str"
 
     def run(self, payload: dict, context=None) -> dict:
@@ -54,22 +60,8 @@ class VoorstelSchrijvenSkill(Skill):
             "above, do not re-investigate what THE CHRONICLE already confirms, and do not present a "
             "knowledge gap as a finding. No extra text."
         )
-        out = reason(prompt, call_site="skill_voorstel", ladder=_hoog_inzet_ladder("skill_voorstel"))
+        out = reason(prompt, call_site="skill_voorstel", ladder=skill_ladder("skill_voorstel"))
         if not out or not out.strip():
             return {"ok": False, "error": "geen LLM beschikbaar — geen voorstel (fail-closed)"}
         return {"ok": True, "voorstel": out.strip(), "by": "noochie"}
 
-
-def _hoog_inzet_ladder(call_site: str):
-    """De dorpsbrede hoog-inzet-ladder voor deze call-site.
-
-    Bewust ZONDER persona-override: een skill kent zijn rol niet (de context die hij krijgt draagt
-    geen role_id), dus die keuze is hier niet te maken. De persona-override werkt wél op de
-    rol-gebonden sites (plan_checklist, einddocument, noochie_weigh_in) via `_persona_ladder`.
-
-    Fail-soft: gaat de keuze stuk, dan de dorpsladder — een ladder mag een call nooit blokkeren."""
-    try:
-        from nooch_village.llm_keuze import ladder_voor
-        return ladder_voor(call_site)
-    except Exception:                                # noqa: BLE001
-        return None

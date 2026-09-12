@@ -231,8 +231,11 @@ def test_moet_het_toch_afgekapt_dan_staat_dat_in_de_prompt(caplog):
 def test_de_ongegrond_lijst_is_alleen_voor_ongegronde_beweringen():
     """De critic zette er ook vorm-gebreken en nuances in ("dit klopt met de onderbouwing, maar…"),
     waardoor de grond-as zakte op iets dat geen grondingsprobleem is."""
-    assert "ALLEEN voor beweringen die de onderbouwing niet dekt" in mc._KADER
-    assert "zet die in 'revisie'" in mc._KADER.replace("\n", " ")
+    # Scope 57: het kader is naar het Engels vertaald (tegenspraak-prompt/oordeelwaarden consistent
+    # met de rest van de inhoudslaag) — zelfde bewering, andere taal.
+    kader = mc._KADER.replace("\n", " ")
+    assert "'unsupported' list is ONLY for statements the evidence does not cover" in kader
+    assert "put it in 'revision'" in kader
 
 
 # ── 7. Een herschrijving leest zijn eigen proza niet ────────────────────────

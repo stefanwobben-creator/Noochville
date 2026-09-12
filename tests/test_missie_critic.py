@@ -162,16 +162,17 @@ def test_de_critic_toetst_het_rapport_niet_het_onderzochte_materiaal():
 
     mc._gegrond("doc", ["d1"], {}, skill=_Vangt())
     kader = gezien["kader"]
-    assert "ONDERZOEKSOBJECT" in kader and "BEVINDING van het rapport" in kader
+    # Kader Engels sinds scope 57 (samen met de prompt van tegenspraak; regels ongewijzigd).
+    assert "OBJECT OF STUDY" in kader and "FINDING of the report" in kader
 
 
 def test_het_kader_houdt_de_andere_kant_ook_dicht():
     """De regel mag geen vrijbrief worden. "Beoordeel de eigen conclusie" zonder de tegenhanger zou
     élke conclusie gegrond maken; en voorgestelde copy is iets dat het rapport AANDRAAGT, geen
     aangehaald materiaal — anders glipt een content-rapport met een overdreven kopregel erdoor."""
-    assert "dekt wat de skills ophaalden het oordeel dat het rapport velt" in mc._KADER
-    assert "ook als de conclusie luidt dat iets niet deugt" in mc._KADER
-    assert "copy of formuleringen die het rapport voorstelt" in mc._KADER
+    assert "does what the skills retrieved cover the judgement the report makes" in mc._KADER
+    assert "even if the conclusion is that something is not sound" in mc._KADER
+    assert "copy or wording the report proposes" in mc._KADER
 
 
 @pytest.mark.parametrize("soort,ongegrond", [
@@ -216,8 +217,8 @@ def test_losse_tegenspraak_aanroepen_veranderen_niet():
     with patch(_REASON, _vang):
         TegenspraakSkill().run({"tekst": "een deliverable"}, None)
         TegenspraakSkill().run({"tekst": "een deliverable", "kader": "TOETS ZO"}, None)
-    assert "KADER VOOR DEZE TOETS" not in prompts[0]
-    assert "KADER VOOR DEZE TOETS:\nTOETS ZO" in prompts[1]
+    assert "FRAME FOR THIS REVIEW" not in prompts[0]
+    assert "FRAME FOR THIS REVIEW:\nTOETS ZO" in prompts[1]
 
 
 def test_gegrond_zonder_llm_is_onbekend_niet_afgekeurd():
@@ -477,11 +478,11 @@ def test_afwezigheid_van_bewijs_is_geen_bewering():
     """De critic las "ik kon X niet vaststellen" als "X bestaat niet" en eiste daar bewijs voor.
     Gemeten: 7 van de 7 runs op hetzelfde voorstel wezen af op precies die zin, in de actie —
     dus elk bescheiden, eerlijk voorstel degradeerde. Afwezigheid van bewijs is geen bewering."""
-    assert "AFWEZIGHEID VAN BEWIJS IS GEEN BEWERING" in mc._KADER
-    assert "is iets anders dan" in mc._KADER
+    assert "ABSENCE OF EVIDENCE IS NOT A CLAIM" in mc._KADER
+    assert "is different from" in mc._KADER
     # ...maar de omzetting naar een stellige uitspraak blijft wél een bewering:
-    assert "STELLIGE uitspraak over de wereld" in mc._KADER
-    assert "er bestaat geen X" in mc._KADER
+    assert "FIRM statement about the world" in mc._KADER
+    assert "there is no X" in mc._KADER
 
 
 def test_moet_bij_zonder_ongegronde_bewering_degradeert_niet():

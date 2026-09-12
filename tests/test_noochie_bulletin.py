@@ -92,14 +92,21 @@ def test_noochie_writes_bulletin_on_dag_eindigt(tmp_path):
 
 
 def test_noochie_handles_empty_run(tmp_path):
+    """Scope 57: een dag ZONDER events schrijft geen bulletin meer. Deze test legde het oude
+    gedrag vast ("lege dag → bulletin toch geschreven"), en precies dat gedrag overschreef live het
+    echte dagbestand zodra een planner de skill met lege events aanriep. In productie is een lege
+    dag bovendien onmogelijk (`dag_begint` wordt altijd verzameld); een lege lijst is een aanroep
+    zonder dag. Geen crash, geen bestand, geen `bulletin_geschreven`-event."""
     noochie, bus = _make_noochie(tmp_path)
+    events = []
+    bus.subscribe("bulletin_geschreven", lambda e: events.append(e))
 
-    with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN):
+    with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock_llm:
         noochie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))
 
     bulletins_dir = Path(tmp_path) / "bulletins"
-    files = list(bulletins_dir.iterdir())
-    assert len(files) == 1
+    assert not bulletins_dir.exists() or list(bulletins_dir.iterdir()) == []
+    assert not mock_llm.called and events == []
 
 
 def test_noochie_handles_llm_failure(tmp_path, caplog):

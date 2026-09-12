@@ -97,7 +97,10 @@ def test_b_kw_payload_juist_doorgegeven(tmp_path, ledger):
     pid = ledger.create("rol", "doel", "human", status="running")
     _prep(ledger, pid, [("volumes", "keywords_everywhere", {"kw": ["barefoot shoes"]})])
     inh._execute_checklist(ledger.get(pid), TODAY)
-    assert kw.last == {"kw": ["barefoot shoes"]}                                  # geen {term}!
+    # `_project_id` reist sinds scope 57 als run-context mee (escaleer/projectverzoek lezen hem
+    # terug); geen skill vraagt erom, dus die sleutel eruit vóór de gelijkheid, niet de sleutel zelf.
+    assert {k: v for k, v in kw.last.items() if k != "_project_id"} == {"kw": ["barefoot shoes"]}
+    assert "_project_id" in kw.last                                              # wél meegegeven
     assert inh._project_checklist(ledger.get(pid))["items"][0]["done"] is True    # afgevinkt
 
 
@@ -108,7 +111,7 @@ def test_c_brands_payload_juist_doorgegeven(tmp_path, ledger):
     pid = ledger.create("rol", "doel", "human", status="running")
     _prep(ledger, pid, [("concurrenten", "competitor_discover", {"brands": ["Nooch"], "limit": 4})])
     inh._execute_checklist(ledger.get(pid), TODAY)
-    assert br.last == {"brands": ["Nooch"], "limit": 4}
+    assert {k: v for k, v in br.last.items() if k != "_project_id"} == {"brands": ["Nooch"], "limit": 4}
     log = " ".join(e["text"] for e in ledger.get(pid).get("log", []))
     assert "Vivobarefoot" in log                                                 # note met echt resultaat
 
