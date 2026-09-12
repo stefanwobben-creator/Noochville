@@ -26,6 +26,19 @@ def strip_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _controleer(resp, bron: str) -> None:
+    """In plaats van `resp.raise_for_status()`: die zet de volledige URL — mét `api_key=…` — in de
+    foutmelding, en zes aanroepers schreven `str(exc)` door naar wall, store en log (skill-review
+    12-09-2026). De melding hier draagt status, reden en het begin van de body, en geen URL."""
+    try:
+        status = int(getattr(resp, "status_code", 200))
+    except (TypeError, ValueError):
+        status = 200                                      # een stub zonder statuscode: niets te melden
+    if status >= 400:
+        from nooch_village.sleutelmasker import http_fout
+        raise RuntimeError(http_fout(resp, bron))
+
+
 def serpapi_search(query: str, key: str, *, num: int = 10, gl: str = "", hl: str = "") -> list[dict]:
     """Google-organic via SerpAPI → [{title, link, snippet}] met échte URLs (geen redirects).
 
@@ -43,7 +56,7 @@ def serpapi_search(query: str, key: str, *, num: int = 10, gl: str = "", hl: str
     if hl:
         params["hl"] = hl
     resp = requests.get(_ENDPOINT, params=params, timeout=20)
-    resp.raise_for_status()
+    _controleer(resp, "SerpAPI")
     data = resp.json()
     out = []
     for item in data.get("organic_results", []):
@@ -148,10 +161,11 @@ def serpapi_news(query: str, key: str, *, num: int = 10) -> list[dict]:
     params = {"engine": "google_news", "q": query, "api_key": key}
     try:
         resp = requests.get(_ENDPOINT, params=params, timeout=20)
-        resp.raise_for_status()
+        _controleer(resp, "SerpAPI news")
         data = resp.json()
     except Exception as exc:
-        log.info("web_read: google_news faalde (%s): %s", query[:40], exc)
+        from nooch_village.sleutelmasker import masker
+        log.info("web_read: google_news faalde (%s): %s", query[:40], masker(exc))
         return []
     out = []
     for item in data.get("news_results", []):

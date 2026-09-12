@@ -59,8 +59,9 @@ class LinkbuildingTargetsSkill(Skill):
         try:
             guides = web_read.serpapi_search(query, key, num=max(limit, 10))
         except Exception as exc:
-            log.warning("linkbuilding_targets: SerpAPI faalde: %s", exc)
-            return {"ok": False, "error": str(exc)}
+            from nooch_village.sleutelmasker import masker      # een ConnectionError draagt de URL mét api_key
+            log.warning("linkbuilding_targets: SerpAPI faalde: %s", masker(exc))
+            return {"ok": False, "error": masker(exc)}
 
         targets = []
         for g in guides[:limit]:

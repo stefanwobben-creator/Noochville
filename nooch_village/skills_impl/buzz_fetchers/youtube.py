@@ -53,7 +53,11 @@ class YouTubeFetcher(BuzzFetcher):
         import requests
         resp = requests.get(f"{_API}/{endpoint}", params=params,
                             headers={"User-Agent": UA}, timeout=20)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Niet `raise_for_status()`: die zet de URL mét `key=…` in de melding, en die melding
+            # ging via refuse(...) het log en de skill-uitkomst in (skill-review 12-09-2026).
+            from nooch_village.sleutelmasker import http_fout
+            raise RuntimeError(http_fout(resp, "YouTube Data API"))
         return resp.json() or {}
 
     def _spend(self, units: int) -> None:

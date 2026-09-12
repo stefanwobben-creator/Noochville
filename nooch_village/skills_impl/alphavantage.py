@@ -84,7 +84,8 @@ class AlphaVantageIndexSkill(DataSourceSkill):
         try:
             data = _fetch(symbol) if _fetch else self._get(symbol, key)
         except Exception as exc:
-            log.warning("AlphaVantage fetch faalde (%s): %s", symbol, exc)
+            from nooch_village.sleutelmasker import masker
+            log.warning("AlphaVantage fetch faalde (%s): %s", symbol, masker(exc))   # URL draagt apikey=
             return None
         if not isinstance(data, dict):
             return None

@@ -153,7 +153,8 @@ class ClaimEvidenceSkill(Skill):
         try:
             results = web_read.serpapi_search(f"{brand} {claim}", key, num=max(limit, 5))
         except Exception as exc:
-            log.info("claim_evidence: zoek faalde voor %s: %s", brand, exc)
+            from nooch_village.sleutelmasker import masker
+            log.info("claim_evidence: zoek faalde voor %s: %s", brand, masker(exc))
             return {**base, "status": "fout"}
 
         any_readable = False

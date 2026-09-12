@@ -112,8 +112,9 @@ class CompetitorDiscoverSkill(Skill):
         try:
             guides = self._serpapi_guides(context, query)
         except Exception as exc:
-            log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", exc)
-            return {"ok": False, "error": str(exc)}
+            from nooch_village.sleutelmasker import masker      # een ConnectionError draagt de URL mét api_key
+            log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", masker(exc))
+            return {"ok": False, "error": masker(exc)}
 
         from nooch_village.llm import reason
         seen, candidates = set(), []

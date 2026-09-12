@@ -244,8 +244,9 @@ class WebZoekSkill(Skill):
                                          hl=str(payload.get("taal") or "").strip()[:5])
                 return rauw, motor, fouten
             except Exception as exc:                      # noqa: BLE001 — nooit de puls breken
-                log.warning("web_zoek: %s faalde (%s): %s", motor, term[:60], exc)
-                fouten.append(f"{motor}: {type(exc).__name__}: {exc}")
+                from nooch_village.sleutelmasker import masker  # ConnectionError draagt de URL mét api_key
+                log.warning("web_zoek: %s faalde (%s): %s", motor, term[:60], masker(exc))
+                fouten.append(f"{motor}: {type(exc).__name__}: {masker(exc)}")
         return [], None, fouten
 
     def _roep(self, motor: str):

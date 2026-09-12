@@ -208,11 +208,12 @@ def test_inhoud_tekst_rendert_records_met_strekking_en_dekking():
     r["treffers"][0]["extract"] = "Kiilto Biomelt is a biodegradable hot melt for packaging."
     tekst = pv.inhoud_tekst(r)
     regels = tekst.splitlines()
-    assert regels[0] == ("• Page 0 (https://example.org/0) — Kiilto Biomelt is a biodegradable hot melt "
+    assert regels[0] == "Searched…"                        # de `text` van de skill is de leeswijzer (scope 53)
+    assert regels[1] == ("• Page 0 (https://example.org/0) — Kiilto Biomelt is a biodegradable hot melt "
                          "for packaging.")
-    assert regels[1].startswith("• Page 1 (https://example.org/1) — " + KORT[:40])   # geen extract → fragment
-    assert regels[2].startswith("• Page 2 (https://example.org/2) — " + KORT[:40])
-    assert regels[3].startswith("COVERAGE INCOMPLETE: 2 of 3")
+    assert regels[2].startswith("• Page 1 (https://example.org/1) — " + KORT[:40])   # geen extract → fragment
+    assert regels[3].startswith("• Page 2 (https://example.org/2) — " + KORT[:40])
+    assert regels[4].startswith("COVERAGE INCOMPLETE: 2 of 3")
     assert "{'ok': True" not in tekst and "'treffers'" not in tekst
 
 

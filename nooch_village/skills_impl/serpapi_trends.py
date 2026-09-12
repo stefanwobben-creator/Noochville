@@ -84,7 +84,9 @@ class SerpapiTrendsSkill(Skill):
     def _get(self, params: dict) -> dict:
         """Eén SerpApi-search. Geïsoleerd zodat tests dit kunnen vervangen."""
         r = requests.get(_ENDPOINT, params=params, timeout=20)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            from nooch_village.sleutelmasker import http_fout   # geen URL (mét api_key) in de melding
+            raise RuntimeError(http_fout(r, "SerpApi"))
         return r.json()
 
     def series(self, term: str, context, *, geo: str | None = None,
@@ -188,10 +190,11 @@ class SerpapiTrendsSkill(Skill):
                             sched.record(kw, self._produced_new(top_related, rising_related, lib))
                     rows.append(row)
                 except Exception as e:
+                    from nooch_village.sleutelmasker import masker
                     rows.append({"term": kw, "locale": locale, "geo": geo,
-                                 "no_data": True, "reason": str(e)})
+                                 "no_data": True, "reason": masker(e)})
                     if geo == first_geo:
-                        legacy[kw] = {"error": str(e)}
+                        legacy[kw] = {"error": masker(e)}
                     # Fout = transiënt, niet 'saai': geen record → volgende run opnieuw proberen.
 
         if sched is not None:

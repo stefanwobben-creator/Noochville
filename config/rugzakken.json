@@ -13,9 +13,11 @@
     "",
     "Wat hier NIET in hoort, en waarom:",
     "  - beslis-skills (keyword_review): die blijven bij de domeinhouder",
-    "  - periodieke skills (claims_site_scan, regulation_watch, materiaal_*): die lopen op de",
-    "    dagpuls via settings.pulse_skills en horen bij de rol die de belofte houdt, niet bij",
-    "    iedereen die het gereedschap zou kunnen pakken",
+    "  - periodieke skills (claims_site_scan, regulation_watch, materiaal_*, en sinds 12-09-2026",
+    "    ook field_note, bulletin_schrijven en gsc_report): die lopen op de dagpuls via",
+    "    settings.pulse_skills of de eigen rol en horen bij de rol die de belofte houdt, niet bij",
+    "    iedereen die het gereedschap zou kunnen pakken. Gemeten: een planner riep field_note en",
+    "    bulletin_schrijven aan met lege data en overschreef zo het echte dagbestand.",
     "  - treden (google_patents, semscholar_tldr, serpapi_trends): die hangen als alternatief",
     "    onder een andere skill in SKILL_LADDERS, dat is geen aparte keuze",
     "  - pure databronnen (gdelt_tone, trends_categorie, alphavantage_index, co2_village): die",
@@ -69,9 +71,6 @@
     "wat": "text needs to be written",
     "skills": [
       "content_schrijven",
-      "gsc_report",
-      "bulletin_schrijven",
-      "field_note",
       "voorstel_schrijven"
     ]
   },

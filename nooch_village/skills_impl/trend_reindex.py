@@ -491,7 +491,8 @@ class TrendReindexSkill(Skill):
             try:
                 df = fetch([term] + cfg["anchors"])
             except Exception as exc:
-                log.error("trend_reindex: fetch '%s' faalde: %s — term overgeslagen.", term, exc)
+                from nooch_village.sleutelmasker import masker
+                log.error("trend_reindex: fetch '%s' faalde: %s — term overgeslagen.", term, masker(exc))
                 fetch_failed += 1
                 continue
             series = series_from_df(df, term)
