@@ -1480,6 +1480,14 @@ class Inhabitant(threading.Thread):
             # einddocument al doet; twee van vier items konden nooit draaien. De planner wist niet
             # wat voor vraag dit was. Stefan: "voor onderzoek hoeft het niet langs de vijf
             # kernwaarden van Nooch, dat is pas relevant als we zelf gaan ontwikkelen."
+            # ONDERZOEKSVRAAG STOND ER AL, MAAR WERD NOOIT GEPLAND (skills-evolutie-advies, 13 sept):
+            # eigen code-comment "23 runs, 0 in 30 dagen". Hij zit in de wat_weten_we_al-rugzak en is
+            # dus altijd een optie geweest — de planner kreeg alleen nooit de zet om hem te kiezen.
+            # Één zin, aansluitend op dezelfde RESEARCH FRAME in plaats van er een vierde tak naast
+            # te zetten: een trend/patroon zonder gestelde oorzaak scherpt eerst de vraag, dan pas zoek.
+            "If the goal describes a TREND, SHIFT or PATTERN whose cause is not already stated in the "
+            "assignment, plan 'onderzoeksvraag' as the FIRST item to sharpen the underlying question "
+            "before you search — do not plan search terms straight from the raw trend label alone.\n"
             "RESEARCH FRAME. First decide what kind of goal this is. (a) An ASSESSMENT ('should we', "
             "'is there potential', 'is it worth it', 'compare'): plan the evidence that answers it — "
             "market size and growth (web search in trade vocabulary), demand over time (keywords, "

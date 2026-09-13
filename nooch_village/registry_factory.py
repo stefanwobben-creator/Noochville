@@ -57,6 +57,9 @@ from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
 from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
 from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
+from nooch_village.skills_impl.site_watch import SiteWatchSkill
+from nooch_village.skills_impl.pappers_financials import PappersFinancialsSkill
+from nooch_village.skills_impl.trustpilot_reviews import TrustpilotReviewsSkill
 from nooch_village.skills_impl.web_zoek import WebZoekSkill
 from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill
 from nooch_village.skills_impl.zoekstrategie import ZoekstrategieSkill
@@ -68,7 +71,7 @@ def build_skill_registry() -> SkillRegistry:
     het cockpit-proces gebruikt het (via `shared_registry`) alleen voor match-metadata."""
     reg = SkillRegistry()
     for skill in (
-        SiteHealthSkill(), HaalPaginaSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
+        SiteHealthSkill(), HaalPaginaSkill(), SiteWatchSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
         FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
         GscPerformanceSkill(), GscReportSkill(),
         NgramCultureSkill(),
@@ -83,7 +86,9 @@ def build_skill_registry() -> SkillRegistry:
         TrendsCategorieSkill(), GdeltToneSkill(),
         CompetitorNewsSkill(),
         CompetitorDiscoverSkill(),
+        PappersFinancialsSkill(),
         CommunityListeningSkill(),
+        TrustpilotReviewsSkill(),
         LinkbuildingTargetsSkill(),
         VerbandVoorstelSkill(),
         OnderzoeksvraagSkill(),

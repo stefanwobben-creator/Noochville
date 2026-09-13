@@ -14,8 +14,10 @@ from __future__ import annotations
 LABELS: dict[str, str] = {
     # ── Listening and tracking ──────────────────────────────────────────────
     "community_listening": "Listens on Reddit, Bluesky and YouTube to what people actually say",
+    "trustpilot_reviews": "Reads a brand's Trustpilot reviews, stars and all",
     "competitor_news": "Follows the news about our competitors",
     "competitor_discover": "Spots new brands appearing on our field",
+    "pappers_financials": "Reads a French competitor's filed revenue history and its trend",
     "gdelt_tone": "Measures how the world press writes about our themes",
     "trends_categorie": "Tracks how much our themes are searched for",
     "google_trends": "Looks at what people search for, per country and language",
@@ -45,6 +47,7 @@ LABELS: dict[str, str] = {
     "plausible_stats": "Counts how many people visit the site",
     "site_health": "Checks whether the site is still standing",
     "haal_pagina": "Fetches a page and quotes the sentence a word appears in",
+    "site_watch": "Notices what changed on a page since the last time it looked",
     "web_zoek": "Searches the open web and reads the pages it finds",
     "mobiel_audit": "Measures how fast and usable a page is on a phone (Lighthouse)",
     "zoekstrategie": "Decides which sources to search, with which term and in which language",
@@ -125,8 +128,10 @@ def ontbrekend(registry=None) -> list[str]:
 # accountabilities via governance Engels zijn; dan valt `match_label` vanzelf terug op LABELS.
 MATCH_NL: dict[str, str] = {
     "community_listening": "Luistert op Reddit, Bluesky en YouTube naar wat mensen echt zeggen",
+    "trustpilot_reviews": "Leest de Trustpilot-reviews van een merk, sterren en al",
     "competitor_news": "Volgt het nieuws over de concurrentie",
     "competitor_discover": "Spot nieuwe merken die op ons speelveld verschijnen",
+    "pappers_financials": "Leest de gedeponeerde omzethistorie van een Franse concurrent en zijn trend",
     "gdelt_tone": "Meet hoe de wereldpers over onze thema's schrijft",
     "trends_categorie": "Houdt bij hoeveel er op onze thema's gezocht wordt",
     "google_trends": "Kijkt waar mensen op zoeken, per land en per taal",
@@ -152,6 +157,7 @@ MATCH_NL: dict[str, str] = {
     "plausible_stats": "Telt hoeveel mensen de site bezoeken",
     "site_health": "Kijkt of de site nog overeind staat",
     "haal_pagina": "Haalt een pagina op en citeert de zin waarin een woord staat",
+    "site_watch": "Merkt wat er veranderd is op een pagina sinds de vorige keer",
     "web_zoek": "Zoekt op het open web en leest de paginas die hij vindt",
     "mobiel_audit": "Meet hoe snel en bruikbaar een pagina is op een telefoon (Lighthouse)",
     "zoekstrategie": "Bepaalt welke bronnen doorzocht worden, met welke term en in welke taal",
