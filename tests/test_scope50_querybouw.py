@@ -100,7 +100,7 @@ def test_epo_koppeltekens_worden_spaties_voor_de_cql():
     assert EpoPatentsSkill._normalize_term('"shoe sole" AND (adhesive OR glue)') == "shoe sole adhesive"
 
 
-def test_epo_zoekt_de_losse_woorden_in_de_titel():
+def test_epo_zoekt_de_losse_woorden_in_titel_en_abstract():
     gezien = []
 
     def _get(url):
@@ -108,7 +108,8 @@ def test_epo_zoekt_de_losse_woorden_in_de_titel():
         return b"<r/>"
     with patch.object(EpoPatentsSkill, "_parse_patents", staticmethod(lambda x: (0, []))):
         EpoPatentsSkill()._search("tok", "glue-free bio-based joining", 5, _get=_get)
-    assert urllib.parse.quote('ti any "glue free bio based joining"') in gezien[0]
+    # Scope 59: veld ti → ta (titel+abstract i.p.v. alleen titel).
+    assert urllib.parse.quote('ta any "glue free bio based joining"') in gezien[0]
 
 
 # ── 3: web_zoek leest alles ──────────────────────────────────────────────────
