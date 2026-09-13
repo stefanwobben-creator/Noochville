@@ -217,10 +217,19 @@ class WebZoekSkill(Skill):
         if not treffers:
             # De zoekmachine wérkte en gaf niets terug. Dat is een antwoord, geen storing — precies
             # het onderscheid dat haal_pagina ook maakt.
-            return {"ok": True, "term": term, "bron": bron, "aantal_treffers": 0, "treffers": [],
-                    "gelezen": 0, "no_data": True,
-                    "reason": f"geen organische treffers voor '{term}' via {bron}",
-                    "text": f"No results on the open web for “{term}” ({bron})."}
+            #
+            # EEN TERUGVAL DIE IN NUL TREFFERS EINDIGT, VERLIEST ANDERS ZIJN SPOOR (scope 60). Tot
+            # hier viel `teruggevallen_van` helemaal uit dit pad: de motor die eerst faalde stond
+            # nergens meer, niet in de output en niet in de tekst — precies de stilte die deze skill
+            # elders (het teruggevallen-pad met treffers) al bewust doorbreekt.
+            no_data_uit = {"ok": True, "term": term, "bron": bron, "aantal_treffers": 0, "treffers": [],
+                           "gelezen": 0, "no_data": True,
+                           "reason": f"geen organische treffers voor '{term}' via {bron}",
+                           "text": f"No results on the open web for “{term}” ({bron})."}
+            if fouten:
+                no_data_uit["teruggevallen_van"] = fouten
+                no_data_uit["text"] += f" (fell back to {bron} after: {'; '.join(fouten)})"
+            return no_data_uit
 
         lezer = self._lezer()
         for t in treffers[:lees]:
@@ -235,10 +244,12 @@ class WebZoekSkill(Skill):
         volledig = gelezen == len(treffers)
         uit = {"ok": True, "term": term, "bron": bron, "aantal_treffers": len(treffers),
                "treffers": treffers, "gelezen": gelezen, "volledig_gelezen": volledig,
-               "text": _als_tekst(term, treffers, bron, gelezen=gelezen)}
+               "text": _als_tekst(term, treffers, bron, gelezen=gelezen, teruggevallen_van=fouten)}
         if fouten:
             # Er is teruggevallen. Dat mag, maar niet stil: twee motoren geven verschillende
             # antwoorden, en wie de uitkomst leest moet kunnen zien dat de andere aan de beurt was.
+            # Sinds scope 60 staat dat ook letterlijk IN `text` (zie `_als_tekst`) — voorheen zat het
+            # alleen in dit structured veld, onzichtbaar voor wie enkel de wall leest.
             uit["teruggevallen_van"] = fouten
         return uit
 
@@ -290,14 +301,20 @@ class WebZoekSkill(Skill):
         return tekst[:_TEKST_PER_PAGINA], ""
 
 
-def _als_tekst(term: str, treffers: list, bron: str = "", gelezen: int | None = None) -> str:
+def _als_tekst(term: str, treffers: list, bron: str = "", gelezen: int | None = None,
+               teruggevallen_van: list | None = None) -> str:
     """De vorm die op de projectwall landt: wat er gezocht is, waar, wat er staat, en van welk domein.
 
     De motor staat er expliciet bij. Twee zoekmachines geven verschillende antwoorden, en zonder die
     regel is een uitkomst van vandaag niet te vergelijken met een van vorige week.
 
     Bewust de fragmenten en niet de volledige paginateksten: de wall is om te lezen, de tekst is om
-    mee te werken. Wie de hele pagina wil, heeft hem in `treffers[i]["tekst"]`."""
+    mee te werken. Wie de hele pagina wil, heeft hem in `treffers[i]["tekst"]`.
+
+    `teruggevallen_van` (scope 60): stond al in het structured output-veld, maar niet híer — en de
+    wall-tekst is het enige wat een rapport-schrijver echt leest. Zonder deze regel is een geslaagde
+    terugval (SerpAPI stuk, Brave antwoordde) onzichtbaar tenzij iemand het ruwe veld opzoekt, en dat
+    is precies de stilte die `teruggevallen_van` zelf bestaat om te doorbreken."""
     waar = f" via {bron}" if bron else ""
     if gelezen is None:
         gelezen = sum(1 for t in treffers if t.get("gelezen"))
@@ -311,6 +328,9 @@ def _als_tekst(term: str, treffers: list, bron: str = "", gelezen: int | None = 
                 f"{len(treffers) - gelezen} result(s) were listed but NOT read, so nothing can be "
                 f"concluded about them. Absence in this list is not evidence of absence")
     regels = [kop + "."]
+    if teruggevallen_van:
+        regels.append(f"Fell back to {bron} after {len(teruggevallen_van)} other engine(s) failed: "
+                      + "; ".join(teruggevallen_van))
     for t in treffers:
         kop = f"• {t['titel'] or t['url']} ({t['domein']})"
         staart = t["fragment"] or ("read in full" if t["gelezen"] else t["reden"])

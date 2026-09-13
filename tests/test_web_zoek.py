@@ -190,6 +190,20 @@ def test_wall_tekst_van_een_treffer_zonder_fragment_valt_terug_op_iets_zinnigs()
     assert "read in full" in regels
 
 
+def test_als_tekst_rendert_de_terugvalregel_direct():
+    """Unit-niveau, los van de skill: `_als_tekst` zelf zet `teruggevallen_van` om in een regel."""
+    regels = _als_tekst("t", [], "brave", gelezen=0,
+                        teruggevallen_van=["serpapi: RuntimeError: stuk"])
+    assert ("Fell back to brave after 1 other engine(s) failed: serpapi: RuntimeError: stuk"
+           in regels)
+
+
+def test_als_tekst_zonder_terugval_blijft_ongewijzigd():
+    """Geen ruis als er niets is teruggevallen — zelfde uitkomst als vóór scope 60."""
+    regels = _als_tekst("t", [], "serpapi", gelezen=0)
+    assert "Fell back to" not in regels
+
+
 # ── twee motoren, één vorm ───────────────────────────────────────────────────
 
 def _ctx(**settings):
@@ -257,6 +271,20 @@ def test_zonder_terugval_geen_ruis_in_de_uitvoer():
     assert "teruggevallen_van" not in _motor_skill().run({"term": "t"}, _ctx(**BEIDE))
 
 
+def test_terugval_staat_ook_in_de_wall_tekst():
+    """SCOPE 60, DE KERNTEST. `teruggevallen_van` stond al in het structured veld, maar de wall-tekst
+    — het enige wat een rapport-schrijver echt leest — zweeg erover. Een geslaagde terugval (SerpAPI
+    stuk, Brave antwoordde) moet zichtbaar zijn zonder dat iemand het ruwe veld opzoekt."""
+    uit = _motor_skill(faalt={"serpapi"}).run({"term": "t"}, _ctx(**BEIDE))
+    assert "Fell back to brave after 1 other engine(s) failed" in uit["text"]
+    assert "serpapi: RuntimeError: serpapi is stuk" in uit["text"]
+
+
+def test_zonder_terugval_geen_fallback_zin_in_de_wall_tekst():
+    uit = _motor_skill().run({"term": "t"}, _ctx(**BEIDE))
+    assert "Fell back to" not in uit["text"]
+
+
 def test_beide_motoren_stuk_is_een_fout_met_allebei_de_redenen():
     uit = _motor_skill(faalt={"serpapi", "brave"}).run({"term": "t"}, _ctx(**BEIDE))
     assert "error" in uit
@@ -288,6 +316,23 @@ def test_nul_treffers_noemt_ook_de_motor():
     uit = _motor_skill(leeg={"serpapi"}).run({"term": "x"}, _ctx(SERPAPI_API_KEY="s"))
     assert uit["no_data"] is True and uit["bron"] == "serpapi"
     assert "serpapi" in uit["reason"]
+
+
+def test_nul_treffers_na_terugval_draagt_ook_teruggevallen_van():
+    """DE BUG DIE SCOPE 60 VOND. Het no_data-pad bouwde tot nu toe zijn eigen dict helemaal opnieuw
+    op en liet `teruggevallen_van` daarbij compleet vallen — ook als de eerste motor zichtbaar stuk
+    was. Zonder deze reparatie verdwijnt precies het spoor dat het teruggevallen-pad mét treffers
+    elders al bewaart."""
+    uit = _motor_skill(faalt={"serpapi"}, leeg={"brave"}).run({"term": "t"}, _ctx(**BEIDE))
+    assert uit["no_data"] is True
+    assert uit["teruggevallen_van"] == ["serpapi: RuntimeError: serpapi is stuk"]
+    assert "fell back to brave after" in uit["text"].lower()
+
+
+def test_nul_treffers_zonder_terugval_blijft_schoon():
+    uit = _motor_skill(leeg={"serpapi"}).run({"term": "x"}, _ctx(SERPAPI_API_KEY="s"))
+    assert "teruggevallen_van" not in uit
+    assert "fell back" not in uit["text"].lower()
 
 
 def test_kleine_letters_in_de_sleutelnaam_werken_ook():

@@ -1211,6 +1211,52 @@ class Librarian(Inhabitant):
                     "reason": f"verband tussen '{a.word}' en '{b.word}'",
                 }, self.id))
 
+    # ── zelf-gat: staat de semantische laag nog overeind? (scope 60) ────────────
+
+    def _reflect(self) -> None:
+        """Wekelijks (via de bestaande `_maybe_reflect`-cadans, geen nieuwe scheduler) vragen of de
+        semantische laag van de kennisbank nog gezond is.
+
+        AANLEIDING (`data_opsporing_kwaliteit.md`, bevinding 1). `semantiek_status()` bestaat al
+        sinds de storing van 29 augustus, maar draaide tot 13 september alleen via het handmatige
+        commando `village keys`. `_meld_terugval` waarschuwt wél tijdens gebruik zodra een
+        `_rangschik`-aanroep 'stil' tegenkomt, maar hooguit ÉÉN keer per index per proces
+        (`_TERUGVAL_GEMELD`) — precies waarom de vorige storing maandenlang onopgemerkt bleef: de
+        ene melding bij opstart verdwijnt in de logs, en daarna is het stil totdat een mens het zelf
+        opvraagt. Dit is de Librarian-eigen aanvulling: een periodieke, HERHAALDE herinnering zolang
+        de storing duurt, niet een eenmalige regel die na de eerste keer verstomt.
+
+        Waarom de Librarian: hij is domein-eigenaar van de kennislaag/bibliotheek (CLAUDE.md,
+        "Librarian cureert") — de semantische index is zíjn gereedschap, geen nieuwe capaciteit.
+        `semantiek_status()` is bestaande, lokale, read-only diagnostiek (geen nieuwe externe call,
+        geen nieuwe skill) — dit blijft dus ruim binnen de grens van regel 10 (HARDE REGELS):
+        uitsluitend een bestaand gat SIGNALEREN, nooit zelf een sleutel/model/quota repareren.
+
+        `force=True`: 'stil' is geen ruis-gevoelig signaal zoals een dalende bezoekerstrend — het is
+        een simpel feit (wél een sleutel, niets doorzoekbaar) dat één meting al betrouwbaar vaststelt.
+        Wachten op een tweede observatie (zoals `min_count=2` elders doet) zou hier alleen een extra
+        week stilte toevoegen aan een storing die al maanden kan duren. Geen 'accountability:' in de
+        tekst: dit is geen voorstel voor een nieuwe rol of bevoegdheid, dus geen governance-route —
+        `_sense_gap` blijft daardoor (bewust) élke reflectie opnieuw melden zolang 'stil' aanhoudt, en
+        zwijgt vanzelf zodra een gezonde meting weer binnenkomt."""
+        try:
+            from nooch_village.kennis_context import semantiek_status
+            status = semantiek_status(self.context.data_dir)
+        except Exception as e:                            # noqa: BLE001 — reflectie mag nooit breken
+            self.log.warning("semantiek_status niet op te vragen tijdens reflectie: %s", e)
+            return
+        if status.get("oordeel") != "stil":
+            return
+        dekking = ", ".join(f"{i['index']}: {i['geindexeerd']}/{i['levend']}"
+                            for i in status.get("indexen", []))
+        beschrijving = (
+            f"De semantische laag van de kennisbank staat STIL: er is een embedding-sleutel maar "
+            f"niets is doorzoekbaar op betekenis ({dekking or 'geen index leesbaar'}, model="
+            f"{status.get('model')}). Het dorp rangschikt intussen overal lexicaal — dat werkt, maar "
+            f"vindt 'mycelium' niet bij 'paddenstoelvezel'. Check het embedding-model en de quota, "
+            f"of draai de backfill; `village keys` toont de volledige dekking.")
+        self._sense_gap("semantiek_stil", beschrijving, kind="operational", force=True)
+
 
 class Facilitator(Inhabitant):
     """Bewaakt de geldigheid van governance-voorstellen zonder inhoudelijk te oordelen.

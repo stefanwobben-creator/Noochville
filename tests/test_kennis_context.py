@@ -13,8 +13,8 @@ from unittest.mock import patch
 from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.insight import Insight
-from nooch_village.kennis_context import (MAX_BLOK_CHARS, kennis_blok, kennis_voor,
-                                          meld_raadpleging, totaal)
+from nooch_village.kennis_context import (MAX_BLOK_CHARS, _preflight, _preflight_semantisch,
+                                          kennis_blok, kennis_voor, meld_raadpleging, totaal)
 from nooch_village.kennisbank import KennisbankStore
 from nooch_village.models import Record, RecordType, RoleDefinition
 from nooch_village.notes_store import NotesStore
@@ -286,3 +286,117 @@ def test_de_lexicale_bronnen_kosten_geen_budget(tmp_path, monkeypatch):
     k = kennis_voor(str(tmp_path), ZOEK, deadline=0.001)
     for sleutel in ("kroniek", "projecten", "preflight"):
         assert sleutel in k
+
+
+# ── Pre-flight hybride: lexicaal eerst, semantisch als vangnet op een mis (scope 60) ───────────
+#
+# Stefan, 13 sep: "hybride, lexicaal eerst". `weten_we_dit_al` zelf blijft ONGEWIJZIGD — puur
+# lexicaal en gratis, want dit is het meest uitgevoerde retrieval-pad in de codebase. Alleen als
+# die lexicale weg NIETS vindt, krijgt de vraag een tweede, semantische kans op dezelfde
+# kennisbank-index als `_inzichten` — exact het 'mycelium vs paddenstoelvezel'-gat uit bevinding 2
+# van `data_opsporing_kwaliteit.md`.
+
+VRAAG_ZONDER_OVERLAP = "Wat weten we over paddenstoelvezel textielvezel"
+
+
+def _seed_mycelium_inzicht(data_dir: str) -> str:
+    """Eén kennisbank-inzicht dat met `VRAAG_ZONDER_OVERLAP` geen enkel inhoudswoord deelt — dus
+    een gegarandeerde lexicale mis in `weten_we_dit_al`, met iets voor de semantische stap om
+    (gesimuleerd) op betekenis te vinden."""
+    kb = KennisbankStore(os.path.join(data_dir, "kennisbank.json"))
+    return kb.add("Mycelium celstructuur groeit snel", why="labresultaten Delft")
+
+
+def _forceer_semantische_hit(monkeypatch, hit_id: str) -> None:
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch",
+                        lambda zoektekst, items, index_path, tekst_fn, **kw: [{"id": hit_id}])
+
+
+def _forceer_geen_semantiek(monkeypatch) -> None:
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch",
+                        lambda *a, **k: None)
+
+
+def test_preflight_blijft_lexicaal_en_gratis_bij_een_directe_treffer(tmp_path, monkeypatch):
+    """DE KERNTEST VAN DE HYBRIDE-KEUZE. De drukste situatie — iets IS al bekend — moet precies zo
+    goedkoop blijven als vandaag: geen enkele poging tot de dure semantische stap, want die betaalt
+    zich hier niet uit."""
+    _seed_kennislaag(str(tmp_path))
+    gezien = _telt_semantische_pogingen(monkeypatch)
+    resultaat = _preflight(str(tmp_path), ZOEK)
+    assert resultaat["bekend"] is True and resultaat["modus"] == "lexicaal"
+    assert gezien == [], "een lexicale treffer had de semantische stap nooit mogen proberen"
+
+
+def test_preflight_valt_semantisch_bij_op_een_lexicale_mis(tmp_path, monkeypatch):
+    """Het gat uit bevinding 2: de vraag deelt geen woord met het inzicht, dus `weten_we_dit_al`
+    zegt NEE — maar de semantische laag herkent het onderwerp wél op betekenis."""
+    mid = _seed_mycelium_inzicht(str(tmp_path))
+    _forceer_semantische_hit(monkeypatch, mid)
+    resultaat = _preflight(str(tmp_path), VRAAG_ZONDER_OVERLAP)
+    assert resultaat["bekend"] is True
+    assert resultaat["modus"] == "semantisch"
+    assert resultaat["treffers"] == 1
+    assert "found on meaning" in resultaat["samenvatting"]
+    assert "Mycelium celstructuur groeit snel" in resultaat["samenvatting"]
+
+
+def test_preflight_blijft_nee_als_semantiek_ook_niets_vindt(tmp_path, monkeypatch):
+    """Geen sleutel, geen index of gewoon niets boven de drempel: dan blijft het eerlijke lexicale
+    NEE gewoon staan — geen upgrade om de upgrade."""
+    _seed_mycelium_inzicht(str(tmp_path))
+    _forceer_geen_semantiek(monkeypatch)
+    resultaat = _preflight(str(tmp_path), VRAAG_ZONDER_OVERLAP)
+    assert resultaat["bekend"] is False
+    assert resultaat["modus"] == "lexicaal"
+
+
+def test_preflight_respecteert_het_budget_ook_op_een_mis(tmp_path, monkeypatch):
+    """Een mens die op een scherm wacht, mag deze stap net zo goed afgeknepen zien als
+    `_inzichten`/`_signalen` — ook al is een lexicale mis juist het pad waar de semantische kans
+    zit. `mag_semantisch=False` moet de poging voorkomen, niet alleen het resultaat negeren."""
+    mid = _seed_mycelium_inzicht(str(tmp_path))
+    gezien = []
+    def _nep(zoektekst, items, index_path, tekst_fn, **kw):
+        gezien.append(index_path)
+        return [{"id": mid}]
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch", _nep)
+    resultaat = _preflight(str(tmp_path), VRAAG_ZONDER_OVERLAP, mag_semantisch=False)
+    assert gezien == [], "mag_semantisch=False had de semantische poging moeten tegenhouden"
+    assert resultaat["bekend"] is False and resultaat["modus"] == "lexicaal"
+
+
+def test_preflight_semantisch_geeft_niets_zonder_kennisbank(tmp_path):
+    assert _preflight_semantisch(str(tmp_path), "iets") is None
+
+
+def test_kennis_voor_met_krap_budget_slaat_de_preflight_upgrade_over(tmp_path, monkeypatch):
+    """End-to-end door `kennis_voor`: hetzelfde budget dat `_inzichten`/`_signalen` afknijpt,
+    knijpt via `_mag_semantisch()` ook deze nieuwe stap af."""
+    mid = _seed_mycelium_inzicht(str(tmp_path))
+    _forceer_semantische_hit(monkeypatch, mid)
+    k = kennis_voor(str(tmp_path), VRAAG_ZONDER_OVERLAP, deadline=0.001)
+    assert k["preflight"]["bekend"] is False
+    assert k["preflight"].get("modus") == "lexicaal"
+
+
+def test_kennis_voor_zonder_budget_geeft_de_preflight_upgrade_door(tmp_path, monkeypatch):
+    """Zonder budget (de daemon) mag de upgrade wél door, en `kennis_blok` moet 'm transparant
+    tonen: gevonden op betekenis is iets anders dan een letterlijke woordmatch, en de lezer (mens
+    of LLM) moet zelf kunnen wegen of het echt hetzelfde onderwerp is."""
+    mid = _seed_mycelium_inzicht(str(tmp_path))
+    _forceer_semantische_hit(monkeypatch, mid)
+    k = kennis_voor(str(tmp_path), VRAAG_ZONDER_OVERLAP)
+    assert k["preflight"]["bekend"] is True
+    assert k["preflight"]["modus"] == "semantisch"
+    blok = kennis_blok(k)
+    assert "gevonden op betekenis, geen letterlijke woordmatch" in blok
+    assert "controleer of dit echt hetzelfde onderwerp is" in blok
+
+
+def test_kennis_blok_toont_de_plain_vorm_zonder_semantische_modus():
+    """Regressie-slot: zonder `modus` (zoals elke bestaande lexicale uitkomst) blijft de oude,
+    kortere kop gewoon staan."""
+    blok = kennis_blok({"preflight": {"bekend": True, "treffers": 3}})
+    assert "WETEN WE DIT AL? JA — 3 directe treffer(s)." in blok
+    assert "gevonden op betekenis" not in blok
