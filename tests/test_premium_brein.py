@@ -59,12 +59,22 @@ def test_hoog_inzet_sites_staan_vast():
     `noochie_memo` kwam er 11 sep 2026 bij: de memo van Noochie aan de founder, op afroep. Mens-facing
     om dezelfde reden als `skill_bulletin`, en met een extra: het is de eerste keer dat zij hem
     rechtstreeks bereikt, en dat oordeel over haar (blijft ze of niet) wordt op deze tekst geveld.
-    Eén call per keer; kosten zijn hier geen overweging."""
+    Eén call per keer; kosten zijn hier geen overweging.
+
+    Vier kwamen er 13 sep 2026 bij (skills-evolutie-advies, bevinding 2.2), en dit is de ENE plek
+    waar dat advies zelf een kanttekening plaatst: het beveelt aan om eerst `critic_labels.jsonl` op
+    productie te lezen — bewijst modelkeuze écht de bottleneck, vóór je dit meeneemt — en die meting
+    kon niet vanuit de cloud-sandbox gebeuren. De vier zijn dus met opzet één losse, makkelijk terug
+    te draaien toevoeging: `skill_claim_evidence` (105 runs, de op-één-na-drukste oordeelslaag van
+    het dorp, en tot dan geheel buiten beeld), `skill_competitor_discover` (is dit merk een échte
+    concurrent, met citaat-eis), `skill_lead_beoordeling` en `skill_content_check` (allebei hadden al
+    een eigen `call_site`, dus geen call_site-plumbing nodig — alleen deze twee regels)."""
     assert lk.HOOG_INZET == {
         "einddocument", "verslag_assemblage", "plan_checklist", "plan_checklist_retry",
         "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
         "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
-        "noochie_memo"}
+        "noochie_memo", "skill_claim_evidence", "skill_competitor_discover",
+        "skill_lead_beoordeling", "skill_content_check"}
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():

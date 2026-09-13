@@ -299,54 +299,28 @@ Scheiding van verantwoordelijkheden:
 - **Operationeel vs. governance**: structureel terugkerende spanning → governance; eenmalig werk → operationeel. De grens ligt bij de trefwoorden in `_STRUCTURAL_KW`.
 - **Default is tactisch**: als geen rol past, escaleer pas naar de mens nadat het tactisch geprobeerd is via de Matchmaker. Zo blijft het dorp zelf-redzaam.
 
-## TijdgeestWachter — culturele taalverschuiving observeren
+## TijdgeestWachter — nooit gebouwd, skill wel beschikbaar (gecorrigeerd 13 sept 2026)
 
-De TijdgeestWachter is geboren via het eerste echte governance-voorstel van de founder
-(`python -m nooch_village.village proposal`). Hij observeert de lange culturele boog van
-de wereldtaal via het onofficiële JSON-endpoint van Google Books Ngram Viewer (data t/m ~2019).
+Deze sectie beschreef ooit een rol "TijdgeestWachter" (cultuurtaal-observatie via Google Books
+Ngram) met een implementatieparagraaf en de suggestie dat hij draaide. Een volledige grep op
+`TijdgeestWachter`, `tijdgeest_wachter`, `activate_tijdgeest_wachter` geeft **nul treffers** in de
+code: geen `Inhabitant`-subklasse, geen `CLASS_MAP`-entry. De rol heeft nooit bestaan als draaiende
+code — dit document liep voor op de implementatie en niemand heeft het teruggedraaid.
 
-### Rol en grenzen
-- **Observeert** de frequentie van missie-relevante termen over decennia (corpus EN 26 of NL 10).
-- **Voedt** GrowthAnalyst en Librarian via `keyword_proposed` (stijgende termen) en
-  `tijdgeest_signaal` (opvallende verschuiving ≥ 2 termen in dezelfde richting).
-- **Claimt het lexicon-domein NIET**: de Librarian cureert; de TijdgeestWachter voedt alleen.
-- **Ritme**: productie = wekelijks (`tijdgeest_interval_seconds = 604800`);
-  demo/test: stel `tijdgeest_interval_seconds=0` in `settings.ini` of via `context.settings`.
+De onderliggende skill bestaat wél en werkt: **`ngram_culture`** (`skills_impl/ngram.py`) zit in de
+`buiten`-rugzak (`config/rugzakken.json`) en is dus voor ELKE rol bereikbaar — precies het model dat
+`koppellaag_besluit.md` (scope 39/40, "vermogen is niet schaars") vastlegde. Vermoedelijke verklaring
+(niet bevestigd): die architectuurbeslissing maakte een toegewijde watcher-rol overbodig vóórdat
+iemand deze sectie corrigeerde.
 
-### Skill: `ngram_culture` (`skills_impl/ngram.py`)
-- Zaad-termen: `burger`, `consument`, `sufficiency`, `regenerative`, `plastic-free` +
-  alle goedgekeurde bibliotheekwoorden (automatisch zelfversterkend).
-- Corpus-detectie: `_NL_INDICATORS` → corpus 10 (NL 2012); anders corpus 26 (EN 2019).
-- Signaal: `slope_recent` (laatste 10 jaar) geeft `stijgend` / `dalend` / `vlak`.
-- Fail-closed: bij netwerk- of parse-fouten per term `{"error": str(e)}`; geen mock-data.
-- Beleefde aanroep: 1,5s sleep tussen batches (onofficieel endpoint).
+Skill-eigenschappen die nog steeds kloppen: zaad-termen komen uit `context.lexicon`
+(zelfversterkend met elke goedgekeurde bibliotheekterm), corpus-detectie kiest EN 26 of NL 10,
+`slope_recent` geeft de richting, en de skill is fail-closed (netwerk-/parsefout → `{"error": ...}`
+per term, geen mock-data).
 
-### Events
-| Event | Wie publiceert | Inhoud |
-|-------|---------------|--------|
-| `tijdgeest_pulse` | mens/demo | Handmatige trigger; optioneel `{"terms": [...]}` payload |
-| `tijdgeest_pulse_completed` | TijdgeestWachter | `ok`, `stijgend`, `dalend`, `terms` (volledige details) |
-| `tijdgeest_signaal` | TijdgeestWachter | `stijgend`, `dalend`, `boodschap` — bij ≥ 2 verschuivingen |
-| `keyword_proposed` | TijdgeestWachter | Per stijgende term nog niet in de bibliotheek |
-
-### Demo draaien
-```bash
-# Stap 1: zorg dat het governance-record bestaat (eenmalig)
-python -m nooch_village.village proposal
-
-# Stap 2: draai de echte ngram-puls
-python -m nooch_village.village ngram
-```
-
-De ngram-demo wacht maximaal 90 seconden op de API-response. Na afloop toont hij een
-per-term tabel met corpus, richting (stijgend/dalend/vlak), recente helling en frequentie.
-
-### Implementatie-aantekeningen
-- `activate_tijdgeest_wachter(records)` in `village.py` voegt `ngram_culture` idempotent
-  toe aan het record zodra het bestaat.
-- `CLASS_MAP["tijdgeest_wachter"] = TijdgeestWachter` — de Reconciler activeert de rol
-  automatisch als het record in governance aanwezig is.
-- Dedup via `lib.status(term) is not None` — ook stijgende termen worden nooit dubbel voorgesteld.
+Wil je deze rol alsnog bouwen: het governance-voorstelmechanisme (`village proposal`) en de skill
+bestaan al. Wat ontbreekt is een `Inhabitant`-subklasse in `roles.py` plus een `CLASS_MAP`-entry,
+zoals bij elke nieuwe bemande rol (zie "Een nieuwe inwoner toevoegen" hierboven).
 
 ## Gap-sensing — drie niveaus van spanning
 
@@ -500,59 +474,24 @@ Een `approve` op een activatie-item green-light de implementatie: de mens heeft 
 - `add_activation` dedupliceerde op `role_id` + status `pending` of `approved` — de KennisScout blijft één item, ook na herstarts.
 - `sync_unmanned()` wordt bij elke Village-start aangeroepen zodat nieuwe onbemande rollen automatisch in de inbox verschijnen.
 
-## KennisScout — academische grounding van lexicon-termen
+## KennisScout — nooit gebouwd als rol, skills wel beschikbaar (gecorrigeerd 13 sept 2026)
 
-De KennisScout grondt kandidaat-termen in wetenschappelijke literatuur en publiceert
-`keyword_evidence`-events voor de Librarian en GrowthAnalyst. Hij beslist en cureert nooit.
+Zelfde situatie als TijdgeestWachter hierboven: deze sectie beschreef een rol "KennisScout" met een
+statustabel "v1 actief" en een demo-commando. Nul treffers in de code voor `KennisScout`,
+`kennis_scout`, `activate_kennis_scout` — geen `Inhabitant`-subklasse, geen `CLASS_MAP`-entry.
 
-### Status: v1 actief
+**Correctie op de tabel die hier stond:** OpenAlex is NIET keyless. `skills_impl/openalex.py` maakt
+`OPENALEX_API_KEY` sinds scope 54 bewust VERPLICHT (`required_env`; de skill faalt closed zonder) —
+het tegenovergestelde van wat deze tabel beweerde. `.env.example` documenteerde tot 13 september
+alleen het optionele `openalex_mailto` (polite-pool e-mailadres) en niet deze verplichte sleutel;
+wie het bestand volgde zette dus de verkeerde variabele en `openalex_evidence` bleef falen. Beide
+zijn nu gecorrigeerd (deze sectie en `.env.example`). Semantic Scholar klopte al: geen key vereist,
+`SEMANTIC_SCHOLAR_API_KEY` is optioneel voor een hogere limiet.
 
-| Skill | Capability | Bron | Key vereist |
-|-------|-----------|------|-------------|
-| `skills_impl/openalex.py` | `openalex_evidence` | OpenAlex (keyless, polite pool) | Nee — `openalex_mailto` uit config |
-| `skills_impl/semantic_scholar.py` | `semscholar_tldr` | Semantic Scholar Graph API | Nee — optioneel `SEMANTIC_SCHOLAR_API_KEY` in `.env` |
-| `skills_impl/openlibrary_search_inside.py` | `openlibrary_search_inside` | OpenLibrary boeken-voltekst | Nee — **gepland voor v2**, nog niet in KennisScout DNA |
-
-### OpenAlex (`openalex_evidence`)
-
-- `GET https://api.openalex.org/works?search=TERM&sort=cited_by_count:desc&mailto=<email>`
-- `openalex_mailto` uit `context.settings` (settings.ini of .env); fallback `info@nooch.earth`
-- Resultaten gesorteerd op citaties (meest geciteerd eerst)
-- Abstract gereconstrueerd vanuit inverted index
-- `no_data: True` als API 0 resultaten teruggeeft (onderscheiden van netwerk-fout)
-
-### Semantic Scholar (`semscholar_tldr`)
-
-- `GET https://api.semanticscholar.org/graph/v1/paper/search?query=TERM&fields=title,abstract,year,citationCount,tldr`
-- `tldr`-veld: machinaal gegenereerde één-zinsamenvatting per paper
-- Geen key vereist (~100 req / 5 min gratis); zet `SEMANTIC_SCHOLAR_API_KEY` in `.env` voor hogere limieten
-- Exponentiële backoff bij HTTP 429 (max 4 pogingen); daarna fail-closed
-
-### Termen komen uit het Lexicon
-
-De KennisScout reageert op `keyword_proposed`-events. Die events worden gestuurd door
-TijdgeestWachter, GrowthAnalyst en PerformanceScout — die halen hun termen op hun beurt
-uit het Lexicon. De `locale`-sleutel in `demand.locale` geeft aan in welke taal de term thuis hoort.
-
-### Librarian-integratie
-
-De Librarian luistert ook op `keyword_evidence`. Als een term eerder `escalated` was maar
-nu KennisScout-bewijs beschikbaar is, herbeoordeelt de Librarian de term automatisch.
-
-### Demo
-
-```bash
-python -m nooch_village.village kennis_scout
-```
-
-Haalt approved lexicon-termen op (max 3 NL + 3 EN) en toont per term:
-- OpenAlex: aantal werken, topics en citaties
-- Semantic Scholar: paper-titels en tldr-samenvattingen
-
-### v2-roadmap
-
-- OpenLibrary voltekst (`openlibrary_search_inside`) toevoegen aan KennisScout DNA
-- Approval via human inbox; daarna handmatige registratie in `activate_kennis_scout()`
+De drie skills die deze rol zou dragen bestaan en werken, en zijn dorpsbreed bereikbaar via de
+`buiten`-rugzak (niet aan één rol gebonden): `openalex_evidence`, `semscholar_tldr`,
+`openlibrary_search_inside`. Zelfde pad als bij TijdgeestWachter om de rol alsnog te bouwen: een
+`Inhabitant`-subklasse in `roles.py` plus een `CLASS_MAP`-entry.
 
 ## Tension-verwerking — agenda voor de volgende sessie (nog niet gebouwd)
 

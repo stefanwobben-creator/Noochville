@@ -88,6 +88,35 @@ class Skill(ABC):
     lijstje uitgedrukt zou je beide eisen en de skill op de andere manier breken. Gebruik
     `ontbrekende_velden()` om dit uit te lezen, niet een eigen lus."""
 
+    def is_configured(self, context) -> bool:
+        """Staan de sleutels uit `required_env` er? Generieke config-poort, gebruikt door
+        `Inhabitant._config_ontbreekt` om een skill zonder sleutel uit de planner-catalogus te weren
+        i.p.v. hem te laten plannen en dan live te laten sterven (het `shopify_sales`-incident,
+        skill-review 12-09-2026: vijf keer gepland zonder `SHOPIFY_TOKEN`, vijf keer zichtbaar
+        gefaald op de wall — de planner ziet description/input_schema, niet of de sleutel er is).
+
+        Vóór 13 september bestond deze check alleen als `DataSourceSkill.is_configured` en als
+        losse, identieke kopie in vier plain-`Skill`-subklassen (`alphavantage`, `gdelt_tone`,
+        `keywords_everywhere`, `trends_categorie`, deels). Zes andere skills met een `required_env`
+        (`claim_evidence`, `competitor_discover`, `linkbuilding`, `openalex`, `plausible`,
+        `serpapi_trends`) hadden HELEMAAL geen `is_configured` — en `_config_ontbreekt` is fail-soft
+        zonder die methode: geen check, dus altijd 'uitvoerbaar', ongeacht `required_env`. Diezelfde
+        vijfvoudige shopify-fout lag dus nog zes keer klaar om zich te herhalen. Deze default sluit
+        het gat op één plek (reference, don't copy) zonder de skills met een ECHT afwijkende eis aan
+        te raken: `gsc.py` (bestand-op-schijf-check), `shopify_sales.py` (token ÓF client-id+secret),
+        `alphavantage`/`gdelt_tone`/`trends_categorie` (extra voorwaarde naast/i.p.v. required_env)
+        houden hun eigen overschrijving, want die doet meer dan dit.
+
+        Fail-soft aan de andere kant: een skill zonder `required_env` (de meerderheid) geeft hier
+        `True` — `all()` over een lege tuple is `True` — en `_config_ontbreekt` slaat de check toch
+        over zodra `required_env` leeg is, dus deze default verandert daar niets aan."""
+        import os
+        vereist = tuple(getattr(self, "required_env", ()) or ())
+        if not vereist:
+            return True
+        settings = getattr(context, "settings", None) or {}
+        return all((settings.get(sleutel) or os.environ.get(sleutel)) for sleutel in vereist)
+
     def validate_payload(self, payload: dict, context) -> list:
         """Grondings-poort op de payload (opt-in). Geeft REDENEN terug waarom deze payload niet kan
         draaien, náást het loutere aanwezig-zijn van verplichte velden (dat dekt required_payload al):

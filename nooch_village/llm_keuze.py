@@ -77,6 +77,18 @@ HOOG_INZET: frozenset[str] = frozenset({
     "skill_voorstel",            # de mens beslist hierop
     "noochie_weigh_in",          # de brug naar The Source
     "noochie_memo",              # mens-facing: de memo aan de founder — één call, hier telt het oordeel
+    # Vier oordeel-sites toegevoegd 13 september (skills-evolutie-advies, bevinding 2.2): elk van deze
+    # vier weegt een claim/lead/tekst net zo zwaar als de sites hierboven, maar stond er nooit bij —
+    # niet expliciet geweigerd, gewoon nooit toegevoegd. `claim_evidence` is met 105 runs de op-één-na-
+    # drukste oordeelslaag van het dorp en zat helemaal buiten beeld. Beschermd door dezelfde
+    # maandcap als de rest van deze lijst (`premium_maand_cap`) — geen open-eind-kostenrisico.
+    # LET OP: het advies-document (`skills_evolutie_advies.md`, wat eerst) raadt aan om eerst
+    # `critic_labels.jsonl` op productie te lezen (bewijst modelkeuze écht de bottleneck is) vóór je
+    # dit meeneemt. Deze vier regels vormen bewust hun eigen, makkelijk terug te draaien wijziging.
+    "skill_claim_evidence",      # claim_evidence.py: "een rapport dat een verzonnen getal doorlaat"
+    "skill_competitor_discover", # is dit merk een échte concurrent? met citaat-eis (scope 55)
+    "skill_lead_beoordeling",    # Nooch-fit van een leverancier/materiaal, met citaat-eis (scope 51)
+    "skill_content_check",       # de laatste blik vóór publicatie tegen de merk-copyregels
 })
 
 # ── En de tegenhanger: waar goedkoop de JUISTE keuze is ──────────────────────────────────────
