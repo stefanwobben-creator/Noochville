@@ -613,7 +613,7 @@ def _artefact_inherited_card(it) -> str:
 
 
 def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: str | None,
-                       *, titel: str, leeg: str) -> str:
+                       *, titel: str, leeg: str, van_rapport: str = "") -> str:
     can_edit = _can_edit_artefacts(st, rec, csrf_token, username)
     oi = artefacts.own_and_inherited(rec.id, kind, st.records, st.att)
 
@@ -621,6 +621,18 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     # lijst i.p.v. een badge/slotje per item.
     kop = ("<p class='muted'>All policies below are "
            "governance-owned.</p>" if kind == "policy" else "")
+
+    # Wiki vóór archief (scope 61): kom je hier via "→ To the wiki" op een projectrapport, dan is
+    # het RAPPORT de tekst die het voorstel-formulier moet voorinvullen, niet de pagina's eigen
+    # body. Fail-soft: geen rapport leesbaar (project weg, geen store) → gewoon terugvallen op de
+    # normale voorinvulling, geen fout op het scherm.
+    rapport_tekst = ""
+    if van_rapport and kind == wiki.PAGINA_KIND:
+        try:
+            store = getattr(st, "project_docs", None)
+            rapport_tekst = (store.read(van_rapport) or "").strip() if store is not None else ""
+        except Exception:                                    # noqa: BLE001 — nooit de tab breken
+            rapport_tekst = ""
 
     # Een note IS een wiki-pagina, en op de permalink kan wie hem niet bezit al een wijziging
     # voorstellen. Op déze tab kon dat niet: een niet-eigenaar zag alleen tekst, zonder enige weg om
@@ -630,7 +642,8 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
             return ""
         from nooch_village.views.wiki import _voorstel_form
         return _voorstel_form(st, a, csrf_token,
-                              next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}")
+                              next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}",
+                              prefill=rapport_tekst)
 
     own = "".join(_artefact_own_card(a, csrf_token, can_edit, anders=_anders(a))
                   for a in oi["own"])
@@ -764,7 +777,8 @@ def _radar_verwijzing(st: _Stores, rec) -> str:
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
-                van: str = "", tot: str = "", compare: bool = False, goal: str = "") -> str:
+                van: str = "", tot: str = "", compare: bool = False, goal: str = "",
+                van_rapport: str = "") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Not found", "<p>Node not found.</p><p><a href='/'>← home</a></p>")
@@ -797,7 +811,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         # en is op 11 september 2026 verwijderd (niet gebruikt); daardoor heeft ook deze rol gewoon
         # notes — en dus wiki-pagina's, waar hij als enige rol van uitgesloten was.
         content = _artefact_tab_html(st, rec, "note", csrf_token, username,
-                                     titel="Notes", leeg="No notes on this role/circle yet.")
+                                     titel="Notes", leeg="No notes on this role/circle yet.",
+                                     van_rapport=van_rapport)
     elif tab == "tools":
         content = (_role_tools_html(rec)
                    + _ritme_html(st, rec)

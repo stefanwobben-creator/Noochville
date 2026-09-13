@@ -128,12 +128,17 @@ def _backlink_sectie(a, pags: list) -> str:
     return f"<div class='c2-sec'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
-def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
+def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str = "") -> str:
     """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
 
     Het loopt langs het bestaande verzoekmechanisme: het wordt een `naar_rol`-item in de inbox van
     de beslisser, met dezelfde drie knoppen (accepteren / aanpassen / weigeren). Hier staat alleen
-    wie het krijgt en waarom, zodat niemand een verzoek de leegte in stuurt."""
+    wie het krijgt en waarom, zodat niemand een verzoek de leegte in stuurt.
+
+    `prefill` (scope 61, wiki_kennisborging.md — "wiki vóór archief"): komt een bezoeker hier via
+    "→ To the wiki" op een projectrapport, dan is het rapport de tekst waar het om gaat, niet de
+    huidige pagina-body. Leeg (het gewone geval) verandert er niets aan: dan vult het formulier
+    zichzelf zoals altijd met `a.body`."""
     ontv = wiki.ontvanger(a.anchor, st.records, st.assign)
     rec = st.records.get(ontv["rol"])
     naar = _name(rec) if rec is not None else ontv["rol"]
@@ -150,7 +155,7 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
             # De veld-ids dragen de artefact-id: op de Notes-tab staan meerdere pagina's onder
             # elkaar, en twee velden met dezelfde id laten elk gekoppeld label naar de eerste wijzen.
             f"{_field('Why', 'waarom', fid=f'vst-waarom-{a.id}', required=True, placeholder='one line: what is wrong now')}"
-            f"{_field('Proposed text', 'voorstel', kind='textarea', value=a.body, fid=f'vst-body-{a.id}')}"
+            f"{_field('Proposed text', 'voorstel', kind='textarea', value=(prefill or a.body), fid=f'vst-body-{a.id}')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_voorstel'>Send</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "

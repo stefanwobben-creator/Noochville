@@ -133,6 +133,21 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
         hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                f"<input type='hidden' name='next' value='{nxt}'>")
+        # WIKI VÓÓR ARCHIEF (scope 61, wiki_kennisborging.md — 13 september 2026). Een archief-item
+        # heeft geen link terug naar dit rapport, dus kennis die hier blijft staan is later niet
+        # meer te vinden. Deze knop lost géén nieuw mechanisme op: hij stuurt naar de Notes-tab van
+        # de eigenaar-rol met `van_rapport` erbij, en daar pakt het BESTAANDE 'Suggest a change'-
+        # formulier (`_voorstel_form`) dat op om zichzelf te vullen met dít rapport in plaats van de
+        # tekst van de pagina waarop het staat (zie `views/wiki.py`/`views/overview.py`). Welke
+        # pagina het wordt — nieuw, of een bestaande — is bewust geen vraag die deze knop
+        # beantwoordt: dat blijft de beslissing van de eigenaar-rol, net als bij elke andere
+        # pagina (`wiki.py`: "een pagina krijgt een eigenaar, en dat is een besluit").
+        # Alleen tonen bij een écht bevestigd rapport: geen seed-vorm (dat is de opdracht, geen
+        # antwoord) en geen lopend concept (dat heeft zijn eigen bevestig-stap, zie hierboven).
+        wiki_knop = ""
+        if orec is not None and doc.strip() and not _projects.heeft_seed_vorm(doc):
+            wiki_knop = (f"<a class='btn sm' href='/node?id={_e(p.get('owner', ''))}&tab=notes"
+                        f"&van_rapport={_e(pid)}'>→ To the wiki</a>")
         acties = (f"<div class='card'>"
                   f"<details class='cardmenu'><summary class='flink'>Edit document</summary>"
                   f"<form method='post' action='/action' class='pf'>{hid}"
@@ -152,7 +167,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                   f"onclick=\"return confirm('Assemble a fresh draft report? "
                   f"It waits for your confirmation; the current text stays until then.')\">"
                   f"Re-assemble draft</button>"
-                  f"</form></div>")
+                  f"</form>{wiki_knop}</div>")
 
     main = f"<div class='c2-main'>{kop}{_banner(msg)}{concept}{body}{acties}</div>"
     return _page(f"Report · {titel}", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

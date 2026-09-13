@@ -321,3 +321,51 @@ def test_notes_tab_linkt_naar_de_pagina(tmp_path):
     a = st.att.add(OWNER, "note", title="HyphaLite")
     html = cockpit2.render_node(st, OWNER, "notes", csrf_token="tok", username="guest")
     assert f"/pagina?id={a.id}" in html and "open page" in html
+
+
+# ── "naar de wiki" vanaf een rapport (scope 61, wiki_kennisborging.md) ───────
+
+def _outsider_ziend_op(st):
+    """Een mens die OWNER niet vervult: ziet het voorstelpad, niet het bewerkpad — zelfde opzet als
+    test_pagina_editknop_alleen_voor_vervuller. 'guest' bleek hiervoor NIET geschikt: op de
+    seed-data mag 'guest' al bewerken (can_edit=True), dus dan verschijnt de suggest-form nooit."""
+    st.people.add("Alice", "alice@nooch.earth")
+    st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
+    st.people.add("Bob", "bob@nooch.earth")
+    return "bob@nooch.earth"
+
+
+def test_van_rapport_vult_het_voorstel_met_het_rapport_niet_de_pagina_body(tmp_path):
+    """Kom je via '→ To the wiki' op een rapport, dan vult het Suggest-a-change-formulier zich met
+    het RAPPORT in plaats van de pagina's eigen tekst. De kaart-body (los van het formulier) blijft
+    gewoon de pagina tonen — alleen het formulier verandert, er wordt niets overschreven."""
+    st = _stores(tmp_path)
+    bob = _outsider_ziend_op(st)
+    st.att.add(OWNER, "note", title="HyphaLite", body="De oude pagina-tekst.")
+    pid = st.projects.create(OWNER, "Onderzoek naar HyphaLite", "human", status="running")
+    st.project_docs.write(pid, "Het bevestigde rapport, uniek en herkenbaar.")
+    st2 = cockpit2._Stores(st.dd)
+
+    zonder = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob)
+    # zonder van_rapport: de oude tekst staat er twee keer (kaart-body + formulier vult zich ermee)
+    assert zonder.count("De oude pagina-tekst.") == 2
+    assert "Het bevestigde rapport, uniek en herkenbaar." not in zonder
+
+    met = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob,
+                               van_rapport=pid)
+    # met van_rapport: de kaart-body toont de pagina nog steeds (1x), maar het formulier vult zich
+    # nu met het rapport in plaats van de pagina-tekst
+    assert met.count("De oude pagina-tekst.") == 1
+    assert "Het bevestigde rapport, uniek en herkenbaar." in met
+
+
+def test_van_rapport_zonder_leesbaar_rapport_valt_terug_op_de_pagina_body(tmp_path):
+    """Fail-soft: een onbestaand project-id bij `van_rapport` mag de tab niet breken — gewoon de
+    normale voorinvulling, geen fout op het scherm."""
+    st = _stores(tmp_path)
+    bob = _outsider_ziend_op(st)
+    st.att.add(OWNER, "note", title="HyphaLite", body="De oude pagina-tekst.")
+    st2 = cockpit2._Stores(st.dd)
+    html = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob,
+                                van_rapport="bestaat-niet")
+    assert html.count("De oude pagina-tekst.") == 2

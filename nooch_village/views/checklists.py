@@ -640,8 +640,15 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                         f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                         f"<button class='btn sm' type='submit' name='action' value='checklist_uitvoer'>"
                         f"make this the role's list</button></form>") if rw else ""
-                rol_lijst = (f"<div class='ck-gate'><span class='chip amber'>"
-                             f"⏸ the role doesn't work this list</span>"
+                # Achterstallig (wall_diepdive_rubberproject_13sept.md, "algemene feedback 6"): dit
+                # is al een knop, geen instelling — een project kan meerdere checklists hebben, maar
+                # de rol werkt er autonoom maar één (`uitvoerlijst`, met opzet exclusief). Wat
+                # ontbrak was uitleg, niet mechaniek: één zin in een title zegt waarom er twee
+                # lijsten zijn en wat de knop doet, zonder iets nieuws te bouwen.
+                rol_lijst = (f"<div class='ck-gate'><span class='chip amber' "
+                             f"title='A project can have more than one checklist, but the role "
+                             f"only works one at a time — the button below makes this the one it "
+                             f"works.'>⏸ the role doesn't work this list</span>"
                              f"<span class='muted'>items with a skill sit here unused</span>{knop}</div>")
         _titel = toon_titel(cl.get("title", ""))
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"

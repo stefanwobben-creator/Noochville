@@ -132,3 +132,35 @@ def test_effort_edit_zet_en_wist(ledger):
     pid = ledger.create("website_watcher", {"doel": "x"}, "clock", effort="1d")
     assert ledger.edit(pid, effort="2d") and ledger.get(pid)["effort"] == "2d"
     assert ledger.edit(pid, effort="") and ledger.get(pid)["effort"] == ""   # leegmaken
+
+
+# ── criteria op de checklist (scope 61) ──────────────────────────────────────
+
+def test_checklist_add_zonder_criteria_laat_de_sleutel_weg(ledger):
+    """Achterstallig gedrag blijft achterstallig: geen `criteria` meegegeven, dan staat de sleutel
+    er niet eens op — een oud project of een met de hand gemaakte lijst ziet geen verschil."""
+    pid = ledger.create("harry_hemp", {"doel": "x"}, "clock")
+    cl = ledger.checklist_add(pid, title="Stappen")
+    assert "criteria" not in cl
+    cl2 = ledger.checklist_add(pid, title="Leeg", criteria={"must": [], "nice": []})
+    assert "criteria" not in cl2                                # allebei leeg → ook geen sleutel
+    cl3 = ledger.checklist_add(pid, title="Onzin", criteria="niet een dict")
+    assert "criteria" not in cl3                                 # geen dict → genegeerd, geen fout
+
+
+def test_checklist_add_criteria_wordt_gecapt_en_afgekapt(ledger):
+    pid = ledger.create("harry_hemp", {"doel": "x"}, "clock")
+    lang = "x" * 200
+    veel = [f"c{i}" for i in range(12)]
+    cl = ledger.checklist_add(pid, title="Stappen", criteria={"must": [lang, "", " ", *veel], "nice": veel})
+    assert len(cl["criteria"]["must"][0]) == 80                  # afgekapt op 80 tekens
+    assert len(cl["criteria"]["must"]) == 8 and len(cl["criteria"]["nice"]) == 8   # gecapt op 8
+    assert "" not in cl["criteria"]["must"]                      # lege/witruimte-only genegeerd
+
+
+def test_checklist_add_alleen_must_of_alleen_nice_werkt_ook(ledger):
+    pid = ledger.create("harry_hemp", {"doel": "x"}, "clock")
+    cl = ledger.checklist_add(pid, title="Stappen", criteria={"must": ["plastic-free"]})
+    assert cl["criteria"] == {"must": ["plastic-free"], "nice": []}
+    cl2 = ledger.checklist_add(pid, title="Stappen2", criteria={"nice": ["EU-based"]})
+    assert cl2["criteria"] == {"must": [], "nice": ["EU-based"]}

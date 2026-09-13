@@ -220,6 +220,20 @@ def test_n_de_stille_valkuil_wordt_zichtbaar(tmp_path, ledger):
     assert html2.index("the role doesn't work this list") < html2.index("the role works this list")
 
 
+def test_n2_de_chip_legt_in_een_zin_uit_waarom_en_wat_de_knop_doet(tmp_path, ledger):
+    """Achterstallig (wall_diepdive_rubberproject_13sept.md, 'algemene feedback 6'): de chip is al
+    een knop, geen instelling. Wat ontbrak was uitleg — een tooltip, geen nieuw mechanisme."""
+    pid = ledger.create("harry_hemp", "doel", "human", status="running")
+    plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
+    ledger.check_add(pid, plan["id"], "a", skill="openalex_evidence")
+    eigen = ledger.checklist_add(pid, title="Acties uit overleg")
+    ledger.check_add(pid, eigen["id"], "b", skill="openalex_evidence")
+
+    html = _html(ledger, pid)
+    assert "title='A project can have more than one checklist" in html
+    assert "only works one at a time" in html
+
+
 def test_o_een_lijst_zonder_skill_items_krijgt_geen_knop(tmp_path, ledger):
     """De knop hoort alleen te staan waar hij iets oplost: een lijst met werk dat blijft liggen."""
     pid = ledger.create("harry_hemp", "doel", "human", status="running")

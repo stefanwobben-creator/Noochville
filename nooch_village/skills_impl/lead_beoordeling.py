@@ -29,6 +29,13 @@ toevoegen die er niet is.
 FAIL-CLOSED. Geen site gevonden, pagina niet leesbaar, model geeft onzin: een `error`, geen
 `no_data`. Een lead die niet beoordeeld kón worden is iets anders dan een lead die niet past, en de
 uitvoerlus laat het item dan open (poging tellen) in plaats van het als antwoord af te vinken.
+
+MUST VS NICE, EN HET VERDICT VOOROP (scope 61, `structurele_prioriteit_informatievinden.md`). Naast
+`criteria` (must) kan de aanroeper nu ook `nice_criteria` meegeven — dezelfde lat die het plan al
+vastlegde (`_plan_checklist` → `ronde_twee.plan_items`), niet een nieuw verzonnen lijstje. Elke regel
+in `beoordeling` draagt voortaan `belang: "must"|"nice"`, en `text` begint met één regel ("Must: x/y
+met", desnoods met de missers erbij) vóór de bestaande kopregel. Dát is de regel die ontbrak toen
+Stefan zei: "ik moet de hele update lezen en zoeken naar de conclusie."
 """
 from __future__ import annotations
 
@@ -103,10 +110,19 @@ def _kort(s, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def _prompt(naam: str, url: str, vraag: str, opdracht: str, criteria: list[str], tekst: str) -> str:
-    crit = ("Assess these criteria, in this order: " + "; ".join(criteria) + ".\n") if criteria else (
-        "Derive the criteria from the ASSIGNMENT if it names any; otherwise use the single "
-        "criterion 'relevant to the question'.\n")
+def _prompt(naam: str, url: str, vraag: str, opdracht: str, criteria: list[str], tekst: str, *,
+            nice_criteria: list[str] | None = None) -> str:
+    must_laag = {c.lower() for c in criteria}
+    nice = [c for c in (nice_criteria or []) if c.lower() not in must_laag]
+    if criteria and nice:
+        crit = ("Assess these criteria, in this order: " + "; ".join(criteria) + ". Also assess these "
+                "bonus criteria the same way, but treat them as nice-to-have: a miss here should not "
+                "by itself pull fit below what the required criteria justify: " + "; ".join(nice) + ".\n")
+    elif criteria or nice:
+        crit = "Assess these criteria, in this order: " + "; ".join(criteria or nice) + ".\n"
+    else:
+        crit = ("Derive the criteria from the ASSIGNMENT if it names any; otherwise use the single "
+                "criterion 'relevant to the question'.\n")
     return (
         "You assess ONE lead for a research question, using ONLY the page text below.\n\n"
         f"QUESTION: {_kort(vraag, 300) or '(not given)'}\n"
@@ -146,12 +162,15 @@ class LeadBeoordelingSkill(Skill):
                     "by name, never a placeholder); "
                     "vraag: str (optional — the project goal); "
                     "opdracht: str (optional — the human's assignment with the criteria); "
-                    "criteria: list[str] (optional — the criteria to assess, e.g. "
-                    "['plastic-free', 'vegan', 'proven in footwear', 'available in the EU'])")
+                    "criteria: list[str] (optional — the MUST criteria to assess, e.g. "
+                    "['plastic-free', 'vegan', 'proven in footwear', 'available in the EU']); "
+                    "nice_criteria: list[str] (optional — NICE-to-have criteria, assessed the same "
+                    "way but a miss here does not by itself sink the fit)")
     required_payload = (("naam", "url"),)
     output_schema = ("ok, naam, url, gevonden_via (url|zoek:<bron>), site_onzeker (bool), "
                      "wat_is_dit, oordeel (high|medium|low), waarom, volgende_stap, citaat, "
-                     "beoordeling[{criterium, oordeel, citaat}], text (voor de wall) | error")
+                     "beoordeling[{criterium, oordeel, citaat, belang: must|nice}], "
+                     "text (voor de wall, begint met het must-verdict) | error")
 
     def __init__(self, zoek=None, haal=None, reason_fn=None):
         # Alle drie injecteerbaar, zodat een test de keten bewijst zonder netwerk, zonder credits
@@ -189,6 +208,8 @@ class LeadBeoordelingSkill(Skill):
         vraag = str(payload.get("vraag") or "").strip()
         opdracht = str(payload.get("opdracht") or "").strip()
         criteria = [str(c).strip() for c in (payload.get("criteria") or []) if str(c).strip()][:_MAX_CRITERIA]
+        nice_criteria = [str(c).strip() for c in (payload.get("nice_criteria") or [])
+                         if str(c).strip()][:_MAX_CRITERIA]
 
         gevonden_via, onzeker = "url", False
         if not url:
@@ -203,12 +224,14 @@ class LeadBeoordelingSkill(Skill):
                     "gevonden_via": gevonden_via}
 
         data = self._beoordeel(naam or web_read.domain_of(url), url, vraag, opdracht, criteria, tekst,
+                               nice_criteria=nice_criteria,
                                ladder=(str(payload.get("ladder") or "").strip() or None))
         if data is None:
             return {"error": "geen oordeel: het model gaf geen bruikbaar antwoord", "naam": naam,
                     "url": url, "gevonden_via": gevonden_via}
 
-        rijen, teruggezet = _rijen(data, criteria, naam=naam or web_read.domain_of(url), url=url)
+        rijen, teruggezet = _rijen(data, criteria, nice_criteria=nice_criteria,
+                                   naam=naam or web_read.domain_of(url), url=url)
         oordeel = str(data.get("fit") or "").strip().lower()
         oordeel = oordeel if oordeel in FIT else "low"
         volgende = str(data.get("next_step") or "").strip().lower()
@@ -258,13 +281,13 @@ class LeadBeoordelingSkill(Skill):
         titel = (gehaald.get("titel") or "").strip() if isinstance(gehaald, dict) else ""
         return (f"{titel}\n{tekst}" if titel else tekst)[:_MAX_TEKST], ""
 
-    def _beoordeel(self, naam, url, vraag, opdracht, criteria, tekst, *, ladder=None):
+    def _beoordeel(self, naam, url, vraag, opdracht, criteria, tekst, *, nice_criteria=None, ladder=None):
         """Eén modelronde. `ladder` komt uit de payload (dezelfde afspraak als `tegenspraak`); leeg
         = de dorpsladder. Geen model of onzin terug → None, en de caller maakt er een fout van."""
         reason_fn = self._reason
         if reason_fn is None:
             from nooch_village.llm import reason as reason_fn        # noqa: PLC0415 — lazy, testbaar
-        prompt = _prompt(naam, url, vraag, opdracht, criteria, tekst)
+        prompt = _prompt(naam, url, vraag, opdracht, criteria, tekst, nice_criteria=nice_criteria)
         try:
             rauw = reason_fn(prompt, json_mode=True, max_tokens=900, call_site="skill_lead_beoordeling",
                              ladder=ladder)
@@ -275,13 +298,33 @@ class LeadBeoordelingSkill(Skill):
         return data if isinstance(data, dict) else None
 
 
-def _rijen(data: dict, criteria: list[str], *, naam: str = "", url: str = "") -> tuple[list[dict], int]:
+def _rijen(data: dict, criteria: list[str], *, nice_criteria: list[str] | None = None,
+           naam: str = "", url: str = "") -> tuple[list[dict], int]:
     """De beoordeling als records: eerst 'what is this', dan per criterium, dan het oordeel. Een
     ja/nee zonder citaat wordt hier 'unknown' — dit is de vangrail, niet de prompt.
 
     De eerste rij draagt `naam` en `url` van de lead (scope 54): die stonden alleen op topniveau,
     en het verslag rendert records — dus het adres van de beoordeelde site haalde het einddocument
-    niet. Nu leest de eerste regel "• Kiilto (https://kiilto.com) — Finnish adhesive maker"."""
+    niet. Nu leest de eerste regel "• Kiilto (https://kiilto.com) — Finnish adhesive maker".
+
+    Elk criterium-record draagt sinds scope 61 ook `belang` ("must"/"nice"), maar alléén als de naam
+    voorkomt in wat de aanroeper daadwerkelijk vroeg (`criteria` = must, `nice_criteria` = nice) —
+    niet door wat het model ervan vindt, dezelfde deterministische-vangrail-gedachte als het
+    citaat-oordeel hierboven. Een criterium dat het model erbij verzint zonder dat het gevraagd was
+    krijgt geen `belang` en telt dus niet mee in het must-verdict: anders zou een scheutig model de
+    lat zelf kunnen verlagen door 'm breder te maken dan gevraagd."""
+    must_laag = {c.lower() for c in criteria}
+    nice_criteria = [c for c in (nice_criteria or []) if c.lower() not in must_laag]
+    nice_laag = {c.lower() for c in nice_criteria}
+
+    def _belang(naam_c: str) -> str | None:
+        nl = naam_c.lower()
+        if nl in must_laag:
+            return "must"
+        if nl in nice_laag:
+            return "nice"
+        return None
+
     eerste = {"criterium": "what is this", "oordeel": _kort(data.get("what_is_this"), 240), "citaat": ""}
     if naam:
         eerste = {"naam": naam, **eerste}
@@ -303,11 +346,21 @@ def _rijen(data: dict, criteria: list[str], *, naam: str = "", url: str = "") ->
         if verdict in ("yes", "no") and not citaat:
             verdict = "unknown"
             teruggezet += 1
-        rijen.append({"criterium": naam, "oordeel": verdict, "citaat": citaat})
-    # criteria die de opdracht noemde maar het model oversloeg: expliciet onbekend, niet stil weg
+        rij = {"criterium": naam, "oordeel": verdict, "citaat": citaat}
+        belang = _belang(naam)
+        if belang:
+            rij["belang"] = belang
+        rijen.append(rij)
+    # criteria die de opdracht noemde (must én nice) maar het model oversloeg: expliciet onbekend,
+    # niet stil weg — hier is `belang` altijd bekend, want `c` komt letterlijk uit die lijsten
     for c in criteria:
         if c.lower() not in gezien:
-            rijen.append({"criterium": c, "oordeel": "unknown", "citaat": ""})
+            gezien.add(c.lower())
+            rijen.append({"criterium": c, "oordeel": "unknown", "citaat": "", "belang": "must"})
+    for c in nice_criteria:
+        if c.lower() not in gezien:
+            gezien.add(c.lower())
+            rijen.append({"criterium": c, "oordeel": "unknown", "citaat": "", "belang": "nice"})
     fit = str(data.get("fit") or "").strip().lower()
     fit = fit if fit in FIT else "low"
     volgende = str(data.get("next_step") or "").strip().lower()
@@ -318,12 +371,28 @@ def _rijen(data: dict, criteria: list[str], *, naam: str = "", url: str = "") ->
 
 
 def _als_tekst(uit: dict) -> str:
-    """De vorm voor de wall: één regel oordeel, dan de criteria met hun citaat."""
+    """De vorm voor de wall: eerst het verdict over de must-criteria in één regel (scope 61 — dát is
+    de regel die iemand zonder verder te lezen al vertelt of dit een goede lead is), dan de
+    bestaande kopregel, dan de criteria met hun citaat."""
+    rijen = uit.get("beoordeling") or []
+    must_rijen = [r for r in rijen if r.get("belang") == "must"]
+    nice_rijen = [r for r in rijen if r.get("belang") == "nice"]
+    regels = []
+    if must_rijen:
+        voldaan = [r["criterium"] for r in must_rijen if r["oordeel"] == "yes"]
+        niet = [r["criterium"] for r in must_rijen if r["oordeel"] != "yes"]
+        verdict = f"Must: {len(voldaan)}/{len(must_rijen)} met"
+        if niet:
+            verdict += f" (missing: {', '.join(niet)})"
+        regels.append(verdict)
+    elif nice_rijen:
+        voldaan = [r["criterium"] for r in nice_rijen if r["oordeel"] == "yes"]
+        regels.append(f"Nice-to-have: {len(voldaan)}/{len(nice_rijen)} met")
     kop = (f"Assessed {uit['naam']} ({uit['url']}, found via {uit['gevonden_via']}"
            f"{', site uncertain' if uit.get('site_onzeker') else ''}): "
            f"{uit['oordeel']} fit — {uit['waarom'] or uit['wat_is_dit']}. Next: {uit['volgende_stap']}.")
-    regels = [kop]
-    for r in uit.get("beoordeling") or []:
+    regels.append(kop)
+    for r in rijen:
         regel = f"• {r['criterium']}: {r['oordeel']}"
         if r.get("citaat"):
             regel += f" — “{r['citaat']}”"

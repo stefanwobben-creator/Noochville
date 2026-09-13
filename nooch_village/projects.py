@@ -650,7 +650,8 @@ class ProjectLedger:
         return None
 
     def checklist_add(self, pid: str, title: str = "", *, akkoord: bool | None = None,
-                      herplan_van: str = "", ronde_twee_van: str = "") -> dict | None:
+                      herplan_van: str = "", ronde_twee_van: str = "",
+                      criteria: dict | None = None) -> dict | None:
         """Voeg een checklist toe. `akkoord=False` markeert 'm als VOORSTEL: een plan dat een mens eerst
         moet goedkeuren (zie `plan_wacht_op_akkoord`). Default None laat de sleutel weg, zodat een met de
         hand gemaakte checklist blijft doen wat hij altijd deed.
@@ -666,7 +667,14 @@ class ProjectLedger:
            onderzoek navolgbaar maakt: niet alleen wat er gezocht is, maar op wiens voorstel.
 
         `ronde_twee_van` = de uitvoerlijst waarvan de leads komen (zie `ronde_twee.py`, scope 51).
-        Zelfde twee redenen: één ronde (bestaat er al zo'n lijst, dan geen derde), en herkomst."""
+        Zelfde twee redenen: één ronde (bestaat er al zo'n lijst, dan geen derde), en herkomst.
+
+        `criteria` (scope 61) = {"must": [...], "nice": [...]} — wat "goed genoeg" betekent voor DEZE
+        lijst, gezet op planmoment (`Inhabitant._plan_checklist`). Optioneel en fail-soft: leeg of geen
+        dict laat de sleutel gewoon weg, zodat een oud project of een met de hand gemaakte checklist
+        blijft doen wat hij altijd deed. Zie `structurele_prioriteit_informatievinden.md`: dit is de ÉÉN
+        plek waar de lat leeft — `ronde_twee` en `lead_beoordeling` lezen 'm vanaf hier in plaats van
+        zelf opnieuw te verzinnen (reference, don't copy, toegepast op een criteria-set)."""
         p = self._projects.get(pid)
         if p is None:
             return None
@@ -677,6 +685,11 @@ class ProjectLedger:
             cl["herplan_van"] = str(herplan_van)[:64]
         if ronde_twee_van:
             cl["ronde_twee_van"] = str(ronde_twee_van)[:64]
+        if isinstance(criteria, dict):
+            must = [str(c).strip()[:80] for c in (criteria.get("must") or []) if str(c).strip()][:8]
+            nice = [str(c).strip()[:80] for c in (criteria.get("nice") or []) if str(c).strip()][:8]
+            if must or nice:
+                cl["criteria"] = {"must": must, "nice": nice}
         self._checklists(p).append(cl)
         p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()

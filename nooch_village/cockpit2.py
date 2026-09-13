@@ -6485,6 +6485,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                        van=(qs.get("van") or [""])[0],
                                        tot=(qs.get("tot") or [""])[0],
                                        compare=(qs.get("compare") or [""])[0] == "1",
+                                       van_rapport=(qs.get("van_rapport") or [""])[0],
                                        username=username))
                 return
             if path == "/rapport":
