@@ -380,13 +380,24 @@ def _scope(p: dict) -> str:
 
 # ── De pre-flight: weten we dit al? ──────────────────────────────────────────────────────────
 
-def _preflight(data_dir: str, tekst: str) -> dict:
+def _preflight(data_dir: str, tekst: str, *, mag_semantisch: bool = True) -> dict:
     """Draai `weten_we_dit_al` AUTOMATISCH bij elke raadpleging.
 
     Die skill was opt-in: een rol moest 'm in zijn DNA hebben én zelf kiezen om 'm te draaien, en
     dus gebeurde het zelden — terwijl de vraag "hebben we dit al" bij élk stuk werk vooraf hoort.
     Hier draait hij als pre-flight, deterministisch en zonder LLM, en zijn verdict (`bekend`) wordt
-    de kop van het grondingsblok. Fail-soft: een fout → geen verdict, nooit een blokkade."""
+    de kop van het grondingsblok. Fail-soft: een fout → geen verdict, nooit een blokkade.
+
+    HYBRIDE, LEXICAAL EERST (scope 60). `weten_we_dit_al` zelf blijft ONGEWIJZIGD — puur lexicaal,
+    gratis, geen externe call — want dit is het meest uitgevoerde retrieval-pad in de hele codebase
+    (bevinding 2, `data_opsporing_kwaliteit.md`) en de kosten van een dure stap wegen hier zwaarder
+    dan bij `_inzichten`/`_signalen`, die al standaard semantisch-eerst gaan. In plaats daarvan komt
+    de semantische stap er PAS bij als de lexicale weg niets vond (`_preflight_semantisch`): dat
+    houdt de drukste situatie (iets IS bekend) precies zo goedkoop als vandaag, en betaalt de
+    embedding-kosten alleen op de zeldzamere 'niets gevonden'-paden — exact waar het
+    'mycelium vs paddenstoelvezel'-gat zit. `mag_semantisch` volgt hetzelfde budget als
+    `_inzichten`/`_signalen` (`_mag_semantisch()` in `kennis_voor`): een mens die op een scherm
+    wacht, mag deze stap net zo goed afgeknepen zien als de andere twee."""
     try:
         import types
 
@@ -397,8 +408,49 @@ def _preflight(data_dir: str, tekst: str) -> dict:
         return {}
     if not isinstance(uit, dict) or not uit.get("ok"):
         return {}
-    return {"bekend": bool(uit.get("bekend")), "treffers": int(uit.get("treffers") or 0),
-            "samenvatting": _regel(uit.get("samenvatting"), 240)}
+    resultaat = {"bekend": bool(uit.get("bekend")), "treffers": int(uit.get("treffers") or 0),
+                "samenvatting": _regel(uit.get("samenvatting"), 240), "modus": "lexicaal"}
+    if not resultaat["bekend"] and mag_semantisch:
+        upgrade = _preflight_semantisch(data_dir, tekst)
+        if upgrade:
+            resultaat.update(upgrade)
+    return resultaat
+
+
+def _preflight_semantisch(data_dir: str, tekst: str) -> dict | None:
+    """Tweede kans ná een lexicale mis: dezelfde kennisbank-index als `_inzichten`
+    (`INDEX_INZICHTEN`), zodat een vraag over 'paddenstoelvezel' een eerder gemunt
+    'mycelium'-inzicht wél vindt — precies het voorbeeld uit bevinding 2.
+
+    Bewust ALLEEN de kennisbank, niet kaartjes of signalen: kaartjes hebben geen embedding-index
+    (`_kaartjes` matcht van nature lexicaal, zie hierboven) en signalen zijn hier niet het
+    gedocumenteerde geval. Klein en scherp gesneden houdt dit een gerichte reparatie van de
+    genoemde bevinding, geen herontwerp van de hele pre-flight.
+
+    None bij geen sleutel, geen index, een API-fout of gewoon niets boven de drempel — dan blijft
+    het lexicale 'NEE' van `weten_we_dit_al` gewoon staan. Fail-soft en stil, zelfde geest als de
+    rest van dit bestand: de vraag mag hier nooit op stranden."""
+    try:
+        from nooch_village.kennisbank import KennisbankStore
+        pad = os.path.join(data_dir, "kennisbank.json")
+        if not os.path.exists(pad):
+            return None
+        alle = KennisbankStore(pad).all()
+        if not alle:
+            return None
+        docs = [(ins, f"{ins.get('title', '')} {ins.get('why', '')}") for ins in alle]
+        hits, modus = _rangschik(tekst, docs, 1, sleutel_fn=lambda i: i.get("id"),
+                                 index=INDEX_INZICHTEN, data_dir=data_dir)
+        if modus != "semantisch" or not hits:
+            return None
+        ins = hits[0]
+        return {"bekend": True, "treffers": 1, "modus": "semantisch",
+                "samenvatting": _regel(
+                    f"Yes (found on meaning, not a literal word match) — "
+                    f"\"{ins.get('title', '')}\"", 240)}
+    except Exception as e:                                # noqa: BLE001 — preflight mag nooit breken
+        log.warning("semantische preflight-fallback faalde fail-soft: %s", e)
+        return None
 
 
 def kennis_voor(bron, tekst: str, limit: int = 5, *, exclude_pid: str = "",
@@ -450,7 +502,7 @@ def kennis_voor(bron, tekst: str, limit: int = 5, *, exclude_pid: str = "",
             uit["projecten"] = _projecten(data_dir, tekst, limit, exclude=exclude_pid)
         except Exception as e:                            # noqa: BLE001
             log.warning("kennis-raadpleging (projecten) faalde fail-soft: %s", e)
-        uit["preflight"] = _preflight(data_dir, tekst)
+        uit["preflight"] = _preflight(data_dir, tekst, mag_semantisch=_mag_semantisch())
     kron = uit["kroniek"]
     uit["samenvatting"] = (f"{len(uit['kaartjes'])} kaartjes, {len(uit['inzichten'])} "
                            f"inzichten, {len(uit['signalen'])} signalen, "
@@ -502,8 +554,15 @@ def kennis_blok(kennis: dict | None, max_chars: int = MAX_BLOK_CHARS) -> str:
     pf = kennis.get("preflight") or {}
     if pf:
         antwoord = "JA" if pf.get("bekend") else "NEE"
-        secties.append((f"WETEN WE DIT AL? {antwoord} — {pf.get('treffers', 0)} directe treffer(s).",
-                        [], 300))
+        kop = f"WETEN WE DIT AL? {antwoord} — {pf.get('treffers', 0)} directe treffer(s)."
+        if pf.get("modus") == "semantisch":
+            # Transparantie-regel, zelfde geest als `_rangschik`: nooit een treffer op BETEKENIS
+            # laten lezen als een letterlijke woordmatch — de lezer (mens of LLM) moet zelf kunnen
+            # wegen of het echt hetzelfde onderwerp is.
+            kop = (f"WETEN WE DIT AL? {antwoord} (gevonden op betekenis, geen letterlijke "
+                   f"woordmatch — controleer of dit echt hetzelfde onderwerp is): "
+                   f"{pf.get('samenvatting', '')}")
+        secties.append((kop, [], 300))
 
     kron = kennis.get("kroniek") or {}
     kron_regels: list[str] = []
