@@ -85,17 +85,43 @@ def test_leads_uit_ontdubbelt_capt_en_leegt_een_verzonnen_url():
                                    reason_fn=_model, max_leads=3)
     assert [l["naam"] for l in leads] == ["Kiilto Biomelt", "acib", "Ghost Corp"]
     assert leads[0]["url"].startswith("https://") and leads[2]["url"] == ""     # placeholder → leeg
-    assert criteria == ["plastic-free", "vegan", "proven in footwear"]          # 'Vegan' is een dubbel
+    # scope 61: zonder `voorkeur` (geen lat van het plan) leidt leads_uit zelf af uit wat het model
+    # teruggeeft, nu als {"must": [...], "nice": []} — 'Vegan' is een dubbel
+    assert criteria == {"must": ["plastic-free", "vegan", "proven in footwear"], "nice": []}
     assert gezien["k"]["call_site"] == "ronde_twee_leads"
     assert "GOAL: Glue-free joining" in gezien["p"] and "Skip the project owner's own brand" in gezien["p"]
+
+
+def test_leads_uit_met_vaste_lat_wint_over_zelf_afleiden():
+    """scope 61 — de kern van het criteria-contract: staat er al een must/nice-lat (`voorkeur`, komt
+    van `cl['criteria']` op het plan), dan wint die en verzint het model er geen eigen criteria meer
+    bij. Nice stuurt niet mee bij het KIEZEN van leads (alleen must, zie `_prompt`'s docstring) — die
+    telt pas bij het beoordelen, via `plan_items` → `lead_beoordeling`."""
+    gezien = {}
+
+    def _model(prompt, **k):
+        gezien["p"] = prompt
+        return json.dumps(LEADS_ANTWOORD)          # het model verzint zelf ook nog 'criteria' erbij
+    leads, criteria = rt.leads_uit("Glue-free joining", "plastic-free and vegan", "materiaal",
+                                   reason_fn=_model, max_leads=3,
+                                   voorkeur={"must": ["plastic-free", "vegan"], "nice": ["EU-based"]})
+    assert [l["naam"] for l in leads] == ["Kiilto Biomelt", "acib", "Ghost Corp"]
+    # de vaste lat wint, niet wat het model er zelf nog bij verzon (LEADS_ANTWOORD noemt ook
+    # "proven in footwear" als criterium — dat mag hier niet meer meekomen)
+    assert criteria == {"must": ["plastic-free", "vegan"], "nice": ["EU-based"]}
+    assert "PRIORITY CRITERIA" in gezien["p"] and "plastic-free; vegan" in gezien["p"]
+    assert "EU-based" not in gezien["p"]                      # nice stuurt niet mee bij het kiezen
+    assert "Also list the criteria" not in gezien["p"]        # het model hoeft niets te verzinnen
 
 
 def test_leads_uit_is_fail_soft():
     def _stuk(*a, **k):
         raise RuntimeError("geen krediet")
-    assert rt.leads_uit("g", "d", "materiaal", reason_fn=_stuk) == ([], [])
-    assert rt.leads_uit("g", "d", "materiaal", reason_fn=lambda *a, **k: "geen json") == ([], [])
-    assert rt.leads_uit("g", "d", "", reason_fn=lambda *a, **k: 1 / 0) == ([], [])   # zonder materiaal geen vraag
+    assert rt.leads_uit("g", "d", "materiaal", reason_fn=_stuk) == ([], {"must": [], "nice": []})
+    assert rt.leads_uit("g", "d", "materiaal",
+                        reason_fn=lambda *a, **k: "geen json") == ([], {"must": [], "nice": []})
+    assert rt.leads_uit("g", "d", "", reason_fn=lambda *a, **k: 1 / 0) == ([], {"must": [], "nice": []}
+                        )   # zonder materiaal geen vraag
 
 
 # ── 3: de items ──────────────────────────────────────────────────────────────
@@ -107,6 +133,22 @@ def test_plan_items_een_beoordeling_per_lead():
                       "payload": {"naam": "acib", "url": "", "vraag": "Glue-free joining",
                                   "opdracht": "plastic-free", "criteria": ["plastic-free", "vegan"]},
                       "reason": "lignin glue"}]
+
+
+def test_plan_items_met_must_nice_dict_vult_nice_criteria_alleen_als_die_er_is():
+    """scope 61: `criteria` mag ook {"must", "nice"} zijn (komt van `leads_uit`/het plan). `nice`
+    wordt alleen als apart payload-veld meegegeven als hij niet leeg is — de skill's eigen schema
+    verandert niet voor callers die nooit nice-criteria kennen."""
+    lead = [{"naam": "acib", "soort": "institute", "url": "", "waarom": "lignin glue"}]
+    met_nice = rt.plan_items(lead, "Glue-free joining", "plastic-free",
+                             {"must": ["plastic-free"], "nice": ["EU-based"]})
+    assert met_nice[0]["payload"]["criteria"] == ["plastic-free"]
+    assert met_nice[0]["payload"]["nice_criteria"] == ["EU-based"]
+
+    zonder_nice = rt.plan_items(lead, "Glue-free joining", "plastic-free",
+                                {"must": ["plastic-free"], "nice": []})
+    assert zonder_nice[0]["payload"]["criteria"] == ["plastic-free"]
+    assert "nice_criteria" not in zonder_nice[0]["payload"]
 
 
 # ── 4: in de uitvoerlus ──────────────────────────────────────────────────────
@@ -177,6 +219,31 @@ def test_lijst_af_geeft_ronde_twee_als_voorstel_en_nog_geen_review(tmp_path, mon
     logtxt = " ".join(e["text"] for e in p.get("log", []))
     assert "🔁 Round one done as far as I can take it. Names worth a closer look: Kiilto Biomelt, acib, Ghost Corp" in logtxt
     assert "Checklist complete" not in logtxt
+
+
+def test_ronde_twee_neemt_de_lat_van_het_plan_over_ipv_zelf_af_te_leiden(tmp_path, monkeypatch):
+    """scope 61, end-to-end: staat er al een must/nice-criteria op de prep-checklist (gezet bij het
+    plannen, zie `projects.checklist_add` en `_plan_checklist`), dan gebruikt ronde twee precies díe
+    lat — niet wat het model in LEADS_ANTWOORD er zelf nog bij verzint ('proven in footwear') — en de
+    lead_beoordeling-items krijgen zowel `criteria` (must) als `nice_criteria`."""
+    import nooch_village.llm as llm
+    monkeypatch.setattr(llm, "reason", _model_met_leads)
+    ledger = ProjectLedger(str(tmp_path / "p.json"))
+    inw = _inw(tmp_path, ledger)
+    pid = ledger.create("harry_hemp", "Glue-free joining", "human", status="running",
+                        description="plastic-free and vegan")
+    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE,
+                              criteria={"must": ["plastic-free"], "nice": ["EU-based"]})
+    ledger.check_add(pid, cl["id"], "Search the web", skill="web_zoek", payload={"term": "bio glue"})
+    inw._execute_checklist(ledger.get(pid), TODAY)
+    p = ledger.get(pid)
+    twee = p["checklists"][1]
+    assert twee["criteria"] == {"must": ["plastic-free"], "nice": ["EU-based"]}
+    payload = twee["items"][0]["payload"]
+    assert payload["criteria"] == ["plastic-free"]                  # de lat van het plan
+    assert payload["nice_criteria"] == ["EU-based"]
+    logtxt = " ".join(e["text"] for e in p.get("log", []))
+    assert "against: plastic-free, EU-based" in logtxt
 
 
 def test_ronde_twee_wacht_op_akkoord_en_draait_daarna_naar_review(tmp_path, monkeypatch):

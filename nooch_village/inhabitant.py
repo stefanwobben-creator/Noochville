@@ -994,7 +994,12 @@ class Inhabitant(threading.Thread):
         # akkoord=False: het plan is een VOORSTEL. `_execute_checklist` slaat 'm over tot een mens
         # op de projectkaart 'go ahead' klikt. Plannen is goedkoop en omkeerbaar, uitvoeren kost
         # API-calls en schrijft naar de wall - dus daar ligt de knip, niet bij het slepen naar ACTIEF.
-        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False)
+        # `criteria` (scope 61): de must/nice-lat die `_plan_checklist` nu meegeeft, gaat in ÉÉN keer
+        # mee de checklist op — ronde_twee en lead_beoordeling lezen 'm vanaf hier terug in plaats van
+        # zelf een nieuwe lat te verzinnen (structurele_prioriteit_informatievinden.md).
+        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False,
+                                  criteria=plan.get("criteria")
+                                  if isinstance(plan.get("criteria"), dict) else None)
         if cl is None:
             return
         # BREED VOOR SMAL, DETERMINISTISCH. De promptregel helpt, maar hij is een belofte: precies
@@ -1248,8 +1253,17 @@ class Inhabitant(threading.Thread):
                              "op de wall, een mens kan de stappen overnemen", pid)
             return
 
+        # criteria (scope 61): de lat komt zoveel mogelijk mee van het OORSPRONKELIJKE plan — die
+        # bestond al vóór deze strategie er kwam en is breder gemotiveerd dan dit smalle herplan-
+        # promptje — en pas als die er niet is, van dit herplan zelf.
+        bestaande_criteria = next(
+            (c.get("criteria") for c in (p.get("checklists") or []) if isinstance(c.get("criteria"), dict)),
+            None)
         cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE, akkoord=False,
-                                  herplan_van=str(item.get("id") or ""))
+                                  herplan_van=str(item.get("id") or ""),
+                                  criteria=bestaande_criteria or (
+                                      plan.get("criteria") if isinstance(plan.get("criteria"), dict)
+                                      else None))
         if cl is None:
             return
         for it in plan["items"]:
@@ -1330,8 +1344,13 @@ class Inhabitant(threading.Thread):
                 max_leads = int(settings.get("ronde_twee_max", ronde_twee.MAX_LEADS_DEFAULT))
             except (TypeError, ValueError):
                 max_leads = ronde_twee.MAX_LEADS_DEFAULT
+            # DE LAT KOMT VAN HET PLAN (scope 61): `cl` is de zojuist afgeronde uitvoerlijst, en als
+            # díe een `criteria`-veld draagt (gezet bij het plannen, zie `_plan_checklist` en
+            # `prepare_project`) dan wint die lat — ronde twee verzint er geen tweede naast, zie
+            # `ronde_twee.leads_uit`'s docstring voor het waarom.
+            eigen_criteria = cl.get("criteria") if isinstance(cl.get("criteria"), dict) else None
             leads, criteria = ronde_twee.leads_uit(
-                goal, opdracht, materiaal, max_leads=max_leads,
+                goal, opdracht, materiaal, max_leads=max_leads, voorkeur=eigen_criteria,
                 ladder=_persona_ladder(self.context, self.id, "ronde_twee_leads"))
         except Exception as e:                            # noqa: BLE001 — nooit de puls breken
             self.log.warning("🔁 ronde twee mislukt voor '%s' (%s: %s) — door naar review",
@@ -1340,7 +1359,8 @@ class Inhabitant(threading.Thread):
         if not leads:
             self.log.info("🔁 project '%s': geen leads in de vondsten — door naar review", pid)
             return False
-        nieuw = ledger.checklist_add(pid, title=ronde_twee.TITEL, akkoord=False, ronde_twee_van=clid)
+        nieuw = ledger.checklist_add(pid, title=ronde_twee.TITEL, akkoord=False, ronde_twee_van=clid,
+                                     criteria=criteria)
         if nieuw is None:
             return False
         for it in ronde_twee.plan_items(leads, goal, opdracht, criteria):
@@ -1350,7 +1370,8 @@ class Inhabitant(threading.Thread):
         # is af en blijft staan als wat hij is: ronde één.
         ledger.set_checklist_uitvoer(pid, nieuw["id"])
         namen = ", ".join(l["naam"] for l in leads)
-        lat = (" against: " + ", ".join(criteria)) if criteria else ""
+        lat_lijst = list((criteria or {}).get("must") or []) + list((criteria or {}).get("nice") or [])
+        lat = (" against: " + ", ".join(lat_lijst)) if lat_lijst else ""
         rest = ""
         if open_items:
             rest = (f" {len(open_items)} item(s) on the first list stay open for a human: "
@@ -1501,6 +1522,20 @@ class Inhabitant(threading.Thread):
             "assignment, not by our own brand values unless the assignment names them. NEVER plan a "
             "step that synthesizes, summarizes or reports on the other steps: the final document is "
             "assembled automatically from the deliverables.\n"
+            # CRITERIA (scope 61, structurele_prioriteit_informatievinden.md). Tot dit scope stond er
+            # nergens een expliciete, gewogen lat: ronde_twee verzon zijn eigen `criteria` pas NÁ de
+            # eerste hele uitvoerlijst, zonder must/nice-onderscheid, los van wat hier gepland werd.
+            # Diezelfde criteria bepalen straks (a) welke leads de moeite waard zijn — niet alleen wat
+            # toevallig goed citeerbaar was in de vondsten — en (b) hoe `lead_beoordeling` élk van hen
+            # toetst, met hetzelfde citaat-of-unknown-mechanisme. Eén lat, hier gezet, overal gelezen.
+            "CRITERIA. State what \"good enough\" looks like for this goal, split into MUST (the goal "
+            "fails without these) and NICE (helpful, not required). For an ASSESSMENT these are the "
+            "deciding factors; for a SEARCH for a supplier or material these are the assignment's "
+            "requirements per lead — the same lat a later round judges each lead against, so get it "
+            "right here rather than leaving it to be guessed afterwards. Do not add our own brand "
+            "values unless the assignment names them. Short noun phrases, at most 6 each. Leave both "
+            "empty only when the goal is pure orientation and there truly is no way yet to say what "
+            "\"good enough\" means.\n"
             "Break the goal down into 2 to 5 concrete sub-items (up to 6 when the three search "
             "vocabularies are all needed). For EVERY item: if one of your skills can "
             "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
@@ -1538,7 +1573,8 @@ class Inhabitant(threading.Thread):
             "Keep the JSON keys and the fixed values (skill names, human_external, missing_capability) "
             "exactly as written here. A quoted claim or source stays in its original language. "
             "Answer ONLY with JSON, exactly this schema:\n"
-            "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
+            "{\"deliverable\": \"...\", \"accountability\": \"...\", \"must_criteria\": [\"...\"], "
+            "\"nice_criteria\": [\"...\"], \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\", "
             "\"kind\": \"human_external|missing_capability (alleen als skill null is)\"}]}"
         )
@@ -1570,6 +1606,22 @@ class Inhabitant(threading.Thread):
                 it["reason"] = ((it.get("reason") or "") + f" (voorgestelde skill '{sk}' niet in DNA)").strip()
                 it["skill"] = None
                 it["payload"] = {}
+        # CRITERIA normaliseren (scope 61): must/nice, gecapt en ontdubbeld, in de vorm die
+        # `projects.checklist_add` en `ronde_twee.leads_uit` verwachten. Leeg blijft leeg — geen
+        # sleutel forceren — want een plan zonder heldere lat is prima (zie de promptregel hierboven
+        # en `ronde_twee`'s fail-soft terugval op zelf-afleiden zonder een gezette lat).
+        def _lijst(sleutel: str) -> list[str]:
+            gezien: set[str] = set()
+            uit: list[str] = []
+            for c in (data.get(sleutel) or [])[:8]:
+                c = " ".join(str(c or "").split())[:80]
+                if c and c.lower() not in gezien:
+                    gezien.add(c.lower())
+                    uit.append(c)
+            return uit
+        must, nice = _lijst("must_criteria"), _lijst("nice_criteria")
+        if must or nice:
+            data["criteria"] = {"must": must, "nice": nice}
         return data
 
     @staticmethod

@@ -109,7 +109,7 @@ def test_beoordeling_bevat_wat_is_dit_criteria_en_oordeel():
     # rendert) het adres van de beoordeelde site toont.
     assert rijen[0] == {"naam": "nahtur-design", "criterium": "what is this", "oordeel": uit["wat_is_dit"],
                         "citaat": "", "url": uit["url"]}
-    assert rijen[1] == {"criterium": "plastic-free", "oordeel": "yes",
+    assert rijen[1] == {"criterium": "plastic-free", "oordeel": "yes", "belang": "must",
                         "citaat": "Die Sohle besteht aus Eco-Rubber, einer Naturkautschukmischung."}
     assert rijen[-1]["criterium"] == "fit" and rijen[-1]["oordeel"].startswith("high — Stitched")
     assert rijen[-1]["volgende_stap"] == "contact"
@@ -123,9 +123,63 @@ def test_beoordeling_bevat_wat_is_dit_criteria_en_oordeel():
 def test_de_wall_tekst_leest_als_een_oordeel_met_citaten():
     uit = _skill().run({"naam": "nahtur-design", "criteria": ["plastic-free"]}, CTX)
     t = uit["text"]
-    assert t.startswith("Assessed nahtur-design (https://nahtur-design.de/, found via zoek:serpapi): high fit")
+    # scope 61: het must-verdict staat vóór de kopregel, dát is het hele punt van de wijziging
+    assert t.startswith("Must: 1/1 met\nAssessed nahtur-design (https://nahtur-design.de/, "
+                        "found via zoek:serpapi): high fit")
     assert "• plastic-free: yes — “Die Sohle besteht aus Eco-Rubber" in t
     assert "Next: contact." in t
+
+
+# ── 2b: must vs nice, en het verdict vooraan (scope 61) ──────────────────────
+
+def test_must_en_nice_worden_apart_geteld_in_het_verdict():
+    antwoord = {"what_is_this": "Test brand (brand)",
+                "criteria": [{"criterion": "plastic-free", "verdict": "yes", "quote": "plastic-free sole."},
+                             {"criterion": "vegan", "verdict": "no", "quote": "Contains wool."},
+                             {"criterion": "recycled packaging", "verdict": "yes", "quote": "Box is recycled."},
+                             {"criterion": "carbon neutral", "verdict": "no", "quote": "Not yet."}],
+                "fit": "medium", "why": "Meets the required criteria but misses a bonus.",
+                "next_step": "read_more", "quote": "plastic-free sole."}
+    uit = _skill(antwoord=antwoord).run({"naam": "x", "criteria": ["plastic-free", "vegan"],
+                                         "nice_criteria": ["recycled packaging", "carbon neutral"]}, CTX)
+    rijen = {r["criterium"]: r for r in uit["beoordeling"] if "belang" in r}
+    assert rijen["plastic-free"]["belang"] == "must" and rijen["vegan"]["belang"] == "must"
+    assert rijen["recycled packaging"]["belang"] == "nice" and rijen["carbon neutral"]["belang"] == "nice"
+    regels = uit["text"].split("\n")
+    # het verdict telt alléén de must-criteria; een gemiste nice hoort niet bij de missers
+    assert regels[0] == "Must: 1/2 met (missing: vegan)"
+    assert regels[1].startswith("Assessed x")
+
+
+def test_een_naam_in_beide_lijsten_telt_als_must():
+    uit = _skill().run({"naam": "x", "criteria": ["plastic-free"],
+                        "nice_criteria": ["plastic-free", "vegan"]}, CTX)
+    plastic = next(r for r in uit["beoordeling"] if r["criterium"] == "plastic-free")
+    vegan = next(r for r in uit["beoordeling"] if r["criterium"] == "vegan")
+    assert plastic["belang"] == "must" and vegan["belang"] == "nice"
+
+
+def test_een_criterium_dat_niemand_vroeg_telt_niet_mee_in_het_verdict():
+    # het model verzint 'm (GOED bevat 'proven in footwear'), maar niemand vroeg erom: geen belang,
+    # dus geen invloed op het must-verdict — anders kan een scheutig model de lat zelf verlagen.
+    uit = _skill().run({"naam": "x", "criteria": ["plastic-free"]}, CTX)
+    extra = next(r for r in uit["beoordeling"] if r["criterium"] == "proven in footwear")
+    assert "belang" not in extra
+    assert uit["text"].split("\n")[0] == "Must: 1/1 met"
+
+
+def test_alleen_nice_criteria_geeft_een_nice_to_have_verdict():
+    # "vegan" in GOED heeft bewust geen citaat (elders getest) en wordt dus 'unknown' — hier
+    # "proven in footwear" gebruiken, die wél een citaat heeft, voor een schoon 2/2 resultaat.
+    uit = _skill().run({"naam": "x", "nice_criteria": ["plastic-free", "proven in footwear"]}, CTX)
+    assert uit["text"].split("\n")[0] == "Nice-to-have: 2/2 met"
+
+
+def test_prompt_noemt_nice_criteria_als_bonus_niet_als_eis():
+    s = _skill()
+    s.run({"naam": "x", "criteria": ["plastic-free"], "nice_criteria": ["vegan"]}, CTX)
+    p = s._reason.prompt
+    assert "plastic-free" in p and "nice-to-have" in p and "vegan" in p
 
 
 # ── 3: geen ja of nee zonder citaat ──────────────────────────────────────────
@@ -141,7 +195,7 @@ def test_een_verdict_zonder_citaat_wordt_onbekend_en_geteld():
 def test_een_criterium_dat_het_model_oversloeg_staat_er_als_onbekend():
     uit = _skill().run({"naam": "x", "criteria": ["plastic-free", "available in the EU"]}, CTX)
     eu = next(r for r in uit["beoordeling"] if r["criterium"] == "available in the EU")
-    assert eu == {"criterium": "available in the EU", "oordeel": "unknown", "citaat": ""}
+    assert eu == {"criterium": "available in the EU", "oordeel": "unknown", "citaat": "", "belang": "must"}
 
 
 def test_onbekende_waarden_vallen_terug_op_veilige_defaults():

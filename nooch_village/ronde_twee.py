@@ -24,6 +24,15 @@ HOE HET WERKT, en waarom precies zo:
 
 FAIL-SOFT. Geen model, geen leads, de rol heeft de skill niet: dan gaat het project gewoon naar
 review, zoals het altijd deed. Ronde twee is een dienst, geen voorwaarde.
+
+DE LAT KOMT VAN HET PLAN, NIET MEER TWEEMAAL VERZONNEN (scope 61,
+`structurele_prioriteit_informatievinden.md`). Tot dit scope verzon deze module zelf een
+`criteria`-lijst uit de vondsten — los van wat het plan (`_plan_checklist`) ooit beloofde, en zonder
+must/nice-onderscheid. Staat er nu een lat op de checklist waar deze ronde uit voortkomt
+(`cl["criteria"]`), dan geeft `leads_uit` die lat door aan de rest: hij bepaalt zowel WELKE leads de
+moeite waard zijn (niet alleen wat toevallig goed citeerbaar was) als straks, via `plan_items`, HOE
+`lead_beoordeling` ze toetst. Geen lat op de checklist (oudere projecten, of een plan zonder heldere
+lat): identiek gedrag aan vóór scope 61.
 """
 from __future__ import annotations
 
@@ -137,22 +146,36 @@ def _json_uit(rauw):
             return None
 
 
-def _prompt(goal: str, description: str, materiaal: str, max_leads: int) -> str:
+def _prompt(goal: str, description: str, materiaal: str, max_leads: int,
+           vaste_must: list[str] | None = None) -> str:
+    # VASTE LAT (scope 61). Staat er al een must-lijst uit het plan, dan verzint het model geen eigen
+    # criteria meer (die zouden toch wijken voor de afgesproken lat) — maar de lat stuurt wél WELKE
+    # leads het kiest, niet alleen hoe ze straks beoordeeld worden. Dit is de fix voor de
+    # papers-boven-bedrijven-scheve uit de wall-diepdive (Patroon 3): zonder een lat koos het model op
+    # wat het beste citeerbaar was in de vondsten (vaak een paper), niet op wat de opdracht vroeg.
+    lat = ""
+    if vaste_must:
+        lat = (f"\nPRIORITY CRITERIA (already fixed by the plan; a lead only earns a spot if it "
+               f"plausibly satisfies these, not just because it is well documented in the findings): "
+               + "; ".join(vaste_must) + ".\n")
+    crit_vraag = ("" if vaste_must else
+                 " Also list the criteria the GOAL and ASSIGNMENT imply for judging a lead "
+                 f"(at most {MAX_CRITERIA}, short noun phrases). For a market or competitor "
+                 "assessment think price range, positioning, materials, production country, target "
+                 "group, channels; for a supplier or solution search, the assignment's requirements. "
+                 "Do not add our own brand values unless the assignment names them.")
     return (
         "Below are the findings of one research round for a project. Pick the leads worth a closer "
         "look: companies, products, institutes, brands or projects that are named in the findings and "
         "that could answer the goal. Skip generic articles, blogs, marketplaces and pages that only "
         "explain the topic. Skip the project owner's own brand.\n\n"
         f"GOAL: {_kort(goal, 300)}\n"
-        f"ASSIGNMENT: {_kort(description, 500) or '(none)'}\n\n"
+        f"ASSIGNMENT: {_kort(description, 500) or '(none)'}\n"
+        f"{lat}\n"
         f"FINDINGS:\n{materiaal}\n\n"
         f"Give at most {max_leads} leads, best first. For each: the name as it appears, what kind of "
         "thing it is, the URL of its OWN site only if a finding gives it (else empty), and one clause "
-        "why it is worth a look. Also list the criteria the GOAL and ASSIGNMENT imply for judging a "
-        f"lead (at most {MAX_CRITERIA}, short noun phrases). For a market or competitor assessment "
-        "think price range, positioning, materials, production country, target group, channels; for "
-        "a supplier or solution search, the assignment's requirements. Do not add our own brand "
-        "values unless the assignment names them. Do not invent names that are not in the findings. "
+        f"why it is worth a look.{crit_vraag} Do not invent names that are not in the findings. "
         "Write in English; names stay as they are.\n\n"
         "Answer ONLY with JSON, exactly this shape:\n"
         '{"leads": [{"naam": "...", "soort": "company|product|institute|brand|project", '
@@ -161,21 +184,34 @@ def _prompt(goal: str, description: str, materiaal: str, max_leads: int) -> str:
 
 
 def leads_uit(goal: str, description: str, materiaal: str, *, reason_fn=None, ladder=None,
-              max_leads: int = MAX_LEADS_DEFAULT) -> tuple[list[dict], list[str]]:
-    """(leads, criteria) uit het materiaal, één modelronde. Fail-soft: ([], [])."""
+              max_leads: int = MAX_LEADS_DEFAULT, voorkeur: dict | None = None
+              ) -> tuple[list[dict], dict]:
+    """(leads, criteria) uit het materiaal, één modelronde. `criteria` = {"must": [...], "nice": [...]}.
+    Fail-soft: ([], {"must": [], "nice": []}).
+
+    `voorkeur` (scope 61) = de must/nice-criteria die al op het plan stonden (`cl["criteria"]`, zie
+    `projects.checklist_add`). Gegeven en niet leeg: die lat wint, het model verzint er geen eigen
+    criteria meer bij — anders drijven "wat het plan beloofde" en "waarop ronde twee toetst" alsnog
+    uiteen, precies het reference-don't-copy-gat dat dit scope dichtte. Leeg of geen `voorkeur`
+    (oudere projecten, of een plan zonder heldere lat): zelfde gedrag als vóór scope 61, het model
+    leidt de criteria zelf af uit de vondsten en die tellen als 'must' (geen 'nice' zonder een mens of
+    een LLM die ze expliciet zo aanmerkt — die verfijning komt pas uit het plan)."""
     if not (materiaal or "").strip():
-        return [], []
+        return [], {"must": [], "nice": []}
     if reason_fn is None:
         from nooch_village.llm import reason as reason_fn        # noqa: PLC0415 — lazy, testbaar
+    vaste_must = [_kort(c, 60) for c in (voorkeur or {}).get("must") or [] if str(c).strip()][:MAX_CRITERIA]
+    vaste_nice = [_kort(c, 60) for c in (voorkeur or {}).get("nice") or [] if str(c).strip()][:MAX_CRITERIA]
+    leeg_criteria = {"must": vaste_must, "nice": vaste_nice}
     try:
-        rauw = reason_fn(_prompt(goal, description, materiaal, max_leads), json_mode=True,
+        rauw = reason_fn(_prompt(goal, description, materiaal, max_leads, vaste_must), json_mode=True,
                          max_tokens=700, call_site="ronde_twee_leads", ladder=ladder)
     except Exception as exc:                                 # noqa: BLE001 — nooit de puls breken
         log.info("ronde_twee: model faalde (%s)", exc)
-        return [], []
+        return [], leeg_criteria
     data = _json_uit(rauw)
     if not isinstance(data, dict):
-        return [], []
+        return [], leeg_criteria
     leads: list[dict] = []
     gezien: set[str] = set()
     for l in (data.get("leads") or []):
@@ -192,22 +228,36 @@ def leads_uit(goal: str, description: str, materiaal: str, *, reason_fn=None, la
                       "waarom": _kort(l.get("waarom"), 160)})
         if len(leads) >= max(1, int(max_leads)):
             break
-    criteria: list[str] = []
+    if vaste_must or vaste_nice:
+        return leads, leeg_criteria                          # de vaste lat wint, zie docstring
+    zelf: list[str] = []
     for c in (data.get("criteria") or []):
         c = _kort(c, 60)
-        if c and c.lower() not in {x.lower() for x in criteria}:
-            criteria.append(c)
-        if len(criteria) >= MAX_CRITERIA:
+        if c and c.lower() not in {x.lower() for x in zelf}:
+            zelf.append(c)
+        if len(zelf) >= MAX_CRITERIA:
             break
-    return leads, criteria
+    return leads, {"must": zelf, "nice": []}
 
 
-def plan_items(leads: list[dict], goal: str, description: str, criteria: list[str]) -> list[dict]:
-    """Per lead één item in de vorm van `_plan_checklist` (`text`, `skill`, `payload`, `reason`)."""
+def plan_items(leads: list[dict], goal: str, description: str, criteria) -> list[dict]:
+    """Per lead één item in de vorm van `_plan_checklist` (`text`, `skill`, `payload`, `reason`).
+
+    `criteria` = {"must": [...], "nice": [...]} (scope 61), of — achterwaarts compatibel voor
+    bestaande callers/tests — een kale `list[str]` die dan als 'must' geldt. De payload volgt
+    `lead_beoordeling`'s schema: `criteria` (must, ongewijzigd veld) en, alleen als er iets in zit,
+    het nieuwe optionele `nice_criteria`."""
+    if isinstance(criteria, dict):
+        must = [str(c) for c in (criteria.get("must") or [])]
+        nice = [str(c) for c in (criteria.get("nice") or [])]
+    else:
+        must, nice = [str(c) for c in (criteria or [])], []
     uit = []
     for l in leads:
         payload = {"naam": l["naam"], "url": l.get("url") or "", "vraag": _kort(goal, 300),
-                   "opdracht": _kort(description, 600), "criteria": list(criteria)}
+                   "opdracht": _kort(description, 600), "criteria": list(must)}
+        if nice:
+            payload["nice_criteria"] = list(nice)
         uit.append({"text": f"Assess lead: {l['naam']}" + (f" ({l['soort']})" if l.get("soort") else ""),
                     "skill": SKILL, "payload": payload,
                     "reason": l.get("waarom") or "named in the findings of round one"})

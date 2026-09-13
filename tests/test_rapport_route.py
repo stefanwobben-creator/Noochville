@@ -203,3 +203,43 @@ def test_de_document_acties_horen_bij_het_document(tmp_path):
     zonder = _met(dd, st, doc="# Oud\n\nx")
     assert "proj_doc_edit" not in render_projectrapport(cockpit2._Stores(dd), met, csrf_token="TOK")
     assert "proj_doc_edit" in render_projectrapport(cockpit2._Stores(dd), zonder, csrf_token="TOK")
+
+
+# ── de "naar de wiki"-knop (scope 61, wiki_kennisborging.md: wiki vóór archief) ──────────────
+
+def test_wiki_knop_wijst_naar_de_notes_tab_van_de_eigenaar_met_van_rapport(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, f"# Kop\n\n{_LANG}\n")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert f"/node?id={ROLE}&tab=notes&van_rapport={pid}" in html
+    assert "To the wiki" in html
+
+
+def test_geen_wiki_knop_zonder_bevestigd_rapport(tmp_path):
+    """Geen document en nog-seed-vorm zijn geen bevestigde kennis — niets om naar de wiki te sturen."""
+    dd, st = _st(tmp_path)
+    leeg = _project(dd, st)
+    dw = "De shortlist is af"
+    seed = _project(dd, st, seed_document(dw), done_when=dw)
+    h_leeg = render_projectrapport(cockpit2._Stores(dd), leeg, csrf_token="TOK")
+    h_seed = render_projectrapport(cockpit2._Stores(dd), seed, csrf_token="TOK")
+    assert "To the wiki" not in h_leeg
+    assert "To the wiki" not in h_seed
+
+
+def test_geen_wiki_knop_bij_een_wachtend_concept(tmp_path):
+    """Een concept heeft zijn eigen bevestig-stap; naar de wiki sturen vóór die stap zou een
+    onbevestigde tekst als kennis laten doorgaan."""
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = _met(dd, st, doc="# Oud\n\nBESTAAND RAPPORT.", concept="## Goal\nCONCEPTTEKST.")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "To the wiki" not in html
+
+
+def test_geen_wiki_knop_zonder_schrijfrecht(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _project(dd, st, f"# Kop\n\n{_LANG}\n")
+    html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
+    assert "To the wiki" not in html
