@@ -72,6 +72,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/roloverleg2` | `render_roloverleg2` | `nooch_village/views/roloverleg.py` |
 | `/metric_export` | `(inline)` | `cockpit2.py` |
 | `/file` | `(inline)` | `cockpit2.py` |
+| `/project_pakket` | `(inline)` | `cockpit2.py` |
 
 
 ## (b) Dispatch-actie → handler
@@ -319,4 +320,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_61 routes · 197 dispatch-acties · 31 stores._
+_62 routes · 197 dispatch-acties · 31 stores._

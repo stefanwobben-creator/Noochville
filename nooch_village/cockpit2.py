@@ -6977,6 +6977,19 @@ def make_handler(data_dir: str, csrf_token: str,
                 mt = mimetypes.guess_type(att.get("name", ""))[0] or "application/octet-stream"
                 self._send_bytes(data, mt)
                 return
+            if path == "/project_pakket":
+                # Alle wall-content van dit project (record + gesprek + checklists + bijlagen) in
+                # één zip, voor handmatige AI-analyse (14 september 2026: het automatische verslag
+                # leest bijlagen niet als bron, zie wall_diepdive_rubberproject_13sept.md). Zelfde
+                # AUTHZ-grens als /file hierboven: geen aparte poort, wie het project mag zien mag
+                # 'm ook exporteren.
+                p = st.projects.get((qs.get("pid") or [""])[0])
+                if p is None:
+                    self._send("<p>Project not found</p>", 404); return
+                from nooch_village.project_pakket import bouw_zip_bytes, slug
+                data = bouw_zip_bytes(p, data_dir)
+                self._send_bytes(data, "application/zip", f"{slug(p)}.zip")
+                return
             self._send("<p>404</p>", 404)
 
         def _redirect(self, nxt: str, msg: str):
