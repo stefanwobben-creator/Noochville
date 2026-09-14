@@ -255,3 +255,83 @@ def test_typografische_verschillen_breken_de_check_niet():
                           citaat="grown from mycelium — not from animals")
     tekst = "It is grown from mycelium – not from animals."
     assert wiki.controleer_citaat(feit, tekst)["gevonden"] is True
+
+
+# ── brok 6: leverancier-pagina's ─────────────────────────────────────────────
+
+LEVERANCIER_ROL = "mother_earth__nooch__supply_chain_coordinator"
+
+
+def _cert(st, *, leverancier="MycoWorks", materiaal="HyphaLite",
+          feit="Leer-alternatief uit mycelium", geldig_tot="2030-01-01"):
+    return st.evidence.record(role_id="compliance", skill=cert_register.SKILL, query=feit,
+                              source=cert_register.EXTERN, status="bevestigd",
+                              meta={"feit": feit, "leverancier": leverancier, "materiaal": materiaal,
+                                    "instantie": "PETA", "geldig_tot": geldig_tot, "claims": []})
+
+
+def test_leverancier_zonder_naam_krijgt_geen_pagina(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st, leverancier="")
+    assert wiki_seed.leverancier_paginas(st.evidence) == []
+
+
+def test_leverancier_pagina_toont_materiaal_en_gegrond_feit(tmp_path):
+    st = _stores(tmp_path)
+    r = _cert(st)
+    ps = {p["titel"]: p for p in wiki_seed.leverancier_paginas(st.evidence, vandaag="2026-08-20")}
+    p = ps["MycoWorks"]
+    assert "HyphaLite" in p["body"]
+    assert len(p["feiten"]) == 1
+    assert p["feiten"][0]["grond"] == {"soort": "cert", "ref": r["id"], "citaat": "", "url": ""}
+
+
+def test_verlopen_cert_levert_geen_feit_maar_de_pagina_blijft(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st, geldig_tot="2024-01-01")
+    ps = {p["titel"]: p for p in wiki_seed.leverancier_paginas(st.evidence, vandaag="2026-08-20")}
+    p = ps["MycoWorks"]
+    assert p["feiten"] == []
+    assert "Nog open" in p["body"] and "verlopen" in p["body"]
+
+
+def test_leverancier_dedup_hoofdletter_ongevoelig(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st, leverancier="MycoWorks", feit="Feit één")
+    _cert(st, leverancier="mycoworks", feit="Feit twee")
+    ps = wiki_seed.leverancier_paginas(st.evidence, vandaag="2026-08-20")
+    assert [p["titel"] for p in ps] == ["MycoWorks"]
+    assert len(ps[0]["feiten"]) == 2
+
+
+def test_leverancier_pagina_gezaaid_is_linkbaar(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st)
+    wiki_seed.zaai(st.att, st.records,
+                   paginas=wiki_seed.leverancier_paginas(st.evidence, vandaag="2026-08-20"),
+                   eigenaar=LEVERANCIER_ROL, soort="leverancier", apply=True)
+    st2 = cockpit2._Stores(st.dd)
+    pags = wiki.paginas(st2.att)
+    assert wiki.resolve("MycoWorks", pags) is not None
+
+
+def test_zaai_alles_neemt_leverancier_mee_als_die_rol_is_opgegeven(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st)
+    rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
+                                   eigenaar_materiaal=OWNER, eigenaar_claims="compliance",
+                                   eigenaar_leverancier=LEVERANCIER_ROL, apply=True,
+                                   vandaag="2026-08-20")
+    lev = [r for r in rapport if r["soort"] == "leverancier"]
+    assert lev and lev[0]["actie"] == "aangemaakt" and lev[0]["titel"] == "MycoWorks"
+    st2 = cockpit2._Stores(st.dd)
+    assert len(st2.att.list(LEVERANCIER_ROL, "note")) == 1
+
+
+def test_zaai_alles_zonder_leverancier_rol_slaat_die_stap_over(tmp_path):
+    st = _stores(tmp_path)
+    _cert(st)
+    rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
+                                   eigenaar_materiaal=OWNER, eigenaar_claims="compliance",
+                                   apply=True)
+    assert [r for r in rapport if r["soort"] == "leverancier"] == []
