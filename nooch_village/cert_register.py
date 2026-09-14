@@ -196,7 +196,8 @@ def opdracht(rij: dict) -> str:
     """De pending-regel als concrete mens-taak, niet als statusmelding."""
     claim = rij.get("claim") or "?"
     cert = rij.get("cert") or {}
-    lev = cert.get("leverancier") or "de leverancier"
+    naam = cert.get("leverancier") or ""
+    lev = f"[[Leverancier: {naam}]]" if naam else "de leverancier"
     if cert:
         return (f"vernieuw het certificaat voor de claim “{claim}” bij {lev} — "
                 f"{rij.get('reden')}")

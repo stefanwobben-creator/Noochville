@@ -420,7 +420,8 @@ def _shortlist_tekst(periode: str, gekozen: list[dict], bekeken: int) -> str:
            "Dit zijn VOORSTELLEN, geen bevindingen: ik draag aan, jij oordeelt.\n")
     blokken = []
     for k in gekozen:
-        lev = k["leverancier"] or "leverancier niet genoemd in de bron"
+        lev = (f"[[Leverancier: {k['leverancier']}]]" if k["leverancier"]
+               else "leverancier niet genoemd in de bron")
         blokken.append(
             f"\n• {k['wat']}\n"
             f"  waarom hier: {k['waarom']}\n"

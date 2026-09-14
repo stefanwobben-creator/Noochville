@@ -1246,6 +1246,7 @@ def main() -> None:
         from nooch_village import claims_db, org
 
         MATERIAAL_ROL = "mother_earth__nooch__creator_of_shoes"
+        LEVERANCIER_ROL = "mother_earth__nooch__supply_chain_coordinator"
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
         # De claim-eigenaar wordt AFGELEID uit governance, niet hier genoemd. Stond hier als
@@ -1259,7 +1260,8 @@ def main() -> None:
         apply = "--apply" in sys.argv
         rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
                                        eigenaar_materiaal=MATERIAAL_ROL,
-                                       eigenaar_claims=CLAIM_ROL, apply=apply)
+                                       eigenaar_claims=CLAIM_ROL,
+                                       eigenaar_leverancier=LEVERANCIER_ROL, apply=apply)
         print(wiki_seed.rapport_tekst(rapport))
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")

@@ -146,6 +146,70 @@ def claim_paginas(db: dict, ledger=None, *, vandaag: str = "") -> list[dict]:
     return uit
 
 
+# ── leverancier-pagina's ─────────────────────────────────────────────────────
+
+BRON_CERTREGISTER = "certificaten geregistreerd in de Kroniek"
+
+
+def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
+    """Eén pagina per leverancier uit de certificaten in de Kroniek: welk materiaal, en welk feit
+    daarover gegrond is.
+
+    De bron is dezelfde `cert_register.certs_uit_kroniek` als de claim-pagina's gebruiken — geen
+    tweede lezing van het certificatenregister. Een cert zonder leverancier-naam levert geen
+    pagina: er is dan niets om de pagina op te noemen, en een pagina "Onbekend" zou latere certs
+    zonder naam stilzwijgend bij elkaar vegen.
+
+    Groeperen gebeurt hoofdletter- en spatie-ongevoelig, dezelfde reden als bij `materiaal_paginas`:
+    twee pagina's met dezelfde titel lossen als [[link]] bewust niet op, dus die zouden allebei
+    onbereikbaar zijn.
+
+    **Een verlopen (of ongedateerd) certificaat levert geen feit.** Zelfde principe als bij claims:
+    een goedkeuring mag zijn bewijs niet overleven. De pagina zelf blijft gewoon bestaan — de
+    leverancier is nog steeds een leverancier — met een open punt dat zegt wat er moet gebeuren."""
+    certs = cert_register.certs_uit_kroniek(ledger) if ledger is not None else []
+
+    per_leverancier: dict[str, list] = {}
+    spelling: dict[str, str] = {}
+    for c in certs:
+        naam = " ".join(str(c.get("leverancier") or "").split())
+        if not naam:
+            continue
+        sleutel = naam.lower()
+        per_leverancier.setdefault(sleutel, []).append(c)
+        spelling.setdefault(sleutel, naam)
+
+    uit = []
+    for sleutel, cs in sorted(per_leverancier.items()):
+        leverancier = spelling[sleutel]
+        materialen = sorted({" ".join(str(c.get("materiaal") or "").split())
+                             for c in cs if c.get("materiaal")})
+        regels = [f"Leverancier uit de {BRON_CERTREGISTER}."]
+        if materialen:
+            regels += ["", "## Materiaal"]
+            regels += [f"- {m}" for m in materialen]
+
+        feiten = []
+        open_punten = []
+        for c in sorted(cs, key=lambda x: str(x.get("feit") or "")):
+            feit_tekst = str(c.get("feit") or "").strip()
+            if not feit_tekst:
+                continue
+            verval = cert_register.verlopen(c, vandaag=vandaag)
+            if verval or verval is None:
+                reden = "verlopen" if verval else "geen leesbare vervaldatum"
+                open_punten.append(f"- {feit_tekst}: certificaat {reden} — vernieuw het "
+                                   f"certificaat bij {leverancier} voordat dit feit weer gegrond is")
+            elif c.get("_record_id"):
+                feiten.append(wiki.maak_feit(feit_tekst, soort="cert", ref=str(c["_record_id"])))
+
+        if open_punten:
+            regels += ["", "## Nog open", *open_punten]
+        uit.append({"titel": leverancier, "body": "\n".join(regels),
+                    "feiten": [f for f in feiten if f]})
+    return uit
+
+
 # ── zaaien ──────────────────────────────────────────────────────────────────
 
 def _bestaat(store, eigenaar: str, titel: str) -> bool:
@@ -196,13 +260,21 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
 
 
 def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar_claims: str,
-               apply: bool = False, actor_id: str = "", vandaag: str = "") -> list[dict]:
-    """Beide sets in één keer. De helft waarvan de eigenaar-rol ontbreekt, wordt overgeslagen —
-    de andere helft gaat gewoon door."""
+               eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
+               vandaag: str = "") -> list[dict]:
+    """Alle sets in één keer. De helft (of het derde) waarvan de eigenaar-rol ontbreekt, wordt
+    overgeslagen — de rest gaat gewoon door.
+
+    `eigenaar_leverancier` is optioneel; zonder waarde wordt die stap helemaal overgeslagen (geen
+    rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout."""
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 
     rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM),
                    eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply, actor_id=actor_id)
+    if eigenaar_leverancier:
+        rapport += zaai(store, records, paginas=leverancier_paginas(ledger, vandaag=vandaag),
+                        eigenaar=eigenaar_leverancier, soort="leverancier", apply=apply,
+                        actor_id=actor_id)
     try:
         db = claims_db()
     except Exception as e:                      # noqa: BLE001 — nette regel i.p.v. een halve run
