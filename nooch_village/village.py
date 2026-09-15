@@ -536,6 +536,52 @@ class Village:
         except Exception as e:                             # noqa: BLE001
             logging.getLogger("village").warning("verweesde-pulse-skill-check faalde: %s", e)
 
+    def _meld_weesprojecten(self) -> list[str]:
+        """Een niet-afgerond project waarvan de eigenaar-rol gearchiveerd of slapend is, heeft geen
+        levende bezetter meer over — er gebeurt nooit meer iets mee, tenzij een mens het opmerkt.
+        Precies het patroon van de compliance-rol-migratie (10 september) en van harry_hemp erna:
+        een rol wordt afgeslankt, maar het werk dat erop stond verhuist niet vanzelf mee.
+
+        Zelfde vorm als `_meld_verweesde_pulse_skills` hierboven, en om dezelfde reden: één melding
+        per ROL, niet per project — een gearchiveerde rol met 90 openstaande projecten mag niet 90
+        losse inbox-items opleveren voor iets waar de oplossing voor allemaal hetzelfde is
+        (herverdelen naar een levende rol, of bewust laten liggen). `gap_key` per rol dedupliceert
+        dat via de HumanInbox, ongeacht status — zelfde afweging die daar al voor pulse-skills geldt.
+
+        Geeft de rol-ids terug die weesprojecten hebben (leeg = niemand)."""
+        from nooch_village.projects import KLAAR
+        dood: dict[str, list[str]] = {}
+        for p in self.context.projects.all():
+            if p.get("status") in KLAAR:
+                continue                                    # afgerond: geen eigenaar meer nodig
+            owner = p.get("owner", "")
+            rec = self.records.get(owner) if owner else None
+            if rec is not None and (getattr(rec, "archived", False) or getattr(rec, "slaapt", False)):
+                dood.setdefault(owner, []).append(p.get("title") or p.get("id", ""))
+        log = logging.getLogger("village")
+        for rol_id, titels in dood.items():
+            log.warning("👻 rol '%s' is gearchiveerd/slapend maar bezit nog %d "
+                        "openstaand project(en)", rol_id, len(titels))
+            try:                                             # fail-soft: melden mag de puls niet breken
+                voorbeeld = "; ".join(titels[:3])
+                if len(titels) > 3:
+                    voorbeeld += f" (+{len(titels) - 3} meer)"
+                self.human_inbox.add_means_gap(
+                    f"weesprojecten:{rol_id}",
+                    f"Rol '{rol_id}' is gearchiveerd of slapend maar bezit nog {len(titels)} "
+                    f"niet-afgerond project(en), dus daar gebeurt niets meer mee: {voorbeeld}. "
+                    f"Herverdeel de accountability naar een levende rol, of laat bewust liggen.",
+                    role_id=rol_id, sensed_by="dorp")
+            except Exception:                                # noqa: BLE001
+                log.warning("👻 weesprojecten van '%s' niet gemeld", rol_id)
+        return list(dood.keys())
+
+    def _veilig_weesprojecten(self) -> None:
+        try:
+            self._meld_weesprojecten()
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("weesprojecten-check faalde: %s", e)
+
     def run_forever(self):
         print(self.report_keys())
         self.bus.subscribe("pulse_completed", lambda e: logging.getLogger("village").info(
@@ -544,6 +590,10 @@ class Village:
         # De nul moet zichzelf verklaren: na elke puls één keer toetsen of elke pulse-skill
         # überhaupt een eigenaar heeft. Fail-soft — een controle mag de puls nooit breken.
         self.bus.subscribe("pulse_completed", lambda e: self._veilig_verweesd())
+        # Zelfde controle, andere vraag: bezit een gearchiveerde/slapende rol nog open werk?
+        # (Stefan, 15 sept: "we werken naar het verwijderen van de AI-rollen" — elke keer dat dat
+        # gebeurt mag het werk dat erop stond niet stil verdwijnen, zoals bij harry_hemp nu al was.)
+        self.bus.subscribe("pulse_completed", lambda e: self._veilig_weesprojecten())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
