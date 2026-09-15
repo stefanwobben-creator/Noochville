@@ -592,28 +592,59 @@ def _artefact_head(a, *, extra: str = "") -> str:
     return head
 
 
-def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "") -> str:
+def _artefact_body_html(a, *, st: _Stores | None = None, pags: list | None = None) -> str:
+    """De body van een artefact. Een wiki-pagina (note) krijgt zijn `[[links]]` opgelost naar
+    andere pagina's — net als op de permalink (`views/wiki.py::_body_html`); elk ander soort
+    (policy, tool) kent dat idioom niet en blijft kale markdown.
+
+    `pags=None` (geen paginalijst aangeleverd) valt terug op kale markdown — nooit een crash,
+    hoogstens een ongelinkte `[[verwijzing]]`."""
+    if not a.body:
+        return ""
+    if a.kind == wiki.PAGINA_KIND and pags is not None:
+        from nooch_village.views.wiki import _body_html as _pagina_body_html
+        return f"<div class='att-body'>{_pagina_body_html(a.body, pags)}</div>"
+    return f"<div class='att-body'>{_md(a.body)}</div>"
+
+
+def _wiki_extras(a, st: _Stores | None, pags: list | None, csrf_token: str, can_edit: bool) -> str:
+    """Feiten en backlinks, rechtstreeks op de kaart (scope: "nou notes zijn nog niet wiki" — geen
+    aparte pagina meer nodig om ze te zien). Alleen voor een echte wiki-pagina, en alleen als er
+    genoeg is aangeleverd (st + pags) om ze live te berekenen."""
+    if a.kind != wiki.PAGINA_KIND or st is None or pags is None:
+        return ""
+    from nooch_village.views.wiki import _feiten_sectie, _backlink_sectie
+    return f"{_feiten_sectie(a, st, csrf_token, can_edit)}{_backlink_sectie(a, pags)}"
+
+
+def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "",
+                       st: _Stores | None = None, pags: list | None = None) -> str:
     """`anders` is wat iemand mag die NIET de eigenaar is — op een note het voorstelpad.
 
     De keuze is exclusief: wie mag bewerken krijgt geen voorstelknop (hij zou zijn eigen voorstel
     moeten goedkeuren), wie niet mag bewerken krijgt geen bewerkknop die toch afketst op de poort."""
-    body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
+    body = _artefact_body_html(a, st=st, pags=pags)
     actions = anders
     if can_edit:
         # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een .qadd-row
         # náást 'archiveren'); 'archiveren' als losse actie eronder.
         actions = (f"{_artefact_edit_form(a, csrf_token)}"
                    f"<div class='qadd-row'>{_artefact_archive_form(a, csrf_token)}</div>")
+    extras = _wiki_extras(a, st, pags, csrf_token, can_edit)
     return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"
-            f"{_artefact_versions_html(a)}{actions}</div>")
+            f"{_artefact_versions_html(a)}{actions}{extras}</div>")
 
 
-def _artefact_inherited_card(it) -> str:
+def _artefact_inherited_card(it, *, st: _Stores | None = None, pags: list | None = None) -> str:
     a = it["artefact"]
     badge = (f" <a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
              f"title='click = go to the source role'>via {_e(it['origin_name'])}</a>")
-    body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
-    return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}</div>"
+    body = _artefact_body_html(a, st=st, pags=pags)
+    # Read-only hier (geen csrf, can_edit=False): wie dit ziet is niet de eigenaar-rol, en
+    # bewerken/feiten-toevoegen gebeurt bij de bron — zelfde regel als de kaart eronder al meldt
+    # ("Applies here ... edit at the source").
+    extras = _wiki_extras(a, st, pags, "", False)
+    return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}{extras}</div>"
 
 
 def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: str | None,
@@ -649,7 +680,8 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
                               next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}",
                               prefill=rapport_tekst)
 
-    own = "".join(_artefact_own_card(a, csrf_token, can_edit, anders=_anders(a))
+    _pags = wiki.paginas(st.att) if kind == wiki.PAGINA_KIND else None
+    own = "".join(_artefact_own_card(a, csrf_token, can_edit, anders=_anders(a), st=st, pags=_pags)
                   for a in oi["own"])
     own = own or f"<div class='card muted'>{_e(leeg)}</div>"
 
@@ -667,7 +699,7 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
             add = _artefact_add_form(rec, kind, csrf_token)
     sec_own = f"<div class='c2-sec'><h3>From this role</h3>{own}{add}</div>"
 
-    inh = "".join(_artefact_inherited_card(it) for it in oi["inherited"])
+    inh = "".join(_artefact_inherited_card(it, st=st, pags=_pags) for it in oi["inherited"])
     inh = inh or "<div class='card muted'>Nothing applies here from above.</div>"
     sec_inh = (f"<div class='c2-sec'><h3>Applies here</h3>"
                f"<p class='muted'>Inherited from parent roles/circles "
