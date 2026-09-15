@@ -577,11 +577,15 @@ def _artefact_head(a, *, extra: str = "") -> str:
     icon = _KIND_ICON.get(a.kind, "")
     dom = (f" <span class='chip muted'>{_e(a.domain)}</span>"
            if a.kind == "policy" and getattr(a, "domain", "") else "")
-    # Een note IS een wiki-pagina (nooch_village/wiki.py): deze tab is de index per rol, de
-    # permalink draagt de feiten en de backlinks. Ook op een geërfde note (lezen mag altijd).
+    # Een note IS een wiki-pagina (nooch_village/wiki.py): geen aparte pagina die je moet
+    # aanmaken, dezelfde data. Dus de titel zelf is de link naar de permalink (feiten,
+    # backlinks, versiegeschiedenis) -- niet een los chipje ernaast dat je apart moet vinden.
+    # Klikken op de kaart is wat iemand hier verwacht. Ook op een geërfde note (lezen mag altijd).
     if a.kind == wiki.PAGINA_KIND:
-        extra += f" <a class='chip' href='{_e(wiki.pagina_url(a.id))}'>open page</a>"
-    head = f"<div class='ptitle'>{icon} {_artefact_id_chip(a)} {_e(a.title) or _e(a.id)}{dom}{extra}</div>"
+        titel = f"<a href='{_e(wiki.pagina_url(a.id))}'>{_e(a.title) or _e(a.id)}</a>"
+    else:
+        titel = _e(a.title) or _e(a.id)
+    head = f"<div class='ptitle'>{icon} {_artefact_id_chip(a)} {titel}{dom}{extra}</div>"
     if a.kind == "tool" and a.url:
         head += (f"<div class='muted'>"
                  f"<a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a></div>")
