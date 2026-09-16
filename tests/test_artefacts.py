@@ -228,6 +228,19 @@ def _give_domain(dd, role_id, domain):
         st.records.put(rec)
 
 
+def _wis_domeinen(st, role_id):
+    """Maak de rol domein-loos, EXPLICIET.
+
+    Vier tests hieronder leunden op "creator_of_shoes heeft toevallig geen domein in de fixture".
+    Dat hield op te kloppen zodra de fixture werd rechtgetrokken naar productie (waar die rol
+    `Materials` houdt). De premisse van een test hoort in de test te staan, niet geleend te worden
+    van een fixture die om een heel andere reden verandert."""
+    rec = st.records.get(role_id)
+    if rec is not None and (rec.definition.domains or []):
+        rec.definition.domains = []
+        st.records.put(rec)
+
+
 def _changelog(dd):
     path = os.path.join(dd, "artefact_changelog.jsonl")
     if not os.path.exists(path):
@@ -241,6 +254,7 @@ def test_route_vervuller_mag_toevoegen(tmp_path):
     st = cockpit2._Stores(dd)
     alice = st.people.add("Alice", "alice@nooch.earth")
     st.assign.assign(OWNER, "person", alice.id)              # persisteren op schijf
+    _wis_domeinen(st, OWNER)                                 # blanco start: precies één domein hierna
     _give_domain(dd, OWNER, "Merkstem")                      # governance wijst eerst het domein toe
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [OWNER], "kind": ["policy"], "title": ["Merkstem"],
@@ -464,7 +478,8 @@ def test_ui_artefact_lijst_gebruikt_card_patroon(tmp_path):
 
 
 def test_ui_policy_geen_domein_toont_melding_geen_form(tmp_path):
-    st = _stores(tmp_path)                                   # OWNER heeft geen domein
+    st = _stores(tmp_path)
+    _wis_domeinen(st, OWNER)                                 # de premisse: deze rol heeft geen domein
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
     assert "no domain yet" in html
     assert "value='artefact_add'" not in html               # geen add-form
@@ -472,6 +487,7 @@ def test_ui_policy_geen_domein_toont_melding_geen_form(tmp_path):
 
 def test_ui_policy_1_domein_vaste_regel_2_domeinen_select(tmp_path):
     st = _stores(tmp_path)
+    _wis_domeinen(st, OWNER)                                 # anders is "1 domein" er stilletjes 2
     _give_role_domain(st, OWNER, "Merkstem")
     one = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
     assert "<input type='hidden' name='domain'" in one and "<select name='domain'>" not in one
@@ -549,7 +565,8 @@ def test_policy_alleen_op_governance_domein(tmp_path):
     """Een policy kan alleen op een rol die het domein écht via governance bezit; geen domein →
     nette weigering, geen pseudo-domein-fallback."""
     dd = _dd(tmp_path)
-    # OWNER (creator_of_shoes) heeft géén governance-domein → policy geweigerd
+    _wis_domeinen(cockpit2._Stores(dd), OWNER)
+    # OWNER is nu domein-loos gemaakt → policy geweigerd
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [OWNER], "kind": ["policy"], "title": ["X"], "next": ["/"]}, username="guest")
     assert "no domain" in msg

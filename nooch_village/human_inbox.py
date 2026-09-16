@@ -5,6 +5,9 @@ Twee item-typen:
                   approve / reject / amend / defer van de mens.
   "activation"  — sensed onbemande rol; wacht op green-light van de mens
                   zodat de implementatie geschreven en geregistreerd kan worden.
+  "runner_activatie" — rol die via een DOMEIN-grant zijn eerste draaiende capaciteit kreeg;
+                  de code bestaat al, alleen het draaien wacht op de mens. Zie
+                  `models.Record.activatie_vereist` en `inbox_actions.decide_runner_activatie`.
 
 Beveiligingsgrens (ingebakken):
   Approvals en zeker activaties mogen UITSLUITEND op het geauthenticeerde lokale
@@ -50,7 +53,7 @@ _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",
                    "withdrawn", "resolved"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
                    "keyword_batch", "verband", "content_suggestion", "content_draft",
-                   "voorstel"}
+                   "voorstel", "runner_activatie"}
 
 
 def _escalation_signature(proposal_dict: dict) -> tuple:
@@ -171,6 +174,66 @@ class HumanInbox:
         self._save()
         return iid
 
+    def add_runner_activatie(self, role_id: str, *, skills: list, reden: str = "") -> str:
+        """Vraag de mens of deze rol een eigen thread mag krijgen.
+
+        NIET HETZELFDE ALS `activation`, en dat verschil is de hele reden voor een apart type.
+        Een `activation` vraagt: zullen we hiervoor code SCHRIJVEN? Dit vraagt: de code bestaat al
+        en staat geregistreerd, mag hij ook DRAAIEN op deze rol? Het eerste levert een stappenplan
+        op, het tweede één vlaggetje dat weggaat. Zou dit hetzelfde type zijn, dan leest de mens een
+        implementatieplan bij een rol waar niets meer te implementeren valt.
+
+        Duplicaatcheck op role_id ongeacht status, net als `add_activation`: een eenmaal beantwoorde
+        vraag keert nooit terug als nieuw item. Een 'nee' is dus blijvend — de rol houdt zijn DNA
+        maar draait niet, en `village._meld_verweesde_pulse_skills` meldt het als dáárdoor niemand
+        de skill nog draait."""
+        for item in self._items.values():
+            if item["type"] == "runner_activatie" and item.get("subject") == role_id:
+                return item["id"]
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "runner_activatie",
+            "subject": role_id,
+            "context": {
+                "role_id": role_id,
+                "skills":  list(skills or []),
+                "reden":   reden,
+                # Wat een ja concreet doet. Expliciet, want dit is het hele besluit.
+                "effect_ja":  "de rol krijgt bij de volgende daemon-start een eigen thread en "
+                              "draait deze skills mee op de dagpuls",
+                "effect_nee": "het DNA blijft ongewijzigd (de rol HOUDT de skills), er draait "
+                              "alleen niemand op",
+            },
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution": None,
+        }
+        self._save()
+        return iid
+
+    def sync_runner_gates(self, records_all: list) -> int:
+        """Eén item per rol die op een activatie-poort staat. Idempotent (dedup op role_id).
+
+        Staat naast `sync_unmanned` en wordt op dezelfde momenten aangeroepen. Zonder deze regel
+        zet de seed wel een poort maar vraagt niemand er iets over, en dan is het verschil met
+        "stilletjes niets doen" alleen een logregel die niemand leest."""
+        n = 0
+        for rec in records_all:
+            if getattr(rec, "archived", False) or not getattr(rec, "activatie_vereist", False):
+                continue
+            bestond = set(self._items)
+            iid = self.add_runner_activatie(
+                rec.id, skills=list(rec.definition.skills or []),
+                reden=getattr(rec, "activatie_reden", "") or "")
+            # TELT ALLEEN ECHT NIEUWE ITEMS. `sync_unmanned` telt hier elk PENDING item, ook een dat
+            # er gisteren al stond — dan zegt de teller elke start "1 toegevoegd" terwijl er niets
+            # gebeurde, en is een echte toevoeging niet van ruis te onderscheiden.
+            if iid not in bestond:
+                n += 1
+        return n
+
     def withdraw_activation(self, role_id: str,
                             reason: str = "rol gearchiveerd (premisse vervallen)") -> bool:
         """Trek het pending activation-item van een rol in zodra de rol verdwijnt.
@@ -184,12 +247,17 @@ class HumanInbox:
         return False
 
     def withdraw_archived_activations(self, records_all: list) -> int:
-        """Veegbeurt: trek elk pending activation-item in waarvan de rol gearchiveerd is
-        (of niet meer bestaat). Retourneert het aantal ingetrokken items."""
+        """Veegbeurt: trek elk pending activatie-item in waarvan de rol gearchiveerd is
+        (of niet meer bestaat). Retourneert het aantal ingetrokken items.
+
+        BEIDE activatie-typen, want de premisse vervalt op dezelfde manier: is de rol weg, dan is
+        "zullen we hem bemensen?" én "mag hij draaien?" allebei geen vraag meer. Stond hier alleen
+        `activation`, dan blijft een runner-poort van een gearchiveerde rol als open werk staan —
+        precies de grafsteen-stapel uit CONVENTIES, opnieuw."""
         archived = {getattr(r, "id", None) for r in records_all if getattr(r, "archived", False)}
         n = 0
         for it in list(self._items.values()):
-            if (it["type"] == "activation" and it["status"] == "pending"
+            if (it["type"] in ("activation", "runner_activatie") and it["status"] == "pending"
                     and it.get("subject") in archived):
                 if self.resolve(it["id"], "withdrawn",
                                 reason="rol gearchiveerd (premisse vervallen)"):

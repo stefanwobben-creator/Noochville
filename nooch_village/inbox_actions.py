@@ -701,6 +701,42 @@ def decide_verband(inbox, notes, iid: str, decision: str, *, reason: str = "") -
     return {"ok": True, "link_gelegd": gelegd}
 
 
+def decide_runner_activatie(inbox, records, iid: str, decision: str,
+                            *, reason: str = "") -> dict:
+    """Menselijk besluit op een runner-activatie: mag deze rol een eigen thread krijgen?
+
+    Zelfde vorm als `decide_verband`: valideer, sluit het item, en voer bij 'approved' het ENE ding
+    uit dat de goedkeuring betekent — hier het wegnemen van `activatie_vereist`, waarna
+    `heeft_runner` weer gewoon antwoordt en de Reconciler de rol bij de volgende bouw materialiseert.
+
+    WAT EEN NEE NIET DOET: het haalt de skills NIET uit het DNA. De grant kwam via het domein en is
+    een governance-feit; dit besluit gaat alleen over draaien. Wie het gereedschap ook wil weghalen
+    gebruikt `afslanken.skill_intrekken` — dat zet de intrek-guard, en de seed respecteert die.
+
+    Het item gaat ALTIJD dicht, ook als het record intussen verdwenen is. Zou het openblijven, dan
+    komt dezelfde onbeslisbare vraag morgen terug en groeit de rij die we juist leeghalen.
+    `poort_weg` zegt wat er echt gebeurd is."""
+    item = next((i for i in inbox.all() if i.get("id") == iid), None)
+    if item is None:
+        return {"ok": False, "error": f"onbekend item: {iid}"}
+    if item.get("type") != "runner_activatie":
+        return {"ok": False, "error": f"item is geen runner_activatie ({item.get('type')})"}
+    if decision not in ("approved", "rejected", "deferred"):
+        return {"ok": False, "error": f"ongeldig besluit: {decision}"}
+    if not inbox.resolve(iid, decision, reason=reason):
+        return {"ok": False, "error": "item bestond niet meer of was al gesloten"}
+    if decision != "approved":
+        return {"ok": True, "poort_weg": False}
+    rid = (item.get("context") or {}).get("role_id") or item.get("subject")
+    rec = records.get(rid) if records is not None else None
+    if rec is None or not getattr(rec, "activatie_vereist", False):
+        return {"ok": True, "poort_weg": False, "role_id": rid}
+    rec.activatie_vereist = False
+    rec.activatie_reden = None
+    records.put(rec)
+    return {"ok": True, "poort_weg": True, "role_id": rid}
+
+
 def weiger_of_stel_uit(inbox, iid: str, decision: str, *, reason: str = "") -> dict:
     """Nee of later, op WELK type dan ook.
 

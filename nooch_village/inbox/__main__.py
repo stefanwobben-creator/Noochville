@@ -585,6 +585,25 @@ def main(argv: list[str]) -> None:
             print(f"\n⚠  Approval green-light de implementatie.")
             print(f"   Iedere stap hierboven passeert daarna nog de normale per-edit code-review.")
 
+        elif item["type"] == "runner_activatie":
+            # Eén gedeeld gevalideerd pad (zoals bij keyword/verband): sluit het item en neem de
+            # poort weg. Alleen de records nodig, geen volledige Village.
+            from nooch_village.governance import Records
+            from nooch_village.inbox_actions import decide_runner_activatie
+            recs = Records(os.path.join(_data_dir(), "governance_records.json"))
+            ctx = item.get("context") or {}
+            res = decide_runner_activatie(inbox, recs, iid, "approved", reason=reason)
+            if not res["ok"]:
+                print(f"✘ {res['error']}")
+            elif res.get("poort_weg"):
+                print(f"✅ '{res['role_id']}' mag draaien — activatie-poort weggenomen.")
+                print(f"   Skills: {', '.join(ctx.get('skills') or []) or '(geen)'}")
+                print(f"\n⚠  De thread start pas bij de VOLGENDE daemon-start. Een draaiende daemon")
+                print(f"   herbouwt zijn inwoners niet op een wijziging van buiten (zie Records).")
+            else:
+                print(f"✅ Item gesloten, maar er stond geen poort meer open op "
+                      f"'{res.get('role_id')}' (record weg, of al geactiveerd).")
+
         elif item["type"] == "means_gap":
             _approve_means_gap(inbox, item)
 

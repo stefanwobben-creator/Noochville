@@ -11,6 +11,7 @@ straks de GlassFrog-API/JSON; deze fixture is onze geverifieerde bron voor nu.
 from __future__ import annotations
 import re
 
+from nooch_village import claims_db
 from nooch_village.models import Record, RecordType, RoleDefinition
 
 
@@ -158,7 +159,12 @@ def nooch_poc_org() -> dict:
              "accountabilities": ["Writing email flows & updates", "Managing customer communication",
                                   "Keeping community engaged and informed"],
              "fillers": ["Nina Wolter"]},
+            # `Materials` stond hier niet, terwijl het levende record het wél houdt. Zelfde gat als
+            # bij Compliance hieronder: de fixture miste de domein-houder waar de materiaal-keten op
+            # leunt (de memo-bezorging via `materiaal_memo.ontvanger`, en sinds 16 september ook de
+            # regrant van de twee memo-skills in `seeds.migrate_records`).
             {"name": "Creator of Shoes", "parent": "Nooch", "purpose": "Kick-ass Noochies",
+             "domains": ["Materials"],
              "accountabilities": ["Designing new shoe models & colorways",
                                   "Working with suppliers on materials and ways of working",
                                   "Reviewing product quality and samples",
@@ -225,8 +231,15 @@ def nooch_poc_org() -> dict:
             # de curatie, de routing naar het bord) daarop leunt. De tests draaiden dus tegen een
             # dorp dat op dít punt niet op productie leek, en dat is precies waar een fixture voor
             # bestaat. Overgenomen uit governance zoals hij op 9 september is aangemaakt.
+            #
+            # DE DOMEINNAMEN STONDEN HIER FOUT, en dat is erger dan de ontbrekende rol was. De
+            # fixture zei `["claims"]`, het levende record houdt `claim-verification` +
+            # `claims-database`. Elke claims-test slaagde dus tegen een naam die op productie niet
+            # bestond, terwijl de echte lookup daar None gaf — een fixture die niet op productie
+            # lijkt, verbergt precies de fout die hij hoort te vangen. Nu letterlijk overgenomen
+            # uit de governance-akte (`role_proposals.build_compliance_domain_proposal`).
             {"name": "Compliance", "parent": "Nooch", "purpose": "A greenwashing proof brand",
-             "domains": ["claims"],
+             "domains": list(claims_db.DOMEINEN),
              "accountabilities": [
                  "Verifying biodegradability and sustainability claims against evidence "
                  "(certification, standards, laboratory results) and recording their status.",
