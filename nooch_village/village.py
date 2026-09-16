@@ -226,6 +226,10 @@ class Village:
         #      remmen de ruis).
         self.bus.subscribe("dag_begint",                  self._on_board_pulse)
         self.bus.subscribe("dag_begint",                  self._on_propose_projects)
+        # Generieke databron-collector + dode-bron-sensor (16 sept 2026): verplaatst uit
+        # website_watcher, want dit was dorpsbrede infrastructuur op een rol-thread — zelfde
+        # koppelfout als de dagbel-op-facilitator van 28 augustus. Zie Village._veilig_databron_puls.
+        self.bus.subscribe("dag_begint",                  lambda e: self._veilig_databron_puls())
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 
@@ -290,6 +294,77 @@ class Village:
         iid = self.human_inbox.add_means_gap(gap_key, description, sensed_by=d.get("by", "website_watcher"))
         logging.getLogger("village.inbox").info(
             "💀 source_died → means-gap in human_inbox: item %s (%s)", iid, gap_key)
+
+    def _collect_daily_observations(self) -> None:
+        """Generieke dag-observatie-collector: elke ACTIEVE DataSourceSkill schrijft z'n gedeclareerde
+        velden weg onder `<source>_<field>_day`. Niets per bron/veld hardcoded; fail-closed.
+
+        Verplaatst uit WebsiteWatcherWorker (16 sept 2026). Dit was generieke dorpsinfrastructuur op
+        een rol-thread: sliep of archiveerde `website_watcher`, dan stopte de dagelijkse verzameling
+        van ELKE databron (GDELT, GSC, Plausible-afgeleiden, Shopify, ...), niet alleen zijn eigen
+        werk. Exact de dagcyclus-les van 28 augustus (de dagbel hing toen aan `facilitator`), nu
+        toegepast op databron-collectie. Reageert rechtstreeks op `dag_begint`, rolonafhankelijk."""
+        from nooch_village.collector import collect_daily_observations
+        obs = getattr(self.context, "observations", None)
+        sources = getattr(self.context, "sources", None)
+        if obs is None or sources is None or self.registry is None:
+            return
+        log = logging.getLogger("village")
+        try:
+            written = collect_daily_observations(self.registry, sources, obs, self.context)
+            if written:
+                log.info("dag-observaties geschreven: %s", written)
+            # Contract-healthcheck (meetcatalogus): ongecatalogiseerde reeks of niet-vullende ACTIEVE
+            # family → luid signaal. Bewust-inactieve bronnen zwijgen. Nooit blokkerend voor de puls.
+            try:
+                from nooch_village.meetcatalog import healthcheck
+                for sig in healthcheck(obs):
+                    log.warning("🩺 meetcatalogus-signaal: %s", sig)
+            except Exception as exc:
+                log.warning("meetcatalogus-healthcheck faalde: %s", exc)
+        except Exception as exc:
+            log.warning("dag-observatie-collector faalde: %s", exc)
+
+    def _sense_dead_sources(self) -> None:
+        """Senst op de OVERGANG van 'recente data' naar 'dood' (fresh→stale uit indicator_freshness):
+        publiceert per overgang een `source_died`-event; `_on_source_died` hierboven schrijft er
+        generiek een means-gap voor in de human_inbox. Dedup + kind-aware drempel zitten in de sensor.
+        Fail-closed.
+
+        Verplaatst uit WebsiteWatcherWorker (16 sept 2026) — zelfde reden als hierboven: de sensor
+        die moet waarschuwen als een bron doodgaat, mag zelf niet doodgaan zodra de rol die hem droeg
+        slaapt. Reageert rechtstreeks op `dag_begint`, rolonafhankelijk."""
+        import os
+        from nooch_village.deadsource import DeadSourceState, sense_dead_sources
+        if getattr(self.context, "observations", None) is None or self.registry is None:
+            return
+        log = logging.getLogger("village")
+        state = DeadSourceState(os.path.join(self.context.data_dir, "deadsource_state.json"))
+
+        def emit(source, field, last_datum, days_ago, cadans):
+            self.bus.publish(Event("source_died", {
+                "source": source, "field": field, "last_datum": last_datum,
+                "days_ago": days_ago, "cadans": cadans, "by": "dorp"}, "dorp"))
+        try:
+            died = sense_dead_sources(self.registry, self.context, state, emit)
+            if died:
+                log.info("dode-bron-overgangen gesensed: %s", died)
+        except Exception as exc:
+            log.warning("dode-bron-sensor faalde: %s", exc)
+
+    def _veilig_databron_puls(self) -> None:
+        """Combineert de databron-collector en de dode-bron-sensor in de vaste volgorde die
+        `WebsiteWatcherWorker._morning_pulse` ook aanhield: eerst verzamelen, dan senst de
+        dode-bron-detectie tegen de zojuist bijgewerkte reeksen. Beide stappen zijn zelf al
+        fail-closed; deze wrapper is de buitenste laag, zoals `_veilig_verweesd` hieronder."""
+        try:
+            self._collect_daily_observations()
+        except Exception as e:                               # noqa: BLE001
+            logging.getLogger("village").warning("databron-puls faalde (collector): %s", e)
+        try:
+            self._sense_dead_sources()
+        except Exception as e:                               # noqa: BLE001
+            logging.getLogger("village").warning("databron-puls faalde (dode-bron-sensor): %s", e)
 
     def _on_means_gap(self, e: Event) -> None:
         """Classificeer een gesensed gat en dispatch op uitkomst A / B / C.
@@ -587,13 +662,19 @@ class Village:
         self.bus.subscribe("pulse_completed", lambda e: logging.getLogger("village").info(
             "✅ dagpuls verwerkt — het dorp leeft en wacht nu op de volgende dag-puls. "
             "Geen nieuwe regels = normaal, niet vastgelopen. Ctrl+C om te stoppen."))
-        # De nul moet zichzelf verklaren: na elke puls één keer toetsen of elke pulse-skill
+        # De nul moet zichzelf verklaren: na elke dag-puls één keer toetsen of elke pulse-skill
         # überhaupt een eigenaar heeft. Fail-soft — een controle mag de puls nooit breken.
-        self.bus.subscribe("pulse_completed", lambda e: self._veilig_verweesd())
+        #
+        # Op dag_begint, NIET pulse_completed (16 sept, gevonden tijdens het gdelt_tone-alert):
+        # pulse_completed wordt uitsluitend gepubliceerd door website_watcher se eigen
+        # _morning_pulse. Slaapt of archiveert die rol, dan vuurt dit vangnet dus NOOIT — precies
+        # het patroon dat het hoort te detecteren, ondermijnt zichzelf. dag_begint komt uit
+        # dagcyclus.py en is rolonafhankelijk (28 augustus-les), dus daar hangt het vangnet nu aan.
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_verweesd())
         # Zelfde controle, andere vraag: bezit een gearchiveerde/slapende rol nog open werk?
         # (Stefan, 15 sept: "we werken naar het verwijderen van de AI-rollen" — elke keer dat dat
         # gebeurt mag het werk dat erop stond niet stil verdwijnen, zoals bij harry_hemp nu al was.)
-        self.bus.subscribe("pulse_completed", lambda e: self._veilig_weesprojecten())
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_weesprojecten())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
