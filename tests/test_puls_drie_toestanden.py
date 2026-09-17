@@ -221,6 +221,19 @@ def test_slapende_rol_met_openstaand_werk_is_ook_een_wees(tmp_path, monkeypatch)
     assert gevangen[0][0] == "weesprojecten:marketing_lead"
 
 
+def test_gearchiveerd_project_is_geen_wees(tmp_path, monkeypatch):
+    """Er is geen `cancelled`-status: een project dat stopt zonder af te zijn wordt gearchiveerd.
+    Dat is een mens die het al heeft afgesloten, dus er valt niets meer te herverdelen — precies de
+    15 van de 16 projecten die bij het opruimen van concurrent_scout anders alsnog gemeld werden."""
+    v, gevangen = _dorp(monkeypatch, tmp_path, [_Rec([], id="oude_rol", archived=True)],
+                        projects=[{**_project("p1", owner="oude_rol", status="blocked"),
+                                   "archived": True},
+                                  {**_project("p2", owner="oude_rol", status="running"),
+                                   "archived": True}])
+    assert v._meld_weesprojecten() == []
+    assert gevangen == []
+
+
 def test_levende_rol_met_openstaand_werk_is_geen_wees(tmp_path, monkeypatch):
     v, gevangen = _dorp(monkeypatch, tmp_path, [_Rec([], id="wytse_rol")],
                         projects=[_project("p1", owner="wytse_rol", status="running")])
