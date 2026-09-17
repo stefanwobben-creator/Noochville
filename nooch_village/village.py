@@ -628,12 +628,19 @@ class Village:
         (herverdelen naar een levende rol, of bewust laten liggen). `gap_key` per rol dedupliceert
         dat via de HumanInbox, ongeacht status — zelfde afweging die daar al voor pulse-skills geldt.
 
+        AFGEROND IS NIET DE ENIGE MANIER WAAROP WERK EINDIGT. Er is geen `cancelled`-status; een
+        project dat stopt zonder af te zijn wordt gearchiveerd, en dat is de gangbare weg — bij
+        concurrent_scout waren 15 van de 16 openstaande projecten zo beëindigd. Alleen op `status`
+        kijken maakte van die 15 alsnog wezen op het moment dat de rol werd opgeruimd: een melding
+        over werk dat een mens al had afgesloten. `afslank_wezen.wezen` slaat gearchiveerd werk om
+        dezelfde reden over; dit is diezelfde regel, niet een tweede definitie van "open project".
+
         Geeft de rol-ids terug die weesprojecten hebben (leeg = niemand)."""
         from nooch_village.projects import KLAAR
         dood: dict[str, list[str]] = {}
         for p in self.context.projects.all():
-            if p.get("status") in KLAAR:
-                continue                                    # afgerond: geen eigenaar meer nodig
+            if p.get("status") in KLAAR or p.get("archived"):
+                continue                                    # afgerond of afgesloten: geen eigenaar nodig
             owner = p.get("owner", "")
             rec = self.records.get(owner) if owner else None
             if rec is not None and (getattr(rec, "archived", False) or getattr(rec, "slaapt", False)):
