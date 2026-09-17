@@ -76,6 +76,14 @@ TYPES: dict[str, dict] = {
         "ja": False,
         "waarom_niet": "this brings a role to life — it stays on the command line on purpose",
     },
+    "runner_activatie": {
+        # Dezelfde ongemakkelijkheid als `activation`, en om dezelfde reden: er gaat een thread
+        # draaien. Dat de code hier al bestaat maakt het besluit niet lichter — het maakt het
+        # alleen sneller uitvoerbaar, en dat is precies waarom het niet op een knop hoort.
+        "vraag": "This role just got its first running skill. Let it run?",
+        "ja": False,
+        "waarom_niet": "letting a role run starts a daily thread — it stays on the command line",
+    },
     "escalation": {
         "vraag": "This governance proposal did not pass the gate. Adopt it anyway?",
         "ja": False,
@@ -141,7 +149,11 @@ def samenvatting(item: dict, max_len: int = 220) -> str:
     het meten, want een script dat bovenin keek drukte 78 lege regels af en dat leest als 'deze items
     hebben geen inhoud'."""
     ctx = item.get("context") if isinstance(item.get("context"), dict) else {}
-    for k in ("description", "voorstel_claim", "reason", "word", "title", "claim", "beschrijving"):
+    # `reden` staat erbij omdat de sleutels in deze store half Engels en half Nederlands zijn
+    # (`beschrijving` stond hier al). Een item waarvan de tekst onder een niet-gezochte sleutel zit,
+    # valt terug op `subject` — een rol-id — en dat leest als "dit item heeft geen inhoud".
+    for k in ("description", "voorstel_claim", "reason", "reden", "word", "title", "claim",
+              "beschrijving"):
         v = ctx.get(k)
         if isinstance(v, str) and v.strip():
             s = " ".join(v.split())

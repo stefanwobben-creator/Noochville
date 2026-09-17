@@ -66,7 +66,10 @@ def test_domein_wijst_de_levende_rol_aan(tmp_path):
 
 def test_hoofdletters_en_spaties_doen_er_niet_toe(tmp_path):
     st = _stores(tmp_path)
-    _geef_domein(st, ROL, "  Claims ")
+    # De variant wordt AFGELEID van de constante, niet ernaast getypt. Hij stond hier als
+    # "  Claims " en bevroor daarmee een domeinnaam die geen enkele rol hield — dezelfde
+    # naast-elkaar-leven-fout die `claims_db.DOMEIN` zelf zes dagen fout hield.
+    _geef_domein(st, ROL, f"  {CLAIMS.upper()} ")
     gevonden = org.role_for_domain(st.records.all(), CLAIMS)
     assert gevonden is not None and gevonden.id == ROL
 

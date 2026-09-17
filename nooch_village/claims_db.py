@@ -24,7 +24,23 @@ DB_PATH = os.path.join(BASE_DIR, "config", "claims_database.json")
 #: Het governance-domein waaronder deze database valt. Wie hem cureert is DAARVAN af te leiden
 #: (`org.role_for_domain`), en staat nergens als rol-id in code: een rol-id is een naam die
 #: verhuist, een domein is het feit dat governance vastlegt.
-DOMEIN = "claims"
+#:
+#: STOND TOT 16 SEPTEMBER 2026 OP "claims", EN DAT BESTOND NERGENS. De governance-akte die
+#: Compliance dit domein gaf (`role_proposals.build_compliance_domain_proposal`) schreef
+#: `claims-database`; het levende record houdt `claim-verification` + `claims-database`. Geen
+#: enkele rol hield ooit "claims", dus `role_for_domain` gaf altijd None — en dat is stil:
+#: `_zorg_skill(records, None, …)` doet niets, de claims-tools-kaart (`views/overview._DOMAIN_TOOLS`)
+#: verscheen bij niemand, en `claims_board.rol_id_voor` gaf overal "". Precies het gat dat
+#: `skill_meta.domein_gaten` zou vangen, behalve dat die alleen META-skills ziet en deze er niet
+#: in staan. Vergelijken op naam kan alleen als de naam klopt.
+DOMEIN = "claims-database"
+
+#: Het claim-werk verdeelt zich over TWEE domeinen, en die horen bij elkaar: `claim-verification`
+#: (toetsen tegen bewijs, ouder) en `claims-database` (de termenlijst en de werklijst cureren, via
+#: de amend van 9 september). Eén rol houdt ze vandaag allebei. Ze staan hier zodat een lezer die
+#: naar een claim-domein zoekt niet per ongeluk een derde naam verzint — `zelf_verwerking` had het
+#: paar los overgeschreven.
+DOMEINEN = ("claim-verification", DOMEIN)
 
 # De runtime-overlay: curatie die op de server ontstaat (termen toevoegen/intrekken, werklijst-
 # statussen) landt hier, NIET in de getrackte seed. Zo blijft config/claims_database.json schoon

@@ -30,6 +30,8 @@ import os
 import re
 import time
 
+from nooch_village import claims_db
+
 log = logging.getLogger("village.zelf_verwerking")
 
 BESTAND = "verwerkingen.jsonl"
@@ -126,7 +128,10 @@ def founder_behoefte(tekst: str) -> tuple[str, str]:
 # De rollen worden herkend aan hun DOMEIN (bibliotheek / claim-verification), niet aan hun id: een
 # id kan hernoemd worden, een domein dragen is een governance-besluit.
 _LEXICON_DOMEIN = ("bibliotheek", "lexicon", "vocabulary")
-_CLAIM_DOMEIN   = ("claim-verification", "claims-database")
+# Niet overschrijven maar VERWIJZEN: het paar hoort bij de database die het beschrijft. Toen het
+# hier los stond, dreef `claims_db.DOMEIN` er ongemerkt vanaf naar een derde naam ("claims") die
+# nergens bestond — deze twee regels waren daardoor de enige plek waar de claim-rol nog gevonden werd.
+_CLAIM_DOMEIN   = claims_db.DOMEINEN
 # Onderzoeksmethode hoort bij de Scientist — maar die rol houdt vandaag GEEN domein, dus er is
 # langs governance geen weg om hem aan te wijzen. Zodra hij er een krijgt, werkt deze route vanzelf.
 # Tot dan: geen overdracht (fail-closed) en een logregel, want een gok op een rol-id is precies de

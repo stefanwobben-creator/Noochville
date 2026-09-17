@@ -428,11 +428,16 @@ class Village:
 
     def _on_governance_changed(self, e: Event) -> None:
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
+        # Rollen die op een runner-poort staan (seed-grant zonder green-light) krijgen hun vraag.
+        self.human_inbox.sync_runner_gates(self.records.all())
         # Een gearchiveerde rol mag geen openstaande activatie-vraag achterlaten.
         self.human_inbox.withdraw_archived_activations(self.records.all())
 
     def start(self):
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
+        # De seed (in __init__) kan zojuist een activatie-poort hebben gezet; die hoort meteen als
+        # vraag in de inbox te staan, niet pas na de eerstvolgende governance-wijziging.
+        self.human_inbox.sync_runner_gates(self.records.all())
         self.human_inbox.withdraw_archived_activations(self.records.all())
         self._migrate_persona_bindings()
         self._audit_role_provenance()

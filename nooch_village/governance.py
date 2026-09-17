@@ -278,7 +278,14 @@ class Records(JsonStore):
                 slaapt=r.get("slaapt", False),
                 slaap_reden=r.get("slaap_reden"),
                 slaap_sinds=r.get("slaap_sinds"),
-                ingetrokken_skills=list(r.get("ingetrokken_skills") or []))
+                ingetrokken_skills=list(r.get("ingetrokken_skills") or []),
+                # LEZEN EN SCHRIJVEN ZIJN HIER NIET SYMMETRISCH: `_save` serialiseert het hele
+                # dataclass via `asdict`, maar `_load` noemt elk veld met de hand. Een nieuw veld
+                # wordt dus wél geschreven en niet teruggelezen — het overleeft geen herstart, en
+                # niets meldt dat. Precies wat er bij deze poort bijna gebeurde: het vlaggetje stond
+                # in het bestand en `heeft_runner` zag het nooit.
+                activatie_vereist=bool(r.get("activatie_vereist", False)),
+                activatie_reden=r.get("activatie_reden"))
             # Fail-soft migratie: elke accountability krijgt een stabiel id. Idempotent —
             # een tweede load muteert niets en schrijft dus ook niets.
             if ensure_acc_ids(self._data[rid].definition):
@@ -616,6 +623,18 @@ def heeft_runner(record, *, class_map=None, registry=None, context=None) -> tupl
         return False, "geen record"
     if getattr(record, "slaapt", False):
         return False, (getattr(record, "slaap_reden", "") or "slaapt")
+    # DE GRANT-POORT. Staat hier, vóór de CLASS_MAP-check, en dat is de bedoeling: zolang een mens
+    # niet heeft getekend start er geen thread, langs welke weg de capaciteit ook binnenkwam. Zou
+    # een CLASS_MAP-entry hier stilletjes voorrang krijgen, dan zijn er weer twee manieren om een
+    # rol te laten draaien en is de goedkeuring alleen de langzame.
+    #
+    # Zelfde familie als `slaapt` hierboven: het record blijft compleet in het register staan, er
+    # draait alleen niets. Verschil is wie het zet — slapen is een besluit ACHTERAF, dit is een rem
+    # VOORAF op capaciteit die de seed net heeft neergelegd. Wegnemen doet de mens in de human inbox
+    # (`inbox_actions.decide_runner_activatie`), niet de code.
+    if getattr(record, "activatie_vereist", False):
+        return False, (getattr(record, "activatie_reden", "")
+                       or "wacht op activatie door de mens (human inbox)")
     if (class_map or {}).get(getattr(record, "id", "")):
         return True, "eigen implementatie"
     if registry is None:

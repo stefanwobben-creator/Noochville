@@ -52,6 +52,22 @@ class Record:
     # dan stilzwijgend een governance-besluit, en niemand ziet dat gebeuren. De seed vult aan wat
     # nooit is besloten; hij overrulet niet wat wél is besloten.
     ingetrokken_skills: list[str] = field(default_factory=list)
+    # EEN GRANT IS GEEN GREEN-LIGHT. `heeft_runner` klapt om zodra een rol één GEREGISTREERDE skill
+    # in zijn DNA heeft: er start een thread, en die draait elke dagpuls. Voor een rol die een MENS
+    # vervult is dat een capaciteitsuitbreiding waar niemand ja op heeft gezegd — precies de grens
+    # uit CLAUDE.md ("uitbreiding van capaciteit is altijd mens-gated", geboren-versus-bemenst).
+    #
+    # Zet de seed een skill neer die op zichzelf een thread zou starten, dan zet hij ook dit vlaggetje
+    # en `heeft_runner` zegt nee tot een mens het wegneemt via de human inbox (type
+    # `runner_activatie`, `inbox_actions.decide_runner_activatie`). Het DNA is dan wél al bijgewerkt:
+    # de rol HOUDT het gereedschap, hij VOERT het nog niet uit. Dat onderscheid is de hele reden dat
+    # dit een apart veld is en geen ontbrekende skill.
+    #
+    # Alleen wie het vlaggetje krijgt, wordt gepoort. Elke rol die vandaag op "actieve skill" draait
+    # heeft het niet en blijft dus gewoon draaien — een gate met terugwerkende kracht zou het halve
+    # dorp stilzetten.
+    activatie_vereist: bool = False
+    activatie_reden: Optional[str] = None
 
 
 @dataclass

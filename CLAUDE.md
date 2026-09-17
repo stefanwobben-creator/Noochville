@@ -428,12 +428,31 @@ De geboren-versus-bemenst-splitsing geldt voor **capaciteit**, niet alleen voor 
 `HumanInbox` (`human_inbox.py`) is de persistente wachtrij voor beslissingen die menselijke goedkeuring vereisen.
 State in `data/human_inbox.json` (gitignored). CLI: `python -m nooch_village.inbox`.
 
-### Twee item-typen
+### Drie item-typen
 
 | Type | Wanneer | Voorbeeld |
 |------|---------|-----------|
 | `escalation` | Governance-voorstel dat G1-G4 niet passeerde | Domein-botsing bij een `add_role` |
 | `activation` | Sensed onbemande rol zonder `CLASS_MAP`-entry | `kennis_scout` geboren via governance |
+| `runner_activatie` | Rol kreeg via een domein-grant zijn EERSTE draaiende skill | `creator_of_shoes` kreeg de materiaal-memo's via het `Materials`-domein |
+
+**`activation` versus `runner_activatie`.** De eerste vraagt of er code GESCHREVEN mag worden; de
+tweede of bestaande, geregistreerde code mag DRAAIEN op deze rol. Verwar ze niet: een
+`activation`-item toont een implementatieplan, en dat leest onzinnig bij een rol waar niets meer te
+implementeren valt.
+
+**Waarom `runner_activatie` bestaat.** `heeft_runner` klapt om zodra een rol één geregistreerde skill
+in zijn DNA heeft — er start een thread die elke dagpuls draait. De domein-regrant in
+`seeds.migrate_records` schrijft precies zo'n skill, dus een seed-regel over EIGENAARSCHAP zou
+stilzwijgend CAPACITEIT uitbreiden. Dat is de grens uit "Harde grens: zelfverbetering stopt bij
+voorstellen", nu ook voor een grant: de seed zet `Record.activatie_vereist`, `heeft_runner` zegt nee
+tot een mens het wegneemt, en het DNA is intussen wél bijgewerkt — de rol HOUDT het gereedschap, hij
+VOERT het nog niet uit. De poort werkt nooit met terugwerkende kracht: alleen wie hem krijgt wordt
+gepoort, dus rollen die vandaag op "actieve skill" draaien merken niets.
+
+Een NEE haalt de skills niet uit het DNA (dat is `afslanken.skill_intrekken`); hij laat alleen de
+thread uit. Merkt daardoor niemand meer de skill te draaien, dan meldt
+`village._meld_verweesde_pulse_skills` dat als verweesde pulse-skill.
 
 ### CLI-commando's
 
@@ -451,12 +470,15 @@ python -m nooch_village.inbox defer   <id> [reden]   # uitstellen, blijft geregi
 
 ### Effecten per actie × type
 
-| Actie | escalation | activation |
-|-------|-----------|-----------|
-| `approve` | `governance_verdict approve` op de bus → Secretary adopteert direct | Green-light; toont stappenplan voor handmatige implementatie |
-| `reject` | `governance_verdict reject` op de bus → Secretary markeert voorstel afgewezen | Item gesloten; geen code |
-| `amend` | Item amended + instructie om voorstel aangepast her in te dienen | Idem voor activatieplan |
-| `defer` | Uitgesteld; blijft in `data/human_inbox.json` | Idem |
+| Actie | escalation | activation | runner_activatie |
+|-------|-----------|-----------|------------------|
+| `approve` | `governance_verdict approve` op de bus → Secretary adopteert direct | Green-light; toont stappenplan voor handmatige implementatie | `activatie_vereist` weg van het record → thread bij de VOLGENDE daemon-start |
+| `reject` | `governance_verdict reject` op de bus → Secretary markeert voorstel afgewezen | Item gesloten; geen code | Item gesloten; DNA blijft, geen thread. Komt niet terug als nieuwe vraag |
+| `amend` | Item amended + instructie om voorstel aangepast her in te dienen | Idem voor activatieplan | n.v.t. — het is een ja/nee over draaien |
+| `defer` | Uitgesteld; blijft in `data/human_inbox.json` | Idem | Idem |
+
+Een draaiende daemon herbouwt zijn inwoners niet op een wijziging van buiten (zie `Records`), dus
+een approve op de commandoregel start de thread pas bij de volgende start — de CLI zegt dat er zelf bij.
 
 ### Beveiligingsgrens (nooit te doorbreken)
 

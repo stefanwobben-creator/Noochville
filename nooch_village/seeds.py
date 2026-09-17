@@ -34,6 +34,26 @@ def _zorg_skill(records, rec, skill: str) -> bool:
     return True
 
 
+def _heeft_runner_nu(rec) -> bool:
+    """Draait er op DIT moment een inwoner op deze rol? Fail-CLOSED bij twijfel.
+
+    Alleen nodig om te weten of een grant de EERSTE draaiende capaciteit is. Kunnen we het niet
+    vaststellen (geen registry, geen CLASS_MAP te laden), dan luidt het antwoord "ja, draaide al" —
+    dan zet de seed geen poort. Dat is met opzet de minst ingrijpende kant: een poort die ten
+    onrechte dichtgaat zet een werkende rol stil, en dat is erger dan een poort die niet dichtgaat
+    op een rol die toch al draaide.
+    """
+    try:
+        from nooch_village.governance import heeft_runner
+        from nooch_village.registry_factory import build_skill_registry
+        from nooch_village.village import CLASS_MAP
+        return heeft_runner(rec, class_map=CLASS_MAP, registry=build_skill_registry())[0]
+    except Exception:                                        # noqa: BLE001
+        log.warning("kon runner-status van %r niet bepalen — geen activatie-poort gezet",
+                    getattr(rec, "id", "?"), exc_info=True)
+        return True
+
+
 # ── Herkomst-wachter ──────────────────────────────────────────────────────────
 # De founding-bootstrap: de enige rollen die geseed mogen zijn. Elke andere rol hoort via
 # governance geboren te zijn (source="sensed"), niet seed-gehardcodeerd. Dit is de
@@ -325,27 +345,72 @@ def migrate_records(records: Records) -> None:
     # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
     if _zorg_skill(records, records.get("harry_hemp"), "onderzoeksvraag"):
         changed = True
-    # ── De twee periodieke compliance-skills volgen het CLAIMS-DOMEIN ─────────
-    # Gemeten op 10 september 2026: `/skills` meldde "Nobody wields this means yet" voor allebei.
-    # De vorige houder was gearchiveerd, en daarmee draaide er geen inwoner meer die ze kon
-    # uitvoeren — twaalf dagen vóór de EmpCo-handhaving, terwijl de wekelijkse site-scan op
-    # 15 september aan de beurt was. De orphan-check in `village._meld_verweesde_pulse_skills`
-    # heeft daar niets over gezegd; waarom niet is nog open.
+    # ── Periodieke skills volgen hun DOMEIN, niet een rol-id ──────────────────
+    # Gemeten op 10 september 2026: `/skills` meldde "Nobody wields this means yet" voor
+    # claims_site_scan en regulation_watch allebei. De vorige houder was gearchiveerd, en daarmee
+    # draaide er geen inwoner meer die ze kon uitvoeren — twaalf dagen vóór de EmpCo-handhaving,
+    # terwijl de wekelijkse site-scan op 15 september aan de beurt was. De orphan-check in
+    # `village._meld_verweesde_pulse_skills` heeft daar niets over gezegd; waarom niet is nog open.
     #
-    # Aan het DOMEIN en niet aan een rol-id, om precies de reden die deze week drie keer beet:
+    # Aan het DOMEIN en niet aan een rol-id, om precies de reden die die week drie keer beet:
     # een rol-id is een naam die verhuist. `role_for_domain` slaat gearchiveerde records over, dus
     # dit kan de oude rol nooit weer tot leven wekken.
     #
-    # BEWUST TIJDELIJK. Zodra de geplande-taak-mechaniek er is horen deze twee daar thuis en niet
+    # BEWUST TIJDELIJK. Zodra de geplande-taak-mechaniek er is horen deze skills daar thuis en niet
     # op een DNA-grant. Intrekken gaat dan met `afslanken.skill_intrekken`; die zet de intrek-guard
     # en `_zorg_skill` respecteert die, dus de seed zet ze niet stilletjes terug.
-    from nooch_village import claims_db, org
-    _claims_rol = org.role_for_domain(records.all(), claims_db.DOMEIN)
-    for _periodiek in ("claims_site_scan", "regulation_watch"):
-        if _zorg_skill(records, _claims_rol, _periodiek):
-            log.info("seed: '%s' toegekend aan '%s' (houder van domein '%s')",
-                     _periodiek, _claims_rol.id, claims_db.DOMEIN)
-            changed = True
+    #
+    # DE MATERIAAL-MEMO'S ZIJN HET TWEEDE PAAR (16 september 2026). `harry_hemp` was hun enige
+    # levende drager, en hij staat op de nominatie om opgeruimd te worden: dan verdwijnen twee
+    # werkende skills mee met een rol, zonder dat iemand dat als besluit heeft genomen. Ze horen
+    # bij het domein dat hun UITKOMST bezit, en dat wisten ze zelf al — `materiaal_memo.ontvanger`
+    # adresseert de memo's via `eigenaar_domein()` op precies dat domein. Nu volgt de GRANT dezelfde
+    # verklaring als de bezorging, in plaats van een rol-id dat er toevallig naast lag.
+    #
+    # WAAROM HET DOMEIN NIET HIER STAAT: hij staat al in `radar_store._DEFAULT_FEEDS`
+    # ("Materials"), overschrijfbaar via `data/feeds.json`. Een tweede literal hier zou een tweede
+    # waarheid zijn die bij de eerste verhuizing uiteendrijft.
+    import os as _os
+    from nooch_village import claims_db, materiaal_memo, org
+    _data_dir = _os.path.dirname(getattr(records, "path", "") or "") or "data"
+    # (domein, skills). Het domein is de verklaring; de rol wordt live geresolved.
+    for _domein, _skills in (
+        (claims_db.DOMEIN, ("claims_site_scan", "regulation_watch")),
+        (materiaal_memo.eigenaar_domein(_data_dir), ("materiaal_kwartaal", "materiaal_shortlist")),
+    ):
+        # LUID ALS NIEMAND HET DOMEIN HOUDT. Dit blok was tot 16 september stil in precies dat
+        # geval: `claims_db.DOMEIN` stond op een naam die geen enkele rol hield, `role_for_domain`
+        # gaf None, en `_zorg_skill(records, None, …)` doet niets en zegt niets. Een grant die
+        # nergens landt ziet er in de logs identiek uit aan een grant die al gedaan was.
+        _houder = org.role_for_domain(records.all(), _domein) if _domein else None
+        if _houder is None:
+            log.warning("seed: geen levende rol houdt domein %r — %s NIET toegekend",
+                        _domein or "(niet geconfigureerd)", ", ".join(_skills))
+            continue
+        # VÓÓR de grant meten, want de grant is precies wat het antwoord verandert.
+        _draaide_al = _heeft_runner_nu(_houder)
+        _verleend = []
+        for _periodiek in _skills:
+            if _zorg_skill(records, _houder, _periodiek):
+                log.info("seed: '%s' toegekend aan '%s' (houder van domein '%s')",
+                         _periodiek, _houder.id, _domein)
+                _verleend.append(_periodiek)
+                changed = True
+        # DE GRANT MAG DE THREAD NIET ZELF AANZETTEN. Kreeg deze rol zojuist zijn EERSTE draaiende
+        # capaciteit, dan zou `heeft_runner` omklappen en de Reconciler een thread starten op een rol
+        # die een mens vervult — een capaciteitsuitbreiding zonder dat iemand ja heeft gezegd. Het DNA
+        # blijft staan (de rol HOUDT het gereedschap); alleen het draaien wacht op de human inbox.
+        if _verleend and not _draaide_al:
+            _rec = records.get(_houder.id)          # vers ophalen: _zorg_skill schreef ertussen
+            if _rec is not None and not _rec.activatie_vereist:
+                _rec.activatie_vereist = True
+                _rec.activatie_reden = (
+                    f"kreeg {', '.join(_verleend)} via het domein '{_domein}'; een thread starten "
+                    f"op deze rol is een besluit van de mens")
+                records.put(_rec)
+                log.warning("seed: '%s' krijgt GEEN thread tot een mens activeert — %s",
+                            _rec.id, _rec.activatie_reden)
+                changed = True
     # ── Noochie absorbeert Ronnie's bulletin-mandaat ──────────────────────────
     noochie = records.get("noochie")
     if noochie is not None:
