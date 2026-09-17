@@ -122,31 +122,41 @@ class _Def:
 
 
 class _Rec:
-    def __init__(self, skills, *, slaapt=False, archived=False):
+    def __init__(self, skills, *, id="", slaapt=False, archived=False):  # noqa: A002 — spiegelt het echte veld
+        self.id = id
         self.definition = _Def(skills)
         self.slaapt = slaapt
         self.archived = archived
 
 
-def _dorp(monkeypatch, tmp_path, records, *, pulse_skills="claims_site_scan,regulation_watch"):
+def _dorp(monkeypatch, tmp_path, records, *, pulse_skills="claims_site_scan,regulation_watch",
+         projects=None):
     from nooch_village.village import Village
     v = object.__new__(Village)
 
     class _Recs:
         def all(self):
             return records
+
+        def get(self, rid):
+            return next((r for r in records if getattr(r, "id", "") == rid), None)
     v.records = _Recs()
+
+    class _Projects:
+        def all(self):
+            return projects or []
 
     class _Ctx:
         settings = {"pulse_skills": pulse_skills}
         data_dir = str(tmp_path)
+        projects = _Projects()
     v.context = _Ctx()
 
     gevangen = []
 
     class _HI:
         def add_means_gap(self, gap_key, description, *, role_id="", sensed_by=""):
-            gevangen.append((gap_key, description))
+            gevangen.append((gap_key, description, role_id))
             return "x"
     v.human_inbox = _HI()
     return v, gevangen
@@ -176,3 +186,83 @@ def test_een_slapende_rol_draagt_geen_capaciteit(tmp_path, monkeypatch):
                         [_Rec(["claims_site_scan"]),
                          _Rec(["regulation_watch"], slaapt=True)])
     assert v._meld_verweesde_pulse_skills() == ["regulation_watch"]
+
+
+# ── weesprojecten: het spiegelbeeld van hierboven — niet "wie mist de skill" maar "wie bezit nog
+# werk terwijl hij weg is" (15 sept: harry_hemp bleek nog 90 projecten te bezitten terwijl Stefan
+# de AI-rollen aan het uitfaseren is; precies het patroon van de compliance-rol-migratie van
+# 10 september, nu op dorpsniveau bewaakt in plaats van per rol herontdekt) ────────────────────────
+
+def _project(id, *, owner, status="future", title=""):
+    return {"id": id, "title": title or id, "owner": owner, "status": status}
+
+
+def test_gearchiveerde_rol_met_openstaand_werk_is_een_wees(tmp_path, monkeypatch):
+    v, gevangen = _dorp(monkeypatch, tmp_path,
+                        [_Rec([], id="harry_hemp", archived=True), _Rec([], id="wytse_rol")],
+                        projects=[_project("p1", owner="harry_hemp"),
+                                  _project("p2", owner="harry_hemp", status="running"),
+                                  _project("p3", owner="harry_hemp", status="done"),
+                                  _project("p4", owner="wytse_rol", status="running")])
+    assert v._meld_weesprojecten() == ["harry_hemp"]
+    # het 'done'-project telt niet mee: 2, niet 3
+    assert len(gevangen) == 1
+    gap_key, beschrijving, role_id = gevangen[0]
+    assert gap_key == "weesprojecten:harry_hemp"
+    assert role_id == "harry_hemp"
+    assert "2" in beschrijving
+
+
+def test_slapende_rol_met_openstaand_werk_is_ook_een_wees(tmp_path, monkeypatch):
+    v, gevangen = _dorp(monkeypatch, tmp_path,
+                        [_Rec([], id="marketing_lead", slaapt=True)],
+                        projects=[_project("p1", owner="marketing_lead", status="blocked")])
+    assert v._meld_weesprojecten() == ["marketing_lead"]
+    assert gevangen[0][0] == "weesprojecten:marketing_lead"
+
+
+def test_levende_rol_met_openstaand_werk_is_geen_wees(tmp_path, monkeypatch):
+    v, gevangen = _dorp(monkeypatch, tmp_path, [_Rec([], id="wytse_rol")],
+                        projects=[_project("p1", owner="wytse_rol", status="running")])
+    assert v._meld_weesprojecten() == []
+    assert gevangen == []
+
+
+def test_alle_projecten_afgerond_is_geen_wees_ook_niet_bij_een_dode_rol(tmp_path, monkeypatch):
+    """Een gearchiveerde rol wiens werk allemaal 'done' is heeft niets meer nodig — geen ruis."""
+    v, gevangen = _dorp(monkeypatch, tmp_path, [_Rec([], id="oude_rol", archived=True)],
+                        projects=[_project("p1", owner="oude_rol", status="done")])
+    assert v._meld_weesprojecten() == []
+    assert gevangen == []
+
+
+def test_meerdere_wees_rollen_geven_meerdere_gemelde_gaten(tmp_path, monkeypatch):
+    v, gevangen = _dorp(monkeypatch, tmp_path,
+                        [_Rec([], id="harry_hemp", archived=True),
+                         _Rec([], id="concurrent_scout", slaapt=True)],
+                        projects=[_project("p1", owner="harry_hemp"),
+                                  _project("p2", owner="concurrent_scout")])
+    assert set(v._meld_weesprojecten()) == {"harry_hemp", "concurrent_scout"}
+    assert len(gevangen) == 2
+
+
+def test_onbekende_eigenaar_wordt_niet_als_wees_gemeld(tmp_path, monkeypatch):
+    """Geen record voor de owner (bv. een oude/foute id) is geen archived/slaapt-oordeel te vellen
+    over — fail-soft negeren, niet gokken."""
+    v, gevangen = _dorp(monkeypatch, tmp_path, [],
+                        projects=[_project("p1", owner="bestaat_niet")])
+    assert v._meld_weesprojecten() == []
+    assert gevangen == []
+
+
+def test_veilig_weesprojecten_is_fail_soft(tmp_path, monkeypatch, caplog):
+    """Dezelfde garantie als _veilig_verweesd hiernaast: een controle mag de dagpuls nooit breken."""
+    v, _ = _dorp(monkeypatch, tmp_path, [_Rec([], id="harry_hemp", archived=True)],
+                projects=[_project("p1", owner="harry_hemp")])
+
+    def _boom():
+        raise RuntimeError("kapotte store")
+    v._meld_weesprojecten = _boom
+    with caplog.at_level(logging.WARNING):
+        v._veilig_weesprojecten()                          # mag niet raisen
+    assert "weesprojecten-check faalde" in caplog.text

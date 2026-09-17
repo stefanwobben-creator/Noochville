@@ -317,10 +317,16 @@ def test_onbekende_pagina_geeft_nette_melding(tmp_path):
 
 
 def test_notes_tab_linkt_naar_de_pagina(tmp_path):
+    """De TITEL is de link, niet een los chipje ernaast.
+
+    Deze test eiste tot 17 september ook de tekst "open page". Dat chipje is bewust weggehaald toen
+    de titel zelf de permalink werd (klikken op de kaart is wat je hier verwacht) — de assertie bleef
+    staan en bevroor daarmee een vorm die niemand meer wilde. Hij toetst nu de BEDOELING: waar de
+    lezer klikt, en waar hij heen gaat."""
     st = _stores(tmp_path)
     a = st.att.add(OWNER, "note", title="HyphaLite")
     html = cockpit2.render_node(st, OWNER, "notes", csrf_token="tok", username="guest")
-    assert f"/pagina?id={a.id}" in html and "open page" in html
+    assert f"<a href='/pagina?id={a.id}'>HyphaLite</a>" in html
 
 
 # ── "naar de wiki" vanaf een rapport (scope 61, wiki_kennisborging.md) ───────

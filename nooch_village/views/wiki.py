@@ -85,18 +85,22 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
 
 def _feit_form(aid: str, csrf_token: str) -> str:
     opts = "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in _SOORT_LABEL.items())
+    # De veld-ids dragen de artefact-id (zelfde reden als _voorstel_form hieronder): zodra
+    # feiten-secties van meerdere pagina's onder elkaar staan (Notes-tab, inline), laat een kale
+    # id elk gekoppeld label naar de EERSTE kaart wijzen in plaats van zijn eigen kaart.
+    soort_id = f"feit-soort-{aid}"
     return (f"<details class='qadd'><summary>+ Add fact</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
-            f"{_field('Fact', 'tekst', required=True, fid='feit-tekst')}"
-            f"<label class='att-lbl' for='feit-soort'>Grounding</label>"
-            f"<select id='feit-soort' name='soort'>"
+            f"{_field('Fact', 'tekst', required=True, fid=f'feit-tekst-{aid}')}"
+            f"<label class='att-lbl' for='{_e(soort_id)}'>Grounding</label>"
+            f"<select id='{_e(soort_id)}' name='soort'>"
             f"<option value=''>none (shows as ungrounded)</option>{opts}</select>"
-            f"{_field('Reference (record / policy id)', 'ref', fid='feit-ref')}"
-            f"{_field('URL (for a cited source)', 'url', kind='url', fid='feit-url')}"
-            f"{_field('Quote', 'citaat', kind='textarea', fid='feit-citaat')}"
+            f"{_field('Reference (record / policy id)', 'ref', fid=f'feit-ref-{aid}')}"
+            f"{_field('URL (for a cited source)', 'url', kind='url', fid=f'feit-url-{aid}')}"
+            f"{_field('Quote', 'citaat', kind='textarea', fid=f'feit-citaat-{aid}')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_feit_add'>Add</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "

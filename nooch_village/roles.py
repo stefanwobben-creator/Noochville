@@ -129,8 +129,10 @@ class WebsiteWatcherWorker(Inhabitant):
                                   {"plausible": plausible, "trends": trends, "prose": prose})
 
             self._log_pulse_metrics(plausible)
-            self._collect_daily_observations()             # generiek: elke actieve bron → observaties
-            self._sense_dead_sources()                     # dood-overgang (fresh→stale) → spanning
+            # _collect_daily_observations/_sense_dead_sources verhuisd naar Village (16 sept): dit
+            # was generieke infrastructuur op een rol-thread — exact de dagcyclus-les van 28 augustus
+            # (facilitator droeg toen de dagbel), nu toegepast op databron-collectie. Ze draaien nu
+            # rechtstreeks op dag_begint, rolonafhankelijk; zie Village._veilig_databron_puls.
             self._surface_locale(plausible)
 
             self._propose_related(trends)
@@ -242,50 +244,6 @@ class WebsiteWatcherWorker(Inhabitant):
         # De losse dagwaarden per bron (visitors/pageviews/visit_duration/shopify/gsc) lopen via de
         # generieke collector (_collect_daily_observations); een rol die metrics "volgt" leest die
         # canonieke reeksen via referentie (MonitoringStore = curatie-lijst), zonder ze te kopiëren.
-
-    def _collect_daily_observations(self) -> None:
-        """Generieke dag-observatie-collector: elke ACTIEVE DataSourceSkill schrijft z'n gedeclareerde
-        velden weg onder `<source>_<field>_day`. Niets per bron/veld hardcoded; fail-closed."""
-        from nooch_village.collector import collect_daily_observations
-        obs = getattr(self.context, "observations", None)
-        sources = getattr(self.context, "sources", None)
-        if obs is None or sources is None or self.registry is None:
-            return
-        try:
-            written = collect_daily_observations(self.registry, sources, obs, self.context)
-            if written:
-                self.log.info("dag-observaties geschreven: %s", written)
-            # Contract-healthcheck (meetcatalogus): ongecatalogiseerde reeks of niet-vullende ACTIEVE family
-            # → luid signaal. Bewust-inactieve bronnen zwijgen. Nooit blokkerend voor de puls.
-            try:
-                from nooch_village.meetcatalog import healthcheck
-                for sig in healthcheck(obs):
-                    self.log.warning("🩺 meetcatalogus-signaal: %s", sig)
-            except Exception as exc:
-                self.log.warning("meetcatalogus-healthcheck faalde: %s", exc)
-        except Exception as exc:
-            self.log.warning("dag-observatie-collector faalde: %s", exc)
-
-    def _sense_dead_sources(self) -> None:
-        """Senst op de OVERGANG van 'recente data' naar 'dood' (fresh→stale uit indicator_freshness):
-        publiceert per overgang een `source_died`-event; de Village schrijft er generiek een means-gap
-        voor in de human_inbox. Dedup + kind-aware drempel zitten in de sensor. Fail-closed."""
-        import os
-        from nooch_village.deadsource import DeadSourceState, sense_dead_sources
-        if getattr(self.context, "observations", None) is None or self.registry is None:
-            return
-        state = DeadSourceState(os.path.join(self.context.data_dir, "deadsource_state.json"))
-
-        def emit(source, field, last_datum, days_ago, cadans):
-            self.bus.publish(Event("source_died", {
-                "source": source, "field": field, "last_datum": last_datum,
-                "days_ago": days_ago, "cadans": cadans, "by": self.id}, self.id))
-        try:
-            died = sense_dead_sources(self.registry, self.context, state, emit)
-            if died:
-                self.log.info("dode-bron-overgangen gesensed: %s", died)
-        except Exception as exc:
-            self.log.warning("dode-bron-sensor faalde: %s", exc)
 
     def _sense_goal_gap(self, plausible: dict) -> None:
         """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.

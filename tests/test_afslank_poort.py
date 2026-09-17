@@ -16,6 +16,12 @@ Wat er daarna één voor één omviel:
   4. `website_watcher` sliep → de GROEI-PULS viel weg (Field Note, Plausible-metrics,
      dode-bron-detectie, doel-gap-signaal, keyword-voorstellen) — zichtbaar aan de events die hij
      publiceert en die anderen lezen.
+
+     ↳ De databron-collector en de dode-bron-detectie horen sinds 16 sept 2026 niet meer bij dit
+       geval: ze verhuisden naar Village (`_veilig_databron_puls`), dezelfde beweging als 1 en 2
+       hierboven. Wat overblijft (Field Note, Plausible-metrics, doel-gap, keyword-voorstellen) is
+       echt rolwerk — een persona-stem en -oordeel, geen infrastructuur — en hoort dus wel bij deze
+       rol te blijven.
   5. `serpapi_trends` werd ingetrokken → de CODE van website_watcher roept hem nog aan, en meldt
      bij elk ontwaken 'dode capability'.
 
@@ -57,10 +63,17 @@ def test_geval_3_website_watcher_draagt_pulse_completed():
 
 
 def test_geval_4_website_watcher_draagt_de_groeipuls():
-    """De groei-puls zelf is geen event, maar wat hij oplevert wél: ontdekking en dode bronnen."""
+    """De groei-puls zelf is geen event, maar wat hij oplevert wél: ontdekking.
+
+    `source_died` hoorde hier ook bij tot 16 september 2026: de generieke databron-collector en de
+    dode-bron-sensor liepen toen nog op deze rol se eigen dag_begint-reactie. Verplaatst naar Village
+    (`_veilig_databron_puls`, zie tests/test_databron_puls_los.py), om dezelfde reden als de dagbel
+    op 28 augustus van `facilitator` naar `dagcyclus.py` verhuisde — zie geval 1 en 2 hierboven.
+    Deze test toont nu de AFWEZIGHEID van die koppeling, niet meer de aanwezigheid ervan."""
     d = aa.rol_afhankelijkheden("website_watcher")
     ev = {e["event"] for e in d["events"]}
-    assert {"project_discovery_ready", "source_died"} <= ev
+    assert "project_discovery_ready" in ev
+    assert "source_died" not in ev, "source_died is dorpsinfrastructuur geworden, geen rolwerk meer"
 
 
 # ── Richting B: een skill intrekken ────────────────────────────────────────
