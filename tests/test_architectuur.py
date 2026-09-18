@@ -59,3 +59,62 @@ def test_geen_twee_renderers_met_dezelfde_naam():
     assert not dubbel, (
         f"renderer-namen in meer dan één bestand: {dubbel}. Geef ze een eigen naam — "
         f"cockpit2 importeert ze plat, dus de laatste import wint stil.")
+
+
+# ── sectie (d): elk databestand is zichtbaar, of zichtbaar onbekend ──────────
+#
+# Sectie (c) dekte ongeveer de helft van de schrijvende opslag en dat stond er nergens bij: wie
+# `data/decision_sheets.jsonl` vond, zocht in de kaart, vond niets, en kon concluderen dat het geen
+# echte store was. Sectie (d) vult dat aan — maar een sectie (d) die 20 van de 27 toont is erger dan
+# geen sectie (d), want dan gaat iemand hem vertrouwen. Vandaar deze twee guards.
+
+def test_elk_gevonden_databestand_staat_ergens_in_de_kaart():
+    """Geen bestand valt stilzwijgend weg: alles zit in (c), (d), (d2) of (d3) — precies één keer."""
+    import os
+    import re
+    from nooch_village import arch_map
+
+    gevonden = set()
+    for f in os.listdir(os.path.dirname(arch_map.__file__)):
+        if f.endswith(".py"):
+            with open(os.path.join(os.path.dirname(arch_map.__file__), f), encoding="utf-8") as fh:
+                gevonden |= set(arch_map._DATABESTAND_RE.findall(fh.read()))
+
+    in_c = {b for _, _, b in arch_map.stores()}
+    df = arch_map.data_files()
+    in_d = [b for b, _ in df["eigenaar"]] + [b for b, _ in df["meerdere"]] + [b for (b,) in df["geen"]]
+
+    ontbreekt = gevonden - in_c - set(in_d)
+    assert not ontbreekt, (
+        f"deze databestanden staan in geen enkele sectie van de vindkaart: {sorted(ontbreekt)}. "
+        f"Vul sectie (d) aan of leg uit waarom ze er niet in horen — een kaart met een onzichtbaar "
+        f"gat is erger dan geen kaart.")
+    dubbel = [b for b in in_d if in_d.count(b) > 1] + sorted(set(in_d) & in_c)
+    assert not dubbel, f"deze bestanden staan in meer dan één sectie: {sorted(set(dubbel))}"
+
+
+def test_sectie_d_leidt_af_uit_schrijfgedrag_en_niet_uit_noemen():
+    """De kern van de indeling: een module die een bestandsnaam alleen NOEMT is een lezer.
+
+    `inhabitant.py` leest `human_inbox.json` en `evidence_ledger.jsonl` zonder er één te bezitten;
+    zou de kaart op stringliterals werken, dan stond hij hier als eigenaar van allebei."""
+    from nooch_village import arch_map
+
+    df = arch_map.data_files()
+    eigenaren = dict(df["eigenaar"])
+    # decision_sheets.py schrijft met `open(pad(data_dir), "a")` — geneste haakjes, en precies het
+    # geval dat de eerste versie van de detectie miste.
+    assert eigenaren.get("decision_sheets.jsonl") == "decision_sheets.py"
+    assert eigenaren.get("founder_park.jsonl") == "founder_park.py"
+    # human_inbox.json heeft meerdere schrijvers en hoort dus NIET bij één eigenaar te staan
+    assert "human_inbox.json" not in eigenaren
+    assert any(b == "human_inbox.json" for b, _ in df["meerdere"])
+
+
+def test_sectie_b_draagt_geen_regelnummers():
+    """Het enige veld dat veranderde zonder dat de architectuur veranderde."""
+    from nooch_village import arch_map
+
+    md = arch_map.render_markdown()
+    assert "cockpit2.py:" not in md, "regelnummer terug in de kaart — dat is de merge-conflictbron"
+    assert "| `decision_sheet_log` | `_act_decision_sheet_log` |" in md
