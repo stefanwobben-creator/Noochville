@@ -126,3 +126,70 @@ def test_hartslag_ook_als_handler_struikelt(tmp_path):
             except Exception:
                 pass
     assert HeartbeatStore(str(tmp_path / "pulse_heartbeat.json")).day_of("harry_hemp") == "2026-07-18"
+
+
+# ── opgeruimde rollen: een dode rol pulseert niet, en dat is geen uitval ───────
+# 18 sept 2026: harry_hemp was de default van `daily_pulse_roles` en werd die dag gearchiveerd.
+# Zonder deze filter had de watchdog hem elke ochtend opnieuw als uitval gemeld — idempotent per
+# rol×dag, dus een vers inbox-item per dag, eindeloos.
+
+def _schrijf_records(tmp_path, **status):
+    """status: rol_id=("archived"|"slaapt"|"levend")"""
+    from nooch_village.governance import Records
+    from nooch_village.models import Record, RecordType, RoleDefinition
+    recs = Records(str(tmp_path / "governance_records.json"))
+    for rid, toestand in status.items():
+        rec = Record(id=rid, type=RecordType.ROLE, parent=None,
+                     definition=RoleDefinition(purpose="x"))
+        rec.archived = toestand == "archived"
+        rec.slaapt = toestand == "slaapt"
+        recs.put(rec)
+    recs.save()
+
+
+def test_gearchiveerde_rol_is_geen_uitval(tmp_path):
+    dd = str(tmp_path)
+    _schrijf_records(tmp_path, harry_hemp="archived")
+    WatchdogState(f"{dd}/pulse_watchdog.json").ensure_since("2026-09-17")
+    calls, notify = _notifier()
+    assert run_watchdog(dd, ["harry_hemp"], "2026-09-18", notify) == []
+    assert calls == []
+
+
+def test_slapende_rol_is_geen_uitval(tmp_path):
+    dd = str(tmp_path)
+    _schrijf_records(tmp_path, noochie="slaapt")
+    WatchdogState(f"{dd}/pulse_watchdog.json").ensure_since("2026-09-17")
+    calls, notify = _notifier()
+    assert run_watchdog(dd, ["noochie"], "2026-09-18", notify) == []
+    assert calls == []
+
+
+def test_levende_rol_zonder_hartslag_escaleert_nog_steeds(tmp_path):
+    """De filter mag de wachter niet uitzetten: dit is waar hij voor bestaat."""
+    dd = str(tmp_path)
+    _schrijf_records(tmp_path, compliance="levend")
+    WatchdogState(f"{dd}/pulse_watchdog.json").ensure_since("2026-09-17")
+    calls, notify = _notifier()
+    assert run_watchdog(dd, ["compliance"], "2026-09-18", notify) == ["compliance"]
+    assert calls == [("compliance", "2026-09-17")]
+
+
+def test_onbekend_rol_id_blijft_escaleren(tmp_path):
+    """Records worden nooit verwijderd, alleen gearchiveerd. Een id dat nergens voorkomt is dus een
+    typfout in `daily_pulse_roles`, en die hoort zichtbaar te blijven in plaats van stil te vallen."""
+    dd = str(tmp_path)
+    _schrijf_records(tmp_path, compliance="levend")
+    WatchdogState(f"{dd}/pulse_watchdog.json").ensure_since("2026-09-17")
+    calls, notify = _notifier()
+    assert run_watchdog(dd, ["harry_hmep"], "2026-09-18", notify) == ["harry_hmep"]
+    assert calls == [("harry_hmep", "2026-09-17")]
+
+
+def test_zonder_records_bestand_filtert_hij_niets(tmp_path):
+    """Fail-soft: is de waarheid niet te lezen, dan liever een melding te veel dan een gemiste
+    uitval — dezelfde keuze als elders in de puls-laag."""
+    dd = str(tmp_path)
+    WatchdogState(f"{dd}/pulse_watchdog.json").ensure_since("2026-09-17")
+    calls, notify = _notifier()
+    assert run_watchdog(dd, ["harry_hemp"], "2026-09-18", notify) == ["harry_hemp"]

@@ -63,11 +63,42 @@ def _yesterday(day_iso: str) -> str:
     return (datetime.date.fromisoformat(day_iso) - datetime.timedelta(days=1)).isoformat()
 
 
+def _opgeruimd(data_dir: str) -> frozenset[str]:
+    """Rollen die via governance zijn gearchiveerd of slapend gelegd.
+
+    EEN DODE ROL PULSEERT NIET, EN DAT IS GEEN UITVAL. Zonder deze filter blijft de watchdog een rol
+    verwachten die een mens bewust heeft opgeruimd, en meldt hij dat ELKE DAG opnieuw — idempotent
+    per rol×dag, dus een vers inbox-item per dag, eindeloos. Gemeten op 18 sept 2026: `harry_hemp`
+    was de default van `daily_pulse_roles` en werd diezelfde dag gearchiveerd.
+
+    Dit is dezelfde regel die `Village._meld_weesprojecten` en `afslank_wezen.wezen` al hanteren:
+    een toestand die een mens bewust heeft gezet, is geen signaal meer.
+
+    EEN ONBEKEND ROL-ID FILTEREN WE BEWUST NIET. Records worden nooit verwijderd, alleen
+    gearchiveerd — een id dat nergens voorkomt is dus een typfout in `daily_pulse_roles`, en die
+    hoort zichtbaar te blijven. Stilzwijgend overslaan zou een verkeerd geconfigureerde wachter in
+    een wachter-die-niets-doet veranderen.
+
+    Fail-soft: kan de waarheid niet gelezen worden, dan filtert hij niets — liever een melding te
+    veel dan een gemiste uitval."""
+    try:
+        import os
+
+        from nooch_village.governance import Records
+        recs = Records(os.path.join(data_dir, "governance_records.json"))
+        return frozenset(r.id for r in recs.all()
+                         if getattr(r, "archived", False) or getattr(r, "slaapt", False))
+    except Exception:                                     # noqa: BLE001
+        return frozenset()
+
+
 def run_watchdog(data_dir: str, expected_roles, today_iso: str, notify) -> list[str]:
     """Check de zojuist afgesloten vorige dag. `today_iso` = de dag die NU begint (die puls draait
     juist; die kun je niet mid-flight bevestigen — daarom de vorige, complete dag). Voor elke rol
     in `expected_roles` zonder hartslag voor gisteren → `notify(role, gisteren)` (één keer).
-    Geeft de gemiste rollen terug. Bootstrap: gisteren < since_day → niets (geen vals alarm)."""
+    Geeft de gemiste rollen terug. Bootstrap: gisteren < since_day → niets (geen vals alarm).
+    Gearchiveerde en slapende rollen tellen niet mee — zie `_opgeruimd`."""
+    opgeruimd = _opgeruimd(data_dir)
     hb = HeartbeatStore(f"{data_dir}/pulse_heartbeat.json")
     wd = WatchdogState(f"{data_dir}/pulse_watchdog.json")
     wd.ensure_since(today_iso)                            # eerste watchdog-dag = de vloer
@@ -80,6 +111,8 @@ def run_watchdog(data_dir: str, expected_roles, today_iso: str, notify) -> list[
         role = (role or "").strip()
         if not role:
             continue
+        if role in opgeruimd:
+            continue                                     # bewust opgeruimd → geen uitval
         if hb.day_of(role) == gisteren:
             continue                                     # pulsde gisteren → ok
         if wd.already_escalated(role, gisteren):
