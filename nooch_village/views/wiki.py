@@ -116,6 +116,40 @@ def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
     return f"<div class='c2-sec'><h3>Facts</h3>{rijen}{add}</div>"
 
 
+#: Een pagina die naar de coach wijst, krijgt het logboek eronder. Waarom aan de INHOUD opgehangen
+#: en niet aan een titel of een rol-id: een titel is een naam die iemand herschrijft, en een rol-id
+#: is precies het soort literal dat deze codebase vandaag twee keer uit de code heeft gehaald. Wat
+#: blijft is de verwijzing zelf — wie de coach noemt, laat zien wat eruit kwam.
+_COACH_URL = "/decision-coach"
+
+
+def _besluiten_sectie(a, st, persoon: str = "") -> str:
+    """De gelogde besluiten onder een pagina die naar de decision coach verwijst.
+
+    AFGELEID BIJ HET LEZEN, NOOIT OPGESLAGEN — dezelfde vorm als `_feiten_sectie` en
+    `_backlink_sectie` hierboven. De pagina bewaart geen kopie van een besluit: verdwijnt een rij
+    uit het logboek of komt er een bij, dan klopt deze sectie de volgende pageload vanzelf. Een
+    opgeslagen kopie zou uiteenlopen zonder dat iets zich meldt.
+
+    Geen verwijzing naar de coach in de body → geen sectie. Zo bepaalt de pagina zelf of hij dit
+    draagt, en hoeft er geen titel of rol-id in de code te staan."""
+    from nooch_village import decision_sheets as ds
+    from nooch_village.views.decision_coach import _KOPIEER_JS, kaarten, persoon_chips
+
+    if _COACH_URL not in (a.body or ""):
+        return ""
+    data_dir = getattr(st, "dd", "") or ""
+    rijen = ds.alle(data_dir) if data_dir else []
+    getoond = [r for r in rijen if str(r.get("decider") or "") == persoon] if persoon else rijen
+    chips = persoon_chips(rijen, persoon, basis=wiki.pagina_url(a.id))
+    # De bestaande kopieer-JS gaat mee, anders is de Copy id-knop een knop die niets doet. Hij
+    # staat één keer per pagina en is idempotent van opzet (event-delegatie op document).
+    return (f"<div class='c2-sec'><h3>Decisions logged</h3>"
+            f"<p class='muted'>Everyone in the circle can read these. The thinking report stays "
+            f"private, in the chat of whoever did the session.</p>"
+            f"{chips}{kaarten(getoond)}</div>{_KOPIEER_JS}")
+
+
 def _backlink_sectie(a, pags: list) -> str:
     binnen = wiki.backlinks(a, pags)
     kaarten = "".join(
@@ -167,7 +201,7 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 
 
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
-                  msg: str = "") -> str:
+                  msg: str = "", persoon: str = "") -> str:
     """Eén wiki-pagina. Onbekende id of een ander artefact-soort → nette melding, geen lege pagina."""
     from nooch_village.views.overview import (_artefact_edit_form, _artefact_versions_html,
                                               _can_edit_artefacts, _dt)
@@ -203,6 +237,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
 
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{bewerk}{hist}"
             f"{_feiten_sectie(a, st, csrf_token, can_edit)}"
+            f"{_besluiten_sectie(a, st, persoon)}"
             f"{_backlink_sectie(a, pags)}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

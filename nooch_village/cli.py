@@ -1262,6 +1262,11 @@ def main() -> None:
                                        eigenaar_materiaal=MATERIAAL_ROL,
                                        eigenaar_claims=CLAIM_ROL,
                                        eigenaar_leverancier=LEVERANCIER_ROL, apply=apply)
+        # De methode-pagina hoort in dezelfde zaai-beurt: één commando, één rapport, dezelfde
+        # dry-run. BEWUST NIET bij de cockpit-start — inhoud aanmaken is geen infrastructuur, en
+        # een bootstrap die een pagina schrijft doet dat ook in elk test-dorp.
+        from nooch_village import wiki_how_we_decide as hwd
+        rapport += hwd.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
         print(wiki_seed.rapport_tekst(rapport))
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
