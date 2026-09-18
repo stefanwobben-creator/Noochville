@@ -114,6 +114,14 @@ class Bronnen:
         self.attachments = _lees_json(os.path.join(d, "attachments.json"), {})
         self.deliverables = _lees_json(os.path.join(d, "deliverables.json"), {})
         self.notifs = _lees_json(os.path.join(d, "notifications.json"), [])
+        # Wie vervult welke rol. Read-only, net als de rest: de audit moet kunnen zien of er een
+        # MENS in een rol zit, want een mens beoordeel je niet op wat er toevallig in deze stores
+        # is vastgelegd (zie `advies`).
+        try:
+            from nooch_village.assignments import Assignments
+            self.assign = Assignments(os.path.join(d, "assignments.json"))
+        except Exception:                                  # noqa: BLE001 — een kapotte store is geen oordeel
+            self.assign = None
         cert_dir = os.path.join(d, "certificaten")
         self.certificaten = sorted(os.listdir(cert_dir)) if os.path.isdir(cert_dir) else []
         out_dir = os.path.join(d, "output")
@@ -258,13 +266,36 @@ def _recent(ts, nu: float) -> bool:
     return bool(ts) and (nu - float(ts)) <= RECENT_DAGEN * 86400
 
 
+def _mens_poort(adv: str, waarom: str, mens_vervuld: bool) -> tuple[str, str]:
+    """Zet `slapen`/`opruimen` om in `vlag` zodra er een mens in de rol zit. De REDEN blijft staan,
+    want de meting is niet ongeldig — alleen het gevolg is niet aan de machine."""
+    if not mens_vervuld or adv not in (SLAPEN, OPRUIMEN):
+        return adv, waarom
+    return VLAG, (f"{waarom} — maar deze rol wordt door een mens vervuld, en deze audit ziet "
+                  f"alleen wat er IN het dorp is vastgelegd. Beoordeel dit met die mens; niet "
+                  f"automatisch laten slapen.")
+
+
 def advies(*, uitkomsten: list, laatst: float, eur: float, onbekende_calls: int,
-           ooit_actief: bool, nu: float, structureel: bool = False) -> tuple[str, str]:
+           ooit_actief: bool, nu: float, structureel: bool = False,
+           mens_vervuld: bool = False) -> tuple[str, str]:
     """(advies, waarom). Deterministisch en in deze volgorde — de eerste die past wint.
 
     De volgorde is het beleid: nooit-actief is opruimen, bewezen-recent is wakker houden, en alles
     daartussen zakt naar slapen. Een onbekende prijs blokkeert alleen het KOSTEN-argument, niet het
-    uitkomst-argument: dan weet je niet wat het kost, en dat is een vraag voor de mens."""
+    uitkomst-argument: dan weet je niet wat het kost, en dat is een vraag voor de mens.
+
+    EEN MENS-VERVULDE ROL ZAKT NOOIT AUTOMATISCH NAAR SLAPEN OF OPRUIMEN. Dat is geen beleefdheid
+    maar een meetgrens: deze audit ziet alleen wat er IN het dorp is vastgelegd, en wie zijn werk
+    buiten NoochVille doet laat hier per definitie geen spoor na. Op 27 augustus 2026 gebeurde dat
+    ook echt — Marketing Lead (14 projecten), Supply Chain Coordinator (6) en Carbon Footprint
+    Improver (6) kregen alle drie "geen bewezen uitkomst" en gingen slapen, en daarmee stonden drie
+    MENSEN drie weken lang buiten de routering (`escalation_router.roster` slaat een slapende rol
+    over). Het oordeel was niet fout, de gevolgtrekking wel.
+
+    Vandaar dezelfde vorm als de structurele uitzondering hierboven: de meting blijft zichtbaar,
+    alleen de automatische consequentie vervalt. `VLAG` betekent "een mens kijkt hiernaar", en dat
+    is precies wat hier hoort te gebeuren."""
     if structureel:
         # Vóór alle andere regels: deze rol hoort niet op output beoordeeld te worden, ook niet als
         # hij toevallig wél iets voortbracht.
@@ -272,7 +303,10 @@ def advies(*, uitkomsten: list, laatst: float, eur: float, onbekende_calls: int,
                              + (f"draagt wel {len(uitkomsten)} bewezen uitkomst(en)" if uitkomsten
                                 else "beoordeel hem op zijn governance-werk, niet hier"))
     if not ooit_actief:
-        return OPRUIMEN, "nooit iets voortgebracht: geen Kroniek-record, geen deliverable, geen project, geen pagina"
+        return _mens_poort(
+            OPRUIMEN,
+            "nooit iets voortgebracht: geen Kroniek-record, geen deliverable, geen project, geen pagina",
+            mens_vervuld)
     if uitkomsten and _recent(laatst, nu):
         return WAKKER, (f"{len(uitkomsten)} bewezen uitkomst(en), laatst actief binnen "
                         f"{RECENT_DAGEN} dagen")
@@ -283,8 +317,9 @@ def advies(*, uitkomsten: list, laatst: float, eur: float, onbekende_calls: int,
         return VLAG, (f"geen bewezen uitkomst en de kosten zijn niet te bepalen "
                       f"({onbekende_calls} call(s) op een trede zonder prijs)")
     if eur >= DURE_POST_EUR:
-        return SLAPEN, f"geen bewezen uitkomst, wel €{eur:.2f} aan model-verbruik"
-    return SLAPEN, "geen bewezen uitkomst"
+        return _mens_poort(SLAPEN, f"geen bewezen uitkomst, wel €{eur:.2f} aan model-verbruik",
+                           mens_vervuld)
+    return _mens_poort(SLAPEN, "geen bewezen uitkomst", mens_vervuld)
 
 
 # ── De inventarisatie ───────────────────────────────────────────────────────
@@ -295,6 +330,7 @@ def _skills_van_rol(rec) -> list[str]:
 
 def rollen_regels(b: Bronnen, kosten: dict, nu: float) -> list[dict]:
     from nooch_village import org
+    from nooch_village.assignments import door_mens_bemand
 
     from nooch_village.villageraad import labels, rollen as levende_rollen
 
@@ -362,8 +398,14 @@ def rollen_regels(b: Bronnen, kosten: dict, nu: float) -> list[dict]:
                   + [x.get("ts") or 0 for x in u])
         laatst = max(tijden) if tijden else 0.0
         ooit = bool(k or d or p or pg)
+        # `bij_twijfel=True`: is de bemensing niet vast te stellen, dan behandelen we de rol als
+        # mens-vervuld. Dat is hier de juiste faalrichting — een onleesbare assignments-store mag
+        # nooit iemand van de roster halen, en `bemensing` eist dat elke aanroeper die richting
+        # expliciet kiest.
+        mens = door_mens_bemand(rid, getattr(b, "assign", None), b.records, bij_twijfel=True)
         adv, waarom = advies(uitkomsten=u, laatst=laatst, eur=eur, onbekende_calls=onb,
-                             ooit_actief=ooit, nu=nu, structureel=is_structureel(rid))
+                             ooit_actief=ooit, nu=nu, structureel=is_structureel(rid),
+                             mens_vervuld=mens)
         rijen.append({
             "id": rid,
             "naam": namen.get(rid) or rid,
