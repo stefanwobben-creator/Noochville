@@ -551,10 +551,13 @@ def birth_content_strategist() -> None:
 
 # ── Compliance-rol: bewaker van de claim-keuring (merk-claims nu, eigen teksten later) ──────────
 
-# De operationele cirkel waar de AI-rollen (concurrent_scout, harry_hemp, …) wonen. Deployment-
-# structuur, GEEN inhoud: overschrijfbaar via het CLI-argument, zodat de tree-id niet brittle in de
-# code vastzit. Default = de huidige live-boom.
-_COMPLIANCE_PARENT = "mother_earth__nooch__noochville"
+# De cirkel waaronder een nieuwe compliance-rol geboren wordt. Deployment-structuur, GEEN inhoud:
+# overschrijfbaar via het CLI-argument, zodat de tree-id niet brittle in de code vastzit.
+#
+# Stond op `mother_earth__nooch__noochville`. Die subcirkel huisvestte de autonome AI-rollen, en die
+# zijn op 17/18 september 2026 allemaal opgeruimd; de cirkel zelf wordt ontbonden. Een default die
+# naar een gearchiveerde cirkel wijst maakt van elk voorstel een rol zonder levende ouder.
+_COMPLIANCE_PARENT = "mother_earth__nooch"
 
 
 def build_compliance_proposal(parent: str = _COMPLIANCE_PARENT) -> Proposal:
