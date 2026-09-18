@@ -181,7 +181,16 @@ class Dagcyclus:
     def _run_pulse_watchdog(self, today_iso: str) -> None:
         """Dorp-brede watchdog: escaleer zichtbaar als een verwachte dagelijkse rol op de zojuist
         afgesloten vorige dag geen hartslag naliet (mogelijk niet-uitvoering). Verwachte set uit
-        config `daily_pulse_roles` (default: harry_hemp). Fail-soft: mag de cadans nooit breken.
+        config `daily_pulse_roles` (default: leeg = niemand wordt dagelijks verwacht). Fail-soft:
+        mag de cadans nooit breken.
+
+        WAAROM DE DEFAULT LEEG IS EN GEEN ROLNAAM. Hier stond `harry_hemp` hard ingebakken, en op
+        18 september 2026 werd die rol gearchiveerd. Een default die één rol noemt is een bewering
+        over de bezetting van het dorp, en die veroudert bij het eerste governance-besluit — precies
+        het soort feit dat op één gezaghebbende plek hoort (hier: de config), niet als literal in de
+        klok. Wie een dagelijkse rol verwacht, zegt dat expliciet. `pulse_watchdog._opgeruimd` vangt
+        daarnaast de gearchiveerde en slapende rollen af, zodat een verouderde config geen dagelijks
+        vals alarm wordt.
 
         Dit is de BINNENSTE wachter: hij ziet een rol die stilviel. Dat het dorp zelf stilvalt kan
         hij niet zien — daarvoor is `puls_wacht` (systemd), buiten dit proces."""
@@ -190,7 +199,7 @@ class Dagcyclus:
             from nooch_village.pulse_watchdog import run_watchdog
             data_dir = self.context.data_dir
             expected = [r.strip() for r in
-                        str(self.context.settings.get("daily_pulse_roles", "harry_hemp")).split(",")
+                        str(self.context.settings.get("daily_pulse_roles", "")).split(",")
                         if r.strip()]
             if not expected:
                 return
