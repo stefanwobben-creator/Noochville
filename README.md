@@ -67,17 +67,27 @@ Geen architectuurwijziging nodig, alleen adapters op bestaande naden:
 
 ---
 
-## De groei-puls (nieuw)
+## De groei-puls
 
-Elke ochtend wekt de `TimeKeeper` de `GrowthAnalyst`. Die haalt zelf echte data op
-(Plausible-verkeer + Google Trends), duidt die tegen je missie en schrijft een
-**Field Note** in `data/output/field_note_<datum>.md`. Daalt het verkeer fors, dan
-senst hij een spanning.
+> **Gestopt op 18 september 2026.** Deze puls draaide op de rol `website_watcher` (in code
+> `WebsiteWatcherWorker`), en die is gearchiveerd omdat 37 van zijn 41 voorleggingen werden
+> afgewezen en er geen enkele werd goedgekeurd. Hij was de **enige houder van de `field_note`-skill**,
+> en die is bewust niet meeverhuisd: er komt dus geen nieuwe Field Note meer bij. De bewaking van de
+> site en het duiden van bezoekersgedrag leven verder als accountabilities van **Website Developer**,
+> die `plausible_stats`, `site_health`, `gsc_performance` en `gsc_report` al houdt. De bestaande
+> notes in `data/output/` blijven staan; `data/afslanken.jsonl` bevat de terugweg.
+>
+> Hieronder staat hoe het werkte, als historie.
+
+Elke ochtend wekte de `TimeKeeper` de `GrowthAnalyst`. Die haalde zelf echte data op
+(Plausible-verkeer + Google Trends), duidde die tegen je missie en schreef een
+**Field Note** in `data/output/field_note_<datum>.md`. Daalde het verkeer fors, dan
+senste hij een spanning.
 
 Draaien:
 
 ```bash
-python -m nooch_village.village          # demo: snelle hartslag, toont de note
+python -m nooch_village.village          # demo: snelle hartslag
 python -m nooch_village.village once      # één echte puls en stoppen (voor cron)
 python -m nooch_village.village run       # blijft draaien, puls 1x per echte dag
 ```

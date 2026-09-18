@@ -16,7 +16,7 @@ Dit is een werkende kern, geen simulatie: de skills doen echt I/O.
 ## Draaien
 
 ```bash
-python -m nooch_village.village          # demo: snelle hartslag, toont de Field Note
+python -m nooch_village.village          # demo: snelle hartslag
 python -m nooch_village.village once      # één echte groei-puls en stoppen (voor cron)
 python -m nooch_village.village run       # blijft draaien, puls 1x per echte dag
 ```
@@ -54,7 +54,10 @@ Kerncomponenten:
 
 Data (allemaal in `data/`, gitignored):
 - `governance_records.json` — de bron van waarheid over wie bestaat en wat ze mogen.
-- `output/field_note_<datum>.md` — de dagelijkse Field Note.
+- `output/field_note_<datum>.md` — de Field Note. **Er komt er geen nieuwe meer bij** (18 sept 2026):
+  `website_watcher` was de enige houder van de `field_note`-skill en is gearchiveerd; die skill is
+  bewust niet meeverhuisd. De bestaande bestanden blijven staan als historie. Wil je hem terug, dan
+  is dat een skill-grant op een levende rol — zie `data/afslanken.jsonl` voor de terugweg.
 - `last_pulse.json` — basislijn voor spanning-detectie. `budget.json`, `system_log.jsonl` (audit-trail).
 
 ## HARDE REGELS (niet schenden zonder overleg)
@@ -354,7 +357,9 @@ Sensing is niet "een incident melden" maar "een gat observeren". Elk inwoner sen
 
 ## Roadmap (depth-first, niet breadth-first)
 
-1. **Echte missie-redenering aanzetten** in de Field Note (zet een LLM-key in `.env`).
+1. ~~**Echte missie-redenering aanzetten** in de Field Note~~ — VERVALLEN (18 sept 2026): de Field
+   Note zelf is gestopt met het archiveren van `website_watcher`. Dit punt komt pas terug als de
+   dagrapportage terugkomt, en dan als een keuze over wie hem schrijft, niet als een LLM-knop.
 2. **Skills porten** uit de oude repo: GSC (`get_gsc_data.py`), Trustpilot (`trustpilot_agent.py`), Serpstat, en de SQLite-`repository.py` als opslaglaag.
 3. **Volledige IDM-governance** (objectronde + de twee poorten).
 4. **Web**: vervang de in-memory `EventBus` door een netwerk-bus (WebSocket/SSE) en de `Inbox` door een server-queue. Beide zitten al achter een interface.
