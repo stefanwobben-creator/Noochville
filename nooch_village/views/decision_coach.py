@@ -149,17 +149,56 @@ def _logboek(csrf_token: str, melding: str, fout: str,
             f"{bericht}{form}")
 
 
-def _cirkel(rijen: list[dict], persoon: str, vanaf: str, tot: str) -> str:
-    """Paneel C. Lezen mag iedereen: elk lid ziet elk sheet. Geen bewerken, geen verwijderen."""
+def persoon_chips(rijen: list[dict], persoon: str, basis: str = "/decision-coach") -> str:
+    """De filterchips per persoon. `basis` is de pagina waarop ze staan.
+
+    Losgetrokken van de kaartjes omdat de wikipagina ze allebei nodig heeft maar het plakformulier
+    niet. Eén renderer voor twee plekken; een tweede kopie zou na één wijziging uit de pas lopen."""
     mensen = sorted({str(r.get("decider") or "") for r in rijen if r.get("decider")})
-    chips = "<div class='cl-bar'>"
-    chips += (f"<a class='cl-filter pill{'' if persoon else ' on'}' "
-              f"href='/decision-coach'>everyone</a>")
+    koppel = "&" if "?" in basis else "?"
+    chips = (f"<div class='cl-bar'><a class='cl-filter pill{'' if persoon else ' on'}' "
+             f"href='{_e(basis)}'>everyone</a>")
     for m in mensen:
         aan = " on" if m == persoon else ""
         chips += (f"<a class='cl-filter pill{aan}' "
-                  f"href='/decision-coach?persoon={_e(m)}'>{_e(m)}</a>")
-    chips += "</div>"
+                  f"href='{_e(basis)}{koppel}persoon={_e(m)}'>{_e(m)}</a>")
+    return chips + "</div>"
+
+
+def kaarten(rijen: list[dict]) -> str:
+    """De gelogde besluiten als kaartjes. Puur renderen — geen filter-UI, geen formulier.
+
+    De wikipagina toont precies deze kaartjes; het plakformulier met csrf en rolkeuze blijft op
+    /decision-coach, want dat is een schrijfhandeling en een wikipagina leest."""
+    if not rijen:
+        return "<p class='muted'>No decision sheets logged yet.</p>"
+    uit = []
+    for r in rijen:
+        wanneer = _datum(r.get("timestamp"))
+        wie = _e(str(r.get("decider") or "unknown"))
+        rol = _e(str(r.get("role") or ""))
+        # De id ZICHTBAAR en kopieerbaar. Een id die alleen in het bestand staat is een
+        # databasesleutel, geen handvat: in een werkoverleg moet je naar één besluit kunnen
+        # wijzen, en vanaf een wikipagina ernaartoe kunnen linken.
+        rid = str(r.get("id") or "")
+        idblok = (f"<code class='pill'>{_e(rid)}</code> "
+                  f"<button class='btn' type='button' data-dc-id='{_e(rid)}'>Copy id</button>"
+                  if rid else "<span class='muted'>no id (logged before ids existed)</span>")
+        uit.append(
+            "<div class='card'>"
+            f"<p class='muted'>{wie}{' · ' + rol if rol else ''} · {_e(wanneer)}</p>"
+            f"<p class='ptitle'>{_e(str(r.get('decision') or ''))}</p>"
+            f"<p class='muted'>{idblok}</p>"
+            f"<p><b>Chose:</b> {_e(str(r.get('chosen_option') or ''))}</p>"
+            f"<p><b>Predicted:</b> {_e(str(r.get('prediction') or ''))}</p>"
+            f"<p><b>Stops if:</b> {_e(str(r.get('stop_signal') or ''))}</p>"
+            "</div>")
+    return "".join(uit)
+
+
+def _cirkel(rijen: list[dict], persoon: str, vanaf: str, tot: str) -> str:
+    """Paneel C. Lezen mag iedereen: elk lid ziet elk sheet. Geen bewerken, geen verwijderen."""
+    chips = persoon_chips(rijen, persoon)
 
     filter_form = (f"<form class='qadd-form' method='get' action='/decision-coach'>"
                    f"<input type='hidden' name='persoon' value='{_e(persoon)}'>"
@@ -167,31 +206,7 @@ def _cirkel(rijen: list[dict], persoon: str, vanaf: str, tot: str) -> str:
                    + _field("Until", "tot", kind="date", value=tot, fid="dc-tot")
                    + "<button class='btn' type='submit'>Filter</button></form>")
 
-    if not rijen:
-        lijst = "<p class='muted'>No decision sheets logged yet.</p>"
-    else:
-        kaarten = []
-        for r in rijen:
-            wanneer = _datum(r.get("timestamp"))
-            wie = _e(str(r.get("decider") or "unknown"))
-            rol = _e(str(r.get("role") or ""))
-            # De id ZICHTBAAR en kopieerbaar. Een id die alleen in het bestand staat is een
-            # databasesleutel, geen handvat: in een werkoverleg moet je naar één besluit kunnen
-            # wijzen, en vanaf een wikipagina ernaartoe kunnen linken.
-            rid = str(r.get("id") or "")
-            idblok = (f"<code class='pill'>{_e(rid)}</code> "
-                      f"<button class='btn' type='button' data-dc-id='{_e(rid)}'>Copy id</button>"
-                      if rid else "<span class='muted'>no id (logged before ids existed)</span>")
-            kaarten.append(
-                "<div class='card'>"
-                f"<p class='ptitle'>{_e(str(r.get('decision') or ''))}</p>"
-                f"<p class='muted'>{idblok}</p>"
-                f"<p class='muted'>{_e(wanneer)} · {wie}{' · ' + rol if rol else ''}</p>"
-                f"<p><b>Chose:</b> {_e(str(r.get('chosen_option') or ''))}</p>"
-                f"<p><b>Predicted:</b> {_e(str(r.get('prediction') or ''))}</p>"
-                f"<p><b>Stops if:</b> {_e(str(r.get('stop_signal') or ''))}</p>"
-                "</div>")
-        lijst = "".join(kaarten)
+    lijst = kaarten(rijen)
     return (f"<p class='ptitle'>3. What the circle decided</p>"
             f"<p class='muted'>Everyone sees everyone's sheets. That is the point: a prediction "
             f"only teaches you something if someone can check it later.</p>"

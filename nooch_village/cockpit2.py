@@ -6546,7 +6546,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # Schrijven zit achter de artefact-poort in de dispatch-acties, niet hier.
                 self._send(render_pagina(st, (qs.get("id") or [""])[0],
                                          csrf_token=effective_csrf, username=username,
-                                         msg=(qs.get("msg") or [""])[0]))
+                                         msg=(qs.get("msg") or [""])[0],
+                                         persoon=(qs.get("persoon") or [""])[0]))
                 return
             # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
             # (de overlay hergebruikt anders de stylesheet van de eerste pagina-load).
