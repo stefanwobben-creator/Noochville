@@ -78,6 +78,31 @@ def role_for_domain(records, domain: str):
     return None
 
 
+def role_with_skill(records, skill: str):
+    """De LEVENDE rol die dit MIDDEL houdt, of None.
+
+    Het zusje van `role_for_domain`, en om dezelfde reden: een rol-id is een naam die verhuist of
+    verdwijnt, het middel is wat governance in het DNA vastlegt. Waar een domein zegt wie ergens
+    OVER gaat, zegt een skill wie iets KAN — en voor werk dat moet worden uitgevoerd is dat de
+    juiste vraag.
+
+    Gearchiveerd en slapend tellen allebei niet mee. Gearchiveerd is weg; een slapende rol staat er
+    nog wel, maar draait geen thread en pakt niets op, dus werk dat je hem geeft blijft liggen.
+
+    Geen houder → None, en de aanroeper besluit wat dat betekent. Werk toewijzen aan een rol die
+    het niet kan is erger dan zichtbaar zeggen dat er niemand is."""
+    doel = " ".join((skill or "").split()).lower()
+    if not doel:
+        return None
+    for r in _live(records):
+        if getattr(r, "slaapt", False):
+            continue
+        for s in (getattr(getattr(r, "definition", None), "skills", None) or []):
+            if " ".join(str(s).split()).lower() == doel:
+                return r
+    return None
+
+
 def breadcrumb(records, node_id: str) -> list[str]:
     """Pad van de wortel naar de node (lijst van ids, wortel eerst). Cyclus-veilig."""
     by_id = {r.id: r for r in records}

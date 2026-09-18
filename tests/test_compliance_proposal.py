@@ -28,8 +28,10 @@ def test_voorstel_is_add_role_compliance():
     assert p.change.purpose
     assert p.change.add_domains == ["claim-keuring"]
     assert p.change.add_accountabilities
-    # default-ouder = de live operationele cirkel (naast concurrent_scout/harry_hemp)
-    assert p.change.new_role_parent == "mother_earth__nooch__noochville"
+    # Default-ouder = de Nooch-cirkel. Stond op de noochville-subcirkel, waar de AI-rollen woonden
+    # (concurrent_scout, harry_hemp, …); die zijn op 17/18 sept 2026 opgeruimd en de cirkel wordt
+    # ontbonden. Een nieuwe rol onder een gearchiveerde cirkel heeft geen levende ouder.
+    assert p.change.new_role_parent == "mother_earth__nooch"
 
 
 def test_ouder_is_overschrijfbaar():

@@ -37,13 +37,31 @@ def _kroniek(tmp_path) -> EvidenceLedger:
     return EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl"))
 
 
+def _records_met_claimseigenaar(role_id="claims_eigenaar"):
+    """Een records-stub met één levende rol die het claims-domein bezit.
+
+    Stond hier als `records=None`. Dat werkte alleen zolang `claims_board.ROL_IDS` het label
+    "copywriter" naar een hardgecodeerd rol-id stuurde; die regel is weg (de rol is opgeheven
+    zonder opvolger) en zonder domein-eigenaar maakt het bord bewust géén taak aan. Deze tests gaan
+    over onderbouwing en vindplaats, niet over routing, dus ze horen een eigenaar te hebben."""
+    from nooch_village import claims_board
+    rollen = [SimpleNamespace(id=role_id, archived=False, slaapt=False,
+                              definition=SimpleNamespace(skills=[], domains=[claims_db.DOMEIN]))]
+    rollen += [SimpleNamespace(id=rid, archived=False, slaapt=False,
+                               definition=SimpleNamespace(skills=[], domains=[]))
+               for rid in claims_board.ROL_IDS.values()]
+    op_id = {r.id: r for r in rollen}
+    return SimpleNamespace(all=lambda: list(rollen), get=lambda rid: op_id.get(rid))
+
+
 def _ctx(tmp_path, monkeypatch=None, ledger=None):
     """Scan-context met een wegwerpkopie van de claims-database (de scan schrijft statussen terug)."""
     if monkeypatch is not None:
         kopie = tmp_path / "claims_database.json"
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
         monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
-    return SimpleNamespace(data_dir=str(tmp_path), settings={}, records=None,
+    return SimpleNamespace(data_dir=str(tmp_path), settings={},
+                           records=_records_met_claimseigenaar(),
                            projects=ProjectLedger(str(tmp_path / "projects.json")),
                            evidence_ledger=ledger)
 
@@ -499,8 +517,8 @@ def test_vindplaatsen_verzwijgt_de_rest_niet():
 
 
 def test_bord_taak_draagt_de_vindplaats_mee(tmp_path):
-    omg = SimpleNamespace(projects=ProjectLedger(str(tmp_path / "p.json")), records=None,
-                          data_dir=str(tmp_path))
+    omg = SimpleNamespace(projects=ProjectLedger(str(tmp_path / "p.json")),
+                          records=_records_met_claimseigenaar(), data_dir=str(tmp_path))
     bev = _bev(stoplicht="red", term="gifvrij", gevonden=["volstrekt gifvrij"])
     bev["onderbouwing"] = claims_substantiatie.ONTBREEKT
     from nooch_village.views.claims import rol_voor

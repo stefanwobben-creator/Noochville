@@ -30,6 +30,7 @@ import os
 import time
 
 from nooch_village import founder_flow as ff
+from nooch_village import org
 
 log = logging.getLogger("village.founder_taken")
 
@@ -45,11 +46,41 @@ def compliance_rol(st) -> str:
     """De levende rol die het claims-domein bezit, of "" als niemand het heeft."""
     from nooch_village import claims_board
     return claims_board.claims_rol(getattr(st, "records", None))
-FIELD_NOTE_ROL = "website_watcher"            # schrijft de dagelijkse Field Note (seeds.py)
-# De rol die een goedgekeurd voorstel UITVOERT. De onderzoekende rol (compliance) stelt de gegronde
-# substantie en richting voor; de copy schrijft hij niet. Die rolgrens is de reden dat er na
-# goedkeuring een handoff staat en niet gewoon een uitvoering.
-UITVOERDER_ROL = "mother_earth__nooch__noochville__copywriter"
+# Stond hier als `FIELD_NOTE_ROL = "website_watcher"` en
+# `UITVOERDER_ROL = "mother_earth__nooch__noochville__copywriter"`. Allebei zijn die rollen op
+# 18 september 2026 gearchiveerd, en allebei bleven ze stil naar een dood record wijzen — exact
+# wat er hierboven met COMPLIANCE_ROL gebeurde. Een rol-id in code overleeft de rol niet.
+#
+# Het MIDDEL is wat governance vastlegt: wie `field_note` of `content_schrijven` in zijn DNA heeft,
+# kan het werk doen. `org.role_with_skill` leidt de rol daaruit af en telt gearchiveerd én slapend
+# niet mee. Niemand die het houdt → "" en de aanroeper zegt dat zichtbaar, want een correctie
+# routeren naar een rol die niet bestaat is hetzelfde als hem weggooien.
+
+
+def _rol_met_middel(st, skill: str) -> str:
+    records = getattr(st, "records", None)
+    if records is None:
+        return ""
+    try:
+        rijen = list(records.all()) if hasattr(records, "all") else list(records)
+    except Exception:                                  # noqa: BLE001
+        return ""                                      # fail-soft, zoals claims_board.claims_rol
+    rec = org.role_with_skill(rijen, skill)
+    return rec.id if rec is not None else ""
+
+
+def field_note_rol(st) -> str:
+    """De levende rol die de Field Note schrijft, of "" als niemand dat middel houdt."""
+    return _rol_met_middel(st, "field_note")
+
+
+def uitvoerder_rol(st) -> str:
+    """De levende rol die een goedgekeurd voorstel UITVOERT (de copy schrijft), of "".
+
+    De onderzoekende rol (compliance) stelt de gegronde substantie en richting voor; de copy
+    schrijft hij niet. Die rolgrens is de reden dat er na goedkeuring een handoff staat en niet
+    gewoon een uitvoering."""
+    return _rol_met_middel(st, "content_schrijven")
 
 
 def _heeft_beoordelaar(signaal: dict, records) -> bool:
@@ -425,9 +456,13 @@ def _content_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     soort, _, sleutel = item.partition(":")
     if oordeel == "publiceer":
         return "✓ approved — recorded as a label"
-    rol = FIELD_NOTE_ROL if soort == "fieldnote" else compliance_rol(st)
+    rol = field_note_rol(st) if soort == "fieldnote" else compliance_rol(st)
     if not rol:
-        return "⚠ no live role owns the claims domain — the correction was not routed"
+        # Twee verschillende leegtes, twee verschillende zinnen: de lezer moet weten of er niemand
+        # het middel houdt of niemand het domein bezit, want de oplossing verschilt.
+        return ("⚠ no live role holds the field_note means — the correction was not routed"
+                if soort == "fieldnote" else
+                "⚠ no live role owns the claims domain — the correction was not routed")
     wat = f"Field Note {sleutel}" if soort == "fieldnote" else f"proof entry {sleutel}"
     claims_board.bericht_aan_rol(
         st, rol, f"The founder asks for a correction on {wat}.", door="founder-flow",
@@ -493,11 +528,18 @@ def _voorstel_effect(st, data_dir: str, item: str, oordeel: str) -> str:
         return "✗ rejected — recorded as a label"
     if oordeel == "aanpassen":
         return "✎ adjusted — your version is recorded as the diff"
+    uitvoerder = uitvoerder_rol(st)
+    if not uitvoerder:
+        # FAIL-CLOSED, EN ZICHTBAAR OP HET MOMENT VAN GOEDKEUREN. De copywriter-rol is bewust
+        # vervallen zonder opvolger; overdragen aan een dood id ziet eruit als een handoff en is
+        # er geen. Het oordeel blijft vastgelegd — alleen de uitvoering heeft geen adres.
+        return ("✓ confirmed — but no live role holds the content_schrijven means, "
+                "so nothing was handed off")
     claims_board.bericht_aan_rol(
-        st, UITVOERDER_ROL, f"Aangenomen voorstel van {rij.get('rol')}: {str(v.get('actie', ''))[:400]}",
+        st, uitvoerder, f"Aangenomen voorstel van {rij.get('rol')}: {str(v.get('actie', ''))[:400]}",
         project_id=str(rij.get("project") or ""), door="founder-flow",
         done_when=f"de voorgestelde wijziging is doorgevoerd: {str(v.get('actie', ''))[:120]}")
-    return f"✓ confirmed — handed to {UITVOERDER_ROL}"
+    return f"✓ confirmed — handed to {uitvoerder}"
 
 
 
