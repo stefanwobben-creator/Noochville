@@ -239,6 +239,13 @@ def _bootstrap(dd: str) -> None:
                                    door="system (zaad)")
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("copy-prompt-tool niet gekoppeld: %s", _e)
+    # Zelfde reden, andere tool: de Decision Coach hangt onder de rol die het besluit-domein houdt,
+    # zodat hij vindbaar is voor wie die rol opent. Idempotent; fail-soft.
+    try:
+        from nooch_village.views.decision_coach import zorg_voor_tool as _dc_tool
+        _dc_tool(st.records, st.att)
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("decision-coach-tool niet gekoppeld: %s", _e)
     # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
     # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
     # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
@@ -334,7 +341,9 @@ from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village import founder_kaart as _founder_kaart
 from nooch_village.copy_stack import StackConfig as CopyStackConfig
+from nooch_village import decision_coach
 from nooch_village.views.copy_prompt import render_copy_prompt
+from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
@@ -6008,7 +6017,43 @@ def _act_ff_cluster(c):
                      else f"👁 watching “{onderwerp[:60]}” — it stays in the trend view")
 
 
+def _act_decision_sheet_log(c):
+    # AUTHZ: iedereen-ingelogd — elk lid logt zijn EIGEN besluit, in zijn eigen woorden. Er is geen
+    # rol, domein of cirkel die een besluit van een mens over zijn eigen werk begrenst; een gate zou
+    # hier alleen bepalen wie mag leren van zijn eigen voorspelling.
+    from nooch_village import decision_sheets as _ds
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    rauw = g("sheet") or ""
+    try:
+        sheet = _ds.parse(rauw)
+    except _ds.Geweigerd as e:
+        # De reden gaat mee terug naar de pagina; er is niets geschreven. Bewust de volle tekst en
+        # geen code: de gebruiker moet kunnen zien WELK veld ontbrak zonder te hoeven raden.
+        return f"{nxt}?fout={urllib.parse.quote(str(e))}", ""
+    persoon = st.people.by_email(username) if username not in (None, "guest") else None
+    rollen = st.assign.roles_of("person", persoon.id) if persoon else []
+    # VANUIT WELKE ROL is dit besloten? In een Holacracy-substraat is dat geen metadata maar de
+    # kern. Eén rol → vanzelf ingevuld; meer dan één → de mens kiest, want alleen hij weet het.
+    # De keuze wordt getoetst aan zijn eigen rollen: een formulierwaarde is een verzoek, geen feit.
+    rol = (g("rol") or "").strip()
+    if len(rollen) > 1 and rol not in rollen:
+        return (f"{nxt}?fout=" + urllib.parse.quote(
+            "Choose the role you decided from. You fill more than one, and which one this decision "
+            "came from is something only you know. Nothing was saved."), "")
+    if len(rollen) == 1:
+        rol = rollen[0]
+    if rol and rol not in rollen:
+        rol = ""                                           # onbekende rol → leeg, nooit gokken
+    # GEEN template_version hier: die komt uit het sheet zelf (`Coach version`). Hem hier uit het
+    # sjabloon op schijf lezen zou een sheet van vorige week de versie van vandaag geven.
+    _ds.log_sheet(c.data_dir, sheet,
+                  decider=(persoon.name if persoon else "guest"),
+                  role=rol, raw=rauw)
+    return f"{nxt}?melding={urllib.parse.quote('Decision sheet logged.')}", ""
+
+
 ACTIONS = {
+    "decision_sheet_log": _act_decision_sheet_log,
     "ff_beslis": _act_ff_beslis,
     "ff_cluster": _act_ff_cluster,
     "ff_promote": _act_ff_promote,
@@ -6894,6 +6939,28 @@ def make_handler(data_dir: str, csrf_token: str,
                 # muteert niets. Een regel wijzigen blijft bij de domein-eigenaar via de
                 # artefact-routes.
                 self._send(render_copy_check(_Stores(data_dir), csrf_token=effective_csrf))
+                return
+            if path == "/decision-coach":
+                # AUTHZ: iedereen-ingelogd — lezen én schrijven staan open voor elk lid. Elk lid
+                # ziet elkaars decision sheets; dat is een bewuste keuze, geen omissie: een
+                # voorspelling leert je pas iets als een ander hem later kan nakijken.
+                # De chips versturen hun keuze als `set_<naam>`; het hidden veld draagt de
+                # vorige keuze. Een klik op een chip wint dus van wat er stond — zelfde regel als
+                # de segmented picker op /copy-prompt.
+                _velden = {n: (qs.get("set_" + n) or qs.get(n) or [""])[-1]
+                           for n, _ in decision_coach.VELDEN}
+                # De rollen van de ingelogde mens, als (id, label): waaruit hij kiest bij het
+                # loggen. De view leidt bemensing niet zelf af — dat weet `assignments`.
+                _p = (st.people.by_email(self._session_username())
+                      if self._session_username() not in (None, "guest") else None)
+                _rollen = [(r, _name(st.records.get(r)) if st.records.get(r) else r)
+                           for r in (st.assign.roles_of("person", _p.id) if _p else [])]
+                self._send(render_decision_coach(
+                    st, base_dir=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+                    data_dir=data_dir, csrf_token=effective_csrf, waarden=_velden, rollen=_rollen,
+                    melding=(qs.get("melding") or [""])[0], fout=(qs.get("fout") or [""])[0],
+                    persoon=(qs.get("persoon") or [""])[0],
+                    vanaf=(qs.get("vanaf") or [""])[0], tot=(qs.get("tot") or [""])[0]))
                 return
             if path == "/copy-prompt":
                 # AUTHZ: iedereen-ingelogd — dezelfde read-scope als /node?tab=policies en
