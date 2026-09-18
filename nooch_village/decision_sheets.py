@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from pydantic import BaseModel, Field
 
@@ -176,6 +177,12 @@ def log_sheet(data_dir: str, sheet: DecisionSheet, *, decider: str, role: str,
     origineel is wat het lid daadwerkelijk heeft neergelegd, en dat hoort niet te veranderen als
     de parser later slimmer wordt."""
     rij = {
+        # EEN STABIELE ID, en die hoort er vanaf de eerste rij in te zitten. Zonder id is er geen
+        # handvat: je kunt niet naar één besluit verwijzen in een werkoverleg, geen permalink
+        # leggen vanaf een wikipagina, en twee rijen van dezelfde persoon in dezelfde seconde zijn
+        # niet uit elkaar te houden. Nu vier regels; met data erin een migratie. Zelfde vorm als
+        # `ProjectLedger.create` en `add_feed_entry` gebruiken.
+        "id": uuid.uuid4().hex[:12],
         "timestamp": time.time(),
         "decider": decider,
         "role": role,

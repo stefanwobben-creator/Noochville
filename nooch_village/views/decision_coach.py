@@ -175,9 +175,17 @@ def _cirkel(rijen: list[dict], persoon: str, vanaf: str, tot: str) -> str:
             wanneer = _datum(r.get("timestamp"))
             wie = _e(str(r.get("decider") or "unknown"))
             rol = _e(str(r.get("role") or ""))
+            # De id ZICHTBAAR en kopieerbaar. Een id die alleen in het bestand staat is een
+            # databasesleutel, geen handvat: in een werkoverleg moet je naar één besluit kunnen
+            # wijzen, en vanaf een wikipagina ernaartoe kunnen linken.
+            rid = str(r.get("id") or "")
+            idblok = (f"<code class='pill'>{_e(rid)}</code> "
+                      f"<button class='btn' type='button' data-dc-id='{_e(rid)}'>Copy id</button>"
+                      if rid else "<span class='muted'>no id (logged before ids existed)</span>")
             kaarten.append(
                 "<div class='card'>"
                 f"<p class='ptitle'>{_e(str(r.get('decision') or ''))}</p>"
+                f"<p class='muted'>{idblok}</p>"
                 f"<p class='muted'>{_e(wanneer)} · {wie}{' · ' + rol if rol else ''}</p>"
                 f"<p><b>Chose:</b> {_e(str(r.get('chosen_option') or ''))}</p>"
                 f"<p><b>Predicted:</b> {_e(str(r.get('prediction') or ''))}</p>"
@@ -237,11 +245,16 @@ def render_decision_coach(st, *, base_dir: str, data_dir: str, csrf_token: str =
 # Kopiëren via de clipboard-API, identiek aan `views/copy_prompt.py`. Zonder JS blijft de tekst
 # gewoon selecteerbaar — progressive enhancement, geen afhankelijkheid.
 _KOPIEER_JS = """<script>(function(){
+ function flits(k,tekst){var was=k.textContent;k.textContent='Copied';
+   setTimeout(function(){k.textContent=was;},1600);}
  document.addEventListener('click',function(e){
-   var k=e.target.closest&&e.target.closest('[data-dc-kopieer]');if(!k)return;
-   var t=document.getElementById('dc-prompt');if(!t||!navigator.clipboard)return;
-   navigator.clipboard.writeText(t.value).then(function(){
-     k.textContent='Copied';setTimeout(function(){k.textContent='Copy the whole prompt';},1600);});
+   var k=e.target.closest&&e.target.closest('[data-dc-kopieer]');
+   if(k){var t=document.getElementById('dc-prompt');
+     if(t&&navigator.clipboard)navigator.clipboard.writeText(t.value).then(function(){flits(k);});
+     return;}
+   var i=e.target.closest&&e.target.closest('[data-dc-id]');
+   if(i&&navigator.clipboard)navigator.clipboard.writeText(i.getAttribute('data-dc-id'))
+     .then(function(){flits(i);});
  });
 })();</script>"""
 
