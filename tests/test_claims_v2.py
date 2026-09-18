@@ -24,10 +24,32 @@ def _ledger(tmp_path) -> ProjectLedger:
     return ProjectLedger(str(tmp_path / "projects.json"))
 
 
+def _records_met_claimseigenaar(role_id="claims_eigenaar"):
+    """Een records-stub met één levende rol die het claims-domein bezit.
+
+    Dit stond hier als `records=None`, en dat werkte alleen zolang het label "copywriter" in
+    `claims_board.ROL_IDS` naar een hardgecodeerd rol-id wees: dan hoefde niemand het domein te
+    bezitten. Die regel is weg (de copywriter is opgeheven zonder opvolger), en zonder eigenaar
+    maakt `zet_op_bord` bewust géén taak aan — een taak zonder eigenaar is erger dan geen taak.
+    Deze tests gaan over dedupe en idempotentie, dus ze horen een eigenaar te hebben."""
+    def _rol(rid, domains=()):
+        return SimpleNamespace(id=rid, archived=False, slaapt=False,
+                               definition=SimpleNamespace(skills=[], domains=list(domains)))
+
+    # De eigenaar van het domein PLUS de rollen die `ROL_IDS` nog wél aanwijst: `rol_id_voor`
+    # toetst of de kandidaat leeft, dus een label dat naar een onbekend record wijst valt terug op
+    # de eigenaar — en dan meet een test over routing alleen nog de terugval.
+    rollen = [_rol(role_id, [claims_db.DOMEIN])]
+    rollen += [_rol(rid) for rid in claims_board.ROL_IDS.values()]
+    op_id = {r.id: r for r in rollen}
+    return SimpleNamespace(all=lambda: list(rollen), get=lambda rid: op_id.get(rid))
+
+
 def _omg(tmp_path, ledger=None):
     """Minimale omgeving voor zet_op_bord: het projectenbord plus een data_dir waar de
     berichten-store zichzelf uit kan opbouwen."""
-    return SimpleNamespace(projects=ledger or _ledger(tmp_path), records=None,
+    return SimpleNamespace(projects=ledger or _ledger(tmp_path),
+                           records=_records_met_claimseigenaar(),
                            data_dir=str(tmp_path))
 
 
@@ -295,7 +317,8 @@ def _ctx(tmp_path, monkeypatch=None):
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
         monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
     return SimpleNamespace(data_dir=str(tmp_path), settings={},
-                           projects=_ledger(tmp_path), records=None)
+                           projects=_ledger(tmp_path),
+                           records=_records_met_claimseigenaar())
 
 
 def test_scan_maakt_taak_van_nieuwe_term_en_is_weekidempotent(tmp_path, monkeypatch):

@@ -1028,17 +1028,14 @@ def _web_actor_id(username: str | None, st) -> str:
 # De rollen die de copy-prompt-generator als gereedschap krijgen. Data, geen if-boom: een rol
 # erbij is één regel. Bewust een lijst en niet "elke rol met policies" — het is een SCHRIJF-tool,
 # en een rol die toevallig policies heeft is daarmee nog geen copywriter.
-_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",
-                       "mother_earth__nooch__noochville__copywriter")
+# De copywriter-rol stond hier tot 18 sept 2026 en is opgeheven zonder opvolger; een gereedschap
+# aanbieden op een gearchiveerde rol levert een kaart op die niemand ooit ziet.
+_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",)
 
 # Welke bronnen een schrijvende rol bij oprichting bewust meekrijgt. Rol-ids in code zijn hier
 # onvermijdelijk: een inclusie IS een besluit, en een besluit dat je afleidt uit een regel is geen
 # besluit meer. Alleen een zaad — zodra een mens de compositie aanraakt, wint die (zie StackConfig).
 _COPY_STACK_ZAAD = {
-    "mother_earth__nooch__noochville__copywriter": (
-        "mother_earth__nooch__community_and_email",      # copy-governance blijft daar wonen
-        "mother_earth__nooch__brand_visual_designer",    # merkstem, zusterrol
-    ),
     "mother_earth__nooch__community_and_email": (
         "mother_earth__nooch__brand_visual_designer",
     ),

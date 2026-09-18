@@ -19,12 +19,16 @@ log = logging.getLogger("village.claims_board")
 ORIGIN = "claims_fix"          # herkomst-stempel: hieraan herkennen we onze eigen taken terug
 
 # Rol-label uit de bevinding → record-id van de rol die het werk doet. Onbekende of niet-bestaande
-# id's vallen terug op compliance: liever bij de eigenaar van het domein dan nergens.
+# id's vallen terug op de domein-eigenaar: liever bij wie erover gaat dan nergens.
+#
+# DE COPYWRITER-REGELS ZIJN WEG (18 sept 2026). Die rol is bewust opgeheven zonder opvolger, dus de
+# labels "copywriter" en "copywriter + compliance" wijzen naar niemand meer. Ze hier op een andere
+# rol zetten zou een besluit van de founder stilzwijgend terugdraaien: het werk is niet verhuisd,
+# het is vervallen. Een copy-bevinding komt daarmee bij de eigenaar van het claims-domein terecht
+# — die oordeelt of er nog iets mee moet, precies zoals bij een escalatie.
 ROL_IDS = {
-    "copywriter": "mother_earth__nooch__noochville__copywriter",
     "visual designer": "mother_earth__nooch__brand_visual_designer",
     "marketeer": "mother_earth__nooch__marketing_lead",
-    "copywriter + compliance": "mother_earth__nooch__noochville__copywriter",
 }
 
 #: Het LABEL waarmee een bevinding naar de domein-eigenaar wijst. Het record-id dat daarbij hoort

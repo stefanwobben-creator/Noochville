@@ -351,7 +351,16 @@ def _scan_ctx(tmp_path, monkeypatch):
     kopie = tmp_path / "claims_database.json"
     kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
-    return SimpleNamespace(data_dir=str(tmp_path), settings={}, records=None,
+    # Een levende rol die het claims-domein bezit. Stond hier als `records=None`, en dat werkte
+    # alleen zolang `claims_board.ROL_IDS` het label "copywriter" naar een hardgecodeerd id stuurde.
+    # Die regel is weg (de rol is opgeheven zonder opvolger); zonder domein-eigenaar maakt het bord
+    # bewust geen taak aan, en dan meet deze test de routing in plaats van de scan.
+    eigenaar = SimpleNamespace(id="claims_eigenaar", archived=False, slaapt=False,
+                               definition=SimpleNamespace(skills=[], domains=[claims_db.DOMEIN]))
+    return SimpleNamespace(data_dir=str(tmp_path), settings={},
+                           records=SimpleNamespace(
+                               all=lambda: [eigenaar],
+                               get=lambda rid: eigenaar if rid == "claims_eigenaar" else None),
                            projects=ProjectLedger(str(tmp_path / "projects.json")), evidence_ledger=None)
 
 
