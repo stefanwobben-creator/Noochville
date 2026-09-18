@@ -78,208 +78,208 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 
 ## (b) Dispatch-actie → handler
 
-De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zijn `_act_*`-handlerfunctie; het regelnummer is de def-regel. Gegroepeerde acties delen één handler.
+De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zijn `_act_*`-handlerfunctie in `cockpit2.py`; gegroepeerde acties delen één handler. Bewust géén regelnummer: dat verandert bij elke regel die erboven wordt toegevoegd, zonder dat de architectuur verandert.
 
-| Actie | Handler (cockpit2.py:regel) |
+| Actie | Handler (cockpit2.py) |
 |---|---|
-| `decision_sheet_log` | `cockpit2.py:6017` |
-| `ff_beslis` | `cockpit2.py:5856` |
-| `ff_cluster` | `cockpit2.py:5984` |
-| `ff_promote` | `cockpit2.py:5914` |
-| `ff_demote` | `cockpit2.py:5938` |
-| `ff_run` | `cockpit2.py:5957` |
-| `kb_new` | `cockpit2.py:5206` |
-| `kb_intake` | `cockpit2.py:5288` |
-| `kb_intake_url` | `cockpit2.py:5305` |
-| `kb_stage_edit` | `cockpit2.py:5324` |
-| `kb_stage_accept` | `cockpit2.py:5336` |
-| `kb_stage_delete` | `cockpit2.py:5355` |
-| `kb_stage_merge` | `cockpit2.py:5361` |
-| `kb_stage_commit` | `cockpit2.py:5372` |
-| `kb_stage_discard` | `cockpit2.py:5392` |
-| `kb_atoom_subject` | `cockpit2.py:5647` |
-| `kb_atoom_purge` | `cockpit2.py:5631` |
-| `tag_voorstel_besluit` | `cockpit2.py:5468` |
-| `tag_onderhoud_run` | `cockpit2.py:5618` |
-| `copy_stack_inclusie` | `cockpit2.py:5600` |
-| `verzoek_besluit` | `cockpit2.py:5487` |
-| `kb_blacklist_leeg` | `cockpit2.py:5640` |
-| `kb_atoom_edit` | `cockpit2.py:5398` |
-| `kb_atoom_related` | `cockpit2.py:5405` |
-| `kb_atoom_reference` | `cockpit2.py:5450` |
-| `kb_insight_link` | `cockpit2.py:5417` |
-| `kb_insight_unlink` | `cockpit2.py:5424` |
-| `kb_meta_start` | `cockpit2.py:5430` |
-| `kb_atoom_merge` | `cockpit2.py:5658` |
-| `kb_atoom_archive` | `cockpit2.py:5679` |
-| `kb_atoom_unarchive` | `cockpit2.py:5688` |
-| `kb_atoom_naar_spel` | `cockpit2.py:5694` |
-| `kb_spel_start` | `cockpit2.py:5715` |
-| `kb_spel_add` | `cockpit2.py:5729` |
-| `kb_spel_remove` | `cockpit2.py:5739` |
-| `kb_spel_flip` | `cockpit2.py:5746` |
-| `kb_spel_finish` | `cockpit2.py:5752` |
-| `kb_link` | `cockpit2.py:5215` |
-| `kb_unlink` | `cockpit2.py:5229` |
-| `kb_annotate` | `cockpit2.py:5240` |
-| `kb_evidence` | `cockpit2.py:5246` |
-| `kb_discuss` | `cockpit2.py:5267` |
-| `kb_reformulate` | `cockpit2.py:5273` |
-| `kw_nominate` | `cockpit2.py:5763` |
-| `kw_nom_accept` | `cockpit2.py:5774` |
-| `kw_nom_reject` | `cockpit2.py:5792` |
-| `ws_forbid` | `cockpit2.py:5835` |
-| `ws_approve` | `cockpit2.py:5840` |
-| `proj_add` | `cockpit2.py:1253` |
-| `artefact_add` | `cockpit2.py:1306` |
-| `artefact_edit` | `cockpit2.py:1350` |
-| `artefact_archive` | `cockpit2.py:1377` |
-| `pagina_feit_add` | `cockpit2.py:1397` |
-| `pagina_feit_del` | `cockpit2.py:1426` |
-| `pagina_voorstel` | `cockpit2.py:1457` |
-| `proj_status` | `cockpit2.py:1487` |
-| `proj_done` | `cockpit2.py:1518` |
-| `proj_dod` | `cockpit2.py:1613` |
-| `proj_archive` | `cockpit2.py:1650` |
-| `proj_unarchive` | `cockpit2.py:1658` |
-| `proj_delete` | `cockpit2.py:1694` |
-| `proj_edit` | `cockpit2.py:1721` |
-| `proj_comment` | `cockpit2.py:1734` |
-| `proj_rename` | `cockpit2.py:1745` |
-| `proj_describe` | `cockpit2.py:1756` |
-| `proj_doc_edit` | `cockpit2.py:1894` |
-| `verslag_bevestig_behaald` | `cockpit2.py:1834` |
-| `verslag_bevestig_niet_behaald` | `cockpit2.py:1840` |
-| `verslag_overslaan` | `cockpit2.py:1845` |
-| `verslag_bijwerken` | `cockpit2.py:1872` |
-| `proj_regen_doc` | `cockpit2.py:1767` |
-| `proj_settrekker` | `cockpit2.py:1907` |
-| `proj_setowner` | `cockpit2.py:1948` |
-| `proj_approve` | `cockpit2.py:1967` |
-| `proj_discard` | `cockpit2.py:1978` |
-| `proj_proposal_accept` | `cockpit2.py:1989` |
-| `proj_proposal_reject` | `cockpit2.py:2002` |
-| `proj_setlabel` | `cockpit2.py:2015` |
-| `proj_setimpact` | `cockpit2.py:2030` |
-| `proj_seteffort` | `cockpit2.py:2060` |
-| `proj_agendeer_verzwakt` | `cockpit2.py:2078` |
-| `proj_setprivate` | `cockpit2.py:2102` |
-| `proj_setdue` | `cockpit2.py:2113` |
-| `proj_goal` | `cockpit2.py:2124` |
-| `proj_depends` | `cockpit2.py:2139` |
-| `goal_add` | `cockpit2.py:2156` |
-| `goal_edit` | `cockpit2.py:2170` |
-| `goal_link` | `cockpit2.py:2184` |
-| `attach_add` | `cockpit2.py:2201` |
-| `attach_remove` | `cockpit2.py:2212` |
-| `react_add` | `cockpit2.py:2222` |
-| `feed_edit` | `cockpit2.py:2233` |
-| `feed_remove` | `cockpit2.py:2244` |
-| `wall_outcome` | `cockpit2.py:3872` |
-| `notif_read` | `cockpit2.py:3968` |
-| `notif_processed` | `cockpit2.py:3978` |
-| `notif_outcome` | `cockpit2.py:4301` |
-| `notif_klaar` | `cockpit2.py:4242` |
-| `goedkeur` | `cockpit2.py:3987` |
-| `notif_delete` | `cockpit2.py:4032` |
-| `notif_add` | `cockpit2.py:4190` |
-| `notif_archive` | `cockpit2.py:4423` |
-| `metrics2_fav` | `cockpit2.py:4043` |
-| `metrics2_unfav` | `cockpit2.py:4058` |
-| `metrics2_form` | `cockpit2.py:4063` |
-| `metrics2_dim` | `cockpit2.py:4070` |
-| `metrics2_compare` | `cockpit2.py:4078` |
-| `metrics2_formula` | `cockpit2.py:4175` |
-| `source_activate` | `cockpit2.py:4151` |
-| `source_deactivate` | `cockpit2.py:4163` |
-| `link_pursue` | `cockpit2.py:4125` |
-| `link_ignore` | `cockpit2.py:4136` |
-| `acc_check` | `cockpit2.py:4087` |
-| `ai_reply` | `cockpit2.py:2254` |
-| `proj_feed` | `cockpit2.py:2266` |
-| `checklist_add` | `cockpit2.py:2314` |
-| `checklist_remove` | `cockpit2.py:2354` |
-| `plan_akkoord` | `cockpit2.py:2337` |
-| `checklist_uitvoer` | `cockpit2.py:2325` |
-| `check_add` | `cockpit2.py:2404` |
-| `check_accept` | `cockpit2.py:2421` |
-| `check_toggle` | `cockpit2.py:2431` |
-| `check_skip` | `cockpit2.py:2453` |
-| `check_unskip` | `cockpit2.py:2465` |
-| `check_handoff` | `cockpit2.py:2486` |
-| `check_remove` | `cockpit2.py:2534` |
-| `check_rename` | `cockpit2.py:2544` |
-| `check_move` | `cockpit2.py:2563` |
-| `role_assign` | `cockpit2.py:2577` |
-| `role_unassign` | `cockpit2.py:2602` |
-| `role_focus` | `cockpit2.py:2624` |
-| `radar_approve` | `cockpit2.py:2657` |
-| `radar_dismiss` | `cockpit2.py:2667` |
-| `radar_promote` | `cockpit2.py:2671` |
-| `radar_merge` | `cockpit2.py:2691` |
-| `radar_koppel` | `cockpit2.py:2707` |
-| `kb_stage_koppel` | `cockpit2.py:2734` |
-| `middel_remove` | `cockpit2.py:2782` |
-| `skilllink_add` | `cockpit2.py:2813` |
-| `means_gap_add` | `cockpit2.py:2843` |
-| `rov2_add` | `cockpit2.py:2997` |
-| `rov2_add_to_group` | `cockpit2.py:3009` |
-| `rov2_remove` | `cockpit2.py:3021` |
-| `rov2_remove_group` | `cockpit2.py:3036` |
-| `rov2_setkind` | `cockpit2.py:3054` |
-| `rov2_consent` | `cockpit2.py:3067` |
-| `rov2_end` | `cockpit2.py:3089` |
-| `wo_open` | `cockpit2.py:3113` |
-| `wo_close` | `cockpit2.py:3123` |
-| `wo_presence` | `cockpit2.py:3139` |
-| `wo_present_all` | `cockpit2.py:3150` |
-| `vangst_add` | `cockpit2.py:3162` |
-| `vangst_tekst` | `cockpit2.py:3210` |
-| `vangst_klaar` | `cockpit2.py:3220` |
-| `vangst_uitkomst` | `cockpit2.py:3269` |
-| `vangst_uitkomst_weg` | `cockpit2.py:3257` |
-| `vangst_uitkomst_edit` | `cockpit2.py:3232` |
-| `vangst_remove` | `cockpit2.py:3201` |
-| `vangst_verwerk` | `cockpit2.py:3385` |
-| `wo_checkout` | `cockpit2.py:4432` |
-| `noochie_send` | `cockpit2.py:4447` |
-| `noochie_reset` | `cockpit2.py:4474` |
-| `noochie_ctx` | `cockpit2.py:4482` |
-| `cl_add` | `cockpit2.py:4490` |
-| `cl_report` | `cockpit2.py:4508` |
-| `cl_remove` | `cockpit2.py:4523` |
-| `m_add_kpi` | `cockpit2.py:4533` |
-| `m_add_from_def` | `cockpit2.py:4565` |
-| `def_add` | `cockpit2.py:4580` |
-| `catalog_publish` | `cockpit2.py:4602` |
-| `def_amend` | `cockpit2.py:4628` |
-| `m_add_link` | `cockpit2.py:4670` |
-| `m_sample` | `cockpit2.py:4681` |
-| `m_remove` | `cockpit2.py:4691` |
-| `m_pin` | `cockpit2.py:4701` |
-| `m_unpin` | `cockpit2.py:4712` |
-| `tile_add` | `cockpit2.py:4750` |
-| `indicator_activate` | `cockpit2.py:4722` |
-| `tile_remove` | `cockpit2.py:4784` |
-| `rov2_set` | `cockpit2.py:4794` |
-| `rov2_acc_add` | `cockpit2.py:4794` |
-| `rov2_acc_remove` | `cockpit2.py:4794` |
-| `rov2_dom_add` | `cockpit2.py:4794` |
-| `rov2_dom_remove` | `cockpit2.py:4794` |
-| `person_edit` | `cockpit2.py:4826` |
-| `person_remove` | `cockpit2.py:4843` |
-| `lk_mute` | `cockpit2.py:4864` |
-| `claims_term_add` | `cockpit2.py:4994` |
-| `claims_term_retract` | `cockpit2.py:5031` |
-| `claims_work_status` | `cockpit2.py:5015` |
-| `claims_bewijs_link` | `cockpit2.py:5060` |
-| `claims_vondst_whitelist` | `cockpit2.py:5084` |
-| `claims_regel_uit_vondst` | `cockpit2.py:5110` |
-| `claims_to_board` | `cockpit2.py:5142` |
-| `persona_edit` | `cockpit2.py:2896` |
-| `persona_llm` | `cockpit2.py:2915` |
-| `persona_finetune` | `cockpit2.py:2932` |
-| `persona_finetune_apply` | `cockpit2.py:2950` |
+| `decision_sheet_log` | `_act_decision_sheet_log` |
+| `ff_beslis` | `_act_ff_beslis` |
+| `ff_cluster` | `_act_ff_cluster` |
+| `ff_promote` | `_act_ff_promote` |
+| `ff_demote` | `_act_ff_demote` |
+| `ff_run` | `_act_ff_run` |
+| `kb_new` | `_act_kb_new` |
+| `kb_intake` | `_act_kb_intake` |
+| `kb_intake_url` | `_act_kb_intake_url` |
+| `kb_stage_edit` | `_act_kb_stage_edit` |
+| `kb_stage_accept` | `_act_kb_stage_accept` |
+| `kb_stage_delete` | `_act_kb_stage_delete` |
+| `kb_stage_merge` | `_act_kb_stage_merge` |
+| `kb_stage_commit` | `_act_kb_stage_commit` |
+| `kb_stage_discard` | `_act_kb_stage_discard` |
+| `kb_atoom_subject` | `_act_kb_atoom_subject` |
+| `kb_atoom_purge` | `_act_kb_atoom_purge` |
+| `tag_voorstel_besluit` | `_act_tag_voorstel_besluit` |
+| `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
+| `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
+| `verzoek_besluit` | `_act_verzoek_besluit` |
+| `kb_blacklist_leeg` | `_act_kb_blacklist_leeg` |
+| `kb_atoom_edit` | `_act_kb_atoom_edit` |
+| `kb_atoom_related` | `_act_kb_atoom_related` |
+| `kb_atoom_reference` | `_act_kb_atoom_reference` |
+| `kb_insight_link` | `_act_kb_insight_link` |
+| `kb_insight_unlink` | `_act_kb_insight_unlink` |
+| `kb_meta_start` | `_act_kb_meta_start` |
+| `kb_atoom_merge` | `_act_kb_atoom_merge` |
+| `kb_atoom_archive` | `_act_kb_atoom_archive` |
+| `kb_atoom_unarchive` | `_act_kb_atoom_unarchive` |
+| `kb_atoom_naar_spel` | `_act_kb_atoom_naar_spel` |
+| `kb_spel_start` | `_act_kb_spel_start` |
+| `kb_spel_add` | `_act_kb_spel_add` |
+| `kb_spel_remove` | `_act_kb_spel_remove` |
+| `kb_spel_flip` | `_act_kb_spel_flip` |
+| `kb_spel_finish` | `_act_kb_spel_finish` |
+| `kb_link` | `_act_kb_link` |
+| `kb_unlink` | `_act_kb_unlink` |
+| `kb_annotate` | `_act_kb_annotate` |
+| `kb_evidence` | `_act_kb_evidence` |
+| `kb_discuss` | `_act_kb_discuss` |
+| `kb_reformulate` | `_act_kb_reformulate` |
+| `kw_nominate` | `_act_kw_nominate` |
+| `kw_nom_accept` | `_act_kw_nom_accept` |
+| `kw_nom_reject` | `_act_kw_nom_reject` |
+| `ws_forbid` | `_act_ws_forbid` |
+| `ws_approve` | `_act_ws_approve` |
+| `proj_add` | `_act_proj_add` |
+| `artefact_add` | `_act_artefact_add` |
+| `artefact_edit` | `_act_artefact_edit` |
+| `artefact_archive` | `_act_artefact_archive` |
+| `pagina_feit_add` | `_act_pagina_feit_add` |
+| `pagina_feit_del` | `_act_pagina_feit_del` |
+| `pagina_voorstel` | `_act_pagina_voorstel` |
+| `proj_status` | `_act_proj_status` |
+| `proj_done` | `_act_proj_done` |
+| `proj_dod` | `_act_proj_dod` |
+| `proj_archive` | `_act_proj_archive` |
+| `proj_unarchive` | `_act_proj_unarchive` |
+| `proj_delete` | `_act_proj_delete` |
+| `proj_edit` | `_act_proj_edit` |
+| `proj_comment` | `_act_proj_comment` |
+| `proj_rename` | `_act_proj_rename` |
+| `proj_describe` | `_act_proj_describe` |
+| `proj_doc_edit` | `_act_proj_doc_edit` |
+| `verslag_bevestig_behaald` | `_act_verslag_bevestig_behaald` |
+| `verslag_bevestig_niet_behaald` | `_act_verslag_bevestig_niet_behaald` |
+| `verslag_overslaan` | `_act_verslag_overslaan` |
+| `verslag_bijwerken` | `_act_verslag_bijwerken` |
+| `proj_regen_doc` | `_act_proj_regen_doc` |
+| `proj_settrekker` | `_act_proj_settrekker` |
+| `proj_setowner` | `_act_proj_setowner` |
+| `proj_approve` | `_act_proj_approve` |
+| `proj_discard` | `_act_proj_discard` |
+| `proj_proposal_accept` | `_act_proj_proposal_accept` |
+| `proj_proposal_reject` | `_act_proj_proposal_reject` |
+| `proj_setlabel` | `_act_proj_setlabel` |
+| `proj_setimpact` | `_act_proj_setimpact` |
+| `proj_seteffort` | `_act_proj_seteffort` |
+| `proj_agendeer_verzwakt` | `_act_proj_agendeer_verzwakt` |
+| `proj_setprivate` | `_act_proj_setprivate` |
+| `proj_setdue` | `_act_proj_setdue` |
+| `proj_goal` | `_act_proj_goal` |
+| `proj_depends` | `_act_proj_depends` |
+| `goal_add` | `_act_goal_add` |
+| `goal_edit` | `_act_goal_edit` |
+| `goal_link` | `_act_goal_link` |
+| `attach_add` | `_act_attach_add` |
+| `attach_remove` | `_act_attach_remove` |
+| `react_add` | `_act_react_add` |
+| `feed_edit` | `_act_feed_edit` |
+| `feed_remove` | `_act_feed_remove` |
+| `wall_outcome` | `_act_wall_outcome` |
+| `notif_read` | `_act_notif_read` |
+| `notif_processed` | `_act_notif_processed` |
+| `notif_outcome` | `_act_notif_outcome` |
+| `notif_klaar` | `_act_notif_klaar` |
+| `goedkeur` | `_act_goedkeur` |
+| `notif_delete` | `_act_notif_delete` |
+| `notif_add` | `_act_notif_add` |
+| `notif_archive` | `_act_notif_archive` |
+| `metrics2_fav` | `_act_metrics2_fav` |
+| `metrics2_unfav` | `_act_metrics2_unfav` |
+| `metrics2_form` | `_act_metrics2_form` |
+| `metrics2_dim` | `_act_metrics2_dim` |
+| `metrics2_compare` | `_act_metrics2_compare` |
+| `metrics2_formula` | `_act_metrics2_formula` |
+| `source_activate` | `_act_source_activate` |
+| `source_deactivate` | `_act_source_deactivate` |
+| `link_pursue` | `_act_link_pursue` |
+| `link_ignore` | `_act_link_ignore` |
+| `acc_check` | `_act_acc_check` |
+| `ai_reply` | `_act_ai_reply` |
+| `proj_feed` | `_act_proj_feed` |
+| `checklist_add` | `_act_checklist_add` |
+| `checklist_remove` | `_act_checklist_remove` |
+| `plan_akkoord` | `_act_plan_akkoord` |
+| `checklist_uitvoer` | `_act_checklist_uitvoer` |
+| `check_add` | `_act_check_add` |
+| `check_accept` | `_act_check_accept` |
+| `check_toggle` | `_act_check_toggle` |
+| `check_skip` | `_act_check_skip` |
+| `check_unskip` | `_act_check_unskip` |
+| `check_handoff` | `_act_check_handoff` |
+| `check_remove` | `_act_check_remove` |
+| `check_rename` | `_act_check_rename` |
+| `check_move` | `_act_check_move` |
+| `role_assign` | `_act_role_assign` |
+| `role_unassign` | `_act_role_unassign` |
+| `role_focus` | `_act_role_focus` |
+| `radar_approve` | `_act_radar_approve` |
+| `radar_dismiss` | `_act_radar_dismiss` |
+| `radar_promote` | `_act_radar_promote` |
+| `radar_merge` | `_act_radar_merge` |
+| `radar_koppel` | `_act_radar_koppel` |
+| `kb_stage_koppel` | `_act_kb_stage_koppel` |
+| `middel_remove` | `_act_middel_remove` |
+| `skilllink_add` | `_act_skilllink_add` |
+| `means_gap_add` | `_act_means_gap_add` |
+| `rov2_add` | `_act_rov2_add` |
+| `rov2_add_to_group` | `_act_rov2_add_to_group` |
+| `rov2_remove` | `_act_rov2_remove` |
+| `rov2_remove_group` | `_act_rov2_remove_group` |
+| `rov2_setkind` | `_act_rov2_setkind` |
+| `rov2_consent` | `_act_rov2_consent` |
+| `rov2_end` | `_act_rov2_end` |
+| `wo_open` | `_act_wo_open` |
+| `wo_close` | `_act_wo_close` |
+| `wo_presence` | `_act_wo_presence` |
+| `wo_present_all` | `_act_wo_present_all` |
+| `vangst_add` | `_act_vangst_add` |
+| `vangst_tekst` | `_act_vangst_tekst` |
+| `vangst_klaar` | `_act_vangst_klaar` |
+| `vangst_uitkomst` | `_act_vangst_uitkomst` |
+| `vangst_uitkomst_weg` | `_act_vangst_uitkomst_weg` |
+| `vangst_uitkomst_edit` | `_act_vangst_uitkomst_edit` |
+| `vangst_remove` | `_act_vangst_remove` |
+| `vangst_verwerk` | `_act_vangst_verwerk` |
+| `wo_checkout` | `_act_wo_checkout` |
+| `noochie_send` | `_act_noochie_send` |
+| `noochie_reset` | `_act_noochie_reset` |
+| `noochie_ctx` | `_act_noochie_ctx` |
+| `cl_add` | `_act_cl_add` |
+| `cl_report` | `_act_cl_report` |
+| `cl_remove` | `_act_cl_remove` |
+| `m_add_kpi` | `_act_m_add_kpi` |
+| `m_add_from_def` | `_act_m_add_from_def` |
+| `def_add` | `_act_def_add` |
+| `catalog_publish` | `_act_catalog_publish` |
+| `def_amend` | `_act_def_amend` |
+| `m_add_link` | `_act_m_add_link` |
+| `m_sample` | `_act_m_sample` |
+| `m_remove` | `_act_m_remove` |
+| `m_pin` | `_act_m_pin` |
+| `m_unpin` | `_act_m_unpin` |
+| `tile_add` | `_act_tile_add` |
+| `indicator_activate` | `_act_indicator_activate` |
+| `tile_remove` | `_act_tile_remove` |
+| `rov2_set` | `_act_rov2_set` |
+| `rov2_acc_add` | `_act_rov2_set` |
+| `rov2_acc_remove` | `_act_rov2_set` |
+| `rov2_dom_add` | `_act_rov2_set` |
+| `rov2_dom_remove` | `_act_rov2_set` |
+| `person_edit` | `_act_person_edit` |
+| `person_remove` | `_act_person_remove` |
+| `lk_mute` | `_act_lk_mute` |
+| `claims_term_add` | `_act_claims_term_add` |
+| `claims_term_retract` | `_act_claims_term_retract` |
+| `claims_work_status` | `_act_claims_work_status` |
+| `claims_bewijs_link` | `_act_claims_bewijs_link` |
+| `claims_vondst_whitelist` | `_act_claims_vondst_whitelist` |
+| `claims_regel_uit_vondst` | `_act_claims_regel_uit_vondst` |
+| `claims_to_board` | `_act_claims_to_board` |
+| `persona_edit` | `_act_persona_edit` |
+| `persona_llm` | `_act_persona_llm` |
+| `persona_finetune` | `_act_persona_finetune` |
+| `persona_finetune_apply` | `_act_persona_finetune_apply` |
 
 
 ## (c) Concern → store → bestand
@@ -321,5 +321,105 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `link_kroniek` | `SkillLinkKroniek` | `skill_links_kroniek.jsonl` |
 
 
+## (d) Databestand → schrijvende module (buiten `_Stores`)
+
+Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer de helft van de schrijvende opslag. De rest woont in losse modules. **Deze lijst is afgeleid uit SCHRIJFGEDRAG**: een module telt als schrijver als hij de bestandsnaam noemt én ergens `open(..., "a"/"w")`, de veilige json-schrijver, een `JsonStore`-subklasse of `_WRITE_METHODS` bevat. Een module die de naam alleen noemt is een lezer en staat hier niet.
+
+| Databestand | Schrijvende module |
+|---|---|
+| `accountability_check.json` | `cockpit2.py` |
+| `afslanken.jsonl` | `afslanken.py` |
+| `artefact_changelog.jsonl` | `artefacts.py` |
+| `autonomie_signaal.jsonl` | `zelf_verwerking.py` |
+| `belofte_grafen.json` | `cockpit2.py` |
+| `board_pulse.jsonl` | `board_loop.py` |
+| `checklist_suggesties.jsonl` | `checklist_vorm.py` |
+| `claims_database.json` | `claims_db.py` |
+| `claims_labels.jsonl` | `claims_labels.py` |
+| `claims_runtime.json` | `claims_db.py` |
+| `competitor_news.json` | `roles.py` |
+| `competitor_seen.json` | `roles.py` |
+| `critic_labels.jsonl` | `missie_critic.py` |
+| `csrf.json` | `cockpit2.py` |
+| `deadsource_state.json` | `village.py` |
+| `decision_sheets.jsonl` | `decision_sheets.py` |
+| `draaistaat.jsonl` | `draaistaat.py` |
+| `feedback.json` | `inhabitant.py` |
+| `feeds.json` | `radar_store.py` |
+| `field_note_prose_last.json` | `roles.py` |
+| `founder_flow.json` | `founder_flow.py` |
+| `founder_labels.jsonl` | `founder_flow.py` |
+| `founder_park.jsonl` | `founder_park.py` |
+| `gaps.jsonl` | `gap_ledger.py` |
+| `goal_state.json` | `roles.py` |
+| `governance_examples.json` | `cli.py` |
+| `kennis_embeddings.json` | `kennis_embeddings.py` |
+| `materiaal_memo.json` | `materiaal_memo.py` |
+| `meta.json` | `epic.py` |
+| `noochie_daily.json` | `roles.py` |
+| `persona_kroniek.jsonl` | `cockpit2.py` |
+| `pinboard.json` | `village.py` |
+| `project_proposals.json` | `project_proposals.py` |
+| `pulse_heartbeat.json` | `inhabitant.py` |
+| `pulse_history.jsonl` | `roles.py` |
+| `radar_beoordelingen.jsonl` | `radar_beoordeling.py` |
+| `radar_embeddings.json` | `radar_clusters.py` |
+| `radar_nieuwheid.json` | `radar_nieuwheid.py` |
+| `relaunch_park.jsonl` | `relaunch_park.py` |
+| `role_metrics.json` | `village.py` |
+| `role_status.json` | `village.py` |
+| `seed_surges.json` | `roles.py` |
+| `serpapi_trends_last.json` | `roles.py` |
+| `sessions.json` | `cockpit2.py` |
+| `shopify_metrics.json` | `cli.py` |
+| `site_audit.jsonl` | `site_audit.py` |
+| `site_audit_dev.jsonl` | `site_audit.py` |
+| `snake_scores.json` | `snake.py` |
+| `spelvraag_cache.json` | `spelvraag.py` |
+| `strategy.json` | `pinboard.py` |
+| `trend_reindex_last_day.json` | `roles.py` |
+| `triage_uitkomsten.jsonl` | `triage_rol.py` |
+| `verwerkingen.jsonl` | `zelf_verwerking.py` |
+| `villageraad.jsonl` | `villageraad.py` |
+| `voorstellen.jsonl` | `onderzoekspas.py` |
+
+
+### (d2) Meerdere schrijvers — eigenaarschap niet af te leiden
+
+Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan niet zeggen wie de eigenaar is; dat blijft mensenwerk.
+
+| Databestand | Schrijvende modules |
+|---|---|
+| `buzz_observations.jsonl` | `cli.py, village.py` |
+| `buzz_query_sets.json` | `cli.py, village.py` |
+| `competitor_brands.json` | `cli.py, roles.py, village.py` |
+| `constraints.json` | `cli.py, inhabitant.py` |
+| `groeidagboek.jsonl` | `role_proposals.py, village.py` |
+| `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, inhabitant.py, village.py` |
+| `lexicon.json` | `cli.py, village.py` |
+| `linkbuilding_targets.json` | `cli.py, cockpit2.py, roles.py` |
+| `llm_usage.jsonl` | `llm_usage.py, village.py` |
+| `system_log.jsonl` | `cockpit2.py, verslag.py, village.py` |
+| `timekeeper_last_day.json` | `dagcyclus.py, puls_wacht.py` |
+
+
+### (d3) Geen schrijver gevonden
+
+Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configuratie, of geschreven buiten het pakket (bijvoorbeeld in een exportpakket). Staat hier zodat het gat zichtbaar is in plaats van weggelaten.
+
+| Databestand |
+|---|
+| `co2_factoren.json` |
+| `kennisbank_embeddings.json` |
+| `kennisbank_intake.json` |
+| `llm_prijzen.json` |
+| `manifest.json` |
+| `mc_records.json` |
+| `persona.json` |
+| `project.json` |
+| `rugzakken.json` |
+| `trend_signals.jsonl` |
+
+
 ---
-_63 routes · 198 dispatch-acties · 31 stores._
+_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 55 daarbuiten met één schrijver · 11 met meerdere · 10 zonder gevonden schrijver._
