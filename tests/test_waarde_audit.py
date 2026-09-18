@@ -35,6 +35,17 @@ def _rij(rapport, rol=ROL):
     return next(r for r in rapport["rollen"] if r["id"] == rol)
 
 
+def _zonder_mens(st, rol=ROL):
+    """Haal de mens van de rol af.
+
+    De bootstrap-fixture zet een persoon op `creator_of_shoes`, en sinds de mens-poort in `advies`
+    zakt zo'n rol nooit meer naar `slapen`/`opruimen`. Tests die het OUTPUT-oordeel meten hebben
+    dus een rol zonder mens nodig; anders meten ze de poort en niet wat ze beweren te meten."""
+    for f in list(st.assign.fillers_of(rol, record=st.records.get(rol))):
+        if f.type == "person":
+            st.assign.unassign(rol, f.type, f.id)
+
+
 def _skill(rapport, naam):
     return next(s for s in rapport["skills"] if s["naam"] == naam)
 
@@ -44,6 +55,7 @@ def _skill(rapport, naam):
 def test_veel_beweging_zonder_uitkomst_blijft_interne_beweging(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
+    _zonder_mens(st)
     for i in range(20):
         st.evidence.record(role_id=ROL, skill="epo_patents", query=f"q{i}",
                            source="ops.epo.org", status="bevestigd", ts=NU - 1000)
@@ -56,6 +68,7 @@ def test_veel_beweging_zonder_uitkomst_blijft_interne_beweging(tmp_path):
 
 def test_een_rol_die_nooit_iets_deed_wordt_opgeruimd(tmp_path):
     dd = _dd(tmp_path)
+    _zonder_mens(cockpit2._Stores(dd))
     r = wa.audit(dd, cockpit2._Stores(dd).records, nu=NU)
     rij = _rij(r)
     assert rij["advies"] == wa.OPRUIMEN
@@ -325,3 +338,73 @@ def test_de_kostenkolom_toont_model_en_bronverbruik(tmp_path):
                                 "ts": NU - 1000}) + "\n")
     tekst = wa.rapport_tekst(wa.audit(dd, cockpit2._Stores(dd).records, nu=NU))
     assert "3 model-calls" in tekst and "7 bron-aanroepen" in tekst
+
+
+# ── een mens beoordeel je niet op wat er toevallig in deze stores staat ───────
+#
+# Op 27 augustus 2026 zette deze audit drie MENS-vervulde rollen in slaap: Marketing Lead
+# (14 projecten), Supply Chain Coordinator (6) en Carbon Footprint Improver (6), alle drie op
+# "geen bewezen uitkomst". Het oordeel was niet fout — er stond niets afgetekend — maar de
+# gevolgtrekking wel: `escalation_router.roster` slaat een slapende rol over, dus drie mensen
+# stonden drie weken buiten de routering. Wie zijn werk buiten NoochVille doet, laat hier per
+# definitie geen spoor na.
+
+def test_mens_vervulde_rol_wordt_gevlagd_in_plaats_van_in_slaap_gezet():
+    kw = dict(uitkomsten=[], laatst=0.0, eur=0.0, onbekende_calls=0, ooit_actief=True, nu=NU)
+    assert wa.advies(**kw)[0] == wa.SLAPEN                       # AI-rol: ongewijzigd
+    adv, waarom = wa.advies(**kw, mens_vervuld=True)
+    assert adv == wa.VLAG
+    assert "geen bewezen uitkomst" in waarom                     # de meting blijft staan
+    assert "door een mens vervuld" in waarom                     # en waarom het gevolg vervalt
+
+
+def test_mens_vervulde_rol_wordt_ook_niet_opgeruimd():
+    kw = dict(uitkomsten=[], laatst=0.0, eur=0.0, onbekende_calls=0, ooit_actief=False, nu=NU)
+    assert wa.advies(**kw)[0] == wa.OPRUIMEN
+    assert wa.advies(**kw, mens_vervuld=True)[0] == wa.VLAG
+
+
+def test_de_poort_raakt_wakker_houden_en_structureel_niet():
+    """Alleen de twee adviezen met een automatisch gevolg gaan langs de poort."""
+    bewezen = dict(uitkomsten=[{"soort": "x", "ref": "y"}], laatst=NU, eur=0.0,
+                   onbekende_calls=0, ooit_actief=True, nu=NU)
+    assert wa.advies(**bewezen, mens_vervuld=True)[0] == wa.WAKKER
+    struct = dict(uitkomsten=[], laatst=0.0, eur=0.0, onbekende_calls=0, ooit_actief=False, nu=NU)
+    assert wa.advies(**struct, structureel=True, mens_vervuld=True)[0] == wa.STRUCTUREEL
+
+
+def test_dure_mens_rol_wordt_gevlagd_met_het_bedrag_erbij():
+    """Het kosten-argument verdwijnt niet: een mens mag zien dat er geld omgaat."""
+    adv, waarom = wa.advies(uitkomsten=[], laatst=0.0, eur=99.0, onbekende_calls=0,
+                            ooit_actief=True, nu=NU, mens_vervuld=True)
+    assert adv == wa.VLAG and "99.00" in waarom
+
+
+def test_audit_vlagt_een_rol_met_een_mens_erop(tmp_path):
+    """End-to-end op een echt dorp: rol zonder uitkomst, mens erop → vlag, geen slapen."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    persoon = st.people.add("Matthijs Boesten", email="m@example.org")
+    st.assign.assign(ROL, "person", persoon.id)
+    st.projects.create(ROL, "iets dat nooit is afgetekend", "human")
+    r = wa.audit(dd, cockpit2._Stores(dd).records, nu=NU)
+    rij = _rij(r)
+    assert rij["advies"] == wa.VLAG
+    assert "door een mens vervuld" in rij["waarom"]
+
+
+def test_audit_laat_een_ai_rol_ongemoeid(tmp_path):
+    """De poort mag de audit niet uitzetten: zonder mens blijft het oordeel wat het was."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    _zonder_mens(st)                                   # de fixture zet er standaard een mens op
+    st.assign.assign(ROL, "persona", "een_persona")
+    st.projects.create(ROL, "iets dat nooit is afgetekend", "human")
+    r = wa.audit(dd, cockpit2._Stores(dd).records, nu=NU)
+    assert _rij(r)["advies"] == wa.SLAPEN
+
+
+def test_onleesbare_bemensing_vlagt_in_plaats_van_te_slapen():
+    """De faalrichting is expliciet: twijfel mag nooit iemand van de roster halen."""
+    from nooch_village.assignments import door_mens_bemand
+    assert door_mens_bemand("een_rol", None, None, bij_twijfel=True) is True
