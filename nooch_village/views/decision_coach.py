@@ -184,14 +184,30 @@ def kaarten(rijen: list[dict]) -> str:
         idblok = (f"<code class='pill'>{_e(rid)}</code> "
                   f"<button class='btn' type='button' data-dc-id='{_e(rid)}'>Copy id</button>"
                   if rid else "<span class='muted'>no id (logged before ids existed)</span>")
+        # DE AANNAMES STAAN OP DE KAART, en dat is geen detail: de gekozen optie zegt WAT iemand
+        # deed, de aannames zeggen WAAROP het rustte — en dat is het deel waar een ander iets van
+        # leert. Ze stonden er niet in de eerste versie; na de eerste echte sessie bleek de kaart
+        # daardoor te weinig te dragen om een besluit van een collega te kunnen wegen.
+        aannames = ""
+        for label, sleutel in (("Assumed", "assumption_1"), ("Assumed", "assumption_2")):
+            waarde = str(r.get(sleutel) or "").strip()
+            if waarde:
+                aannames += f"<p><b>{label}:</b> {_e(waarde)}</p>"
+        # "Still unknown" is de nuance en niet de kern: ingeklapt, zodat hij te lezen is zonder de
+        # zes regels die ertoe doen weg te drukken.
+        onbekend = str(r.get("still_unknown") or "").strip()
+        onbekend_blok = (f"<details><summary class='muted'>Still unknown</summary>"
+                         f"<p class='muted'>{_e(onbekend)}</p></details>" if onbekend else "")
         uit.append(
             "<div class='card'>"
             f"<p class='muted'>{wie}{' · ' + rol if rol else ''} · {_e(wanneer)}</p>"
             f"<p class='ptitle'>{_e(str(r.get('decision') or ''))}</p>"
             f"<p class='muted'>{idblok}</p>"
             f"<p><b>Chose:</b> {_e(str(r.get('chosen_option') or ''))}</p>"
+            f"{aannames}"
             f"<p><b>Predicted:</b> {_e(str(r.get('prediction') or ''))}</p>"
             f"<p><b>Stops if:</b> {_e(str(r.get('stop_signal') or ''))}</p>"
+            f"{onbekend_blok}"
             "</div>")
     return "".join(uit)
 

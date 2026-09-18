@@ -360,3 +360,92 @@ def test_de_id_staat_zichtbaar_en_kopieerbaar_op_de_kaart(tmp_path):
     html = render_decision_coach(None, base_dir=str(tmp_path), data_dir=str(tmp_path))
     assert rij["id"] in html
     assert f"data-dc-id='{rij['id']}'" in html             # kopieerknop wijst naar deze id
+
+
+# ── de kaart draagt de aannames ──────────────────────────────────────────────
+#
+# Na de eerste echte sessie bleek de kaart te weinig te dragen: de gekozen optie zegt WAT iemand
+# deed, de aannames zeggen WAAROP het rustte — en dat is het deel waar een ander iets van leert.
+# Eén implementatie in `kaarten()`, dus /decision-coach en de wikipagina tonen hetzelfde.
+
+def test_de_kaart_toont_alle_zes_de_velden(tmp_path):
+    from nooch_village.views.decision_coach import kaarten
+    rij = ds.log_sheet(str(tmp_path), ds.parse(_blok()), decider="Stefan Wobben", role="", raw="r")
+    html = kaarten([rij])
+    for veld in ("decision", "chosen_option", "assumption_1", "assumption_2", "prediction",
+                 "stop_signal"):
+        assert rij[veld] in html, f"{veld} ontbreekt op de kaart"
+
+
+def test_still_unknown_staat_ingeklapt_onder_de_zes(tmp_path):
+    """De nuance mag niet de zes regels wegdrukken die ertoe doen."""
+    from nooch_village.views.decision_coach import kaarten
+    rij = ds.log_sheet(str(tmp_path), ds.parse(_blok()), decider="x", role="", raw="r")
+    html = kaarten([rij])
+    assert "<details>" in html and "Still unknown" in html
+    assert rij["still_unknown"] in html
+    assert html.index(rij["stop_signal"]) < html.index(rij["still_unknown"])
+
+
+def test_een_leeg_still_unknown_geeft_geen_leeg_blok(tmp_path):
+    from nooch_village.views.decision_coach import kaarten
+    rij = ds.log_sheet(str(tmp_path),
+                       ds.parse(_blok(**{"Still unknown, and whether that is acceptable": ""})),
+                       decider="x", role="", raw="r")
+    html = kaarten([rij])
+    assert "Still unknown" not in html
+
+
+def test_de_wikipagina_toont_dezelfde_zes_velden(tmp_path):
+    """Eén renderer, twee plekken — anders lopen ze na één wijziging uit de pas."""
+    from nooch_village import cockpit2, wiki_how_we_decide as hwd
+    from nooch_village.views.wiki import render_pagina
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    hwd.zorg_voor_pagina(st.att, st.records, ".", apply=True)
+    rij = ds.log_sheet(dd, ds.parse(_blok()), decider="Stefan Wobben", role="", raw="r")
+    a = next(x for x in st.att.list(hwd.EIGENAAR, "note") if x.title == hwd.TITEL)
+    html = render_pagina(st, a.id)
+    for veld in ("assumption_1", "assumption_2", "prediction", "stop_signal"):
+        assert rij[veld] in html
+
+
+# ── sjabloon v2: een meetplan is geen voorspelling ───────────────────────────
+#
+# De eerste echte sessie leverde als voorspelling "Measure customer retention and conversion rate
+# impact once the first Vietnam batch ships" — dat is een plan om te meten, geen uitkomst waarop je
+# ongelijk kunt krijgen. v2 laat de coach doorvragen tot er een getal en een datum staat.
+
+def _sjabloontekst():
+    with open("prompts/decision_coach_en.md", encoding="utf-8") as fh:
+        return " ".join(fh.read().split())
+
+
+def test_sjabloon_staat_op_versie_2():
+    assert dc.versie(".") == "2"
+
+
+def test_dimensie_zeven_weigert_een_meetplan():
+    plat = _sjabloontekst()
+    assert "Do not accept an answer that only says what you will measure" in plat
+    assert "Keep asking until there is a number and a date" in plat
+    assert "or until they say plainly that they cannot predict it" in plat
+
+
+def test_fase_drie_vraagt_nog_een_keer_voor_het_sheet():
+    plat = _sjabloontekst()
+    assert "If the prediction has no number and no date, say so before you output the sheet" in plat
+    assert 'write "no prediction given" on that line rather than a plan to measure' in plat
+    # en die instructie staat VÓÓR het sheet, niet erna — anders komt hij te laat
+    with open("prompts/decision_coach_en.md", encoding="utf-8") as fh:
+        ruw = fh.read()
+    assert ruw.index("If the prediction has no number") < ruw.index(ds.START)
+
+
+def test_een_sheet_van_v1_blijft_v1(tmp_path):
+    """Het hele punt van het versieveld: de rij van gisteren verandert niet mee met het sjabloon."""
+    rij = ds.log_sheet(str(tmp_path), ds.parse(_blok(**{"Coach version": "1"})),
+                       decider="Stefan Wobben", role="", raw="r")
+    assert rij["template_version"] == "1"
+    assert dc.versie(".") == "2"                          # op schijf staat v2, en dat blijft zo
