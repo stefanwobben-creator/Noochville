@@ -326,3 +326,37 @@ def test_tool_op_een_onbekende_rol_faalt_zacht(tmp_path):
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     assert zorg_voor_tool(st.records, st.att, "bestaat_niet") == ""
+
+
+# ── de stabiele id ───────────────────────────────────────────────────────────
+
+def test_twee_sheets_in_dezelfde_seconde_krijgen_verschillende_ids(tmp_path):
+    """Zonder id is `timestamp + decider` de enige onderscheiding, en die is niet uniek: twee
+    besluiten van dezelfde persoon binnen één seconde zijn dan hetzelfde besluit. De id is het
+    handvat waarmee je in een werkoverleg naar één rij kunt wijzen."""
+    import time as _t
+    vast = 1789000000.0
+    eerder = _t.time
+    _t.time = lambda: vast                                 # dezelfde seconde afdwingen
+    try:
+        a = ds.log_sheet(str(tmp_path), ds.parse(_blok(Decision="eerste")),
+                         decider="Stefan Wobben", role="rol_a", raw="r")
+        b = ds.log_sheet(str(tmp_path), ds.parse(_blok(Decision="tweede")),
+                         decider="Stefan Wobben", role="rol_a", raw="r")
+    finally:
+        _t.time = eerder
+    assert a["timestamp"] == b["timestamp"] and a["decider"] == b["decider"]
+    assert a["id"] and b["id"] and a["id"] != b["id"]
+    rijen = ds.alle(str(tmp_path))
+    assert len(rijen) == 2
+    assert all(r.get("id") for r in rijen)                 # elke rij draagt er een
+    assert len({r["id"] for r in rijen}) == 2
+
+
+def test_de_id_staat_zichtbaar_en_kopieerbaar_op_de_kaart(tmp_path):
+    """Een id die alleen in het bestand staat is een databasesleutel, geen handvat."""
+    from nooch_village.views.decision_coach import render_decision_coach
+    rij = ds.log_sheet(str(tmp_path), ds.parse(_blok()), decider="Stefan Wobben", role="", raw="r")
+    html = render_decision_coach(None, base_dir=str(tmp_path), data_dir=str(tmp_path))
+    assert rij["id"] in html
+    assert f"data-dc-id='{rij['id']}'" in html             # kopieerknop wijst naar deze id
