@@ -96,7 +96,7 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 64   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
+_PREFIX_CEILING = 65   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
                        #      inline-editor van cockpit2_util wordt door de wall-comment ÉN
                        #      het conceptverslag gebruikt. Hij verving twee ad-hoc bouwsels
                        #      ('fentry-edit' plus een <details> op /rapport) door één, en
@@ -121,6 +121,9 @@ _PREFIX_CEILING = 64   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen f
                        #      de index is een nieuw scherm met een eigen tweekoloms-indeling,
                        #      en de bestaande families (cl-, kc-, c2-) dragen die niet. Alle
                        #      kaarten erin hergebruiken wél .card/.cl-head/.pill.
+                       # +1: 'msg-' — /messages (fase 8): kanalenlijst links, draad rechts.
+                       #      Expliciet besluit, zelfde soort als 'wiki-': een tweekoloms
+                       #      scherm dat de bestaande families niet dragen.
 
 
 def _prefix_families() -> set[str]:

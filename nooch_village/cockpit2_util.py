@@ -512,15 +512,16 @@ _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 # is wat hier gebeurt — alleen de structuur, niet de vormgeving; die komt in fase 9 over alle
 # schermen tegelijk.
 #
-# WAT ER NIET IN ZIT, met reden. "Messages" staat wel in het prototype, maar dat scherm zegt daar
-# zélf "does not exist in the real system yet": het hoort bij de channel-laag van fase 8. Een
-# nav-item dat naar niets wijst is erger dan een ontbrekend nav-item.
+# Messages stond hier in fase 7 BEWUST niet, omdat het scherm toen nog geen data had. Sinds fase 8
+# is de channel-laag er (project-, cirkel- en DM-kanalen), dus staat hij er wel — met een echt
+# scherm erachter en niet als doorverwijzing.
 #
 # Goals en Metrics zijn GEEN zijbalk-items meer maar tabs op de cirkel, zoals in het prototype.
 # Hun routes (`/goals`, `/metrics2`) blijven bestaan — geen dode links, dezelfde regel als bij de
 # vorige nav-slanking.
 _SIDE_ITEMS = (
     ("/projects", "Projects"),
+    ("/messages", "Messages"),
     ("/wiki",     "Wiki"),
 )
 

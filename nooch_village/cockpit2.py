@@ -58,6 +58,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
+from nooch_village.channels import ChannelStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
 from nooch_village.registry_factory import shared_registry
@@ -147,6 +148,9 @@ class _Stores:
         except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
             pass
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
+        # De gespreklaag (fase 8): cirkel- en DM-kanalen wonen hier, project-kanalen
+        # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
+        self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
@@ -333,6 +337,7 @@ from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.wiki import render_wiki_index, render_pagina
+from nooch_village.views.messages import render_messages
 from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
@@ -1272,6 +1277,29 @@ def _act_pagina_feit_add(c):
     return nxt, f"➕ fact added ({upd.id})"
 
 
+def _act_msg_post(c):
+    """Eén bericht in een kanaal (fase 8).
+
+    # AUTHZ: iedereen-ingelogd — meedoen aan een gesprek is deelnemen, geen structuurmutatie;
+    # dezelfde regel als de project-wall waar deze laag uit voortkomt.
+    #
+    # WEL EEN HERKENDE AUTEUR. Een bericht zonder afzender kan niemand beantwoorden, en in een
+    # DM-kanaal bepaalt de afzender wélk kanaal het is. Fail-closed dus, en met de reden erbij.
+    # EN ALLEEN IN JE EIGEN DM: een kanaal tussen twee andere mensen is niet van jou."""
+    from nooch_village import channels
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    kanaal = (g("kanaal") or "").strip()
+    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE, channels.DM):
+        return nxt, "✗ unknown channel"
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to write — a message needs an author"
+    if channels.soort_van(kanaal) == channels.DM and ik not in channels.dm_leden(kanaal):
+        return nxt, "✗ that conversation is not yours"
+    entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
+    return nxt, ("💬 posted" if entry else "✗ a message needs text")
+
+
 def _act_keep_in_wiki(c):
     """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
 
@@ -2032,6 +2060,40 @@ def _act_feed_remove(c):
 
 
 
+def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
+                               extra: dict, entry_id: str) -> int:
+    """Route elke @-vermelding naar het DM-kanaal van de bedoelde mens. Geeft het aantal terug.
+
+    DE AFZENDER MOET EEN MENS ZIJN. Een DM is tussen twee mensen; een persona of een niet-herkende
+    auteur heeft geen kant van dat gesprek. In dat geval blijft het de oude notificatie — niet omdat
+    dat mooier is, maar omdat een bericht van niemand nergens heen kan.
+
+    EEN ROL IS GEEN MENS. Bij `@rolnaam` gaat het bericht naar elke PERSOON die de rol vervult. Heeft
+    de rol er geen, dan valt hij terug op de notificatie: dat is precies het geval waarvoor de
+    wachtrij bestaat (er ligt werk, er is nog niemand)."""
+    from nooch_village import channels
+    afzender = auteur if (auteur and auteur != "dialoog" and st.people.get(auteur)) else ""
+    n = 0
+    for ty, tid, _nm in ment:
+        ontvangers: list[str] = []
+        if ty == "person":
+            ontvangers = [tid]
+        elif ty == "role" and afzender:
+            ontvangers = [f.id for f in st.assign.fillers_of(tid) if f.type == "person"]
+        # Geen afzender, geen ontvanger, of jezelf vermelden → de oude weg.
+        ontvangers = [o for o in ontvangers if o and o != afzender]
+        if not afzender or not ontvangers:
+            st.notif.add(ty, tid, pid, entry_id, by=auteur, snippet=tekst, extra=extra)
+            n += 1
+            continue
+        for o in ontvangers:
+            st.channels.post(channels.dm_kanaal(afzender, o), tekst,
+                             author_type="human", author_id=afzender,
+                             herkomst={"project": pid, "entry": entry_id})
+            n += 1
+    return n
+
+
 def _act_proj_feed(c):
         nxt, st, g, pj = c.nxt, c.st, c.g, c.pj
         msg = ""
@@ -2062,11 +2124,21 @@ def _act_proj_feed(c):
             # poort de woorden van die mens herschrijven. Het merk hoort dus bij het pad, niet bij
             # de auteur-herkenning.
             _getypt = {notifications.MENS_GETYPT: True} if atype == "human" else {}
-            for ty, tid, nm in ment:
-                st.notif.add(ty, tid, g("pid"), entry["id"], by=_auteur, snippet=g("text"),
-                             extra=_getypt)
-            if ment:
-                msg += f" · {len(ment)} genotificeerd"
+            # EEN @-VERMELDING IS EEN BERICHT, GEEN NOTIFICATIE (fase 8). Tot 19 september 2026 werd
+            # elke vermelding een rij in de NotifStore. Dat is de juiste vorm voor werk dat
+            # afgehandeld moet worden — daar staan er 338 van — maar niet voor "hé, kijk jij hier
+            # even naar": dat is één mens die een ander aanspreekt, en dus een bericht in het
+            # DM-kanaal tussen die twee.
+            #
+            # Een vermelding van een ROL landt bij de mensen die hem vervullen, elk in hun eigen
+            # DM met de afzender. Heeft de rol geen mens-vervuller, dan valt hij terug op de
+            # notificatie: fail-closed, want werk bij niemand neerleggen is stiller en erger dan
+            # een melding te veel.
+            _gemeld = _vermeldingen_naar_kanalen(st, ment, pid=g("pid"), tekst=g("text"),
+                                                 auteur=_auteur, extra=_getypt,
+                                                 entry_id=entry["id"])
+            if _gemeld:
+                msg += f" · {_gemeld} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
             # mens-comment: een persona-comment kan nooit een nieuwe reply triggeren (geen loop), ook
             # niet met een @erin. Cap + fail-closed zitten in _reply_to_mentions.
@@ -5065,6 +5137,7 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "msg_post": _act_msg_post,
     "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
@@ -5438,6 +5511,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_response(302)
                 self.send_header("Location", "/projects")
                 self.end_headers()
+                return
+            if path == "/messages":
+                # AUTHZ: iedereen-ingelogd — meelezen in de kanalen van het dorp is net zo vrij als
+                # het bord. Schrijven vereist een HERKENDE persoon (zie _act_msg_post): een bericht
+                # zonder auteur kan niemand beantwoorden.
+                _ik = _web_actor_id(username, st)
+                self._send(render_messages(st, ik=_ik, kanaal=(qs.get("k") or [""])[0],
+                                           csrf_token=effective_csrf,
+                                           msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een

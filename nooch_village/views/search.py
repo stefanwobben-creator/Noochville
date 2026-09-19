@@ -141,19 +141,75 @@ def _snip(body: str) -> str:
 
 
 def _pages(st, termen):
-    """Wiki-pagina's (de rol-notes): titel, tekst én de feiten die erop staan.
+    """De wiki: titel, tekst én de feiten die erop staan — voor ALLE drie de soorten.
 
     De feiten meenemen is het punt: je zoekt zelden op de titel van een pagina, maar wel op iets
     dat érin staat ("Ecovative", "geldig tot 2030"). Zonder dat blijft de pagina onvindbaar totdat
-    je al weet dat hij bestaat."""
+    je al weet dat hij bestaat.
+
+    Sinds fase 7 zijn policy, note en tool één oppervlak; sinds fase 8 zoekt dit er ook zo in.
+    Een policy alleen op titel kunnen vinden was precies de reden dat niemand ze las."""
     uit = []
     from nooch_village import wiki
-    for a in wiki.paginas(st.att):
-        feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
-        if _match(f"{a.title} {a.body} {feiten}", termen):
-            uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
-                        "titel": a.title or a.id,
-                        "snip": _snip(a.body or feiten)})
+    for soort in ("policy", "note", "tool"):
+        for a in st.att.by_kind(soort):
+            feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
+            if _match(f"{a.title} {a.body} {feiten}", termen):
+                # ÉÉN categorie voor alle drie: sinds fase 7 zijn policy/note/tool één oppervlak,
+                # en een trefferlijst die ze uit elkaar trekt zet de oude drie-deuren-indeling terug.
+                uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
+                            "titel": a.title or a.id,
+                            "snip": _snip(a.body or feiten)})
+    return uit
+
+
+def _gesprekken(st, termen):
+    """De gespreklaag: project-, cirkel- en DM-kanalen (fase 8).
+
+    Hier staat het meeste van wat een mens ooit heeft OPGESCHREVEN maar nergens formeel vastlegde
+    — "Selco levert in 3 weken". Zonder dit is zoeken een index op titels, en titels zijn precies
+    het deel dat je al kent.
+
+    DM'S BLIJVEN BUITEN DE ZOEK. Een privégesprek doorzoekbaar maken voor iedereen die is ingelogd
+    is geen zoekfunctie maar een lek; dat is een apart besluit, geen bijvangst hiervan."""
+    from nooch_village import channels
+    uit = []
+    for p in st.projects.all():
+        if p.get("archived"):
+            continue
+        for e in (p.get("log") or []):
+            if _match(str(e.get("text") or ""), termen):
+                sc = p.get("scope")
+                titel = sc if isinstance(sc, str) else ""
+                uit.append({"url": f"/project?id={p.get('id')}", "kind": "message",
+                            "titel": titel or str(p.get("id") or ""),
+                            "snip": _snip(str(e.get("text") or ""))})
+    for k in st.channels.bestaande(channels.CIRCLE):
+        for e in st.channels.trail(k):
+            if _match(str(e.get("text") or ""), termen):
+                rec = st.records.get(channels.doel_van(k))
+                uit.append({"url": f"/messages?k={k}", "kind": "message",
+                            "titel": _name(rec) if rec is not None else channels.doel_van(k),
+                            "snip": _snip(str(e.get("text") or ""))})
+    return uit
+
+
+def _checklist_items(st, termen):
+    """Checklist-items. Een stap is vaak het enige plek waar een concrete handeling staat
+    ("vraag Selco om een monster"), en die was tot fase 8 onvindbaar."""
+    uit = []
+    for p in st.projects.all():
+        if p.get("archived"):
+            continue
+        sc = p.get("scope")
+        titel = sc if isinstance(sc, str) else ""
+        for cl in (p.get("checklists") or []):
+            for it in (cl.get("items") or []):
+                tekst = str(it.get("text") or "")
+                if tekst and _match(tekst, termen):
+                    uit.append({"url": f"/project?id={p.get('id')}", "kind": "step",
+                                "titel": _snip(tekst),
+                                "snip": f"{titel or p.get('id')} · {cl.get('title') or 'checklist'}"})
     return uit
 
 
@@ -185,8 +241,8 @@ def _words(st, termen):
 # geen eigen scherm meer, dus een treffer linkt naar de zoekpagina zelf in plaats van naar een
 # route die niet meer bestaat.
 _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
-            ("Projects", _projects), ("Pages", _pages), ("Insights", _insights),
-            ("Words", _words))
+            ("Projects", _projects), ("Steps", _checklist_items), ("Pages", _pages),
+            ("Messages", _gesprekken), ("Insights", _insights), ("Words", _words))
 
 
 def _zoek(st, termen) -> tuple[list, list]:

@@ -21,12 +21,12 @@ def test_de_zijbalk_draagt_de_hele_navigatie():
         assert href in h and label in h
 
 
-def test_messages_staat_er_bewust_niet_in():
-    """Het prototype toont Messages, maar zegt er zelf bij dat dat scherm nog niet bestaat: het
-    hoort bij de channel-laag van fase 8. Een nav-item dat naar niets wijst is erger dan een
-    ontbrekend nav-item."""
+def test_messages_staat_er_pas_in_sinds_er_data_achter_zit():
+    """In fase 7 stond Messages er bewust NIET in: het prototype zegt zelf dat dat scherm nog niet
+    bestaat, en een nav-item dat naar niets wijst is erger dan een ontbrekend nav-item. Sinds fase
+    8 is de channel-laag er, dus staat hij er wel."""
     h = _nav()
-    assert "Messages" not in h and "/messages" not in h
+    assert "Messages" in h and "/messages" in h
 
 
 def test_de_inbox_is_een_lade_geen_pagina():
