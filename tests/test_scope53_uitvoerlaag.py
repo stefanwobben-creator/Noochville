@@ -241,4 +241,6 @@ def test_configuratiepoort_is_fail_soft_zonder_required_env():
 def test_periodieke_schrijvers_zitten_niet_in_de_rugzak_schrijven():
     with open("config/rugzakken.json", encoding="utf-8") as f:
         rz = json.load(f)
-    assert set(rz["schrijven"]["skills"]) == {"content_schrijven", "voorstel_schrijven"}
+    # content_schrijven is op 19 sept 2026 verwijderd met de copywriter-rol; wat overblijft in de
+    # schrijf-rugzak is het voorstel.
+    assert set(rz["schrijven"]["skills"]) == {"voorstel_schrijven"}

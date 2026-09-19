@@ -362,28 +362,8 @@ def _content_suggestion_event(item: dict, kind: str, audience: str, outcome: str
     }
 
 
-def _content_check_report(item: dict, text: str, context) -> dict:
-    """Draai de eindcheck (content_check-skill) op de door de mens herschreven tekst,
-    met de kind + claim-ids van de draft. Geeft het rapport-dict terug."""
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    ctx = item.get("context", {})
-    return ContentCheckSkill().run({
-        "text":              text,
-        "claim_insight_ids": ctx.get("claim_insight_ids", []),
-        "kind":              ctx.get("kind", "blog"),
-    }, context)
 
 
-def _approve_verband(inbox, item, iid: str, notes, reason: str = "") -> bool:
-    """Approve een verband (3c): sluit het item en schrijf het touwtje tussen de twee
-    kaartjes (notes.link). Retourneert True als de link gelegd is (beide kaartjes
-    bestaan), anders False (het item is dan wel netjes afgesloten)."""
-    ctx = item.get("context", {})
-    a, b = ctx.get("kaart_a_id"), ctx.get("kaart_b_id")
-    inbox.resolve(iid, "approved", reason=reason)
-    if not (a and b):
-        return False
-    return notes.link(a, b) is not None
 
 
 def _approve_means_gap(inbox, item, _load_fn=None):
@@ -622,17 +602,6 @@ def main(argv: list[str]) -> None:
         elif item["type"] == "keyword_batch":
             _approve_keyword_batch(inbox, item, iid, reason)
 
-        elif item["type"] == "verband":
-            # Verband vereist de notes-store via Village-context
-            _, v = _load()
-            a = item["context"].get("kaart_a_id")
-            b = item["context"].get("kaart_b_id")
-            ok = _approve_verband(inbox, item, iid, v.context.notes, reason)
-            if ok:
-                print(f"✅ Verband goedgekeurd → touwtje gelegd: {a} ↔ {b}.")
-            else:
-                print(f"✘ Item gesloten, maar touwtje niet gelegd (kaartje ontbreekt): {a}, {b}.")
-
         elif item["type"] == "content_suggestion":
             # Mens kiest de brief; de levende strateeg draft op het event.
             from nooch_village.event_bus import Event
@@ -699,27 +668,6 @@ def main(argv: list[str]) -> None:
             inbox.resolve(iid, "approved", reason=reason)
             print(f"✅ Item '{item['subject']}' [{iid}] goedgekeurd (type: {item['type']}).")
             print(f"⚠  Beslissing vastgelegd, niets uitgevoerd — dit type kent geen schrijfactie.")
-
-    elif cmd == "check":
-        if len(argv) < 3:
-            print("Gebruik: inbox check <id> <pad-naar-tekstbestand>"); sys.exit(1)
-        iid, path = argv[1], argv[2]
-        inbox = _inbox_only()
-        item = inbox.get(iid)
-        if item is None or item["type"] != "content_draft":
-            print(f"Item '{iid}' is geen content_draft."); sys.exit(1)
-        if not os.path.exists(path):
-            print(f"Bestand niet gevonden: {path}"); sys.exit(1)
-        text = open(path, encoding="utf-8").read()
-        _, v = _load()
-        report = _content_check_report(item, text, v.context)
-        print(f"\n── Eindcheck ──")
-        print(f"Gate ok          : {report['gate_ok']}")
-        if report["forbidden_words"]:
-            print(f"Verboden woorden : {report['forbidden_words']}")
-        for ci in report["claim_issues"]:
-            print(f"Claim-issue      : {ci['insight_id']} — {ci['reason']}")
-        print(f"\nSuggesties:\n{report.get('suggestions') or '(geen / geen LLM)'}")
 
     elif cmd == "reject":
         if len(argv) < 2:

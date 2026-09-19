@@ -30,7 +30,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/admin` | `render_admin` | `nooch_village/views/overview.py` |
 | `/founder` | `render_founder_flow` | `nooch_village/views/founder_flow.py` |
 | `/_patterns` | `render_patterns` | `nooch_village/views/overview.py` |
-| `/signals` | `render_signals` | `nooch_village/views/signals.py` |
 | `/inbox` | `render_inbox_frag` | `nooch_village/views/inbox.py` |
 | `/search` | `render_search_fragment` | `nooch_village/views/search.py` |
 | `/skills` | `render_skills` | `nooch_village/views/skills.py` |
@@ -39,13 +38,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/site-audit` | `render_site_audit` | `nooch_village/views/site_audit.py` |
 | `/bronnen` | `render_bronnen` | `nooch_village/views/bronnen.py` |
 | `/codie` | `render_codie` | `nooch_village/views/codie.py` |
-| `/inzichten` | `render_kennislaag` | `nooch_village/views/kennislaag.py` |
-| `/kennisbank` | `render_kennisbank` | `nooch_village/views/kennisbank.py` |
-| `/kennisbank/search` | `render_kennisbank_search` | `nooch_village/views/kennisbank.py` |
-| `/kennisbank/tags` | `render_tag_onderhoud` | `nooch_village/views/tag_onderhoud.py` |
-| `/kennisbank/staging` | `render_kennisbank_staging` | `nooch_village/views/kennisbank_staging.py` |
-| `/kennisbank/spel` | `render_kennisbank_spel` | `nooch_village/views/kennisbank_spel.py` |
-| `/kennisbank/spel/search` | `render_kennisbank_spel_search` | `nooch_village/views/kennisbank_spel.py` |
 | `/linkbuilding` | `render_linkbuilding` | `nooch_village/views/linkbuilding.py` |
 | `/accountabilities` | `render_accountabilities` | `nooch_village/views/accountabilities.py` |
 | `/woordenschat` | `render_woordenschat` | `nooch_village/views/woordenschat.py` |
@@ -89,40 +81,14 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `ff_demote` | `_act_ff_demote` |
 | `ff_run` | `_act_ff_run` |
 | `kb_new` | `_act_kb_new` |
-| `kb_intake` | `_act_kb_intake` |
-| `kb_intake_url` | `_act_kb_intake_url` |
-| `kb_stage_edit` | `_act_kb_stage_edit` |
-| `kb_stage_accept` | `_act_kb_stage_accept` |
-| `kb_stage_delete` | `_act_kb_stage_delete` |
-| `kb_stage_merge` | `_act_kb_stage_merge` |
-| `kb_stage_commit` | `_act_kb_stage_commit` |
-| `kb_stage_discard` | `_act_kb_stage_discard` |
-| `kb_atoom_subject` | `_act_kb_atoom_subject` |
-| `kb_atoom_purge` | `_act_kb_atoom_purge` |
-| `tag_voorstel_besluit` | `_act_tag_voorstel_besluit` |
 | `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
 | `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
 | `verzoek_besluit` | `_act_verzoek_besluit` |
-| `kb_blacklist_leeg` | `_act_kb_blacklist_leeg` |
-| `kb_atoom_edit` | `_act_kb_atoom_edit` |
-| `kb_atoom_related` | `_act_kb_atoom_related` |
-| `kb_atoom_reference` | `_act_kb_atoom_reference` |
 | `kb_insight_link` | `_act_kb_insight_link` |
 | `kb_insight_unlink` | `_act_kb_insight_unlink` |
-| `kb_meta_start` | `_act_kb_meta_start` |
-| `kb_atoom_merge` | `_act_kb_atoom_merge` |
-| `kb_atoom_archive` | `_act_kb_atoom_archive` |
-| `kb_atoom_unarchive` | `_act_kb_atoom_unarchive` |
-| `kb_atoom_naar_spel` | `_act_kb_atoom_naar_spel` |
-| `kb_spel_start` | `_act_kb_spel_start` |
-| `kb_spel_add` | `_act_kb_spel_add` |
-| `kb_spel_remove` | `_act_kb_spel_remove` |
-| `kb_spel_flip` | `_act_kb_spel_flip` |
-| `kb_spel_finish` | `_act_kb_spel_finish` |
 | `kb_link` | `_act_kb_link` |
 | `kb_unlink` | `_act_kb_unlink` |
 | `kb_annotate` | `_act_kb_annotate` |
-| `kb_evidence` | `_act_kb_evidence` |
 | `kb_discuss` | `_act_kb_discuss` |
 | `kb_reformulate` | `_act_kb_reformulate` |
 | `kw_nominate` | `_act_kw_nominate` |
@@ -213,12 +179,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `role_assign` | `_act_role_assign` |
 | `role_unassign` | `_act_role_unassign` |
 | `role_focus` | `_act_role_focus` |
-| `radar_approve` | `_act_radar_approve` |
 | `radar_dismiss` | `_act_radar_dismiss` |
-| `radar_promote` | `_act_radar_promote` |
 | `radar_merge` | `_act_radar_merge` |
-| `radar_koppel` | `_act_radar_koppel` |
-| `kb_stage_koppel` | `_act_kb_stage_koppel` |
 | `middel_remove` | `_act_middel_remove` |
 | `skilllink_add` | `_act_skilllink_add` |
 | `means_gap_add` | `_act_means_gap_add` |
@@ -312,9 +274,6 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `radar` | `RadarStore` | `radar.json` |
 | `radar_besluiten` | `ClusterBesluitStore` | `radar_clusters.json` |
 | `kennisbank` | `KennisbankStore` | `kennisbank.json` |
-| `notes` | `NotesStore` | `notes.json` |
-| `spel` | `SpelStore` | `kennisbank_spel.json` |
-| `staging` | `StagingStore` | `kennisbank_staging.json` |
 | `library` | `Library` | `library.json` |
 | `nominations` | `NominationQueue` | `keyword_nominaties.json` |
 | `nom_kroniek` | `NominationKroniek` | `keyword_nominaties.jsonl` |
@@ -353,6 +312,7 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `materiaal_memo.json` | `materiaal_memo.py` |
 | `meta.json` | `epic.py` |
 | `noochie_daily.json` | `roles.py` |
+| `notes.json` | `kennisbank.py` |
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
@@ -368,7 +328,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `site_audit.jsonl` | `site_audit.py` |
 | `site_audit_dev.jsonl` | `site_audit.py` |
 | `snake_scores.json` | `snake.py` |
-| `spelvraag_cache.json` | `spelvraag.py` |
 | `strategy.json` | `pinboard.py` |
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
@@ -402,8 +361,6 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | Databestand |
 |---|
 | `co2_factoren.json` |
-| `kennisbank_embeddings.json` |
-| `kennisbank_intake.json` |
 | `llm_prijzen.json` |
 | `manifest.json` |
 | `persona.json` |
@@ -414,4 +371,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 10 zonder gevonden schrijver._
+_55 routes · 168 dispatch-acties · 28 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 8 zonder gevonden schrijver._

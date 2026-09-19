@@ -31,7 +31,6 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
 )
-from nooch_village.notes_store import NotesStore
 from nooch_village.competitor_brands import CompetitorBrands
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -79,7 +78,6 @@ class Village:
         seed_buzz_query_sets(self.context.buzz_query_sets)
         self.context.buzz_observations = BuzzObservationStore(
             os.path.join(self.context.data_dir, "buzz_observations.jsonl"))
-        self.context.notes = NotesStore(os.path.join(self.context.data_dir, "notes.json"))
         # Gedeelde concurrent-store: confirmed merken die de scout heeft laten bevestigen
         # zijn nu leesbaar voor élke rol (voor KE/SerpAPI-analyses).
         self.context.competitors = CompetitorBrands(
@@ -718,45 +716,11 @@ class Village:
         # ("/project?id=<pid>") maakt dit idempotent met de cockpit-hook. Fail-soft: een falend
         # signaal mag een done (of dit event) nooit blokkeren.
         nieuw_done = [pid for pid in done if pid not in self._completed_seen]
-        dd = getattr(self.context, "data_dir", None)
-        if nieuw_done and dd:
-            try:
-                from nooch_village.radar_store import RadarStore
-                from nooch_village.project_signal import signal_from_project
-                radar = RadarStore(os.path.join(dd, "radar.json"))
-                _docs = getattr(self.context, "project_docs", None)
-                for pid in nieuw_done:
-                    _doc = _docs.read(pid) if _docs is not None else ""
-                    signal_from_project(radar, done[pid], _doc)   # einddocument levert de conclusie
-            except Exception:
-                logging.getLogger("village.signals").exception("project→signaal mislukt")
-            # Verdieping (rapport-lus): het EINDDOCUMENT van elke nieuwe done → bestaande
-            # intake-atomiser → kennisbank-STAGING ("even nakijken", mens-gated) — bewust ALLEEN
-            # hier op het daemon-pad, waar de LLM-ladder beschikbaar is. De cockpit-done doet dit
-            # niet synchroon en hoeft dat ook niet: `led.by_status("done")` hierboven herleest
-            # projects.json cross-proces (_maybe_reload), dus élke done — ook een cockpit-done —
-            # verschijnt binnen één poll (_board_poll_seconds) in `nieuw_done`. Fail-soft per
-            # project: geen rapport of stille LLM → één logregel, nooit een geblokkeerde poll.
-            try:
-                from nooch_village.project_signal import report_to_staging
-                for pid in nieuw_done:
-                    try:
-                        res = report_to_staging(dd, done[pid])
-                    except Exception:
-                        logging.getLogger("village.signals").exception(
-                            "project→staging mislukt (pid=%s)", pid)
-                        continue
-                    if res.get("batch"):
-                        # Afzender voor de stille poort: metadata-event zodat Lara's (Librarian)
-                        # log/inbox-flow het ziet. target="staging" laat haar handler ALLEEN
-                        # loggen — de SCHRIJFweg blijft de mens-review in de staging (geen
-                        # dubbel-schrijven; zie roles.Librarian._on_insight_proposed).
-                        self.bus.publish(Event("insight_proposed",
-                                               {"project_id": pid, "atoms": res["atoms"],
-                                                "batch_id": res["batch"], "target": "staging"},
-                                               "board_watch"))
-            except Exception:
-                logging.getLogger("village.signals").exception("project→staging mislukt")
+        # HIER STOND DE PROJECT→SIGNAAL→STAGING-LUS. Een afgerond project werd een radarsignaal en
+        # zijn einddocument werd geatomiseerd naar de kennisbank-staging. Beide bestemmingen zijn op
+        # 19 sept 2026 verdwenen (project_signal + de intake/staging-laag), en een afgerond project
+        # hoort volgens het nieuwe model in de wiki te landen via Keep-in-wiki — met menselijke
+        # input, niet als automatische atomisering.
         for pid, p in done.items():
             if pid in self._completed_seen or pid in auto:
                 continue                                        # al gezien, of al inline aangekondigd (autonoom)

@@ -124,27 +124,6 @@ def test_leeg_bron_scheidt_antwoord_van_gat():
     assert I._leeg_bron({"ok": True}) == "geen_inhoud"
 
 
-def test_content_check_meldt_een_schone_tekst_expliciet():
-    """Zonder deze regel leest een geslaagde controle die niets vond als ontbrekende kennis — en
-    sinds de missie-critic telt dat mee op de substantieel-as.
-
-    Scope 56: 'schoon' is alleen een antwoord als ÉLKE laag draaide. Deze test legde het fail-open
-    gedrag vast (context=None → geen model, geen copy_rules → tóch `no_data` "geen verboden
-    woorden"); nu is dat `ok: False` "niet getoetst", en de schone uitkomst vraagt een context mét
-    copy_rules en een model dat antwoordt."""
-    from types import SimpleNamespace
-    from unittest.mock import patch
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    zonder = ContentCheckSkill().run({"text": "Wij maken schoenen in Portugal."}, None)
-    assert zonder["ok"] is False and "niet getoetst" in zonder["error"]
-    assert I._classify_result(zonder)[0] == "fout"                    # blijft open, mét reden
-    ctx = SimpleNamespace(copy_rules="REGELS", data_dir=None)
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        uit = ContentCheckSkill().run({"text": "Wij maken schoenen in Portugal."}, ctx)
-    assert not (uit.get("forbidden_words") or uit.get("claim_issues") or uit.get("suggestions"))
-    assert uit.get("no_data") is True
-    assert "no forbidden words" in uit.get("reason", "")
-    assert I._leeg_bron(uit) == "gemeld"
 
 
 def test_critic_telt_een_gerapporteerde_lege_taak_niet_als_gat():
@@ -172,21 +151,6 @@ def test_oude_items_zonder_bron_blijven_een_gat():
 
 # ── 6. De regressie die dit alles veroorzaakte ─────────────────────────────
 
-def test_de_drie_skills_die_het_kostten_landen_nu_als_gelukt():
-    """claims_check (29 runs), content_check (20) en projectverzoek (6) waren samen 55 van de 87
-    weggegooide resultaten. Met hun ECHTE uitvoervorm horen ze nu te landen."""
-    claims_check = {"ok": True, "bevindingen": [{"term": "planet-safe / planet-friendly",
-                                                 "stoplicht": "red"}],
-                    "score": 88, "rood": 1, "oranje": 0, "groen": 0, "versie": "2026-07-18.2"}
-    assert c(claims_check) == ("gelukt", ("list", "bevindingen"))
-
-    content_check = {"gate_ok": False, "forbidden_words": ["100% duurzaam"],
-                     "claim_issues": [], "suggestions": ["noem de bron"]}
-    assert c(content_check)[0] == "gelukt"
-
-    handoff = {"ok": True, "pid": "abc123", "naar_rol": "copywriter",
-               "titel": "Compliant kopregel schrijven"}
-    assert c(handoff)[0] == "gelukt"
 
 
 # ── 7. Nasleep uit de eerste productiedraai ─────────────────────────────────

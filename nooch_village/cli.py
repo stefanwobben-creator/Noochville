@@ -189,66 +189,6 @@ def main() -> None:
         from nooch_village.demos.ops import discovery_demo
         discovery_demo()
 
-    elif mode == "kennis_migrate":
-        # Geef de 196 bestaande kaartjes hun SOORT (signaal/bevinding/kader/standpunt).
-        # Default = dry-run (toont het plan, verandert niets). 'apply' voert het door.
-        # Conservatief: al-gezet blijft, definities → Lexicon, twijfel → mens-review.
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.notes_store import NotesStore
-        from nooch_village.kennis_migrate import plan_migration, apply_plan
-        from nooch_village.claim_classify import classify_kind
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        store = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
-        do_apply = "apply" in sys.argv[2:]
-        use_llm = "nollm" not in sys.argv[2:]
-
-        # Classifier: heuristiek, met LLM als rijkere terugval op de twijfelgevallen (mens-machine).
-        # 'nollm' = puur heuristiek (snel, geen Gemini-calls; handig bij quota/overbelasting).
-        def classify(claim, et, source):
-            k = classify_kind(claim, et, source)
-            if k is not None or not use_llm:
-                return k
-            try:
-                from nooch_village.llm import reason
-                prompt = ("Classificeer deze bewering in één woord: signaal (trend/mening), "
-                          "bevinding (empirie), kader (norm/regel), standpunt (eigen claim), "
-                          "of onbeslist. Antwoord met enkel dat woord.\n\nBewering: " + (claim or ""))
-                ans = (reason(prompt, call_site="cli_claim_classify") or "").strip().lower()
-                from nooch_village.insight import ClaimKind
-                for kk in ClaimKind:
-                    if kk.value in ans:
-                        return kk
-            except Exception:
-                pass
-            return None
-
-        plan = plan_migration(store.all(), classify=classify)
-        s = plan["summary"]
-        print(f"📚 Kennis-migratie ({'APPLY' if do_apply else 'DRY-RUN'}) over {s['totaal']} kaartjes")
-        print(f"   al gezet (overslaan): {s['al_gezet']}")
-        print(f"   toe te kennen: {s['toe_te_kennen']}")
-        print(f"   definitie → Lexicon: {s['definitie_lexicon']}")
-        print(f"   onbeslist → mens-review: {s['onbeslist_review']}")
-        print()
-        # toon een paar voorbeelden per categorie
-        shown = 0
-        for r in plan["rows"]:
-            if r["proposed"] and shown < 12:
-                print(f"   [{r['proposed']:<10}] {r['claim']}")
-                shown += 1
-        if s["onbeslist_review"]:
-            print("\n   ⚠ onbeslist (blijven op jou wachten):")
-            for r in plan["rows"]:
-                if r["note"] == "onbeslist → mens-review":
-                    print(f"      {r['claim']}")
-        if do_apply:
-            n = apply_plan(store, plan)
-            print(f"\n✅ {n} kaartjes kregen hun soort. De rest (definitie/onbeslist) is met rust gelaten.")
-        else:
-            print("\n(DRY-RUN — niets gewijzigd. Draai 'kennis_migrate apply' om door te voeren.)")
-
     elif mode == "harry_hemp":
         from nooch_village.demos.knowledge import harry_hemp_grounding_demo
         harry_hemp_grounding_demo()
@@ -417,28 +357,6 @@ def main() -> None:
             print(f"🌱 volg-woord toegevoegd: {w}")
         print("Draai 'enrich_volumes' om volume + 5-jaars trend op te halen voor de nieuwe seeds.")
 
-    elif mode == "synthesize":
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.notes_store import NotesStore
-        from nooch_village.synthesist import synthesize_round, density
-        from nooch_village.village import BASE_DIR
-        n = next((int(a) for a in sys.argv[2:] if a.isdigit()), 3)
-        ctx = load_context(BASE_DIR)
-        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
-        ctx.notes = notes
-        d0 = density(notes)
-        print(f"Kennisgraaf vóór: {d0['cards']} kaartjes, {d0['links']} links, "
-              f"gem. gelijkenis {d0['avg_similarity']}")
-        made = synthesize_round(notes, ctx, n)
-        if not made:
-            print("Geen nieuwe creatieve links (geen bridge-paar of geen LLM).")
-        for m in made:
-            print(f"  🔗 {m['synthese'][:80]}  (uit {m['parents'][0]} + {m['parents'][1]})")
-        d1 = density(notes)
-        print(f"Kennisgraaf ná: {d1['cards']} kaartjes, {d1['links']} links, "
-              f"gem. gelijkenis {d1['avg_similarity']}")
-
     elif mode == "rereview":
         import os
         from nooch_village.config import load_context
@@ -488,63 +406,6 @@ def main() -> None:
         print(f"\nMax {total} credits als je ALLE batches goedkeurt (per batch los te keuren).")
         print("Bekijk + keur goed:  python -m nooch_village.inbox")
 
-    elif mode == "notes_remove":
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.notes_store import NotesStore
-        from nooch_village.village import BASE_DIR
-        if len(sys.argv) < 3:
-            print("Gebruik: python -m nooch_village.village notes_remove <id> [id ...]",
-                  file=sys.stderr)
-            sys.exit(1)
-        ctx = load_context(BASE_DIR)
-        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
-        for nid in sys.argv[2:]:
-            print(("  − verwijderd: " if notes.remove(nid) else "  = niet gevonden: ") + nid)
-
-    elif mode == "recurate":
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.notes_store import NotesStore
-        from nooch_village.curate_migrate import recurate_cards
-        from nooch_village.village import BASE_DIR
-        if len(sys.argv) < 3:
-            print("Gebruik: python -m nooch_village.village recurate <card_id> [card_id ...]",
-                  file=sys.stderr)
-            print("Haalt elk kaartje opnieuw door de curator (Engels + atomair) via de LLM.",
-                  file=sys.stderr)
-            sys.exit(1)
-        ctx = load_context(BASE_DIR)
-        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
-        print("Her-curatie via de curator (LLM):")
-        for r in recurate_cards(notes, sys.argv[2:]):
-            if r["replaced"]:
-                print(f"  ✔ {r['card_id']} → {r['new_ids']}")
-            else:
-                print(f"  ✗ {r['card_id']}: {r['reason']}")
-
-    elif mode == "ingest":
-        import json, os
-        from nooch_village.config import load_context
-        from nooch_village.ingest import ingest_insights
-        from nooch_village.notes_store import NotesStore
-        from nooch_village.village import BASE_DIR
-        if len(sys.argv) < 3:
-            print("Gebruik: python -m nooch_village.village ingest <pad-naar-json>",
-                  file=sys.stderr)
-            sys.exit(1)
-        with open(sys.argv[2], encoding="utf-8") as f:
-            items = json.load(f)
-        ctx = load_context(BASE_DIR)
-        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
-        res = ingest_insights(notes, items)
-        print(f"Ingestie: {len(res['added'])} toegevoegd, "
-              f"{len(res['skipped'])} overgeslagen, {res['linked']} link(s) gelegd.")
-        for i in res["added"]:
-            print(f"  + {i}")
-        for i in res["skipped"]:
-            print(f"  = {i} (bestond al)")
-
     elif mode == "roster":
         from nooch_village.village import Village
         v = Village(heartbeat_seconds=86400)
@@ -578,19 +439,6 @@ def main() -> None:
         uit = vul_index(items, ctx.data_dir)
         print(f"klaar — {uit['gedaan']} geïndexeerd, {uit['mislukt']} mislukt "
               f"(van {uit['todo']} te doen)")
-
-    elif mode == "embed_opruimen":
-        # Ruimt de embedding-indexen op: weg met sleutels die nooit meer een treffer kunnen geven.
-        # Nalatenschap van de adres-sleutel (zie embed_opruimen.py). Droge loop is de default.
-        #   python -m nooch_village.village embed_opruimen [--apply]
-        from nooch_village.config import load_context
-        from nooch_village.embed_opruimen import rapport
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        toepassen = "--apply" in sys.argv[2:]
-        print(f"embedding-indexen in {ctx.data_dir}"
-              f"{' — TOEPASSEN' if toepassen else ' — droge loop (voeg --apply toe om te schrijven)'}\n")
-        rapport(ctx.data_dir, apply=toepassen)
 
     elif mode == "vastgelopen_route":
         # Eenmalige pas over projecten die vóór de laatste meter al geparkeerd waren. De router
@@ -852,123 +700,6 @@ def main() -> None:
         print(f"✅ Backfill {source} {res['start']}..{res['end']} klaar: {res['written']} nieuw geschreven, "
               f"{res['skipped']} waren er al (idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg "
               f"(geen data/creds). Herdraaien is veilig.")
-
-    elif mode == "projects_to_signals":
-        # Backfill: bestaande done-projecten → radar-signalen op /signals (feed 'Projecten').
-        # Zelfde deterministische helper als de done-hooks; link-dedupe ("/project?id=<pid>")
-        # maakt herdraaien veilig en append-only add behoeft geen backup.
-        # python -m nooch_village.village projects_to_signals [--dry-run]
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.projects import ProjectLedger
-        from nooch_village.radar_store import RadarStore
-        from nooch_village.project_doc_store import ProjectDocStore
-        from nooch_village.project_signal import backfill_done_projects
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
-        radar = RadarStore(os.path.join(ctx.data_dir, "radar.json"))
-        docs = ProjectDocStore(ctx.data_dir)
-        dry = "--dry-run" in sys.argv
-        res = backfill_done_projects(ledger, radar, dry_run=dry, docs=docs)
-        label = "zou er signalen van maken (dry-run)" if dry else "signalen gemaakt"
-        print(f"📡 {res['done']} done-projecten: {res['created']} {label}, "
-              f"{res['skipped']} al aanwezig/overgeslagen. Herdraaien is veilig (link-dedupe).")
-
-    elif mode == "projects_resignal":
-        # Terugwerkende kracht (non-LLM): herschrijf de content van BESTAANDE project-signalen zodat
-        # ze de conclusie uit het einddocument tonen i.p.v. de procedurele "goedgekeurd na review".
-        # Behoudend: alleen lege/procedurele content wordt vervangen; mens-edits blijven staan.
-        # --dry-run telt alleen. python -m nooch_village.village projects_resignal [--dry-run]
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.projects import ProjectLedger
-        from nooch_village.radar_store import RadarStore
-        from nooch_village.project_doc_store import ProjectDocStore
-        from nooch_village.project_signal import backfill_signal_content
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
-        radar = RadarStore(os.path.join(ctx.data_dir, "radar.json"))
-        docs = ProjectDocStore(ctx.data_dir)
-        dry = "--dry-run" in sys.argv
-        res = backfill_signal_content(ledger, radar, docs, dry_run=dry)
-        label = "zou de content herschrijven (dry-run)" if dry else "content herschreven"
-        print(f"✏️  {res['project_signals']} project-signalen: {res['updated']} {label} "
-              f"(conclusie uit einddocument), {res['skipped']} met eigen/inhoudelijke tekst overgeslagen. "
-              f"Herdraaien is veilig.")
-
-    elif mode == "projects_to_staging":
-        # Verdieping van projects_to_signals (rapport-lus): het EINDDOCUMENT van elk done-project
-        # → bestaande intake-atomiser → kennisbank-STAGING ("even nakijken", mens-gated) — nooit
-        # direct de bibliotheek in. Idempotent via de IntakeLedger (hash van rapport + bron-hint
-        # "project: <scope>"): herdraaien of een ongewijzigd rapport levert niets nieuws.
-        # --dry-run telt alleen (geen LLM, geen schrijf). Zonder LLM-sleutels: fail-closed —
-        # projecten tellen als 'mislukt' en kunnen bij een latere run alsnog.
-        # python -m nooch_village.village projects_to_staging [--dry-run]
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.projects import ProjectLedger
-        from nooch_village.project_signal import backfill_reports_to_staging
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
-        dry = "--dry-run" in sys.argv
-        res = backfill_reports_to_staging(ledger, ctx.data_dir, dry_run=dry)
-        label = ("zouden een staging-set opleveren (dry-run)" if dry
-                 else f"staging-set(s) gemaakt ({res['atoms']} voorstellen)")
-        print(f"📚 {res['done']} done-projecten: {res['batches']} {label}, "
-              f"{res['skipped']} zonder rapport/al verwerkt, {res['mislukt']} mislukt (LLM). "
-              f"Nakijken op /kennisbank/staging?batch=… — herdraaien is veilig.")
-
-    elif mode in ("kb_verrijk", "kb_verrijk_herkomst"):
-        # Verrijkingsronde: bestaande kenniskaartjes zonder herkomst-verantwoording in
-        # batches langs de LLM (zelfde regels als de intake: alleen uit de kaarttekst,
-        # nooit gokken). Grootboek voorkomt dubbele pogingen; provenance wordt alleen
-        # gezet als hij nu 'unknown' is. Dry-run telt alleen. Draai op prod als nooch,
-        # met een backup van data/notes.json vóór de echte run.
-        # python -m nooch_village.village kb_verrijk [--dry-run] [--limit N]
-        # (kb_verrijk_herkomst blijft een alias; sinds 19 jul doet de ronde óók onderwerpen)
-        from nooch_village.config import load_context
-        from nooch_village.herkomst_verrijking import verrijk_herkomst
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        dry = "--dry-run" in sys.argv
-        lim = None
-        if "--limit" in sys.argv:
-            try:
-                lim = int(sys.argv[sys.argv.index("--limit") + 1])
-            except (IndexError, ValueError):
-                print("✗ --limit verwacht een getal"); return
-        t = verrijk_herkomst(ctx.data_dir, dry_run=dry, limit=lim)
-        if dry:
-            print(f"🔍 dry-run: {t['kandidaten']} kaartjes zonder verantwoording staan klaar "
-                  f"({t['overgeslagen']} al voorzien of eerder geprobeerd). "
-                  f"Echte run: zelfde commando zonder --dry-run (backup notes.json eerst).")
-        else:
-            print(f"🏷 {t['kandidaten']} signals bekeken: {t['gevuld']} verantwoording gezet, "
-                  f"{t['prov_gezet']} provenance ingevuld (was unknown), "
-                  f"{t['onderwerp_gezet']} onderwerp toegekend, {t['leeg']} zonder "
-                  f"aanknopingspunt (onthouden), {t['mislukt']} mislukt (LLM — kan later "
-                  f"alsnog). Herdraaien is veilig.")
-
-    elif mode == "tag_onderhoud":
-        # Tag-onderhoudslus handmatig draaien (buiten Lara's weekritme om). --dry-run toont
-        # de voorstellen zonder ze op te slaan. python -m nooch_village.village tag_onderhoud
-        from nooch_village.config import load_context
-        from nooch_village.tag_onderhoud import draai_onderhoud
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        dry = "--dry-run" in sys.argv
-        res = draai_onderhoud(ctx.data_dir, force=True, dry_run=dry)
-        if dry:
-            print(f"🔍 dry-run: {res.get('voorstellen', 0)} voorstel(len):")
-            for v in res.get("dry") or []:
-                print(f"  {v['actie']}: {', '.join(v['van'])}"
-                      + (f" → {v['naar']}" if v.get("naar") else "")
-                      + (f"  ({v['waarom']})" if v.get("waarom") else ""))
-        else:
-            print(f"🏷 {res.get('nieuw', 0)} nieuw voorstel(len) — nakijken op /kennisbank/tags")
 
     elif mode == "backfill_dim":
         # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde

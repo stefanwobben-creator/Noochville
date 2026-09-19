@@ -6,12 +6,11 @@ from __future__ import annotations
 import pytest
 
 from nooch_village.human_inbox import HumanInbox
-from nooch_village.notes_store import NotesStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.inbox_actions import (
-    decide_keyword, defer_item, confirm_item, add_reference, route_to_project, mark_done,
+    decide_keyword, defer_item, confirm_item, route_to_project, mark_done,
     route_to_governance, resolve_tension)
 
 
@@ -90,22 +89,8 @@ def test_confirm_item_met_voorstel(tmp_path):
 
 # ── Add Reference (capture info → kennis-kaart) ───────────────────────────────
 
-def test_add_reference_schrijft_kaart_zonder_te_sluiten(tmp_path):
-    """Een rail produceert een uitkomst maar sluit de spanning niet (multi-uitkomst)."""
-    notes = NotesStore(str(tmp_path / "notes.json"))
-    res = add_reference(notes, claim="Most vegan sneakers contain plastic.",
-                        grounds="Material analysis from the nooch.earth article.")
-    assert res["ok"]
-    card = notes.get(res["card_id"])
-    assert card is not None and "plastic" in card.claim
-    assert card.grounds                                  # contract: grounds gevuld
 
 
-def test_add_reference_weigert_zonder_grounds(tmp_path):
-    notes = NotesStore(str(tmp_path / "notes.json"))
-    res = add_reference(notes, claim="Een claim zonder bewijs.", grounds="")
-    assert not res["ok"]
-    assert notes.all() == []                             # niks geschreven (fail-closed)
 
 
 # ── Add Project (uitkomst voor een rol) ───────────────────────────────────────
@@ -159,23 +144,6 @@ def test_route_to_governance_korte_rationale_invalid(tmp_path):
     assert "x" not in recs.get("trends").definition.skills      # niks toegevoegd
 
 
-def test_een_spanning_meerdere_uitkomsten_dan_sluiten(tmp_path):
-    """De kern-les: één spanning → meerdere uitkomsten, daarna bewust sluiten.
-    Project + reference produceren, spanning blijft pending; mark_done sluit hem."""
-    projects = ProjectLedger(str(tmp_path / "projects.json"))
-    notes = NotesStore(str(tmp_path / "notes.json"))
-    hi = HumanInbox(str(tmp_path / "inbox.json"))
-    iid = hi.add_means_gap("nl_corpus", "NL-bron onbruikbaar")
-
-    route_to_project(projects, owner="the_source", scope="Onderzoek KB-datasets")
-    add_reference(notes, claim="The Dutch ngram corpus lacks core mission words.",
-                  grounds="Coverage check found 9 missing strong-signal words.")
-    assert hi.get(iid)["status"] == "pending"            # nog open na twee uitkomsten
-
-    # Afgehandeld via uitkomsten → resolved (niet withdrawn: dat is 'niets nodig')
-    resolve_tension(hi, iid, reason="project + reference vastgelegd")
-    assert hi.get(iid)["status"] == "resolved"
-    assert len(projects.all()) == 1 and len(notes.all()) == 1
 
 
 def test_resolve_versus_withdrawn(tmp_path):

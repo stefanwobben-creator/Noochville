@@ -11,7 +11,6 @@ from nooch_village.inhabitant import _persona_ladder, Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 from nooch_village.insight import Insight
-from nooch_village.insight_ingest import insight_from_grounding
 # De dagcadans is INFRASTRUCTUUR en woont in `dagcyclus.py` — zie de kop daar: hij zat hier,
 # in een rol, en toen die rol sliep stond het dorp drie dagen stil. Deze twee namen blijven
 # hier alleen als doorverwijzing, zodat bestaande imports niet stil iets anders gaan betekenen.

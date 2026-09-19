@@ -348,31 +348,8 @@ def _post(dd, pad: str, velden: dict) -> dict:
         srv.server_close()
 
 
-def test_de_wizard_vraagt_de_kennislaag_met_een_budget(tmp_path, monkeypatch):
-    """De MENS wacht. Zijn browser stapt eruit na AI_TIMEOUT_MS, dus de raadpleging vóór het model
-    krijgt een budget mee — anders eet de aanloop het werk op (gemeten op prod: 29,4s aanloop tegen
-    3,3s plannen, waarna de checklist in een dichte verbinding werd geschreven)."""
-    from nooch_village import cockpit2 as c2
-    gezien = {}
-
-    def _nep_kennis(bron, tekst, limit=5, *, exclude_pid="", deadline=None):
-        gezien["deadline"] = deadline
-        return {}
-    monkeypatch.setattr("nooch_village.kennis_context.kennis_voor", _nep_kennis)
-    monkeypatch.setattr("nooch_village.wizard.plan_items", lambda *a, **k: [])
-
-    st = _st(tmp_path)
-    _post(st.dd, "/wizard/plan", {"uitkomst": "iets onderzocht", "role": ""})
-    assert gezien.get("deadline") == c2._WIZARD_KENNIS_BUDGET_S
-    assert 0 < c2._WIZARD_KENNIS_BUDGET_S < 12, "het budget hoort een fractie van AI_TIMEOUT_MS te zijn"
 
 
-def test_de_daemon_houdt_zijn_volle_raadpleging(tmp_path):
-    """Het budget is er voor wie WACHT. De daemon kijkt naar geen enkel scherm en mag de tijd nemen;
-    daar verandert deze PR niets — de default blijft 'geen budget'."""
-    import inspect
-    from nooch_village.kennis_context import kennis_voor
-    assert inspect.signature(kennis_voor).parameters["deadline"].default is None
 
 
 def test_plan_items_geeft_zijn_ladder_door(tmp_path):

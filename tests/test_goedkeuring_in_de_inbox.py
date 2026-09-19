@@ -63,34 +63,8 @@ def test_een_al_gesloten_item_gaat_niet_twee_keer_dicht(inbox):
 
 # ── 2. Ja mag per type, en de poort faalt closed ─────────────────────────────
 
-def test_wie_mag_ja_zeggen():
-    """Curatie wel, organisatie-wijzigingen niet. Een verband leggen of een woord cureren raakt de
-    kennislaag; een rol activeren geeft hem een thread."""
-    assert goedkeuring.mag_ja("verband") is True
-    assert goedkeuring.mag_ja("keyword") is True
-    assert goedkeuring.mag_ja("activation") is False
-    assert goedkeuring.mag_ja("escalation") is False
-    assert goedkeuring.mag_ja("means_gap") is False
 
 
-def test_elk_type_met_een_ja_heeft_ook_een_handler():
-    """DE POORT MOET WAAR ZIJN, NIET ALLEEN CONSISTENT. `opportunity` stond op `ja: True` met de
-    belofte "routes it onward", maar `_act_goedkeur` heeft alleen takken voor `verband` en
-    `keyword`. Op Ja klikken gaf dus `✗ not supported here`, elke keer, en het item bleef staan.
-    Kansen worden wél aangemaakt (village.py), dus die dode knop stond er echt in de inbox.
-
-    Deze test leest de handler-bron en eist dat elk type met `ja: True` daar ook genoemd wordt.
-    Een volgende `ja: True` zonder tak valt om in plaats van pas op het scherm."""
-    import inspect
-    from nooch_village import cockpit2
-    bron = inspect.getsource(cockpit2._act_goedkeur)
-    for typ, spec in goedkeuring.TYPES.items():
-        if not spec.get("ja"):
-            continue
-        assert f'"{typ}"' in bron, (
-            f"type {typ!r} belooft een ja-knop, maar `_act_goedkeur` heeft er geen tak voor — "
-            f"de knop geeft dan '✗ not supported here'. Bouw de tak, of zet `ja` op False met "
-            f"een `waarom_niet`.")
 
 
 def test_een_type_zonder_ja_wijst_naar_een_werkende_route():
@@ -157,12 +131,6 @@ def test_de_samenvatting_kijkt_onder_context(inbox):
     assert goedkeuring.samenvatting(item) == "te breed voor de missie"
 
 
-def test_zonder_tekst_valt_hij_terug_op_het_onderwerp(inbox):
-    """Liever een lelijke regel dan een lege: bij een verband is `subject` 'kaartA|kaartB', en dat is
-    nog steeds informatie."""
-    iid = inbox.add_verband("kaart_a", "kaart_b", "")
-    s = goedkeuring.samenvatting(inbox.get(iid))
-    assert "kaart_a" in s and s != ""
 
 
 def test_open_items_staan_op_oudste_eerst(inbox):
@@ -181,57 +149,16 @@ def test_alleen_openstaande_items(inbox):
     assert goedkeuring.open_items(inbox) == []
 
 
-def test_tel_per_type_grootste_groep_eerst(inbox):
-    for w in ("a", "b", "c"):
-        inbox.add_keyword_escalation(w, "r", {})
-    inbox.add_verband("k1", "k2", "claim")
-    assert goedkeuring.tel_per_type(goedkeuring.open_items(inbox))[0] == ("keyword", 3)
 
 
 # ── 5. Een verband sluit ALTIJD, ook als de link niet lukt ───────────────────
 
-def test_verband_goedkeuren_legt_het_touwtje(inbox):
-    class _Notes:
-        def __init__(self):
-            self.gelegd = []
-
-        def link(self, a, b):
-            self.gelegd.append((a, b))
-            return {"a": a, "b": b}
-
-    notes = _Notes()
-    iid = inbox.add_verband("k1", "k2", "deze twee horen bij elkaar")
-    r = inbox_actions.decide_verband(inbox, notes, iid, "approved", reason="ja")
-    assert r == {"ok": True, "link_gelegd": True}
-    assert notes.gelegd == [("k1", "k2")]
-    assert inbox.get(iid)["status"] == "approved"
 
 
-def test_een_verdwenen_kaartje_laat_het_item_niet_openstaan(inbox):
-    """Zou het item openblijven, dan komt hetzelfde onbeslisbare voorstel morgen terug en groeit de
-    rij die we juist leeghalen. Het besluit is genomen; dat de link niet kon is een aparte melding."""
-    class _Notes:
-        def link(self, a, b):
-            return None
-
-    iid = inbox.add_verband("k1", "weg", "claim")
-    r = inbox_actions.decide_verband(inbox, _Notes(), iid, "approved")
-    assert r["ok"] is True and r["link_gelegd"] is False
-    assert inbox.get(iid)["status"] == "approved"          # tóch dicht
 
 
-def test_verband_afwijzen_legt_geen_touwtje(inbox):
-    class _Notes:
-        def link(self, a, b):
-            raise AssertionError("er mag niets gelegd worden bij een afwijzing")
-
-    iid = inbox.add_verband("k1", "k2", "claim")
-    assert inbox_actions.decide_verband(inbox, _Notes(), iid, "rejected")["ok"] is True
 
 
-def test_decide_verband_weigert_een_ander_type(inbox):
-    iid = inbox.add_keyword_escalation("woord", "r", {})
-    assert inbox_actions.decide_verband(inbox, None, iid, "approved")["ok"] is False
 
 
 # ── 6. De ene inbox sneuvelt niet voor de andere ─────────────────────────────
@@ -262,15 +189,6 @@ def _st(tmp_path):
     return cockpit2._Stores(str(tmp_path))
 
 
-def test_de_rij_toont_de_vraag_en_de_knoppen(tmp_path):
-    from nooch_village.views import inbox as V
-    hi = HumanInbox(os.path.join(str(tmp_path), "human_inbox.json"))
-    iid = hi.add_verband("k1", "k2", "deze twee horen bij elkaar")
-    html = V._gk_row(_st(tmp_path), hi.get(iid))
-    assert "Link these two cards?" in html
-    assert "deze twee horen bij elkaar" in html
-    for besluit in ("approved", "rejected", "deferred"):
-        assert f"gkBeslis('{iid}','{besluit}')" in html
 
 
 def test_een_activatie_toont_geen_ja_maar_wel_de_regel(tmp_path):
@@ -284,17 +202,6 @@ def test_een_activatie_toont_geen_ja_maar_wel_de_regel(tmp_path):
     assert "nooch_village.inbox approve" in html           # en de weg ernaartoe
 
 
-def test_de_lade_telt_beide_inboxen_bij_elkaar(tmp_path):
-    """Eén telling op het badge, anders kijk je nog steeds naar één van de twee."""
-    from nooch_village.views import inbox as V
-    st = _st(tmp_path)
-    hi = HumanInbox(os.path.join(str(tmp_path), "human_inbox.json"))
-    hi.add_verband("k1", "k2", "claim")
-    hi.add_keyword_escalation("woord", "reden", {})
-    frag = V.render_inbox_frag(st, [("role", "een_rol")])
-    assert "data-count='2'" in frag
-    assert "approvals" in frag
-    assert "Waiting for your approval" in frag
 
 
 def test_zonder_goedkeuringen_verandert_er_niets_aan_de_lade(tmp_path):

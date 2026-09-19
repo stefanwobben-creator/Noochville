@@ -33,11 +33,6 @@ from __future__ import annotations
 # straks ook in de CLI en in een eventuele samenvatting kunnen staan — één bron, zoals bij
 # `not_answered_note`. Engels, zoals de hele inhoudslaag sinds 06-09-2026.
 TYPES: dict[str, dict] = {
-    "verband": {
-        "vraag": "Link these two cards?",
-        "ja": True,
-        "wat": "writes the link between the two cards",
-    },
     "keyword": {
         "vraag": "Add this word to the library, or ban it?",
         "ja": True,

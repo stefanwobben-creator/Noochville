@@ -134,26 +134,3 @@ def test_parse_blok_en_bump():
 
 # ── de view (geen machinerie naar buiten) ────────────────────────────────────
 
-def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
-    from nooch_village.views.kennisbank import render_kennisbank
-    dd = str(tmp_path)
-    kb = KennisbankStore(f"{dd}/kennisbank.json")
-    iid = kb.add("Prijs blokkeert onze kern-doelgroep", why="drie signalen, één survey",
-                 subject="prijs")
-    from nooch_village.kennisbank_spel import SpelStore
-    from nooch_village.kennisbank_staging import StagingStore
-    st = types.SimpleNamespace(dd=dd, kennisbank=kb,
-                               spel=SpelStore(f"{dd}/kennisbank_spel.json"),
-                               staging=StagingStore(f"{dd}/kennisbank_staging.json"))
-
-    html = render_kennisbank(st, csrf_token="tok")
-    assert "Oracle" in html and "still thin" in html
-    # de machinerie blijft binnen: geen ruwe trust/strength/groep-ids in de UI
-    for verboden in ("strength", "agreement", "independence_group", "0.9", "trust"):
-        assert verboden not in html
-
-    detail = render_kennisbank(st, kid=iid, csrf_token="tok")
-    # PR-2: detail staat nu in de linkerkolom (geen overlay-drawer meer)
-    assert "kn-detail" in detail and "No evidence collected yet." in detail
-    # herformuleren loopt via het copy-paste-spel (kb_spel_start), niet meer inline
-    assert "kb_spel_start" in detail and "Play again" in detail

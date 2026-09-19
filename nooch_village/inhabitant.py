@@ -1102,17 +1102,13 @@ class Inhabitant(threading.Thread):
         (of "" bij niets gevonden). Puur deterministisch (geen LLM) en volledig fail-soft: een
         kapotte/ontbrekende store mag de voorbereiding nooit blokkeren."""
         try:
-            from nooch_village.kennis_context import (kennis_blok, kennis_voor,
-                                          meld_raadpleging, totaal)
-            kennis = kennis_voor(getattr(self.context, "data_dir", None), goal, exclude_pid=pid)
-            meld_raadpleging(self.bus, project_id=pid, rol=self.id, kennis=kennis)
-            blok = kennis_blok(kennis)
-            # Zie project_worker: gate op een echte vondst, niet op een niet-leeg blok.
-            if totaal(kennis):
+            from nooch_village import reeds_bekend
+            blok = reeds_bekend.blok(getattr(self.context, "data_dir", None), goal)
+            reeds_bekend.meld(self.bus, project_id=pid, rol=self.id, gevonden=bool(blok))
+            if blok:
                 try:
-                    ledger.add_feed_entry(pid, "📚 raadpleegde de kennisbank: "
-                                          + kennis["samenvatting"], kind="system",
-                                          author_type="role", author_id=self.id)
+                    ledger.add_feed_entry(pid, "📚 verse oriëntatie op het onderwerp opgehaald",
+                                          kind="system", author_type="role", author_id=self.id)
                 except Exception:
                     pass                                  # ledger zonder feed → alleen log + event
             return blok
@@ -3192,9 +3188,9 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         # Fail-soft: geen data_dir of een kapotte store → leeg blok, prompt als voorheen.
         grond = ""
         try:
-            from nooch_village.kennis_context import kennis_blok, kennis_voor
+            from nooch_village import reeds_bekend
             if data_dir:
-                grond = kennis_blok(kennis_voor(data_dir, scope_txt, exclude_pid=pid))
+                grond = reeds_bekend.blok(data_dir, scope_txt)
         except Exception as e:                              # noqa: BLE001 — document gaat vóór
             log.warning("grounding voor einddocument overgeslagen: %s", e)
         prompt = (

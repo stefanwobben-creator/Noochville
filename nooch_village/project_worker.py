@@ -107,20 +107,14 @@ def _raadpleeg_kennis(ledger, p: dict, owner: str, data_dir, bus) -> str:
     if data_dir is None:
         return ""
     try:
-        from nooch_village.kennis_context import (kennis_blok, kennis_voor,
-                                          meld_raadpleging, totaal)
-        # exclude_pid: zonder dit vindt elk project zichzelf terug als "eerder project" —
-        # dan is er altijd een treffer en zegt de sectie niets.
-        kennis = kennis_voor(data_dir, _scope_text(p.get("scope")), exclude_pid=p.get("id", ""))
-        meld_raadpleging(bus, project_id=p.get("id", ""), rol=owner, kennis=kennis)
-        blok = kennis_blok(kennis)
-        # Gate op een ECHTE vondst, niet op een niet-leeg blok: het blok draagt sinds de
-        # grounding altijd minstens de grondwet, en 'geraadpleegd: 0/0/0' op de kaart is ruis.
-        if totaal(kennis):
+        from nooch_village import reeds_bekend
+        # Vers gevraagd in plaats van opgezocht: de kaartjes-store is op 19 sept 2026 verdwenen.
+        blok = reeds_bekend.blok(data_dir, _scope_text(p.get("scope")))
+        reeds_bekend.meld(bus, project_id=p.get("id", ""), rol=owner, gevonden=bool(blok))
+        if blok:
             try:                                       # feed-regel: zichtbaar op de projectkaart
-                ledger.add_feed_entry(p["id"], "📚 raadpleegde de kennisbank: "
-                                      + kennis["samenvatting"], kind="system",
-                                      author_type="role", author_id=owner)
+                ledger.add_feed_entry(p["id"], "📚 verse oriëntatie op het onderwerp opgehaald",
+                                      kind="system", author_type="role", author_id=owner)
             except Exception:
                 pass                                   # oude/kale ledger zonder feed → alleen log+event
         return blok

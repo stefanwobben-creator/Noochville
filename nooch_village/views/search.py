@@ -30,10 +30,6 @@ def _match(tekst: str, termen: list[str]) -> bool:
     return all(any(w.startswith(term) for w in ws) for term in termen)
 
 
-def _kaartje_url(claim: str) -> str:
-    """Signal/kenniskaartje heeft geen eigen detailpagina; open de kennisbank met de claim voorgevuld
-    in de zoek, zodat het kaartje daar bovenaan verschijnt."""
-    return "/kennisbank?q=" + quote(" ".join((claim or "").split()[:6]))
 
 
 def _vervuller_namen(st, role) -> list:
@@ -165,21 +161,11 @@ def _insights(st, termen):
     uit = []
     for k in st.kennisbank.all():
         if _match(f"{k.get('title','')} {k.get('why','')}", termen):
-            uit.append({"url": f"/kennisbank?id={k.get('id')}", "kind": "insight",
+            uit.append({"url": "", "kind": "insight",
                         "titel": k.get("title", ""), "snip": k.get("why", "")})
     return uit
 
 
-def _signals(st, termen):
-    uit = []
-    for a in st.notes.all():
-        if getattr(a, "archived", False):
-            continue
-        claim = getattr(a, "claim", "")
-        if _match(claim, termen):
-            uit.append({"url": _kaartje_url(claim), "kind": "signal",
-                        "titel": claim, "snip": getattr(a, "source", "") or ""})
-    return uit
 
 
 def _words(st, termen):
@@ -194,9 +180,13 @@ def _words(st, termen):
 # Volgorde en labels van de groepen. Mensen eerst (wie werkt er?), dan rollen en de losse
 # accountabilities (waar is iets belegd?), daarna de kennis-lagen. (founder 23 jul: signal =
 # kenniskaartje, insight = laag 2, word = library-zoekwoord.)
+# De groep "Signals" (kenniskaartjes) verviel op 19 sept 2026 met de kaartjes-store. "Insights"
+# blijft: `kennisbank.json` bestaat nog en `weten_we_dit_al` leest hem — maar de kennisbank heeft
+# geen eigen scherm meer, dus een treffer linkt naar de zoekpagina zelf in plaats van naar een
+# route die niet meer bestaat.
 _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
             ("Projects", _projects), ("Pages", _pages), ("Insights", _insights),
-            ("Signals", _signals), ("Words", _words))
+            ("Words", _words))
 
 
 def _zoek(st, termen) -> tuple[list, list]:

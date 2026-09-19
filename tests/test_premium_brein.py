@@ -346,7 +346,6 @@ def test_guard_triage_landt_niet_op_sonnet(tmp_path, monkeypatch):
 @pytest.mark.parametrize("bestand,site", [
     ("nooch_village/skills_impl/tegenspraak.py", "skill_tegenspraak"),
     ("nooch_village/skills_impl/synthesize.py", "skill_synthesize"),
-    ("nooch_village/skills_impl/content_schrijven.py", "skill_content_schrijven"),
     ("nooch_village/skills_impl/bulletin_schrijven.py", "skill_bulletin"),
     ("nooch_village/skills_impl/voorstel.py", "skill_voorstel"),
 ])

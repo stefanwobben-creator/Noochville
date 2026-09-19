@@ -29,7 +29,6 @@
     "Beheerd door de Circle Lead. Wijzigen is operationeel en omkeerbaar, geen governance-ronde:",
     "een rugzak zegt 'dit middel is beschikbaar', nooit 'deze rol gaat hierover'."
   ],
-
   "buiten": {
     "stagiair": "Sid",
     "wat": "what is happening outside us: market, people, science, patents",
@@ -54,7 +53,6 @@
       "lead_beoordeling"
     ]
   },
-
   "onze_cijfers": {
     "stagiair": "Sid",
     "wat": "how we are doing: visitors, findability, sales, health of the site",
@@ -68,25 +66,20 @@
       "linkbuilding_targets"
     ]
   },
-
   "schrijven": {
     "stagiair": "Wendy",
     "wat": "text needs to be written",
     "skills": [
-      "content_schrijven",
       "voorstel_schrijven"
     ]
   },
-
   "mag_dit": {
     "stagiair": "Wendy",
     "wat": "is this allowed and substantiated? (EU claim rules)",
     "skills": [
-      "content_check",
       "claims_check"
     ]
   },
-
   "wat_weten_we_al": {
     "stagiair": "Noochie",
     "wat": "ordering, connecting, looking back at earlier work",
@@ -105,7 +98,6 @@
       "beslissing die daar hoort en niet hier."
     ],
     "skills": [
-      "curate",
       "verband_voorstel",
       "onderzoeksvraag",
       "kroniek_interpret",
@@ -113,7 +105,6 @@
       "library_list"
     ]
   },
-
   "basis": {
     "stagiair": "",
     "wat": "plumbing every role always has: look first, argue against yourself, hand over",

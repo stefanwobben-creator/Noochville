@@ -62,7 +62,6 @@ from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_clusters import ClusterBesluitStore
 from nooch_village.radar_store import RadarStore
-from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
 from functools import lru_cache
 from nooch_village.skill_match import plan_offers
@@ -98,11 +97,6 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       field as kb_field, verdict as kb_verdict,
                                       WORD_LABEL as KB_WORD_LABEL,
                                       load_atoms as kb_load_atoms)
-from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
-from nooch_village.kennisbank_spel import SpelStore, spel_finish
-from nooch_village.kennisbank_staging import StagingStore, commit_atom, commit_batch
-from nooch_village.views.kennisbank_staging import render_kennisbank_staging
-from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
@@ -171,9 +165,6 @@ class _Stores:
         # clustering is berekend, de projectkeuze is strategie — zie radar_clusters.
         self.radar_besluiten = ClusterBesluitStore(os.path.join(dd, "radar_clusters.json"))
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
-        self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
-        self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
-        self.staging = StagingStore(os.path.join(dd, "kennisbank_staging.json"))   # zone 2: even-nakijken
         self.library = Library(os.path.join(dd, "library.json"))   # beschermde woordenschat (Lara cureert)
         self.nominations = NominationQueue(os.path.join(dd, "keyword_nominaties.json"))   # fase 4: pending-queue
         self.nom_kroniek = NominationKroniek(os.path.join(dd, "keyword_nominaties.jsonl"))   # fase 4: beslissings-Kroniek
@@ -328,7 +319,6 @@ from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
 )
-from nooch_village.views.signals import render_signals
 from nooch_village.views.inbox import (
     render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
 )
@@ -347,13 +337,9 @@ from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
-from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.wiki import render_pagina
 from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.codie import render_codie
-from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
-from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
-                                                 render_kennisbank_spel_search)
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
@@ -1594,19 +1580,9 @@ def _act_proj_done(c):
                            door=(p.get("owner") or ""))
         # Geen event vanuit dit proces — de daemon-board-watch (village._poll_board) detecteert de
         # wacht→done-overgang (blocked_on=="review") en vuurt project_completed op de in-memory bus (#10-fix).
-        # Done → signaal op /signals (feed 'Projecten'): done is al de mens-poort, dus het signaal
-        # komt direct goedgekeurd in de RadarStore; de founder promoveert het daar naar de kennisbank.
-        # Link-dedupe ("/project?id=<pid>") maakt dit idempotent met de board-watch-hook. Fail-soft:
-        # een falende signaal-aanmaak mag een done nooit blokkeren.
-        # De rapport-lus (einddocument → intake → kennisbank-STAGING) draait hier bewust NIET:
-        # geen synchrone LLM-call in het cockpit-proces. De daemon-board-watch herleest
-        # projects.json (by_status → _maybe_reload) en pakt óók deze cockpit-done binnen één
-        # poll op — daar draait project_signal.report_to_staging met de LLM-ladder.
-        try:
-            from nooch_village.project_signal import signal_from_project
-            signal_from_project(st.radar, pj.get(pid), _doc)   # einddocument levert de conclusie
-        except Exception:
-            logging.getLogger("cockpit2.signals").exception("project→signaal mislukt (pid=%s)", pid)
+        # HIER GING EEN DONE NAAR DE RADAR EN NAAR DE KENNIS-STAGING. Beide bestemmingen zijn op
+        # 19 sept 2026 verdwenen. Een afgerond project hoort nu via Keep-in-wiki in de wiki te
+        # landen — met menselijke input, niet als automatisch signaal of geatomiseerd kaartje.
         return nxt, msg
 
 
@@ -1629,21 +1605,11 @@ def archiveer(st, pj, pid: str) -> str:
     bevestigde (of bewust overgeslagen) verslag (scope 49: "als ik het rapport gemaakt heb, moet ie
     eigenlijk worden gearchiveerd"). Geeft de melding terug.
 
-    Archiveren is het moment waarop een project echt het bord verlaat — dán hoort het (ook) als
-    signal op /signals te staan (founder, 19 jul). Idempotent: bestond het signaal al (done-hook of
-    eerdere archivering), dan gebeurt er niets; is het al verwerkt naar Oracle, dan komt het niet
-    terug (MECE — de inhoud telt al mee)."""
+    Archiveren is het moment waarop een project echt het bord verlaat. Tot 19 sept 2026 werd het
+    dan ook een signaal op /signals; die feed en de promotielaag eronder bestaan niet meer."""
     pj.archive(pid)
     msg = "🗄 gearchiveerd (blijft bestaan)"
-    try:
-        from nooch_village.project_signal import signal_from_project
-        p = pj.get(pid)
-        if (p is not None and p.get("status") == "done"
-                and signal_from_project(st.radar, p)):
-            msg += " · 📡 placed as a signal on /signals"
-    except Exception:
-        logging.getLogger("cockpit2.signals").exception(
-            "project→signaal bij archiveren mislukt (pid=%s)", pid)
+    # Het signaal-pad bij archiveren verviel op 19 sept 2026 met de radar-promotielaag.
     return msg
 
 
@@ -2654,38 +2620,12 @@ def _act_radar_set(c, status: str, ok_msg: str):
         return nxt, ok_msg
 
 
-def _act_radar_approve(c):
-        nxt, msg = _act_radar_set(c, "goedgekeurd", "✓ added to the archive")
-        # Config-vlag radar_auto_promote (default uit): goedkeuren promoveert dan meteen
-        # door naar de kennisbank — hetzelfde codepad als de knop, dus dezelfde dedup/marker.
-        if msg == "✓ added to the archive" and radar_promote.auto_promote_enabled(c.data_dir):
-            _aid, pmsg = radar_promote.promote_signal(c.st, c.g("rid"))
-            msg = f"{msg} · {pmsg}"
-        return nxt, msg
 
 
 def _act_radar_dismiss(c):
         return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
 
 
-def _act_radar_promote(c):
-        """Goedgekeurd radar-signaal → kenniskaartje, MET tussenstap: het signaal wordt
-        klaargezet bij "Even nakijken" (staging), waar de mens het kan bewerken, met andere
-        signalen samenvoegen of weggooien; pas bij commit ontstaat het kaartje. Zelfde poort
-        als de andere radar-curatie: de rolvervuller of Circle Lead van de rol van het
-        signaal. (De radar_auto_promote-vlag blijft de directe route — die is een bewuste
-        opt-out van deze review.)"""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        bid, msg = radar_promote.stage_signal(st, g("rid"))
-        if bid:
-            return f"/kennisbank/staging?batch={bid}", msg
-        return nxt, msg
 
 
 def _act_radar_merge(c):
@@ -2704,56 +2644,8 @@ def _act_radar_merge(c):
                      if ok else "✗ merging failed")
 
 
-def _act_radar_koppel(c):
-        """/signals MECE-knop: dit signaal staat (vrijwel) al in de kennisbank — koppel de
-        herkomst aan het bestaande kaartje (stack_provenance, grounding +1), markeer het
-        signaal als verwerkt. Zelfde poort als de andere radar-curatie."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        if it.get("promoted_atom_id"):
-            return nxt, "Already handled — this signal is already linked"
-        doel = g("doel")
-        if not doel or st.notes.get(doel) is None:
-            return nxt, "✗ target card not found"
-        source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
-        st.notes.stack_provenance(doel, source=source, reference=(it.get("link") or "").strip())
-        st.notes.add_tags(doel, ["signal"])
-        for m in it.get("merged_sources") or []:
-            if m.get("source") or m.get("link"):
-                st.notes.stack_provenance(doel, source=m.get("source") or "",
-                                          reference=m.get("link") or "")
-        st.radar.mark_promoted(g("rid"), doel)
-        return nxt, "🔗 provenance linked to the existing signal — handled"
 
 
-def _act_kb_stage_koppel(c):
-        # AUTHZ: iedereen-ingelogd — zelfde regel als de andere kb_-takken hierboven: permissieve
-        # intake, strenge uitgang. Koppelen voegt herkomst toe aan een bestaand kaartje en maakt
-        # niets nieuws; de poort staat bij het GEBRUIK van kennis, niet bij de ingang.
-        """MECE-knop in de staging-review: dit voorstel is hetzelfde inzicht als een bestaand
-        kaartje — koppel het als extra bron (stack_provenance, grounding +1) in plaats van
-        een tweede kaartje te maken. Signaal-voorstellen krijgen meteen hun promoted-marker."""
-        st = c.st
-        b = st.staging.get(c.g("bid"))
-        a = next((x for x in (b or {}).get("atoms", []) if x["sid"] == c.g("sid")), None)
-        doel = c.g("doel")
-        if a is None or not doel or st.notes.get(doel) is None:
-            return c.nxt, "✗ proposal or target card not found"
-        st.notes.stack_provenance(doel, source=a.get("source") or "",
-                                  reference=(a.get("reference") or ""))
-        if a.get("radar_rids"):
-            st.notes.add_tags(doel, ["signal"])
-            for rid in a["radar_rids"]:
-                al = st.radar.get(rid)
-                if al is not None and not al.get("promoted_atom_id"):
-                    st.radar.mark_promoted(rid, doel)
-        st.staging.remove_atom(c.g("bid"), c.g("sid"))
-        return c.nxt, "🔗 linked as an extra source to the existing signal"
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -4014,9 +3906,9 @@ def _act_goedkeur(c):
             # Niet stil weigeren: de mens moet weten WAAROM en WAAR het dan wel kan.
             return nxt, f"✗ {goedkeuring.waarom_niet(item)} — run it from the command line"
         reden = f"via cockpit door {username}"
-        if item.get("type") == "verband":
-            r = inbox_actions.decide_verband(hi, st.notes, iid, besluit, reason=reden)
-        elif item.get("type") == "keyword" and besluit in ("approved", "rejected"):
+        # Het 'verband'-itemtype verviel op 19 sept 2026 met de kaartjes-store: een touwtje tussen
+        # twee kaartjes kan niet gelegd worden als er geen kaartjes meer zijn.
+        if item.get("type") == "keyword" and besluit in ("approved", "rejected"):
             r = inbox_actions.decide_keyword(hi, st.library, iid,
                                              "approve" if besluit == "approved" else "reject",
                                              reason=reden)
@@ -5243,25 +5135,6 @@ def _act_kb_annotate(c):
     return c.nxt, ("💬 note saved" if ok else "✗ note not saved")
 
 
-def _act_kb_evidence(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Nieuw bewijs = een nieuw
-    # ATOOM in de bibliotheek (laag 1, dom: geen oordeel bij de intake) + een link met richting.
-    iid, text = c.g("iid"), c.g("text").strip()
-    if not text:
-        return c.nxt, "✗ typ eerst iets"
-    actor = _kb_actor(c)
-    bron = c.g("source").strip() or actor
-    # Eigen naam als bron = een intern oordeel (meningssterkte ≠ bewijssterkte);
-    # elke andere bron blijft 'unknown' tot een curator de herkomst duidt.
-    prov = "internal_judgment" if bron == actor else "unknown"
-    atom_id = "atom_" + uuid.uuid4().hex[:8]
-    c.st.notes.add(Insight(id=atom_id, claim=text[:500], source=bron, provenance=prov))
-    voor = _kb_word(c, iid)
-    ok = c.st.kennisbank.link(iid, atom_id, c.g("stance") or "support", by=actor)
-    if not ok:
-        return c.nxt, "✗ card created but linking failed"
-    na = _kb_word(c, iid)
-    return c.nxt, ("➕ added. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
 def _act_kb_discuss(c):
@@ -5285,133 +5158,24 @@ def _act_kb_reformulate(c):
     return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
 
 
-def _act_kb_intake(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Fase 2: ruwe tekst →
-    # LLM-ladder → atomen, idempotent (hash content+bron) append aan de bibliotheek.
-    # Laag 1 blijft dom: geen oordeel, geen veld; trust wordt pas in laag 2 afgeleid.
-    uitkomst = kb_intake(c.g("raw"), c.g("source_hint"), c.data_dir)
-    if uitkomst is None:
-        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
-    nieuw, dubbel = uitkomst
-    if not nieuw and not dubbel:
-        return c.nxt, "✗ typ eerst iets om te noteren"
-    if not nieuw:
-        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
-    extra = f" ({dubbel} al bekend)" if dubbel else ""
-    return (f"/kennisbank?nieuw={','.join(nieuw)}",
-            f"✂️ we splitsten dit in {len(nieuw)} notities{extra}")
 
 
-def _act_kb_intake_url(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. URL = source-adapter:
-    # trafilatura haalt de hoofdtekst op, de bestaande atomiser doet de rest (geen fork).
-    from nooch_village.kennisbank_sources import van_url
-    uit = van_url(c.g("url"))
-    if uit is None:
-        return c.nxt, "✗ could not fetch this page or extract readable text from it"
-    raw, label = uit
-    uitkomst = kb_intake(raw, label, c.data_dir)
-    if uitkomst is None:
-        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
-    nieuw, dubbel = uitkomst
-    if not nieuw:
-        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
-    extra = f" ({dubbel} al bekend)" if dubbel else ""
-    return (f"/kennisbank?nieuw={','.join(nieuw)}",
-            f"✂️ we splitsten de pagina in {len(nieuw)} notities{extra}")
 
 
-def _act_kb_stage_edit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Staging bewerken vóór commit.
-    # Onderwerp/provenance staan niet meer in het formulier (LLM classificeert; slimme
-    # tags volgen later) — alleen doorgeven als ze wél zijn meegestuurd, anders zou een
-    # gewone tekst-bewaar het LLM-onderwerp stilletjes wissen.
-    subject = (c.form.get("subject") or [None])[0]
-    provenance = (c.form.get("provenance") or [None])[0]
-    ok = c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=c.g("content"),
-                                subject=subject, provenance=provenance)
-    return c.nxt, ("✏️ updated" if ok else "✗ not found")
 
 
-def _act_kb_stage_accept(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "✓ Bewaar → bibliotheek":
-    # eventuele tekstwijziging bewaren en dit ENE voorstel meteen verwerken (founder, 19 jul:
-    # verwerkt = weg uit de set, anders lijkt de actie niet gebeurd). Zelfde dedupe/MECE/
-    # marker-pad als de set-commit; een leeggeraakte set ruimt zichzelf op.
-    content = (c.form.get("content") or [None])[0]
-    if content and content.strip():
-        c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=content)
-    res = commit_atom(c.st.staging, c.g("bid"), c.g("sid"), c.data_dir, radar=c.st.radar)
-    if res is None:
-        return c.nxt, "✗ proposal not found"
-    msg = {"nieuw": "✓ in Oracle",
-           "bekend": "Al bekend — niets gedupliceerd",
-           "gekoppeld": "🔗 merged with an existing signal"}[res["uitkomst"]]
-    if res["leeg"]:
-        return "/kennisbank", f"🎉 set verwerkt · laatste voorstel: {msg}"
-    return c.nxt, msg
 
 
-def _act_kb_stage_delete(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.staging.remove_atom(c.g("bid"), c.g("sid"))
-    return c.nxt, ("🗑 weggegooid" if ok else "✗ not found")
 
 
-def _act_kb_stage_merge(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    sids = [s for s in (c.form.get("sid") or []) if s]
-    if len(sids) < 2:
-        return c.nxt, "✗ tick at least two proposals"
-    if not c.g("kop").strip():
-        return c.nxt, "✗ give the composed card a heading"
-    ok = c.st.staging.merge_atoms(c.g("bid"), sids, c.g("kop"))
-    return c.nxt, ("🧩 samengevoegd" if ok else "✗ merging failed")
 
 
-def _act_kb_stage_commit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Pas hier landen de
-    # nagekeken atomen append-only in de bibliotheek (idempotent op hash content+bron).
-    res = commit_batch(c.st.staging, c.g("bid"), c.data_dir, radar=c.st.radar)
-    if res is None:
-        return c.nxt, "✗ this set no longer exists"
-    nieuw, dubbel, gekoppeld = res
-    if not nieuw and not gekoppeld:
-        return "/kennisbank", (f"Al bekend: {dubbel} notitie(s) stonden er al" if dubbel
-                               else "Nothing added — the set was empty")
-    delen = []
-    if nieuw:
-        delen.append(f"✅ {nieuw} notes added to the library")
-    if gekoppeld:
-        delen.append(f"🔗 {gekoppeld} signal(s) merged with an existing signal in Oracle")
-    if dubbel:
-        delen.append(f"{dubbel} al bekend")
-    return "/kennisbank", " · ".join(delen)
 
 
-def _act_kb_stage_discard(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.staging.discard(c.g("bid"))
-    return "/kennisbank", ("Set discarded — nothing in the library" if ok else "✗ set not found")
 
 
-def _act_kb_atoom_edit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Bewerken-met-historie
-    # (PR-2): de vorige claim blijft bewaard in edit_history (append-only, extractie-fouten).
-    res = c.st.notes.edit_note(c.g("atom_id"), claim=c.g("claim"))
-    return c.nxt, ("✏️ updated (previous version kept)" if res else "✗ editing failed")
 
 
-def _act_kb_atoom_related(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "Voeg gerelateerd feit toe":
-    # een NIEUW gelinkt atoom met eigen bron (het 36%-geval), geen verrijking-in-place.
-    actor = _kb_actor(c)
-    bron = c.g("source").strip() or actor
-    prov = "internal_judgment" if bron == actor else "unknown"
-    res = c.st.notes.add_related(c.g("atom_id"), c.g("content"), bron, provenance=prov)
-    if res is None:
-        return c.nxt, "✗ could not add a related fact (empty, or it already exists)"
-    return c.nxt, "➕ related fact added and linked"
 
 
 def _act_kb_insight_link(c):
@@ -5427,61 +5191,10 @@ def _act_kb_insight_unlink(c):
     return c.nxt, ("unlinked" if ok else "✗ unlinking failed")
 
 
-def _act_kb_meta_start(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: speel een META-inzicht —
-    # de gekoppelde inzichten van dit inzicht als input aan dezelfde copy-paste-spel-flow.
-    src = c.st.kennisbank.get(c.g("iid"))
-    if src is None:
-        return c.nxt, "✗ insight not found"
-    related = src.get("related") or []
-    if len(related) < 2:
-        return c.nxt, "✗ link ≥2 insights first (supporting/contradicting) to play a meta-insight"
-    kaarten = []
-    for r in related:
-        other = c.st.kennisbank.get(r["insight_id"])
-        if other is not None:
-            kaarten.append({"atom_id": r["insight_id"], "stance": r.get("stance") or "support",
-                            "label": other.get("title") or ""})
-    sid = c.st.spel.start(f"Meta-inzicht over: {src.get('title') or ''}", kaarten,
-                          by=_kb_actor(c), meta=True)
-    return f"/kennisbank/spel?sid={sid}", "🎲 meta-game started — the linked insights are the hand"
 
 
-def _act_kb_atoom_reference(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Een URL als bronlink bij een
-    # atoom (A3): landt in het reference-veld. Een expliciet-geplakte bronlink houden we (anders
-    # dan de intake-validator, die een kale artikel-URL juist dropt). Bron-propagatie (founder
-    # dd 2026-07-18): dezelfde reference gaat óók naar de andere atomen met dezelfde
-    # genormaliseerde bron die er nog geen hebben (nooit een bestaande overschrijven).
-    url = c.g("url").strip()
-    if not re.match(r"^https?://", url):
-        return c.nxt, "✗ paste a valid URL (https://…)"
-    if not c.st.notes.set_reference(c.g("atom_id"), url):
-        return c.nxt, "✗ note not found"
-    extra = c.st.notes.propagate_reference(c.g("atom_id"))
-    if extra:
-        return c.nxt, (f"🔗 source link attached — also set on {extra} other "
-                       f"kaartje(s) met dezelfde bron")
-    return c.nxt, "🔗 source link attached"
 
 
-def _act_tag_voorstel_besluit(c):
-    # AUTHZ: iedereen-ingelogd — tag-onderhoud-review. ✓ voert het voorstel meteen door op
-    # alle kaartjes (NotesStore.retag); ✗ wijst af (komt niet opnieuw terug).
-    from nooch_village.tag_onderhoud import TagVoorstellenStore, voer_voorstel_uit
-    store = TagVoorstellenStore(f"{c.data_dir}/tag_voorstellen.json")
-    keuze = c.g("keuze")
-    if keuze == "doorvoeren":
-        vs = {v["id"]: v for v in store.open_voorstellen()}
-        v = vs.get(c.g("vid"))
-        if v is None:
-            return c.nxt, "✗ proposal not found or already decided"
-        n = voer_voorstel_uit(c.st.notes, v)
-        store.besluit(c.g("vid"), "doorgevoerd")
-        return c.nxt, f"✓ doorgevoerd op {n} signal(s)"
-    v = store.besluit(c.g("vid"), "afgewezen")
-    return c.nxt, ("✗ rejected — it will not come back" if v
-                   else "✗ proposal not found or already decided")
 
 
 def _act_verzoek_besluit(c):
@@ -5628,81 +5341,18 @@ def _act_tag_onderhoud_run(c):
                    f"({res['voorstellen'] - res['nieuw']} al bekend/afgewezen)")
 
 
-def _act_kb_atoom_purge(c):
-    # AUTHZ: iedereen-ingelogd — ⚙-actie. Definitief weggooien kan alleen op een kaartje dat
-    # al op de black-list staat (eerst verwijderen, dan pas definitief). Afweging bewust bij
-    # de mens: na een purge kan dezelfde tekst in principe opnieuw binnenkomen.
-    ok = c.st.notes.purge(c.g("atom_id"))
-    return c.nxt, ("🔥 definitief weggegooid" if ok
-                   else "✗ not found or not deleted yet")
 
 
-def _act_kb_blacklist_leeg(c):
-    # AUTHZ: iedereen-ingelogd — ⚙-actie: de hele black-list in één keer definitief legen.
-    n = c.st.notes.purge_archived()
-    return c.nxt, (f"🔥 black-list geleegd: {n} definitief weggegooid" if n
-                   else "The blacklist was already empty")
 
 
-def _act_kb_atoom_subject(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
-    # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
-    subject = c.g("subject")
-    if subject not in KB_SUBJECTS:
-        return c.nxt, "✗ pick a subject from the list"
-    if not c.st.notes.add_tags(c.g("atom_id"), [subject]):
-        return c.nxt, "✗ note not found"
-    return c.nxt, f"📥 gesorteerd naar '{subject}'"
 
 
-def _act_kb_atoom_merge(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Drag&drop-merge
-    # (statements-herontwerp dd 2026-07-18): sleep een statement op een ander → modal →
-    # één kaart met de gekozen tekst als nieuwe versie. De herkomst van het bron-atoom
-    # stapelt op het doel (zie NotesStore.merge_into: merged_from + supersede-spoor +
-    # "; "-gestapelde source/reference); verwijzingen elders — in andere atomen én in
-    # kennisbank-inzichten — worden herwezen; het bron-atoom verdwijnt uit de lijst
-    # (gearchiveerd, nooit gewist). Verving de oude selectie-merge ("Voeg samen") —
-    # die interactie is in het herontwerp opgegaan in het slepen.
-    target_id, source_id = c.g("target_id"), c.g("source_id")
-    if not target_id or not source_id:
-        return c.nxt, "✗ merge: drag one statement onto the other"
-    if target_id == source_id:
-        return c.nxt, "✗ merging with itself does nothing — drag onto a different statement"
-    kaart = c.st.notes.merge_into(target_id, source_id, c.g("tekst"), by=_kb_actor(c))
-    if kaart is None:
-        return c.nxt, "✗ merge failed — statement not found (any more) or text empty"
-    c.st.kennisbank.rewire_atom(source_id, target_id)
-    return c.nxt, f"🧩 merged → v{kaart.version} (provenance of both kept)"
 
 
-def _act_kb_atoom_archive(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Archiveren ≠ wissen.
-    ids = [a for a in (c.form.get("atoom") or []) if a] or [c.g("atom_id")]
-    ok = sum(1 for aid in ids if aid and c.st.notes.archive(aid))
-    if not ok:
-        return c.nxt, "✗ select a note first"
-    return c.nxt, f"📦 {ok} notitie(s) gearchiveerd — terug te zetten via 'Gearchiveerd'"
 
 
-def _act_kb_atoom_unarchive(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.notes.archive(c.g("atom_id"), archived=False)
-    return c.nxt, ("↩ restored to the library" if ok else "✗ restoring failed")
 
 
-def _act_kb_atoom_naar_spel(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Voedt de spel-hand
-    # (richting draai je in het spel). Sinds de founder-ronde dd 2026-07-18 komt dit uit
-    # het statement-detail (één atoom per keer); de meervoudsvorm blijft fail-soft werken.
-    ids = [a for a in (c.form.get("atoom") or []) if a]
-    sid = c.g("sid")
-    if not ids:
-        return c.nxt, "✗ select a note first"
-    if not sid or c.st.spel.get(sid) is None:
-        return c.nxt, "✗ pick an open game"
-    ok = sum(1 for aid in ids if c.st.spel.add_kaart(sid, aid, "support"))
-    return f"/kennisbank/spel?sid={sid}", f"🔗 {ok} card(s) linked to your hand"
 
 
 def _kb_spel_set(c) -> list[dict]:
@@ -5712,52 +5362,14 @@ def _kb_spel_set(c) -> list[dict]:
             for aid in ids if aid]
 
 
-def _act_kb_spel_start(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Start een dialoog
-    # met de gecureerde set; bij reformulate_of wordt het een versie-spel.
-    kaarten = _kb_spel_set(c)
-    hunch = c.g("hunch").strip()
-    if not hunch:
-        return c.nxt, "✗ typ eerst je vermoeden"
-    if not kaarten:
-        return c.nxt, "✗ tick at least one card"
-    sid = c.st.spel.start(hunch, kaarten, reformulate_of=c.g("reformulate_of"),
-                          by=_kb_actor(c))
-    return f"/kennisbank/spel?sid={sid}", "🎲 game started — the thinking partner opens"
 
 
-def _act_kb_spel_add(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De hand uitbreiden
-    # (taak 2): idempotent, kaart moet in de bibliotheek bestaan.
-    if c.g("atom_id") not in kb_load_atoms(c.data_dir):
-        return c.nxt, "✗ card not found in the library"
-    ok = c.st.spel.add_kaart(c.g("sid"), c.g("atom_id"), c.g("stance") or "support",
-                             annotation=c.g("annotation"))
-    return c.nxt, ("🔗 linked to your hand" if ok else "✗ linking failed")
 
 
-def _act_kb_spel_remove(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.spel.remove_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("Removed from your hand (the card stays in the library)" if ok
-                   else "✗ removing failed")
 
 
-def _act_kb_spel_flip(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Richting in één klik.
-    ok = c.st.spel.flip_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("↔ richting gedraaid" if ok else "✗ flipping failed")
 
 
-def _act_kb_spel_finish(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Munt het inzicht uit
-    # het teruggeplakte blok (copy-paste-spel): v1.0, of versie-bump bij herformuleren.
-    res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank, c.g("blok"))
-    if res is None:
-        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
-    iid, versie = res
-    woord = ("new version v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
-    return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
 
 
 def _act_kw_nominate(c):
@@ -6057,40 +5669,14 @@ ACTIONS = {
     "ff_demote": _act_ff_demote,
     "ff_run": _act_ff_run,
     "kb_new": _act_kb_new,
-    "kb_intake": _act_kb_intake,
-    "kb_intake_url": _act_kb_intake_url,
-    "kb_stage_edit": _act_kb_stage_edit,
-    "kb_stage_accept": _act_kb_stage_accept,
-    "kb_stage_delete": _act_kb_stage_delete,
-    "kb_stage_merge": _act_kb_stage_merge,
-    "kb_stage_commit": _act_kb_stage_commit,
-    "kb_stage_discard": _act_kb_stage_discard,
-    "kb_atoom_subject": _act_kb_atoom_subject,
-    "kb_atoom_purge": _act_kb_atoom_purge,
-    "tag_voorstel_besluit": _act_tag_voorstel_besluit,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
     "verzoek_besluit": _act_verzoek_besluit,
-    "kb_blacklist_leeg": _act_kb_blacklist_leeg,
-    "kb_atoom_edit": _act_kb_atoom_edit,
-    "kb_atoom_related": _act_kb_atoom_related,
-    "kb_atoom_reference": _act_kb_atoom_reference,
     "kb_insight_link": _act_kb_insight_link,
     "kb_insight_unlink": _act_kb_insight_unlink,
-    "kb_meta_start": _act_kb_meta_start,
-    "kb_atoom_merge": _act_kb_atoom_merge,
-    "kb_atoom_archive": _act_kb_atoom_archive,
-    "kb_atoom_unarchive": _act_kb_atoom_unarchive,
-    "kb_atoom_naar_spel": _act_kb_atoom_naar_spel,
-    "kb_spel_start": _act_kb_spel_start,
-    "kb_spel_add": _act_kb_spel_add,
-    "kb_spel_remove": _act_kb_spel_remove,
-    "kb_spel_flip": _act_kb_spel_flip,
-    "kb_spel_finish": _act_kb_spel_finish,
     "kb_link": _act_kb_link,
     "kb_unlink": _act_kb_unlink,
     "kb_annotate": _act_kb_annotate,
-    "kb_evidence": _act_kb_evidence,
     "kb_discuss": _act_kb_discuss,
     "kb_reformulate": _act_kb_reformulate,
     "kw_nominate": _act_kw_nominate,
@@ -6182,12 +5768,8 @@ ACTIONS = {
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
     "role_focus": _act_role_focus,
-    "radar_approve": _act_radar_approve,
     "radar_dismiss": _act_radar_dismiss,
-    "radar_promote": _act_radar_promote,
     "radar_merge": _act_radar_merge,
-    "radar_koppel": _act_radar_koppel,
-    "kb_stage_koppel": _act_kb_stage_koppel,
     "middel_remove": _act_middel_remove,
     "skilllink_add": _act_skilllink_add,
     "means_gap_add": _act_means_gap_add,
@@ -6622,11 +6204,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
                 return
-            if path == "/signals":
-                # Dorp-brede lijst van goedgekeurde radar-signalen (read-only aggregatie). Publiek zoals
-                # het overzicht; achter de sessie-auth zoals alles.
-                self._send(render_signals(st, csrf_token=effective_csrf, feed=(qs.get("feed") or [""])[0]))
-                return
             if path == "/inbox":
                 # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
                 tgts = _person_targets(st, username)
@@ -6688,77 +6265,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 # per ontbrekende capaciteit. Read-only — de mens-poort zit op het pad van gat naar
                 # code-wijziging, niet op dit scherm.
                 self._send(render_codie(data_dir))
-                return
-            if path == "/inzichten":
-                # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).
-                self._send(render_kennislaag(data_dir))
-                return
-            if path == "/kennisbank":
-                # Kennisbank (laag 2): geversioneerde inzichten met een berekend veld van
-                # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer;
-                # ?hunch= zoekt kaarten (top-down), ?speel= toont een cluster-set (bottom-up),
-                # ?nieuw= toont de atomen van de laatste intake.
-                try:
-                    _pag = max(1, int((qs.get("pag") or ["1"])[0]))
-                except ValueError:
-                    _pag = 1
-                try:
-                    _cl = max(0, int((qs.get("cluster") or ["0"])[0]))
-                except ValueError:
-                    _cl = 0
-                try:
-                    _sug = max(0, int((qs.get("sug") or ["0"])[0]))
-                except ValueError:
-                    _sug = 0
-                self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
-                                             q=(qs.get("q") or [""])[0],
-                                             csrf_token=effective_csrf,
-                                             msg=(qs.get("msg") or [""])[0],
-                                             hunch=(qs.get("hunch") or [""])[0],
-                                             speel=(qs.get("speel") or [""])[0],
-                                             nieuw=(qs.get("nieuw") or [""])[0],
-                                             hub=(qs.get("hub") or [""])[0], pag=_pag,
-                                             open_=(qs.get("open") or [""])[0], cluster=_cl,
-                                             flip=(qs.get("flip") or [""])[0] in ("1", "true", "on"),
-                                             sug=_sug))
-                return
-            if path == "/kennisbank/search":
-                # Live smart-search fragment (PR-2): alleen de resultatenlijst, over de verse
-                # bibliotheek. Zoekt op inhoud én bron; markeert brug-suggesties bij een
-                # actief inzicht. chrome=False: het is een fragment dat de JS inplakt.
-                self._send(render_kennisbank_search(st, (qs.get("q") or [""])[0],
-                                                    (qs.get("hub") or [""])[0],
-                                                    (qs.get("active") or [""])[0],
-                                                    csrf_token=effective_csrf), chrome=False)
-                return
-            if path == "/kennisbank/tags":
-                # Tag-onderhoud: de weekvoorstellen van de Library, mens keurt (founder, 19 jul).
-                from nooch_village.views.tag_onderhoud import render_tag_onderhoud
-                self._send(render_tag_onderhoud(st, csrf_token=effective_csrf,
-                                                msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/staging":
-                # Zone 2: de "even nakijken"-ronde vóór de bibliotheek (bewerken/samenvoegen/weggooien).
-                self._send(render_kennisbank_staging(st, (qs.get("batch") or [""])[0],
-                                                     csrf_token=effective_csrf,
-                                                     msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/spel":
-                # Het inzicht-spel, copy-paste-flow: hand cureren → prompt kopiëren →
-                # blok terugplakken → munten. ?zoek= zoekt kaarten voor de hand.
-                self._send(render_kennisbank_spel(st, (qs.get("sid") or [""])[0],
-                                                  zoek=(qs.get("zoek") or [""])[0],
-                                                  csrf_token=effective_csrf,
-                                                  msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/spel/search":
-                # Live zoek-fragment op de spel-pagina (Oracle-patroon, founder 19 jul):
-                # alleen de resultaten, over de verse bibliotheek en de verse hand;
-                # in-het-spel-kaarten gemarkeerd groen/rood. chrome=False: fragment.
-                self._send(render_kennisbank_spel_search(st, (qs.get("sid") or [""])[0],
-                                                         zoek=(qs.get("zoek") or [""])[0],
-                                                         csrf_token=effective_csrf),
-                           chrome=False)
                 return
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
@@ -7477,7 +6983,6 @@ def make_handler(data_dir: str, csrf_token: str,
                     # de mens kijkt na op /kennisbank/staging).
                     from nooch_village.kennisbank_sources import (bron_reference,
                                                                   detect_and_extract)
-                    from nooch_village.kennisbank_intake import atomiseer
                     username = self._session_username()
                     fname, blob = files.get("file", ("", b""))
                     res = detect_and_extract(text=fields.get("bron_text", ""),

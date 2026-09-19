@@ -164,7 +164,7 @@ def test_views_linken_designsysteem_css():
     from nooch_village.cockpit2_util import _DS_LINK, _EXTRA_CSS
     assert _DS_LINK.startswith('<link rel="stylesheet" href="/static/nooch.css?v=')
     assert len(_EXTRA_CSS) > 10_000          # het bestand is echt geladen
-    for view in ("overview", "projects", "metrics", "catalog", "signals"):
+    for view in ("overview", "projects", "metrics", "catalog", "claims"):
         src = open(os.path.join(_PKG, "views", f"{view}.py"), encoding="utf-8").read()
         assert "_DS_LINK" in src, f"views/{view}.py linkt de design-CSS niet"
         assert "<style>{_EXTRA_CSS}</style>" not in src, (

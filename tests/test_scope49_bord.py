@@ -144,9 +144,8 @@ def test_een_afgerond_project_blijft_voor_zijn_doel_meetellen(tmp_path):
 
 
 def test_archiveren_is_een_gedeelde_route(tmp_path):
-    """Eén plek voor 'het bord af, met signaal': de knop en het verslag delen `archiveer`. Twee
-    kopieën drijven uiteen (de signaal-plaatsing zou dan op één van de twee ontbreken)."""
-    bron = inspect.getsource(cockpit2)
-    assert bron.count("signal_from_project(st.radar, p)") == 1
+    """Eén plek voor 'het bord af': de knop en het verslag delen `archiveer`. Twee kopieën drijven
+    uiteen, en dat was precies het risico toen er nog een signaal-plaatsing aan hing — die is op
+    19 sept 2026 vervallen met de radarlaag, de gedeelde route blijft."""
     for f in (cockpit2._act_proj_archive, cockpit2._bevestig_met, cockpit2._act_verslag_overslaan):
         assert "archiveer(" in inspect.getsource(f), f.__name__

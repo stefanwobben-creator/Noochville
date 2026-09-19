@@ -510,84 +510,18 @@ def _cc_ctx(tmp_path=None, rules="REGELS"):
     return SimpleNamespace(notes=store, copy_rules=rules, data_dir=None)
 
 
-def test_content_check_rode_empco_term_wordt_ook_in_een_blog_gestopt(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        uit = ContentCheckSkill().run({"text": "Onze duurzame sneaker.", "kind": "blog"}, _cc_ctx(tmp_path))
-    assert uit["gate_ok"] is False and any("duurzaam" in w for w in uit["forbidden_words"])
-    assert I._classify_result(uit) == ("gelukt", ("list", "bevindingen"))
-    regel = inhoud_tekst(uit).splitlines()[1]
-    assert "red — blocked — source A+B" in regel and "found 'duurzame'" in regel
 
 
-def test_content_check_verboden_woord_valt_ook_zonder_store(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        uit = ContentCheckSkill().run({"text": "Gemaakt van plastic.", "kind": "sales_page"}, _cc_ctx(None))
-    assert uit["forbidden_words"] == ["plastic"] and uit["gate_ok"] is False
-    assert uit["ok"] is True and uit["niet_getoetst"] == []
 
 
-def test_content_check_niets_gevonden_maar_laag_niet_gedraaid_is_niet_getoetst(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value=None):
-        geen_model = ContentCheckSkill().run({"text": "Een schone tekst."}, _cc_ctx(tmp_path))
-    assert geen_model["ok"] is False and "no model" in geen_model["error"]
-    geen_regels = ContentCheckSkill().run({"text": "Een schone tekst."}, _cc_ctx(tmp_path, rules=""))
-    assert geen_regels["ok"] is False and "no copy_rules" in geen_regels["error"]
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        geen_store = ContentCheckSkill().run({"text": "Een schone tekst.", "kind": "sales_page",
-                                              "claim_insight_ids": ["v"]}, _cc_ctx(None))
-    assert geen_store["ok"] is False and "no notes store" in geen_store["error"]
-    for uit in (geen_model, geen_regels, geen_store):
-        assert I._classify_result(uit)[0] == "fout" and "niet getoetst" in I._foutreden(uit)
 
 
-def test_content_check_schoon_met_alle_lagen_is_gemeld_leeg_en_ok_is_geen_suggestie(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    for antwoord in ("OK.", '{"compliant": true, "issues": []}'):
-        with patch("nooch_village.llm.reason", return_value=antwoord):
-            uit = ContentCheckSkill().run({"text": "Een schone tekst.", "kind": "sales_page",
-                                           "claim_insight_ids": ["v"]}, _cc_ctx(tmp_path))
-        assert uit["suggestions"] is None
-        assert uit["no_data"] is True and I._leeg_bron(uit) == "gemeld"
-        assert "claim card(s)" in uit["reason"] and "copy rules" in uit["reason"]
 
 
-def test_content_check_onbekende_kind_sneuvelt_bij_plannen_en_bij_draaien():
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    s = ContentCheckSkill()
-    assert s.required_payload == ("text",)
-    assert any("blog, sales_page, passport" in r for r in s.validate_payload({"text": "x", "kind": "landing"}, None))
-    uit = s.run({"text": "x", "kind": "landing"}, _cc_ctx(None))
-    assert uit["ok"] is False and "sales_page" in uit["error"]
-    assert "'blog' | 'sales_page' | 'passport'" in s.input_schema
-    assert s.description.startswith("Final check of a public text")
 
 
-def test_content_check_prompt_is_engels_met_json_en_ladder(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill, _PROMPT
-    assert "only on the rules and the text below" in _PROMPT and '"compliant"' in _PROMPT
-    gezien = {}
-
-    def vang(prompt, **kw):
-        gezien.update(kw)
-        return '{"compliant": false, "issues": ["Too long"]}'
-    with patch("nooch_village.llm.reason", vang):
-        uit = ContentCheckSkill().run({"text": "T.", "ladder": "premium"}, _cc_ctx(tmp_path))
-    assert gezien["json_mode"] is True and gezien["ladder"] == "premium" and gezien["max_tokens"] >= 500
-    assert uit["suggestions"] == "Too long"
-    assert uit["bevindingen"][-1] == {"term": "copy rules", "oordeel": "advice", "citaat": "Too long"}
 
 
-def test_find_forbidden_words_gebruikt_de_database_met_de_literals_als_vangnet(monkeypatch):
-    from nooch_village import publication_check as pc
-    assert pc.find_forbidden_words("Onze planet-safe plastic zool", pc.FORBIDDEN_IN_SALES) == [
-        "plastic", "planet-safe / planet-friendly / planet-loving"]
-    monkeypatch.setattr(claims_db, "DB_PATH", "/nergens/claims.json")
-    assert pc.find_forbidden_words("Onze planet-safe plastic zool", pc.FORBIDDEN_IN_SALES) == ["plastic"]
-    rapport = pc.review_publication("Onze plastic zool", [], pc.PublicationKind.SALES_PAGE, None)
-    assert rapport.database_ok is False and rapport.forbidden_words == ["plastic"]
 
 
 # ══ accountability_check ═════════════════════════════════════════════════════

@@ -37,18 +37,6 @@ def test_add_maakt_project_houdt_item_open(tmp_path):
     assert inbox.get(iid)["status"] == "pending"           # item BLIJFT open
 
 
-def test_meerdere_uitkomsten_op_een_kans(tmp_path):
-    from nooch_village.notes_store import NotesStore
-    inbox, projects, iid = _setup(tmp_path)
-    notes = NotesStore(str(tmp_path / "notes.json"))
-    # twee projecten (verschillende rollen) + een kennis-kaart, dan afronden
-    decide_opportunity(inbox, iid, "add", destination="project", owner="scout", projects=projects)
-    decide_opportunity(inbox, iid, "add", destination="project", owner="librarian", projects=projects)
-    decide_opportunity(inbox, iid, "add", destination="knowledge", notes=notes)
-    assert len(projects.all()) == 2 and len(notes.all()) == 1
-    assert inbox.get(iid)["status"] == "pending"           # nog open
-    decide_opportunity(inbox, iid, "done")
-    assert inbox.get(iid)["status"] == "approved"          # nu gesloten
 
 
 def test_reject_onthoudt_constraint(tmp_path):

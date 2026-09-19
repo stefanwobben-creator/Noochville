@@ -38,9 +38,6 @@ from nooch_village.skills_impl.community_listening import CommunityListeningSkil
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
-from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
-from nooch_village.skills_impl.content_check import ContentCheckSkill
-from nooch_village.skills_impl.curate import CurateSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
 from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
@@ -92,9 +89,6 @@ def build_skill_registry() -> SkillRegistry:
         LinkbuildingTargetsSkill(),
         VerbandVoorstelSkill(),
         OnderzoeksvraagSkill(),
-        ContentSchrijvenSkill(),
-        ContentCheckSkill(),
-        CurateSkill(),
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),
         CertEvidenceSkill(), ClaimEvidenceSkill(), ClaimsCheckSkill(), ClaimsSiteScanSkill(), RegulationWatchSkill(),

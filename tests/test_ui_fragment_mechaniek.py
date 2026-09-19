@@ -32,8 +32,6 @@ PLAFOND = {
     "views/callbar.py": 1,          # LiveKit-tegels: eigen levenscyclus, geen server-fragment
     "views/claims.py": 1,
     "views/inbox.py": 2,
-    "views/kennisbank.py": 1,
-    "views/kennisbank_spel.py": 1,
     "views/noochie.py": 1,
     "views/projects.py": 1,         # de modal-controller zélf — dit IS de gastheer van fragmenten
 }

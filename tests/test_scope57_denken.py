@@ -267,33 +267,8 @@ def _notes(tmp_path):
     return ns
 
 
-def test_content_schrijven_weigert_verzonnen_verified_en_een_soort_buiten_de_enum(tmp_path):
-    from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
-    sk = ContentSchrijvenSkill()
-    ctx = SimpleNamespace(notes=_notes(tmp_path), copy_rules="")
-    goed = [{"id": "echt", "claim": "Barefoot demand rises.", "status": "verified"}]
-    assert sk.validate_payload({"cards": goed, "kind": "sales_page"}, ctx) == []
-    fout = [{"id": "conscious_actie_1", "claim": "Made of 100% mycelium", "status": "verified"}]
-    redenen = sk.validate_payload({"cards": fout, "kind": "sales_page"}, ctx)
-    assert redenen and "conscious_actie_1" in redenen[0] and "verified" in redenen[0]
-    assert sk.validate_payload({"cards": goed, "kind": "faq_page"}, ctx)
-    assert sk.validate_payload({"cards": "tekst"}, ctx)
-    assert ContentSchrijvenSkill.required_payload == ("cards",)
 
 
-def test_content_schrijven_degradeert_een_status_die_de_store_niet_kent(tmp_path):
-    from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
-    ctx = SimpleNamespace(notes=_notes(tmp_path), copy_rules="")
-    cards = [{"id": "echt", "claim": "Barefoot demand rises.", "status": "unresolved"},
-             {"id": "nep", "claim": "Made of 100% mycelium", "status": "verified"}]
-    with patch("nooch_village.llm.reason", return_value="Draft.") as m:
-        uit = ContentSchrijvenSkill().run({"cards": cards, "kind": "sales_page"}, ctx)
-    prompt = m.call_args[0][0]
-    assert "- (verified) Barefoot demand rises." in prompt              # uit de store, niet de payload
-    assert "- (unverified) Made of 100% mycelium" in prompt
-    assert m.call_args.kwargs["max_tokens"] == 2500
-    assert Inhabitant._classify_result(uit) == ("gelukt", ("text", "text"))
-    assert Inhabitant._classify_result({"error": "no draft"})[0] == "fout"
 
 
 # ── 4. bulletin_schrijven / field_note ───────────────────────────────────────
@@ -388,25 +363,6 @@ def test_tegenspraak_weigert_placeholder_bewijs():
 
 # ── 6. drie oorzaken, drie antwoorden ────────────────────────────────────────
 
-def test_curate_onderscheidt_geen_model_rommel_en_niets_geldig(tmp_path):
-    from nooch_village.skills_impl.curate import CurateSkill
-    ctx = SimpleNamespace(notes=None)
-    sk = CurateSkill()
-    with patch("nooch_village.llm.reason", return_value=None):
-        geen = sk.run({"input": "consument daalt"}, ctx)                 # alias-sleutel
-    assert "error" in geen and Inhabitant._classify_result(geen)[0] == "fout"
-    with patch("nooch_village.llm.reason", return_value="Sure, here you go"):
-        rommel = sk.run({"data": ["claim one", "claim two"]}, ctx)
-    assert "error" in rommel and "JSON" in rommel["error"]
-    with patch("nooch_village.llm.reason", return_value='[{"id":"a","claim":"x"}]'):
-        leeg = sk.run({"text": "x"}, ctx)
-    assert leeg["no_data"] is True and "none complete" in leeg["reason"]
-    with patch("nooch_village.llm.reason", return_value='[{"id":"a","claim":"x","grounds":"y"}]') as m:
-        goed = sk.run({"fuzzy": "x"}, ctx)
-    assert goed["cards"][0]["id"] == "a" and Inhabitant._classify_result(goed)[0] == "gelukt"
-    assert m.call_args.kwargs["max_tokens"] == 2000 and m.call_args.kwargs["json_mode"] is True
-    assert ontbrekende_velden(CurateSkill.required_payload, {"context": "x"}) == ["fuzzy|text|input|data"]
-    assert ontbrekende_velden(CurateSkill.required_payload, {"input": "x"}) == []
 
 
 def test_verband_call_site_is_bewust_goedkoop():
@@ -489,15 +445,3 @@ def test_voorstel_en_synthesize_declareren_hun_contract():
     assert build_skill_registry().get("synthesize_cards") is None      # CLI-pad, geen dorpsskill
 
 
-def test_engelse_descriptions_dragen_de_kern_in_160_tekens():
-    from nooch_village.registry_factory import build_skill_registry
-    reg = build_skill_registry()
-    for naam, woord in (("escaleer", "DECISION"), ("projectverzoek", "ANOTHER role"),
-                        ("content_schrijven", "brand voice"), ("voorstel_schrijven", "SCOPE"),
-                        ("tegenspraak", "weakest"), ("curate", "atomic English"),
-                        ("verband_voorstel", "connection"), ("kroniek_interpret", "Chronicle"),
-                        ("weten_we_dit_al", "Memory first"), ("library_lookup", "status of ONE word"),
-                        ("library_list", "statuses"), ("bulletin_schrijven", "bulletin"),
-                        ("field_note", "Field Note")):
-        assert woord in reg.get(naam).description[:160], naam
-        assert reg.get(naam).input_schema, naam

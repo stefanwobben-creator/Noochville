@@ -182,8 +182,8 @@ def onderzoek(inhabitant, vraag: str, *, term: str = "") -> dict:
         uit["overgeslagen"].append(paginaweg)
 
     try:
-        from nooch_village.kennis_context import kennis_blok, kennis_voor
-        uit["kennis"] = kennis_blok(kennis_voor(inhabitant.context.data_dir, vraag))
+        from nooch_village import reeds_bekend
+        uit["kennis"] = reeds_bekend.blok(inhabitant.context.data_dir, vraag)
     except Exception as e:                                   # noqa: BLE001
         uit["overgeslagen"].append(f"kennislaag: {e}")
 

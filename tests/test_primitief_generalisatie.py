@@ -203,7 +203,11 @@ def test_prep_onparsebaar_retry_dan_niet_parsebaar_gelogd(tmp_path, ledger, monk
     with caplog.at_level(logging.WARNING):
         inh.prepare_project(pid)
     assert inh._project_checklist(ledger.get(pid)) is None           # geen checklist
-    assert calls["n"] == 2                                            # eerste poging + één gerichte retry
+    # 3 = de verse REEDS-BEKEND-oriëntatie (reeds_bekend.blok) + de eerste plan-poging +
+    # één gerichte retry. Die eerste call is er sinds 19 sept 2026: de kennislaag was
+    # een store-lookup en is nu een LLM-call — elk nieuw project kost dus één
+    # model-aanroep meer.
+    assert calls["n"] == 3
     msgs = " ".join(r.getMessage() for r in caplog.records)
     assert "NIET PARSEBAAR" in msgs and "sorry" in msgs              # onderscheid + rauwe output in de log
 

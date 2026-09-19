@@ -113,7 +113,7 @@ def test_guard_geen_callbar_op_de_geserveerde_paginas(tmp_path):
     dd = _dd(tmp_path)
     httpd, port = _server(dd)
     try:
-        for pad in ("/metrics2", "/admin", "/signals", "/inwoners", "/founder"):
+        for pad in ("/metrics2", "/admin", "/inwoners", "/founder"):
             status, body = _get(port, pad)
             assert status == 200, (pad, status)
             assert "cb-frame" not in body, pad
