@@ -335,18 +335,14 @@ from nooch_village import decision_coach
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
-from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.wiki import render_pagina
 from nooch_village.views.rapport import render_projectrapport
-from nooch_village.views.codie import render_codie
 from nooch_village.views.linkbuilding import render_linkbuilding
-from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
 from nooch_village.library import Library
 from nooch_village.keyword_nominations import (NominationQueue, NominationKroniek, valid_reason)
-from nooch_village.views.belofte import render_belofte
 
 
 from nooch_village.views.noochie import (
@@ -3976,38 +3972,6 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ not found")
 
 
-def _act_acc_check(c):
-        # Dorpsbrede accountability-check (dubbelingen + formulering) via één LLM-call; bewaart de uitkomst.
-        # AUTHZ: anchor-lead — dit leest de accountabilities van ELKE rol in het dorp en schrijft één
-        # org-breed oordeel weg. Dat is dezelfde reikwijdte als persona-beheer, dus dezelfde poort.
-        #
-        # DE OUDE CHECK STOND OMGEKEERD: `if c.username in (None, "guest"): return "✗ not allowed"`
-        # weigerde juist guest (= auth uit, mag per definitie alles) en liet élke ingelogde
-        # gebruiker door. Beide helften waren fout, in tegengestelde richting, en de tak had geen
-        # AUTHZ-label dat het verschil zichtbaar maakte.
-        _deny = _anchor_gate(c.st, c.username)
-        if _deny:
-            return c.nxt, f"✗ {_deny}"
-        from nooch_village.skills_impl.accountability_check import (MAX_TOKENS,
-                                                                    check_accountabilities)
-        from nooch_village.views.accountabilities import roles_with_accountabilities
-        from nooch_village import llm
-        roles = roles_with_accountabilities(c.st)
-        # `max_tokens`/`json_mode`: één JSON-object over ~30 rollen paste niet in de default van 700
-        # tokens; een afgekapt antwoord parste niet en las als "0 aandachtspunten" (scope 56).
-        res = check_accountabilities(
-            roles, lambda p: llm.reason(p, call_site="cockpit_accountability_check",
-                                        max_tokens=MAX_TOKENS, json_mode=True))
-        try:
-            with open(os.path.join(c.data_dir, "accountability_check.json"), "w", encoding="utf-8") as f:
-                json.dump(res, f, ensure_ascii=False)
-        except Exception:
-            pass
-        if res.get("ok") is False:
-            # Een storing is geen oordeel: niet "check klaar: 0", maar de reden.
-            return c.nxt, f"✗ check kon niet draaien: {res.get('reden') or 'onbekende reden'}"
-        n = len(res.get("duplicates") or []) + len(res.get("weak") or [])
-        return c.nxt, f"check klaar: {n} aandachtspunt(en) over {res.get('n_roles', len(roles))} rollen"
 
 
 # De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze
@@ -5454,176 +5418,16 @@ def _act_ws_approve(c):
     return _act_ws_curate(c, "approved", "✓ “{word}” geactiveerd (approved)")
 
 
-# ── Founder Flow: de graduele-autonomie-trainingslus ─────────────────────────────────────────
-# Alle takken hieronder: AUTHZ: anchor-lead — de flow bepaalt hoeveel de AI zelfstandig mag doen
-# aan radar-triage, claim-oordelen en content-goedkeuring. Dat is een org-brede bevoegdheid (het
-# raakt drie domeinen tegelijk) en het is de founder-rol die hem uitoefent, dus dezelfde poort als
-# persona-beheer. Fail-closed via _anchor_gate; guest (auth uit) mag alles.
-
-def _ff_niveaus(c):
-    from nooch_village.founder_flow import NIVEAU_BESTAND, NiveauStore
-    return NiveauStore(os.path.join(c.data_dir, NIVEAU_BESTAND))
 
 
-def _act_ff_beslis(c):
-        # AUTHZ: anchor-lead — zie het blok-comment hierboven.
-        from nooch_village import founder_flow as ff
-        from nooch_village import founder_taken
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak, item, oordeel = g("taak"), g("item"), g("oordeel")
-        if taak not in ff.TAKEN or oordeel not in ff.OORDELEN.get(taak, ()):
-            return nxt, "✗ unknown task or judgement"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        correctie = g("correctie") == "1"
-        cfg = ff.instellingen(c.data_dir, taak)
-        audit = ff.in_auditsteekproef(taak, item, cfg.get("audit_pct", 0))
-
-        # Het AI-voorstel komt ALTIJD van de server, nooit uit het formulier. Een voorstel dat de
-        # client meestuurt is een voorstel dat de client kan zetten, en dan meet de promotiepoort
-        # niets. Bij een eerste beslissing rekent de wachtrij het opnieuw uit; bij een correctie
-        # staat het al in de log (het item is dan uit de wachtrij verdwenen).
-        labels = ff.alle(c.data_dir)
-        if correctie:
-            eerder = ff.laatste_per_item(labels, taak).get(item, {})
-            ai, titel = eerder.get("ai"), eerder.get("titel", "")
-        else:
-            bron = founder_taken.item_van(st, c.data_dir, taak, item, niveau)
-            if bron is None:
-                return nxt, "✗ this item is no longer in the queue"
-            ai, titel = bron.get("ai"), bron.get("titel", "")
-
-        melding = founder_taken.voer_uit(st, c.data_dir, taak, item, oordeel)
-        try:
-            seconden = max(0.0, time.time() - float(g("getoond") or 0))
-        except (TypeError, ValueError):
-            seconden = 0.0
-        ff.leg_vast(c.data_dir, taak=taak, item=item, mens=oordeel, ai=ai,
-                    ai_getoond=ff.toont_voorstel_vooraf(niveau, audit) or correctie,
-                    niveau=niveau, door=username or "?", seconden=seconden,
-                    correctie=correctie, audit=audit, titel=titel)
-
-        # Een nieuw blind audit-oordeel is precies het moment waarop het bewijs verandert, dus
-        # hier wordt de demotie-poort gerekend. Omhoog vraagt een handtekening, omlaag gebeurt
-        # vanzelf: wachten op een mens betekent dat een afwijkend model ondertussen doorwerkt.
-        terugval = ff.pas_demotie_toe(niveaus, ff.alle(c.data_dir), taak,
-                                      ff.instellingen(c.data_dir, taak))
-        if terugval:
-            melding = f"{melding} · {terugval}"
-
-        # Blind beslist → de onthulling hoort erbij, anders leert de founder niets van de
-        # vergelijking. Hij reist als query-parameter mee; de view rendert 'm bovenaan.
-        if not correctie and not ff.toont_voorstel_vooraf(niveau, audit):
-            sleutel = urllib.parse.quote(f"{taak}|{item}|{oordeel}|{ai or ''}|{niveau}")
-            scheiding = "&" if "?" in nxt else "?"
-            return f"{nxt}{scheiding}onthuld={sleutel}", melding
-        return nxt, melding
 
 
-def _act_ff_promote(c):
-        # AUTHZ: anchor-lead — een trede omhoog breidt uit wat de AI zonder mens mag doen; die
-        # handtekening is mensenwerk, ook als de meting groen staat.
-        from nooch_village import founder_flow as ff
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        cfg = ff.instellingen(c.data_dir, taak)
-        # Fail-closed: de poort wordt hier opnieuw gerekend. Dat de knop zichtbaar was, is geen
-        # bewijs dat hij dat nog steeds mag zijn — de meting kan tussen render en klik gezakt zijn.
-        kan, reden = ff.promoveerbaar(ff.alle(c.data_dir), taak, niveau, cfg)
-        if not kan:
-            return nxt, f"✗ promotion blocked: {reden}"
-        nieuw = ff.volgende(niveau)
-        niveaus.zet(taak, nieuw, door=username or "?", reden=reden)
-        return nxt, f"✓ {ff.TAAK_LABEL[taak]} → level {nieuw} ({reden})"
 
 
-def _act_ff_demote(c):
-        # AUTHZ: anchor-lead — een trede terug is de rem op drift; altijd toegestaan, nooit gemeten.
-        from nooch_village import founder_flow as ff
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        if niveau == "A":
-            return nxt, "already at A"
-        nieuw = ff.vorige(niveau)
-        niveaus.zet(taak, nieuw, door=username or "?", reden=g("reden") or "stepped back by the founder")
-        return nxt, f"↩ {ff.TAAK_LABEL[taak]} → level {nieuw}"
 
 
-def _act_ff_run(c):
-        # AUTHZ: anchor-lead — dit past AI-voorstellen echt toe (radar wegvegen, bordtaken,
-        # @rol-berichten). Alleen op niveau C/D, en nooit op de auditsteekproef.
-        from nooch_village import founder_flow as ff
-        from nooch_village import founder_taken
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveau = _ff_niveaus(c).niveau(taak)
-        if niveau not in ("C", "D"):
-            return nxt, "✗ the AI only works through the queue from level C"
-        cfg = ff.instellingen(c.data_dir, taak)
-        verslag = founder_taken.verwerk_automatisch(st, c.data_dir, taak, niveau, cfg)
-        # Wat is blijven liggen wordt genoemd, niet stil weggelaten: een melding die alleen het
-        # aantal verwerkte items geeft, leest als "alles gedaan" terwijl dat niet zo is.
-        staart = ""
-        if verslag["audit"]:
-            staart += f" · {verslag['audit']} held back for your audit"
-        if verslag["zonder_voorstel"]:
-            staart += f" · {verslag['zonder_voorstel']} skipped (no proposal)"
-        return nxt, f"🤖 the AI handled {verslag['verwerkt']} item(s){staart}"
 
 
-def _act_ff_cluster(c):
-        """Een opkomend onderwerp promoveren naar een project, of parkeren als 'watch'.
-
-        Bewust GEEN label en geen trede. De clustering en de bronnen-teller zijn berekend, en de
-        vraag of een stijgend onderwerp een project waard is, is een strategische keuze die niet
-        uit een steekproef te leren valt — die hoort niet in de graduele-autonomie-machinerie.
-        Wat hier wordt vastgelegd is alleen wat de founder besloot, zodat een afgehandeld
-        onderwerp niet elke week opnieuw om aandacht vraagt."""
-        # AUTHZ: anchor-lead — zie het blok-comment boven de Founder Flow-takken.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        sleutel, keuze = g("sleutel"), g("keuze")
-        onderwerp = g("onderwerp").strip()
-        if not sleutel or keuze not in ("project", "watch"):
-            return nxt, "✗ unknown topic or choice"
-        ref = ""
-        if keuze == "project":
-            rol = g("rol") or "harry_hemp"
-            if st.records.get(rol) is None:
-                return nxt, "✗ the role behind this topic no longer exists"
-            # Hetzelfde aanmaakpad als het projectenbord: een radar-onderwerp levert een echt
-            # project op, geen aparte soort werk.
-            ref = st.projects.create(rol, f"Onderzoek opkomend onderwerp: {onderwerp[:160]}",
-                                     "founder_flow", status="future", origin="radar_cluster",
-                                     done_when="we weten of dit onderwerp iets voor Nooch betekent",
-                                     description=g("bewijs")[:600])
-        st.radar_besluiten.zet(sleutel, keuze, onderwerp=onderwerp, door=username or "?", ref=ref)
-        return nxt, (f"📌 project created for “{onderwerp[:60]}”" if keuze == "project"
-                     else f"👁 watching “{onderwerp[:60]}” — it stays in the trend view")
 
 
 def _act_decision_sheet_log(c):
@@ -5663,11 +5467,6 @@ def _act_decision_sheet_log(c):
 
 ACTIONS = {
     "decision_sheet_log": _act_decision_sheet_log,
-    "ff_beslis": _act_ff_beslis,
-    "ff_cluster": _act_ff_cluster,
-    "ff_promote": _act_ff_promote,
-    "ff_demote": _act_ff_demote,
-    "ff_run": _act_ff_run,
     "kb_new": _act_kb_new,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
@@ -5748,7 +5547,6 @@ ACTIONS = {
     "source_deactivate": _act_source_deactivate,
     "link_pursue": _act_link_pursue,
     "link_ignore": _act_link_ignore,
-    "acc_check": _act_acc_check,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -6192,15 +5990,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
-            if path == "/founder":
-                # De trainingslus van de founder: drie taken, elk met een eigen rijpheidsniveau.
-                # Achter dezelfde sessie-auth als de rest; de schrijfacties gaan door _anchor_gate.
-                self._send(render_founder_flow(
-                    st, data_dir, csrf_token=effective_csrf,
-                    msg=(qs.get("msg") or [""])[0], ritme=(qs.get("ritme") or ["dag"])[0],
-                    onthuld=(qs.get("onthuld") or [""])[0],
-                    radar_view=(qs.get("radar") or ["trend"])[0], username=username))
-                return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
                 return
@@ -6260,19 +6049,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
                 self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
                 return
-            if path == "/codie":
-                # Codie-backlog: de capaciteit-gaten die de escalatie-router oogstte, geclusterd
-                # per ontbrekende capaciteit. Read-only — de mens-poort zit op het pad van gat naar
-                # code-wijziging, niet op dit scherm.
-                self._send(render_codie(data_dir))
-                return
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
                 self._send(render_linkbuilding(data_dir, csrf_token=effective_csrf))
-                return
-            if path == "/accountabilities":
-                # Dorpsbrede accountability-check (dubbelingen + formulering).
-                self._send(render_accountabilities(st, data_dir, csrf_token=effective_csrf))
                 return
             if path == "/woordenschat":
                 # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid; met
@@ -6296,11 +6075,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 # IA-fase 2→3: de Scientist-lens is nu een lens op de gedeelde laag. Oude route
                 # blijft werken via een redirect (geen dode deep-links).
                 self._redirect_to("/keywords?lens=scientist")
-                return
-            if path == "/belofte":
-                # Belofte-graaf: eerste-principes-ontleding, sterkte op het zwakste onderdeel (read-only, stap 1).
-                bid = (qs.get("id") or [""])[0]
-                self._send(render_belofte(data_dir, bid))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.

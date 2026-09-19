@@ -19,8 +19,7 @@ import time
 
 import pytest
 
-from nooch_village import cockpit2, founder_taken, radar_clusters, radar_nieuwheid
-from nooch_village import founder_flow as ff
+from nooch_village import cockpit2, radar_clusters, radar_nieuwheid
 
 DAG = 86400
 
@@ -354,64 +353,11 @@ def test_invouwen_gooit_niets_weg(dd):
     assert c["ingevouwen"][0]["content"] == "Mycelium"           # volledig signaal, geen stub
 
 
-# ── 5. De koppeling met de Founder Flow ──────────────────────────────────────
-
-def test_radar_beeld_telt_bronnen_en_houdt_alles(dd):
-    st = cockpit2._Stores(dd)
-    for n in range(8):
-        _voeg_toe(st, f"Mycelium leer kweken variant {n}", source="fashionunited.com")
-    _voeg_toe(st, "Ananasvezel Pinatex fabriek", source="mdpi.com")
-    beeld = founder_taken.radar_beeld(cockpit2._Stores(dd), dd)
-    mycelium = max(beeld["clusters"], key=lambda c: len(c["leden"]))
-    assert len(mycelium["leden"]) == 8
-    assert mycelium["trend"]["bronnen"] == 1                     # één bron, acht vermeldingen
-    assert sum(len(c["open"]) for c in beeld["clusters"]) == 9   # niets kwijt
 
 
-def test_wachtrij_toont_op_a_en_b_alles_en_lekt_dus_niets(dd):
-    """Zou de wachtrij op A/B al gefilterd zijn op het AI-oordeel, dan verraadt het lidmaatschap
-    het voorstel en stemt elk blind label per constructie in — 100% zonder iets te meten."""
-    st = cockpit2._Stores(dd)
-    for n in range(4):
-        _voeg_toe(st, f"Onderwerp {n} met eigen inhoud", source=f"bron{n}.com")
-    for niveau in ("A", "B"):
-        rijen = founder_taken.wachtrij(cockpit2._Stores(dd), dd, ff.RADAR, niveau=niveau)
-        assert len(rijen) == 4
 
 
-def test_wachtrij_vouwt_pas_vanaf_c(dd, monkeypatch):
-    st = cockpit2._Stores(dd)
-    _voeg_toe(st, "Mycelium", source="a.com")
-    _voeg_toe(st, "Mycelium kweker Ecovative Portugal", source="b.com")
-    monkeypatch.setattr(radar_nieuwheid, "beoordeel_items",
-                        lambda items, **k: {i["id"]: {"nieuw": "Ecovative" in i["content"],
-                                                      "reden": "test", "gefaald": False}
-                                            for i in items})
-    assert len(founder_taken.wachtrij(cockpit2._Stores(dd), dd, ff.RADAR, niveau="B")) == 2
-    op_c = founder_taken.wachtrij(cockpit2._Stores(dd), dd, ff.RADAR, niveau="C")
-    assert len(op_c) == 1 and "Ecovative" in op_c[0]["titel"]
 
 
-def test_clustering_heeft_geen_trede_maar_de_nieuwheid_wel():
-    """Clustering en de bronnen-teller zijn berekend, dus ze horen niet in de tredes. Het enige
-    radar-oordeel dat een trede kent is nieuwheid."""
-    assert ff.OORDELEN[ff.RADAR] == ("nieuw", "bekend")
-    assert "keep" not in ff.OORDELEN[ff.RADAR] and "dismiss" not in ff.OORDELEN[ff.RADAR]
 
 
-def test_oude_relevantie_labels_tellen_niet_mee_op_de_nieuwheids_as(dd):
-    """De as is veranderd van relevantie naar nieuwheid. Oude keep/dismiss-labels blijven in de
-    append-only log staan, maar mogen de nieuwe meting niet vullen — dat zou een relevantie-
-    oordeel afzetten tegen een nieuwheids-voorstel."""
-    import json
-    import os
-    with open(os.path.join(dd, ff.BESTAND), "w", encoding="utf-8") as f:
-        for n in range(40):
-            f.write(json.dumps({"taak": ff.RADAR, "item": f"oud{n}", "mens": "keep",
-                                "ai": "keep", "ai_getoond": False, "correctie": False,
-                                "niveau": "A", "ts": 1_000_000 + n}) + "\n")
-    labels = ff.alle(dd)
-    assert len(labels) == 40                                     # de log is niet herschreven
-    assert ff.overeenstemming(labels, ff.RADAR, 60)["n"] == 0    # maar ze meten niet mee
-    kan, reden = ff.promoveerbaar(labels, ff.RADAR, "A", ff.instellingen(dd, ff.RADAR))
-    assert not kan and "0/30 blind examples" in reden

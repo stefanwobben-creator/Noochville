@@ -30,9 +30,6 @@ def main() -> None:
         from nooch_village.demos.growth import demo
         demo()
 
-    elif mode == "librarian":
-        from nooch_village.demos.knowledge import librarian_demo
-        librarian_demo()
 
     elif mode == "governance":
         from nooch_village.demos.governance_demos import governance_demo
@@ -129,77 +126,15 @@ def main() -> None:
             else:
                 print(f"  ✗ {w}: geen kaartje geschreven (LLM weg of niets gevonden)")
 
-    elif mode == "harry_run":
-        # Eenmalige opdracht aan Harry op eigen termen: ngram-richting + lange-boog-verbanden
-        # (co-beweging/substitutie) + gekalibreerde OpenAlex-voortzetting voorbij de cutoff.
-        import time
-        from nooch_village.event_bus import Event
-        from nooch_village.village import Village
-        terms = sys.argv[2:] or ["consumer", "citizen"]
-        v = Village(heartbeat_seconds=86400)
-        v.context.settings["tijdgeest_interval_seconds"] = "0"
-        pulse, cors, conts = {}, [], []
-        v.bus.subscribe("tijdgeest_pulse_completed", lambda e: pulse.update(e.data))
-        v.bus.subscribe("tijdgeest_correlatie",      lambda e: cors.extend(e.data.get("bevindingen", [])))
-        v.bus.subscribe("tijdgeest_voortzetting",    lambda e: conts.extend(e.data.get("reports", [])))
-        v.start()
-        if "harry_hemp" not in v.reconciler.live:
-            print("HarryHemp niet actief in het dorp.", file=sys.stderr); v.stop(); sys.exit(1)
-        print(f"\nHarry draait ngram + verbanden + OpenAlex-voortzetting voor: {', '.join(terms)}")
-        print("Wacht op Google Books Ngram + OpenAlex (kan ~30-60s duren)…\n")
-        # De mens vraagt als houder van the_source (spelregel 5).
-        v.bus.publish(Event("tijdgeest_pulse", {"terms": terms}, "the_source"))
-        for _ in range(1200):
-            if pulse:
-                break
-            time.sleep(0.1)
-        time.sleep(0.5)
-        v.stop()
-        if not pulse.get("ok"):
-            print(f"Puls mislukt: {pulse.get('error', 'onbekend')}"); sys.exit(1)
-        print("── ngram-richting ──")
-        for r in pulse.get("rows", []):
-            if r.get("no_data"):
-                print(f"  {r['term']:<22} geen data ({r.get('reason', '')})")
-            else:
-                s = r.get("signal", {})
-                print(f"  {r['term']:<22} {s.get('direction', '?'):<10} (recente helling {s.get('slope_recent')})")
-        print("\n── lange-boog-verbanden ──")
-        for c in cors or []:
-            print(f"  {c['label']}: '{c['a']}' ~ '{c['b']}' (r={c['r']}, {c['n']} jaar)")
-        if not cors:
-            print("  (geen sterk verband gevonden)")
-        print("\n── voortzetting voorbij de cutoff (OpenAlex-proxy) ──")
-        for ct in conts or []:
-            cal = ct["calibration"]; jaren = sorted(ct["arc"])
-            print(f"  {ct['term']:<22} kalibratie r={cal.get('r')} ({cal.get('n')} jaar overlap); "
-                  f"boog t/m {jaren[-1] if jaren else '?'}")
-        if not conts:
-            print("  (geen vertrouwde voortzetting; OpenAlex correleerde onvoldoende met ngram)")
 
-    elif mode == "reflect":
-        from nooch_village.demos.analysis import reflect_demo
-        reflect_demo()
 
     elif mode == "simulate":
         from nooch_village.demos.ops import simulate
         simulate()
 
-    elif mode == "discovery":
-        from nooch_village.demos.ops import discovery_demo
-        discovery_demo()
 
-    elif mode == "harry_hemp":
-        from nooch_village.demos.knowledge import harry_hemp_grounding_demo
-        harry_hemp_grounding_demo()
 
-    elif mode == "content_strategist":
-        from nooch_village.role_proposals import birth_content_strategist
-        birth_content_strategist()
 
-    elif mode == "content_strategist_skills":
-        from nooch_village.role_proposals import grant_content_strategist_skills
-        grant_content_strategist_skills()
 
     elif mode == "compliance":
         from nooch_village.role_proposals import birth_compliance
@@ -213,38 +148,7 @@ def main() -> None:
         from nooch_village.role_proposals import grant_compliance_claims
         grant_compliance_claims()
 
-    elif mode == "grant_serpapi_trends":
-        from nooch_village.role_proposals import grant_website_watcher_serpapi
-        grant_website_watcher_serpapi()
 
-    elif mode == "ask_accountability":
-        import time
-        from nooch_village.event_bus import Event
-        from nooch_village.village import Village
-        if len(sys.argv) < 4:
-            print("Gebruik: python -m nooch_village.village ask_accountability <rol> <accountability>",
-                  file=sys.stderr)
-            sys.exit(1)
-        target, key = sys.argv[2], sys.argv[3]
-        v = Village(heartbeat_seconds=86400)
-        done = {}
-        v.bus.subscribe("nl_corpus_check_completed", lambda e: done.update(e.data))
-        v.bus.subscribe("accountability_check_completed", lambda e: done.update(e.data))
-        v.start()
-        time.sleep(0.3)
-        # de mens vraagt als houder van the_source (spelregel 5)
-        v.bus.publish(Event("accountability_requested",
-            {"target": target, "accountability": key, "payload": {}, "from": "the_source"}, "the_source"))
-        for _ in range(600):              # max ~60s (verse fetch kan even duren)
-            if done:
-                break
-            time.sleep(0.1)
-        v.stop()
-        if done:
-            print(f"Antwoord van '{target}' op '{key}': {done}")
-        else:
-            print(f"Geen antwoord binnen de tijd (rol biedt '{key}' misschien niet aan, "
-                  f"of de check duurde te lang).")
 
     elif mode == "seat_human":
         import os
@@ -266,9 +170,6 @@ def main() -> None:
             print(f"Rol '{role_id}' bestaat niet.", file=sys.stderr)
             sys.exit(1)
 
-    elif mode == "upgrade_harry_role":
-        from nooch_village.role_proposals import upgrade_harry_role
-        upgrade_harry_role()
 
     elif mode == "formalize":
         from nooch_village.role_proposals import formalize_session_governance
@@ -282,13 +183,6 @@ def main() -> None:
             sys.exit(1)
         grant_skill_via_governance(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
 
-    elif mode == "grant_accountability":
-        from nooch_village.role_proposals import grant_accountability_via_governance
-        if len(sys.argv) < 4:
-            print("Gebruik: python -m nooch_village.village grant_accountability <role_id> <accountability>",
-                  file=sys.stderr)
-            sys.exit(1)
-        grant_accountability_via_governance(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
 
     elif mode == "revoke_skill":
         from nooch_village.role_proposals import revoke_skill_via_governance
@@ -338,24 +232,6 @@ def main() -> None:
         if dry:
             print("\nDraai zonder 'dry' om dit echt weg te schrijven.")
 
-    elif mode == "add_seed":
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.library import Library
-        from nooch_village.village import BASE_DIR
-        words = [a.strip() for a in sys.argv[2:] if a.strip()]
-        if not words:
-            print('Gebruik: python -m nooch_village.village add_seed "footwear" "fashion"',
-                  file=sys.stderr)
-            sys.exit(1)
-        ctx = load_context(BASE_DIR)
-        lib = Library(os.path.join(ctx.data_dir, "library.json"))
-        for w in words:
-            lib.curate(w, "approved", rationale="seed toegevoegd door de mens (volg-woord)",
-                       by="founder")
-            lib.set_function(w, "volg")                   # expliciet seed, ongeacht woordenaantal
-            print(f"🌱 volg-woord toegevoegd: {w}")
-        print("Draai 'enrich_volumes' om volume + 5-jaars trend op te halen voor de nieuwe seeds.")
 
     elif mode == "rereview":
         import os
@@ -416,29 +292,6 @@ def main() -> None:
         v = Village(heartbeat_seconds=86400)
         print(v.report_keys())
 
-    elif mode == "radar_embed":
-        # Vult de radar-embedding-index in één getemporiseerde run, zodat de clustering op /founder
-        # semantisch draait i.p.v. lexicaal. Een page-load is geen plek om honderden embeddings op
-        # te halen — daarom staat de bulk hier en houdt de render zich met een cap bij.
-        # Idempotent en herstartbaar: al geïndexeerde signalen kosten niets.
-        #   python -m nooch_village.village radar_embed [dagen]
-        import os as _os
-
-        import time as _time
-
-        from nooch_village.config import load_context
-        from nooch_village.radar_clusters import tijdstip, vul_index
-        from nooch_village.radar_store import RadarStore
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        dagen = int(sys.argv[2]) if len(sys.argv) > 2 else 60
-        radar = RadarStore(_os.path.join(ctx.data_dir, "radar.json"))
-        nu = _time.time()
-        items = [i for i in radar.all_items() if nu - tijdstip(i) < dagen * 86400]
-        print(f"radar-embeddings: {len(items)} signalen binnen {dagen} dagen")
-        uit = vul_index(items, ctx.data_dir)
-        print(f"klaar — {uit['gedaan']} geïndexeerd, {uit['mislukt']} mislukt "
-              f"(van {uit['todo']} te doen)")
 
     elif mode == "vastgelopen_route":
         # Eenmalige pas over projecten die vóór de laatste meter al geparkeerd waren. De router
@@ -474,80 +327,7 @@ def main() -> None:
         alarm(ctx.data_dir, uit)
         sys.exit(1)
 
-    elif mode == "competitor":
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.competitor_brands import CompetitorBrands
-        from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
-        from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        store = CompetitorBrands(os.path.join(ctx.data_dir, "competitor_brands.json"))
-        raw = (ctx.settings.get("competitor_brands", "") or "")
-        monitored = list(dict.fromkeys(
-            [b.strip() for b in raw.split(",") if b.strip()] + store.confirmed()))
-        print("🔭 Concurrent-scan draait (Google News RSS per merk)…")
-        res = CompetitorNewsSkill().run({"brands": monitored} if monitored else {}, ctx)
-        if not res.get("ok"):
-            print(f"Scan mislukt: {res.get('error', 'onbekend')}", file=sys.stderr)
-            sys.exit(1)
-        print(f"✅ Rapport: {res['path']}")
-        print(f"   {res['total']} updates over {len(res['brands'])} merken: {', '.join(res['brands'])}")
-        if res.get("errors"):
-            print(f"   ⚠️ merken met fouten: {list(res['errors'])}")
-        # Ontdekking: spot nieuwe merken en zet ze (deduped) klaar voor jouw oordeel
-        print("🔮 Scannen op nieuwe/aanverwante merken…")
-        disc = CompetitorDiscoverSkill().run({"brands": monitored}, ctx)
-        if disc.get("ok"):
-            added = [c["brand"] for c in disc.get("candidates", [])
-                     if store.add_candidate(c.get("brand", ""), c.get("article", ""), c.get("link", ""))]
-            if added:
-                print(f"   {len(added)} nieuw gespot (wacht op je oordeel in de cockpit): {', '.join(added)}")
-            else:
-                print("   geen nieuwe merken gespot")
-        else:
-            print(f"   ontdekking overgeslagen: {disc.get('error', 'onbekend')}")
-        # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden
-        from nooch_village.link_targets import LinkTargets
-        from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
-        print("🔗 Scannen op linkbuilding-doelwitten…")
-        lt = LinkbuildingTargetsSkill().run({"brands": monitored}, ctx)
-        if lt.get("ok"):
-            lstore = LinkTargets(os.path.join(ctx.data_dir, "linkbuilding_targets.json"))
-            new = [t for t in lt.get("targets", [])
-                   if lstore.add_candidate(t.get("link", ""), t.get("title", ""),
-                                           t.get("source", ""), t.get("priority", "onbekend"))]
-            hoog = sum(1 for t in new if t.get("priority") == "hoog")
-            print(f"   {len(new)} nieuw doelwit(ten), waarvan {hoog} hoge prioriteit (zie cockpit)")
-        else:
-            print(f"   linkbuilding overgeslagen: {lt.get('error', 'onbekend')}")
 
-    elif mode == "community_listening":
-        # Billy Buzz: haal Reddit-ervaringen op als observaties (grounded, geen oordeel).
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.buzz_query_sets import BuzzQuerySets, seed_buzz_query_sets
-        from nooch_village.buzz_observations import BuzzObservationStore
-        from nooch_village.skills_impl.community_listening import CommunityListeningSkill
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        ctx.buzz_query_sets = BuzzQuerySets(os.path.join(ctx.data_dir, "buzz_query_sets.json"))
-        seed_buzz_query_sets(ctx.buzz_query_sets)
-        ctx.buzz_observations = BuzzObservationStore(
-            os.path.join(ctx.data_dir, "buzz_observations.jsonl"))
-        set_id = sys.argv[2] if len(sys.argv) > 2 else "barefoot_ervaringen"
-        print(f"🎧 community_listening draait op set '{set_id}' (YouTube + Bluesky; Reddit inactief)…")
-        res = CommunityListeningSkill().run({"query_set_id": set_id}, ctx)
-        if not res.get("ok"):
-            print(f"Overgeslagen [{res.get('refuse', '?')}]: {res.get('error', 'onbekend')}",
-                  file=sys.stderr)
-            sys.exit(1)
-        print(f"✅ {res['new']} nieuwe observatie(s) totaal — {res.get('summary', '')}")
-        top = ctx.buzz_observations.top_by_score(set_id, limit=5)
-        for r in top:
-            ctx_title = f" — “{r.get('context_title')}”" if r.get('context_title') else ""
-            print(f"   · [{r.get('platform', '?')} · {r.get('score', 0)}]{ctx_title}\n"
-                  f"     {(r.get('fragment') or r.get('title') or '')[:80]}\n     {r.get('permalink', '')}")
 
     elif mode == "answer_questions":
         # Gebundelde beantwoording: alle openstaande mens-vragen aan rollen in één LLM-call
@@ -761,25 +541,6 @@ def main() -> None:
               f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}"
               f", gem. {res.get('avg_pairs_month', 0)} paar/maand). Dashboard staat in de cockpit.")
 
-    elif mode == "work_projects":
-        # Rollen werken (omkeerbaar, met eigen skills) aan hun actieve projecten.
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.projects import ProjectLedger
-        from nooch_village.governance import Records
-        from nooch_village.project_worker import work_projects
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        limit = next((int(a) for a in sys.argv[2:] if a.isdigit()), 5)
-        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
-        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
-        from nooch_village.personas import PersonaStore
-        personas = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
-        print(f"🛠️  Rollen werken aan hun omkeerbare projecten (max {limit})…")
-        # Kennis-eerst: data_dir zet de kennislaag-raadpleging aan (log + feed-regel; geen bus in de CLI).
-        res = work_projects(ledger, recs, limit=limit, personas=personas, data_dir=ctx.data_dir)
-        print(f"✅ {res['worked']} uitgevoerd, {res['blocked']} geblokkeerd (vragen jouw oordeel), "
-              f"{res['skipped']} wachten op een volgende ronde. Zie het projectbord in de cockpit.")
 
     elif mode == "board_pulse":
         # De autonome pull-scheduler één keer draaien (dezelfde functie die de daemon op dag_begint
@@ -897,66 +658,8 @@ def main() -> None:
                 print(f"🪑 {p.name} ({p.mbti or 'geen MBTI'}) zit nu in de rol '{role_id}'. "
                       f"De rugzak (skills) blijft van de rol; {p.name} kleurt de toon.")
 
-    elif mode == "review_roles":
-        # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,
-        # en zet per rol één verbetervoorstel als kans in de inbox (mens-gated, niks auto-toegepast).
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.governance import Records
-        from nooch_village.governance_examples import GovernanceExamples
-        from nooch_village.governance_review import review_all_roles
-        from nooch_village.human_inbox import HumanInbox
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
-        ge = GovernanceExamples(os.path.join(ctx.data_dir, "governance_examples.json"))
-        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
-        print(f"🏛️ Facilitator reviewt alle rollen (referentiebank: {ge.count()} voorbeeldrollen)…")
-        res = review_all_roles(recs, ge, inbox)
-        print(f"✅ {res['reviewed']} rollen gereviewd, {res['proposed']} verbetervoorstel(len) "
-              f"als kans in je inbox (verwerk ze in de focus-triage). {res['skipped']} overgeslagen "
-              f"(kernrollen/cirkels).")
-        if ge.count() == 0:
-            print("   ⚠️ Referentiebank leeg — draai eerst 'ingest_governance' voor grounding.")
 
-    elif mode == "teleology_review":
-        # Teleologie-review: de Facilitator herijkt per rol de purpose (bestaansdoel) + accountabilities
-        # naar de standaard (Engels, B1, -ing-vorm); de Secretary legt elk als kans in de human inbox.
-        # Mens-gated: niks auto-toegepast, jij keurt goed in de triage.
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.governance import Records
-        from nooch_village.governance_review import teleology_review_all_roles
-        from nooch_village.human_inbox import HumanInbox
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
-        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
-        print("🏛️ Teleologie-review: Facilitator herijkt purpose + accountabilities (EN, B1, -ing)…")
-        res = teleology_review_all_roles(recs, inbox)
-        print(f"✅ {res['reviewed']} rollen gereviewd, {res['proposed']} voorstel(len) door de Secretary "
-              f"vastgelegd in je inbox (mens-gated). {res['skipped']} overgeslagen (kernrollen/cirkels)"
-              + (f", {res['incomplete']} met een accountability die nog niet in -ing-vorm staat (gemarkeerd)."
-                 if res['incomplete'] else "."))
 
-    elif mode == "teleology_to_roloverleg":
-        # De Secretary zet de teleologie-voorstellen (human inbox) op de roloverleg-agenda, zodat de mens
-        # ze 1-voor-1 in het roloverleg-scherm verwerkt. Mens-gated: adopteren gebeurt pas bij consent.
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.governance import Records
-        from nooch_village.human_inbox import HumanInbox
-        from nooch_village.roloverleg import Agenda
-        from nooch_village.governance_review import route_teleology_to_roloverleg
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
-        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
-        agenda = Agenda(os.path.join(ctx.data_dir, "roloverleg_agenda.json"))
-        print("🏛️ Secretary zet de teleologie-voorstellen op de roloverleg-agenda…")
-        res = route_teleology_to_roloverleg(inbox, recs, agenda)
-        print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
-              f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
     elif mode == "wiki_zaad":
         # De eerste wiki-pagina's uit bestaande bronnen (stuklijst + claims-werklijst).

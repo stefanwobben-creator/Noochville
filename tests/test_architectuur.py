@@ -105,7 +105,9 @@ def test_sectie_d_leidt_af_uit_schrijfgedrag_en_niet_uit_noemen():
     # decision_sheets.py schrijft met `open(pad(data_dir), "a")` — geneste haakjes, en precies het
     # geval dat de eerste versie van de detectie miste.
     assert eigenaren.get("decision_sheets.jsonl") == "decision_sheets.py"
-    assert eigenaren.get("founder_park.jsonl") == "founder_park.py"
+    # Tweede voorbeeld, een andere module dan de eerste. Stond tot 19 sept 2026 op
+    # founder_park.jsonl; die module is met de Founder Flow weg (BLOK C).
+    assert eigenaren.get("gaps.jsonl") == "gap_ledger.py"
     # human_inbox.json heeft meerdere schrijvers en hoort dus NIET bij één eigenaar te staan
     assert "human_inbox.json" not in eigenaren
     assert any(b == "human_inbox.json" for b, _ in df["meerdere"])

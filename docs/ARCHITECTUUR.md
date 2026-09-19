@@ -28,7 +28,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/middelen` | `render_middelen` | `nooch_village/views/overview.py` |
 | `/person` | `render_person` | `nooch_village/views/overview.py` |
 | `/admin` | `render_admin` | `nooch_village/views/overview.py` |
-| `/founder` | `render_founder_flow` | `nooch_village/views/founder_flow.py` |
 | `/_patterns` | `render_patterns` | `nooch_village/views/overview.py` |
 | `/inbox` | `render_inbox_frag` | `nooch_village/views/inbox.py` |
 | `/search` | `render_search_fragment` | `nooch_village/views/search.py` |
@@ -37,13 +36,10 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/goal` | `render_goal` | `nooch_village/views/doelen.py` |
 | `/site-audit` | `render_site_audit` | `nooch_village/views/site_audit.py` |
 | `/bronnen` | `render_bronnen` | `nooch_village/views/bronnen.py` |
-| `/codie` | `render_codie` | `nooch_village/views/codie.py` |
 | `/linkbuilding` | `render_linkbuilding` | `nooch_village/views/linkbuilding.py` |
-| `/accountabilities` | `render_accountabilities` | `nooch_village/views/accountabilities.py` |
 | `/woordenschat` | `render_woordenschat` | `nooch_village/views/woordenschat.py` |
 | `/keywords` | `render_keyword_lens` | `nooch_village/views/keyword_lens.py` |
 | `/long-term-trends` | `(inline)` | `cockpit2.py` |
-| `/belofte` | `render_belofte` | `nooch_village/views/belofte.py` |
 | `/metrics2` | `render_metrics2` | `nooch_village/views/metrics2.py` |
 | `/inbox/verwerk` | `render_verwerk` | `nooch_village/views/inbox.py` |
 | `/catalog` | `render_catalog` | `nooch_village/views/catalog.py` |
@@ -75,11 +71,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | Actie | Handler (cockpit2.py) |
 |---|---|
 | `decision_sheet_log` | `_act_decision_sheet_log` |
-| `ff_beslis` | `_act_ff_beslis` |
-| `ff_cluster` | `_act_ff_cluster` |
-| `ff_promote` | `_act_ff_promote` |
-| `ff_demote` | `_act_ff_demote` |
-| `ff_run` | `_act_ff_run` |
 | `kb_new` | `_act_kb_new` |
 | `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
 | `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
@@ -160,7 +151,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `source_deactivate` | `_act_source_deactivate` |
 | `link_pursue` | `_act_link_pursue` |
 | `link_ignore` | `_act_link_ignore` |
-| `acc_check` | `_act_acc_check` |
 | `ai_reply` | `_act_ai_reply` |
 | `proj_feed` | `_act_proj_feed` |
 | `checklist_add` | `_act_checklist_add` |
@@ -286,16 +276,18 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 
 | Databestand | Schrijvende module |
 |---|---|
-| `accountability_check.json` | `cockpit2.py` |
 | `afslanken.jsonl` | `afslanken.py` |
 | `artefact_changelog.jsonl` | `artefacts.py` |
 | `autonomie_signaal.jsonl` | `zelf_verwerking.py` |
 | `belofte_grafen.json` | `cockpit2.py` |
 | `board_pulse.jsonl` | `board_loop.py` |
+| `buzz_observations.jsonl` | `village.py` |
+| `buzz_query_sets.json` | `village.py` |
 | `checklist_suggesties.jsonl` | `checklist_vorm.py` |
 | `claims_database.json` | `claims_db.py` |
 | `claims_labels.jsonl` | `claims_labels.py` |
 | `claims_runtime.json` | `claims_db.py` |
+| `competitor_brands.json` | `village.py` |
 | `constraints.json` | `cli.py` |
 | `critic_labels.jsonl` | `missie_critic.py` |
 | `csrf.json` | `cockpit2.py` |
@@ -303,12 +295,10 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `decision_sheets.jsonl` | `decision_sheets.py` |
 | `draaistaat.jsonl` | `draaistaat.py` |
 | `feeds.json` | `radar_store.py` |
-| `founder_flow.json` | `founder_flow.py` |
-| `founder_labels.jsonl` | `founder_flow.py` |
-| `founder_park.jsonl` | `founder_park.py` |
 | `gaps.jsonl` | `gap_ledger.py` |
 | `governance_examples.json` | `cli.py` |
 | `kennis_embeddings.json` | `kennis_embeddings.py` |
+| `linkbuilding_targets.json` | `cockpit2.py` |
 | `materiaal_memo.json` | `materiaal_memo.py` |
 | `meta.json` | `epic.py` |
 | `noochie_daily.json` | `roles.py` |
@@ -340,13 +330,9 @@ Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan 
 
 | Databestand | Schrijvende modules |
 |---|---|
-| `buzz_observations.jsonl` | `cli.py, village.py` |
-| `buzz_query_sets.json` | `cli.py, village.py` |
-| `competitor_brands.json` | `cli.py, village.py` |
 | `groeidagboek.jsonl` | `role_proposals.py, village.py` |
 | `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, village.py` |
 | `lexicon.json` | `cli.py, village.py` |
-| `linkbuilding_targets.json` | `cli.py, cockpit2.py` |
 | `llm_usage.jsonl` | `llm_usage.py, village.py` |
 | `system_log.jsonl` | `cockpit2.py, verslag.py, village.py` |
 | `timekeeper_last_day.json` | `dagcyclus.py, puls_wacht.py` |
@@ -370,4 +356,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_55 routes · 168 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 10 met meerdere · 9 zonder gevonden schrijver._
+_51 routes · 162 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

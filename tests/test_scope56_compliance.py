@@ -434,43 +434,5 @@ def _cc_ctx(tmp_path=None, rules="REGELS"):
 
 
 
-# ══ accountability_check ═════════════════════════════════════════════════════
-
-def test_accountability_check_storing_is_geen_oordeel(tmp_path):
-    from nooch_village import cockpit2
-    from nooch_village.skills_impl.accountability_check import check_accountabilities
-    rollen = [{"role": "A", "accountabilities": ["x doen"]}]
-    res = check_accountabilities(rollen, reason_fn=lambda p: None)
-    assert res["ok"] is False and "geen antwoord" in res["reden"]
-    assert res["n_roles"] == 1 and res["at"] > 0
-    afgekapt = check_accountabilities(rollen, reason_fn=lambda p: '{"duplicates": [{"acc')
-    assert afgekapt["ok"] is False and "niet leesbaar" in afgekapt["reden"]
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    with open(os.path.join(dd, "accountability_check.json"), "w", encoding="utf-8") as f:
-        json.dump(res, f)
-    html = cockpit2.render_accountabilities(st, dd, csrf_token="t")
-    assert "The check could not run" in html and "No duplicates found" not in html
-    assert "Last run:" in html and "1 roles checked" in html
 
 
-def test_accountability_check_actie_geeft_capaciteit_en_zegt_storing(tmp_path, monkeypatch):
-    from nooch_village import cockpit2, llm
-    from nooch_village.skills_impl.accountability_check import MAX_TOKENS
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    gezien = {}
-
-    def vang(prompt, **kw):
-        gezien.update(kw)
-        return None
-    monkeypatch.setattr(llm, "reason", vang)
-    _, msg = cockpit2.dispatch(dd, "acc_check", {"next": ["/accountabilities"]}, "guest")
-    assert gezien["max_tokens"] == MAX_TOKENS == 3000 and gezien["json_mode"] is True
-    assert "kon niet draaien" in msg
-    opgeslagen = json.load(open(os.path.join(dd, "accountability_check.json"), encoding="utf-8"))
-    assert opgeslagen["ok"] is False and "at" in opgeslagen and "n_roles" in opgeslagen
-    monkeypatch.setattr(llm, "reason", lambda p, **kw: '{"duplicates": [], "weak": []}')
-    _, msg = cockpit2.dispatch(dd, "acc_check", {"next": ["/accountabilities"]}, "guest")
-    assert msg.startswith("check klaar: 0 aandachtspunt(en) over")

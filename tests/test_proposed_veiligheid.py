@@ -2,11 +2,14 @@
 beweging. Ruis is duur, dus de mens is de poort — en die poort mag niet per ongeluk openvallen
 doordat een andere lus zijn statusfilter verbreedt.
 
-Deze test bevriest die grens op alle drie de autonome lussen die een project kunnen oppakken:
-  1. `board_loop.activate_pulse` — activeert / hervat / escaleert;
-  2. `project_worker._eligible` (via work_projects) — laat een rol tekst opleveren;
-  3. `Inhabitant._tend_projects` — bereidt voor en voert uit.
-Verbreedt iemand later een van die filters, dan valt hier een test om.
+Deze test bevroor die grens op drie autonome lussen. Twee bestaan sinds 19 september 2026 niet
+meer: `project_worker._eligible` (de module is weg) en de voorbereid-en-voer-uit-helft van
+`Inhabitant._tend_projects` (BLOK A). Wat overblijft is `board_loop.activate_pulse`, en dat is
+nu de ENIGE lus die een project uit zichzelf in beweging kan brengen — reden te meer om hem
+hier vast te houden. Verbreedt iemand dat statusfilter, dan valt hier een test om.
+
+`_tend_projects` blijft wél getest, maar op wat hij nog doet: hij mag een voorstel niet
+heropenen. Dat is de parkeer-klep, en die kijkt naar `blocked`, niet naar `proposed`.
 """
 from __future__ import annotations
 
@@ -17,7 +20,6 @@ from nooch_village.event_bus import EventBus
 from nooch_village.config import Context
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition
-from nooch_village.project_worker import _eligible
 from nooch_village.projects import ProjectLedger
 from nooch_village.skills import SkillRegistry
 
@@ -54,16 +56,11 @@ def test_activate_pulse_escaleert_een_voorstel_niet_bij_onbemande_rol(tmp_path):
     assert res["escalated"] == [] and led.get(v)["status"] == "proposed"
 
 
-def test_rol_werkt_nooit_aan_een_voorstel(tmp_path):
-    """project_worker: een voorstel is niet 'eligible', dus er wordt geen tekst voor opgeleverd."""
-    led = _led(tmp_path)
-    v = led.get(led.create("harry", "voorstel", "role", status="proposed"))
-    assert _eligible(v, 3) is False
 
 
-def test_tend_projects_bereidt_een_voorstel_niet_voor(tmp_path):
-    """Inhabitant: een voorstel krijgt geen checklist en wordt niet uitgevoerd — hij zit in geen
-    van de statussen die _tend_projects langsloopt (future / queued / running)."""
+def test_tend_projects_heropent_een_voorstel_niet(tmp_path):
+    """Inhabitant: een voorstel blijft een voorstel. De parkeer-klep kijkt naar `blocked`;
+    `proposed` komt daar niet in voor, dus er gebeurt niets."""
     dd = str(tmp_path)
     ctx = Context(settings={}, data_dir=dd)
     ctx.projects = _led(tmp_path)

@@ -65,14 +65,6 @@ def test_wat_het_dorp_zelf_aanmaakt_slaapt(tmp_path):
     assert 'status="future"' in inspect.getsource(claims_board) and "queued" not in inspect.getsource(claims_board)
 
 
-def test_de_rol_werkt_alleen_aan_actief_werk_en_maar_een_keer(tmp_path):
-    """`_eligible`: running en nog niet gewerkt. Future is niet aan de beurt, en na één ronde is het
-    `worked`-anker de rem (dat was vroeger de overgang queued → running)."""
-    from nooch_village.project_worker import _eligible
-    assert not _eligible({"status": "future"}, 3)
-    assert _eligible({"status": "running"}, 3)
-    assert not _eligible({"status": "running", "worked": True}, 3)
-    assert not _eligible({"status": "blocked"}, 3) and not _eligible({"status": "done"}, 3)
 
 
 # ── 3: de migratie ───────────────────────────────────────────────────────────

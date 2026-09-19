@@ -174,15 +174,31 @@ def beoordeel(signaal: dict, lexicon=None) -> dict:
     return {"besluit": NAAR_VOORSTEL, "as": "", "principe": "", "citaat": "", "themas": list(themas)}
 
 
+def _in_steekproef(taak: str, item: str, audit_pct: float) -> bool:
+    """Hoort dit item in de blinde auditsteekproef?
+
+    Deterministisch uit een hash van (taak, item) — géén random. Twee redenen: een item mag niet
+    van steekproef wisselen tussen twee page-loads, en de keuze moet reproduceerbaar zijn bij het
+    naspelen van de log.
+
+    Stond tot 19 september 2026 in `founder_flow.in_auditsteekproef`. Die module is met de hele
+    Founder Flow verdwenen; dit is geen kopie maar een verhuizing naar de enige overgebleven
+    gebruiker. Verdwijnt de radar-beoordeling in fase 4, dan gaat deze helper mee."""
+    import hashlib
+    pct = max(0.0, min(100.0, float(audit_pct or 0)))
+    if pct <= 0:
+        return False
+    h = int(hashlib.sha1(f"{taak}:{item}".encode("utf-8")).hexdigest()[:8], 16)
+    return (h % 100) < pct
+
+
 def in_audit(signaal_id: str, dismiss_as: str) -> bool:
     """Valt deze dismiss in de auditsteekproef?
 
-    Hergebruikt de deterministische hash uit `founder_flow` — dezelfde dismiss valt altijd hetzelfde
-    uit, dus geen loterij bij elke render. Het percentage verschilt per as omdat het risico verschilt:
-    een `off_strategie`-dismiss kan een nieuw signaal begraven, een `strijdig`-dismiss bijna niet."""
-    from nooch_village.founder_flow import in_auditsteekproef
-    return in_auditsteekproef("dismiss_audit", f"{dismiss_as}:{signaal_id}",
-                              AUDIT_PCT.get(dismiss_as, 25))
+    Het percentage verschilt per as omdat het risico verschilt: een `off_strategie`-dismiss kan een
+    nieuw signaal begraven, een `strijdig`-dismiss bijna niet."""
+    return _in_steekproef("dismiss_audit", f"{dismiss_as}:{signaal_id}",
+                          AUDIT_PCT.get(dismiss_as, 25))
 
 
 def leg_vast(data_dir: str, *, signaal: dict, oordeel: dict, rol: str,

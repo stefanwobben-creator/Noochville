@@ -230,17 +230,6 @@ def test_de_matching_brug_blijft_bij_de_taal_van_de_records():
     assert "beoord" in _middel_signatuur("keyword_review")
 
 
-def test_geen_engelse_berichten_meer_uit_de_founder_flow():
-    """De 20 code-literals. Drie ervan stuurden Engels naar een inbox — "Bank the evidence for:" was
-    er 14 van. De cockpit-CHROME blijft Engels (i18n fase 1); de berichtinhoud is Nederlands, net als
-    elke andere spanning."""
-    import inspect
-
-    from nooch_village import founder_taken
-    bron = inspect.getsource(founder_taken)
-    for engels in ("Bank the evidence for", "Ground this claim scientifically",
-                   "Approved proposal from"):
-        assert engels not in bron, engels
 
 
 # ── de grond-check: derde onafhankelijke deelcheck ──────────────────────────
