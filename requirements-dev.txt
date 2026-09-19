@@ -1,0 +1,16 @@
+# Dev-only. Wordt NIET geïnstalleerd door scripts/deploy.sh of .github/workflows/ci.yml —
+# die draaien allebei op requirements.txt. Wie deze eindcheck wil draaien installeert 'm zelf:
+#
+#   ./venv/bin/pip install -r requirements-dev.txt
+#   ./venv/bin/python -m playwright install chromium      # ~94 MB, buiten de venv
+#
+# pytest staat bewust in requirements.txt en niet hier: CI installeert alleen dat bestand.
+
+# Browser-eindcheck op de herbouwde schermen (fase 9). Geen enkele test in tests/ importeert
+# playwright; hij draait handmatig via claude/fase9_screenshots/maak_screenshots.py.
+#
+# Waarom vastgelegd en niet weggegooid: de screenshot-ronde vond twee fouten die de 4.027
+# unit-tests niet konden zien, omdat die de broncode lezen en niet de gerenderde pagina —
+# de pasteltinten op de vier bordkolommen, en Messages die op een leeg kanaal opende.
+# Zie claude/eindrapport_opruiming_fase1-9.md, §6.
+playwright>=1.63
