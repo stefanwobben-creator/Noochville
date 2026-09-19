@@ -104,18 +104,6 @@ def _roept_aan(fn, naam: str) -> bool:
                for n in ast.walk(boom))
 
 
-def test_de_planner_leest_de_lessen_en_verbreedt():
-    """Zonder deze twee schakels is een les vastleggen zinloos voor het pad dat er echt toe doet:
-    `_plan_checklist` schrijft de zoekopdrachten van een project, en kende de leerlus niet."""
-    import inspect
-
-    from nooch_village.inhabitant import Inhabitant
-    assert "lessen_section" in inspect.getsource(Inhabitant._plan_checklist), \
-        "de planner-prompt mist het lessen-blok"
-    assert _roept_aan(Inhabitant._plan_checklist, "_lessen"), \
-        "de planner haalt de lessen niet op"
-    assert _roept_aan(Inhabitant.prepare_project, "verbreed_planitems"), \
-        "de planner past de verbreding niet toe op zijn eigen items"
 
 
 # ── 3. De poort houdt nu iets tegen ──────────────────────────────────────────

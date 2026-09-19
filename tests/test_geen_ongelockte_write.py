@@ -62,7 +62,9 @@ _WHITELIST = {
     "deliverable_store.py": (1, "write-once sidecar per deliverable (data/deliverables/<id>.json); "
                                "lock-vrij want elk id is uniek — NIET de index, die loopt via JsonStore._save"),
     # ── daemon-lokaal: per-thread/single-writer state, geen gedeelde store ──
-    "inhabitant.py":     (5, "daemon-lokaal: per-rol-thread reflect-/goal-state (eigen bestand per rol)"),
+    # `inhabitant.py` stond hier op 5 (per-rol reflect-/goal-state). Die vijf schrijvers zaten
+    # allemaal in de projectuitvoering en de sensing-cluster, weg op 19 sept 2026 (BLOK A).
+    # De regel is verwijderd in plaats van op 0 gezet: een plafond van nul is geen schuld.
     "roles.py":          (1, "daemon-lokaal: per-rol single-writer state (seed). Stond op 3; de twee "
                              "andere schrijvers zaten in HarryHemp en WebsiteWatcherWorker, en die "
                              "klassen zijn op 19 sept 2026 verwijderd"),

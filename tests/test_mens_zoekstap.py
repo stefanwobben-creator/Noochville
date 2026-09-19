@@ -103,83 +103,12 @@ def _plan_antwoord(items):
     return json.dumps({"deliverable": "d", "accountability": "a", "items": items})
 
 
-def test_prepare_project_zet_het_item_en_het_bericht_op_het_project(tmp_path, monkeypatch):
-    import nooch_village.llm as llm
-    antwoord = _plan_antwoord([
-        {"text": "search", "skill": "web_zoek", "payload": {"term": "bio glue"}, "reason": ""},
-        {"text": "papers", "skill": "openalex_evidence", "payload": {"term": "adhesives footwear"}, "reason": ""}])
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (antwoord, "mock") if k.get("return_tier") else antwoord)
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inw = _inw(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "Glue-free joining", "human", status="future",
-                        description="plastic-free and vegan")
-    inw.prepare_project(pid)
-    p = ledger.get(pid)
-    items = inw._project_checklist(p)["items"]
-    mens = [it for it in items if it.get("human_task")]
-    assert len(mens) == 1 and mens[0]["text"].startswith("🔎") and mens[0]["reason"] == mz.ITEM_REDEN
-    assert checklist_progress(items) == (0, 2)                          # het mens-item telt niet mee
-    logtxt = [e["text"] for e in p.get("log", [])]
-    bericht = next(t for t in logtxt if t.startswith(mz.MARKER))
-    assert "   • bio glue" in bericht and "   • adhesives footwear" in bericht
-    assert "Research this: Glue-free joining." in bericht and "plastic-free and vegan" in bericht
-    assert p["status"] == "future"                                      # geen mens-project geworden
 
 
-def test_plan_zonder_zoekstap_krijgt_geen_mens_zoekstap(tmp_path, monkeypatch):
-    import nooch_village.llm as llm
-    antwoord = _plan_antwoord([{"text": "write", "skill": None, "payload": {}, "reason": "no skill",
-                                "kind": "missing_capability"}])
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (antwoord, "mock") if k.get("return_tier") else antwoord)
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inw = _inw(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="future")
-    inw.prepare_project(pid)
-    items = inw._project_checklist(ledger.get(pid))["items"]
-    assert len(items) == 1 and not any(it.get("human_task") for it in items)
-    assert not any(e["text"].startswith(mz.MARKER) for e in ledger.get(pid).get("log", []))
 
 
-# ── ook na de strategie, maar één keer ───────────────────────────────────────
-
-def test_herplanning_na_strategie_zet_de_mens_zoekstap_op_de_tweede_lijst(tmp_path, monkeypatch):
-    """Een eerste lijst die alleen uit `zoekstrategie` bestond had geen zoekterm en dus geen
-    queries voor de mens; de tweede lijst (uit de strategie) heeft ze wel. Eén keer, niet op elke
-    lijst opnieuw."""
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inw = _inw(tmp_path, ledger, skills=("zoekstrategie", "web_zoek"))
-    monkeypatch.setattr(Inhabitant, "_plan_checklist",
-                        lambda self, goal, **kw: {"items": [
-                            {"text": "search", "skill": "web_zoek", "payload": {"term": "bio glue"}}]})
-    pid = ledger.create("harry_hemp", "Glue-free joining", "role", status="running")
-    cl = ledger.checklist_add(pid, title="Strategie")
-    ledger.check_add(pid, cl["id"], "strategy", skill="zoekstrategie")
-    item = ledger.get(pid)["checklists"][0]["items"][0]
-    inw._herplan_na_strategie(pid, item, {"ok": True, "stappen": [
-        {"bron": "web_zoek", "term": "bio glue", "taal": "en"}]}, ledger)
-    p = ledger.get(pid)
-    tweede = p["checklists"][1]["items"]
-    assert [it["text"][:1] for it in tweede] == ["s", "🔎"] and tweede[1]["human_task"] is True
-    assert checklist_progress(tweede) == (0, 1)
-    assert sum(1 for e in p.get("log", []) if e["text"].startswith(mz.MARKER)) == 1
 
 
-def test_herplanning_dupliceert_de_mens_zoekstap_niet(tmp_path, monkeypatch):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inw = _inw(tmp_path, ledger, skills=("zoekstrategie", "web_zoek"))
-    monkeypatch.setattr(Inhabitant, "_plan_checklist",
-                        lambda self, goal, **kw: {"items": [
-                            {"text": "search", "skill": "web_zoek", "payload": {"term": "bio glue"}}]})
-    pid = ledger.create("harry_hemp", "Glue-free joining", "role", status="running")
-    cl = ledger.checklist_add(pid, title="Uitvoerplan")
-    ledger.check_add(pid, cl["id"], "strategy", skill="zoekstrategie")
-    ledger.check_add(pid, cl["id"], mz.ITEM_TEKST, skill=None, human_task=True)      # stond er al
-    item = ledger.get(pid)["checklists"][0]["items"][0]
-    inw._herplan_na_strategie(pid, item, {"ok": True, "stappen": [
-        {"bron": "web_zoek", "term": "bio glue", "taal": "en"}]}, ledger)
-    p = ledger.get(pid)
-    alle = [it for c in p["checklists"] for it in c["items"] if it["text"].startswith("🔎")]
-    assert len(alle) == 1
 
 
 # ── en via de wizard, de andere weg naar het bord ────────────────────────────

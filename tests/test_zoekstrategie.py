@@ -196,85 +196,14 @@ def _resultaat():
             "bij_nul_treffers": "verbreed naar plant-based footwear"}
 
 
-def test_herplan_maakt_een_tweede_lijst_die_op_akkoord_wacht(rol, monkeypatch):
-    inw, led = rol
-    monkeypatch.setattr(Inhabitant, "_plan_checklist",
-                        lambda self, goal, **kw: {"items": [
-                            {"text": "Search OpenAlex for 'vegan shoes'",
-                             "skill": "openalex_evidence", "payload": {"term": "vegan shoes"}}]})
-    pid = led.create("sid", "waarom groeien vegan schoenen", "role", status="running")
-    cl = led.checklist_add(pid, title="Strategie")
-    led.check_add(pid, cl["id"], "bepaal de strategie", skill="zoekstrategie")
-    item = led.get(pid)["checklists"][0]["items"][0]
-
-    inw._herplan_na_strategie(pid, item, _resultaat(), led)
-
-    cls = led.get(pid)["checklists"]
-    assert len(cls) == 2
-    nieuw = cls[1]
-    assert nieuw.get("herplan_van") == item["id"]
-    assert nieuw.get("akkoord") is False                  # wacht op go ahead, net als elk plan
-    assert plan_wacht_op_akkoord(nieuw) is True
-    assert uitvoerlijst(led.get(pid))["id"] == nieuw["id"]   # de rol werkt nu déze lijst
 
 
-def test_maar_een_ronde(rol, monkeypatch):
-    """DE KERNTEST. Zonder deze rem kan een strategie een lijst opleveren die weer een strategie
-    bevat, en plant het dorp door zonder ooit iets te zoeken."""
-    inw, led = rol
-    monkeypatch.setattr(Inhabitant, "_plan_checklist",
-                        lambda self, goal, **kw: {"items": [{"text": "x", "skill": "openalex_evidence",
-                                                             "payload": {"term": "t"}}]})
-    pid = led.create("sid", "doel", "role", status="running")
-    cl = led.checklist_add(pid, title="Strategie")
-    led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
-    item = led.get(pid)["checklists"][0]["items"][0]
-
-    inw._herplan_na_strategie(pid, item, _resultaat(), led)
-    inw._herplan_na_strategie(pid, item, _resultaat(), led)
-    inw._herplan_na_strategie(pid, item, _resultaat(), led)
-    assert len(led.get(pid)["checklists"]) == 2, "meer dan één herplan-ronde"
 
 
-def test_het_plan_krijgt_de_term_mee_met_verbod_om_te_vertalen(rol, monkeypatch):
-    """De hele stap bestaat om de term bij het corpus te laten passen. Zou de planner hem alsnog
-    'verbeteren', dan is de fout van juli terug."""
-    inw, led = rol
-    gezien = {}
-    monkeypatch.setattr(Inhabitant, "_plan_checklist",
-                        lambda self, goal, **kw: gezien.setdefault("d", kw.get("description")) and None
-                        or {"items": [{"text": "x", "skill": "openalex_evidence", "payload": {}}]})
-    pid = led.create("sid", "doel", "role", status="running")
-    cl = led.checklist_add(pid, title="Strategie")
-    led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
-    inw._herplan_na_strategie(pid, led.get(pid)["checklists"][0]["items"][0], _resultaat(), led)
-
-    d = gezien["d"]
-    assert 'search term "vegan shoes"' in d
-    assert "do not translate" in d
-    assert "Next term if the first runs thin: verbreed naar plant-based footwear" in d
 
 
-def test_zonder_stappen_gebeurt_er_niets(rol):
-    """Herplannen is een dienst, geen voorwaarde: de strategie staat toch op de wall."""
-    inw, led = rol
-    pid = led.create("sid", "doel", "role", status="running")
-    cl = led.checklist_add(pid, title="Strategie")
-    led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
-    item = led.get(pid)["checklists"][0]["items"][0]
-    inw._herplan_na_strategie(pid, item, {"ok": True, "stappen": []}, led)
-    assert len(led.get(pid)["checklists"]) == 1
 
 
-def test_mislukt_plan_laat_het_project_heel(rol, monkeypatch):
-    inw, led = rol
-    monkeypatch.setattr(Inhabitant, "_plan_checklist", lambda self, goal, **kw: None)
-    pid = led.create("sid", "doel", "role", status="running")
-    cl = led.checklist_add(pid, title="Strategie")
-    led.check_add(pid, cl["id"], "strategie", skill="zoekstrategie")
-    item = led.get(pid)["checklists"][0]["items"][0]
-    inw._herplan_na_strategie(pid, item, _resultaat(), led)
-    assert len(led.get(pid)["checklists"]) == 1           # geen halve lijst achtergelaten
 
 
 def test_als_tekst_zonder_strategie_of_nulplan():

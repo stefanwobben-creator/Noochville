@@ -81,29 +81,6 @@ def _plausible_get(url, **kw):
     return resp
 
 
-def test_plausible_opent_met_de_kopcijfers_en_niet_met_paginapaden():
-    from nooch_village.skills_impl.plausible import PlausibleSkill
-    with patch("nooch_village.skills_impl.plausible.requests.get", side_effect=_plausible_get):
-        r = PlausibleSkill().run({"period": "7d"}, _plausible_ctx())
-    assert C(r) == ("gelukt", ("list", "rows"))                # rows wint van top_pages
-    assert [x["metric"] for x in r["rows"][:5]] == ["visitors", "pageviews", "visit_duration", "bounce_rate",
-                                                     "visitors_day"]
-    assert r["rows"][0] == {"period": "7d", "metric": "visitors", "waarde": 312,
-                            "text": "312 unique visitors in the last 7 days"}
-    # de breakdown-regels dragen de naam als titelveld (het verslag kent geen `country` als titel)
-    land = next(x for x in r["rows"] if x.get("dimension") == "country")
-    assert land["name"] == "NL" and land["waarde"] == 200 and "NL" in land["text"]
-    assert r["text"].startswith("312 unique visitors and 900 pageviews in the last 7 days")
-    assert "Yesterday" in r["text"] and "top country NL (200)" in r["text"]
-    # de oude sleutels blijven voor roles.py (_extract_pulse_metrics, _surface_locale)
-    assert r["results"]["visitors"]["value"] == 312 and r["countries"][0]["country"] == "NL"
-    note = _note(_inw(PlausibleSkill()), "plausible_stats", r)
-    assert note.split("\n")[1].startswith("312 unique visitors")
-    assert "metric: visitors | period: 7d | waarde: 312" in note
-    verslag = project_verslag.inhoud_tekst(r)
-    assert verslag.splitlines()[0].startswith("312 unique visitors")
-    assert "• visitors — 312 unique visitors in the last 7 days" in verslag
-    assert "• /p0 — 50 visitors on /p0 in the last 7 days" in verslag     # het verslag toont 8 records
 
 
 def test_plausible_zonder_sleutel_is_een_fout_geen_lege_lijst():
@@ -276,22 +253,6 @@ def test_env_example_noemt_de_shopify_sleutels_zonder_waarden():
         assert f"{naam}=" in regels, f"{naam} hoort als lege regel in .env.example"
 
 
-def test_shopify_opent_met_paren_en_omzet_en_niet_met_landen():
-    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
-    post = lambda q, v: _gql([_order("NL", 90, [("Groen", 1)]), _order("DE", 180, [("Groen", 2)])])
-    r = ShopifySalesSkill().run({"window_days": 30, "_post": post}, _shop_ctx())
-    assert C(r) == ("gelukt", ("list", "rows")) and r["truncated"] is False
-    assert [x["metric"] for x in r["rows"][:4]] == ["pairs_sold", "orders", "revenue", "aov"]
-    assert r["rows"][0]["text"] == "3 pairs sold in the last 30 days" and r["rows"][0]["waarde"] == 3
-    assert r["text"].startswith("3 pairs in 2 orders, €270.00 (AOV €135.00) in the last 30 days")
-    assert "stub" not in r["text"].lower()
-    land = next(x for x in r["rows"] if x.get("dimension") == "country")
-    assert land["name"] == "NL" and land["text"] == "1 order from NL in the last 30 days"
-    note = _note(_inw(ShopifySalesSkill()), "shopify_sales", r)
-    assert note.split("\n")[1].startswith("3 pairs in 2 orders") and "('NL', 1)" not in note
-    assert "• pairs_sold — 3 pairs sold in the last 30 days" in project_verslag.inhoud_tekst(r)
-    # de platte sleutels blijven voor de CLI en het dashboard
-    assert r["pairs_sold"] == 3 and r["revenue"] == 270.0 and dict(r["by_country"])["NL"] == 1
 
 
 def test_shopify_nul_orders_is_no_data_en_geen_timestamp():
@@ -301,19 +262,6 @@ def test_shopify_nul_orders_is_no_data_en_geen_timestamp():
     assert C(r)[0] == "leeg"
 
 
-def test_shopify_stub_zegt_stub_en_wijkt_voor_client_credentials():
-    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
-    r = ShopifySalesSkill().run({"stub": True}, SimpleNamespace(settings={}, data_dir="/tmp"))
-    assert r["stub"] is True and r["text"].startswith("STUB") and "stub" in r["text"].lower()
-    assert all(x["text"].startswith("stub:") for x in r["rows"]) and r["rows"][0]["waarde"] == 6
-    note = _note(_inw(ShopifySalesSkill()), "shopify_sales", r)
-    assert note.split("\n")[1].startswith("STUB")
-    # client-credentials zijn een live route: de stub-vlag verliest, ook zonder statisch token
-    ctx = SimpleNamespace(settings={"SHOPIFY_STORE": "x.myshopify.com", "SHOPIFY_CLIENT_ID": "cid",
-                                    "SHOPIFY_CLIENT_SECRET": "sec", "shopify_stub": "true"}, data_dir="/tmp")
-    live = ShopifySalesSkill().run({"window_days": 7, "_token_post": lambda s, i, c: "shpat_x",
-                                    "_post": lambda q, v: _gql([_order("NL", 90, [("Groen", 1)])])}, ctx)
-    assert live.get("stub") is None and live["pairs_sold"] == 1 and "stub" not in live["text"].lower()
 
 
 def test_shopify_afgekapte_historie_zegt_dat():
@@ -386,24 +334,6 @@ def test_site_audit_leest_site_health_nog(_open_host):
     assert lamp["kleur"] == "rood" and "ConnectionError" in lamp["uitleg"]
 
 
-# ══ 6. mobiel_audit ══════════════════════════════════════════════════════════
-
-def test_mobiel_audit_rows_openen_met_de_scores():
-    from test_mobiel_audit import _psi, _skill, _ctx, URL
-    r = _skill(_psi()).run({"url": URL}, _ctx())
-    assert C(r) == ("gelukt", ("list", "rows"))                          # niet meer `bevindingen`
-    assert [x["metric"] for x in r["rows"][:4]] == ["performance", "accessibility", "best_practices", "seo"]
-    assert r["rows"][0] == {"metric": "performance", "waarde": 72, "weergave": "72/100",
-                            "text": "Lighthouse performance score 72 of 100 (mobile)"}
-    lcp = next(x for x in r["rows"] if x.get("metric") == "lcp_ms")
-    assert lcp["weergave"] == "3.2 s" and lcp["text"] == "LCP 3.2 s (lab, mobile)"
-    assert any(x.get("key") == "third-party-cookies" and x["text"].startswith("best_practices:") for x in r["rows"])
-    assert any(x.get("key") == "tap-targets" and "mobile check failed" in x["text"] for x in r["rows"])
-    from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill
-    note = Inhabitant._deliverable_note(_inw(MobielAuditSkill()), {"text": "audit", "skill": "mobiel_audit"}, r, C(r)[1])
-    assert "performance 72" in note.split("\n")[1] and "metric: performance | waarde: 72" in note
-    assert "• performance — Lighthouse performance score 72 of 100" in project_verslag.inhoud_tekst(r)
-    assert r["scores"]["performance"] == 72 and r["bevindingen"]                # site_audit leest deze nog
 
 
 def test_mobiel_audit_strategie_strandt_bij_het_plannen():

@@ -141,30 +141,6 @@ def test_lees_nul_is_nog_steeds_alleen_de_lijst():
     assert uit["gelezen"] == 0 and uit["aantal_treffers"] == 8
 
 
-# ── 4: de prompts vragen om drie woordenschatten ─────────────────────────────
-
-def test_planner_vraagt_drie_woordenschatten_en_korte_corpusfrases(tmp_path, monkeypatch):
-    import nooch_village.llm as llm
-    from nooch_village.event_bus import EventBus
-    from nooch_village.inhabitant import Inhabitant
-    from nooch_village.models import Record, RecordType, RoleDefinition
-    from nooch_village.skills import SkillRegistry
-    gezien = {}
-
-    def _model(prompt, **k):
-        gezien["p"] = prompt
-        antwoord = '{"deliverable":"x","items":[{"text":"t","skill":null,"payload":{},"reason":"r"}]}'
-        return (antwoord, "mock") if k.get("return_tier") else antwoord
-    monkeypatch.setattr(llm, "reason", _model)
-    rec = Record(id="r", type=RecordType.ROLE, parent="noochville",
-                 definition=RoleDefinition(purpose="t", skills=["web_zoek"]), source="seed")
-    ctx = SimpleNamespace(settings={"deliverable_context_enabled": "0"}, rugzakken={},
-                          data_dir=str(tmp_path), projects=None, records=None)
-    Inhabitant(rec, EventBus(name="t"), SkillRegistry(), ctx)._plan_checklist("Find bio-based glues")
-    p = gezien["p"]
-    assert "THREE vocabularies" in p and "the language of the market" in p
-    assert "SHORT technical phrase of 2 to 3 words" in p
-    assert "Search terms follow the corpus or the market" in p
 
 
 def test_zoekstrategie_vraagt_drie_woordenschatten(monkeypatch):
@@ -183,8 +159,3 @@ def test_zoekstrategie_vraagt_drie_woordenschatten(monkeypatch):
     assert "SHORT technical phrase of 2 to 3 words" in gezien["p"]
 
 
-def test_herplanning_geeft_de_taal_door_in_de_payload():
-    import inspect
-    from nooch_village.inhabitant import Inhabitant
-    bron = inspect.getsource(Inhabitant._herplan_na_strategie)
-    assert "'taal'" in bron and "'land'" in bron

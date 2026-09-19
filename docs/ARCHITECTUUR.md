@@ -296,12 +296,12 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `claims_database.json` | `claims_db.py` |
 | `claims_labels.jsonl` | `claims_labels.py` |
 | `claims_runtime.json` | `claims_db.py` |
+| `constraints.json` | `cli.py` |
 | `critic_labels.jsonl` | `missie_critic.py` |
 | `csrf.json` | `cockpit2.py` |
 | `deadsource_state.json` | `village.py` |
 | `decision_sheets.jsonl` | `decision_sheets.py` |
 | `draaistaat.jsonl` | `draaistaat.py` |
-| `feedback.json` | `inhabitant.py` |
 | `feeds.json` | `radar_store.py` |
 | `founder_flow.json` | `founder_flow.py` |
 | `founder_labels.jsonl` | `founder_flow.py` |
@@ -316,7 +316,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
-| `pulse_heartbeat.json` | `inhabitant.py` |
 | `radar_beoordelingen.jsonl` | `radar_beoordeling.py` |
 | `radar_embeddings.json` | `radar_clusters.py` |
 | `radar_nieuwheid.json` | `radar_nieuwheid.py` |
@@ -344,9 +343,8 @@ Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan 
 | `buzz_observations.jsonl` | `cli.py, village.py` |
 | `buzz_query_sets.json` | `cli.py, village.py` |
 | `competitor_brands.json` | `cli.py, village.py` |
-| `constraints.json` | `cli.py, inhabitant.py` |
 | `groeidagboek.jsonl` | `role_proposals.py, village.py` |
-| `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, inhabitant.py, village.py` |
+| `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, village.py` |
 | `lexicon.json` | `cli.py, village.py` |
 | `linkbuilding_targets.json` | `cli.py, cockpit2.py` |
 | `llm_usage.jsonl` | `llm_usage.py, village.py` |
@@ -365,10 +363,11 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `manifest.json` |
 | `persona.json` |
 | `project.json` |
+| `pulse_heartbeat.json` |
 | `rugzakken.json` |
 | `seed_surges.json` |
 | `trend_signals.jsonl` |
 
 
 ---
-_55 routes · 168 dispatch-acties · 28 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 8 zonder gevonden schrijver._
+_55 routes · 168 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 10 met meerdere · 9 zonder gevonden schrijver._

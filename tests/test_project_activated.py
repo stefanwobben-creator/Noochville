@@ -3,11 +3,16 @@
 Een statuswijziging naar ACTIEF (meestal een bord-drag in het LOSSE cockpit-proces) moet binnen
 seconden opgepakt worden i.p.v. pas bij de dag-puls (dag_begint). Cockpit en village delen alleen
 projects.json; de village-poll (`Village._poll_board`) herleest dat bestand en vertaalt een verse
-naar-'running'-overgang naar een in-memory project_activated-event dat de eigenaar-rol oppakt
-(`Inhabitant._on_project_activated`) en UITSLUITEND dat ene project uitvoert.
+naar-'running'-overgang naar een in-memory project_activated-event.
 
-Publisher = de village-board-watch, NIET ledger.start(): start() draait cross-proces in de cockpit
-(geen bus, geen inwoners) én zit ín _claim_run_complete (zou een react-lus geven). Zie SCOPE-analyse.
+19 SEPT 2026 — DE ONTVANGER IS WEG. `Inhabitant._on_project_activated` bereidde het project voor
+en voerde het uit; die hele motor is met BLOK A verdwenen. Slepen naar ACTIEF is vanaf nu een
+menselijke statuswijziging: het bord verandert, er gaat een event over de bus, en niemand pakt
+het op. De detectie hieronder blijft getest, want het event voedt nog de board-watch zelf — en
+er staat nu expliciet een test die bewijst dat een bord-drag geen AttributeError meer geeft.
+
+Publisher = de village-board-watch, NIET ledger.start(): start() draait cross-proces in de
+cockpit (geen bus, geen inwoners). Zie SCOPE-analyse.
 """
 from __future__ import annotations
 from types import SimpleNamespace
@@ -17,7 +22,7 @@ from nooch_village.village import Village
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry, Skill
-from nooch_village.projects import ProjectLedger
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
 
 
 class _ResearchSkill(Skill):
@@ -43,7 +48,7 @@ def _inhabitant(tmp_path, ledger, rid="harry_hemp"):
 
 
 def _prep(ledger, pid, items):
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
+    cl = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     for text, skill, query in items:
         ledger.check_add(pid, cl["id"], text, skill=skill, query=query)
     return cl
@@ -69,80 +74,41 @@ def test_a_board_watch_detecteert_activatie(tmp_path):
     assert events == [{"pid": pid, "owner": "harry_hemp"}]        # broadcast met owner-veld
 
 
-# b. eigenaar-rol pakt ALLEEN het geactiveerde project op; owner-mismatch wordt genegeerd
-def test_b_eigenaar_voert_alleen_dat_project_uit(tmp_path):
+
+
+
+
+
+
+
+
+# f. een bord-drag naar ACTIEF loopt nergens meer op stuk
+def test_f_bord_drag_naar_actief_crasht_niet(tmp_path):
+    """Stefans eis bij het verwijderen van BLOK A: bewijs het, vertrouw niet op 'hij draait toch niet'.
+
+    De rol heeft geen handler meer voor `project_activated`. Dit publiceert het event precies zoals
+    de board-watch dat doet, laat de inwoner zijn inbox verwerken, en controleert dat er geen
+    AttributeError op een verdwenen methode komt. Het project blijft staan waar het staat — dat IS
+    het bedoelde gedrag: een mens doet het werk."""
     led = ProjectLedger(str(tmp_path / "p.json"))
     inh = _inhabitant(tmp_path, led)
-    pid = led.create("harry_hemp", "doel", "human", status="running")
-    _prep(led, pid, [("studies", "openalex_evidence", "barefoot")])
-    ander = led.create("harry_hemp", "ander doel", "human", status="running")
-    _prep(led, ander, [("studies", "openalex_evidence", "vegan")])
+    assert not inh.bus._subs.get("project_activated"), (
+        "de rol hoort niet meer op project_activated te reageren")
 
-    inh._on_project_activated(Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch"))
-    assert inh._project_checklist(led.get(pid))["items"][0]["done"] is True      # dit project liep
-    assert inh._project_checklist(led.get(ander))["items"][0]["done"] is False   # het andere niet
-
-    # owner-mismatch: niet mijn project → geen uitvoering, geen crash
-    vreemd = led.create("iemand_anders", "doel", "human", status="running")
-    _prep(led, vreemd, [("s", "openalex_evidence", "x")])
-    inh._on_project_activated(Event("project_activated", {"pid": vreemd, "owner": "iemand_anders"}, "board_watch"))
-    assert inh._project_checklist(led.get(vreemd))["items"][0]["done"] is False
+    pid = led.create("harry_hemp", "blote-voeten schoenen", "human", status="future")
+    led.start(pid)                                                # bord-drag → ACTIEF
+    inh.bus.publish(Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "village"))
+    while inh.inbox.pending() > 0:                                # eigen thread-werk afhandelen
+        job = inh.inbox.take(timeout=0.05)
+        if job and callable(job):
+            job()
+    assert led.get(pid)["status"] == "running"                    # staat er nog, onaangeroerd
+    assert not led.get(pid).get("checklists")                     # en er is niets voorbereid
 
 
-# c. geactiveerd zonder checklist → project_needs_preparation, geen valse done
-def test_c_geen_checklist_signaal_geen_uitvoering(tmp_path):
+# g. prime: een project dat bij opstart AL running is, telt niet als nieuwe activatie
+def test_g_prime_vuurt_niet_voor_bestaande_running(tmp_path):
     led = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, led)
-    signals = []
-    inh.bus.subscribe("project_needs_preparation", lambda e: signals.append(e.data))
-    pid = led.create("harry_hemp", "doel", "human", status="running")   # geen _prep → geen checklist
-    inh._on_project_activated(Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch"))
-    p = led.get(pid)
-    assert p["status"] != "done" and p.get("outcome") != "stub:done"
-    assert signals and signals[0]["project_id"] == pid
-
-
-# d. tweede activatie zelfde dag → idempotent (geen dubbele notes) + board-watch dedupliceert
-def test_d_tweede_activatie_idempotent(tmp_path):
-    led = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, led)
-    pid = led.create("harry_hemp", "doel", "human", status="running")
-    _prep(led, pid, [("studies", "openalex_evidence", "barefoot")])
-    ev = Event("project_activated", {"pid": pid, "owner": "harry_hemp"}, "board_watch")
-    inh._on_project_activated(ev)
-    n1 = len(led.get(pid).get("log", []))
-    inh._on_project_activated(ev)                                # tweede activatie, zelfde dag
-    assert len(led.get(pid).get("log", [])) == n1               # geen dubbele deliverable-notes
-
-    # board-watch zelf vuurt niet twee keer voor dezelfde lopende activatie
-    v, events = _watch(led)
-    Village._poll_board(v)                                       # pid is al 'running' → 1e keer gezien
-    first = list(events)
-    Village._poll_board(v)                                       # zelfde running-set → geen nieuw event
-    assert events == first
-
-
-# e. eigenaar zonder live inwoner (mens-rol) → event verdwijnt, geen crash
-def test_e_mens_rol_geen_crash(tmp_path):
-    led = ProjectLedger(str(tmp_path / "p.json"))
-    pid = led.create("founder", "mens-project", "human", status="future")   # mens-bemande rol
-    v, events = _watch(led)                                                  # geen inwoner geabonneerd
-    led.start(pid)
-    assert Village._poll_board(v) == [pid]                       # publiceert netjes...
-    assert events == [{"pid": pid, "owner": "founder"}]          # ...en niets crasht (geen subscriber)
-
-    # en een echte inwoner met een ANDER id negeert het stil (owner-mismatch)
-    inh = _inhabitant(tmp_path, led, rid="harry_hemp")
-    inh._on_project_activated(Event("project_activated", {"pid": pid, "owner": "founder"}, "board_watch"))
-
-
-# f. wiring: het project_activated-event is echt gekoppeld; bestaande 'running' vuurt niet bij opstart
-def test_f_wiring_en_prime(tmp_path):
-    led = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, led)
-    assert inh.bus._subs.get("project_activated"), "react() moet project_activated koppelen"
-
-    # _prime_board_watch: een project dat bij opstart AL running is, telt niet als nieuwe activatie
     pid = led.create("harry_hemp", "doel", "human", status="future")
     led.start(pid)
     v, events = _watch(led)

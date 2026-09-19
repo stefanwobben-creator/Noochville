@@ -16,7 +16,7 @@ from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition
-from nooch_village.projects import ProjectLedger
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
 from nooch_village.skills import Skill, SkillRegistry
 
 
@@ -42,7 +42,7 @@ def _antwoord(role="NONE", kind="missing_capability", capability=""):
 def _project(ledger, owner="harry", tekst="bouw de QR-landingspagina", trail=None):
     pid = ledger.create(owner, "QR-codes op de schoenen", "human", status="running")
     ledger.start(pid)
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
+    cl = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     ledger.check_add(pid, cl["id"], tekst, skill=None, reason="geen skill hiervoor")
     if trail:
         ledger.set_handoff_trail(pid, trail)
@@ -110,24 +110,6 @@ def test_het_spoor_reist_mee_naar_het_nieuwe_project(tmp_path):
     assert nieuw["owner"] == "website_dev" and nieuw["status"] == "future"
 
 
-# ── GUARD 2: zichtbaar doodlopen ───────────────────────────────────────────────
-
-def test_doodgelopen_handoff_parkeert_zichtbaar_bij_de_ontvanger(tmp_path):
-    """B kan het ook niet en niemand anders bezit het: dan parkeert B's project zichtbaar via de
-    klep, mét gat-record. Nooit stil sterven."""
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    recs = _records(tmp_path)
-    pid, clid = _project(ledger, owner="website_dev", trail=["harry"])
-    inh = _inhabitant(tmp_path, ledger, recs, "website_dev")
-
-    inh._execute_checklist(ledger.get(pid), "2026-07-30")
-
-    p = ledger.get(pid)
-    assert p["status"] == "blocked"                        # zichtbaar geparkeerd bij B
-    assert "vastgelopen" in (p["blocked_on"] or "")
-    gaten = gap_ledger.alle(str(tmp_path))
-    assert len(gaten) == 1 and gaten[0]["role"] == "website_dev"
-    assert gaten[0]["hop_trail"] == ["harry"]              # de keten is terug te lezen
 
 
 # ── de beslisvolgorde ──────────────────────────────────────────────────────────

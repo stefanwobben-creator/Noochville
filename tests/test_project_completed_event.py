@@ -19,7 +19,7 @@ from nooch_village.village import Village
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry, Skill
-from nooch_village.projects import ProjectLedger
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 
 _MOCK_BULLETIN = ("# Dorpsbulletin\n## Wat ik vandaag zag\nx\n## Wie was actief\nx\n"
@@ -48,7 +48,7 @@ def _inhabitant(tmp_path, ledger):
 
 
 def _prep(ledger, pid, items):
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
+    cl = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     for text, skill, query in items:
         ledger.check_add(pid, cl["id"], text, skill=skill, query=query)
     return cl
@@ -60,55 +60,10 @@ def _capture(inh, name="project_completed"):
     return got
 
 
-# 1. Checklist af → WACHT (review), NIET done: geen project_completed, wel awaiting_review + note
-def test_1_checklist_af_wacht_op_review(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, ledger)
-    done_evt = _capture(inh, "project_completed")
-    review_evt = _capture(inh, "project_awaiting_review")
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("studie", "openalex_evidence", "barefoot")])
-    inh._claim_run_complete(pid)
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and p["blocked_on"] == "review"   # WACHT-kolom
-    assert p.get("review_raised") is True and p.get("outcome") in (None, "")   # outcome pas bij Done
-    assert done_evt == []                                              # GEEN autonome project_completed
-    assert len(review_evt) == 1 and review_evt[0]["project_id"] == pid
-    assert any(e.get("text", "").startswith("✅ Checklist complete") for e in p.get("log", []))
 
 
-# 2. Onvolledige checklist (blijft ACTIEF) → geen event
-def test_2_onvolledig_geen_event(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, ledger)
-    got = _capture(inh)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("studie", "openalex_evidence", "x"), ("mens-taak", None, "")])  # no-skill blijft open
-    inh._claim_run_complete(pid)
-    assert ledger.get(pid)["status"] != "done"
-    assert got == []
 
 
-# 3. Wacht → actief terugslepen (review afgewezen): geen re-event, geen re-block, geen outcome-wis
-def test_3_terugsleep_herblokkeert_niet_zonder_mutatie(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, ledger)
-    review_evt = _capture(inh, "project_awaiting_review")
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("studie", "openalex_evidence", "x")])
-    inh._claim_run_complete(pid)                            # → wacht, review_raised gezet
-    assert len(review_evt) == 1 and ledger.get(pid)["review_raised"] is True
-    # mens sleept wacht→actief (review afgewezen); forceer een verse dag zodat _execute_checklist echt draait
-    ledger.start(pid)                                       # blocked → running, blocked_on gewist
-    ledger.get(pid)["last_tended"] = ""; ledger._save()
-    inh._claim_run_complete(pid)
-    p = ledger.get(pid)
-    assert len(review_evt) == 1                             # geen tweede awaiting_review
-    assert p["status"] == "running" and p.get("outcome") in (None, "")   # blijft actief, geen outcome
-    # pas een checklist-mutatie (uitvinken) wist de vlag → volgende all-done mag opnieuw reviewen
-    cl = inh._project_checklist(p)
-    ledger.check_toggle(pid, cl["id"], cl["items"][0]["id"])   # uitvinken → review_raised gewist
-    assert ledger.get(pid).get("review_raised") in (None, False)
 
 
 # 3b. Mens sleept wacht→done → board-watch vuurt project_completed MÉT deliverable_ids (#10-fix)
@@ -146,21 +101,6 @@ def test_3d_direct_actief_done(tmp_path):
     assert got[0]["route"] == "direct" and got[0]["deliverable_ids"] == []   # geen gate, geen deliverables
 
 
-# 3c. DONE→ACTIEF (reopen) met volle checklist → GEEN vals project_completed (bekende bug, nu opgelost)
-def test_3c_reopen_geen_vals_completed(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    inh = _inhabitant(tmp_path, ledger)
-    done_evt = _capture(inh, "project_completed")
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("studie", "openalex_evidence", "x")])
-    inh._claim_run_complete(pid)                            # → WACHT, review_raised gezet
-    ledger.complete(pid, "checklist voltooid (1/1) — goedgekeurd na review")   # mens: Done
-    ledger.reopen(pid)                                      # DONE→ACTIEF: outcome gewist, checklist nog vol
-    ledger.get(pid)["last_tended"] = ""; ledger._save()    # forceer dat de puls echt draait
-    inh._claim_run_complete(pid)                            # de dagpuls
-    p = ledger.get(pid)
-    assert p["status"] == "running"                        # blijft ACTIEF, geen re-complete
-    assert done_evt == []                                  # GEEN vals project_completed (bug opgelost)
 
 
 # ── Bulletin-kant (Noochie) ───────────────────────────────────────────────────

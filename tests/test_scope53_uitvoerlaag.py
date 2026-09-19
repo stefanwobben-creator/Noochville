@@ -124,13 +124,6 @@ def test_serpapi_search_stub_zonder_statuscode_werkt_als_voorheen(monkeypatch):
     assert web_read.serpapi_search("x", "k")[0]["link"] == "https://a.example"
 
 
-# ── 3. de executor maskeert elke foutreden en leest 'reden' ──────────────────
-
-def test_foutreden_maskeert_en_leest_reden():
-    assert _GEHEIM not in Inhabitant._foutreden({"ok": False, "error": _POOL_FOUT})
-    assert Inhabitant._foutreden({"ok": False, "reden": "week al gescand"}) == "week al gescand"
-    assert Inhabitant._foutreden({"ok": False}) == "skill meldde ok=False zonder reden"
-    assert Inhabitant._foutreden("skill 'x' niet geregistreerd") == "skill 'x' niet geregistreerd"
 
 
 def test_execute_skill_geeft_gemaskeerde_fout_terug():
@@ -180,24 +173,8 @@ def test_expliciete_signalen_blijven_leidend():
     assert Inhabitant._classify_result({"no_data": True, "rows": [{"a": 1}]})[0] == "leeg"
 
 
-# ── 5. de text als leeswijzer ────────────────────────────────────────────────
-
-def test_note_toont_de_text_van_de_skill_boven_de_records():
-    inw = _inw(_Skill("web_zoek"))
-    result = {"text": "3 of 9 results read in full; nothing can be said about the other 6.",
-              "treffers": [{"title": "A", "url": "https://a.example", "fragment": "aa"},
-                           {"title": "B", "url": "https://b.example", "fragment": "bb"}]}
-    note = inw._deliverable_note({"text": "zoek", "skill": "web_zoek"}, result, ("list", "treffers"))
-    regels = note.split("\n")
-    assert regels[1].startswith("3 of 9 results read in full")
-    assert "title: A" in note and "title: B" in note
 
 
-def test_leeswijzer_niet_dubbel_bij_tekst_archetype():
-    inw = _inw(_Skill("x"))
-    result = {"text": "Alleen deze tekst."}
-    note = inw._deliverable_note({"text": "t", "skill": "x"}, result, ("text", "text"))
-    assert note.count("Alleen deze tekst.") == 1
 
 
 def test_verslag_zet_de_text_eerst_en_kent_de_nieuwe_veldnamen():

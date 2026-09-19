@@ -68,19 +68,6 @@ def test_project_worker_parser_blijft_liberaal():
     assert work_one("x", "r", "p", llm_reason=lambda _p: "LEVER: af")["outcome"] == "af"
 
 
-def test_opportunity_reflex_velden_blijven_bij_hun_parser():
-    """2C gedaan op 06-09-2026: prompt vraagt TITLE/WHAT/WHY, parser leest beide talen.
-
-    De verboden-woordenlijst is VERTAALD en niet geschrapt. Dat is geen stijlvoorkeur maar merkstem:
-    elk woord op die lijst ('conversie', 'doelgroep', 'consument') verandert een mens in een
-    transactie, en dat is precies het frame dat Nooch niet voert. Een prompt die om gewone taal
-    vraagt zonder te zeggen wélke woorden fout zijn, is de helft van de instructie."""
-    s = _src("inhabitant.py")
-    assert "TITLE:" in s and "WHAT:" in s and "WHY:" in s
-    assert 'key in ("titel", "title")' in s and 'key in ("wat", "what")' in s
-    assert 'key in ("waarom", "why"' in s
-    assert "target audience" in s and "consumer" in s          # de lijst is mee, niet weg
-    assert "CITIZEN frame" in s
 
 
 def test_noochie_weigh_in_velden_blijven_bij_hun_parser():

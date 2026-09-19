@@ -481,32 +481,8 @@ def test_serpapi_trends_leest_beide_sleutelnamen_en_de_term_payload(tmp_path):
     assert res["ok"] is False and _GEHEIM not in json.dumps(res) and _classify(res) == "fout"
 
 
-def test_trends_ladder_valt_door_naar_serpapi_zonder_dna_grant(tmp_path):
-    """De échte trede: google_trends (429) → serpapi_trends met dezelfde payload, ook al staat
-    serpapi_trends in geen rugzak en niet in het DNA — wie de kop mag voeren, mag de trede voeren."""
-    from nooch_village.evidence_ledger import SKILL_LADDERS, EvidenceLedger
-    assert SKILL_LADDERS["google_trends"] == ["google_trends", "serpapi_trends"]
-    gezien = {}
-    kop = _Stub("google_trends", {"ok": False, "error": "all 1 lookup(s) failed: 429", "rows": [{"term": "x", "error": "429"}]})
-    trede = _Stub("serpapi_trends", fn=lambda p: gezien.setdefault("payload", p) and
-                  {"rows": [{"term": "barefoot", "interest_latest": 55, "tekst": "interest 55 (vlak)"}],
-                   "text": "1 of 1 term(s)", "source": "serpapi"})
-    inw = _inw(kop, trede, tmp_path=tmp_path, dna=["google_trends"])
-    assert "serpapi_trends" not in inw.effective_skills()
-    res, bron = inw._use_skill_with_ladder("google_trends", {"term": "barefoot", "timeframe": "today 5-y"})
-    assert bron == "serpapi_trends" and res["rows"][0]["interest_latest"] == 55
-    assert gezien["payload"] == {"term": "barefoot", "timeframe": "today 5-y"}
-    recs = EvidenceLedger(os.path.join(str(tmp_path), "evidence_ledger.jsonl")).all_records()
-    assert [(r["source"], r["status"]) for r in recs] == [("google_trends", "fout"), ("serpapi_trends", "bevestigd")]
-    assert not os.path.exists(os.path.join(str(tmp_path), "human_inbox.json"))   # geen valse escalatie
 
 
-def test_trede_respecteert_de_domeinpoort(tmp_path):
-    inw = _inw(_Stub("google_trends", {"ok": True}), _Stub("serpapi_trends", {"ok": True}), tmp_path=tmp_path,
-               dna=["google_trends"])
-    with patch("nooch_village.skill_meta.schrijft_in_domein", return_value="bibliotheek"):
-        res = inw._run_rung("serpapi_trends", {})
-    assert "domein" in res["error"]
 
 
 def test_rugzakken_noemen_de_trede_waar():
@@ -518,34 +494,6 @@ def test_rugzakken_noemen_de_trede_waar():
     assert not any("serpapi_trends" in blok.get("skills", []) for k, blok in rz.items() if not k.startswith("_"))
 
 
-# ── 8. trend_reindex ─────────────────────────────────────────────────────────
-
-
-
-def test_reindex_rij_draagt_oordeel_en_zin(tmp_path):
-    from nooch_village.skills_impl.trend_reindex import TrendReindexSkill, signal_tekst
-    import datetime as dt
-    import pandas as pd
-    weeks = [dt.date(2024, 1, 7) + dt.timedelta(days=7 * i) for i in range(104)]
-
-    def fetch(terms):
-        vals = {t: [10.0] * 104 for t in terms}
-        vals[terms[0]] = [10.0] * 52 + [40.0] * 52                     # 4x de baseline, aanhoudend
-        df = pd.DataFrame(vals, index=pd.DatetimeIndex([pd.Timestamp(w) for w in weeks]))
-        df["isPartial"] = [False] * 103 + [True]
-        return df
-
-    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={})
-    res = TrendReindexSkill().run({"terms": ["barefoot shoes"], "_fetch": fetch}, ctx)
-    row = res["evaluated"][0]
-    assert list(row)[:3] == ["term", "signal_type", "tekst"] and row["signal_type"] == "trend"
-    assert row["tekst"].startswith("trend: ~4.0x its 2024 baseline, holds across")
-    assert res["text"].startswith("1 term(s) re-indexed (override): 1 trend; signals: barefoot shoes")
-    assert "• barefoot shoes — trend: ~4.0x its 2024 baseline" in project_verslag.inhoud_tekst(res)
-    note = Inhabitant._format_record(row)
-    assert note.startswith("term: barefoot shoes | signal_type: trend | tekst: trend: ~4.0x")
-    assert "no signal" in signal_tekst("x", {"signal_type": "flat", "index_latest": 1.0, "base_year": 2024,
-                                            "baseline": 10, "peak": 12})
 
 
 # ── 9. het tweewekelijkse rapport verwacht alleen wat de catalogus actief noemt ─
@@ -559,17 +507,3 @@ def test_verwachte_bronnen_komen_uit_de_meetcatalogus():
     assert not hasattr(biweekly_report, "_VERWACHT")
 
 
-# ── 10. de wall-note toont leeswijzer én strekking ───────────────────────────
-
-def test_wall_note_toont_de_text_en_het_citaat(tmp_path):
-    inw = _inw(_Stub("competitor_discover", {}), tmp_path=tmp_path)
-    res = {"ok": True, "gescand": 1, "gelezen": 1, "query": "q",
-           "candidates": [{"brand": "Vivobarefoot", "article": "Best barefoot", "link": "https://g",
-                           "citaat": "Our top pick is Vivobarefoot."}],
-           "text": "1 candidate brand(s) from 1 of 1 guides read for 'q': Vivobarefoot"}
-    status, arch = Inhabitant._classify_result(res)
-    assert (status, arch) == ("gelukt", ("list", "candidates"))
-    note = inw._deliverable_note({"text": "find brands", "skill": "competitor_discover"}, res, arch)
-    regels = note.splitlines()
-    assert regels[1] == res["text"]                                   # de leeswijzer direct onder de kop
-    assert regels[2] == "• brand: Vivobarefoot | article: Best barefoot | link: https://g | citaat: Our top pick is Vivobarefoot."

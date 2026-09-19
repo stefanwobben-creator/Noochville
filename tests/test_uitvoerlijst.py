@@ -127,58 +127,10 @@ def test_i_aanwijzen_is_een_schrijfpad(tmp_path, ledger):
     assert "set_checklist_uitvoer" in _WRITE_METHODS
 
 
-# ── de rol en de lijst, end to end ─────────────────────────────────────────────────────────────
-
-def test_j_de_rol_draait_een_hernoemde_lijst(tmp_path, ledger):
-    """Nina's route: haar lijst heet anders, zij accepteert een aanbod, de rol pakt het op."""
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title="Acties uit overleg")
-    ledger.check_add(pid, cl["id"], "bel de fabriek")                 # mens-item, geen skill
-    assert inh._project_checklist(ledger.get(pid)) is None            # nog geen werk voor de rol
-
-    ledger.check_add(pid, cl["id"], "zoek de studies op",
-                     skill="openalex_evidence", payload={"term": "barefoot"})
-    assert inh._project_checklist(ledger.get(pid))["id"] == cl["id"]  # nu wel
-
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    items = ledger.get(pid)["checklists"][0]["items"]
-    assert items[1]["done"] is True                                   # het skill-item draaide
-    assert items[0]["done"] is False                                  # het mens-item niet
-    logtxt = " ".join(e["text"] for e in ledger.get(pid).get("log", []))
-    assert "Study on barefoot" in logtxt
 
 
-def test_k_geen_akkoord_poort_op_een_handgemaakte_lijst(tmp_path, ledger):
-    """De twee routes naar uitvoering, allebei met een mens ervoor: óf het gegenereerde plan is
-    goedgekeurd (`akkoord`), óf een mens accepteerde per item een aanbod. Een handgemaakte lijst
-    draagt geen akkoord-vraag en hoort er ook geen te krijgen."""
-    from nooch_village.projects import plan_wacht_op_akkoord
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title="What's needed")
-    ledger.check_add(pid, cl["id"], "zoek uit", skill="openalex_evidence", payload={"term": "x"})
-    assert plan_wacht_op_akkoord(ledger.get(pid)) is False
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    assert ledger.get(pid)["checklists"][0]["items"][0]["done"] is True
 
 
-def test_l_het_plan_wint_van_een_los_lijstje(tmp_path, ledger):
-    """Een project met zowel een gegenereerd plan als een eigen lijstje: de rol werkt het plan af,
-    en de akkoord-poort blijft dus staan."""
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    eigen = ledger.checklist_add(pid, title="Acties uit overleg")
-    ledger.check_add(pid, eigen["id"], "zoek uit", skill="openalex_evidence", payload={"term": "x"})
-    plan = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE, akkoord=False)
-    ledger.check_add(pid, plan["id"], "andere zoekopdracht",
-                     skill="openalex_evidence", payload={"term": "y"})
-
-    assert inh._project_checklist(ledger.get(pid))["id"] == plan["id"]
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    cls = {c["id"]: c for c in ledger.get(pid)["checklists"]}
-    assert cls[plan["id"]]["items"][0]["done"] is False               # wacht op akkoord
-    assert cls[eigen["id"]]["items"][0]["done"] is False              # en dit is niet zijn lijst
 
 
 # ── de UI ──────────────────────────────────────────────────────────────────────────────────────

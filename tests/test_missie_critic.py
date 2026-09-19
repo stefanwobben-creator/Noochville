@@ -365,111 +365,16 @@ def test_ook_geslaagde_oordelen_worden_vastgelegd(tmp_path):
     assert mc.alle(str(tmp_path))[0]["geslaagd"] is True
 
 
-# ── GUARDS: de review-gate end-to-end ────────────────────────────────────────
-
-def test_guard_off_mission_rapport_bereikt_geen_schone_review(tmp_path):
-    """DE guard. Het project komt wél in de review-kolom (eeuwig tegenhouden verbergt het), maar
-    NIET schoon: het oordeel staat op het project, op de kaart en in het event."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs)
-    events = []
-    inh.bus.subscribe("critic_rejected", lambda e: events.append(e.data))
-    pid = ledger.create("sid", "Onderzoek iets", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "Onderzoek iets", skill="openalex_evidence", query="x")
-    off_mission = "# R\n\n## Onderzoek iets\n" + "Een verhandeling over kantoorpanden. " * 30
-    with patch(_REASON, side_effect=_reason_mock(off_mission)):
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and p["blocked_on"] == "review"
-    assert p.get("critic_verdict") == "afgewezen"                 # niet schoon
-    assert any("Missie-critic" in e.get("text", "") for e in p.get("log", []))
-    assert events and events[-1]["oordelen"]["missie"] is False
-    assert mc.alle(str(tmp_path))                                 # afwijzing gelogd
 
 
-def test_guard_leeg_project_wordt_gevlagd(tmp_path):
-    """DE tweede guard. Alle taken draaiden, geen enkele leverde iets op."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs, leeg=True)              # de skill geeft no_data
-    pid = ledger.create("sid", "Onderzoek iets", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "Onderzoek iets", skill="openalex_evidence", query="x")
-    with patch(_REASON, side_effect=_reason_mock(GOED_DOC)):
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    item = p["checklists"][0]["items"][0]
-    assert item["done"] is True and item["leeg"] is True          # afgevinkt, maar geen antwoord
-    from nooch_village.projects import not_answered_note
-    assert "run without a result" in not_answered_note(p["checklists"][0])
-    assert p.get("critic_verdict") == "afgewezen"
-    labels = mc.alle(str(tmp_path))
-    assert labels and labels[0]["oordelen"]["substantieel"] is False
 
 
-def test_leeg_item_vinkt_niet_meer_schoon_af(tmp_path):
-    """De reparatie: een uitgevoerd-maar-leeg item wordt afgevinkt (anders haalt het project de
-    review-gate nooit) maar draagt `leeg`, zodat 4/4 niet als 'alles beantwoord' leest."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs, leeg=True)
-    pid = ledger.create("sid", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
-    with patch(_REASON, side_effect=_reason_mock("doc")):
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    item = ledger.get(pid)["checklists"][0]["items"][0]
-    assert item["done"] and item["leeg"] and item["leeg_reden"] == "niets gevonden"
 
 
-def test_goed_rapport_haalt_wel_een_schone_review(tmp_path):
-    """De tegenhanger: zonder deze test weet je niet of de critic iets doorlaat of alles tegenhoudt."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="running",
-                        done_when="de zool kan plasticvrij en vegan")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "Onderzoek plasticvrije materialen voor de zool",
-                     skill="openalex_evidence", query="x")
-    with patch(_REASON, side_effect=_reason_mock(GOED_DOC)), \
-         patch("nooch_village.skills_impl.tegenspraak.TegenspraakSkill", lambda: _Positief()):
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and p["blocked_on"] == "review"
-    assert p.get("critic_verdict") is None                        # SCHOON
-    assert not any("Missie-critic" in e.get("text", "") for e in p.get("log", []))
 
 
-def test_herkans_pas_gebeurt_in_dezelfde_puls(tmp_path):
-    """Een puls is een dag. Het project een dag laten wachten op een tweede synthese kost een dag
-    en levert niets op wat nu al kan."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs)
-    pid = ledger.create("sid", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
-    with patch(_REASON, side_effect=_reason_mock("te kort")) as m:
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    assert _synth_calls(m) == 2                                      # synthese + herkansing
-    p = ledger.get(pid)
-    assert p.get("critic_herkansing") is True
-    assert p["status"] == "blocked"                               # niet blijven hangen
-    fasen = [r["fase"] for r in mc.alle(str(tmp_path))]
-    assert fasen == ["eerste", "herkansing"]
 
 
-def test_kapotte_critic_blokkeert_de_oplevering_niet(tmp_path, monkeypatch):
-    """De poort mag de oplevering niet gijzelen."""
-    ledger, ds, docs = _stores(tmp_path)
-    inh = _inh(tmp_path, ledger, ds, docs)
-    monkeypatch.setattr(mc, "beoordeel", lambda **k: (_ for _ in ()).throw(RuntimeError("stuk")))
-    pid = ledger.create("sid", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "taak", skill="openalex_evidence", query="x")
-    with patch(_REASON, side_effect=_reason_mock("doc")):
-        inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and p["blocked_on"] == "review"
-    assert p.get("critic_verdict") is None
 
 
 # ── De twee gegrond-as-bugs, in één heropening gerepareerd ──────────────────

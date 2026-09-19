@@ -74,7 +74,7 @@ def test_hoog_inzet_sites_staan_vast():
         "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
         "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
         "noochie_memo", "skill_claim_evidence", "skill_competitor_discover",
-        "skill_lead_beoordeling", "skill_content_check"}
+        "skill_content_check"}      # -skill_lead_beoordeling: die skill bestaat niet meer (BLOK A)
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():
@@ -366,20 +366,13 @@ def test_skill_ladder_is_de_dorpsbrede_keuze_zonder_persona():
 
 
 def test_rolgebonden_sites_gaan_via_de_persona_hook():
-    """plan_checklist(+retry), einddocument en noochie_weigh_in kennen hun rol wél, dus daar mag de
-    persona-override werken — die lopen via `_persona_ladder`/`ladder_voor`, niet via de skill-helper."""
-    inh = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert '_persona_ladder(self.context, self.id, "plan_checklist")' in inh
-    assert '_persona_ladder(self.context, self.id,\n                                                            "plan_checklist_retry")' in inh
-    assert 'ladder_voor("einddocument", _p)' in inh
+    """Een call-site die zijn rol kent mag de persona-override gebruiken, via `_persona_ladder`.
+
+    Deze test dekte er vier: plan_checklist, plan_checklist_retry, einddocument en
+    noochie_weigh_in. De eerste drie zaten in `inhabitant.py` en zijn met BLOK A verdwenen
+    (19 sept 2026). Wat overblijft is de enige rol-gebonden site die nog bestaat."""
     rollen = open("nooch_village/roles.py", encoding="utf-8").read()
     assert '_persona_ladder(self.context, self.id, "noochie_weigh_in")' in rollen
-
-
-def test_einddocument_token_cap_is_verhoogd():
-    """Sonnet kan een langer document aan; de oude cap van 4000 was op de goedkope tredes geijkt."""
-    inh = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert 'settings.get("einddocument_max_tokens", "8000")' in inh
 
 
 def test_critic_gebruikt_dezelfde_kop_niet_een_kopie():

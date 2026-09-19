@@ -181,11 +181,6 @@ def test_bij_een_storing_valt_hij_terug_op_de_oude_melding(st, tmp_path, monkeyp
                         from_naam="R", waarom="x", item_text="y") is None
 
 
-def test_de_klep_pingt_de_founder_niet_dubbel():
-    """Twee meldingen over één gebeurtenis: dan overschreeuwt de vage de concrete."""
-    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert "if mens and not payload and not faal and not geland:" in src
-    assert "open_items, geland = self._route_stuck_items(" in src
 
 
 # ── Wat de scherm-check opleverde (29 aug 2026) ─────────────────────────────

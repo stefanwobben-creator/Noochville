@@ -25,7 +25,7 @@ from nooch_village import cockpit2
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition
-from nooch_village.projects import ProjectLedger, checklist_progress
+from nooch_village.projects import ProjectLedger, checklist_progress, PREP_CHECKLIST_TITLE
 from nooch_village.skills import Skill, SkillRegistry
 
 DAG1 = "2026-09-09"
@@ -56,7 +56,7 @@ def _project(ledger, items):
     pid = ledger.create("compliance", "Subsidieadministratie kloppend maken", "human",
                         status="running")
     ledger.start(pid)
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
+    cl = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     for tekst, skill in items:
         ledger.check_add(pid, cl["id"], tekst, skill=skill,
                          reason="" if skill else "geen skill: dit vraagt een mens")
@@ -71,85 +71,12 @@ def _pauzes(p) -> list:
     return [e["text"] for e in p.get("log", []) if e["text"].startswith("⏸️")]
 
 
-# ── 1 + 2: de lus stopt, maar de klep blijft werken ─────────────────────────
-
-def test_na_claimen_blijft_het_project_actief(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid, clid = _project(ledger, [("verifieer de claim", "claims_check"),
-                                  ("bel de boekhouder over de bankafschriften", None)])
-    inh = _inh(tmp_path, ledger)
-
-    inh._execute_checklist(ledger.get(pid), DAG1)
-    assert ledger.get(pid)["status"] == "blocked"          # één keer vragen mag
-    assert len(_pauzes(ledger.get(pid))) == 1
-
-    # de mens sleept terug naar ACTIEF: dát is het antwoord
-    assert ledger.claim_human_items(pid, door="stefan") != []
-    ledger.start(pid)
-
-    inh._execute_checklist(ledger.get(pid), DAG2)
-
-    p = ledger.get(pid)
-    assert p["status"] == "running"                          # geen tweede parkering
-    assert len(_pauzes(p)) == 1                              # en geen tweede hulpvraag
-    assert p.get("park") is None
 
 
-def test_zonder_claim_parkeert_hij_gewoon_opnieuw(tmp_path):
-    """De tegenproef: zonder het vastgelegde antwoord doet de klep precies wat hij hoort te doen."""
-    ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid, _clid = _project(ledger, [("verifieer de claim", "claims_check"),
-                                   ("bel de boekhouder over de bankafschriften", None)])
-    inh = _inh(tmp_path, ledger)
-
-    inh._execute_checklist(ledger.get(pid), DAG1)
-    ledger.start(pid)                                        # terug naar actief, maar niets geclaimd
-    inh._execute_checklist(ledger.get(pid), DAG2)
-
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and len(_pauzes(p)) == 2
 
 
-# ── 3: een geclaimde stap is echt werk en telt mee ──────────────────────────
-
-def test_geclaimde_stap_telt_mee_voor_klaar(tmp_path):
-    """`human_task` zou hem uit de noemer halen; dan is 1/1 'compleet' en gaat het project naar
-    review terwijl de mens zijn stap nog moet doen. Review is óók blocked: de lus terug."""
-    ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid, clid = _project(ledger, [("verifieer de claim", "claims_check"),
-                                  ("bel de boekhouder over de bankafschriften", None)])
-    inh = _inh(tmp_path, ledger)
-    inh._execute_checklist(ledger.get(pid), DAG1)
-    ledger.claim_human_items(pid, door="stefan")
-    ledger.start(pid)
-
-    inh._execute_checklist(ledger.get(pid), DAG2)
-
-    p = ledger.get(pid)
-    item = next(it for it in _cl(p, clid)["items"] if it["text"].startswith("bel de boekhouder"))
-    assert item.get("geclaimd") is True and not item.get("human_task")
-    assert checklist_progress(_cl(p, clid)) == (1, 2)        # eerlijk: 1 van 2, nog niet af
-    assert p["status"] == "running"                          # dus ook niet 'klaar voor review'
 
 
-def test_afvinken_maakt_het_project_alsnog_afrondbaar(tmp_path):
-    """Claimen is geen ontsnapping: doet de mens de stap, dan is de checklist gewoon af."""
-    ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid, clid = _project(ledger, [("verifieer de claim", "claims_check"),
-                                  ("bel de boekhouder over de bankafschriften", None)])
-    inh = _inh(tmp_path, ledger)
-    inh._execute_checklist(ledger.get(pid), DAG1)
-    ledger.claim_human_items(pid, door="stefan")
-    ledger.start(pid)
-    item = next(it for it in _cl(ledger.get(pid), clid)["items"]
-                if it["text"].startswith("bel de boekhouder"))
-    ledger.check_toggle(pid, clid, item["id"])
-
-    inh._execute_checklist(ledger.get(pid), DAG2)
-
-    p = ledger.get(pid)
-    assert checklist_progress(_cl(p, clid)) == (2, 2)
-    assert p.get("blocked_on") == "review"
 
 
 # ── 4: het slepen in de cockpit is wat claimt ───────────────────────────────

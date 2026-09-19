@@ -108,31 +108,8 @@ def test_de_zoekstrategie_leest_de_kansregels_juist_NIET(tmp_path):
     assert zs._lessen(_Ctx(dd)) == []
 
 
-def test_de_kans_reflex_leest_de_zoeklessen_juist_NIET(tmp_path):
-    """En dezelfde scheiding aan de andere kant, op de échte lezer in `inhabitant.py`."""
-    from nooch_village.inhabitant import Inhabitant
-    dd = str(tmp_path)
-    Constraints(os.path.join(dd, "constraints.json")).add("verbreed eerst", domein=ZOEKEN)
-    Constraints(os.path.join(dd, "constraints.json")).add("geen kinderschoenen", domein=KANSEN)
-
-    class _Nep:
-        context = _Ctx(dd)
-        log = __import__("logging").getLogger("test")
-    assert Inhabitant._house_constraints(_Nep()) == ["geen kinderschoenen"]
 
 
-def test_een_kapotte_store_stopt_de_puls_niet(tmp_path):
-    """Fail-soft mét spoor: een onleesbaar bestand mag de reflectie nooit breken."""
-    from nooch_village.inhabitant import Inhabitant
-    from nooch_village.skills_impl import zoekstrategie as zs
-    dd = str(tmp_path)
-    (tmp_path / "constraints.json").write_text("{dit is geen json")
-
-    class _Nep:
-        context = _Ctx(dd)
-        log = __import__("logging").getLogger("test")
-    assert Inhabitant._house_constraints(_Nep()) == []
-    assert zs._lessen(_Ctx(dd)) == []
 
 
 # ── 3. Breed voor smal, deterministisch ──────────────────────────────────────

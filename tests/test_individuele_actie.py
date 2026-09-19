@@ -47,37 +47,8 @@ def _capture(bus):
     return events
 
 
-def test_geen_herhaling_wordt_individuele_actie(seeded):
-    """C-gap zonder logboek-bewijs → individuele_actie, GEEN rol-voorstel."""
-    bus = EventBus(name="test")
-    events = _capture(bus)
-    inh = _inh(seeded, bus)
-    with patch("nooch_village.llm.reason",
-               return_value="VERDICT: coherent\nREASON: ok"):
-        inh._raise_governance_proposal(
-            Tension(sensed_by="test_rol", description=_DESC, kind="structural"))
-
-    assert len(events["individuele_actie"]) == 1
-    add_role = [p for p in events["proposal_raised"]
-                if p.data["proposal"]["change"]["kind"] == "add_role"]
-    assert add_role == []
 
 
-def test_met_herhaling_wordt_rol_voorstel(seeded):
-    """C-gap mét logboek-bewijs (obs=3) → rol-voorstel, GEEN individuele actie."""
-    bus = EventBus(name="test")
-    events = _capture(bus)
-    inh = _inh(seeded, bus)
-    with patch("nooch_village.llm.reason",
-               return_value="VERDICT: coherent\nREASON: ok"):
-        inh._raise_governance_proposal(Tension(
-            sensed_by="test_rol", description=_DESC, kind="structural",
-            evidence={"observations": 3, "first_seen": time.time() - 86400, "gap_key": "x"}))
-
-    assert events["individuele_actie"] == []
-    add_role = [p for p in events["proposal_raised"]
-                if p.data["proposal"]["change"]["kind"] == "add_role"]
-    assert len(add_role) == 1
 
 
 def test_village_routeert_individuele_actie_naar_inbox(tmp_path):

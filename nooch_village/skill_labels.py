@@ -51,7 +51,6 @@ LABELS: dict[str, str] = {
     "web_zoek": "Searches the open web and reads the pages it finds",
     "mobiel_audit": "Measures how fast and usable a page is on a phone (Lighthouse)",
     "zoekstrategie": "Decides which sources to search, with which term and in which language",
-    "lead_beoordeling": "Looks up a lead's website, reads it and says with a quote whether it fits",
 
     # ── Writing and checking ─────────────────────────────────────────────
     "content_schrijven": "Writes website copy in the brand's voice",
@@ -66,7 +65,6 @@ LABELS: dict[str, str] = {
     "voorstel_schrijven": "Works a vague hunch up into a concrete proposal",
 
     # ── Ordering knowledge ───────────────────────────────────────────────────
-    "curate": "Cuts raw input into separate, sharp insight cards",
     "verband_voorstel": "Sees whether two cards have anything to do with each other",
     "onderzoeksvraag": "Derives from a trend the question of why that trend exists",
 
@@ -161,7 +159,6 @@ MATCH_NL: dict[str, str] = {
     "web_zoek": "Zoekt op het open web en leest de paginas die hij vindt",
     "mobiel_audit": "Meet hoe snel en bruikbaar een pagina is op een telefoon (Lighthouse)",
     "zoekstrategie": "Bepaalt welke bronnen doorzocht worden, met welke term en in welke taal",
-    "lead_beoordeling": "Zoekt de site van een lead op, leest hem en zegt met een citaat of hij past",
     "content_schrijven": "Schrijft website-tekst in de stem van het merk",
     "content_check": "Leest publieke tekst na op verboden en onbewezen claims",
     "claims_check": "Toetst tekst aan de Europese regels voor duurzaamheidsclaims",
@@ -172,7 +169,6 @@ MATCH_NL: dict[str, str] = {
     "bulletin_schrijven": "Schrijft het dagelijkse dorpsbulletin",
     "field_note": "Duidt de cijfers van vandaag tegen de missie",
     "voorstel_schrijven": "Werkt een vaag gevoel uit tot een concreet voorstel",
-    "curate": "Snijdt ruwe input tot losse, scherpe inzicht-kaartjes",
     "verband_voorstel": "Ziet of twee kaartjes iets met elkaar te maken hebben",
     "onderzoeksvraag": "Leidt uit een trend de vraag af waarom die trend er is",
     "weten_we_dit_al": "Kijkt eerst of we het antwoord al ergens hebben liggen",

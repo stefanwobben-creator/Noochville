@@ -587,17 +587,6 @@ def test_radar_voorstel_is_de_nieuwheidscheck(dd):
     assert "strategy theme" not in rij["ai_waarom"]
 
 
-def test_claim_wachtrij_bevat_wat_de_scan_niet_kon_afdoen():
-    """Op productie stond de hele werklijst in een auto-status en was de wachtrij dus leeg: de
-    flow wachtte op 'open' terwijl de wekelijkse scan dat woord al lang niet meer gebruikte.
-    'Niet auto-verifieerbaar' is juist hét geval waarin een mens moet oordelen."""
-    from nooch_village import claims_db
-    assert founder_taken._wacht_op_mens("open")
-    assert founder_taken._wacht_op_mens(claims_db.NIET_VERIFIEERBAAR)
-    assert founder_taken._wacht_op_mens(claims_db.AUTO_REGRESSIE)
-    assert not founder_taken._wacht_op_mens(claims_db.AUTO_OPGELOST)
-    assert not founder_taken._wacht_op_mens("in behandeling")
-    assert not founder_taken._wacht_op_mens("live")
 
 
 def test_claim_wachtrij_leest_de_auto_statussen_uit_de_overlay(dd):

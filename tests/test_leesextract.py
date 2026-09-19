@@ -111,31 +111,10 @@ def _inwoner(tmp_path=None, ledger=None, reg=None):
     return Inhabitant(rec, EventBus(name="test"), reg or SkillRegistry(), ctx)
 
 
-def test_format_record_zet_het_extract_na_de_titel_en_laat_de_ruwe_tekst_weg():
-    rec = {"titel": "Page 0", "url": "https://example.org/0", "domein": "example.org", "fragment": KORT,
-           "tekst": LANG, "gelezen": True, "extract": "Kiilto Biomelt is a biodegradable hot melt."}
-    regel = Inhabitant._format_record(rec)
-    assert regel.startswith("titel: Page 0 | extract: Kiilto Biomelt is a biodegradable hot melt.")
-    assert "tekst:" not in regel and "url: https://example.org/0" in regel and "fragment:" in regel
 
 
-def test_format_record_zonder_extract_is_het_oude_gedrag():
-    rec = {"titel": "Page 0", "tekst": LANG}
-    regel = Inhabitant._format_record(rec)
-    assert regel.startswith("titel: Page 0 | tekst: ") and regel.endswith("…") and len(regel) < 200
 
 
-def test_note_draagt_het_extract(monkeypatch):
-    monkeypatch.setattr(dk, "conclusie", lambda *a, **k: "")
-    r = _web_zoek_result()
-    r["treffers"][0]["extract"] = "Kiilto Biomelt: biodegradable hot melt for packaging."
-    note = _inwoner()._deliverable_note({"text": "Find hot melts", "skill": "web_zoek"}, r,
-                                        ("list", "treffers"), source="web_zoek")
-    regel0 = next(r for r in note.splitlines() if r.startswith("• titel: Page 0"))
-    assert "extract: Kiilto Biomelt: biodegradable hot melt for packaging." in regel0
-    assert "tekst:" not in regel0                                           # de ruwe 160 tekens zijn weg
-    regel1 = next(r for r in note.splitlines() if r.startswith("• titel: Page 1"))
-    assert "tekst:" in regel1                                               # zonder extract: oud gedrag
 
 
 def test_de_conclusie_ziet_meer_dan_2000_tekens():
@@ -157,48 +136,8 @@ class _ZoekSkill(Skill):
         return _web_zoek_result()
 
 
-def test_uitvoerlus_verrijkt_voor_note_en_store(tmp_path, monkeypatch):
-    import nooch_village.llm as llm
-    from nooch_village.deliverable_store import DeliverableStore
-
-    def _model(prompt, **k):
-        if k.get("call_site") == "lees_extract":
-            return json.dumps({"1": "Extract one.", "2": "Extract two."})
-        return "One sentence."
-    monkeypatch.setattr(llm, "reason", _model)
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    reg = SkillRegistry()
-    reg.register(_ZoekSkill())
-    inw = _inwoner(tmp_path, ledger, reg)
-    inw.context.deliverables = DeliverableStore(str(tmp_path / "deliverables.json"))
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "Find hot melts", skill="web_zoek", payload={"term": "bio-based hot melt"})
-    inw._execute_checklist(ledger.get(pid), "2026-09-12")
-    logtxt = " ".join(e["text"] for e in ledger.get(pid).get("log", []))
-    assert "extract: Extract one." in logtxt and "extract: Extract two." in logtxt
-    recs = inw.context.deliverables.for_project(pid)
-    inhoud = inw.context.deliverables.content_for(recs[0]["id"])
-    assert inhoud["treffers"][0]["extract"] == "Extract one."             # de store heeft hetzelfde
-    assert inhoud["treffers"][0]["tekst"] == LANG                          # en nog steeds het ruwe materiaal
 
 
-def test_uitvoerlus_zonder_extracten_is_het_oude_gedrag(tmp_path, monkeypatch):
-    import nooch_village.llm as llm
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: "")
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    reg = SkillRegistry()
-    reg.register(_ZoekSkill())
-    inw = _inwoner(tmp_path, ledger, reg)
-    inw.context.settings["lees_extract_enabled"] = "0"
-    aangeroepen = []
-    monkeypatch.setattr(le, "verrijk", lambda *a, **k: aangeroepen.append(1) or 0)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
-    ledger.check_add(pid, cl["id"], "Find hot melts", skill="web_zoek", payload={"term": "x"})
-    inw._execute_checklist(ledger.get(pid), "2026-09-12")
-    assert not aangeroepen                                                 # uitgezet = niet gevraagd
-    assert ledger.get(pid)["checklists"][0]["items"][0]["done"] is True    # en het werk ging gewoon door
 
 
 # ── 4: het verslag rendert records, geen dict-repr ───────────────────────────

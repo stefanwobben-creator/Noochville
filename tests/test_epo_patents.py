@@ -119,13 +119,6 @@ def test_b_search_en_run(monkeypatch):
     assert r["total"] == 42 and len(r["patents"]) == 1 and r["patents"][0]["title"] == "Barefoot shoe"
 
 
-# ── d. lijst-archetype → note-formatter toont eigen velden per patent ────────────
-def test_d_archetype_en_note():
-    result = {"total": 1, "patents": [{"title": "Barefoot shoe", "publication_number": "US1A1",
-                                       "publication_date": "20200101", "applicants": ["Vivo"]}]}
-    assert Inhabitant._classify_result(result) == ("gelukt", ("list", "patents"))
-    note = _inh()._deliverable_note({"text": "patenten", "skill": "epo_patents"}, result, ("list", "patents"))
-    assert "Barefoot shoe" in note and "publication_date: 20200101" in note and "Vivo" in note
 
 
 # ── e. fail-soft: 0 patenten (echte observatie) / 403 → gat + error ──────────────

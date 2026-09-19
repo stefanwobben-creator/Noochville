@@ -99,15 +99,6 @@ def test_privesleutels_tellen_niet():
     assert c({"ok": True, "_intern": [1, 2, 3]})[0] == "leeg"
 
 
-# ── 4. Auditeerbaar: welke sleutel is geteld? ───────────────────────────────
-
-def test_de_getelde_sleutel_komt_terug_en_staat_in_het_log():
-    """Bij twijfel moet je kunnen zien wélke inhoud als deliverable geteld is — zelfde gedachte
-    als de Kroniek: laat zien waar iets vandaan komt."""
-    status, archetype = c({"ok": True, "bevindingen": [{"term": "x"}], "score": 88})
-    assert archetype == ("list", "bevindingen")
-    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert "inhoud uit '%s'" in src                    # de logregel noemt de sleutel
 
 
 def test_opmaak_hint_verandert_de_detectie_niet():
@@ -117,11 +108,6 @@ def test_opmaak_hint_verandert_de_detectie_niet():
     assert c({"gloednieuw": {"2026-07-01": 10}})[1] == ("dictlist", "gloednieuw")
 
 
-# ── 5. Legitiem leeg is een ANTWOORD, geen kennisgat ────────────────────────
-
-def test_leeg_bron_scheidt_antwoord_van_gat():
-    assert I._leeg_bron({"no_data": True, "reason": "site is schoon"}) == "gemeld"
-    assert I._leeg_bron({"ok": True}) == "geen_inhoud"
 
 
 

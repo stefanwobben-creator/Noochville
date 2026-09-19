@@ -35,29 +35,8 @@ def _note(item_skill: str, result: dict) -> str:
                                  source=item_skill)
 
 
-# ══ claims_check ═════════════════════════════════════════════════════════════
-
-def test_claims_check_lege_run_boekt_als_gemeld_leeg_met_de_lege_run_regel():
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Handgemaakt in Portugal, in kleine series."})
-    assert I._classify_result(uit) == ("leeg", None)
-    assert I._leeg_bron(uit) == "gemeld"                       # 📭 antwoord, geen kennisgat
-    assert "GEEN goedkeuring" in uit["reason"]
-    assert "toelichting" in uit and "betekenis" not in uit
 
 
-def test_claims_check_de_rode_treffer_wint_van_de_disclaimers():
-    """Gemeten in de review: 3 bevindingen (1 rood) en 4 betekenis-strings → de note toonde de
-    disclaimers en verzweeg de rode treffer."""
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Onze zolen zijn plasticvrij en klimaatneutraal, "
-                                          "100% recycled"})
-    assert I._classify_result(uit) == ("gelukt", ("list", "bevindingen"))
-    assert len(uit["toelichting"]) >= 3                        # de disclaimers zijn er nog wél
-    note = _note("claims_check", uit)
-    assert "klimaatneutraal" in note and "red" in note
-    assert "VOORGESTELD alternatief" not in note.split("\n")[0:3][-1]
-    assert uit["text"].startswith("3 findings: 1 red")
 
 
 def test_claims_check_het_verslag_toont_stoplicht_bron_en_waarom():
@@ -115,27 +94,8 @@ def _reason(a, o, c):
     return lambda prompt, **kw: payload
 
 
-def test_claim_evidence_alle_merken_fout_blijft_open_met_reden():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://m.example"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=""), \
-         patch("nooch_village.llm.reason", _reason(True, True, "x")):
-        res = ClaimEvidenceSkill().run({"brands": ["A", "B"], "claim": "afbreekbaar"}, _ctx_ce())
-    assert I._classify_result(res) == ("fout", None)
-    assert "no brand could be checked" in I._foutreden(res)
-    # de mislukkingen zijn wél Kroniek-feiten (daarop leert de ladder)
-    assert {r["status"] for r in ClaimEvidenceSkill().evidence_records(res, role_id="c")} == {"fout"}
 
 
-def test_claim_evidence_alle_merken_leeg_is_gemeld_leeg():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    page = "Wij verkopen sneakers in vele kleuren. Gratis verzending." + _PAD
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://m.example"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=page), \
-         patch("nooch_village.llm.reason", _reason(False, False, "")):
-        res = ClaimEvidenceSkill().run({"brands": ["A"], "claim": "afbreekbaar"}, _ctx_ce())
-    assert I._classify_result(res) == ("leeg", None) and I._leeg_bron(res) == "gemeld"
-    assert "none of the 1 brand(s) makes the claim" in res["reason"]
 
 
 def test_claim_evidence_string_brand_en_limit_cap():
@@ -265,15 +225,6 @@ def test_cert_evidence_niet_geschreven_is_niet_gelukt(tmp_path):
     assert zonder["ok"] is False and "Kroniek" in zonder["error"]
 
 
-def test_cert_evidence_een_verlopen_certificaat_wordt_als_zodanig_gemeld(tmp_path):
-    from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
-    ctx = SimpleNamespace(data_dir=str(tmp_path))
-    uit = CertEvidenceSkill().run({"text": CERT.replace("2099-06-30", "2020-01-01"),
-                                   "claims": ["recycled"]}, ctx)
-    assert uit["ok"] and uit["verlopen"] is True
-    assert any("verlopen (2020-01-01)" in r for r in uit["let_op"])
-    assert "EXPIRED" in uit["text"]
-    assert "EXPIRED" in _note("cert_evidence", uit)
 
 
 def test_cert_evidence_validate_payload_vangt_een_verzonnen_bestand(tmp_path):
@@ -364,39 +315,8 @@ def _scan_ctx(tmp_path, monkeypatch):
                            projects=ProjectLedger(str(tmp_path / "projects.json")), evidence_ledger=None)
 
 
-def test_site_scan_skipped_leest_als_gemeld_niet_als_kennisgat(tmp_path, monkeypatch):
-    """Het merendeel van de 45 'lege' scan-items uit de review: de week was al gedaan, en dat las
-    als 🕳 kennisgat omdat de skipped-vorm alleen `ok`/`reden` droeg."""
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None,
-                               "modelpas": False}, ctx)
-    tweede = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None,
-                                        "modelpas": False}, ctx)
-    assert tweede["skipped"] is True and tweede["reden"]          # de pulslaag leest dit nog
-    assert I._classify_result(tweede) == ("leeg", None)
-    assert I._leeg_bron(tweede) == "gemeld"
-    assert "this week's scan: 5 of 5 page(s) covered" in tweede["reason"]
 
 
-def test_site_scan_deelrun_zonder_bevinding_is_gemeld_leeg_met_dekking(tmp_path, monkeypatch):
-    """Een deelrun met één 429 en 0 nieuwe bevindingen boekte als 'gelukt' met de paginalabels
-    als "2 results" — de administratieve lijsten wonnen de inhoudsrace."""
-    from nooch_village import safe_fetch
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    schoon = "<html><body><p>Handmade in Portugal.</p></body></html>"
-
-    def fetch(url):
-        if "mission" in url:
-            raise safe_fetch.FetchMislukt("de pagina gaf HTTP 429", status=429)
-        return (200, schoon)
-    uit = ClaimsSiteScanSkill().run({"_fetch": fetch, "_sleep": lambda s: None, "modelpas": False}, ctx)
-    assert uit["ok"] and uit["volledig"] is False
-    assert I._classify_result(uit) == ("leeg", None) and I._leeg_bron(uit) == "gemeld"
-    assert "4 of 5 covered this week" in uit["reason"] and "1 page(s) not fetched (mission)" in uit["reason"]
-    assert set(uit["_scan"]) >= {"gedekt", "fouten", "statussen", "gewhitelist", "gaten"}
-    assert "gedekt" not in uit and "fouten" not in uit             # niet meer op topniveau
 
 
 def test_site_scan_met_bevinding_toont_de_bevinding_niet_de_paginalabels(tmp_path, monkeypatch):
@@ -415,16 +335,6 @@ def test_site_scan_met_bevinding_toont_de_bevinding_niet_de_paginalabels(tmp_pat
     assert "new finding(s)" in uit["text"]
 
 
-def test_site_scan_escalatie_blijft_een_fout(tmp_path, monkeypatch):
-    from nooch_village import safe_fetch
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-
-    def kapot(url):
-        raise safe_fetch.FetchMislukt("de pagina gaf HTTP 503", status=503)
-    uit = ClaimsSiteScanSkill().run({"_fetch": kapot, "_sleep": lambda s: None, "modelpas": False}, ctx)
-    assert uit["ok"] is False and I._classify_result(uit)[0] == "fout"
-    assert "geen enkele pagina" in I._foutreden(uit)
 
 
 # ══ regulation_watch ═════════════════════════════════════════════════════════

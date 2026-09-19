@@ -43,40 +43,12 @@ def inhabitant(tmp_path, ledger):
     return _make_inhabitant(tmp_path, ledger)
 
 
-def test_claim_run_complete_zonder_checklist_geen_valse_done(inhabitant, ledger):
-    # ACTIEF zonder voorbereiding → geen uitvoering, geen valse done, geen stub:done-marker
-    pid = ledger.create("website_watcher", "schrijf vegan-pagina", "human")
-    inhabitant._claim_run_complete(pid)
-    p = ledger.get(pid)
-    assert p["status"] != "done"
-    assert p.get("outcome") != "stub:done"
 
 
-def test_claim_run_complete_calls_run_project(inhabitant, ledger):
-    called = []
-
-    def mock_run(project):
-        called.append(project)
-        return "custom_outcome"
-
-    inhabitant.run_project = mock_run
-    pid = ledger.create("website_watcher", "analyseer", "human")
-    inhabitant._claim_run_complete(pid)
-    assert len(called) == 1
-    assert called[0]["id"] == pid
 
 
-def test_claim_run_complete_outcome_from_run_project(inhabitant, ledger):
-    inhabitant.run_project = lambda p: "prop_123"
-    pid = ledger.create("website_watcher", "werk", "human")
-    inhabitant._claim_run_complete(pid)
-    assert ledger.get(pid)["outcome"] == "prop_123"
 
 
-def test_run_project_zonder_checklist_geeft_geen_stub(inhabitant, ledger):
-    # de stub:done-marker is vervangen: geen checklist → run_project geeft None (geen valse success)
-    pid = ledger.create("website_watcher", "werk", "human")
-    assert inhabitant.run_project(ledger.get(pid)) is None
 
 
 def test_een_nieuw_project_slaapt_en_de_rol_raakt_het_niet_aan(inhabitant, ledger):
@@ -90,9 +62,3 @@ def test_een_nieuw_project_slaapt_en_de_rol_raakt_het_niet_aan(inhabitant, ledge
     assert ledger.get(pid)["status"] == "future" and not ledger.get(pid).get("worked")
 
 
-def test_on_project_activated_zonder_checklist_geen_valse_done(inhabitant, ledger):
-    # correcte eigenaar, maar geen voorbereiding → geen valse done (niet meer de oude stub:done-flow)
-    pid = ledger.create("website_watcher", "werk", "human", status="running")
-    event = Event("project_activated", {"pid": pid, "owner": "website_watcher"}, "village")
-    inhabitant._on_project_activated(event)
-    assert ledger.get(pid)["status"] != "done"

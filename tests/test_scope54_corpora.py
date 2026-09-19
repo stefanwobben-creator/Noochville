@@ -95,15 +95,6 @@ def test_openalex_record_draagt_adres_doi_en_lang_abstract():
     assert "top cited: “Work 1”, 2021, 99 citations" in uit["text"]
 
 
-def test_openalex_verslag_en_leesextract_lezen_het_record():
-    uit = _oa_run({"term": "adhesives footwear", "limit": 1}, [_oa_work(1)])
-    assert Inhabitant._classify_result(uit) == ("gelukt", ("list", "hits"))
-    t = project_verslag.inhoud_tekst(uit)
-    assert t.splitlines()[0].startswith("1 work(s) on OpenAlex")            # de text als leeswijzer
-    assert "• Work 1 (https://openalex.org/W1) — w0 w1 w2" in t             # titel (adres) — strekking
-    assert leesextract.te_lezen(uit, ("list", "hits")) == [(uit["hits"][0], "abstract")]
-    note = _inw()._deliverable_note({"text": "x", "skill": "openalex_evidence"}, uit, ("list", "hits"))
-    assert "url: https://openalex.org/W1" in note
 
 
 def test_openalex_is_configured_volgt_de_sleutel_en_description_is_planner_engels():
@@ -544,30 +535,8 @@ def test_web_zoek_leest_alle_paginas_met_een_wachtbudget_per_run(monkeypatch):
     assert id(gezien[-1]) != id(gezien[0])                                          # per run een nieuw
 
 
-def test_lead_beoordeling_leest_met_wachtbudget(monkeypatch):
-    from nooch_village.skills_impl.lead_beoordeling import LeadBeoordelingSkill
-    gezien = _budget_recorder(monkeypatch)
-    s = LeadBeoordelingSkill(zoek=None, reason_fn=lambda *a, **k: json.dumps(
-        {"what_is_this": "a shop", "criteria": [], "fit": "low", "why": "w", "next_step": "discard", "quote": ""}))
-    uit = s.run({"naam": "x", "url": "https://x.example/"}, SimpleNamespace(settings={}))
-    assert uit["ok"] is True and len(gezien) == 1 and isinstance(gezien[0], safe_fetch.Wachtbudget)
 
 
-def test_lead_beoordeling_eerste_record_draagt_naam_en_adres_voor_het_verslag():
-    from nooch_village.skills_impl.lead_beoordeling import LeadBeoordelingSkill
-    s = LeadBeoordelingSkill(zoek=None, haal=lambda url: {"url": url, "titel": "Kiilto", "tekst": "Kiilto makes glue. " * 20},
-                             reason_fn=lambda *a, **k: json.dumps(
-                                 {"what_is_this": "Finnish adhesive maker (manufacturer)",
-                                  "criteria": [{"criterion": "plastic-free", "verdict": "yes",
-                                                "quote": "Kiilto makes glue."}],
-                                  "fit": "medium", "why": "w", "next_step": "read_more",
-                                  "quote": "Kiilto makes glue."}))
-    uit = s.run({"naam": "Kiilto", "url": "https://kiilto.com/"}, SimpleNamespace(settings={}))
-    eerste = uit["beoordeling"][0]
-    assert eerste["naam"] == "Kiilto" and eerste["url"] == "https://kiilto.com/"
-    t = project_verslag.inhoud_tekst(uit)
-    assert "• Kiilto (https://kiilto.com/) — Finnish adhesive maker (manufacturer)" in t
-    assert "• plastic-free — yes — “Kiilto makes glue.”" in t
 
 
 # ═══ 8. haal_pagina en safe_fetch ════════════════════════════════════════════
@@ -587,21 +556,6 @@ def test_haal_pagina_lege_pagina_is_no_data_niet_gelukt_met_de_url_als_inhoud():
     assert uit["no_data"] is True                                              # ook mét term
 
 
-def test_haal_pagina_treffers_dragen_titel_url_en_fragment_en_er_is_een_text():
-    from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
-    uit = HaalPaginaSkill(haal=lambda *_a, **_k: dict(_FAQ)).run({"url": _FAQ["url"], "term": "natural"})
-    t = uit["treffers"][0]
-    assert t["titel"] == "FAQ — Nooch" and t["url"] == _FAQ["url"]
-    assert t["fragment"] == ("FAQ — Nooch · Waar zijn de schoenen van gemaakt? · Onze materialen zijn "
-                             "natural en plantaardig. · We gebruiken geen leer.")
-    assert uit["text"] == ("FAQ — Nooch (nooch.earth): 1 line(s) with 'natural'; first: “Onze materialen "
-                           "zijn natural en plantaardig.”.")
-    assert Inhabitant._classify_result(uit) == ("gelukt", ("list", "treffers"))
-    verslag = project_verslag.inhoud_tekst(uit)
-    assert verslag.splitlines()[0].startswith("FAQ — Nooch (nooch.earth): 1 line(s)")
-    assert "• FAQ — Nooch (https://nooch.earth/pages/faq) — FAQ — Nooch · Waar zijn de schoenen" in verslag
-    note = _inw()._deliverable_note({"text": "faq", "skill": "haal_pagina"}, uit, ("list", "treffers"))
-    assert "titel: FAQ — Nooch" in note and "regel: Onze materialen zijn natural" in note
 
 
 def test_safe_fetch_laat_alleen_tekst_door_de_stripper():
