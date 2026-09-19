@@ -1036,43 +1036,6 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     return _page(name, inner)
 
 
-def render_patterns(csrf_token: str = "") -> str:
-    """Levende styleguide: elk atoom/molecuul één keer. Bron van waarheid; geen losse varianten."""
-    def sec(title, body):
-        return f"<div class='c2-sec'><h3>{_e(title)}</h3><div style='display:flex;gap:.5rem;flex-wrap:wrap;align-items:center'>{body}</div></div>"
-    buttons = ("<button class='btn ok'>Primary</button>"
-               "<button class='btn'>Neutral</button>"
-               "<button class='btn no'>Danger</button>"
-               "<button class='btn ok sm'>Primary sm</button>"
-               "<button class='btn sm'>Neutral sm</button>"
-               "<button class='btn ghost sm'>Ghost sm</button>"
-               "<a class='dellink' href='#'>delete</a>")
-    chips = ("<span class='chip green'>green</span><span class='chip muted'>muted</span>"
-             "<span class='chip outline'>outline</span><span class='chip coral'>coral</span>"
-             "<span class='chip coral-solid'>Overdue</span><span class='chip'>tint (default)</span>"
-             "<span class='badge ro'>read</span><span class='badge rw'>edit</span>")
-    cards = (f"<button class='acard'>{_IC_CLOCK}<span>Date</span></button>"
-             f"<button class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
-             f"<button class='acard acard-off' disabled>{_IC_TARGET}<span>Goals</span></button>")
-    att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>example attachment</a></div>"
-    due = (f"<span class='chip outline'>{_IC_CLOCK}25 Jun 2026</span>"
-           f"<span class='chip coral'>{_IC_CLOCK}1 Jan 2020</span><span class='chip coral-solid'>Overdue</span>")
-    av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
-    icons = (f"<span class='manage-ico' title='add person'>{_ICON_ADD_PERSON}</span>"
-             f"<span class='manage-ico' title='add reply'>{_ICON_ADD_EMOJI}</span>")
-    body = (sec("Buttons — atom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
-            + sec("Line icons (neutral, currentColor)", icons)
-            + sec("Status & chips & badges", chips)
-            + sec("Action-cards (molecule)", cards)
-            + sec("Attachment card", att)
-            + sec("Deadline-chip", due)
-            + sec("Avatar", av))
-    main = (f"<div class='c2-main'><h1>Patterns</h1>"
-            f"<p class='muted'>Living reference. Use these atoms and molecules; don't invent variants.</p>{body}</div>")
-    inner = (f"{_DS_LINK}"
-             f"{_nav('patterns')}"
-             f"<div class='c2-wrap'>{main}</div>")
-    return _page("Patterns", inner)
 
 
 

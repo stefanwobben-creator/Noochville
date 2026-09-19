@@ -18,7 +18,6 @@ from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.trends import TrendsSkill, _normalize_rising_value, _geo_to_locale
-from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.projects import ProjectLedger
 from nooch_village.monitoring import MonitoringStore
 

@@ -4,6 +4,23 @@ from __future__ import annotations
 from nooch_village.definitions import DefinitionStore, MIGRATIONS
 
 
+
+def _kpi_uit_def(dd, node, did=None, *, naam=""):
+    """Maak een KPI uit een catalogus-definitie, via de gedeelde helper.
+
+    Deze tests deden dat tot 19 september 2026 via de dispatch-actie `m_add_from_def`. Die actie
+    is in fase 6 verwijderd: geen enkel formulier in de cockpit verstuurde hem nog (de levende weg
+    loopt via `m_add_kpi`/`m_add_link`). De ROUTE bestaat gewoon — beide levende acties roepen
+    `views/metrics._kpi_id_from_def` aan, en dat is precies wat hier gebeurt. Zo toetsen deze
+    tests dezelfde code als de cockpit, zonder een deur die er niet meer is."""
+    from nooch_village.views.metrics import _kpi_id_from_def
+    from nooch_village import cockpit2
+    st = cockpit2._Stores(dd)
+    if did is None:
+        d = st.defs.by_name(naam)
+        did = d["id"] if d else ""
+    return _kpi_id_from_def(st, node, did)
+
 def test_add_en_current(tmp_path):
     s = DefinitionStore(str(tmp_path / "d.json"))
     d = s.add("Conversie", owner="lib", unit="%", definition="orders / bezoekers",
@@ -84,7 +101,7 @@ def test_kpi_uit_catalogus_en_defv(tmp_path):
     # pak een bestaande catalogus-definitie (Bezoekers Plausible)
     d = st.defs.by_name("Bezoekers (Plausible)")
     assert d is not None
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, d["id"])
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] == d["id"] and it["def_version"] == 1
@@ -99,7 +116,7 @@ def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
     cockpit2._bootstrap(dd)
     rid = "mother_earth__nooch__marketing_lead"
     # knows-exactly: zoeken op naam koppelt aan de catalogus
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_name": ["Omzet (Shopify)"], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, naam="Omzet (Shopify)")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] and it["origin"] == "shopify"
@@ -126,7 +143,7 @@ def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
     if st.records.get(rid) is None:
         rid = "mother_earth__nooch"
     d = st.defs.by_name("Tevredenheid werkoverleg")
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, d["id"])
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("def_id") == d["id"]][0]
     assert it["auto"] is True and it["origin"] == "werkoverleg"
@@ -259,7 +276,7 @@ def test_catalogus_usage_telt_gebruik(tmp_path):
     st = cockpit2._Stores(dd)
     rid = "mother_earth__nooch__marketing_lead"
     d = st.defs.by_name("Omzet (Shopify)")
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, d["id"])
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     assert "in use 1×" in page
 
@@ -275,8 +292,8 @@ def test_meetwijze_per_bron_en_invoer(tmp_path):
     nps = st.defs.by_name("NPS")
     assert st.defs.current(nps["id"])["meetwijze"] == "enquete"
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [erp["id"]], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [nps["id"]], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, erp["id"])
+    _kpi_uit_def(dd, rid, nps["id"])
     st = cockpit2._Stores(dd)
     kerp = [i for i in st.metrics.for_node(rid) if i.get("def_id") == erp["id"]][0]
     knps = [i for i in st.metrics.for_node(rid) if i.get("def_id") == nps["id"]][0]
@@ -293,7 +310,7 @@ def test_meetwijze_wijzigen_flipt_invoer(tmp_path):
                                       "meetwijze": ["handmatig"], "next": ["/catalog"]}, username="guest")
     did = cockpit2._Stores(dd).defs.by_name("Eigen meter")["id"]
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [did], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, did)
     mid = [i for i in cockpit2._Stores(dd).metrics.for_node(rid) if i.get("def_id") == did][0]["id"]
     assert cockpit2._Stores(dd).metrics.add_sample(mid, 1) is True
     # zet meetwijze op systeem → KPI's flippen naar auto, invoer geblokkeerd
@@ -378,7 +395,7 @@ def test_co2_bron_en_verificatie(tmp_path):
     assert "voorlopig" in page and "not live yet" in page and "data-ver='voorlopig'" in page
     # velden stromen mee naar een KPI uit de catalogus, en de tegel toont 'voorlopig'
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]}, username="guest")
+    _kpi_uit_def(dd, rid, st.defs.by_name("CO2 per paar")["id"])
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("name") == "CO2 per paar"][0]
     assert it["verificatie"] == "voorlopig" and it["bron_url"] == "/carbon-footprint-of-shoes"

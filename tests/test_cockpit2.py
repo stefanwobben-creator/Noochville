@@ -350,10 +350,15 @@ def test_project_detail_checklist_en_feed(tmp_path):
                                        "done_when": ["af bij oplevering"], "col": ["actief"],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
-    # omschrijving + label via edit
-    cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Detail-test"],
-                                        "description": ["Een nette omschrijving"], "label": ["groen"],
-                                        "trekker": [_een_vervuller(dd)], "next": ["/"]}, username="guest")
+    # Omschrijving en titel via de LEVENDE acties. Stond op `proj_edit`, dat alles in één deed;
+    # die actie is in fase 6 verwijderd (geen formulier verstuurde hem nog). Het label zetten we
+    # rechtstreeks in de ledger: er is sinds fase 6 geen dispatch-actie meer die dat doet, maar de
+    # kaart RENDERT een bestaand label nog wel — en dat is wat deze test toetst.
+    cockpit2.dispatch(dd, "proj_rename", {"pid": [pid], "scope": ["Detail-test"], "next": ["/"]},
+                      username="guest")
+    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["Een nette omschrijving"],
+                                            "next": ["/"]}, username="guest")
+    cockpit2._Stores(dd).projects.edit(pid, label="groen", allow_done=True)
     # named checklist + items + afvinken
     cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]}, username="guest")
     clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
@@ -361,8 +366,8 @@ def test_project_detail_checklist_en_feed(tmp_path):
     cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 2"], "next": ["/"]}, username="guest")
     item1 = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]["id"]
     cockpit2.dispatch(dd, "check_toggle", {"pid": [pid], "clid": [clid], "item": [item1], "next": ["/"]}, username="guest")
-    # opmerking in de feed
-    cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["Eerste voortgang"], "next": ["/"]}, username="guest")
+    # opmerking in de feed (via de levende wall-actie; `proj_comment` is weg in fase 6)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["Eerste voortgang"], "next": ["/"]}, username="guest")
 
     page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", back="/node?id=" + role)
     assert "Detail-test" in page and "Een nette omschrijving" in page
@@ -381,8 +386,9 @@ def test_project_kaart_toont_label_en_progress(tmp_path):
                                        "done_when": ["af bij oplevering"], "col": ["actief"],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
-    cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Met label"], "label": ["koraal"],
-                                        "trekker": [_een_vervuller(dd)], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_rename", {"pid": [pid], "scope": ["Met label"], "next": ["/"]},
+                      username="guest")
+    cockpit2._Stores(dd).projects.edit(pid, label="koraal", allow_done=True)   # zie hierboven
     cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["c"], "next": ["/"]}, username="guest")
     clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
     cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["a"], "next": ["/"]}, username="guest")

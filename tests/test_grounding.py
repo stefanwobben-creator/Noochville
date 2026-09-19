@@ -32,29 +32,5 @@ def test_per_pagina_getal_is_gegrond():
     assert ground_field_note(body, PLAUS, "2026-07-12") == []
 
 
-def test_field_note_skill_markeert_en_logt(tmp_path, monkeypatch):
-    """End-to-end: een gehallucineerde LLM-body → ONGEGROND-banner in het bestand + fout in de Kroniek."""
-    import nooch_village.skills_impl.field_note as fn
-    from nooch_village.evidence_ledger import EvidenceLedger
-
-    # forceer de LLM-tak met een gehallucineerde body (verkeerde datum + verzonnen bezoekersgetal)
-    monkeypatch.setattr(fn, "reason", lambda *a, **k: "**Field Note – 22 mei 2024**\n\n12 bezoekers deze week.")
-    ctx = type("Ctx", (), {"data_dir": str(tmp_path)})()
-    out = fn.FieldNoteSkill().run({"plausible": {"results": {"visitors": {"value": 107}}}, "trends": {}}, ctx)
-
-    assert out["grounded"] is False and out["issues"]
-    body = open(out["path"], encoding="utf-8").read()
-    assert "ONGEGROND" in body                                     # gemarkeerd, niet schoon gepubliceerd
-    recs = EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl")).all_records()
-    assert recs and recs[-1]["skill"] == "field_note" and recs[-1]["status"] == "fout"
 
 
-def test_field_note_skill_gegrond_geen_banner(tmp_path, monkeypatch):
-    import nooch_village.skills_impl.field_note as fn
-    from nooch_village.evidence_ledger import EvidenceLedger
-    monkeypatch.setattr(fn, "reason", lambda *a, **k: "Rustige week. Bezoekers (7d): 107.")
-    ctx = type("Ctx", (), {"data_dir": str(tmp_path)})()
-    out = fn.FieldNoteSkill().run({"plausible": {"results": {"visitors": {"value": 107}}}, "trends": {}}, ctx)
-    assert out["grounded"] is True and out["issues"] == []
-    assert "ONGEGROND" not in open(out["path"], encoding="utf-8").read()
-    assert EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl")).all_records()[-1]["status"] == "bevestigd"

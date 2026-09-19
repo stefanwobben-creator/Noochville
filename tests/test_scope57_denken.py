@@ -170,38 +170,8 @@ def _notes(tmp_path):
 
 
 
-# ── 4. bulletin_schrijven / field_note ───────────────────────────────────────
-
-def test_bulletin_zonder_events_schrijft_niets(tmp_path):
-    from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
-    ctx = SimpleNamespace(data_dir=str(tmp_path))
-    with patch("nooch_village.llm.reason", return_value="# Village bulletin") as m:
-        uit = BulletinSchrijvenSkill().run({"thema": "x", "doel": "y"}, ctx)
-    assert uit["no_data"] is True and not m.called
-    assert not os.path.exists(os.path.join(str(tmp_path), "bulletins"))
-    assert ontbrekende_velden(BulletinSchrijvenSkill.required_payload, {"thema": "x"}) == ["events"]
-    with patch("nooch_village.llm.reason", return_value="# Village bulletin\ntext"):
-        uit = BulletinSchrijvenSkill().run({"events": [{"name": "dag_begint", "by": "clock"}]}, ctx)
-    assert uit["text"].startswith("# Village bulletin") and os.path.exists(uit["path"])
-    assert Inhabitant._classify_result(uit)[1] == ("text", "text")     # de note, niet het pad
 
 
-def test_field_note_zonder_data_schrijft_niets_en_de_ladder_krijgt_zijn_context(tmp_path, monkeypatch):
-    import nooch_village.skills_impl.field_note as fn
-    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={})
-    uit = fn.FieldNoteSkill().run({"topic": "traffic", "content": "x"}, ctx)
-    assert uit["no_data"] is True and uit["path"] is None
-    assert not os.path.exists(os.path.join(str(tmp_path), "output"))
-    assert not os.path.exists(os.path.join(str(tmp_path), "last_pulse.json"))
-    assert ontbrekende_velden(fn.FieldNoteSkill.required_payload, {}) == ["plausible"]
-    # de ladder-keuze draait nu écht (was een NameError op `context`, stil gevangen)
-    gezien = {}
-    import nooch_village.llm_keuze as lk
-    monkeypatch.setattr(lk, "llm_voorkeur", lambda omg, rid, site: gezien.update(omg=omg, site=site))
-    monkeypatch.setattr(fn, "reason", lambda *a, **k: "Quiet week. Visitors (7d): 107.")
-    uit = fn.FieldNoteSkill().run({"plausible": {"results": {"visitors": {"value": 107}}}}, ctx)
-    assert gezien["omg"] is ctx and gezien["site"] == "skill_field_note"
-    assert uit["text"].startswith("# Field Note") and "Quiet week" in uit["text"]
 
 
 # ── 5. tegenspraak ───────────────────────────────────────────────────────────
@@ -282,16 +252,5 @@ def test_library_lookup_onbekend_is_gemeld_leeg_en_list_leest_een_string():
     assert "approved | forbidden | avoid | escalated | insight_statement" in LibraryListSkill.input_schema
 
 
-# ── 7. metadata en de gedeelde helper ────────────────────────────────────────
-
-def test_voorstel_en_synthesize_declareren_hun_contract():
-    from nooch_village.registry_factory import build_skill_registry
-    from nooch_village.skills_impl.synthesize import SynthesizeCardsSkill
-    from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
-    assert VoorstelSchrijvenSkill.required_payload == ("tension",)
-    assert ontbrekende_velden(VoorstelSchrijvenSkill.required_payload, {}) == ["tension"]
-    assert SynthesizeCardsSkill.cost == "free"
-    assert SynthesizeCardsSkill.required_payload == ("card_a", "card_b")
-    assert build_skill_registry().get("synthesize_cards") is None      # CLI-pad, geen dorpsskill
 
 

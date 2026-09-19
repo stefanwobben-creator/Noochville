@@ -466,11 +466,14 @@ def test_gate_op_clreport_afgeleid_via_cid(tmp_path):
 # ── Punt 1: collaboratie-takken ongated — elke ingelogde gebruiker mag ────────
 
 def test_collaboratie_buitenstaander_mag_reageren(tmp_path):
-    # proj_comment heeft GEEN rol-gate: een ingelogde niet-lid mag reageren
+    # De wall-actie heeft GEEN rol-gate: een ingelogde niet-lid mag reageren. Stond op
+    # `proj_comment`; die actie is in fase 6 verwijderd (geen formulier verstuurde hem nog, de
+    # cockpit gebruikt `proj_feed`). De EIS is ongewijzigd: deelnemen aan de draad is geen
+    # structuurmutatie, dus geen rol-poort.
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")             # geen rol, geen lead
     pid = cockpit2._Stores(dd).projects.create(_GATE_ROLE, "P", "human")
-    _, msg = cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["hoi"], "next": ["/x"]},
+    _, msg = cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["hoi"], "next": ["/x"]},
                                username="buiten@nooch.earth")
     assert "geplaatst" in msg and "Geen toegang" not in msg
 

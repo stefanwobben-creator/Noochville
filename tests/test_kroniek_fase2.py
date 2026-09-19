@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 from nooch_village.evidence_ledger import EvidenceLedger, interpret
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-from nooch_village.skills_impl.kroniek_interpret import KroniekInterpretSkill
 
 
 def _led(tmp_path):
@@ -86,21 +85,7 @@ def test_interpret_leeg_onderwerp(tmp_path):
     assert interpret(_led(tmp_path), "  ")["conclusie"] == "geen onderwerp opgegeven"
 
 
-# ── de skill ──────────────────────────────────────────────────────────────────
-
-def test_kroniek_interpret_skill_leest_het_register(tmp_path):
-    led = _led(tmp_path)
-    led.record(role_id="c", skill="claim_evidence", query="Veja — biodegradable", source="https://a", status="bevestigd", result_ref="ISO")
-    ctx = SimpleNamespace(evidence_ledger=led, data_dir=str(tmp_path))
-    res = KroniekInterpretSkill().run({"onderwerp": "biodegradable"}, ctx)
-    assert res["ok"] and len(res["bevestigd"]) == 1
 
 
-def test_kroniek_interpret_skill_zonder_onderwerp(tmp_path):
-    res = KroniekInterpretSkill().run({}, SimpleNamespace(data_dir=str(tmp_path)))
-    assert res["ok"] is False
 
 
-def test_kroniek_interpret_geregistreerd():
-    from nooch_village.registry_factory import build_skill_registry
-    assert build_skill_registry().get("kroniek_interpret") is not None

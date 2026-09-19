@@ -90,76 +90,19 @@ class _Ctx:
         self.settings = {}
 
 
-def test_de_zoekstrategie_leest_de_lessen(tmp_path):
-    """DE KERNTEST OP DE LUS. Schrijf een les, en hij moet in de prompt terechtkomen die de
-    volgende strategie bepaalt. Zonder deze schakel is schrijven zinloos."""
-    from nooch_village.skills_impl import zoekstrategie as zs
-    dd = str(tmp_path)
-    Constraints(os.path.join(dd, "constraints.json")).add(
-        "gebruik B2B-registers (Kompass, Europages) voor leveranciers", domein=ZOEKEN)
-    assert "Kompass" in " ".join(zs._lessen(_Ctx(dd)))
-
-
-def test_de_zoekstrategie_leest_de_kansregels_juist_NIET(tmp_path):
-    """De tegenhanger van de domeinscheiding, op de lezer in plaats van op de store."""
-    from nooch_village.skills_impl import zoekstrategie as zs
-    dd = str(tmp_path)
-    Constraints(os.path.join(dd, "constraints.json")).add("geen kinderschoenen", domein=KANSEN)
-    assert zs._lessen(_Ctx(dd)) == []
 
 
 
 
 
 
-# ── 3. Breed voor smal, deterministisch ──────────────────────────────────────
-
-def test_de_echte_mislukte_term_wordt_verbreed():
-    """De term uit het geval zelf. Negen woorden met zes eisen erin; de kern is drie woorden."""
-    from nooch_village.skills_impl.zoekstrategie import verbreed
-    kort = verbreed("Savon de Potasse fabricant fournisseur Europe savon liquide potassique "
-                    "industriel")
-    assert kort and len(kort.split()) <= 4
-    assert "savon" in kort.lower() and "potasse" in kort.lower()
-    for eis in ("fabricant", "fournisseur", "Europe", "industriel"):
-        assert eis.lower() not in kort.lower(), eis
 
 
-def test_een_term_die_al_breed_is_blijft_met_rust():
-    """Anders verbreedt hij een goede zoekopdracht kapot, en dat is de tegenovergestelde fout."""
-    from nooch_village.skills_impl.zoekstrategie import verbreed
-    assert verbreed("Savon de Potasse buy") == ""
-    assert verbreed("vegan sneakers") == ""
-    assert verbreed("") == ""
 
 
-def test_de_brede_stap_komt_voor_de_smalle_te_staan():
-    """DE REDEN DAT DIT IN CODE ZIT EN NIET IN DE PROMPT. Een promptregel is een belofte: hij
-    houdt zich er meestal aan, en precies de keer dat hij dat niet doet mislukt het onderzoek
-    zonder dat iemand het merkt."""
-    from nooch_village.skills_impl.zoekstrategie import _breed_voor_smal
-    smal = {"bron": "web_zoek", "taal": "fr", "waarom": "x",
-            "term": "Savon de Potasse fabricant fournisseur Europe savon liquide industriel"}
-    uit = _breed_voor_smal([smal])
-    assert len(uit) == 2
-    assert uit[0]["bron"] == "web_zoek" and len(uit[0]["term"].split()) <= 4
-    assert uit[0]["verbreed_van"] == smal["term"]
-    assert uit[1] is smal, "de smalle stap blijft: hij was niet fout, hij was te vroeg"
 
 
-def test_hooguit_een_brede_stap_erbij():
-    """Twee brede stappen is dubbel werk, en de cap op het aantal stappen is er niet voor niets."""
-    from nooch_village.skills_impl.zoekstrategie import _breed_voor_smal
-    stappen = [{"bron": "web_zoek", "term": f"iets {i} fabricant fournisseur Europe industriel",
-                "taal": "en", "waarom": "x"} for i in range(3)]
-    uit = _breed_voor_smal(stappen)
-    assert sum(1 for s in uit if s.get("verbreed_van")) == 1
 
 
-def test_een_corpus_bron_wordt_niet_verbreed():
-    """OpenAlex en de patentregisters hebben juist baat bij een precieze technische term. De
-    breed-eerst-regel geldt voor het OPEN web, niet voor een corpus."""
-    from nooch_village.skills_impl.zoekstrategie import _breed_voor_smal
-    stappen = [{"bron": "openalex_evidence", "taal": "en", "waarom": "x",
-                "term": "potassium soap manufacturer supplier Europe industrial"}]
-    assert _breed_voor_smal(stappen) == stappen
+
+

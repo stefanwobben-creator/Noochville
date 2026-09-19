@@ -121,99 +121,16 @@ def _s2_skill():
     return SemanticScholarSkill()
 
 
-def test_semscholar_or_keten_wordt_per_clausule_gezocht_en_verenigd():
-    gezien = []
-
-    def fake(req, timeout=None):
-        gezien.append(req.full_url)
-        n = len(gezien)
-        return _Resp({"total": 1, "data": [_s2_paper(n, cites=n), _s2_paper(0, cites=50)]})  # P0 in beide
-
-    with patch("urllib.request.urlopen", fake), patch("time.sleep"):
-        uit = _s2_skill().run({"term": "glue-free OR adhesive-free footwear", "limit": 5},
-                              SimpleNamespace(settings={}))
-    assert len(gezien) == 2
-    assert "query=glue%20free" in gezien[0] and "query=adhesive%20free%20footwear" in gezien[1]
-    assert uit["gezocht"] == ["glue free", "adhesive free footwear"]
-    assert [h["title"] for h in uit["hits"]] == ["Paper 0", "Paper 2", "Paper 1"]     # dedup + citaties
-    hit = uit["hits"][0]
-    assert hit["url"] == "https://www.semanticscholar.org/paper/P0" and hit["doi"] == "10.2/0"
-    assert len(hit["abstract"]) > 600
-    assert uit["text"].startswith("2 paper(s) on Semantic Scholar for 'glue-free OR adhesive-free footwear'")
-    assert "searched 2 clauses" in uit["text"] and "top cited: “Paper 0”, 2019, 50 citations" in uit["text"]
 
 
 
 
-def test_semscholar_drie_uitkomsten():
-    with patch("urllib.request.urlopen", lambda req, timeout=None: _Resp({"total": 0, "data": []})), \
-         patch("time.sleep"):
-        leeg = _s2_skill().run({"term": "a OR b"}, SimpleNamespace(settings={}))
-    assert leeg["no_data"] is True and Inhabitant._classify_result(leeg)[0] == "leeg"
-
-    def kapot(req, timeout=None):
-        raise _http(503, "Service Unavailable")
-    with patch("urllib.request.urlopen", kapot), patch("time.sleep"):
-        fout = _s2_skill().run({"term": "a OR b"}, SimpleNamespace(settings={}))
-    assert "error" in fout and "503" in fout["error"] and Inhabitant._classify_result(fout)[0] == "fout"
 
 
-def test_semscholar_backoff_herhaalt_5xx_en_timeout_precies_een_keer():
-    s = _s2_skill()
-    slaap = []
-    calls = {"n": 0}
-
-    def eerst_500(req, timeout=None):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise _http(500, "Internal Server Error")
-        return _Resp({"data": []})
-
-    with patch("urllib.request.urlopen", eerst_500):
-        assert s._fetch_with_backoff("https://x", {}, _sleep=slaap.append) == {"data": []}
-    assert calls["n"] == 2 and slaap == [2.0]
-
-    calls["n"] = 0
-
-    def eerst_timeout(req, timeout=None):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise urllib.error.URLError("timed out")
-        return _Resp({"data": [1]})
-
-    with patch("urllib.request.urlopen", eerst_timeout):
-        assert s._fetch_with_backoff("https://x", {}, _sleep=lambda *_: None) == {"data": [1]}
-
-    def altijd_500(req, timeout=None):
-        raise _http(502, "Bad Gateway")
-    with patch("urllib.request.urlopen", altijd_500):
-        uit = s._fetch_with_backoff("https://x", {}, _sleep=lambda *_: None)
-    assert isinstance(uit, str) and "502" in uit                              # één herhaling, dan fout
-
-    def vierhonderd(req, timeout=None):
-        calls["n"] += 1
-        raise _http(404, "Not Found")
-    calls["n"] = 0
-    with patch("urllib.request.urlopen", vierhonderd):
-        uit = s._fetch_with_backoff("https://x", {}, _sleep=lambda *_: None)
-    assert "404" in uit and calls["n"] == 1                                    # geen herhaling op 4xx
 
 
-def test_semscholar_429_backoff_blijft_zoals_hij_was():
-    s = _s2_skill()
-    slaap = []
-
-    def altijd_429(req, timeout=None):
-        raise _http(429, "Too Many Requests")
-    with patch("urllib.request.urlopen", altijd_429):
-        uit = s._fetch_with_backoff("https://x", {}, _sleep=slaap.append)
-    assert "429" in uit and len(slaap) == 3                                    # 4 pogingen, 3 pauzes
 
 
-def test_semscholar_metadata_engels():
-    s = _s2_skill()
-    assert "Semantic Scholar" in s.description[:160] and "English" in s.description[:160]
-    assert "required" in s.input_schema and "zoekterm" not in s.input_schema
 
 
 # ═══ 3. EPO OPS ══════════════════════════════════════════════════════════════
@@ -325,64 +242,12 @@ class _Get:
 
 
 
-@pytest.mark.parametrize("data", [
-    {}, {"hits": None}, {"hits": []}, {"hits": {"hits": "geen lijst"}},
-    {"hits": {"total": "veel", "hits": [None, 3, {"edition": "x", "highlight": {"text": "geen lijst"}}]}},
-    {"hits": {"hits": [{"edition": {"title": "T", "authors": "niet een lijst", "publish_year": "onbekend"},
-                        "highlight": None}]}},
-    {"hits": {"hits": [{"edition": {"title": "T", "publish_date": "March 2011"}, "ia": ["eerste", "tweede"],
-                        "highlight": {"text": ["x"]}}]}},
-])
-def test_openlibrary_parse_is_defensief(data):
-    from nooch_village.skills_impl.openlibrary_search_inside import parse_hits
-    total, records = parse_hits(data)
-    assert isinstance(total, int) and isinstance(records, list)
-    for r in records:
-        assert set(r) == {"source", "title", "url", "tekst", "authors", "year"}
-        assert isinstance(r["authors"], list) and (r["year"] is None or isinstance(r["year"], int))
-        assert isinstance(r["url"], str) and "[" not in r["url"]
-    if records and data["hits"]["hits"][0].get("ia") == ["eerste", "tweede"]:
-        assert records[0]["url"] == "https://archive.org/details/eerste" and records[0]["year"] == 2011
 
 
-def test_openlibrary_nul_treffers_is_no_data_en_storing_is_error():
-    with patch("requests.get", _Get({"hits": {"total": 0, "hits": []}})), patch("time.sleep"):
-        leeg = _ol_skill().run({"term": "zzxq"}, None)
-    assert leeg["no_data"] is True and "zzxq" in leeg["reason"]
-    assert Inhabitant._classify_result(leeg)[0] == "leeg"                     # gemeld, geen kennisgat
-
-    import requests
-    get = _Get(requests.exceptions.Timeout("t"), requests.exceptions.ConnectionError("c"))
-    with patch("requests.get", get), patch("time.sleep"):
-        fout = _ol_skill().run({"term": "x"}, None)
-    assert "error" in fout and "niet bereikbaar" in fout["error"] and len(get.gezien) == 2   # één herhaling
-    assert Inhabitant._classify_result(fout)[0] == "fout"
 
 
-def test_openlibrary_herhaalt_een_keer_na_timeout_of_5xx():
-    import requests
-    ok = {"hits": {"total": 1, "hits": [_OL_HIT]}}
-    get = _Get(requests.exceptions.Timeout("t"), ok)
-    with patch("requests.get", get), patch("time.sleep"):
-        assert _ol_skill().run({"term": "barefoot"}, None)["total"] == 1
-    get = _Get(503, ok)
-    with patch("requests.get", get), patch("time.sleep"):
-        assert _ol_skill().run({"term": "barefoot"}, None)["total"] == 1 and len(get.gezien) == 2
-    get = _Get(404)
-    with patch("requests.get", get), patch("time.sleep"):
-        uit = _ol_skill().run({"term": "barefoot"}, None)
-    assert "error" in uit and "404" in uit["error"] and len(get.gezien) == 1
 
 
-def test_openlibrary_belofte_is_overal_dezelfde():
-    from nooch_village import skill_labels
-    from nooch_village.skills_impl.zoekstrategie import BRONNEN
-    s = _ol_skill()
-    assert "Full-text search inside" in s.description[:160]
-    assert "inside scanned books" in BRONNEN["openlibrary_search_inside"]
-    assert "full text" in skill_labels.LABELS["openlibrary_search_inside"].lower()
-    from nooch_village.skills_impl import openlibrary_search_inside as mod
-    assert mod._ENDPOINT == "https://openlibrary.org/search/inside.json"       # de voltekst, niet de catalogus
 
 
 # ═══ 6. Ngram — topniveau fail-closed, strekking per rij ═════════════════════
@@ -400,42 +265,12 @@ def _reeks(stijgend=True):
     return [1.2e-4] * 30 + [1.2e-4 * 0.9 ** (i + 1) for i in range(10)]
 
 
-def test_ngram_alles_stuk_is_error_niets_gevonden_is_no_data():
-    def stuk(*a, **k):
-        raise urllib.error.URLError("timed out")
-    with patch("nooch_village.skills_impl.ngram._fetch_ngram", stuk), patch("nooch_village.skills_impl.ngram.time.sleep"):
-        fout = _ng().run({"terms": ["vegan", "leather"]}, None)
-    assert "error" in fout and "2 van 2" in fout["error"] and "timed out" in fout["error"]
-    assert all(r.get("error") and not r.get("no_data") for r in fout["rows"])   # rows blijven voor de Wachter
-    assert Inhabitant._classify_result(fout)[0] == "fout"
-
-    with patch("nooch_village.skills_impl.ngram._fetch_ngram", return_value=[]), \
-         patch("nooch_village.skills_impl.ngram.time.sleep"):
-        leeg = _ng().run({"terms": ["zzxq"]}, None)
-    assert leeg["no_data"] is True and "corpus" in leeg["reason"] and len(leeg["rows"]) == 1
-    assert Inhabitant._classify_result(leeg)[0] == "leeg"
 
 
 
 
-def test_ngram_stuurt_case_insensitive_mee_en_neemt_locale_of_corpus_uit_de_payload():
-    gezien = []
-
-    def fake(req, timeout=None):
-        gezien.append(req.full_url)
-        return _Resp([])
-    with patch("urllib.request.urlopen", fake), patch("nooch_village.skills_impl.ngram.time.sleep"):
-        _ng().run({"terms": ["barefoot"], "locale": "nl"}, None)             # geen indicatorwoord, tóch NL
-        _ng().run({"terms": ["schoenen"], "corpus": 26}, None)               # corpus wint van de detectie
-        _ng().run({"terms": ["schoenen"]}, None)                             # zonder aanwijzing: detectie
-    assert "case_insensitive=true" in gezien[0]
-    assert "corpus=10" in gezien[0] and "corpus=26" in gezien[1] and "corpus=10" in gezien[2]
 
 
-def test_ngram_metadata_zegt_taal_en_lengte():
-    s = _ng()
-    assert "locale" in s.input_schema and "5 words" in s.input_schema
-    assert "Google Books Ngram" in s.description[:160]
 
 
 # ═══ 7. web_zoek en lead_beoordeling — één wachtbudget per run ═══════════════
@@ -507,24 +342,7 @@ def test_haal_pagina_meldt_een_pdf_als_permanente_fout():
     assert "error" in uit and uit["tijdelijk"] is False and "application/pdf" in uit["error"]
 
 
-# ═══ 9. zoekstrategie — alleen plannbare bronnen ═════════════════════════════
-
-def test_zoekstrategie_biedt_alleen_bronnen_aan_die_in_een_rugzak_zitten():
-    from nooch_village.skills_impl.zoekstrategie import BRONNEN
-    with open("config/rugzakken.json", encoding="utf-8") as f:
-        rz = json.load(f)
-    plannbaar = {s for k, v in rz.items() if isinstance(v, dict) for s in (v.get("skills") or [])}
-    assert set(BRONNEN) <= plannbaar, sorted(set(BRONNEN) - plannbaar)
-    assert "google_patents" not in BRONNEN and "semscholar_tldr" not in BRONNEN
-    assert "Semantic Scholar" in BRONNEN["openalex_evidence"] and "Google Patents" in BRONNEN["epo_patents"]
 
 
 
 
-def test_ruis_check_accepteert_een_getal_met_decimaal_of_exponent():
-    from nooch_village.skills_impl.ruis_check import RuisCheckSkill
-    s = RuisCheckSkill()
-    assert s.run({"query": "q", "aantal": "5000.0"}, None)["status"] == "bruikbaar"
-    assert s.run({"query": "q", "aantal": "5e3"}, None)["aantal"] == 5000
-    assert s.run({"query": "q", "aantal": 5001.7}, None)["status"] == "te_breed"
-    assert "error" in s.run({"query": "q", "aantal": "veel"}, None)

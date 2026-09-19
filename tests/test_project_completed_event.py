@@ -20,7 +20,6 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry, Skill
 from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
-from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 
 _MOCK_BULLETIN = ("# Dorpsbulletin\n## Wat ik vandaag zag\nx\n## Wie was actief\nx\n"
                   "## Wat ik signaleer\nx\n## Tot morgen\nx")
@@ -99,61 +98,3 @@ def test_3d_direct_actief_done(tmp_path):
     Village._poll_board(stub)
     assert len(got) == 1 and got[0]["project_id"] == pid
     assert got[0]["route"] == "direct" and got[0]["deliverable_ids"] == []   # geen gate, geen deliverables
-
-
-
-
-# ── Bulletin-kant (Noochie) ───────────────────────────────────────────────────
-def _make_noochie(tmp_path, ledger):
-    reg = SkillRegistry()
-    reg.register(BulletinSchrijvenSkill())
-    ctx = SimpleNamespace(settings={"reflect_interval_seconds": "0"}, data_dir=str(tmp_path),
-                          records=None, projects=ledger)
-    rec = Record(id="noochie", type=RecordType.ROLE, parent="noochville",
-                 definition=RoleDefinition(purpose="x", skills=["bulletin_schrijven"]), source="seed")
-    return Noochie(rec, EventBus(name="test"), reg, ctx)
-
-
-# 4. Bulletin bevat de afrondingsregel met de scope-tekst (scope uit de ledger)
-def test_4_bulletin_bevat_afrondingsregel(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    pid = ledger.create("harry_hemp", "Onderzoek naar barefoot shoes", "human", status="future")
-    noochie = _make_noochie(tmp_path, ledger)
-    noochie._events_today = [{"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": pid}]
-    with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock:
-        noochie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))
-    prompt = mock.call_args[0][0]
-    assert "rondde af: Onderzoek naar barefoot shoes" in prompt   # owner (records=None → id) + scope uit ledger
-
-
-# 5. project_completed voor een onvindbaar project → regel overgeslagen, geen exception
-def test_5_onvindbaar_project_regel_overgeslagen(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    # Eén vindbaar project ernaast (scope 57: bulletin_schrijven slaat een LEGE events-lijst over
-    # met no_data — dat moet hier niet gebeuren, want dan wordt llm.reason nooit aangeroepen en
-    # test deze case niets meer). Met een echt project ernaast blijft `events` na filtering
-    # niet-leeg, en toetst de assert alsnog dat het onvindbare project geen regel krijgt.
-    pid = ledger.create("harry_hemp", "Onderzoek naar hennepvezel", "human", status="future")
-    noochie = _make_noochie(tmp_path, ledger)
-    noochie._events_today = [
-        {"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": pid},
-        {"name": "project_completed", "by": "harry_hemp", "note": "", "project_id": "bestaat-niet"},
-    ]
-    with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock:
-        noochie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))   # geen crash
-    prompt = mock.call_args[0][0]
-    assert "rondde af: Onderzoek naar hennepvezel" in prompt   # het vindbare project staat er wél
-    assert prompt.count("rondde af") == 1                      # onvindbaar → regel overgeslagen (fail-closed)
-
-
-# 6. Bulletin bevat de 'wacht op review'-regel (naast 'rondde af'), scope uit de ledger
-def test_6_bulletin_toont_wacht_op_review(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    pid = ledger.create("harry_hemp", "Onderzoek naar barefoot shoes", "human", status="future")
-    noochie = _make_noochie(tmp_path, ledger)
-    noochie._events_today = [{"name": "project_awaiting_review", "by": "harry_hemp",
-                              "note": "", "project_id": pid}]
-    with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock:
-        noochie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))
-    prompt = mock.call_args[0][0]
-    assert "wacht op review: Onderzoek naar barefoot shoes" in prompt

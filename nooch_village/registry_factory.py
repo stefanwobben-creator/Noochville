@@ -15,26 +15,18 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.site_health import SiteHealthSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.trends import TrendsSkill
-from nooch_village.skills_impl.trend_reindex import TrendReindexSkill
 from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
-from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill, LibraryListSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
 from nooch_village.skills_impl.gsc_report import GscReportSkill
-from nooch_village.skills_impl.ngram import NgramCultureSkill
-from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
-from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
+from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.epo_patents import EpoPatentsSkill
 from nooch_village.skills_impl.google_patents import GooglePatentsSkill
-from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
-from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
-from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
-from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
 from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
@@ -43,60 +35,42 @@ from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
 from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
 from nooch_village.materiaal_memo import MateriaalKwartaalSkill, MateriaalShortlistSkill
 from nooch_village.skills_impl.regulation_watch import RegulationWatchSkill
-from nooch_village.skills_impl.kroniek_interpret import KroniekInterpretSkill
 from nooch_village.skills_impl.weten_we_dit_al import WetenWeDitAlSkill
-from nooch_village.skills_impl.ruis_check import RuisCheckSkill
 from nooch_village.skills_impl.escaleer import EscaleerSkill
 from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
 from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
 from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
-from nooch_village.skills_impl.site_watch import SiteWatchSkill
-from nooch_village.skills_impl.pappers_financials import PappersFinancialsSkill
-from nooch_village.skills_impl.trustpilot_reviews import TrustpilotReviewsSkill
 from nooch_village.skills_impl.web_zoek import WebZoekSkill
 from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill
-from nooch_village.skills_impl.zoekstrategie import ZoekstrategieSkill
-
 
 def build_skill_registry() -> SkillRegistry:
     """Bouw een verse SkillRegistry met alle geregistreerde skills. De daemon gebruikt dit bij opstart;
     het cockpit-proces gebruikt het (via `shared_registry`) alleen voor match-metadata."""
     reg = SkillRegistry()
     for skill in (
-        SiteHealthSkill(), HaalPaginaSkill(), SiteWatchSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
-        FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
+        SiteHealthSkill(), HaalPaginaSkill(), PlausibleSkill(), TrendsSkill(), SerpapiTrendsSkill(),
+        LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
         GscPerformanceSkill(), GscReportSkill(),
-        NgramCultureSkill(),
-        OpenlibrarySearchInsideSkill(),
-        SemanticScholarSkill(),
         OpenalexSkill(),
+        SemanticScholarSkill(),   # tweede trede van de bewijs-ladder onder openalex_evidence
         EpoPatentsSkill(),
         GooglePatentsSkill(),          # alternatief pad voor de skill-ladder als EPO OPS faalt
-        BulletinSchrijvenSkill(),
         KeywordsEverywhereSkill(),
         AlphaVantageIndexSkill(),
-        TrendsCategorieSkill(), GdeltToneSkill(),
-        PappersFinancialsSkill(),
-        TrustpilotReviewsSkill(),
-        LinkbuildingTargetsSkill(),
-        VerbandVoorstelSkill(),
-        OnderzoeksvraagSkill(),
+        TrendsCategorieSkill(),        LinkbuildingTargetsSkill(),
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),
         CertEvidenceSkill(), ClaimEvidenceSkill(), ClaimsCheckSkill(), ClaimsSiteScanSkill(), RegulationWatchSkill(),
         # De radar-uitgang (#436/#437). Zonder registratie is een grant een lege
         # verwijzing: de rol draagt dan een capability-naam die nergens op wijst.
         MateriaalKwartaalSkill(), MateriaalShortlistSkill(),
-        KroniekInterpretSkill(),
         WetenWeDitAlSkill(),
-        RuisCheckSkill(),
         EscaleerSkill(),
         TegenspraakSkill(),
         ProjectverzoekSkill(),
         # Sid's eerste stap: bepaal HOE je zoekt voordat je zoekt. Zijn resultaat laat
         # `_herplan_na_strategie` de volgende uitvoerlijst schrijven.
-        ZoekstrategieSkill(),
         # De bron die het dorp niet had: vrij zoeken op het open web. SerpAPI zat er drie keer
         # in, elke keer vastgeklonken aan één doel; dit is de losse toegang.
         WebZoekSkill(),
@@ -107,7 +81,6 @@ def build_skill_registry() -> SkillRegistry:
     ):
         reg.register(skill)
     return reg
-
 
 @lru_cache(maxsize=1)
 def shared_registry() -> SkillRegistry:

@@ -9,11 +9,10 @@ from __future__ import annotations
 from nooch_village import cockpit2
 
 
-def test_verwijder_livekit_room_fail_soft_zonder_creds(monkeypatch):
-    monkeypatch.delenv("LIVEKIT_URL", raising=False)
-    assert cockpit2.verwijder_livekit_room("wo-x-1") is False       # geen creds → False, geen exception
 
 
 def test_static_whitelist_weigert_onbekend_pad():
-    assert cockpit2._STATIC_TYPES.get("livekit-client.umd.min.js")  # bekend bestand mag
+    # Stond op livekit-client.umd.min.js; die is met de call bar weg (fase 6). De eis is
+    # dat een BEKEND bestand door de whitelist komt en een onbekend niet.
+    assert cockpit2._STATIC_TYPES.get("nooch.css")             # bekend bestand mag
     assert cockpit2._STATIC_TYPES.get("../config/settings.ini") is None   # traversal/onbekend geweigerd

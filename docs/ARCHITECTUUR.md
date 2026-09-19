@@ -14,7 +14,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/login` | `(inline)` | `cockpit2.py` |
 | `/logout` | `(inline)` | `cockpit2.py` |
 | `/wachtwoord` | `(inline)` | `cockpit2.py` |
-| `/snake` | `render_snake_page` | `nooch_village/snake.py` |
 | `/context` | `(inline)` | `cockpit2.py` |
 | `/epic/frame` | `(inline)` | `cockpit2.py` |
 | `/` | `(inline)` | `cockpit2.py` |
@@ -28,7 +27,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/middelen` | `render_middelen` | `nooch_village/views/overview.py` |
 | `/person` | `render_person` | `nooch_village/views/overview.py` |
 | `/admin` | `render_admin` | `nooch_village/views/overview.py` |
-| `/_patterns` | `render_patterns` | `nooch_village/views/overview.py` |
 | `/inbox` | `render_inbox_frag` | `nooch_village/views/inbox.py` |
 | `/search` | `render_search_fragment` | `nooch_village/views/search.py` |
 | `/skills` | `render_skills` | `nooch_village/views/skills.py` |
@@ -42,15 +40,10 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/metrics2` | `render_metrics2` | `nooch_village/views/metrics2.py` |
 | `/inbox/verwerk` | `render_verwerk` | `nooch_village/views/inbox.py` |
 | `/catalog` | `render_catalog` | `nooch_village/views/catalog.py` |
-| `/catalogus_koppelen` | `(inline)` | `cockpit2.py` |
 | `/kpi_new` | `render_kpi_composer` | `nooch_village/views/metrics.py` |
 | `/noochie` | `render_noochie` | `nooch_village/views/noochie.py` |
 | `/vangst` | `render_vangst_frag` | `nooch_village/views/vangst.py` |
 | `/werkoverleg` | `render_werkoverleg` | `nooch_village/views/werkoverleg.py` |
-| `/callbar` | `render_callbar` | `nooch_village/views/callbar.py` |
-| `/livekit-token` | `(inline)` | `cockpit2.py` |
-| `/livekit-presence` | `(inline)` | `cockpit2.py` |
-| `/claims/db.json` | `(inline)` | `cockpit2.py` |
 | `/claims` | `render_claims` | `nooch_village/views/claims.py` |
 | `/copy-check` | `render_copy_check` | `nooch_village/views/copy_check.py` |
 | `/decision-coach` | `render_decision_coach` | `nooch_village/views/decision_coach.py` |
@@ -67,7 +60,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | Actie | Handler (cockpit2.py) |
 |---|---|
 | `decision_sheet_log` | `_act_decision_sheet_log` |
-| `kb_new` | `_act_kb_new` |
 | `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
 | `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
 | `verzoek_besluit` | `_act_verzoek_besluit` |
@@ -75,9 +67,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `kb_insight_unlink` | `_act_kb_insight_unlink` |
 | `kb_link` | `_act_kb_link` |
 | `kb_unlink` | `_act_kb_unlink` |
-| `kb_annotate` | `_act_kb_annotate` |
 | `kb_discuss` | `_act_kb_discuss` |
-| `kb_reformulate` | `_act_kb_reformulate` |
 | `kw_nominate` | `_act_kw_nominate` |
 | `kw_nom_accept` | `_act_kw_nom_accept` |
 | `kw_nom_reject` | `_act_kw_nom_reject` |
@@ -92,12 +82,9 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `pagina_voorstel` | `_act_pagina_voorstel` |
 | `proj_status` | `_act_proj_status` |
 | `proj_done` | `_act_proj_done` |
-| `proj_dod` | `_act_proj_dod` |
 | `proj_archive` | `_act_proj_archive` |
 | `proj_unarchive` | `_act_proj_unarchive` |
 | `proj_delete` | `_act_proj_delete` |
-| `proj_edit` | `_act_proj_edit` |
-| `proj_comment` | `_act_proj_comment` |
 | `proj_rename` | `_act_proj_rename` |
 | `proj_describe` | `_act_proj_describe` |
 | `proj_doc_edit` | `_act_proj_doc_edit` |
@@ -111,7 +98,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_discard` | `_act_proj_discard` |
 | `proj_proposal_accept` | `_act_proj_proposal_accept` |
 | `proj_proposal_reject` | `_act_proj_proposal_reject` |
-| `proj_setlabel` | `_act_proj_setlabel` |
 | `proj_setimpact` | `_act_proj_setimpact` |
 | `proj_seteffort` | `_act_proj_seteffort` |
 | `proj_agendeer_verzwakt` | `_act_proj_agendeer_verzwakt` |
@@ -128,8 +114,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `feed_edit` | `_act_feed_edit` |
 | `feed_remove` | `_act_feed_remove` |
 | `wall_outcome` | `_act_wall_outcome` |
-| `notif_read` | `_act_notif_read` |
-| `notif_processed` | `_act_notif_processed` |
 | `notif_outcome` | `_act_notif_outcome` |
 | `notif_klaar` | `_act_notif_klaar` |
 | `goedkeur` | `_act_goedkeur` |
@@ -144,7 +128,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
 | `source_deactivate` | `_act_source_deactivate` |
-| `ai_reply` | `_act_ai_reply` |
 | `proj_feed` | `_act_proj_feed` |
 | `checklist_add` | `_act_checklist_add` |
 | `checklist_remove` | `_act_checklist_remove` |
@@ -155,7 +138,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `check_toggle` | `_act_check_toggle` |
 | `check_skip` | `_act_check_skip` |
 | `check_unskip` | `_act_check_unskip` |
-| `check_handoff` | `_act_check_handoff` |
 | `check_remove` | `_act_check_remove` |
 | `check_rename` | `_act_check_rename` |
 | `check_move` | `_act_check_move` |
@@ -192,7 +174,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `cl_report` | `_act_cl_report` |
 | `cl_remove` | `_act_cl_remove` |
 | `m_add_kpi` | `_act_m_add_kpi` |
-| `m_add_from_def` | `_act_m_add_from_def` |
 | `def_add` | `_act_def_add` |
 | `catalog_publish` | `_act_catalog_publish` |
 | `def_amend` | `_act_def_amend` |
@@ -211,7 +192,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `rov2_dom_remove` | `_act_rov2_set` |
 | `person_edit` | `_act_person_edit` |
 | `person_remove` | `_act_person_remove` |
-| `lk_mute` | `_act_lk_mute` |
+| `check_handoff` | `_act_check_handoff` |
 | `claims_skill` | `_act_claims_skill` |
 | `claims_term_add` | `_act_claims_term_add` |
 | `claims_term_retract` | `_act_claims_term_retract` |
@@ -296,7 +277,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `shopify_metrics.json` | `cli.py` |
 | `site_audit.jsonl` | `site_audit.py` |
 | `site_audit_dev.jsonl` | `site_audit.py` |
-| `snake_scores.json` | `snake.py` |
 | `strategy.json` | `pinboard.py` |
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
@@ -332,4 +312,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_47 routes · 154 dispatch-acties · 27 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_40 routes · 142 dispatch-acties · 27 stores in `_Stores` · 37 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

@@ -143,19 +143,5 @@ def test_lees_nul_is_nog_steeds_alleen_de_lijst():
 
 
 
-def test_zoekstrategie_vraagt_drie_woordenschatten(monkeypatch):
-    from nooch_village.skills_impl.zoekstrategie import ZoekstrategieSkill
-    import nooch_village.llm as llm
-    gezien = {}
-
-    def _model(prompt, **k):
-        gezien["p"] = prompt
-        return json.dumps({"strategie": "s", "stappen": [{"bron": "web_zoek", "term": "bio glue", "taal": "en"}],
-                           "bij_nul_treffers": "n"})
-    monkeypatch.setattr(llm, "reason", _model)
-    uit = ZoekstrategieSkill().run({"vraag": "v"}, SimpleNamespace(settings={}, data_dir=None))
-    assert uit["ok"] is True
-    assert "THREE VOCABULARIES" in gezien["p"] and "the language of the market" in gezien["p"]
-    assert "SHORT technical phrase of 2 to 3 words" in gezien["p"]
 
 

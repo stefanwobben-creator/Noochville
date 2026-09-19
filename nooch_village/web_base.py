@@ -94,8 +94,6 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
    navigatie. Dat patroon ontstond om de call bar niet weg te gooien; die is 11 aug 2026 uit de
    shell gehaald en de bijbehorende verberg-regel hier met 'm mee. De overlay-aanpak zelf blijft —
    een navigatie voor een easter-egg is nog steeds zonde. */
-.snake-overlay{position:fixed;inset:0;z-index:1000;border:0;background:transparent}
-.snake-frame{width:100%;height:100%;border:0;background:transparent}
 """
 
 
@@ -136,35 +134,6 @@ def _banner(msg) -> str:
 
 
 # Verborgen easter-egg-trigger op elke ingelogde cockpit-pagina (login gebruikt _page NIET): de
-# Konami-code of 5× klikken op de paginatitel opent Snake. Self-contained (geen imports) en zonder
-# preventDefault, zodat pijltjestoetsen op echte pagina's niet gekaapt worden.
-#
-# Snake opent als IN-PAGE OVERLAY (fullscreen iframe /snake) i.p.v. een navigatie: zo overleeft de
-# call bar-iframe (geen full-page nav → verbinding + audio lopen door). body.overlay-open verbergt de
-# bar; de snake-pagina meldt sluiten via postMessage (× of Escape). /snake zit achter de sessie-auth.
-_KONAMI_TRIGGER = """<script>(function(){
- function openSnake(){
-   if(document.getElementById('snake-overlay'))return;
-   var ov=document.createElement('div');ov.id='snake-overlay';ov.className='snake-overlay';
-   var fr=document.createElement('iframe');fr.className='snake-frame';fr.src='/snake';fr.title='Snaker';
-   fr.setAttribute('allow','autoplay');
-   fr.addEventListener('load',function(){try{fr.contentWindow.focus();}catch(e){}});
-   ov.appendChild(fr);document.body.appendChild(ov);document.body.classList.add('overlay-open');
- }
- function closeSnake(){var ov=document.getElementById('snake-overlay');if(ov)ov.remove();
-   document.body.classList.remove('overlay-open');}
- window.addEventListener('message',function(e){
-   if(e.origin!==location.origin)return;
-   if((e.data||{}).type==='snake-close')closeSnake();
- });
- var K=['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','b','a'],b=[];
- addEventListener('keydown',function(e){ b.push((e.key||'').toLowerCase()); if(b.length>K.length)b.shift();
-   if(b.length===K.length&&K.every(function(k,i){return b[i]===k;})){b=[];openSnake();} });
- var h=document.querySelector('h1'); if(h){var c=0,t; h.addEventListener('click',function(){
-   c++; clearTimeout(t); t=setTimeout(function(){c=0;},1500); if(c>=5){c=0;openSnake();} });}
-})();</script>"""
-
-
 # ── De gedeelde fragment-mechaniek (static/nooch.js) ─────────────────────────
 # Eén script voor de klasse "een stuk pagina vervangt zichzelf": wachtrij voor typ-en-Enter-velden,
 # opnieuw bedraden van verse formulieren (idempotent), cursor-herstel en tellers. Elke volle pagina
@@ -184,4 +153,4 @@ def _page(title: str, inner: str) -> str:
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body><main>{inner}</main>{_KONAMI_TRIGGER}{_JS_LINK}</body></html>')
+            f'<body><main>{inner}</main>{_JS_LINK}</body></html>')

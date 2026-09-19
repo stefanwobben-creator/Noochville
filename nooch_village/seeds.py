@@ -242,7 +242,9 @@ def seed_records(records: Records) -> None:
                          # juistheid dan aan het afvuren van de guard. Eén bron van waarheid, dus
                          # de geboorte-definitie volgt het oordeel. `serpapi_trends` stond hier
                          # nooit in — die kwam via een latere toekenning.
-                         skills=["site_health", "plausible_stats", "field_note"]),
+                         # `field_note` stond hier ook; die skill is weg (fase 6) en er komt geen
+                         # nieuwe Field Note meer bij (zie CLAUDE.md, 18 sept 2026).
+                         skills=["site_health", "plausible_stats"]),
                      persona="Corry Coconut")
     librarian = Record(id="librarian", type=RecordType.ROLE, parent="noochville",
                        definition=RoleDefinition(
@@ -250,7 +252,8 @@ def seed_records(records: Records) -> None:
                            accountabilities=["kandidaat-woorden beoordelen",
                                              "twijfelgevallen escaleren naar een mens"],
                            domains=["bibliotheek"],
-                           skills=["keyword_review", "library_lookup", "verband_voorstel",
+                           # `verband_voorstel` stond hier ook; die skill is weg (fase 6).
+                           skills=["keyword_review", "library_lookup",
                                    "keywords_everywhere"]))
     trends = Record(id="trends", type=RecordType.ROLE, parent="noochville",
                     definition=RoleDefinition(
@@ -342,9 +345,9 @@ def migrate_records(records: Records) -> None:
     # met echt zoekvolume vóór de beoordeling (idempotent).
     if _zorg_skill(records, records.get("librarian"), "keywords_everywhere"):
         changed = True
-    # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
-    if _zorg_skill(records, records.get("harry_hemp"), "onderzoeksvraag"):
-        changed = True
+    # HIER STOND EEN GRANT: harry_hemp kreeg `onderzoeksvraag` voor de verdiep-lus. Die skill is
+    # op 19 september 2026 weg (fase 6) en harry_hemp is gearchiveerd. Een seed die een niet-
+    # bestaande skill toekent maakt bij elke start een record dat de registry niet kan waarmaken.
     # ── Periodieke skills volgen hun DOMEIN, niet een rol-id ──────────────────
     # Gemeten op 10 september 2026: `/skills` meldde "Nobody wields this means yet" voor
     # claims_site_scan en regulation_watch allebei. De vorige houder was gearchiveerd, en daarmee
@@ -433,8 +436,7 @@ def migrate_records(records: Records) -> None:
         if not noochie.definition.accountabilities:
             noochie.definition.accountabilities = _NOOCHIE_ACCOUNTABILITIES
             noochie_changed = True
-        if _zorg_skill(records, noochie, "bulletin_schrijven"):
-            changed = True
+        # `bulletin_schrijven` stond hier als grant voor Noochie; die skill is weg (fase 6).
         if noochie_changed:
             records.put(noochie)
             changed = True

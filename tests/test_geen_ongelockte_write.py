@@ -48,7 +48,6 @@ _WHITELIST = {
     "personas.py":       (1, "(b) cockpit-concurrent (_Stores) + occasionele CLI"),
     "roloverleg.py":     (1, "(b) cockpit-concurrent (_Stores, roloverleg-agenda)"),
     "strategy_store.py": (1, "(b) cockpit-concurrent (_Stores)"),
-    "snake.py":          (1, "(b) cockpit-only game-scores (triviaal)"),
     # ── (c) alleen daemon, single-writer (puls/collector/skills) — laag risico ──
     "lexicon.py":        (1, "single-writer: seed + Librarian-daemon"),
     "monitoring.py":     (1, "single-writer: alleen de daemon"),

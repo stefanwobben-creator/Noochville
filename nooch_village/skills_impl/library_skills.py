@@ -2,7 +2,15 @@ from __future__ import annotations
 import re, json
 from nooch_village.skills import Skill
 from nooch_village.llm import reason
-from nooch_village.skills_impl.field_note import MISSION
+# VERHUISD UIT `field_note.py` op 19 september 2026 (fase 6). Die skill is weg — de Field Note
+# stopte al met het archiveren van website_watcher (18 sept) — en deze tekst was zijn enige
+# overlevende lezer. Geen kopie dus, een verhuizing: hij staat nu op de plek die hem gebruikt.
+MISSION = (
+    "Nooch.earth bewijst dat ethisch en duurzaam ondernemen winstgevend is. "
+    "Kernwaarden: meliorisme (altijd beter), ubuntu (succes samen met klant, producent, planeet), "
+    "geen externaliteiten (geen plastic, geen leer, in Europa geproduceerd, op bestelling), transparantie. "
+    "Doel: organische groei richting 1000 klanten per jaar via missie-gedreven keywords."
+)
 
 # Heuristiek (werkt zonder LLM-key): transparante regels i.p.v. een black box.
 MISSION_CORE = ["plasticvrij", "plastic free", "zonder plastic", "plantbased",

@@ -49,7 +49,6 @@ from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS, body_cap
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
 from nooch_village.evidence_ledger import EvidenceLedger
-from nooch_village import snake
 from nooch_village.source_status import SourceStatusStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
@@ -274,7 +273,7 @@ from nooch_village.views.overview import (
     _acc_row, _overview_html, _fillsummary,
     _fillers_block, _role_row, _roles_html,
     _members_html, _att_html,
-    render_node, render_person, render_patterns, render_admin,
+    render_node, render_person, render_admin,
     render_rolefillers, render_middelen,
     _CORE_ROLE_NAMES, _ICON_ADD_PERSON,
 )
@@ -345,7 +344,6 @@ from nooch_village.views.noochie import (
     _noochie_suggest, _noochie_reply,
     render_noochie, _noochie_chrome,
 )
-from nooch_village.views.callbar import render_callbar
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -1048,19 +1046,6 @@ def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
     return "No access — only the Circle Lead may do this"
 
 
-# ── LiveKit-video: token-uitgifte ───────────────────────────────────────────
-def maak_livekit_token(room: str, identity: str, naam: str) -> str:
-    """Mint een LiveKit-access-token. ÉÉN plek voor de grants-config. Pakt LIVEKIT_API_KEY /
-    LIVEKIT_API_SECRET automatisch uit de env. Lazy import zodat cockpit2 importeerbaar blijft
-    zonder livekit-api (de token-tak faalt dan bewust closed, zie issue_livekit_token)."""
-    from livekit import api
-    from datetime import timedelta
-    return (api.AccessToken()
-            .with_identity(identity)
-            .with_name(naam)
-            .with_grants(api.VideoGrants(room_join=True, room=room))
-            .with_ttl(timedelta(hours=2))
-            .to_jwt())
 
 
 VILLAGE_ROOM = "village"
@@ -1072,130 +1057,16 @@ def _tab_suffix(tab: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", (tab or "").lower())[:12]
 
 
-def issue_livekit_token(st, username: str | None, tab: str | None = None):
-    """Geef een LiveKit-token uit voor de DORP-BREDE call bar. Geeft (status_code, payload) terug.
-
-    HARDE REGEL: `room` en de identity-BASE worden UITSLUITEND server-side bepaald — nooit uit de
-    request. Er is één dorp-brede room (`VILLAGE_ROOM`). `tab` is de enige request-input en dient
-    alléén als per-tabblad-suffix (`<base>#tab-<tab>`) zodat meerdere tabs van dezelfde gebruiker niet
-    op een duplicate-identity-kick lopen; de suffix wordt gesanitiseerd en kan de base niet vervangen
-    (geen impersonatie). De vroegere wo-<circle>-<started_at>-afleiding is vervallen."""
-    # AUTHZ: iedereen-ingelogd — de call bar is dorp-breed; er is geen cirkel-structuur om aan te
-    # toetsen. Elke herkende ingelogde actor krijgt een (toeschouwer-)token; deelnemen/muten is een
-    # gespreksdaad, geen structuurdaad. Een niet-herkende sessie krijgt geen token (fail-closed).
-    server_url = os.getenv("LIVEKIT_URL", "").strip()
-    if not server_url:
-        return 503, {"error": "LiveKit not configured"}
-    # IDENTITY-BASE: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste base.
-    if username and username != "guest":
-        actor = st.people.by_email(username)
-        if actor is None:
-            return 403, {"error": "Geen herkende gebruiker"}
-        base, name = actor.id, actor.name
-    else:
-        base, name = "guest", "Gast"
-    suffix = _tab_suffix(tab)
-    identity = f"{base}#tab-{suffix}" if suffix else base
-    try:
-        token = maak_livekit_token(VILLAGE_ROOM, identity, name)
-    except Exception as e:
-        # De API-secret mag NOOIT lekken: alleen het exceptietype terug, geen details.
-        return 500, {"error": f"token-generatie faalde ({type(e).__name__})"}
-    return 200, {"token": token, "server_url": server_url, "identity": identity}
 
 
-def verwijder_livekit_room(room: str) -> bool:
-    """Hef een LiveKit-room op (server-side, fail-soft). True bij succes, False als het niet lukt
-    (geen creds, room al weg, netwerk) — NOOIT een exception naar de caller; het afronden van het
-    overleg mag hier niet op stuklopen. De API-secret lekt niet (geen details in de return)."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url:
-        return False
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                await lk.room.delete_room(api.DeleteRoomRequest(room=room))
-            finally:
-                await lk.aclose()
-
-        asyncio.run(_run())
-        return True
-    except Exception:
-        return False
 
 
-def livekit_mute_participant(identity: str, muted: bool = True) -> bool:
-    """Mute/unmute de audio-track(s) van een deelnemer server-side (voor iedereen), fail-soft. True als
-    er minstens één audio-track is (un)gemute, False bij geen creds / deelnemer of track weg / netwerk —
-    NOOIT een exception naar de caller. De API-secret lekt niet. Zelfde patroon als
-    verwijder_livekit_room (api.LiveKitAPI, wss->https-conversie, async in één asyncio.run)."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url or not (identity or "").strip():
-        return False
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                p = await lk.room.get_participant(
-                    api.RoomParticipantIdentity(room=VILLAGE_ROOM, identity=identity))
-                sids = [t.sid for t in p.tracks if t.type == api.TrackType.AUDIO]
-                for sid in sids:
-                    await lk.room.mute_published_track(api.MuteRoomTrackRequest(
-                        room=VILLAGE_ROOM, identity=identity, track_sid=sid, muted=muted))
-                return bool(sids)
-            finally:
-                await lk.aclose()
-
-        return asyncio.run(_run())
-    except Exception:
-        return False
 
 
-def livekit_presence():
-    """Aantal deelnemers in de dorp-room, server-side via list_participants — GEEN eigen
-    deelnemer-verbinding, dus kost GEEN WebRTC-minuten (in tegenstelling tot de oude observer-connect).
-    Fail-soft: (0, []) zonder creds of bij een fout. Ontdubbelt op de identity-base (tab-suffix eraf)
-    zodat meerdere tabs van één persoon als één deelnemer tellen. Zelfde async-in-asyncio.run-patroon
-    als livekit_mute_participant."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url:
-        return 0, []
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                res = await lk.room.list_participants(api.ListParticipantsRequest(room=VILLAGE_ROOM))
-                return list(res.participants)
-            finally:
-                await lk.aclose()
-
-        parts = asyncio.run(_run())
-        seen = {}
-        for p in parts:
-            base = (p.identity or "").split("#tab-")[0]
-            if base:
-                seen[base] = p.name or base
-        return len(seen), list(seen.values())[:8]
-    except Exception:
-        return 0, []
 
 
 # Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
 _STATIC_TYPES = {
-    "livekit-client.umd.min.js": "application/javascript; charset=utf-8",
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
@@ -1556,18 +1427,6 @@ def _act_proj_done(c):
         return nxt, msg
 
 
-def _act_proj_dod(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        # Zelfde autorisatie als de andere kaart-bewerkingen: rolvervuller of Circle Lead.
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        veld = g("veld")
-        if veld not in ("done_when", "dod_outcome"):
-            return nxt, "✗ onbekend DoD-veld"
-        if not pj.set_dod(g("pid"), veld, g("tekst")):
-            return nxt, "✗ project does not exist"
-        return nxt, "✓ saved"
 
 
 def archiveer(st, pj, pid: str) -> str:
@@ -1654,28 +1513,8 @@ def _act_proj_delete(c):
         return _na_verwijderen(nxt, pid), msg
 
 
-def _act_proj_edit(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        msg = ""
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        person, agent = _parse_trekker(g("trekker"))
-        pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
-                private=(g("private") == "1"), description=g("description"), label=g("label"))
-        msg = "💾 saved"
-        return nxt, msg
 
 
-def _act_proj_comment(c):
-        nxt, g, pj = c.nxt, c.g, c.pj
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        if pj.add_comment(g("pid"), g("comment")):
-            msg = "💬 geplaatst"
-        return nxt, msg
 
 
 def _act_proj_rename(c):
@@ -1913,15 +1752,6 @@ def _act_proj_proposal_reject(c):
         return nxt, ""
 
 
-def _act_proj_setlabel(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        msg = ""
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        if pj.edit(g("pid"), label=g("label"), allow_done=True):
-            msg = "✓ label saved"
-        return nxt, msg
 
 
 _IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
@@ -2152,16 +1982,6 @@ def _act_feed_remove(c):
         return nxt, msg
 
 
-def _act_ai_reply(c):
-        nxt, st, g = c.nxt, c.st, c.g
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        _load_env()
-        msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
-               else "no AI reply (no AI inhabitant on the role or no LLM key)")
-        return nxt, msg
 
 
 def _act_proj_feed(c):
@@ -2384,52 +2204,6 @@ def _checklist_item(pj, pid: str, clid: str, item_id: str) -> dict | None:
     return None
 
 
-def _act_check_handoff(c):
-        """Eén checklist-item doorgeven aan een rol of persoon.
-
-        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
-        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
-        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
-
-        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
-        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
-        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
-        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
-        uit de pas lopen en werk stil op de verkeerde plek laten landen.
-
-        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
-        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
-        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        pid = g("pid")
-        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
-        if not getypt:
-            return nxt, "✗ pick a role or person to hand this to"
-        from nooch_village.views.inbox import _at_doelen
-        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
-        if doel is None:
-            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
-
-        it = _checklist_item(pj, pid, g("clid"), g("item"))
-        tekst = (it or {}).get("text", "") if it else ""
-        if not tekst:
-            return nxt, "✗ item not found"
-        soort, ref = route_werk(st, tekst=tekst,
-                                rol=doel["id"] if doel["kind"] == "role" else "",
-                                persoon=doel["id"] if doel["kind"] == "person" else "",
-                                herkomst=f"↳ doorgegeven uit project {pid}",
-                                door=username or "", opdrachtgever=username or "",
-                                bron_project=pid, van_mens=True)
-        if soort == "keuze":
-            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
-                         f"pick the person instead of the role")
-        from nooch_village import project_items
-        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
-                                              by=username or "", naar_label=doel["label"])
-        return nxt, (msg + (f" ({soort})" if soort else ""))
 
 
 def _act_check_remove(c):
@@ -3671,23 +3445,8 @@ def _act_wall_outcome(c):
         return nxt, f"✓ {_LBL[otype]} created"
 
 
-def _act_notif_read(c):
-        # AUTHZ: rolvervuller of Circle Lead — via `_notif_gate`: het item moet aan JOU of aan een
-        # rol die jij vervult zijn gericht. Zie de docstring van die poort.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        c.st.notif.mark_item_read(c.g("nid"))
-        return c.nxt, "✓ marked as read"
 
 
-def _act_notif_processed(c):
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        c.st.notif.mark_item_processed(c.g("nid"))
-        return c.nxt, "✓ verwerkt"
 
 
 def _act_goedkeur(c):
@@ -4212,19 +3971,6 @@ def _act_m_add_kpi(c):
         return nxt, msg
 
 
-def _act_m_add_from_def(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _role_gate(g("node"), username, st)
-        if _deny:
-            return nxt, _deny
-        did = g("def_id")
-        if not did and g("def_name"):
-            d = st.defs.by_name(g("def_name"))
-            did = d["id"] if d else ""
-        kid = _kpi_id_from_def(st, g("node"), did)
-        msg = "✓ KPI from the catalogue added" if kid else "⛔ pick an existing definition from the catalogue"
-        return nxt, msg
 
 
 def _act_def_add(c):
@@ -4511,24 +4257,61 @@ def _act_person_remove(c):
         return nxt, msg
 
 
-def _act_lk_mute(c):
-        # AUTHZ: circle-member of iedereen-ingelogd — muten is een gespreksdaad, geen structuurdaad;
-        # toeschouwers zijn uitgesloten via de client-state (observer-tiles zijn niet klikbaar), niet
-        # via authz. De sessie-check in do_POST dekt "ingelogd = mag" (guest = auth uit = mag ook).
-        nxt, g = c.nxt, c.g
-        target = g("identity").strip()
-        if not target:
-            return nxt, ""
-        muted = g("muted") != "0"                 # muted=0 → unmute; anders mute
-        ok = livekit_mute_participant(target, muted)
-        verb = "gemute" if muted else "ge-unmute"
-        return nxt, (f"✓ {verb}" if ok else "muting failed")
 
 
 # ── Claims-checker: cureren van de claims-database ───────────────────────────
-# De database (`config/claims_database.json`) is het domein van de compliance-rol. Lezen is vrij
-# (route /claims/db.json); cureren is exclusief de domein-eigenaar. De juridische inhoud is
-# mensenwerk — deze takken schrijven alleen door wat compliance invoert.
+# De database (`config/claims_database.json`) is juridisch mensenwerk: deze takken schrijven alleen
+# door wat een mens invoert. Sinds fase 5 is er geen domein-eigenaar meer — wie is ingelogd mag
+# cureren (`_claims_gate`). De JSON-route /claims/db.json is in fase 6 verwijderd: nul verzoeken in
+# veertien dagen log, en Stefan bevestigde dat niets van buiten hem aansprak.
+
+def _act_check_handoff(c):
+        """Eén checklist-item doorgeven aan een rol of persoon.
+
+        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
+        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
+        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
+
+        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
+        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
+        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
+        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
+        uit de pas lopen en werk stil op de verkeerde plek laten landen.
+
+        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
+        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
+        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        pid = g("pid")
+        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
+        if not getypt:
+            return nxt, "✗ pick a role or person to hand this to"
+        from nooch_village.views.inbox import _at_doelen
+        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
+        if doel is None:
+            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
+
+        it = _checklist_item(pj, pid, g("clid"), g("item"))
+        tekst = (it or {}).get("text", "") if it else ""
+        if not tekst:
+            return nxt, "✗ item not found"
+        soort, ref = route_werk(st, tekst=tekst,
+                                rol=doel["id"] if doel["kind"] == "role" else "",
+                                persoon=doel["id"] if doel["kind"] == "person" else "",
+                                herkomst=f"↳ doorgegeven uit project {pid}",
+                                door=username or "", opdrachtgever=username or "",
+                                bron_project=pid, van_mens=True)
+        if soort == "keuze":
+            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
+                         f"pick the person instead of the role")
+        from nooch_village import project_items
+        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
+                                              by=username or "", naar_label=doel["label"])
+        return nxt, (msg + (f" ({soort})" if soort else ""))
+
 
 def _claims_bordresultaat(qs: dict) -> dict:
     """Het resultaat van de laatste 'Zet op het bord'-klik, meegegeven in de redirect-URL.
@@ -4897,13 +4680,6 @@ def _kb_word(c, iid: str) -> str:
     return KB_WORD_LABEL[kb_verdict(kb_field(ins.get("evidence") or [], atoms))["word"]]
 
 
-def _act_kb_new(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
-    title = c.g("title").strip()
-    if not title:
-        return c.nxt, "✗ type a claim first"
-    iid = c.st.kennisbank.add(title, why=c.g("why"), by=_kb_actor(c))
-    return f"/kennisbank?id={iid}", "➕ insight created (v1.0) — link evidence and watch how certain it becomes"
 
 
 def _act_kb_link(c):
@@ -4931,10 +4707,6 @@ def _act_kb_unlink(c):
                    + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
-def _act_kb_annotate(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
-    ok = c.st.kennisbank.annotate(c.g("iid"), c.g("atom_id"), c.g("text"))
-    return c.nxt, ("💬 note saved" if ok else "✗ note not saved")
 
 
 def _act_kb_discuss(c):
@@ -4943,19 +4715,6 @@ def _act_kb_discuss(c):
     return c.nxt, ("💬 kanttekening geplaatst" if ok else "✗ type an annotation first")
 
 
-def _act_kb_reformulate(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De trage klok: claim/
-    # reframe/falsifier opnieuw gemunt uit het spel; de vorige versie blijft in history.
-    iid = c.g("iid")
-    parsed = parse_blok(c.g("blok"))
-    if not parsed["claim"]:
-        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
-    nieuwe = c.st.kennisbank.reformulate(iid, title=parsed["claim"],
-                                         reframe=parsed["reframe"],
-                                         falsifier=parsed["falsifier"], by=_kb_actor(c))
-    if nieuwe is None:
-        return c.nxt, "✗ rewording failed"
-    return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
 
 
 def _act_kb_insight_link(c):
@@ -5241,7 +5000,6 @@ def _act_decision_sheet_log(c):
 
 ACTIONS = {
     "decision_sheet_log": _act_decision_sheet_log,
-    "kb_new": _act_kb_new,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
     "verzoek_besluit": _act_verzoek_besluit,
@@ -5249,9 +5007,7 @@ ACTIONS = {
     "kb_insight_unlink": _act_kb_insight_unlink,
     "kb_link": _act_kb_link,
     "kb_unlink": _act_kb_unlink,
-    "kb_annotate": _act_kb_annotate,
     "kb_discuss": _act_kb_discuss,
-    "kb_reformulate": _act_kb_reformulate,
     "kw_nominate": _act_kw_nominate,
     "kw_nom_accept": _act_kw_nom_accept,
     "kw_nom_reject": _act_kw_nom_reject,
@@ -5266,12 +5022,9 @@ ACTIONS = {
     "pagina_voorstel": _act_pagina_voorstel,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
-    "proj_dod": _act_proj_dod,
     "proj_archive": _act_proj_archive,
     "proj_unarchive": _act_proj_unarchive,
     "proj_delete": _act_proj_delete,
-    "proj_edit": _act_proj_edit,
-    "proj_comment": _act_proj_comment,
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
@@ -5285,7 +5038,6 @@ ACTIONS = {
     "proj_discard": _act_proj_discard,
     "proj_proposal_accept": _act_proj_proposal_accept,
     "proj_proposal_reject": _act_proj_proposal_reject,
-    "proj_setlabel": _act_proj_setlabel,
     "proj_setimpact": _act_proj_setimpact,
     "proj_seteffort": _act_proj_seteffort,
     "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,
@@ -5302,8 +5054,6 @@ ACTIONS = {
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
-    "notif_read": _act_notif_read,
-    "notif_processed": _act_notif_processed,
     "notif_outcome": _act_notif_outcome,
     "notif_klaar": _act_notif_klaar,
     "goedkeur": _act_goedkeur,
@@ -5319,7 +5069,6 @@ ACTIONS = {
     "source_activate": _act_source_activate,
     "source_deactivate": _act_source_deactivate,
 
-    "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
@@ -5330,7 +5079,6 @@ ACTIONS = {
     "check_toggle": _act_check_toggle,
     "check_skip": _act_check_skip,
     "check_unskip": _act_check_unskip,
-    "check_handoff": _act_check_handoff,
     "check_remove": _act_check_remove,
     "check_rename": _act_check_rename,
     "check_move": _act_check_move,
@@ -5367,7 +5115,6 @@ ACTIONS = {
     "cl_report": _act_cl_report,
     "cl_remove": _act_cl_remove,
     "m_add_kpi": _act_m_add_kpi,
-    "m_add_from_def": _act_m_add_from_def,
     "def_add": _act_def_add,
     "catalog_publish": _act_catalog_publish,
     "def_amend": _act_def_amend,
@@ -5386,7 +5133,7 @@ ACTIONS = {
     "rov2_dom_remove": _act_rov2_set,
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
-    "lk_mute": _act_lk_mute,
+    "check_handoff": _act_check_handoff,
     "claims_skill": _act_claims_skill,
     "claims_term_add": _act_claims_term_add,
     "claims_term_retract": _act_claims_term_retract,
@@ -5607,14 +5354,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if username and st.people.must_change(username):     # poort: alles → /wachtwoord tot gewijzigd
                 self._redirect_to("/wachtwoord")
                 return
-            if path == "/snake":
-                # AUTHZ: ingelogde-member — verborgen easter-egg 'Snaker'; puur fun, los van alles.
-                # De login-redirect hierboven dekt de niet-ingelogde gebruiker al af.
-                # chrome=False: geen dorp-brede call bar/Noochie-rail injecteren — de pagina draait als
-                # fullscreen-overlay-iframe op de cockpit; de bar leeft in de PARENT en wordt daar via
-                # body.overlay-open verborgen. Injecteren zou hier een tweede (ongestylede) bar geven.
-                self._send(snake.render_snake_page(st, username, effective_csrf), chrome=False)
-                return
             if path == "/context":
                 # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes
                 # (één rol), dus in auth-uit óók voor guest zichtbaar; alleen de persoon-context-
@@ -5745,9 +5484,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
-            if path == "/_patterns":
-                self._send(render_patterns(effective_csrf))
-                return
             if path == "/inbox":
                 # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
                 tgts = _person_targets(st, username)
@@ -5856,11 +5592,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0],
                                           koppel=(qs.get("koppel") or [""])[0], curator=curator))
                 return
-            if path == "/catalogus_koppelen":
-                # Samengevoegd in /catalog (scope 4): geen los scherm meer → 303 naar het koppel-onderdeel.
-                src = (qs.get("source") or [""])[0]
-                self._redirect_to(f"/catalog?koppel={urllib.parse.quote(src or '1')}")
-                return
             if path == "/kpi_new":
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
                                                csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
@@ -5919,34 +5650,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     # doorgifte wees 'by person' naar de
                                                     # node-pagina en verliet je de modal.
                                                     group=(qs.get("group") or [""])[0]), fr))
-                return
-            if path == "/callbar":
-                # AUTHZ: iedereen-ingelogd — de route levert alleen de bar-UI (iframe-body); de
-                # daadwerkelijke toegang bewaakt /livekit-token zelf. Achter de sessie-auth zoals alles.
-                # chrome=False: deze pagina IS de bar en mag de iframe niet in zichzelf injecteren.
-                self._send(render_callbar(csrf_token=effective_csrf), chrome=False)
-                return
-            if path == "/livekit-token":
-                # Enige request-input: `tab` (per-tabblad-suffix). Room + identity-base bepaalt de
-                # server zelf (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
-                status, payload = issue_livekit_token(st, username, (qs.get("tab") or [""])[0])
-                self._send_json(payload, status)
-                return
-            if path == "/livekit-presence":
-                # Goedkope presence voor de callbar: telt deelnemers in de dorp-room server-side, ZONDER
-                # zelf te verbinden. Vervangt de oude observer-connect die WebRTC-minuten opslurpte.
-                count, names = livekit_presence()
-                self._send_json({"count": count, "names": names}, 200)
-                return
-            if path == "/claims/db.json":
-                # AUTHZ: iedereen-ingelogd — naslagwerk, lezen is vrij (domein-regel: cureren is
-                # exclusief compliance, en dat loopt via de dispatch-takken hieronder).
-                try:
-                    self._send_bytes(
-                        json.dumps(_claims_db.load(data_dir=data_dir), ensure_ascii=False).encode("utf-8"),
-                        "application/json; charset=utf-8")
-                except _claims_db.ClaimsDbError as e:
-                    self._send_json({"error": str(e)}, 500)   # fail-closed: liever een fout dan lege lijst
                 return
             if path == "/claims":
                 # AUTHZ: iedereen-ingelogd — checken is voor alle rollen; muteren kan hier niet
@@ -6098,18 +5801,6 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send(_auth.login_page(next_url, error="Email address or password is incorrect."))
                 return
 
-            if path == "/snake/score":
-                # AUTHZ: ingelogde-member — iedereen mag spelen; de score wordt ONDER de sessie-gebruiker
-                # geschreven (nooit een meegestuurde naam), en alleen als hij hoger is dan het record.
-                username = self._session_username()
-                if sessions is not None and username is None:
-                    self._send("Not logged in", 403); return
-                raw = self.rfile.read(length).decode("utf-8") if length else ""
-                form = urllib.parse.parse_qs(raw)
-                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
-                    self._send("CSRF token invalid", 403); return
-                self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
-                return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
             if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):

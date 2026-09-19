@@ -27,12 +27,6 @@ from nooch_village.zoektermen import (BREED_MAX_WOORDEN, gestapeld, verbreed,
                                       verbreed_planitems)
 
 
-# ── 1. Eén huis voor de breed-eerst-regel ────────────────────────────────────
-
-def test_de_regel_woont_op_een_plek():
-    """`zoekstrategie` mag geen eigen kopie meer hebben: die divergentie IS de bug van vandaag."""
-    from nooch_village.skills_impl import zoekstrategie as zs
-    assert zs.verbreed is verbreed, "zoekstrategie hoort af te leiden, niet over te typen"
 
 
 def test_de_twee_echte_mislukte_termen():

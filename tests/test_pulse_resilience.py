@@ -57,16 +57,3 @@ def test_bounded_trends_exceptie_geeft_error_dict():
     assert out["keywords"] == {} and out["rows"] == []
 
 
-def test_field_note_schrijft_door_met_trends_error(tmp_path):
-    """Bewijs het eindresultaat: met een trends-error schrijft field_note nog steeds
-    een Field Note op basis van Plausible."""
-    from types import SimpleNamespace
-    from nooch_village.skills_impl.field_note import FieldNoteSkill
-
-    ctx = SimpleNamespace(data_dir=str(tmp_path))
-    plausible = {"results": {"visitors": {"value": 107}}}
-    trends = _bounded_trends(lambda: time.sleep(2.0), budget=0.1)   # timeout → error dict
-    out = FieldNoteSkill().run({"plausible": plausible, "trends": trends}, ctx)
-    assert out["path"] is not None
-    import os
-    assert os.path.exists(out["path"])
