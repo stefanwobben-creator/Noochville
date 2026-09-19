@@ -18,10 +18,29 @@ Dat is bewust ÉÉN klasse met twee achterkanten en niet twee stores met dezelfd
 kanaal aanspreekt hoeft niet te weten welk soort het is, en er is geen tweede plek die na een
 wijziging uit de pas gaat lopen.
 
-WAT DIT NIET IS. Geen notificatie-laag. De 338 rol-notificaties in `NotifStore` zijn werk dat
-afgehandeld moet worden en horen op `/inbox`, niet in een chat-stroom. Alleen de @-vermelding — één
-mens die een ander aanspreekt — is een bericht, en die landt sinds fase 8 in het DM-kanaal tussen
-die twee.
+WAT DIT NIET IS. Geen notificatie-laag. `NotifStore` en `/inbox` bestaan hiernaast ONGEWIJZIGD
+verder; er is niets gemigreerd en kanaalberichten hebben geen afgehandeld-veld. Alleen de
+@-vermelding — één mens die een ander aanspreekt — is een bericht geworden.
+
+DAT WIJKT AF VAN DE OPDRACHT, en de twee redenen staan hier omdat ze anders over een half jaar als
+"nooit afgemaakt" lezen in plaats van als een besluit. Gemeten op de productie-notificaties,
+19 september 2026, 338 rol-gerichte items:
+
+  1. EEN DM HEEFT TWEE MENSEN NODIG, en die zijn er niet. Vijf van de 338 hebben een MENS als
+     afzender. De rest komt van rol-id's en systeemnamen: compliance (69), claims-checker (46),
+     harry_hemp (45), librarian (22), website_watcher (19). Bij 333 is er maar één kant van het
+     gesprek. Je zou ze eenzijdig in het persoonskanaal van de ontvanger kunnen duwen, maar dat is
+     precies niet wat een DM-kanaal is.
+
+  2. ZE DRAGEN EEN AFHANDEL-MODEL, geen gelezen-vlag:
+         read 259 · processed 258 · archived 225 · outcome 185
+         verwerkingen 83 · poort 54 · done 33
+     Dat is een verwerkingsgeschiedenis met uitkomsten en een poort-oordeel. Overzetten is niet
+     één veld erbij maar dat model opnieuw bouwen bovenop een chat-trail — of 185 vastgelegde
+     uitkomsten en 54 poort-oordelen stil laten verdwijnen.
+
+Het DUBBELE dat fase 8 moest opheffen is wél weg: een @-vermelding heeft nu precies één
+bestemming. Wat hiernaast blijft staan is geen duplicaat maar een ander soort object.
 """
 from __future__ import annotations
 
