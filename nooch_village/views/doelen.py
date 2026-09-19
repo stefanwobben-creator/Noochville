@@ -52,7 +52,13 @@ def _rail(st) -> str:
 
 # ── /goals ───────────────────────────────────────────────────────────────────
 
-def render_goals(st, csrf_token: str = "", username: str | None = None, msg: str = "") -> str:
+def render_goals(st, csrf_token: str = "", username: str | None = None, msg: str = "",
+                 inner_only: bool = False) -> str:
+    """De doelen. `inner_only` geeft alleen de inhoud terug, zonder pagina-schil.
+
+    Sinds fase 7 zijn de doelen ook een TAB op de cirkel (prototype v15), want ze gaan
+    over die cirkel. De route /goals blijft bestaan — geen dode links — en beide paden
+    renderen hetzelfde, uit deze ene functie."""
     alle = st.projects.all()
     kaarten = ""
     for d in st.doelen.all():
@@ -79,11 +85,14 @@ def render_goals(st, csrf_token: str = "", username: str | None = None, msg: str
                  f"{_field('Work packages (one per line, optional)', 'activiteiten', kind='textarea')}"
                  f"<div><button class='btn ok sm' type='submit' name='action' value='goal_add'>Create goal</button></div>"
                  f"</form></details>")
-    main = (f"<div class='c2-main'><h1>Goals</h1>"
-            f"<p class='muted'>Where the work is heading. A project stays with its role and points at a goal; "
-            f"progress is derived: done projects count 1, open projects their checklist ratio.</p>"
-            + (f"<p class='muted'>{_e(msg)}</p>" if msg else "")
-            + f"{kaarten}{nieuw}</div>")
+    binnen = (f"<p class='muted'>Where the work is heading. A project stays with its role and points "
+              f"at a goal; progress is derived: done projects count 1, open projects their checklist "
+              f"ratio.</p>"
+              + (f"<p class='muted'>{_e(msg)}</p>" if msg else "")
+              + f"{kaarten}{nieuw}")
+    if inner_only:
+        return binnen
+    main = f"<div class='c2-main'><h1>Goals</h1>{binnen}</div>"
     return _page("Goals", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}{_rail(st)}</div>")
 
 

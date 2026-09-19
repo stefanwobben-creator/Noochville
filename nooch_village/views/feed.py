@@ -231,12 +231,53 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     #
     # `_wall_outcome_form` en `_wall_outcome_opts` blijven bestaan: de checklist-kant gebruikt ze
     # nog (views/checklists.py) en de `wall_outcome`-dispatch bedient de inbox-route.
+    # KEEP IN WIKI (fase 7). Eén regel uit dit gesprek als FEIT op een wiki-pagina, met herkomst.
+    # De opslag bestond al (`meta["feiten"]`, zie wiki.py); dit is alleen de ingang, zoals het
+    # prototype hem toont: een knop per bericht die een keuzelijst van pagina's uitklapt.
+    #
+    # Niet op de system-entry: die IS al de audit-trail van het project, en een feit dat zegt
+    # "moved from Active to Waiting" hoort niet in een wiki. Alleen op wat een mens schreef.
+    keep = _keep_in_wiki_form(st, pid, entry, csrf_token, terug) if (csrf_token and eid and atype != "system") else ""
     return (f"<div class='fentry editor-inline'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
             f"<div class='fbubble'>{bubble}</div>"
-            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}{tools}</div></div>"
+            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}{tools}{keep}</div></div>"
             f"</div>")
+
+
+def _keep_wiki_opties(st) -> str:
+    """De pagina's waar een feit heen kan: elke wiki-pagina (kind="note") van het dorp.
+
+    Geen rol-grens: je houdt een feit bij het ONDERWERP (de leverancier, het materiaal), en dat
+    onderwerp staat zelden op de rol waar het gesprek toevallig plaatsvond. Dezelfde redenering
+    als bij `[[links]]`, die ook geen rolgrens kennen."""
+    from nooch_village import wiki
+    uit = []
+    for a in st.att.by_kind(wiki.PAGINA_KIND):
+        uit.append(f"<option value='{_e(a.id)}'>{_e(a.title or a.id)}</option>")
+    return "".join(uit)
+
+
+def _keep_in_wiki_form(st, pid: str, entry: dict, csrf_token: str, terug: str) -> str:
+    """De 'Keep in wiki'-uitklapper onder één bericht."""
+    opties = _keep_wiki_opties(st)
+    if not opties:
+        return ""                     # geen enkele pagina → geen knop die nergens heen kan
+    eid = str(entry.get("id") or "")
+    return (f"<span class='fsep'>·</span>"
+            f"<details class='fentry-keep'><summary class='flink'>Keep in wiki</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='item' value='{_e(eid)}'>"
+            f"<input type='hidden' name='next' value='{_e(terug)}'>"
+            f"<label class='att-lbl' for='kw-{_e(eid)}'>Keep as a fact on which page?</label>"
+            f"<select id='kw-{_e(eid)}' name='aid'>{opties}</select>"
+            f"<p class='muted'>Added under <b>Facts</b>, with this project and this message as its "
+            f"source.</p>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+            f"value='keep_in_wiki'>Keep</button></div></form></details>")
 
 
 def _feed_author_options(st, p: dict) -> str:

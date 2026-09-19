@@ -241,3 +241,76 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
             f"{_backlink_sectie(a, pags)}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+
+
+# ── /wiki — de dorpsbrede index (fase 7) ─────────────────────────────────────
+#
+# Hiervóór was er geen index: je kwam bij een pagina via de Notes/Tools/Policies-tab van de rol die
+# hem toevallig bezat. Dat werkt alleen als je al weet wie dat is. Het prototype (v15) zet alles op
+# één scherm, gegroepeerd per domein, met een filter per soort — en dat kan zonder migratie, want
+# `AttachmentStore.kind` onderscheidt note/tool/policy al en `by_kind` leest over alle anchors heen.
+#
+# GEEN TWEEDE WAARHEID OVER EIGENAARSCHAP. Het domein komt van de policy zelf (`a.domain`); een
+# note of tool heeft er geen, en die staan onder "No domain yet" — precies zoals het prototype het
+# toont. Wie een item mag wijzigen verandert niet: dat blijft de eigenaar-rol, via zijn eigen tab.
+
+_WIKI_SOORTEN = (("all", "All"), ("policy", "Policy"), ("note", "Note"), ("tool", "Tool"))
+_WIKI_ICOON = {"policy": "&#128193;", "note": "&#128196;", "tool": "&#128295;"}
+
+
+def _wiki_items(st, soort: str = "all") -> list:
+    """Alle artefacten van het dorp, nieuwste eerst, eventueel op soort gefilterd."""
+    soorten = [k for k, _ in _WIKI_SOORTEN[1:]] if soort == "all" else [soort]
+    uit = []
+    for k in soorten:
+        uit.extend(st.att.by_kind(k))
+    return sorted(uit, key=lambda a: a.updated_at or a.created_at, reverse=True)
+
+
+def _wiki_domein(a) -> str:
+    """Het domein waaronder dit item hoort. Leeg → de verzamelgroep."""
+    return (getattr(a, "domain", "") or "").strip()
+
+
+def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
+    """Alles wat het dorp heeft opgeschreven, op één scherm."""
+    soort = soort if soort in {k for k, _ in _WIKI_SOORTEN} else "all"
+    items = _wiki_items(st, soort)
+
+    chips = "".join(
+        f"<a class='cl-filter{' on' if soort == k else ''}' href='/wiki?kind={k}'>{_e(lbl)}</a>"
+        for k, lbl in _WIKI_SOORTEN)
+
+    # Linkerkolom: per domein, ingeklapt behalve de eerste. Native <details>, geen JS.
+    per_domein: dict[str, list] = {}
+    for a in items:
+        per_domein.setdefault(_wiki_domein(a) or "No domain yet", []).append(a)
+    kolom = []
+    for n, (dom, rij) in enumerate(sorted(per_domein.items(), key=lambda kv: (kv[0] == "No domain yet", kv[0]))):
+        links = "".join(
+            f"<li><a href='/pagina?id={_e(a.id)}'>{_e(a.title or a.id)} "
+            f"<span class='pill'>{_e(a.kind)}</span></a></li>" for a in rij)
+        kolom.append(f"<details{' open' if n == 0 else ''}><summary>{_e(dom)} "
+                     f"<span class='muted'>{len(rij)}</span></summary><ul class='clean'>{links}</ul></details>")
+    nav = f"<nav class='wiki-doms'>{''.join(kolom) or ''}</nav>"
+
+    kaarten = "".join(
+        f"<div class='card'><div class='cl-head'>"
+        f"<h3><a href='/pagina?id={_e(a.id)}'>{_WIKI_ICOON.get(a.kind, '')} {_e(a.title or a.id)}</a></h3>"
+        f"<span class='kc-actions'><span class='pill'>{_e(a.kind)}</span>"
+        + (f"<span class='pill'>{_e(_wiki_domein(a))}</span>" if _wiki_domein(a) else
+           "<span class='pill muted'>no domain</span>")
+        + f"</span></div>"
+          f"<p class='muted'>Owner: {_e(_name(st.records.get(a.anchor)) if st.records.get(a.anchor) else a.anchor)}"
+        + (f" &middot; {_e((a.body or '')[:120])}" if a.body else "") + "</p></div>"
+        for a in items)
+    if not kaarten:
+        kaarten = ("<p class='muted'>Nothing written down yet. A policy, note or tool starts on the "
+                   "role or circle that owns it &mdash; open its Wiki tab.</p>")
+
+    main = (f"<div class='c2-main'><h1>Wiki</h1>"
+            f"<p class='muted'>All policies, notes and tools from across the village &middot; "
+            f"by domain where known. Edit an item where it lives: on its owning role or circle.</p>"
+            f"<div class='cl-filters'>{chips}</div>"
+            f"<div class='c2-wiki'>{nav}<section>{kaarten}</section></div></div>")
+    return _page("Wiki", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

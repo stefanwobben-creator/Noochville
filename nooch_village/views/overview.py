@@ -785,7 +785,13 @@ def _radar_verwijzing(st: _Stores, rec) -> str:
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
                 van: str = "", tot: str = "", compare: bool = False, goal: str = "",
-                van_rapport: str = "") -> str:
+                van_rapport: str = "", kind_flt: str = "") -> str:
+    # OUDE TABNAMEN BLIJVEN WERKEN. policies/notes/tools zijn sinds fase 7 één Wiki-tab. De alias
+    # staat HIER en niet in de route, zodat elke aanroeper hem krijgt — de route, een test, een
+    # ingebedde render. Hij vertaalt naar het juiste voorfilter, wat preciezer is dan doorsturen.
+    if tab in ("policies", "notes", "tools"):
+        kind_flt = kind_flt or {"policies": "policy", "notes": "note", "tools": "tool"}[tab]
+        tab = "wiki"
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Not found", "<p>Node not found.</p><p><a href='/'>← home</a></p>")
@@ -813,30 +819,48 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
         content = _members_html(st, rec, csrf_token)
-    elif tab == "notes":
-        # De Website Developer had hier gÉÉn notes maar de Backlog Builder. Die verhuisde naar Tools
-        # en is op 11 september 2026 verwijderd (niet gebruikt); daardoor heeft ook deze rol gewoon
-        # notes — en dus wiki-pagina's, waar hij als enige rol van uitgesloten was.
-        content = _artefact_tab_html(st, rec, "note", csrf_token, username,
-                                     titel="Notes", leeg="No notes on this role/circle yet.",
-                                     van_rapport=van_rapport)
-    elif tab == "tools":
-        content = (_role_tools_html(rec)
-                   + _ritme_html(st, rec)
-                   + _radar_verwijzing(st, rec)
-                   + _artefact_tab_html(st, rec, "tool", csrf_token, username,
-                                        titel="Tools", leeg="No tools on this role/circle yet."))
+    elif tab == "wiki":
+        # ÉÉN TAB VOOR DRIE SOORTEN (fase 7). Policies, Notes en Tools waren drie tabs boven één
+        # AttachmentStore; het enige verschil is `kind`. Drie deuren naar één kamer dwingen je te
+        # weten waar iets ooit is neergezet vóór je het kunt vinden. Nu: één oppervlak met een
+        # filter, precies zoals het prototype het toont — en zonder migratie, want `kind` bestond al.
+        #
+        # De tool-specifieke blokken (rol-tools, ritme, radar) horen bij `kind="tool"` en staan
+        # daarom onder het tool-filter; bij "all" staan ze eronder, niet ertussen.
+        soort = (kind_flt or "all").lower()
+        if soort not in ("all", "policy", "note", "tool"):
+            soort = "all"
+        chips = "".join(
+            f"<a class='cl-filter{' on' if soort == k else ''}' "
+            f"href='/node?id={_e(node_id)}&tab=wiki&kind={k}'>{_e(lbl)}</a>"
+            for k, lbl in (("all", "All"), ("policy", "Policy"), ("note", "Note"), ("tool", "Tool")))
+        delen = [f"<div class='cl-filters'>{chips}</div>"]
+        if soort in ("all", "policy"):
+            delen.append(_artefact_tab_html(st, rec, "policy", csrf_token, username,
+                                            titel="Policies",
+                                            leeg="No policies on this role/circle yet."))
+        if soort in ("all", "note"):
+            delen.append(_artefact_tab_html(st, rec, "note", csrf_token, username, titel="Notes",
+                                            leeg="No notes on this role/circle yet.",
+                                            van_rapport=van_rapport))
+        if soort in ("all", "tool"):
+            delen.append(_role_tools_html(rec) + _ritme_html(st, rec) + _radar_verwijzing(st, rec)
+                         + _artefact_tab_html(st, rec, "tool", csrf_token, username, titel="Tools",
+                                              leeg="No tools on this role/circle yet."))
+        content = "".join(delen)
     elif tab == "metrics":
         # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als
         # node-tab. Vervangt het oude _metrics_tab_html; KPI-aanmaken loopt via de rijke composer.
         content = render_metrics2_tab(st, rec, csrf_token, win=mw, compare=compare, van=van, tot=tot)
+    elif tab == "goals":
+        # Dezelfde inhoud als /goals, uit dezelfde functie. Een tweede kopie zou na één wijziging
+        # uit de pas lopen — de regel die ook bij het projectenbord geldt.
+        from nooch_village.views.doelen import render_goals
+        content = render_goals(st, csrf_token=csrf_token, username=username, inner_only=True)
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
         content = _projects_tab_html(st, rec, csrf_token, group=group, username=username, goal=goal)
-    elif tab == "policies":
-        content = _artefact_tab_html(st, rec, "policy", csrf_token, username,
-                                     titel="Policies", leeg="No policies on this role/circle yet.")
     else:
         content = ""      # onbekende tab (niet in de tab-lijst) → geen inhoud
 

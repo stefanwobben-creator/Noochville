@@ -1700,3 +1700,26 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
 
 
+
+
+def render_projects_screen(st: _Stores, rec, *, csrf_token: str = "", username: str | None = None,
+                           group: str = "") -> str:
+    """Het projectenbord als EIGEN scherm (`/projects`), de landing sinds fase 7.
+
+    Het bord stond al op de cirkelpagina als tab, en dat is precies wat het prototype (v15)
+    opmerkt: het was tegelijk het meest bezochte scherm en het diepst weggestopte. Dit hergebruikt
+    `_projects_tab_html` letterlijk — dezelfde kaarten, kolommen en groepering — zodat er geen
+    tweede bord ontstaat dat na één wijziging uit de pas loopt. Alleen de schil is nieuw.
+
+    De tab op de cirkel BLIJFT bestaan: hij is daar de gefilterde weergave van díe cirkel, en op de
+    rolpagina van die ene rol. Deze route is de ongefilterde voordeur."""
+    from nooch_village.cockpit2_util import _DS_LINK, _nav
+    from nooch_village.web_base import _page
+
+    inner = _projects_tab_html(st, rec, csrf_token, group=group, username=username)
+    kop = (f"<div class='c2-sec'><h1>Projects</h1>"
+           f"<p class='muted'>Everything on the board for {_e(_name(rec))}. "
+           f"Filter per role or person with the grouping above.</p></div>")
+    return _page("Projects",
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>{kop}{inner}"
+                 f"</div></div>")

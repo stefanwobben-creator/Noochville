@@ -84,7 +84,7 @@ def test_agenda_stap_toont_een_spanning_tegelijk(tmp_path):
     assert frag.count("<summary>verwerken</summary>") == 1
     # ...maar alle drie de punten links in het menu, want dat is de navigatie
     assert frag.count("class='rov-title'") == 3
-    assert "volgende spanning" in frag
+    assert "next tension" in frag
 
 
 def test_menu_markeert_hetzelfde_punt_als_het_scherm_toont(tmp_path):
@@ -121,7 +121,7 @@ def test_vangscherm_blijft_de_volle_lijst(tmp_path):
     _vang(dd, "punt een", "punt twee", "punt drie")
     html = render_vangst(cockpit2._Stores(dd), C, csrf_token="t")
     assert html.count("<summary>verwerken</summary>") == 3
-    assert "volgende spanning" not in html
+    assert "next tension" not in html
 
 
 # ── 3. het projectbord blijft in het overleg ────────────────────────────────

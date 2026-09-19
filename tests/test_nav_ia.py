@@ -1,7 +1,8 @@
-"""IA-fase 1 + de header-opruiming (23 jul): de bovenrand draagt logo, globale zoekbalk en
-begroeting; de meta-links (Metrics · Deelnemers) staan in de gedeelde footer en de breadcrumb
-is weg. De Kennisbank woont onder de Librarian-rol (Tools-tab). Deze test bevriest het
-contract: de inhoud én de single-source-regel (geen view hardcodeert de nav inline)."""
+"""De navigatie is ÉÉN plek: de zijbalk (fase 7, 19 september 2026, prototype v15).
+
+Daarvoor stond ze op drie: een topbar met logo+zoek, een footer met drie meta-links en een
+organisatieboom in de rechterrail. Deze test bevriest het nieuwe contract — de inhoud én de
+single-source-regel (geen view hardcodeert de nav inline)."""
 from __future__ import annotations
 
 import glob
@@ -10,24 +11,38 @@ import re
 from nooch_village.cockpit2_util import _footer, _nav
 
 
-def test_topbar_is_logo_plus_zoek_zonder_meta_links():
-    """De bovenrand is rustig: logo + globale zoekbalk + begroeting. De meta-links zijn naar de
-    footer verhuisd, dus ze horen hier NIET meer te staan."""
+def test_de_zijbalk_draagt_de_hele_navigatie():
+    """Logo, zoek, begroeting, de nav-items en de plek voor de organisatieboom — alles in één
+    aside. Dat is het punt: drie plekken navigatie liepen uiteen."""
     h = _nav()
-    assert "c2-logo" in h and "class='c2-search'" in h and "c2-greet" in h
-    assert "/metrics2" not in h and "/admin" not in h        # meta-links: footer, niet topbar
-    # de uit-de-nav-gehaalde items zijn weg (Kennisbank woont onder de Librarian-rol)
-    for weg in ("/inbox", "/belofte", "/inzichten", "/signals", "/accountabilities",
-                "/kennisbank"):
-        assert weg not in h, f"{weg} hoort niet meer in de nav"
+    assert "c2-side" in h and "c2-logo" in h and "class='c2-search'" in h and "c2-greet" in h
+    assert "c2-org" in h                                     # de boom staat hier, niet rechts
+    for href, label in (("/projects", "Projects"), ("/wiki", "Wiki"), ("/admin", "Admin")):
+        assert href in h and label in h
 
 
-def test_meta_links_staan_in_de_footer():
-    """Metrics en People blijven bereikbaar — één bron (_NAV_ITEMS), gerenderd in de footer
-    die _send op elke pagina injecteert."""
+def test_messages_staat_er_bewust_niet_in():
+    """Het prototype toont Messages, maar zegt er zelf bij dat dat scherm nog niet bestaat: het
+    hoort bij de channel-laag van fase 8. Een nav-item dat naar niets wijst is erger dan een
+    ontbrekend nav-item."""
+    h = _nav()
+    assert "Messages" not in h and "/messages" not in h
+
+
+def test_de_inbox_is_een_lade_geen_pagina():
+    """De drawer bestaat al als globale chrome, met badge en een +-knop voor een nieuwe spanning.
+    Hem als link naar /inbox zetten zou een tweede ingang naar dezelfde functie maken."""
+    h = _nav()
+    assert "ibxToggle()" in h and "Inbox" in h
+    assert "href='/inbox'" not in h
+
+
+def test_de_footer_draagt_geen_navigatie_meer():
+    """Goals en Metrics zijn tabs op de cirkel geworden, Admin staat in de zijbalk. Wat overblijft
+    is de build-info."""
     f = _footer()
-    assert "<a href='/metrics2'>Metrics</a>" in f
-    assert "<a href='/admin'>People</a>" in f
+    assert "build" in f
+    assert "/metrics2" not in f and "/admin" not in f and "/goals" not in f
 
 
 def test_context_label_wordt_niet_meer_getoond():

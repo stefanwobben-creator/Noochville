@@ -60,7 +60,7 @@ def _triage_band(st, n: dict) -> str:
         kop = (f"<strong>Waarschijnlijk voor {_e(naam)}</strong>, omdat: "
                f"“{_e(str(n.get('triage_accountability') or ''))}”")
     else:
-        kop = f"<strong>Geen rol gevonden</strong> — {_e(grond)}"
+        kop = f"<strong>No role found</strong> — {_e(grond)}"
     staart = f"<br><span class='muted'>Vorm: {_e(vorm)}</span>" if vorm else ""
     return f"<p class='muted'>{kop}{staart}</p>"
 
@@ -474,7 +474,7 @@ def _kaart_html(st, n: dict) -> str:
             # staan als herkomst, niet als hoofdtekst.
             regels.append(f"<div class='fbubble'>{_e(herschreven['spanning'])}</div>")
             if herschreven.get("voorstel"):
-                regels.append(f"<p><strong>Voorstel:</strong> {_e(herschreven['voorstel'])}</p>")
+                regels.append(f"<p><strong>Proposal:</strong> {_e(herschreven['voorstel'])}</p>")
             regels.append(f"<details class='box-details'><summary class='muted'>ruwe signalering"
                           f"</summary><p class='muted'>{_e(kern or tekst)}</p></details>")
         elif herschreven and not herschreven.get("ok"):
@@ -846,7 +846,7 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # regel maar een ander geval: daar IS accepteren de handeling zelf (een nieuwe versie van de
     # pagina), niet een project dat het nog moet gaan doen.
     if _type_van(n) == "naar_rol" and n.get("pagina"):
-        return ("<div class='rdr-pane'><h3>Wat doe je met dit voorstel?</h3>"
+        return ("<div class='rdr-pane'><h3>What do you do with this proposal?</h3>"
                 + _verzoek_knoppen(n, csrf) + klaar + "</div>")
 
     # EEN MEMO VRAAGT NIETS. Er valt niets te accepteren of te routeren: je leest hem, en de enige
@@ -860,7 +860,7 @@ def _wizard_pane(st, n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # het meer is dan één handeling en er een project van maken.
     if _type_van(n) == zv.ACTIE:
         pj = _outcome_form("project", nid, csrf, prefill, role_opts, pj_opts, nxt, "actie-project")
-        return ("<div class='rdr-pane'><h3>Wat doe je met deze actie?</h3>"
+        return ("<div class='rdr-pane'><h3>What do you do with this action?</h3>"
                 f"{klaar}"
                 f"<details class='wo-ocd box-details'><summary>Meer dan één handeling? → "
                 f"<strong>maak er een project van</strong></summary>{pj}</details></div>")

@@ -480,12 +480,12 @@ def test_vangst_zonder_cirkel_valt_terug_op_de_thuiscirkel(tmp_path):
 
 def test_een_kaal_agendapunt_toont_geen_groot_spanningsvak(tmp_path):
     """Het normale live-geval. Er is geen tijd om een spanning uit te schrijven, dus het scherm
-    vraagt er niet om: één klein '⚡ Geen' en meteen door naar het uitkomst-formulier."""
+    vraagt er niet om: één klein '⚡ None' en meteen door naar het uitkomst-formulier."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "Checkout hapert", by_id="p1")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
-    assert "⚡ Geen" in html
+    assert "⚡ None" in html
     assert "beschrijf hier wat er speelt" not in html        # het oude, dwingende blok is weg
     # en het uitkomst-formulier staat vóór de uitkomstenlijst
     assert html.index("name='otype'") < html.index("Uitkomsten van het overleg")
@@ -500,7 +500,7 @@ def test_een_vooraf_ingevoerde_spanning_staat_er_gewoon(tmp_path):
     st.werk.punt_tekst(CIRCLE, it["id"], "Klanten haken af bij de betaalstap sinds de nieuwe flow.")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "Klanten haken af bij de betaalstap" in html
-    assert "⚡ Geen" not in html
+    assert "⚡ None" not in html
 
 
 def test_de_herkomst_is_automatisch_geen_invulveld(tmp_path):

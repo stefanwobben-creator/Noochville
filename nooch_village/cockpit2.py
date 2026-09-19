@@ -32,6 +32,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer,
+    _SIDE_ORG, _SIDE_CIRCLE,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -284,7 +285,7 @@ from nooch_village.views.projects import (
     _scope_text, _proj_card, _quickadd,
     _columns_html, _drag_script,
     _modal_html, _group_meta, _projects_board,
-    _archived_html, _projects_tab_html,
+    _archived_html, _projects_tab_html, render_projects_screen,
     _person_projects_tab_html, render_project,  # noqa
     _PROJ_CHIP, _PROJ_COLS, _LABELS, _II_PREFIX,
 )
@@ -331,7 +332,7 @@ from nooch_village import decision_coach
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
-from nooch_village.views.wiki import render_pagina
+from nooch_village.views.wiki import render_wiki_index, render_pagina
 from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
@@ -1269,6 +1270,54 @@ def _act_pagina_feit_add(c):
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
     return nxt, f"➕ fact added ({upd.id})"
+
+
+def _act_keep_in_wiki(c):
+    """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
+
+    # AUTHZ: rolvervuller of Circle Lead van de PAGINA — dezelfde poort als `pagina_feit_add`.
+    # Bewust niet losser: een feit is inhoud van die pagina, en wie hem mag schrijven is een
+    # bestaande regel. Dat betekent wel dat je een feit niet zomaar op andermans pagina kunt
+    # zetten; komt dat in de weg te zitten, dan is dat een governance-vraag en geen UI-vraag.
+
+    DE HERKOMST IS HET PUNT. Een losse zin in een wiki is een bewering; dezelfde zin mét "uit
+    project X, gezegd door Y op datum Z" is navolgbaar. Daarom `soort="bron"`: dat is herkomst,
+    geen bewijs — `wiki.grond_status` leest hem als `ongecontroleerd` en niet als `gegrond`, en
+    dat is precies goed voor een uitspraak uit een gesprek."""
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    pagina = st.att.get(g("aid"))
+    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    p = st.projects.get(g("pid"))
+    if p is None:
+        return nxt, "✗ project not found"
+    entry = next((e for e in (p.get("log") or []) if str(e.get("id") or "") == g("item")), None)
+    if entry is None:
+        return nxt, "✗ message not found"
+    tekst = " ".join(str(entry.get("text") or "").split())
+    if not tekst:
+        return nxt, "✗ nothing to keep — the message has no text"
+    _deny = _artefact_gate(pagina.anchor, username, st)        # check vóór de mutatie
+    if _deny:
+        raise Forbidden(_deny)
+
+    from nooch_village.views.feed import _feed_norm, _feed_who
+    _kind, atype, aid = _feed_norm(entry)
+    wie, _ = _feed_who(st, atype, aid)
+    herkomst = f"{_scope_text(p) or p.get('id', '')} · {wie} · {_stamp(entry.get('at'))}"
+    feit = wiki.maak_feit(tekst, soort="bron", ref=str(p.get("id") or ""), citaat=herkomst)
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    meta = dict(getattr(pagina, "meta", None) or {})
+    meta["feiten"] = list(wiki.feiten(pagina)) + [feit]
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{pagina.anchor}"
+    upd = st.att.update(pagina.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note="feit uit projectgesprek")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, f"✓ kept on {upd.title or upd.id}"
 
 
 def _act_pagina_feit_del(c):
@@ -5016,6 +5065,7 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_voorstel": _act_pagina_voorstel,
@@ -5234,18 +5284,28 @@ def make_handler(data_dir: str, csrf_token: str,
                     _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
                 except Exception:
                     _st, _ro = None, ""
-                # Pattern-fix (founder 23 jul): ELKE pagina die nog geen organisatieboom-rail heeft
-                # krijgt hem hier alsnog, zodat je bij élke tool je navigatie houdt — niet alleen op het
-                # projectenbord. Node-pagina's hebben al een `c2-rail` en worden overgeslagen. De rail
-                # wordt vóór de main geïnjecteerd; flex-order (.c2-rail{order:1}) zet hem toch rechts.
-                if _st is not None and "c2-rail" not in body and "class='c2-wrap'>" in body:
+                # DE ORGANISATIEBOOM ZAT IN DE RECHTERRAIL en staat sinds fase 7 in de zijbalk
+                # links, bij de rest van de navigatie (prototype v15). Hij wordt hier gevuld en niet
+                # in `_nav()` zelf, omdat hij de records nodig heeft en `_nav()` geen stores kent —
+                # zelfde patroon als de begroeting hieronder. Pagina's met een EIGEN rail (de
+                # node-pagina's) houden die; daar staat de boom met de huidige node opengeklapt.
+                if _st is not None and _SIDE_ORG in body:
                     try:
                         from nooch_village.views.overview import _tree_html
-                        _rail = f"<div class='c2-rail'>{_tree_html(_st, '')}</div>"
-                        body = body.replace("<div class='c2-wrap'>",
-                                            f"<div class='c2-wrap'>{_rail}", 1)
+                        body = body.replace(
+                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, '')}</div>", 1)
                     except Exception:
                         pass
+                # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde
+                # node waar '/' vóór fase 7 op landde. Nu landt '/' op Projects en is de cirkel een
+                # eigen nav-item, precies zoals in het prototype.
+                if _st is not None and _SIDE_CIRCLE in body:
+                    try:
+                        _cid = _home_node(_st.records.all())
+                        body = body.replace(_SIDE_CIRCLE,
+                                            f"<a href='/node?id={_e(_cid)}'>Circle</a>" if _cid else "", 1)
+                    except Exception:
+                        body = body.replace(_SIDE_CIRCLE, "", 1)
                 # Persoonlijke begroeting in de header: voornaam van de ingelogde persoon, klikbaar
                 # naar de eigen persoonspagina (/person?id=...).
                 if _st is not None:
@@ -5372,18 +5432,37 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._schrijf(b)
                 return
             if path in ("/", "/index.html"):
+                # PROJECTS IS DE LANDING (fase 7, prototype v15). Hiervóór kwam je op de
+                # cirkelpagina uit; het bord stond daar als tab én als de plek waar je feitelijk
+                # elke dag werkt. De cirkel is nu een nav-item, het bord de voordeur.
+                self.send_response(302)
+                self.send_header("Location", "/projects")
+                self.end_headers()
+                return
+            if path == "/wiki":
+                # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
+                # node). Schrijven gebeurt niet hier maar op de eigenaar-rol, achter zijn poort.
+                self._send(render_wiki_index(st, csrf_token=effective_csrf,
+                                             soort=(qs.get("kind") or ["all"])[0]))
+                return
+            if path == "/projects":
+                # AUTHZ: iedereen-ingelogd — lezen van het bord is vrij; de mutaties eronder gaan
+                # elk door hun eigen poort (proj_*), precies als op de cirkel-tab.
                 default_id = _home_node(st.records.all())
-                if default_id:
-                    self.send_response(302)
-                    self.send_header("Location", f"/node?id={default_id}")
-                    self.end_headers()
-                    return
-                self._send(_page("Empty", "<p>No organisation loaded yet.</p>"))
+                if not default_id:
+                    self._send(_page("Empty", "<p>No organisation loaded yet.</p>")); return
+                rec = st.records.get(default_id)
+                self._send(render_projects_screen(
+                    st, rec, csrf_token=effective_csrf, username=username,
+                    group=(qs.get("group") or [""])[0]))
                 return
             if path == "/node":
                 nid = (qs.get("id") or [""])[0]
                 ntab = (qs.get("tab") or ["overview"])[0]
+                # Oude tabnamen (policies/notes/tools) vertaalt `render_node` zelf naar de
+                # Wiki-tab met het juiste voorfilter — zie daar.
                 self._send(render_node(st, nid, ntab, csrf_token=effective_csrf,
+                                       kind_flt=(qs.get("kind") or [""])[0],
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        goal=(qs.get("goal") or [""])[0],

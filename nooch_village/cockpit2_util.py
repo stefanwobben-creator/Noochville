@@ -59,9 +59,13 @@ def lokaal(ts, vorm: str = "%Y-%m-%d %H:%M", settings=None, leeg: str = "—") -
 # De rol waarop de Backlog Builder (Notes-vervanger) leeft. Eén bron voor gate + view + coupling.
 WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
 
-_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "tools", "projects",
+# Fase 7 (prototype v15): policies/notes/tools zijn één Wiki-tab geworden — ze stonden altijd al
+# in één AttachmentStore, alleen met een ander `kind`. Projects verhuisde naar een eigen scherm
+# (/projects) maar blijft hier als GEFILTERDE weergave van deze node. Goals kwam erbij: dat stond
+# als losse route in de footer-nav, terwijl het over deze cirkel gaat.
+_CIRCLE_TABS = ["overview", "roles", "members", "goals", "wiki", "projects",
                 "checklists", "metrics"]
-_ROLE_TABS = ["overview", "policies", "notes", "tools", "projects", "checklists", "metrics"]
+_ROLE_TABS = ["overview", "wiki", "projects", "checklists", "metrics"]
 # Persoon/AI-role-filler-view: een read-only aggregatie-lens over de rollen die iemand vervult,
 # geen nieuwe autoriteitslaag. Spiegelt de rol-view-chrome via _tabbar(base="/person").
 _PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
@@ -69,8 +73,11 @@ _PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
 # Sleutels zijn logica (tab-parameters in de URL) en blijven; alleen de getoonde labels zijn Engels.
 _TAB_LABEL = {
     "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
-    "policies": "Policies", "notes": "Notes", "tools": "Tools", "projects": "Projects",
+    "wiki": "Wiki", "goals": "Goals", "projects": "Projects",
     "checklists": "Checklists", "metrics": "Metrics",
+    # Oude sleutels blijven in de labeltabel staan: bestaande links (bookmarks, /node?tab=notes in
+    # documentatie) mogen niet als rauwe sleutel op het scherm eindigen.
+    "policies": "Policies", "notes": "Notes", "tools": "Tools",
     "rollen": "Roles", "projecten": "Projects", "context": "Context", "checklist": "Checklist",
 }
 
@@ -498,43 +505,78 @@ _DS_VERSION = _hashlib.md5(_EXTRA_CSS.encode("utf-8")).hexdigest()[:10]
 _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 
 
-# ── De top-nav: ÉÉN gedeelde balk (was inline gedupliceerd over ~18 views) ──────
-# IA-fase 1: rol-gecentreerd. De nav is geslankt tot drie ankers — Metrics (catalogus
-# + bronnen samengevoegd, landt op het dashboard), Kennisbank ("Wat Nooch weet": waar
-# beloftes/inzichten/signalen samenkomen) en Deelnemers. Home/inbox/beloftes/inzichten/
-# signalen/accountabilities zijn uit de nav; hun routes blijven bestaan (geen dode links),
-# hun inhoud verhuist in latere fasen. "Reference, don't copy": één bron voor de nav.
-# Kennisbank woont sinds de IA-opruiming onder de Librarian-rol (Tools-tab), niet in de top-nav.
-_NAV_ITEMS = (
-    ("/goals", "Goals"),
-    ("/metrics2", "Metrics"),
-    ("/admin", "People"),
+# ── De zijbalk: ÉÉN gedeelde navigatie (fase 7, 19 september 2026) ─────────────
+# Hiervóór was de navigatie over drie plekken verdeeld: een topbar met logo+zoek, een footer met
+# drie links (Goals · Metrics · People) en een organisatieboom in de RECHTERrail die `_send` op elke
+# pagina injecteerde. Het prototype (v15) zet die drie bij elkaar in één vaste zijbalk links, en dat
+# is wat hier gebeurt — alleen de structuur, niet de vormgeving; die komt in fase 9 over alle
+# schermen tegelijk.
+#
+# WAT ER NIET IN ZIT, met reden. "Messages" staat wel in het prototype, maar dat scherm zegt daar
+# zélf "does not exist in the real system yet": het hoort bij de channel-laag van fase 8. Een
+# nav-item dat naar niets wijst is erger dan een ontbrekend nav-item.
+#
+# Goals en Metrics zijn GEEN zijbalk-items meer maar tabs op de cirkel, zoals in het prototype.
+# Hun routes (`/goals`, `/metrics2`) blijven bestaan — geen dode links, dezelfde regel als bij de
+# vorige nav-slanking.
+_SIDE_ITEMS = (
+    ("/projects", "Projects"),
+    ("/wiki",     "Wiki"),
 )
+
+#: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
+#: `_nav()` heeft geen stores). Zelfde patroon als de begroeting.
+_SIDE_CIRCLE = "<!--c2-circle-->"
+_SIDE_ORG = "<div class='c2-org' id='c2-org'></div>"
 
 
 def _nav(context: str = "GlassFrog (PoC)") -> str:
-    """De gedeelde top-header: het Nooch-logo links en een globale zoekbalk ernaast (zoekt door
-    rollen, projecten en de kennisbank). Elke pagina roept dit aan, dus logo + zoek staan overal.
-    De meta-links (Metrics, Deelnemers, build) zijn naar de footer verhuisd (zie `_footer`), zodat
-    de bovenrand rustig blijft. `context` blijft in de signatuur voor compat (niet meer getoond)."""
+    """De gedeelde zijbalk: logo, zoek, wie je bent, de navigatie en de organisatieboom.
+
+    Elke pagina roept dit aan, dus de navigatie staat overal — één bron, zoals de topbar die hij
+    vervangt. `context` blijft in de signatuur voor compat (niet getoond); ~40 aanroepers geven
+    hem niet mee en hoeven daarom niet aangeraakt te worden.
+
+    De Inbox is een KNOP en geen link: de drawer bestaat al als globale chrome
+    (`render_inbox_chrome`) met launcher, badge en een "+ tension"-paneel. Het prototype toont hem
+    als lade, dus hier hoort hij als lade open te gaan en niet als pagina te navigeren."""
     return (
-        "<div class='c2-topbar'>"
+        "<aside class='c2-side'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
-        "<input id='gs-input' type='search' name='q' placeholder='Search people, roles, accountabilities…' "
+        "<input id='gs-input' type='search' name='q' placeholder='Search people, roles, projects…' "
         "autocomplete='off' aria-label='global search'>"
+        "<kbd class='c2-kbd' aria-hidden='true'>/</kbd>"
         "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"
-        # Persoonlijke begroeting rechts; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
+        # Persoonlijke begroeting; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
         "<span class='c2-greet' id='c2-greet'></span>"
-        "</div>"
+        "<nav class='c2-subnav'>"
+        + "".join(f"<a href='{h}'>{_e(l)}</a>" for h, l in _SIDE_ITEMS)
+        + "<button type='button' class='c2-navbtn' onclick='ibxToggle()'>Inbox"
+          "<span class='c2-navct hide' id='c2-ibx-ct'>0</span></button>"
+          "<div class='c2-subnav-div'></div>"
+        + _SIDE_CIRCLE
+        + "<a href='/admin'>Admin</a>"
+          "</nav>"
+        + _SIDE_ORG
+        + "</aside>"
         + _GS_LIVE_JS)
 
 
 # Live-zoek: terwijl je typt haalt dit de dropdown-resultaten op (fragment via /search?frag=1), debounced.
 # Klik buiten de balk sluit de dropdown; Enter opent de volledige /search-pagina (het form submit).
 _GS_LIVE_JS = """<script>(function(){
+ // SNELTOETS (fase 7): `/` en Cmd/Ctrl+K zetten de cursor in de zoekbalk. `/` alleen als je
+ // niet al in een veld staat — anders kun je geen schuine streep meer typen in een formulier.
+ addEventListener('keydown', function(e){
+   var b=document.getElementById('gs-input'); if(!b) return;
+   var t=e.target||{}, tag=(t.tagName||'').toLowerCase();
+   var tikt = tag==='input'||tag==='textarea'||tag==='select'||t.isContentEditable;
+   if(e.key==='/' && !tikt){ e.preventDefault(); b.focus(); b.select(); return; }
+   if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){ e.preventDefault(); b.focus(); b.select(); }
+ });
  var box=document.getElementById('gs-input'), drop=document.getElementById('gs-drop'), t;
  if(!box||!drop||box.dataset.wired)return; box.dataset.wired='1';
  function hide(){drop.hidden=true;} function show(){if(drop.innerHTML.trim())drop.hidden=false;}
@@ -552,10 +594,12 @@ _GS_LIVE_JS = """<script>(function(){
 
 
 def _footer() -> str:
-    """De gedeelde footer met de cockpit-meta en de admin-links (Metrics, Deelnemers). Wordt globaal
-    door `_send` vóór </body> geïnjecteerd, zodat hij op elke pagina staat, ook de tool-pagina's."""
-    links = " · ".join(f"<a href='{href}'>{_e(label)}</a>" for href, label in _NAV_ITEMS)
-    return (f"<footer class='c2-foot'>cockpit 2 · {_e('GlassFrog (PoC)')} · build {_BUILD} · "
-            f"{links}</footer>")
+    """De gedeelde footer: alleen nog cockpit-meta. Wordt globaal door `_send` vóór </body>
+    geïnjecteerd, zodat de build op elke pagina te zien is.
+
+    HIER STONDEN DRIE NAV-LINKS (Goals · Metrics · People). Ze zijn in fase 7 naar de zijbalk
+    verhuisd, of preciezer: Goals en Metrics zijn tabs op de cirkel geworden en Admin staat in de
+    zijbalk. Navigatie op twee plekken is navigatie die uiteen gaat lopen."""
+    return (f"<footer class='c2-foot'>cockpit 2 · {_e('GlassFrog (PoC)')} · build {_BUILD}</footer>")
 
 

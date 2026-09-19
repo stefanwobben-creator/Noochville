@@ -17,6 +17,8 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/context` | `(inline)` | `cockpit2.py` |
 | `/` | `(inline)` | `cockpit2.py` |
 | `/index.html` | `(inline)` | `cockpit2.py` |
+| `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
+| `/projects` | `render_projects_screen` | `nooch_village/views/projects.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
 | `/rapport` | `render_projectrapport` | `nooch_village/views/rapport.py` |
 | `/pagina` | `render_pagina` | `nooch_village/views/wiki.py` |
@@ -76,6 +78,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `artefact_add` | `_act_artefact_add` |
 | `artefact_edit` | `_act_artefact_edit` |
 | `artefact_archive` | `_act_artefact_archive` |
+| `keep_in_wiki` | `_act_keep_in_wiki` |
 | `pagina_feit_add` | `_act_pagina_feit_add` |
 | `pagina_feit_del` | `_act_pagina_feit_del` |
 | `pagina_voorstel` | `_act_pagina_voorstel` |
@@ -310,4 +313,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_39 routes · 142 dispatch-acties · 27 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_41 routes · 143 dispatch-acties · 27 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
