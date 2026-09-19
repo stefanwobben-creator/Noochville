@@ -56,9 +56,28 @@ def test_pagina_staat_bij_strategic_lead_en_draagt_de_negen_regels(dorp):
     a = _pagina(st)
     assert a.anchor == hwd.EIGENAAR
     for nr in range(9):
-        assert f"{nr}. **" in a.body                       # 0 t/m 8, de methode zelf
+        assert f"- **{nr}. " in a.body                     # 0 t/m 8, de methode zelf
     assert "/decision-coach" in a.body                     # de link onder de negen regels
     assert "never reaches NoochVille" in a.body            # de derde uitleg-zin
+
+
+def test_de_tekst_is_geschreven_voor_de_renderer_die_er_is():
+    """`_md` kent `## `-koppen, `- `-lijsten en `**vet**` — verder niets.
+
+    Deze pagina stond van 18 t/m 20 september 2026 live MET een zichtbare `# How we decide here`
+    en een regel met drie streepjes, omdat de tekst nooit gerenderd bekeken is vóór het zaaien.
+    Gecorrigeerd via `scripts/herstel_note_strate_001.py`; deze test houdt het zo."""
+    from nooch_village.cockpit2_util import _md
+
+    ruw = hwd.tekst(".")
+    regels = [r for r in ruw.split("\n") if r.strip()]
+    assert not any(r.startswith("# ") for r in regels), "`# ` rendert als platte tekst"
+    assert not any(r.strip() == "---" for r in regels), "`---` rendert als drie streepjes"
+    for vorige, huidige in zip(regels, regels[1:]):
+        if vorige.startswith("- "):
+            assert huidige.startswith(("- ", "## ")) or huidige[0].isupper() or huidige[0] == "*", \
+                f"doorgelopen lijstregel: {huidige!r}"
+    assert _md(ruw).count("<li>") == 9                     # de negen regels, als echte lijst
 
 
 def test_zaaien_is_idempotent_en_overschrijft_niet(dorp):
