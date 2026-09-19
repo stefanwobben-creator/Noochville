@@ -229,8 +229,15 @@ def test_noochie_dag_begint_triggers_reflect_and_collect(tmp_path):
     assert "dag_begint" in collected, "dag_begint moet verzameld zijn door _collect_event"
 
 
-def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
-    """KANTEL: prompt bevat kantel-instructie; kantel-zin belandt in tension_sensed na min_count=2."""
+def test_noochie_reflect_kantel_in_prompt_en_log(tmp_path, caplog):
+    """KANTEL: de kantel-instructie staat in de prompt en de kantel-zin haalt de logregel.
+
+    Tot 19 september 2026 toetste deze test dat de kantel-zin via `_sense_gap` (min_count=2) in
+    een `tension_sensed` belandde. Die escalatie is weg: het voorstel gaat nu naar het log en
+    verder nergens heen. De kantel-eis zelf blijft overeind — hij zit in de prompt, en de zin
+    mag onderweg niet wegvallen."""
+    import logging
+
     noochie, bus = _make_noochie(tmp_path)
 
     mock_voorstel = (
@@ -248,23 +255,20 @@ def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
         prompts_gezien.append(prompt)
         return mock_voorstel
 
-    with patch("nooch_village.llm.reason", side_effect=mock_reason):
-        # Eerste aanroep: count=1, nog onder min_count=2 — geen spanning
+    with caplog.at_level(logging.INFO), patch("nooch_village.llm.reason", side_effect=mock_reason):
         noochie._reflect()
-        assert len(tensions) == 0
-
-        # Tweede aanroep: count=2, drempel bereikt — spanning gepubliceerd
         noochie._reflect()
 
-    assert len(prompts_gezien) >= 2, "reason() moet minstens tweemaal zijn aangeroepen"
+    assert len(prompts_gezien) == 2, "reason() moet per aanroep eenmaal zijn aangeroepen"
     prompt = prompts_gezien[0]
     assert "flips if" in prompt, f"kantel-instructie ontbreekt in prompt:\n{prompt}"
 
-    assert len(tensions) >= 1, "tension_sensed moet na min_count=2 gepubliceerd zijn"
-    description = tensions[0].get("description", "")
-    assert "kantelt als" in description, (
-        f"kantel-zin ontbreekt in de tension_sensed description:\n{description}"
-    )
+    regels = [r.getMessage() for r in caplog.records if "Noochie-voorstel" in r.getMessage()]
+    assert len(regels) == 2, f"elk voorstel hoort één logregel te geven, kreeg {len(regels)}"
+    assert "kantelt als" in regels[0], (
+        f"kantel-zin ontbreekt in de logregel:\n{regels[0]}")
+    assert not tensions, (
+        "Noochie escaleert niet meer naar een spanning; het voorstel blijft in het log")
 
 
 def test_gsc_pulse_completed_verzameld_met_boodschap(tmp_path):

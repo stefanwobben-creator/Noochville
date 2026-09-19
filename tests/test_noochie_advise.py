@@ -115,3 +115,47 @@ def test_no_governance_proposal_raised(noochie_bus, ledger):
     ledger.block(pid, "noochie")
     _send_discovery(noochie, pid, ["visitors"])
     assert proposals == []
+
+
+# ── _reflect draait zonder de sensing-cluster ────────────────────────────────
+#
+# `Noochie._reflect` escaleerde zijn creatieve voorstel via `Inhabitant._sense_gap`. Die methode
+# gaat weg met de sensing-cluster (fase 3, BLOK A). Noochie slaapt op dit moment, en juist dáárom
+# staat deze test er: "hij draait toch niet" is geen garantie dat hij het bij het wekken doet.
+
+def test_reflect_draait_zonder_sense_gap(tmp_path, monkeypatch, caplog):
+    """Geen NameError, geen AttributeError — ook niet als Noochie morgen gewekt wordt."""
+    import logging
+    import nooch_village.llm as llm
+    from nooch_village.projects import ProjectLedger
+
+    noochie, _bus = _make_noochie(tmp_path, ProjectLedger(str(tmp_path / "p.json")))
+    monkeypatch.setattr(llm, "reason",
+                        lambda *a, **k: "The village lacks X. Y would help because Z. "
+                                        "This advice flips if Q.")
+    # Niet "_sense_gap bestaat niet" — die methode zit nog op Inhabitant tot de sensing-cluster
+    # valt. Wat hier telt is dat _reflect hem niet meer AANROEPT; zo overleeft deze test ook de
+    # verwijdering van de cluster zelf. Docstring weg vóór de check: die MAG de naam noemen
+    # (hij legt juist uit waarom de aanroep er niet meer is), de code niet.
+    import ast, inspect, textwrap
+    fn = ast.parse(textwrap.dedent(inspect.getsource(type(noochie)._reflect))).body[0]
+    if ast.get_docstring(fn):
+        fn.body = fn.body[1:]
+    assert "_sense_gap" not in ast.unparse(fn)
+    with caplog.at_level(logging.INFO):
+        noochie._reflect()                                 # mag niet knallen
+    assert "Noochie-voorstel" in caplog.text
+    assert "The village lacks X" in caplog.text
+
+
+def test_reflect_zwijgt_zonder_model(tmp_path, monkeypatch, caplog):
+    """Geen model → geen voorstel, geen logregel, geen fout."""
+    import logging
+    import nooch_village.llm as llm
+    from nooch_village.projects import ProjectLedger
+
+    noochie, _bus = _make_noochie(tmp_path, ProjectLedger(str(tmp_path / "p.json")))
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: None)
+    with caplog.at_level(logging.INFO):
+        noochie._reflect()
+    assert "Noochie-voorstel" not in caplog.text

@@ -460,14 +460,16 @@ class Noochie(Inhabitant):
             self.log.info("kon Noochie-dagrapport niet opslaan: %s", e)
 
     def _reflect(self) -> None:
-        """Genereert periodiek één creatief voorstel als spanning richting de mens.
+        """Genereert periodiek één creatief voorstel. LOG-ONLY sinds 19 september 2026.
 
-        Deduplicatie: de inhoud-hash van het voorstel wordt bijgehouden in
-        reflect_noochie.json (via _sense_gap). Pas bij een nieuw uniek voorstel
-        (andere hash) én min_count=2 wordt er een spanning gesensed — ook in
-        demo-modus (reflect_interval_seconds=0). force=True is verwijderd zodat
-        Noochie de inbox niet overspoelt.
-        """
+        Dit escaleerde via `_sense_gap` naar een spanning in de human inbox. Die aanroep is hier
+        weg; de methode zelf zit nog op `Inhabitant` en valt met de rest van de sensing-cluster.
+        Wat overblijft is het voorstel zelf, en dat gaat naar het log.
+
+        EERLIJK OVER WAT DIT NU IS: één LLM-call per reflectie-interval waarvan de uitkomst
+        nergens anders landt dan in een logregel. Leest niemand dat log, dan hoort deze hele
+        methode weg — houd hem niet omdat hij er staat. Noochie slaapt op dit moment, dus hij
+        draait nergens; deze code bestaat opdat hij bij het wekken niet stukloopt."""
         from nooch_village.llm import reason
         prompt = (
             f"You are Noochie, the idea engine of Nooch.earth.\n"
@@ -481,9 +483,10 @@ class Noochie(Inhabitant):
         result = reason(prompt, call_site="noochie_reflect")
         if not result:
             return
+        # De hash blijft: hij maakt in het log zichtbaar of dit hetzelfde voorstel is als de
+        # vorige keer. Er is geen store meer die hem onthoudt, en dus ook geen dedup-belofte.
         h = hashlib.sha256(result.encode()).hexdigest()[:16]
-        gap_key = f"creatief_voorstel_{h}"
-        self._sense_gap(gap_key, result, kind="governance", min_count=2)
+        self.log.info("💡 Noochie-voorstel [%s]: %s", h, " ".join(result.split())[:300])
 
     # ── bulletin-mandaat (afsplitsbaar blok) ──────────────────────────────────
 
