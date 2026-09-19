@@ -352,6 +352,14 @@ risicomoment dat jij hoort te kiezen, niet ik.
 3. **De 63 kleur-alleen-statussen** buiten de negentien schermen (§2).
 4. **`Pillow` uit `requirements.txt`** (§8).
 5. **De plausible-testfailure** — een omgevingslek, geen regressie (§8).
+6. **De pagina "How we decide here" rendert zijn eerste regel verkeerd.** `content/how_we_decide_en.md`
+   opent met `# How we decide here` en bevat een `---`-streep, maar de wiki-renderer (`_md`) kent
+   alleen `## `-koppen en `- `-lijsten. Beide komen er letterlijk doorheen, dus op
+   `village.nooch.earth/pagina?id=NOTE-STRATE-001` staat sinds 18 september een zichtbare `#` boven
+   de tekst. Mijn fout: ik heb die tekst destijds nooit gerenderd bekeken — dezelfde categorie als
+   de zestien loginpagina-screenshots in §6. **Het bronbestand repareren helpt niet:** `wiki_seed`
+   overschrijft nooit, dus de live pagina verandert alleen als iemand hem in de UI bijwerkt.
+   `content/claims_policy_en.md` is wél voor deze renderer geschreven, met een guard-test erop.
 
 ---
 

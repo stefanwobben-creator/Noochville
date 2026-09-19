@@ -685,6 +685,12 @@ def main() -> None:
         # een bootstrap die een pagina schrijft doet dat ook in elk test-dorp.
         from nooch_village import wiki_how_we_decide as hwd
         rapport += hwd.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
+        # De beleidspagina gaat mee in dezelfde beurt, en met een VASTE eigenaar-rol — niet via
+        # `org.role_for_domain` zoals de claim-pagina's hierboven. Die afleiding levert sinds
+        # 18 sept 2026 niets op (geen levende eigenaar van 'claims-database'), en een beleidspagina
+        # die wacht op een domein-grant verschijnt nooit. Zie wiki_claims_policy voor het besluit.
+        from nooch_village import wiki_claims_policy as wcp
+        rapport += wcp.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
         print(wiki_seed.rapport_tekst(rapport))
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
