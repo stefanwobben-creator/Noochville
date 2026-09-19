@@ -31,7 +31,7 @@ from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
-    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer,
+    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
     _SIDE_ORG, _SIDE_CIRCLE,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
@@ -1071,10 +1071,22 @@ def _tab_suffix(tab: str | None) -> str:
 
 
 # Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
+# ── Nooch UI v1: welke routes meedoen (fase 9) ────────────────────────────────
+# De negentien schermen die in fase 7 en 8 zijn herbouwd of aangeraakt. Wat hier NIET staat doet
+# bewust niet mee — /claims en /metrics2 zijn geparkeerd voor een eventuele tiende fase, de rest is
+# in fase 1-8 nooit qua UI aangeraakt. De volledige lijst met redenen staat in
+# claude/fase9_designsysteem_inventarisatie.md §5.
+_NU_ROUTES = frozenset({
+    "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
+    "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
+    "/inbox", "/inbox/verwerk", "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
+})
+
 _STATIC_TYPES = {
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
+    "nooch-ui.css": "text/css; charset=utf-8",
     # De gedeelde fragment-mechaniek. URL draagt ?v=<inhoud-hash> (web_base._JS_LINK).
     "nooch.js": "application/javascript; charset=utf-8",
     "nooch-logo.svg": "image/svg+xml; charset=utf-8",
@@ -5344,6 +5356,19 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Set-Cookie", cookie)
             self.end_headers()
 
+        def _nu_scope(self, body: str) -> str:
+            """Zet `class="nu"` op <body> als deze route in fase 9 is herbouwd.
+
+            ÉÉN PLEK, ROUTE-GESTUURD. Het alternatief was een vlag door ~19 render-functies heen
+            duwen; dan staat de scope op negentien plekken en loopt hij na de eerste wijziging uit
+            de pas. Hier is hij een lijst, en die lijst IS de verantwoording: wat er niet in staat
+            doet bewust niet mee (zie claude/fase9_designsysteem_inventarisatie.md §5)."""
+            pad = (self.path or "/").split("?", 1)[0]
+            if pad not in _NU_ROUTES or "<body>" not in body:
+                return body
+            return body.replace("<body>", '<body class="nu">', 1).replace(
+                _DS_LINK, _DS_LINK + _NU_LINK, 1)
+
         def _send(self, body: str, code: int = 200, chrome: bool = True):
             # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een
             # sessie en alleen op volledige HTML-pagina's (met </body>). chrome=False voor de inbox-routes
@@ -5401,6 +5426,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 body = body.replace(
                     "</body>",
                     render_inbox_chrome(csrf_token, _ro) + _footer() + "</body>", 1)
+            body = self._nu_scope(body)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")

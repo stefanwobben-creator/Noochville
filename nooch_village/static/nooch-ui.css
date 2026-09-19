@@ -1,0 +1,179 @@
+/* ═══ Nooch UI v1 ═══════════════════════════════════════════════════════════════════════════════
+   Het nieuwe visuele systeem (prototype v15): 2px zwarte randen, scherpe hoeken, één neongroen
+   accent, en status altijd als VORM plus woord — nooit kleur alleen.
+
+   WAAROM ALLES ONDER `.nu` STAAT EN NIET IN EEN TWEEDE `:root`.
+   De opdracht was: een eigen tokenbestand naast nooch.css, niet vermengd, zonder aliasing. Dat is
+   hier gedaan — maar niet als tweede globale `:root`, want vier tokennamen botsen met de oude set:
+
+       --border    oud #DDD4C0 (een KLEUR)   nieuw 2px solid var(--nu-text) (een SHORTHAND)
+       --muted     oud #9A9483               nieuw #58595B
+       --neon      oud #2bff6f               nieuw #00FF00
+       --surface   oud #fff                  nieuw #FFFFFF
+
+   `--border` is de dodelijke: hij staat 147x in nooch.css als `border:1px solid var(--border)`.
+   Een tweede globale `:root` maakt daar `border:1px solid 2px solid #000` van — ongeldige CSS, en
+   dan verdwijnen de randen op ELK scherm, ook de schermen die buiten deze fase vallen.
+
+   Dus: eigen bestand, eigen blok, eigen `--nu-`-naamruimte, en alles onder `.nu`. De twee systemen
+   raken elkaar nergens, en een scherm doet mee doordat `<body>` de klasse `nu` krijgt (zie
+   `cockpit2._NU_ROUTES`). Een scherm dat niet meedoet merkt van dit bestand exact niets.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.nu {
+  --nu-neon: #00FF00;
+  --nu-accent: #00A551;
+  --nu-accent-text: #14713C;
+  --nu-bg-alt: #E9FBE9;
+  --nu-bg: #FFFAFA;
+  --nu-surface: #FFFFFF;
+  --nu-text: #000000;
+  --nu-muted: #58595B;
+  --nu-border-subtle: #E6E7E8;
+  --nu-danger: #EE4036;
+  --nu-border: 2px solid var(--nu-text);
+  --nu-sp-1: .4rem; --nu-sp-2: .7rem; --nu-sp-3: 1.1rem; --nu-sp-4: 1.8rem;
+  --nu-font: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  background: var(--nu-bg);
+  color: var(--nu-text);
+  font-family: var(--nu-font);
+}
+
+/* ── Typografie ────────────────────────────────────────────────────────────────────────────── */
+.nu h1 { font-family: var(--nu-font); font-weight: 700; font-size: clamp(1.5rem,1.4vw + 1rem,2rem);
+  line-height: 1.15; color: var(--nu-text); letter-spacing: -.01em; }
+.nu h2, .nu h3 { font-family: var(--nu-font); font-weight: 700; color: var(--nu-text);
+  text-transform: none; letter-spacing: 0; }
+.nu a { color: var(--nu-accent-text); }
+.nu .muted { color: var(--nu-muted); }
+
+/* ── Vlakken: 2px rand, geen radius, geen schaduw ─────────────────────────────────────────── */
+.nu .card, .nu .box, .nu .kpi, .nu table {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
+.nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
+.nu .c2-subnav a, .nu .c2-navbtn { border-radius: 0; color: var(--nu-text); }
+.nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
+.nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 999px; }
+
+/* ── Knoppen: zwart-op-wit, hover inverteert ──────────────────────────────────────────────── */
+.nu .btn {
+  font-family: var(--nu-font); font-weight: 700; font-size: .9rem; border: var(--nu-border);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  padding: .5em 1em; min-height: 38px; box-shadow: none; }
+.nu .btn:hover { background: var(--nu-text); color: var(--nu-surface); }
+.nu .btn.ok { background: var(--nu-neon); border-color: var(--nu-text); color: var(--nu-text); }
+.nu .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
+.nu .btn.ghost { border-color: var(--nu-border-subtle); color: var(--nu-muted); font-weight: 600;
+  background: none; }
+.nu .btn.ghost:hover { background: var(--nu-text); color: var(--nu-surface);
+  border-color: var(--nu-text); }
+.nu .btn.sm { padding: .3em .8em; min-height: 30px; font-size: .8rem; }
+.nu .btn:disabled, .nu .btn.ok:disabled { opacity: .4; background: var(--nu-surface);
+  color: var(--nu-muted); border-color: var(--nu-border-subtle); }
+
+/* ── Pill / chip / badge: in het prototype één vorm ───────────────────────────────────────── */
+.nu .pill, .nu .chip, .nu .badge {
+  display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid var(--nu-text);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  padding: .15em .6em; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .03em; }
+.nu .pill.muted, .nu .chip.muted, .nu .badge.ro {
+  border-color: var(--nu-border-subtle); color: var(--nu-muted);
+  text-transform: none; letter-spacing: 0; font-weight: 600; }
+
+/* ── STATUS: vorm + woord, nooit kleur alleen ─────────────────────────────────────────────────
+   Het hele punt van dit systeem. Een gekleurd vlakje zegt niets tegen wie kleur niet (goed) ziet,
+   en niets in zwart-wit. De vorm draagt de betekenis, de kleur versterkt hem, en het WOORD staat
+   er altijd bij. */
+.nu .nu-status {
+  display: inline-flex; align-items: center; gap: .45em; font-size: .78rem; font-weight: 700;
+  padding: .2em .6em; border: 1.5px solid var(--nu-text); background: var(--nu-surface); }
+.nu .nu-status::before { content: ""; width: .55em; height: .55em; flex: none; }
+.nu .nu-status--ok { background: var(--nu-bg-alt); color: var(--nu-accent-text); }
+.nu .nu-status--ok::before { background: var(--nu-accent); border-radius: 50%; }   /* rond, gevuld */
+.nu .nu-status--open { color: var(--nu-muted); border-style: dashed; }
+.nu .nu-status--open::before { border: 1px solid var(--nu-muted); border-radius: 50%; }  /* rond, leeg */
+.nu .nu-status--wait::before { background: var(--nu-text);
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }                              /* half vierkant */
+.nu .nu-status--off { color: var(--nu-danger); border-color: var(--nu-danger); }
+.nu .nu-status--off::before { background: var(--nu-danger);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); }                                  /* driehoek */
+
+/* ── Tabs, filters, invoer ────────────────────────────────────────────────────────────────── */
+.nu .c2-tabs a { border-radius: 0; font-weight: 700; color: var(--nu-muted); }
+.nu .c2-tabs a.on { border: var(--nu-border); border-bottom-color: var(--nu-surface);
+  background: var(--nu-surface); color: var(--nu-text); }
+.nu .cl-filter { border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-weight: 700; }
+.nu .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
+.nu input[type=text], .nu input[type=search], .nu input[type=email], .nu input[type=number],
+.nu textarea, .nu select {
+  font-family: var(--nu-font); border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); }
+.nu .c2-search input { border-color: var(--nu-text); }
+.nu :focus-visible { outline: 3px solid var(--nu-neon); outline-offset: -1px; }
+
+/* ── Het bord en de gesprek-trail ─────────────────────────────────────────────────────────── */
+.nu .pkaart, .nu .kcard, .nu .msg-item, .nu .fentry {
+  border-radius: 0; box-shadow: none; }
+.nu .pkaart, .nu .kcard { border: var(--nu-border); background: var(--nu-surface); }
+.nu .msg-kanaal { border-radius: 0; }
+.nu .msg-kanaal.on { background: var(--nu-text); color: var(--nu-neon); }
+.nu .wiki-doms details { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
+
+/* ── Het bord: kolommen dragen een VORM, geen pasteltint ──────────────────────────────────────
+   De vier kolommen hadden elk een eigen achtergrondkleur (blauw/oranje/groen/grijs). Dat is
+   precies de kleur-alleen-status die dit systeem vervangt: in zwart-wit, of voor wie die tinten
+   niet onderscheidt, zijn het vier identieke vakken. Nu één rustige achtergrond voor alle vier,
+   en het onderscheid zit in het merkteken vóór de kop — dezelfde vormen als `.nu-status`. */
+.nu .pcol,
+.nu .pcol[data-to='actief'], .nu .pcol[data-to='wacht'],
+.nu .pcol[data-to='done'], .nu .pcol[data-to='toekomst'] {
+  background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+.nu .pcol-h { display: flex; align-items: center; gap: .45em; color: var(--nu-text);
+  font-family: var(--nu-font); }
+.nu .pcol-h::before { content: ""; width: .6em; height: .6em; flex: none;
+  border: 1.5px solid var(--nu-text); }
+.nu .pcol[data-to='actief']  .pcol-h::before { background: var(--nu-accent); border-radius: 50%; }
+.nu .pcol[data-to='wacht']   .pcol-h::before { background: var(--nu-text);
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }
+.nu .pcol[data-to='done']    .pcol-h::before { background: var(--nu-text); border-radius: 50%; }
+.nu .pcol[data-to='toekomst'] .pcol-h::before { border-style: dashed; border-radius: 50%; }
+
+/* ── De footer staat naast de zijbalk, niet eronder ──────────────────────────────────────────
+   `_send` injecteert hem vóór </body>, dus buiten de `.c2-wrap` die de zijbalk-offset draagt. */
+.nu .c2-foot { margin-left: 232px; border-top: 1.5px solid var(--nu-border-subtle);
+  color: var(--nu-muted); }
+@media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
+
+/* ── De inbox-launcher: zwart-op-neon, en niet meer bovenop de zijbalk ───────────────────── */
+.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: var(--nu-border);
+  background: var(--nu-neon); box-shadow: none; }
+.nu .ibx-launch.zero { background: var(--nu-surface); }
+.nu .ibx-launch:hover { transform: none; background: var(--nu-text); color: var(--nu-surface); }
+
+/* ── Groeperings- en filterknoppen in de bordkop ─────────────────────────────────────────── */
+.nu .pkaart, .nu .pcol .card { border: var(--nu-border); }
+.nu .c2-sec > h1 + p.muted { max-width: 720px; }
+
+/* ── De resterende knop-achtigen: alles vierkant, zwart-op-wit ───────────────────────────────
+   `.addlink` en `.vswitch a` zijn links die als knop worden gelezen. Ze droegen nog de oude
+   pill-vorm met groene vulling — één scherm met twee knopvormen leest als twee systemen. */
+.nu .addlink, .nu .vswitch a, .nu .flink {
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); font-weight: 700; padding: .3em .8em; }
+.nu .addlink:hover, .nu .vswitch a:hover, .nu .flink:hover {
+  background: var(--nu-text); color: var(--nu-surface); text-decoration: none; }
+.nu .vswitch a.on { background: var(--nu-neon); color: var(--nu-text); }
+
+/* ── De organisatieboom in de zijbalk ──────────────────────────────────────────────────────── */
+.nu .tree { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; box-shadow: none;
+  background: var(--nu-surface); }
+.nu .tree h3 { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .tree .here { background: var(--nu-neon); border-radius: 0; }
+.nu .tree a { color: var(--nu-text); }
+
+/* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
+.nu .cl-head h3 a { color: var(--nu-text); }
+.nu .msg-item { border-bottom: 1.5px solid var(--nu-border-subtle); }

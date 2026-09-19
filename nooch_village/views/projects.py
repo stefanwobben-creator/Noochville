@@ -5,7 +5,7 @@ import json
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from nooch_village.web_base import _e, _page, _banner, _field
+from nooch_village.web_base import _e, _page, _banner, _field, _status
 from nooch_village.project_essentie import essentie_van
 from nooch_village.projects import heeft_seed_vorm
 from nooch_village import projects as _PJ                 # tijdlijn (scope 48)
@@ -1238,13 +1238,17 @@ def _meta_rijen(st, p, rw: bool, hid, trekker_opts: str = "", terminaal: str = "
         # eindigt — en ze stonden onderaan de rail onder "More", los van de plek waar je de status
         # verandert. Twee menu's voor "waar staat dit project" is één te veel; de scheiding
         # verwijderen/archiveren blijft zichtbaar door de scheidingslijn en de danger-stijl.
+        # De status als VORM plus WOORD (Nooch UI v1): het `_status`-label staat in de summary, dus
+        # je ziet wát het is én kunt het in dezelfde klik veranderen. Buiten een `.nu`-scherm
+        # rendert `_status` als gewone span — dezelfde HTML, geen halve stijl.
         uit.append(_meta_rij("Status",
                              f"<details class='cardmenu mmenu'>"
-                             f"<summary class='ctrl' aria-label='change status'>{_e(_slbl)}"
+                             f"<summary class='ctrl' aria-label='change status'>"
+                             f"{_status(p.get('status') or '', _slbl)}"
                              f"<span class='car'>▾</span></summary>"
                              f"<div class='cardmenu-b'>{items}{terminaal}</div></details>"))
     else:
-        uit.append(_meta_rij("Status", f"<span class='ctrl'>{_e(_slbl)}</span>"))
+        uit.append(_meta_rij("Status", _status(p.get("status") or "", _slbl)))
 
     uit.append(_meta_rij("Assignee", _eigenaar_control(st, p, rw, hid, trekker_opts)))
 

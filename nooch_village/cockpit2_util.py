@@ -504,6 +504,18 @@ with open(_EXTRA_CSS_PATH, encoding="utf-8") as _css_f:
 _DS_VERSION = _hashlib.md5(_EXTRA_CSS.encode("utf-8")).hexdigest()[:10]
 _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 
+# ── Nooch UI v1 (fase 9) ───────────────────────────────────────────────────────
+# Een TWEEDE stylesheet, bewust niet vermengd met nooch.css. Alles erin staat onder `.nu`, dus een
+# pagina zonder die klasse merkt er niets van — zie de kop van static/nooch-ui.css voor waarom het
+# geen tweede globale `:root` is (vier botsende tokennamen, waarvan `--border` 147 randen sloopt).
+with open(_os.path.join(_os.path.dirname(__file__), "static", "nooch-ui.css"),
+          encoding="utf-8") as _nu_f:
+    _NU_CSS = _nu_f.read()
+_NU_VERSION = _hashlib.md5(_NU_CSS.encode("utf-8")).hexdigest()[:10]
+_NU_LINK = (f'<link rel="stylesheet" href="/static/nooch-ui.css?v={_NU_VERSION}">'
+            '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+            'family=Archivo:wght@400;500;600;700&display=swap">')
+
 
 # ── De zijbalk: ÉÉN gedeelde navigatie (fase 7, 19 september 2026) ─────────────
 # Hiervóór was de navigatie over drie plekken verdeeld: een topbar met logo+zoek, een footer met

@@ -68,7 +68,12 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                     msg: str = "") -> str:
     groepen = _kanalen(st, ik)
     if not kanaal:
-        kanaal = next((k for g in ("Direct", "Circles", "Projects") for k in groepen[g]), "")
+        # OPEN OP IETS DAT GEZEGD IS. De eerste versie pakte simpelweg het eerste kanaal, en dat
+        # was de anchor-cirkel: je landde op "Nothing said here yet" terwijl er drie kanalen
+        # verderop wél gesprek stond. Een leeg kanaal als voordeur laat het scherm dood lijken.
+        volgorde = [k for g in ("Direct", "Projects", "Circles") for k in groepen[g]]
+        kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
+                      volgorde[0] if volgorde else "")
 
     lijst = []
     for groep, rij in groepen.items():

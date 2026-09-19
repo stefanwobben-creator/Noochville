@@ -146,6 +146,29 @@ _JS_VERSION = _hashlib.md5(_JS_SRC.encode("utf-8")).hexdigest()[:10]
 _JS_LINK = f'<script src="/static/nooch.js?v={_JS_VERSION}" defer></script>'
 
 
+#: Projectstatus → (Nooch UI-variant, woord). De VORM zit in de CSS (`.nu-status--*`), het WOORD
+#: staat er altijd bij. Nooit kleur alleen: een gekleurd vlakje zegt niets tegen wie kleur niet
+#: goed ziet, en niets in zwart-wit.
+_STATUS_VORM = {
+    "running": ("ok", "Active"),
+    "blocked": ("wait", "Waiting"),
+    "done":    ("ok", "Done"),
+    "future":  ("open", "Future"),
+    "proposed": ("open", "Proposed"),
+    "draft":   ("open", "Draft"),
+}
+
+
+def _status(status: str, label: str = "") -> str:
+    """Eén statuslabel als VORM plus WOORD (Nooch UI v1, fase 9).
+
+    Buiten een `.nu`-scherm rendert dit als een gewone inline-span: de klassen doen dan niets, de
+    tekst blijft leesbaar. Zo kan hij gebruikt worden op een scherm dat nog niet meedoet zonder er
+    half-nieuw uit te zien."""
+    soort, woord = _STATUS_VORM.get(str(status or "").lower(), ("open", status or "—"))
+    return f"<span class='nu-status nu-status--{soort}'>{_e(label or woord)}</span>"
+
+
 def _page(title: str, inner: str) -> str:
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
