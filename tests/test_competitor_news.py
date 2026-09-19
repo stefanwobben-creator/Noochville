@@ -10,7 +10,6 @@ from unittest.mock import patch
 from datetime import timedelta
 from nooch_village.skills_impl.competitor_news import (
     CompetitorNewsSkill, _parse_all, _cascade_select)
-from nooch_village.roles import ConcurrentScout
 
 _RSS = """<?xml version="1.0"?><rss><channel>
 <item><title>Veja raises new funding round</title><link>http://a</link>
@@ -111,20 +110,6 @@ def test_run_fail_closed_als_alle_merken_falen(tmp_path):
 
 # ── rol: dedup + signalen + gebundelde missie-spanning ─────────────────────────
 
-def _scout(skill_result, tmp_path):
-    s = SimpleNamespace()
-    s.id = "concurrent_scout"
-    s.context = SimpleNamespace(data_dir=str(tmp_path), settings={})
-    s.log = logging.getLogger("test.scout")
-    s._busy = False
-    s._events = []
-    s._tensions = []
-    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.use_skill = lambda cap, payload: skill_result
-    s.sense_tension = lambda desc, kind="operational": s._tensions.append((desc, kind))
-    for name in ("_run_news", "_is_mission_relevant", "_seen_path", "_load_seen", "_save_seen"):
-        setattr(s, name, types.MethodType(getattr(ConcurrentScout, name), s))
-    return s
 
 
 _SKILL_OK = {
@@ -142,20 +127,5 @@ def _signals(s):
     return [e for e in s._events if e.name == "competitor_signal"]
 
 
-def test_eerste_run_signaleert_en_senst_missie_spanning(tmp_path):
-    s = _scout(_SKILL_OK, tmp_path)
-    s._run_news(["Veja", "Moea"])
-    assert len(_signals(s)) == 2                  # twee nieuwe berichten → twee signalen
-    assert len(s._tensions) == 1                  # één gebundelde spanning (B-Corp = missie)
-    done = [e for e in s._events if e.name == "competitor_pulse_completed"][0]
-    assert done.data["new"] == 2 and done.data["mission_relevant"] == 1
 
 
-def test_tweede_run_is_stil_door_dedup(tmp_path):
-    s = _scout(_SKILL_OK, tmp_path)
-    s._run_news(["Veja", "Moea"])                 # eerste run: markeert links als gezien
-    s._events.clear(); s._tensions.clear()
-    s._run_news(["Veja", "Moea"])                 # tweede run: niets nieuws
-    assert _signals(s) == [] and s._tensions == []
-    done = [e for e in s._events if e.name == "competitor_pulse_completed"][0]
-    assert done.data["new"] == 0

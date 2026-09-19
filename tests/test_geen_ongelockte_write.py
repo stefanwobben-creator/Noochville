@@ -63,7 +63,9 @@ _WHITELIST = {
                                "lock-vrij want elk id is uniek — NIET de index, die loopt via JsonStore._save"),
     # ── daemon-lokaal: per-thread/single-writer state, geen gedeelde store ──
     "inhabitant.py":     (5, "daemon-lokaal: per-rol-thread reflect-/goal-state (eigen bestand per rol)"),
-    "roles.py":          (3, "daemon-lokaal: per-rol single-writer state (seed; +trend_reindex_last_day)"),
+    "roles.py":          (1, "daemon-lokaal: per-rol single-writer state (seed). Stond op 3; de twee "
+                             "andere schrijvers zaten in HarryHemp en WebsiteWatcherWorker, en die "
+                             "klassen zijn op 19 sept 2026 verwijderd"),
     "dagcyclus.py":      (1, "infra single-writer: timekeeper_last_day.json — één klok-thread, "
                              "verhuisd uit roles.py toen de cadans uit de facilitator kwam"),
     "village.py":        (1, "daemon single-writer: role_status.json (cockpit leest read-only)"),

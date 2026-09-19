@@ -178,14 +178,6 @@ def test_gsc_run_bucket_verdeling_locale_en_text():
     assert GscPerformanceSkill().run({"_query": q}, _gsc_ctx("https://nooch.nl/"))["locale"] == "nl"
 
 
-def test_gsc_nul_rijen_is_no_data_met_de_lag_als_reden():
-    from nooch_village.skills_impl.gsc import GscPerformanceSkill
-    r = GscPerformanceSkill().run({"_query": lambda b: {"rows": []}}, _gsc_ctx())
-    assert C(r)[0] == "leeg" and r["no_data"] is True
-    assert "0 rows" in r["reason"] and "28 days" in r["reason"] and "3 days" in r["reason"]
-    assert r["rows"] == [] and r["total"] == 0 and r["bucket_counts"] == {}   # TrendsWorker leest deze nog
-    fout = GscPerformanceSkill().run({"_query": lambda b: (_ for _ in ()).throw(RuntimeError("quota"))}, _gsc_ctx())
-    assert C(fout)[0] == "fout" and "quota" in fout["error"]
 
 
 def test_gsc_bucketgrenzen_leven_op_een_plek_en_de_planner_kent_alleen_row_limit():
@@ -229,18 +221,6 @@ def test_gsc_report_schrijft_de_nota_met_de_banden_uit_gsc(tmp_path):
     assert "vegan sneakers" in nota and "4 zoekopdrachten" in nota
 
 
-def test_trendsworker_schrijft_geen_nota_zonder_data():
-    """`_maybe_write_nota` zet geen stempel en publiceert geen gsc_nota_written als er niets is."""
-    from nooch_village.roles import TrendsWorker
-    gepubliceerd = []
-    w = SimpleNamespace(_nota_interval=0, _last_nota=0.0, log=MagicMock(), id="trends",
-                        bus=SimpleNamespace(publish=gepubliceerd.append),
-                        use_skill=lambda naam, payload: {"no_data": True, "reason": "0 rows"})
-    TrendsWorker._maybe_write_nota(w, {"rows": []})
-    assert gepubliceerd == [] and w._last_nota == 0.0
-    w.use_skill = lambda naam, payload: {"path": "data/output/gsc_nota_x.md", "today": "x", "total": 4}
-    TrendsWorker._maybe_write_nota(w, {"rows": [{"query": "a"}]})
-    assert len(gepubliceerd) == 1 and w._last_nota > 0
 
 
 # ══ 4. shopify_sales ═════════════════════════════════════════════════════════

@@ -173,17 +173,6 @@ def test_news_record_draagt_snippet_en_uitgever(tmp_path):
     assert "• Vivobarefoot opens repair hub - Footwear News (http://a) — Footwear News" in project_verslag.inhoud_tekst(res)
 
 
-def test_news_zonder_merken_is_fout_en_de_puls_slaat_eerlijk_over(tmp_path):
-    from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
-    from nooch_village.roles import ConcurrentScout
-    res = CompetitorNewsSkill().run({}, SimpleNamespace(data_dir=str(tmp_path), settings={}))
-    assert _classify(res) == "fout" and "competitor_brands" in res["error"]
-    s = SimpleNamespace(id="concurrent_scout", log=logging.getLogger("t"), _events=[])
-    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.use_skill = lambda cap, payload: (_ for _ in ()).throw(AssertionError("mag niet draaien"))
-    types.MethodType(ConcurrentScout._run_news, s)([])
-    done = [e for e in s._events if e.name == "competitor_pulse_completed"]
-    assert done and done[0].data["ok"] is False and "geen merken" in done[0].data["error"]
 
 
 # ── 3. community_listening ───────────────────────────────────────────────────
@@ -531,30 +520,6 @@ def test_rugzakken_noemen_de_trede_waar():
 
 # ── 8. trend_reindex ─────────────────────────────────────────────────────────
 
-def test_reindex_escalatie_zonder_evaluatie_is_fout_en_de_puls_meldt_de_founder(tmp_path):
-    from nooch_village.skills_impl.trend_reindex import TrendReindexSkill, _serpapi_fetch
-    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "K"})
-    skill = TrendReindexSkill()
-    bad = _serpapi_fetch(skill._cfg(ctx), get_fn=lambda p: {"error": "out of searches"})
-    res = skill.run({"terms": ["barefoot shoes"], "_fetch": bad}, ctx)
-    assert res["ok"] is False and res["error"] == res["escalate"]["reason"] and "opgehaald" in res["error"]
-    assert _classify(res) == "fout"                        # was: gelukt, ('list', 'watchlist')
-
-    # de dagpuls van HarryHemp maakt er nog steeds de founder-heads-up van
-    from nooch_village.roles import HarryHemp
-    from nooch_village.notifications import NotifStore
-    from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    reg = SkillRegistry()
-    reg.register(_Stub("trend_reindex", res))
-    rec = Record(id="harry_hemp", type=RecordType.ROLE, parent="noochville",
-                 definition=RoleDefinition(purpose="t", skills=["trend_reindex"]), source="seed")
-    rec.persona = "Sid"
-    harry = HarryHemp(rec, EventBus(name="t"),  reg,
-                      SimpleNamespace(settings={"tijdgeest_interval_seconds": "0", "reflect_interval_seconds": "0"},
-                                      data_dir=str(tmp_path), records=None, library=SimpleNamespace(status=lambda w: None)))
-    harry._trend_reindex_pulse(None)
-    fnd = NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", FOUNDER_ROLE_ID)])
-    assert len(fnd) == 1 and "trend-re-index" in fnd[0]["snippet"]
 
 
 def test_reindex_rij_draagt_oordeel_en_zin(tmp_path):

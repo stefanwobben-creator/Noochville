@@ -337,8 +337,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `claims_database.json` | `claims_db.py` |
 | `claims_labels.jsonl` | `claims_labels.py` |
 | `claims_runtime.json` | `claims_db.py` |
-| `competitor_news.json` | `roles.py` |
-| `competitor_seen.json` | `roles.py` |
 | `critic_labels.jsonl` | `missie_critic.py` |
 | `csrf.json` | `cockpit2.py` |
 | `deadsource_state.json` | `village.py` |
@@ -346,12 +344,10 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `draaistaat.jsonl` | `draaistaat.py` |
 | `feedback.json` | `inhabitant.py` |
 | `feeds.json` | `radar_store.py` |
-| `field_note_prose_last.json` | `roles.py` |
 | `founder_flow.json` | `founder_flow.py` |
 | `founder_labels.jsonl` | `founder_flow.py` |
 | `founder_park.jsonl` | `founder_park.py` |
 | `gaps.jsonl` | `gap_ledger.py` |
-| `goal_state.json` | `roles.py` |
 | `governance_examples.json` | `cli.py` |
 | `kennis_embeddings.json` | `kennis_embeddings.py` |
 | `materiaal_memo.json` | `materiaal_memo.py` |
@@ -361,15 +357,12 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
 | `pulse_heartbeat.json` | `inhabitant.py` |
-| `pulse_history.jsonl` | `roles.py` |
 | `radar_beoordelingen.jsonl` | `radar_beoordeling.py` |
 | `radar_embeddings.json` | `radar_clusters.py` |
 | `radar_nieuwheid.json` | `radar_nieuwheid.py` |
 | `relaunch_park.jsonl` | `relaunch_park.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
-| `seed_surges.json` | `roles.py` |
-| `serpapi_trends_last.json` | `roles.py` |
 | `sessions.json` | `cockpit2.py` |
 | `shopify_metrics.json` | `cli.py` |
 | `site_audit.jsonl` | `site_audit.py` |
@@ -377,7 +370,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `snake_scores.json` | `snake.py` |
 | `spelvraag_cache.json` | `spelvraag.py` |
 | `strategy.json` | `pinboard.py` |
-| `trend_reindex_last_day.json` | `roles.py` |
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
 | `villageraad.jsonl` | `villageraad.py` |
@@ -392,12 +384,12 @@ Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan 
 |---|---|
 | `buzz_observations.jsonl` | `cli.py, village.py` |
 | `buzz_query_sets.json` | `cli.py, village.py` |
-| `competitor_brands.json` | `cli.py, roles.py, village.py` |
+| `competitor_brands.json` | `cli.py, village.py` |
 | `constraints.json` | `cli.py, inhabitant.py` |
 | `groeidagboek.jsonl` | `role_proposals.py, village.py` |
 | `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, inhabitant.py, village.py` |
 | `lexicon.json` | `cli.py, village.py` |
-| `linkbuilding_targets.json` | `cli.py, cockpit2.py, roles.py` |
+| `linkbuilding_targets.json` | `cli.py, cockpit2.py` |
 | `llm_usage.jsonl` | `llm_usage.py, village.py` |
 | `system_log.jsonl` | `cockpit2.py, verslag.py, village.py` |
 | `timekeeper_last_day.json` | `dagcyclus.py, puls_wacht.py` |
@@ -418,8 +410,9 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `persona.json` |
 | `project.json` |
 | `rugzakken.json` |
+| `seed_surges.json` |
 | `trend_signals.jsonl` |
 
 
 ---
-_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 55 daarbuiten met één schrijver · 11 met meerdere · 10 zonder gevonden schrijver._
+_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 11 zonder gevonden schrijver._

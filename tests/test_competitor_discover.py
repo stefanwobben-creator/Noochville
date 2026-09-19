@@ -11,7 +11,6 @@ from nooch_village.skills_impl.competitor_discover import (
 from nooch_village.skills import resolve_source_scope
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.inbox_actions import decide_competitor_candidate
-from nooch_village.roles import ConcurrentScout
 
 
 
@@ -169,14 +168,6 @@ def _snap(cands):
 
 # ── scout-discovery-stap ────────────────────────────────────────────────────────
 
-def test_scout_gebruikt_gedeelde_competitor_store(tmp_path):
-    # 'aanbieden in de village': de scout leest de gedeelde context.competitors-store,
-    # zodat confirmed concurrenten voor élke rol beschikbaar zijn.
-    store = CompetitorBrands(str(tmp_path / "b.json"))
-    store.add_candidate("Cariuma"); store.confirm("Cariuma")
-    s = SimpleNamespace(context=SimpleNamespace(competitors=store, data_dir=str(tmp_path)))
-    bound = types.MethodType(ConcurrentScout._brands_store, s)
-    assert bound() is store and "Cariuma" in bound().confirmed()
 
 
 def test_confirmed_concurrenten_voeden_de_trends_seed(tmp_path):
@@ -200,53 +191,7 @@ def test_nieuwe_concurrent_krijgt_voorrang_via_scheduler(tmp_path):
     assert "Merrell" in chosen and "oud" not in chosen
 
 
-def test_scout_meet_marktinteresse_van_concurrenten(tmp_path):
-    # consument 1: scout leest confirmed concurrenten en meet hun volume via KE
-    store = CompetitorBrands(str(tmp_path / "b.json"))
-    store.add_candidate("Veja"); store.confirm("Veja")
-    s = SimpleNamespace()
-    s.id = "concurrent_scout"
-    s.dna = SimpleNamespace(skills=["keywords_everywhere"])
-    s.log = logging.getLogger("test.scout")
-    s._events = []
-    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.context = SimpleNamespace(settings={}, competitors=store)
-    s.use_skill = lambda cap, payload: {"keywords": [{"keyword": "Veja", "vol": 18100}]}
-    s._run_market_interest = types.MethodType(ConcurrentScout._run_market_interest, s)
-    s._run_market_interest(["Veja"], store)
-    ev = [e for e in s._events if e.name == "competitor_interest"]
-    assert ev and ev[0].data["volumes"]["Veja"] == 18100
 
 
-def test_scout_discovery_zet_kandidaten_klaar(tmp_path):
-    s = SimpleNamespace()
-    s.id = "concurrent_scout"
-    s.dna = SimpleNamespace(skills=["competitor_news", "competitor_discover"])
-    s.log = logging.getLogger("test.scout")
-    s._events = []
-    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.context = SimpleNamespace(settings={"discover_query": "best barefoot shoe brands"})   # opt-in AAN
-    s.use_skill = lambda cap, payload: {"ok": True, "candidates": [
-        {"brand": "Cariuma", "article": "art", "link": "http://a"}]}
-    s._run_discovery = types.MethodType(ConcurrentScout._run_discovery, s)
-    store = CompetitorBrands(str(tmp_path / "b.json"))
-    s._run_discovery(["Veja"], store)
-    assert store.status("Cariuma") == "candidate"
-    assert any(e.name == "competitor_candidate" for e in s._events)
 
 
-def test_scout_discovery_uit_zonder_discover_query(tmp_path):
-    # geen discover_query → opt-in staat uit: de SerpAPI-scrape draait niet, de Inoreader-feed blijft de bron
-    called = []
-    s = SimpleNamespace()
-    s.id = "concurrent_scout"
-    s.dna = SimpleNamespace(skills=["competitor_discover"])
-    s.log = logging.getLogger("test.scout")
-    s._events = []
-    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.context = SimpleNamespace(settings={})                     # géén discover_query
-    s.use_skill = lambda cap, payload: called.append(cap) or {"ok": True, "candidates": []}
-    s._run_discovery = types.MethodType(ConcurrentScout._run_discovery, s)
-    store = CompetitorBrands(str(tmp_path / "b.json"))
-    s._run_discovery(["Veja"], store)
-    assert called == []                                          # competitor_discover NIET aangeroepen

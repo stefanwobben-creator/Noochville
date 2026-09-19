@@ -18,10 +18,7 @@ from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import (Records, Secretary, Reconciler,
                                       GovernanceGate, proposal_to_dict)
 from nooch_village.models import Proposal, RecordType
-from nooch_village.roles import (
-    WebsiteWatcherWorker, Librarian, TrendsWorker,
-    Facilitator, Noochie, HarryHemp, ContentStrategist, ConcurrentScout,
-)
+from nooch_village.roles import Facilitator, Noochie
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
 from nooch_village.observers.coherence_observer import CoherenceObserver
@@ -39,17 +36,15 @@ from nooch_village.competitor_brands import CompetitorBrands
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+# De zes AI-rolklassen (WebsiteWatcherWorker, Librarian, TrendsWorker, HarryHemp,
+# ContentStrategist, ConcurrentScout) zijn op 19 sept 2026 verwijderd: hun rollen waren tussen
+# 15 en 18 september al op governance-niveau gearchiveerd, en daarmee was 1.903 van de 2.404 regels
+# in roles.py code voor inwoners die niet meer bestaan.
 CLASS_MAP = {
-    "website_watcher": WebsiteWatcherWorker,
-    "librarian":       Librarian,
-    "trends":          TrendsWorker,
     # 'facilitator' is de historische seed-id van de governance-motor (G0-G4-poort + dagcadans/dag_begint);
     # de roltekst is bewust Engels (Holacracy-Facilitator), GEEN vreemd NL-duplicaat. Niet hernoemen/verplaatsen.
     "facilitator":     Facilitator,
     "noochie":         Noochie,
-    "harry_hemp":      HarryHemp,
-    "content_strategist": ContentStrategist,
-    "concurrent_scout": ConcurrentScout,
 }
 
 
@@ -180,15 +175,6 @@ class Village:
         self.bus.subscribe("task_completed",              self._observe)
         self.bus.subscribe("pulse_completed",             self._observe)
         self.bus.subscribe("tension_sensed",              self._observe)
-        self.bus.subscribe("keyword_decided",             self._observe)
-        self.bus.subscribe("human_decision_needed",       self._observe)
-        self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
-        self.bus.subscribe("human_decision_needed",       self._on_verband_suggestion)
-        self.bus.subscribe("content_opportunity",         self._observe)
-        self.bus.subscribe("content_opportunity",         self._on_content_opportunity)
-        self.bus.subscribe("content_draft_ready",         self._observe)
-        self.bus.subscribe("content_draft_ready",         self._on_content_draft_ready)
-        self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
         self.bus.subscribe("governance_changed",          self._on_governance_changed)
         self.bus.subscribe("governance_review_requested", self._observe)
@@ -201,8 +187,6 @@ class Village:
         self.bus.subscribe("source_died",                 self._on_source_died)
         self.bus.subscribe("role_born",                   self._observe)
         self.bus.subscribe("role_born",                   self._on_role_born)
-        self.bus.subscribe("tijdgeest_pulse_completed",   self._observe)
-        self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.bus.subscribe("individuele_actie",           self._observe)
@@ -420,57 +404,9 @@ class Village:
             logging.getLogger("village.inbox").info(
                 "📝 %s stelt voor item %s (gap %s) te sluiten: %s", by, item_id, gap_key, reason)
 
-    def _on_verband_suggestion(self, e: Event) -> None:
-        """Schrijf een verband-voorstel (topic 'verband') naar de human inbox (3c).
 
-        De mens beslist later: approve schrijft het touwtje, reject laat het weg.
-        Fail-closed: zonder beide kaart-ids gebeurt er niets.
-        """
-        if e.data.get("topic") != "verband":
-            return
-        a = e.data.get("kaart_a_id")
-        b = e.data.get("kaart_b_id")
-        if not a or not b:
-            return
-        iid = self.human_inbox.add_verband(
-            a, b, e.data.get("voorstel_claim", ""), e.data.get("reason", ""))
-        logging.getLogger("village.inbox").info(
-            "📬 verband-voorstel in human_inbox: item %s (%s ↔ %s)", iid, a, b)
 
-    def _on_content_opportunity(self, e: Event) -> None:
-        """Schrijf een gespotte content-kans naar de human inbox (model C).
-        Fail-closed: zonder seed_id gebeurt er niets."""
-        seed_id = e.data.get("seed_id")
-        if not seed_id:
-            return
-        iid = self.human_inbox.add_content_suggestion(
-            seed_id, e.data.get("cluster_ids", []), e.data.get("reason", ""))
-        logging.getLogger("village.inbox").info(
-            "📬 content-kans in human_inbox: item %s (cluster '%s')", iid, seed_id)
 
-    def _on_content_draft_ready(self, e: Event) -> None:
-        """Schrijf een gegenereerde content-draft naar de human inbox, klaar om te
-        herschrijven. Fail-closed: zonder seed_id of tekst gebeurt er niets."""
-        seed_id = e.data.get("seed_id")
-        text = e.data.get("text")
-        if not seed_id or not text:
-            return
-        iid = self.human_inbox.add_content_draft(
-            seed_id, e.data.get("kind", "blog"), text,
-            e.data.get("claim_insight_ids", []))
-        logging.getLogger("village.inbox").info(
-            "📬 content-draft in human_inbox: item %s (cluster '%s')", iid, seed_id)
-
-    def _on_keyword_escalation(self, e: Event) -> None:
-        """Schrijf keyword-escalaties naar de human inbox."""
-        if e.data.get("topic") != "keyword":
-            return
-        word   = e.data.get("word", "?")
-        reason = e.data.get("reason", "")
-        demand = e.data.get("demand", {})
-        iid = self.human_inbox.add_keyword_escalation(word, reason, demand)
-        logging.getLogger("village.inbox").info(
-            "📬 keyword-escalatie in human_inbox: item %s ('%s')", iid, word)
 
     def approve_escalation(self, item_id: str, reason: str = "") -> bool:
         """Stuur governance_verdict approve voor een escalatie-item.

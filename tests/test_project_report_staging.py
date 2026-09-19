@@ -164,34 +164,6 @@ def test_poll_board_rapport_naar_staging_met_event(tmp_path, monkeypatch):
 
 # ── 6. Lara's poort: target="staging" wordt herkend en alleen gelogd — nooit dubbel schrijven ─
 
-def test_librarian_logt_staging_event_en_schrijft_niet(tmp_path):
-    from nooch_village.roles import Librarian
-    from nooch_village.models import Record, RoleDefinition, RecordType
-    from nooch_village.skills import SkillRegistry, Skill
-
-    class _CurateBoem(Skill):
-        name = "curate"
-        description = "mag voor target=staging nooit draaien"
-
-        def run(self, payload, context):
-            raise AssertionError("curate mag niet draaien: de schrijfweg is de staging-review")
-
-    bus = EventBus(name="t")
-    registry = SkillRegistry()
-    registry.register(_CurateBoem())
-    notes = NotesStore(str(tmp_path / "notes.json"))
-    rec = Record(id="librarian", type=RecordType.ROLE, parent="noochville",
-                 definition=RoleDefinition(purpose="t", skills=["curate"]), source="seed")
-    ctx = SimpleNamespace(settings={}, data_dir=str(tmp_path), records=None,
-                          library=SimpleNamespace(status=lambda w: None),
-                          lexicon=SimpleNamespace(concept_for_word=lambda w: None),
-                          notes=notes)
-    lib = Librarian(rec, bus, registry, ctx)
-    # Zelfs mét een fuzzy-veld erbij wint target="staging": alleen loggen, geen tweede schrijfweg.
-    lib._on_insight_proposed(Event("insight_proposed",
-        {"target": "staging", "project_id": "p1", "atoms": 2, "batch_id": "stg_x",
-         "fuzzy": "zou anders gecureerd en weggeschreven worden"}, "board_watch"))
-    assert notes.all() == []
 
 
 # ── 7. Backfill: dry-run telt alleen; echt maakt sets; herdraaien is idempotent ──────────────
