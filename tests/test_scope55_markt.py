@@ -79,49 +79,16 @@ _GIDS = ("x" * 250 + " Our top pick is Vivobarefoot, a British brand with wide t
          "Wildling Shoes makes minimalist shoes in Germany. Nike is only mentioned as the mainstream contrast.")
 
 
-def test_discover_geen_merknaam_leest_als_leeg_niet_als_vier():
-    res = _discover("[]", text=_GIDS)
-    assert res["no_data"] and res["candidates"] == [] and res["gescand"] == 1
-    assert res["reason"] == "1 of 1 guides read, no brand names"
-    assert _classify(res) == "leeg"                 # was: gelukt, archetype ('metric', 'guides')
-
-
-def test_discover_zonder_model_is_een_fout():
-    res = _discover(None, text=_GIDS)
-    assert res["ok"] is False and "no model" in res["error"]
-    assert _classify(res) == "fout"
-
-
-def test_discover_zonder_gidsen_is_leeg():
-    res = _discover("[]", text=_GIDS, guides=[])
-    assert res["no_data"] and "no guide articles" in res["reason"]
 
 
 
 
-def test_discover_prompt_is_engels_json_met_grounding_en_ladder():
-    from nooch_village.skills_impl import competitor_discover as cd
-    assert "Return ONLY a JSON array" in cd._PROMPT and "literally appear" in cd._PROMPT
-    assert "Hieronder" not in cd._PROMPT
-    skill = cd.CompetitorDiscoverSkill()
-    gezien = {}
-
-    def fake_reason(prompt, **kw):
-        gezien.update(kw)
-        return "[]"
-
-    with patch.object(skill, "_serpapi_guides", return_value=[{"title": "g", "link": "https://g"}]), \
-         patch.object(skill, "_fetch_text", return_value=_GIDS), \
-         patch("nooch_village.llm.reason", fake_reason):
-        skill.run({"topic": "barefoot", "ladder": "mistral:x"}, SimpleNamespace(settings={}))
-    assert gezien["json_mode"] is True and gezien["max_tokens"] == cd._MAX_TOKENS
-    assert gezien["ladder"] == "mistral:x" and gezien["call_site"] == "skill_competitor_discover"
 
 
-def test_discover_parse_leest_json_en_kommalijst():
-    from nooch_village.skills_impl.competitor_discover import _parse_brand_list
-    assert _parse_brand_list('["Veja", "Cariuma", "Nooch"]', []) == ["Veja", "Cariuma"]
-    assert _parse_brand_list("Veja, Cariuma", ["Veja"]) == ["Cariuma"]
+
+
+
+
 
 
 # ── 2. competitor_news ───────────────────────────────────────────────────────
@@ -140,15 +107,6 @@ _RSS_GN = ('<?xml version="1.0"?><rss><channel><item>'
            '</item></channel></rss>')
 
 
-def test_news_niets_gevonden_leest_als_leeg_niet_als_vier_merken(tmp_path):
-    from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
-    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={})
-    with patch("requests.get", return_value=_resp(_RSS_LEEG)), patch("time.sleep"):
-        res = CompetitorNewsSkill().run({"brands": ["Vivobarefoot", "Wildling", "Xero", "Vibram"]}, ctx)
-    assert res["no_data"] and res["items"] == [] and res["total"] == 0
-    assert res["reason"].startswith("no news about Vivobarefoot, Wildling, Xero, Vibram in the last 365 days")
-    assert res["_brands"] == ["Vivobarefoot", "Wildling", "Xero", "Vibram"] and "brands" not in res
-    assert _classify(res) == "leeg"                 # was: gelukt, ('list', 'brands') → "4 results"
 
 
 
@@ -179,81 +137,16 @@ def _rij(n, title="Best barefoot shoes review"):
             "context_id": f"V{n}", "context_title": title, "query": "barefoot shoes"}
 
 
-def test_listening_stil_leest_als_leeg_met_de_samenvatting(tmp_path):
-    from nooch_village.skills_impl import buzz_fetchers
-    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
-    with patch.dict(buzz_fetchers.FETCHERS, {"youtube": _spy(), "bluesky": _spy()}):
-        res = CommunityListeningSkill().run({"query_set_id": "barefoot_ervaringen"}, _listen_ctx(tmp_path))
-    assert res["ok"] and res["no_data"] and res["reason"] == "youtube: 0 nieuw / bluesky: 0 nieuw / reddit: inactief"
-    assert _classify(res) == "leeg"                 # was: gelukt, ('dictlist', 'counts')
-
-
-def test_listening_alle_platforms_geweigerd_is_fout(tmp_path):
-    from nooch_village.skills_impl import buzz_fetchers
-    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
-    with patch.dict(buzz_fetchers.FETCHERS, {"youtube": _spy(refuse="BUZZ_NO_KEY"),
-                                             "bluesky": _spy(refuse="BUZZ_RATE_LIMITED")}):
-        res = CommunityListeningSkill().run({"query_set_id": "barefoot_ervaringen"}, _listen_ctx(tmp_path))
-    assert res["ok"] is False and res["refuse"] == "BUZZ_NO_KEY" and "BUZZ_RATE_LIMITED" in res["error"]
-    assert _classify(res) == "fout"
 
 
 
 
-def test_listening_cache_sleutel_per_set(tmp_path):
-    """Dezelfde query in twee sets → twee fetches: de discovery-set van een project deelt zijn 6u-cache
-    niet meer met de monitor-set (anders kreeg het project 0 rijen als de puls al draaide)."""
-    from nooch_village.buzz_observations import BuzzCache
-    from nooch_village.skills_impl.buzz_fetchers.bluesky import BlueskyFetcher
-    cache = BuzzCache(str(tmp_path / "cache.json"))
-    ctx = SimpleNamespace(settings={}, data_dir=str(tmp_path))
-    calls = []
-
-    def get(url, params=None, headers=None, timeout=None):
-        calls.append(params["q"])
-        return SimpleNamespace(status_code=200, json=lambda: {"posts": []}, raise_for_status=lambda: None)
-
-    with patch("requests.get", get), patch("time.sleep"):
-        BlueskyFetcher().fetch("barefoot_ervaringen", {"active": True, "queries": ["barefoot"]}, ctx, cache, {"now": 1e9})
-        BlueskyFetcher().fetch("discover:x", {"active": True, "queries": ["barefoot"]}, ctx, cache, {"now": 1e9})
-        BlueskyFetcher().fetch("discover:x", {"active": True, "queries": ["barefoot"]}, ctx, cache, {"now": 1e9})
-    assert calls == ["barefoot", "barefoot"]         # per set één keer; de derde zit in de cache
 
 
-def test_listening_validate_noemt_de_bestaande_sets_en_laat_discovery_door(tmp_path):
-    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
-    ctx = _listen_ctx(tmp_path)
-    reden = CommunityListeningSkill().validate_payload({"query_set_id": "verzonnen"}, ctx)
-    assert reden and "bestaande sets: barefoot_ervaringen" in reden[0] and "`queries`" in reden[0]
-    assert CommunityListeningSkill().validate_payload({"query_set_id": "verzonnen", "queries": ["x"]}, ctx) == []
-    # run() volgt dezelfde regel: onbekend id mét queries = discovery
-    from nooch_village.skills_impl import buzz_fetchers
-    with patch.dict(buzz_fetchers.FETCHERS, {"youtube": _spy(), "bluesky": _spy()}):
-        res = CommunityListeningSkill().run({"query_set_id": "verzonnen", "queries": ["barefoot slijtage"]}, ctx)
-    assert res["query_set_id"] == "discover:barefoot-slijtage"
-    with patch.dict(buzz_fetchers.FETCHERS, {"youtube": _spy(), "bluesky": _spy()}):
-        res = CommunityListeningSkill().run({"query_set_id": "verzonnen"}, ctx)
-    assert res["refuse"] == "BUZZ_NO_SET" and "barefoot_ervaringen" in res["error"]
 
 
-def test_youtube_commentthreads_fout_lekt_geen_sleutel(tmp_path, caplog, monkeypatch):
-    """Het tweede HTTP-pad (commentThreads) bouwde zijn melding nog met raise_for_status (URL mét key=)."""
-    from nooch_village.buzz_observations import BuzzCache
-    from nooch_village.skills_impl.buzz_fetchers.youtube import YouTubeFetcher
-    monkeypatch.setenv("YOUTUBE_API_KEY", _GEHEIM)
-    ctx = SimpleNamespace(settings={}, data_dir=str(tmp_path))
 
-    def get(url, params=None, headers=None, timeout=None):
-        if "/search" in url:
-            return SimpleNamespace(status_code=200, text="", json=lambda: {"items": [{"id": {"videoId": "V"}, "snippet": {"title": "t"}}]})
-        return SimpleNamespace(status_code=500, reason="Server Error", text=f"boom key={_GEHEIM}",
-                               raise_for_status=lambda: (_ for _ in ()).throw(RuntimeError(f"500 for url ?key={_GEHEIM}")))
 
-    with patch("requests.get", get), caplog.at_level(logging.WARNING):
-        res = YouTubeFetcher().fetch("s", {"active": True, "queries": ["x"]}, ctx, BuzzCache(str(tmp_path / "c.json")), {"now": 1e9})
-    assert res["rows"] == []
-    assert any("BUZZ_FETCH_FAILED" in r.getMessage() for r in caplog.records)
-    assert _GEHEIM not in caplog.text
 
 
 

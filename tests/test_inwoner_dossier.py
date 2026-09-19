@@ -244,9 +244,12 @@ def test_elke_geregistreerde_skill_heeft_mensentaal():
 
 def test_label_valt_terug_op_de_omschrijving():
     assert skill_labels.label("bestaat_niet_123") == "bestaat_niet_123"
-    assert skill_labels.label("community_listening").startswith("Listens")
+    # Stond op community_listening; die skill is weg (fase 4). Elke levende skill met een
+    # label doet het hier: de eis is dat een BEKENDE naam zijn omschrijving geeft.
+    assert skill_labels.label("claims_check") != "claims_check"
     # De matching-brug blijft Nederlands zolang de accountability-teksten dat zijn (MATCH_NL).
-    assert skill_labels.match_label("community_listening").startswith("Luistert")
+    # Stond ook op community_listening; nu op een skill die nog bestaat.
+    assert skill_labels.match_label("claims_check").startswith("Toetst")
 
 
 def test_uitvoering_blijft_op_rol_dna():

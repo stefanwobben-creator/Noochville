@@ -60,7 +60,6 @@ from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_C
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
-from nooch_village.radar_clusters import ClusterBesluitStore
 from nooch_village.radar_store import RadarStore
 from nooch_village.registry_factory import shared_registry
 from functools import lru_cache
@@ -163,7 +162,6 @@ class _Stores:
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
         # Wat de founder met een opkomend onderwerp deed (project of watch). Geen oordeel-label:
         # clustering is berekend, de projectkeuze is strategie — zie radar_clusters.
-        self.radar_besluiten = ClusterBesluitStore(os.path.join(dd, "radar_clusters.json"))
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
         self.library = Library(os.path.join(dd, "library.json"))   # beschermde woordenschat (Lara cureert)
         self.nominations = NominationQueue(os.path.join(dd, "keyword_nominaties.json"))   # fase 4: pending-queue
@@ -337,7 +335,6 @@ from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.wiki import render_pagina
 from nooch_village.views.rapport import render_projectrapport
-from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
 from nooch_village.library import Library
@@ -2544,38 +2541,10 @@ def _act_role_focus(c):
         return nxt, msg
 
 
-def _act_radar_set(c, status: str, ok_msg: str):
-        """Radar-signaal goedkeuren/wegklikken. Poort op de EIGEN rol van het item (niet op een
-        meegestuurde rol), zodat alleen de rolvervuller of Circle Lead cureert."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        st.radar.set_status(g("rid"), status)
-        return nxt, ok_msg
 
 
-def _act_radar_dismiss(c):
-        return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
 
 
-def _act_radar_merge(c):
-        """Drag&drop op /signals: twee goedgekeurde signalen worden er één, met de gekozen
-        hoofdtekst uit de modal. Zelfde poort als de andere radar-curatie, op BEIDE signalen."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        doel, bron = st.radar.get(g("target_rid")), st.radar.get(g("source_rid"))
-        if doel is None or bron is None:
-            return nxt, "✗ onbekend radar-signaal"
-        for it in (doel, bron):
-            _deny = _role_gate(it["role"], username, st)
-            if _deny:
-                return nxt, _deny
-        ok = st.radar.merge_signals(g("target_rid"), g("source_rid"), g("tekst"))
-        return nxt, ("🧩 signals merged — the provenance of both travels along"
-                     if ok else "✗ merging failed")
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -3821,30 +3790,8 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ not found")
 
 
-# De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze
-# doelwitten (skill `linkbuilding_targets`) en het oordeel "wel/niet achteraan" is operationeel werk
-# binnen die rol. Ook hier stond de omgekeerde check; zie `_act_acc_check` voor wat daar mis aan was.
-
-def _act_link_pursue(c):
-        # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
-        deny = _role_gate("concurrent_scout", c.username, c.st)
-        if deny:
-            return c.nxt, f"✗ {deny}"
-        from nooch_village.link_targets import LinkTargets
-        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
-        ok = store.pursue((c.g("link") or "").strip())
-        return c.nxt, ("→ being pitched" if ok else "✗ not found")
 
 
-def _act_link_ignore(c):
-        # AUTHZ: rolvervuller of Circle Lead — zie het blok hierboven.
-        deny = _role_gate("concurrent_scout", c.username, c.st)
-        if deny:
-            return c.nxt, f"✗ {deny}"
-        from nooch_village.link_targets import LinkTargets
-        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
-        ok = store.ignore((c.g("link") or "").strip())
-        return c.nxt, ("genegeerd" if ok else "✗ not found")
 
 
 # De twee bron-takken: AUTHZ: anchor-lead — een bron aanzetten bepaalt welke externe API's het HELE
@@ -5327,8 +5274,6 @@ ACTIONS = {
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
     "source_deactivate": _act_source_deactivate,
-    "link_pursue": _act_link_pursue,
-    "link_ignore": _act_link_ignore,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -5348,8 +5293,6 @@ ACTIONS = {
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
     "role_focus": _act_role_focus,
-    "radar_dismiss": _act_radar_dismiss,
-    "radar_merge": _act_radar_merge,
     "middel_remove": _act_middel_remove,
     "skilllink_add": _act_skilllink_add,
     "means_gap_add": _act_means_gap_add,
@@ -5826,10 +5769,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
                 self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
-                return
-            if path == "/linkbuilding":
-                # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
-                self._send(render_linkbuilding(data_dir, csrf_token=effective_csrf))
                 return
             if path == "/woordenschat":
                 # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid; met

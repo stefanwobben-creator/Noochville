@@ -54,8 +54,6 @@ BRONNEN: dict[str, str] = {
     "openlibrary_search_inside": ("passages from inside scanned books that contain the term, mostly "
                                   "English — use the exact wording a book would use"),
     "ngram_culture": "word frequency in books over decades, per language corpus — pick the corpus",
-    "community_listening": "what people say on Bluesky/YouTube — the language people actually use",
-    "competitor_news": "news about known competitor brands, keyless",
     "web_zoek": "the open web: searches a term and reads the top pages, any language",
     "haal_pagina": "reads ONE public page you already have the URL of",
     "google_trends": "search volume, per country and language",

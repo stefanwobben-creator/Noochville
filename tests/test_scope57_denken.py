@@ -213,23 +213,6 @@ _OORDEEL = json.dumps({"verdict": "needs revision", "weakest_claim": "45% CO2 sa
 
 
 
-def test_tegenspraak_leest_beide_talen_en_de_critic_leest_het_engelse_oordeel():
-    from nooch_village import missie_critic as mc
-    from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
-    with patch("nooch_village.llm.reason", return_value='{"oordeel":"houdt stand","ongegrond":[]}'):
-        uit = TegenspraakSkill().run({"tekst": "x"}, None)
-    assert uit["oordeel"] == "holds" and uit["text"].startswith("VERDICT: holds")
-
-    class _Sug:
-        def run(self, payload, context=None):
-            return {"ok": True, "oordeel": "needs revision", "ongegrond": [], "revisie": "add a line"}
-    ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_Sug())
-    assert ok is True and "add a line" in waarom
-
-    class _Ok:
-        def run(self, payload, context=None):
-            return {"ok": True, "oordeel": "holds", "ongegrond": [], "text": "VERDICT: holds"}
-    assert mc._gegrond("doc", ["d1"], {}, skill=_Ok()) == (True, "VERDICT: holds")
 
 
 def test_tegenspraak_weigert_placeholder_bewijs():

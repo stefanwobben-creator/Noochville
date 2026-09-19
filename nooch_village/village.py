@@ -70,14 +70,9 @@ class Village:
         self.context.links = AITaskStore(os.path.join(self.context.data_dir, "ai_tasks.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
-        # Community-listening (Billy Buzz): configureerbare zoek-sets + observatie-store.
-        from nooch_village.buzz_query_sets import BuzzQuerySets, seed_buzz_query_sets
-        from nooch_village.buzz_observations import BuzzObservationStore
-        self.context.buzz_query_sets = BuzzQuerySets(
-            os.path.join(self.context.data_dir, "buzz_query_sets.json"))
-        seed_buzz_query_sets(self.context.buzz_query_sets)
-        self.context.buzz_observations = BuzzObservationStore(
-            os.path.join(self.context.data_dir, "buzz_observations.jsonl"))
+        # Community-listening (Billy Buzz) hing hier: zoek-sets + observatie-store voor Reddit,
+        # YouTube en Bluesky. Weg op 19 september 2026 (fase 4). De 5,4 MB aan observaties in
+        # data/buzz_observations.jsonl blijft staan als historie; er komt niets meer bij.
         # Gedeelde concurrent-store: confirmed merken die de scout heeft laten bevestigen
         # zijn nu leesbaar voor élke rol (voor KE/SerpAPI-analyses).
         self.context.competitors = CompetitorBrands(

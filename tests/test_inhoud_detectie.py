@@ -112,27 +112,8 @@ def test_opmaak_hint_verandert_de_detectie_niet():
 
 
 
-def test_critic_telt_een_gerapporteerde_lege_taak_niet_als_gat():
-    """DE regel waar het om draait: een project waarin alles in orde bleek mag niet op de
-    substantieel-as zakken juist omdát er niets mis was."""
-    from nooch_village import missie_critic as mc
-    gemeld = {"id": "c", "items": [{"id": "i1", "text": "Toets de copy", "done": True,
-                                    "leeg": True, "leeg_bron": "gemeld"}]}
-    gat = {"id": "c", "items": [{"id": "i1", "text": "Toets de copy", "done": True,
-                                 "leeg": True, "leeg_bron": "geen_inhoud"}]}
-    assert mc._lege_items(gemeld) == []                          # antwoord, geen gat
-    assert len(mc._lege_items(gat)) == 1
-    doc = "x" * 900
-    assert mc._substantieel(doc, ["bewijs"], gemeld)[0] is True
-    assert mc._substantieel(doc, ["bewijs"], gat)[0] is False
 
 
-def test_oude_items_zonder_bron_blijven_een_gat():
-    """Terugwaartse compatibiliteit: een item van vóór deze wijziging draagt geen `leeg_bron`.
-    Dat als 'gemeld' lezen zou historische gaten stilzwijgend witwassen."""
-    from nooch_village import missie_critic as mc
-    oud = {"id": "c", "items": [{"id": "i", "text": "t", "done": True, "leeg": True}]}
-    assert len(mc._lege_items(oud)) == 1
 
 
 # ── 6. De regressie die dit alles veroorzaakte ─────────────────────────────

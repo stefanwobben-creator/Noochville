@@ -68,24 +68,30 @@ def fetch_items(url: str) -> list:
 def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, mission: str = "",
                       limit: int = 40, own_brand_terms=("nooch", "nooch.earth"), llm_reason=None,
                       focus: str = "competitor") -> dict:
-    """Verwerk de items van één feed naar de RadarStore van de gekoppelde rol (status 'wacht'). Strenge
-    distill (precisie), idempotent op artikel-URL, fail-closed per item. Houdt een trace bij (--debug)."""
-    from nooch_village.news_distill import distill_articles
-    from nooch_village.competitor_brands import CompetitorBrands
+    """Zet de items van één feed ONGEFILTERD in de swipefile. Ontdubbeld op artikel-URL, meer niet.
+
+    TOT 19 SEPTEMBER 2026 STOND HIER EEN POORT. Elk artikel ging langs `news_distill` — een strenge
+    LLM-toets op precisie — en alleen wat daar doorheen kwam werd een signaal met status 'wacht'.
+    Dat model ging uit van een mens die de wachtrij beoordeelt. Die beoordeling is er nooit gekomen:
+    329 signalen stonden onbeoordeeld, de oudste van 7 juli. Stefans besluit: geen poort, geen
+    wachtrij, geen goedkeuren per signaal. De feed landt, en het maandrapport (nog te bouwen, in de
+    geplande-taak-mechaniek) leegt de bak.
+
+    Wat daarmee ook verdween: de `kind`-classificatie en de `rationale` die het model schreef. Een
+    signaal draagt nu zijn eigen titel als inhoud. Dat is minder, en dat hoort zo — een label dat
+    niemand leest is duurder dan geen label.
+
+    De eigen-merk-markering blijft wél: een artikel OVER Nooch is reputatie, geen marktsignaal, en
+    dat onderscheid kost geen modelronde.
+
+    `mission`, `llm_reason` en `focus` blijven in de signatuur staan zolang de aanroepers
+    (`ingest_feed`, `ingest_all`, het CLI-pad) ze doorgeven; ze doen niets meer."""
     from nooch_village.radar_store import RadarStore
 
     radar = RadarStore(os.path.join(data_dir, "radar.json"))
-    try:
-        known = CompetitorBrands(os.path.join(data_dir, "competitor_brands.json")).confirmed()
-    except Exception:
-        known = []
-
     res = {"fetched": len(items), "blocked": 0, "seen": 0, "distilled": 0,
            "proposed": 0, "own_brand": 0, "trace": []}
-    # Eerst filteren en de bruikbare artikelen verzamelen; daarna in BATCHES destilleren (founder 23 jul,
-    # tegen de 20/dag-LLM-cap): ~40 losse calls per feed worden zo ~4.
-    werk = []                                                    # [(link, title, art)]
-    gezien_nu: set = set()                                        # dubbele URL's BINNEN deze batch ook ontdubbelen
+    gezien_nu: set = set()                       # dubbele URL's BINNEN deze batch ook ontdubbelen
     for it in (items[:limit] if limit else items):
         link = (it.get("url") or "").strip()
         title = (it.get("title") or "").strip()
@@ -101,28 +107,17 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
             res["trace"].append((title[:75], "al gezien"))
             continue
         gezien_nu.add(link)
-        werk.append((link, title, _to_article(it)))
-
-    arts = [w[2] for w in werk]
-    resultaten = distill_articles(arts, mission=mission, known_brands=known, llm_reason=llm_reason,
-                                  strict=True, focus=focus)
-    for (link, title, art), d in zip(werk, resultaten):
-        radar.mark_seen(link)                                   # verwerkt = gezien (ook bij 'geen')
-        if not d:
-            res["trace"].append((title[:75], "geen"))
-            continue
-        res["distilled"] += 1
-        # Eigen-merk-signaal apart labelen: een artikel OVER Nooch is reputatie, geen concurrent-zet.
+        art = _to_article(it)
+        radar.mark_seen(link)
         blob = (title + " " + art["content"]).lower()
         own_hit = any(t.lower() in blob for t in own_brand_terms)
         if own_hit:
             res["own_brand"] += 1
-        rationale = ("[eigen merk] " if own_hit else "") + (d.get("rationale") or "")
-        if radar.add(role=role, feed=feed, kind=d["kind"], content=d["content"],
-                     rationale=rationale, source=art["brand"], link=link,
+        if radar.add(role=role, feed=feed, kind="signaal", content=title,
+                     rationale=("[eigen merk]" if own_hit else ""), source=art["brand"], link=link,
                      published_at=art.get("date", "")):
             res["proposed"] += 1
-        res["trace"].append((title[:75], d["kind"] + (" [eigen merk]" if own_hit else "")))
+        res["trace"].append((title[:75], "opgeslagen" + (" [eigen merk]" if own_hit else "")))
     return res
 
 

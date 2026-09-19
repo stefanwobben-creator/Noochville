@@ -98,119 +98,16 @@ def test_claims_check_levert_de_betekenis_zelf_mee():
     assert uit["no_data"] is True and "GEEN goedkeuring" in uit["reason"]
 
 
-# ── 1. `overgeslagen` als citeerbaar feit ───────────────────────────────────
-
-def test_wat_niet_gedraaid_heeft_is_zelf_bewijs():
-    """De pas verzamelde die lijst al en gooide 'm weg vóór hij bewijs werd, zodat de synthese moest
-    AFLEIDEN dat een bron ontbrak — en daarop degradeerde."""
-    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
-    assert 'f"niet gedraaid — {reden}"' in src
-    i = src.index("for reden in uit[\"overgeslagen\"]:")
-    assert 'uit["bewijs"].append' in src[i:i + 400]
-
-
-# ── 2. De read-only paginacheck ─────────────────────────────────────────────
-
-def test_de_paginacheck_gebruikt_de_leeskant_niet_de_skill():
-    """`claims_site_scan` maakt in zijn volle vorm bordtaken aan, schrijft een weekmarker en heeft
-    een week-poort. Die bijwerkingen horen bij de wekelijkse scan, niet bij één vraag."""
-    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
-    kern = src[src.index("def _paginacheck"):src.index("def _payload_voor")]
-    assert "scan_paginas" in kern and "verzamel(" in kern
-    assert "ClaimsSiteScanSkill" not in kern          # niet de skill zelf
-    assert "markeer_week" not in kern and "week_gedaan" not in kern
-    assert "modelpas=False" in kern                   # geen LLM-recall die kandidaten raadt
-
-
-def test_de_paginacheck_meldt_ook_een_niet_gevonden_term():
-    """'de term staat er niet' is een even bruikbaar feit als 'de term staat op pagina X' — en zonder
-    die regel moet de synthese de afwezigheid weer afleiden."""
-    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
-    assert "is op geen van de" in src and "gescande" in src
-
-
-def test_de_paginacheck_breekt_de_pas_niet(monkeypatch):
-    """Fail-soft mét een reden die meereist. Gestubd, want een test hoort nooit de echte site te
-    raken — mijn eerste versie deed dat wél (een niet-bestaande data_dir valt terug op de repo-db,
-    waarna `verzamel` gewoon nooch.earth ophaalde)."""
-    from types import SimpleNamespace
-    from nooch_village import onderzoekspas as op
-
-    def _stuk(*a, **k):
-        raise RuntimeError("site onbereikbaar")
-
-    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.verzamel", _stuk)
-    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
-    regels, weg = op._paginacheck(inh, "term")
-    assert regels == [] and "site onbereikbaar" in weg
-
-
-def test_de_paginacheck_maakt_van_de_waarneming_bewijsregels(monkeypatch):
-    from types import SimpleNamespace
-    from nooch_village import onderzoekspas as op
-
-    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.scan_paginas",
-                        lambda db: [{"url": "https://x/faq", "label": "faq"}])
-    monkeypatch.setattr(
-        "nooch_village.skills_impl.claims_site_scan.verzamel",
-        lambda paginas, db, **k: ([{"pagina": "faq", "term": "duurzaam", "stoplicht": "red"}],
-                                  [], {"faq": "onze schoenen zijn plasticvrij"}, {}))
-    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
-
-    regels, weg = op._paginacheck(inh, "plasticvrij")
-    citaten = [r["citaat"] for r in regels]
-    assert any("staat op pagina 'faq'" in c for c in citaten)
-    assert weg == ""
-
-    afwezig, _ = op._paginacheck(inh, "mycelium")
-    assert any("is op geen van de 1 gescande pagina's aangetroffen" in r["citaat"] for r in afwezig)
 
 
 
-# ── De ruis die ik zelf toevoegde ───────────────────────────────────────────
-
-def test_de_paginacheck_neemt_alleen_bevindingen_over_DEZE_claim_mee(monkeypatch):
-    """Eerst nam ik de eerste vier bevindingen van de hele site. Elk voorstel kreeg daardoor dezelfde
-    home-page-bevindingen mee ('planet-safe' rood, 'zero waste' rood) ongeacht wat er onderzocht
-    werd. Gemeten: bak B ging van 7 kandidaten naar 0 — de relevante regel stond er wél maar
-    verdronk in ruis die de critic terecht als scope-drift las.
-
-    Zelf toegevoegde ruis is duurder dan een ontbrekende bron: de bron laat een gat achter dat de
-    synthese kan benoemen, de ruis laat een voorstel zakken op iets dat er niet toe doet."""
-    from types import SimpleNamespace
-    from nooch_village import onderzoekspas as op
-
-    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.scan_paginas",
-                        lambda db: [{"url": "https://x/p", "label": "product"}])
-    monkeypatch.setattr(
-        "nooch_village.skills_impl.claims_site_scan.verzamel",
-        lambda paginas, db, **k: (
-            [{"pagina": "home", "term": "planet-safe / planet-friendly", "stoplicht": "red"},
-             {"pagina": "home", "term": "zero waste", "stoplicht": "red"},
-             {"pagina": "product", "term": "plasticvrij / plastic free", "stoplicht": "orange"}],
-            [], {"product": "onze schoenen zijn plasticvrij"}, {}))
-    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
-
-    citaten = [r["citaat"] for r in op._paginacheck(inh, "plasticvrij")[0]]
-    assert any("staat op pagina 'product'" in c for c in citaten)
-    assert any("plasticvrij / plastic free" in c for c in citaten)     # raakt de claim
-    assert not any("planet-safe" in c for c in citaten)                # andere claim, andere pagina
-    assert not any("zero waste" in c for c in citaten)
 
 
-def test_het_negatieve_feit_blijft_ook_zonder_relevante_bevindingen(monkeypatch):
-    """'de term staat er niet' is zelf signaal en mag niet met de ruis mee weggefilterd worden."""
-    from types import SimpleNamespace
-    from nooch_village import onderzoekspas as op
 
-    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.scan_paginas",
-                        lambda db: [{"url": "https://x/p", "label": "product"}])
-    monkeypatch.setattr(
-        "nooch_village.skills_impl.claims_site_scan.verzamel",
-        lambda paginas, db, **k: ([{"pagina": "home", "term": "zero waste", "stoplicht": "red"}],
-                                  [], {"product": "geen enkele match hier"}, {}))
-    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
 
-    citaten = [r["citaat"] for r in op._paginacheck(inh, "mycelium")[0]]
-    assert any("is op geen van de 1 gescande pagina's aangetroffen" in c for c in citaten)
-    assert not any("zero waste" in c for c in citaten)
+
+
+
+
+
+

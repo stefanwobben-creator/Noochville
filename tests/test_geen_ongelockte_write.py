@@ -53,9 +53,7 @@ _WHITELIST = {
     "lexicon.py":        (1, "single-writer: seed + Librarian-daemon"),
     "monitoring.py":     (1, "single-writer: alleen de daemon"),
     "competitor_brands.py":     (1, "single-writer: alleen de daemon"),
-    "competitor_news_store.py": (1, "single-writer: alleen de daemon"),
     "deadsource.py":     (1, "single-writer: alleen de daemon"),
-    "link_targets.py":   (1, "single-writer: alleen de daemon"),
     "seed_surge_store.py": (1, "single-writer: alleen de daemon"),
     "keyword_scheduler.py": (1, "single-writer: alleen een daemon-skill"),
     "skills_impl/claims_site_scan.py": (1, "daemon-lokaal: weekmarker van de compliance-scan, één schrijver"),
@@ -79,7 +77,6 @@ _WHITELIST = {
     # plaats van stil door te gaan, is precies waarvoor `test_whitelist_is_actueel` bestaat.
     "feedback.py":       (1, "dormant: legacy cockpit1"),
     "governance_examples.py": (1, "dormant: legacy cockpit1 + handmatige CLI"),
-    "news_distill.py":   (1, "dormant: legacy cockpit1"),
     "pinboard.py":       (1, "dormant: demo-only (discovery_board)"),
     "cli.py":            (1, "eenmalig CLI-commando (shopify_metrics), geen concurrency-store"),
 }

@@ -36,7 +36,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/goal` | `render_goal` | `nooch_village/views/doelen.py` |
 | `/site-audit` | `render_site_audit` | `nooch_village/views/site_audit.py` |
 | `/bronnen` | `render_bronnen` | `nooch_village/views/bronnen.py` |
-| `/linkbuilding` | `render_linkbuilding` | `nooch_village/views/linkbuilding.py` |
 | `/woordenschat` | `render_woordenschat` | `nooch_village/views/woordenschat.py` |
 | `/keywords` | `render_keyword_lens` | `nooch_village/views/keyword_lens.py` |
 | `/long-term-trends` | `(inline)` | `cockpit2.py` |
@@ -145,8 +144,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
 | `source_deactivate` | `_act_source_deactivate` |
-| `link_pursue` | `_act_link_pursue` |
-| `link_ignore` | `_act_link_ignore` |
 | `ai_reply` | `_act_ai_reply` |
 | `proj_feed` | `_act_proj_feed` |
 | `checklist_add` | `_act_checklist_add` |
@@ -165,8 +162,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `role_assign` | `_act_role_assign` |
 | `role_unassign` | `_act_role_unassign` |
 | `role_focus` | `_act_role_focus` |
-| `radar_dismiss` | `_act_radar_dismiss` |
-| `radar_merge` | `_act_radar_merge` |
 | `middel_remove` | `_act_middel_remove` |
 | `skilllink_add` | `_act_skilllink_add` |
 | `means_gap_add` | `_act_means_gap_add` |
@@ -254,7 +249,6 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `doelen` | `DoelStore` | `doelen.json` |
 | `copy_stack` | `CopyStackConfig` | `copy_stack.json` |
 | `radar` | `RadarStore` | `radar.json` |
-| `radar_besluiten` | `ClusterBesluitStore` | `radar_clusters.json` |
 | `kennisbank` | `KennisbankStore` | `kennisbank.json` |
 | `library` | `Library` | `library.json` |
 | `nominations` | `NominationQueue` | `keyword_nominaties.json` |
@@ -273,15 +267,12 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `autonomie_signaal.jsonl` | `zelf_verwerking.py` |
 | `belofte_grafen.json` | `cockpit2.py` |
 | `board_pulse.jsonl` | `board_loop.py` |
-| `buzz_observations.jsonl` | `village.py` |
-| `buzz_query_sets.json` | `village.py` |
 | `checklist_suggesties.jsonl` | `checklist_vorm.py` |
 | `claims_database.json` | `claims_db.py` |
 | `claims_labels.jsonl` | `claims_labels.py` |
 | `claims_runtime.json` | `claims_db.py` |
 | `competitor_brands.json` | `village.py` |
 | `constraints.json` | `cli.py` |
-| `critic_labels.jsonl` | `missie_critic.py` |
 | `csrf.json` | `cockpit2.py` |
 | `deadsource_state.json` | `village.py` |
 | `decision_sheets.jsonl` | `decision_sheets.py` |
@@ -290,7 +281,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `gaps.jsonl` | `gap_ledger.py` |
 | `governance_examples.json` | `cli.py` |
 | `kennis_embeddings.json` | `kennis_embeddings.py` |
-| `linkbuilding_targets.json` | `cockpit2.py` |
 | `materiaal_memo.json` | `materiaal_memo.py` |
 | `meta.json` | `epic.py` |
 | `noochie_daily.json` | `roles.py` |
@@ -298,9 +288,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
-| `radar_beoordelingen.jsonl` | `radar_beoordeling.py` |
-| `radar_embeddings.json` | `radar_clusters.py` |
-| `radar_nieuwheid.json` | `radar_nieuwheid.py` |
 | `relaunch_park.jsonl` | `relaunch_park.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
@@ -313,7 +300,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
 | `villageraad.jsonl` | `villageraad.py` |
-| `voorstellen.jsonl` | `onderzoekspas.py` |
 
 
 ### (d2) Meerdere schrijvers — eigenaarschap niet af te leiden
@@ -345,4 +331,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_48 routes · 157 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_47 routes · 153 dispatch-acties · 27 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

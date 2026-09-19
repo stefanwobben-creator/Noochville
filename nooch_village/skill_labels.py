@@ -13,10 +13,7 @@ from __future__ import annotations
 
 LABELS: dict[str, str] = {
     # ── Listening and tracking ──────────────────────────────────────────────
-    "community_listening": "Listens on Reddit, Bluesky and YouTube to what people actually say",
     "trustpilot_reviews": "Reads a brand's Trustpilot reviews, stars and all",
-    "competitor_news": "Follows the news about our competitors",
-    "competitor_discover": "Spots new brands appearing on our field",
     "pappers_financials": "Reads a French competitor's filed revenue history and its trend",
     "gdelt_tone": "Measures how the world press writes about our themes",
     "trends_categorie": "Tracks how much our themes are searched for",
@@ -125,10 +122,7 @@ def ontbrekend(registry=None) -> list[str]:
 # Daarom deze tweede kaart: ALLEEN voor matchen, nooit voor weergave. Hij mag weg zodra de
 # accountabilities via governance Engels zijn; dan valt `match_label` vanzelf terug op LABELS.
 MATCH_NL: dict[str, str] = {
-    "community_listening": "Luistert op Reddit, Bluesky en YouTube naar wat mensen echt zeggen",
     "trustpilot_reviews": "Leest de Trustpilot-reviews van een merk, sterren en al",
-    "competitor_news": "Volgt het nieuws over de concurrentie",
-    "competitor_discover": "Spot nieuwe merken die op ons speelveld verschijnen",
     "pappers_financials": "Leest de gedeponeerde omzethistorie van een Franse concurrent en zijn trend",
     "gdelt_tone": "Meet hoe de wereldpers over onze thema's schrijft",
     "trends_categorie": "Houdt bij hoeveel er op onze thema's gezocht wordt",

@@ -375,14 +375,6 @@ def test_rolgebonden_sites_gaan_via_de_persona_hook():
     assert '_persona_ladder(self.context, self.id, "noochie_weigh_in")' in rollen
 
 
-def test_critic_gebruikt_dezelfde_kop_niet_een_kopie():
-    """Reference, don't copy: verandert de dorpsbrede kop, dan verandert de critic mee. De critic
-    haalt 'm via `ladder_voor` (dus mét staart), niet via de kale kop — zie
-    test_de_critic_draait_niet_op_een_enkele_trede."""
-    from nooch_village import missie_critic
-    assert missie_critic.premium_ladder().split(",")[0] == lk.hoog_inzet_ladder()
-    src = open("nooch_village/missie_critic.py", encoding="utf-8").read()
-    assert "claude-sonnet" not in src                 # geen tweede exemplaar van de modelnaam
 
 
 # ── Prijsloze tredes zijn zichtbaar, niet stil ───────────────────────────────
@@ -417,13 +409,3 @@ def test_prijsloze_melding_is_eenmalig(caplog):
     assert caplog.text.count("PRIJSLOZE_TREDE") == 1
 
 
-def test_de_critic_draait_niet_op_een_enkele_trede():
-    """De grondings-toets kreeg eerst de KALE kop mee: één lege respons van Sonnet en de critic
-    kon niets zeggen (gegrond=None → nooit door de poort). Waargenomen op productie: 'alle 1
-    trede(s) uitgeput'. De zachte staart is precies voor dit geval."""
-    from nooch_village import missie_critic
-    ladder = missie_critic.premium_ladder()
-    tredes = [t for t in ladder.split(",") if t.strip()]
-    assert len(tredes) > 1, "de critic heeft geen terugval"
-    assert tredes[0].startswith("anthropic:claude-sonnet")
-    assert tredes[1:] == llm.dorpsladder().split(",")

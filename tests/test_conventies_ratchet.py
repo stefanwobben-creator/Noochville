@@ -31,7 +31,7 @@ STORES = {
     "agenda", "ai", "assign", "att", "checklists", "copy_stack", "defs", "doelen",
     "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "metrics",
     "nom_kroniek", "nominations", "noochie", "notif", "observations", "people",
-    "personas", "project_docs", "projects", "radar", "radar_besluiten", "records", "sources", "strategies", "werk",
+    "personas", "project_docs", "projects", "radar", "records", "sources", "strategies", "werk",
 }
 
 
