@@ -154,20 +154,15 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                   # Een uitleg, geen veldlabel: deze zin hoort bij het formulier maar labelt
                   # geen invoerveld. Als label zonder for= zou hij een koppeling beloven die er
                   # niet is — de ratchet ving dat.
-                  f"<p class='muted att-hint'>The AI updates this document; give lasting "
-                  f"instructions via a #task comment on the project wall.</p>"
+                  # 19 sept 2026: hier stond "The AI updates this document" plus een
+                  # Re-assemble-knop. Allebei weg — er is geen assembler meer (BLOK B). Dit
+                  # document is vanaf nu van de mens, en de zin zegt dat ook.
+                  f"<p class='muted att-hint'>This document is yours to write. Nothing updates "
+                  f"it automatically.</p>"
                   f"{md_editor('doc', value=doc, rows=16, help=True)}"
                   f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>"
                   f"Save document</button></form></details>"
-                  f"<form method='post' action='/action' class='pf einddoc-regen'>{hid}"
-                  f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
-                  # De tekst zegt nu wat er gebeurt: een CONCEPT, geen overschrijving. De oude
-                  # tekst beloofde "this overwrites the current text" — dat doet hij niet meer, en
-                  # een knop die iets anders zegt dan hij doet is de vals-succes-familie.
-                  f"onclick=\"return confirm('Assemble a fresh draft report? "
-                  f"It waits for your confirmation; the current text stays until then.')\">"
-                  f"Re-assemble draft</button>"
-                  f"</form>{wiki_knop}</div>")
+                  f"{wiki_knop}</div>")
 
     main = f"<div class='c2-main'>{kop}{_banner(msg)}{concept}{body}{acties}</div>"
     return _page(f"Report · {titel}", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

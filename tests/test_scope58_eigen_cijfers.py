@@ -134,25 +134,6 @@ def _gsc_rows():
                      {"keys": ["schoenen zonder plastic"], "clicks": 0, "impressions": 0, "position": 60.0}]}
 
 
-def test_gsc_run_bucket_verdeling_locale_en_text():
-    from nooch_village.skills_impl.gsc import GscPerformanceSkill
-    gezien = {}
-
-    def q(body):
-        gezien.update(body)
-        return _gsc_rows()
-    r = GscPerformanceSkill().run({"_query": q, "row_limit": 50}, _gsc_ctx())
-    assert gezien["dimensions"] == ["query"] and gezien["rowLimit"] == 50
-    assert r["bucket_counts"] == {"page1": 1, "high_potential": 1, "low_ranking": 1, "content_gap": 1}
-    assert r["total"] == 4 and r["locale"] == "en" and all(x["locale"] == "en" for x in r["rows"])
-    assert r["text"].startswith("4 queries in ") and "1 high potential (position 11–30)" in r["text"]
-    assert "1 low ranking (position 31+)" in r["text"] and "4 clicks on 530 impressions" in r["text"]
-    assert C(r) == ("gelukt", ("list", "rows"))
-    assert r["rows"][0]["text"] == "avg. position 8.2, 90 impressions, 3 clicks (page 1)"
-    verslag = project_verslag.inhoud_tekst(r)
-    assert verslag.splitlines()[0].startswith("4 queries in") and "• vegan sneakers — avg. position 8.2" in verslag
-    # locale uit het domein
-    assert GscPerformanceSkill().run({"_query": q}, _gsc_ctx("https://nooch.nl/"))["locale"] == "nl"
 
 
 

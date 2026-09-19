@@ -2,7 +2,8 @@
 
 Twee dingen die deze tests bewaken en die met de hand makkelijk terugsluipen:
 1. de kaart toont het volledige rapport NIET meer inline (dat was het hele punt);
-2. `proj_doc_edit` en `proj_regen_doc` blijven bereikbaar — nu op de route. Bij de herindeling
+2. `proj_doc_edit` blijft bereikbaar — nu op de route. (`proj_regen_doc` stond hier ook;
+   die actie is op 19 sept 2026 weg met de assembler, BLOK B.) Bij de herindeling
    verdwenen drie acties stil omdat hun blok in een verwijderde rij zat; dat mag niet nog eens.
 """
 from __future__ import annotations
@@ -95,11 +96,11 @@ def test_route_toont_het_volledige_rapport_in_de_leeslaag(tmp_path):
     assert f"/project?pid={pid}" in html                # en een weg terug
 
 
-def test_bewerken_en_verversen_blijven_bereikbaar_op_de_route(tmp_path):
+def test_bewerken_blijft_bereikbaar_op_de_route(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st, "# Kop\n\nEen zin die als essentie kan dienen op de kaart.\n")
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    for actie in ("proj_doc_edit", "proj_regen_doc"):
+    for actie in ("proj_doc_edit",):
         assert f"value='{actie}'" in html, f"{actie} onbereikbaar geworden"
     assert "/rapport?pid=" in html                      # na opslaan blijf je bij het document
 
@@ -108,7 +109,7 @@ def test_route_zonder_schrijfrecht_toont_geen_bewerkacties(tmp_path):
     dd, st = _st(tmp_path)
     pid = _project(dd, st, "# Kop\n\nEen zin die als essentie kan dienen op de kaart.\n")
     html = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="")
-    assert "proj_doc_edit" not in html and "proj_regen_doc" not in html
+    assert "proj_doc_edit" not in html
     assert "einddoc-body" in html                                # lezen mag wel
 
 

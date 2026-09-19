@@ -56,12 +56,9 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/copy-check` | `render_copy_check` | `nooch_village/views/copy_check.py` |
 | `/decision-coach` | `render_decision_coach` | `nooch_village/views/decision_coach.py` |
 | `/copy-prompt` | `render_copy_prompt` | `nooch_village/views/copy_prompt.py` |
-| `/inwoners` | `render_inwoners` | `nooch_village/views/inwoners.py` |
-| `/inwoner` | `render_inwoner` | `nooch_village/views/inwoners.py` |
 | `/roloverleg2` | `render_roloverleg2` | `nooch_village/views/roloverleg.py` |
 | `/metric_export` | `(inline)` | `cockpit2.py` |
 | `/file` | `(inline)` | `cockpit2.py` |
-| `/project_pakket` | `(inline)` | `cockpit2.py` |
 
 
 ## (b) Dispatch-actie → handler
@@ -109,7 +106,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `verslag_bevestig_niet_behaald` | `_act_verslag_bevestig_niet_behaald` |
 | `verslag_overslaan` | `_act_verslag_overslaan` |
 | `verslag_bijwerken` | `_act_verslag_bijwerken` |
-| `proj_regen_doc` | `_act_proj_regen_doc` |
 | `proj_settrekker` | `_act_proj_settrekker` |
 | `proj_setowner` | `_act_proj_setowner` |
 | `proj_approve` | `_act_proj_approve` |
@@ -228,10 +224,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `claims_vondst_whitelist` | `_act_claims_vondst_whitelist` |
 | `claims_regel_uit_vondst` | `_act_claims_regel_uit_vondst` |
 | `claims_to_board` | `_act_claims_to_board` |
-| `persona_edit` | `_act_persona_edit` |
-| `persona_llm` | `_act_persona_llm` |
-| `persona_finetune` | `_act_persona_finetune` |
-| `persona_finetune_apply` | `_act_persona_finetune_apply` |
 
 
 ## (c) Concern → store → bestand
@@ -346,9 +338,6 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 |---|
 | `co2_factoren.json` |
 | `llm_prijzen.json` |
-| `manifest.json` |
-| `persona.json` |
-| `project.json` |
 | `pulse_heartbeat.json` |
 | `rugzakken.json` |
 | `seed_surges.json` |
@@ -356,4 +345,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_51 routes · 162 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_48 routes · 157 dispatch-acties · 28 stores in `_Stores` · 46 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

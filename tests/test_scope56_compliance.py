@@ -18,7 +18,6 @@ import pytest
 
 from nooch_village import claims_db
 from nooch_village.inhabitant import Inhabitant as I
-from nooch_village.project_verslag import inhoud_tekst
 
 _PAD = (" Deze webpagina bevat verder algemene informatie over verzending, retourbeleid, "
         "klantenservice, maatvoering en de geschiedenis van het merk, puur als context. " * 2)
@@ -39,13 +38,6 @@ def _note(item_skill: str, result: dict) -> str:
 
 
 
-def test_claims_check_het_verslag_toont_stoplicht_bron_en_waarom():
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Onze 100% planet-safe sneakers."})
-    tekst = inhoud_tekst(uit)
-    regel = next(r for r in tekst.splitlines() if r.startswith("• planet-safe"))
-    assert "red — source A" in regel and "found 'planet-safe'" in regel
-    assert tekst.startswith(uit["text"])                       # de leeswijzer eerst
 
 
 def test_claims_check_schrijft_zijn_eigen_kroniek_records():
@@ -117,19 +109,6 @@ def test_claim_evidence_string_brand_en_limit_cap():
     assert res["rows"][0]["status"] == "onduidelijk"
 
 
-def test_claim_evidence_het_verslag_leest_merk_url_oordeel_en_citaat():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    page = "Onze zolen zijn gecertificeerd biodegradable volgens ISO 14855, labresultaat bijgevoegd." + _PAD
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://veja.example/duurzaam"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=page), \
-         patch("nooch_village.llm.reason", _reason(True, True, "gecertificeerd biodegradable volgens ISO 14855")):
-        res = ClaimEvidenceSkill().run({"brands": ["Veja"], "claim": "biodegradable"}, _ctx_ce())
-    regel = [r for r in inhoud_tekst(res).splitlines() if r.startswith("• Veja")][0]
-    assert "https://veja.example/duurzaam" in regel and "confirmed" in regel
-    assert "ISO 14855" in regel
-    assert res["text"].startswith("'biodegradable' checked for 1 brand(s)")
-    row = res["rows"][0]
-    assert row["url"] == row["source"] and row["citaat"] == row["evidence"]   # additief
 
 
 # ══ cert_evidence ════════════════════════════════════════════════════════════
@@ -319,20 +298,6 @@ def _scan_ctx(tmp_path, monkeypatch):
 
 
 
-def test_site_scan_met_bevinding_toont_de_bevinding_niet_de_paginalabels(tmp_path, monkeypatch):
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    pagina = "<html><body><p>Onze schoenen zijn volstrekt gifvrij en biologisch afbreekbaar.</p></body></html>"
-    uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina), "_sleep": lambda s: None,
-                                     "modelpas": False}, ctx)
-    assert uit["nieuw"] >= 1
-    assert I._classify_result(uit) == ("gelukt", ("list", "aangemaakt"))
-    rec = uit["aangemaakt"][0]
-    assert rec["url"].startswith("https://nooch.earth") and rec["oordeel"].startswith(rec["stoplicht"])
-    assert "on page" in rec["citaat"]
-    verslag = inhoud_tekst(uit)
-    assert "https://nooch.earth" in verslag and "red" in verslag
-    assert "new finding(s)" in uit["text"]
 
 
 

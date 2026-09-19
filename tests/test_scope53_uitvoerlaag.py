@@ -177,21 +177,8 @@ def test_expliciete_signalen_blijven_leidend():
 
 
 
-def test_verslag_zet_de_text_eerst_en_kent_de_nieuwe_veldnamen():
-    inhoud = {"text": "performance 58 · LCP 20.3 s", "rows": [
-        {"keyword": "barefoot shoes", "evidence": "12100 searches per month", "permalink": "https://k.example"}]}
-    t = project_verslag.inhoud_tekst(inhoud)
-    assert t.splitlines()[0] == "performance 58 · LCP 20.3 s"
-    assert "• barefoot shoes (https://k.example) — 12100 searches per month" in t
 
 
-def test_verslag_geeft_tekst_terug_in_plaats_van_json():
-    inhoud = {"voorstel": "SCOPE: a\nAPPROACH: b\nTRADE-OFF: c", "ok": True}
-    t = project_verslag.inhoud_tekst(inhoud)
-    assert t == "SCOPE: a\nAPPROACH: b\nTRADE-OFF: c"
-    reeks = project_verslag.inhoud_tekst({"results": {"visitors": 312, "pageviews": 900}, "period": "7d"})
-    assert reeks == "results: visitors=312; pageviews=900"
-    assert project_verslag.inhoud_tekst({"a": 1}) == json.dumps({"a": 1})
 
 
 # ── 6. de configuratiepoort ──────────────────────────────────────────────────

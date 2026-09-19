@@ -335,7 +335,6 @@ from nooch_village import decision_coach
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
-from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.wiki import render_pagina
 from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.linkbuilding import render_linkbuilding
@@ -1539,35 +1538,13 @@ def _act_proj_done(c):
             outcome = "approved after review"
         _wie = st.people.by_email(username) if username and username != "guest" else None
         pj.complete(pid, outcome, door=(_wie.id if _wie else (username or ""))); msg = "✓ afgerond"
-        # HET VERSLAG STELT ZICHZELF SAMEN — één keer, hier, niet elke puls. Uit wat er al ligt:
-        # definitie + checklist + gesprek + het bestaande document. Het resultaat is een CONCEPT
-        # dat naast het document wacht tot een mens het bevestigt (zie project_doc_store).
-        #
-        # GEEN POORT. De status staat hierboven al op done; mislukt de assemblage, dan is het
-        # project gewoon afgesloten en staat er geen concept. Maar dan wél LUID: een assemblage die
-        # stil wegvalt leest later als "er viel niets samen te stellen", en dat is precies de
-        # onzichtbaarheid waar we bij het radarsignaal tegenaan liepen.
-        try:
-            from nooch_village.project_verslag import deliverable_blokken, stel_samen
-            from nooch_village.llm import reason as _reason
-            _p = pj.get(pid) or {}
-            # DEZELFDE BRONNEN als de knop op /rapport: anders weet het ene pad meer dan het
-            # andere en krijg je twee verschillende verslagen voor hetzelfde project.
-            _concept = stel_samen(_p, _doc, reason=_reason,
-                                  deliverables=deliverable_blokken(
-                                      getattr(st, "deliverables", None), pid))
-            if _concept is not None and _ds is not None:
-                _ds.write_concept(pid, _concept.tekst, bronnen=_concept.bronnen,
-                                  voorzet=_concept.voorzet)
-                logging.getLogger("cockpit2.verslag").info(
-                    "VERSLAG_CONCEPT: pid=%s bronnen=%d voorzet=%s", pid, len(_concept.bronnen),
-                    _concept.voorzet)
-            else:
-                logging.getLogger("cockpit2.verslag").info(
-                    "VERSLAG_GEEN_MATERIAAL: pid=%s — geen bronnen om uit samen te stellen", pid)
-        except Exception:
-            logging.getLogger("cockpit2.verslag").exception(
-                "VERSLAG_MISLUKT: pid=%s afgesloten zonder concept", pid)
+        # HIER STELDE HET VERSLAG ZICHZELF SAMEN bij het afsluiten: één LLM-ronde over
+        # definitie + checklist + gesprek + document, weggeschreven als concept naast het
+        # document. Weg op 19 september 2026 (besluit Stefan, BLOK B). De 363 bestaande
+        # einddocumenten blijven leesbaar op /rapport; er komt alleen geen nieuw concept meer
+        # bij. Wat een afgerond project achterlaat, zet een mens in de wiki — Keep-in-wiki,
+        # fase 7. Geen vervanging hier, want een half-automatische samenvatting die niemand
+        # bevestigt is precies wat we kwijt wilden.
         # DE LUS SLUIT. Vroeg iemand dit als taak, dan hoort hij nu dat het klaar is. Zonder deze
         # regel is werk dat een rol voor je oppakt een eenrichtingsweg: het gebeurt, en jij hoort
         # er nooit meer iets van. Fail-soft — een melding die niet lukt blokkeert geen afronding.
@@ -1724,41 +1701,6 @@ def _act_proj_describe(c):
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ description saved"
         return nxt, msg
-
-
-def _act_proj_regen_doc(c):
-        # AUTHZ: zelfde poort als de edit-route (rolvervuller of Circle Lead).
-        #
-        # ÉÉN ASSEMBLER, TWEE INGANGEN. Deze knop draaide de OUDE per-taak-synthese uit
-        # `inhabitant.synthesize_einddocument`, terwijl het afsluit-pad de nieuwe assembler
-        # gebruikte. Gevolg: dezelfde knop op hetzelfde scherm gaf een ander soort document —
-        # Engels, een kop per taak, en "Niet onderzocht — geen gegrond resultaat" onder koppen waar
-        # wél iets gebeurde. Gemeten op 310 productiedocumenten: mediaan 6 koppen, 253 kopblokken
-        # met "niet onderzocht", 64 (bijna) leeg.
-        #
-        # HIJ SCHRIJFT NU EEN CONCEPT, GEEN DOCUMENT. Dat is dezelfde regel als bij het afsluiten:
-        # alleen een expliciete bevestiging vervangt de canonieke tekst. "Opnieuw genereren" is een
-        # voorstel, en een voorstel dat zichzelf meteen doorvoert is geen voorstel.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        pid = g("pid")
-        p = pj.get(pid)
-        if p is None:
-            return nxt, "✗ project not found"
-        _deny = _role_gate(p.get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        _load_env()                                          # LLM-key beschikbaar maken (zoals _ai_reply)
-        from nooch_village.llm import reason as _reason
-        from nooch_village.project_verslag import deliverable_blokken, stel_samen
-        store = getattr(st, "project_docs", None)
-        if store is None:
-            return nxt, "✗ no document store"
-        concept = stel_samen(p, store.read(pid), reason=_reason,
-                             deliverables=deliverable_blokken(getattr(st, "deliverables", None), pid))
-        if concept is None:
-            return nxt, "✗ nothing to assemble from — no definition, checklist, wall or deliverables"
-        store.write_concept(pid, concept.tekst, bronnen=concept.bronnen, voorzet=concept.voorzet)
-        return nxt, f"📄 draft report assembled from {len(concept.bronnen)} sources — confirm it below"
 
 
 def _bevestig_met(c, oordeel: str):
@@ -2616,12 +2558,8 @@ def _act_radar_set(c, status: str, ok_msg: str):
         return nxt, ok_msg
 
 
-
-
 def _act_radar_dismiss(c):
         return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
-
-
 
 
 def _act_radar_merge(c):
@@ -2638,10 +2576,6 @@ def _act_radar_merge(c):
         ok = st.radar.merge_signals(g("target_rid"), g("source_rid"), g("tekst"))
         return nxt, ("🧩 signals merged — the provenance of both travels along"
                      if ok else "✗ merging failed")
-
-
-
-
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -2746,18 +2680,6 @@ def _act_means_gap_add(c):
         return nxt, "📥 reported as a means gap; review it via the human inbox"
 
 
-# ── Inwoner-dossier: de persona als drager ──────────────────────────────────
-# Alle takken hieronder: AUTHZ: anchor-lead — de persona is een org-breed object (hij reist mee
-# tussen zetels), dus het beheer ervan hoort bij de anchor-lead. Fail-closed via _anchor_gate.
-#
-# Wat hier NOOIT gebeurt: purpose, accountabilities of domeinen aanraken. Dat is mandaat, dat
-# leeft in de records en wijzigt alleen via governance (G0-G4).
-
-# Voorstellen van de finetune-knop leven per proces, niet in een store: ze zijn een tussenstap
-# in één menselijke handeling, geen feit dat bewaard moet blijven.
-_finetune_cache: dict = {}
-
-
 def _anchor_gate(st, username: str | None) -> str | None:
     """Alleen de anchor-lead beheert persona's. Guest (auth uit) mag alles."""
     if username == "guest":
@@ -2779,79 +2701,6 @@ def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | 
                                 "door": door or "?", "at": time.time()}, ensure_ascii=False) + "\n")
     except Exception:
         pass
-
-
-def _act_persona_edit(c):
-        # AUTHZ: anchor-lead — persona-beheer is org-breed (zie blok-comment hierboven).
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid = g("pid")
-        oud = st.personas.get(pid)
-        if oud is None:
-            return nxt, "⛔ unknown inhabitant"
-        st.personas.update(pid, mbti=g("mbti"), instructions=g("instructions"),
-                           avatar=g("avatar"), prompt_extra=g("prompt_extra"))
-        for veld, was in (("instructions", oud.instructions), ("prompt_extra", oud.prompt_extra),
-                          ("mbti", oud.mbti)):
-            if g(veld) != was:
-                _persona_kroniek(st, pid, veld, was, g(veld), username)
-        return nxt, "✓ personality updated"
-
-
-def _act_persona_llm(c):
-        # AUTHZ: anchor-lead — modelkeuze raakt het budget van het hele dorp.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        per_taak = {}
-        for regel in (g("llm_per_taak") or "").splitlines():
-            if "=" in regel:
-                sleutel, _, waarde = regel.partition("=")
-                if sleutel.strip() and waarde.strip():
-                    per_taak[sleutel.strip()] = waarde.strip()
-        if st.personas.update(g("pid"), llm={"default": g("llm_default"), "per_taak": per_taak}) is None:
-            return nxt, "⛔ unknown inhabitant"
-        return nxt, f"✓ model preference saved ({len(per_taak)} task override(s))"
-
-
-def _act_persona_finetune(c):
-        # AUTHZ: anchor-lead — de AI stelt voor, de mens kiest; niets wordt hier overschreven.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid = g("pid")
-        persona = st.personas.get(pid)
-        if persona is None:
-            return nxt, "⛔ unknown inhabitant"
-        voorstellen = _finetune_voorstellen(persona)
-        if not voorstellen:
-            # Fail-closed: geen LLM-antwoord → geen voorstellen, en zeker geen lege overschrijving.
-            return nxt, "⛔ the AI gave no usable proposal — try again later"
-        _finetune_cache[pid] = voorstellen
-        return nxt, f"✨ {len(voorstellen)} proposal(s) — pick one"
-
-
-def _act_persona_finetune_apply(c):
-        # AUTHZ: anchor-lead — pas hier wordt er echt iets overschreven, na een menselijke keuze.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid, keuze = g("pid"), g("keuze")
-        persona = st.personas.get(pid)
-        if persona is None:
-            return nxt, "⛔ unknown inhabitant"
-        if not keuze.strip() or keuze.strip() == "(nu leeg)":
-            _finetune_cache.pop(pid, None)
-            return nxt, "✓ nothing changed"
-        _persona_kroniek(st, pid, "prompt_extra", persona.prompt_extra, keuze, username)
-        st.personas.update(pid, prompt_extra=keuze)
-        _finetune_cache.pop(pid, None)
-        return nxt, "✓ prompt extra updated"
 
 
 def _finetune_voorstellen(persona) -> list:
@@ -3970,8 +3819,6 @@ def _act_metrics2_compare(c):
         ok = c.st.metrics.set_tile_compare(g("node"), g("tid"), g("cmp_source"),
                                            g("cmp_measure"), g("cmp_dim") or "over_tijd")
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ not found")
-
-
 
 
 # De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze
@@ -5099,8 +4946,6 @@ def _act_kb_annotate(c):
     return c.nxt, ("💬 note saved" if ok else "✗ note not saved")
 
 
-
-
 def _act_kb_discuss(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
     ok = c.st.kennisbank.discuss(c.g("iid"), c.g("text"), _kb_actor(c))
@@ -5122,26 +4967,6 @@ def _act_kb_reformulate(c):
     return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _act_kb_insight_link(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: koppel een ander INZICHT
     # als steun/tegen aan het geopende inzicht (de Zettelkasten-ladder → meta-inzicht).
@@ -5153,12 +4978,6 @@ def _act_kb_insight_unlink(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.kennisbank.unlink_insight(c.g("iid"), c.g("other_id"))
     return c.nxt, ("unlinked" if ok else "✗ unlinking failed")
-
-
-
-
-
-
 
 
 def _act_verzoek_besluit(c):
@@ -5305,35 +5124,11 @@ def _act_tag_onderhoud_run(c):
                    f"({res['voorstellen'] - res['nieuw']} al bekend/afgewezen)")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _kb_spel_set(c) -> list[dict]:
     """Gecureerde set uit het formulier: checkboxes `kaart` + per kaart `stance_<id>`."""
     ids = c.form.get("kaart") or []
     return [{"atom_id": aid, "stance": (c.g(f"stance_{aid}") or "support")}
             for aid in ids if aid]
-
-
-
-
-
-
-
-
-
-
 
 
 def _act_kw_nominate(c):
@@ -5418,18 +5213,6 @@ def _act_ws_approve(c):
     return _act_ws_curate(c, "approved", "✓ “{word}” geactiveerd (approved)")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def _act_decision_sheet_log(c):
     # AUTHZ: iedereen-ingelogd — elk lid logt zijn EIGEN besluit, in zijn eigen woorden. Er is geen
     # rol, domein of cirkel die een besluit van een mens over zijn eigen werk begrenst; een gate zou
@@ -5505,7 +5288,6 @@ ACTIONS = {
     "verslag_bevestig_niet_behaald": _act_verslag_bevestig_niet_behaald,
     "verslag_overslaan": _act_verslag_overslaan,
     "verslag_bijwerken": _act_verslag_bijwerken,
-    "proj_regen_doc": _act_proj_regen_doc,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,
@@ -5625,10 +5407,6 @@ ACTIONS = {
     "claims_vondst_whitelist": _act_claims_vondst_whitelist,
     "claims_regel_uit_vondst": _act_claims_regel_uit_vondst,
     "claims_to_board": _act_claims_to_board,
-    "persona_edit": _act_persona_edit,
-    "persona_llm": _act_persona_llm,
-    "persona_finetune": _act_persona_finetune,
-    "persona_finetune_apply": _act_persona_finetune_apply,
 }
 
 
@@ -6259,20 +6037,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                               uit=(qs.get("uit") or [""])[0],
                                               doel=_doel, awareness=_aware, admin=_admin))
                 return
-            if path == "/inwoners":
-                # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter
-                # de anchor-lead-poort in de dispatch-takken.
-                self._send(render_inwoners(_Stores(data_dir), msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/inwoner":
-                # AUTHZ: iedereen-ingelogd — lezen mag iedereen; het formulier verschijnt alleen
-                # mét csrf (ingelogd) en de schrijfactie toetst apart op anchor-lead.
-                st = _Stores(data_dir)
-                pid = (qs.get("id") or [""])[0]
-                self._send(render_inwoner(st, pid, csrf_token=effective_csrf,
-                                          msg=(qs.get("msg") or [""])[0],
-                                          voorstellen=_finetune_cache.get(pid, [])))
-                return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]
                 ct = _STATIC_TYPES.get(name)                 # whitelist → geen path-traversal
@@ -6321,19 +6085,6 @@ def make_handler(data_dir: str, csrf_token: str,
                     data = fh.read()
                 mt = mimetypes.guess_type(att.get("name", ""))[0] or "application/octet-stream"
                 self._send_bytes(data, mt)
-                return
-            if path == "/project_pakket":
-                # Alle wall-content van dit project (record + gesprek + checklists + bijlagen) in
-                # één zip, voor handmatige AI-analyse (14 september 2026: het automatische verslag
-                # leest bijlagen niet als bron, zie wall_diepdive_rubberproject_13sept.md). Zelfde
-                # AUTHZ-grens als /file hierboven: geen aparte poort, wie het project mag zien mag
-                # 'm ook exporteren.
-                p = st.projects.get((qs.get("pid") or [""])[0])
-                if p is None:
-                    self._send("<p>Project not found</p>", 404); return
-                from nooch_village.project_pakket import bouw_zip_bytes, slug
-                data = bouw_zip_bytes(p, data_dir)
-                self._send_bytes(data, "application/zip", f"{slug(p)}.zip")
                 return
             self._send("<p>404</p>", 404)
 
@@ -6388,7 +6139,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
-            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact", "/wizard/create"):
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
                     self._send_json({"error": "not logged in"}, 403); return
@@ -6403,12 +6154,6 @@ def make_handler(data_dir: str, csrf_token: str,
                         from nooch_village.wizard import sharpen_outcome, board_anchors
                         _ankers = board_anchors(st.projects.all())   # eigen bord = stem van het team
                         self._send_json({"uitkomst": sharpen_outcome(g1("ruw"), anchors=_ankers)})
-                        return
-                    if path == "/wizard/impact":
-                        # Een GOK voor moeite en impact, bedoeld om in één tik bij te stellen.
-                        # Fail-soft: geen model = een leeg antwoord, en de chips blijven leeg.
-                        from nooch_village.wizard import guess_impact
-                        self._send_json(guess_impact(g1("idee"), rol=g1("role")))
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items

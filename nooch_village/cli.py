@@ -127,13 +127,9 @@ def main() -> None:
                 print(f"  ✗ {w}: geen kaartje geschreven (LLM weg of niets gevonden)")
 
 
-
     elif mode == "simulate":
         from nooch_village.demos.ops import simulate
         simulate()
-
-
-
 
 
     elif mode == "compliance":
@@ -147,7 +143,6 @@ def main() -> None:
     elif mode == "compliance_claims":
         from nooch_village.role_proposals import grant_compliance_claims
         grant_compliance_claims()
-
 
 
     elif mode == "seat_human":
@@ -326,7 +321,6 @@ def main() -> None:
             sys.exit(0)
         alarm(ctx.data_dir, uit)
         sys.exit(1)
-
 
 
     elif mode == "answer_questions":
@@ -659,8 +653,6 @@ def main() -> None:
                       f"De rugzak (skills) blijft van de rol; {p.name} kleurt de toon.")
 
 
-
-
     elif mode == "wiki_zaad":
         # De eerste wiki-pagina's uit bestaande bronnen (stuklijst + claims-werklijst).
         # DRY-RUN by default: eerst het rapport, pas met --apply wordt er geschreven.
@@ -697,40 +689,6 @@ def main() -> None:
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
 
-    elif mode == "noochie_memo":
-        # Eén memo van Noochie aan de founder, op afroep. De toets van de pijp (scope 41): komt er
-        # iets van haar in de cockpit-inbox? Default DRY-RUN: de memo staat in de terminal; met
-        # --apply wordt hij ook bezorgd. Fail-closed: zonder LLM-antwoord geen memo en geen sjabloon.
-        import json
-        from nooch_village import noochie_memo
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        apply = "--apply" in sys.argv
-        if "--feiten" in sys.argv:
-            # Wat Noochie te zien krijgt, zonder LLM-call: om te controleren of de invoer klopt
-            # vóór je een memo leest die erop bouwt (scope 42a: de inhoud, niet de tellingen).
-            feiten = noochie_memo.verzamel(st, ctx.data_dir)
-            print(json.dumps(feiten, ensure_ascii=False, indent=1))
-            print("\nomvang:", json.dumps(noochie_memo.omvang(feiten)), file=sys.stderr)
-            return
-        print("📝 Noochie schrijft een memo aan de founder…", flush=True)
-        r = noochie_memo.memo(st, ctx.data_dir, apply=apply)
-        if not r["ok"]:
-            print(f"⚠ {r['reden']}")
-            return
-        print("\n" + r["tekst"] + "\n")
-        o = noochie_memo.omvang(r["feiten"])
-        print(f"(invoer: {o['projecten_met_inhoud']} projecten met inhoud, {o['pdfs_gelezen']} pdf's "
-              f"gelezen, {o['wiki_paginas']} wiki-pagina's, ~{o['tokens_ongeveer']} tokens)")
-        if apply:
-            print("✅ bezorgd in de cockpit-inbox van de founder (afzender: noochie)."
-                  if r["bezorgd"] else f"⚠ {r['reden']}")
-        else:
-            print("DRY-RUN — niet bezorgd. Draai opnieuw met --apply om hem in je inbox te zetten.")
 
     elif mode == "site_audit":
         # De lampjes van de shop: bereikbaar, Lighthouse (mobiel), claims. Eén run, één snapshot
@@ -1402,51 +1360,6 @@ def main() -> None:
         if not apply:
             print("(DRY-RUN — er is niets gemuteerd. Geef 'apply' mee om het uit te voeren.)")
 
-    elif mode == "inwoner_export":
-        # Pakket-export: één inwoner als verkoopbaar bestand. Geen sleutels, geen dorpsdata.
-        import os
-        from nooch_village import inwoner_pakket
-        from nooch_village.config import load_context
-        from nooch_village.personas import PersonaStore
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        store = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
-        zoek = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
-        treffer = next((p for p in store.all()
-                        if p.id == zoek or p.name.lower() == zoek.lower()), None)
-        if treffer is None:
-            print(f"✗ geen inwoner gevonden voor '{zoek}'. Bekend: "
-                  + ", ".join(p.name for p in store.all()))
-            sys.exit(1)
-        uit = os.path.join(ctx.data_dir, "output",
-                           f"{inwoner_pakket.slug(treffer.name)}.inwoner")
-        inwoner_pakket.exporteer(treffer, uit)
-        manifest = inwoner_pakket.bouw_manifest(treffer)
-        print(f"📦 {treffer.name} → {uit}")
-        print(f"   skills: {len(manifest['skills'])} · modules: {len(set(manifest['skill_modules'].values()))} "
-              f"· vereiste sleutels: {', '.join(manifest['vereiste_sleutels']) or 'geen'}")
-
-    elif mode == "inwoner_install":
-        import os
-        from nooch_village import inwoner_pakket
-        from nooch_village.config import load_context
-        from nooch_village.personas import PersonaStore
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        store = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
-        pad = sys.argv[2] if len(sys.argv) > 2 else ""
-        if not os.path.exists(pad):
-            print(f"✗ pakket niet gevonden: {pad}")
-            sys.exit(1)
-        res = inwoner_pakket.installeer(store, pad)
-        print(f"📥 '{res['naam']}' geïmporteerd (id={res['persona_id']})")
-        if res["ontbrekende_skills"]:
-            print(f"   ⚠ skills die deze village niet kent: {', '.join(res['ontbrekende_skills'])}")
-            print("     → de code moet hier eerst gebouwd en geregistreerd worden (mens-gated).")
-        if res["ontbrekende_sleutels"]:
-            print(f"   ⚠ ontbrekende API-sleutels: {', '.join(res['ontbrekende_sleutels'])}")
-        if not (res["ontbrekende_skills"] or res["ontbrekende_sleutels"]):
-            print("   ✓ deze village heeft alles wat hij nodig heeft.")
 
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
@@ -1461,6 +1374,6 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | noochie_memo | site_audit | doelen_zaad | status_log",
+              "wiki_zaad | wiki_broncheck | site_audit | doelen_zaad | status_log",
               file=sys.stderr)
         sys.exit(1)

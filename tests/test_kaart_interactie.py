@@ -151,6 +151,11 @@ def test_comment_en_concept_delen_hetzelfde_edit_component(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["comment"], "author": ["human:"],
                                         "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
+    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
+    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
+    cockpit2._Stores(dd).project_docs.write_concept(
+        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
     kaart = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     rapport = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     for naam, html in (("kaart", kaart), ("rapport", rapport)):
@@ -177,6 +182,11 @@ def test_de_toggle_knop_vindt_zijn_eigen_blok(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["c"], "author": ["human:"],
                                         "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
+    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
+    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
+    cockpit2._Stores(dd).project_docs.write_concept(
+        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
     for html in (P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK"),
                  render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")):
         # de wrapper opent VÓÓR het paar en VÓÓR de knop, en sluit erna: dan omvat hij beide

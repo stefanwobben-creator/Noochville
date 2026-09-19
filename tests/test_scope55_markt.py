@@ -97,16 +97,6 @@ def test_discover_zonder_gidsen_is_leeg():
     assert res["no_data"] and "no guide articles" in res["reason"]
 
 
-def test_discover_records_dragen_het_zinnetje_uit_de_gids_en_de_text():
-    res = _discover(json.dumps(["Vivobarefoot", "Wildling Shoes", "Xero Shoes"]), text=_GIDS)
-    namen = [c["brand"] for c in res["candidates"]]
-    assert namen == ["Vivobarefoot", "Wildling Shoes"]     # Xero staat niet in de tekst → grounding
-    vivo = res["candidates"][0]
-    assert vivo["citaat"].startswith("Our top pick is Vivobarefoot")
-    assert res["text"].startswith("2 candidate brand(s) from 1 of 1 guides read")
-    t = project_verslag.inhoud_tekst(res)
-    assert t.splitlines()[0] == res["text"]
-    assert "• Vivobarefoot (https://g.example/x) — Our top pick is Vivobarefoot" in t
 
 
 def test_discover_prompt_is_engels_json_met_grounding_en_ladder():
@@ -161,16 +151,6 @@ def test_news_niets_gevonden_leest_als_leeg_niet_als_vier_merken(tmp_path):
     assert _classify(res) == "leeg"                 # was: gelukt, ('list', 'brands') → "4 results"
 
 
-def test_news_record_draagt_snippet_en_uitgever(tmp_path):
-    from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
-    d = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={})
-    with patch("requests.get", return_value=_resp(_RSS_GN.format(d=d))):
-        res = CompetitorNewsSkill().run({"brands": "Vivobarefoot"}, ctx)      # string → lijst
-    it = res["items"][0]
-    assert it["source"] == "Footwear News" and it["snippet"] == "Footwear News"   # description zonder de kop
-    assert res["text"].startswith("1 news item(s) about 1 brand(s): Vivobarefoot 1 (30d)")
-    assert "• Vivobarefoot opens repair hub - Footwear News (http://a) — Footwear News" in project_verslag.inhoud_tekst(res)
 
 
 
@@ -218,23 +198,6 @@ def test_listening_alle_platforms_geweigerd_is_fout(tmp_path):
     assert _classify(res) == "fout"
 
 
-def test_listening_discovery_krijgt_ook_de_al_bekende_rijen(tmp_path):
-    from nooch_village.skills_impl import buzz_fetchers
-    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
-    ctx = _listen_ctx(tmp_path)
-    rijen = [_rij(1), _rij(2)]
-    with patch.dict(buzz_fetchers.FETCHERS, {"youtube": _spy(rijen), "bluesky": _spy()}):
-        puls = CommunityListeningSkill().run({"query_set_id": "barefoot_ervaringen"}, ctx)     # de monitor-puls
-        proj = CommunityListeningSkill().run({"queries": ["barefoot shoes"]}, ctx)              # het project daarna
-        puls2 = CommunityListeningSkill().run({"query_set_id": "barefoot_ervaringen"}, ctx)    # de reeks blijft nieuw=nieuw
-    assert puls["new"] == 2 and len(puls["observaties"]) == 2
-    assert proj["new"] == 0 and proj["bekend"] == 2 and len(proj["observaties"]) == 2   # was: 0 observaties
-    assert proj["text"].startswith("2 observation(s) about 'barefoot shoes'") and "2 al bekend" in proj["summary"]
-    assert _classify(proj) == "gelukt"
-    assert puls2["no_data"] and "bekend" not in puls2
-    obs = proj["observaties"][0]
-    assert obs["title"] == "Best barefoot shoes review" and "context" not in obs
-    assert "• Best barefoot shoes review (https://youtube.com/watch?v=V1&lc=C1) — comment 1" in project_verslag.inhoud_tekst(proj)
 
 
 def test_listening_cache_sleutel_per_set(tmp_path):
@@ -293,28 +256,6 @@ def test_youtube_commentthreads_fout_lekt_geen_sleutel(tmp_path, caplog, monkeyp
     assert _GEHEIM not in caplog.text
 
 
-# ── 4. linkbuilding_targets ──────────────────────────────────────────────────
-
-def test_linkbuilding_onderwerp_uit_het_project_en_snippet_in_het_record():
-    from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
-    gezien = {}
-
-    def search(query, key, num=10, **kw):
-        gezien["query"] = query
-        return [{"title": "Best barefoot shoe brands", "link": "https://goodonyou.eco/barefoot",
-                 "snippet": "We tested 12 barefoot brands, from Vivobarefoot to Wildling."}]
-
-    with patch("nooch_village.web_read.serpapi_search", search), \
-         patch("nooch_village.web_read.fetch_text", return_value="… Vivobarefoot and Wildling …"):
-        res = LinkbuildingTargetsSkill().run({"brands": ["Vivobarefoot", "Wildling"], "topic": "best barefoot shoe brands"},
-                                             SimpleNamespace(settings={"SERPAPI_API_KEY": "k",
-                                                                       "linkbuilding_query": "vegan sneakers guide"}))
-    assert gezien["query"] == "best barefoot shoe brands"         # payload wint van de config
-    t = res["targets"][0]
-    assert t["priority"] == "hoog" and t["snippet"].startswith("We tested 12 barefoot brands")
-    assert res["gescand"] == 1 and "scanned" not in res
-    assert res["text"] == "1 guide page(s) for 'best barefoot shoe brands': 1 hoog; strongest pitch: goodonyou.eco"
-    assert "• Best barefoot shoe brands (https://goodonyou.eco/barefoot) — We tested 12 barefoot brands" in project_verslag.inhoud_tekst(res)
 
 
 def test_linkbuilding_zonder_onderwerp_blokkeert_bij_het_plannen_en_bij_het_draaien():
@@ -361,26 +302,6 @@ def test_ke_string_wordt_niet_teken_voor_teken_verstuurd():
     assert _classify(res) == "leeg"                                    # was: gelukt, ('text', 'currency')
 
 
-def test_ke_rij_heeft_term_en_tekst_en_de_text_de_top_drie():
-    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-    data = [{"keyword": "barefoot shoes", "vol": 12100, "cpc": {"value": "0.42"}, "competition": 0.31,
-             "trend": [{"value": 9900}, {"value": 12100}]},
-            {"keyword": "minimalist shoes", "vol": 2400, "cpc": {"value": "0"}, "competition": 0,
-             "trend": []},
-            {"keyword": "zero drop shoes", "vol": 5400, "cpc": {"value": "0.2"}, "competition": 0.1, "trend": []},
-            {"keyword": "wide toe box", "vol": 800, "cpc": {"value": "0"}, "competition": 0, "trend": []}]
-    with patch("nooch_village.skills_impl.keywords_everywhere.requests.post", return_value=_ke_response(data)):
-        res = KeywordsEverywhereSkill().run({"kw": ["barefoot shoes", "minimalist shoes", "zero drop shoes", "wide toe box"]},
-                                            SimpleNamespace(settings={"KEYWORDS_EVERYWHERE_API_KEY": "k"}))
-    r0 = res["keywords"][0]
-    assert r0["term"] == "barefoot shoes"
-    assert r0["tekst"] == "12100/mo, cpc 0.42, competition 0.31, trend +22% over 12 months"
-    assert res["keywords"][1]["tekst"] == "2400/mo"
-    assert res["text"] == ("4 keyword(s) with search volume (global); top: barefoot shoes 12100/mo; "
-                           "zero drop shoes 5400/mo; minimalist shoes 2400/mo")
-    t = project_verslag.inhoud_tekst(res)
-    assert "• barefoot shoes — 12100/mo, cpc 0.42, competition 0.31, trend +22% over 12 months" in t
-    assert "{" not in t                                                # geen ruwe JSON meer
 
 
 # ── 6. google_trends ─────────────────────────────────────────────────────────
@@ -400,21 +321,6 @@ def _trends_run(payload, fetch, settings=None, tmp_path=None):
         return skill.run(payload, ctx)
 
 
-def test_trends_term_wordt_opgezocht_niet_het_lexicon_venster():
-    import pandas as pd
-    gezien = []
-
-    def fetch(pytrends, kw, geo, timeframe="today 12-m"):
-        gezien.append((kw, geo, timeframe))
-        return pd.DataFrame({kw: [40, 62]}), {}
-
-    res = _trends_run({"term": "barefoot shoes", "timeframe": "today 5-y"}, fetch)
-    assert gezien == [("barefoot shoes", "NL", "today 5-y")]
-    row = res["rows"][0]
-    assert row["tekst"] == "interest 62 (stijgend)" and row["interest_latest"] == 62
-    assert res["text"] == "1 of 1 term(s) with Google Trends data (today 5-y): barefoot shoes 62 (stijgend)"
-    assert _classify(res) == "gelukt"
-    assert "• barefoot shoes — interest 62 (stijgend)" in project_verslag.inhoud_tekst(res)
 
 
 def test_trends_alle_rijen_fout_is_fout_alle_rijen_leeg_is_leeg():

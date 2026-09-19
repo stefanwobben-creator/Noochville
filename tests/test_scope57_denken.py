@@ -90,15 +90,6 @@ def _records(tmp_path, ids=()):
     return recs
 
 
-# ── 1. escaleer ──────────────────────────────────────────────────────────────
-
-def test_bevinding_is_alleen_de_tekst(tmp_path):
-    r = EscaleerSkill().run({"reden": "no alternative meets the requirements", "aard": "bevinding"},
-                            SimpleNamespace(data_dir=str(tmp_path)))
-    assert r["text"] == "no alternative meets the requirements"
-    assert "samenvatting" not in r
-    assert Inhabitant._classify_result(r) == ("gelukt", ("text", "text"))
-    assert project_verslag.inhoud_tekst(r) == "no alternative meets the requirements"
 
 
 def test_beslissing_draagt_de_vraag_en_het_project(tmp_path):

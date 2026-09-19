@@ -140,66 +140,11 @@ class _ZoekSkill(Skill):
 
 
 
-# ── 4: het verslag rendert records, geen dict-repr ───────────────────────────
-
-def test_inhoud_tekst_rendert_records_met_strekking_en_dekking():
-    r = _web_zoek_result(n_gelezen=2, n_totaal=3)
-    r["treffers"][0]["extract"] = "Kiilto Biomelt is a biodegradable hot melt for packaging."
-    tekst = pv.inhoud_tekst(r)
-    regels = tekst.splitlines()
-    assert regels[0] == "Searched…"                        # de `text` van de skill is de leeswijzer (scope 53)
-    assert regels[1] == ("• Page 0 (https://example.org/0) — Kiilto Biomelt is a biodegradable hot melt "
-                         "for packaging.")
-    assert regels[2].startswith("• Page 1 (https://example.org/1) — " + KORT[:40])   # geen extract → fragment
-    assert regels[3].startswith("• Page 2 (https://example.org/2) — " + KORT[:40])
-    assert regels[4].startswith("COVERAGE INCOMPLETE: 2 of 3")
-    assert "{'ok': True" not in tekst and "'treffers'" not in tekst
 
 
-def test_inhoud_tekst_zonder_records_geeft_compacte_json_en_respecteert_de_cap():
-    assert pv.inhoud_tekst({"score": 88, "lcp_ms": 3200}) == '{"score": 88, "lcp_ms": 3200}'
-    lang = {"hits": [{"title": f"T{i}", "abstract": "a" * 500} for i in range(30)]}
-    tekst = pv.inhoud_tekst(lang)
-    assert len(tekst) <= pv._DELIVERABLE_CAP + 20 and "… and 22 more record(s)" in tekst
-    assert pv.inhoud_tekst({"_truncated": True, "preview": "x" * 10}) == "x" * 10
 
 
-def test_deliverable_blokken_gebruikt_de_kop_van_de_note_en_de_records_uit_de_inhoud():
-    r = _web_zoek_result(n_gelezen=1, n_totaal=1)
-    r["treffers"][0]["extract"] = "The extract."
-    summary = ("📎 Find hot melts — via web_zoek · usable (1)\n➜ One product found.\n"
-               "• titel: Page 0 | extract: The extract. | url: https://example.org/0")
-
-    class Store:
-        def for_project(self, pid):
-            return [{"id": "d1", "summary": summary}]
-
-        def content_for(self, rid):
-            return r
-    blok = pv.deliverable_blokken(Store(), "p1")[0]
-    assert blok.startswith("📎 Find hot melts — via web_zoek · usable (1)\n➜ One product found.")
-    assert "• Page 0 (https://example.org/0) — The extract." in blok
-    assert blok.count("The extract.") == 1                                  # niet dubbel (note én inhoud)
-    assert "{'ok'" not in blok
 
 
-def test_deliverable_blokken_zonder_records_houdt_de_oude_vorm():
-    class Store:
-        def for_project(self, pid):
-            return [{"id": "d1", "summary": "📎 Audit — via mobiel_audit"}]
-
-        def content_for(self, rid):
-            return {"score": 45}
-    blok = pv.deliverable_blokken(Store(), "p1")[0]
-    assert blok == '📎 Audit — via mobiel_audit\n  {"score": 45}'
 
 
-@pytest.mark.parametrize("inhoud", [None, "", {}])
-def test_deliverable_blokken_zonder_inhoud_is_alleen_de_note(inhoud):
-    class Store:
-        def for_project(self, pid):
-            return [{"id": "d1", "summary": "📎 X"}]
-
-        def content_for(self, rid):
-            return inhoud
-    assert pv.deliverable_blokken(Store(), "p1") == ["📎 X"]

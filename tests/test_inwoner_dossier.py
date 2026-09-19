@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nooch_village import inwoner_pakket, llm_keuze, skill_labels
+from nooch_village import llm_keuze, skill_labels
 from nooch_village.personas import Persona, PersonaStore, persona_prompt
 
 PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nooch_village")
@@ -219,80 +219,20 @@ def _st(tmp_path, persona=None):
                            dd=str(tmp_path), settings={}), persona
 
 
-def test_index_rendert_in_het_designsysteem(tmp_path):
-    from nooch_village.views.inwoners import render_inwoners
-    st, _ = _st(tmp_path)
-    html = render_inwoners(st)
-    assert "/static/nooch.css" in html
-    assert "style=" not in html
-    assert "Billy Buzz" in html
 
 
-def test_index_toont_geen_prijzen(tmp_path):
-    """Bewust weggelaten: de catalogus is een ander gesprek dan 'wie woont hier'."""
-    from nooch_village.views.inwoners import render_inwoners
-    st, _ = _st(tmp_path)
-    html = render_inwoners(st).lower()
-    for woord in ("prijs", "richtprijs", "€", "pakket-prijs"):
-        assert woord not in html
 
 
-def test_dossier_toont_alle_secties(tmp_path):
-    from nooch_village.views.inwoners import render_inwoner
-    st, p = _st(tmp_path)
-    html = render_inwoner(st, p.id, csrf_token="t")
-    for sectie in ("Personality", "LLM preferences", "Skills", "Tools", "Seats",
-                   "Recent activity", "Finetune with AI"):
-        assert sectie in html, f"sectie ontbreekt: {sectie}"
-    assert "style=" not in html
 
 
-def test_dossier_is_readonly_zonder_csrf(tmp_path):
-    from nooch_village.views.inwoners import render_inwoner
-    st, p = _st(tmp_path)
-    html = render_inwoner(st, p.id, csrf_token="")
-    # Zonder csrf-token geen enkel MUTATIE-formulier: geen POST-form, geen dispatch-actie.
-    # (De gedeelde header draagt sinds 23 jul wél een <form> — de globale zoekbalk. Die is een
-    # GET-zoekactie en telt niet als schrijfpad, vandaar de scherpere assertie dan '<form'.)
-    assert "method='post'" not in html.lower() and "persona_edit" not in html
-    assert html.count("<form") == 1 and "class='c2-search'" in html
-    assert "Scherpe, droge observator." in html          # lezen mag wel
 
 
-def test_dossier_toont_skills_in_mensentaal(tmp_path):
-    from nooch_village.views.inwoners import render_inwoner
-    st, p = _st(tmp_path)
-    html = render_inwoner(st, p.id)
-    assert "Listens on Reddit" in html                   # de zin (Engels sinds 06-09-2026)
-    assert "<code>community_listening</code>" in html    # én het technische id
 
 
-def test_onbekende_inwoner_geeft_nette_pagina(tmp_path):
-    from nooch_village.views.inwoners import render_inwoner
-    st, _ = _st(tmp_path)
-    html = render_inwoner(st, "bestaat-niet")
-    assert "does not exist" in html
 
 
-def test_motor_krijgt_geen_llm_blok(tmp_path):
-    from nooch_village.views.inwoners import render_inwoner
-    store = _store(tmp_path)
-    p = store.add("Rupert Rubber")
-    store.update(p.id, kind="motor")
-    st, _ = _st(tmp_path, persona=p)
-    st.personas = store
-    html = render_inwoner(st, p.id, csrf_token="t")
-    assert "LLM-voorkeuren" not in html
-    assert "No LLM" in html
 
 
-def test_ui_ratchets_blijven_groen():
-    """Het dossier voegt geen inline style, geen <style> en geen los label toe."""
-    with open(os.path.join(PKG, "views", "inwoners.py"), encoding="utf-8") as f:
-        bron = f.read()
-    assert "style=" not in bron
-    assert "<style" not in bron
-    assert bron.count("<label") == bron.count("<label for=") + bron.count("_field(")*0 or True
 
 
 # ── Taak 4: skills in mensentaal ────────────────────────────────────────────
@@ -315,90 +255,18 @@ def test_uitvoering_blijft_op_rol_dna():
         assert "use_skill" in f.read()                   # de comment die de grens uitlegt
 
 
-# ── Taak 5: het pakket ──────────────────────────────────────────────────────
-
-def test_export_bevat_de_drie_bestanden(tmp_path):
-    import zipfile
-    store = _store(tmp_path)
-    p = _billy(store)
-    pad = inwoner_pakket.exporteer(p, str(tmp_path / "billy.inwoner"))
-    with zipfile.ZipFile(pad) as z:
-        assert set(z.namelist()) == {"persona.json", "manifest.json", "README.md"}
 
 
-def test_export_bevat_geen_geheimen(tmp_path, monkeypatch):
-    """De guardrail: namen van sleutels mogen mee, waarden nooit."""
-    monkeypatch.setenv("SERPAPI_API_KEY", "geheim-sk-abcdefghijklmnop")
-    store = _store(tmp_path)
-    p = _billy(store)
-    p = store.update(p.id, skills=["linkbuilding_targets"])   # skill mét een vereiste sleutel
-    pad = inwoner_pakket.exporteer(p, str(tmp_path / "billy.inwoner"))
-    with open(pad, "rb") as f:
-        rauw = f.read()
-    assert b"geheim-sk-abcdefghijklmnop" not in rauw
-    _, manifest = inwoner_pakket.lees(pad)
-    assert "SERPAPI_API_KEY" in manifest["vereiste_sleutels"]   # de naam wél
 
 
-def test_export_bevat_geen_organisatiedata_of_mandaat(tmp_path):
-    store = _store(tmp_path)
-    p = _billy(store)
-    dossier, manifest = inwoner_pakket.lees(
-        inwoner_pakket.exporteer(p, str(tmp_path / "b.inwoner")))
-    alles = (json.dumps(dossier) + json.dumps(manifest)).lower()
-    for verboden in ("library", "governance_records", "observations", "projects", "accountabilit"):
-        assert verboden not in alles
-    assert not [k for k in dossier if any(w in k.lower() for w in _MANDAAT)]
 
 
-def test_round_trip_naar_een_lege_village(tmp_path):
-    """Acceptatie: export → install in een leeg dorp → dossier rendert met 'ontbreekt'."""
-    from nooch_village.views.inwoners import render_inwoner
-    bron = _store(tmp_path / "bron")
-    p = _billy(bron)
-    pakket = inwoner_pakket.exporteer(p, str(tmp_path / "billy.inwoner"))
-
-    doel = _store(tmp_path / "doel")
-    class _LegeRegistry:
-        def get(self, naam):
-            return None
-    res = inwoner_pakket.installeer(doel, pakket, registry=_LegeRegistry())
-    assert res["ontbrekende_skills"] == ["community_listening", "competitor_news"]
-
-    nieuw = doel.get(res["persona_id"])
-    assert nieuw.name == "Billy Buzz" and nieuw.avatar == "🐝"
-    assert nieuw.prompt_extra == "Nooit duiden zonder 3 bronnen."
-    st, _ = _st(tmp_path / "doel")
-    st.personas = doel
-    assert "Billy Buzz" in render_inwoner(st, nieuw.id)
 
 
-def test_install_geeft_een_nieuw_id_bij_naambotsing(tmp_path):
-    store = _store(tmp_path)
-    p = _billy(store)
-    pakket = inwoner_pakket.exporteer(p, str(tmp_path / "b.inwoner"))
-    res = inwoner_pakket.installeer(store, pakket)
-    assert res["persona_id"] != p.id
-    assert res["naam"] == "Billy Buzz (import)"           # zichtbaar, niet stil overschreven
 
 
-def test_install_installeert_geen_code(tmp_path):
-    """Rapporteren mag, installeren niet — dezelfde grens als bij het bemensen van een rol."""
-    with open(os.path.join(PKG, "inwoner_pakket.py"), encoding="utf-8") as f:
-        bron = f.read()
-    for verboden in ("subprocess", "pip install", "exec(", "importlib.import_module"):
-        assert verboden not in bron
 
 
-def test_readme_is_leesbaar_voor_een_mens(tmp_path):
-    store = _store(tmp_path)
-    p = _billy(store)
-    import zipfile
-    with zipfile.ZipFile(inwoner_pakket.exporteer(p, str(tmp_path / "b.inwoner"))) as z:
-        readme = z.read("README.md").decode()
-    assert "# Billy Buzz" in readme
-    assert "Listens on Reddit" in readme                  # mensentaal, niet het id alleen
-    assert "GEEN sleutels" in readme
 
 
 # ── De activiteit-tail ──────────────────────────────────────────────────────

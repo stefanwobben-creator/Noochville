@@ -98,6 +98,11 @@ def _afgesloten(dd, st, titel="Sluitstuk"):
     it = next(c for c in st.projects.get(pid)["checklists"] if c["id"] == cl)["items"][0]
     st.projects.check_toggle(pid, cl, it["id"])
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
+    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
+    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
+    cockpit2._Stores(dd).project_docs.write_concept(
+        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
     return pid
 
 

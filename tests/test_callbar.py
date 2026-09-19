@@ -113,7 +113,7 @@ def test_guard_geen_callbar_op_de_geserveerde_paginas(tmp_path):
     dd = _dd(tmp_path)
     httpd, port = _server(dd)
     try:
-        for pad in ("/metrics2", "/admin", "/inwoners"):   # /founder is weg (BLOK C)
+        for pad in ("/metrics2", "/admin"):   # /founder (BLOK C) en /inwoners (BLOK B) zijn weg
             status, body = _get(port, pad)
             assert status == 200, (pad, status)
             assert "cb-frame" not in body, pad

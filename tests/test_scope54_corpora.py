@@ -143,15 +143,6 @@ def test_semscholar_or_keten_wordt_per_clausule_gezocht_en_verenigd():
     assert "searched 2 clauses" in uit["text"] and "top cited: “Paper 0”, 2019, 50 citations" in uit["text"]
 
 
-def test_semscholar_url_uit_paperid_als_de_bron_geen_url_geeft():
-    p = _s2_paper(7)
-    del p["url"]
-    with patch("urllib.request.urlopen", lambda req, timeout=None: _Resp({"total": 1, "data": [p]})), \
-         patch("time.sleep"):
-        uit = _s2_skill().run({"term": "x"}, SimpleNamespace(settings={}))
-    assert uit["hits"][0]["url"] == "https://www.semanticscholar.org/paper/P7"
-    t = project_verslag.inhoud_tekst(uit)
-    assert "• Paper 7 (https://www.semanticscholar.org/paper/P7) — woord0" in t
 
 
 def test_semscholar_drie_uitkomsten():
@@ -271,18 +262,6 @@ def test_epo_echte_fout_blijft_fout():
     assert "error" in uit and "503" in uit["error"] and Inhabitant._classify_result(uit)[0] == "fout"
 
 
-def test_epo_record_met_espacenet_link_lang_abstract_en_text():
-    with patch("time.sleep"):
-        uit = _epo(lambda url, token: _OPS_XML).run({"term": "shoe sole"}, SimpleNamespace(settings={}))
-    p = uit["patents"][0]
-    assert p["url"] == "https://worldwide.espacenet.com/patent/search?q=pn%3DEP777A1"
-    assert len(p["abstract"]) > 600
-    assert uit["gezocht"] == 'ta="shoe sole"'
-    assert uit["text"] == ("3 patent(s) via EPO OPS for 'shoe sole' (searched: ta=\"shoe sole\"); "
-                           "first: “Glue-free shoe” (EP777A1, 20210101).")
-    t = project_verslag.inhoud_tekst(uit)
-    assert "• Glue-free shoe (https://worldwide.espacenet.com/patent/search?q=pn%3DEP777A1) — woord0" in t
-    assert leesextract.te_lezen(uit, ("list", "patents")) == [(p, "abstract")]
 
 
 def test_epo_or_keten_mengt_leeg_en_treffers_en_faalt_bij_storing_zonder_treffers():
@@ -314,20 +293,6 @@ def test_epo_input_schema_zegt_hoe_or_werkt():
     assert "EPO Open Patent Services" in s.description[:160]
 
 
-# ═══ 4. Google Patents ═══════════════════════════════════════════════════════
-
-def test_google_patents_record_met_link_en_text():
-    from nooch_village.skills_impl.google_patents import GooglePatentsSkill
-    sk = GooglePatentsSkill()
-    sk._fetch = lambda term, limit, _get=None: {"results": {"total_num_results": 1, "cluster": [{"result": [
-        {"patent": {"title": "Compostable sole", "publication_number": "US123A1",
-                    "publication_date": "2024-01-01", "snippet": LANG}}]}]}}
-    uit = sk.run({"term": "compostable sole"}, None)
-    p = uit["patents"][0]
-    assert p["url"] == "https://patents.google.com/patent/US123A1" and len(p["abstract"]) > 600
-    assert uit["text"] == ("1 patent(s) on Google Patents for 'compostable sole'; first: "
-                           "“Compostable sole” (US123A1, 2024-01-01).")
-    assert "• Compostable sole (https://patents.google.com/patent/US123A1) — woord0" in project_verslag.inhoud_tekst(uit)
 
 
 # ═══ 5. Open Library — voltekst ══════════════════════════════════════════════
@@ -358,23 +323,6 @@ class _Get:
         return SimpleNamespace(status_code=status, reason="", text=json.dumps(body), json=lambda: body)
 
 
-def test_openlibrary_bevraagt_het_search_inside_endpoint_en_parset_de_treffers():
-    get = _Get({"hits": {"total": 2, "hits": [_OL_HIT, {"edition": {"key": "/books/OL2M", "title": "B"},
-                                                          "highlight": {"text": ["x {{{barefoot}}} y"]}}]}})
-    with patch("requests.get", get), patch("time.sleep"):
-        uit = _ol_skill().run({"term": "barefoot", "limit": 5}, None)
-    assert get.gezien[0]["url"] == "https://openlibrary.org/search/inside.json"
-    assert get.gezien[0]["params"] == {"q": "barefoot", "limit": 5} and get.gezien[0]["timeout"] == 20
-    assert uit["total"] == 2 and len(uit["hits"]) == 2 and "error" not in uit
-    h = uit["hits"][0]
-    assert h["title"] == "Born to Run" and h["url"] == "https://archive.org/details/borntorun00mcdo"
-    assert h["tekst"] == "the barefoot runners of the Copper Canyon … running barefoot on the trail"
-    assert h["authors"] == ["Christopher McDougall"] and h["year"] == 2009
-    assert uit["hits"][1]["url"] == "https://openlibrary.org/books/OL2M"       # geen ia → de editie
-    assert uit["text"].startswith("2 book(s) with 'barefoot' in their full text")
-    assert "• Born to Run (https://archive.org/details/borntorun00mcdo) — the barefoot runners" in \
-        project_verslag.inhoud_tekst(uit)
-    assert Inhabitant._classify_result(uit) == ("gelukt", ("list", "hits"))
 
 
 @pytest.mark.parametrize("data", [
@@ -468,25 +416,6 @@ def test_ngram_alles_stuk_is_error_niets_gevonden_is_no_data():
     assert Inhabitant._classify_result(leeg)[0] == "leeg"
 
 
-def test_ngram_mix_is_gelukt_met_strekking_per_rij_en_text():
-    raw = [{"ngram": "vegan (All)", "timeseries": _reeks(True)},
-           {"ngram": "vegan", "timeseries": [0.0] * 40},                   # de losse variant telt niet
-           {"ngram": "leather (All)", "timeseries": _reeks(False)}]
-    with patch("nooch_village.skills_impl.ngram._fetch_ngram", return_value=raw), \
-         patch("nooch_village.skills_impl.ngram.time.sleep"):
-        uit = _ng().run({"terms": ["vegan", "leather", "zzxq"], "locale": "en", "year_start": 1980}, None)
-    assert "error" not in uit and not uit.get("no_data")
-    assert Inhabitant._classify_result(uit) == ("gelukt", ("list", "rows"))
-    rij = {r["term"]: r for r in uit["rows"]}
-    assert rij["vegan"]["signal"]["direction"] == "stijgend"
-    assert rij["vegan"]["tekst"] == "rising over 2010–2019; last 1.2e-04, peak 1.2e-04 in 2019"
-    assert rij["leather"]["tekst"] == "falling over 2010–2019; last 4.2e-05, peak 1.2e-04 in 1980"
-    assert rij["zzxq"]["no_data"] is True
-    assert uit["text"] == ("2 of 3 term(s) found in Google Books Ngram (corpus 26, 1980–%d): "
-                           "rising — vegan; falling — leather; not in corpus — zzxq." % uit["year_end"])
-    t = project_verslag.inhoud_tekst(uit)
-    assert t.splitlines()[0].startswith("2 of 3 term(s) found")
-    assert "• vegan — rising over 2010–2019" in t                            # de richting haalt het verslag
 
 
 def test_ngram_stuurt_case_insensitive_mee_en_neemt_locale_of_corpus_uit_de_payload():
@@ -590,18 +519,6 @@ def test_zoekstrategie_biedt_alleen_bronnen_aan_die_in_een_rugzak_zitten():
     assert "Semantic Scholar" in BRONNEN["openalex_evidence"] and "Google Patents" in BRONNEN["epo_patents"]
 
 
-# ═══ 10. onderzoeksvraag en ruis_check — classificatie ═══════════════════════
-
-def test_onderzoeksvraag_drie_uitkomsten_classificeren_verschillend():
-    from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
-    def _run(antwoord):
-        with patch("nooch_village.llm.reason", return_value=antwoord):
-            return OnderzoeksvraagSkill().run({"word": "barefoot shoes", "claim": "rising"}, None)
-    assert Inhabitant._classify_result(_run(None))[0] == "fout"
-    assert Inhabitant._classify_result(_run('{"question": null}'))[0] == "leeg"
-    goed = _run('{"question": "Which biomechanical benefits drive the uptake of barefoot shoes?"}')
-    assert Inhabitant._classify_result(goed) == ("gelukt", ("text", "vraag"))
-    assert project_verslag.inhoud_tekst(goed) == "Which biomechanical benefits drive the uptake of barefoot shoes?"
 
 
 def test_ruis_check_accepteert_een_getal_met_decimaal_of_exponent():

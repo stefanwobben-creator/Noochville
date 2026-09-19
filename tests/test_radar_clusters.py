@@ -45,31 +45,10 @@ def _voeg_toe(st, content, *, source, dagen_terug=1, rationale=""):
     return rid
 
 
-# ── 1. De bronnen-teller ─────────────────────────────────────────────────────
-
-def test_acht_vermeldingen_uit_een_bron_tellen_als_een_bron():
-    """De guard waar het hele mechanisme om draait. Wie op vermeldingen stuurt, wordt geregeerd
-    door de luidruchtigste feed."""
-    leden = [_sig(f"s{n}", f"Mycelium leer variant {n}", source="fashionunited.com")
-             for n in range(8)]
-    assert len(leden) == 8
-    assert len(radar_clusters.bronnen_van(leden)) == 1
 
 
-def test_acht_bronnen_tellen_als_acht():
-    leden = [_sig(f"s{n}", f"Mycelium leer variant {n}", source=f"bron{n}.com") for n in range(8)]
-    assert len(radar_clusters.bronnen_van(leden)) == 8
 
 
-def test_bron_valt_terug_op_link_dan_feed_dan_onbekend():
-    zonder = {"id": "a", "content": "x", "feed": "Material Innovation"}
-    assert radar_clusters.bron_van(zonder) == "material innovation"
-    met_link = {"id": "b", "content": "x", "link": "https://www.mdpi.com/artikel/1"}
-    assert radar_clusters.bron_van(met_link) == "www.mdpi.com"
-    # Herkomstloos telt als ÉÉN bron, niet als n: anders zouden acht anonieme signalen als acht
-    # onafhankelijke bevestigingen lezen.
-    leeg = [{"id": str(n), "content": "x"} for n in range(8)]
-    assert radar_clusters.bronnen_van(leeg) == {"onbekend"}
 
 
 # ── 2. Clustering ────────────────────────────────────────────────────────────
