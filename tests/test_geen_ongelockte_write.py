@@ -77,7 +77,6 @@ _WHITELIST = {
     # plaats van stil door te gaan, is precies waarvoor `test_whitelist_is_actueel` bestaat.
     "feedback.py":       (1, "dormant: legacy cockpit1"),
     "governance_examples.py": (1, "dormant: legacy cockpit1 + handmatige CLI"),
-    "link_suggest.py":   (1, "dormant: legacy cockpit1"),
     "news_distill.py":   (1, "dormant: legacy cockpit1"),
     "pinboard.py":       (1, "dormant: demo-only (discovery_board)"),
     "cli.py":            (1, "eenmalig CLI-commando (shopify_metrics), geen concurrency-store"),

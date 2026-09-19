@@ -406,7 +406,6 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `kennisbank_intake.json` |
 | `llm_prijzen.json` |
 | `manifest.json` |
-| `mc_records.json` |
 | `persona.json` |
 | `project.json` |
 | `rugzakken.json` |
@@ -415,4 +414,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 11 zonder gevonden schrijver._
+_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 47 daarbuiten met één schrijver · 11 met meerdere · 10 zonder gevonden schrijver._

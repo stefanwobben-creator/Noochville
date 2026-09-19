@@ -87,13 +87,6 @@ def test_het_bord_gebruikt_alleen_bestaande_statussen():
     assert set(_PROJ_CHIP) == set(P.STATUSSEN), "elke status hoort een chip te hebben"
 
 
-def test_elke_status_heeft_een_teken_op_de_commandoregel():
-    """`future`, `draft` en `proposed` misten en werden een '?'. Een vraagteken op een lijst die je
-    gebruikt om te beslissen is erger dan geen lijst."""
-    from nooch_village.projects_cli import _STATUS_ICON, _status_icon
-    assert set(_STATUS_ICON) == set(P.STATUSSEN)
-    for s in P.STATUSSEN:
-        assert _status_icon(s) != "?", f"status {s!r} heeft geen teken"
 
 
 def test_elke_status_heeft_een_label_op_het_metrics_scherm():

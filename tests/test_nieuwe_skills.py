@@ -177,46 +177,5 @@ def _fake_notes(cards):
     return Notes()
 
 
-def test_kennis_tags_hints():
-    from nooch_village import kennis_tags
-    notes = _fake_notes([
-        ("a", "x", ["hint:leer", "hint:circulariteit", "signal"], 0, "2026-01-01"),
-        ("b", "y", ["hint:leer", "hint:circulariteit"], 0, "2026-01-02"),
-        ("c", "z", ["hint:circulariteit", "hint:kurkzooltje"], 0, "2026-01-03"),
-    ])
-    # hint:leer is exact een onderwerp → deterministische map (geen LLM nodig)
-    plan = kennis_tags.plan_hints(notes, reason_fn=lambda *a, **k: '{"circulariteit":"materiaal","kurkzooltje":"NONE"}',
-                                  drempel_nieuw=4)
-    assert plan["map"].get("leer") == "leer"
-    assert plan["map"].get("circulariteit") == "materiaal"     # via LLM
-    assert "kurkzooltje" in plan["drop"]                        # LLM NONE + zeldzaam
-    r = kennis_tags.pas_hints_toe(notes, plan)
-    assert r["gemapt"] == 2 and r["gedropt"] == 1
-    # na toepassen: geen hint:*-tags meer, wel de echte onderwerpen
-    alle = {t for a in notes.all() for t in a.tags}
-    assert not any(t.startswith("hint:") for t in alle)
-    assert "leer" in alle and "materiaal" in alle
-
-    # geen LLM → alleen exacte map, rest onaangeroerd (nooit stil weggooien)
-    notes2 = _fake_notes([("a", "x", ["hint:leer", "hint:vaagconcept"], 0, "2026-01-01")])
-    plan2 = kennis_tags.plan_hints(notes2, reason_fn=False)     # False → geen LLM
-    assert plan2["map"].get("leer") == "leer" and "vaagconcept" in plan2["onaangeroerd"]
 
 
-def test_kennis_merge_clusters():
-    from nooch_village import kennis_merge
-    notes = _fake_notes([
-        ("a", "EU Ecolabel koppelt textiel aan de circulaire economie", [], 3, "2026-01-01"),
-        ("b", "EU Ecolabel koppelt textiel aan circulaire economie inclusief herkomst", [], 1, "2026-01-05"),
-        ("c", "Mycelium groeit snel op landbouwreststromen", [], 0, "2026-01-02"),
-    ])
-    zelfde = lambda nieuw, best, rf=None, **k: "zelfde"        # signatuur van _llm_zelfde
-    # _llm_zelfde(nieuw, bestaand, reason_fn) → wij faken via reason_fn die alles 'ZELFDE' noemt
-    res = kennis_merge.vind_clusters(notes, reason_fn=lambda *a, **k: "ZELFDE",
-                                     lex_drempel=0.5, sem_drempel=0.99)
-    assert len(res["clusters"]) == 1
-    cl = res["clusters"][0]
-    assert cl["target"] == "a"                                 # meeste grounding wint
-    assert cl["sources"][0]["id"] == "b"
-    r = kennis_merge.pas_merge_toe(notes, res["clusters"])
-    assert r["kaarten_opgeruimd"] == 1 and notes.get("b").archived

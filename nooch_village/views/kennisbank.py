@@ -1000,7 +1000,7 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
                     for i in inzichten if i["id"] != active_iid) or (
         "<p class='muted'>No insights yet. Verify the lead-in above (once there "
         "are signals), or seed the first batch: "
-        "<code>python -m nooch_village.kennisbank_seed --apply</code></p>")
+        "</p>")
 
     actiebalk = _actiebalk(open_, st, atoms, inzichten, hunch, speel, cluster, csrf_token)
     toast = _nieuw_toast(nieuw, atoms)
