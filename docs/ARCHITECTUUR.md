@@ -15,7 +15,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/logout` | `(inline)` | `cockpit2.py` |
 | `/wachtwoord` | `(inline)` | `cockpit2.py` |
 | `/context` | `(inline)` | `cockpit2.py` |
-| `/epic/frame` | `(inline)` | `cockpit2.py` |
 | `/` | `(inline)` | `cockpit2.py` |
 | `/index.html` | `(inline)` | `cockpit2.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
@@ -264,7 +263,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `governance_examples.json` | `cli.py` |
 | `kennis_embeddings.json` | `kennis_embeddings.py` |
 | `materiaal_memo.json` | `materiaal_memo.py` |
-| `meta.json` | `epic.py` |
 | `noochie_daily.json` | `roles.py` |
 | `notes.json` | `kennisbank.py` |
 | `persona_kroniek.jsonl` | `cockpit2.py` |
@@ -312,4 +310,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_40 routes · 142 dispatch-acties · 27 stores in `_Stores` · 37 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_39 routes · 142 dispatch-acties · 27 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

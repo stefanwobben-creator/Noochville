@@ -20,7 +20,7 @@ from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import (org, artefacts, epic, acc_ids, skill_meta, skill_links,
+from nooch_village import (org, artefacts, acc_ids, skill_meta, skill_links,
                            skill_labels, wiki, claims_db)
 from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
@@ -165,35 +165,6 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
             f"<div class='acc-ai'>{beheer}</div></div>")
 
 
-def _epic_earth_html() -> str:
-    """Live NASA-EPIC-aardbol: de laatste frames gestapeld, met een klein script dat ze traag
-    doorloopt (zachte draaiing), plus een UTC-onderschrift. Alleen bestaande + de goedgekeurde
-    .epic-* klassen, geen inline styles. Fail-closed: geen frames → nette melding."""
-    frames = epic.latest_frames()
-    if not frames:
-        return "<div class='card muted'>Live earth image (NASA EPIC) is briefly unavailable.</div>"
-    imgs = "".join(
-        f"<img class='epic-frame{' on' if i == len(frames) - 1 else ''}' "
-        f"src='/epic/frame?image={_e(f['image'])}&date={_e(f['date'])}' "
-        f"data-cap='{_e(f['caption'])} UTC' alt='Earth from NASA EPIC (DSCOVR)' loading='lazy'>"
-        for i, f in enumerate(frames))
-    cap0 = f"{_e(frames[-1]['caption'])} UTC"
-    # Wachtindicator: draaiende 🌍 + tekst, zichtbaar tot het beeld binnen is (JS zet .loaded op load).
-    loader = ("<div class='epic-loading'><span class='epic-globe' aria-hidden='true'>🌍</span>"
-              "<span class='epic-load-txt'>Mother Earth is loading…</span></div>")
-    js = ("<script>(function(){var w=document.currentScript.parentNode;"
-          "var earth=w.querySelector('.epic-earth');"
-          "var on=earth?earth.querySelector('.epic-frame.on'):null;"
-          "function done(){if(earth)earth.classList.add('loaded');}"
-          "if(on){if(on.complete)done();else{on.addEventListener('load',done);on.addEventListener('error',done);}}"
-          "else{done();}"
-          "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
-          "if(fr.length<2)return;var i=fr.length-1;"
-          "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
-          "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},5000);"
-          "})();</script>")
-    return (f"<div class='epic-earth'>{loader}{imgs}</div>"
-            f"<div class='epic-cap'>Live: {cap0}</div>{js}")
 
 
 def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
@@ -206,10 +177,10 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
     doms = d.domains or []
     doms_list = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>") if doms else ""
-    if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live aardbol; geen "Geen domein."
-        domains_inner = _epic_earth_html() + doms_list
-    else:
-        domains_inner = doms_list or "<span class='muted'>No domain.</span>"
+    # Op de anchor-cirkel stond hier een live NASA-EPIC-aardbol. Weg op 19 september 2026
+    # (fase 6): mooi, maar het was een dagelijkse externe ophaal plus een schijf-cache voor een
+    # plaatje, en in een codebase die we halveren is dat geen domein.
+    domains_inner = doms_list or "<span class='muted'>No domain.</span>"
     parts.append(f"<div class='c2-sec'><h3>Domains</h3>{domains_inner}</div>")
     accs = d.accountabilities or []
     if not is_c:

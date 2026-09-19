@@ -24,7 +24,6 @@ from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.epo_patents import EpoPatentsSkill
 from nooch_village.skills_impl.google_patents import GooglePatentsSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
@@ -57,7 +56,6 @@ def build_skill_registry() -> SkillRegistry:
         EpoPatentsSkill(),
         GooglePatentsSkill(),          # alternatief pad voor de skill-ladder als EPO OPS faalt
         KeywordsEverywhereSkill(),
-        AlphaVantageIndexSkill(),
         TrendsCategorieSkill(),        LinkbuildingTargetsSkill(),
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),

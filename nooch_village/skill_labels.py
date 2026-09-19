@@ -16,7 +16,6 @@ LABELS: dict[str, str] = {
     "trends_categorie": "Tracks how much our themes are searched for",
     "google_trends": "Looks at what people search for, per country and language",
     "serpapi_trends": "Search volume from a paid, reliable source",
-    "alphavantage_index": "Follows the share prices of the sustainable index funds",
 
     # ── Searching and substantiating ────────────────────────────────────────────
     "openalex_evidence": "Finds scientific evidence in the academic literature",
@@ -112,7 +111,6 @@ MATCH_NL: dict[str, str] = {
     "trends_categorie": "Houdt bij hoeveel er op onze thema's gezocht wordt",
     "google_trends": "Kijkt waar mensen op zoeken, per land en per taal",
     "serpapi_trends": "Zoekvolume via een betaalde, betrouwbare bron",
-    "alphavantage_index": "Volgt de beurskoersen van de duurzame index-fondsen",
     "openalex_evidence": "Zoekt wetenschappelijk bewijs in de academische literatuur",
     "epo_patents": "Doorzoekt het Europese patentregister",
     "google_patents": "Doorzoekt patenten wereldwijd",

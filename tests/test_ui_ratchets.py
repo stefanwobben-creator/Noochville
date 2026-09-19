@@ -96,7 +96,7 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 64   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
+_PREFIX_CEILING = 63   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
                        #      inline-editor van cockpit2_util wordt door de wall-comment ÉN
                        #      het conceptverslag gebruikt. Hij verving twee ad-hoc bouwsels
                        #      ('fentry-edit' plus een <details> op /rapport) door één, en
@@ -116,6 +116,7 @@ _PREFIX_CEILING = 64   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen f
                        #      Duolingo-achtig scherm met voortgangsbalk en stapkaart, geen cockpit-lijst.
                        #      De CSS staat sinds 24 jul in static/nooch.css, niet meer als blob in de view.
                        # -1: 'snake-' — het easter-egg is op 19 sept 2026 verwijderd (fase 6).
+                       # -1: 'epic-'  — de NASA-aardbol is in dezelfde beurt verdwenen.
 
 
 def _prefix_families() -> set[str]:

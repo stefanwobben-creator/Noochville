@@ -301,7 +301,9 @@ def test_verwachte_bronnen_komen_uit_de_meetcatalogus():
     from nooch_village import biweekly_report, meetcatalog
     actief = meetcatalog.actieve_bronnen()
     assert "gdelt_tone" not in actief and "trends_categorie" not in actief and "werkoverleg" not in actief
-    assert {"plausible", "gsc", "trends", "alphavantage", "keywordseverywhere"} <= set(actief)
+    # alphavantage stond hier ook; die bron is op 19 september 2026 uit de catalogus
+    # gehaald (fase 6) — hij haalde dagelijks op en geen enkele tegel las hem.
+    assert {"plausible", "gsc", "trends", "keywordseverywhere"} <= set(actief)
     assert biweekly_report._verwacht() == actief
     assert not hasattr(biweekly_report, "_VERWACHT")
 

@@ -75,7 +75,6 @@ def test_schone_store_nul_vals_alarm():
         _row("openalex", "openalex_works_90d::mycelium", NOW - 2 * DAY),
         _row("trends", "trends_ratio_thrift_luxury_day", NOW - 2 * DAY),
         _row("keywordseverywhere", "keywordseverywhere_footwear_day", NOW - 2 * DAY),
-        _row("alphavantage", "alphavantage_spx_day", NOW - DAY),
         _row("werkoverleg", "werk_tevredenheid_day", NOW - 100 * DAY),   # irregular → geen alarm
         _row("shopify", "shopify_orders_day", NOW - 100 * DAY),           # inactief → geen alarm
     ]
