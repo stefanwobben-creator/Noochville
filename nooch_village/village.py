@@ -592,6 +592,38 @@ class Village:
                 log.warning("👻 weesprojecten van '%s' niet gemeld", rol_id)
         return list(dood.keys())
 
+    def _radar_ingest(self) -> dict:
+        """De Inoreader-feeds ophalen en ongefilterd in de swipefile zetten.
+
+        DIT DRAAIDE TOT 19 SEPTEMBER 2026 ALS LOSSE CRON (`30 6 * * *` onder gebruiker `nooch`),
+        buiten het dorp om. Dat is dezelfde koppelfout als de dagbel-op-de-facilitator van 28
+        augustus, maar dan andersom: een taak van het dorp die alleen in de serverconfig bestond,
+        onzichtbaar in de repo en niet meetbaar in de puls. Nu hangt hij aan `dag_begint`, net als
+        de databron-collector en de twee wees-sweeps.
+
+        BIJ HET DEPLOYEN MOET DIE CRONTAB-REGEL WEG, anders draait de ingest tweemaal per dag. De
+        ontdubbeling op artikel-URL vangt dubbele signalen op, dus het is niet gevaarlijk — het is
+        twee keer de Inoreader-API en een log met twee bronnen."""
+        from nooch_village.inoreader_ingest import ingest_all
+        return ingest_all(self.context.data_dir)
+
+    def _veilig_radar_ingest(self) -> None:
+        try:
+            uit = self._radar_ingest()
+            n = sum((v or {}).get("proposed", 0) for v in uit.values())
+            logging.getLogger("village").info("📡 radar-ingest: %d nieuw over %d feed(s)", n, len(uit))
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("radar-ingest faalde: %s", e)
+
+    def _veilig_legal_check(self) -> None:
+        """De legal-feed op iets dat Nooch raakt. Ná de ingest gewired, zodat wat vanochtend
+        binnenkwam vandaag nog beoordeeld wordt in plaats van morgen."""
+        try:
+            from nooch_village import legal_signaal
+            legal_signaal.check(self.context.data_dir, self.human_inbox)
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("legal-check faalde: %s", e)
+
     def _veilig_weesprojecten(self) -> None:
         try:
             self._meld_weesprojecten()
@@ -616,6 +648,10 @@ class Village:
         # (Stefan, 15 sept: "we werken naar het verwijderen van de AI-rollen" — elke keer dat dat
         # gebeurt mag het werk dat erop stond niet stil verdwijnen, zoals bij harry_hemp nu al was.)
         self.bus.subscribe("dag_begint", lambda e: self._veilig_weesprojecten())
+        # De radar-ingest: verhuisd van een losse crontab-regel naar de dagcadans (19 sept 2026).
+        # Eerst ophalen, dan de legal-check, zodat een vers signaal dezelfde puls nog wordt gezien.
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_radar_ingest())
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_legal_check())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")

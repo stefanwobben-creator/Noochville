@@ -388,6 +388,43 @@ class HumanInbox:
         self._save()
         return iid
 
+    def add_legal_signaal(self, *, link: str, titel: str, bron: str = "", reden: str = "") -> str:
+        """Eén legal-signaal dat Nooch raakt (zie `legal_signaal.py`). Dedup op de artikel-LINK.
+
+        Op de link en niet op de titel: dezelfde wetswijziging krijgt bij drie uitgevers drie
+        koppen, en dat zijn drie meldingen waard als ze uit drie bronnen komen. Hetzelfde artikel
+        dat morgen opnieuw door de feed rolt is er één.
+
+        Dedup over ALLE statussen, net als `add_suggestion`: eenmaal gemeld en afgehandeld betekent
+        niet dat het over een week opnieuw mag opduiken."""
+        sleutel = (link or titel).strip()
+        if not sleutel:
+            return ""
+        for item in self._items.values():
+            if item["type"] == "legal_signaal" and item.get("subject") == sleutel:
+                return item["id"]
+
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "legal_signaal",
+            "subject": sleutel,
+            "context": {
+                "link":  link,
+                "titel": titel,
+                "bron":  bron,
+                "reden": reden,
+                "note": ("Legal & Green Claims: dit signaal lijkt Nooch te raken. Lees het en "
+                         "beslis zelf; er is niets voorbereid en er gebeurt niets automatisch."),
+            },
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
+        }
+        self._save()
+        return iid
+
     def add_keyword_batch(self, market: str, tier: str,
                           candidates: list[str], estimated_credits: int,
                           geo: str | None = None, locale: str | None = None) -> str:

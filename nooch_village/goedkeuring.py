@@ -56,6 +56,16 @@ TYPES: dict[str, dict] = {
         "waarom_niet": ("approving has to pick a destination (project or knowledge) and that "
                         "field is not on this form yet"),
     },
+    "legal_signaal": {
+        "vraag": "Read this legal signal?",
+        # GEEN JA-KNOP, en dat is geen tekortkoming. Er valt hier niets goed te keuren: het item is
+        # een leesopdracht, geen voorstel. "Ja" zou moeten betekenen dat er iets gebeurt, en het
+        # enige wat kan gebeuren is dat een mens het artikel leest en zelf besluit. Nee en later
+        # mogen altijd, dus het item is gewoon weg te werken.
+        "ja": False,
+        "waarom_niet": ("this is something to read, not something to approve — open the link and "
+                        "decide yourself"),
+    },
     "suggestion": {
         "vraag": "Is this suggestion worth acting on?",
         "ja": False,
