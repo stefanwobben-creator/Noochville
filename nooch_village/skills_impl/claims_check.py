@@ -99,10 +99,12 @@ class ClaimsCheckSkill(Skill):
 
 
 def verrijk(b: dict) -> dict:
-    """Eén bevinding mét `oordeel` en `citaat`, zodat de uitvoerlaag (wall-note, verslag) het
-    stoplicht en de bron toont. Tot scope 56 rendert het verslag alleen de termnaam: "• planet-safe"
-    zonder rood, bron of waarom (project_verslag kent alleen title/url/extract-achtige velden;
-    `oordeel` + `citaat` rendert hij als "oordeel — “citaat”")."""
+    """Eén bevinding mét `oordeel` en `citaat`, zodat een lezer het stoplicht en de bron ziet en
+    niet alleen de termnaam ("• planet-safe" zonder rood, bron of waarom).
+
+    De aanleiding was de verslag-assembler, die alleen title/url/extract-achtige velden rende.
+    Die assembler is op 19 september 2026 weg (fase 3, BLOK B); de verrijking blijft, want ze
+    is nuttig voor elke lezer van een bevinding — het scherm, de wall-note en een mens."""
     stoplicht = str(b.get("stoplicht") or "")
     bron = str(b.get("bron") or "").strip()
     detail = str(b.get("bron_detail") or "").strip()

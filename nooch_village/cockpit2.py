@@ -4600,28 +4600,27 @@ def _claims_scan(form: dict, data_dir: str | None = None) -> tuple[dict, str]:
 def _claims_gate(st, username: str | None) -> str | None:
     """Poort voor claims-curatie: None = mag, anders de weigering.
 
-    De rol wordt AFGELEID uit het claims-domein en staat hier niet als id. Acht dispatch-takken
-    riepen `_role_gate("compliance", …)` los aan; toen die rol verhuisde en het oude record werd
-    gearchiveerd, hingen die acht poorten aan een naam die niemand meer draagt. Ze werkten alleen
-    nog doordat `resolve_circle_id` via het archief-record bij de oude cirkel uitkwam — verdwijnt
-    die cirkel, dan weigeren ze iedereen zonder dat iets zegt waaróm.
-
-    Bezit geen levende rol het domein, dan zegt de poort dát, in plaats van "alleen de rolvervuller
-    of Circle Lead mag dit" — dat laatste stuurt de lezer een uur de verkeerde kant op.
-
-    De guest-regel blijft ONGEWIJZIGD gelden: auth uit = mag alles, precies zoals bij elke andere
-    poort. Mijn eerste versie weigerde vóór `_role_gate` en brak daarmee stil de enige modus waarin
-    het dorp zonder login draait — een nieuwe poort mag geen bestaande regel omduwen als bijvangst."""
-    rol = _claims_rol(st)
-    if not rol and username != "guest":
-        return (f"⛔ No access — no live role owns the '{_claims_db.DOMEIN}' domain. "
-                f"Assign it to a role via governance first.")
-    return _role_gate(rol, username, st)
-
-
-def _claims_rol(st) -> str:
-    """Het record-id van de levende rol die het claims-domein bezit ("" = niemand)."""
-    return _claims_board.claims_rol(getattr(st, "records", None))
+    # AUTHZ: iedereen-ingelogd — claims is sinds 19 september 2026 geen domein met een eigenaar
+    # meer maar gereedschap dat een mens pakt (fase 5). Wie is ingelogd mag de term-database
+    # bijwerken.
+    #
+    # WAT HIER WEG IS. De poort leidde de eigenaar-rol af uit het claims-domein en liet alleen de
+    # rolvervuller of Circle Lead door. Die constructie was al één keer gerepareerd: acht takken
+    # riepen `_role_gate("compliance", …)` met een literal aan, en toen die rol verhuisde hing de
+    # hele curatie aan een naam die niemand meer droeg. De afleiding uit governance loste dat op,
+    # maar de onderliggende aanname bleef: dat er een eigenaar HOORT te zijn. Die aanname is
+    # vervallen. Het claims-domein heeft sinds 18 september geen levende eigenaar, de EmpCo-deadline
+    # staat op 27 september, en een poort die niemand doorlaat is dan geen zorgvuldigheid maar een
+    # blokkade.
+    #
+    # Wat blijft: de guest-regel (auth uit = mag alles) en fail-closed op een ingelogde die het
+    # systeem niet kent. Dat is dezelfde vorm als `_role_gate` en `_member_gate`; alleen de
+    # rol-eis eruit, niet de authenticatie."""
+    if username == "guest":
+        return None
+    if st.people.by_email(username) is None:
+        return "No access — user not recognised"
+    return None
 
 
 def _claims_gate_open(st, username: str | None) -> bool:
@@ -4639,6 +4638,51 @@ def _claims_audit(st, username: str | None, event: str, **velden) -> None:
                                ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+# De twee claims-skills draaiden tot 19 september 2026 mee op de dagpuls (`pulse_skills` in
+# settings.ini). Claims is sinds fase 5 geen domein met een eigenaar meer maar gereedschap dat een
+# mens pakt, en gereedschap heeft een knop nodig, geen wekker. De DNA-grant op compliance blijft
+# staan: de skills MOGEN nog, ze gaan alleen niet meer uit zichzelf lopen.
+_CLAIMS_KNOPPEN = {
+    "claims_site_scan": "site scan",
+    "regulation_watch": "regulation check",
+}
+
+
+def _act_claims_skill(c):
+        """Draai een van de twee claims-skills op aanvraag, synchroon, en zeg wat eruit kwam.
+
+        # AUTHZ: iedereen-ingelogd — zelfde poort als de rest van de claims-curatie (`_claims_gate`).
+        #
+        # SYNCHROON, en dat is een keuze. De mens staat voor het scherm en heeft net geklikt; een
+        # achtergrondtaak zou betekenen dat hij niet weet of er iets gebeurt. Beide skills bewaken
+        # hun eigen ritme en zijn idempotent per periode, dus twee keer klikken is niet twee keer
+        # werk — dat is precies waarom ze een knop kunnen zijn."""
+        naam = (c.g("skill") or "").strip()
+        if naam not in _CLAIMS_KNOPPEN:
+            return c.nxt, "✗ unknown claims skill"
+        _deny = _claims_gate(c.st, c.username)
+        if _deny:
+            return c.nxt, _deny
+        skill = shared_registry().get(naam)
+        if skill is None:
+            return c.nxt, f"✗ {naam} is not registered"
+        _load_env()
+        try:
+            uit = skill.run({}, c.st) or {}
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("cockpit2.claims").exception("%s faalde", naam)
+            return c.nxt, f"✗ {_CLAIMS_KNOPPEN[naam]} failed: {type(e).__name__}"
+        _claims_audit(c.st, c.username, f"claims_skill_run", skill=naam, ok=bool(uit.get("ok")))
+        # De uitkomst in één regel, en een lege uitkomst zegt WAAROM hij leeg is — een skill die
+        # "niets gedaan" meldt zonder reden leest als een storing (zelfde regel als bij de puls).
+        if uit.get("no_data") or uit.get("skipped"):
+            return c.nxt, f"· {_CLAIMS_KNOPPEN[naam]}: {uit.get('reason') or uit.get('reden') or 'nothing to do'}"
+        if uit.get("ok") is False:
+            reden = (uit.get("escalate") or {}).get("reason") or uit.get("error") or "unknown reason"
+            return c.nxt, f"✗ {_CLAIMS_KNOPPEN[naam]}: {reden}"
+        return c.nxt, f"✓ {_CLAIMS_KNOPPEN[naam]}: {uit.get('text') or 'done'}"
 
 
 def _act_claims_term_add(c):
@@ -5343,6 +5387,7 @@ ACTIONS = {
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
     "lk_mute": _act_lk_mute,
+    "claims_skill": _act_claims_skill,
     "claims_term_add": _act_claims_term_add,
     "claims_term_retract": _act_claims_term_retract,
     "claims_work_status": _act_claims_work_status,
@@ -5399,17 +5444,6 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 _PUBLIC_GET: set[str] = set()
 
 
-# Het kennis-budget van de wizard, in seconden. Er wacht een MENS voor een scherm, en zijn browser
-# stapt eruit na `AI_TIMEOUT_MS` (12s, views/wizard.py). Het budget is met opzet een fractie daarvan:
-# de raadpleging is de aanloop, het model is het werk, en de aanloop mag het werk niet opeten.
-#
-# Gemeten op prod 28 aug 2026: de raadpleging kostte 29,4s en het plannen zelf 3,3s. De server maakte
-# de checklist keurig af en schreef hem in een verbinding die al dicht was — vier keer een
-# BrokenPipeError in het log en vier keer "the assistant could not be reached" op het scherm.
-#
-# Dit knijpt alleen de semantische stap af; alle lexicale bronnen blijven staan (zie
-# `kennis_context.kennis_voor`). Voor de daemon verandert er niets: die geeft geen budget mee.
-_WIZARD_KENNIS_BUDGET_S = 2.5
 
 
 def _home_node(recs) -> str:
@@ -6112,27 +6146,32 @@ def make_handler(data_dir: str, csrf_token: str,
                         # Geheugen-eerst (zoals de daemon-planner): raadpleeg de kennislaag én eerder
                         # afgerond onderzoek vóór het plannen, zodat de wizard voortbouwt i.p.v.
                         # opnieuw verzamelt. Fail-soft: een lege/kapotte store → geen sectie.
-                        kennis = ""
+                        # DIT WAS STIL KAPOT. Er stond `from nooch_village.kennis_context import
+                        # kennis_voor, kennis_blok`, en die module is in fase 2b verdwenen. De
+                        # ImportError viel in de buitenste `except`, dus de wizard logde bij ELKE
+                        # plan-aanroep een exception en nam óók het deliverable-blok niet mee — dat
+                        # stond binnen dezelfde try. Fail-soft mag, maar niet zó: een pad dat altijd
+                        # faalt en altijd zwijgt is geen terugval, het is een dood pad met ruis.
+                        # `reeds_bekend` is de vervanging die in fase 2b voor kennis_context kwam.
+                        kennis, delen = "", []
                         try:
-                            from nooch_village.kennis_context import kennis_voor, kennis_blok
                             from nooch_village.deliverable_context import gather_deliverable_context
-                            delen = []
-                            try:
-                                dblok = gather_deliverable_context(
-                                    st.projects, goal, max_notes=5, max_chars=2000,
-                                    store=st.deliverables) or ""
-                            except Exception:
-                                dblok = ""
+                            dblok = gather_deliverable_context(
+                                st.projects, goal, max_notes=5, max_chars=2000,
+                                store=st.deliverables) or ""
                             if dblok:
                                 delen.append("Eerder afgerond onderzoek in het dorp (gebruik dit; "
                                              "plan geen items die dit al beantwoordt):\n" + dblok)
-                            kblok = kennis_blok(kennis_voor(st.dd, goal,
-                                                            deadline=_WIZARD_KENNIS_BUDGET_S))
+                        except Exception:
+                            logging.getLogger("cockpit2.wizard").exception("deliverable-context faalde")
+                        try:
+                            from nooch_village import reeds_bekend
+                            kblok = reeds_bekend.blok(st.dd, goal)
                             if kblok:
                                 delen.append(kblok)
-                            kennis = "\n\n".join(delen)
                         except Exception:
-                            logging.getLogger("cockpit2.wizard").exception("geheugen-raadpleging faalde")
+                            logging.getLogger("cockpit2.wizard").exception("reeds-bekend faalde")
+                        kennis = "\n\n".join(delen)
                         # ÉÉN MODELBELEID. Dit is dezelfde beslissing als `plan_checklist` in de
                         # daemon — welk werk er gebeurt — en een fout hier plant zich voort in elke
                         # stap die eruit volgt. Hij hoort dus op hetzelfde brein te draaien, via

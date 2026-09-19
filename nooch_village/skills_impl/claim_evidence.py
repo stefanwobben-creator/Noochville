@@ -193,9 +193,12 @@ class ClaimEvidenceSkill(Skill):
     @staticmethod
     def _verrijk(row: dict) -> dict:
         """Additief: `url` (= source), `citaat` (= evidence) en `oordeel` (= de status in woorden),
-        zodat het verslag "• Veja (https://…) — confirmed — “…”" leest en niet alleen "• Veja"
-        (project_verslag kent `evidence`/`source` niet als adres/strekking-veld; skill-review
-        12-09-2026). De oude velden blijven staan voor `evidence_records`."""
+        zodat een bevinding leest als "• Veja (https://…) — confirmed — “…”" en niet als "• Veja".
+
+        Geschreven voor de verslag-assembler, die `evidence`/`source` niet als adres- of
+        strekking-veld herkende (skill-review 12-09-2026). Die assembler is weg sinds 19 september
+        2026; de velden blijven, want ze dienen elke lezer. De oude velden blijven óók staan, voor
+        `evidence_records`."""
         status = str(row.get("status") or "")
         return {**row, "url": row.get("source") or "", "citaat": row.get("evidence") or "",
                 "oordeel": _OORDEEL.get(status, status)}

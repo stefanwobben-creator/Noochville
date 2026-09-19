@@ -33,11 +33,15 @@ def test_ze_lopen_mee_op_de_dagpuls():
 
 
 def test_de_bestaande_pulse_skills_blijven_staan():
-    """Toevoegen mag nooit vervangen: claims_site_scan en regulation_watch draaien al."""
+    """Toevoegen mag nooit vervangen.
+
+    Stond op claims_site_scan + regulation_watch; die twee zijn op 19 september 2026 uit
+    pulse_skills gehaald (fase 5) en zijn nu knoppen op /claims. De eis blijft dezelfde: wat hier
+    staat is er met opzet, en de materiaal-skills mogen niet als bijvangst verdwijnen."""
     cp = configparser.ConfigParser()
     cp.read(pathlib.Path("config/settings.ini"))
     ps = cp.defaults().get("pulse_skills", "")
-    assert "claims_site_scan" in ps and "regulation_watch" in ps
+    assert "claims_site_scan" not in ps and "regulation_watch" not in ps
 
 
 def test_hun_kost_is_puls_veilig():

@@ -212,6 +212,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `person_edit` | `_act_person_edit` |
 | `person_remove` | `_act_person_remove` |
 | `lk_mute` | `_act_lk_mute` |
+| `claims_skill` | `_act_claims_skill` |
 | `claims_term_add` | `_act_claims_term_add` |
 | `claims_term_retract` | `_act_claims_term_retract` |
 | `claims_work_status` | `_act_claims_work_status` |
@@ -331,4 +332,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_47 routes · 153 dispatch-acties · 27 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_47 routes · 154 dispatch-acties · 27 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
