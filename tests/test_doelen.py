@@ -253,8 +253,13 @@ def test_poorten_anchor_lead_voor_doelen_en_rol_voor_de_koppeling(tmp_path):
 
 
 def test_route_en_navigatie():
+    """De doelen zijn sinds fase 7 een TAB op de cirkel (prototype v15), niet meer een losse
+    nav-link. De routes blijven bestaan — geen dode links — en beide paden renderen uit dezelfde
+    functie, zodat er geen tweede doelen-scherm ontstaat."""
     import inspect
     src = inspect.getsource(cockpit2)
     assert 'path == "/goals"' in src and 'path == "/goal"' in src
-    from nooch_village.cockpit2_util import _NAV_ITEMS
-    assert ("/goals", "Goals") in _NAV_ITEMS
+    from nooch_village.cockpit2_util import _CIRCLE_TABS, _TAB_LABEL
+    assert "goals" in _CIRCLE_TABS and _TAB_LABEL["goals"] == "Goals"
+    from nooch_village.views.doelen import render_goals
+    assert "inner_only" in inspect.signature(render_goals).parameters

@@ -43,18 +43,5 @@ def test_grond_ongeldig_oordeel_valt_terug(tmp_path):
     assert row["oordeel"] == Oordeel.ONBEKEND.value
 
 
-def test_scherm_toont_sterkte_en_bottleneck(tmp_path):
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)                           # seed loopt mee
-    html = cockpit2.render_belofte(dd)
-    assert "Promises" in html and "unproven" in html
-    detail = cockpit2.render_belofte(dd, SCHOEN_BELOFTE_ID)
-    assert "Glue / cement" in detail and "Outsole" in detail
-    assert "hemp fabric" in detail                    # alternatief zichtbaar
-    assert "bottleneck" in detail.lower()
 
 
-def test_scherm_onbekende_belofte(tmp_path):
-    dd = str(tmp_path / "poc2")
-    cockpit2._bootstrap(dd)
-    assert "Unknown promise" in cockpit2.render_belofte(dd, "zomaar-iets")

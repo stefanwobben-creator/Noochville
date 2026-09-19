@@ -66,7 +66,3 @@ def test_skills_voorstel_passeert_de_gate(tmp_path):
     assert passed, f"verwacht aangenomen, maar {gate} blokkeerde: {reason}"
 
 
-def test_content_strategist_in_class_map():
-    from nooch_village.village import CLASS_MAP
-    from nooch_village.roles import ContentStrategist
-    assert CLASS_MAP.get("content_strategist") is ContentStrategist

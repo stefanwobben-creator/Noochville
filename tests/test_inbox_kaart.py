@@ -142,7 +142,7 @@ def test_de_herschreven_bevinding_is_de_hoofdtekst():
                        "voorstel": "De zin vervangen door wat we kunnen aantonen."}}
     html = _kaart_html(_St(), n)
     assert "zonder dat ergens staat wat we daarmee bedoelen" in html
-    assert "Voorstel:" in html
+    assert "Proposal:" in html
     assert "ruwe signalering" in html          # wel bewaard, weggevouwen
 
 

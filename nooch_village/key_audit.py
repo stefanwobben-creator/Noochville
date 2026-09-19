@@ -57,17 +57,10 @@ def audit_keys(registry, context, *, environ=None) -> dict:
     # De semantische laag hoort hier, want hij faalt op precies de manier die dit rapport bestaat om
     # te voorkomen: STIL. Een sleutel die er is maar een model dat niet meer bestaat, of een quota
     # die op is, geeft geen foutmelding — alleen lexicale terugval, voor onbepaalde tijd. Een
-    # sleutel-rapport dat zegt "✓ GEMINI_API_KEY" terwijl er niets doorzoekbaar is op betekenis,
-    # vertelt de halve waarheid.
-    semantiek = None
-    try:
-        from nooch_village.kennis_context import semantiek_status
-        dd = getattr(context, "data_dir", None)
-        if dd:
-            semantiek = semantiek_status(dd)
-    except Exception:                                     # noqa: BLE001 — rapport mag nooit breken
-        semantiek = None
-    return {"ladder": ladder, "skills": skills, "semantiek": semantiek}
+    # De semantiek-regel is op 19 sept 2026 vervallen: hij rapporteerde of de KAARTJES-index
+    # doorzoekbaar was op betekenis, en die index bestaat niet meer. Het sleutel-rapport gaat weer
+    # alleen over sleutels — geen halve waarheid, maar ook geen verzonnen tweede dimensie.
+    return {"ladder": ladder, "skills": skills, "semantiek": None}
 
 
 def format_key_report(audit: dict) -> str:

@@ -38,11 +38,9 @@ CATALOG = [
     ("openalex_works_90d::*",             "openalex",           "weekly",    "active"),
     ("trends_ratio_*_day",                "trends",             "weekly",    "active"),   # incl. scope 3 slow÷fast
     ("keywordseverywhere_*_day",          "keywordseverywhere", "weekly",    "active"),
-    ("alphavantage_*_day",                "alphavantage",       "daily",     "active"),
     ("mobiel_audit_*_day",                "mobiel_audit",       "weekly",    "active"),   # Lighthouse mobiel (PSI)
     ("werk_duur_day",                     "werkoverleg",        "irregular", "active"),   # per overleg → geen N-check
     ("werk_tevredenheid_day",             "werkoverleg",        "irregular", "active"),
-    ("gdelt_*_day",                       "gdelt_tone",         "daily",     "inactive"),
     ("shopify_*_day",                     "shopify",            "daily",     "inactive"),
     ("semanticscholar_*_day",             "semanticscholar",    "monthly",   "inactive"),
 ]

@@ -290,17 +290,3 @@ def test_aanroeper_mag_een_eigen_done_when_meegeven(tmp_path):
     assert p["done_when"] == "de zool is plasticvrij getest"
 
 
-def test_de_critic_kan_de_nieuwe_done_when_daadwerkelijk_halen():
-    """De toets die telt: haalt een rapport óver de claim de `beantwoordt`-as? Met de oude
-    sjabloonzin was dat onmogelijk, met de nieuwe hoort het te lukken."""
-    from nooch_village import missie_critic as mc
-    claim = '“100% Planet-Safe”'
-    doc = ("# Rapport\n\n## Onderzoek de claim 100% Planet-Safe\n"
-           "De claim '100% Planet-Safe' is niet houdbaar: er is geen bron die dekt dat het "
-           "product volledig planeetveilig is. Correctievoorstel: 'gemaakt zonder plastic'. " * 4)
-    cl = {"id": "c", "items": [{"id": "i", "text": "Onderzoek de claim 100% Planet-Safe",
-                                "done": True}]}
-    oud = {"done_when": "het gevraagde is uitgevoerd of expliciet afgewezen"}
-    nieuw = {"done_when": claims_board._done_when_uit(f"Bank the evidence for: {claim} — x")}
-    assert mc._beantwoordt(doc, oud, cl)[0] is False       # zoals het was: onmogelijk
-    assert mc._beantwoordt(doc, nieuw, cl)[0] is True      # zoals het nu is: haalbaar

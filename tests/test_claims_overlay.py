@@ -8,7 +8,8 @@ import json
 import os
 import shutil
 
-from nooch_village import claims_db, claims_migrate, cockpit2
+from nooch_village import claims_db, cockpit2
+
 
 
 def _kopie_seed(tmp_path):
@@ -120,23 +121,8 @@ def test_kapotte_overlay_faalt_luid(tmp_path):
 
 # ── 2. Migratie ───────────────────────────────────────────────────────────────────────────────
 
-def test_bereken_delta_tilt_extra_termen_en_statusdiffs():
-    committed = {"termen": [{"patroon": "a", "term": "A"}],
-                 "werklijst": [{"nr": 1, "status": "open"}], "meta": {"versie": "2026-07-01"}}
-    working = {"termen": [{"patroon": "a", "term": "A"}, {"patroon": "b", "term": "B-runtime"}],
-               "werklijst": [{"nr": 1, "status": "opgelost"}], "meta": {"versie": "2026-07-20"}}
-    d = claims_migrate.bereken_delta(committed, working)
-    assert [t["patroon"] for t in d["toegevoegd"]] == ["b"]
-    assert d["werklijst"] == {"1": "opgelost"} and d["meta_versie"] == "2026-07-20"
-    assert d["ingetrokken"] == []                                        # nooit auto-intrekken
-    assert claims_migrate._leeg(claims_migrate.bereken_delta(committed, committed))
 
 
-def test_migratie_is_idempotent_als_overlay_bestaat(tmp_path, capsys):
-    _pad, dd = _kopie_seed(tmp_path)
-    claims_db._schrijf_overlay(dd, claims_db._leeg_overlay())
-    assert claims_migrate.main([dd]) == 0
-    assert "bestaat al" in capsys.readouterr().out
 
 
 # ── 3. Retract-UI via de dispatch ───────────────────────────────────────────────────────────────

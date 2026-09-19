@@ -15,7 +15,6 @@ from nooch_village.meetcatalog import actieve_bronnen
 # Leesbare bron-namen (bron-id → label). Onbekende bronnen vallen terug op de id.
 _BRON_LABEL = {
     "plausible": "Web-analytics (Plausible)",
-    "alphavantage": "Markt — index-ETF's (Alpha Vantage)",
     "trends_categorie": "Zoekinteresse (Google Trends)",
     "gdelt_tone": "Nieuwstoon (GDELT)",
     "gsc": "Zoekprestaties (Search Console)",

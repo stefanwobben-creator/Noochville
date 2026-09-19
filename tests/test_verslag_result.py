@@ -26,7 +26,8 @@ def _st(tmp_path):
     return dd, cockpit2._Stores(dd)
 
 
-def _afgesloten(dd, st, *, doc="", items=(("A", True),)):
+def _afgesloten(dd, st, *, doc="", items=(("A", True),),
+                concept="## Goal\naf\n\n## Result\nAchieved. Alle stappen af."):
     pid = st.projects.create(ROLE, "Sluitstuk", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
@@ -39,6 +40,13 @@ def _afgesloten(dd, st, *, doc="", items=(("A", True),)):
     if doc:
         cockpit2._Stores(dd).project_docs.write(pid, doc)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    # HET CONCEPT KOMT NIET MEER VANZELF. Tot 19 september 2026 assembleerde het afsluitpad er
+    # zelf een (project_verslag.stel_samen); die assembler is weg, BLOK B. De BEVESTIG-flow
+    # hieronder leeft wél gewoon door — hij bevestigt het concept dat er ligt, en voor de 363
+    # bestaande projectdocumenten op productie ligt dat er. Dus schrijft deze helper er nu zelf
+    # een, in plaats van dat de tests op een verdwenen producent leunen.
+    if concept:
+        cockpit2._Stores(dd).project_docs.write_concept(pid, concept, bronnen=["checklist"])
     return pid
 
 
@@ -297,45 +305,12 @@ def test_bevestigen_zonder_keuze_kan_niet_meer_bestaan(tmp_path):
     assert "verslag_bevestig_niet_behaald" in ck.ACTIONS
 
 
-def test_verslag_en_scherm_delen_de_taal_maar_de_infra_blijft(tmp_path):
-    """Scherm én verslag zijn Engels, passend bij de cockpit. De `taal`-parameter blijft staan:
-    de sleutel is mechaniek en het label is content, dus zodra er een taalinstelling komt hoeft
-    alleen de aanroep te kiezen. We bouwen die instelling nu niet — alleen de default staat om."""
-    from nooch_village.project_verslag import label_voor
-    assert label_voor("behaald") == "achieved"               # default = scherm én verslag
-    assert label_voor("behaald", "nl") == "behaald"          # de taal-infra blijft bestaan
-    dd, st = _st(tmp_path)
-    pid = _afgesloten(dd, st, doc="")
-    doc = cockpit2._Stores(dd).project_docs.concept(pid)["tekst"]
-    assert "## Goal" in doc and "## What happened" in doc and "## Result" in doc
-    assert "## Doel" not in doc and "## Wat er gebeurde" not in doc
 
 
-def test_de_kopnamen_leven_op_een_plek():
-    """`met_result` en `modeloordeel` zoeken naar de koppen die de prompt voorschrijft. Stonden die
-    los, dan zou een prompt-wijziging de zoekfunctie stil laten missen — en dan valt het
-    modeloordeel weg zónder foutmelding. Engelse koppen blijven herkend voor oude documenten."""
-    from nooch_village.project_verslag import KOP_RESULTAAT, _PROMPT, met_result, modeloordeel
-    assert f"## {KOP_RESULTAAT}" in _PROMPT
-    assert modeloordeel(f"## {KOP_RESULTAAT}\nBehaald.") == "Behaald."
-    assert modeloordeel("## Result\nAchieved.") == "Achieved."          # document van vóór deze PR
-    assert "Twee gaten" not in met_result("## Result\nTwee gaten.", "behaald")
 
 
-def test_geen_kop_per_taak_meer_in_de_prompt():
-    """Gemeten op productie: 310 documenten met mediaan 6 koppen, waarvan 253 kopblokken
-    "niet onderzocht" bevatten en 64 (bijna) leeg zijn. Een kop per taak levert vooral koppen op
-    die zeggen dat er niets is."""
-    from nooch_village.project_verslag import _PROMPT
-    assert "NO heading per task" in _PROMPT
-    assert "Not investigated:" in _PROMPT                     # één zin, niet een kopje per taak
 
 
-def test_het_doeltype_staat_in_de_prompt():
-    """Een beoordelingsproject is behaald zodra er een gegrond oordeel ligt — ook een "nee".
-    Zonder dit leest de assembler elk "nee" als een mislukking."""
-    from nooch_village.project_verslag import _PROMPT
-    assert "ASSESSMENT project" in _PROMPT and "including a 'no'" in _PROMPT
 
 
 def test_de_assemblage_staat_op_de_hoog_inzet_ladder():
@@ -430,52 +405,14 @@ def test_bevestigen_vanaf_de_route_werkt_met_een_keuze(tmp_path):
     assert cockpit2._Stores(dd).projects.get(pid)["resultaat"] == "behaald"
 
 
-# ── de koppen zijn vaste labels ──────────────────────────────────────────────
-def test_een_verkeerd_gespelde_kop_wordt_rechtgezet():
-    """"Lernings" is geen verzinsel: dat stond letterlijk in een document op productie. Een kop die
-    uit modeltekst komt is een typefout die wacht om te gebeuren — en dan vindt `met_result` de
-    Result-sectie niet meer en valt het modeloordeel weg ZONDER foutmelding."""
-    from nooch_village.project_verslag import normaliseer_koppen
-    n = normaliseer_koppen("## Lernings\nx\n\n### Wat er gebeurde\ny\n\n## Resultaat\nz")
-    assert "## Learnings" in n and "### What happened" in n and "## Result" in n
-    assert "Lernings" not in n
 
 
-def test_een_onbekende_kop_blijft_staan():
-    """Liever een onbekende kop zichtbaar dan stilletjes hernoemd naar iets wat het model niet
-    bedoelde."""
-    from nooch_village.project_verslag import normaliseer_koppen
-    assert "## Iets eigens" in normaliseer_koppen("## Iets eigens\nx")
 
 
-def test_de_normalisatie_draait_op_de_modeloutput(tmp_path):
-    from nooch_village.project_verslag import stel_samen
-    c = stel_samen({"scope": "x", "checklists": [{"items": [{"text": "a", "done": True}]}]}, "",
-                   reason=lambda *a, **k: "```markdown\n## Lernings\nIets geleerd.\n```")
-    assert "## Learnings" in c.tekst and "Lernings" not in c.tekst
 
 
-# ── de caps knipten feiten weg ───────────────────────────────────────────────
-def test_de_gesprekscap_is_verruimd_op_een_meting():
-    """Een verslag zei "Paques niet bevestigd" terwijl de wall die communicatie toonde: de
-    vermelding stond op positie 670 in een regel van 1296 tekens, en de cap stond op 600. Een
-    tweede project verloor hem aan de regel-cap (23 → 20 regels).
-
-    Gemeten over 373 projecten: 3075 gespreksregels, 2696 in de prompt, 598 ingekort, 22 projecten
-    die hele regels kwijtraakten. Bij 1500/50 zijn mediaan en p90 van de invoer identiek aan
-    ongekapt (1556 / 3897 tokens); de caps bijten alleen de uiterste staart nog."""
-    from nooch_village.project_verslag import _MAX_REGELS, _REGEL_CAP
-    assert _REGEL_CAP >= 1300, "een regel van 1296 tekens moet er heel in passen"
-    assert _MAX_REGELS >= 40
-    # en ze staan er nog: zonder cap bepaalt het langste gesprek de prijs van élk verslag
-    assert _REGEL_CAP < 10_000 and _MAX_REGELS < 1_000
 
 
-def test_een_feit_diep_in_een_lange_regel_bereikt_de_prompt():
-    from nooch_village.project_verslag import _gesprek
-    lang = "x " * 400 + "Paques Helian bevestigde de levering." + " y" * 200
-    regels = _gesprek({"log": [{"who": "rol", "text": lang}]})
-    assert any("Paques Helian bevestigde" in r for r in regels), "feit weggeknipt door de cap"
 
 
 # ── de outcome-affordance is weg ─────────────────────────────────────────────

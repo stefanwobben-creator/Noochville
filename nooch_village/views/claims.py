@@ -429,6 +429,27 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
             f"Add</button></div></form></div>")
 
 
+def _blok_skills(csrf_token: str) -> str:
+    """De twee claims-skills als knop. Hergebruikt `.card` + `.qadd-row` + `.btn`, zoals
+    `_blok_beheer` hierboven — geen nieuwe klassen, geen inline style.
+
+    Ze liepen tot 19 september 2026 mee op de dagpuls. Claims is gereedschap dat een mens pakt,
+    dus staan ze hier: je ziet wat er is, en je start het zelf."""
+    def knop(actie: str, label: str, uitleg: str) -> str:
+        return (f"<form method='post' action='/action' class='qadd-form'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='next' value='/claims?tab=werklijst'>"
+                f"<input type='hidden' name='skill' value='{_e(actie)}'>"
+                f"<p class='muted'>{_e(uitleg)}</p>"
+                f"<div class='qadd-row'><button class='btn' name='action' value='claims_skill'>"
+                f"{_e(label)}</button></div></form>")
+
+    return (f"<div class='card'><h3>Run a check</h3>"
+            f"{knop('claims_site_scan', 'Scan the site', 'Walks our own pages and lists every claim it finds. Weekly rhythm; running it twice in a week does nothing.')}"
+            f"{knop('regulation_watch', 'Check the regulation', 'Re-hashes the source texts of the claims rules and makes a task for every change. Monthly rhythm.')}"
+            f"</div>")
+
+
 def _vondst_acties(bevinding: dict, csrf_token: str, kan_cureren: bool, bron: str) -> str:
     """Twee lichte acties per bevinding: 'geen claim' (uitzondering) en 'maak hier een regel van'.
 
@@ -537,7 +558,8 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     elif tab == "werklijst":
         body = _tab_werklijst(db, csrf_token, kan_cureren)
         if kan_cureren and csrf_token:
-            body += _blok_beheer(db, csrf_token) + _blok_bewijs(csrf_token, bewijzen)
+            body += (_blok_skills(csrf_token) + _blok_beheer(db, csrf_token)
+                     + _blok_bewijs(csrf_token, bewijzen))
     elif tab == "database":
         body = _tab_database(db, zoek, csrf_token, kan_cureren)
     else:

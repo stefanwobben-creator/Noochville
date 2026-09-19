@@ -79,8 +79,8 @@ def test_de_snelle_route_is_twee_tikken(tmp_path):
     h = render_wizard(_st(tmp_path), "t")
     assert 'id="wz-ruw"' in h and 'id="wz-save"' in h
     assert "Put on the board" in h
-    # de opslaan-knop staat BOVEN de opgevouwen verrijking, niet erachter
-    assert h.index('id="wz-save"') < h.index("Impact and effort")
+    # De opslaan-knop staat BOVEN de opgevouwen verrijking, niet erachter. "Impact and effort"
+    # stond hier ook; die sectie is op 19 sept 2026 weg (BLOK B), de checklist niet.
     assert h.index('id="wz-save"') < h.index("Checklist")
     assert "S.uitkomst" not in h                         # de titel is de uitkomst, één veld
 
@@ -128,29 +128,13 @@ def test_de_ai_is_een_bonus_geen_poort(tmp_path):
     assert "AbortController" in h and "AI_TIMEOUT_MS" in h        # timeout op élke AI-call
     # Elke AI-plek biedt bij mislukken een WEG VOORUIT, niet alleen een foutmelding. Op de
     # formulering zelf toetsen we niet — die mag veranderen; de uitweg niet.
+    # De derde uitweg hoorde bij de impact-gok ("set it yourself, or leave it empty"); die
+    # AI-plek bestaat niet meer (BLOK B), dus ook zijn uitweg niet.
     for uitweg in ("type it yourself, saving still works",         # het aanscherpen
-                   "your own steps work fine",                     # de checklist
-                   "set it yourself, or leave it empty"):          # de impact-gok
+                   "your own steps work fine"):                    # de checklist
         assert uitweg in h, uitweg
 
 
-# ── B2: impact en moeite ────────────────────────────────────────────────────
-
-def test_de_gok_valt_per_as_dicht_bij_onzin():
-    """Een verzonnen as is erger dan een lege: hij stuurt later de prioritering. Wat niet in de
-    toegestane waarden zit valt weg, niet 'onbekend'."""
-    from nooch_village.wizard import guess_impact
-    goed = guess_impact("doos verstevigen", reason_fn=lambda *a, **k:
-                        '{"tijd":"1d","missie":"neutraal","business":"medium","waarom":"klein"}')
-    assert goed == {"tijd": "1d", "missie": "neutraal", "business": "medium", "waarom": "klein"}
-    # onzin per as valt weg, de bruikbare as blijft
-    half = guess_impact("x", reason_fn=lambda *a, **k:
-                        '{"tijd":"3 weken","missie":"neutraal","business":"heel hoog"}')
-    assert half == {"missie": "neutraal"}
-    # geen model, kapotte json of leeg idee → niets, en dus lege chips
-    for kapot in (None, "geen json", "{}"):
-        assert guess_impact("x", reason_fn=lambda *a, **k: kapot) == {}
-    assert guess_impact("", reason_fn=lambda *a, **k: '{"tijd":"1d"}') == {}
 
 
 def test_de_assen_komen_uit_de_projectstore():
@@ -162,25 +146,8 @@ def test_de_assen_komen_uit_de_projectstore():
                              "business": _BUSINESS_IMPACT}
 
 
-def test_impact_laadt_pas_als_je_de_sectie_opent(tmp_path):
-    """Zelfde discipline als de checklist: de AI draait niet tenzij gevraagd."""
-    from nooch_village.views.wizard import render_wizard
-    h = render_wizard(_st(tmp_path), "t")
-    assert 'ontoggle="if(this.open)schat()"' in h
-    assert "/wizard/impact" in h and "AI_TIMEOUT_MS" in h
-    assert "set it yourself, or leave it empty" in h          # fail-open, met een uitweg
-    assert "a gok mag geen keuze overschrijven" not in h      # (commentaar hoort niet in de body)
-    assert "if(!S[k]&&r&&r[k])S[k]=r[k]" in h                 # een gok overschrijft geen keuze
 
 
-def test_het_label_is_afgeleid_en_wordt_niet_opgeslagen(tmp_path):
-    """'Quick win' is een gevolg van moeite en business-impact. Zou het een veld zijn, dan klopt
-    het niet meer zodra iemand een chip verzet."""
-    from nooch_village.views.wizard import render_wizard
-    h = render_wizard(_st(tmp_path), "t")
-    assert "function label()" in h and "Quick win" in h
-    assert "label:" not in h                                  # geen state-veld
-    assert "items:JSON.stringify" in h and "label" not in h.split("post('/wizard/create'")[1][:200]
 
 
 # ── B3: de checklist is meteen bruikbaar ────────────────────────────────────
@@ -348,31 +315,8 @@ def _post(dd, pad: str, velden: dict) -> dict:
         srv.server_close()
 
 
-def test_de_wizard_vraagt_de_kennislaag_met_een_budget(tmp_path, monkeypatch):
-    """De MENS wacht. Zijn browser stapt eruit na AI_TIMEOUT_MS, dus de raadpleging vóór het model
-    krijgt een budget mee — anders eet de aanloop het werk op (gemeten op prod: 29,4s aanloop tegen
-    3,3s plannen, waarna de checklist in een dichte verbinding werd geschreven)."""
-    from nooch_village import cockpit2 as c2
-    gezien = {}
-
-    def _nep_kennis(bron, tekst, limit=5, *, exclude_pid="", deadline=None):
-        gezien["deadline"] = deadline
-        return {}
-    monkeypatch.setattr("nooch_village.kennis_context.kennis_voor", _nep_kennis)
-    monkeypatch.setattr("nooch_village.wizard.plan_items", lambda *a, **k: [])
-
-    st = _st(tmp_path)
-    _post(st.dd, "/wizard/plan", {"uitkomst": "iets onderzocht", "role": ""})
-    assert gezien.get("deadline") == c2._WIZARD_KENNIS_BUDGET_S
-    assert 0 < c2._WIZARD_KENNIS_BUDGET_S < 12, "het budget hoort een fractie van AI_TIMEOUT_MS te zijn"
 
 
-def test_de_daemon_houdt_zijn_volle_raadpleging(tmp_path):
-    """Het budget is er voor wie WACHT. De daemon kijkt naar geen enkel scherm en mag de tijd nemen;
-    daar verandert deze PR niets — de default blijft 'geen budget'."""
-    import inspect
-    from nooch_village.kennis_context import kennis_voor
-    assert inspect.signature(kennis_voor).parameters["deadline"].default is None
 
 
 def test_plan_items_geeft_zijn_ladder_door(tmp_path):
@@ -485,27 +429,6 @@ def test_de_kolom_van_de_deur_reist_mee(tmp_path, monkeypatch):
     assert cockpit2._Stores(st.dd).projects.get(r["pid"])["status"] == "future"   # default: slapend (scope 49)
 
 
-def test_tijd_is_een_getal_met_uren_of_dagen(tmp_path, monkeypatch):
-    """De vier chips (1 hour · 1 day · 2 days · 1 week) zijn weg: Stefan wil "een invoerveld en
-    erachter uren of dagen", en zo staat het al in de rail. Eén conversieregel (`uren_uit`) voor
-    beide; de AI-gok levert nog een bucket en wordt via dezelfde tabel naar uren vertaald."""
-    from nooch_village.views.wizard import render_wizard
-    from nooch_village.views.projects import _EFFORT_ENUM_HOURS
-    st = _st(tmp_path)
-    h = render_wizard(st, "t")
-    assert 'id="wz-uren"' in h and 'id="wz-eenheid"' in h and "1 week" not in h
-    assert "EFFORT_UREN=" + json.dumps(_EFFORT_ENUM_HOURS) in h          # de servertabel, één bron
-    assert "uren:S.uren,eenheid:S.eenheid" in h
-    assert cockpit2.uren_uit("2", "dagen") == 16 and cockpit2.uren_uit("3", "uren") == 3
-    assert cockpit2.uren_uit("", "uren") is None and cockpit2.uren_uit("0", "dagen") is None
-    monkeypatch.setattr("nooch_village.llm.reason", lambda *a, **k: None)
-    rid = "mother_earth__nooch__website_developer"
-    wie = f"person:{st.people.all()[0].id}"
-    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Twee dagen", "uren": "2",
-                                        "eenheid": "dagen", "trekker": wie})
-    assert cockpit2._Stores(st.dd).projects.get(r["pid"])["effort"] == {"hours": 16}
-    r = _post(st.dd, "/wizard/create", {"role": rid, "titel": "Ongeschat", "uren": "", "trekker": wie})
-    assert not cockpit2._Stores(st.dd).projects.get(r["pid"]).get("effort")
 
 
 def test_een_doel_kies_je_al_in_de_wizard(tmp_path, monkeypatch):

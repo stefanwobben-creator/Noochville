@@ -123,44 +123,9 @@ def _inwoner(rugzakken=None):
     return Inhabitant(rec, EventBus(name="test"), SkillRegistry(), ctx)
 
 
-def test_note_zonder_conclusie_is_de_oude_note(monkeypatch):
-    """DE BELANGRIJKSTE TEST. Valt het model weg, dan mag er niets verdwijnen."""
-    monkeypatch.setattr(dk, "conclusie", lambda *a, **k: "")
-    inw = _inwoner()
-    note = inw._deliverable_note({"text": "Find news", "skill": "competitor_news"},
-                                 {"items": [{"title": "A"}, {"title": "B"}, {"title": "C"}]},
-                                 ("list", "items"), source="competitor_news", lijst="Execution plan")
-    assert note.startswith("📎 Find news — via competitor_news · Sid · list “Execution plan” · usable (3)")
-    assert "• title: A" in note and "• title: B" in note
-    assert "➜" not in note
 
 
-def test_note_met_conclusie_zet_hem_onder_de_kop_en_boven_het_bewijs(monkeypatch):
-    monkeypatch.setattr(dk, "conclusie", lambda *a, **k: "Three items, none recent.")
-    inw = _inwoner()
-    note = inw._deliverable_note({"text": "Find news", "skill": "competitor_news"},
-                                 {"items": [{"title": "A"}, {"title": "B"}, {"title": "C"}]},
-                                 ("list", "items"), source="competitor_news")
-    regels = note.splitlines()
-    assert regels[0].startswith("📎 Find news")
-    assert regels[1] == "➜ Three items, none recent."
-    assert regels[2].startswith("• title: A")
 
 
-def test_note_noemt_de_fallback_bron_en_de_stagiair_van_die_bron(monkeypatch):
-    """Bij een skill-ladder-reroute telt de bron die het écht leverde, ook voor de stem."""
-    monkeypatch.setattr(dk, "conclusie", lambda *a, **k: "")
-    inw = _inwoner()
-    note = inw._deliverable_note({"text": "Patents", "skill": "epo_patents"},
-                                 {"patents": [{"title": "P"}]}, ("list", "patents"),
-                                 source="google_patents")
-    assert "google_patents (fallback voor epo_patents)" in note
-    assert "Sid" not in note          # google_patents zit in geen rugzak → geen gezicht verzinnen
 
 
-def test_note_zonder_rugzakken_noemt_geen_stagiair(monkeypatch):
-    monkeypatch.setattr(dk, "conclusie", lambda *a, **k: "")
-    inw = _inwoner(rugzakken={})
-    note = inw._deliverable_note({"text": "X", "skill": "competitor_news"},
-                                 {"items": []}, ("list", "items"), source="competitor_news")
-    assert note.startswith("📎 X — via competitor_news · nothing (0)")

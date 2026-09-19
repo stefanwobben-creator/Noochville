@@ -408,11 +408,6 @@ def test_zit_in_de_rugzak_buiten():
     assert rugzak.rugzak_van(rugzak.laad("."), "web_zoek") == "buiten"
 
 
-def test_zoekstrategie_kan_hem_kiezen():
-    """Een bron die de strategie niet kent, wordt bij het plannen weggefilterd — dan bestaat de skill
-    wel maar bereikt Sid hem nooit."""
-    from nooch_village.skills_impl.zoekstrategie import BRONNEN
-    assert "web_zoek" in BRONNEN
 
 
 def test_kost_credits_en_zegt_dat():

@@ -18,10 +18,7 @@ from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import (Records, Secretary, Reconciler,
                                       GovernanceGate, proposal_to_dict)
 from nooch_village.models import Proposal, RecordType
-from nooch_village.roles import (
-    WebsiteWatcherWorker, Librarian, TrendsWorker,
-    Facilitator, Noochie, HarryHemp, ContentStrategist, ConcurrentScout,
-)
+from nooch_village.roles import Facilitator, Noochie
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
 from nooch_village.observers.coherence_observer import CoherenceObserver
@@ -34,22 +31,19 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
 )
-from nooch_village.notes_store import NotesStore
 from nooch_village.competitor_brands import CompetitorBrands
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+# De zes AI-rolklassen (WebsiteWatcherWorker, Librarian, TrendsWorker, HarryHemp,
+# ContentStrategist, ConcurrentScout) zijn op 19 sept 2026 verwijderd: hun rollen waren tussen
+# 15 en 18 september al op governance-niveau gearchiveerd, en daarmee was 1.903 van de 2.404 regels
+# in roles.py code voor inwoners die niet meer bestaan.
 CLASS_MAP = {
-    "website_watcher": WebsiteWatcherWorker,
-    "librarian":       Librarian,
-    "trends":          TrendsWorker,
     # 'facilitator' is de historische seed-id van de governance-motor (G0-G4-poort + dagcadans/dag_begint);
     # de roltekst is bewust Engels (Holacracy-Facilitator), GEEN vreemd NL-duplicaat. Niet hernoemen/verplaatsen.
     "facilitator":     Facilitator,
     "noochie":         Noochie,
-    "harry_hemp":      HarryHemp,
-    "content_strategist": ContentStrategist,
-    "concurrent_scout": ConcurrentScout,
 }
 
 
@@ -76,15 +70,9 @@ class Village:
         self.context.links = AITaskStore(os.path.join(self.context.data_dir, "ai_tasks.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
-        # Community-listening (Billy Buzz): configureerbare zoek-sets + observatie-store.
-        from nooch_village.buzz_query_sets import BuzzQuerySets, seed_buzz_query_sets
-        from nooch_village.buzz_observations import BuzzObservationStore
-        self.context.buzz_query_sets = BuzzQuerySets(
-            os.path.join(self.context.data_dir, "buzz_query_sets.json"))
-        seed_buzz_query_sets(self.context.buzz_query_sets)
-        self.context.buzz_observations = BuzzObservationStore(
-            os.path.join(self.context.data_dir, "buzz_observations.jsonl"))
-        self.context.notes = NotesStore(os.path.join(self.context.data_dir, "notes.json"))
+        # Community-listening (Billy Buzz) hing hier: zoek-sets + observatie-store voor Reddit,
+        # YouTube en Bluesky. Weg op 19 september 2026 (fase 4). De 5,4 MB aan observaties in
+        # data/buzz_observations.jsonl blijft staan als historie; er komt niets meer bij.
         # Gedeelde concurrent-store: confirmed merken die de scout heeft laten bevestigen
         # zijn nu leesbaar voor élke rol (voor KE/SerpAPI-analyses).
         self.context.competitors = CompetitorBrands(
@@ -180,15 +168,6 @@ class Village:
         self.bus.subscribe("task_completed",              self._observe)
         self.bus.subscribe("pulse_completed",             self._observe)
         self.bus.subscribe("tension_sensed",              self._observe)
-        self.bus.subscribe("keyword_decided",             self._observe)
-        self.bus.subscribe("human_decision_needed",       self._observe)
-        self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
-        self.bus.subscribe("human_decision_needed",       self._on_verband_suggestion)
-        self.bus.subscribe("content_opportunity",         self._observe)
-        self.bus.subscribe("content_opportunity",         self._on_content_opportunity)
-        self.bus.subscribe("content_draft_ready",         self._observe)
-        self.bus.subscribe("content_draft_ready",         self._on_content_draft_ready)
-        self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
         self.bus.subscribe("governance_changed",          self._on_governance_changed)
         self.bus.subscribe("governance_review_requested", self._observe)
@@ -201,8 +180,6 @@ class Village:
         self.bus.subscribe("source_died",                 self._on_source_died)
         self.bus.subscribe("role_born",                   self._observe)
         self.bus.subscribe("role_born",                   self._on_role_born)
-        self.bus.subscribe("tijdgeest_pulse_completed",   self._observe)
-        self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.bus.subscribe("individuele_actie",           self._observe)
@@ -420,57 +397,9 @@ class Village:
             logging.getLogger("village.inbox").info(
                 "📝 %s stelt voor item %s (gap %s) te sluiten: %s", by, item_id, gap_key, reason)
 
-    def _on_verband_suggestion(self, e: Event) -> None:
-        """Schrijf een verband-voorstel (topic 'verband') naar de human inbox (3c).
 
-        De mens beslist later: approve schrijft het touwtje, reject laat het weg.
-        Fail-closed: zonder beide kaart-ids gebeurt er niets.
-        """
-        if e.data.get("topic") != "verband":
-            return
-        a = e.data.get("kaart_a_id")
-        b = e.data.get("kaart_b_id")
-        if not a or not b:
-            return
-        iid = self.human_inbox.add_verband(
-            a, b, e.data.get("voorstel_claim", ""), e.data.get("reason", ""))
-        logging.getLogger("village.inbox").info(
-            "📬 verband-voorstel in human_inbox: item %s (%s ↔ %s)", iid, a, b)
 
-    def _on_content_opportunity(self, e: Event) -> None:
-        """Schrijf een gespotte content-kans naar de human inbox (model C).
-        Fail-closed: zonder seed_id gebeurt er niets."""
-        seed_id = e.data.get("seed_id")
-        if not seed_id:
-            return
-        iid = self.human_inbox.add_content_suggestion(
-            seed_id, e.data.get("cluster_ids", []), e.data.get("reason", ""))
-        logging.getLogger("village.inbox").info(
-            "📬 content-kans in human_inbox: item %s (cluster '%s')", iid, seed_id)
 
-    def _on_content_draft_ready(self, e: Event) -> None:
-        """Schrijf een gegenereerde content-draft naar de human inbox, klaar om te
-        herschrijven. Fail-closed: zonder seed_id of tekst gebeurt er niets."""
-        seed_id = e.data.get("seed_id")
-        text = e.data.get("text")
-        if not seed_id or not text:
-            return
-        iid = self.human_inbox.add_content_draft(
-            seed_id, e.data.get("kind", "blog"), text,
-            e.data.get("claim_insight_ids", []))
-        logging.getLogger("village.inbox").info(
-            "📬 content-draft in human_inbox: item %s (cluster '%s')", iid, seed_id)
-
-    def _on_keyword_escalation(self, e: Event) -> None:
-        """Schrijf keyword-escalaties naar de human inbox."""
-        if e.data.get("topic") != "keyword":
-            return
-        word   = e.data.get("word", "?")
-        reason = e.data.get("reason", "")
-        demand = e.data.get("demand", {})
-        iid = self.human_inbox.add_keyword_escalation(word, reason, demand)
-        logging.getLogger("village.inbox").info(
-            "📬 keyword-escalatie in human_inbox: item %s ('%s')", iid, word)
 
     def approve_escalation(self, item_id: str, reason: str = "") -> bool:
         """Stuur governance_verdict approve voor een escalatie-item.
@@ -663,6 +592,38 @@ class Village:
                 log.warning("👻 weesprojecten van '%s' niet gemeld", rol_id)
         return list(dood.keys())
 
+    def _radar_ingest(self) -> dict:
+        """De Inoreader-feeds ophalen en ongefilterd in de swipefile zetten.
+
+        DIT DRAAIDE TOT 19 SEPTEMBER 2026 ALS LOSSE CRON (`30 6 * * *` onder gebruiker `nooch`),
+        buiten het dorp om. Dat is dezelfde koppelfout als de dagbel-op-de-facilitator van 28
+        augustus, maar dan andersom: een taak van het dorp die alleen in de serverconfig bestond,
+        onzichtbaar in de repo en niet meetbaar in de puls. Nu hangt hij aan `dag_begint`, net als
+        de databron-collector en de twee wees-sweeps.
+
+        BIJ HET DEPLOYEN MOET DIE CRONTAB-REGEL WEG, anders draait de ingest tweemaal per dag. De
+        ontdubbeling op artikel-URL vangt dubbele signalen op, dus het is niet gevaarlijk — het is
+        twee keer de Inoreader-API en een log met twee bronnen."""
+        from nooch_village.inoreader_ingest import ingest_all
+        return ingest_all(self.context.data_dir)
+
+    def _veilig_radar_ingest(self) -> None:
+        try:
+            uit = self._radar_ingest()
+            n = sum((v or {}).get("proposed", 0) for v in uit.values())
+            logging.getLogger("village").info("📡 radar-ingest: %d nieuw over %d feed(s)", n, len(uit))
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("radar-ingest faalde: %s", e)
+
+    def _veilig_legal_check(self) -> None:
+        """De legal-feed op iets dat Nooch raakt. Ná de ingest gewired, zodat wat vanochtend
+        binnenkwam vandaag nog beoordeeld wordt in plaats van morgen."""
+        try:
+            from nooch_village import legal_signaal
+            legal_signaal.check(self.context.data_dir, self.human_inbox)
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("legal-check faalde: %s", e)
+
     def _veilig_weesprojecten(self) -> None:
         try:
             self._meld_weesprojecten()
@@ -687,6 +648,10 @@ class Village:
         # (Stefan, 15 sept: "we werken naar het verwijderen van de AI-rollen" — elke keer dat dat
         # gebeurt mag het werk dat erop stond niet stil verdwijnen, zoals bij harry_hemp nu al was.)
         self.bus.subscribe("dag_begint", lambda e: self._veilig_weesprojecten())
+        # De radar-ingest: verhuisd van een losse crontab-regel naar de dagcadans (19 sept 2026).
+        # Eerst ophalen, dan de legal-check, zodat een vers signaal dezelfde puls nog wordt gezien.
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_radar_ingest())
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_legal_check())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
@@ -782,45 +747,11 @@ class Village:
         # ("/project?id=<pid>") maakt dit idempotent met de cockpit-hook. Fail-soft: een falend
         # signaal mag een done (of dit event) nooit blokkeren.
         nieuw_done = [pid for pid in done if pid not in self._completed_seen]
-        dd = getattr(self.context, "data_dir", None)
-        if nieuw_done and dd:
-            try:
-                from nooch_village.radar_store import RadarStore
-                from nooch_village.project_signal import signal_from_project
-                radar = RadarStore(os.path.join(dd, "radar.json"))
-                _docs = getattr(self.context, "project_docs", None)
-                for pid in nieuw_done:
-                    _doc = _docs.read(pid) if _docs is not None else ""
-                    signal_from_project(radar, done[pid], _doc)   # einddocument levert de conclusie
-            except Exception:
-                logging.getLogger("village.signals").exception("project→signaal mislukt")
-            # Verdieping (rapport-lus): het EINDDOCUMENT van elke nieuwe done → bestaande
-            # intake-atomiser → kennisbank-STAGING ("even nakijken", mens-gated) — bewust ALLEEN
-            # hier op het daemon-pad, waar de LLM-ladder beschikbaar is. De cockpit-done doet dit
-            # niet synchroon en hoeft dat ook niet: `led.by_status("done")` hierboven herleest
-            # projects.json cross-proces (_maybe_reload), dus élke done — ook een cockpit-done —
-            # verschijnt binnen één poll (_board_poll_seconds) in `nieuw_done`. Fail-soft per
-            # project: geen rapport of stille LLM → één logregel, nooit een geblokkeerde poll.
-            try:
-                from nooch_village.project_signal import report_to_staging
-                for pid in nieuw_done:
-                    try:
-                        res = report_to_staging(dd, done[pid])
-                    except Exception:
-                        logging.getLogger("village.signals").exception(
-                            "project→staging mislukt (pid=%s)", pid)
-                        continue
-                    if res.get("batch"):
-                        # Afzender voor de stille poort: metadata-event zodat Lara's (Librarian)
-                        # log/inbox-flow het ziet. target="staging" laat haar handler ALLEEN
-                        # loggen — de SCHRIJFweg blijft de mens-review in de staging (geen
-                        # dubbel-schrijven; zie roles.Librarian._on_insight_proposed).
-                        self.bus.publish(Event("insight_proposed",
-                                               {"project_id": pid, "atoms": res["atoms"],
-                                                "batch_id": res["batch"], "target": "staging"},
-                                               "board_watch"))
-            except Exception:
-                logging.getLogger("village.signals").exception("project→staging mislukt")
+        # HIER STOND DE PROJECT→SIGNAAL→STAGING-LUS. Een afgerond project werd een radarsignaal en
+        # zijn einddocument werd geatomiseerd naar de kennisbank-staging. Beide bestemmingen zijn op
+        # 19 sept 2026 verdwenen (project_signal + de intake/staging-laag), en een afgerond project
+        # hoort volgens het nieuwe model in de wiki te landen via Keep-in-wiki — met menselijke
+        # input, niet als automatische atomisering.
         for pid, p in done.items():
             if pid in self._completed_seen or pid in auto:
                 continue                                        # al gezien, of al inline aangekondigd (autonoom)

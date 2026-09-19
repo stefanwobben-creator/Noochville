@@ -15,7 +15,6 @@ from nooch_village.web_base import _e, _page
 
 
 from nooch_village.cockpit2_util import _name, _rol_labels    # één naamregel, geen tweede vorm
-from nooch_village.views.projects import _EFFORT_ENUM_HOURS    # één uren-tabel, ook voor de AI-gok
 
 
 II_PREFIX = "ii:"          # Individueel Initiatief: werk onder de cirkel, zonder rol
@@ -154,7 +153,6 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__TREKKER__", _js(trekker)) \
                     .replace("__DOELEN__", doel_opts) \
                     .replace("__DOELWPS__", doel_wps) \
-                    .replace("__EFFORT_UREN__", json.dumps(_EFFORT_ENUM_HOURS)) \
                     .replace("__COL__", _e(col)) \
                     .replace("__ROLE__", _e(pre))
     if fragment:
@@ -174,9 +172,9 @@ _WIZ_HTML = r"""
 (function(){
 const CSRF="__CSRF__";
 const ROLEOPTS="__ROLES__", PREROLE="__ROLE__", DOELOPTS="__DOELEN__";
-// Werkpakketten per doel (id → {w:[…]}), en de uren achter de AI-gok (1u/1d/2d/1w → uren), allebei
+// Werkpakketten per doel (id → {w:[…]}),
 // uit de server: één tabel, geen tweede in de browser.
-const DOELWPS=__DOELWPS__, EFFORT_UREN=__EFFORT_UREN__;
+const DOELWPS=__DOELWPS__;
 // Alleen rollen met TWEE of meer vervullers (cockpit2.vervullers_map). Bij één is er
 // niets te kiezen — die staat al als default in S.trekker — en bij nul niets te tonen.
 const VERVULLERS=__VERVULLERS__;
@@ -185,8 +183,7 @@ const VERVULLERS=__VERVULLERS__;
 // hele snelle route bovenaan — project, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
 const S={ruw:"__RUW__",ruwEigen:"",nid:"__NID__",titel:"",checklist:[],planfout:"",
-         uren:"",eenheid:"uren",missie:"",
-         business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
+         suggesties:[],sugBezig:false,checkInit:false,
          role:PREROLE,col:"__COL__",doel:"",wp:"",
          trekker:"__TREKKER__",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
@@ -275,15 +272,13 @@ function form(){
 
   <div class="wz-foot"><button class="wz-btn" id="wz-save" onclick="maak()">Put on the board</button></div>
 
-  <details class="box-details" ontoggle="if(this.open)schat()"><summary>Impact and effort <span class="wz-hint">(optional)</span></summary>
-    <div id="wz-impact"></div></details>
   <details class="box-details" ontoggle="if(this.open)checklist()"><summary>Checklist <span class="wz-hint">(optional)</span></summary>
     <div id="wz-check"><p class="wz-hint">Open this to write steps. ✨ suggests some while you type; leaving it empty is fine.</p></div></details>
   `;
   const sel=document.getElementById('wz-role');
   if(S.role){sel.value=S.role;}
   const gs=document.getElementById('wz-goal'); if(gs&&S.doel){gs.value=S.doel;}
-  toonWie(); toonOwner(); toonWp(); impact(); stelKnop();
+  toonWie(); toonOwner(); toonWp(); stelKnop();
   const t=document.getElementById('wz-ruw'); if(t&&!S.ruw)t.focus();
 }
 function toonWie(){
@@ -302,48 +297,13 @@ function toonWp(){
 }
 
 // De GOK laadt pas als je de sectie opent — net als de checklist. Geen model betekent lege chips
-// en een regel tekst; opslaan werkt de hele tijd door, de knop staat erboven.
-async function schat(){
-  if(S.geschat)return; S.geschat=true;
-  lees();
-  const idee=S.ruw; if(!idee){impact('Type your project first.');return;}
-  impact('✨ estimating…');
-  const r=await post('/wizard/impact',{idee:idee,role:S.role},AI_TIMEOUT_MS);
-  if(r&&r.__fout){impact('✨ '+r.__fout+' — set it yourself, or leave it empty.');return;}
-  // Alleen overnemen wat de mens nog niet zelf koos: een gok mag geen keuze overschrijven.
-  ['missie','business'].forEach(k=>{if(!S[k]&&r&&r[k])S[k]=r[k];});
-  // De gok komt als bucket (1u/1d/2d/1w); het veld is een getal. Vertalen via de servertabel.
-  if(!S.uren&&r&&r.tijd&&EFFORT_UREN[r.tijd]){S.uren=String(EFFORT_UREN[r.tijd]);S.eenheid='uren';}
-  S.waarom=(r&&r.waarom)||'';
-  impact();
-}
-function uren(){
-  // Het getal in het veld, in uren (dagen × 8, zoals proj_seteffort). Leeg of onzin → 0.
-  const n=parseFloat(String(S.uren||'').replace(',','.')); if(!(n>0))return 0;
-  return Math.round(n*(S.eenheid==='dagen'?8:1));
-}
-function label(){
-  // Afgeleid, nooit opgeslagen: als het getal verandert verandert het label vanzelf mee.
-  const h=uren();
-  if(h&&h<=8&&S.business==='hoog')return 'Quick win';
-  if(h>=40&&S.business==='laag')return 'Slow burner';
-  return '';
-}
-function impact(melding){
-  const el=document.getElementById('wz-impact'); if(!el)return;
-  const chip=(g,val,lbl)=>`<span class="wz-chip ${S[g]===val?'on':''}" onclick="S['${g}']=(S['${g}']==='${val}'?'':'${val}');impact()">${lbl}</span>`;
-  const lbl=label(), kop=lbl?`<span class="wz-badge ok">${esc(lbl)}</span> `:'';
-  const uitleg=melding?`<p class="wz-hint">${esc(melding)}</p>`
-    :(S.waarom?`<p class="wz-hint">${kop}✨ guessed: ${esc(S.waarom)} — one tap to change.</p>`
-              :(lbl?`<p class="wz-hint">${kop}</p>`:''));
-  el.innerHTML=`${uitleg}
-   <div class="wz-clab">Time <span class="wz-hint">— a number, in hours or days</span></div>
-   <div class="wz-add"><input type="number" id="wz-uren" min="0" step="1" placeholder="0" value="${esc(S.uren)}"
-     oninput="S.uren=this.value" onchange="impact()">
-     <select id="wz-eenheid" onchange="S.eenheid=this.value;impact()"><option value="uren"${S.eenheid==='uren'?' selected':''}>hours</option><option value="dagen"${S.eenheid==='dagen'?' selected':''}>days</option></select></div>
-   <div class="wz-clab">Mission impact</div><div class="wz-chips">${chip('missie','versterkt','Strengthens')}${chip('missie','neutraal','Neutral')}${chip('missie','verzwakt','Weakens')}</div>
-   <div class="wz-clab">Business impact</div><div class="wz-chips">${chip('business','hoog','High')}${chip('business','medium','Medium')}${chip('business','laag','Low')}</div>`;
-}
+// HIER STONDEN VIER FUNCTIES: schat() (een LLM-gok via /wizard/impact), uren(), label() en
+// impact() (de chips voor Mission impact en Business impact). Weg op 19 september 2026, BLOK B.
+// Reden: de velden vulden een prioritering die er niet meer is. Op productie stond missie_impact
+// op 25 van de 160 levende projecten en effort op 44; business_case op 0. Drie invoervelden die
+// niemand terugleest zijn geen hulp maar een drempel. De WAARDEN blijven in de data staan als
+// historie — alleen het formulier vraagt er niet meer om. De definitieve wizard-vervanging
+// (één vraag: "wat is klaar-wanneer?") komt in fase 7 met het prototype-formulier.
 
 // OPENEN IS TYPEN. Hier stond een wachtscherm: "✨ maakt een checklist…" met een spinner van
 // maximaal twaalf seconden, en pas daarna kon je iets. Dat is de AI vóór de mens zetten bij een
@@ -426,8 +386,10 @@ async function maak(){
   const b=document.getElementById('wz-save'); if(b)b.textContent='Putting it on the board…';
   // DE TITEL IS WAT ER IN HET VELD STAAT, letterlijk: de server herschrijft niets meer (Stefan, 12 sep:
   // "dat moet nooit mogen"). De titel is ook de done-when: er is geen tweede veld.
+  // uren/eenheid/missie/business zaten hier ook; het formulier vraagt ze niet meer (BLOK B),
+  // dus ze gingen altijd leeg mee. De server vult ze niet in als ze ontbreken.
   const r=await post('/wizard/create',{role:S.role,titel:S.ruw,
-    trekker:S.trekker,uren:S.uren,eenheid:S.eenheid,missie:S.missie,business:S.business,nid:S.nid||'',
+    trekker:S.trekker,nid:S.nid||'',
     col:S.col,doel_id:S.doel,activiteit:S.wp,
     items:JSON.stringify(S.checklist),
     sug_aan:String(S.sugAan||0),sug_over:String(S.sugOver||0),sug_eigen:String(S.sugEigen||0)});
@@ -444,13 +406,13 @@ function gereed(){
    <div class="wz-foot"><a class="wz-btn ghost" href="${esc(r.url)}">View on the board</a>
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
-function restart(){Object.assign(S,{ruw:"",ruwEigen:"",titel:"",checklist:[],planfout:"",uren:"",
-  eenheid:"uren",doel:"",wp:"",missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
+function restart(){Object.assign(S,{ruw:"",ruwEigen:"",titel:"",checklist:[],planfout:"",
+  doel:"",wp:"",suggesties:[],sugBezig:false,checkInit:false,
   trekker:"",bezig:false,klaar:null}); form();}
 
-window.S=S;window.scherp=scherp;window.terug=terug;window.maak=maak;window.impact=impact;window.draw=draw;
+window.S=S;window.scherp=scherp;window.terug=terug;window.maak=maak;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
-window.schat=schat;window.neem=neem;window.drawSug=drawSug;
+window.neem=neem;window.drawSug=drawSug;
 window.toonWie=toonWie;window.toonWp=toonWp;window.toonOwner=toonOwner;window.suggesties=suggesties;
 form();
 })();

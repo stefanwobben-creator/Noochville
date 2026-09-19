@@ -21,8 +21,9 @@ def test_ongecatalogiseerde_reeks_signaal():
 
 
 def test_inactieve_bron_stil():
-    # gdelt: inactief + 100 dagen oud → GÉÉN alarm (en het matcht de catalogus, dus geen ongecatalogiseerd)
-    assert healthcheck([_row("gdelt_tone", "gdelt_sustainable_footwear_day", NOW - 100 * DAY)], now_ts=NOW) == []
+    # Stond op gdelt_tone; die bron is op 19 september 2026 uit de catalogus gehaald (fase 6).
+    # shopify is nu het inactieve voorbeeld: inactief + 100 dagen oud → GÉÉN alarm, en het matcht
+    # de catalogus, dus ook geen 'ongecatalogiseerd'.
     assert healthcheck([_row("shopify", "shopify_orders_day", NOW - 100 * DAY)], now_ts=NOW) == []
 
 
@@ -74,8 +75,7 @@ def test_schone_store_nul_vals_alarm():
         _row("openalex", "openalex_works_90d::mycelium", NOW - 2 * DAY),
         _row("trends", "trends_ratio_thrift_luxury_day", NOW - 2 * DAY),
         _row("keywordseverywhere", "keywordseverywhere_footwear_day", NOW - 2 * DAY),
-        _row("alphavantage", "alphavantage_spx_day", NOW - DAY),
         _row("werkoverleg", "werk_tevredenheid_day", NOW - 100 * DAY),   # irregular → geen alarm
-        _row("gdelt_tone", "gdelt_x_day", NOW - 100 * DAY),              # inactief → geen alarm
+        _row("shopify", "shopify_orders_day", NOW - 100 * DAY),           # inactief → geen alarm
     ]
     assert healthcheck(rows, now_ts=NOW) == []

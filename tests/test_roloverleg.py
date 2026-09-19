@@ -218,18 +218,6 @@ def test_auto_stollen_na_3x(tmp_path):
     assert formalize_ripe_experiments(led, ag) == 0          # dedup: niet nog eens
 
 
-def test_work_projects_experiment_herwerkt_tot_drempel(tmp_path):
-    from nooch_village.projects import ProjectLedger
-    from nooch_village.roloverleg import Agenda
-    from nooch_village.project_worker import work_projects
-    led = ProjectLedger(str(tmp_path / "projects.json"))
-    pid = led.create("scout", "Volgen van trends", "human", origin="experiment", status="running")
-    ag = Agenda(str(tmp_path / "ag.json"))
-    out = None
-    for _ in range(4):                                        # vier pulsen
-        out = work_projects(led, llm_reason=lambda p: "LEVER: gedaan", agenda=ag)
-    assert led.get(pid)["executions"] == 3                   # gestopt op de drempel
-    assert ag.open() and ag.open()[0]["change"]["add_accountabilities"] == ["Volgen van trends"]
 
 
 

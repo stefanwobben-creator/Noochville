@@ -190,12 +190,12 @@ def test_verschil_los():
 def test_scherm_leeg_en_gevuld(tmp_path):
     dd, st = _st(tmp_path)
     html = render_site_audit(st)
-    assert "Nog geen run" in html and "village site_audit" in html
+    assert "No run yet" in html and "village site_audit" in html
     site_audit.run_en_bewaar(st, _ctx(dd), _reg())
     site_audit.run_en_bewaar(st, _ctx(dd), _reg(mobiel=_Mobiel(_lighthouse(perf=92))))
     html = render_site_audit(cockpit2._Stores(dd))
     assert "chip green" in html and "chip amber" in html and "chip coral" in html
-    assert "Gewisseld sinds de vorige run" in html and "Snelheid (mobiel)" in html
+    assert "Changed since the previous run" in html and "Snelheid (mobiel)" in html
     assert "LCP-element: Nooch 269 in het gras" in html
     assert "Verloop" in html
     assert "eigenaar: <code>Website Developer</code>" in html or "eigenaar: <code>" in html
@@ -272,6 +272,6 @@ def test_scherm_toont_live_en_dev_als_twee_reeksen(tmp_path):
     st = cockpit2._Stores(dd)
     dev = render_site_audit(st, doel="dev")
     assert "preview_theme_id=42" in dev and "preview-balk" in dev and "class='on' href='/site-audit?doel=dev'" in dev
-    assert "Nog geen run" in render_site_audit(st), "live blijft leeg: de dev-run hoort daar niet"
-    assert "Nog geen run" in render_site_audit(st, doel="onzin"), "onbekend doel valt terug op live"
+    assert "No run yet" in render_site_audit(st), "live blijft leeg: de dev-run hoort daar niet"
+    assert "No run yet" in render_site_audit(st, doel="onzin"), "onbekend doel valt terug op live"
     assert "style=" not in dev

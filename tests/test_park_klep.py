@@ -161,73 +161,13 @@ def _inhabitant(tmp_path, led):
     return Inhabitant(rec, EventBus(name="t"), reg, ctx)
 
 
-def test_een_onvolledige_payload_repareert_de_rol_zelf(tmp_path):
-    """Geen mens-werk: de rol schreef zelf een onvolledige payload voor zijn eigen skill. Lukt het
-    herstel, dan ziet de mens dit nooit."""
-    led, pid, clid, items = _p(tmp_path, [("Scan PHA-patenten voor footwear", "epo_patents", False)])
-    inh = _inhabitant(tmp_path, led)
-    with patch(_REASON, lambda p, **kw: '{"term": "PHA footwear"}'):
-        gelukt = inh._herstel_payloads(pid, clid, [led.get(pid)["checklists"][0]["items"][0]])
-    assert gelukt == {items[0]["id"]}
-    it = led.get(pid)["checklists"][0]["items"][0]
-    assert it["payload"] == {"term": "PHA footwear"} and "payload_ok" not in it
 
 
-def test_een_herstel_dat_de_poort_niet_haalt_telt_niet(tmp_path):
-    """Fail-closed op de uitkomst: dezelfde validatie als bij de eerste poging. Een LLM die iets
-    verzint komt er dus niet mee weg — daarom mag deze call op de goedkope ladder."""
-    led, pid, clid, items = _p(tmp_path, [("Scan patenten", "epo_patents", False)])
-    inh = _inhabitant(tmp_path, led)
-    with patch(_REASON, lambda p, **kw: '{"iets_anders": "x"}'):   # 'term' ontbreekt nog steeds
-        assert inh._herstel_payloads(pid, clid, [led.get(pid)["checklists"][0]["items"][0]]) == set()
-    assert led.get(pid)["checklists"][0]["items"][0].get("payload_ok") is False
 
 
-@pytest.mark.parametrize("antwoord", [None, "", "geen json", '{"kapot": '])
-def test_een_onbruikbaar_antwoord_laat_het_item_met_rust(tmp_path, antwoord):
-    led, pid, clid, items = _p(tmp_path, [("Scan patenten", "epo_patents", False)])
-    inh = _inhabitant(tmp_path, led)
-    with patch(_REASON, lambda p, **kw: antwoord):
-        assert inh._herstel_payloads(pid, clid, [led.get(pid)["checklists"][0]["items"][0]]) == set()
 
 
-def test_de_prompt_verbiedt_het_raden_van_identifiers(tmp_path):
-    """Een gerepareerde payload met een verzonnen merknaam of URL is erger dan een geparkeerd item."""
-    led, pid, clid, items = _p(tmp_path, [("Scan patenten", "epo_patents", False)])
-    inh = _inhabitant(tmp_path, led)
-    gezien = []
-    with patch(_REASON, lambda p, **kw: gezien.append(p) or '{"term": "x"}'):
-        inh._herstel_payloads(pid, clid, [led.get(pid)["checklists"][0]["items"][0]])
-    assert "Verzin GEEN identifiers" in gezien[0]
-    assert "liever leeg dan het te raden" in gezien[0]
 
 
-def test_de_drie_redenen_blijven_gescheiden_in_de_melding():
-    """`mens = [... != "fails"]` lumpte payload bij het mens-werk, en dan komt een planfout van de
-    rol bij de mens binnen als 'wacht op een externe partij'."""
-    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert 'mens = [it for it in stuck if blokkades[it["id"]] == "human"]' in src
-    assert 'payload = [it for it in stuck if blokkades[it["id"]] == "payload"]' in src
-    assert "if mens and not faal and not payload:" in src
-    assert "payload onvolledig na herstelpoging" in src
 
 
-# ── De founder-ping: alleen als de park-reden hem nodig heeft ───────────────
-
-def test_alleen_een_mens_blokkade_pingt_de_founder():
-    """Dit vuurde ongeacht de reden: 79 van de 98 founder-notificaties waren "Project van X
-    vastgelopen". Een payload- of fails-blokkade is rolwerk — de rol herstelt zijn payload of de
-    bron moet gefixt worden, en het project draagt sinds #287 zijn eigen park-reden waarmee de klep
-    het afhandelt. Zonder deze poort is de inbox een logbestand met een badge erop.
-
-    Sinds 29 aug 2026 staat er een vierde voorwaarde bij: `not geland`. Landde de stap al
-    wélgevormd bij een mens (de laatste meter, escalation_router.naar_mens), dan zou deze ping een
-    TWEEDE melding over dezelfde gebeurtenis zijn — en dan overschreeuwt de vage ("vastgelopen op N
-    mens-/extern item(s)") de concrete vraag die er net naast kwam te liggen."""
-    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    i = src.index("ledger.block(pid, f\"vastgelopen op")
-    blok = src[i:i + 1800]
-    assert "if mens and not payload and not faal and not geland:" in blok
-    assert "_notify_founder" in blok
-    assert "geparkeerd zonder founder-ping" in blok        # de andere tak is zichtbaar, niet stil
-    assert "wélgevormd bij een" in blok                    # en de derde tak ook

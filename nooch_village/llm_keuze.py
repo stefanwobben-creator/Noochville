@@ -62,6 +62,10 @@ PREMIUM_ONLY: frozenset[str] = frozenset()
 # een verzonnen getal doorlaat, een critic die een zwakke claim niet ziet. Daar hoort het sterkste
 # brein dat we hebben, en kosten zijn hier bewust geen overweging.
 HOOG_INZET: frozenset[str] = frozenset({
+    # LET OP (19 sept 2026): `einddocument`, `plan_checklist` en `plan_checklist_retry`
+    # hebben sinds BLOK A geen aanroeper meer in de code. Ze staan hier nog omdat het
+    # modelbeleid ze als voorbeeld-site gebruikt in zijn eigen tests; het opruimen van
+    # deze tabel is een aparte beurt, niet die van de opruiming zelf.
     "einddocument",              # het stuk dat de mens leest en waarop hij beslist
     "verslag_assemblage",        # hetzelfde stuk, maar dán: dit wordt orgkennis zodra een mens het
                                  # bevestigt, en een zwakke samenvatting die je bevestigt is erger
@@ -87,7 +91,6 @@ HOOG_INZET: frozenset[str] = frozenset({
     # dit meeneemt. Deze vier regels vormen bewust hun eigen, makkelijk terug te draaien wijziging.
     "skill_claim_evidence",      # claim_evidence.py: "een rapport dat een verzonnen getal doorlaat"
     "skill_competitor_discover", # is dit merk een échte concurrent? met citaat-eis (scope 55)
-    "skill_lead_beoordeling",    # Nooch-fit van een leverancier/materiaal, met citaat-eis (scope 51)
     "skill_content_check",       # de laatste blik vóór publicatie tegen de merk-copyregels
 })
 

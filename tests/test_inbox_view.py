@@ -307,10 +307,12 @@ def test_een_item_voor_een_rol_die_jij_vervult_is_van_jou(tmp_path):
     src = st.projects.create(_OWNER, "Rolwerk", "human")
     n = st.notif.add("role", _OWNER, src, by="test", snippet="voor de rol")
 
-    _nxt, msg = cockpit2.dispatch(dd, "notif_read",
+    # Stond op `notif_read`; die actie is in fase 6 verwijderd (geen formulier verstuurde hem
+    # nog — de inbox gebruikt `notif_klaar`). De EIS is ongewijzigd: de poort matcht op jezelf
+    # ÉN op elke rol die je vervult.
+    _nxt, msg = cockpit2.dispatch(dd, "notif_klaar",
                                   {"nid": [n["id"]], "next": ["/inbox"]}, username=ik.email)
     assert "No access" not in msg
-    assert cockpit2._Stores(dd).notif._find(n["id"]).get("read")
 
 
 def test_guest_mag_alles_want_dan_staat_auth_uit(tmp_path):
@@ -325,15 +327,18 @@ def test_guest_mag_alles_want_dan_staat_auth_uit(tmp_path):
     assert "No access" not in msg
 
 
-def test_alle_zes_de_wachtrij_acties_zitten_achter_dezelfde_poort(tmp_path):
-    """Niet één handler maar de hele familie. Een poort op vijf van de zes is geen poort: wie
-    `notif_klaar` mag misbruiken heeft `notif_delete` niet nodig."""
+def test_alle_vier_de_wachtrij_acties_zitten_achter_dezelfde_poort(tmp_path):
+    """Niet één handler maar de hele familie. Een poort op drie van de vier is geen poort: wie
+    `notif_klaar` mag misbruiken heeft `notif_delete` niet nodig.
+
+    Het waren er zes; `notif_read` en `notif_processed` zijn in fase 6 verwijderd omdat geen
+    enkel formulier ze nog verstuurde."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     ik = _mens(st)
     ander = _tweede_mens(st)
     velden = {
-        "notif_read": {}, "notif_processed": {}, "notif_archive": {}, "notif_delete": {},
+        "notif_archive": {}, "notif_delete": {},
         "notif_klaar": {}, "notif_outcome": {"otype": ["actie"], "content": ["iets"]},
     }
     for actie, extra in velden.items():

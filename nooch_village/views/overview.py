@@ -20,7 +20,7 @@ from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import (org, artefacts, epic, acc_ids, skill_meta, skill_links,
+from nooch_village import (org, artefacts, acc_ids, skill_meta, skill_links,
                            skill_labels, wiki, claims_db)
 from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
@@ -165,35 +165,6 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
             f"<div class='acc-ai'>{beheer}</div></div>")
 
 
-def _epic_earth_html() -> str:
-    """Live NASA-EPIC-aardbol: de laatste frames gestapeld, met een klein script dat ze traag
-    doorloopt (zachte draaiing), plus een UTC-onderschrift. Alleen bestaande + de goedgekeurde
-    .epic-* klassen, geen inline styles. Fail-closed: geen frames → nette melding."""
-    frames = epic.latest_frames()
-    if not frames:
-        return "<div class='card muted'>Live earth image (NASA EPIC) is briefly unavailable.</div>"
-    imgs = "".join(
-        f"<img class='epic-frame{' on' if i == len(frames) - 1 else ''}' "
-        f"src='/epic/frame?image={_e(f['image'])}&date={_e(f['date'])}' "
-        f"data-cap='{_e(f['caption'])} UTC' alt='Earth from NASA EPIC (DSCOVR)' loading='lazy'>"
-        for i, f in enumerate(frames))
-    cap0 = f"{_e(frames[-1]['caption'])} UTC"
-    # Wachtindicator: draaiende 🌍 + tekst, zichtbaar tot het beeld binnen is (JS zet .loaded op load).
-    loader = ("<div class='epic-loading'><span class='epic-globe' aria-hidden='true'>🌍</span>"
-              "<span class='epic-load-txt'>Mother Earth is loading…</span></div>")
-    js = ("<script>(function(){var w=document.currentScript.parentNode;"
-          "var earth=w.querySelector('.epic-earth');"
-          "var on=earth?earth.querySelector('.epic-frame.on'):null;"
-          "function done(){if(earth)earth.classList.add('loaded');}"
-          "if(on){if(on.complete)done();else{on.addEventListener('load',done);on.addEventListener('error',done);}}"
-          "else{done();}"
-          "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
-          "if(fr.length<2)return;var i=fr.length-1;"
-          "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
-          "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},5000);"
-          "})();</script>")
-    return (f"<div class='epic-earth'>{loader}{imgs}</div>"
-            f"<div class='epic-cap'>Live: {cap0}</div>{js}")
 
 
 def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
@@ -206,10 +177,10 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
     doms = d.domains or []
     doms_list = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>") if doms else ""
-    if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live aardbol; geen "Geen domein."
-        domains_inner = _epic_earth_html() + doms_list
-    else:
-        domains_inner = doms_list or "<span class='muted'>No domain.</span>"
+    # Op de anchor-cirkel stond hier een live NASA-EPIC-aardbol. Weg op 19 september 2026
+    # (fase 6): mooi, maar het was een dagelijkse externe ophaal plus een schijf-cache voor een
+    # plaatje, en in een codebase die we halveren is dat geen domein.
+    domains_inner = doms_list or "<span class='muted'>No domain.</span>"
     parts.append(f"<div class='c2-sec'><h3>Domains</h3>{domains_inner}</div>")
     accs = d.accountabilities or []
     if not is_c:
@@ -814,7 +785,13 @@ def _radar_verwijzing(st: _Stores, rec) -> str:
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
                 van: str = "", tot: str = "", compare: bool = False, goal: str = "",
-                van_rapport: str = "") -> str:
+                van_rapport: str = "", kind_flt: str = "") -> str:
+    # OUDE TABNAMEN BLIJVEN WERKEN. policies/notes/tools zijn sinds fase 7 één Wiki-tab. De alias
+    # staat HIER en niet in de route, zodat elke aanroeper hem krijgt — de route, een test, een
+    # ingebedde render. Hij vertaalt naar het juiste voorfilter, wat preciezer is dan doorsturen.
+    if tab in ("policies", "notes", "tools"):
+        kind_flt = kind_flt or {"policies": "policy", "notes": "note", "tools": "tool"}[tab]
+        tab = "wiki"
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Not found", "<p>Node not found.</p><p><a href='/'>← home</a></p>")
@@ -842,30 +819,48 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
         content = _members_html(st, rec, csrf_token)
-    elif tab == "notes":
-        # De Website Developer had hier gÉÉn notes maar de Backlog Builder. Die verhuisde naar Tools
-        # en is op 11 september 2026 verwijderd (niet gebruikt); daardoor heeft ook deze rol gewoon
-        # notes — en dus wiki-pagina's, waar hij als enige rol van uitgesloten was.
-        content = _artefact_tab_html(st, rec, "note", csrf_token, username,
-                                     titel="Notes", leeg="No notes on this role/circle yet.",
-                                     van_rapport=van_rapport)
-    elif tab == "tools":
-        content = (_role_tools_html(rec)
-                   + _ritme_html(st, rec)
-                   + _radar_verwijzing(st, rec)
-                   + _artefact_tab_html(st, rec, "tool", csrf_token, username,
-                                        titel="Tools", leeg="No tools on this role/circle yet."))
+    elif tab == "wiki":
+        # ÉÉN TAB VOOR DRIE SOORTEN (fase 7). Policies, Notes en Tools waren drie tabs boven één
+        # AttachmentStore; het enige verschil is `kind`. Drie deuren naar één kamer dwingen je te
+        # weten waar iets ooit is neergezet vóór je het kunt vinden. Nu: één oppervlak met een
+        # filter, precies zoals het prototype het toont — en zonder migratie, want `kind` bestond al.
+        #
+        # De tool-specifieke blokken (rol-tools, ritme, radar) horen bij `kind="tool"` en staan
+        # daarom onder het tool-filter; bij "all" staan ze eronder, niet ertussen.
+        soort = (kind_flt or "all").lower()
+        if soort not in ("all", "policy", "note", "tool"):
+            soort = "all"
+        chips = "".join(
+            f"<a class='cl-filter{' on' if soort == k else ''}' "
+            f"href='/node?id={_e(node_id)}&tab=wiki&kind={k}'>{_e(lbl)}</a>"
+            for k, lbl in (("all", "All"), ("policy", "Policy"), ("note", "Note"), ("tool", "Tool")))
+        delen = [f"<div class='cl-filters'>{chips}</div>"]
+        if soort in ("all", "policy"):
+            delen.append(_artefact_tab_html(st, rec, "policy", csrf_token, username,
+                                            titel="Policies",
+                                            leeg="No policies on this role/circle yet."))
+        if soort in ("all", "note"):
+            delen.append(_artefact_tab_html(st, rec, "note", csrf_token, username, titel="Notes",
+                                            leeg="No notes on this role/circle yet.",
+                                            van_rapport=van_rapport))
+        if soort in ("all", "tool"):
+            delen.append(_role_tools_html(rec) + _ritme_html(st, rec) + _radar_verwijzing(st, rec)
+                         + _artefact_tab_html(st, rec, "tool", csrf_token, username, titel="Tools",
+                                              leeg="No tools on this role/circle yet."))
+        content = "".join(delen)
     elif tab == "metrics":
         # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als
         # node-tab. Vervangt het oude _metrics_tab_html; KPI-aanmaken loopt via de rijke composer.
         content = render_metrics2_tab(st, rec, csrf_token, win=mw, compare=compare, van=van, tot=tot)
+    elif tab == "goals":
+        # Dezelfde inhoud als /goals, uit dezelfde functie. Een tweede kopie zou na één wijziging
+        # uit de pas lopen — de regel die ook bij het projectenbord geldt.
+        from nooch_village.views.doelen import render_goals
+        content = render_goals(st, csrf_token=csrf_token, username=username, inner_only=True)
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
         content = _projects_tab_html(st, rec, csrf_token, group=group, username=username, goal=goal)
-    elif tab == "policies":
-        content = _artefact_tab_html(st, rec, "policy", csrf_token, username,
-                                     titel="Policies", leeg="No policies on this role/circle yet.")
     else:
         content = ""      # onbekende tab (niet in de tab-lijst) → geen inhoud
 
@@ -1036,43 +1031,6 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     return _page(name, inner)
 
 
-def render_patterns(csrf_token: str = "") -> str:
-    """Levende styleguide: elk atoom/molecuul één keer. Bron van waarheid; geen losse varianten."""
-    def sec(title, body):
-        return f"<div class='c2-sec'><h3>{_e(title)}</h3><div style='display:flex;gap:.5rem;flex-wrap:wrap;align-items:center'>{body}</div></div>"
-    buttons = ("<button class='btn ok'>Primary</button>"
-               "<button class='btn'>Neutral</button>"
-               "<button class='btn no'>Danger</button>"
-               "<button class='btn ok sm'>Primary sm</button>"
-               "<button class='btn sm'>Neutral sm</button>"
-               "<button class='btn ghost sm'>Ghost sm</button>"
-               "<a class='dellink' href='#'>delete</a>")
-    chips = ("<span class='chip green'>green</span><span class='chip muted'>muted</span>"
-             "<span class='chip outline'>outline</span><span class='chip coral'>coral</span>"
-             "<span class='chip coral-solid'>Overdue</span><span class='chip'>tint (default)</span>"
-             "<span class='badge ro'>read</span><span class='badge rw'>edit</span>")
-    cards = (f"<button class='acard'>{_IC_CLOCK}<span>Date</span></button>"
-             f"<button class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
-             f"<button class='acard acard-off' disabled>{_IC_TARGET}<span>Goals</span></button>")
-    att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>example attachment</a></div>"
-    due = (f"<span class='chip outline'>{_IC_CLOCK}25 Jun 2026</span>"
-           f"<span class='chip coral'>{_IC_CLOCK}1 Jan 2020</span><span class='chip coral-solid'>Overdue</span>")
-    av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
-    icons = (f"<span class='manage-ico' title='add person'>{_ICON_ADD_PERSON}</span>"
-             f"<span class='manage-ico' title='add reply'>{_ICON_ADD_EMOJI}</span>")
-    body = (sec("Buttons — atom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
-            + sec("Line icons (neutral, currentColor)", icons)
-            + sec("Status & chips & badges", chips)
-            + sec("Action-cards (molecule)", cards)
-            + sec("Attachment card", att)
-            + sec("Deadline-chip", due)
-            + sec("Avatar", av))
-    main = (f"<div class='c2-main'><h1>Patterns</h1>"
-            f"<p class='muted'>Living reference. Use these atoms and molecules; don't invent variants.</p>{body}</div>")
-    inner = (f"{_DS_LINK}"
-             f"{_nav('patterns')}"
-             f"<div class='c2-wrap'>{main}</div>")
-    return _page("Patterns", inner)
 
 
 

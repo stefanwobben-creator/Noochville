@@ -441,7 +441,7 @@ def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
 
     Het grote tekstvak stond bovenaan en bleef in de praktijk leeg: in een live overleg is er geen
     tijd om een spanning uit te schrijven. Alleen wie een punt VOORAF invoert vult hem, en dan moet
-    hij er gewoon staan. Daarom: ingevuld → je leest hem meteen; leeg → één klein "⚡ Geen" dat je
+    hij er gewoon staan. Daarom: ingevuld → je leest hem meteen; leeg → één klein "⚡ None" dat je
     kunt openklappen als je hem tóch wilt vullen, en dat verder niets van je vraagt."""
     iid = it["id"]
     sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
@@ -450,7 +450,7 @@ def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
 
     kort = " ".join(tekst.split())
     samenvatting = (f"⚡ {_e(kort[:110])}{'…' if len(kort) > 110 else ''}" if kort
-                    else "<span class='muted'>⚡ Geen</span>")
+                    else "<span class='muted'>⚡ None</span>")
     veld = _field("Spanning", "tekst", kind="textarea", value=tekst, fid=f"vs-{iid}",
                   placeholder="optioneel — meestal vul je dit vooraf in, niet tijdens het overleg",
                   attrs=f'onchange="{sub}"')
@@ -569,7 +569,7 @@ def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = ""
             # de 'Group by'-knoppen op het projectenbord.
             u = _open_nxt(nxt, volgend)
             rijen += (f"<div class='wo-next'><a class='btn js-modal' href='{_e(u)}' "
-                      f"data-href='{_e(u)}'>volgende spanning →</a></div>")
+                      f"data-href='{_e(u)}'>next tension →</a></div>")
     else:
         rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid) for p in punten)
     return (tellers(punten) + rijen) if rijen else (

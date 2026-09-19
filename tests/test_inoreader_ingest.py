@@ -25,22 +25,6 @@ def _radar(tmp_path):
     return RadarStore(str(tmp_path / "radar.json"))
 
 
-def test_blocklist_en_distill(tmp_path):
-    items = [
-        {"title": "These feet beckon you!", "url": "https://rawporn.org/threads/x", "content_html": "<p>...</p>"},
-        {"title": "Veja launches new sneaker", "url": "https://example.com/veja", "content_html": "<p>Veja...</p>",
-         "date_published": "2019-06-01T08:00:00Z"},
-        {"title": "", "url": "https://x.com/leeg"},                 # geen titel -> overgeslagen
-    ]
-    res = ing.ingest_feed_items(items, role=_ROLE, feed=_FEED, data_dir=str(tmp_path),
-                                llm_reason=_reason_veja)
-    assert res["blocked"] == 1                                      # porno-domein eruit
-    assert len(res["trace"]) == 3 and any(v == "geblokkeerd" for _, v in res["trace"])
-    assert res["proposed"] == 1                                     # veja-voorstel
-    pend = _radar(tmp_path).pending(_ROLE)
-    assert len(pend) == 1 and pend[0]["kind"] == "concurrent" and pend[0]["content"] == "Veja"
-    assert pend[0]["feed"] == _FEED and pend[0]["status"] == "wacht"
-    assert pend[0]["published_at"] == "2019-06-01T08:00:00Z"        # publicatiedatum uit de feed bewaard
 
 
 def test_idempotent_op_link(tmp_path):
@@ -66,34 +50,7 @@ def test_blocked_domain_helper():
     assert ing._blocked("https://www.veja-store.com/nieuws") is False
 
 
-def test_strict_distill_param(tmp_path):
-    from nooch_village.news_distill import distill_article
-    assert distill_article({"title": "iets vaags", "brand": "x"},
-                           llm_reason=lambda p: "SOORT: geen", strict=True) is None
-    d = distill_article({"title": "Merk X lanceert vegan schoen", "brand": "x"},
-                        llm_reason=lambda p: "SOORT: concurrent\nINHOUD: Merk X\nWAAROM: lancering",
-                        strict=True)
-    assert d and d["kind"] == "concurrent"
 
 
-def test_materials_focus_prompt_and_distill():
-    from nooch_village.news_distill import distill_article, _distill_prompt
-    p = _distill_prompt("iets", "bron", "(geen)", "", strict=True, focus="materials")
-    assert "materiaalwetenschapper" in p and "afbreekbaarheid" in p   # materiaal-bril
-    assert "concurrent" not in p                                      # geen concurrent-bril
-    d = distill_article({"title": "Nieuwe biologisch afbreekbare vezel uit schimmel", "brand": "x"},
-                        llm_reason=lambda pr: "SOORT: kaart\nINHOUD: schimmelvezel\nWAAROM: afbreekbaar",
-                        focus="materials")
-    assert d and d["kind"] == "kaart" and d["content"] == "schimmelvezel"
 
 
-def test_materials_focus_via_ingest(tmp_path):
-    def reason(pr):
-        assert "materiaalwetenschapper" in pr                         # de materials-prompt is gebruikt
-        return _batch(pr, "SOORT: kaart\nINHOUD: hennepvezel\nWAAROM: bio-based")
-    items = [{"title": "Doorbraak in hennepvezel voor schoenen", "url": "https://x/hemp", "content_html": "hemp"}]
-    res = ing.ingest_feed_items(items, role="harry_hemp", feed="Material Innovation",
-                                data_dir=str(tmp_path), llm_reason=reason, focus="materials")
-    assert res["proposed"] == 1
-    p = _radar(tmp_path).pending("harry_hemp")[0]
-    assert p["kind"] == "kaart" and p["content"] == "hennepvezel" and p["feed"] == "Material Innovation"

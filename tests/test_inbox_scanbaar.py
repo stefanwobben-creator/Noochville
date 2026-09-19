@@ -145,7 +145,7 @@ def test_de_actiekaart_vraagt_niet_opnieuw_om_akkoord(tmp_path):
     dd, st = _st(tmp_path)
     n = _item(st, type="actie")
     html = render_verwerk(st, n, csrf_token="t")
-    assert "Wat doe je met deze actie?" in html
+    assert "What do you do with this action?" in html
     assert "notif_klaar" in html                      # afvinken
     assert "maak er een project van" in html
     assert "Wat doe je met dit verzoek?" not in html  # niet de verzoek-kaart

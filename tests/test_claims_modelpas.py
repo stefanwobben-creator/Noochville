@@ -356,9 +356,9 @@ def test_regel_uit_vondst_weigert_een_lege_vondst(tmp_path):
     assert "⛔" in melding
 
 
-def test_beide_acties_zijn_compliance_gated(tmp_path, monkeypatch):
+def test_beide_acties_zitten_achter_de_claims_poort(tmp_path, monkeypatch):
     from nooch_village import cockpit2
-    monkeypatch.setattr(cockpit2, "_role_gate", lambda *a, **k: "⛔ geen rechten")
+    monkeypatch.setattr(cockpit2, "_claims_gate", lambda *a, **k: "⛔ geen rechten")
     ctx = _dispatch_ctx(tmp_path, {"fragment": "een lange genoeg zin om te whitelisten"})
     for actie in (cockpit2._act_claims_vondst_whitelist, cockpit2._act_claims_regel_uit_vondst):
         _, melding = actie(ctx)

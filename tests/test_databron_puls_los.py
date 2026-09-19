@@ -111,13 +111,21 @@ def test_veilig_databron_puls_draait_beide_stappen_in_volgorde_en_is_fail_soft_p
     assert order == ["collect", "sense"], "een falende collector mag de dode-bron-sensor niet blokkeren"
 
 
-def test_website_watcher_draagt_source_died_niet_meer():
-    """De statische afhankelijkheids-gate (afslank_afhankelijkheden) moet dit ook zo zien —
-    anders is de verhuizing hierboven alleen in de runtime waar, niet in de poort die
-    `afslanken.voer_uit` gebruikt om te bepalen of website_watcher zomaar mag slapen."""
-    from nooch_village import afslank_afhankelijkheden as aa
+def test_source_died_hangt_aan_geen_enkele_rol_meer():
+    """De statische afhankelijkheids-gate moet de verhuizing ook zo zien — anders is hij alleen in
+    de runtime waar, niet in de poort die `afslanken.voer_uit` gebruikt.
 
-    d = aa.rol_afhankelijkheden("website_watcher")
-    ev = {e["event"] for e in d["events"]}
-    assert "source_died" not in ev
-    assert "project_discovery_ready" in ev, "de rest van de groei-puls blijft wel echt rolwerk"
+    Stond op `website_watcher`, die `source_died` publiceerde tot de collector op 16 sept 2026 naar
+    Village verhuisde. Die rol bestaat sinds 19 sept niet meer als klasse, dus de meting is nu
+    sterker geworden: source_died hangt aan GEEN ENKELE rol. Komt hij ooit weer bij een rol terecht,
+    dan faalt deze test, en dat is precies de bedoeling — dorpsinfrastructuur hoort niet in een rol
+    terug te kruipen."""
+    from nooch_village import afslank_afhankelijkheden as aa
+    from nooch_village.governance import Records
+    from nooch_village.village import BASE_DIR
+    import os
+
+    recs = Records(os.path.join(BASE_DIR, "data", "governance_records.json"))
+    for rec in recs.all():
+        ev = {e["event"] for e in aa.rol_afhankelijkheden(rec.id, recs)["events"]}
+        assert "source_died" not in ev, f"{rec.id} publiceert source_died weer als rolwerk"

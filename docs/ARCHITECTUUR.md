@@ -14,11 +14,12 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/login` | `(inline)` | `cockpit2.py` |
 | `/logout` | `(inline)` | `cockpit2.py` |
 | `/wachtwoord` | `(inline)` | `cockpit2.py` |
-| `/snake` | `render_snake_page` | `nooch_village/snake.py` |
 | `/context` | `(inline)` | `cockpit2.py` |
-| `/epic/frame` | `(inline)` | `cockpit2.py` |
 | `/` | `(inline)` | `cockpit2.py` |
 | `/index.html` | `(inline)` | `cockpit2.py` |
+| `/messages` | `render_messages` | `nooch_village/views/messages.py` |
+| `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
+| `/projects` | `render_projects_screen` | `nooch_village/views/projects.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
 | `/rapport` | `render_projectrapport` | `nooch_village/views/rapport.py` |
 | `/pagina` | `render_pagina` | `nooch_village/views/wiki.py` |
@@ -28,9 +29,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/middelen` | `render_middelen` | `nooch_village/views/overview.py` |
 | `/person` | `render_person` | `nooch_village/views/overview.py` |
 | `/admin` | `render_admin` | `nooch_village/views/overview.py` |
-| `/founder` | `render_founder_flow` | `nooch_village/views/founder_flow.py` |
-| `/_patterns` | `render_patterns` | `nooch_village/views/overview.py` |
-| `/signals` | `render_signals` | `nooch_village/views/signals.py` |
 | `/inbox` | `render_inbox_frag` | `nooch_village/views/inbox.py` |
 | `/search` | `render_search_fragment` | `nooch_village/views/search.py` |
 | `/skills` | `render_skills` | `nooch_village/views/skills.py` |
@@ -38,42 +36,23 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/goal` | `render_goal` | `nooch_village/views/doelen.py` |
 | `/site-audit` | `render_site_audit` | `nooch_village/views/site_audit.py` |
 | `/bronnen` | `render_bronnen` | `nooch_village/views/bronnen.py` |
-| `/codie` | `render_codie` | `nooch_village/views/codie.py` |
-| `/inzichten` | `render_kennislaag` | `nooch_village/views/kennislaag.py` |
-| `/kennisbank` | `render_kennisbank` | `nooch_village/views/kennisbank.py` |
-| `/kennisbank/search` | `render_kennisbank_search` | `nooch_village/views/kennisbank.py` |
-| `/kennisbank/tags` | `render_tag_onderhoud` | `nooch_village/views/tag_onderhoud.py` |
-| `/kennisbank/staging` | `render_kennisbank_staging` | `nooch_village/views/kennisbank_staging.py` |
-| `/kennisbank/spel` | `render_kennisbank_spel` | `nooch_village/views/kennisbank_spel.py` |
-| `/kennisbank/spel/search` | `render_kennisbank_spel_search` | `nooch_village/views/kennisbank_spel.py` |
-| `/linkbuilding` | `render_linkbuilding` | `nooch_village/views/linkbuilding.py` |
-| `/accountabilities` | `render_accountabilities` | `nooch_village/views/accountabilities.py` |
 | `/woordenschat` | `render_woordenschat` | `nooch_village/views/woordenschat.py` |
 | `/keywords` | `render_keyword_lens` | `nooch_village/views/keyword_lens.py` |
 | `/long-term-trends` | `(inline)` | `cockpit2.py` |
-| `/belofte` | `render_belofte` | `nooch_village/views/belofte.py` |
 | `/metrics2` | `render_metrics2` | `nooch_village/views/metrics2.py` |
 | `/inbox/verwerk` | `render_verwerk` | `nooch_village/views/inbox.py` |
 | `/catalog` | `render_catalog` | `nooch_village/views/catalog.py` |
-| `/catalogus_koppelen` | `(inline)` | `cockpit2.py` |
 | `/kpi_new` | `render_kpi_composer` | `nooch_village/views/metrics.py` |
 | `/noochie` | `render_noochie` | `nooch_village/views/noochie.py` |
 | `/vangst` | `render_vangst_frag` | `nooch_village/views/vangst.py` |
 | `/werkoverleg` | `render_werkoverleg` | `nooch_village/views/werkoverleg.py` |
-| `/callbar` | `render_callbar` | `nooch_village/views/callbar.py` |
-| `/livekit-token` | `(inline)` | `cockpit2.py` |
-| `/livekit-presence` | `(inline)` | `cockpit2.py` |
-| `/claims/db.json` | `(inline)` | `cockpit2.py` |
 | `/claims` | `render_claims` | `nooch_village/views/claims.py` |
 | `/copy-check` | `render_copy_check` | `nooch_village/views/copy_check.py` |
 | `/decision-coach` | `render_decision_coach` | `nooch_village/views/decision_coach.py` |
 | `/copy-prompt` | `render_copy_prompt` | `nooch_village/views/copy_prompt.py` |
-| `/inwoners` | `render_inwoners` | `nooch_village/views/inwoners.py` |
-| `/inwoner` | `render_inwoner` | `nooch_village/views/inwoners.py` |
 | `/roloverleg2` | `render_roloverleg2` | `nooch_village/views/roloverleg.py` |
 | `/metric_export` | `(inline)` | `cockpit2.py` |
 | `/file` | `(inline)` | `cockpit2.py` |
-| `/project_pakket` | `(inline)` | `cockpit2.py` |
 
 
 ## (b) Dispatch-actie → handler
@@ -83,48 +62,14 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | Actie | Handler (cockpit2.py) |
 |---|---|
 | `decision_sheet_log` | `_act_decision_sheet_log` |
-| `ff_beslis` | `_act_ff_beslis` |
-| `ff_cluster` | `_act_ff_cluster` |
-| `ff_promote` | `_act_ff_promote` |
-| `ff_demote` | `_act_ff_demote` |
-| `ff_run` | `_act_ff_run` |
-| `kb_new` | `_act_kb_new` |
-| `kb_intake` | `_act_kb_intake` |
-| `kb_intake_url` | `_act_kb_intake_url` |
-| `kb_stage_edit` | `_act_kb_stage_edit` |
-| `kb_stage_accept` | `_act_kb_stage_accept` |
-| `kb_stage_delete` | `_act_kb_stage_delete` |
-| `kb_stage_merge` | `_act_kb_stage_merge` |
-| `kb_stage_commit` | `_act_kb_stage_commit` |
-| `kb_stage_discard` | `_act_kb_stage_discard` |
-| `kb_atoom_subject` | `_act_kb_atoom_subject` |
-| `kb_atoom_purge` | `_act_kb_atoom_purge` |
-| `tag_voorstel_besluit` | `_act_tag_voorstel_besluit` |
 | `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
 | `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
 | `verzoek_besluit` | `_act_verzoek_besluit` |
-| `kb_blacklist_leeg` | `_act_kb_blacklist_leeg` |
-| `kb_atoom_edit` | `_act_kb_atoom_edit` |
-| `kb_atoom_related` | `_act_kb_atoom_related` |
-| `kb_atoom_reference` | `_act_kb_atoom_reference` |
 | `kb_insight_link` | `_act_kb_insight_link` |
 | `kb_insight_unlink` | `_act_kb_insight_unlink` |
-| `kb_meta_start` | `_act_kb_meta_start` |
-| `kb_atoom_merge` | `_act_kb_atoom_merge` |
-| `kb_atoom_archive` | `_act_kb_atoom_archive` |
-| `kb_atoom_unarchive` | `_act_kb_atoom_unarchive` |
-| `kb_atoom_naar_spel` | `_act_kb_atoom_naar_spel` |
-| `kb_spel_start` | `_act_kb_spel_start` |
-| `kb_spel_add` | `_act_kb_spel_add` |
-| `kb_spel_remove` | `_act_kb_spel_remove` |
-| `kb_spel_flip` | `_act_kb_spel_flip` |
-| `kb_spel_finish` | `_act_kb_spel_finish` |
 | `kb_link` | `_act_kb_link` |
 | `kb_unlink` | `_act_kb_unlink` |
-| `kb_annotate` | `_act_kb_annotate` |
-| `kb_evidence` | `_act_kb_evidence` |
 | `kb_discuss` | `_act_kb_discuss` |
-| `kb_reformulate` | `_act_kb_reformulate` |
 | `kw_nominate` | `_act_kw_nominate` |
 | `kw_nom_accept` | `_act_kw_nom_accept` |
 | `kw_nom_reject` | `_act_kw_nom_reject` |
@@ -134,17 +79,16 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `artefact_add` | `_act_artefact_add` |
 | `artefact_edit` | `_act_artefact_edit` |
 | `artefact_archive` | `_act_artefact_archive` |
+| `msg_post` | `_act_msg_post` |
+| `keep_in_wiki` | `_act_keep_in_wiki` |
 | `pagina_feit_add` | `_act_pagina_feit_add` |
 | `pagina_feit_del` | `_act_pagina_feit_del` |
 | `pagina_voorstel` | `_act_pagina_voorstel` |
 | `proj_status` | `_act_proj_status` |
 | `proj_done` | `_act_proj_done` |
-| `proj_dod` | `_act_proj_dod` |
 | `proj_archive` | `_act_proj_archive` |
 | `proj_unarchive` | `_act_proj_unarchive` |
 | `proj_delete` | `_act_proj_delete` |
-| `proj_edit` | `_act_proj_edit` |
-| `proj_comment` | `_act_proj_comment` |
 | `proj_rename` | `_act_proj_rename` |
 | `proj_describe` | `_act_proj_describe` |
 | `proj_doc_edit` | `_act_proj_doc_edit` |
@@ -152,14 +96,12 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `verslag_bevestig_niet_behaald` | `_act_verslag_bevestig_niet_behaald` |
 | `verslag_overslaan` | `_act_verslag_overslaan` |
 | `verslag_bijwerken` | `_act_verslag_bijwerken` |
-| `proj_regen_doc` | `_act_proj_regen_doc` |
 | `proj_settrekker` | `_act_proj_settrekker` |
 | `proj_setowner` | `_act_proj_setowner` |
 | `proj_approve` | `_act_proj_approve` |
 | `proj_discard` | `_act_proj_discard` |
 | `proj_proposal_accept` | `_act_proj_proposal_accept` |
 | `proj_proposal_reject` | `_act_proj_proposal_reject` |
-| `proj_setlabel` | `_act_proj_setlabel` |
 | `proj_setimpact` | `_act_proj_setimpact` |
 | `proj_seteffort` | `_act_proj_seteffort` |
 | `proj_agendeer_verzwakt` | `_act_proj_agendeer_verzwakt` |
@@ -176,8 +118,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `feed_edit` | `_act_feed_edit` |
 | `feed_remove` | `_act_feed_remove` |
 | `wall_outcome` | `_act_wall_outcome` |
-| `notif_read` | `_act_notif_read` |
-| `notif_processed` | `_act_notif_processed` |
 | `notif_outcome` | `_act_notif_outcome` |
 | `notif_klaar` | `_act_notif_klaar` |
 | `goedkeur` | `_act_goedkeur` |
@@ -192,10 +132,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
 | `source_deactivate` | `_act_source_deactivate` |
-| `link_pursue` | `_act_link_pursue` |
-| `link_ignore` | `_act_link_ignore` |
-| `acc_check` | `_act_acc_check` |
-| `ai_reply` | `_act_ai_reply` |
 | `proj_feed` | `_act_proj_feed` |
 | `checklist_add` | `_act_checklist_add` |
 | `checklist_remove` | `_act_checklist_remove` |
@@ -206,19 +142,12 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `check_toggle` | `_act_check_toggle` |
 | `check_skip` | `_act_check_skip` |
 | `check_unskip` | `_act_check_unskip` |
-| `check_handoff` | `_act_check_handoff` |
 | `check_remove` | `_act_check_remove` |
 | `check_rename` | `_act_check_rename` |
 | `check_move` | `_act_check_move` |
 | `role_assign` | `_act_role_assign` |
 | `role_unassign` | `_act_role_unassign` |
 | `role_focus` | `_act_role_focus` |
-| `radar_approve` | `_act_radar_approve` |
-| `radar_dismiss` | `_act_radar_dismiss` |
-| `radar_promote` | `_act_radar_promote` |
-| `radar_merge` | `_act_radar_merge` |
-| `radar_koppel` | `_act_radar_koppel` |
-| `kb_stage_koppel` | `_act_kb_stage_koppel` |
 | `middel_remove` | `_act_middel_remove` |
 | `skilllink_add` | `_act_skilllink_add` |
 | `means_gap_add` | `_act_means_gap_add` |
@@ -249,7 +178,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `cl_report` | `_act_cl_report` |
 | `cl_remove` | `_act_cl_remove` |
 | `m_add_kpi` | `_act_m_add_kpi` |
-| `m_add_from_def` | `_act_m_add_from_def` |
 | `def_add` | `_act_def_add` |
 | `catalog_publish` | `_act_catalog_publish` |
 | `def_amend` | `_act_def_amend` |
@@ -268,7 +196,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `rov2_dom_remove` | `_act_rov2_set` |
 | `person_edit` | `_act_person_edit` |
 | `person_remove` | `_act_person_remove` |
-| `lk_mute` | `_act_lk_mute` |
+| `check_handoff` | `_act_check_handoff` |
+| `claims_skill` | `_act_claims_skill` |
 | `claims_term_add` | `_act_claims_term_add` |
 | `claims_term_retract` | `_act_claims_term_retract` |
 | `claims_work_status` | `_act_claims_work_status` |
@@ -276,10 +205,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `claims_vondst_whitelist` | `_act_claims_vondst_whitelist` |
 | `claims_regel_uit_vondst` | `_act_claims_regel_uit_vondst` |
 | `claims_to_board` | `_act_claims_to_board` |
-| `persona_edit` | `_act_persona_edit` |
-| `persona_llm` | `_act_persona_llm` |
-| `persona_finetune` | `_act_persona_finetune` |
-| `persona_finetune_apply` | `_act_persona_finetune_apply` |
 
 
 ## (c) Concern → store → bestand
@@ -300,6 +225,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `deliverables` | `DeliverableStore` | `deliverables.json` |
 | `ai` | `AITaskStore` | `ai_tasks.json` |
 | `notif` | `NotifStore` | `notifications.json` |
+| `channels` | `ChannelStore` | `channels.json` |
 | `agenda` | `Agenda` | `roloverleg_agenda.json` |
 | `noochie` | `NoochieStore` | `noochie.json` |
 | `checklists` | `ChecklistStore` | `checklists.json` |
@@ -310,11 +236,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `doelen` | `DoelStore` | `doelen.json` |
 | `copy_stack` | `CopyStackConfig` | `copy_stack.json` |
 | `radar` | `RadarStore` | `radar.json` |
-| `radar_besluiten` | `ClusterBesluitStore` | `radar_clusters.json` |
 | `kennisbank` | `KennisbankStore` | `kennisbank.json` |
-| `notes` | `NotesStore` | `notes.json` |
-| `spel` | `SpelStore` | `kennisbank_spel.json` |
-| `staging` | `StagingStore` | `kennisbank_staging.json` |
 | `library` | `Library` | `library.json` |
 | `nominations` | `NominationQueue` | `keyword_nominaties.json` |
 | `nom_kroniek` | `NominationKroniek` | `keyword_nominaties.jsonl` |
@@ -327,7 +249,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 
 | Databestand | Schrijvende module |
 |---|---|
-| `accountability_check.json` | `cockpit2.py` |
 | `afslanken.jsonl` | `afslanken.py` |
 | `artefact_changelog.jsonl` | `artefacts.py` |
 | `autonomie_signaal.jsonl` | `zelf_verwerking.py` |
@@ -337,51 +258,33 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `claims_database.json` | `claims_db.py` |
 | `claims_labels.jsonl` | `claims_labels.py` |
 | `claims_runtime.json` | `claims_db.py` |
-| `competitor_news.json` | `roles.py` |
-| `competitor_seen.json` | `roles.py` |
-| `critic_labels.jsonl` | `missie_critic.py` |
+| `competitor_brands.json` | `village.py` |
+| `constraints.json` | `cli.py` |
 | `csrf.json` | `cockpit2.py` |
 | `deadsource_state.json` | `village.py` |
 | `decision_sheets.jsonl` | `decision_sheets.py` |
 | `draaistaat.jsonl` | `draaistaat.py` |
-| `feedback.json` | `inhabitant.py` |
 | `feeds.json` | `radar_store.py` |
-| `field_note_prose_last.json` | `roles.py` |
-| `founder_flow.json` | `founder_flow.py` |
-| `founder_labels.jsonl` | `founder_flow.py` |
-| `founder_park.jsonl` | `founder_park.py` |
 | `gaps.jsonl` | `gap_ledger.py` |
-| `goal_state.json` | `roles.py` |
 | `governance_examples.json` | `cli.py` |
 | `kennis_embeddings.json` | `kennis_embeddings.py` |
 | `materiaal_memo.json` | `materiaal_memo.py` |
-| `meta.json` | `epic.py` |
 | `noochie_daily.json` | `roles.py` |
+| `notes.json` | `kennisbank.py` |
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
-| `pulse_heartbeat.json` | `inhabitant.py` |
-| `pulse_history.jsonl` | `roles.py` |
-| `radar_beoordelingen.jsonl` | `radar_beoordeling.py` |
-| `radar_embeddings.json` | `radar_clusters.py` |
-| `radar_nieuwheid.json` | `radar_nieuwheid.py` |
 | `relaunch_park.jsonl` | `relaunch_park.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
-| `seed_surges.json` | `roles.py` |
-| `serpapi_trends_last.json` | `roles.py` |
 | `sessions.json` | `cockpit2.py` |
 | `shopify_metrics.json` | `cli.py` |
 | `site_audit.jsonl` | `site_audit.py` |
 | `site_audit_dev.jsonl` | `site_audit.py` |
-| `snake_scores.json` | `snake.py` |
-| `spelvraag_cache.json` | `spelvraag.py` |
 | `strategy.json` | `pinboard.py` |
-| `trend_reindex_last_day.json` | `roles.py` |
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
 | `villageraad.jsonl` | `villageraad.py` |
-| `voorstellen.jsonl` | `onderzoekspas.py` |
 
 
 ### (d2) Meerdere schrijvers — eigenaarschap niet af te leiden
@@ -390,14 +293,9 @@ Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan 
 
 | Databestand | Schrijvende modules |
 |---|---|
-| `buzz_observations.jsonl` | `cli.py, village.py` |
-| `buzz_query_sets.json` | `cli.py, village.py` |
-| `competitor_brands.json` | `cli.py, roles.py, village.py` |
-| `constraints.json` | `cli.py, inhabitant.py` |
 | `groeidagboek.jsonl` | `role_proposals.py, village.py` |
-| `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, inhabitant.py, village.py` |
+| `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, village.py` |
 | `lexicon.json` | `cli.py, village.py` |
-| `linkbuilding_targets.json` | `cli.py, cockpit2.py, roles.py` |
 | `llm_usage.jsonl` | `llm_usage.py, village.py` |
 | `system_log.jsonl` | `cockpit2.py, verslag.py, village.py` |
 | `timekeeper_last_day.json` | `dagcyclus.py, puls_wacht.py` |
@@ -410,16 +308,12 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | Databestand |
 |---|
 | `co2_factoren.json` |
-| `kennisbank_embeddings.json` |
-| `kennisbank_intake.json` |
 | `llm_prijzen.json` |
-| `manifest.json` |
-| `mc_records.json` |
-| `persona.json` |
-| `project.json` |
+| `pulse_heartbeat.json` |
 | `rugzakken.json` |
+| `seed_surges.json` |
 | `trend_signals.jsonl` |
 
 
 ---
-_63 routes · 198 dispatch-acties · 31 stores in `_Stores` · 55 daarbuiten met één schrijver · 11 met meerdere · 10 zonder gevonden schrijver._
+_42 routes · 144 dispatch-acties · 28 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

@@ -18,7 +18,7 @@ _SRC_LABEL = {
     "plausible": "Website analytics (Plausible)", "shopify": "Sales (Shopify)",
     "gsc": "Search traffic (Google Search Console)", "trends": "Search interest (Google Trends)",
     "trends_categorie": "Category interest (Google Trends)",
-    "keywordseverywhere": "Search volume (Keywords Everywhere)", "alphavantage": "Market index (AlphaVantage)",
+    "keywordseverywhere": "Search volume (Keywords Everywhere)",
     "openalex": "Science (OpenAlex)", "semanticscholar": "Science (Semantic Scholar)",
     "gdelt_tone": "News tone (GDELT)", "co2_village": "LLM usage & CO₂ (internal)",
 }

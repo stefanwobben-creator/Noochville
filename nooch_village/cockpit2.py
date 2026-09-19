@@ -31,7 +31,8 @@ from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
-    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer,
+    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
+    _SIDE_ORG, _SIDE_CIRCLE,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -49,20 +50,17 @@ from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS, body_cap
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
 from nooch_village.evidence_ledger import EvidenceLedger
-from nooch_village import snake
 from nooch_village.source_status import SourceStatusStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
-from nooch_village import epic
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
+from nooch_village.channels import ChannelStore
 from nooch_village.project_doc_store import ProjectDocStore
-from nooch_village.radar_clusters import ClusterBesluitStore
 from nooch_village.radar_store import RadarStore
-from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
 from functools import lru_cache
 from nooch_village.skill_match import plan_offers
@@ -98,11 +96,6 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       field as kb_field, verdict as kb_verdict,
                                       WORD_LABEL as KB_WORD_LABEL,
                                       load_atoms as kb_load_atoms)
-from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
-from nooch_village.kennisbank_spel import SpelStore, spel_finish
-from nooch_village.kennisbank_staging import StagingStore, commit_atom, commit_batch
-from nooch_village.views.kennisbank_staging import render_kennisbank_staging
-from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
@@ -155,6 +148,9 @@ class _Stores:
         except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
             pass
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
+        # De gespreklaag (fase 8): cirkel- en DM-kanalen wonen hier, project-kanalen
+        # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
+        self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
@@ -169,11 +165,7 @@ class _Stores:
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
         # Wat de founder met een opkomend onderwerp deed (project of watch). Geen oordeel-label:
         # clustering is berekend, de projectkeuze is strategie — zie radar_clusters.
-        self.radar_besluiten = ClusterBesluitStore(os.path.join(dd, "radar_clusters.json"))
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
-        self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
-        self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
-        self.staging = StagingStore(os.path.join(dd, "kennisbank_staging.json"))   # zone 2: even-nakijken
         self.library = Library(os.path.join(dd, "library.json"))   # beschermde woordenschat (Lara cureert)
         self.nominations = NominationQueue(os.path.join(dd, "keyword_nominaties.json"))   # fase 4: pending-queue
         self.nom_kroniek = NominationKroniek(os.path.join(dd, "keyword_nominaties.jsonl"))   # fase 4: beslissings-Kroniek
@@ -285,7 +277,7 @@ from nooch_village.views.overview import (
     _acc_row, _overview_html, _fillsummary,
     _fillers_block, _role_row, _roles_html,
     _members_html, _att_html,
-    render_node, render_person, render_patterns, render_admin,
+    render_node, render_person, render_admin,
     render_rolefillers, render_middelen,
     _CORE_ROLE_NAMES, _ICON_ADD_PERSON,
 )
@@ -297,7 +289,7 @@ from nooch_village.views.projects import (
     _scope_text, _proj_card, _quickadd,
     _columns_html, _drag_script,
     _modal_html, _group_meta, _projects_board,
-    _archived_html, _projects_tab_html,
+    _archived_html, _projects_tab_html, render_projects_screen,
     _person_projects_tab_html, render_project,  # noqa
     _PROJ_CHIP, _PROJ_COLS, _LABELS, _II_PREFIX,
 )
@@ -328,7 +320,6 @@ from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
 )
-from nooch_village.views.signals import render_signals
 from nooch_village.views.inbox import (
     render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
 )
@@ -345,29 +336,19 @@ from nooch_village import decision_coach
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
-from nooch_village.views.founder_flow import render_founder_flow
-from nooch_village.views.inwoners import render_inwoner, render_inwoners
-from nooch_village.views.kennislaag import render_kennislaag
-from nooch_village.views.wiki import render_pagina
+from nooch_village.views.wiki import render_wiki_index, render_pagina
+from nooch_village.views.messages import render_messages
 from nooch_village.views.rapport import render_projectrapport
-from nooch_village.views.codie import render_codie
-from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
-from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
-                                                 render_kennisbank_spel_search)
-from nooch_village.views.linkbuilding import render_linkbuilding
-from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
 from nooch_village.library import Library
 from nooch_village.keyword_nominations import (NominationQueue, NominationKroniek, valid_reason)
-from nooch_village.views.belofte import render_belofte
 
 
 from nooch_village.views.noochie import (
     _noochie_suggest, _noochie_reply,
     render_noochie, _noochie_chrome,
 )
-from nooch_village.views.callbar import render_callbar
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -1070,19 +1051,6 @@ def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
     return "No access — only the Circle Lead may do this"
 
 
-# ── LiveKit-video: token-uitgifte ───────────────────────────────────────────
-def maak_livekit_token(room: str, identity: str, naam: str) -> str:
-    """Mint een LiveKit-access-token. ÉÉN plek voor de grants-config. Pakt LIVEKIT_API_KEY /
-    LIVEKIT_API_SECRET automatisch uit de env. Lazy import zodat cockpit2 importeerbaar blijft
-    zonder livekit-api (de token-tak faalt dan bewust closed, zie issue_livekit_token)."""
-    from livekit import api
-    from datetime import timedelta
-    return (api.AccessToken()
-            .with_identity(identity)
-            .with_name(naam)
-            .with_grants(api.VideoGrants(room_join=True, room=room))
-            .with_ttl(timedelta(hours=2))
-            .to_jwt())
 
 
 VILLAGE_ROOM = "village"
@@ -1094,133 +1062,31 @@ def _tab_suffix(tab: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", (tab or "").lower())[:12]
 
 
-def issue_livekit_token(st, username: str | None, tab: str | None = None):
-    """Geef een LiveKit-token uit voor de DORP-BREDE call bar. Geeft (status_code, payload) terug.
-
-    HARDE REGEL: `room` en de identity-BASE worden UITSLUITEND server-side bepaald — nooit uit de
-    request. Er is één dorp-brede room (`VILLAGE_ROOM`). `tab` is de enige request-input en dient
-    alléén als per-tabblad-suffix (`<base>#tab-<tab>`) zodat meerdere tabs van dezelfde gebruiker niet
-    op een duplicate-identity-kick lopen; de suffix wordt gesanitiseerd en kan de base niet vervangen
-    (geen impersonatie). De vroegere wo-<circle>-<started_at>-afleiding is vervallen."""
-    # AUTHZ: iedereen-ingelogd — de call bar is dorp-breed; er is geen cirkel-structuur om aan te
-    # toetsen. Elke herkende ingelogde actor krijgt een (toeschouwer-)token; deelnemen/muten is een
-    # gespreksdaad, geen structuurdaad. Een niet-herkende sessie krijgt geen token (fail-closed).
-    server_url = os.getenv("LIVEKIT_URL", "").strip()
-    if not server_url:
-        return 503, {"error": "LiveKit not configured"}
-    # IDENTITY-BASE: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste base.
-    if username and username != "guest":
-        actor = st.people.by_email(username)
-        if actor is None:
-            return 403, {"error": "Geen herkende gebruiker"}
-        base, name = actor.id, actor.name
-    else:
-        base, name = "guest", "Gast"
-    suffix = _tab_suffix(tab)
-    identity = f"{base}#tab-{suffix}" if suffix else base
-    try:
-        token = maak_livekit_token(VILLAGE_ROOM, identity, name)
-    except Exception as e:
-        # De API-secret mag NOOIT lekken: alleen het exceptietype terug, geen details.
-        return 500, {"error": f"token-generatie faalde ({type(e).__name__})"}
-    return 200, {"token": token, "server_url": server_url, "identity": identity}
 
 
-def verwijder_livekit_room(room: str) -> bool:
-    """Hef een LiveKit-room op (server-side, fail-soft). True bij succes, False als het niet lukt
-    (geen creds, room al weg, netwerk) — NOOIT een exception naar de caller; het afronden van het
-    overleg mag hier niet op stuklopen. De API-secret lekt niet (geen details in de return)."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url:
-        return False
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                await lk.room.delete_room(api.DeleteRoomRequest(room=room))
-            finally:
-                await lk.aclose()
-
-        asyncio.run(_run())
-        return True
-    except Exception:
-        return False
 
 
-def livekit_mute_participant(identity: str, muted: bool = True) -> bool:
-    """Mute/unmute de audio-track(s) van een deelnemer server-side (voor iedereen), fail-soft. True als
-    er minstens één audio-track is (un)gemute, False bij geen creds / deelnemer of track weg / netwerk —
-    NOOIT een exception naar de caller. De API-secret lekt niet. Zelfde patroon als
-    verwijder_livekit_room (api.LiveKitAPI, wss->https-conversie, async in één asyncio.run)."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url or not (identity or "").strip():
-        return False
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                p = await lk.room.get_participant(
-                    api.RoomParticipantIdentity(room=VILLAGE_ROOM, identity=identity))
-                sids = [t.sid for t in p.tracks if t.type == api.TrackType.AUDIO]
-                for sid in sids:
-                    await lk.room.mute_published_track(api.MuteRoomTrackRequest(
-                        room=VILLAGE_ROOM, identity=identity, track_sid=sid, muted=muted))
-                return bool(sids)
-            finally:
-                await lk.aclose()
-
-        return asyncio.run(_run())
-    except Exception:
-        return False
 
 
-def livekit_presence():
-    """Aantal deelnemers in de dorp-room, server-side via list_participants — GEEN eigen
-    deelnemer-verbinding, dus kost GEEN WebRTC-minuten (in tegenstelling tot de oude observer-connect).
-    Fail-soft: (0, []) zonder creds of bij een fout. Ontdubbelt op de identity-base (tab-suffix eraf)
-    zodat meerdere tabs van één persoon als één deelnemer tellen. Zelfde async-in-asyncio.run-patroon
-    als livekit_mute_participant."""
-    url = os.getenv("LIVEKIT_URL", "").strip()
-    if not url:
-        return 0, []
-    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
-    try:
-        import asyncio
-        from livekit import api
-
-        async def _run():
-            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
-            try:
-                res = await lk.room.list_participants(api.ListParticipantsRequest(room=VILLAGE_ROOM))
-                return list(res.participants)
-            finally:
-                await lk.aclose()
-
-        parts = asyncio.run(_run())
-        seen = {}
-        for p in parts:
-            base = (p.identity or "").split("#tab-")[0]
-            if base:
-                seen[base] = p.name or base
-        return len(seen), list(seen.values())[:8]
-    except Exception:
-        return 0, []
 
 
 # Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
+# ── Nooch UI v1: welke routes meedoen (fase 9) ────────────────────────────────
+# De negentien schermen die in fase 7 en 8 zijn herbouwd of aangeraakt. Wat hier NIET staat doet
+# bewust niet mee — /claims en /metrics2 zijn geparkeerd voor een eventuele tiende fase, de rest is
+# in fase 1-8 nooit qua UI aangeraakt. De volledige lijst met redenen staat in
+# claude/fase9_designsysteem_inventarisatie.md §5.
+_NU_ROUTES = frozenset({
+    "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
+    "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
+    "/inbox", "/inbox/verwerk", "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
+})
+
 _STATIC_TYPES = {
-    "livekit-client.umd.min.js": "application/javascript; charset=utf-8",
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
+    "nooch-ui.css": "text/css; charset=utf-8",
     # De gedeelde fragment-mechaniek. URL draagt ?v=<inhoud-hash> (web_base._JS_LINK).
     "nooch.js": "application/javascript; charset=utf-8",
     "nooch-logo.svg": "image/svg+xml; charset=utf-8",
@@ -1423,6 +1289,77 @@ def _act_pagina_feit_add(c):
     return nxt, f"➕ fact added ({upd.id})"
 
 
+def _act_msg_post(c):
+    """Eén bericht in een kanaal (fase 8).
+
+    # AUTHZ: iedereen-ingelogd — meedoen aan een gesprek is deelnemen, geen structuurmutatie;
+    # dezelfde regel als de project-wall waar deze laag uit voortkomt.
+    #
+    # WEL EEN HERKENDE AUTEUR. Een bericht zonder afzender kan niemand beantwoorden, en in een
+    # DM-kanaal bepaalt de afzender wélk kanaal het is. Fail-closed dus, en met de reden erbij.
+    # EN ALLEEN IN JE EIGEN DM: een kanaal tussen twee andere mensen is niet van jou."""
+    from nooch_village import channels
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    kanaal = (g("kanaal") or "").strip()
+    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE, channels.DM):
+        return nxt, "✗ unknown channel"
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to write — a message needs an author"
+    if channels.soort_van(kanaal) == channels.DM and ik not in channels.dm_leden(kanaal):
+        return nxt, "✗ that conversation is not yours"
+    entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
+    return nxt, ("💬 posted" if entry else "✗ a message needs text")
+
+
+def _act_keep_in_wiki(c):
+    """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
+
+    # AUTHZ: rolvervuller of Circle Lead van de PAGINA — dezelfde poort als `pagina_feit_add`.
+    # Bewust niet losser: een feit is inhoud van die pagina, en wie hem mag schrijven is een
+    # bestaande regel. Dat betekent wel dat je een feit niet zomaar op andermans pagina kunt
+    # zetten; komt dat in de weg te zitten, dan is dat een governance-vraag en geen UI-vraag.
+
+    DE HERKOMST IS HET PUNT. Een losse zin in een wiki is een bewering; dezelfde zin mét "uit
+    project X, gezegd door Y op datum Z" is navolgbaar. Daarom `soort="bron"`: dat is herkomst,
+    geen bewijs — `wiki.grond_status` leest hem als `ongecontroleerd` en niet als `gegrond`, en
+    dat is precies goed voor een uitspraak uit een gesprek."""
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    pagina = st.att.get(g("aid"))
+    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    p = st.projects.get(g("pid"))
+    if p is None:
+        return nxt, "✗ project not found"
+    entry = next((e for e in (p.get("log") or []) if str(e.get("id") or "") == g("item")), None)
+    if entry is None:
+        return nxt, "✗ message not found"
+    tekst = " ".join(str(entry.get("text") or "").split())
+    if not tekst:
+        return nxt, "✗ nothing to keep — the message has no text"
+    _deny = _artefact_gate(pagina.anchor, username, st)        # check vóór de mutatie
+    if _deny:
+        raise Forbidden(_deny)
+
+    from nooch_village.views.feed import _feed_norm, _feed_who
+    _kind, atype, aid = _feed_norm(entry)
+    wie, _ = _feed_who(st, atype, aid)
+    herkomst = f"{_scope_text(p) or p.get('id', '')} · {wie} · {_stamp(entry.get('at'))}"
+    feit = wiki.maak_feit(tekst, soort="bron", ref=str(p.get("id") or ""), citaat=herkomst)
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    meta = dict(getattr(pagina, "meta", None) or {})
+    meta["feiten"] = list(wiki.feiten(pagina)) + [feit]
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{pagina.anchor}"
+    upd = st.att.update(pagina.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note="feit uit projectgesprek")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, f"✓ kept on {upd.title or upd.id}"
+
+
 def _act_pagina_feit_del(c):
     # AUTHZ: rolvervuller of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
     # achter, zodat de historie laat zien dát er een feit weg is (nooit een stille verdwijning).
@@ -1557,35 +1494,13 @@ def _act_proj_done(c):
             outcome = "approved after review"
         _wie = st.people.by_email(username) if username and username != "guest" else None
         pj.complete(pid, outcome, door=(_wie.id if _wie else (username or ""))); msg = "✓ afgerond"
-        # HET VERSLAG STELT ZICHZELF SAMEN — één keer, hier, niet elke puls. Uit wat er al ligt:
-        # definitie + checklist + gesprek + het bestaande document. Het resultaat is een CONCEPT
-        # dat naast het document wacht tot een mens het bevestigt (zie project_doc_store).
-        #
-        # GEEN POORT. De status staat hierboven al op done; mislukt de assemblage, dan is het
-        # project gewoon afgesloten en staat er geen concept. Maar dan wél LUID: een assemblage die
-        # stil wegvalt leest later als "er viel niets samen te stellen", en dat is precies de
-        # onzichtbaarheid waar we bij het radarsignaal tegenaan liepen.
-        try:
-            from nooch_village.project_verslag import deliverable_blokken, stel_samen
-            from nooch_village.llm import reason as _reason
-            _p = pj.get(pid) or {}
-            # DEZELFDE BRONNEN als de knop op /rapport: anders weet het ene pad meer dan het
-            # andere en krijg je twee verschillende verslagen voor hetzelfde project.
-            _concept = stel_samen(_p, _doc, reason=_reason,
-                                  deliverables=deliverable_blokken(
-                                      getattr(st, "deliverables", None), pid))
-            if _concept is not None and _ds is not None:
-                _ds.write_concept(pid, _concept.tekst, bronnen=_concept.bronnen,
-                                  voorzet=_concept.voorzet)
-                logging.getLogger("cockpit2.verslag").info(
-                    "VERSLAG_CONCEPT: pid=%s bronnen=%d voorzet=%s", pid, len(_concept.bronnen),
-                    _concept.voorzet)
-            else:
-                logging.getLogger("cockpit2.verslag").info(
-                    "VERSLAG_GEEN_MATERIAAL: pid=%s — geen bronnen om uit samen te stellen", pid)
-        except Exception:
-            logging.getLogger("cockpit2.verslag").exception(
-                "VERSLAG_MISLUKT: pid=%s afgesloten zonder concept", pid)
+        # HIER STELDE HET VERSLAG ZICHZELF SAMEN bij het afsluiten: één LLM-ronde over
+        # definitie + checklist + gesprek + document, weggeschreven als concept naast het
+        # document. Weg op 19 september 2026 (besluit Stefan, BLOK B). De 363 bestaande
+        # einddocumenten blijven leesbaar op /rapport; er komt alleen geen nieuw concept meer
+        # bij. Wat een afgerond project achterlaat, zet een mens in de wiki — Keep-in-wiki,
+        # fase 7. Geen vervanging hier, want een half-automatische samenvatting die niemand
+        # bevestigt is precies wat we kwijt wilden.
         # DE LUS SLUIT. Vroeg iemand dit als taak, dan hoort hij nu dat het klaar is. Zonder deze
         # regel is werk dat een rol voor je oppakt een eenrichtingsweg: het gebeurt, en jij hoort
         # er nooit meer iets van. Fail-soft — een melding die niet lukt blokkeert geen afronding.
@@ -1594,34 +1509,12 @@ def _act_proj_done(c):
                            door=(p.get("owner") or ""))
         # Geen event vanuit dit proces — de daemon-board-watch (village._poll_board) detecteert de
         # wacht→done-overgang (blocked_on=="review") en vuurt project_completed op de in-memory bus (#10-fix).
-        # Done → signaal op /signals (feed 'Projecten'): done is al de mens-poort, dus het signaal
-        # komt direct goedgekeurd in de RadarStore; de founder promoveert het daar naar de kennisbank.
-        # Link-dedupe ("/project?id=<pid>") maakt dit idempotent met de board-watch-hook. Fail-soft:
-        # een falende signaal-aanmaak mag een done nooit blokkeren.
-        # De rapport-lus (einddocument → intake → kennisbank-STAGING) draait hier bewust NIET:
-        # geen synchrone LLM-call in het cockpit-proces. De daemon-board-watch herleest
-        # projects.json (by_status → _maybe_reload) en pakt óók deze cockpit-done binnen één
-        # poll op — daar draait project_signal.report_to_staging met de LLM-ladder.
-        try:
-            from nooch_village.project_signal import signal_from_project
-            signal_from_project(st.radar, pj.get(pid), _doc)   # einddocument levert de conclusie
-        except Exception:
-            logging.getLogger("cockpit2.signals").exception("project→signaal mislukt (pid=%s)", pid)
+        # HIER GING EEN DONE NAAR DE RADAR EN NAAR DE KENNIS-STAGING. Beide bestemmingen zijn op
+        # 19 sept 2026 verdwenen. Een afgerond project hoort nu via Keep-in-wiki in de wiki te
+        # landen — met menselijke input, niet als automatisch signaal of geatomiseerd kaartje.
         return nxt, msg
 
 
-def _act_proj_dod(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        # Zelfde autorisatie als de andere kaart-bewerkingen: rolvervuller of Circle Lead.
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        veld = g("veld")
-        if veld not in ("done_when", "dod_outcome"):
-            return nxt, "✗ onbekend DoD-veld"
-        if not pj.set_dod(g("pid"), veld, g("tekst")):
-            return nxt, "✗ project does not exist"
-        return nxt, "✓ saved"
 
 
 def archiveer(st, pj, pid: str) -> str:
@@ -1629,21 +1522,11 @@ def archiveer(st, pj, pid: str) -> str:
     bevestigde (of bewust overgeslagen) verslag (scope 49: "als ik het rapport gemaakt heb, moet ie
     eigenlijk worden gearchiveerd"). Geeft de melding terug.
 
-    Archiveren is het moment waarop een project echt het bord verlaat — dán hoort het (ook) als
-    signal op /signals te staan (founder, 19 jul). Idempotent: bestond het signaal al (done-hook of
-    eerdere archivering), dan gebeurt er niets; is het al verwerkt naar Oracle, dan komt het niet
-    terug (MECE — de inhoud telt al mee)."""
+    Archiveren is het moment waarop een project echt het bord verlaat. Tot 19 sept 2026 werd het
+    dan ook een signaal op /signals; die feed en de promotielaag eronder bestaan niet meer."""
     pj.archive(pid)
     msg = "🗄 gearchiveerd (blijft bestaan)"
-    try:
-        from nooch_village.project_signal import signal_from_project
-        p = pj.get(pid)
-        if (p is not None and p.get("status") == "done"
-                and signal_from_project(st.radar, p)):
-            msg += " · 📡 placed as a signal on /signals"
-    except Exception:
-        logging.getLogger("cockpit2.signals").exception(
-            "project→signaal bij archiveren mislukt (pid=%s)", pid)
+    # Het signaal-pad bij archiveren verviel op 19 sept 2026 met de radar-promotielaag.
     return msg
 
 
@@ -1718,28 +1601,8 @@ def _act_proj_delete(c):
         return _na_verwijderen(nxt, pid), msg
 
 
-def _act_proj_edit(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        msg = ""
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        person, agent = _parse_trekker(g("trekker"))
-        pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
-                private=(g("private") == "1"), description=g("description"), label=g("label"))
-        msg = "💾 saved"
-        return nxt, msg
 
 
-def _act_proj_comment(c):
-        nxt, g, pj = c.nxt, c.g, c.pj
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        if pj.add_comment(g("pid"), g("comment")):
-            msg = "💬 geplaatst"
-        return nxt, msg
 
 
 def _act_proj_rename(c):
@@ -1762,41 +1625,6 @@ def _act_proj_describe(c):
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ description saved"
         return nxt, msg
-
-
-def _act_proj_regen_doc(c):
-        # AUTHZ: zelfde poort als de edit-route (rolvervuller of Circle Lead).
-        #
-        # ÉÉN ASSEMBLER, TWEE INGANGEN. Deze knop draaide de OUDE per-taak-synthese uit
-        # `inhabitant.synthesize_einddocument`, terwijl het afsluit-pad de nieuwe assembler
-        # gebruikte. Gevolg: dezelfde knop op hetzelfde scherm gaf een ander soort document —
-        # Engels, een kop per taak, en "Niet onderzocht — geen gegrond resultaat" onder koppen waar
-        # wél iets gebeurde. Gemeten op 310 productiedocumenten: mediaan 6 koppen, 253 kopblokken
-        # met "niet onderzocht", 64 (bijna) leeg.
-        #
-        # HIJ SCHRIJFT NU EEN CONCEPT, GEEN DOCUMENT. Dat is dezelfde regel als bij het afsluiten:
-        # alleen een expliciete bevestiging vervangt de canonieke tekst. "Opnieuw genereren" is een
-        # voorstel, en een voorstel dat zichzelf meteen doorvoert is geen voorstel.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        pid = g("pid")
-        p = pj.get(pid)
-        if p is None:
-            return nxt, "✗ project not found"
-        _deny = _role_gate(p.get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        _load_env()                                          # LLM-key beschikbaar maken (zoals _ai_reply)
-        from nooch_village.llm import reason as _reason
-        from nooch_village.project_verslag import deliverable_blokken, stel_samen
-        store = getattr(st, "project_docs", None)
-        if store is None:
-            return nxt, "✗ no document store"
-        concept = stel_samen(p, store.read(pid), reason=_reason,
-                             deliverables=deliverable_blokken(getattr(st, "deliverables", None), pid))
-        if concept is None:
-            return nxt, "✗ nothing to assemble from — no definition, checklist, wall or deliverables"
-        store.write_concept(pid, concept.tekst, bronnen=concept.bronnen, voorzet=concept.voorzet)
-        return nxt, f"📄 draft report assembled from {len(concept.bronnen)} sources — confirm it below"
 
 
 def _bevestig_met(c, oordeel: str):
@@ -2012,15 +1840,6 @@ def _act_proj_proposal_reject(c):
         return nxt, ""
 
 
-def _act_proj_setlabel(c):
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        msg = ""
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        if pj.edit(g("pid"), label=g("label"), allow_done=True):
-            msg = "✓ label saved"
-        return nxt, msg
 
 
 _IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
@@ -2251,16 +2070,40 @@ def _act_feed_remove(c):
         return nxt, msg
 
 
-def _act_ai_reply(c):
-        nxt, st, g = c.nxt, c.st, c.g
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        _load_env()
-        msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
-               else "no AI reply (no AI inhabitant on the role or no LLM key)")
-        return nxt, msg
+
+
+def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
+                               extra: dict, entry_id: str) -> int:
+    """Route elke @-vermelding naar het DM-kanaal van de bedoelde mens. Geeft het aantal terug.
+
+    DE AFZENDER MOET EEN MENS ZIJN. Een DM is tussen twee mensen; een persona of een niet-herkende
+    auteur heeft geen kant van dat gesprek. In dat geval blijft het de oude notificatie — niet omdat
+    dat mooier is, maar omdat een bericht van niemand nergens heen kan.
+
+    EEN ROL IS GEEN MENS. Bij `@rolnaam` gaat het bericht naar elke PERSOON die de rol vervult. Heeft
+    de rol er geen, dan valt hij terug op de notificatie: dat is precies het geval waarvoor de
+    wachtrij bestaat (er ligt werk, er is nog niemand)."""
+    from nooch_village import channels
+    afzender = auteur if (auteur and auteur != "dialoog" and st.people.get(auteur)) else ""
+    n = 0
+    for ty, tid, _nm in ment:
+        ontvangers: list[str] = []
+        if ty == "person":
+            ontvangers = [tid]
+        elif ty == "role" and afzender:
+            ontvangers = [f.id for f in st.assign.fillers_of(tid) if f.type == "person"]
+        # Geen afzender, geen ontvanger, of jezelf vermelden → de oude weg.
+        ontvangers = [o for o in ontvangers if o and o != afzender]
+        if not afzender or not ontvangers:
+            st.notif.add(ty, tid, pid, entry_id, by=auteur, snippet=tekst, extra=extra)
+            n += 1
+            continue
+        for o in ontvangers:
+            st.channels.post(channels.dm_kanaal(afzender, o), tekst,
+                             author_type="human", author_id=afzender,
+                             herkomst={"project": pid, "entry": entry_id})
+            n += 1
+    return n
 
 
 def _act_proj_feed(c):
@@ -2293,11 +2136,21 @@ def _act_proj_feed(c):
             # poort de woorden van die mens herschrijven. Het merk hoort dus bij het pad, niet bij
             # de auteur-herkenning.
             _getypt = {notifications.MENS_GETYPT: True} if atype == "human" else {}
-            for ty, tid, nm in ment:
-                st.notif.add(ty, tid, g("pid"), entry["id"], by=_auteur, snippet=g("text"),
-                             extra=_getypt)
-            if ment:
-                msg += f" · {len(ment)} genotificeerd"
+            # EEN @-VERMELDING IS EEN BERICHT, GEEN NOTIFICATIE (fase 8). Tot 19 september 2026 werd
+            # elke vermelding een rij in de NotifStore. Dat is de juiste vorm voor werk dat
+            # afgehandeld moet worden — daar staan er 338 van — maar niet voor "hé, kijk jij hier
+            # even naar": dat is één mens die een ander aanspreekt, en dus een bericht in het
+            # DM-kanaal tussen die twee.
+            #
+            # Een vermelding van een ROL landt bij de mensen die hem vervullen, elk in hun eigen
+            # DM met de afzender. Heeft de rol geen mens-vervuller, dan valt hij terug op de
+            # notificatie: fail-closed, want werk bij niemand neerleggen is stiller en erger dan
+            # een melding te veel.
+            _gemeld = _vermeldingen_naar_kanalen(st, ment, pid=g("pid"), tekst=g("text"),
+                                                 auteur=_auteur, extra=_getypt,
+                                                 entry_id=entry["id"])
+            if _gemeld:
+                msg += f" · {_gemeld} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
             # mens-comment: een persona-comment kan nooit een nieuwe reply triggeren (geen loop), ook
             # niet met een @erin. Cap + fail-closed zitten in _reply_to_mentions.
@@ -2483,52 +2336,6 @@ def _checklist_item(pj, pid: str, clid: str, item_id: str) -> dict | None:
     return None
 
 
-def _act_check_handoff(c):
-        """Eén checklist-item doorgeven aan een rol of persoon.
-
-        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
-        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
-        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
-
-        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
-        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
-        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
-        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
-        uit de pas lopen en werk stil op de verkeerde plek laten landen.
-
-        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
-        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
-        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        pid = g("pid")
-        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
-        if not getypt:
-            return nxt, "✗ pick a role or person to hand this to"
-        from nooch_village.views.inbox import _at_doelen
-        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
-        if doel is None:
-            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
-
-        it = _checklist_item(pj, pid, g("clid"), g("item"))
-        tekst = (it or {}).get("text", "") if it else ""
-        if not tekst:
-            return nxt, "✗ item not found"
-        soort, ref = route_werk(st, tekst=tekst,
-                                rol=doel["id"] if doel["kind"] == "role" else "",
-                                persoon=doel["id"] if doel["kind"] == "person" else "",
-                                herkomst=f"↳ doorgegeven uit project {pid}",
-                                door=username or "", opdrachtgever=username or "",
-                                bron_project=pid, van_mens=True)
-        if soort == "keuze":
-            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
-                         f"pick the person instead of the role")
-        from nooch_village import project_items
-        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
-                                              by=username or "", naar_label=doel["label"])
-        return nxt, (msg + (f" ({soort})" if soort else ""))
 
 
 def _act_check_remove(c):
@@ -2640,120 +2447,10 @@ def _act_role_focus(c):
         return nxt, msg
 
 
-def _act_radar_set(c, status: str, ok_msg: str):
-        """Radar-signaal goedkeuren/wegklikken. Poort op de EIGEN rol van het item (niet op een
-        meegestuurde rol), zodat alleen de rolvervuller of Circle Lead cureert."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        st.radar.set_status(g("rid"), status)
-        return nxt, ok_msg
 
 
-def _act_radar_approve(c):
-        nxt, msg = _act_radar_set(c, "goedgekeurd", "✓ added to the archive")
-        # Config-vlag radar_auto_promote (default uit): goedkeuren promoveert dan meteen
-        # door naar de kennisbank — hetzelfde codepad als de knop, dus dezelfde dedup/marker.
-        if msg == "✓ added to the archive" and radar_promote.auto_promote_enabled(c.data_dir):
-            _aid, pmsg = radar_promote.promote_signal(c.st, c.g("rid"))
-            msg = f"{msg} · {pmsg}"
-        return nxt, msg
 
 
-def _act_radar_dismiss(c):
-        return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
-
-
-def _act_radar_promote(c):
-        """Goedgekeurd radar-signaal → kenniskaartje, MET tussenstap: het signaal wordt
-        klaargezet bij "Even nakijken" (staging), waar de mens het kan bewerken, met andere
-        signalen samenvoegen of weggooien; pas bij commit ontstaat het kaartje. Zelfde poort
-        als de andere radar-curatie: de rolvervuller of Circle Lead van de rol van het
-        signaal. (De radar_auto_promote-vlag blijft de directe route — die is een bewuste
-        opt-out van deze review.)"""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        bid, msg = radar_promote.stage_signal(st, g("rid"))
-        if bid:
-            return f"/kennisbank/staging?batch={bid}", msg
-        return nxt, msg
-
-
-def _act_radar_merge(c):
-        """Drag&drop op /signals: twee goedgekeurde signalen worden er één, met de gekozen
-        hoofdtekst uit de modal. Zelfde poort als de andere radar-curatie, op BEIDE signalen."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        doel, bron = st.radar.get(g("target_rid")), st.radar.get(g("source_rid"))
-        if doel is None or bron is None:
-            return nxt, "✗ onbekend radar-signaal"
-        for it in (doel, bron):
-            _deny = _role_gate(it["role"], username, st)
-            if _deny:
-                return nxt, _deny
-        ok = st.radar.merge_signals(g("target_rid"), g("source_rid"), g("tekst"))
-        return nxt, ("🧩 signals merged — the provenance of both travels along"
-                     if ok else "✗ merging failed")
-
-
-def _act_radar_koppel(c):
-        """/signals MECE-knop: dit signaal staat (vrijwel) al in de kennisbank — koppel de
-        herkomst aan het bestaande kaartje (stack_provenance, grounding +1), markeer het
-        signaal als verwerkt. Zelfde poort als de andere radar-curatie."""
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        it = st.radar.get(g("rid"))
-        if it is None:
-            return nxt, "✗ onbekend radar-signaal"
-        _deny = _role_gate(it["role"], username, st)
-        if _deny:
-            return nxt, _deny
-        if it.get("promoted_atom_id"):
-            return nxt, "Already handled — this signal is already linked"
-        doel = g("doel")
-        if not doel or st.notes.get(doel) is None:
-            return nxt, "✗ target card not found"
-        source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
-        st.notes.stack_provenance(doel, source=source, reference=(it.get("link") or "").strip())
-        st.notes.add_tags(doel, ["signal"])
-        for m in it.get("merged_sources") or []:
-            if m.get("source") or m.get("link"):
-                st.notes.stack_provenance(doel, source=m.get("source") or "",
-                                          reference=m.get("link") or "")
-        st.radar.mark_promoted(g("rid"), doel)
-        return nxt, "🔗 provenance linked to the existing signal — handled"
-
-
-def _act_kb_stage_koppel(c):
-        # AUTHZ: iedereen-ingelogd — zelfde regel als de andere kb_-takken hierboven: permissieve
-        # intake, strenge uitgang. Koppelen voegt herkomst toe aan een bestaand kaartje en maakt
-        # niets nieuws; de poort staat bij het GEBRUIK van kennis, niet bij de ingang.
-        """MECE-knop in de staging-review: dit voorstel is hetzelfde inzicht als een bestaand
-        kaartje — koppel het als extra bron (stack_provenance, grounding +1) in plaats van
-        een tweede kaartje te maken. Signaal-voorstellen krijgen meteen hun promoted-marker."""
-        st = c.st
-        b = st.staging.get(c.g("bid"))
-        a = next((x for x in (b or {}).get("atoms", []) if x["sid"] == c.g("sid")), None)
-        doel = c.g("doel")
-        if a is None or not doel or st.notes.get(doel) is None:
-            return c.nxt, "✗ proposal or target card not found"
-        st.notes.stack_provenance(doel, source=a.get("source") or "",
-                                  reference=(a.get("reference") or ""))
-        if a.get("radar_rids"):
-            st.notes.add_tags(doel, ["signal"])
-            for rid in a["radar_rids"]:
-                al = st.radar.get(rid)
-                if al is not None and not al.get("promoted_atom_id"):
-                    st.radar.mark_promoted(rid, doel)
-        st.staging.remove_atom(c.g("bid"), c.g("sid"))
-        return c.nxt, "🔗 linked as an extra source to the existing signal"
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -2858,18 +2555,6 @@ def _act_means_gap_add(c):
         return nxt, "📥 reported as a means gap; review it via the human inbox"
 
 
-# ── Inwoner-dossier: de persona als drager ──────────────────────────────────
-# Alle takken hieronder: AUTHZ: anchor-lead — de persona is een org-breed object (hij reist mee
-# tussen zetels), dus het beheer ervan hoort bij de anchor-lead. Fail-closed via _anchor_gate.
-#
-# Wat hier NOOIT gebeurt: purpose, accountabilities of domeinen aanraken. Dat is mandaat, dat
-# leeft in de records en wijzigt alleen via governance (G0-G4).
-
-# Voorstellen van de finetune-knop leven per proces, niet in een store: ze zijn een tussenstap
-# in één menselijke handeling, geen feit dat bewaard moet blijven.
-_finetune_cache: dict = {}
-
-
 def _anchor_gate(st, username: str | None) -> str | None:
     """Alleen de anchor-lead beheert persona's. Guest (auth uit) mag alles."""
     if username == "guest":
@@ -2891,79 +2576,6 @@ def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | 
                                 "door": door or "?", "at": time.time()}, ensure_ascii=False) + "\n")
     except Exception:
         pass
-
-
-def _act_persona_edit(c):
-        # AUTHZ: anchor-lead — persona-beheer is org-breed (zie blok-comment hierboven).
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid = g("pid")
-        oud = st.personas.get(pid)
-        if oud is None:
-            return nxt, "⛔ unknown inhabitant"
-        st.personas.update(pid, mbti=g("mbti"), instructions=g("instructions"),
-                           avatar=g("avatar"), prompt_extra=g("prompt_extra"))
-        for veld, was in (("instructions", oud.instructions), ("prompt_extra", oud.prompt_extra),
-                          ("mbti", oud.mbti)):
-            if g(veld) != was:
-                _persona_kroniek(st, pid, veld, was, g(veld), username)
-        return nxt, "✓ personality updated"
-
-
-def _act_persona_llm(c):
-        # AUTHZ: anchor-lead — modelkeuze raakt het budget van het hele dorp.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        per_taak = {}
-        for regel in (g("llm_per_taak") or "").splitlines():
-            if "=" in regel:
-                sleutel, _, waarde = regel.partition("=")
-                if sleutel.strip() and waarde.strip():
-                    per_taak[sleutel.strip()] = waarde.strip()
-        if st.personas.update(g("pid"), llm={"default": g("llm_default"), "per_taak": per_taak}) is None:
-            return nxt, "⛔ unknown inhabitant"
-        return nxt, f"✓ model preference saved ({len(per_taak)} task override(s))"
-
-
-def _act_persona_finetune(c):
-        # AUTHZ: anchor-lead — de AI stelt voor, de mens kiest; niets wordt hier overschreven.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid = g("pid")
-        persona = st.personas.get(pid)
-        if persona is None:
-            return nxt, "⛔ unknown inhabitant"
-        voorstellen = _finetune_voorstellen(persona)
-        if not voorstellen:
-            # Fail-closed: geen LLM-antwoord → geen voorstellen, en zeker geen lege overschrijving.
-            return nxt, "⛔ the AI gave no usable proposal — try again later"
-        _finetune_cache[pid] = voorstellen
-        return nxt, f"✨ {len(voorstellen)} proposal(s) — pick one"
-
-
-def _act_persona_finetune_apply(c):
-        # AUTHZ: anchor-lead — pas hier wordt er echt iets overschreven, na een menselijke keuze.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        pid, keuze = g("pid"), g("keuze")
-        persona = st.personas.get(pid)
-        if persona is None:
-            return nxt, "⛔ unknown inhabitant"
-        if not keuze.strip() or keuze.strip() == "(nu leeg)":
-            _finetune_cache.pop(pid, None)
-            return nxt, "✓ nothing changed"
-        _persona_kroniek(st, pid, "prompt_extra", persona.prompt_extra, keuze, username)
-        st.personas.update(pid, prompt_extra=keuze)
-        _finetune_cache.pop(pid, None)
-        return nxt, "✓ prompt extra updated"
 
 
 def _finetune_voorstellen(persona) -> list:
@@ -3965,23 +3577,8 @@ def _act_wall_outcome(c):
         return nxt, f"✓ {_LBL[otype]} created"
 
 
-def _act_notif_read(c):
-        # AUTHZ: rolvervuller of Circle Lead — via `_notif_gate`: het item moet aan JOU of aan een
-        # rol die jij vervult zijn gericht. Zie de docstring van die poort.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        c.st.notif.mark_item_read(c.g("nid"))
-        return c.nxt, "✓ marked as read"
 
 
-def _act_notif_processed(c):
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        c.st.notif.mark_item_processed(c.g("nid"))
-        return c.nxt, "✓ verwerkt"
 
 
 def _act_goedkeur(c):
@@ -4014,9 +3611,9 @@ def _act_goedkeur(c):
             # Niet stil weigeren: de mens moet weten WAAROM en WAAR het dan wel kan.
             return nxt, f"✗ {goedkeuring.waarom_niet(item)} — run it from the command line"
         reden = f"via cockpit door {username}"
-        if item.get("type") == "verband":
-            r = inbox_actions.decide_verband(hi, st.notes, iid, besluit, reason=reden)
-        elif item.get("type") == "keyword" and besluit in ("approved", "rejected"):
+        # Het 'verband'-itemtype verviel op 19 sept 2026 met de kaartjes-store: een touwtje tussen
+        # twee kaartjes kan niet gelegd worden als er geen kaartjes meer zijn.
+        if item.get("type") == "keyword" and besluit in ("approved", "rejected"):
             r = inbox_actions.decide_keyword(hi, st.library, iid,
                                              "approve" if besluit == "approved" else "reject",
                                              reason=reden)
@@ -4084,64 +3681,8 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ not found")
 
 
-def _act_acc_check(c):
-        # Dorpsbrede accountability-check (dubbelingen + formulering) via één LLM-call; bewaart de uitkomst.
-        # AUTHZ: anchor-lead — dit leest de accountabilities van ELKE rol in het dorp en schrijft één
-        # org-breed oordeel weg. Dat is dezelfde reikwijdte als persona-beheer, dus dezelfde poort.
-        #
-        # DE OUDE CHECK STOND OMGEKEERD: `if c.username in (None, "guest"): return "✗ not allowed"`
-        # weigerde juist guest (= auth uit, mag per definitie alles) en liet élke ingelogde
-        # gebruiker door. Beide helften waren fout, in tegengestelde richting, en de tak had geen
-        # AUTHZ-label dat het verschil zichtbaar maakte.
-        _deny = _anchor_gate(c.st, c.username)
-        if _deny:
-            return c.nxt, f"✗ {_deny}"
-        from nooch_village.skills_impl.accountability_check import (MAX_TOKENS,
-                                                                    check_accountabilities)
-        from nooch_village.views.accountabilities import roles_with_accountabilities
-        from nooch_village import llm
-        roles = roles_with_accountabilities(c.st)
-        # `max_tokens`/`json_mode`: één JSON-object over ~30 rollen paste niet in de default van 700
-        # tokens; een afgekapt antwoord parste niet en las als "0 aandachtspunten" (scope 56).
-        res = check_accountabilities(
-            roles, lambda p: llm.reason(p, call_site="cockpit_accountability_check",
-                                        max_tokens=MAX_TOKENS, json_mode=True))
-        try:
-            with open(os.path.join(c.data_dir, "accountability_check.json"), "w", encoding="utf-8") as f:
-                json.dump(res, f, ensure_ascii=False)
-        except Exception:
-            pass
-        if res.get("ok") is False:
-            # Een storing is geen oordeel: niet "check klaar: 0", maar de reden.
-            return c.nxt, f"✗ check kon niet draaien: {res.get('reden') or 'onbekende reden'}"
-        n = len(res.get("duplicates") or []) + len(res.get("weak") or [])
-        return c.nxt, f"check klaar: {n} aandachtspunt(en) over {res.get('n_roles', len(roles))} rollen"
 
 
-# De twee linkbuilding-takken: AUTHZ: rolvervuller of Circle Lead — `concurrent_scout` levert deze
-# doelwitten (skill `linkbuilding_targets`) en het oordeel "wel/niet achteraan" is operationeel werk
-# binnen die rol. Ook hier stond de omgekeerde check; zie `_act_acc_check` voor wat daar mis aan was.
-
-def _act_link_pursue(c):
-        # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
-        deny = _role_gate("concurrent_scout", c.username, c.st)
-        if deny:
-            return c.nxt, f"✗ {deny}"
-        from nooch_village.link_targets import LinkTargets
-        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
-        ok = store.pursue((c.g("link") or "").strip())
-        return c.nxt, ("→ being pitched" if ok else "✗ not found")
-
-
-def _act_link_ignore(c):
-        # AUTHZ: rolvervuller of Circle Lead — zie het blok hierboven.
-        deny = _role_gate("concurrent_scout", c.username, c.st)
-        if deny:
-            return c.nxt, f"✗ {deny}"
-        from nooch_village.link_targets import LinkTargets
-        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
-        ok = store.ignore((c.g("link") or "").strip())
-        return c.nxt, ("genegeerd" if ok else "✗ not found")
 
 
 # De twee bron-takken: AUTHZ: anchor-lead — een bron aanzetten bepaalt welke externe API's het HELE
@@ -4562,19 +4103,6 @@ def _act_m_add_kpi(c):
         return nxt, msg
 
 
-def _act_m_add_from_def(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _role_gate(g("node"), username, st)
-        if _deny:
-            return nxt, _deny
-        did = g("def_id")
-        if not did and g("def_name"):
-            d = st.defs.by_name(g("def_name"))
-            did = d["id"] if d else ""
-        kid = _kpi_id_from_def(st, g("node"), did)
-        msg = "✓ KPI from the catalogue added" if kid else "⛔ pick an existing definition from the catalogue"
-        return nxt, msg
 
 
 def _act_def_add(c):
@@ -4861,24 +4389,61 @@ def _act_person_remove(c):
         return nxt, msg
 
 
-def _act_lk_mute(c):
-        # AUTHZ: circle-member of iedereen-ingelogd — muten is een gespreksdaad, geen structuurdaad;
-        # toeschouwers zijn uitgesloten via de client-state (observer-tiles zijn niet klikbaar), niet
-        # via authz. De sessie-check in do_POST dekt "ingelogd = mag" (guest = auth uit = mag ook).
-        nxt, g = c.nxt, c.g
-        target = g("identity").strip()
-        if not target:
-            return nxt, ""
-        muted = g("muted") != "0"                 # muted=0 → unmute; anders mute
-        ok = livekit_mute_participant(target, muted)
-        verb = "gemute" if muted else "ge-unmute"
-        return nxt, (f"✓ {verb}" if ok else "muting failed")
 
 
 # ── Claims-checker: cureren van de claims-database ───────────────────────────
-# De database (`config/claims_database.json`) is het domein van de compliance-rol. Lezen is vrij
-# (route /claims/db.json); cureren is exclusief de domein-eigenaar. De juridische inhoud is
-# mensenwerk — deze takken schrijven alleen door wat compliance invoert.
+# De database (`config/claims_database.json`) is juridisch mensenwerk: deze takken schrijven alleen
+# door wat een mens invoert. Sinds fase 5 is er geen domein-eigenaar meer — wie is ingelogd mag
+# cureren (`_claims_gate`). De JSON-route /claims/db.json is in fase 6 verwijderd: nul verzoeken in
+# veertien dagen log, en Stefan bevestigde dat niets van buiten hem aansprak.
+
+def _act_check_handoff(c):
+        """Eén checklist-item doorgeven aan een rol of persoon.
+
+        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
+        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
+        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
+
+        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
+        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
+        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
+        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
+        uit de pas lopen en werk stil op de verkeerde plek laten landen.
+
+        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
+        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
+        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        pid = g("pid")
+        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
+        if not getypt:
+            return nxt, "✗ pick a role or person to hand this to"
+        from nooch_village.views.inbox import _at_doelen
+        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
+        if doel is None:
+            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
+
+        it = _checklist_item(pj, pid, g("clid"), g("item"))
+        tekst = (it or {}).get("text", "") if it else ""
+        if not tekst:
+            return nxt, "✗ item not found"
+        soort, ref = route_werk(st, tekst=tekst,
+                                rol=doel["id"] if doel["kind"] == "role" else "",
+                                persoon=doel["id"] if doel["kind"] == "person" else "",
+                                herkomst=f"↳ doorgegeven uit project {pid}",
+                                door=username or "", opdrachtgever=username or "",
+                                bron_project=pid, van_mens=True)
+        if soort == "keuze":
+            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
+                         f"pick the person instead of the role")
+        from nooch_village import project_items
+        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
+                                              by=username or "", naar_label=doel["label"])
+        return nxt, (msg + (f" ({soort})" if soort else ""))
+
 
 def _claims_bordresultaat(qs: dict) -> dict:
     """Het resultaat van de laatste 'Zet op het bord'-klik, meegegeven in de redirect-URL.
@@ -4950,28 +4515,27 @@ def _claims_scan(form: dict, data_dir: str | None = None) -> tuple[dict, str]:
 def _claims_gate(st, username: str | None) -> str | None:
     """Poort voor claims-curatie: None = mag, anders de weigering.
 
-    De rol wordt AFGELEID uit het claims-domein en staat hier niet als id. Acht dispatch-takken
-    riepen `_role_gate("compliance", …)` los aan; toen die rol verhuisde en het oude record werd
-    gearchiveerd, hingen die acht poorten aan een naam die niemand meer draagt. Ze werkten alleen
-    nog doordat `resolve_circle_id` via het archief-record bij de oude cirkel uitkwam — verdwijnt
-    die cirkel, dan weigeren ze iedereen zonder dat iets zegt waaróm.
-
-    Bezit geen levende rol het domein, dan zegt de poort dát, in plaats van "alleen de rolvervuller
-    of Circle Lead mag dit" — dat laatste stuurt de lezer een uur de verkeerde kant op.
-
-    De guest-regel blijft ONGEWIJZIGD gelden: auth uit = mag alles, precies zoals bij elke andere
-    poort. Mijn eerste versie weigerde vóór `_role_gate` en brak daarmee stil de enige modus waarin
-    het dorp zonder login draait — een nieuwe poort mag geen bestaande regel omduwen als bijvangst."""
-    rol = _claims_rol(st)
-    if not rol and username != "guest":
-        return (f"⛔ No access — no live role owns the '{_claims_db.DOMEIN}' domain. "
-                f"Assign it to a role via governance first.")
-    return _role_gate(rol, username, st)
-
-
-def _claims_rol(st) -> str:
-    """Het record-id van de levende rol die het claims-domein bezit ("" = niemand)."""
-    return _claims_board.claims_rol(getattr(st, "records", None))
+    # AUTHZ: iedereen-ingelogd — claims is sinds 19 september 2026 geen domein met een eigenaar
+    # meer maar gereedschap dat een mens pakt (fase 5). Wie is ingelogd mag de term-database
+    # bijwerken.
+    #
+    # WAT HIER WEG IS. De poort leidde de eigenaar-rol af uit het claims-domein en liet alleen de
+    # rolvervuller of Circle Lead door. Die constructie was al één keer gerepareerd: acht takken
+    # riepen `_role_gate("compliance", …)` met een literal aan, en toen die rol verhuisde hing de
+    # hele curatie aan een naam die niemand meer droeg. De afleiding uit governance loste dat op,
+    # maar de onderliggende aanname bleef: dat er een eigenaar HOORT te zijn. Die aanname is
+    # vervallen. Het claims-domein heeft sinds 18 september geen levende eigenaar, de EmpCo-deadline
+    # staat op 27 september, en een poort die niemand doorlaat is dan geen zorgvuldigheid maar een
+    # blokkade.
+    #
+    # Wat blijft: de guest-regel (auth uit = mag alles) en fail-closed op een ingelogde die het
+    # systeem niet kent. Dat is dezelfde vorm als `_role_gate` en `_member_gate`; alleen de
+    # rol-eis eruit, niet de authenticatie."""
+    if username == "guest":
+        return None
+    if st.people.by_email(username) is None:
+        return "No access — user not recognised"
+    return None
 
 
 def _claims_gate_open(st, username: str | None) -> bool:
@@ -4989,6 +4553,51 @@ def _claims_audit(st, username: str | None, event: str, **velden) -> None:
                                ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+# De twee claims-skills draaiden tot 19 september 2026 mee op de dagpuls (`pulse_skills` in
+# settings.ini). Claims is sinds fase 5 geen domein met een eigenaar meer maar gereedschap dat een
+# mens pakt, en gereedschap heeft een knop nodig, geen wekker. De DNA-grant op compliance blijft
+# staan: de skills MOGEN nog, ze gaan alleen niet meer uit zichzelf lopen.
+_CLAIMS_KNOPPEN = {
+    "claims_site_scan": "site scan",
+    "regulation_watch": "regulation check",
+}
+
+
+def _act_claims_skill(c):
+        """Draai een van de twee claims-skills op aanvraag, synchroon, en zeg wat eruit kwam.
+
+        # AUTHZ: iedereen-ingelogd — zelfde poort als de rest van de claims-curatie (`_claims_gate`).
+        #
+        # SYNCHROON, en dat is een keuze. De mens staat voor het scherm en heeft net geklikt; een
+        # achtergrondtaak zou betekenen dat hij niet weet of er iets gebeurt. Beide skills bewaken
+        # hun eigen ritme en zijn idempotent per periode, dus twee keer klikken is niet twee keer
+        # werk — dat is precies waarom ze een knop kunnen zijn."""
+        naam = (c.g("skill") or "").strip()
+        if naam not in _CLAIMS_KNOPPEN:
+            return c.nxt, "✗ unknown claims skill"
+        _deny = _claims_gate(c.st, c.username)
+        if _deny:
+            return c.nxt, _deny
+        skill = shared_registry().get(naam)
+        if skill is None:
+            return c.nxt, f"✗ {naam} is not registered"
+        _load_env()
+        try:
+            uit = skill.run({}, c.st) or {}
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("cockpit2.claims").exception("%s faalde", naam)
+            return c.nxt, f"✗ {_CLAIMS_KNOPPEN[naam]} failed: {type(e).__name__}"
+        _claims_audit(c.st, c.username, f"claims_skill_run", skill=naam, ok=bool(uit.get("ok")))
+        # De uitkomst in één regel, en een lege uitkomst zegt WAAROM hij leeg is — een skill die
+        # "niets gedaan" meldt zonder reden leest als een storing (zelfde regel als bij de puls).
+        if uit.get("no_data") or uit.get("skipped"):
+            return c.nxt, f"· {_CLAIMS_KNOPPEN[naam]}: {uit.get('reason') or uit.get('reden') or 'nothing to do'}"
+        if uit.get("ok") is False:
+            reden = (uit.get("escalate") or {}).get("reason") or uit.get("error") or "unknown reason"
+            return c.nxt, f"✗ {_CLAIMS_KNOPPEN[naam]}: {reden}"
+        return c.nxt, f"✓ {_CLAIMS_KNOPPEN[naam]}: {uit.get('text') or 'done'}"
 
 
 def _act_claims_term_add(c):
@@ -5203,13 +4812,6 @@ def _kb_word(c, iid: str) -> str:
     return KB_WORD_LABEL[kb_verdict(kb_field(ins.get("evidence") or [], atoms))["word"]]
 
 
-def _act_kb_new(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
-    title = c.g("title").strip()
-    if not title:
-        return c.nxt, "✗ type a claim first"
-    iid = c.st.kennisbank.add(title, why=c.g("why"), by=_kb_actor(c))
-    return f"/kennisbank?id={iid}", "➕ insight created (v1.0) — link evidence and watch how certain it becomes"
 
 
 def _act_kb_link(c):
@@ -5237,31 +4839,6 @@ def _act_kb_unlink(c):
                    + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
-def _act_kb_annotate(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
-    ok = c.st.kennisbank.annotate(c.g("iid"), c.g("atom_id"), c.g("text"))
-    return c.nxt, ("💬 note saved" if ok else "✗ note not saved")
-
-
-def _act_kb_evidence(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Nieuw bewijs = een nieuw
-    # ATOOM in de bibliotheek (laag 1, dom: geen oordeel bij de intake) + een link met richting.
-    iid, text = c.g("iid"), c.g("text").strip()
-    if not text:
-        return c.nxt, "✗ typ eerst iets"
-    actor = _kb_actor(c)
-    bron = c.g("source").strip() or actor
-    # Eigen naam als bron = een intern oordeel (meningssterkte ≠ bewijssterkte);
-    # elke andere bron blijft 'unknown' tot een curator de herkomst duidt.
-    prov = "internal_judgment" if bron == actor else "unknown"
-    atom_id = "atom_" + uuid.uuid4().hex[:8]
-    c.st.notes.add(Insight(id=atom_id, claim=text[:500], source=bron, provenance=prov))
-    voor = _kb_word(c, iid)
-    ok = c.st.kennisbank.link(iid, atom_id, c.g("stance") or "support", by=actor)
-    if not ok:
-        return c.nxt, "✗ card created but linking failed"
-    na = _kb_word(c, iid)
-    return c.nxt, ("➕ added. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
 def _act_kb_discuss(c):
@@ -5270,148 +4847,6 @@ def _act_kb_discuss(c):
     return c.nxt, ("💬 kanttekening geplaatst" if ok else "✗ type an annotation first")
 
 
-def _act_kb_reformulate(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De trage klok: claim/
-    # reframe/falsifier opnieuw gemunt uit het spel; de vorige versie blijft in history.
-    iid = c.g("iid")
-    parsed = parse_blok(c.g("blok"))
-    if not parsed["claim"]:
-        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
-    nieuwe = c.st.kennisbank.reformulate(iid, title=parsed["claim"],
-                                         reframe=parsed["reframe"],
-                                         falsifier=parsed["falsifier"], by=_kb_actor(c))
-    if nieuwe is None:
-        return c.nxt, "✗ rewording failed"
-    return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
-
-
-def _act_kb_intake(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Fase 2: ruwe tekst →
-    # LLM-ladder → atomen, idempotent (hash content+bron) append aan de bibliotheek.
-    # Laag 1 blijft dom: geen oordeel, geen veld; trust wordt pas in laag 2 afgeleid.
-    uitkomst = kb_intake(c.g("raw"), c.g("source_hint"), c.data_dir)
-    if uitkomst is None:
-        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
-    nieuw, dubbel = uitkomst
-    if not nieuw and not dubbel:
-        return c.nxt, "✗ typ eerst iets om te noteren"
-    if not nieuw:
-        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
-    extra = f" ({dubbel} al bekend)" if dubbel else ""
-    return (f"/kennisbank?nieuw={','.join(nieuw)}",
-            f"✂️ we splitsten dit in {len(nieuw)} notities{extra}")
-
-
-def _act_kb_intake_url(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. URL = source-adapter:
-    # trafilatura haalt de hoofdtekst op, de bestaande atomiser doet de rest (geen fork).
-    from nooch_village.kennisbank_sources import van_url
-    uit = van_url(c.g("url"))
-    if uit is None:
-        return c.nxt, "✗ could not fetch this page or extract readable text from it"
-    raw, label = uit
-    uitkomst = kb_intake(raw, label, c.data_dir)
-    if uitkomst is None:
-        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
-    nieuw, dubbel = uitkomst
-    if not nieuw:
-        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
-    extra = f" ({dubbel} al bekend)" if dubbel else ""
-    return (f"/kennisbank?nieuw={','.join(nieuw)}",
-            f"✂️ we splitsten de pagina in {len(nieuw)} notities{extra}")
-
-
-def _act_kb_stage_edit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Staging bewerken vóór commit.
-    # Onderwerp/provenance staan niet meer in het formulier (LLM classificeert; slimme
-    # tags volgen later) — alleen doorgeven als ze wél zijn meegestuurd, anders zou een
-    # gewone tekst-bewaar het LLM-onderwerp stilletjes wissen.
-    subject = (c.form.get("subject") or [None])[0]
-    provenance = (c.form.get("provenance") or [None])[0]
-    ok = c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=c.g("content"),
-                                subject=subject, provenance=provenance)
-    return c.nxt, ("✏️ updated" if ok else "✗ not found")
-
-
-def _act_kb_stage_accept(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "✓ Bewaar → bibliotheek":
-    # eventuele tekstwijziging bewaren en dit ENE voorstel meteen verwerken (founder, 19 jul:
-    # verwerkt = weg uit de set, anders lijkt de actie niet gebeurd). Zelfde dedupe/MECE/
-    # marker-pad als de set-commit; een leeggeraakte set ruimt zichzelf op.
-    content = (c.form.get("content") or [None])[0]
-    if content and content.strip():
-        c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=content)
-    res = commit_atom(c.st.staging, c.g("bid"), c.g("sid"), c.data_dir, radar=c.st.radar)
-    if res is None:
-        return c.nxt, "✗ proposal not found"
-    msg = {"nieuw": "✓ in Oracle",
-           "bekend": "Al bekend — niets gedupliceerd",
-           "gekoppeld": "🔗 merged with an existing signal"}[res["uitkomst"]]
-    if res["leeg"]:
-        return "/kennisbank", f"🎉 set verwerkt · laatste voorstel: {msg}"
-    return c.nxt, msg
-
-
-def _act_kb_stage_delete(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.staging.remove_atom(c.g("bid"), c.g("sid"))
-    return c.nxt, ("🗑 weggegooid" if ok else "✗ not found")
-
-
-def _act_kb_stage_merge(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    sids = [s for s in (c.form.get("sid") or []) if s]
-    if len(sids) < 2:
-        return c.nxt, "✗ tick at least two proposals"
-    if not c.g("kop").strip():
-        return c.nxt, "✗ give the composed card a heading"
-    ok = c.st.staging.merge_atoms(c.g("bid"), sids, c.g("kop"))
-    return c.nxt, ("🧩 samengevoegd" if ok else "✗ merging failed")
-
-
-def _act_kb_stage_commit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Pas hier landen de
-    # nagekeken atomen append-only in de bibliotheek (idempotent op hash content+bron).
-    res = commit_batch(c.st.staging, c.g("bid"), c.data_dir, radar=c.st.radar)
-    if res is None:
-        return c.nxt, "✗ this set no longer exists"
-    nieuw, dubbel, gekoppeld = res
-    if not nieuw and not gekoppeld:
-        return "/kennisbank", (f"Al bekend: {dubbel} notitie(s) stonden er al" if dubbel
-                               else "Nothing added — the set was empty")
-    delen = []
-    if nieuw:
-        delen.append(f"✅ {nieuw} notes added to the library")
-    if gekoppeld:
-        delen.append(f"🔗 {gekoppeld} signal(s) merged with an existing signal in Oracle")
-    if dubbel:
-        delen.append(f"{dubbel} al bekend")
-    return "/kennisbank", " · ".join(delen)
-
-
-def _act_kb_stage_discard(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.staging.discard(c.g("bid"))
-    return "/kennisbank", ("Set discarded — nothing in the library" if ok else "✗ set not found")
-
-
-def _act_kb_atoom_edit(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Bewerken-met-historie
-    # (PR-2): de vorige claim blijft bewaard in edit_history (append-only, extractie-fouten).
-    res = c.st.notes.edit_note(c.g("atom_id"), claim=c.g("claim"))
-    return c.nxt, ("✏️ updated (previous version kept)" if res else "✗ editing failed")
-
-
-def _act_kb_atoom_related(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "Voeg gerelateerd feit toe":
-    # een NIEUW gelinkt atoom met eigen bron (het 36%-geval), geen verrijking-in-place.
-    actor = _kb_actor(c)
-    bron = c.g("source").strip() or actor
-    prov = "internal_judgment" if bron == actor else "unknown"
-    res = c.st.notes.add_related(c.g("atom_id"), c.g("content"), bron, provenance=prov)
-    if res is None:
-        return c.nxt, "✗ could not add a related fact (empty, or it already exists)"
-    return c.nxt, "➕ related fact added and linked"
 
 
 def _act_kb_insight_link(c):
@@ -5425,63 +4860,6 @@ def _act_kb_insight_unlink(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.kennisbank.unlink_insight(c.g("iid"), c.g("other_id"))
     return c.nxt, ("unlinked" if ok else "✗ unlinking failed")
-
-
-def _act_kb_meta_start(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: speel een META-inzicht —
-    # de gekoppelde inzichten van dit inzicht als input aan dezelfde copy-paste-spel-flow.
-    src = c.st.kennisbank.get(c.g("iid"))
-    if src is None:
-        return c.nxt, "✗ insight not found"
-    related = src.get("related") or []
-    if len(related) < 2:
-        return c.nxt, "✗ link ≥2 insights first (supporting/contradicting) to play a meta-insight"
-    kaarten = []
-    for r in related:
-        other = c.st.kennisbank.get(r["insight_id"])
-        if other is not None:
-            kaarten.append({"atom_id": r["insight_id"], "stance": r.get("stance") or "support",
-                            "label": other.get("title") or ""})
-    sid = c.st.spel.start(f"Meta-inzicht over: {src.get('title') or ''}", kaarten,
-                          by=_kb_actor(c), meta=True)
-    return f"/kennisbank/spel?sid={sid}", "🎲 meta-game started — the linked insights are the hand"
-
-
-def _act_kb_atoom_reference(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Een URL als bronlink bij een
-    # atoom (A3): landt in het reference-veld. Een expliciet-geplakte bronlink houden we (anders
-    # dan de intake-validator, die een kale artikel-URL juist dropt). Bron-propagatie (founder
-    # dd 2026-07-18): dezelfde reference gaat óók naar de andere atomen met dezelfde
-    # genormaliseerde bron die er nog geen hebben (nooit een bestaande overschrijven).
-    url = c.g("url").strip()
-    if not re.match(r"^https?://", url):
-        return c.nxt, "✗ paste a valid URL (https://…)"
-    if not c.st.notes.set_reference(c.g("atom_id"), url):
-        return c.nxt, "✗ note not found"
-    extra = c.st.notes.propagate_reference(c.g("atom_id"))
-    if extra:
-        return c.nxt, (f"🔗 source link attached — also set on {extra} other "
-                       f"kaartje(s) met dezelfde bron")
-    return c.nxt, "🔗 source link attached"
-
-
-def _act_tag_voorstel_besluit(c):
-    # AUTHZ: iedereen-ingelogd — tag-onderhoud-review. ✓ voert het voorstel meteen door op
-    # alle kaartjes (NotesStore.retag); ✗ wijst af (komt niet opnieuw terug).
-    from nooch_village.tag_onderhoud import TagVoorstellenStore, voer_voorstel_uit
-    store = TagVoorstellenStore(f"{c.data_dir}/tag_voorstellen.json")
-    keuze = c.g("keuze")
-    if keuze == "doorvoeren":
-        vs = {v["id"]: v for v in store.open_voorstellen()}
-        v = vs.get(c.g("vid"))
-        if v is None:
-            return c.nxt, "✗ proposal not found or already decided"
-        n = voer_voorstel_uit(c.st.notes, v)
-        store.besluit(c.g("vid"), "doorgevoerd")
-        return c.nxt, f"✓ doorgevoerd op {n} signal(s)"
-    v = store.besluit(c.g("vid"), "afgewezen")
-    return c.nxt, ("✗ rejected — it will not come back" if v
-                   else "✗ proposal not found or already decided")
 
 
 def _act_verzoek_besluit(c):
@@ -5628,136 +5006,11 @@ def _act_tag_onderhoud_run(c):
                    f"({res['voorstellen'] - res['nieuw']} al bekend/afgewezen)")
 
 
-def _act_kb_atoom_purge(c):
-    # AUTHZ: iedereen-ingelogd — ⚙-actie. Definitief weggooien kan alleen op een kaartje dat
-    # al op de black-list staat (eerst verwijderen, dan pas definitief). Afweging bewust bij
-    # de mens: na een purge kan dezelfde tekst in principe opnieuw binnenkomen.
-    ok = c.st.notes.purge(c.g("atom_id"))
-    return c.nxt, ("🔥 definitief weggegooid" if ok
-                   else "✗ not found or not deleted yet")
-
-
-def _act_kb_blacklist_leeg(c):
-    # AUTHZ: iedereen-ingelogd — ⚙-actie: de hele black-list in één keer definitief legen.
-    n = c.st.notes.purge_archived()
-    return c.nxt, (f"🔥 black-list geleegd: {n} definitief weggegooid" if n
-                   else "The blacklist was already empty")
-
-
-def _act_kb_atoom_subject(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
-    # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
-    subject = c.g("subject")
-    if subject not in KB_SUBJECTS:
-        return c.nxt, "✗ pick a subject from the list"
-    if not c.st.notes.add_tags(c.g("atom_id"), [subject]):
-        return c.nxt, "✗ note not found"
-    return c.nxt, f"📥 gesorteerd naar '{subject}'"
-
-
-def _act_kb_atoom_merge(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Drag&drop-merge
-    # (statements-herontwerp dd 2026-07-18): sleep een statement op een ander → modal →
-    # één kaart met de gekozen tekst als nieuwe versie. De herkomst van het bron-atoom
-    # stapelt op het doel (zie NotesStore.merge_into: merged_from + supersede-spoor +
-    # "; "-gestapelde source/reference); verwijzingen elders — in andere atomen én in
-    # kennisbank-inzichten — worden herwezen; het bron-atoom verdwijnt uit de lijst
-    # (gearchiveerd, nooit gewist). Verving de oude selectie-merge ("Voeg samen") —
-    # die interactie is in het herontwerp opgegaan in het slepen.
-    target_id, source_id = c.g("target_id"), c.g("source_id")
-    if not target_id or not source_id:
-        return c.nxt, "✗ merge: drag one statement onto the other"
-    if target_id == source_id:
-        return c.nxt, "✗ merging with itself does nothing — drag onto a different statement"
-    kaart = c.st.notes.merge_into(target_id, source_id, c.g("tekst"), by=_kb_actor(c))
-    if kaart is None:
-        return c.nxt, "✗ merge failed — statement not found (any more) or text empty"
-    c.st.kennisbank.rewire_atom(source_id, target_id)
-    return c.nxt, f"🧩 merged → v{kaart.version} (provenance of both kept)"
-
-
-def _act_kb_atoom_archive(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Archiveren ≠ wissen.
-    ids = [a for a in (c.form.get("atoom") or []) if a] or [c.g("atom_id")]
-    ok = sum(1 for aid in ids if aid and c.st.notes.archive(aid))
-    if not ok:
-        return c.nxt, "✗ select a note first"
-    return c.nxt, f"📦 {ok} notitie(s) gearchiveerd — terug te zetten via 'Gearchiveerd'"
-
-
-def _act_kb_atoom_unarchive(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.notes.archive(c.g("atom_id"), archived=False)
-    return c.nxt, ("↩ restored to the library" if ok else "✗ restoring failed")
-
-
-def _act_kb_atoom_naar_spel(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Voedt de spel-hand
-    # (richting draai je in het spel). Sinds de founder-ronde dd 2026-07-18 komt dit uit
-    # het statement-detail (één atoom per keer); de meervoudsvorm blijft fail-soft werken.
-    ids = [a for a in (c.form.get("atoom") or []) if a]
-    sid = c.g("sid")
-    if not ids:
-        return c.nxt, "✗ select a note first"
-    if not sid or c.st.spel.get(sid) is None:
-        return c.nxt, "✗ pick an open game"
-    ok = sum(1 for aid in ids if c.st.spel.add_kaart(sid, aid, "support"))
-    return f"/kennisbank/spel?sid={sid}", f"🔗 {ok} card(s) linked to your hand"
-
-
 def _kb_spel_set(c) -> list[dict]:
     """Gecureerde set uit het formulier: checkboxes `kaart` + per kaart `stance_<id>`."""
     ids = c.form.get("kaart") or []
     return [{"atom_id": aid, "stance": (c.g(f"stance_{aid}") or "support")}
             for aid in ids if aid]
-
-
-def _act_kb_spel_start(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Start een dialoog
-    # met de gecureerde set; bij reformulate_of wordt het een versie-spel.
-    kaarten = _kb_spel_set(c)
-    hunch = c.g("hunch").strip()
-    if not hunch:
-        return c.nxt, "✗ typ eerst je vermoeden"
-    if not kaarten:
-        return c.nxt, "✗ tick at least one card"
-    sid = c.st.spel.start(hunch, kaarten, reformulate_of=c.g("reformulate_of"),
-                          by=_kb_actor(c))
-    return f"/kennisbank/spel?sid={sid}", "🎲 game started — the thinking partner opens"
-
-
-def _act_kb_spel_add(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De hand uitbreiden
-    # (taak 2): idempotent, kaart moet in de bibliotheek bestaan.
-    if c.g("atom_id") not in kb_load_atoms(c.data_dir):
-        return c.nxt, "✗ card not found in the library"
-    ok = c.st.spel.add_kaart(c.g("sid"), c.g("atom_id"), c.g("stance") or "support",
-                             annotation=c.g("annotation"))
-    return c.nxt, ("🔗 linked to your hand" if ok else "✗ linking failed")
-
-
-def _act_kb_spel_remove(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
-    ok = c.st.spel.remove_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("Removed from your hand (the card stays in the library)" if ok
-                   else "✗ removing failed")
-
-
-def _act_kb_spel_flip(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Richting in één klik.
-    ok = c.st.spel.flip_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("↔ richting gedraaid" if ok else "✗ flipping failed")
-
-
-def _act_kb_spel_finish(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Munt het inzicht uit
-    # het teruggeplakte blok (copy-paste-spel): v1.0, of versie-bump bij herformuleren.
-    res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank, c.g("blok"))
-    if res is None:
-        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
-    iid, versie = res
-    woord = ("new version v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
-    return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
 
 
 def _act_kw_nominate(c):
@@ -5842,178 +5095,6 @@ def _act_ws_approve(c):
     return _act_ws_curate(c, "approved", "✓ “{word}” geactiveerd (approved)")
 
 
-# ── Founder Flow: de graduele-autonomie-trainingslus ─────────────────────────────────────────
-# Alle takken hieronder: AUTHZ: anchor-lead — de flow bepaalt hoeveel de AI zelfstandig mag doen
-# aan radar-triage, claim-oordelen en content-goedkeuring. Dat is een org-brede bevoegdheid (het
-# raakt drie domeinen tegelijk) en het is de founder-rol die hem uitoefent, dus dezelfde poort als
-# persona-beheer. Fail-closed via _anchor_gate; guest (auth uit) mag alles.
-
-def _ff_niveaus(c):
-    from nooch_village.founder_flow import NIVEAU_BESTAND, NiveauStore
-    return NiveauStore(os.path.join(c.data_dir, NIVEAU_BESTAND))
-
-
-def _act_ff_beslis(c):
-        # AUTHZ: anchor-lead — zie het blok-comment hierboven.
-        from nooch_village import founder_flow as ff
-        from nooch_village import founder_taken
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak, item, oordeel = g("taak"), g("item"), g("oordeel")
-        if taak not in ff.TAKEN or oordeel not in ff.OORDELEN.get(taak, ()):
-            return nxt, "✗ unknown task or judgement"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        correctie = g("correctie") == "1"
-        cfg = ff.instellingen(c.data_dir, taak)
-        audit = ff.in_auditsteekproef(taak, item, cfg.get("audit_pct", 0))
-
-        # Het AI-voorstel komt ALTIJD van de server, nooit uit het formulier. Een voorstel dat de
-        # client meestuurt is een voorstel dat de client kan zetten, en dan meet de promotiepoort
-        # niets. Bij een eerste beslissing rekent de wachtrij het opnieuw uit; bij een correctie
-        # staat het al in de log (het item is dan uit de wachtrij verdwenen).
-        labels = ff.alle(c.data_dir)
-        if correctie:
-            eerder = ff.laatste_per_item(labels, taak).get(item, {})
-            ai, titel = eerder.get("ai"), eerder.get("titel", "")
-        else:
-            bron = founder_taken.item_van(st, c.data_dir, taak, item, niveau)
-            if bron is None:
-                return nxt, "✗ this item is no longer in the queue"
-            ai, titel = bron.get("ai"), bron.get("titel", "")
-
-        melding = founder_taken.voer_uit(st, c.data_dir, taak, item, oordeel)
-        try:
-            seconden = max(0.0, time.time() - float(g("getoond") or 0))
-        except (TypeError, ValueError):
-            seconden = 0.0
-        ff.leg_vast(c.data_dir, taak=taak, item=item, mens=oordeel, ai=ai,
-                    ai_getoond=ff.toont_voorstel_vooraf(niveau, audit) or correctie,
-                    niveau=niveau, door=username or "?", seconden=seconden,
-                    correctie=correctie, audit=audit, titel=titel)
-
-        # Een nieuw blind audit-oordeel is precies het moment waarop het bewijs verandert, dus
-        # hier wordt de demotie-poort gerekend. Omhoog vraagt een handtekening, omlaag gebeurt
-        # vanzelf: wachten op een mens betekent dat een afwijkend model ondertussen doorwerkt.
-        terugval = ff.pas_demotie_toe(niveaus, ff.alle(c.data_dir), taak,
-                                      ff.instellingen(c.data_dir, taak))
-        if terugval:
-            melding = f"{melding} · {terugval}"
-
-        # Blind beslist → de onthulling hoort erbij, anders leert de founder niets van de
-        # vergelijking. Hij reist als query-parameter mee; de view rendert 'm bovenaan.
-        if not correctie and not ff.toont_voorstel_vooraf(niveau, audit):
-            sleutel = urllib.parse.quote(f"{taak}|{item}|{oordeel}|{ai or ''}|{niveau}")
-            scheiding = "&" if "?" in nxt else "?"
-            return f"{nxt}{scheiding}onthuld={sleutel}", melding
-        return nxt, melding
-
-
-def _act_ff_promote(c):
-        # AUTHZ: anchor-lead — een trede omhoog breidt uit wat de AI zonder mens mag doen; die
-        # handtekening is mensenwerk, ook als de meting groen staat.
-        from nooch_village import founder_flow as ff
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        cfg = ff.instellingen(c.data_dir, taak)
-        # Fail-closed: de poort wordt hier opnieuw gerekend. Dat de knop zichtbaar was, is geen
-        # bewijs dat hij dat nog steeds mag zijn — de meting kan tussen render en klik gezakt zijn.
-        kan, reden = ff.promoveerbaar(ff.alle(c.data_dir), taak, niveau, cfg)
-        if not kan:
-            return nxt, f"✗ promotion blocked: {reden}"
-        nieuw = ff.volgende(niveau)
-        niveaus.zet(taak, nieuw, door=username or "?", reden=reden)
-        return nxt, f"✓ {ff.TAAK_LABEL[taak]} → level {nieuw} ({reden})"
-
-
-def _act_ff_demote(c):
-        # AUTHZ: anchor-lead — een trede terug is de rem op drift; altijd toegestaan, nooit gemeten.
-        from nooch_village import founder_flow as ff
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveaus = _ff_niveaus(c)
-        niveau = niveaus.niveau(taak)
-        if niveau == "A":
-            return nxt, "already at A"
-        nieuw = ff.vorige(niveau)
-        niveaus.zet(taak, nieuw, door=username or "?", reden=g("reden") or "stepped back by the founder")
-        return nxt, f"↩ {ff.TAAK_LABEL[taak]} → level {nieuw}"
-
-
-def _act_ff_run(c):
-        # AUTHZ: anchor-lead — dit past AI-voorstellen echt toe (radar wegvegen, bordtaken,
-        # @rol-berichten). Alleen op niveau C/D, en nooit op de auditsteekproef.
-        from nooch_village import founder_flow as ff
-        from nooch_village import founder_taken
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        taak = g("taak")
-        if taak not in ff.TAKEN:
-            return nxt, "✗ unknown task"
-        niveau = _ff_niveaus(c).niveau(taak)
-        if niveau not in ("C", "D"):
-            return nxt, "✗ the AI only works through the queue from level C"
-        cfg = ff.instellingen(c.data_dir, taak)
-        verslag = founder_taken.verwerk_automatisch(st, c.data_dir, taak, niveau, cfg)
-        # Wat is blijven liggen wordt genoemd, niet stil weggelaten: een melding die alleen het
-        # aantal verwerkte items geeft, leest als "alles gedaan" terwijl dat niet zo is.
-        staart = ""
-        if verslag["audit"]:
-            staart += f" · {verslag['audit']} held back for your audit"
-        if verslag["zonder_voorstel"]:
-            staart += f" · {verslag['zonder_voorstel']} skipped (no proposal)"
-        return nxt, f"🤖 the AI handled {verslag['verwerkt']} item(s){staart}"
-
-
-def _act_ff_cluster(c):
-        """Een opkomend onderwerp promoveren naar een project, of parkeren als 'watch'.
-
-        Bewust GEEN label en geen trede. De clustering en de bronnen-teller zijn berekend, en de
-        vraag of een stijgend onderwerp een project waard is, is een strategische keuze die niet
-        uit een steekproef te leren valt — die hoort niet in de graduele-autonomie-machinerie.
-        Wat hier wordt vastgelegd is alleen wat de founder besloot, zodat een afgehandeld
-        onderwerp niet elke week opnieuw om aandacht vraagt."""
-        # AUTHZ: anchor-lead — zie het blok-comment boven de Founder Flow-takken.
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _anchor_gate(st, username)
-        if _deny:
-            return nxt, _deny
-        sleutel, keuze = g("sleutel"), g("keuze")
-        onderwerp = g("onderwerp").strip()
-        if not sleutel or keuze not in ("project", "watch"):
-            return nxt, "✗ unknown topic or choice"
-        ref = ""
-        if keuze == "project":
-            rol = g("rol") or "harry_hemp"
-            if st.records.get(rol) is None:
-                return nxt, "✗ the role behind this topic no longer exists"
-            # Hetzelfde aanmaakpad als het projectenbord: een radar-onderwerp levert een echt
-            # project op, geen aparte soort werk.
-            ref = st.projects.create(rol, f"Onderzoek opkomend onderwerp: {onderwerp[:160]}",
-                                     "founder_flow", status="future", origin="radar_cluster",
-                                     done_when="we weten of dit onderwerp iets voor Nooch betekent",
-                                     description=g("bewijs")[:600])
-        st.radar_besluiten.zet(sleutel, keuze, onderwerp=onderwerp, door=username or "?", ref=ref)
-        return nxt, (f"📌 project created for “{onderwerp[:60]}”" if keuze == "project"
-                     else f"👁 watching “{onderwerp[:60]}” — it stays in the trend view")
-
-
 def _act_decision_sheet_log(c):
     # AUTHZ: iedereen-ingelogd — elk lid logt zijn EIGEN besluit, in zijn eigen woorden. Er is geen
     # rol, domein of cirkel die een besluit van een mens over zijn eigen werk begrenst; een gate zou
@@ -6051,48 +5132,14 @@ def _act_decision_sheet_log(c):
 
 ACTIONS = {
     "decision_sheet_log": _act_decision_sheet_log,
-    "ff_beslis": _act_ff_beslis,
-    "ff_cluster": _act_ff_cluster,
-    "ff_promote": _act_ff_promote,
-    "ff_demote": _act_ff_demote,
-    "ff_run": _act_ff_run,
-    "kb_new": _act_kb_new,
-    "kb_intake": _act_kb_intake,
-    "kb_intake_url": _act_kb_intake_url,
-    "kb_stage_edit": _act_kb_stage_edit,
-    "kb_stage_accept": _act_kb_stage_accept,
-    "kb_stage_delete": _act_kb_stage_delete,
-    "kb_stage_merge": _act_kb_stage_merge,
-    "kb_stage_commit": _act_kb_stage_commit,
-    "kb_stage_discard": _act_kb_stage_discard,
-    "kb_atoom_subject": _act_kb_atoom_subject,
-    "kb_atoom_purge": _act_kb_atoom_purge,
-    "tag_voorstel_besluit": _act_tag_voorstel_besluit,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
     "verzoek_besluit": _act_verzoek_besluit,
-    "kb_blacklist_leeg": _act_kb_blacklist_leeg,
-    "kb_atoom_edit": _act_kb_atoom_edit,
-    "kb_atoom_related": _act_kb_atoom_related,
-    "kb_atoom_reference": _act_kb_atoom_reference,
     "kb_insight_link": _act_kb_insight_link,
     "kb_insight_unlink": _act_kb_insight_unlink,
-    "kb_meta_start": _act_kb_meta_start,
-    "kb_atoom_merge": _act_kb_atoom_merge,
-    "kb_atoom_archive": _act_kb_atoom_archive,
-    "kb_atoom_unarchive": _act_kb_atoom_unarchive,
-    "kb_atoom_naar_spel": _act_kb_atoom_naar_spel,
-    "kb_spel_start": _act_kb_spel_start,
-    "kb_spel_add": _act_kb_spel_add,
-    "kb_spel_remove": _act_kb_spel_remove,
-    "kb_spel_flip": _act_kb_spel_flip,
-    "kb_spel_finish": _act_kb_spel_finish,
     "kb_link": _act_kb_link,
     "kb_unlink": _act_kb_unlink,
-    "kb_annotate": _act_kb_annotate,
-    "kb_evidence": _act_kb_evidence,
     "kb_discuss": _act_kb_discuss,
-    "kb_reformulate": _act_kb_reformulate,
     "kw_nominate": _act_kw_nominate,
     "kw_nom_accept": _act_kw_nom_accept,
     "kw_nom_reject": _act_kw_nom_reject,
@@ -6102,17 +5149,16 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "msg_post": _act_msg_post,
+    "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_voorstel": _act_pagina_voorstel,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
-    "proj_dod": _act_proj_dod,
     "proj_archive": _act_proj_archive,
     "proj_unarchive": _act_proj_unarchive,
     "proj_delete": _act_proj_delete,
-    "proj_edit": _act_proj_edit,
-    "proj_comment": _act_proj_comment,
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
@@ -6120,14 +5166,12 @@ ACTIONS = {
     "verslag_bevestig_niet_behaald": _act_verslag_bevestig_niet_behaald,
     "verslag_overslaan": _act_verslag_overslaan,
     "verslag_bijwerken": _act_verslag_bijwerken,
-    "proj_regen_doc": _act_proj_regen_doc,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,
     "proj_discard": _act_proj_discard,
     "proj_proposal_accept": _act_proj_proposal_accept,
     "proj_proposal_reject": _act_proj_proposal_reject,
-    "proj_setlabel": _act_proj_setlabel,
     "proj_setimpact": _act_proj_setimpact,
     "proj_seteffort": _act_proj_seteffort,
     "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,
@@ -6144,8 +5188,6 @@ ACTIONS = {
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
-    "notif_read": _act_notif_read,
-    "notif_processed": _act_notif_processed,
     "notif_outcome": _act_notif_outcome,
     "notif_klaar": _act_notif_klaar,
     "goedkeur": _act_goedkeur,
@@ -6160,11 +5202,7 @@ ACTIONS = {
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
     "source_deactivate": _act_source_deactivate,
-    "link_pursue": _act_link_pursue,
-    "link_ignore": _act_link_ignore,
-    "acc_check": _act_acc_check,
 
-    "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
@@ -6175,19 +5213,12 @@ ACTIONS = {
     "check_toggle": _act_check_toggle,
     "check_skip": _act_check_skip,
     "check_unskip": _act_check_unskip,
-    "check_handoff": _act_check_handoff,
     "check_remove": _act_check_remove,
     "check_rename": _act_check_rename,
     "check_move": _act_check_move,
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
     "role_focus": _act_role_focus,
-    "radar_approve": _act_radar_approve,
-    "radar_dismiss": _act_radar_dismiss,
-    "radar_promote": _act_radar_promote,
-    "radar_merge": _act_radar_merge,
-    "radar_koppel": _act_radar_koppel,
-    "kb_stage_koppel": _act_kb_stage_koppel,
     "middel_remove": _act_middel_remove,
     "skilllink_add": _act_skilllink_add,
     "means_gap_add": _act_means_gap_add,
@@ -6218,7 +5249,6 @@ ACTIONS = {
     "cl_report": _act_cl_report,
     "cl_remove": _act_cl_remove,
     "m_add_kpi": _act_m_add_kpi,
-    "m_add_from_def": _act_m_add_from_def,
     "def_add": _act_def_add,
     "catalog_publish": _act_catalog_publish,
     "def_amend": _act_def_amend,
@@ -6237,7 +5267,8 @@ ACTIONS = {
     "rov2_dom_remove": _act_rov2_set,
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
-    "lk_mute": _act_lk_mute,
+    "check_handoff": _act_check_handoff,
+    "claims_skill": _act_claims_skill,
     "claims_term_add": _act_claims_term_add,
     "claims_term_retract": _act_claims_term_retract,
     "claims_work_status": _act_claims_work_status,
@@ -6245,10 +5276,6 @@ ACTIONS = {
     "claims_vondst_whitelist": _act_claims_vondst_whitelist,
     "claims_regel_uit_vondst": _act_claims_regel_uit_vondst,
     "claims_to_board": _act_claims_to_board,
-    "persona_edit": _act_persona_edit,
-    "persona_llm": _act_persona_llm,
-    "persona_finetune": _act_persona_finetune,
-    "persona_finetune_apply": _act_persona_finetune_apply,
 }
 
 
@@ -6298,17 +5325,6 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 _PUBLIC_GET: set[str] = set()
 
 
-# Het kennis-budget van de wizard, in seconden. Er wacht een MENS voor een scherm, en zijn browser
-# stapt eruit na `AI_TIMEOUT_MS` (12s, views/wizard.py). Het budget is met opzet een fractie daarvan:
-# de raadpleging is de aanloop, het model is het werk, en de aanloop mag het werk niet opeten.
-#
-# Gemeten op prod 28 aug 2026: de raadpleging kostte 29,4s en het plannen zelf 3,3s. De server maakte
-# de checklist keurig af en schreef hem in een verbinding die al dicht was — vier keer een
-# BrokenPipeError in het log en vier keer "the assistant could not be reached" op het scherm.
-#
-# Dit knijpt alleen de semantische stap af; alle lexicale bronnen blijven staan (zie
-# `kennis_context.kennis_voor`). Voor de daemon verandert er niets: die geeft geen budget mee.
-_WIZARD_KENNIS_BUDGET_S = 2.5
 
 
 def _home_node(recs) -> str:
@@ -6340,6 +5356,19 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Set-Cookie", cookie)
             self.end_headers()
 
+        def _nu_scope(self, body: str) -> str:
+            """Zet `class="nu"` op <body> als deze route in fase 9 is herbouwd.
+
+            ÉÉN PLEK, ROUTE-GESTUURD. Het alternatief was een vlag door ~19 render-functies heen
+            duwen; dan staat de scope op negentien plekken en loopt hij na de eerste wijziging uit
+            de pas. Hier is hij een lijst, en die lijst IS de verantwoording: wat er niet in staat
+            doet bewust niet mee (zie claude/fase9_designsysteem_inventarisatie.md §5)."""
+            pad = (self.path or "/").split("?", 1)[0]
+            if pad not in _NU_ROUTES or "<body>" not in body:
+                return body
+            return body.replace("<body>", '<body class="nu">', 1).replace(
+                _DS_LINK, _DS_LINK + _NU_LINK, 1)
+
         def _send(self, body: str, code: int = 200, chrome: bool = True):
             # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een
             # sessie en alleen op volledige HTML-pagina's (met </body>). chrome=False voor de inbox-routes
@@ -6353,18 +5382,28 @@ def make_handler(data_dir: str, csrf_token: str,
                     _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
                 except Exception:
                     _st, _ro = None, ""
-                # Pattern-fix (founder 23 jul): ELKE pagina die nog geen organisatieboom-rail heeft
-                # krijgt hem hier alsnog, zodat je bij élke tool je navigatie houdt — niet alleen op het
-                # projectenbord. Node-pagina's hebben al een `c2-rail` en worden overgeslagen. De rail
-                # wordt vóór de main geïnjecteerd; flex-order (.c2-rail{order:1}) zet hem toch rechts.
-                if _st is not None and "c2-rail" not in body and "class='c2-wrap'>" in body:
+                # DE ORGANISATIEBOOM ZAT IN DE RECHTERRAIL en staat sinds fase 7 in de zijbalk
+                # links, bij de rest van de navigatie (prototype v15). Hij wordt hier gevuld en niet
+                # in `_nav()` zelf, omdat hij de records nodig heeft en `_nav()` geen stores kent —
+                # zelfde patroon als de begroeting hieronder. Pagina's met een EIGEN rail (de
+                # node-pagina's) houden die; daar staat de boom met de huidige node opengeklapt.
+                if _st is not None and _SIDE_ORG in body:
                     try:
                         from nooch_village.views.overview import _tree_html
-                        _rail = f"<div class='c2-rail'>{_tree_html(_st, '')}</div>"
-                        body = body.replace("<div class='c2-wrap'>",
-                                            f"<div class='c2-wrap'>{_rail}", 1)
+                        body = body.replace(
+                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, '')}</div>", 1)
                     except Exception:
                         pass
+                # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde
+                # node waar '/' vóór fase 7 op landde. Nu landt '/' op Projects en is de cirkel een
+                # eigen nav-item, precies zoals in het prototype.
+                if _st is not None and _SIDE_CIRCLE in body:
+                    try:
+                        _cid = _home_node(_st.records.all())
+                        body = body.replace(_SIDE_CIRCLE,
+                                            f"<a href='/node?id={_e(_cid)}'>Circle</a>" if _cid else "", 1)
+                    except Exception:
+                        body = body.replace(_SIDE_CIRCLE, "", 1)
                 # Persoonlijke begroeting in de header: voornaam van de ingelogde persoon, klikbaar
                 # naar de eigen persoonspagina (/person?id=...).
                 if _st is not None:
@@ -6387,6 +5426,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 body = body.replace(
                     "</body>",
                     render_inbox_chrome(csrf_token, _ro) + _footer() + "</body>", 1)
+            body = self._nu_scope(body)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -6472,14 +5512,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if username and st.people.must_change(username):     # poort: alles → /wachtwoord tot gewijzigd
                 self._redirect_to("/wachtwoord")
                 return
-            if path == "/snake":
-                # AUTHZ: ingelogde-member — verborgen easter-egg 'Snaker'; puur fun, los van alles.
-                # De login-redirect hierboven dekt de niet-ingelogde gebruiker al af.
-                # chrome=False: geen dorp-brede call bar/Noochie-rail injecteren — de pagina draait als
-                # fullscreen-overlay-iframe op de cockpit; de bar leeft in de PARENT en wordt daar via
-                # body.overlay-open verborgen. Injecteren zou hier een tweede (ongestylede) bar geven.
-                self._send(snake.render_snake_page(st, username, effective_csrf), chrome=False)
-                return
             if path == "/context":
                 # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes
                 # (één rol), dus in auth-uit óók voor guest zichtbaar; alleen de persoon-context-
@@ -6498,27 +5530,47 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.end_headers()
                 self._schrijf(b)
                 return
-            if path == "/epic/frame":
-                # NASA EPIC-frame (server-side naar ~512px JPEG geresized) doorserveren; key blijft server-side.
-                data = epic.frame_bytes((qs.get("image") or [""])[0], (qs.get("date") or [""])[0])
-                if data:
-                    self._send_bytes(data, "image/jpeg")
-                else:
-                    self._send("", 404)
-                return
             if path in ("/", "/index.html"):
+                # PROJECTS IS DE LANDING (fase 7, prototype v15). Hiervóór kwam je op de
+                # cirkelpagina uit; het bord stond daar als tab én als de plek waar je feitelijk
+                # elke dag werkt. De cirkel is nu een nav-item, het bord de voordeur.
+                self.send_response(302)
+                self.send_header("Location", "/projects")
+                self.end_headers()
+                return
+            if path == "/messages":
+                # AUTHZ: iedereen-ingelogd — meelezen in de kanalen van het dorp is net zo vrij als
+                # het bord. Schrijven vereist een HERKENDE persoon (zie _act_msg_post): een bericht
+                # zonder auteur kan niemand beantwoorden.
+                _ik = _web_actor_id(username, st)
+                self._send(render_messages(st, ik=_ik, kanaal=(qs.get("k") or [""])[0],
+                                           csrf_token=effective_csrf,
+                                           msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/wiki":
+                # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
+                # node). Schrijven gebeurt niet hier maar op de eigenaar-rol, achter zijn poort.
+                self._send(render_wiki_index(st, csrf_token=effective_csrf,
+                                             soort=(qs.get("kind") or ["all"])[0]))
+                return
+            if path == "/projects":
+                # AUTHZ: iedereen-ingelogd — lezen van het bord is vrij; de mutaties eronder gaan
+                # elk door hun eigen poort (proj_*), precies als op de cirkel-tab.
                 default_id = _home_node(st.records.all())
-                if default_id:
-                    self.send_response(302)
-                    self.send_header("Location", f"/node?id={default_id}")
-                    self.end_headers()
-                    return
-                self._send(_page("Empty", "<p>No organisation loaded yet.</p>"))
+                if not default_id:
+                    self._send(_page("Empty", "<p>No organisation loaded yet.</p>")); return
+                rec = st.records.get(default_id)
+                self._send(render_projects_screen(
+                    st, rec, csrf_token=effective_csrf, username=username,
+                    group=(qs.get("group") or [""])[0]))
                 return
             if path == "/node":
                 nid = (qs.get("id") or [""])[0]
                 ntab = (qs.get("tab") or ["overview"])[0]
+                # Oude tabnamen (policies/notes/tools) vertaalt `render_node` zelf naar de
+                # Wiki-tab met het juiste voorfilter — zie daar.
                 self._send(render_node(st, nid, ntab, csrf_token=effective_csrf,
+                                       kind_flt=(qs.get("kind") or [""])[0],
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        goal=(qs.get("goal") or [""])[0],
@@ -6610,23 +5662,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
-            if path == "/founder":
-                # De trainingslus van de founder: drie taken, elk met een eigen rijpheidsniveau.
-                # Achter dezelfde sessie-auth als de rest; de schrijfacties gaan door _anchor_gate.
-                self._send(render_founder_flow(
-                    st, data_dir, csrf_token=effective_csrf,
-                    msg=(qs.get("msg") or [""])[0], ritme=(qs.get("ritme") or ["dag"])[0],
-                    onthuld=(qs.get("onthuld") or [""])[0],
-                    radar_view=(qs.get("radar") or ["trend"])[0], username=username))
-                return
-            if path == "/_patterns":
-                self._send(render_patterns(effective_csrf))
-                return
-            if path == "/signals":
-                # Dorp-brede lijst van goedgekeurde radar-signalen (read-only aggregatie). Publiek zoals
-                # het overzicht; achter de sessie-auth zoals alles.
-                self._send(render_signals(st, csrf_token=effective_csrf, feed=(qs.get("feed") or [""])[0]))
-                return
             if path == "/inbox":
                 # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
                 tgts = _person_targets(st, username)
@@ -6683,91 +5718,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
                 self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
                 return
-            if path == "/codie":
-                # Codie-backlog: de capaciteit-gaten die de escalatie-router oogstte, geclusterd
-                # per ontbrekende capaciteit. Read-only — de mens-poort zit op het pad van gat naar
-                # code-wijziging, niet op dit scherm.
-                self._send(render_codie(data_dir))
-                return
-            if path == "/inzichten":
-                # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).
-                self._send(render_kennislaag(data_dir))
-                return
-            if path == "/kennisbank":
-                # Kennisbank (laag 2): geversioneerde inzichten met een berekend veld van
-                # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer;
-                # ?hunch= zoekt kaarten (top-down), ?speel= toont een cluster-set (bottom-up),
-                # ?nieuw= toont de atomen van de laatste intake.
-                try:
-                    _pag = max(1, int((qs.get("pag") or ["1"])[0]))
-                except ValueError:
-                    _pag = 1
-                try:
-                    _cl = max(0, int((qs.get("cluster") or ["0"])[0]))
-                except ValueError:
-                    _cl = 0
-                try:
-                    _sug = max(0, int((qs.get("sug") or ["0"])[0]))
-                except ValueError:
-                    _sug = 0
-                self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
-                                             q=(qs.get("q") or [""])[0],
-                                             csrf_token=effective_csrf,
-                                             msg=(qs.get("msg") or [""])[0],
-                                             hunch=(qs.get("hunch") or [""])[0],
-                                             speel=(qs.get("speel") or [""])[0],
-                                             nieuw=(qs.get("nieuw") or [""])[0],
-                                             hub=(qs.get("hub") or [""])[0], pag=_pag,
-                                             open_=(qs.get("open") or [""])[0], cluster=_cl,
-                                             flip=(qs.get("flip") or [""])[0] in ("1", "true", "on"),
-                                             sug=_sug))
-                return
-            if path == "/kennisbank/search":
-                # Live smart-search fragment (PR-2): alleen de resultatenlijst, over de verse
-                # bibliotheek. Zoekt op inhoud én bron; markeert brug-suggesties bij een
-                # actief inzicht. chrome=False: het is een fragment dat de JS inplakt.
-                self._send(render_kennisbank_search(st, (qs.get("q") or [""])[0],
-                                                    (qs.get("hub") or [""])[0],
-                                                    (qs.get("active") or [""])[0],
-                                                    csrf_token=effective_csrf), chrome=False)
-                return
-            if path == "/kennisbank/tags":
-                # Tag-onderhoud: de weekvoorstellen van de Library, mens keurt (founder, 19 jul).
-                from nooch_village.views.tag_onderhoud import render_tag_onderhoud
-                self._send(render_tag_onderhoud(st, csrf_token=effective_csrf,
-                                                msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/staging":
-                # Zone 2: de "even nakijken"-ronde vóór de bibliotheek (bewerken/samenvoegen/weggooien).
-                self._send(render_kennisbank_staging(st, (qs.get("batch") or [""])[0],
-                                                     csrf_token=effective_csrf,
-                                                     msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/spel":
-                # Het inzicht-spel, copy-paste-flow: hand cureren → prompt kopiëren →
-                # blok terugplakken → munten. ?zoek= zoekt kaarten voor de hand.
-                self._send(render_kennisbank_spel(st, (qs.get("sid") or [""])[0],
-                                                  zoek=(qs.get("zoek") or [""])[0],
-                                                  csrf_token=effective_csrf,
-                                                  msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/kennisbank/spel/search":
-                # Live zoek-fragment op de spel-pagina (Oracle-patroon, founder 19 jul):
-                # alleen de resultaten, over de verse bibliotheek en de verse hand;
-                # in-het-spel-kaarten gemarkeerd groen/rood. chrome=False: fragment.
-                self._send(render_kennisbank_spel_search(st, (qs.get("sid") or [""])[0],
-                                                         zoek=(qs.get("zoek") or [""])[0],
-                                                         csrf_token=effective_csrf),
-                           chrome=False)
-                return
-            if path == "/linkbuilding":
-                # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
-                self._send(render_linkbuilding(data_dir, csrf_token=effective_csrf))
-                return
-            if path == "/accountabilities":
-                # Dorpsbrede accountability-check (dubbelingen + formulering).
-                self._send(render_accountabilities(st, data_dir, csrf_token=effective_csrf))
-                return
             if path == "/woordenschat":
                 # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid; met
                 # csrf-token read-write (beheer: verbied/heractiveer + nominatie-oordeel).
@@ -6790,11 +5740,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 # IA-fase 2→3: de Scientist-lens is nu een lens op de gedeelde laag. Oude route
                 # blijft werken via een redirect (geen dode deep-links).
                 self._redirect_to("/keywords?lens=scientist")
-                return
-            if path == "/belofte":
-                # Belofte-graaf: eerste-principes-ontleding, sterkte op het zwakste onderdeel (read-only, stap 1).
-                bid = (qs.get("id") or [""])[0]
-                self._send(render_belofte(data_dir, bid))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
@@ -6824,11 +5769,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 curator = actor is None or is_circle_lead(actor.id, "mother_earth", st.assign)
                 self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0],
                                           koppel=(qs.get("koppel") or [""])[0], curator=curator))
-                return
-            if path == "/catalogus_koppelen":
-                # Samengevoegd in /catalog (scope 4): geen los scherm meer → 303 naar het koppel-onderdeel.
-                src = (qs.get("source") or [""])[0]
-                self._redirect_to(f"/catalog?koppel={urllib.parse.quote(src or '1')}")
                 return
             if path == "/kpi_new":
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
@@ -6888,34 +5828,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     # doorgifte wees 'by person' naar de
                                                     # node-pagina en verliet je de modal.
                                                     group=(qs.get("group") or [""])[0]), fr))
-                return
-            if path == "/callbar":
-                # AUTHZ: iedereen-ingelogd — de route levert alleen de bar-UI (iframe-body); de
-                # daadwerkelijke toegang bewaakt /livekit-token zelf. Achter de sessie-auth zoals alles.
-                # chrome=False: deze pagina IS de bar en mag de iframe niet in zichzelf injecteren.
-                self._send(render_callbar(csrf_token=effective_csrf), chrome=False)
-                return
-            if path == "/livekit-token":
-                # Enige request-input: `tab` (per-tabblad-suffix). Room + identity-base bepaalt de
-                # server zelf (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
-                status, payload = issue_livekit_token(st, username, (qs.get("tab") or [""])[0])
-                self._send_json(payload, status)
-                return
-            if path == "/livekit-presence":
-                # Goedkope presence voor de callbar: telt deelnemers in de dorp-room server-side, ZONDER
-                # zelf te verbinden. Vervangt de oude observer-connect die WebRTC-minuten opslurpte.
-                count, names = livekit_presence()
-                self._send_json({"count": count, "names": names}, 200)
-                return
-            if path == "/claims/db.json":
-                # AUTHZ: iedereen-ingelogd — naslagwerk, lezen is vrij (domein-regel: cureren is
-                # exclusief compliance, en dat loopt via de dispatch-takken hieronder).
-                try:
-                    self._send_bytes(
-                        json.dumps(_claims_db.load(data_dir=data_dir), ensure_ascii=False).encode("utf-8"),
-                        "application/json; charset=utf-8")
-                except _claims_db.ClaimsDbError as e:
-                    self._send_json({"error": str(e)}, 500)   # fail-closed: liever een fout dan lege lijst
                 return
             if path == "/claims":
                 # AUTHZ: iedereen-ingelogd — checken is voor alle rollen; muteren kan hier niet
@@ -6979,20 +5891,6 @@ def make_handler(data_dir: str, csrf_token: str,
                                               uit=(qs.get("uit") or [""])[0],
                                               doel=_doel, awareness=_aware, admin=_admin))
                 return
-            if path == "/inwoners":
-                # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter
-                # de anchor-lead-poort in de dispatch-takken.
-                self._send(render_inwoners(_Stores(data_dir), msg=(qs.get("msg") or [""])[0]))
-                return
-            if path == "/inwoner":
-                # AUTHZ: iedereen-ingelogd — lezen mag iedereen; het formulier verschijnt alleen
-                # mét csrf (ingelogd) en de schrijfactie toetst apart op anchor-lead.
-                st = _Stores(data_dir)
-                pid = (qs.get("id") or [""])[0]
-                self._send(render_inwoner(st, pid, csrf_token=effective_csrf,
-                                          msg=(qs.get("msg") or [""])[0],
-                                          voorstellen=_finetune_cache.get(pid, [])))
-                return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]
                 ct = _STATIC_TYPES.get(name)                 # whitelist → geen path-traversal
@@ -7042,19 +5940,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 mt = mimetypes.guess_type(att.get("name", ""))[0] or "application/octet-stream"
                 self._send_bytes(data, mt)
                 return
-            if path == "/project_pakket":
-                # Alle wall-content van dit project (record + gesprek + checklists + bijlagen) in
-                # één zip, voor handmatige AI-analyse (14 september 2026: het automatische verslag
-                # leest bijlagen niet als bron, zie wall_diepdive_rubberproject_13sept.md). Zelfde
-                # AUTHZ-grens als /file hierboven: geen aparte poort, wie het project mag zien mag
-                # 'm ook exporteren.
-                p = st.projects.get((qs.get("pid") or [""])[0])
-                if p is None:
-                    self._send("<p>Project not found</p>", 404); return
-                from nooch_village.project_pakket import bouw_zip_bytes, slug
-                data = bouw_zip_bytes(p, data_dir)
-                self._send_bytes(data, "application/zip", f"{slug(p)}.zip")
-                return
             self._send("<p>404</p>", 404)
 
         def _redirect(self, nxt: str, msg: str):
@@ -7094,21 +5979,9 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send(_auth.login_page(next_url, error="Email address or password is incorrect."))
                 return
 
-            if path == "/snake/score":
-                # AUTHZ: ingelogde-member — iedereen mag spelen; de score wordt ONDER de sessie-gebruiker
-                # geschreven (nooit een meegestuurde naam), en alleen als hij hoger is dan het record.
-                username = self._session_username()
-                if sessions is not None and username is None:
-                    self._send("Not logged in", 403); return
-                raw = self.rfile.read(length).decode("utf-8") if length else ""
-                form = urllib.parse.parse_qs(raw)
-                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
-                    self._send("CSRF token invalid", 403); return
-                self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
-                return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
-            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact", "/wizard/create"):
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
                     self._send_json({"error": "not logged in"}, 403); return
@@ -7123,12 +5996,6 @@ def make_handler(data_dir: str, csrf_token: str,
                         from nooch_village.wizard import sharpen_outcome, board_anchors
                         _ankers = board_anchors(st.projects.all())   # eigen bord = stem van het team
                         self._send_json({"uitkomst": sharpen_outcome(g1("ruw"), anchors=_ankers)})
-                        return
-                    if path == "/wizard/impact":
-                        # Een GOK voor moeite en impact, bedoeld om in één tik bij te stellen.
-                        # Fail-soft: geen model = een leeg antwoord, en de chips blijven leeg.
-                        from nooch_village.wizard import guess_impact
-                        self._send_json(guess_impact(g1("idee"), rol=g1("role")))
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items
@@ -7148,27 +6015,32 @@ def make_handler(data_dir: str, csrf_token: str,
                         # Geheugen-eerst (zoals de daemon-planner): raadpleeg de kennislaag én eerder
                         # afgerond onderzoek vóór het plannen, zodat de wizard voortbouwt i.p.v.
                         # opnieuw verzamelt. Fail-soft: een lege/kapotte store → geen sectie.
-                        kennis = ""
+                        # DIT WAS STIL KAPOT. Er stond `from nooch_village.kennis_context import
+                        # kennis_voor, kennis_blok`, en die module is in fase 2b verdwenen. De
+                        # ImportError viel in de buitenste `except`, dus de wizard logde bij ELKE
+                        # plan-aanroep een exception en nam óók het deliverable-blok niet mee — dat
+                        # stond binnen dezelfde try. Fail-soft mag, maar niet zó: een pad dat altijd
+                        # faalt en altijd zwijgt is geen terugval, het is een dood pad met ruis.
+                        # `reeds_bekend` is de vervanging die in fase 2b voor kennis_context kwam.
+                        kennis, delen = "", []
                         try:
-                            from nooch_village.kennis_context import kennis_voor, kennis_blok
                             from nooch_village.deliverable_context import gather_deliverable_context
-                            delen = []
-                            try:
-                                dblok = gather_deliverable_context(
-                                    st.projects, goal, max_notes=5, max_chars=2000,
-                                    store=st.deliverables) or ""
-                            except Exception:
-                                dblok = ""
+                            dblok = gather_deliverable_context(
+                                st.projects, goal, max_notes=5, max_chars=2000,
+                                store=st.deliverables) or ""
                             if dblok:
                                 delen.append("Eerder afgerond onderzoek in het dorp (gebruik dit; "
                                              "plan geen items die dit al beantwoordt):\n" + dblok)
-                            kblok = kennis_blok(kennis_voor(st.dd, goal,
-                                                            deadline=_WIZARD_KENNIS_BUDGET_S))
+                        except Exception:
+                            logging.getLogger("cockpit2.wizard").exception("deliverable-context faalde")
+                        try:
+                            from nooch_village import reeds_bekend
+                            kblok = reeds_bekend.blok(st.dd, goal)
                             if kblok:
                                 delen.append(kblok)
-                            kennis = "\n\n".join(delen)
                         except Exception:
-                            logging.getLogger("cockpit2.wizard").exception("geheugen-raadpleging faalde")
+                            logging.getLogger("cockpit2.wizard").exception("reeds-bekend faalde")
+                        kennis = "\n\n".join(delen)
                         # ÉÉN MODELBELEID. Dit is dezelfde beslissing als `plan_checklist` in de
                         # daemon — welk werk er gebeurt — en een fout hier plant zich voort in elke
                         # stap die eruit volgt. Hij hoort dus op hetzelfde brein te draaien, via
@@ -7477,7 +6349,6 @@ def make_handler(data_dir: str, csrf_token: str,
                     # de mens kijkt na op /kennisbank/staging).
                     from nooch_village.kennisbank_sources import (bron_reference,
                                                                   detect_and_extract)
-                    from nooch_village.kennisbank_intake import atomiseer
                     username = self._session_username()
                     fname, blob = files.get("file", ("", b""))
                     res = detect_and_extract(text=fields.get("bron_text", ""),

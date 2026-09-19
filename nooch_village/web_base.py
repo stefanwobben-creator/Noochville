@@ -94,8 +94,6 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
    navigatie. Dat patroon ontstond om de call bar niet weg te gooien; die is 11 aug 2026 uit de
    shell gehaald en de bijbehorende verberg-regel hier met 'm mee. De overlay-aanpak zelf blijft —
    een navigatie voor een easter-egg is nog steeds zonde. */
-.snake-overlay{position:fixed;inset:0;z-index:1000;border:0;background:transparent}
-.snake-frame{width:100%;height:100%;border:0;background:transparent}
 """
 
 
@@ -136,35 +134,6 @@ def _banner(msg) -> str:
 
 
 # Verborgen easter-egg-trigger op elke ingelogde cockpit-pagina (login gebruikt _page NIET): de
-# Konami-code of 5× klikken op de paginatitel opent Snake. Self-contained (geen imports) en zonder
-# preventDefault, zodat pijltjestoetsen op echte pagina's niet gekaapt worden.
-#
-# Snake opent als IN-PAGE OVERLAY (fullscreen iframe /snake) i.p.v. een navigatie: zo overleeft de
-# call bar-iframe (geen full-page nav → verbinding + audio lopen door). body.overlay-open verbergt de
-# bar; de snake-pagina meldt sluiten via postMessage (× of Escape). /snake zit achter de sessie-auth.
-_KONAMI_TRIGGER = """<script>(function(){
- function openSnake(){
-   if(document.getElementById('snake-overlay'))return;
-   var ov=document.createElement('div');ov.id='snake-overlay';ov.className='snake-overlay';
-   var fr=document.createElement('iframe');fr.className='snake-frame';fr.src='/snake';fr.title='Snaker';
-   fr.setAttribute('allow','autoplay');
-   fr.addEventListener('load',function(){try{fr.contentWindow.focus();}catch(e){}});
-   ov.appendChild(fr);document.body.appendChild(ov);document.body.classList.add('overlay-open');
- }
- function closeSnake(){var ov=document.getElementById('snake-overlay');if(ov)ov.remove();
-   document.body.classList.remove('overlay-open');}
- window.addEventListener('message',function(e){
-   if(e.origin!==location.origin)return;
-   if((e.data||{}).type==='snake-close')closeSnake();
- });
- var K=['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','b','a'],b=[];
- addEventListener('keydown',function(e){ b.push((e.key||'').toLowerCase()); if(b.length>K.length)b.shift();
-   if(b.length===K.length&&K.every(function(k,i){return b[i]===k;})){b=[];openSnake();} });
- var h=document.querySelector('h1'); if(h){var c=0,t; h.addEventListener('click',function(){
-   c++; clearTimeout(t); t=setTimeout(function(){c=0;},1500); if(c>=5){c=0;openSnake();} });}
-})();</script>"""
-
-
 # ── De gedeelde fragment-mechaniek (static/nooch.js) ─────────────────────────
 # Eén script voor de klasse "een stuk pagina vervangt zichzelf": wachtrij voor typ-en-Enter-velden,
 # opnieuw bedraden van verse formulieren (idempotent), cursor-herstel en tellers. Elke volle pagina
@@ -177,6 +146,29 @@ _JS_VERSION = _hashlib.md5(_JS_SRC.encode("utf-8")).hexdigest()[:10]
 _JS_LINK = f'<script src="/static/nooch.js?v={_JS_VERSION}" defer></script>'
 
 
+#: Projectstatus → (Nooch UI-variant, woord). De VORM zit in de CSS (`.nu-status--*`), het WOORD
+#: staat er altijd bij. Nooit kleur alleen: een gekleurd vlakje zegt niets tegen wie kleur niet
+#: goed ziet, en niets in zwart-wit.
+_STATUS_VORM = {
+    "running": ("ok", "Active"),
+    "blocked": ("wait", "Waiting"),
+    "done":    ("ok", "Done"),
+    "future":  ("open", "Future"),
+    "proposed": ("open", "Proposed"),
+    "draft":   ("open", "Draft"),
+}
+
+
+def _status(status: str, label: str = "") -> str:
+    """Eén statuslabel als VORM plus WOORD (Nooch UI v1, fase 9).
+
+    Buiten een `.nu`-scherm rendert dit als een gewone inline-span: de klassen doen dan niets, de
+    tekst blijft leesbaar. Zo kan hij gebruikt worden op een scherm dat nog niet meedoet zonder er
+    half-nieuw uit te zien."""
+    soort, woord = _STATUS_VORM.get(str(status or "").lower(), ("open", status or "—"))
+    return f"<span class='nu-status nu-status--{soort}'>{_e(label or woord)}</span>"
+
+
 def _page(title: str, inner: str) -> str:
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
@@ -184,4 +176,4 @@ def _page(title: str, inner: str) -> str:
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body><main>{inner}</main>{_KONAMI_TRIGGER}{_JS_LINK}</body></html>')
+            f'<body><main>{inner}</main>{_JS_LINK}</body></html>')

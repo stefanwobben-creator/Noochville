@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from nooch_village import claims_board, cockpit2, founder_taken, org, role_proposals
+from nooch_village import claims_board, cockpit2, org, role_proposals
 
 
 def _rol(rid, *, skills=(), archived=False, slaapt=False):
@@ -54,27 +54,12 @@ def _st(rollen):
     return SimpleNamespace(records=SimpleNamespace(all=lambda: rollen))
 
 
-def test_uitvoerder_rol_volgt_het_middel():
-    assert founder_taken.uitvoerder_rol(_st([_rol("w", skills=["content_schrijven"])])) == "w"
 
 
-def test_uitvoerder_rol_is_leeg_als_niemand_het_middel_houdt():
-    """De copywriter is bewust vervallen zonder opvolger; dan hoort hier "" te staan en geen id."""
-    assert founder_taken.uitvoerder_rol(_st([_rol("w", skills=["content_schrijven"],
-                                                  archived=True)])) == ""
 
 
-def test_field_note_rol_volgt_het_middel():
-    assert founder_taken.field_note_rol(_st([_rol("n", skills=["field_note"])])) == "n"
-    assert founder_taken.field_note_rol(_st([_rol("n", skills=["field_note"],
-                                                  archived=True)])) == ""
 
 
-def test_afleiding_is_fail_soft_op_de_vorm_van_records():
-    """Zelfde keuze als claims_board.claims_rol: een resolver die gooit legt de hele flow plat."""
-    assert founder_taken.uitvoerder_rol(SimpleNamespace(records=None)) == ""
-    stuk = SimpleNamespace(records=SimpleNamespace(all=lambda: (_ for _ in ()).throw(RuntimeError())))
-    assert founder_taken.uitvoerder_rol(stuk) == ""
 
 
 # ── de uitgeschakelde copywriter-verwijzingen ────────────────────────────────

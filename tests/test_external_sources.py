@@ -8,9 +8,7 @@ import types
 import pytest
 
 from nooch_village.observations import ObservationStore
-from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
-from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 
 
 def _ctx(**settings):
@@ -61,72 +59,16 @@ def _gdelt_json():
                                    {"date": "20260706T000000Z", "value": 0.0}]}]}
 
 
-def test_gdelt_config_en_meta():
-    s = GdeltToneSkill()
-    ctx = _ctx(gdelt_terms="vegan footwear", gdelt_source_version="1")
-    assert s.available_metrics(ctx) == ["vegan_footwear"] and s.is_configured(ctx)
-    m = s.observation_meta(ctx, "2026-07-05", "vegan_footwear")
-    assert m["term"] == "vegan footwear" and m["timespan"] == "2d" and "timelinetone" in m["endpoint"]
 
 
-def test_gdelt_happy_path_dag_gemiddelde():
-    s = GdeltToneSkill()
-    assert s._tone_for("vegan footwear", "2026-07-05", _fetch=lambda t: _gdelt_json()) == -2.0   # (-1.5 + -2.5)/2
 
 
-def test_gdelt_fail_closed():
-    s = GdeltToneSkill()
-    assert s._tone_for("x", "2026-07-05", _fetch=lambda t: (_ for _ in ()).throw(RuntimeError("429"))) is None
-    assert s._tone_for("x", "2026-07-05", _fetch=lambda t: "niet json") is None                  # geen dict
-    assert s._tone_for("x", "2026-07-05", _fetch=lambda t: {"foo": 1}) is None                    # geen timeline
-    assert s._tone_for("x", "2026-07-09", _fetch=lambda t: _gdelt_json()) is None                 # geen dag → gat
-    broken = {"timeline": [{"data": [{"date": "20260705T000000Z"}]}]}                             # punt zonder value
-    assert s._tone_for("x", "2026-07-05", _fetch=lambda t: broken) is None
 
 
-def test_gdelt_onderscheidt_leeg_van_ophaalfout():
-    """DE BUG DIE ELF DAGEN DUURDE. Beide werden `None`, dus niets kon zien dat de ene een
-    WAARNEMING was ("opgehaald, er was niets") en de andere ONWETENDHEID ("we kregen het niet
-    opgehaald"). `vegan_footwear` stond als dode bron in de inbox terwijl de ruwe respons 200 gaf."""
-    s = GdeltToneSkill()
-    leeg = s.tone_uitkomst("x", "2026-07-09", _fetch=lambda t: _gdelt_json())
-    assert leeg.status == "leeg" and leeg.waarde is None
-
-    def _reset(_t):
-        raise ConnectionResetError(104, "Connection reset by peer")
-
-    stuk = s.tone_uitkomst("x", "2026-07-05", _fetch=_reset, _sleep=lambda _s: None)
-    assert stuk.status == "ophaalfout" and stuk.pogingen == 4      # 1 + drie backoff-stappen
 
 
-def test_gdelt_haalt_binnen_na_een_reset():
-    """WAT DE FIX MOET DOEN: een reset is geen eindoordeel. De tweede poging levert de data die er
-    de hele tijd al was."""
-    beurten = {"n": 0}
-
-    def _soms_stuk(_t):
-        beurten["n"] += 1
-        if beurten["n"] == 1:
-            raise ConnectionResetError(104, "Connection reset by peer")
-        return _gdelt_json()
-
-    s = GdeltToneSkill()
-    res = s.tone_uitkomst("vegan footwear", "2026-07-05", _fetch=_soms_stuk, _sleep=lambda _s: None)
-    assert res.status == "ok" and res.waarde == -2.0 and res.pogingen == 2
 
 
-def test_een_inhoudelijke_fout_wordt_niet_herhaald():
-    """Opnieuw proberen bij niet-JSON gaat de tweede keer net zo goed mis, en is alleen maar last
-    voor de bron. Alleen TRANSPORT wordt herhaald."""
-    beurten = {"n": 0}
-
-    def _altijd_rommel(_t):
-        beurten["n"] += 1
-        return "geen json"
-
-    s = GdeltToneSkill()
-    res = s.tone_uitkomst("x", "2026-07-05", _fetch=_altijd_rommel, _sleep=lambda _s: None)
-    assert res.status == "ophaalfout" and beurten["n"] == 1
 
 
 # ── idempotentie + metadata via de store (geldt voor alle drie) ─────────────────────────────────
@@ -139,27 +81,8 @@ def test_idempotent_en_meta_via_store(tmp_path):
     assert len(rows) == 1 and rows[0]["meta"] == meta and rows[0]["value"] == 5075.25
 
 
-def test_gdelt_daily_values_spatieert_per_term(monkeypatch):
-    s = GdeltToneSkill()
-    ctx = _ctx(gdelt_terms="a, b")
-    from nooch_village.bron_ophalen import Uitkomst
-    monkeypatch.setattr(s, "tone_uitkomst",
-                        lambda term, datum, **kw: Uitkomst("ok", {"a": -1.0, "b": 2.0}[term]))
-    slept = []
-    out = s.daily_values(ctx, "2026-07-05", _sleep=lambda x: slept.append(x))
-    # 15 en niet 6: 6 seconden bleek te krap en de tweede term kreeg systematisch een reset. Het
-    # getal is beleefdheid; de RETRY vangt de drift.
-    assert out == {"a": -1.0, "b": 2.0} and slept == [15.0]
 
 
-def test_bevroren_config_wordt_door_de_skills_gelezen():
-    """De bevroren snapshot in settings.ini komt via load_context in de skills terecht."""
-    from nooch_village.config import load_context
-    from nooch_village.village import BASE_DIR
-    ctx = load_context(BASE_DIR)
-    assert AlphaVantageIndexSkill()._symbols(ctx) == {"spx": "SPY", "aex": "IAEX.AMS"}   # ETF-proxies (vervangt Stooq)
-    assert TrendsCategorieSkill()._terms(ctx) == ["footwear", "sustainable shoes", "vegan shoes"]
-    assert GdeltToneSkill()._terms(ctx) == ["sustainable footwear", "vegan footwear"]
 
 
 # ── Alpha Vantage (index-tracking-ETF's, vervangt Stooq) ────────────────────────────────────────
@@ -170,87 +93,15 @@ _AV_JSON = {"Meta Data": {"2. Symbol": "SPY"},
                 "2026-07-01": {"4. close": "740.5"}}}
 
 
-def test_alphavantage_config_meta_zonder_key_lek():
-    s = AlphaVantageIndexSkill()
-    ctx = _ctx(alphavantage_symbols="spx:SPY, aex:IAEX.AMS", ALPHAVANTAGE_API_KEY="SECRET",
-               alphavantage_source_version="2")
-    assert set(s.available_metrics(ctx)) == {"spx", "aex"} and s.is_configured(ctx)
-    m = s.observation_meta(ctx, "2026-07-02", "spx")
-    assert m["symbol"] == "SPY" and m["instrument"] == "index-tracking-ETF" and m["source_version"] == 2
-    assert "SECRET" not in m["endpoint"] and "apikey" not in m["endpoint"]     # key lekt NIET in de meta
 
 
-def test_alphavantage_happy_path_exacte_dag():
-    s = AlphaVantageIndexSkill()
-    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda sym: _AV_JSON) == 744.78
-    assert s._close_for("SPY", "2026-07-01", "K", _fetch=lambda sym: _AV_JSON) == 740.5
 
 
-def test_alphavantage_fail_closed():
-    s = AlphaVantageIndexSkill()
-    for err in ({"Note": "rate limit"}, {"Information": "premium endpoint"}, {"Error Message": "invalid"}):
-        assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x, e=err: e) is None   # AV-fout/limiet
-    assert s._close_for("SPY", "2026-07-09", "K", _fetch=lambda x: _AV_JSON) is None        # geen dag → gat
-    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: "niet json") is None      # geen dict
-    bad = {"Time Series (Daily)": {"2026-07-02": {"4. close": "nietnum"}}}
-    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: bad) is None              # niet-numeriek
-    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: (_ for _ in ()).throw(RuntimeError())) is None
 
 
-def test_alphavantage_geen_key_geen_data():
-    s = AlphaVantageIndexSkill()
-    ctx = _ctx(alphavantage_symbols="spx:SPY")                                # geen key
-    assert not s.is_configured(ctx)
-    assert s.daily_values(ctx, "2026-07-02", _sleep=lambda x: None) == {"spx": None}
 
 
-def test_alphavantage_spatieert_per_symbool(monkeypatch):
-    s = AlphaVantageIndexSkill()
-    ctx = _ctx(alphavantage_symbols="spx:SPY, aex:IAEX.AMS", ALPHAVANTAGE_API_KEY="K")
-    monkeypatch.setattr(s, "_close_for", lambda sym, datum, key, **kw: {"SPY": 744.78, "IAEX.AMS": 100.0}[sym])
-    slept = []
-    out = s.daily_values(ctx, "2026-07-02", _sleep=lambda x: slept.append(x))
-    assert out == {"spx": 744.78, "aex": 100.0} and slept == [13.0]           # één spacing tussen twee symbolen
 
 
-def test_ophaalfout_schrijft_niets_dus_het_recency_alarm_blijft_werken(tmp_path):
-    """DE KEERZIJDE VAN DE SPLITSING, en de vraag die hem compleet maakt.
-
-    We hebben "ophaalfout" losgetrokken van "leeg" zodat een reset niet meer als waarneming telt.
-    Dan is de volgende vraag terecht: gaat het recency-alarm ("laatste data N dagen geleden") nog
-    wél af als een bron dagenlang ALLEEN ophaalfout geeft? Anders ruilen we een zichtbare storing in
-    voor een stille — en de oorspronkelijke spanning die dit onderzoek startte was terecht.
-
-    Het antwoord is ja, en het is structureel: `indicator_freshness` leest de OBSERVATIES en vraagt
-    "wanneer kreeg dit veld voor het laatst een waarde". Een ophaalfout schrijft er geen — net zomin
-    als "leeg" — dus de versheid verloopt gewoon en de fresh→stale-overgang vuurt.
-
-    De splitsing veranderde HOE we het loggen en of we opnieuw proberen, niet WAT er wordt
-    vastgelegd. Dat is precies de bedoeling: een ophaalfout is geen waarneming, en dus mag hij een
-    lege reeks ook niet opvullen."""
-    from nooch_village.bron_ophalen import Uitkomst
-    s = GdeltToneSkill()
-    ctx = _ctx(gdelt_terms="vegan footwear")
-
-    def _altijd_reset(term, datum, **kw):
-        return Uitkomst("ophaalfout", None, "ConnectionResetError")
-
-    s.tone_uitkomst = _altijd_reset
-    out = s.daily_values(ctx, "2026-09-01", _sleep=lambda _x: None)
-    # geen waarde → de collector legt niets vast → de reeks veroudert → fresh→stale → source_died
-    assert out == {"vegan_footwear": None}
 
 
-def test_leeg_en_ophaalfout_leggen_allebei_niets_vast_maar_zeggen_iets_anders(caplog):
-    """Ze schrijven hetzelfde (niets) en betekenen iets anders. Dat verschil hoort in het LOG te
-    staan, want daar leest een mens waarom een reeks stilviel — data of storing."""
-    import logging
-    from nooch_village.bron_ophalen import Uitkomst
-    s = GdeltToneSkill()
-    ctx = _ctx(gdelt_terms="x")
-    for status, woord in (("ophaalfout", "OPHAALFOUT"), ("leeg", "leeg")):
-        caplog.clear()
-        s.tone_uitkomst = lambda t, d, _st=status, **kw: Uitkomst(_st, None, "reden")
-        with caplog.at_level(logging.INFO):
-            assert s.daily_values(ctx, "2026-09-01", _sleep=lambda _x: None) == {"x": None}
-        assert any(woord in r.message for r in caplog.records), status

@@ -35,18 +35,6 @@ def test_calibrate_alleen_gedeelde_jaren():
     assert res["n"] == 5
 
 
-# ── continue_arc ──────────────────────────────────────────────────────────────
-
-def test_continue_arc_ankert_op_100_en_zet_door():
-    ngram    = {2017: 0.5, 2018: 0.75, 2019: 1.0}          # anker 2019 = 1.0
-    openalex = {2019: 0.02, 2020: 0.03, 2021: 0.04}        # anker 2019 = 0.02
-    arc = continue_arc(ngram, openalex, anchor_year=2019)
-    assert arc[2019] == 100.0                              # anker = 100
-    assert arc[2017] == 50.0                               # 100 * 0.5/1.0
-    assert arc[2018] == 75.0
-    assert arc[2020] == 150.0                              # 100 * 0.03/0.02
-    assert arc[2021] == 200.0
-    assert sorted(arc) == [2017, 2018, 2019, 2020, 2021]   # ngram t/m anker, daarna OpenAlex
 
 
 def test_continue_arc_leeg_zonder_anker():
@@ -54,8 +42,3 @@ def test_continue_arc_leeg_zonder_anker():
     assert continue_arc({2019: 1.0}, {2020: 0.03}, anchor_year=2019) == {}
 
 
-def test_continue_arc_negeert_ngram_na_anker():
-    ngram    = {2018: 0.5, 2019: 1.0, 2020: 0.0}           # 2020 ngram-blind (0)
-    openalex = {2019: 0.02, 2020: 0.04}
-    arc = continue_arc(ngram, openalex, anchor_year=2019)
-    assert arc[2020] == 200.0                              # OpenAlex, niet de ngram-0

@@ -231,11 +231,11 @@ def test_vastgelegd_toont_alleen_handmatig_bewijs_nieuwste_eerst(tmp_path):
     assert [r["meta"]["claim"] for r in rijen] == ["claim 1", "claim 0"]
 
 
-def test_bewijs_link_is_compliance_gated(tmp_path, monkeypatch):
+def test_bewijs_link_zit_achter_de_claims_poort(tmp_path, monkeypatch):
     """De schrijfactie zit achter dezelfde poort als termen cureren: een ingelogde onbekende
     mag geen bewijs vaststellen."""
     from nooch_village import cockpit2
-    monkeypatch.setattr(cockpit2, "_role_gate", lambda *a, **k: "⛔ geen rechten")
+    monkeypatch.setattr(cockpit2, "_claims_gate", lambda *a, **k: "⛔ geen rechten")
     ctx = SimpleNamespace(nxt="/claims", st=SimpleNamespace(dd=str(tmp_path)), username="vreemde",
                           data_dir=str(tmp_path), g=lambda k: "x")
     _, melding = cockpit2._act_claims_bewijs_link(ctx)

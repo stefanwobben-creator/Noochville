@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from nooch_village import gap_ledger
-from nooch_village.views.codie import render_codie
 
 
 def _gat(dd, **kw):
@@ -90,38 +89,9 @@ def test_probleemstelling_is_geen_code_spec(tmp_path):
         assert verboden not in tekst
 
 
-# ── de weergave ────────────────────────────────────────────────────────────────
-
-def test_view_rangschikt_en_toont_de_keten(tmp_path):
-    dd = str(tmp_path)
-    _gat(dd, capability="klein gat", project_id="p1")
-    for i in range(3):
-        _gat(dd, capability="groot gat", project_id=f"q{i}", hop_trail=["website_dev"])
-
-    html = render_codie(dd)
-
-    assert html.index("groot gat") < html.index("klein gat")     # frequentie bepaalt de volgorde
-    assert "Blokkeerde 3 projecten" in html
-    assert "Ging eerst langs" in html and "website_dev" in html  # de hop-keten is terug te lezen
-    assert "probleemstellingen, geen specs" in html
 
 
-def test_view_is_read_only(tmp_path):
-    """De mens-poort zit op het pad van gat naar code, niet op dit scherm: geen knoppen, geen forms."""
-    dd = str(tmp_path)
-    _gat(dd)
-    html = render_codie(dd)
-    assert "<form" not in html.split("</head>")[1].replace(
-        "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>", "")
-    assert "action='/action'" not in html
 
 
-def test_view_zonder_gaten_legt_uit_wat_dat_betekent(tmp_path):
-    html = render_codie(str(tmp_path))
-    assert "Nog geen capaciteitsgaten" in html
-    assert "dorpspuls" in html                                    # stilte kan ook 'kapot' betekenen
 
 
-def test_view_zonder_inline_styles(tmp_path):
-    _gat(str(tmp_path))
-    assert "style=" not in render_codie(str(tmp_path))

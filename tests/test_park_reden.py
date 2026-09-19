@@ -124,11 +124,6 @@ def test_park_is_een_schrijfmethode_onder_het_slot():
     assert "park" in _WRITE_METHODS
 
 
-def test_de_puls_legt_de_reden_vast_voordat_hij_reset():
-    """Volgorde-guard op de bron: staat `reset_item_fails` vóór `park`, dan legt de puls een reden
-    vast die al gewist is."""
-    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert src.index("ledger.park(pid,") < src.index("ledger.reset_item_fails(pid, clid,")
 
 
 # ── Halve mens-taken: markeren i.p.v. het hele project verplaatsen ───────────

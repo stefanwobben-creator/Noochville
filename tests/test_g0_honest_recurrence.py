@@ -94,28 +94,6 @@ def _inh(records, bus):
     return Inhabitant(rec, bus, SkillRegistry(), _Ctx(records))
 
 
-def test_evidence_stempelt_meermaals_in_trigger(seeded):
-    """Een Tension mét logboek-bewijs (obs=3) → trigger bevat 'meermaals' + telling."""
-    bus = EventBus(name="test")
-    proposals = []
-    bus.subscribe("proposal_raised", lambda e: proposals.append(e))
-
-    inh = _inh(seeded, bus)
-    with patch("nooch_village.llm.reason",
-               return_value="VERDICT: coherent\nREASON: heldere rol"):
-        inh._raise_governance_proposal(Tension(
-            sensed_by="test_rol",
-            description="recurring legal compliance audit needed",
-            kind="structural",
-            evidence={"observations": 3, "first_seen": time.time() - 86400, "gap_key": "x"},
-        ))
-
-    add_role = [p for p in proposals
-                if p.data["proposal"]["change"]["kind"] == "add_role"]
-    assert len(add_role) == 1
-    trigger = add_role[0].data["proposal"]["trigger_example"].lower()
-    assert "meermaals" in trigger
-    assert "3x" in trigger
 
 
 def test_neutrale_trigger_wordt_door_g0_geweigerd(records_with_root):

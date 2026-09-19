@@ -112,31 +112,10 @@ def _capture_prompt(inh, goal, **kw):
     return cap.get("prompt", "")
 
 
-def test_injectie_met_context_toont_sectie(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    _seed_done(ledger, "harry_hemp", "Onderzoek naar barefoot shoes", "barefoot",
-               "📎 studie — via openalex_evidence: barefoot loopschoenen bevindingen")
-    inh = _inhabitant(tmp_path, ledger)                     # enabled default "1"
-    prompt = _capture_prompt(inh, "barefoot loopschoenen onderzoek", keyword="barefoot", exclude_pid="ander")
-    assert "Research already completed in the village" in prompt
-    assert "barefoot loopschoenen bevindingen" in prompt
 
 
-# 4b + 7. Leeg blok → geen sectie; enabled=0 → geen sectie (prompt zonder geheugen-kop)
-def test_7_uitgeschakeld_geen_sectie(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))
-    _seed_done(ledger, "harry_hemp", "Onderzoek naar barefoot shoes", "barefoot",
-               "📎 barefoot loopschoenen bevindingen")     # relevante bron aanwezig...
-    inh = _inhabitant(tmp_path, ledger, deliverable_context_enabled="0")   # ...maar uit
-    prompt = _capture_prompt(inh, "barefoot loopschoenen onderzoek", keyword="barefoot", exclude_pid="ander")
-    assert "Eerder afgerond onderzoek" not in prompt        # geen sectie
 
 
-def test_4b_leeg_blok_geen_sectie(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "p.json"))        # geen done-projecten → leeg blok
-    inh = _inhabitant(tmp_path, ledger)
-    prompt = _capture_prompt(inh, "barefoot onderzoek", keyword="barefoot", exclude_pid="ander")
-    assert "Eerder afgerond onderzoek" not in prompt        # leeg blok → sectie volledig weggelaten
 
 
 # ── DeliverableStore als bron (met wall-fallback) ─────────────────────────────

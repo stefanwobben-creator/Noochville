@@ -65,14 +65,6 @@ def test_wat_het_dorp_zelf_aanmaakt_slaapt(tmp_path):
     assert 'status="future"' in inspect.getsource(claims_board) and "queued" not in inspect.getsource(claims_board)
 
 
-def test_de_rol_werkt_alleen_aan_actief_werk_en_maar_een_keer(tmp_path):
-    """`_eligible`: running en nog niet gewerkt. Future is niet aan de beurt, en na één ronde is het
-    `worked`-anker de rem (dat was vroeger de overgang queued → running)."""
-    from nooch_village.project_worker import _eligible
-    assert not _eligible({"status": "future"}, 3)
-    assert _eligible({"status": "running"}, 3)
-    assert not _eligible({"status": "running", "worked": True}, 3)
-    assert not _eligible({"status": "blocked"}, 3) and not _eligible({"status": "done"}, 3)
 
 
 # ── 3: de migratie ───────────────────────────────────────────────────────────
@@ -106,6 +98,11 @@ def _afgesloten(dd, st, titel="Sluitstuk"):
     it = next(c for c in st.projects.get(pid)["checklists"] if c["id"] == cl)["items"][0]
     st.projects.check_toggle(pid, cl, it["id"])
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
+    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
+    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
+    cockpit2._Stores(dd).project_docs.write_concept(
+        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
     return pid
 
 
@@ -144,9 +141,8 @@ def test_een_afgerond_project_blijft_voor_zijn_doel_meetellen(tmp_path):
 
 
 def test_archiveren_is_een_gedeelde_route(tmp_path):
-    """Eén plek voor 'het bord af, met signaal': de knop en het verslag delen `archiveer`. Twee
-    kopieën drijven uiteen (de signaal-plaatsing zou dan op één van de twee ontbreken)."""
-    bron = inspect.getsource(cockpit2)
-    assert bron.count("signal_from_project(st.radar, p)") == 1
+    """Eén plek voor 'het bord af': de knop en het verslag delen `archiveer`. Twee kopieën drijven
+    uiteen, en dat was precies het risico toen er nog een signaal-plaatsing aan hing — die is op
+    19 sept 2026 vervallen met de radarlaag, de gedeelde route blijft."""
     for f in (cockpit2._act_proj_archive, cockpit2._bevestig_met, cockpit2._act_verslag_overslaan):
         assert "archiveer(" in inspect.getsource(f), f.__name__

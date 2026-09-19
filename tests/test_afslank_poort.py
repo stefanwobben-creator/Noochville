@@ -55,34 +55,35 @@ def test_geval_1_en_2_kunnen_niet_meer_gebeuren():
     assert d["eigen_ritme"] is False, "de facilitator heeft geen eigen ritme meer nodig"
 
 
-def test_geval_3_website_watcher_draagt_pulse_completed():
-    d = aa.rol_afhankelijkheden("website_watcher")
+def test_geval_3_en_4_een_rol_met_een_klasse_draagt_zijn_events():
+    """Geval 3 en 4 gingen over `website_watcher`, en die rol bestaat sinds 19 september 2026 niet
+    meer: zijn klasse is met de vijf andere AI-rollen uit `roles.py` verwijderd. Het MECHANISME dat
+    die twee gevallen bewaakten leeft wel — een rol met een eigen klasse draagt events die anderen
+    lezen, en de poort hoort die te zien vóór je hem laat slapen.
+
+    De meting staat daarom nu op `noochie`, de laatste rol met een eigen klasse. Valt die ooit ook
+    weg, dan faalt deze test en is dat de juiste uitkomst: de poort heeft dan geen levend voorbeeld
+    meer, en dat hoort iemand te weten voordat hij op een lege poort vertrouwt."""
+    d = aa.rol_afhankelijkheden("noochie")
     ev = {e["event"]: e["consumenten"] for e in d["events"]}
-    assert "pulse_completed" in ev
-    assert "Village" in ev["pulse_completed"], "de afrondingsregel hangt hieraan"
-
-
-def test_geval_4_website_watcher_draagt_de_groeipuls():
-    """De groei-puls zelf is geen event, maar wat hij oplevert wél: ontdekking.
-
-    `source_died` hoorde hier ook bij tot 16 september 2026: de generieke databron-collector en de
-    dode-bron-sensor liepen toen nog op deze rol se eigen dag_begint-reactie. Verplaatst naar Village
-    (`_veilig_databron_puls`, zie tests/test_databron_puls_los.py), om dezelfde reden als de dagbel
-    op 28 augustus van `facilitator` naar `dagcyclus.py` verhuisde — zie geval 1 en 2 hierboven.
-    Deze test toont nu de AFWEZIGHEID van die koppeling, niet meer de aanwezigheid ervan."""
-    d = aa.rol_afhankelijkheden("website_watcher")
-    ev = {e["event"] for e in d["events"]}
-    assert "project_discovery_ready" in ev
-    assert "source_died" not in ev, "source_died is dorpsinfrastructuur geworden, geen rolwerk meer"
+    assert d["klasse"] == "Noochie", "een rol met een eigen klasse hoort herkend te worden"
+    assert "bulletin_geschreven" in ev and "Village" in ev["bulletin_geschreven"]
 
 
 # ── Richting B: een skill intrekken ────────────────────────────────────────
 
-def test_geval_5_serpapi_trends_wordt_nog_aangeroepen():
-    d = aa.skill_afhankelijkheden("serpapi_trends")
+def test_geval_5_een_skill_met_aanroepers_wordt_gezien():
+    """Geval 5 was `serpapi_trends`, aangeroepen vanuit de code van `website_watcher`. Die rol is
+    op 19 september 2026 verwijderd en daarmee ook die aanroep — het geval kan zich niet meer
+    voordoen in díe vorm, maar richting B van de poort blijft nodig: een skill intrekken terwijl
+    code hem nog aanroept.
+
+    De meting staat daarom op een skill die nog wél wordt aangeroepen. Levert dit ooit een lege set
+    op, dan is dat geen groene test maar een blinde poort."""
+    d = aa.skill_afhankelijkheden("claims_check")
     plekken = {a["bestand"] for a in d["aanroepers"]}
-    assert "roles.py" in plekken, "de use_skill-aanroep in de rol wordt niet gezien"
-    assert any("use_skill" in a["code"] for a in d["aanroepers"])
+    assert plekken, "een aangeroepen skill hoort zijn aanroepers te tonen"
+    assert "claims_substantiatie.py" in plekken
 
 
 # ── Wat de poort NIET moet doen ────────────────────────────────────────────
@@ -115,8 +116,8 @@ def test_een_snit_met_afhankelijkheden_wordt_geweigerd():
     `website_watcher` draagt nog wél echt werk waar anderen op wachten, dus daar heeft de poort
     zijn tanden."""
     with pytest.raises(af.AfhankelijkheidNietBevestigd) as e:
-        af.voer_uit(_plan(rollen=["website_watcher"]), None, data_dir="", bevestigd=False)
-    assert "pulse_completed" in str(e.value)
+        af.voer_uit(_plan(rollen=["noochie"]), None, data_dir="", bevestigd=False)
+    assert "bulletin_geschreven" in str(e.value)
 
 
 def test_bevestigen_mag_wel_want_het_kan_de_juiste_keuze_zijn():
@@ -133,11 +134,11 @@ def test_een_leeg_plan_hoeft_niets_te_bevestigen():
 
 
 def test_het_rapport_toont_de_afhankelijkheden():
-    plan = _plan(rollen=["website_watcher"], skills=["serpapi_trends"])
+    plan = _plan(rollen=["noochie"], skills=["claims_check"])
     plan["_afhankelijkheden"] = af.afhankelijkheden_van(plan)["tekst"]
     tekst = af.rapport_tekst(plan, apply=False)
     assert "Wat er aan deze snit hangt" in tekst
-    assert "pulse_completed" in tekst and "serpapi_trends" in tekst
+    assert "bulletin_geschreven" in tekst and "claims_check" in tekst
 
 
 # ── Richting C: wat ligt er op zijn bord ────────────────────────────────────
@@ -184,9 +185,9 @@ def test_de_snit_wordt_geweigerd_om_een_vol_bord(tmp_path):
     """De poort heeft tanden: open projecten blokkeren de snit tot je ze bevestigt."""
     from nooch_village.projects import ProjectLedger
     pj = ProjectLedger(str(tmp_path / "p.json"))
-    pj.create("website_watcher", "Werk dat blijft liggen", "human")
+    pj.create("noochie", "Werk dat blijft liggen", "human")
     with pytest.raises(af.AfhankelijkheidNietBevestigd) as e:
-        af.voer_uit(_plan(rollen=["website_watcher"]), None, data_dir="", bevestigd=False,
+        af.voer_uit(_plan(rollen=["noochie"]), None, data_dir="", bevestigd=False,
                     projects=pj)
     assert "OPEN PROJECT" in str(e.value)
 
@@ -195,6 +196,6 @@ def test_het_rapport_noemt_het_project_bij_naam(tmp_path):
     """Een waarschuwing die niet zegt WÁT er blijft liggen, laat je alsnog gokken."""
     from nooch_village.projects import ProjectLedger
     pj = ProjectLedger(str(tmp_path / "p.json"))
-    pj.create("website_watcher", "Carbon footprint jaarlijks meten", "human")
-    tekst = aa.rapport(["website_watcher"], [], None, pj)
+    pj.create("noochie", "Carbon footprint jaarlijks meten", "human")
+    tekst = aa.rapport(["noochie"], [], None, pj)
     assert "OPEN PROJECT" in tekst and "Carbon footprint" in tekst

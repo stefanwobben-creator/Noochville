@@ -74,7 +74,7 @@ def test_hoog_inzet_sites_staan_vast():
         "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
         "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
         "noochie_memo", "skill_claim_evidence", "skill_competitor_discover",
-        "skill_lead_beoordeling", "skill_content_check"}
+        "skill_content_check"}      # -skill_lead_beoordeling: die skill bestaat niet meer (BLOK A)
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():
@@ -345,9 +345,6 @@ def test_guard_triage_landt_niet_op_sonnet(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("bestand,site", [
     ("nooch_village/skills_impl/tegenspraak.py", "skill_tegenspraak"),
-    ("nooch_village/skills_impl/synthesize.py", "skill_synthesize"),
-    ("nooch_village/skills_impl/content_schrijven.py", "skill_content_schrijven"),
-    ("nooch_village/skills_impl/bulletin_schrijven.py", "skill_bulletin"),
     ("nooch_village/skills_impl/voorstel.py", "skill_voorstel"),
 ])
 def test_skill_sites_vragen_de_hoog_inzet_ladder(bestand, site):
@@ -367,30 +364,15 @@ def test_skill_ladder_is_de_dorpsbrede_keuze_zonder_persona():
 
 
 def test_rolgebonden_sites_gaan_via_de_persona_hook():
-    """plan_checklist(+retry), einddocument en noochie_weigh_in kennen hun rol wél, dus daar mag de
-    persona-override werken — die lopen via `_persona_ladder`/`ladder_voor`, niet via de skill-helper."""
-    inh = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert '_persona_ladder(self.context, self.id, "plan_checklist")' in inh
-    assert '_persona_ladder(self.context, self.id,\n                                                            "plan_checklist_retry")' in inh
-    assert 'ladder_voor("einddocument", _p)' in inh
+    """Een call-site die zijn rol kent mag de persona-override gebruiken, via `_persona_ladder`.
+
+    Deze test dekte er vier: plan_checklist, plan_checklist_retry, einddocument en
+    noochie_weigh_in. De eerste drie zaten in `inhabitant.py` en zijn met BLOK A verdwenen
+    (19 sept 2026). Wat overblijft is de enige rol-gebonden site die nog bestaat."""
     rollen = open("nooch_village/roles.py", encoding="utf-8").read()
     assert '_persona_ladder(self.context, self.id, "noochie_weigh_in")' in rollen
 
 
-def test_einddocument_token_cap_is_verhoogd():
-    """Sonnet kan een langer document aan; de oude cap van 4000 was op de goedkope tredes geijkt."""
-    inh = open("nooch_village/inhabitant.py", encoding="utf-8").read()
-    assert 'settings.get("einddocument_max_tokens", "8000")' in inh
-
-
-def test_critic_gebruikt_dezelfde_kop_niet_een_kopie():
-    """Reference, don't copy: verandert de dorpsbrede kop, dan verandert de critic mee. De critic
-    haalt 'm via `ladder_voor` (dus mét staart), niet via de kale kop — zie
-    test_de_critic_draait_niet_op_een_enkele_trede."""
-    from nooch_village import missie_critic
-    assert missie_critic.premium_ladder().split(",")[0] == lk.hoog_inzet_ladder()
-    src = open("nooch_village/missie_critic.py", encoding="utf-8").read()
-    assert "claude-sonnet" not in src                 # geen tweede exemplaar van de modelnaam
 
 
 # ── Prijsloze tredes zijn zichtbaar, niet stil ───────────────────────────────
@@ -425,13 +407,3 @@ def test_prijsloze_melding_is_eenmalig(caplog):
     assert caplog.text.count("PRIJSLOZE_TREDE") == 1
 
 
-def test_de_critic_draait_niet_op_een_enkele_trede():
-    """De grondings-toets kreeg eerst de KALE kop mee: één lege respons van Sonnet en de critic
-    kon niets zeggen (gegrond=None → nooit door de poort). Waargenomen op productie: 'alle 1
-    trede(s) uitgeput'. De zachte staart is precies voor dit geval."""
-    from nooch_village import missie_critic
-    ladder = missie_critic.premium_ladder()
-    tredes = [t for t in ladder.split(",") if t.strip()]
-    assert len(tredes) > 1, "de critic heeft geen terugval"
-    assert tredes[0].startswith("anthropic:claude-sonnet")
-    assert tredes[1:] == llm.dorpsladder().split(",")

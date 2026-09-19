@@ -212,28 +212,6 @@ def test_een_mislukte_klim_laat_de_afkeuring_staan():
     assert uit["ok"] is False and "slag om de arm" in uit["reden"]
 
 
-# ── de bron levert één taal, en zegt welke ──────────────────────────────────
-
-def test_de_plan_prompt_vraagt_een_expliciete_taal():
-    """De plan-prompt moet de taal VOORSCHRIJVEN, wat die taal ook is.
-
-    Geschiedenis, want die verklaart waarom deze test bestaat. Ooit stond er "Write all free text
-    in English"; dat leverde 154 Engelse machine-berichten op productie op die in de inbox van een
-    mens landden náást Nederlandse bevindingen. Toen is de INHOUD Nederlands gemaakt. Op 6 september
-    2026 is dat besloten om te draaien: NoochVille wordt default Engels voor internationale groei,
-    en toen is de hele inhoudslaag meegegaan (labels, rugzakken, intake, spelvraag) in plaats van
-    alleen deze prompt.
-
-    Wat deze test bewaakt is niet de taalKEUZE maar de EIS dat er één staat, plus de twee regels die
-    los van de taal gelden: vaste tokens blijven letterlijk, en een citaat behoudt zijn eigen taal.
-    Zonder die twee vertaalt een model precies de dingen die een parser nodig heeft."""
-    import inspect
-
-    from nooch_village.inhabitant import Inhabitant
-    bron = inspect.getsource(Inhabitant._plan_checklist)
-    assert "in ENGLISH" in bron or "in DUTCH" in bron, "de prompt schrijft geen taal voor"
-    assert "quoted claim or source stays in its original language" in bron
-    assert "exactly as written here" in bron            # vaste tokens blijven letterlijk
 
 
 def test_de_matching_brug_blijft_bij_de_taal_van_de_records():
@@ -252,17 +230,6 @@ def test_de_matching_brug_blijft_bij_de_taal_van_de_records():
     assert "beoord" in _middel_signatuur("keyword_review")
 
 
-def test_geen_engelse_berichten_meer_uit_de_founder_flow():
-    """De 20 code-literals. Drie ervan stuurden Engels naar een inbox — "Bank the evidence for:" was
-    er 14 van. De cockpit-CHROME blijft Engels (i18n fase 1); de berichtinhoud is Nederlands, net als
-    elke andere spanning."""
-    import inspect
-
-    from nooch_village import founder_taken
-    bron = inspect.getsource(founder_taken)
-    for engels in ("Bank the evidence for", "Ground this claim scientifically",
-                   "Approved proposal from"):
-        assert engels not in bron, engels
 
 
 # ── de grond-check: derde onafhankelijke deelcheck ──────────────────────────

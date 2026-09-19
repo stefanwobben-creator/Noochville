@@ -83,13 +83,13 @@ def render_site_audit(st, doel: str = "live") -> str:
                   "dan staan hier de lampjes van de shop: bereikbaar, snelheid, toegankelijkheid, best "
                   "practices, SEO en claims.")
         main = (f"<div class='c2-main'><h1>Site audit {_doel_seg(doel)}</h1>"
-                f"<p class='muted'>Nog geen run. Draai <code>{_e(cmd)}</code> op de server; {uitleg}</p></div>")
+                f"<p class='muted'>No run yet. Run <code>{_e(cmd)}</code> on the server; {uitleg}</p></div>")
     else:
         wissels = laatste.get("wissels") or []
         wissel_html = ""
         if wissels:
             regels = "".join(f"<li>{_e(w['naam'])}: {_chip(w['was'])} → {_chip(w['nu'])}</li>" for w in wissels)
-            wissel_html = (f"<div class='card'><b>Gewisseld sinds de vorige run</b>"
+            wissel_html = (f"<div class='card'><b>Changed since the previous run</b>"
                            f"<ul class='fbul'>{regels}</ul></div>")
         kaarten = "".join(_lamp_card(st, l) for l in laatste.get("lampjes") or [])
         wanneer = _age(float(laatste.get("ts") or 0)) if laatste.get("ts") else "?"

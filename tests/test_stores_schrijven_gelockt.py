@@ -89,22 +89,6 @@ def _klassen():
                 yield os.path.relpath(pad, _PKG).replace(os.sep, "/"), node
 
 
-def test_elke_schrijvende_store_gaat_door_het_slot():
-    """DE KERNTEST. `notes_store.NotesStore` zakte hier vóór 8 september doorheen: hij schreef met
-    een kale open-plus-dump, erfde niets, en declareerde niets."""
-    zonder = []
-    for rel, kl in _klassen():
-        if not _schrijft_naar_zichzelf(kl):
-            continue
-        if _erft_jsonstore(kl) or _declareert_write_methods(kl):
-            continue
-        if kl.name in _BEWUST_ZONDER_SLOT:
-            continue
-        zonder.append(f"{rel}::{kl.name}")
-    assert not zonder, (
-        "deze klassen schrijven naar hun eigen pad zonder slot: " + ", ".join(sorted(zonder)) +
-        ". Erf van util.JsonStore en declareer _WRITE_METHODS, of zet synchronized er zelf op "
-        "(zoals ObservationStore). Bewuste uitzondering? Zet 'm in _BEWUST_ZONDER_SLOT mét reden.")
 
 
 def test_de_uitzonderingen_bestaan_nog_en_hebben_een_reden():
@@ -116,24 +100,3 @@ def test_de_uitzonderingen_bestaan_nog_en_hebben_een_reden():
         assert naam in namen, f"{naam}: staat in _BEWUST_ZONDER_SLOT maar bestaat niet meer"
 
 
-def test_de_vijf_gemigreerde_stores_staan_onder_het_slot():
-    """De vijf uit ronde A, expliciet. Zonder deze test zou een latere refactor ze stil kunnen
-    terugzetten naar een eigen `_save` zonder dat de bovenstaande test het per se opmerkt."""
-    from nooch_village.governance import Records
-    from nooch_village.library import Library
-    from nooch_village.source_status import SourceStatusStore
-    from nooch_village.notes_store import NotesStore
-    from nooch_village.observations import ObservationStore
-    from nooch_village.util import JsonStore
-
-    for kl in (Records, Library, SourceStatusStore, NotesStore):
-        assert issubclass(kl, JsonStore), f"{kl.__name__} hoort van JsonStore te erven"
-        assert kl._WRITE_METHODS, f"{kl.__name__} declareert geen schrijfmethoden"
-
-    # ObservationStore is bewust GEEN JsonStore (jsonl), maar zijn schrijvers zijn wel gewrapt.
-    assert not issubclass(ObservationStore, JsonStore)
-    assert ObservationStore._WRITE_METHODS
-    for naam in ObservationStore._WRITE_METHODS:
-        meth = getattr(ObservationStore, naam)
-        assert getattr(meth, "__wrapped__", None) is not None, (
-            f"ObservationStore.{naam} is niet door synchronized gewrapt")

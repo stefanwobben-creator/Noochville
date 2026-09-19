@@ -517,8 +517,10 @@ def test_ui_tools_tab_toont_url_en_icon(tmp_path):
     st.att.add(OWNER, "tool", title="Serpstat", url="https://serpstat.com")
     html = cockpit2.render_node(st, OWNER, "tools", csrf_token="tok", username="guest")
     assert "Tools" in html and "https://serpstat.com" in html and "🛠" in html
-    # de tab zit in de tabbar
-    assert "tab=tools" in cockpit2.render_node(st, OWNER, "overview", csrf_token="tok", username="guest")
+    # De tab zit in de tabbar — sinds fase 7 als Wiki, want policies/notes/tools zijn daar één
+    # oppervlak geworden. `tab=tools` blijft als LINK werken (render_node vertaalt hem naar
+    # wiki+voorfilter), hij staat alleen niet meer als eigen tab in de balk.
+    assert "tab=wiki" in cockpit2.render_node(st, OWNER, "overview", csrf_token="tok", username="guest")
 
 
 def test_ui_policies_governance_eigendom_kop_geen_slotje(tmp_path):

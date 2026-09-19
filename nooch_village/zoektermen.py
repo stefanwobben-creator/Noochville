@@ -28,7 +28,8 @@ _KAAL_DOMEIN = re.compile(r"^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$", re.I)
 
 #: Bronnen/skills die het OPEN web bevragen. Daar geldt de breed-eerst-regel; een corpus-bron
 #: (OpenAlex, patentregisters) heeft juist baat bij een precieze technische term.
-OPEN_WEB = ("web_zoek", "community_listening", "google_trends")
+# community_listening zat hier ook; die skill is weg (fase 4, 19 sept 2026).
+OPEN_WEB = ("web_zoek", "google_trends")
 
 #: Boven dit aantal woorden is een open-web-term geen zoekopdracht meer maar een specificatie.
 BREED_MAX_WOORDEN = 5

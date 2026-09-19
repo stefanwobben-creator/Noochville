@@ -18,7 +18,6 @@ import pytest
 
 from nooch_village import claims_db
 from nooch_village.inhabitant import Inhabitant as I
-from nooch_village.project_verslag import inhoud_tekst
 
 _PAD = (" Deze webpagina bevat verder algemene informatie over verzending, retourbeleid, "
         "klantenservice, maatvoering en de geschiedenis van het merk, puur als context. " * 2)
@@ -35,38 +34,10 @@ def _note(item_skill: str, result: dict) -> str:
                                  source=item_skill)
 
 
-# ══ claims_check ═════════════════════════════════════════════════════════════
-
-def test_claims_check_lege_run_boekt_als_gemeld_leeg_met_de_lege_run_regel():
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Handgemaakt in Portugal, in kleine series."})
-    assert I._classify_result(uit) == ("leeg", None)
-    assert I._leeg_bron(uit) == "gemeld"                       # 📭 antwoord, geen kennisgat
-    assert "GEEN goedkeuring" in uit["reason"]
-    assert "toelichting" in uit and "betekenis" not in uit
 
 
-def test_claims_check_de_rode_treffer_wint_van_de_disclaimers():
-    """Gemeten in de review: 3 bevindingen (1 rood) en 4 betekenis-strings → de note toonde de
-    disclaimers en verzweeg de rode treffer."""
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Onze zolen zijn plasticvrij en klimaatneutraal, "
-                                          "100% recycled"})
-    assert I._classify_result(uit) == ("gelukt", ("list", "bevindingen"))
-    assert len(uit["toelichting"]) >= 3                        # de disclaimers zijn er nog wél
-    note = _note("claims_check", uit)
-    assert "klimaatneutraal" in note and "red" in note
-    assert "VOORGESTELD alternatief" not in note.split("\n")[0:3][-1]
-    assert uit["text"].startswith("3 findings: 1 red")
 
 
-def test_claims_check_het_verslag_toont_stoplicht_bron_en_waarom():
-    from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
-    uit = ClaimsCheckSkill().run({"text": "Onze 100% planet-safe sneakers."})
-    tekst = inhoud_tekst(uit)
-    regel = next(r for r in tekst.splitlines() if r.startswith("• planet-safe"))
-    assert "red — source A" in regel and "found 'planet-safe'" in regel
-    assert tekst.startswith(uit["text"])                       # de leeswijzer eerst
 
 
 def test_claims_check_schrijft_zijn_eigen_kroniek_records():
@@ -115,27 +86,8 @@ def _reason(a, o, c):
     return lambda prompt, **kw: payload
 
 
-def test_claim_evidence_alle_merken_fout_blijft_open_met_reden():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://m.example"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=""), \
-         patch("nooch_village.llm.reason", _reason(True, True, "x")):
-        res = ClaimEvidenceSkill().run({"brands": ["A", "B"], "claim": "afbreekbaar"}, _ctx_ce())
-    assert I._classify_result(res) == ("fout", None)
-    assert "no brand could be checked" in I._foutreden(res)
-    # de mislukkingen zijn wél Kroniek-feiten (daarop leert de ladder)
-    assert {r["status"] for r in ClaimEvidenceSkill().evidence_records(res, role_id="c")} == {"fout"}
 
 
-def test_claim_evidence_alle_merken_leeg_is_gemeld_leeg():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    page = "Wij verkopen sneakers in vele kleuren. Gratis verzending." + _PAD
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://m.example"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=page), \
-         patch("nooch_village.llm.reason", _reason(False, False, "")):
-        res = ClaimEvidenceSkill().run({"brands": ["A"], "claim": "afbreekbaar"}, _ctx_ce())
-    assert I._classify_result(res) == ("leeg", None) and I._leeg_bron(res) == "gemeld"
-    assert "none of the 1 brand(s) makes the claim" in res["reason"]
 
 
 def test_claim_evidence_string_brand_en_limit_cap():
@@ -157,19 +109,6 @@ def test_claim_evidence_string_brand_en_limit_cap():
     assert res["rows"][0]["status"] == "onduidelijk"
 
 
-def test_claim_evidence_het_verslag_leest_merk_url_oordeel_en_citaat():
-    from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
-    page = "Onze zolen zijn gecertificeerd biodegradable volgens ISO 14855, labresultaat bijgevoegd." + _PAD
-    with patch("nooch_village.web_read.serpapi_search", lambda q, k, num=10: [{"link": "https://veja.example/duurzaam"}]), \
-         patch("nooch_village.web_read.fetch_text", return_value=page), \
-         patch("nooch_village.llm.reason", _reason(True, True, "gecertificeerd biodegradable volgens ISO 14855")):
-        res = ClaimEvidenceSkill().run({"brands": ["Veja"], "claim": "biodegradable"}, _ctx_ce())
-    regel = [r for r in inhoud_tekst(res).splitlines() if r.startswith("• Veja")][0]
-    assert "https://veja.example/duurzaam" in regel and "confirmed" in regel
-    assert "ISO 14855" in regel
-    assert res["text"].startswith("'biodegradable' checked for 1 brand(s)")
-    row = res["rows"][0]
-    assert row["url"] == row["source"] and row["citaat"] == row["evidence"]   # additief
 
 
 # ══ cert_evidence ════════════════════════════════════════════════════════════
@@ -265,15 +204,6 @@ def test_cert_evidence_niet_geschreven_is_niet_gelukt(tmp_path):
     assert zonder["ok"] is False and "Kroniek" in zonder["error"]
 
 
-def test_cert_evidence_een_verlopen_certificaat_wordt_als_zodanig_gemeld(tmp_path):
-    from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
-    ctx = SimpleNamespace(data_dir=str(tmp_path))
-    uit = CertEvidenceSkill().run({"text": CERT.replace("2099-06-30", "2020-01-01"),
-                                   "claims": ["recycled"]}, ctx)
-    assert uit["ok"] and uit["verlopen"] is True
-    assert any("verlopen (2020-01-01)" in r for r in uit["let_op"])
-    assert "EXPIRED" in uit["text"]
-    assert "EXPIRED" in _note("cert_evidence", uit)
 
 
 def test_cert_evidence_validate_payload_vangt_een_verzonnen_bestand(tmp_path):
@@ -364,67 +294,12 @@ def _scan_ctx(tmp_path, monkeypatch):
                            projects=ProjectLedger(str(tmp_path / "projects.json")), evidence_ledger=None)
 
 
-def test_site_scan_skipped_leest_als_gemeld_niet_als_kennisgat(tmp_path, monkeypatch):
-    """Het merendeel van de 45 'lege' scan-items uit de review: de week was al gedaan, en dat las
-    als 🕳 kennisgat omdat de skipped-vorm alleen `ok`/`reden` droeg."""
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None,
-                               "modelpas": False}, ctx)
-    tweede = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None,
-                                        "modelpas": False}, ctx)
-    assert tweede["skipped"] is True and tweede["reden"]          # de pulslaag leest dit nog
-    assert I._classify_result(tweede) == ("leeg", None)
-    assert I._leeg_bron(tweede) == "gemeld"
-    assert "this week's scan: 5 of 5 page(s) covered" in tweede["reason"]
 
 
-def test_site_scan_deelrun_zonder_bevinding_is_gemeld_leeg_met_dekking(tmp_path, monkeypatch):
-    """Een deelrun met één 429 en 0 nieuwe bevindingen boekte als 'gelukt' met de paginalabels
-    als "2 results" — de administratieve lijsten wonnen de inhoudsrace."""
-    from nooch_village import safe_fetch
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    schoon = "<html><body><p>Handmade in Portugal.</p></body></html>"
-
-    def fetch(url):
-        if "mission" in url:
-            raise safe_fetch.FetchMislukt("de pagina gaf HTTP 429", status=429)
-        return (200, schoon)
-    uit = ClaimsSiteScanSkill().run({"_fetch": fetch, "_sleep": lambda s: None, "modelpas": False}, ctx)
-    assert uit["ok"] and uit["volledig"] is False
-    assert I._classify_result(uit) == ("leeg", None) and I._leeg_bron(uit) == "gemeld"
-    assert "4 of 5 covered this week" in uit["reason"] and "1 page(s) not fetched (mission)" in uit["reason"]
-    assert set(uit["_scan"]) >= {"gedekt", "fouten", "statussen", "gewhitelist", "gaten"}
-    assert "gedekt" not in uit and "fouten" not in uit             # niet meer op topniveau
 
 
-def test_site_scan_met_bevinding_toont_de_bevinding_niet_de_paginalabels(tmp_path, monkeypatch):
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-    pagina = "<html><body><p>Onze schoenen zijn volstrekt gifvrij en biologisch afbreekbaar.</p></body></html>"
-    uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina), "_sleep": lambda s: None,
-                                     "modelpas": False}, ctx)
-    assert uit["nieuw"] >= 1
-    assert I._classify_result(uit) == ("gelukt", ("list", "aangemaakt"))
-    rec = uit["aangemaakt"][0]
-    assert rec["url"].startswith("https://nooch.earth") and rec["oordeel"].startswith(rec["stoplicht"])
-    assert "on page" in rec["citaat"]
-    verslag = inhoud_tekst(uit)
-    assert "https://nooch.earth" in verslag and "red" in verslag
-    assert "new finding(s)" in uit["text"]
 
 
-def test_site_scan_escalatie_blijft_een_fout(tmp_path, monkeypatch):
-    from nooch_village import safe_fetch
-    from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
-    ctx = _scan_ctx(tmp_path, monkeypatch)
-
-    def kapot(url):
-        raise safe_fetch.FetchMislukt("de pagina gaf HTTP 503", status=503)
-    uit = ClaimsSiteScanSkill().run({"_fetch": kapot, "_sleep": lambda s: None, "modelpas": False}, ctx)
-    assert uit["ok"] is False and I._classify_result(uit)[0] == "fout"
-    assert "geen enkele pagina" in I._foutreden(uit)
 
 
 # ══ regulation_watch ═════════════════════════════════════════════════════════
@@ -510,123 +385,19 @@ def _cc_ctx(tmp_path=None, rules="REGELS"):
     return SimpleNamespace(notes=store, copy_rules=rules, data_dir=None)
 
 
-def test_content_check_rode_empco_term_wordt_ook_in_een_blog_gestopt(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        uit = ContentCheckSkill().run({"text": "Onze duurzame sneaker.", "kind": "blog"}, _cc_ctx(tmp_path))
-    assert uit["gate_ok"] is False and any("duurzaam" in w for w in uit["forbidden_words"])
-    assert I._classify_result(uit) == ("gelukt", ("list", "bevindingen"))
-    regel = inhoud_tekst(uit).splitlines()[1]
-    assert "red — blocked — source A+B" in regel and "found 'duurzame'" in regel
 
 
-def test_content_check_verboden_woord_valt_ook_zonder_store(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        uit = ContentCheckSkill().run({"text": "Gemaakt van plastic.", "kind": "sales_page"}, _cc_ctx(None))
-    assert uit["forbidden_words"] == ["plastic"] and uit["gate_ok"] is False
-    assert uit["ok"] is True and uit["niet_getoetst"] == []
 
 
-def test_content_check_niets_gevonden_maar_laag_niet_gedraaid_is_niet_getoetst(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    with patch("nooch_village.llm.reason", return_value=None):
-        geen_model = ContentCheckSkill().run({"text": "Een schone tekst."}, _cc_ctx(tmp_path))
-    assert geen_model["ok"] is False and "no model" in geen_model["error"]
-    geen_regels = ContentCheckSkill().run({"text": "Een schone tekst."}, _cc_ctx(tmp_path, rules=""))
-    assert geen_regels["ok"] is False and "no copy_rules" in geen_regels["error"]
-    with patch("nooch_village.llm.reason", return_value='{"compliant": true, "issues": []}'):
-        geen_store = ContentCheckSkill().run({"text": "Een schone tekst.", "kind": "sales_page",
-                                              "claim_insight_ids": ["v"]}, _cc_ctx(None))
-    assert geen_store["ok"] is False and "no notes store" in geen_store["error"]
-    for uit in (geen_model, geen_regels, geen_store):
-        assert I._classify_result(uit)[0] == "fout" and "niet getoetst" in I._foutreden(uit)
 
 
-def test_content_check_schoon_met_alle_lagen_is_gemeld_leeg_en_ok_is_geen_suggestie(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    for antwoord in ("OK.", '{"compliant": true, "issues": []}'):
-        with patch("nooch_village.llm.reason", return_value=antwoord):
-            uit = ContentCheckSkill().run({"text": "Een schone tekst.", "kind": "sales_page",
-                                           "claim_insight_ids": ["v"]}, _cc_ctx(tmp_path))
-        assert uit["suggestions"] is None
-        assert uit["no_data"] is True and I._leeg_bron(uit) == "gemeld"
-        assert "claim card(s)" in uit["reason"] and "copy rules" in uit["reason"]
 
 
-def test_content_check_onbekende_kind_sneuvelt_bij_plannen_en_bij_draaien():
-    from nooch_village.skills_impl.content_check import ContentCheckSkill
-    s = ContentCheckSkill()
-    assert s.required_payload == ("text",)
-    assert any("blog, sales_page, passport" in r for r in s.validate_payload({"text": "x", "kind": "landing"}, None))
-    uit = s.run({"text": "x", "kind": "landing"}, _cc_ctx(None))
-    assert uit["ok"] is False and "sales_page" in uit["error"]
-    assert "'blog' | 'sales_page' | 'passport'" in s.input_schema
-    assert s.description.startswith("Final check of a public text")
 
 
-def test_content_check_prompt_is_engels_met_json_en_ladder(tmp_path):
-    from nooch_village.skills_impl.content_check import ContentCheckSkill, _PROMPT
-    assert "only on the rules and the text below" in _PROMPT and '"compliant"' in _PROMPT
-    gezien = {}
-
-    def vang(prompt, **kw):
-        gezien.update(kw)
-        return '{"compliant": false, "issues": ["Too long"]}'
-    with patch("nooch_village.llm.reason", vang):
-        uit = ContentCheckSkill().run({"text": "T.", "ladder": "premium"}, _cc_ctx(tmp_path))
-    assert gezien["json_mode"] is True and gezien["ladder"] == "premium" and gezien["max_tokens"] >= 500
-    assert uit["suggestions"] == "Too long"
-    assert uit["bevindingen"][-1] == {"term": "copy rules", "oordeel": "advice", "citaat": "Too long"}
 
 
-def test_find_forbidden_words_gebruikt_de_database_met_de_literals_als_vangnet(monkeypatch):
-    from nooch_village import publication_check as pc
-    assert pc.find_forbidden_words("Onze planet-safe plastic zool", pc.FORBIDDEN_IN_SALES) == [
-        "plastic", "planet-safe / planet-friendly / planet-loving"]
-    monkeypatch.setattr(claims_db, "DB_PATH", "/nergens/claims.json")
-    assert pc.find_forbidden_words("Onze planet-safe plastic zool", pc.FORBIDDEN_IN_SALES) == ["plastic"]
-    rapport = pc.review_publication("Onze plastic zool", [], pc.PublicationKind.SALES_PAGE, None)
-    assert rapport.database_ok is False and rapport.forbidden_words == ["plastic"]
 
 
-# ══ accountability_check ═════════════════════════════════════════════════════
-
-def test_accountability_check_storing_is_geen_oordeel(tmp_path):
-    from nooch_village import cockpit2
-    from nooch_village.skills_impl.accountability_check import check_accountabilities
-    rollen = [{"role": "A", "accountabilities": ["x doen"]}]
-    res = check_accountabilities(rollen, reason_fn=lambda p: None)
-    assert res["ok"] is False and "geen antwoord" in res["reden"]
-    assert res["n_roles"] == 1 and res["at"] > 0
-    afgekapt = check_accountabilities(rollen, reason_fn=lambda p: '{"duplicates": [{"acc')
-    assert afgekapt["ok"] is False and "niet leesbaar" in afgekapt["reden"]
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    with open(os.path.join(dd, "accountability_check.json"), "w", encoding="utf-8") as f:
-        json.dump(res, f)
-    html = cockpit2.render_accountabilities(st, dd, csrf_token="t")
-    assert "The check could not run" in html and "No duplicates found" not in html
-    assert "Last run:" in html and "1 roles checked" in html
 
 
-def test_accountability_check_actie_geeft_capaciteit_en_zegt_storing(tmp_path, monkeypatch):
-    from nooch_village import cockpit2, llm
-    from nooch_village.skills_impl.accountability_check import MAX_TOKENS
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    gezien = {}
-
-    def vang(prompt, **kw):
-        gezien.update(kw)
-        return None
-    monkeypatch.setattr(llm, "reason", vang)
-    _, msg = cockpit2.dispatch(dd, "acc_check", {"next": ["/accountabilities"]}, "guest")
-    assert gezien["max_tokens"] == MAX_TOKENS == 3000 and gezien["json_mode"] is True
-    assert "kon niet draaien" in msg
-    opgeslagen = json.load(open(os.path.join(dd, "accountability_check.json"), encoding="utf-8"))
-    assert opgeslagen["ok"] is False and "at" in opgeslagen and "n_roles" in opgeslagen
-    monkeypatch.setattr(llm, "reason", lambda p, **kw: '{"duplicates": [], "weak": []}')
-    _, msg = cockpit2.dispatch(dd, "acc_check", {"next": ["/accountabilities"]}, "guest")
-    assert msg.startswith("check klaar: 0 aandachtspunt(en) over")

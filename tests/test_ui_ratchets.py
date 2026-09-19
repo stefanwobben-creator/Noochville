@@ -115,6 +115,15 @@ _PREFIX_CEILING = 65   # +1 'editor-' — GEDEELD COMPONENT, geen scherm-eigen f
                        # +1: 'wz-' — de project-wizard (/project/nieuw + modal-overlay): een eigen
                        #      Duolingo-achtig scherm met voortgangsbalk en stapkaart, geen cockpit-lijst.
                        #      De CSS staat sinds 24 jul in static/nooch.css, niet meer als blob in de view.
+                       # -1: 'snake-' — het easter-egg is op 19 sept 2026 verwijderd (fase 6).
+                       # -1: 'epic-'  — de NASA-aardbol is in dezelfde beurt verdwenen.
+                       # +1: 'wiki-' — de domeinkolom op /wiki (fase 7). Expliciet besluit:
+                       #      de index is een nieuw scherm met een eigen tweekoloms-indeling,
+                       #      en de bestaande families (cl-, kc-, c2-) dragen die niet. Alle
+                       #      kaarten erin hergebruiken wél .card/.cl-head/.pill.
+                       # +1: 'msg-' — /messages (fase 8): kanalenlijst links, draad rechts.
+                       #      Expliciet besluit, zelfde soort als 'wiki-': een tweekoloms
+                       #      scherm dat de bestaande families niet dragen.
 
 
 def _prefix_families() -> set[str]:
@@ -164,7 +173,7 @@ def test_views_linken_designsysteem_css():
     from nooch_village.cockpit2_util import _DS_LINK, _EXTRA_CSS
     assert _DS_LINK.startswith('<link rel="stylesheet" href="/static/nooch.css?v=')
     assert len(_EXTRA_CSS) > 10_000          # het bestand is echt geladen
-    for view in ("overview", "projects", "metrics", "catalog", "signals"):
+    for view in ("overview", "projects", "metrics", "catalog", "claims"):
         src = open(os.path.join(_PKG, "views", f"{view}.py"), encoding="utf-8").read()
         assert "_DS_LINK" in src, f"views/{view}.py linkt de design-CSS niet"
         assert "<style>{_EXTRA_CSS}</style>" not in src, (

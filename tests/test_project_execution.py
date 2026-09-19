@@ -10,7 +10,7 @@ from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry, Skill
-from nooch_village.projects import ProjectLedger
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
 
 TODAY = "2026-07-08"
 
@@ -48,118 +48,26 @@ def _inhabitant(tmp_path, ledger, skills=("openalex_evidence",)):
 
 def _prep(ledger, pid, items):
     """items: list van (text, skill|None, query, reason)."""
-    cl = ledger.checklist_add(pid, title=Inhabitant._PREP_CHECKLIST_TITLE)
+    cl = ledger.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
     for text, skill, query, reason in items:
         ledger.check_add(pid, cl["id"], text, skill=skill, query=query, reason=reason)
     return cl
 
 
-# a. TOEKOMST → checklist gegenereerd (skill-gekoppeld of open-met-reden); project NIET uitgevoerd
-def test_a_voorbereiding_genereert_checklist(tmp_path, ledger, monkeypatch):
-    import nooch_village.llm as llm
-    plan = ('{"deliverable":"evidence-dossier","accountability":"research studies","items":['
-            '{"text":"wetenschappelijke studies","skill":"openalex_evidence","query":"barefoot shoes","reason":""},'
-            '{"text":"patenten","skill":null,"query":"","reason":"geen patent-skill"}]}')
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "Patents and scientific studies on barefoot shoes", "human", status="future")
-    inh.prepare_project(pid)
-    p = ledger.get(pid)
-    assert p["status"] == "future"                                   # niet uitgevoerd, blijft TOEKOMST
-    cl = inh._project_checklist(p)
-    # Drie, niet twee: een plan met een zoekstap krijgt de mens-zoekstap erbij (scope 50c), als
-    # mens-taak die niet meetelt. De twee geplande items staan er onveranderd in.
-    assert cl and len(cl["items"]) == 3 and cl["items"][2].get("human_task") is True
-    skilled = [it for it in cl["items"] if it.get("skill")]
-    open_it = [it for it in cl["items"] if not it.get("skill") and not it.get("human_task")]
-    assert skilled[0]["skill"] == "openalex_evidence" and skilled[0]["query"] == "barefoot shoes"
-    assert open_it[0]["reason"] == "geen patent-skill"
 
 
-def test_a2_voorgestelde_skill_buiten_dna_wordt_geen_skill(tmp_path, ledger, monkeypatch):
-    import nooch_village.llm as llm
-    plan = '{"deliverable":"x","items":[{"text":"t","skill":"patent_api","query":"q","reason":""}]}'
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="future")
-    inh.prepare_project(pid)
-    it = inh._project_checklist(ledger.get(pid))["items"][0]
-    assert it.get("skill") is None and "niet in DNA" in it["reason"]   # machine-check tegen DNA
 
 
-def test_a3_geen_llm_geen_checklist_blijft_toekomst(tmp_path, ledger, monkeypatch):
-    import nooch_village.llm as llm
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (None, None) if k.get("return_tier") else None)  # geen key → None
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="future")
-    inh.prepare_project(pid)
-    p = ledger.get(pid)
-    assert inh._project_checklist(p) is None and p["status"] == "future"   # geen valse voorbereiding
 
 
-# b. ACTIEF met checklist → afvinkbaar item uitgevoerd, note per item, afgevinkt
-def test_b_uitvoering_vinkt_af_met_note(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert inh._project_checklist(p)["items"][0]["done"] is True
-    logtxt = " ".join(e["text"] for e in p.get("log", []))
-    assert "Study on barefoot" in logtxt                              # de deliverable-note
 
 
-# c. alle items af → DONE; open item → blijft ACTIEF (eerlijke voortgang)
-def test_c_alle_af_done_open_blijft_actief(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    pid1 = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid1, [("s", "openalex_evidence", "x", "")])
-    inh._claim_run_complete(pid1)
-    p1 = ledger.get(pid1)
-    assert p1["status"] == "blocked" and p1["blocked_on"] == "review"  # review-gate: alles af → WACHT, niet done
-
-    pid2 = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid2, [("s", "openalex_evidence", "x", ""), ("p", None, "", "geen patent-skill")])
-    inh._claim_run_complete(pid2)
-    p2 = ledger.get(pid2)
-    assert p2["status"] != "done"                                     # open item → blijft ACTIEF
-    cl2 = inh._project_checklist(p2)
-    assert sum(1 for it in cl2["items"] if it.get("done")) == 1 and len(cl2["items"]) == 2   # 1/2
 
 
-# d. ACTIEF zonder checklist → signaal, geen uitvoering, geen stub:done
-def test_d_geen_checklist_signaal_geen_valse_done(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    signals = []
-    inh.bus.subscribe("project_needs_preparation", lambda e: signals.append(e.data))
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    inh._claim_run_complete(pid)
-    p = ledger.get(pid)
-    assert p["status"] != "done" and p.get("outcome") != "stub:done"
-    assert signals and signals[0]["project_id"] == pid                # luid signaal
 
 
-# e. idempotent: tweede puls dezelfde dag dupliceert niets
-def test_e_idempotent_tweede_puls(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("s", "openalex_evidence", "x", ""), ("p", None, "", "geen skill")])
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    n1 = len(ledger.get(pid).get("log", []))
-    inh._execute_checklist(ledger.get(pid), TODAY)                    # tweede puls zelfde dag
-    assert len(ledger.get(pid).get("log", [])) == n1                  # geen dubbele notes
 
 
-# f. skill-fout → item open + reden zichtbaar, geen stille skip
-def test_f_skill_fout_item_open_met_reden(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert inh._project_checklist(p)["items"][0]["done"] is False     # blijft open
-    logtxt = " ".join(e["text"] for e in p.get("log", []))
-    assert "niet gelukt" in logtxt                                    # reden in de note, geen stille skip
 
 
 # h. ledger: fail-teller optellen en resetten
@@ -174,95 +82,14 @@ def test_h_note_en_reset_item_fails(tmp_path, ledger):
     assert (ledger.get(pid)["checklists"][0]["items"][0].get("fails") or 0) == 0
 
 
-# i. vastgelopen item → na de retry-grens naar WAITING met een concrete hulpvraag (niet eeuwig ACTIEF)
-def test_i_vastgelopen_na_grens_naar_waiting(tmp_path, ledger, monkeypatch):
-    import nooch_village.llm as llm
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: "Kan iemand een alternatieve bron voor 'boom' aandragen?")
-    inh = _inhabitant(tmp_path, ledger)
-    inh.context.settings["item_fail_limit"] = "3"
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
-    events = []
-    inh.bus.subscribe("project_stuck", lambda e: events.append(e.data))
-
-    for day in ("2026-07-08", "2026-07-09"):                       # 2 pogingen < grens 3
-        inh._execute_checklist(ledger.get(pid), day)
-    p = ledger.get(pid)
-    assert p["status"] == "running" and p["checklists"][0]["items"][0]["fails"] == 2
-
-    inh._execute_checklist(ledger.get(pid), "2026-07-10")          # 3e poging → grens geraakt → WAITING
-    p = ledger.get(pid)
-    assert p["status"] == "blocked" and "wacht op antwoord" in (p.get("blocked_on") or "")
-    assert p["checklists"][0]["items"][0]["fails"] == 0            # gereset → verse pogingen na reactivering
-    assert events and events[-1]["vraag"] and events[-1]["items"] == 1
-    logtxt = " ".join(e["text"] for e in p.get("log", []))
-    assert "⏸️" in logtxt and "alternatieve bron" in logtxt        # de concrete hulpvraag staat op de wall
 
 
-# j. grens 0 zet de klep uit → eeuwig herproberen (ongewijzigd oud gedrag)
-def test_j_grens_nul_zet_klep_uit(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    inh.context.settings["item_fail_limit"] = "0"
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
-    for day in ("2026-07-08", "2026-07-09", "2026-07-10"):
-        inh._execute_checklist(ledger.get(pid), day)
-    assert ledger.get(pid)["status"] == "running"                 # nooit geblokkeerd, blijft ACTIEF
 
 
-# g. skill uitgevoerd maar leeg → item AF (no-data is een uitkomst), 📭 op de wall zodat de mens kan
-#    beoordelen of het project klaar is (De Kroniek B3: leeg is een feit, geen mislukking).
-def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    _prep(ledger, pid, [("leeg-item", "openalex_evidence", "leeg", "")])
-    inh._execute_checklist(ledger.get(pid), TODAY)
-    p = ledger.get(pid)
-    assert inh._project_checklist(p)["items"][0]["done"] is True      # leeg = uitgevoerd → afgevinkt
-    logtxt = " ".join(e["text"] for e in p.get("log", []))
-    # De skill zei zélf `no_data` → dat is een gerapporteerde uitkomst, geen kennisgat. De wall
-    # zegt dat nu ook zo; '📭' blijft het merk voor gemeld-leeg (🕳 is het merk voor een echt gat).
-    assert "📭" in logtxt and "reported, nothing found" in logtxt
-    assert "niet gelukt" not in logtxt                               # geen ⚠️: het is geen mislukking
 
 
-# ── fix-brief: active-without-checklist herstel + zichtbare founder-escalatie ──
-
-def test_tend_prepareert_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
-    """Root cause: een project dat ACTIEF werd zonder voorbereide checklist zat permanent stil
-    (prepare_project weigerde niet-future). De tend bereidt het nu alsnog voor.
-
-    Sinds scope 4 stopt het dáár: het verse plan is een voorstel en wacht op een mens. Zodra het
-    akkoord er is voert dezelfde tend het uit — zie tests/test_plan_is_voorstel.py."""
-    import nooch_village.llm as llm
-    plan = ('{"deliverable":"dossier","items":['
-            '{"text":"studies","skill":"openalex_evidence","query":"barefoot","reason":""}]}')
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
-    inh = _inhabitant(tmp_path, ledger)
-    # simuleer een bord-drag: project staat 'running' zonder checklist
-    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="running")
-    ledger.start(pid)
-    assert ledger.get(pid)["status"] == "running" and inh._project_checklist(ledger.get(pid)) is None
-    inh._tend_projects(None)                                   # de dagelijkse verzorging
-    cl = inh._project_checklist(ledger.get(pid))
-    assert cl is not None and cl["items"][0]["done"] is False  # voorbereid, nog niet uitgevoerd
-    ledger.plan_akkoord(pid, cl["id"], door="stefan")          # de mens zegt ga maar doen
-    inh._tend_projects(None)
-    assert inh._project_checklist(ledger.get(pid))["items"][0]["done"] is True
 
 
-def test_prepare_project_verruimd_voor_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
-    import nooch_village.llm as llm
-    plan = '{"deliverable":"x","items":[{"text":"t","skill":"openalex_evidence","query":"q","reason":""}]}'
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
-    inh = _inhabitant(tmp_path, ledger)
-    pid = ledger.create("harry_hemp", "doel", "human", status="running")
-    ledger.start(pid)                                          # → running, geen checklist
-    inh.prepare_project(pid)
-    assert inh._project_checklist(ledger.get(pid)) is not None
-    # idempotent: mét checklist doet prepare niets (geen tweede checklist)
-    inh.prepare_project(pid)
-    assert len(ledger.get(pid).get("checklists", [])) == 1
 
 
 def test_means_gap_escaleert_zichtbaar_naar_founder(tmp_path):

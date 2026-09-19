@@ -19,32 +19,6 @@ def _slug(text: str) -> str:
     return s[:60] or "ref"
 
 
-def add_reference(notes, claim: str, grounds: str,
-                  *, source: str = "cockpit", tags=None) -> dict:
-    """Capture-info-rail (Add Reference): leg een feit vast als kennis-kaart. Loopt via
-    de curator-contract-poort (validate_card + finalize_card) en ingest_insights —
-    Engels/atomair/compleet, geen LLM, geen Village.
-
-    Sluit de spanning NIET: één spanning kan meerdere uitkomsten hebben (ook een project,
-    een governance-voorstel, ...). Afsluiten is een aparte, bewuste stap (mark_done).
-    Geeft {ok, card_id?}.
-    """
-    from nooch_village.curate import validate_card, finalize_card
-    from nooch_village.ingest import ingest_insights
-
-    claim = (claim or "").strip()
-    grounds = (grounds or "").strip()
-    if not claim or not grounds:
-        return {"ok": False, "error": "claim en grounds zijn allebei verplicht"}
-
-    raw = {"id": _slug(claim), "claim": claim, "grounds": grounds,
-           "tags": tags or []}
-    if not validate_card(raw):
-        return {"ok": False, "error": "kaart haalt het contract niet (id/claim/grounds)"}
-
-    card = finalize_card(raw, source=source, source_date=date.today().isoformat())
-    res = ingest_insights(notes, [card])
-    return {"ok": True, "card_id": card["id"], "added": res["added"]}
 
 
 def route_to_project(projects, owner: str, scope: str) -> dict:
@@ -62,13 +36,6 @@ def route_to_project(projects, owner: str, scope: str) -> dict:
     return {"ok": True, "pid": pid, "owner": owner}
 
 
-def remove_note(notes, note_id: str) -> dict:
-    """Verwijder een kennis-kaartje (NotesStore.remove ruimt ook inkomende links op).
-    Voor het bewust weggooien van een niet-relevant kaartje. Geeft {ok}."""
-    if not note_id:
-        return {"ok": False, "error": "geen kaart-id"}
-    ok = notes.remove(note_id)
-    return {"ok": ok, "removed": note_id} if ok else {"ok": False, "error": "kaart niet gevonden"}
 
 
 def route_to_governance(records, role_id: str, skill: str, rationale: str,
@@ -303,15 +270,7 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                                         examples_block=examples_block, agenda=agenda)
         return {"ok": True, "status": "added", "destination": "governance", "title": title,
                 "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
-    if destination == "knowledge" and notes is not None:
-        from nooch_village.insight import Insight, GroundingStatus
-        import uuid as _uuid
-        # 'info' = wat de mens zelf toevoegt (tactical: informatie geven); valt terug op de kans.
-        claim = (info or "").strip() or title
-        notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=claim,
-                          grounds=(info or wat or title), source="triage",
-                          status=GroundingStatus.UNRESOLVED, tags=["triage"]))
-        return {"ok": True, "status": "added", "destination": "knowledge", "title": title}
+    # De bestemming 'knowledge' verviel op 19 sept 2026 met de kaartjes-store.
     # project (default): dedup op scope + eigenaar, zodat 2 projecten voor verschillende rollen kunnen.
     scope = (scope_override or "").strip() or title
     owner = (owner or ctx.get("by") or "village").strip()

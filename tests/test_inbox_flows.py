@@ -411,4 +411,4 @@ def test_zonder_gegronde_match_zegt_de_band_waarom(tmp_path):
     st = _t.SimpleNamespace(records=_t.SimpleNamespace(get=lambda r: None))
     band = _triage_band(st, {"triage_vorm": "actie", "triage_grond": "geen wakkere rol met de "
                                                                     "classificatie-accountability"})
-    assert "Geen rol gevonden" in band and "classificatie-accountability" in band
+    assert "No role found" in band and "classificatie-accountability" in band

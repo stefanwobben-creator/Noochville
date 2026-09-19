@@ -33,11 +33,6 @@ from __future__ import annotations
 # straks ook in de CLI en in een eventuele samenvatting kunnen staan — één bron, zoals bij
 # `not_answered_note`. Engels, zoals de hele inhoudslaag sinds 06-09-2026.
 TYPES: dict[str, dict] = {
-    "verband": {
-        "vraag": "Link these two cards?",
-        "ja": True,
-        "wat": "writes the link between the two cards",
-    },
     "keyword": {
         "vraag": "Add this word to the library, or ban it?",
         "ja": True,
@@ -60,6 +55,16 @@ TYPES: dict[str, dict] = {
         "ja": False,
         "waarom_niet": ("approving has to pick a destination (project or knowledge) and that "
                         "field is not on this form yet"),
+    },
+    "legal_signaal": {
+        "vraag": "Read this legal signal?",
+        # GEEN JA-KNOP, en dat is geen tekortkoming. Er valt hier niets goed te keuren: het item is
+        # een leesopdracht, geen voorstel. "Ja" zou moeten betekenen dat er iets gebeurt, en het
+        # enige wat kan gebeuren is dat een mens het artikel leest en zelf besluit. Nee en later
+        # mogen altijd, dus het item is gewoon weg te werken.
+        "ja": False,
+        "waarom_niet": ("this is something to read, not something to approve — open the link and "
+                        "decide yourself"),
     },
     "suggestion": {
         "vraag": "Is this suggestion worth acting on?",

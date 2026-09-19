@@ -49,7 +49,7 @@ def test_de_klasse_is_niet_leeg():
 
 
 def test_ook_de_slapende_oppervlakken_zijn_gedekt():
-    """`noochie` slaapt en de callbar staat sinds 11 aug uit de app-shell. Ze zijn tóch gedekt:
-    een scherm dat wakker wordt, hoort de bug niet mee terug te brengen."""
+    """`noochie` slaapt. Hij is tóch gedekt: een scherm dat wakker wordt, hoort de bug niet mee
+    terug te brengen. De callbar stond hier ook — die is in fase 6 verwijderd."""
     namen = {n for n, _r, _s in _action_fetches()}
-    assert {"noochie.py", "callbar.py"} <= namen
+    assert {"noochie.py"} <= namen

@@ -39,8 +39,8 @@ class VoorstelSchrijvenSkill(Skill):
         # kapotte store → leeg blok, prompt ongewijzigd.
         grond = ""
         try:
-            from nooch_village.kennis_context import kennis_blok, kennis_voor
-            grond = kennis_blok(kennis_voor(getattr(context, "data_dir", None) or "", tension))
+            from nooch_village import reeds_bekend
+            grond = reeds_bekend.blok(getattr(context, "data_dir", None) or "", tension)
         except Exception:                                # noqa: BLE001 — nooit een voorstel blokkeren
             grond = ""
 

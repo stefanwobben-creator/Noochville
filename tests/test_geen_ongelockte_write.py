@@ -48,22 +48,23 @@ _WHITELIST = {
     "personas.py":       (1, "(b) cockpit-concurrent (_Stores) + occasionele CLI"),
     "roloverleg.py":     (1, "(b) cockpit-concurrent (_Stores, roloverleg-agenda)"),
     "strategy_store.py": (1, "(b) cockpit-concurrent (_Stores)"),
-    "snake.py":          (1, "(b) cockpit-only game-scores (triviaal)"),
     # ── (c) alleen daemon, single-writer (puls/collector/skills) — laag risico ──
     "lexicon.py":        (1, "single-writer: seed + Librarian-daemon"),
     "monitoring.py":     (1, "single-writer: alleen de daemon"),
     "competitor_brands.py":     (1, "single-writer: alleen de daemon"),
-    "competitor_news_store.py": (1, "single-writer: alleen de daemon"),
     "deadsource.py":     (1, "single-writer: alleen de daemon"),
-    "link_targets.py":   (1, "single-writer: alleen de daemon"),
     "seed_surge_store.py": (1, "single-writer: alleen de daemon"),
     "keyword_scheduler.py": (1, "single-writer: alleen een daemon-skill"),
     "skills_impl/claims_site_scan.py": (1, "daemon-lokaal: weekmarker van de compliance-scan, één schrijver"),
     "deliverable_store.py": (1, "write-once sidecar per deliverable (data/deliverables/<id>.json); "
                                "lock-vrij want elk id is uniek — NIET de index, die loopt via JsonStore._save"),
     # ── daemon-lokaal: per-thread/single-writer state, geen gedeelde store ──
-    "inhabitant.py":     (5, "daemon-lokaal: per-rol-thread reflect-/goal-state (eigen bestand per rol)"),
-    "roles.py":          (3, "daemon-lokaal: per-rol single-writer state (seed; +trend_reindex_last_day)"),
+    # `inhabitant.py` stond hier op 5 (per-rol reflect-/goal-state). Die vijf schrijvers zaten
+    # allemaal in de projectuitvoering en de sensing-cluster, weg op 19 sept 2026 (BLOK A).
+    # De regel is verwijderd in plaats van op 0 gezet: een plafond van nul is geen schuld.
+    "roles.py":          (1, "daemon-lokaal: per-rol single-writer state (seed). Stond op 3; de twee "
+                             "andere schrijvers zaten in HarryHemp en WebsiteWatcherWorker, en die "
+                             "klassen zijn op 19 sept 2026 verwijderd"),
     "dagcyclus.py":      (1, "infra single-writer: timekeeper_last_day.json — één klok-thread, "
                              "verhuisd uit roles.py toen de cadans uit de facilitator kwam"),
     "village.py":        (1, "daemon single-writer: role_status.json (cockpit leest read-only)"),
@@ -75,8 +76,6 @@ _WHITELIST = {
     # plaats van stil door te gaan, is precies waarvoor `test_whitelist_is_actueel` bestaat.
     "feedback.py":       (1, "dormant: legacy cockpit1"),
     "governance_examples.py": (1, "dormant: legacy cockpit1 + handmatige CLI"),
-    "link_suggest.py":   (1, "dormant: legacy cockpit1"),
-    "news_distill.py":   (1, "dormant: legacy cockpit1"),
     "pinboard.py":       (1, "dormant: demo-only (discovery_board)"),
     "cli.py":            (1, "eenmalig CLI-commando (shopify_metrics), geen concurrency-store"),
 }
