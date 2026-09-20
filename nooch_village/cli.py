@@ -31,6 +31,15 @@ def main() -> None:
         demo()
 
 
+    elif mode == "radar_archief":
+        # Pijplijn stap 6: de wachtrij leeghalen zonder de geschiedenis weg te gooien.
+        # Droge run standaard; pas met --apply wordt er geschreven.
+        import os
+        from nooch_village import radar_archief
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        radar_archief.rapport(ctx.data_dir, apply="--apply" in sys.argv[2:])
+
     elif mode == "weekmemo":
         # De weekmemo met de hand: standaard een DROGE RUN (toon de memo, bezorg niets, onthoud
         # niets), pas met --doen echt versturen. Zelfde werkafspraak als elk script dat data

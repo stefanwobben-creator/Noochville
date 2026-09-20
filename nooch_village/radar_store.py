@@ -16,7 +16,13 @@ import uuid
 
 from nooch_village.util import JsonStore
 
-_STATUSES = ("wacht", "goedgekeurd", "afgewezen", "samengevoegd")
+#: `gearchiveerd` is de vijfde en hij is van een andere ORDE dan de vier ervoor. Die vier zijn een
+#: menselijk OORDEEL over het signaal (goedgekeurd, afgewezen, samengevoegd) of het ontbreken
+#: daarvan (wacht). Archiveren zegt niets over het signaal — het zegt: we stoppen met erom vragen.
+#: Toegevoegd op 20 september 2026 (pijplijn stap 6) om 339 wachtende items uit de wachtrij te
+#: halen zonder ze weg te gooien: de 304 goedgekeurde en 295 afgewezen items zijn het
+#: referentiemateriaal waar de adapters op terugkijken, en een leeggemaakte bak zou dat opeten.
+_STATUSES = ("wacht", "goedgekeurd", "afgewezen", "samengevoegd", "gearchiveerd")
 
 
 def _radar_default() -> dict:
