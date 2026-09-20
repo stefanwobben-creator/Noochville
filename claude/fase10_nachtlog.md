@@ -228,3 +228,142 @@ zijbalk-navigatie van eerder vannacht. Geen van beide stond in de vier typografi
 ze laten staan.
 
 Suite: 4.060 passed, 1 failed (de bekende), 1 xfailed.
+
+---
+
+# Punt 1 en punt 4 — inventarisatie gedaan, NIETS gebouwd
+
+Je zei: stoppen en wachten zodra ik hier kom, want beide vragen eerst een voorstel. De briefs
+vragen zelf óók om een inventarisatie vooraf ("doe eerst een korte inventarisatie", "onderzoek
+eerst"), en dat is lezen, geen bouwen. Dus die heb ik gedaan zodat je 's ochtends meteen kunt
+beslissen. **Er is voor punt 1 en 4 geen regel code gewijzigd.**
+
+## Punt 1a — het zoek/filterveld: waarom het acuut is
+
+Gemeten op prod:
+
+```
+projecten (niet-gearchiveerd)   442      ← evenveel projectkanalen in de lijst
+  waarvan met minstens 1 bericht 385
+cirkels                          20
+cirkel- en DM-kanalen in gebruik   0      ← de laag staat sinds vannacht live
+```
+
+`views/messages.py` toont élk niet-gearchiveerd project als kanaal. Dat zijn er **442**. Dat is
+geen lijst meer, dat is een muur — je bevinding klopt en het is erger dan "onhandig".
+
+**Ik heb het veld niet gebouwd.** Je schreef eerder "bouw sowieso een zoek/filterveld", maar
+vannacht "stop zodra je bij punt 1 komt". Die twee spreken elkaar tegen en ik ga daar niet zelf
+tussen kiezen. Het is een klein, geïsoleerd stuk en kan er in één beurt in zodra je ja zegt.
+
+## Punt 1b — een vierde kanaalsoort: het voorstel
+
+**Wat er nu staat.** Drie soorten, één vorm. Het kanaal-id is `soort:doel`, en `doel` is altijd
+het id van iets dat al bestaat:
+
+| soort | id | opslag |
+|---|---|---|
+| `project` | `project:<pid>` | `ProjectLedger`, in `project["log"]` — 442 bestaande gesprekken |
+| `circle` | `circle:<record_id>` | `data/channels.json` |
+| `dm` | `dm:<a>\|<b>`, id's gesorteerd | `data/channels.json` |
+
+Eén `ChannelStore` met twee achterkanten. `soort_van()` en `doel_van()` splitsen op de dubbele
+punt; verder weet niemand welk soort hij aanspreekt.
+
+**Wat een vierde soort breekt.** Alle drie de bestaande soorten *lenen* hun identiteit van iets
+dat al bestaat. Een los kanaal heeft geen ouder — het is het eerste kanaal dat iemand moet
+**aanmaken**, en dat bestaat nu nergens in het model. Drie vragen volgen daaruit:
+
+**1. Waar komt het id vandaan?**
+
+- **A — `topic:<id>` met een aparte namenlijst** (`data/channels.json` krijgt `"namen": {id: naam}`).
+  Hernoemen raakt de trail niet, twee mensen kunnen niet per ongeluk hetzelfde kanaal maken onder
+  een andere schrijfwijze. *Mijn voorkeur*, en om dezelfde reden waarom de DM-id gesorteerd is:
+  identiteit mag niet aan een weergavestring hangen.
+- **B — `topic:<slug>`, de naam ís het id.** Simpeler te lezen in een logregel, maar hernoemen
+  verliest het gesprek en "Batch 4" / "batch-4" / "Batch-4" worden drie kanalen.
+
+**2. Wie mag er een aanmaken?** Nu maakt niemand een kanaal: het bestaat omdat zijn onderwerp
+bestaat. Drie opties: iedereen-ingelogd (zoals `_claims_gate` sinds fase 5), circle-member, of
+Circle Lead. Het is een nieuwe dispatch-tak, dus CLAUDE.md eist hier sowieso een expliciet
+AUTHZ-label.
+
+**3. Dit draait een besluit van vier dagen terug om.** Bij fase 8 zei je letterlijk: *"Cirkelkanalen:
+één per bestaande cirkel. Geen vrije onderwerp-kanalen zoals #batch-4."* Punt 1 vraagt nu precies
+dat. Prima om van gedachten te veranderen — maar het hoort als correctie benoemd te worden en niet
+stilzwijgend gebouwd, zoals je zelf bij de 338 notificaties zei.
+
+**Verder nog:** `views/messages.py` groepeert nu in drie kopjes; er komt een vierde bij. En
+`kanalen_van()` kent alleen DM's — voor losse kanalen is er geen "waar zit ik in", dus of iedereen
+ziet alles, of er komt een lidmaatschap-begrip bij. Dat laatste is een tweede nieuw datamodel-begrip
+en daar zou ik in deze ronde vanaf blijven.
+
+## Punt 4 — het edit-formulier, zoals het nu werkt
+
+**Het formulier** (`views/overview.py::_artefact_edit_form`): een `<details class='qadd'>` met
+summary "edit", die openklapt naar een `<form method='post' action='/action'>`. Velden:
+
+| veld | soort | opmerking |
+|---|---|---|
+| `csrf` | hidden | |
+| `aid` | hidden | het artefact-id |
+| `next` | hidden | waar je na opslaan landt; `/pagina` geeft zijn eigen permalink mee |
+| `title` | tekst | |
+| `body` | `md_editor()` | de markdown-editor |
+| `url` | url | **alleen** als `kind == "tool"` |
+
+Eén knop `Save` (`name=action value=artefact_edit`) en een ✕ die de `<details>` dichtklapt.
+
+**Het opslaan** (`cockpit2._act_artefact_edit`): haalt het artefact op, draait **`_artefact_gate`
+vóór de mutatie** (rolvervuller of Circle Lead; weigering = `Forbidden`), controleert de
+bodylengte, en roept dan `st.att.update(...)` aan met `actor_id`, `actor_type="person"`,
+`governance_ref` (`domain:<x>` als het artefact een domein heeft, anders `role:<anchor>`) en
+`change_note="bewerkt"`. Daarna `artefacts.log_change(action="edit", ...)`.
+
+Belangrijk detail: `update()` schrijft alleen wat je meegeeft — `title=(g("title") if "title" in
+form else None)`. Een veld dat niet in het formulier zit, blijft ongemoeid. Dat is precies wat
+inline bewerken nodig heeft: je kunt per veld opslaan zonder de rest te overschrijven.
+
+**Wat je zei te behouden, en waar het zit:**
+- dezelfde rechtencheck → `_artefact_gate(cur.anchor, username, st)`, ongewijzigd hergebruiken
+- dezelfde version/change_note-opslag → `AttachmentStore.update` voegt een versie-entry toe met
+  `change_note`; die moet dus blijven lopen via `update()` en niet via `set_meta()` (dat schrijft
+  bewust zónder versie)
+
+**De echte ontwerpvraag** is niet de techniek maar de change_note. Nu is er één opslagmoment per
+bewerking en dus één versie-entry `"bewerkt"`. Bij inline bewerken per veld krijg je drie
+versie-entries voor wat de gebruiker als één wijziging ervaart. Opties: per veld een eigen
+change_note (`"titel bewerkt"`), of debouncen tot één entry per sessie. Dat moet je beslissen
+vóórdat er 442 pagina's met een rommelige historie staan.
+
+---
+
+# Slot
+
+**Niets gedeployed, niets gemerged.** Prod draait nog op `8ab787a`. Alle werk staat op
+`fase1-dode-rolklassen`, niet gepusht.
+
+## Wat er vannacht af is
+
+| commit | wat |
+|---|---|
+| `7fa8492` | groep A — `projects.py` 102 → 8 |
+| `3843cb2` | groep A — `inbox.py` 50 → 0 |
+| `0d305a3` | groep A — `wizard.py`, `search.py`, `overview.py` → 0 |
+| `5703b70` | groep B — `/middelen`, `/rolefillers`, `/site-audit` in de scope |
+| `3cda4fe` | groep C — `roloverleg.py` 33 → 1, `werkoverleg.py` 13 → 0 |
+| `506f9d6` | punt 3 — de dubbele organisatieboom weg |
+
+Van **491** open klasse-gebruiken naar **9**, en die negen zijn vorm en geen kleur.
+Suite: 4.060 passed, 1 failed (de bekende `test_plausible_zonder_sleutel`), 1 xfailed.
+
+## Drie dingen waar ik je antwoord op wil
+
+1. **De zijbalk op node-pagina's is niet letterlijk ongewijzigd** (punt 3). Functionaliteit
+   behouden of de zijbalk met rust laten — één regel verschil.
+2. **Het zoek/filterveld in Messages**: "bouw sowieso" van eerder tegen "stop bij punt 1" van
+   vannacht. 442 kanalen in die lijst, dus het is urgent.
+3. **Hoofdletters in de navigatie en de tabs.** De zijbalk (`Projects`, `Messages`, …) en de
+   tabbladen (`Overview`, `Roles`, …) staan in onderkast terwijl de knoppen ernaast wél
+   hoofdletters dragen. De referentie heeft `SHOP STORE MISSION CONTACT` in hoofdletters. Viel
+   buiten de vier punten, dus ik heb het laten staan.
