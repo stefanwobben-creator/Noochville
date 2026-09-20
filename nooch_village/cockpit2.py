@@ -370,32 +370,6 @@ def _owner_ai(st: _Stores, orec):
     return None
 
 
-def _inbox_items(st: _Stores, targets) -> list:
-    """De wachtrij van deze mens, gelezen uit de KANALEN (fase 10, stap 2 van de inbox-migratie).
-
-    Twee bronnen, en dat is tijdelijk:
-      * ROL-doelen komen uit `role:<id>`-kanalen. Daar staat de migratie.
-      * PERSOON-doelen komen nog uit `NotifStore`: die 33 items zijn bewust niet gemigreerd, want
-        Stefans besluit gaat over rollen en een `person:`-kanaalsoort erbij verzinnen zou een
-        tweede datamodel-begrip zijn dat niemand heeft gevraagd.
-
-    `hersync` draait vlak vóór het lezen, niet bij elke schrijfactie. Zolang `NotifStore` de
-    schrijver is (tot stap 3) staat hetzelfde feit op twee plekken; deze volgorde zorgt dat er
-    nooit uit een verouderde kopie gelezen wordt, in plaats van dat elke schrijf-tak eraan moet
-    denken zichzelf te spiegelen. Eén plek die het bij elkaar houdt, niet dertien.
-    """
-    from nooch_village import notif_migratie
-    try:
-        notif_migratie.hersync(st.notif, st.channels)
-        uit = notif_migratie.open_uit_kanalen(st.channels, targets)
-    except Exception:
-        # Fail-open naar de OUDE bron. Een lege inbox is hier het gevaarlijke antwoord: dan denkt
-        # iemand dat er geen werk ligt. Liever de bron die sinds juni werkt dan een stil scherm.
-        logging.getLogger("cockpit2.inbox").exception("kanaal-inbox faalde — terug naar NotifStore")
-        return st.notif.open_for_targets(targets)
-    uit += st.notif.open_for_targets([(t, i) for t, i in targets if t == "person"])
-    return sorted(uit, key=lambda n: -(n.get("at") or 0))
-
 
 def _person_targets(st: _Stores, username: str) -> list:
     """De inbox-doelen van de ingelogde mens: hemzelf als persoon ÉN elke rol die hij vervult. Zo bundelt
@@ -1341,6 +1315,13 @@ def _act_msg_post(c):
         return nxt, "✗ log in as a person to write — a message needs an author"
     if channels.soort_van(kanaal) == channels.DM and ik not in channels.dm_leden(kanaal):
         return nxt, "✗ that conversation is not yours"
+    # DE POORT STAAT OOK SERVER-SIDE, niet alleen als ontbrekend invoerveld. Een DM waarvan de
+    # tegenpartij een rol- of systeemnaam is (alle gemigreerde inbox-berichten) leest niemand; een
+    # bericht daarheen is een dead letter. Het scherm toont er geen veld, en deze regel zorgt dat
+    # een handmatige POST er ook niet langs komt.
+    from nooch_village.views.messages import kan_antwoorden
+    if not kan_antwoorden(st, kanaal, ik):
+        return nxt, "✗ nobody reads that channel — start a project or write to a person"
     entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
     return nxt, ("💬 posted" if entry else "✗ a message needs text")
 
@@ -5738,20 +5719,18 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/inbox":
                 # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
                 tgts = _person_targets(st, username)
-                _items = _inbox_items(st, tgts)          # stap 2: rol-helft uit de kanalen
                 # chrome=False: de drawer wordt door _send geïnjecteerd op ANDERE pagina's; deze route IS
                 # de drawer-inhoud (fragment) of de standalone-fallback, dus geen drawer-in-drawer.
                 if (qs.get("frag") or [""])[0]:
-                    self._send(render_inbox_frag(st, tgts, csrf_token=effective_csrf,
-                                                 items=_items), chrome=False)
+                    self._send(render_inbox_frag(st, tgts, csrf_token=effective_csrf), chrome=False)
                     return
                 nm = ""
                 if username and username != "guest":
                     _p = st.people.by_email(username)
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
-                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done,
-                                        items=_items), chrome=False)
+                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done),
+                           chrome=False)
                 return
             if path == "/search":
                 # Globale zoekopdracht vanuit de header: roles, projects, insights, signals.

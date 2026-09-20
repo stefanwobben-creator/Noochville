@@ -1,13 +1,17 @@
-"""Stap 1 van de inbox-migratie: de rol-notificaties als bericht in het kanaal van hun ROL.
+"""De inbox wordt DM — stap A: elke notificatie als bericht bij de mens die hem aangaat.
 
-Wat hier bewaakt wordt is niet dat er berichten verschijnen — dat is het makkelijke deel. Het is
-de **harde eis**: de verwerkingsstate moet letterlijk meekomen. 185 vastgelegde uitkomsten en 54
-poort-oordelen op productie zijn oordelen van een mens; een migratie die daar een afgeleid
-statusveld van maakt, gooit ze weg zonder dat iemand het ziet.
+Dit vervangt het eerdere ontwerp met `role:<id>` en een `verwerking`-blok. Stefan trok die eis op
+20 september in: *"alles wat tot dusver in de inbox is gekomen kon ik niet echt veel mee, dus dat
+werkte sowieso niet, dus ook niet om te houden."* Er gaat dus géén state mee — en precies daarom
+staat hieronder een test die dat vastlegt, want "we bewaren niets" is een besluit en geen
+vergetelheid.
 
-En één eigenschap die de hele vormkeuze draagt: er wordt **niets naar een mens vertaald**. Een
-gearchiveerde rol houdt gewoon zijn kanaal, dus voor de negentien open items op opgeheven rollen
-hoeft niemand aangewezen te worden.
+Twee dingen dragen het ontwerp en hebben elk hun eigen test:
+
+1. **`target_type` routeert, niet `entry_id`.** Die twee verzamelingen raken elkaar nauwelijks: op
+   prod zijn er 33 persoon-gerichte rijen waarvan er 3 een `entry_id` dragen, en 24 rijen mét
+   `entry_id` waarvan er 21 rol-gericht zijn.
+2. **Een rol met twee vervullers wordt NIET geraden.** Die rijen worden geparkeerd en gemeld.
 """
 from __future__ import annotations
 
@@ -15,10 +19,10 @@ import tempfile
 
 import pytest
 
-from nooch_village import channels, cockpit2, notif_migratie
+from nooch_village import channels, cockpit2, notif_migratie as nm
 
-LEVEND = "mother_earth__nooch__compliance"
-OPGEHEVEN = "librarian"          # bestaat op prod alleen nog als gearchiveerd record
+LEVEND = "mother_earth__nooch__creator_of_shoes"
+OPGEHEVEN = "librarian"
 
 
 @pytest.fixture()
@@ -26,188 +30,160 @@ def dorp():
     dd = tempfile.mkdtemp()
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-
-    rijk = st.notif.add("role", LEVEND, "p1", snippet="claim 'natural' toetsen", by="claims-checker")
-    st.notif.add_outcome(rijk["id"], intent="opgelost", label="herformuleerd")
-    st.notif.mark_item_processed(rijk["id"], outcome="herformuleerd naar 'plantaardig'")
-    st.notif.set_poort(rijk["id"], {"oordeel": "G2", "reden": "accountability-duplicaat"})
-
-    st.notif.add("role", OPGEHEVEN, "p2", snippet="oud werk zonder eigenaar", by="harry_hemp")
-    st.notif.add("person", "iemand", "p3", snippet="voor een mens", by="dialoog")
+    st.mens = st.people.add("Een Mens", "een@test.nl")
+    st.tweede = st.people.add("Twee Mens", "twee@test.nl")
+    st.founder = st.people.add("De Founder", "founder@test.nl")
+    # DE BOOTSTRAP ZET AL VERVULLERS NEER. Zonder deze opschoning heeft `creator_of_shoes` er twee
+    # zodra de test er een bij zet, en dan meet je de bootstrap in plaats van de routering.
+    for rol in (LEVEND, OPGEHEVEN, nm.TERUGVAL_ROL):
+        rec = st.records.get(rol)
+        for f in list(st.assign.fillers_of(rol, rec)) if rec else []:
+            st.assign.unassign(rol, f.type, f.id)
+    st.assign.assign(LEVEND, "person", st.mens.id)
+    st.assign.assign(nm.TERUGVAL_ROL, "person", st.founder.id)
     return st
 
 
-def _entries(st, rol):
-    return st.channels.trail(channels.role_kanaal(rol), limit=1000)
+# ── routering ────────────────────────────────────────────────────────────────
 
-
-# ── de harde eis ─────────────────────────────────────────────────────────────
-
-def test_de_verwerkingsstate_komt_letterlijk_mee(dorp):
+def test_een_persoon_gericht_item_gaat_naar_die_persoon(dorp):
     st = dorp
-    bron = next(n for n in st.notif.all() if n.get("target_id") == LEVEND)
-    notif_migratie.migreer(st.notif, st.channels, apply=True)
-    e = next(x for x in _entries(st, LEVEND) if x["id"] == bron["id"])
-    for veld in channels.VERWERKING_VELDEN:
-        if veld in bron:
-            assert e["verwerking"][veld] == bron[veld], veld
-    assert e["verwerking"]["outcome"] and e["verwerking"]["poort"]
-    assert e["verwerking"]["verwerkingen"]        # de gestapelde uitkomsten, niet platgeslagen
+    n = st.notif.add("person", st.tweede.id, "p1", snippet="voor jou", by="dialoog")
+    ontvanger, reden = nm.ontvanger_van(st, n)
+    assert ontvanger == st.tweede.id and reden == nm.NAAR_PERSOON
 
 
-def test_de_telling_voor_en_na_is_de_guard(dorp):
-    """De migratie levert zijn eigen bewijs mee. Een migratie die dat niet doet, is een bewering."""
+def test_een_rol_met_een_vervuller_gaat_naar_die_vervuller(dorp):
     st = dorp
-    r = notif_migratie.migreer(st.notif, st.channels, apply=True)
-    assert r["klopt"] is True
-    assert r["voor"] == r["na"]
-    assert r["na_berichten"] == r["rol_rijen"]
+    n = st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
+    assert nm.ontvanger_van(st, n) == (st.mens.id, nm.NAAR_VERVULLER)
 
 
-def test_een_wegvallend_oordeel_laat_de_guard_omvallen(dorp):
-    """Zou de guard altijd True zeggen, dan bewaakt hij niets. Hier wordt hij bewust gebroken."""
+def test_een_rol_zonder_vervuller_valt_terug_op_de_founder(dorp):
+    """Ook als de rol gearchiveerd is. Op prod dragen `noochville__circle_lead` (49 rijen) en
+    `the_source` (36) nog wél een vervuller; dáár volgt de routering de vervulling. 85 berichten
+    mogen niet van de volgorde van twee checks afhangen."""
     st = dorp
-    notif_migratie.migreer(st.notif, st.channels, apply=True)
-    kanaal = channels.role_kanaal(LEVEND)
-    for e in st.channels._data["kanalen"][kanaal]:
-        e.get("verwerking", {}).pop("poort", None)
-    # WEGSCHRIJVEN is hier nodig, en dat is zelf een bevinding: elke schrijfmethode van
-    # `ChannelStore` herlaadt onder het slot (`JsonStore._WRITE_METHODS`), dus een mutatie die
-    # alleen in het geheugen staat wordt bij de volgende schrijfactie gewoon weggegooid. Prettige
-    # eigenschap — maar een test die dat niet weet, toetst niets.
-    st.channels._save()
-    r = notif_migratie.migreer(st.notif, st.channels, apply=True)
-    assert r["klopt"] is False and r["na"]["poort"] < r["voor"]["poort"]
+    n = st.notif.add("role", OPGEHEVEN, "p1", snippet="oud werk", by="harry_hemp")
+    assert nm.ontvanger_van(st, n) == (st.founder.id, nm.NAAR_TERUGVAL)
 
 
-# ── de vormkeuze ─────────────────────────────────────────────────────────────
-
-def test_er_wordt_niets_naar_een_mens_vertaald(dorp):
-    """Het kanaal is dat van de ROL. Een opgeheven rol zonder mens-vervuller migreert gewoon mee."""
+def test_een_rol_met_twee_vervullers_wordt_niet_geraden(dorp):
+    """Naar beiden is dubbel, naar de eerste is willekeur, naar de founder is een aanname. Parkeren."""
     st = dorp
-    notif_migratie.migreer(st.notif, st.channels, apply=True)
-    e = _entries(st, OPGEHEVEN)
-    assert len(e) == 1
-    assert channels.soort_van(channels.role_kanaal(OPGEHEVEN)) == channels.ROLE
-    # open blijft open: niemand heeft het gesloten en niemand kan dat namens de rol doen
-    assert not e[0]["verwerking"].get("done") and not e[0]["verwerking"].get("archived")
+    st.assign.assign(LEVEND, "person", st.tweede.id)          # nu twee mensen
+    n = st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
+    ontvanger, reden = nm.ontvanger_van(st, n)
+    assert ontvanger == "" and reden == nm.MEERDERE
+    r = nm.migreer(st.notif, st, apply=True)
+    assert r["geparkeerd"] == 1 and r["geparkeerde_rollen"][f"role:{LEVEND}"] == 1
+    assert r["klopt"] is True                                  # geparkeerd telt gewoon mee
 
 
-def test_persoon_gerichte_items_blijven_liggen(dorp):
-    """Stefans besluit gaat over rollen. Een `person:`-kanaalsoort erbij verzinnen zou een tweede
-    datamodel-begrip zijn dat niemand heeft gevraagd — ze worden geteld, niet aangeraakt."""
+def test_entry_id_speelt_geen_rol_in_de_routering(dorp):
+    """De opdracht routeerde op `entry_id`; dat bleek een andere verzameling dan bedoeld."""
     st = dorp
-    r = notif_migratie.migreer(st.notif, st.channels, apply=True)
-    assert r["persoon_rijen"] == 1
-    assert not [k for k in st.channels.bestaande() if channels.soort_van(k) == channels.ROLE
-                and channels.doel_van(k) == "iemand"]
+    met = st.notif.add("role", LEVEND, "p1", entry_id="abc123", snippet="met", by="x")
+    zonder = st.notif.add("role", LEVEND, "p1", snippet="zonder", by="x")
+    assert nm.ontvanger_van(st, met)[0] == nm.ontvanger_van(st, zonder)[0] == st.mens.id
 
 
-def test_de_volgorde_en_het_tijdstip_blijven_van_de_notificatie(dorp):
-    """`at` van de klok nemen zet drie maanden gesprek op de dag van de migratie."""
+# ── het bericht ──────────────────────────────────────────────────────────────
+
+def test_er_gaat_geen_verwerkingsstate_mee(dorp):
+    """Een besluit, geen vergetelheid: Stefan trok de eis in omdat de inbox niet werkte."""
     st = dorp
-    bron = {n["id"]: n["at"] for n in st.notif.all() if n.get("target_type") == "role"}
-    notif_migratie.migreer(st.notif, st.channels, apply=True)
-    for rol in (LEVEND, OPGEHEVEN):
-        for e in _entries(st, rol):
-            assert e["at"] == bron[e["id"]]
+    n = st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
+    st.notif.mark_item_processed(n["id"], outcome="afgehandeld")
+    nm.migreer(st.notif, st, apply=True)
+    kanaal = channels.dm_kanaal("claims-checker", st.mens.id)
+    e = st.channels.trail(kanaal)[0]
+    assert "verwerking" not in e
+    assert set(e) == {"id", "kind", "author", "text", "at"}
 
 
-# ── stap 1 verwijdert niets ──────────────────────────────────────────────────
-
-def test_notifstore_blijft_volledig_intact(dorp):
-    """Stap 1 van drie: schrijven naast NotifStore. Verwijderen is stap 3."""
+def test_id_en_tijdstip_komen_uit_de_notificatie(dorp):
+    """Twee keuzes die uit het vorige ontwerp overeind blijven: `at` van de klok nemen zet drie
+    maanden gesprek op de dag van de migratie, en het id maakt de migratie idempotent."""
     st = dorp
-    voor = len(st.notif.all())
-    notif_migratie.migreer(st.notif, st.channels, apply=True)
-    assert len(st.notif.all()) == voor
+    n = st.notif.add("role", LEVEND, "p1", snippet="iets", by="x")
+    nm.migreer(st.notif, st, apply=True)
+    e = st.channels.trail(channels.dm_kanaal("x", st.mens.id))[0]
+    assert e["id"] == n["id"] and e["at"] == n["at"]
 
 
-def test_de_migratie_is_idempotent(dorp):
+def test_de_migratie_is_idempotent_en_verantwoordt_alles(dorp):
     st = dorp
-    eerste = notif_migratie.migreer(st.notif, st.channels, apply=True)
-    tweede = notif_migratie.migreer(st.notif, st.channels, apply=True)
-    assert eerste["geschreven"] == 2 and tweede["geschreven"] == 0
-    assert tweede["bestond_al"] == 2 and tweede["klopt"] is True
+    for i in range(3):
+        st.notif.add("role", LEVEND, "p1", snippet=f"item {i}", by="claims-checker")
+    st.notif.add("person", st.tweede.id, "p1", snippet="voor jou", by="dialoog")
+    eerste = nm.migreer(st.notif, st, apply=True)
+    tweede = nm.migreer(st.notif, st, apply=True)
+    assert eerste["geschreven"] == 4 and tweede["geschreven"] == 0
+    assert tweede["bestond_al"] == 4
+    assert eerste["klopt"] and tweede["klopt"]
 
 
 def test_droogloop_schrijft_niets(dorp):
     st = dorp
-    r = notif_migratie.migreer(st.notif, st.channels, apply=False)
-    assert r["geschreven"] == 2
-    assert _entries(st, LEVEND) == []
+    st.notif.add("role", LEVEND, "p1", snippet="iets", by="x")
+    r = nm.migreer(st.notif, st, apply=False)
+    assert r["geschreven"] == 1 and "klopt" not in r
+    assert "droogloop" in nm.rapport_tekst(r)
+    assert st.channels.bestaande() == []
 
 
-def test_een_droogloop_rapporteert_geen_vergelijking(dorp):
-    """De eerste versie printte bij een droogloop ook de ná-kolom, en die stond op nul: acht regels
-    "← WIJKT AF" met eronder "✓ tellingen kloppen". Dat leest als van alles behalve als "er is nog
-    niets gebeurd" — dezelfde fout als een neutrale regel bij een no-op deploy."""
+def test_notifstore_blijft_intact(dorp):
+    """Stap A van twee: schrijven. Verwijderen is stap B."""
     st = dorp
-    droog = notif_migratie.rapport_tekst(notif_migratie.migreer(st.notif, st.channels, apply=False))
-    assert "WIJKT AF" not in droog and "tellingen kloppen" not in droog
-    assert "droogloop" in droog
-    echt = notif_migratie.rapport_tekst(notif_migratie.migreer(st.notif, st.channels, apply=True))
-    assert "vóór" in echt and "✓ tellingen kloppen" in echt
+    st.notif.add("role", LEVEND, "p1", snippet="iets", by="x")
+    nm.migreer(st.notif, st, apply=True)
+    assert len(st.notif.all()) == 1
 
 
-# ── stap 2: /inbox leest uit de kanalen ──────────────────────────────────────
+# ── het antwoordveld ─────────────────────────────────────────────────────────
 
-def _targets(st, rollen):
-    return [("role", r) for r in rollen]
-
-
-def test_de_kanaal_wachtrij_is_dezelfde_als_de_notifstore_wachtrij(dorp):
-    """De kern van stap 2. Zou dit uiteenlopen, dan mist iemand werk zonder dat iets het zegt."""
+def test_geen_antwoordveld_als_de_tegenpartij_geen_persoon_is(dorp):
+    """Antwoorden aan `compliance` is een dead letter: een rol leest geen berichten."""
+    from nooch_village.views.messages import kan_antwoorden, render_messages
     st = dorp
-    from nooch_village import notif_migratie as nm
-    t = _targets(st, [LEVEND, OPGEHEVEN])
-    nm.hersync(st.notif, st.channels)
-    uit_kanaal = {n["id"] for n in nm.open_uit_kanalen(st.channels, t)}
-    uit_store = {n["id"] for n in st.notif.open_for_targets(t)}
-    assert uit_kanaal == uit_store and uit_kanaal
+    st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
+    nm.migreer(st.notif, st, apply=True)
+    dood = channels.dm_kanaal("claims-checker", st.mens.id)
+    levend = channels.dm_kanaal(st.mens.id, st.tweede.id)
+    assert kan_antwoorden(st, dood, st.mens.id) is False
+    assert kan_antwoorden(st, levend, st.mens.id) is True
+    html = render_messages(st, ik=st.mens.id, kanaal=dood, csrf_token="t")
+    assert "No reply box" in html and "value='msg_post'" not in html
 
 
-def test_een_inbox_actie_landt_in_het_kanaal_zonder_sync_aanroep(dorp):
-    """`NotifStore` blijft tot stap 3 de schrijver. `hersync` draait vlak vóór het lezen, dus een
-    actie hoeft zichzelf niet te spiegelen — en kan dus ook niet vergeten dat te doen."""
+def test_de_poort_staat_ook_server_side(dorp):
+    """Het ontbrekende invoerveld is geen poort. Een handmatige POST hoort ook te stuiten."""
     st = dorp
-    from nooch_village import notif_migratie as nm
-    t = _targets(st, [LEVEND, OPGEHEVEN])
-    nm.hersync(st.notif, st.channels)
-    open_voor = len(nm.open_uit_kanalen(st.channels, t))
-    doel = st.notif.open_for_targets(t)[0]
-    # `archive_item` weigert wat nog niet verwerkt is ("alleen wat verwerkt is mag weg"), dus eerst
-    # verwerken. Dat is geen omweg in de test maar de echte volgorde op het scherm.
-    st.notif.mark_item_processed(doel["id"], outcome="afgehandeld")
-    assert st.notif.archive_item(doel["id"]) is True        # alleen NotifStore aangeraakt
-    nm.hersync(st.notif, st.channels)
-    assert len(nm.open_uit_kanalen(st.channels, t)) == open_voor - 1
+    st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
+    nm.migreer(st.notif, st, apply=True)
+    dood = channels.dm_kanaal("claims-checker", st.mens.id)
+    velden = {"kanaal": dood, "tekst": "hallo?"}
+    _nxt, msg = cockpit2.ACTIONS["msg_post"](cockpit2._Ctx(
+        st=st, g=lambda k, d="": velden.get(k, d), nxt="/messages", form=velden,
+        username=st.mens.email, action="msg_post", data_dir=""))
+    assert msg.startswith("✗") and "nobody reads" in msg
 
 
-def test_alle_velden_die_het_scherm_leest_komen_mee(dorp):
-    """De eerste versie kopieerde twaalf handgekozen velden; de view gebruikt er zeventien. Een
-    handgekozen lijst is een tweede plek waar een veld vergeten kan worden."""
+def test_het_kanaal_heet_naar_de_bron_en_niet_direct(dorp):
+    """Twintig kanalen die allemaal "direct" heten is geen lijst."""
+    from nooch_village.views.messages import _label
     st = dorp
-    from nooch_village import notif_migratie as nm
-    nodig = ("bevinding", "by", "entry_id", "herkomst", "id", "ok", "pagina", "poort",
-             "project_id", "snippet", "target_id", "target_type", "triage_grond", "triage_rol",
-             "triage_vorm", "type", "voorstel")
-    bron = next(n for n in st.notif.all() if n.get("target_id") == LEVEND)
-    bron.update({k: f"waarde-{k}" for k in nodig if k not in bron})
-    st.notif._save()
-    nm.hersync(st.notif, st.channels)
-    uit = next(n for n in nm.open_uit_kanalen(st.channels, _targets(st, [LEVEND]))
-               if n["id"] == bron["id"])
-    for k in nodig:
-        assert k in uit, k
+    kanaal = channels.dm_kanaal("claims-checker", st.mens.id)
+    assert _label(st, kanaal, st.mens.id) == "claims-checker"
 
 
-def test_de_route_valt_terug_op_notifstore_als_de_kanalen_falen(dorp, monkeypatch):
-    """Fail-OPEN, en dat is hier de juiste kant. Een lege inbox laat iemand denken dat er geen werk
-    ligt; dat is erger dan een scherm op de oude bron."""
+def test_een_kanaal_met_jezelf_heet_yourself_en_mag_antwoorden(dorp):
+    """Op prod bestaat er één: notificaties waarvan de afzender dezelfde mens is als de vervuller
+    van de doelrol — jij die je eigen rol aanspreekt. Zonder aparte regel heet dat "direct", net
+    als elk ander naamloos kanaal, en heeft het geen invoerveld terwijl het je eigen notitieblok is."""
+    from nooch_village.views.messages import _label, kan_antwoorden
     st = dorp
-    from nooch_village import notif_migratie as nm
-    monkeypatch.setattr(nm, "hersync", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk")))
-    t = _targets(st, [LEVEND, OPGEHEVEN])
-    assert {n["id"] for n in cockpit2._inbox_items(st, t)} == \
-           {n["id"] for n in st.notif.open_for_targets(t)}
+    eigen = channels.dm_kanaal(st.mens.id, st.mens.id)
+    assert _label(st, eigen, st.mens.id) == "Yourself"
+    assert kan_antwoorden(st, eigen, st.mens.id) is True

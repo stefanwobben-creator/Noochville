@@ -31,8 +31,37 @@ def _label(st, kanaal: str, ik: str = "") -> str:
         return _name(rec) if rec is not None else doel
     if soort == channels.TOPIC:
         return st.channels.naam_van(kanaal) or doel
-    ander = next((x for x in channels.dm_leden(kanaal) if x != ik), "")
-    return _person_name(st, ander) or ander or "direct"
+    leden = channels.dm_leden(kanaal)
+    # EEN KANAAL MET JEZELF BESTAAT ECHT. Op prod is er één (`dm:<stefan>|<stefan>`): notificaties
+    # waarvan de afzender dezelfde mens is als de vervuller van de doelrol — jij die je eigen rol
+    # aanspreekt. Zonder deze regel heet dat kanaal "direct", net als elk ander naamloos kanaal.
+    if leden and len(set(leden)) == 1:
+        return "Yourself"
+    ander = next((x for x in leden if x != ik), "")
+    naam = _person_name(st, ander)
+    if naam:
+        return naam
+    # De tegenpartij is geen persoon. Sinds de inbox-migratie kan dat: een gesignaleerd bericht
+    # draagt de ROL of het systeem dat het stuurde als tegenpartij. Toon dan de rolnaam, en anders
+    # de ruwe id — nooit "direct", want dan lijken twintig kanalen op elkaar.
+    rec = st.records.get(ander) if ander else None
+    return (_name(rec) if rec is not None else "") or ander or "direct"
+
+
+def kan_antwoorden(st, kanaal: str, ik: str = "") -> bool:
+    """Mag er in dit kanaal geschreven worden?
+
+    Alleen als de tegenpartij van een DM een BESTAANDE PERSOON is. Bij 333 van de 338 gemigreerde
+    inbox-berichten is de afzender een rol- of systeemnaam (`compliance`, `claims-checker`, …), en
+    die leest geen berichten. Een antwoordveld dat niets bereikt is erger dan geen antwoordveld —
+    dat is het dead-letter-patroon dat in dit dorp al eens is vastgelegd."""
+    if channels.soort_van(kanaal) != channels.DM:
+        return True
+    leden = channels.dm_leden(kanaal)
+    if leden and len(set(leden)) == 1:
+        return True          # je eigen kanaal: notities aan jezelf mogen gewoon
+    ander = next((x for x in leden if x != ik), "")
+    return bool(ander) and st.people.get(ander) is not None
 
 
 #: Hoeveel projectkanalen er ZONDER zoekterm getoond worden. Op productie staan er 442, en die
@@ -158,7 +187,11 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
     schrijf = ""
-    if kanaal and csrf_token and ik:
+    if kanaal and not kan_antwoorden(st, kanaal, ik):
+        schrijf = ("<p class='muted'>No reply box: the other side of this channel is a role, not a "
+                   "person, and a role does not read messages. Need something done? Start a "
+                   "project or write to the person who fills the role.</p>")
+    elif kanaal and csrf_token and ik:
         schrijf = (f"<form method='post' action='/action' class='qadd-form'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"

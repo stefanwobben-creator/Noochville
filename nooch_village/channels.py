@@ -50,28 +50,12 @@ import uuid
 from nooch_village.util import JsonStore
 
 #: Kanaalsoorten. De prefix staat in het id zelf, zodat een kanaal-id overal zelf-verklarend is.
-PROJECT, CIRCLE, DM, TOPIC, ROLE = "project", "circle", "dm", "topic", "role"
+PROJECT, CIRCLE, DM, TOPIC = "project", "circle", "dm", "topic"
 
 #: Berichtsoorten binnen een kanaal. Een `notificatie` is een gemigreerd inbox-item: dezelfde
 #: trail, maar met een verwerkingsgeschiedenis eronder die een gewoon bericht niet heeft.
 COMMENT, NOTIFICATIE = "comment", "notificatie"
 
-#: Wat er NIET in het `verwerking`-blok hoeft, omdat het al op het bericht zelf staat.
-#: Al het andere gaat mee — ALLES, niet een handgekozen lijst. Dat is de harde eis bij de migratie
-#: (besluit Stefan, 20 sept 2026) in zijn letterlijke vorm.
-#:
-#: WAAROM ALLES EN NIET EEN LIJST. De eerste versie noemde twaalf velden op. Toen `/inbox` erop
-#: ging lezen bleek de view er zeventien te gebruiken: `herkomst`, `pagina`, `voorstel`,
-#: `triage_grond`, `triage_rol`, `triage_vorm`, `ok` stonden er niet bij. Een handgekozen lijst is
-#: een tweede plek waar een veld vergeten kan worden, en dat merk je pas als het scherm leeg blijft.
-VERWERKING_OVERSLAAN = ("id", "at", "tekst")
-
-#: De velden die de migratie-guard TELT. Dit is bewust wél een lijst: het zijn de oordelen van een
-#: mens (185 outcomes, 54 poort-oordelen op prod) en die wil je met naam en toenaam terugzien in
-#: het rapport, niet als "alles klopt".
-VERWERKING_VELDEN = ("read", "processed", "archived", "done", "deleted",
-                     "outcome", "poort", "verwerkingen", "type", "bevinding",
-                     "project_id", "entry_id")
 
 TEKST_MAX = 1500
 TRAIL_MAX = 500          # per kanaal bewaard; ouder verdwijnt niet, maar wordt niet meer getoond
@@ -84,16 +68,6 @@ def project_kanaal(pid: str) -> str:
 def circle_kanaal(record_id: str) -> str:
     return f"{CIRCLE}:{record_id}"
 
-
-def role_kanaal(record_id: str) -> str:
-    """Het kanaal van een ROL, niet van zijn huidige vervuller.
-
-    Waarom niet het persoonskanaal: een notificatie is aan de rol gericht. Zet je de historie van
-    compliance in de DM van wie die rol vandaag vervult, dan loopt ze de deur uit zodra iemand
-    anders hem krijgt. Zelfde regel als bij het topic-id — identiteit hangt niet aan de huidige
-    invulling. Bijkomend: een GEARCHIVEERDE rol houdt gewoon zijn kanaal, dus er hoeft voor de
-    negentien open items op opgeheven rollen niemand aangewezen te worden."""
-    return f"{ROLE}:{record_id}"
 
 
 def topic_kanaal(topic_id: str) -> str:
@@ -134,8 +108,7 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie",
-                      "werk_verwerking_bij")
+    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie")
     _STATE = "_data"
     _default = dict
 
@@ -207,15 +180,19 @@ class ChannelStore(JsonStore):
     def plaats_notificatie(self, kanaal: str, n: dict) -> dict | None:
         """Eén NotifStore-rij als bericht in een kanaal. Alleen voor de migratie.
 
-        DRIE DINGEN DIE HIER ANDERS ZIJN DAN BIJ `post`, en alle drie met opzet:
+        TWEE DINGEN DIE HIER ANDERS ZIJN DAN BIJ `post`, allebei met opzet:
 
         1. **Het id van de notificatie wordt het id van het bericht.** Daardoor is de migratie
            idempotent (tweemaal draaien voegt niets toe) én blijft elk bericht terug te voeren op
            de rij waar het uit komt, zolang `NotifStore` er nog staat.
         2. **`at` komt uit de notificatie**, niet van de klok. Anders staat de hele historie op de
            dag van de migratie en is de volgorde van drie maanden gesprek weg.
-        3. **`verwerking` wordt LETTERLIJK overgenomen.** Geen samenvatting, geen afgeleide status.
-           Zie `VERWERKING_VELDEN`.
+
+        ER GAAT GEEN VERWERKINGSSTATE MEE. Een eerdere versie kopieerde read/processed/outcome/poort
+        mee in een `verwerking`-blok. Stefan heeft die eis op 20 september ingetrokken: *"alles wat
+        tot dusver in de inbox is gekomen kon ik niet echt veel mee, dus dat werkte sowieso niet,
+        dus ook niet om te houden."* Het is nu een gewoon bericht; de ontvanger is verantwoordelijk,
+        zoals bij elk ander bericht.
 
         Geeft None als het bericht er al staat — dat is geen fout maar de idempotentie."""
         nid = str(n.get("id") or "")
@@ -227,29 +204,15 @@ class ChannelStore(JsonStore):
         entry = {
             "id": nid,
             "kind": NOTIFICATIE,
-            "author": {"type": "role" if n.get("by") else "", "id": str(n.get("by") or "")},
+            "author": {"type": str(n.get("author_type") or "role"), "id": str(n.get("by") or "")},
             "text": str(n.get("tekst") or n.get("snippet") or ""),
             "at": float(n.get("at") or 0),
-            "verwerking": {k: v for k, v in n.items() if k not in VERWERKING_OVERSLAAN},
         }
         rij.append(entry)
         rij.sort(key=lambda e: float(e.get("at") or 0))
         self._save()
         return entry
 
-    def werk_verwerking_bij(self, kanaal: str, entry_id: str, verwerking: dict) -> bool:
-        """Ververs het `verwerking`-blok van één bericht. Alleen voor `notif_migratie.hersync`.
-
-        Zolang `NotifStore` de schrijver is (stap 1 en 2), is dit de enige manier waarop een
-        inbox-actie in het kanaal landt. Raakt `text` en `at` bewust NIET aan: die zijn het bericht
-        zelf, en een verwerking mag de tekst van een spanning niet herschrijven."""
-        rij = (self._data.get("kanalen") or {}).get(kanaal) or []
-        for e in rij:
-            if e.get("id") == entry_id:
-                e["verwerking"] = dict(verwerking)
-                self._save()
-                return True
-        return False
 
     # ── lezen ────────────────────────────────────────────────────────────────
     def trail(self, kanaal: str, limit: int = TRAIL_MAX) -> list[dict]:

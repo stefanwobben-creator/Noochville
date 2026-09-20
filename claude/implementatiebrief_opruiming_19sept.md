@@ -1317,6 +1317,54 @@ ontworpen.** Fase 8 legde het persoonskanaal al vast als een echt tweerichtings-
 kanten kunnen schrijven), geen aparte actie nodig — alleen bevestigen dat dit inderdaad zo aanvoelt
 zodra de kanalen straks in gebruik zijn, geen nieuwe bouwvraag.
 
+## Fase 10, NotifStore-migratie stap 1 van 3 afgerond (20 sept, ochtend, commit `a8aed27`)
+
+Alleen schrijven, nog niets verwijderd — NotifStore, `/inbox` en `/inbox/verwerk` blijven ongewijzigd
+tot stap 3. Suite 4.098 passed / 1 failed (bekende). Getest op een lokale kopie van de echte
+productiedata (`notifications.json`, kopie na afloop verwijderd): 338 rol- + 33 persoon-notificaties
+verwerkt, 338 berichten geschreven naar 17 rolkanalen (niet 8 zoals de open-items-telling deed
+vermoeden — meerdere gearchiveerde rollen als the_source, noochville__circle_lead, librarian hebben
+wél historie maar geen open items, en bevestigen daarmee de vormkeuze: een opgeheven rol houdt zijn
+kanaal, er hoeft niemand aangewezen). De harde eis is exact gehaald: outcome 185→185, poort 54→54,
+verwerkingen 83→83, en de overige velden (read/processed/archived/done/deleted) kwamen allemaal
+ongewijzigd door.
+
+Drie bouwkeuzes, vastgelegd: het notificatie-id wordt het bericht-id (idempotent, en herleidbaar
+naar de bron zolang NotifStore nog bestaat); `at` komt uit de notificatie, niet uit de klok (anders
+staat drie maanden gesprek op de migratiedag); de verwerking wordt letterlijk overgenomen, geen
+afgeleide status — zoals al vastgelegd.
+
+Eigen bug gevonden en gefixt tijdens het testen: de droogloop-uitvoer toonde ook de ná-kolom, die bij
+een droogloop per definitie nul is en dus als "acht regels wijken af" oogde — dezelfde soort
+misleidende no-op-melding als eerder bij de deploy-status. Droogloop toont nu alleen de huidige
+telling; de ná-telling en de guard-test lopen pas bij `--apply`. Geen beslissing nodig, gewoon
+genoteerd voor de geschiedenis.
+
+Ga door met stap 2 (`/inbox` laten lezen uit de kanalen).
+
+## Fase 10, NotifStore-migratie stap 2 van 3 afgerond (20 sept, commit `3f261c7`) — eerst een dag op prod voor stap 3
+
+Alleen de lezer is om, NotifStore blijft de schrijver. Suite 4.102 passed / 1 failed (bekende).
+Fail-open opgezet, bewust andersom dan de standaardregel: faalt de kanaal-lezing, dan valt `/inbox`
+terug op NotifStore, want een lege inbox is hier het gevaarlijke antwoord (iemand denkt dat er geen
+werk ligt).
+
+**Stap 2 ving een echte fout in stap 1**: `VERWERKING_VELDEN` was een handgekozen lijst van twaalf
+velden. Zodra `/inbox` erop ging lezen bleek de view zeventien velden te gebruiken — `herkomst`,
+`pagina`, `voorstel`, `triage_grond`, `triage_rol`, `triage_vorm` en `ok` stonden er niet bij en
+waren dus stil leeg gebleven. Nu gaat alles mee, met een overslaan-lijst van drie (id/at/tekst, die
+al op het bericht zelf staan) in plaats van een aanvink-lijst — een handgekozen lijst is zelf een
+tweede plek waar een veld vergeten kan worden. Precies de reden voor de drie-stappenaanpak: in één
+grote commit was dit pas ná het verwijderen van NotifStore gevonden, zonder bron om uit te herstellen.
+
+**Besluit: stap 3 nu nog niet bouwen/deployen.** Claude Code's eigen advies, overgenomen: mijn
+eerdere akkoord op de drie-stappenaanpak was "pas als dat een tijdje staat" — en stap 2 heeft tien
+minuten gedraaid, alleen tegen een lokale kopie van `notifications.json`, nooit op prod. Volgorde:
+(1) deploy stap 1+2 (verwijdert niets, `/inbox` valt fail-open terug op NotifStore bij problemen),
+(2) laat een dag op prod draaien als echt bewijs in plaats van alleen de testsuite, (3) pas dan stap
+3 bouwen én deployen — met NotifStore-verwijdering zelf (13 methodes, 46 aanroepen, 18 bronbestanden,
+37 testbestanden) onomkeerbaar, dus geen deploy vóór Stefan hem gezien heeft.
+
 ## Wat hierna nog open staat
 
 - De geplande-taak-mechaniek zelf (nodig voor: het maandrapport dat straks in de Wiki-schermen uit

@@ -325,14 +325,8 @@ def _poort_secties(st, items, csrf_token, done) -> str:
     return "".join(uit)
 
 
-def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = "",
-                 items=None) -> str:
-    # `items` wordt sinds fase 10 stap 2 door de route MEEGEGEVEN: de rol-items komen dan uit de
-    # kanalen (`notif_migratie.open_uit_kanalen`) en de persoon-items nog uit NotifStore. De view
-    # hoeft niet te weten waar ze vandaan komen — de vorm is hetzelfde feit, alleen elders
-    # opgeslagen. Zonder `items` valt hij terug op de oude bron, zodat elke bestaande aanroeper
-    # (en elke test) blijft werken tot stap 3 die weghaalt.
-    items = st.notif.open_for_targets(targets) if items is None else list(items)
+def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = "") -> str:
+    items = st.notif.open_for_targets(targets)
     # HET VIERMOMENT MOET DE ZOJUIST GESLOTEN SPANNING NOG KUNNEN TONEN. Sinds sluiten de wachtrij
     # écht verkort, staat hij er niet meer in — en dan verdween precies het schermpje dat laat zien
     # wát je vastlegde. De gesloten spanning wordt daarom eenmalig terug in de lijst gezet, alleen
@@ -1018,12 +1012,10 @@ def _gk_items(st):
         return []
 
 
-def render_inbox_frag(st, targets, csrf_token: str = "", items=None) -> str:
+def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
     """Het dynamische deel van de drawer: telling + rijen, opgehaald via /inbox?frag=1. Geen page-shell
-    (de shell is de chrome). De drawer-JS leest data-count/data-sub en vult de lijst.
-
-    `items`: zie `render_inbox` — sinds stap 2 komt de rol-helft uit de kanalen."""
-    items = st.notif.open_for_targets(targets) if items is None else list(items)
+    (de shell is de chrome). De drawer-JS leest data-count/data-sub en vult de lijst."""
+    items = st.notif.open_for_targets(targets)
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
     rows = "".join(_ibx_row(st, n) for n in items)
 

@@ -1,169 +1,131 @@
-"""De inbox naar de kanalen — stap 1 van drie: SCHRIJVEN, niets verwijderen.
+"""De inbox wordt DM — stap A van twee: SCHRIJVEN, niets verwijderen.
 
-Besluit Stefan, nacht van 19 op 20 september 2026: *"inbox moet gewoon weg, dat wordt een kanaal in
-messages"*. Dat draait de fase-8-keuze om waarin `NotifStore` en `/inbox` bewust naast de
-kanaallaag bleven staan.
+Besluit Stefan, 20 september 2026: *"alles wat tot dusver in de inbox is gekomen kon ik niet echt
+veel mee, dus dat werkte sowieso niet, dus ook niet om te houden — als er iets gesignaleerd is kan
+het gewoon naar een DM en dan is de mens verantwoordelijk."*
 
-DRIE STAPPEN, EN DIT IS DE EERSTE:
+Daarmee vervalt het eerdere ontwerp (een vijfde kanaalsoort `role:<id>` met de verwerkingsstate
+erin). Er gaat **geen** state mee: geen read/processed/archived, geen outcome, geen poort-oordeel.
+Het wordt een gewoon bericht. De ontvanger is verantwoordelijk, zoals bij elk ander bericht.
 
-  1. schrijven naast `NotifStore` (deze module) — niets weg, uitkomst te bekijken
-  2. `/inbox` laten lezen uit de kanalen
-  3. pas dan `NotifStore` en de oude routes verwijderen
+TWEE STAPPEN:
+  A. migreren (deze module) — `NotifStore` en `/inbox` blijven staan, uitkomst te bekijken
+  B. opruimen — `NotifStore`, `/inbox`, `/inbox/verwerk` en de lade eruit
 
-De reden voor die volgorde staat in `claude/fase10_voorstel_inbox_migratie.md`: 13
-NotifStore-methodes, 46 aanroepen, 18 bronbestanden, 37 testbestanden. Een fout in stap 1 die pas
-na stap 3 opvalt, neemt de historie van 371 items mee.
+DE ROUTERING, in deze volgorde. `target_type` beslist, niet `entry_id` — die twee verzamelingen
+raken elkaar nauwelijks (33 persoon-gerichte rijen waarvan 3 een `entry_id` dragen; 24 rijen met
+`entry_id` waarvan er 21 rol-gericht zijn).
 
-WAT HIER NIET GEBEURT. Geen vertaling naar een mens. Een notificatie is aan een ROL gericht en gaat
-naar `role:<record_id>`. Daardoor is er voor de negentien open items op de vijf in fase 1-3
-gearchiveerde rollen (librarian, harry_hemp, copywriter, compliance, concurrent_scout) niets te
-kiezen: ze migreren mee met status open, want dat IS de waarheid — niemand heeft ze ooit gesloten
-en er is nu niemand die dat namens de rol kan doen.
+  1. doel is een PERSOON        → DM naar die persoon
+  2. doel is een ROL met precies één mens-vervuller → DM naar die mens.
+     Dit geldt óók als de rol gearchiveerd is: `noochville__circle_lead` (49 rijen) en
+     `the_source` (36) zijn opgeheven maar nog aan een mens toegewezen, en 85 berichten mogen niet
+     van de volgorde van twee checks afhangen.
+  3. doel is een ROL zonder mens-vervuller → DM naar de terugval (de founder).
+  4. doel is een ROL met MEER DAN ÉÉN mens-vervuller → **niet migreren**, rapporteren.
+     Elf rijen op drie rollen (`mother_earth__nooch`, en twee circle_leads) hebben Lotte én Stefan.
+     Naar beiden is het bericht dubbel, naar de eerste is willekeur, naar de founder is een aanname.
+     Dat is een keuze van een mens; de migratie parkeert ze en zegt het.
 
-PERSOON-GERICHTE ITEMS BLIJVEN LIGGEN. 33 van de 371 zijn op een persoon gericht (2 open). Stefans
-besluit gaat over rollen; een `person:`-kanaalsoort erbij verzinnen zou een tweede datamodel-begrip
-zijn dat niemand heeft gevraagd. Ze worden geteld en gerapporteerd, niet aangeraakt.
+DE TEGENPARTIJ IS MEESTAL GEEN PERSOON. Bij 333 van de 338 rol-rijen is `by` een rol- of
+systeemnaam (`compliance` 69, `claims-checker` 46, `harry_hemp` 45, …). Het DM-id draagt die naam
+dan als tegenpartij. Dat is bewust: de bron blijft zichtbaar en de signalen blijven per bron
+gegroepeerd. `views/messages` haalt het antwoordveld weg zodra de tegenpartij geen persoon is —
+antwoorden aan iets dat niet leest is het dead-letter-patroon, en een antwoordveld dat niets
+bereikt is erger dan geen antwoordveld.
 """
 from __future__ import annotations
 
 from nooch_village import channels
 
-#: De twee tellingen die de migratie moet overleven. Zie de harde eis in het voorstel: 185
-#: vastgelegde uitkomsten en 54 poort-oordelen zijn oordelen van een mens, geen afgeleide status.
-TEL_VELDEN = ("outcome", "poort", "verwerkingen", "read", "processed", "archived", "done", "deleted")
+#: Wie de berichten krijgt van een rol die niemand meer vervult.
+TERUGVAL_ROL = "mother_earth__nooch__strategic_lead_founder_steward"
+
+#: Uitkomsten van de routering, in het rapport terug te zien.
+NAAR_PERSOON, NAAR_VERVULLER, NAAR_TERUGVAL, MEERDERE, ONBEKEND = (
+    "persoon", "vervuller", "terugval", "meerdere-vervullers", "onbekend-doel")
 
 
-def tellen(rijen) -> dict[str, int]:
-    """Hoe vaak elk verwerkingsveld gevuld is. Vóór en ná moeten gelijk zijn."""
-    return {v: sum(1 for n in rijen if n.get(v)) for v in TEL_VELDEN}
+def _mensen_van(st, rol: str) -> list[str]:
+    rec = st.records.get(rol)
+    return [f.id for f in st.assign.fillers_of(rol, rec) if f.type == "person"] if rec else []
 
 
-def tellen_entries(entries) -> dict[str, int]:
-    """Dezelfde telling, maar over gemigreerde kanaalberichten."""
-    return {v: sum(1 for e in entries if (e.get("verwerking") or {}).get(v)) for v in TEL_VELDEN}
+def _terugval(st) -> str:
+    mensen = _mensen_van(st, TERUGVAL_ROL)
+    return mensen[0] if len(mensen) == 1 else ""
 
 
-def _rol_rijen(notif) -> list[dict]:
-    return [n for n in notif.all() if n.get("target_type") == "role" and n.get("target_id")]
+def ontvanger_van(st, n: dict) -> tuple[str, str]:
+    """(persoon_id, reden). Lege persoon_id = niet te routeren; de reden zegt waarom."""
+    soort, doel = n.get("target_type"), str(n.get("target_id") or "")
+    if soort == "person":
+        return (doel, NAAR_PERSOON) if st.people.get(doel) else ("", ONBEKEND)
+    if soort != "role" or not doel:
+        return "", ONBEKEND
+    mensen = _mensen_van(st, doel)
+    if len(mensen) == 1:
+        return mensen[0], NAAR_VERVULLER
+    if len(mensen) > 1:
+        return "", MEERDERE
+    terug = _terugval(st)
+    return (terug, NAAR_TERUGVAL) if terug else ("", ONBEKEND)
 
 
-def migreer(notif, kanalen, *, apply: bool = False) -> dict:
-    """Zet elke rol-gerichte notificatie in het kanaal van zijn rol.
+def migreer(notif, st, *, apply: bool = False) -> dict:
+    """Elke notificatie als DM-bericht. `apply=False` schrijft niets.
 
-    `apply=False` (default) schrijft niets en rapporteert wat er zou gebeuren — zelfde vorm als
-    `wiki_seed.zaai`. Idempotent: een rij die al in het kanaal staat wordt overgeslagen.
-
-    Geeft een rapport terug met de tellingen vóór en ná, zodat de guard geen aparte stap is maar
-    onderdeel van de uitvoer. Een migratie die zijn eigen bewijs niet meelevert, is een bewering.
-    """
-    rijen = _rol_rijen(notif)
-    voor = tellen(rijen)
-    rapport = {"rol_rijen": len(rijen), "voor": voor, "geschreven": 0, "bestond_al": 0,
-               "kanalen": {}, "persoon_rijen": sum(1 for n in notif.all()
-                                                   if n.get("target_type") == "person")}
+    Idempotent: een rij die al in het kanaal staat wordt overgeslagen. Het rapport draagt zijn
+    eigen bewijs — een migratie die dat niet doet, is een bewering."""
+    rijen = notif.all()
+    r = {"rijen": len(rijen), "geschreven": 0, "bestond_al": 0, "geparkeerd": 0,
+         "per_reden": {}, "kanalen": {}, "geparkeerde_rollen": {}, "apply": apply}
     for n in rijen:
-        kanaal = channels.role_kanaal(n["target_id"])
-        rapport["kanalen"][kanaal] = rapport["kanalen"].get(kanaal, 0) + 1
+        ontvanger, reden = ontvanger_van(st, n)
+        r["per_reden"][reden] = r["per_reden"].get(reden, 0) + 1
+        if not ontvanger:
+            r["geparkeerd"] += 1
+            sleutel = f"{n.get('target_type')}:{n.get('target_id')}"
+            r["geparkeerde_rollen"][sleutel] = r["geparkeerde_rollen"].get(sleutel, 0) + 1
+            continue
+        kanaal = channels.dm_kanaal(str(n.get("by") or "village"), ontvanger)
+        r["kanalen"][kanaal] = r["kanalen"].get(kanaal, 0) + 1
         if not apply:
-            bestaat = any(e.get("id") == n.get("id") for e in kanalen.trail(kanaal, limit=10_000))
-            rapport["bestond_al" if bestaat else "geschreven"] += 1
+            bestaat = any(e.get("id") == n.get("id")
+                          for e in st.channels.trail(kanaal, limit=10_000))
+            r["bestond_al" if bestaat else "geschreven"] += 1
             continue
-        if kanalen.plaats_notificatie(kanaal, n) is None:
-            rapport["bestond_al"] += 1
+        if st.channels.plaats_notificatie(kanaal, n) is None:
+            r["bestond_al"] += 1
         else:
-            rapport["geschreven"] += 1
+            r["geschreven"] += 1
 
-    na_entries = [e for k in rapport["kanalen"]
-                  for e in kanalen.trail(k, limit=10_000)
-                  if e.get("kind") == channels.NOTIFICATIE]
-    rapport["na"] = tellen_entries(na_entries)
-    rapport["na_berichten"] = len(na_entries)
-    rapport["apply"] = apply
-    rapport["klopt"] = (not apply) or (rapport["na"] == voor
-                                       and rapport["na_berichten"] == len(rijen))
-    return rapport
-
-
-def hersync(notif, kanalen) -> dict:
-    """Breng de kanalen bij met `NotifStore`, in één pass. Stap 2 leunt hierop.
-
-    ZOLANG STAP 3 NIET IS GEZET, IS `NotifStore` DE SCHRIJVER. Elke inbox-actie (gelezen,
-    verwerkt, uitkomst, poort, archiveren) schrijft nog steeds daar. Het kanaal is in stap 2 de
-    LEZER. Twee plekken met hetzelfde feit is normaal gesproken precies wat `reference, don't copy`
-    verbiedt — hier is het tijdelijk en bewust, en dit is de enige plek die ze bij elkaar houdt:
-    één functie, aangeroepen vlak vóór het lezen, in plaats van een sync-aanroep verspreid over
-    elke schrijf-actie. Drift is daarmee niet mogelijk, want er wordt nooit uit een verouderde
-    kopie gelezen.
-
-    In stap 3 verdwijnt deze functie samen met `NotifStore`.
-    """
-    rijen = {n["id"]: n for n in _rol_rijen(notif)}
-    bij, nieuw = 0, 0
-    for n in rijen.values():
-        kanaal = channels.role_kanaal(n["target_id"])
-        entry = next((e for e in kanalen.trail(kanaal, limit=10_000)
-                      if e.get("id") == n.get("id")), None)
-        if entry is None:
-            if kanalen.plaats_notificatie(kanaal, n) is not None:
-                nieuw += 1
-            continue
-        vers = {k: v for k, v in n.items() if k not in channels.VERWERKING_OVERSLAAN}
-        if entry.get("verwerking") != vers:
-            kanalen.werk_verwerking_bij(kanaal, n["id"], vers)
-            bij += 1
-    return {"nieuw": nieuw, "bijgewerkt": bij, "totaal": len(rijen)}
-
-
-def open_uit_kanalen(kanalen, targets) -> list[dict]:
-    """De inbox-wachtrij, maar gelezen uit de KANALEN in plaats van uit `NotifStore`.
-
-    Geeft dicts met dezelfde vorm als `NotifStore.open_for_targets` teruggaf, zodat de view niet
-    hoeft te weten waar zijn items vandaan komen. Dat is geen truc om een herschrijving te
-    vermijden: de vorm ís hetzelfde feit, alleen op een andere plek opgeslagen.
-
-    Alleen rol-doelen. Persoon-gerichte items zijn niet gemigreerd (besluit: buiten deze ronde),
-    dus die haalt de aanroeper nog bij `NotifStore` vandaan.
-    """
-    rollen = [i for t, i in targets if t == "role"]
-    uit = []
-    for rol in rollen:
-        for e in kanalen.trail(channels.role_kanaal(rol), limit=10_000):
-            if e.get("kind") != channels.NOTIFICATIE:
-                continue
-            v = dict(e.get("verwerking") or {})
-            if v.get("archived") or v.get("deleted") or v.get("done"):
-                continue
-            v.update({"id": e.get("id"), "at": e.get("at"),
-                      "tekst": e.get("text") or "", "target_type": "role", "target_id": rol})
-            v.setdefault("snippet", (e.get("text") or "")[:160])
-            uit.append(v)
-    return sorted(uit, key=lambda n: -(n.get("at") or 0))
+    if apply:
+        geplaatst = sum(1 for k in r["kanalen"]
+                        for e in st.channels.trail(k, limit=10_000)
+                        if e.get("kind") == channels.NOTIFICATIE)
+        r["berichten"] = geplaatst
+        r["klopt"] = geplaatst + r["geparkeerd"] == r["rijen"]
+    return r
 
 
 def rapport_tekst(r: dict) -> str:
-    regels = [f"rol-gerichte notificaties : {r['rol_rijen']}",
-              f"persoon-gericht (blijft)  : {r['persoon_rijen']}",
-              f"geschreven                : {r['geschreven']}",
-              f"bestond al                : {r['bestond_al']}",
-              f"kanalen                   : {len(r['kanalen'])}", ""]
-    # BIJ EEN DROOGLOOP GEEN VERGELIJKING. De eerste versie printte de ná-kolom ook dan, en die
-    # stond logischerwijs op nul — acht regels "← WIJKT AF" met eronder "✓ tellingen kloppen".
-    # Dat leest als een kapotte migratie óf als een geslaagde, maar zeker niet als "er is nog niets
-    # gebeurd". Zelfde fout als de neutrale ▸ bij een no-op deploy: de uitvoer moet zeggen wat er
-    # is gebeurd, niet wat er zou kunnen.
-    if not r.get("apply"):
-        regels.append(f"{'veld':<14}{'nu':>8}")
-        for v in TEL_VELDEN:
-            regels.append(f"{v:<14}{r['voor'].get(v, 0):>8}")
-        regels.append("")
-        regels.append("◌ droogloop — de ná-telling en de guard volgen bij --apply")
-        return "\n".join(regels)
-
-    regels.append(f"{'veld':<14}{'vóór':>8}{'ná':>8}")
-    for v in TEL_VELDEN:
-        vo, na = r["voor"].get(v, 0), r["na"].get(v, 0)
-        merk = "" if vo == na else "   ← WIJKT AF"
-        regels.append(f"{v:<14}{vo:>8}{na:>8}{merk}")
+    regels = [f"notificaties       : {r['rijen']}",
+              f"geschreven         : {r['geschreven']}",
+              f"bestond al         : {r['bestond_al']}",
+              f"geparkeerd         : {r['geparkeerd']}",
+              f"DM-kanalen         : {len(r['kanalen'])}", "", "routering:"]
+    for reden, n in sorted(r["per_reden"].items(), key=lambda x: -x[1]):
+        regels.append(f"   {reden:<22}{n:>5}")
+    if r["geparkeerde_rollen"]:
+        regels += ["", "geparkeerd (een mens moet kiezen):"]
+        for doel, n in sorted(r["geparkeerde_rollen"].items(), key=lambda x: -x[1]):
+            regels.append(f"   {doel:<52}{n:>4}")
     regels.append("")
-    regels.append("✓ tellingen kloppen" if r["klopt"] else "✗ TELLINGEN KLOPPEN NIET — niet doorgaan")
+    if not r.get("apply"):
+        regels.append("◌ droogloop — er is niets geschreven. Draai opnieuw met --apply.")
+        return "\n".join(regels)
+    regels.append(f"berichten in de kanalen: {r['berichten']}  "
+                  f"(+ {r['geparkeerd']} geparkeerd = {r['rijen']})")
+    regels.append("✓ alles verantwoord" if r["klopt"] else "✗ ER IS IETS KWIJT — niet doorgaan")
     return "\n".join(regels)

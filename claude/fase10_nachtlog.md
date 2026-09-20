@@ -597,3 +597,50 @@ archiveerde direct en concludeerde dat de sync stuk was. De volgorde verwerken �
 echte volgorde op het scherm; de test volgt hem nu.
 
 Vier tests erbij (14 totaal in dit bestand). Suite: 4.102 passed, 1 failed (de bekende), 1 xfailed.
+
+## HERONTWERP — de inbox wordt DM (vorm A)
+
+Stefan trok de eis op het bewaren van de verwerkingsstate in. `role:<record_id>` vervalt, stap 2
+vervalt, het worden twee stappen. Vorm A gekozen: één DM per (ontvanger × afzendende rol), zonder
+antwoordveld als de tegenpartij geen persoon is.
+
+**Weggegooid uit `a8aed27`/`3f261c7`:** `channels.ROLE`, `role_kanaal()`, `VERWERKING_VELDEN`,
+`VERWERKING_OVERSLAAN`, `werk_verwerking_bij()`, `hersync()`, `open_uit_kanalen()`,
+`cockpit2._inbox_items()` en de `items=`-parameters op beide inbox-views. **Behouden:**
+`plaats_notificatie()` (id-als-id, `at` uit de notificatie), de droogloop/apply-vorm en de
+rapportage-fix.
+
+### Droogloop op echte prod-data
+
+```
+notificaties  371      geschreven 360      geparkeerd 11      DM-kanalen 41
+
+routering:  vervuller 308 · persoon 33 · terugval 19 · meerdere-vervullers 11
+
+geparkeerd (een mens moet kiezen):
+   role:mother_earth__nooch               7
+   role:mother_earth__nooch__circle_lead  2
+   role:mother_earth__circle_lead         2
+```
+
+De verdeling klopt precies met wat ik in het voorstel voorspelde. De grootste kanalen:
+`compliance ↔ Stefan` (68), `harry_hemp ↔ Stefan` (43), `claims-checker ↔ Stefan` (42).
+
+**Van de 41 kanalen hebben er 39 een niet-persoon als tegenpartij** en dus geen antwoordveld.
+Twee hebben twee echte mensen; daar blijft het veld staan.
+
+### Eén ding dat de prod-droogloop aan het licht bracht
+
+Er is **één echt zelf-kanaal**: `dm:<stefan>|<stefan>`, van notificaties waarvan de afzender
+dezelfde mens is als de vervuller van de doelrol — jij die je eigen rol aanspreekt. Zonder aparte
+regel heette dat "direct" (net als elk ander naamloos kanaal) én had het géén invoerveld, terwijl
+het je eigen notitieblok is. Heet nu "Yourself" en mag antwoorden.
+
+### De elf geparkeerde rijen
+
+Drie rollen hebben Lotte **én** Stefan als vervuller. De migratie raadt niet: ze blijven in
+`NotifStore` staan en worden in het rapport bij naam genoemd. De guard telt ze mee
+(`360 + 11 = 371`), dus ze kunnen niet stil verdwijnen. Zodra Stefan kiest is het één extra run —
+de migratie is idempotent.
+
+Veertien tests. Suite: 4.102 passed, 1 failed (de bekende), 1 xfailed.
