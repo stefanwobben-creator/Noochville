@@ -274,7 +274,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `site_audit.jsonl` | `site_audit.py` |
 | `site_audit_dev.jsonl` | `site_audit.py` |
 | `strategy.json` | `pinboard.py` |
-| `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
 
 
@@ -305,8 +304,9 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `rugzakken.json` |
 | `seed_surges.json` |
 | `trend_signals.jsonl` |
+| `triage_uitkomsten.jsonl` |
 | `villageraad.jsonl` |
 
 
 ---
-_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 34 daarbuiten met één schrijver · 6 met meerdere · 8 zonder gevonden schrijver._
+_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

@@ -283,36 +283,9 @@ class Inhabitant(threading.Thread):
                           telling["geen_grant"], telling["fout"])
         return telling
 
-    def _payload_opnieuw(self, skill: str, tekst: str, schema: str, mist: list, huidig: dict):
-        """Leid de payload opnieuw af uit de item-tekst + het input_schema van de skill."""
-        from nooch_village.llm import reason as llm_reason
-        import json as _json
-        prompt = (
-            "Je vult de invoer (payload) voor één skill-aanroep in NoochVille (Nooch.earth, duurzame "
-            "veganistische schoenen). Een eerdere poging was onvolledig.\n\n"
-            f"SKILL: {skill}\n"
-            f"INPUT-VORM (input_schema): {schema or '(geen schema — leid af uit de taak)'}\n"
-            f"DE TAAK: {tekst}\n"
-            f"HUIDIGE PAYLOAD: {_json.dumps(huidig, ensure_ascii=False)[:500]}\n"
-            f"ONTBREEKT: {', '.join(mist) or '(onbekend — vul de hele payload opnieuw)'}\n\n"
-            "Vul de ontbrekende velden uit de taaktekst. Verzin GEEN identifiers, URL's, merknamen of "
-            "id's die niet in de taak staan — laat een veld liever leeg dan het te raden.\n"
-            "Antwoord UITSLUITEND met het JSON-object van de payload.")
-        raw = llm_reason(prompt, call_site="payload_herstel", json_mode=True, max_tokens=700)
-        if not raw:
-            return None
-        s = str(raw)
-        try:
-            return _json.loads(s[s.find("{"):s.rfind("}") + 1])
-        except (ValueError, IndexError):
-            return None
+    # HIER STOND `_payload_opnieuw`: een model dat de payload van een mislukte skill-aanroep
+    # opnieuw invulde. Nul aanroepers, weg op 20 september 2026.
 
-    # ── Wat telt als resultaat? ──────────────────────────────────────────────────────────────
-    # Hiervóór stonden hier drie allowlists (_LIST_KEYS/_TEXT_KEYS/_METRIC_KEYS): een skill moest
-    # zijn uitvoer in een sleutel stoppen die toevallig in die lijsten stond, anders las een
-    # geslaagde run als "leeg". Dat is drie keer misgegaan — projectverzoek (pid/titel),
-    # claims_check (bevindingen) en content_check — en kostte 87 weggegooide resultaten. Een
-    # allowlist die elke nieuwe skill een gezegende sleutelnaam laat raden, is stille koppeling.
     #
     # Nu andersom: alles wat GEEN metadata is en substantie draagt, telt. Zo hoeft geen enkele
     # nieuwe skill nog iets te raden.

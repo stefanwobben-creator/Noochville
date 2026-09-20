@@ -3783,16 +3783,6 @@ def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str,
         return ""
 
 
-def _noteer_triage(data_dir: str, n: dict, **kw) -> None:
-    """Wat deed de mens met de rolsuggestie? Fail-stil: een meting die een handeling blokkeert is
-    geen meting maar een obstakel."""
-    try:
-        from nooch_village.triage_rol import noteer_uitkomst
-        noteer_uitkomst(data_dir, n, **kw)
-    except Exception:                                        # noqa: BLE001
-        logging.getLogger("village.triage").debug("triage-uitkomst niet genoteerd", exc_info=True)
-
-
 def _volledig_van(n: dict) -> str:
     """De volle tekst van een spanning — dezelfde die het formulier voorvult."""
     from nooch_village.tekstpreview import volledig
