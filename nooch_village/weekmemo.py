@@ -38,6 +38,7 @@ stap, naast het feit dat de regel nu op één plek staat.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 
 #: Korter dan dit is te generiek om als vindplaats te dienen: een fragment van tien tekens komt in
 #: elke pagina wel ergens voor, en dan grondt de poort niets meer. Beide implementaties hanteerden
@@ -66,3 +67,46 @@ def gegrond(fragment: str, brontekst: str, *, streng: bool) -> bool:
     norm = norm_streng if streng else norm_los
     f = norm(fragment)
     return len(f) >= MIN_FRAGMENT and f in norm(brontekst)
+
+
+# ── Stap 2: één signaalvorm, en de drempel bij de bron ──────────────────────────────────────────
+#
+# WAAROM ÉÉN VORM. De vijf bronnen leveren vandaag drie verschillende dingen: een claim-bevinding
+# (term + pagina + stoplicht), een radar-item (feed-item met link en bron) en een Kroniek-record
+# (merk + claim + status). Zolang die drie vormen los leven, moet elke lezer ze alle drie kennen —
+# en dat is precies waarom de synthese in stap 4 anders vijf keer geschreven zou worden.
+#
+# WAT ER BEWUST NIET IN ZIT: een status, een oordeel, een ontvanger. Een signaal is een WAARNEMING.
+# Wat ermee gebeurt beslist de mens die de memo leest; zet je dat hier al in het model, dan kruipt
+# de beslissing terug in de pijplijn (CLAUDE.md, "AI is instrument, geen rol").
+
+
+@dataclass(frozen=True)
+class Signaal:
+    """Eén waarneming, ongeacht welke bron hem zag.
+
+    Bevroren met opzet: een verzamelaar levert waarnemingen en verandert er niets meer aan. Wie
+    iets wil toevoegen maakt een nieuw signaal, zodat je in de memo kunt terugzien wat de bron zei
+    en niet wat er onderweg van gemaakt is."""
+
+    bron: str                       #: welke adapter hem zag — de sleutel in `BRONNEN`
+    tekst: str                      #: wat er is waargenomen, in de woorden van de bron
+    vindplaats: str = ""            #: waar het staat: een URL, een paginalabel, een merknaam
+    gevonden_op: float = 0.0        #: wanneer de BRON het zag, niet wanneer wij het ophaalden
+    herkomst: str = ""              #: het id van het onderliggende record, om op terug te vallen
+    extra: dict = field(default_factory=dict)   #: wat alleen deze bron weet (stoplicht, feed, …)
+
+
+#: DE DREMPEL HOORT BIJ DE BRON, NIET BIJ DE PIJPLIJN. Dit was de belangrijkste ontwerpkeuze van
+#: stap 2: de drie postures hieronder zijn alle drie verdedigbaar voor hun onderwerp en ze zijn NIET
+#: te middelen. Ze hier naast elkaar zetten maakt dat zichtbaar in plaats van impliciet in vijf
+#: modules — en dwingt wie een bron toevoegt om te zeggen welke hij kiest.
+#:
+#:   recall       bij twijfel melden. Een onterechte vlag kost een muisklik, een gemiste claim
+#:                een boete.
+#:   precisie     bij twijfel NIET melden. Dit zijn filters: ze halen weg, en te veel weghalen is
+#:                hier de dure fout.
+#:   fail-closed  bij twijfel niets. Liever een gemiste melding dan een verzonnen alarm — een vals
+#:                alarm ondermijnt de echte.
+#:   selectie     hooguit een handvol, liever nul dan een zwakke.
+DREMPELS = ("recall", "precisie", "fail-closed", "selectie")

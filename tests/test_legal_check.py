@@ -156,3 +156,73 @@ def test_de_ingest_hangt_niet_meer_aan_een_losse_cron():
     wie dit later leest niet hoeft te raden waarom het twee keer draaide."""
     bron = open("nooch_village/village.py", encoding="utf-8").read()
     assert "30 6 * * *" in bron and "tweemaal per dag" in bron
+
+
+# ── De verzamelaar (pijplijn stap 2, 20 sept 2026) ──────────────────────────
+#
+# `verzamel()` is `check()` zonder de aflevering: hij geeft `weekmemo.Signaal`-objecten terug en
+# schrijft niets. Dat is de scheiding die de pijplijn aanbrengt — een verzamelaar WAARNEEMT, de
+# memo bepaalt wat de lezer ziet, en de mens bepaalt wat er gebeurt.
+#
+# Wat hieronder NIET opnieuw wordt getoetst: de beoordeling zelf. Die zit in `beoordeel` en heeft
+# zijn eigen tests hierboven; `verzamel` gebruikt precies dezelfde functie, dus hem hier nog eens
+# toetsen zou dezelfde belofte op twee plekken vastleggen.
+
+def test_verzamel_levert_signalen_en_schrijft_niets(tmp_path):
+    _radar(tmp_path, [{"content": "EU scherpt regels voor groene claims aan",
+                       "link": "https://eu-nieuws.eu/a", "at": NU - 3600}])
+    voor = (tmp_path / "radar.json").read_bytes()
+    uit = ls.verzamel(str(tmp_path), nu=NU,
+                      reason_fn=lambda p, **k: "RELEVANT: check onze claimpagina")
+    assert len(uit) == 1
+    s = uit[0]
+    assert s.bron == "legal"
+    assert "groene claims" in s.tekst                       # de tekst is die van de BRON
+    assert s.vindplaats == "https://eu-nieuws.eu/a"
+    assert s.gevonden_op > 0
+    assert s.extra["reden"].startswith("check onze claimpagina")   # wat het MODEL toevoegde
+    # Side-effect-free: dit is de eigenschap waar stap 7 een ratchet op zet.
+    assert (tmp_path / "radar.json").read_bytes() == voor
+    assert not (tmp_path / "human_inbox.json").exists()
+
+
+def test_verzamel_is_fail_closed_bij_een_storing(tmp_path):
+    """Dezelfde posture als `check`: geen model of een fout levert GEEN signaal, nooit een gok.
+    Een vals juridisch alarm ondermijnt de echte."""
+    _radar(tmp_path, [{"content": "EU scherpt regels aan", "link": "https://eu-nieuws.eu/a",
+                       "at": NU - 3600}])
+
+    def _stuk(prompt, **kw):
+        raise RuntimeError("geen krediet")
+
+    assert ls.verzamel(str(tmp_path), nu=NU, reason_fn=_stuk) == []
+    assert ls.verzamel(str(tmp_path), nu=NU, reason_fn=lambda p, **k: "NO") == []
+
+
+def test_verzamel_kijkt_terug_tot_sinds_en_niet_tot_36_uur(tmp_path):
+    """Het venster is een eigenschap van de AANROEP geworden. `check` kijkt 36 uur terug (een
+    dagpuls), de weekmemo een week — en dat verschil hoort niet in de bron te zitten."""
+    _radar(tmp_path, [{"content": "verse wetswijziging over groene claims",
+                       "link": "https://eu-nieuws.eu/vers", "at": NU - 3600},
+                      {"content": "oudere wetswijziging over groene claims",
+                       "link": "https://eu-nieuws.eu/oud", "at": NU - 5 * 86400}])
+    ja = lambda p, **k: "RELEVANT: iets"                     # noqa: E731
+    week = ls.verzamel(str(tmp_path), nu=NU, sinds=NU - 7 * 86400, reason_fn=ja)
+    dag = ls.verzamel(str(tmp_path), nu=NU, sinds=NU - 36 * 3600, reason_fn=ja)
+    assert len(week) == 2 and len(dag) == 1
+    assert dag[0].vindplaats.endswith("/vers")
+
+
+def test_verzamel_leest_alleen_de_legal_feed(tmp_path):
+    _radar(tmp_path, [{"content": "iets juridisch", "link": "https://a", "at": NU - 3600},
+                      {"content": "een nieuw materiaal", "link": "https://b", "at": NU - 3600,
+                       "feed": "Material Innovation"}])
+    uit = ls.verzamel(str(tmp_path), nu=NU, reason_fn=lambda p, **k: "RELEVANT: iets")
+    assert [s.vindplaats for s in uit] == ["https://a"]
+
+
+def test_de_drempel_staat_op_de_bron():
+    """Stap 2's kernkeuze: de drempel hoort bij de bron en niet bij de pijplijn. Staat hij hier
+    niet, dan moet de memo hem raden — en dan is hij impliciet, precies wat we opheffen."""
+    from nooch_village.weekmemo import DREMPELS
+    assert ls.DREMPEL == "fail-closed" and ls.DREMPEL in DREMPELS

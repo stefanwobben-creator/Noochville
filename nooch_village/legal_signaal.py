@@ -83,6 +83,58 @@ def beoordeel(signaal: dict, *, reason_fn=None) -> str:
     return reden[:400] or "raakt Nooch (geen toelichting gegeven)"
 
 
+#: Deze bron levert `fail-closed` aan de weekmemo: geen model, een leeg antwoord of welke fout dan
+#: ook betekent GEEN signaal. Dat staat al in de kop van deze module en het verandert niet door de
+#: pijplijn — de drempel hoort bij de bron, niet bij de lezer.
+DREMPEL = "fail-closed"
+
+
+def verzamel(data_dir: str, *, sinds: float = 0.0, nu: float | None = None, reason_fn=None,
+             cap: int = MAX_PER_PULS) -> list:
+    """De verse legal-signalen die Nooch raken, als `weekmemo.Signaal`.
+
+    DIT IS `check()` ZONDER DE AFLEVERING. Waar `check` een item in de human inbox zette, geeft
+    deze een lijst terug en schrijft niets — dat is de hele scheiding die stap 2 aanbrengt: een
+    verzamelaar WAARNEEMT, de memo beslist wat de lezer ziet, en de mens beslist wat er gebeurt.
+
+    `sinds` in plaats van `venster_uren`: de weekmemo kijkt een week terug en niet 36 uur, en het
+    venster is dus een eigenschap van de AANROEP geworden. 0 betekent: alles wat de radar heeft.
+
+    Side-effect-free, net als `beoordeel`. Dat is geen detail maar de eigenschap waar stap 7 een
+    ratchet op zet: een verzamelaar die schrijft is de terugkeer van precies het probleem dat deze
+    pijplijn opheft."""
+    import os
+
+    from nooch_village.radar_bronnen import tijdstip
+    from nooch_village.radar_store import RadarStore
+    from nooch_village.weekmemo import Signaal
+
+    nu = time.time() if nu is None else nu
+    try:
+        radar = RadarStore(os.path.join(data_dir, "radar.json"))
+        alles = [s for s in radar.all_items() if str(s.get("feed") or "") == FEED]
+    except Exception:                                       # noqa: BLE001 — fail-closed, luid
+        log.warning("radar niet leesbaar — geen legal-signalen", exc_info=True)
+        return []
+
+    kandidaten = [s for s in alles if tijdstip(s) >= sinds]
+    kandidaten.sort(key=tijdstip, reverse=True)
+    uit = []
+    for s in kandidaten[:cap]:
+        reden = beoordeel(s, reason_fn=reason_fn)
+        if not reden:
+            continue                                        # fail-closed: geen reden = geen signaal
+        uit.append(Signaal(
+            bron="legal", tekst=str(s.get("content") or ""),
+            vindplaats=str(s.get("link") or s.get("source") or ""),
+            gevonden_op=float(tijdstip(s) or 0.0),
+            herkomst=str(s.get("id") or s.get("link") or ""),
+            # De REDEN is wat het model toevoegde, en die hoort niet in `tekst`: `tekst` is wat de
+            # bron zei, `extra` is wat wij ervan vonden. In de memo staan ze daarom apart.
+            extra={"reden": reden, "bron_naam": str(s.get("source") or "")}))
+    return uit
+
+
 def check(data_dir: str, inbox, *, nu: float | None = None, reason_fn=None,
           venster_uren: float = VENSTER_UREN, cap: int = MAX_PER_PULS) -> list[str]:
     """De dagelijkse ronde. Geeft de id's van de aangemaakte inbox-items terug (leeg = niets).
