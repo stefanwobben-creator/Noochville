@@ -481,3 +481,27 @@ namen zijn daarom `qadd-bar` binnen de bestaande `qadd-`-familie — wat ook eer
 letterlijk hetzelfde component.
 
 Zeven tests. Suite: 4.083 passed, 1 failed (de bekende), 1 xfailed.
+
+## punt 4b — de voorbeeld-knop (optie 2)
+
+Een 👁-knop aan het eind van de editor-werkbalk wisselt tussen het tekstvak en de opgemaakte
+weergave. Nogmaals klikken (✎) gaat terug.
+
+**De weergave komt van de server**, via een nieuw fragment-endpoint `/md-preview` dat gewoon `_md`
+aanroept. Niet van een markdown-parser in JavaScript, en dat is de enige echte keuze hier: een
+tweede renderer loopt uiteen zodra er één opmaakregel bij komt, en zou bovendien het escapen
+opnieuw goed moeten doen. Er staat een structurele test op die eist dat er géén opmaak-syntax
+(`**`, `~~`, `## `, `replace(/`) in de JS-functie voorkomt — het begin van een tweede renderer
+valt daarmee op bij het schrijven.
+
+Het opslagmodel is niet aangeraakt; ook daar staat een test op die de `/md-preview`-tak scant op
+`_Stores(`, `.update(`, `.add(`.
+
+Twee kleine keuzes: het endpoint eist csrf (hij schrijft niets, maar kaatst wel willekeurige tekst
+terug — fail-closed, zelfde regel als de wizard-endpoints), en als de call faalt klapt het tekstvak
+meteen terug open. Een leeg voorbeeldvak leest als "je tekst is weg", en dat is precies het moment
+waarop iemand gaat plakken.
+
+`docs/ARCHITECTUUR.md` geregenereerd — `/md-preview` is een nieuwe route.
+
+Vijf tests. Suite: 4.088 passed, 1 failed (de bekende), 1 xfailed.

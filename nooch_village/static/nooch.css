@@ -1605,3 +1605,4 @@ summary.pchip:hover{border-color:var(--gray)}
 .msg-telling{font-weight:400;text-transform:none;letter-spacing:0;color:var(--subtle);font-size:.7rem}
 .qadd-bar{margin-top:.5rem}
 .att-body[data-qadd-open]{cursor:text}
+.editor-prev{padding:.5rem .6rem;border-top:1px solid var(--border);min-height:3rem}

@@ -410,15 +410,22 @@ def md_editor(name: str, value: str = "", rows: int = 6,
     hlp = ("<details class='emoji-pick tb-help'><summary title='Formatting help'>?</summary>"
            "<div class='md-help'>**bold** · *italic* · ~~strikethrough~~ · # heading · - list · [text](url)</div>"
            "</details>") if help else ""
-    return (f"<div class='editor'><div class='editor-tb'>"
+    # VOORBEELD-KNOP (fase 10, punt 4b). De werkbalk toonde `**vet**` als `**vet**` tot je opsloeg,
+    # en op een lange wiki-pagina bewerk je dan een hele pagina in broncode. De knop haalt de
+    # weergave op bij `/md-preview`, dus bij `_md` zelf — niet bij een tweede parser in JS, want die
+    # twee lopen uiteen zodra er één opmaakregel bij komt.
+    return (f"<div class='editor' data-md-preview><div class='editor-tb'>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Bold'><b>B</b></button>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Italic'><i>I</i></button>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Strikethrough'><s>S</s></button>"
             f"<span class='tb-sep'></span>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='List'>•</button>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Heading'>H</button>"
+            f"<span class='tb-sep'></span>"
+            f"<button type='button' class='tb-b' data-md-toggle title='Preview'>👁</button>"
             f"{hlp}</div>"
             f"<textarea name='{_e(name)}' rows='{rows}' placeholder='{_e(placeholder)}'>{_e(value)}</textarea>"
+            f"<div class='editor-prev att-body' hidden></div>"
             f"</div>{_WRAPSEL_JS}")
 
 

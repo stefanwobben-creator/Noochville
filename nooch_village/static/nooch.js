@@ -171,6 +171,36 @@
     });
   }
 
+  // ── Markdown-voorbeeld (fase 10 punt 4b) ──────────────────────────────────────────────────
+  // De knop wisselt tussen het tekstvak en de weergave. De weergave komt van de SERVER
+  // (`/md-preview` → `_md`), niet van een parser hier: dan toont het voorbeeld per definitie
+  // hetzelfde als wat je na opslaan ziet, en is er geen tweede renderer om uit de pas te lopen.
+  function mdPreview(root) {
+    root.querySelectorAll("[data-md-toggle]").forEach(function (knop) {
+      if (knop.dataset.nvWired) return;
+      knop.dataset.nvWired = "1";
+      knop.addEventListener("click", function () {
+        var ed = knop.closest("[data-md-preview]");
+        if (!ed) return;
+        var ta = ed.querySelector("textarea"), prev = ed.querySelector(".editor-prev");
+        if (!ta || !prev) return;
+        if (!prev.hidden) { prev.hidden = true; ta.hidden = false; knop.textContent = "👁"; return; }
+        var f = knop.closest("form");
+        var csrf = f ? (f.querySelector("input[name=csrf]") || {}).value || "" : "";
+        var body = new URLSearchParams({ csrf: csrf, tekst: ta.value });
+        prev.textContent = "…";
+        prev.hidden = false; ta.hidden = true; knop.textContent = "✎";
+        fetch("/md-preview", { method: "POST", body: body, credentials: "same-origin",
+                               headers: { "Content-Type": "application/x-www-form-urlencoded" } })
+          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+          .then(function (html) { prev.innerHTML = html; })
+          // Faalt de call, dan gaat het tekstvak meteen terug open. Een leeg voorbeeldvak zou
+          // lezen als "je tekst is weg", en dat is precies het moment waarop iemand gaat plakken.
+          .catch(function () { prev.hidden = true; ta.hidden = false; knop.textContent = "👁"; });
+      });
+    });
+  }
+
   // Zonder JS zou de opslaan-knop onbereikbaar zijn, want `hidden` staat in de HTML. Deze regel
   // draait die volgorde om: de balk is verborgen ZODRA de JS draait, en anders gewoon zichtbaar.
   function barReset(root) {
@@ -184,6 +214,7 @@
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
     barReset(root);
     inlineEdit(root);
+    mdPreview(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);

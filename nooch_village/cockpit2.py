@@ -6026,6 +6026,28 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
 
 
+            # ── Markdown-voorbeeld (fragment-endpoint voor de editor-werkbalk) ─────────────
+            if path == "/md-preview":
+                # AUTHZ: iedereen-ingelogd — dit LEEST niets en SCHRIJFT niets. Het rendert de tekst
+                # die de gebruiker zelf net heeft getypt en stuurt hem terug. Geen store wordt
+                # aangeraakt, dus er is niets om te beschermen behalve de sessie zelf.
+                #
+                # WAAROM SERVER-SIDE EN GEEN JS-RENDERER. Het voorbeeld moet exact hetzelfde tonen
+                # als wat je na opslaan ziet. Een markdown-parser in JS zou een TWEEDE renderer
+                # zijn naast `_md`, en die twee lopen uiteen zodra er één regel bij komt —
+                # `reference, don't copy`. Bovendien escapet `_md` eerst en pas daarna de
+                # opmaak-regexes; een eigen JS-versie zou dat opnieuw goed moeten doen.
+                if sessions is not None and self._session_username() is None:
+                    self.send_response(403); self.end_headers(); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self.send_response(403); self.end_headers(); return
+                tekst = (form.get("tekst") or [""])[0]
+                self._send(_md(tekst[:20000]) or "<p class='muted'>Nothing to preview yet.</p>",
+                           chrome=False)
+                return
+
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
             if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
                 username = self._session_username()
