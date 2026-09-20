@@ -29,6 +29,12 @@ WEB_SERVICE="noochville-cockpit2"        # de enige met een HTTP-health-endpoint
 RUN_USER="nooch"
 VENV_PY="/opt/noochville/venv/bin/python"
 HEALTH_URL="http://127.0.0.1:8766/"
+# DE TWEEDE CHECK, EN DE REDEN DAT HIJ ER IS. Op 20 september 2026 stond de site een uur op 502
+# terwijl `HEALTH_URL` keurig 303 gaf: `/` redirect naar de login zonder ooit `people.json` aan te
+# raken, en dát bestand was onleesbaar geworden. Een health-check die de datalaag niet aanraakt,
+# toetst alleen of het proces leeft — niet of de app werkt. `/login` leest people.json (`auth.py::
+# _by_email`), dus hij valt om op precies de klasse fouten die `/` doorlaat.
+DIEPTE_URL="http://127.0.0.1:8766/login"
 HEALTH_RETRIES=10          # ~20s totale boot-marge
 HEALTH_SLEEP=2
 DAEMON_SETTLE=8            # de daemon mag even booten; een import-fout is binnen die tijd zichtbaar
@@ -57,6 +63,38 @@ health_ok(){
   fout "health-check faalde (laatste code: ${code:-geen})"; return 1
 }
 
+# DE DATALAAG ÉCHT AANRAKEN. Zie de toelichting bij DIEPTE_URL: een 3xx van `/` zegt alleen dat er
+# een proces luistert. Deze doet een request die people.json moet openen.
+diepte_ok(){
+  local code
+  code="$(curl -o /dev/null -s -w '%{http_code}' --max-time 5 "$DIEPTE_URL")" || code=000
+  if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+    log "diepte-check OK ($DIEPTE_URL → HTTP $code, datalaag leesbaar)"; return 0
+  fi
+  fout "diepte-check faalde ($DIEPTE_URL → ${code:-geen}) — het proces leeft, de app niet"
+  return 1
+}
+
+# EIGENDOM IN data/. De klasse fout waar de diepte-check het symptoom van vangt: een script dat als
+# root draaide laat een bestand achter dat de service niet meer kan lezen. Dat is deze zomer al
+# gebeurd (radar.json, kennisbank_intake.json) en op 20 september opnieuw (people.json, door een
+# "read-only" diagnose die sinds die dag wél schrijft).
+#
+# Herstellen en het LUID zeggen, niet stil repareren: een 502 laten staan is erger, maar wie dit in
+# de log ziet moet weten dat er iets als root heeft gedraaid.
+eigendom_ok(){
+  local fout_lijst
+  fout_lijst="$(find "$REPO/data" -maxdepth 2 ! -user "$RUN_USER" -printf '%u %p\n' 2>/dev/null || true)"
+  if [ -z "$fout_lijst" ]; then
+    log "eigendom-check OK (alles in data/ is van $RUN_USER)"; return 0
+  fi
+  fout "eigendom in data/ klopt niet — dit hoort NOOIT te gebeuren:"
+  printf '%s\n' "$fout_lijst" >&2
+  chown -R "$RUN_USER:$RUN_USER" "$REPO/data"
+  fout "hersteld naar $RUN_USER. Zoek uit welk script als root draaide."
+  return 0
+}
+
 # Een service zonder HTTP-endpoint (de daemon) toetsen we op wat er wél te weten valt: draait hij
 # nog ná de boot-marge? Een import- of configfout laat 'm meteen sneuvelen; met Restart=always staat
 # hij dan op 'activating (auto-restart)' of 'failed', nooit op 'active'.
@@ -80,7 +118,9 @@ restart(){
 # Gezond = de webapp antwoordt ÉN elke niet-web service draait nog. Beide, want een deploy die de
 # daemon sloopt terwijl de site het doet, is geen geslaagde deploy.
 alles_gezond(){
+  eigendom_ok || return 1
   health_ok || return 1
+  diepte_ok || return 1
   for svc in "${SERVICES[@]}"; do
     [ "$svc" = "$WEB_SERVICE" ] && continue
     daemon_ok "$svc" || return 1
