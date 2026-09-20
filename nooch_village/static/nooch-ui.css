@@ -59,14 +59,23 @@
 .nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
 .nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
 
-/* ── Knoppen: zwart-op-wit, hover inverteert ──────────────────────────────────────────────── */
+/* ── Knoppen: zwart-op-wit, hover inverteert ────────────────────────────────────────────────
+   FASE 12 — ÉÉN LIJNDIKTE PER ROL. Deze knop droeg `--nu-border` (2px): exact de lijn van een
+   container. Een knop naast een kaart las daardoor als nóg een vlak, en dat was Stefans klacht
+   ("alles oogt als hetzelfde kader") in één regel CSS. Nu 1,5px, zodat de 2px van een container
+   de zwaarste lijn op het scherm blijft. Hiërarchie ontstaat niet door een kader wég te halen
+   maar door te kiezen wie de dikste lijn krijgt. */
 .nu .btn {
-  font-family: var(--nu-font); font-weight: 700; font-size: .9rem; border: var(--nu-border);
+  font-family: var(--nu-font); font-weight: 700; font-size: .9rem;
+  border: 1.5px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
   padding: .5em 1em; min-height: 38px; box-shadow: none;
   text-transform: uppercase; letter-spacing: .04em; }
 .nu .btn:hover { background: var(--nu-text); color: var(--nu-surface); }
-.nu .btn.ok { background: var(--nu-neon); border-color: var(--nu-text); color: var(--nu-text); }
+/* DE VULLING ÍS HET SIGNAAL. De hoofdactie droeg een neon vlak én een zwarte rand: twee signalen
+   voor één betekenis, en samen eten ze het onderscheid op. `transparent` en niet `border: 0`,
+   want de rand telt mee in de hoogte — weghalen zou de knop 3px korter maken dan zijn buren. */
+.nu .btn.ok { background: var(--nu-neon); border-color: transparent; color: var(--nu-text); }
 .nu .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
 .nu .btn.ghost { border-color: var(--nu-border-subtle); color: var(--nu-muted); font-weight: 600;
   background: none; }
@@ -76,10 +85,18 @@
 .nu .btn:disabled, .nu .btn.ok:disabled { opacity: .4; background: var(--nu-surface);
   color: var(--nu-muted); border-color: var(--nu-border-subtle); }
 
-/* ── Pill / chip / badge: in het prototype één vorm ───────────────────────────────────────── */
+/* ── Pill / chip / badge: in het prototype één vorm ─────────────────────────────────────────
+   FASE 12 — EEN ETIKET IS GEEN CONTAINER. Dit atoom stond 101 keer in 22 bestanden mét een zwarte
+   rand: één etiket met een kader valt niet op, honderd wel. In de referentiebeelden is een eyebrow
+   kleine hoofdletter-tekst en nooit een doosje.
+
+   Opmerkelijk: de BASIS-`.chip` in nooch.css was altijd al een tintvulling zonder rand. De zwarte
+   rand kwam er in fase 9 bij. Dit is dus deels een terugkeer naar wat er stond, in de `--nu-*`-
+   tinten. `transparent` en niet `border: 0`, zodat de hoogte gelijk blijft aan de varianten die
+   hun lijn wél houden (`.outline`). */
 .nu .pill, .nu .chip, .nu .badge {
-  display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid var(--nu-text);
-  border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
+  border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
   padding: .15em .6em; font-size: .72rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .03em; }
 .nu .pill.muted, .nu .chip.muted, .nu .badge.ro {
@@ -90,26 +107,38 @@
    Het hele punt van dit systeem. Een gekleurd vlakje zegt niets tegen wie kleur niet (goed) ziet,
    en niets in zwart-wit. De vorm draagt de betekenis, de kleur versterkt hem, en het WOORD staat
    er altijd bij. */
+/* FASE 12 — het KADER vervalt, de VORM en het WOORD blijven. Die twee zijn de dragers (zie de kop
+   van dit bestand); de rand was de derde en die maakte van elke status een doosje. */
 .nu .nu-status {
   display: inline-flex; align-items: center; gap: .45em; font-size: .78rem; font-weight: 700;
-  padding: .2em .6em; border: 1.5px solid var(--nu-text); background: var(--nu-surface); }
+  padding: .2em .6em; border: 1.5px solid transparent; background: var(--nu-bg-alt); }
 .nu .nu-status::before { content: ""; width: .55em; height: .55em; flex: none; }
 .nu .nu-status--ok { background: var(--nu-bg-alt); color: var(--nu-accent-text); }
 .nu .nu-status--ok::before { background: var(--nu-accent); border-radius: 50%; }   /* rond, gevuld */
-.nu .nu-status--open { color: var(--nu-muted); border-style: dashed; }
+/* Open/vacant houdt zijn gestippelde lijn — niet als kader maar als BETEKENIS: gestippeld is in
+   dit systeem "nog niet ingevuld". Daarom subtiel grijs en niet zwart. */
+.nu .nu-status--open { color: var(--nu-muted); background: var(--nu-surface);
+  border: 1.5px dashed var(--nu-border-subtle); }
 .nu .nu-status--open::before { border: 1px solid var(--nu-muted); border-radius: 50%; }  /* rond, leeg */
 .nu .nu-status--wait::before { background: var(--nu-text);
   clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }                              /* half vierkant */
-.nu .nu-status--off { color: var(--nu-danger); border-color: var(--nu-danger); }
+/* Rood houdt zijn lijn. Dit is geen container-kader maar een alarm, en het is de enige status
+   waar de kleur zelf iets zegt dat de vorm niet kan overnemen. */
+.nu .nu-status--off { color: var(--nu-danger); background: var(--nu-surface);
+  border-color: var(--nu-danger); }
 .nu .nu-status--off::before { background: var(--nu-danger);
   clip-path: polygon(50% 0, 100% 100%, 0 100%); }                                  /* driehoek */
 
 /* ── Tabs, filters, invoer ────────────────────────────────────────────────────────────────── */
 .nu .c2-tabs a { border-radius: 0; font-weight: 700; color: var(--nu-muted);
   text-transform: uppercase; letter-spacing: .05em; }
-.nu .c2-tabs a.on { border: var(--nu-border); border-bottom-color: var(--nu-surface);
+/* De tab-vorm (lijn met een open onderkant) blijft; alleen de dikte gaat mee met de knoppen,
+   zodat een container de zwaarste lijn houdt. */
+.nu .c2-tabs a.on { border: 1.5px solid var(--nu-text); border-bottom-color: var(--nu-surface);
   background: var(--nu-surface); color: var(--nu-text); }
-.nu .cl-filter { border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+/* FASE 12 — EEN RIJ FILTERS IS GEEN RIJ DOOSJES. In rust geen lijn; actief blijft gevuld, want
+   dáár is het onderscheid dat je moet zien. Zelfde keuze als bij de kanaalrij, die dit al deed. */
+.nu .cl-filter { border: 1.5px solid transparent; border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-weight: 700; }
 .nu .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
 .nu input[type=text], .nu input[type=search], .nu input[type=email], .nu input[type=number],
@@ -165,7 +194,8 @@
 @media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
 
 /* ── De inbox-launcher: zwart-op-neon, en niet meer bovenop de zijbalk ───────────────────── */
-.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: var(--nu-border);
+/* De launcher is een PRIMAIRE actie: neon vulling, dus geen rand erbovenop (fase 12). */
+.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: 2px solid transparent;
   background: var(--nu-neon); box-shadow: none; }
 .nu .ibx-launch.zero { background: var(--nu-surface); }
 .nu .ibx-launch:hover { transform: none; background: var(--nu-text); color: var(--nu-surface); }
@@ -307,8 +337,12 @@
 .nu .dellink, .nu .vz-h { color: var(--nu-danger); font-family: var(--nu-font); }
 .nu .chip.coral-solid { background: var(--nu-danger); color: var(--nu-surface);
   border-color: var(--nu-danger); }
-.nu .amber { background: var(--nu-bg); color: var(--nu-text); border: 1.5px solid var(--nu-text); }
-.nu .outline { background: none; border: var(--nu-border); color: var(--nu-text); }
+/* De twee chip-varianten zetten hun eigen rand en moeten dus mee met de regel hierboven, anders
+   staat er naast een kaderloos etiket alsnog een zwart doosje. Het ONDERSCHEID blijft, maar het
+   zit nu in de tekst en niet in een lijn: groen = informatie, zwart = let op. */
+.nu .amber { background: var(--nu-bg-alt); color: var(--nu-text); border-color: transparent; }
+.nu .outline { background: none; border: 1.5px solid var(--nu-border-subtle);
+  color: var(--nu-muted); }
 
 /* 6 · De overlay zelf */
 .nu .ovl { background: rgba(0,0,0,.55); }
@@ -355,7 +389,8 @@
 
 /* 4 · De laatste pil-radiussen in dit scherm */
 .nu .ibx-plus, .nu .ibx-hct, .nu .ibx-ct { border-radius: 0; }
-.nu .ibx-plus { border: var(--nu-border); background: var(--nu-surface); color: var(--nu-text); }
+.nu .ibx-plus { border: 1.5px solid var(--nu-text); background: var(--nu-surface);
+  color: var(--nu-text); }
 .nu .ibx-hct, .nu .ibx-ct { background: var(--nu-neon); color: var(--nu-text);
   font-family: var(--nu-font); font-weight: 700; }
 
@@ -368,7 +403,8 @@
 
 /* 7 · De staart van inbox.py */
 .nu .ibx-btn, .nu .ibx-alaan, .nu .ibx-add {
-  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text);
   font-family: var(--nu-font); }
 .nu .ibx-add { border-width: 0 0 2px 0; }
 .nu .einddoc-body { color: var(--nu-text); }
@@ -384,9 +420,14 @@
 /* wizard.py */
 .nu .wz-hint, .nu .wz-who, .nu .wz-x, .nu .wz-rm {
   color: var(--nu-muted); font-family: var(--nu-font); }
-.nu .wz-btn, .nu .wz-chip, .nu .wz-add, .nu .wz-badge {
-  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+/* DEZE VIER STONDEN IN ÉÉN REGEL, en dat was precies het probleem: twee knoppen en twee etiketten
+   met dezelfde container-lijn. De rolverdeling splitst ze (fase 12). */
+.nu .wz-btn, .nu .wz-add {
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .wz-chip, .nu .wz-badge {
+  border: 1.5px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
+  color: var(--nu-accent-text); font-family: var(--nu-font); box-shadow: none; }
 .nu .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
 .nu .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   box-shadow: none; }
@@ -459,10 +500,15 @@
    De basisvormen staan in nooch.css (die ook geldt op schermen die niet meedoen); hier krijgen ze
    de taal van dit systeem: scherpe hoeken, zwarte lijn, groen als vulling. */
 
-/* 2a — het voortgangs-atoom. Vierkant, één lijn, en de vulling draagt de betekenis. */
-.nu progress.nu-progress { height: 8px; border: 1.5px solid var(--nu-text); border-radius: 0;
-  background: var(--nu-surface); }
-.nu progress.nu-progress::-webkit-progress-bar { background: var(--nu-surface); border-radius: 0; }
+/* 2a — het voortgangs-atoom. Vierkant, en de VULLING draagt de betekenis.
+   FASE 12: de zwarte lijn om de baan is eraf. Een balkje is INFORMATIE, en informatie krijgt in
+   deze rolverdeling geen kader — de baan zelf (subtiel grijs) laat al zien hoe lang hij is. Dit
+   atoom is op 20 september bewust mét lijn gebouwd omdat dat toen het systeem was; hij hoorde bij
+   dit besluit en niet ervóór. */
+.nu progress.nu-progress { height: 8px; border: 0; border-radius: 0;
+  background: var(--nu-border-subtle); }
+.nu progress.nu-progress::-webkit-progress-bar { background: var(--nu-border-subtle);
+  border-radius: 0; }
 .nu progress.nu-progress::-webkit-progress-value { background: var(--nu-accent); border-radius: 0; }
 .nu progress.nu-progress::-moz-progress-bar { background: var(--nu-accent); border-radius: 0; }
 
@@ -483,7 +529,8 @@
 .nu .c2-side--rail { border-right: var(--nu-border); }
 .nu .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
 .nu .c2-side--rail .c2-orgfly[open] .c2-org { border: var(--nu-border); border-radius: 0; }
-.nu .c2-burger { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
+.nu .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); }
 
 /* De kaart op het bord in dit systeem. `.pcard` was tot nu toe onzichtbaar voor de dekkings-
    ratchet doordat de view hem alleen als `pcard{verz}` (mét placeholder) rendeerde; sinds de

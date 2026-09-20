@@ -152,6 +152,18 @@ def rapport(data_dir: str, *, apply: bool = False, owner: str = "") -> dict:
           + (f" · mislukt: {v['mislukt']}" if v["mislukt"] else ""))
     for g in v["geland"]:
         print(f"    {g['naam'][:18]:18s} {g['stap'][:58]:58s} {g.get('ref','')}")
+        # HET ENIGE PER-GEVAL-OORDEEL DAT ER NOG IS (20 september 2026). Het rapport toonde per
+        # toewijzing een kale naam, terwijl `suggestie` al in elk item zat en nergens werd geprint.
+        # Dat maakte het rapport onherbeoordeelbaar: de regel "op welke grond" eronder is sinds
+        # `_mens_ontvanger` altijd de founder teruggeeft een CONSTANTE ("alles wat vastloopt komt
+        # eerst bij jou") — niet verkeerd, maar voor elk geval hetzelfde, en dus zonder onderscheid.
+        # De modelsuggestie is wél per geval verschillend, en hij is precies waar een mens ja of nee
+        # tegen zegt: accepteren doe je door in de DM `@rol` te antwoorden.
+        #
+        # Het blijft een VOORSTEL en geen bestemming: de ontvanger is hierboven al bepaald en
+        # verandert hier niet door (CLAUDE.md, "AI is instrument, geen rol").
+        if g.get("suggestie"):
+            print(f"      ↳ {g['suggestie'][:96]}")
     if v["verdeling"]:
         print("\n  VERDELING — waar landt het:")
         for naam, n in sorted(v["verdeling"].items(), key=lambda t: -t[1]):

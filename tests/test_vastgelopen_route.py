@@ -162,3 +162,34 @@ def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):
     """Een id in een verdeling is niet te lezen; de vraag is welke MENS dit krijgt."""
     _vastgelopen(dd)
     assert FOUNDER_NAAM in " ".join(vr.pas(dd)["verdeling"])
+
+
+def test_het_rapport_toont_de_suggestie_per_toewijzing(dd, capsys):
+    """DE ENIGE PLEK WAAR EEN TOEWIJZING NOG HERBEOORDEELBAAR IS (20 september 2026).
+
+    De regel "op welke grond" onderaan het rapport is sinds `_mens_ontvanger` altijd de founder
+    teruggeeft een CONSTANTE: "alles wat vastloopt komt eerst bij jou", voor elk geval hetzelfde.
+    Niet verkeerd, maar zonder onderscheid — je kunt er geen enkele toewijzing mee wegen.
+
+    De modelsuggestie is wél per geval verschillend, zat al in elk item van het verslag, en werd
+    nergens geprint. Nu wel. Het blijft een VOORSTEL: de ontvanger is al bepaald en verandert hier
+    niet door."""
+    _vastgelopen(dd)
+    vr.rapport(dd, apply=False)
+    uit = capsys.readouterr().out
+    assert "alles wat vastloopt komt eerst bij jou" in uit          # de constante grond blijft
+    # De suggestie hangt aan een modelantwoord; zonder sleutel is hij leeg en hoort er niets te
+    # staan — een lege "↳"-regel zou suggereren dat er een voorstel was.
+    v = vr.pas(dd)
+    heeft = [g for g in v["geland"] if g.get("suggestie")]
+    assert ("↳" in uit) == bool(heeft), "een ↳-regel hoort te bestaan als en alleen als er een voorstel is"
+
+
+def test_de_suggestie_verandert_de_bestemming_niet(dd):
+    """DE GRENS. Het model mag iets vinden; het adres blijft de founder. Zou de suggestie de
+    bestemming raken, dan is het geen voorstel meer maar een toewijzing door een model."""
+    _vastgelopen(dd)
+    v = vr.pas(dd, reason_fn=lambda *a, **k: '{"rol": "mother_earth__nooch__creator_of_shoes", '
+                                            '"kind": "rol", "waarom": "materiaalvraag"}')
+    assert list(v["gronden"]) == ["alles wat vastloopt komt eerst bij jou"]
+    assert FOUNDER_NAAM in " ".join(v["verdeling"])
