@@ -644,3 +644,58 @@ Drie rollen hebben Lotte **én** Stefan als vervuller. De migratie raadt niet: z
 de migratie is idempotent.
 
 Veertien tests. Suite: 4.102 passed, 1 failed (de bekende), 1 xfailed.
+
+## stap B — begonnen, en bewust gestopt vóór de commit
+
+Opdracht: B alvast bouwen, dan deployen. Ik heb B gesplitst in B1 (alles wat vanaf nu ontstaat gaat
+als DM) en B2 (`NotifStore`, `/inbox`, `/inbox/verwerk` en de lade eruit), en B1 gebouwd. **B1 is
+niet gecommit** — hij staat in de stash (`B1-writers-wip`). De reden staat hieronder.
+
+### Wat er wél is gecommit: de gedeelde routering
+
+`signaal.py` — één plek die bepaalt bij wie een melding landt, gebruikt door de migratie (371
+bestaande rijen) én door alles wat vanaf nu ontstaat. Twee kopieën zouden betekenen dat dezelfde
+rol-id vandaag bij Lotte landt en morgen bij Stefan zonder dat iets zich meldt.
+
+Eén verschil staat er expliciet in, want het is een keuze: **bij meerdere vervullers parkeert de
+migratie, maar gaat een nieuwe melding naar allemaal.** Historie hoort precies één plek te hebben
+en een mens kiest welke; nieuw werk mag liever dubbel aankomen dan nergens.
+
+### Waarom B1 niet gecommit is
+
+De tien schrijfplekken omzetten werkte (`.notif.add` komt nul keer meer voor in `cockpit2.py`,
+alles loopt via `_signaleer`). Maar de suite gaat daarmee van 1 naar **44 failures**, verdeeld over
+twaalf testbestanden. Ze falen allemaal in dezelfde vorm:
+
+```
+items = st.notif.open_for_targets(...)
+assert len(items) == 1      →  assert 0 == 1
+```
+
+Dat is geen bug maar de gedragswijziging zelf: die tests controleren dát er een inbox-item ontstaat.
+Ze moeten controleren dat er een DM ontstaat. Mechanisch van vorm, maar **inhoudelijk niet**: elke
+test legt vast wie wát krijgt, en dat is precies wat deze migratie verandert.
+
+De werkafspraak is volledige suite groen vóór elke commit. Ik commit geen rode boom, en ik ga 44
+tests die vastleggen wie welk bericht krijgt niet aan het eind van een lange beurt in één veeg
+herschrijven — dat is hoe je een migratie krijgt die er goed uitziet en het niet is.
+
+### Twee gedragsbesluiten die ik in B1 moest nemen, en die je moet zien
+
+1. **`_settle_inbox(processed=True)` stuurt niets meer.** Vier van de vijf aanroepen zetten een
+   item neer en markeerden het meteen als verwerkt — werk dat al gedaan was op het moment dat het
+   verscheen. Zonder verwerkingsmodel is er geen plek meer voor "al gedaan", en een bericht over
+   afgerond werk is geen bericht maar een log. Alleen `processed=False` (de mens moet er nog naar
+   kijken) stuurt nog een DM.
+2. **De `extra`-velden vervallen.** `type`, `rol`, `prive`, `opdrachtgever`, `bron_project`,
+   `MENS_GETYPT`, `afronding`, `suggestie` — die droegen het inbox-scherm. Een DM heeft alleen
+   tekst, afzender en tijd. `bron_project` is als `herkomst` bewaard gebleven, want dat is het enige
+   veld dat het bericht zelf leesbaar houdt ("from project X"). De rest verdwijnt.
+
+Besluit 1 verandert wat je nog te zien krijgt; besluit 2 verandert hoe een bericht eruitziet. Geen
+van beide wilde ik stilzwijgend committen.
+
+### Wat ik voorstel
+
+B1 als eigen beurt, met de 44 tests erbij en per testbestand nagelopen wat het vastlegt. Daarna B2.
+De stash staat klaar; niets is verloren.

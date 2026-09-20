@@ -36,40 +36,26 @@ bereikt is erger dan geen antwoordveld.
 """
 from __future__ import annotations
 
-from nooch_village import channels
+from nooch_village import channels, signaal
 
-#: Wie de berichten krijgt van een rol die niemand meer vervult.
-TERUGVAL_ROL = "mother_earth__nooch__strategic_lead_founder_steward"
-
-#: Uitkomsten van de routering, in het rapport terug te zien.
-NAAR_PERSOON, NAAR_VERVULLER, NAAR_TERUGVAL, MEERDERE, ONBEKEND = (
-    "persoon", "vervuller", "terugval", "meerdere-vervullers", "onbekend-doel")
-
-
-def _mensen_van(st, rol: str) -> list[str]:
-    rec = st.records.get(rol)
-    return [f.id for f in st.assign.fillers_of(rol, rec) if f.type == "person"] if rec else []
-
-
-def _terugval(st) -> str:
-    mensen = _mensen_van(st, TERUGVAL_ROL)
-    return mensen[0] if len(mensen) == 1 else ""
+# De routering woont in `signaal.py`, want `cockpit2` gebruikt hem ook voor alles wat vanaf nu
+# ontstaat. Twee kopieën zouden betekenen dat dezelfde rol-id vandaag bij de een landt en morgen
+# bij de ander, zonder dat iets zich meldt.
+TERUGVAL_ROL = signaal.TERUGVAL_ROL
+NAAR_PERSOON, NAAR_VERVULLER = signaal.NAAR_PERSOON, signaal.NAAR_VERVULLER
+NAAR_TERUGVAL, MEERDERE, ONBEKEND = signaal.NAAR_TERUGVAL, signaal.MEERDERE, signaal.ONBEKEND
 
 
 def ontvanger_van(st, n: dict) -> tuple[str, str]:
-    """(persoon_id, reden). Lege persoon_id = niet te routeren; de reden zegt waarom."""
-    soort, doel = n.get("target_type"), str(n.get("target_id") or "")
-    if soort == "person":
-        return (doel, NAAR_PERSOON) if st.people.get(doel) else ("", ONBEKEND)
-    if soort != "role" or not doel:
-        return "", ONBEKEND
-    mensen = _mensen_van(st, doel)
-    if len(mensen) == 1:
-        return mensen[0], NAAR_VERVULLER
-    if len(mensen) > 1:
-        return "", MEERDERE
-    terug = _terugval(st)
-    return (terug, NAAR_TERUGVAL) if terug else ("", ONBEKEND)
+    """(persoon_id, reden). Lege persoon_id = niet te routeren; de reden zegt waarom.
+
+    DE MIGRATIE PARKEERT bij meerdere vervullers, terwijl een NIEUWE melding naar allemaal gaat
+    (`signaal.stuur`). Dat verschil is bewust: historie hoort precies één plek te hebben, en een
+    mens beslist welke; nieuw werk mag liever dubbel aankomen dan nergens."""
+    wie, reden = signaal.ontvangers(st, n.get("target_type"), n.get("target_id"))
+    if reden == signaal.MEERDERE or len(wie) != 1:
+        return "", reden
+    return wie[0], reden
 
 
 def migreer(notif, st, *, apply: bool = False) -> dict:
