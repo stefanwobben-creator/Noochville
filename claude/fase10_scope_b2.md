@@ -53,29 +53,24 @@ per bericht een LLM-call waarvan **niemand de uitkomst leest**.
 Daar komt bij: de helft die woorden vervangt mág sowieso niet op mens-tekst draaien — dat is de
 `MENS_GETYPT`-regel, en in een DM-laag is vrijwel alles mens-tekst.
 
-**Twee wegen, en dit is een keuze voor jou:**
+**BESLIST (Stefan, 20 september): weg A — de poort gaat met pensioen.** `spanning_ontstaat`,
+`bevinding` en `zelf_verwerking` gaan er in B2 uit. Geen nieuwe lezer: beide helften hebben hun
+enige afnemer verloren en horen niet terug te komen voor de sier. Herschrijven mag sowieso niet op
+mens-tekst draaien, en in een DM-laag is dat vrijwel alles.
 
-- **A — de poort met pensioen.** `spanning_ontstaat`, `bevinding` en `zelf_verwerking` eruit in B2.
-  Eerlijk: zijn beide afnemers zijn weg, en een module die draait zonder lezer is de duurste soort
-  dode code — hij kost tokens en niemand merkt dat het antwoord nergens landt.
-- **B — de poort een nieuwe lezer geven.** Bijvoorbeeld: het TYPEREN blijft, en een DM toont een
-  klein label ("vraag aan jou" / "melding") zodat je in een lange kanalenlijst ziet wát er op je
-  wacht. Herschrijven vervalt hoe dan ook. Dat is dan wél een nieuwe UI-vraag, en onder de nieuwe
-  CLAUDE.md-regel begint die bij een atoom (het label), niet bij het scherm.
-
-Ik bouw geen van beide tot je kiest. Weg is niet terug te halen; wiring zonder lezer is stil.
+Dat maakt B2 een stuk groter dan alleen `NotifStore`: er gaan drie modules uit in plaats van één.
+De verwijdering hoort daarom pas ná de rest van B2, zodat een fout in de omzetting niet met een
+dode-code-opruiming in dezelfde commit zit.
 
 ---
 
-## Open vraag: wat blijft er over van de lade?
+## Wat er van de lade overblijft — BESLIST
 
-Zonder inbox is er geen plek meer die zegt "dit ligt bij jou". De DM-kanalen zijn een stroom, geen
-wachtrij. Drie mogelijkheden, van klein naar groot:
+Geen apart label en geen nieuw begrip. De "waar ligt iets bij mij"-behoefte wordt gedekt door de
+**kanaal-ongelezen-indicator die al in fase 11 (punt 3a/3b) is gescoped**, en dat is de eerste
+bouwstap daar. B2 hoeft er dus niets voor te verzinnen.
 
-1. De lade toont **ongelezen DM's** — één teller, geen nieuw begrip.
-2. De lade verdwijnt; `/messages` is de enige plek.
-3. `/messages` krijgt een **"aan jou gericht"**-filter (de DM-groep staat er al apart).
-
-Mijn voorkeur is 1 of 3: die gebruiken wat er is. Optie 2 is het eerlijkst bij "de mens is
-verantwoordelijk", maar dan is er geen enkel scherm meer met een getal erop, en dat is precies wat
-mensen gebruiken om te weten of ze iets gemist hebben.
+Praktisch gevolg voor de volgorde: B2 haalt `/inbox` weg, en de indicator uit fase 11 neemt de
+functie over. Zitten die te ver uit elkaar, dan is er even geen enkel scherm met een getal erop —
+het enige dat mensen gebruiken om te weten of ze iets gemist hebben. Dat is geen blokkade, wel iets
+om bij de planning van B2 en fase 11 naast elkaar te leggen.

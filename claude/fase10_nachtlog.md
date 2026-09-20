@@ -772,3 +772,34 @@ Niet mechanisch vervangen. Per test nagelopen wat hij vastlegde:
 `claude/ux_voorstel_best_practices_20sept.md` is nieuw — allebei van Stefan, tijdens dit werk. Ik
 laat ze staan; ze horen niet in een commit van mij. (De brief kondigt ook een **fase 11** aan over
 UX-microinteracties; die heb ik niet opgepakt.)
+
+## De migratie is uitgevoerd op productie
+
+**20 september, 09:45–09:55.** Snapshot `backups/data_2026-09-20_0945.tgz` (100 MB, 2.070
+bestanden), deploy naar `8ecf29a`, droogloop, en na akkoord `--apply`.
+
+```
+notificaties  371   geschreven 371   bestond al 0   geparkeerd 0   DM-kanalen 41
+routering:    vervuller 308 · persoon 33 · terugval 30
+berichten in de kanalen: 371  (+ 0 geparkeerd = 371)      ✓ alles verantwoord
+```
+
+Nagelopen ná het schrijven, op de echte store:
+
+| controle | uitkomst |
+|---|---|
+| berichten in de 41 DM-kanalen | 371, allemaal `kind="notificatie"` |
+| elke notificatie-id terug te vinden | **ja**, 0 kwijt |
+| berichten met een lege tekst | **0** |
+| tijdspanne | 30 juni 2026 – 19 september 2026 |
+| `NotifStore` | **371 rijen, onaangeroerd** |
+
+Per ontvanger: Stefan 351 · Lotte 14 · Matthijs 5 · Wytse 1.
+
+De `terugval` is 30 en niet 19: de elf rijen op rollen met twee vervullers horen er sinds het
+besluit van vanochtend bij. 19 + 11 = 30, en `geparkeerd` staat daarmee op 0.
+
+Services actief, `/`, `/messages` en `/inbox` alle drie 303, geen fouten in de logs.
+
+**`NotifStore` staat er nog** — dat is de hele opzet van twee stappen: de bron blijft naast de
+kopie staan tot iemand heeft kunnen kijken of de 371 leesbaar zijn aangekomen.

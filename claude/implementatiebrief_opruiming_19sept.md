@@ -1468,16 +1468,27 @@ rest: in de oude inbox zat, naast de meldingenlijst die nu een DM wordt, ook een
 add` als aanroeper en draait nergens meer op de acht omgezette paden — een module die stilviel
 zonder dat iets het zei.
 
-**Besluit: de besluitwachtrij krijgt een eigen kleine store** (voorstellen + acties, niets meer),
-niet NotifStore laten voortleven voor "nog even die twee flows." Reden: de vereenvoudiging van
-eerder vandaag ("iedere melding wordt een DM, mens verantwoordelijk") ging over pure signalering —
-deze twee waren dat nooit. Een pagina-voorstel en een toegewezen actie zijn objecten met echte
-status (pending/geaccepteerd/geweigerd, toegewezen/afgerond), geen mededeling. Ze op een DM
-proberen te persen verliest precies dat, en NotifStore "alleen nog voor twee flows" laten
-doorleven is uitstel, geen oplossing — dan is-ie nooit weg. Een eigen minimale store laat NotifStore
-daadwerkelijk sneuvelen zoals bedoeld, in plaats van hem onder een andere naam te laten voortbestaan.
-`spanning_ontstaat` moet meeverhuizen: de typeer-/bevindingpoort haakt straks in op de write-kant van
-deze nieuwe besluitwachtrij-store, niet meer op `NotifStore.add`.
+~~**Besluit: de besluitwachtrij krijgt een eigen kleine store** (voorstellen + acties, niets meer),
+niet NotifStore laten voortleven voor "nog even die twee flows."~~ — **teruggedraaid, zie hieronder.**
+
+**Herzien (20 sept, na Stefans tegenvraag "wat hebben we hieraan, en wat als we dit niet doen?")**:
+geen besluitwachtrij, geen nieuwe store. De twee vragen die dit bepaalden, zijn beantwoord:
+
+- **Werkoverleg-actie: dat doet het werkoverleg al.** Er is al een bestaand mechanisme
+  (`roloverleg.py`) dat de toewijzing en het afronden bijhoudt, los van NotifStore. De DM is dus
+  puur een melding ("je hebt een actie toegewezen gekregen") bovenop een staat die al ergens anders
+  leeft — niets nieuws om vast te leggen, alleen de melding zelf via de gewone DM-route.
+- **Pagina-voorstel: menselijk maken, geen eigen mechaniek.** Geen automatische consequentie bij
+  "accepteren" — Stefan (of wie de rol vervult) leest de suggestie en past de pagina, als hij het
+  ermee eens is, gewoon zelf aan zoals bij elke andere wiki-bewerking. Geen aparte status nodig: een
+  genegeerd voorstel betekent simpelweg dat de pagina niet verandert, hetzelfde patroon als elke
+  andere DM vandaag.
+
+Beide worden dus gewoon een plain DM, identiek aan de andere 371 rijen — geen uitzondering meer op
+de tien schrijfplekken. `spanning_ontstaat` (de typeer-/bevindingpoort) haakt daarmee ook niet in op
+een nieuwe store, maar op de ene gedeelde plek waar elke DM/message ontstaat — dezelfde plek voor
+alle signalen, geen aparte aanroeper per type. Dit sluit de NotifStore-vereenvoudiging nu volledig:
+geen nieuwe infrastructuur, geen `/inbox`-restant in welke vorm dan ook.
 
 Twee bugs gevonden én al gefixt tijdens B1, akkoord, geen verdere actie: (1) een gast zonder
 gekoppelde ontvanger verloor zijn genoteerde spanning stilletjes — valt nu terug op Stefans DM in
@@ -1522,6 +1533,35 @@ is: een nieuw voorstel of een nieuwe actie stuurt, net als elke andere melding, 
 handelen, met een link naar de plek waar de beslissing zelf plaatsvindt. Zo blijft er precies één
 plek die zegt "hier moet je iets mee" (Messages, zoals nu al voor alles geldt), zonder een tweede
 besluit-scherm te bouwen dat los staat van waar de beslissing inhoudelijk hoort.
+
+**Aanscherping op de routing (20 sept, Stefans vraag "hoe gaat de routing dan?")**: geen aparte
+routinglogica voor deze twee objecttypen. De routing loopt via exact hetzelfde mechanisme als de
+andere 371 rijen vandaag: `signaal.py` bepaalt wie de huidige vervuller (rol) of toegewezene (actie)
+is, en daar gaat een gewone message naartoe, precies zoals elke andere melding. "Oppakken" betekent:
+de mens ziet 'm in Messages zoals nu al voor alles geldt, en die message wijst naar de plek waar de
+beslissing/afronding daadwerkelijk gebeurt (accepteer/weiger/aanpas bij het voorstel, de afrondknop
+bij de actie — bestaande of geplande knoppen, geen nieuw scherm). "Bij de wiki-pagina/werkoverleg"
+uit de vorige alinea is dus niet een alternatieve manier om het te vínden, het is waar je na het
+klikken op de message landt. Enige verschil met een gewone DM: er hangt een besluitwachtrij-record
+achter (pending/geaccepteerd/geweigerd, toegewezen/afgerond), zodat de status niet verloren gaat
+zoals bij een plain DM wel zou gebeuren.
+
+**Per-bericht acties: vinken (verwerkt) en verwijderen (20 sept, Stefans aanvulling)**: uitbreiding
+op de al geplande Slack-stijl berichtverwijdering. Twee acties per bericht: een vink om 'm als
+verwerkt te markeren, en verwijderen (dan is-ie weg uit de conversatie). Onderscheid, bewust gemaakt
+om niet dezelfde soort bug te herhalen als de gast-zonder-ontvanger van vandaag (een record dat stil
+verdwijnt terwijl de onderliggende staat er niets van weet):
+
+- **Plain DM** (de 371 gemigreerde + alle toekomstige gewone meldingen): geen backing-state, dus
+  vinken is een pure, persoonlijke marker (decluttering, geen effect op iets anders) en verwijderen
+  is onschuldig — weg is weg, er hangt niets aan vast.
+- **Besluitwachtrij-bericht** (voorstel/actie, wél backing-state): vinken mag geen los, onafhankelijk
+  vinkje zijn naast de echte beslissing — dat zou precies het lek herhalen dat B1 vandaag al een keer
+  blootlegde. Vinken op zo'n bericht IS de beslissing afronden (accepteren/afronden raakt de
+  besluitwachtrij-record rechtstreeks, geen aparte marker die uit de pas kan lopen). Verwijderen mag
+  alleen als de onderliggende beslissing al is afgehandeld; staat 'ie nog open, dan eerst afhandelen
+  — anders verdwijnt een openstaand verzoek spoorloos, hetzelfde risico als vandaag al eenmaal
+  gevonden en gefixt is.
 
 **Deploy** — geblokkeerd, niet door Claude Code maar door een actie bij Stefan: `deploy.sh` doet
 alleen een fast-forward naar `origin/main`, prod staat op `8ab787a`, al het werk zit in PR #517 (een
@@ -1719,6 +1759,32 @@ patterns), of gaat toevoegen als dat nog niet gebeurd is:
    lijst terug (view-naam + korte reden), zodat zichtbaar is waar de schuld zit. Geen prioritering
    of fix nodig, puur zicht erop.
 ```
+
+## Fase 10, A+B1 live, droogloop schoon, spanning_ontstaat met pensioen (20 sept)
+
+**A+B1 staat live op prod** (`8ecf29a`), health-check 303, beide services actief, geen fouten.
+Backup vooraf: `backups/data_2026-09-20_0945.tgz` (100 MB, 2.070 bestanden).
+
+**Droogloop, cijfers kloppen**: 371 in, 371 verwerkt, 0 geparkeerd, 41 DM-kanalen. Routering:
+vervuller 308, persoon 33, terugval 30 (= 19 zonder levende vervuller + 11 geparkeerde-met-
+meerdere-vervullers, precies zoals besloten). Grootste ontvangers: Stefan 351, Lotte 14, Matthijs 5,
+Wytse 1. Geen `--apply` gedraaid, wacht op Stefans expliciete go.
+
+**spanning_ontstaat met pensioen, geen nieuwe lezer.** De poort deed twee dingen, en Claude Code
+vond terecht dat allebei hun lezer kwijt zijn: typeren (las door de oude inbox-routering/-filtering,
+die niet meer bestaat nu alles één plat DM-kanaal is, geen buckets meer om te vullen) en herschrijven
+(las door `views/inbox.py::_regel`, ook weg). Herschrijven kan bovendien sowieso niet blijven
+bestaan: hij mag niet op `MENS_GETYPT` draaien, terwijl in een DM-laag vrijwel alles mens-tekst is —
+hem laten voortbestaan zou zijn eigen regel breken. Geen van beide dus nieuw bedraden voor de sier;
+retire, zoals Claude Code zelf al voorstelde als optie ("de poort met pensioen").
+
+**"Waar zie ik dat het bij mij ligt" — geen nieuw mechanisme, dit is al Fase 11 punt 3a/3b.** Zonder
+inbox geen los getal meer. Maar dat probleem is al herkend en al gescoped: de kanaal-ongelezen-
+indicator uit Fase 11 (vetgedrukte kanaalnaam + stipje/telling op `.msg-kanaal`, al de eerste stap in
+de bouwvolgorde) is precies dit, generiek voor elk DM-kanaal inclusief de nieuwe signaal-kanalen.
+Geen los "vraag aan jou"/"melding"-label bouwen — dat zou een tweede, aparte manier zijn om hetzelfde
+te laten zien naast wat al gepland stond. Claude Code's eigen voorkeur (hergebruiken wat er al is)
+komt hiermee exact overeen met Fase 11.
 
 ## Wat hierna nog open staat
 
