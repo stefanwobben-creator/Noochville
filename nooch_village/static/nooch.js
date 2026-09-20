@@ -138,16 +138,39 @@
   // Er wordt NIETS opgeslagen vanuit deze code: het blijft hetzelfde formulier met dezelfde ene
   // submit naar `artefact_edit`. Zonder JS werkt alles nog: de "edit"-summary opent de <details>
   // en de balk is dan gewoon zichtbaar (zie de `hidden`-reset hieronder).
+  /* Het bewerk-formulier openen en er meteen in staan. Twee ingangen, één gedrag:
+   *
+   *   [data-qadd-open]      de TEKST zelf (klik in de inhoud)
+   *   [data-qadd-opener]    een zichtbare knop, bv. "Edit page" bovenaan
+   *
+   * DE KNOP IS ER BIJGEKOMEN (21 september 2026) omdat de tekst-ingang onvindbaar was: de enige
+   * zichtbare aanwijzing was een klein grijs "edit"-linkje ONDER de hele pagina-inhoud. Wie niet
+   * wist dat de tekst klikbaar was, vond de bewerkmogelijkheid niet — en dat is precies wat er
+   * gebeurde. `scrollIntoView` erbij, want het formulier staat onder een lange pagina: openen
+   * zonder ernaartoe gaan is nog steeds onvindbaar. */
+  function openBewerken(vanaf) {
+    var kaart = vanaf.closest(".c2-main") || document;
+    var det = kaart.querySelector("details[data-qadd-inline]");
+    if (!det) return;
+    det.open = true;
+    det.scrollIntoView({ block: "center", behavior: "smooth" });
+    var f = det.querySelector("textarea, input[name=title]");
+    if (f) f.focus();
+  }
+
   function inlineEdit(root) {
     root.querySelectorAll("[data-qadd-open]").forEach(function (el) {
       if (el.dataset.nvWired) return;
       el.dataset.nvWired = "1";
       el.addEventListener("click", function (e) {
         if (e.target.closest("a, button, input, textarea")) return;   // een link blijft een link
-        var kaart = el.closest(".c2-main") || document;
-        var det = kaart.querySelector("details[data-qadd-inline]");
-        if (det) { det.open = true; var f = det.querySelector("textarea, input[name=title]"); if (f) f.focus(); }
+        openBewerken(el);
       });
+    });
+    root.querySelectorAll("[data-qadd-opener]").forEach(function (el) {
+      if (el.dataset.nvWired) return;
+      el.dataset.nvWired = "1";
+      el.addEventListener("click", function (e) { e.preventDefault(); openBewerken(el); });
     });
     root.querySelectorAll("form[data-qadd-dirty]").forEach(function (f) {
       if (f.dataset.nvWired) return;

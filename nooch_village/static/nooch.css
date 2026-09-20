@@ -1485,3 +1485,9 @@ progress.nu-progress.wide{height:8px}
    wordt anders een kolom van vijftien regels. */
 .admin-row-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:.5rem}
 .admin-row-form .att-lbl{flex:0 0 100%}
+/* De kopbalk van een wiki-pagina: de herkomstregel links, de bewerkknop rechts. Die knop zat als
+   klein grijs tekstlinkje ónder de hele inhoud (21 september 2026) — vindbaar als je wist dat hij
+   er was, en anders niet. */
+.wiki-kopbalk{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;
+  flex-wrap:wrap}
+.wiki-kopbalk>p{margin:0;flex:1 1 20rem}

@@ -122,3 +122,57 @@ def test_policies_en_tools_veranderen_niet(tmp_path):
     ctx = artefacts.serialize_context(OWNER, st2.records, st2.att, st2.evidence)
     assert "feiten" not in ctx["policies"]["own"][0]
     assert "feiten" not in ctx["tools"]["own"][0]
+
+# ── de bewerkknop (21 september 2026) ────────────────────────────────────────
+#
+# WAT ER MIS WAS, en het was geen ontbrekende functie maar een onvindbare: bewerken kon al, via een
+# klein grijs "edit"-linkje ÓNDER de hele pagina-inhoud, plus een klik op de tekst zelf die nergens
+# werd aangekondigd. Wie niet wist dat de tekst klikbaar was, vond de bewerkmogelijkheid niet.
+# Eén zichtbare knop bovenaan erbij — dezelfde `<details>`, dezelfde ene `artefact_edit`-actie.
+
+def _pagina_html(tmp_path, can_edit=True):
+    from nooch_village import cockpit2, wiki
+    from nooch_village.views.wiki import render_pagina
+    dd = str(tmp_path)
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rol = st.records.all()[0].id
+    a = st.att.add(rol, wiki.PAGINA_KIND, title="Testpagina", body="Wat tekst.")
+    mens = st.people.add("Beheerder", "b@t.nl")
+    if can_edit:
+        st.assign.assign(rol, "person", mens.id)
+    return render_pagina(st, a.id, csrf_token="TOK",
+                         username="b@t.nl" if can_edit else "")
+
+
+def test_de_bewerkknop_staat_bovenaan_en_is_zichtbaar(tmp_path):
+    html = _pagina_html(tmp_path)
+    assert "data-qadd-opener" in html, "er hoort een expliciete bewerkknop te staan"
+    assert "Edit page" in html
+    # BOVENAAN: vóór de inhoud, niet eronder. Dat was precies het probleem.
+    assert html.index("data-qadd-opener") < html.index("att-body"), "de knop staat onder de tekst"
+    assert "btn" in html.split("data-qadd-opener")[0][-120:], "de knop draagt het knop-atoom"
+
+
+def test_wie_niet_mag_bewerken_krijgt_geen_knop(tmp_path):
+    """Een knop die een poort daarna weigert, belooft iets wat niet kan."""
+    html = _pagina_html(tmp_path, can_edit=False)
+    assert "data-qadd-opener" not in html
+
+
+def test_de_knop_opent_hetzelfde_formulier_als_de_tekst(tmp_path):
+    """Eén formulier, één submit, één `artefact_edit`. De knop is een tweede INGANG, geen tweede
+    opslagpad — anders ontstaat er een tweede waarheid over wat er is opgeslagen."""
+    html = _pagina_html(tmp_path)
+    assert html.count("value='artefact_edit'") == 1
+    assert "data-qadd-inline" in html           # het bestaande formulier
+    assert "data-qadd-open" in html             # en de tekst blijft ook klikbaar
+
+
+def test_de_opener_is_bedraad_in_het_gedeelde_bestand():
+    """In `nooch.js` en niet als inline script: de pagina wordt ook als fragment geladen, en een
+    script uit innerHTML draait nooit (de les van de checklist-microinteractie, één dag eerder)."""
+    import pathlib
+    js = (pathlib.Path(__file__).resolve().parents[1]
+          / "nooch_village" / "static" / "nooch.js").read_text()
+    assert "data-qadd-opener" in js and "scrollIntoView" in js
