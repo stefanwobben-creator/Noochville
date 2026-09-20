@@ -194,7 +194,8 @@
 @media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
 
 /* ── De inbox-launcher: zwart-op-neon, en niet meer bovenop de zijbalk ───────────────────── */
-.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: var(--nu-border);
+/* De launcher is een PRIMAIRE actie: neon vulling, dus geen rand erbovenop (fase 12). */
+.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: 2px solid transparent;
   background: var(--nu-neon); box-shadow: none; }
 .nu .ibx-launch.zero { background: var(--nu-surface); }
 .nu .ibx-launch:hover { transform: none; background: var(--nu-text); color: var(--nu-surface); }
@@ -388,7 +389,8 @@
 
 /* 4 · De laatste pil-radiussen in dit scherm */
 .nu .ibx-plus, .nu .ibx-hct, .nu .ibx-ct { border-radius: 0; }
-.nu .ibx-plus { border: var(--nu-border); background: var(--nu-surface); color: var(--nu-text); }
+.nu .ibx-plus { border: 1.5px solid var(--nu-text); background: var(--nu-surface);
+  color: var(--nu-text); }
 .nu .ibx-hct, .nu .ibx-ct { background: var(--nu-neon); color: var(--nu-text);
   font-family: var(--nu-font); font-weight: 700; }
 
@@ -401,7 +403,8 @@
 
 /* 7 · De staart van inbox.py */
 .nu .ibx-btn, .nu .ibx-alaan, .nu .ibx-add {
-  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text);
   font-family: var(--nu-font); }
 .nu .ibx-add { border-width: 0 0 2px 0; }
 .nu .einddoc-body { color: var(--nu-text); }
@@ -417,9 +420,14 @@
 /* wizard.py */
 .nu .wz-hint, .nu .wz-who, .nu .wz-x, .nu .wz-rm {
   color: var(--nu-muted); font-family: var(--nu-font); }
-.nu .wz-btn, .nu .wz-chip, .nu .wz-add, .nu .wz-badge {
-  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+/* DEZE VIER STONDEN IN ÉÉN REGEL, en dat was precies het probleem: twee knoppen en twee etiketten
+   met dezelfde container-lijn. De rolverdeling splitst ze (fase 12). */
+.nu .wz-btn, .nu .wz-add {
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .wz-chip, .nu .wz-badge {
+  border: 1.5px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
+  color: var(--nu-accent-text); font-family: var(--nu-font); box-shadow: none; }
 .nu .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
 .nu .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   box-shadow: none; }
@@ -492,10 +500,15 @@
    De basisvormen staan in nooch.css (die ook geldt op schermen die niet meedoen); hier krijgen ze
    de taal van dit systeem: scherpe hoeken, zwarte lijn, groen als vulling. */
 
-/* 2a — het voortgangs-atoom. Vierkant, één lijn, en de vulling draagt de betekenis. */
-.nu progress.nu-progress { height: 8px; border: 1.5px solid var(--nu-text); border-radius: 0;
-  background: var(--nu-surface); }
-.nu progress.nu-progress::-webkit-progress-bar { background: var(--nu-surface); border-radius: 0; }
+/* 2a — het voortgangs-atoom. Vierkant, en de VULLING draagt de betekenis.
+   FASE 12: de zwarte lijn om de baan is eraf. Een balkje is INFORMATIE, en informatie krijgt in
+   deze rolverdeling geen kader — de baan zelf (subtiel grijs) laat al zien hoe lang hij is. Dit
+   atoom is op 20 september bewust mét lijn gebouwd omdat dat toen het systeem was; hij hoorde bij
+   dit besluit en niet ervóór. */
+.nu progress.nu-progress { height: 8px; border: 0; border-radius: 0;
+  background: var(--nu-border-subtle); }
+.nu progress.nu-progress::-webkit-progress-bar { background: var(--nu-border-subtle);
+  border-radius: 0; }
 .nu progress.nu-progress::-webkit-progress-value { background: var(--nu-accent); border-radius: 0; }
 .nu progress.nu-progress::-moz-progress-bar { background: var(--nu-accent); border-radius: 0; }
 
@@ -516,7 +529,8 @@
 .nu .c2-side--rail { border-right: var(--nu-border); }
 .nu .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
 .nu .c2-side--rail .c2-orgfly[open] .c2-org { border: var(--nu-border); border-radius: 0; }
-.nu .c2-burger { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
+.nu .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); }
 
 /* De kaart op het bord in dit systeem. `.pcard` was tot nu toe onzichtbaar voor de dekkings-
    ratchet doordat de view hem alleen als `pcard{verz}` (mét placeholder) rendeerde; sinds de

@@ -19,11 +19,12 @@ moeilijk, hij is onzichtbaar. De volgende `.chip`-variant die "even" `var(--nu-b
 er in de editor identiek uit aan een goede, en pas op het scherm zie je dat er weer een doosje
 bij is gekomen. Deze test kijkt naar de TOKENS, niet naar hoe iets eruitziet.
 
-WAT HIER BEWUST BUITEN VALT (gemeten op 20 september 2026, na de doorvoering): vijf families zetten
-nog wél de container-lijn op knop-achtigen — `ibx-` (inbox-drawer), `wz-` (wizard),
-`eff`/`cardmenu-b`, `ibx-launch` en `c2-burger`. Ze stonden niet in de vier regels plus twee kleine
-die zijn afgesproken. Ze staan hier als lijst zodat het een BESLUIT blijft en geen vergeten hoek;
-zie `claude/fase12_hierarchie_audit.md`.
+DE TWEEDE RONDE (20 september, besluit Stefan): de families die in de eerste ronde buiten de zes
+afgesproken regels vielen, zijn alsnog meegenomen — zelfde regel, consequent doorgetrokken. Bij het
+doorvoeren bleek de eerste telling (negen selectors) te grof: vier daarvan zijn CONTAINERS
+(`ibx-drawer`, `ibx-row`, `ibx-head`, `wz-card`, `cardmenu-b`, `eff`) en die horen hun lijn juist te
+houden. `test_de_containers_in_die_families_houden_hun_lijn` bewaakt dat, want een regel die "haal
+overal het kader weg" wordt, sloopt de rolverdeling van de andere kant.
 """
 from __future__ import annotations
 
@@ -37,7 +38,13 @@ _ONTCOM = re.sub(r"/\*.*?\*/", "", NU, flags=re.S)
 #: De klassen die per rol GEEN container-lijn mogen dragen. Een nieuwe knop of chip hoort hier bij
 #: te komen; dat is goedkoper dan hem later op een screenshot terugvinden.
 GEEN_CONTAINER_LIJN = ("btn", "pill", "chip", "badge", "cl-filter", "nu-status",
-                       "c2-tabs", "c2-subnav", "msg-kanaal", "amber", "outline")
+                       "c2-tabs", "c2-subnav", "msg-kanaal", "amber", "outline",
+                       # Tweede ronde (20 sept, besluit Stefan): dezelfde regel doorgetrokken naar
+                       # de families die in de eerste ronde buiten de zes vielen.
+                       "ibx-plus", "ibx-btn", "ibx-alaan", "ibx-add", "ibx-launch",
+                       "wz-btn", "wz-add", "wz-chip", "wz-badge", "c2-burger",
+                       # En het voortgangs-atoom: informatie, dus geen kader.
+                       "nu-progress")
 
 #: Het token dat de zwaarste lijn draagt. Eén plek, zodat "2px" hier geen tweede waarheid wordt.
 CONTAINER_TOKEN = "var(--nu-border)"
@@ -168,15 +175,21 @@ def test_geen_knop_label_of_navigatie_pakt_de_container_lijn():
         "(zie claude/fase12_hierarchie_audit.md):\n" + "\n".join(fout))
 
 
-def test_de_bewust_overgeslagen_families_staan_geteld():
-    """Wat buiten de afgesproken zes viel, blijft ZICHTBAAR. Zakt dit getal, dan heeft iemand een
-    familie meegenomen en hoort het plafond mee te zakken; stijgt het, dan is er een nieuwe
-    knop-achtige met een container-lijn bijgekomen."""
-    families = {"ibx-", "wz-", "eff", "cardmenu-b", "c2-burger"}
-    geteld = 0
-    for sel, body in _regels():
-        if CONTAINER_TOKEN in body and any(f".{f}" in sel for f in families):
-            geteld += 1
-    assert geteld == 9, (
-        f"{geteld} selectors uit de overgeslagen families dragen de container-lijn (was 9). "
-        "Meegenomen? Verlaag dit getal. Nieuwe erbij? Dan hoort hij bij de rolverdeling.")
+def test_de_containers_in_die_families_houden_hun_lijn():
+    """DE ANDERE KANT VAN DEZELFDE REGEL. Bij het doorvoeren van de tweede ronde bleek de telling
+    van negen te grof: een lade, een rij, een popover en een wizard-kaart zijn CONTAINERS, en die
+    horen de zwaarste lijn juist te dragen. Zonder deze test leest de vorige als "haal overal het
+    kader weg", en dan is de hiërarchie van de andere kant net zo hard weg."""
+    houders = " | ".join(sel for sel, body in _regels() if CONTAINER_TOKEN in body)
+    for klasse in ("ibx-drawer", "ibx-row", "ibx-head", "wz-card", "cardmenu-b", "eff"):
+        assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", houders), (
+            f".{klasse} is een container en hoort {CONTAINER_TOKEN} te dragen")
+
+
+def test_het_voortgangs_atoom_is_informatie_geen_container():
+    """Een balkje krijgt geen kader; de baan laat al zien hoe lang hij is. Dit atoom is op
+    20 september bewust mét lijn gebouwd omdat dat toen het systeem was — hij hoorde bij dit
+    besluit en niet ervóór."""
+    body = _body(r"^\.nu progress\.nu-progress$")
+    assert re.search(r"border:\s*0", body)
+    assert "var(--nu-border-subtle)" in body          # de baan, subtiel en niet zwart
