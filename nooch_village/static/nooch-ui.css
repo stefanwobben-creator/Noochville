@@ -439,3 +439,6 @@
 .nu .msg-zoek input[type=search] { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 .nu .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* punt 4 · de opslaan-balk van het inline formulier */
+.nu .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }

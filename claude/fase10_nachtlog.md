@@ -449,3 +449,35 @@ naast de kanaallaag, en jij gaf daar op 19 september akkoord op ("geen tweede pa
 Ik heb hier dus niets aan gebouwd, omdat ik niet weet wat je bedoelt. Drie mogelijkheden: je
 bedoelt de visuele inbox-stap van vannacht (die is af), je bedoelt dat de 338 nu alsnog naar kanalen
 moeten (dat is een nieuw en groot besluit), of het komt uit een andere draad. Zeg welke.
+
+## punt 4 — inline bewerken met de ene save-actie
+
+**Wat níét verandert, en dat is het punt:** één formulier, één submit, één `artefact_edit`-actie,
+één `update()`-aanroep, één versie-entry met `change_note="bewerkt"`. De poort (`_artefact_gate`)
+staat nog steeds vóór de mutatie. Daar staan vier tests op, waarvan één structureel op de
+volgorde in de bron — een poort ná de schrijfactie is geen poort.
+
+**Wat wel verandert:** de opslaan-balk verschijnt pas als er echt iets getypt is
+(`data-qadd-dirty`), en klikken op de tekst van een pagina opent het formulier (`data-qadd-open`).
+
+**Drie keuzes die ik onderweg heb gemaakt:**
+
+1. **De `<details>` blijft als drager.** Niet uit nostalgie: zonder JS is de "edit"-summary de
+   enige ingang, en op een lijst met twintig artefacten wil je geen twintig openstaande
+   tekstvakken. Op `/pagina` (één pagina) voelt het als inline; in een lijst blijft het opgevouwen.
+2. **De balk is in de HTML zichtbaar en wordt pas dóór JS verborgen.** Andersom — `hidden` in de
+   HTML — zou de opslaan-knop onbereikbaar maken zodra scripts uitstaan. Dan is "inline" een
+   regressie en geen verbetering. Daar staat een test op.
+3. **Klikken opent alleen voor wie mag bewerken.** `data-qadd-open` komt alleen op de pagina als
+   `can_edit` waar is; anders belooft een tekstcursor iets wat de poort daarna weigert.
+
+**Eén beperking die je moet weten:** wie het formulier opent, ziet de markdown-broncode en niet de
+opgemaakte tekst — `md_editor` heeft een werkbalk maar geen live preview. Voor een korte notitie is
+dat prima, voor een lange wiki-pagina minder. Een preview is een eigen stuk werk; zeg het als je
+dat wilt.
+
+**Geen nieuwe klasse-prefix-familie.** `_PREFIX_CEILING` staat op 65 en er wáren er 65. De nieuwe
+namen zijn daarom `qadd-bar` binnen de bestaande `qadd-`-familie — wat ook eerlijk is, want het is
+letterlijk hetzelfde component.
+
+Zeven tests. Suite: 4.083 passed, 1 failed (de bekende), 1 xfailed.

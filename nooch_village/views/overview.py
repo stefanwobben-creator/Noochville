@@ -511,17 +511,27 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "") -> str:
     nxt = next_url or f"/node?id={a.anchor}&tab={_tab_for(a.kind)}"
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
-    return (f"<details class='qadd'><summary class='muted'>edit</summary>"
-            f"<form method='post' action='/action' class='qadd-form'>"
+    # INLINE BEWERKEN (fase 10 punt 4). Wat er NIET verandert: één formulier, één submit, één
+    # `artefact_edit`-actie, één `update()`-aanroep, één versie-entry met change_note "bewerkt".
+    # Wat wél verandert is waar de knop staat. De opslaan-balk is `hidden` tot er echt iets is
+    # getypt (`data-qadd-dirty`), en de tekst op de pagina opent het formulier bij een klik
+    # (`data-qadd-open`, zie nooch.js). De `<details>` blijft als drager staan en niet uit
+    # nostalgie: zonder JS is de "edit"-summary de enige manier om er nog in te komen, en op een
+    # lijst met twintig artefacten wil je geen twintig openstaande tekstvakken.
+    #
+    # Eén save-actie en dus ÉÉN change_note, bewust: per veld opslaan zou drie versie-entries
+    # geven voor wat de schrijver als één wijziging ervaart (besluit Stefan, 20 september 2026).
+    return (f"<details class='qadd' data-qadd-inline><summary class='muted'>edit</summary>"
+            f"<form method='post' action='/action' class='qadd-form' data-qadd-dirty>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<label class='att-lbl'>Title</label><input name='title' value='{_e(a.title)}'>"
             f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
             f"{urlf}"
-            f"<div class='qadd-row'>"
+            f"<div class='qadd-row qadd-bar'>"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Save</button>"
-            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"<button type='button' class='qadd-x' data-qadd-cancel "
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 

@@ -1603,3 +1603,5 @@ summary.pchip:hover{border-color:var(--gray)}
 .msg-zoek{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.7rem}
 .msg-zoek input[type=search]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font:inherit;font-size:.86rem}
 .msg-telling{font-weight:400;text-transform:none;letter-spacing:0;color:var(--subtle);font-size:.7rem}
+.qadd-bar{margin-top:.5rem}
+.att-body[data-qadd-open]{cursor:text}

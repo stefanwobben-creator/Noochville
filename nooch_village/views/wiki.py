@@ -227,7 +227,10 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
            f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
            f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>")
 
-    body = (f"<div class='card'><div class='att-body'>{_body_html(a.body, pags)}</div></div>"
+    # `data-qadd-open`: klikken op de tekst opent het bewerk-formulier eronder (fase 10 punt 4).
+    # Alleen voor wie mag bewerken — anders belooft een cursor iets wat de poort daarna weigert.
+    _open = " data-qadd-open" if can_edit else ""
+    body = (f"<div class='card'><div class='att-body'{_open}>{_body_html(a.body, pags)}</div></div>"
             if a.body else "<div class='card muted'>This page has no text yet.</div>")
     # Eigenaar bewerkt; ieder ander doet een voorstel. Geen csrf-token = geen schrijf-sessie
     # (publieke view), dan ook geen voorstelknop.
