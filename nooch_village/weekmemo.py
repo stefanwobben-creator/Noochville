@@ -264,6 +264,27 @@ def _kaal(signalen: list, periode: str, rapport: dict | None = None) -> str:
     return "\n".join(stukken)
 
 
+def _zonder_eigen_kop(tekst: str) -> str:
+    """De memo draagt één kop, en dat is die van ons.
+
+    De eerste echte memo (week 38) opende met twee titels: onze wrapper zette er
+    "🗂 Weekmemo 2026-W38" boven en het model schreef daaronder zelf "# WEEKMEMO — Nooch | Week 38".
+    Dat is niet lelijk-maar-onschuldig: de tweede titel draagt een periode die het model zelf heeft
+    afgeleid, en die kan afwijken van de periode waarop de memo dáádwerkelijk is gedraaid.
+
+    Daarom hier en niet in de prompt: een promptregel is een verzoek, dit is een garantie. Alleen
+    een kop op de EERSTE regel valt weg — de `##`-kopjes van de thema's zijn de structuur van het
+    stuk en blijven staan."""
+    regels = (tekst or "").strip().splitlines()
+    while regels and not regels[0].strip():
+        regels.pop(0)
+    if regels and regels[0].lstrip().startswith("# "):
+        regels.pop(0)
+        while regels and not regels[0].strip():
+            regels.pop(0)
+    return "\n".join(regels).strip()
+
+
 def stel_op(signalen: list, periode: str, *, reason_fn=None, rapport: dict | None = None) -> str:
     """De weekmemo als tekst. Nooit leeg als er signalen zijn.
 
@@ -316,7 +337,7 @@ def stel_op(signalen: list, periode: str, *, reason_fn=None, rapport: dict | Non
         return kaal
     if not uit:
         return kaal
-    return f"🗂 Weekmemo {periode}\n\n{str(uit).strip()}\n\n({len(signalen)} signalen)"
+    return f"🗂 Weekmemo {periode}\n\n{_zonder_eigen_kop(str(uit))}\n\n({len(signalen)} signalen)"
 
 
 # ── Stap 5: de ronde — verzamelen, één memo, één adres ──────────────────────────────────────────

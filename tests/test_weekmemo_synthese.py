@@ -155,3 +155,27 @@ def test_de_synthese_site_staat_in_hoog_inzet():
     waar de waarde zit") vervallen en hoort dat opgeschreven te worden."""
     from nooch_village import llm_keuze as lk
     assert wm.CALL_SITE in lk.HOOG_INZET and wm.CALL_SITE not in lk.GOEDKOOP
+
+
+def test_de_memo_draagt_maar_een_kop():
+    """DE EERSTE ECHTE MEMO (week 38) opende met twee titels: onze wrapper zette er
+    "🗂 Weekmemo 2026-W38" boven en het model schreef daaronder zijn eigen "# WEEKMEMO — Nooch |
+    Week 38". Niet lelijk-maar-onschuldig: die tweede titel draagt een periode die het MODEL heeft
+    afgeleid, en die kan afwijken van de periode waarop de memo daadwerkelijk draaide.
+
+    Daarom in code en niet in de prompt: een promptregel is een verzoek, dit is een garantie."""
+    from nooch_village import weekmemo as wm
+    sig = [wm.Signaal(bron="legal", tekst="er is iets gebeurd", herkomst="a1")]
+    tekst = wm.stel_op(sig, "2026-W38",
+                       reason_fn=lambda p, **k: "# WEEKMEMO — Nooch | Week 99\n\n## Thema\ninhoud")
+    assert tekst.count("WEEKMEMO") == 0                  # de eigen kop van het model is weg
+    assert tekst.startswith("🗂 Weekmemo 2026-W38")       # en de onze draagt de ECHTE periode
+    assert "## Thema" in tekst and "inhoud" in tekst     # de structuur van het stuk blijft
+
+
+def test_alleen_de_eerste_regel_telt_als_kop():
+    """De `##`-kopjes van de thema's zijn de structuur van het stuk. Een opruiming die die ook
+    pakt, maakt van de memo één blok tekst."""
+    from nooch_village.weekmemo import _zonder_eigen_kop
+    assert _zonder_eigen_kop("## Thema\ntekst") == "## Thema\ntekst"
+    assert _zonder_eigen_kop("tekst\n# Later pas een kop") == "tekst\n# Later pas een kop"
