@@ -243,3 +243,67 @@
    liep er langs. Alleen de browser liet dat zien; in de bron is het een kop als elke andere. */
 .nu .swim-h { color: var(--nu-text); font-family: var(--nu-font); font-weight: 700;
   text-transform: uppercase; letter-spacing: .02em; }
+
+/* ══ GROEP A · projects.py (/projects, /project) ═══════════════════════════════════════════════
+   51 klassen droegen hier nog de oude look. Ze zijn niet op naam aangepakt maar per PATROON — wat
+   ze delen is een 1px crème rand met 9px radius, grijstinten uit een ander palet, of een
+   accentkleur die in geen van beide referentiebeelden voorkomt.
+
+   Over die accentkleuren, gemeten in plaats van aangenomen (elke pixel geteld):
+     --coral   #FF6B5B    0 px in de e-mail, 1 px op de productpagina   → geen merkkleur
+     --goal    #6A4FA0    0 px                5 px                      → geen merkkleur
+     ai-paars  #7A5BD1    0 px                0 px                      → geen merkkleur
+     --yellow  #FFCE2E   18 px              662 px                      → WEL aanwezig (de sterren)
+   Paars en koraal worden hier dus neutraal; geel blijft, want dat staat er echt.
+   Rood blijft als `--nu-danger` bestaan: een foutkleur is functioneel nodig, ook al staat hij niet
+   op een productfoto. Dat is een keuze, geen meting — daarom staat hij hier benoemd. */
+
+/* 1 · Omhulsels: 1px crème rand + 9px radius → 2px zwart, vierkant */
+.nu .ctrl, .nu .fieldform, .nu .fbubble, .nu .box-details, .nu .datepop,
+.nu .vzblock, .nu .ovl-box, .nu .pkaart-rail, .nu .title-edit {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+.nu .pkaart-rail { border-left: var(--nu-border); border-top: none;
+  border-right: none; border-bottom: none; }
+
+/* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
+.nu .railsplit, .nu .menu-sep, .nu .einddoc-split { background: var(--nu-text); height: 1.5px; }
+
+/* 3 · Grijstinten uit het oude palet → één muted */
+.nu .pf, .nu .fstamp, .nu .rail-l, .nu .psec-bij, .nu .pkaart-crumb, .nu .vz-t,
+.nu .mk, .nu .einddoc-sigsep, .nu .pbadge, .nu .pstatus {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .rail-v, .nu .ptitle-ro, .nu .einddoc-sig { color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+/* 4 · Groen dat niet in de beelden staat (#14713C / --green-tint) */
+.nu .menuitem { color: var(--nu-text); background: none; font-weight: 700; }
+.nu .menuitem.on { background: var(--nu-bg-alt); }
+.nu .pchip-v { color: var(--nu-text); font-weight: 600; }
+
+/* 5 · Accentkleuren zonder merkdekking → neutraal, betekenis blijft in het WOORD staan */
+.nu .doel { background: var(--nu-surface); border-color: var(--nu-text); }
+.nu .pbar { background: var(--nu-text); }
+.nu .av.ai, .nu .ai { background: var(--nu-text); color: var(--nu-surface); }
+.nu .av { background: var(--nu-text); color: var(--nu-surface); font-family: var(--nu-font); }
+.nu .dellink, .nu .vz-h { color: var(--nu-danger); font-family: var(--nu-font); }
+.nu .chip.coral-solid { background: var(--nu-danger); color: var(--nu-surface);
+  border-color: var(--nu-danger); }
+.nu .amber { background: var(--nu-bg); color: var(--nu-text); border: 1.5px solid var(--nu-text); }
+.nu .outline { background: none; border: var(--nu-border); color: var(--nu-text); }
+
+/* 6 · De overlay zelf */
+.nu .ovl { background: rgba(0,0,0,.55); }
+.nu .ovl-x { color: var(--nu-text); font-family: var(--nu-font); }
+.nu .psec-head { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .clabel { border-radius: 0; }
+
+/* 7 · De staart: nog een pil-radius, twee omhulsels en een losse coral */
+.nu .einddoc-seggroup { border: var(--nu-border); border-radius: 0; }
+.nu .einddoc-seg { background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); border-radius: 0; }
+.nu .einddoc-kern { color: var(--nu-text); }
+.nu .eff, .nu .cardmenu-b { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
+.nu .danger { color: var(--nu-danger); }
+.nu .car { color: var(--nu-muted); }

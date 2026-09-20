@@ -178,3 +178,96 @@ def test_green_dark_ratchet():
     assert len(zonder) <= _PLAFOND, (
         f"{len(zonder)} selectors met --green-dark zonder nu-tegenhanger (plafond {_PLAFOND}). "
         f"Gestegen? Dan is er een oude groentint teruggekomen: {zonder[:5]}")
+
+
+# ── De dekkings-ratchet per view ─────────────────────────────────────────────────────────────
+
+VIEWS = REPO / "nooch_village" / "views"
+
+#: Hoeveel klasse-gebruiken per view dragen nog de oude look zónder tegenhanger in nooch-ui.css.
+#: Zelfde vorm als `_STYLE_WHITELIST` en `_PREFIX_CEILING`: het getal mag alleen OMLAAG. Een view
+#: die stijgt heeft een nieuwe klasse gekregen uit het oude palet — dat is de fout die deze hele
+#: fase opruimt, en dan wil je het bij het schrijven weten en niet bij een screenshot.
+_DEKKING_PLAFOND = {
+    "projects.py": 8,        # 20 sep: van 102 → 8 (mform/mdot/car zijn vorm, geen kleur)
+    "inbox.py": 50,
+    "roloverleg.py": 35,
+    "wizard.py": 24,
+    "vangst.py": 15,
+    "werkoverleg.py": 14,
+    "search.py": 10,
+    "overview.py": 9,
+    "wiki.py": 2,
+    "doelen.py": 1,
+    "messages.py": 1,
+}
+
+_VISUEEL = re.compile(r"(background|border|border-radius|box-shadow|color|font-family)\s*:", re.I)
+_BASIS = (REPO / "nooch_village" / "web_base.py").read_text()
+
+
+def _oude_look_klassen() -> set[str]:
+    uit = set()
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(OUD) + "\n" + _ONTCOM(_BASIS)):
+        if _VISUEEL.search(body):
+            uit |= set(re.findall(r"\.([a-z0-9_-]+)", sel))
+    return uit
+
+
+def _open_uses(bestand: str, oude: set[str]) -> int:
+    t = (VIEWS / bestand).read_text()
+    n = 0
+    for m in re.finditer(r"class=['\"]([^'\"]+)['\"]", t):
+        for k in m.group(1).split():
+            if not re.fullmatch(r"[a-z0-9_-]+", k) or k.startswith("js-"):
+                continue
+            if k in oude and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU):
+                n += 1
+    return n
+
+
+def test_dekking_per_view_gaat_alleen_omlaag():
+    oude = _oude_look_klassen()
+    te_hoog = {b: (_open_uses(b, oude), p) for b, p in _DEKKING_PLAFOND.items()
+               if _open_uses(b, oude) > p}
+    assert not te_hoog, f"boven het plafond (nu, plafond): {te_hoog}"
+
+
+def test_het_plafond_staat_niet_te_ruim():
+    """Een ratchet die tien boven de werkelijkheid staat bewaakt niets. Zakt een view, dan hoort
+    het plafond in diezelfde commit mee te zakken."""
+    oude = _oude_look_klassen()
+    slap = {b: (_open_uses(b, oude), p) for b, p in _DEKKING_PLAFOND.items()
+            if p - _open_uses(b, oude) > 0}
+    assert not slap, f"plafond te ruim, verlaag het in deze commit (nu, plafond): {slap}"
+
+
+def test_kleuren_zonder_merkdekking_worden_binnen_nu_geneutraliseerd():
+    """--coral, --goal en het AI-paars komen in geen van beide referentiebeelden voor (0, 5 en 0
+    pixels). Elke klasse die ze zet én op een nu-scherm staat, moet een tegenhanger hebben."""
+    oude_klassen: dict[str, str] = {}
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(OUD)):
+        for kleur in ("var(--coral)", "var(--goal)", "#7A5BD1"):
+            if kleur in body:
+                for k in re.findall(r"\.([a-z0-9_-]+)", sel):
+                    oude_klassen[k] = kleur
+    gebruikt = set()
+    for bestand in _DEKKING_PLAFOND:
+        t = (VIEWS / bestand).read_text()
+        for m in re.finditer(r"class=['\"]([^'\"]+)['\"]", t):
+            gebruikt |= set(m.group(1).split())
+    # Wat er nog staat, met de view waar het thuishoort. Deze lijst mag alleen KORTER worden:
+    # elke stap van groep A/C die een view aanpakt haalt er een paar af.
+    _NOG_TE_DOEN = {
+        "ibx-ct", "ibx-err", "ibx-sub",              # inbox.py
+        "rov-delrole", "rovm-close", "sec-issue",    # roloverleg.py
+        "cl-check",                                  # werkoverleg.py
+        "mdot",                                      # projects.py — ronde stip, vorm en geen kleur
+    }
+    gemist = [k for k in sorted(oude_klassen) if k in gebruikt
+              and k not in _NOG_TE_DOEN
+              and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)]
+    assert not gemist, f"niet-merkkleuren nog levend op een nu-scherm: {gemist}"
+    nog = {k for k in _NOG_TE_DOEN
+           if not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)}
+    assert nog == _NOG_TE_DOEN, f"al afgehandeld, haal ze uit _NOG_TE_DOEN: {_NOG_TE_DOEN - nog}"
