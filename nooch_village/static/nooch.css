@@ -227,11 +227,6 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 /* Impact-pills (scope 2): klikbare optie-chips met semantische kleur; elke pill toont z'n kleur (gedempt),
    de gekozen pill (.on) staat vol + met inset-ring. Kleuren per spec: g=groen, n=grijs, r=rood, l=lichtgrijs. */
 .imp-wrap{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
-.imp-pill{padding:.14rem .55rem;border-radius:var(--radius-pill);border:1px solid transparent;font:inherit;font-size:.7rem;font-weight:700;line-height:1.5;cursor:pointer;opacity:.5}
-.imp-pill:hover{opacity:.8}
-.imp-pill.on{opacity:1;box-shadow:inset 0 0 0 1.5px currentColor}
-.imp-pill.n{background:var(--cream-2);color:var(--gray)}
-.imp-pill.l{background:var(--cream);color:var(--muted)}
 /* Missie-impact op de bordkaart. DRIE VORMEN, niet drie kleuren: gevulde cirkel = versterkt,
    open ring = neutraal, driehoek = verzwakt. De kleur versterkt het, maar draagt het niet — in
    zwart-wit, of voor wie deze tinten niet onderscheidt, waren dit drie identieke stippen met een
@@ -362,8 +357,6 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .rov-delrole .flink{color:var(--coral)}
 .rov-by{flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
-.fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
-.fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
 @media(min-width:620px){.pgrid{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}}
 .pmain{min-width:0}.pside{min-width:0}
@@ -794,7 +787,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    scrollbak die het muiswiel opslokt — en dan is de knop eronder onbereikbaar. */
 .einddoc-body{line-height:1.6}
 /* Een codeblok IN een document: de Claude Code-opdracht of het commando dat Noochie's memo
-   meegeeft om te plakken (scope 42a). Zelfde monospace-recept als `.kn-prompt`; pre-wrap zodat
+   meegeeft om te plakken (scope 42a). Monospace, pre-wrap zodat
    een lange regel de kolom niet openbreekt, en een rand zodat je ziet waar het plakwerk begint
    en eindigt. Element-selector onder de bestaande familie, geen nieuwe klasse. */
 .einddoc-body pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.4;
@@ -898,7 +891,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-prog{display:flex;align-items:center;gap:.6rem;margin:.2rem 0 .6rem}
 .ck-prog .pbar{flex:1 1 auto;width:auto}
 .ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}
-.ck-list{}.ck-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .3rem;border:none;border-radius:var(--radius)}
+.ck-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .3rem;border:none;border-radius:var(--radius)}
 .ck-item:hover{background:var(--cream-2)}
 .ck-box{width:18px;height:18px;border:1.5px solid var(--subtle);border-radius:4px;background:var(--surface);cursor:pointer;font-size:.72rem;line-height:1;color:#fff;flex:0 0 auto}
 .ck-box.on{background:var(--green);border-color:var(--green)}
@@ -1021,232 +1014,15 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .switch.on{background:var(--green)}
 .switch.on::after{left:17px}
 .switch-field{display:inline-flex;align-items:center;gap:.5rem;font-size:12.5px;color:var(--muted)}
-
-/* ── Dorp-brede LiveKit call bar: draait in een same-origin iframe (views/callbar.py → /callbar). De
-   parent kent alleen de iframe-strook. De bar-eigen .c2-callbar/.cb-* leven in de iframe-pagina zelf.
-   Begint ná de .noo-rail (2.6rem), onder modals (z-index 45 < .ovl 50 → modal dimt mee). De iframe
-   start `hidden`; de glue onthult 'm pas als LiveKit geconfigureerd is (cb-ready), zodat een lege
-   strook geen clicks vangt. */
-/* Expliciete width: een <iframe> is een replaced element — met alleen left+right (width:auto) rekt
-   Firefox 'm wel maar valt Chrome terug op ~intrinsieke breedte (negeert right). calc dwingt beide
-   naar volle breedte naast de .noo-rail (2.6rem). */
-/* De parent-shell-strook is 11 aug 2026 verwijderd: de call bar werkte niet betrouwbaar en hangt
-   niet meer in de app-shell. De bar-eigen markup in de /callbar-pagina blijft bestaan; terugzetten
-   vraagt naast de injectie in `_send` ook deze regels terug. */
-/* vangnet tegen occlusie: alleen op pagina's mét bar; en de toast zweeft erboven */
-
-/* ── Kennisbank (/kennisbank): "Wat Nooch weet" — de kn-*-familie. Expliciet vocabulaire-
-   besluit (prototype nooch-kb, drawer + 4-punts meter; zie tests/test_ui_ratchets.py).
-   Het zekerheids-woord + de meter kleuren per verdict (stevig/groeit/omstreden/dun);
-   percentages of ruwe trust komen hier bewust nooit in beeld. */
-.kn-topic{display:block;text-decoration:none;color:var(--ink);cursor:pointer;transition:box-shadow .15s}
-.kn-topic:hover{box-shadow:0 4px 18px rgba(27,27,27,.08)}
-.kn-thead{display:flex;align-items:flex-start;gap:.8rem}
-.kn-tmain{flex:1}
-.kn-ttitle{font-family:var(--font-display);font-weight:700;font-size:1.05rem;line-height:1.3}
-.kn-twhy{color:var(--gray);font-size:.92rem;margin-top:.25rem}
-.kn-conf{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;text-align:right}
-.kn-arrow{color:var(--muted);align-self:center;font-size:1rem}
-.kn-word{font-size:.74rem;font-weight:700;border-radius:var(--radius-pill);padding:.12rem .6rem;white-space:nowrap}
-.kn-word.dun{background:var(--sand);color:var(--gray)}
-.kn-dots{letter-spacing:2px;font-size:.7rem}
-.kn-dots.stevig{color:var(--green)} .kn-dots.groeit{color:#B8860B}
-.kn-dots.omstreden{color:var(--coral)} .kn-dots.dun{color:var(--muted)}
-.kn-dots .o{color:var(--border)}
-.kn-scrim{position:fixed;inset:0;background:rgba(27,27,27,.4);z-index:40}
-.kn-drawer{position:fixed;top:0;right:0;height:100%;width:min(520px,96vw);background:var(--cream);
- box-shadow:-8px 0 34px rgba(27,27,27,.22);z-index:41;overflow-y:auto;padding:1.3rem 1.4rem 3rem}
-.kn-x{float:right;font-size:1.5rem;color:var(--muted);text-decoration:none;line-height:1}
-.kn-claim{font-family:var(--font-display);font-weight:800;font-size:1.3rem;line-height:1.25;margin:.3rem 0 .6rem;max-width:92%}
-.kn-sentence{font-size:.95rem;color:var(--gray);background:var(--cream-2);border-radius:var(--radius);padding:.7rem .85rem;margin:.6rem 0 1rem}
-.kn-sentence b{color:var(--ink)}
-.kn-kantel{font-size:.84rem;margin:.3rem 0 .5rem;padding:.35rem .6rem;border-left:3px solid var(--yellow);background:var(--cream-3);border-radius:0 var(--radius) var(--radius) 0}
-.kn-sec{margin:1.3rem 0}
-.kn-sectitle{font-family:var(--font-display);font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:.7rem 0 .5rem}
-.kn-note{display:flex;gap:.55rem;align-items:flex-start;font-size:.92rem;padding:.45rem 0;border-top:1px solid var(--cream-2)}
-.kn-note .kn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.5em}
-.kn-ntext{flex:1;min-width:0}
-.kn-src{color:var(--muted);font-size:.8rem;display:block;margin-top:.05rem}
-.kn-ann{color:var(--green-dark);font-size:.84rem;display:block;margin-top:.15rem;border-left:2px solid var(--green-tint);padding-left:.5rem}
-.kn-nctrls{display:flex;gap:.1rem;flex-shrink:0;align-items:flex-start}
-.kn-nctrl{border:none;background:none;box-shadow:none;margin:0;padding:0}
-.kn-nctrl>summary{cursor:pointer;color:var(--muted);font-weight:400;padding:.1rem .3rem}
-.kn-nctrl[open]{position:relative;background:var(--surface);border:1px solid var(--border);padding:.4rem .5rem;z-index:2}
-.kn-unlink{display:inline}
-.kn-panel{margin-top:.7rem}
-.kn-lrow{display:flex;gap:.5rem;align-items:flex-start;padding:.45rem .1rem;border-top:1px solid var(--cream-2);flex-wrap:wrap}
-.kn-lrow .kn-lt{flex:1 1 14rem;font-size:.9rem}
-.kn-lrow select,.kn-lrow input{border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.84rem;padding:.3rem .45rem;background:var(--surface)}
-.kn-zoek{display:flex;gap:.45rem;align-items:flex-end;margin:.3rem 0 .5rem}
-.kn-zoek input{flex:1}
-.kn-other{font-size:.95rem;color:#2C5A87;background:#E4EDF6;border-radius:var(--radius);padding:.7rem .85rem}
-.kn-falsi{font-size:.93rem;background:var(--cream-2);border-left:3px solid var(--coral);border-radius:0 var(--radius) var(--radius) 0;padding:.55rem .8rem}
-.kn-prompt{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);
- font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.4;padding:.5rem .6rem;background:var(--cream-2);white-space:pre-wrap}
-.kn-comment{font-size:.9rem;background:var(--cream-2);border-radius:var(--radius);padding:.5rem .7rem;margin-bottom:.4rem}
-.kn-by{font-size:.74rem;color:var(--muted);display:block;margin-top:.15rem}
-.kn-discrow{display:flex;gap:.45rem;align-items:flex-end;margin-top:.5rem}
-.kn-discrow input{flex:1;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.88rem;padding:.4rem .55rem;background:var(--surface)}
-.kn-capture{margin:.6rem 0 1rem}
-
-/* ── Kennisbank zone 1: sticky actiebalk (layout-herinrichting) ────────────── */
-.kn-actiebalk{position:sticky;top:0;z-index:6;background:var(--cream);padding:.5rem 0 .3rem;margin-bottom:.6rem;border-bottom:1px solid var(--border)}
-.kn-actiebtns{display:flex;gap:.5rem;flex-wrap:wrap}
-.kn-cluster{background:var(--surface);border:1px solid var(--blue-tint,#E4EDF6);border-left:3px solid #2C5A87;border-radius:var(--radius);padding:.6rem .8rem;margin:.5rem 0}
-.kn-stage-edit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.35rem .5rem;margin-bottom:.3rem}
-.kn-stage-edit select{border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.84rem;padding:.25rem .4rem;background:var(--surface)}
-/* Staging-kaart (fix-brief bug 1): verticale stapel op volle breedte. De middenkolom is
-   minmax(0,1fr) zodat een lange onbreekbare URL-slug de kaart nooit naar ~0 kan persen. */
-.kn-stage{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:start;padding:.6rem 0;border-top:1px solid var(--cream-2)}
-.kn-stage input[type=checkbox]{margin-top:.4rem}
-.kn-stage-edit{min-width:0}
-.kn-stage-edit textarea{overflow-wrap:anywhere}
-.kn-stage-src{display:block;color:var(--muted);font-size:.8rem;margin:.15rem 0;overflow-wrap:anywhere}
-.kn-stage-ctrls{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
-.kn-stage-del{margin:0}
-
-/* ── Kennisbank PR-2: twee-koloms werkgebied + live search + inzicht-detail links ── */
-.kn-cols{display:flex;gap:1.2rem;align-items:flex-start}
-.kn-col-left{flex:1 1 55%;min-width:0}
-.kn-col-right{flex:1 1 45%;min-width:0}
-@media(max-width:800px){.kn-cols{flex-direction:column}.kn-col-left,.kn-col-right{flex:1 1 auto;width:100%}}
-.kn-detail{position:relative;border-left:3px solid var(--green)}
-.kn-detail .kn-x{position:absolute;top:.5rem;right:.7rem;font-size:1.4rem;color:var(--muted);text-decoration:none;line-height:1}
 .kn-searchbox{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .6rem;margin:.3rem 0 .5rem;background:var(--surface)}
-#kn-biebresults{max-height:70vh;overflow-y:auto}
-
-/* ── Kennisbank UX-ronde: inhoud boven, machinerie treedt terug ─────────────── */
-.kn-dots{opacity:.6}                        /* secundair; het WOORD draagt de status */
-.kn-note .kn-nctrls{opacity:.55;transition:opacity .12s}
-.kn-note:hover .kn-nctrls,.kn-note:focus-within .kn-nctrls{opacity:1}   /* machinerie pas bij hover/focus */
-.kn-tags>summary{cursor:pointer;color:var(--muted);font-size:.82rem;padding:.2rem 0}
-/* Inline bewerken: '✏️ bewerk' opent het veld pas op verzoek; Bewaar ónder, primair */
-.kn-editable{margin:.3rem 0 0}
-.kn-editable>summary{cursor:pointer;list-style:none;display:inline-block;font-size:.78rem;padding:.25rem .7rem;border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface)}
-.kn-editable>summary::-webkit-details-marker{display:none}
-.kn-editable[open]>summary{border-color:var(--green);color:var(--green-dark)}
-.kn-editform{margin-top:.35rem;display:flex;flex-direction:column;align-items:flex-start;gap:.35rem}
-.kn-editform textarea,.kn-editform input[type=text]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .55rem;background:var(--surface)}
-.kn-al{font-size:.78rem;font-style:italic}
-/* Founder-ronde dd 2026-07-18: rustige Signals-kop + tags-pill + curatie-tekstlinks per
-   statement. De bulk-selectiebalk (.kn-selbar/.kn-selcount/.kn-sel) is verwijderd. */
-.kn-koprij{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:1.8rem 0 .5rem}
-.kn-koprij h2{margin:0}
-.kn-koprustig{font-weight:400;text-transform:none;letter-spacing:0;font-size:1rem;color:var(--gray)}
-.kn-tagpill{position:relative;margin:0}
-.kn-tagpill>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.1rem .6rem;font-size:.74rem;color:var(--gray);background:var(--surface)}
-.kn-tagpill>summary::-webkit-details-marker{display:none}
-.kn-tagpill[open]>summary{border-color:var(--green);color:var(--green-dark)}
-.kn-tagchips{position:absolute;z-index:8;top:calc(100% + .3rem);left:0;min-width:16rem;max-width:24rem;max-height:min(60vh,26rem);overflow:auto;display:flex;flex-wrap:wrap;gap:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.5rem .6rem}
-.kn-tagchips>p{flex-basis:100%;margin:.4rem 0 0}
-.kn-tagchip{border:none;cursor:pointer;font:inherit;display:inline-flex;align-items:center;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:600;line-height:1.5;background:var(--cream-2);color:var(--gray)}
-.kn-stmtacties{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin-top:.3rem}
-.kn-stmtactie{margin:0;display:inline-block}
-.kn-actlink{border:none;background:none;box-shadow:none;padding:0;margin:0;font:inherit;font-size:.78rem;color:var(--muted);cursor:pointer;text-decoration:underline}
-.kn-actlink:hover{color:var(--ink)}
-.kn-spelvorm>summary{cursor:pointer;list-style:none;font-size:.78rem;color:var(--muted);text-decoration:underline}
-.kn-spelvorm>summary::-webkit-details-marker{display:none}
-.kn-spelvorm[open]{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
-/* Bron toevoegen: rustige verticale indeling */
-.kn-bronform{display:flex;flex-direction:column;gap:.7rem;align-items:flex-start}
-.kn-bronveld{width:100%}
-.kn-bronform textarea,.kn-bronform input[type=file]{width:100%;box-sizing:border-box}
-.kn-bronhint{margin:.2rem 0 0;font-size:.8rem}
-/* Speel: hunch ondergeschikt onder de clusters */
-.kn-hunch{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;margin-top:.6rem;opacity:.9}
-.kn-openspel{margin-top:.6rem;font-size:.82rem;display:flex;gap:.6rem;flex-wrap:wrap}
-/* Gesprek als echte draad (C3) */
-.kn-thread{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem}
-.kn-msg{background:var(--cream-2);border-radius:var(--radius);padding:.5rem .7rem}
-.kn-msg-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;font-size:.8rem;margin-bottom:.15rem}
-.kn-msg-text{font-size:.92rem}
-.kn-discrow{display:flex;gap:.45rem;align-items:flex-end;margin-top:.2rem}
-.kn-discrow input{flex:1;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.4rem .55rem;background:var(--surface)}
-
-/* ── Kennisbank Deel B: flip + gerelateerde inzichten ───────────────────────── */
-.kn-flipbar{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.3rem}
-.kn-flip{border-left:3px solid var(--coral)}
-.kn-flip .kn-claim{color:var(--coral)}
-.kn-topiclink{margin-top:.3rem;opacity:1;display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
-.kn-topic{display:block}
-.kn-koppellbl{font-size:.82rem}
-/* Taak 1 vindbaarheid: de gerelateerde-inzichten-box valt op als de plek voor koppelen */
-.kn-relbox{background:var(--cream-2);border-radius:var(--radius);padding:.7rem .8rem;margin-top:1.3rem}
-.kn-relbox .kn-sectitle{margin-top:0}
-.kn-metaplay{margin-top:.6rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
-/* Taak 2 rechter-brug: kop + uitleg die links (open inzicht) aan rechts (koppel bewijs) knoopt */
-.kn-brugkop{font-size:.86rem;margin:.15rem 0 .6rem;color:var(--gray)}
-/* Taak 3 flip: per statement de omgekeerde lens-lezing, ondergeschikt aan de statement-tekst */
-.kn-fliplens{display:block;font-size:.8rem;font-style:italic;color:var(--coral);margin-top:.2rem}
-
-/* ── Kennisbank-statements (herontwerp dd 2026-07-18, SPEC_prototype: kaal overzicht,
-   klik = uitklap-detail, ⠿-handle voor drag&drop-mergen met modal) ─────────── */
-.kn-lijst{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
-.kn-stmt{display:flex;gap:.3rem;align-items:flex-start;border-top:1px solid var(--cream-2);padding:.1rem .55rem;position:relative}
-.kn-stmt:first-child{border-top:none}
-.kn-stmt:hover{background:var(--cream-2)}
-.kn-stmt.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
-.kn-stmt.dragging{opacity:.4}
-.kn-handle{flex:0 0 auto;color:var(--border);cursor:grab;font-size:.9rem;letter-spacing:-1px;line-height:1.1;user-select:none;padding:.6rem .1rem 0;opacity:0;transition:opacity .12s}
-.kn-stmt:hover .kn-handle,.kn-handle:focus-visible{opacity:1}
-.kn-handle:hover{color:var(--muted)}
-.kn-stmtbody{flex:1;min-width:0;margin:0}
-.kn-stmtbody>summary{cursor:pointer;list-style:none;font-weight:400;font-size:.92rem;padding:.5rem .2rem}
-.kn-stmtbody>summary::-webkit-details-marker{display:none}
-.kn-stmtdetail{padding:.1rem .2rem .7rem}
-.kn-dl{display:grid;grid-template-columns:95px 1fr;gap:.12rem .6rem;font-size:.84rem;margin:.3rem 0 .5rem}
-.kn-dl dt{color:var(--muted)}
-.kn-dl dd{margin:0;min-width:0;overflow-wrap:anywhere}
-.kn-koppel{text-decoration:none;background:var(--cream-3);margin:.1rem .25rem .1rem 0}
-.kn-koppel:hover{border-color:var(--green)}
-.kn-koppel.contra{border-color:var(--coral);color:var(--coral)}
-.kn-bronvorm{display:inline-block;margin:0;vertical-align:baseline}
-.kn-bronvorm>summary{display:inline;cursor:pointer;list-style:none;color:var(--muted);font-size:.8rem}
-.kn-bronvorm>summary::-webkit-details-marker{display:none}
-.kn-bronvorm[open]{display:block;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem;margin-top:.2rem}
-/* merge-modal (zelfde stijl als de spec; [hidden] van de UA blijft leidend) */
-.kn-overlay{position:fixed;inset:0;background:rgba(27,27,27,.35);z-index:9}
-.kn-modal{position:fixed;z-index:10;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.1rem 1.2rem}
-.kn-modal h2{font-family:var(--font-display);font-size:1rem;margin:0 0 .6rem;color:var(--green-dark)}
-.kn-opt{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .5rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.45rem;cursor:pointer;font-size:.88rem}
-.kn-opt.on{border-color:var(--green);background:var(--green-tint)}
-.kn-opt input{margin-top:.2rem}
-.kn-modal textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.9rem;padding:.6rem;background:var(--surface);min-height:84px}
-.kn-modalbtns{margin-top:.6rem;display:flex;gap:.5rem;justify-content:flex-end}
-/* Inwoner-dossier: het enige nieuwe atoom van dit scherm. Emoji-avatar in een cirkel — het
-   prototype had hem 64px; hier één maat die zowel in de h1 als in een tabelrij werkt. */
-.avatar{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;
- border-radius:50%;background:var(--yellow-light);border:2px solid var(--yellow);font-size:1.1rem;
- vertical-align:middle}
 /* Vulgraad van een balk in stappen van 10% — een klasse i.p.v. een inline style, zodat de
    inline-style-ratchet op nul blijft. */
 .bar-w0{width:0}.bar-w1{width:10%}.bar-w2{width:20%}.bar-w3{width:30%}.bar-w4{width:40%}
 .bar-w5{width:50%}.bar-w6{width:60%}.bar-w7{width:70%}.bar-w8{width:80%}.bar-w9{width:90%}
 .bar-w10{width:100%}
-/* Voortgangsbalk bron-intake (kn-vg*): pure CSS-animatie, géén meting. De cubic-bezier is
-   bewust een harde ease-in — de balk komt traag op gang en versnelt daarna steeds verder
-   (goal-gradient-effect: versnellende voortgang voelt als winst). Hij parkeert op 96% en
-   pulseert daar zachtjes tot de server klaar is en de redirect de pagina overneemt. */
-.kn-vgmodal{text-align:center}
-.kn-vgbaan{height:12px;border:1px solid var(--border);border-radius:999px;background:var(--green-tint);overflow:hidden;margin:.7rem 0 .5rem}
-.kn-vgbalk{height:100%;width:0;background:var(--green);border-radius:999px;animation:kn-vgvullen 16s cubic-bezier(.85,.05,.9,.35) forwards,kn-vgpuls 1.6s ease-in-out 16s infinite}
-@keyframes kn-vgvullen{from{width:0}to{width:96%}}
-@keyframes kn-vgpuls{0%,100%{opacity:1}50%{opacity:.55}}
-/* MECE-hint in de staging-review: volle breedte onder het voorstel, rustig maar zichtbaar. */
-.kn-mece{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-size:.85rem;background:var(--green-tint);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .6rem}
-.kn-mece-koppel{display:inline}
 /* Multi-select op /signals: selectievakje per goedgekeurd signaal + de selectie-balk. */
 .rdr-sel{margin-top:.35rem}
 .rdr-selbar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.4rem 0 .6rem}
-/* Drag&drop-merge op de staging-voorstellen: zelfde interactie(-stijl) als de statements. */
-.kn-stage .kn-handle{padding-top:.3rem}
-.kn-stage:hover .kn-handle{opacity:1}
-.kn-stage.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
-.kn-stage.dragging{opacity:.4}
-/* Provenance-chip + LLM-verantwoording in de staging-review (pulldowns zijn vervangen). */
-.kn-provchip{display:inline-flex;gap:.4rem;align-items:baseline;font-size:.85rem;min-width:0}
-/* Drag&drop-merge op /signals: handle zichtbaar bij hover, dropdoel gemarkeerd. */
-.rdr-row:hover .kn-handle{opacity:1}
 .rdr-row.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
 .rdr-row.dragging{opacity:.4}
 /* ✗ als rustig token rechts achteraan de signaal-rij (inbox-actie, geen schreeuwer). */
@@ -1257,36 +1033,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .rdr-bronvorm{display:block;margin:.2rem 0 .6rem}
 .rdr-bronvorm>summary{display:inline-block;cursor:pointer;list-style:none}
 .rdr-bronvorm>summary::-webkit-details-marker{display:none}
-.rdr-bronvorm[open]>.kn-capture{margin-top:.6rem;max-width:640px}
-/* Black-list-rijen in het ⚙-paneel: tekst + terugzet + definitief naast elkaar. */
-.kn-blrow{display:flex;gap:.5rem;align-items:center}
-.kn-blrow .kn-lt{flex:1;min-width:0}
-.kn-blleeg{margin:.3rem 0 .6rem}
-/* Signals in regular gewicht: het vet is voor insights — zo zie je de laag aan de letter.
-   (Het gewicht zelf staat op .kn-stmtbody>summary hierboven — die selector is specifieker
-   dan deze klasse, dus dáár is de ene gezaghebbende plek; hier alleen de fallback.) */
-.kn-stmttekst{font-weight:400}
-/* A–Z-taglijst met aantallen (vervangt de onderwerp-chips; tags zijn dé taal). */
-.kn-taglijst{display:flex;flex-wrap:wrap;gap:.3rem}
-.kn-tagtal{margin-left:.35rem;font-weight:400;color:var(--muted)}
-/* Tag-onderhoud-review: voorstel-rijen met actie-chip, tags en besluit-knoppen. */
-.kn-tagvoorstel{display:flex;gap:.5rem;align-items:center}
-.kn-tagvoorstel .kn-lt{flex:1;min-width:0}
-/* Spelronde (founder, 19 jul) — de suggestiekaart bovenaan de inzichten-kolom:
-   lichtgeel = "dit is een start, nog niet geverifieerd"; verify start het spel. */
-.kn-sugg{background:var(--yellow-light);border:1px solid var(--yellow)}
-.kn-sugghead{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
-.kn-suggflag{background:var(--yellow);color:#5c4a00}
-.kn-suggbtns{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
-/* Spelvraag (founder, 19 jul): de claim is informatie, de vraag is verleiding — een kleine
-   LLM herformuleert het cluster tot één vraag (spelvraag.py, gecachet, fail-soft naar
-   .kn-claim). Displayfont op gewicht 500: uitnodigend, niet schreeuwend; de claim zakt
-   naar een startpunt-regel. */
-.kn-spelvraag{font-family:var(--font-display);font-weight:500;font-size:1.02rem;line-height:1.45;margin:.1rem 0 .2rem}
-.kn-spelvraag .wie{display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin-bottom:.15rem}
-.kn-spelstart{font-size:.78rem;margin:.1rem 0 .3rem}
-/* Zoekresultaten op de spel-pagina: wat al in het spel zit kleurt subtiel mee —
-   groen steunt, rood spreekt tegen (zelfde betekenis als de kn-note-stippen). */
 
 /* ── Gedeelde shell: de vaste zijbalk links (fase 7, 19 sept 2026) ─────────────────────────────
    Verving de topbar (logo+zoek), de meta-footer (Goals · Metrics · People) en de
@@ -1405,9 +1151,6 @@ a.wz-btn{text-align:center;text-decoration:none;display:inline-block}
 .wz-foot{display:flex;gap:.6rem;align-items:center;margin-top:1.1rem}
 .wz-foot .wz-btn{flex:1}
 .wz-skip{background:none;border:none;color:var(--subtle);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
-.wz-now{background:var(--green-tint);border-radius:10px;padding:.75rem .85rem;border:1.5px solid var(--green)}
-.wz-now .lb{font-size:.68rem;font-weight:700;text-transform:uppercase;color:var(--green-dark);letter-spacing:.04em}
-.wz-now .tx{font-family:var(--font-display);font-weight:500;font-size:1.02rem;line-height:1.35;margin-top:.15rem}
 .wz-think{color:var(--subtle);font-style:italic;font-size:.9rem;padding:.5rem 0}
 .wz-item{display:flex;align-items:flex-start;gap:.5rem;padding:.55rem .1rem;border-top:1px solid var(--cream-2)}
 .wz-item:first-child{border-top:none}
@@ -1434,7 +1177,6 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
 .wz-srow:first-child{border-top:none}.wz-sk{width:95px;flex:none;color:var(--subtle);font-weight:600}.wz-sv{flex:1}
 .wz-cheer{text-align:center;padding:1rem 0}.wz-cheer .big{font-size:2.6rem}
-
 
 /* ══ PROJECTKAART — herindeling ═══════════════════════════════════════════════════════════════
    Structuur uit docs/projectkaart_redesign_prototype.html. De MAATVOERING komt uit die mock
@@ -1559,13 +1301,6 @@ summary.pchip:hover{border-color:var(--gray)}
   font-weight:600;color:var(--ink);padding:0;box-shadow:none}
 .pchip-inzet input{width:2.4rem;text-align:right}
 .pchip-inzet .fieldform{gap:.25rem}
-
-/* 3. De doel-knop rendeerde zijn SVG op natuurlijke grootte. */
-.rail-btn{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
-  background:var(--surface);border-radius:var(--radius);padding:.35rem .6rem;font:inherit;
-  font-size:.78rem;color:var(--ink);cursor:pointer}
-.rail-btn[disabled]{opacity:.55;cursor:default}
-.rail-btn svg{width:1rem;height:1rem;flex:0 0 auto}
 
 /* ── /wiki: de dorpsbrede index (fase 7) — domeinkolom links, kaarten rechts ─────────────────── */
 .c2-wiki{display:flex;gap:1.2rem;align-items:flex-start}
