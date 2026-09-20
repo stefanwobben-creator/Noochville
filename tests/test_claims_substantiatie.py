@@ -63,8 +63,14 @@ def _records_met_claimseigenaar(role_id="claims_eigenaar"):
     zonder opvolger) en zonder domein-eigenaar maakt het bord bewust géén taak aan. Deze tests gaan
     over onderbouwing en vindplaats, niet over routing, dus ze horen een eigenaar te hebben."""
     from nooch_village import claims_board
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     rollen = [SimpleNamespace(id=role_id, archived=False, slaapt=False,
                               definition=SimpleNamespace(skills=[], domains=[claims_db.DOMEIN]))]
+    # DE FOUNDER HOORT ER OOK IN. De scan meldt sinds 20 september 2026 aan hem, en `signaal`
+    # leest de records die hier worden geïnjecteerd — een stub zonder founder laat het nieuwe pad
+    # stil doodlopen en de test zou dat als "geen melding" lezen.
+    rollen += [SimpleNamespace(id=FOUNDER_ROLE_ID, archived=False, slaapt=False,
+                               definition=SimpleNamespace(skills=[], domains=[]))]
     rollen += [SimpleNamespace(id=rid, archived=False, slaapt=False,
                                definition=SimpleNamespace(skills=[], domains=[]))
                for rid in claims_board.ROL_IDS.values()]
@@ -85,10 +91,17 @@ def _ctx(tmp_path, monkeypatch=None, ledger=None):
     # het" niet waar te nemen — vroeger schreef `NotifStore.add` een rij op een rol die niemand
     # las, en dat is precies het dead letter dat deze migratie wegneemt.
     from nooch_village.assignments import Assignments
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     from nooch_village.people import PeopleStore
     _mens = PeopleStore(os.path.join(str(tmp_path), "people.json")).add("Compliance", "c@t.nl")
-    Assignments(os.path.join(str(tmp_path), "assignments.json")).assign(
-        "claims_eigenaar", "person", _mens.id)
+    _assign = Assignments(os.path.join(str(tmp_path), "assignments.json"))
+    _assign.assign("claims_eigenaar", "person", _mens.id)
+    # EN EEN MENS OP DE FOUNDER-ROL. Sinds 20 september 2026 gaan de meldingen van de scan
+    # (scan-lijst kapot, scan vastgelopen, regressie) naar de founder en niet meer naar "de rol
+    # die het claims-domein bezit" — dat domein heeft sinds fase 5 geen eigenaar, dus die
+    # meldingen liepen dood. Zonder deze regel is het nieuwe pad niet waar te nemen: `signaal`
+    # levert alleen af bij een MENS.
+    _assign.assign(FOUNDER_ROLE_ID, "person", _mens.id)
     if monkeypatch is not None:
         kopie = tmp_path / "claims_database.json"
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")

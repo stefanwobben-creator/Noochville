@@ -1,22 +1,25 @@
-"""De dagelijkse legal-check en de verhuizing van de radar-ingest naar de dagcadans (19 sept 2026).
+"""De legal-bron van de weekmemo, en de bedrading aan de dagcadans.
 
 Twee dingen die in dezelfde beurt zijn gebouwd en om dezelfde reden bij elkaar horen: de radar werd
 een swipefile die niemand dagelijks leest, en voor één van de vier feeds is dat niet goed genoeg.
 Een wetswijziging over duurzaamheidsclaims is geen trend maar een deadline.
 
-Wat hier vastligt:
-  1. alleen de Legal-feed wordt gelezen, alleen binnen het venster, en met een cap;
-  2. NEE levert niets op, en elke storing levert ook niets op (fail-closed — liever een gemiste
-     melding dan een verzonnen juridisch alarm);
-  3. dedup op de artikel-LINK, niet op de kop: drie uitgevers over dezelfde wet mogen drie
-     meldingen zijn, hetzelfde artikel twee keer is er één;
-  4. beide taken hangen echt aan `dag_begint`, en in die volgorde.
+DIT BESTAND TOETSTE TOT 20 SEPTEMBER 2026 `check()`: de dagelijkse ronde die per vers signaal één
+item in de human inbox zette. Die is opgeheven — niet omdat hij fout was, maar omdat hij DUBBEL
+was geworden naast de weekmemo. Dezelfde bron, dezelfde mens, twee uitgangen; dat is de vorm
+waarin twee beelden uit elkaar gaan lopen zonder dat iets zich meldt.
+
+Wat er van die tests overbleef staat hieronder op `verzamel()`, want dáár leven de garanties nu:
+alleen de Legal-feed, het venster als argument van de AANROEP, de cap, en fail-closed (geen model,
+een leeg antwoord of een fout = geen signaal; liever een gemiste melding dan een verzonnen
+juridisch alarm). Wat verviel is wat alleen over het inbox-item ging: de dedup op de artikel-link.
+Die rol vervult nu het boek van de memo (`weekmemo.voorgelegd`), en dat is precies de winst —
+één plek die bijhoudt wat al is voorgelegd, voor alle vijf de bronnen.
 """
 from __future__ import annotations
 
 import time
 
-from nooch_village.human_inbox import HumanInbox
 from nooch_village import legal_signaal as ls
 from nooch_village.radar_store import RadarStore
 
@@ -40,115 +43,37 @@ def _radar(tmp_path, signalen):
     return r
 
 
-def _inbox(tmp_path):
-    return HumanInbox(str(tmp_path / "human_inbox.json"))
-
-
-# ── 1. selectie: feed, venster, cap ──────────────────────────────────────────
-def test_alleen_de_legal_feed_wordt_gelezen(tmp_path):
-    _radar(tmp_path, [
-        {"content": "EU tightens green claims rules", "link": "https://a.eu/1", "at": NU},
-        {"content": "Mycelium leather scales up", "link": "https://b.eu/2", "at": NU,
-         "feed": "Material Innovation"},
-    ])
-    gezien = []
-    def fake(prompt, **kw):
-        gezien.append(prompt)
-        return "RELEVANT: check our claim wording"
-    ls.check(str(tmp_path), _inbox(tmp_path), nu=NU, reason_fn=fake)
-    assert len(gezien) == 1 and "green claims" in gezien[0]
-
-
-def test_een_oud_signaal_valt_buiten_het_venster(tmp_path):
-    _radar(tmp_path, [{"content": "Oude wetswijziging", "link": "https://a.eu/oud",
-                       "at": NU - 48 * 3600}])
-    aangeroepen = []
-    ls.check(str(tmp_path), _inbox(tmp_path), nu=NU,
-             reason_fn=lambda p, **k: aangeroepen.append(p) or "RELEVANT: x")
-    assert aangeroepen == []
-
-
-def test_een_signaal_zonder_bruikbare_tijd_telt_niet_als_vers(tmp_path):
-    """'Misschien vers' is hier geen grond — anders wordt elke herstart een melding-storm.
-    Een onleesbare publicatiedatum valt terug op `at`, en dat is in deze test de echte klok,
-    ruim vóór het venster rond NU."""
-    _radar(tmp_path, [{"content": "Zonder tijd", "link": "https://a.eu/x", "published_at": "ooit"}])
-    assert ls.check(str(tmp_path), _inbox(tmp_path), nu=NU,
-                    reason_fn=lambda p, **k: "RELEVANT: x") == []
-
-
-def test_de_cap_begrenst_de_rekening_per_puls(tmp_path):
-    _radar(tmp_path, [{"content": f"Wetsvoorstel {i}", "link": f"https://a.eu/{i}", "at": NU}
-                      for i in range(10)])
-    n = []
-    ls.check(str(tmp_path), _inbox(tmp_path), nu=NU, cap=3,
-             reason_fn=lambda p, **k: n.append(p) or "NO")
-    assert len(n) == 3
-
-
-# ── 2. fail-closed ───────────────────────────────────────────────────────────
-def test_nee_levert_geen_item(tmp_path):
-    _radar(tmp_path, [{"content": "Schoenenmerk haalt funding op", "link": "https://a.eu/1", "at": NU}])
-    inbox = _inbox(tmp_path)
-    assert ls.check(str(tmp_path), inbox, nu=NU, reason_fn=lambda p, **k: "NO") == []
-    assert inbox.pending() == []
-
-
-def test_geen_model_of_een_fout_levert_geen_item(tmp_path):
-    _radar(tmp_path, [{"content": "EU tightens green claims", "link": "https://a.eu/1", "at": NU}])
-    def knalt(prompt, **kw):
-        raise RuntimeError("geen sleutel")
-    inbox = _inbox(tmp_path)
-    assert ls.check(str(tmp_path), inbox, nu=NU, reason_fn=knalt) == []
-    assert ls.check(str(tmp_path), inbox, nu=NU, reason_fn=lambda p, **k: None) == []
-    assert ls.check(str(tmp_path), inbox, nu=NU, reason_fn=lambda p, **k: "") == []
-    assert inbox.pending() == []
-
-
-def test_een_treffer_draagt_de_reden_en_de_link(tmp_path):
-    _radar(tmp_path, [{"content": "EU tightens green claims rules", "link": "https://a.eu/1",
-                       "source": "fashionunited.com", "at": NU}])
-    inbox = _inbox(tmp_path)
-    ids = ls.check(str(tmp_path), inbox, nu=NU,
-                   reason_fn=lambda p, **k: "RELEVANT: check the wording of our vegan claim")
-    assert len(ids) == 1
-    item = inbox.get(ids[0])
-    assert item["type"] == "legal_signaal"
-    ctx = item["context"]
-    assert ctx["link"] == "https://a.eu/1" and ctx["bron"] == "fashionunited.com"
-    assert "vegan claim" in ctx["reden"]
-
-
-# ── 3. dedup op de link ──────────────────────────────────────────────────────
-def test_hetzelfde_artikel_meldt_maar_een_keer(tmp_path):
-    _radar(tmp_path, [{"content": "EU tightens green claims", "link": "https://a.eu/1", "at": NU}])
-    inbox = _inbox(tmp_path)
-    ja = lambda p, **k: "RELEVANT: x"
-    eerste = ls.check(str(tmp_path), inbox, nu=NU, reason_fn=ja)
-    tweede = ls.check(str(tmp_path), inbox, nu=NU, reason_fn=ja)
-    assert len(eerste) == 1
-    assert tweede == [] or tweede == eerste          # geen tweede item
-    assert len([i for i in inbox.all() if i["type"] == "legal_signaal"]) == 1
-
-
-def test_drie_bronnen_over_dezelfde_wet_zijn_drie_meldingen(tmp_path):
-    """Dedup op de LINK, niet op de kop: dat drie uitgevers dit brengen is zelf informatie."""
-    # De koppen verschillen, zoals bij drie uitgevers: de RadarStore dedupliceert zelf al op
-    # (rol, soort, inhoud), dus drie identieke koppen zijn daar al één signaal.
-    _radar(tmp_path, [{"content": f"EU tightens green claims, says {h}", "link": f"https://{h}/1",
-                       "source": h, "at": NU} for h in ("a.eu", "b.eu", "c.eu")])
-    inbox = _inbox(tmp_path)
-    ids = ls.check(str(tmp_path), inbox, nu=NU, reason_fn=lambda p, **k: "RELEVANT: x")
-    assert len(ids) == 3
-
-
 # ── 4. de puls-bedrading ─────────────────────────────────────────────────────
 def test_beide_taken_hangen_aan_dag_begint_en_in_de_juiste_volgorde():
-    """Eerst ophalen, dan beoordelen — anders ziet de legal-check pas morgen wat vanochtend kwam."""
+    """Eerst ophalen, dan beoordelen — anders ziet de memo pas volgende week wat vanochtend kwam.
+
+    De tweede helft was `_veilig_legal_check`; sinds 20 september is dat de weekmemo, die dezelfde
+    feed als een van zijn vijf bronnen leest."""
     bron = open("nooch_village/village.py", encoding="utf-8").read()
     i = bron.index('self.bus.subscribe("dag_begint", lambda e: self._veilig_radar_ingest())')
-    j = bron.index('self.bus.subscribe("dag_begint", lambda e: self._veilig_legal_check())')
+    j = bron.index('self.bus.subscribe("dag_begint", lambda e: self._veilig_weekmemo())')
     assert i < j
+
+
+def test_de_dagelijkse_legal_uitgang_is_echt_weg():
+    """DE GUARD BIJ HET BESLUIT. Eén bron, één uitgang. Komt `check` ooit terug naast de memo, dan
+    krijgt dezelfde mens hetzelfde signaal weer twee keer — en dan is de vraag welke van de twee
+    hij gelooft als ze verschillen."""
+    assert not hasattr(ls, "check")
+    from nooch_village.human_inbox import HumanInbox
+    assert not hasattr(HumanInbox, "add_legal_signaal")
+    # DE CODE, NIET DE UITLEG: het comment in `village.py` noemt `_veilig_legal_check` juist als
+    # wat er wég is (zelfde vorm als `test_notify_rol_is_niet_meer_hardwired_op_de_founder`).
+    code = "\n".join(r for r in open("nooch_village/village.py", encoding="utf-8")
+                     if not r.strip().startswith("#"))
+    assert "_veilig_legal_check" not in code
+
+
+def test_de_bestaande_inbox_items_blijven_af_te_handelen():
+    """De SCHRIJVER is weg, de LEZER blijft. Op productie liggen items van dit type; een type dat
+    `goedkeuring` niet meer kent is werk dat niemand kan sluiten."""
+    from nooch_village.goedkeuring import TYPES
+    assert "legal_signaal" in TYPES
 
 
 def test_de_ingest_hangt_niet_meer_aan_een_losse_cron():
@@ -219,6 +144,17 @@ def test_verzamel_leest_alleen_de_legal_feed(tmp_path):
                        "feed": "Material Innovation"}])
     uit = ls.verzamel(str(tmp_path), nu=NU, reason_fn=lambda p, **k: "RELEVANT: iets")
     assert [s.vindplaats for s in uit] == ["https://a"]
+
+
+def test_de_cap_begrenst_de_rekening_per_ronde(tmp_path):
+    """Stond op `check` (per puls) en hoort net zo goed bij `verzamel`: één modelaanroep per
+    signaal, dus zonder cap bepaalt een drukke nieuwsweek de rekening."""
+    _radar(tmp_path, [{"content": f"Wetsvoorstel {i} over groene claims",
+                       "link": f"https://eu-nieuws.eu/{i}", "at": NU - 3600} for i in range(10)])
+    gezien = []
+    ls.verzamel(str(tmp_path), nu=NU, sinds=NU - 7 * 86400, cap=3,
+                reason_fn=lambda p, **k: gezien.append(p) or "NO")
+    assert len(gezien) == 3
 
 
 def test_de_drempel_staat_op_de_bron():

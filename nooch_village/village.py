@@ -612,15 +612,6 @@ class Village:
         except Exception as e:                              # noqa: BLE001
             logging.getLogger("village").warning("radar-ingest faalde: %s", e)
 
-    def _veilig_legal_check(self) -> None:
-        """De legal-feed op iets dat Nooch raakt. Ná de ingest gewired, zodat wat vanochtend
-        binnenkwam vandaag nog beoordeeld wordt in plaats van morgen."""
-        try:
-            from nooch_village import legal_signaal
-            legal_signaal.check(self.context.data_dir, self.human_inbox)
-        except Exception as e:                              # noqa: BLE001
-            logging.getLogger("village").warning("legal-check faalde: %s", e)
-
     def _veilig_weekmemo(self) -> None:
         """De weekmemo: één synthese per ISO-week over de vijf bronnen, als DM bij de founder.
 
@@ -665,11 +656,15 @@ class Village:
         # gebeurt mag het werk dat erop stond niet stil verdwijnen, zoals bij harry_hemp nu al was.)
         self.bus.subscribe("dag_begint", lambda e: self._veilig_weesprojecten())
         # De radar-ingest: verhuisd van een losse crontab-regel naar de dagcadans (19 sept 2026).
-        # Eerst ophalen, dan de legal-check, zodat een vers signaal dezelfde puls nog wordt gezien.
+        # Eerst ophalen, dan de weekmemo, zodat een vers signaal dezelfde puls nog wordt gezien.
+        #
+        # HIER STOND OOK `_veilig_legal_check`: de dagelijkse ronde die per legal-signaal een
+        # inbox-item maakte. Weg op 20 september 2026 — sinds de weekmemo droeg diezelfde bron
+        # twee uitgangen naar dezelfde mens, en dat is precies de vorm waarin twee beelden uit
+        # elkaar gaan lopen. De memo leest de feed nu als een van de vijf bronnen.
         self.bus.subscribe("dag_begint", lambda e: self._veilig_radar_ingest())
-        self.bus.subscribe("dag_begint", lambda e: self._veilig_legal_check())
-        # De weekmemo als laatste in deze rij: hij leest wat de ingest en de legal-check net hebben
-        # opgeleverd. Zijn eigen weekpoort zorgt dat hij hooguit één keer per ISO-week iets doet.
+        # De weekmemo als laatste in deze rij: hij leest wat de ingest net heeft opgeleverd. Zijn
+        # eigen weekpoort zorgt dat hij hooguit één keer per ISO-week iets doet.
         self.bus.subscribe("dag_begint", lambda e: self._veilig_weekmemo())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "

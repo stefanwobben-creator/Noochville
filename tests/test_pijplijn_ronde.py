@@ -206,3 +206,51 @@ def test_de_ronde_kiest_geen_ontvanger(tmp_path):
     code = "\n".join(r for r in bron.splitlines() if not r.strip().startswith("#"))
     for verboden in ("classificeer", "menselijke_eigenaar", "kies_ontvanger", "rol_voor"):
         assert verboden not in code
+
+
+# ── 5. één bron, één uitgang (besluit 20 september 2026) ─────────────────────────────────────
+
+def test_de_scan_meldt_aan_een_mens_en_maakt_geen_werk_aan(tmp_path, monkeypatch):
+    """DE GUARD BIJ BESLUIT 3. De drie meldingen van de scan (scan-lijst kapot, scan vastgelopen,
+    claim-regressie) gingen naar "de rol die het claims-domein bezit". Twee dingen waren daar mis:
+    dat domein heeft sinds fase 5 geen eigenaar, dus ze liepen dood — en áls ze aankwamen maakte
+    `bericht_aan_rol` bij een AI-bemande rol een PROJECT aan. Dat laatste is precies het
+    automatische werk dat pijplijn-stap 3 heeft weggehaald."""
+    import ast
+    import inspect
+
+    from nooch_village.skills_impl import claims_site_scan as css
+    # OP DE AANROEPEN, NIET OP DE TEKST: de docstring van `_meld_aan_mens` noemt
+    # `bericht_aan_rol` juist als wat er wég is, en die uitleg hoort niet verboden te worden.
+    boom = ast.parse(inspect.getsource(css))
+    aanroepen = {n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", "")
+                 for n in ast.walk(boom) if isinstance(n, ast.Call)}
+    assert "bericht_aan_rol" not in aanroepen, "de scan hoort via `signaal` te melden, niet via het bord"
+    assert "stuur_op_pad" in inspect.getsource(css._meld_aan_mens)
+
+
+def test_de_scan_melding_valt_terug_op_de_founder(tmp_path, monkeypatch):
+    """Zonder rol: de founder. Met een aantoonbare eigenaar (de rol die de regressie ooit fixte):
+    die rol, waarna `signaal` er zelf de mens bij zoekt."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    from nooch_village.skills_impl import claims_site_scan as css
+
+    gezien = []
+    monkeypatch.setattr("nooch_village.signaal.stuur_op_pad",
+                        lambda dd, soort, doel, tekst, **k: gezien.append((doel, tekst)) or ["dm"])
+    ctx = types.SimpleNamespace(data_dir=str(tmp_path))
+    css._meld_aan_mens(ctx, "iets kapots")
+    css._meld_aan_mens(ctx, "een regressie", rol="mother_earth__nooch__creator_of_shoes")
+    assert gezien[0][0] == FOUNDER_ROLE_ID
+    assert gezien[1][0] == "mother_earth__nooch__creator_of_shoes"
+
+
+def test_een_melding_die_nergens_aankomt_wordt_geLOGD(tmp_path, monkeypatch, caplog):
+    """Stil falen is hier de dure fout: zo liepen deze drie meldingen maanden dood zonder spoor."""
+    import logging
+
+    from nooch_village.skills_impl import claims_site_scan as css
+    monkeypatch.setattr("nooch_village.signaal.stuur_op_pad", lambda *a, **k: [])
+    with caplog.at_level(logging.WARNING):
+        css._meld_aan_mens(types.SimpleNamespace(data_dir=str(tmp_path)), "niemand hoort dit")
+    assert "kwam nergens aan" in caplog.text

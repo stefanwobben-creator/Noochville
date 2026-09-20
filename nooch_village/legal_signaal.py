@@ -1,22 +1,25 @@
-"""De dagelijkse legal-check: één inbox-item als er iets binnenkomt dat Nooch raakt.
+"""De legal-bron van de weekmemo: raakt dit nieuwsbericht Nooch?
 
 WAAROM DIT HET ENIGE STUK IS DAT DE RADAR-OPRUIMING OVERLEEFT ALS NIEUWE CODE. De radar werd op
 19 september 2026 een swipefile: feeds landen ongefilterd en het maandrapport (nog te bouwen) leegt
 de bak. Voor drie van de vier feeds is dat precies goed — een trend hoeft niet vandaag gelezen te
 worden. Voor de Legal & Green Claims-feed niet: een wetswijziging over duurzaamheidsclaims is geen
-trend maar een deadline, en die hoort niet een maand in een bak te liggen.
+trend maar een deadline.
 
-Dus: geen rapport, geen wachtrij, geen status per signaal. Eén vraag per vers signaal — raakt dit
-Nooch? — en bij ja één item in de human inbox van de founder. Niets anders.
+HIER STOND `check()`: de dagelijkse ronde die per vers signaal één item in de human inbox zette.
+Weg op 20 september 2026, op Stefans besluit, en de reden is niet dat hij fout was maar dat hij
+DUBBEL was geworden. Sinds de weekmemo draagt `verzamel()` dezelfde signalen naar dezelfde mens —
+dagelijks als inbox-item én wekelijks in de memo. Eén bron, twee uitgangen: dat is precies de vorm
+waarin twee beelden uit elkaar gaan lopen zonder dat iets zich meldt, en het is ook waarom de
+andere vier bronnen geen eigen uitgang meer hebben.
 
-GEEN EIGEN STATE, EN DE PRIJS DAARVAN STAAT HIER. De check kijkt naar signalen uit de laatste
-`VENSTER_UREN` en niet verder terug. Dat scheelt een store, een migratie en een tweede waarheid over
-"al gezien", maar het betekent ook: ligt de daemon anderhalve dag plat, dan is die dag legal-signaal
-ongezien. Dat is een bewuste ruil en geen gat dat iemand later moet ontdekken. Het venster is ruimer
-dan een dag zodat een late puls niets laat vallen; de dedup op de link in de inbox vangt de overlap.
+WAT JE INLEVERT, EERLIJK OPGESCHREVEN: snelheid. Een wetssignaal dat op maandag binnenkomt landt
+nu pas in de weekmemo in plaats van dezelfde dag. Dat is de prijs van één uitgang, met open ogen
+betaald — en het venster van de memo (acht dagen) is ruimer dan de 36 uur die `check` hanteerde,
+dus er valt niets tussenuit zoals vroeger bij een daemon die een dag plat lag.
 
 Fail-closed zoals `reeds_bekend` en `onderzoeksvraag`: geen model, een leeg antwoord of welke fout
-dan ook betekent GEEN item. Liever een gemiste melding dan een verzonnen juridisch alarm.
+dan ook betekent GEEN signaal. Liever een gemiste melding dan een verzonnen juridisch alarm.
 """
 from __future__ import annotations
 
@@ -28,11 +31,8 @@ log = logging.getLogger("village.legal")
 #: Het label uit `radar_store._DEFAULT_FEEDS` (overschrijfbaar via data/feeds.json).
 FEED = "Legal & Green Claims"
 
-#: Ruimer dan 24 uur: een puls die een paar uur later valt mag geen signaal laten vallen.
-VENSTER_UREN = 36
-
-#: Per puls, niet per feed. Een dag legal-nieuws is een handvol artikelen; loopt het hoger op, dan
-#: is dat zelf het signaal (en de cap houdt de rekening voorspelbaar).
+#: Per ronde, niet per feed. Een week legal-nieuws is een handvol artikelen; loopt het hoger op,
+#: dan is dat zelf het signaal (en de cap houdt de rekening voorspelbaar).
 MAX_PER_PULS = 15
 
 MAX_TOKENS = 300
@@ -50,15 +50,6 @@ NO
 
 Headline: {titel}
 Source: {bron}"""
-
-
-def _vers(signalen: list, *, nu: float, venster_uren: float) -> list:
-    """De signalen uit dit venster, nieuwste eerst. Alles zonder bruikbare tijd valt af — een
-    signaal zonder tijdstempel is niet aantoonbaar vers, en 'misschien vers' is hier geen grond."""
-    from nooch_village.radar_bronnen import tijdstip
-    grens = nu - venster_uren * 3600
-    uit = [(tijdstip(s), s) for s in signalen]
-    return [s for t, s in sorted(uit, key=lambda p: -p[0]) if t >= grens]
 
 
 def beoordeel(signaal: dict, *, reason_fn=None) -> str:
@@ -132,36 +123,4 @@ def verzamel(data_dir: str, *, sinds: float = 0.0, nu: float | None = None, reas
             # De REDEN is wat het model toevoegde, en die hoort niet in `tekst`: `tekst` is wat de
             # bron zei, `extra` is wat wij ervan vonden. In de memo staan ze daarom apart.
             extra={"reden": reden, "bron_naam": str(s.get("source") or "")}))
-    return uit
-
-
-def check(data_dir: str, inbox, *, nu: float | None = None, reason_fn=None,
-          venster_uren: float = VENSTER_UREN, cap: int = MAX_PER_PULS) -> list[str]:
-    """De dagelijkse ronde. Geeft de id's van de aangemaakte inbox-items terug (leeg = niets).
-
-    `inbox` wordt geïnjecteerd, niet hier geopend: de aanroeper (Village) heeft er al een, en twee
-    HumanInbox-objecten op hetzelfde bestand is precies de soort dubbele schrijver waar de
-    lock-discipline over gaat."""
-    from nooch_village.radar_store import RadarStore
-    import os
-
-    nu = time.time() if nu is None else nu
-    radar = RadarStore(os.path.join(data_dir, "radar.json"))
-    legal = [s for s in radar.all_items() if str(s.get("feed") or "") == FEED]
-    uit: list[str] = []
-    for s in _vers(legal, nu=nu, venster_uren=venster_uren)[:cap]:
-        reden = beoordeel(s, reason_fn=reason_fn)
-        if not reden:
-            continue
-        try:
-            iid = inbox.add_legal_signaal(link=str(s.get("link") or ""),
-                                          titel=str(s.get("content") or ""),
-                                          bron=str(s.get("source") or ""), reden=reden)
-        except Exception as e:                              # noqa: BLE001
-            log.warning("legal-item niet aangemaakt: %s", e)
-            continue
-        if iid:
-            uit.append(iid)
-    if uit:
-        log.info("⚖️ legal-check: %d signaal/signalen naar de inbox", len(uit))
     return uit

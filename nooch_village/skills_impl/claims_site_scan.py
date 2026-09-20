@@ -389,14 +389,31 @@ def kop_tekst(uit: dict, gevonden: int, tijdelijk: list, permanent: list, status
     return kop
 
 
-def _claims_rol(context) -> str:
-    """De levende rol die het claims-domein bezit ("" = niemand).
+def _meld_aan_mens(context, tekst: str, rol: str = "") -> None:
+    """Eén melding uit deze scan, bij een MENS. Fail-soft: een melding mag de scan niet breken.
 
-    Stond op vier plekken in dit bestand als de letterlijke naam "compliance". Die rol is verhuisd
-    en het oude record is gearchiveerd, waardoor die vier berichten naar een rol gingen waar
-    niemand meer naar kijkt. Het domein is wat governance vastlegt; de naam niet."""
-    from nooch_village import claims_board
-    return claims_board.claims_rol(getattr(context, "records", None))
+    HIER STOND `_claims_rol` + `claims_board.bericht_aan_rol` (20 september 2026, besluit Stefan).
+    Twee dingen waren daar mis, en het tweede is het ergste:
+
+    1. **Hij kwam nergens aan.** `_claims_rol` zoekt de levende rol die het claims-domein bezit.
+       Sinds fase 5 (19 september) bezit niemand dat domein — claims is gereedschap dat een mens
+       pakt, geen rol met een eigenaar. Alle drie deze meldingen liepen dus dood in een lege
+       rol-id, zonder fout en zonder spoor.
+    2. **Als hij wél aankwam, maakte hij werk aan.** `bericht_aan_rol` zet bij een AI-bemande rol
+       een PROJECT op het bord. Dat is hetzelfde mechanisme dat pijplijn-stap 3 hier weghaalde,
+       op kleinere schaal: automatisch werk op naam van een rol, zonder dat een mens tekende.
+
+    Nu: een DM bij de founder, net als de weekmemo. `rol` mag meegegeven worden als er een
+    aantoonbare mens-eigenaar is (de rol die een regressie ooit fixte) — `signaal.stuur_op_pad`
+    zoekt daar zelf de mens bij en valt terug op de Circle Lead en dan de founder. Er wordt in
+    geen van beide gevallen een project aangemaakt."""
+    from nooch_village import signaal
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    data_dir = getattr(context, "data_dir", ".")
+    doel = rol or FOUNDER_ROLE_ID
+    if not signaal.stuur_op_pad(data_dir, "role", doel, tekst, by="claims-scan",
+                                omgeving=context):
+        log.warning("scan-melding kwam nergens aan (%s): %s", doel, tekst[:80])
 
 
 class ClaimsSiteScanSkill(Skill):
@@ -474,12 +491,14 @@ class ClaimsSiteScanSkill(Skill):
         for v in geschreven:
             if v["naar"] != claims_db.AUTO_REGRESSIE:
                 continue
-            # Een regressie gaat naar wie hem gefixt had én altijd naar compliance.
+            # Een regressie gaat naar wie hem gefixt had én altijd naar de founder. De eerste is
+            # een aantoonbaar feit (die rol droeg het project dat hem oploste), de tweede is het
+            # adres dat altijd bestaat.
             tekst = f"↩️ Werklijst #{v['nr']} staat weer op de site — {v['reden']}"
             eigenaar = _wie_fixte(context.projects, v["nr"])
             if eigenaar:
-                claims_board.bericht_aan_rol(context, eigenaar, tekst)
-            claims_board.bericht_aan_rol(context, _claims_rol(context), tekst)
+                _meld_aan_mens(context, tekst, rol=eigenaar)
+            _meld_aan_mens(context, tekst)
         return geschreven, mislukt
 
     def _kroniek(self, context):
@@ -586,21 +605,26 @@ class ClaimsSiteScanSkill(Skill):
                                       "onbereikbaar": [f["label"] for f in tijdelijk],
                                       "fouten": fout_tekst(fouten, 5)})
         for f in permanent:
-            claims_board.bericht_aan_rol(
-                context, _claims_rol(context),
+            _meld_aan_mens(
+                context,
                 f"🧭 Scan-lijst: '{f['label']}' is niet meer op te halen ({f['reden']}) — "
                 f"werk meta.scan_paginas bij ({f['url']})")
 
         if vastgelopen:
-            # Eén bericht aan compliance, met de pagina's die vanaf de server niet leesbaar zijn.
-            # Compliance bezit de scan-lijst; dit is hun beslissing (andere bron, andere route).
-            claims_board.bericht_aan_rol(
-                context, _claims_rol(context),
+            # Eén bericht, met de pagina's die vanaf de server niet leesbaar zijn. Wie de
+            # scan-lijst bijwerkt is een mensbeslissing; tot fase 5 was dat "compliance", maar dat
+            # domein heeft geen eigenaar meer.
+            _meld_aan_mens(
+                context,
                 f"🚧 Site-scan blijft blind op {len(tijdelijk)} pagina('s): "
                 f"{', '.join(f['label'] for f in tijdelijk)} — {fout_tekst(tijdelijk, 1)}. "
                 f"Al {MAX_PULSEN_ZONDER_VOORTGANG} pulsen geen enkele nieuwe pagina erbij.")
+        # `rol` is hier een LABEL op het capaciteitsgat, geen adres: `gap_ledger` groepeert er
+        # clusters mee. Het claims-domein heeft sinds fase 5 geen eigenaar, dus dat label is leeg —
+        # en een leeg label is eerlijker dan een rol-id die niemand vervult.
         gaten = self._oogst_gaten(data_dir, signalen, bevindingen, tijdelijk,
-                                  vastgelopen, rol=_claims_rol(context))
+                                  vastgelopen,
+                                  rol=claims_board.claims_rol(getattr(context, "records", None)))
         headsup = self._headsup(meldbaar, statussen, tijdelijk, permanent, signalen, vastgelopen,
                                 len(nieuw_gedekt), len(paginas))
         gevonden = [bevinding_record(b) for b in meldbaar]
