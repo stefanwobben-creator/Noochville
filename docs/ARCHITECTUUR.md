@@ -98,8 +98,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_setowner` | `_act_proj_setowner` |
 | `proj_approve` | `_act_proj_approve` |
 | `proj_discard` | `_act_proj_discard` |
-| `proj_proposal_accept` | `_act_proj_proposal_accept` |
-| `proj_proposal_reject` | `_act_proj_proposal_reject` |
 | `proj_setimpact` | `_act_proj_setimpact` |
 | `proj_seteffort` | `_act_proj_seteffort` |
 | `proj_agendeer_verzwakt` | `_act_proj_agendeer_verzwakt` |
@@ -266,7 +264,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `notes.json` | `kennisbank.py` |
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
-| `project_proposals.json` | `project_proposals.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
 | `sessions.json` | `cockpit2.py` |
@@ -310,4 +307,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 34 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_40 routes · 138 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

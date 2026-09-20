@@ -51,13 +51,16 @@ def test_nieuw_is_slapend_en_alleen_de_active_deur_maakt_actief(tmp_path):
 
 
 def test_wat_het_dorp_zelf_aanmaakt_slaapt(tmp_path):
-    """Doorgegeven werk, een goedgekeurd concept en een aangenomen voorstel: allemaal future. Een mens
-    sleept naar Active; dat is de regel van 5 september, en queued was er de uitzondering op."""
+    """Doorgegeven werk en een goedgekeurd concept: allemaal future. Een mens sleept naar Active;
+    dat is de regel van 5 september, en queued was er de uitzondering op.
+
+    DE DERDE INGANG IS VERVALLEN (21 september 2026): een aangenomen VOORSTEL landde hier ook in
+    future, maar de hele voorstel-lus is opgeheven — er was geen scherm meer waar een mens ja kon
+    zeggen, terwijl de generator doordraaide. Wat die regel bewaakte geldt nog steeds voor de twee
+    ingangen die er wél zijn."""
     pl = ProjectLedger(str(tmp_path / "p.json"))
     d = pl.create("rol", "Concept", "human", status="draft"); pl.approve(d)
     assert pl.get(d)["status"] == "future"
-    v = pl.create("rol", "Voorstel", "role", status="proposed"); pl.accept_proposal(v)
-    assert pl.get(v)["status"] == "future"
     from nooch_village.project_items import handoff
     src = inspect.getsource(handoff)
     assert 'status="future"' in src and "queued" not in src

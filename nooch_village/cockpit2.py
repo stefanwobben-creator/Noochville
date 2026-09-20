@@ -1857,32 +1857,9 @@ def _act_proj_discard(c):
         return nxt, msg
 
 
-def _act_proj_proposal_accept(c):
-        # AUTHZ: rolvervuller-of-Circle-Lead — een voorstel aannemen zet werk op het bord van díe rol;
-        # dat is operationeel projectwerk, zelfde poort als proj_approve voor een draft.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        from nooch_village import project_proposals
-        if project_proposals.accept(pj, c.data_dir, g("pid"), person=username or ""):
-            return nxt, "✓ proposal accepted — it is in Future now, activate it when you want"
-        return nxt, ""
-
-
-def _act_proj_proposal_reject(c):
-        # AUTHZ: rolvervuller-of-Circle-Lead — zelfde poort als accepteren; wie erover mag beslissen
-        # mag ook nee zeggen. De afwijzing wordt onthouden zodat dezelfde bron niet opnieuw voorstelt.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        from nooch_village import project_proposals
-        if project_proposals.reject(pj, c.data_dir, g("pid")):
-            return nxt, "🗑 proposal rejected — it will not be proposed again"
-        return nxt, ""
-
-
+# HIER STONDEN `_act_proj_proposal_accept` en `_act_proj_proposal_reject`. Ze hadden sinds de
+# verwijdering van de Founder Flow geen enkel formulier meer dat ze rendert — de dispatch kon ze
+# uitvoeren, maar er was geen knop meer die ze aanriep. Weg met de rest van de lus (21 sept 2026).
 
 
 _IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
@@ -4876,8 +4853,6 @@ ACTIONS = {
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,
     "proj_discard": _act_proj_discard,
-    "proj_proposal_accept": _act_proj_proposal_accept,
-    "proj_proposal_reject": _act_proj_proposal_reject,
     "proj_setimpact": _act_proj_setimpact,
     "proj_seteffort": _act_proj_seteffort,
     "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,

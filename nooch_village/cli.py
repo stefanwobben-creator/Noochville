@@ -31,6 +31,14 @@ def main() -> None:
         demo()
 
 
+    elif mode == "voorstel_opruiming":
+        # Eenmalig: de projectvoorstellen die vastzaten sinds de Founder Flow verdween.
+        import os
+        from nooch_village import voorstel_opruiming
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        voorstel_opruiming.rapport(ctx.data_dir, apply="--apply" in sys.argv[2:])
+
     elif mode == "radar_archief":
         # Pijplijn stap 6: de wachtrij leeghalen zonder de geschiedenis weg te gooien.
         # Droge run standaard; pas met --apply wordt er geschreven.
@@ -590,28 +598,9 @@ def main() -> None:
             print("   (niets bewogen — de puls raakt alleen cluster-leden met een ACTIEVE root, "
                   "binnen de WIP-limiet. Standalone projecten blijven mens-gestuurd.)")
 
-    elif mode == "propose_projects":
-        # Signaal → projectVOORSTEL. Zet niets op het actieve bord: elk voorstel krijgt status
-        # 'proposed' en wacht op jouw oordeel in de review-baan van de cockpit.
-        import os
-        from nooch_village.config import load_context
-        from nooch_village.governance import Records
-        from nooch_village.project_proposals import generate_proposals
-        from nooch_village.projects import ProjectLedger
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        ctx.projects = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
-        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
-        res = generate_proposals(ctx, records=recs)
-        print(f"💡 Voorstel-ronde: {len(res['created'])} nieuw voorgesteld "
-              f"({res['open_before']} stonden er al open, cap {res['cap']}), "
-              f"{res['skipped_dedup']} al eerder beoordeeld.")
-        for c in res["created"]:
-            print(f"   · [{c['owner']}] {c['title'][:80]}")
-        for s in res["skipped_cap"]:
-            print(f"   ⏭ overgeslagen (baan vol): [{s['owner']}] {s['raw'][:70]}")
-        if res["created"]:
-            print("   Beoordeel ze in de cockpit bij de rol → Projects → 💡 Proposals.")
+    # `propose_projects` stond hier: met de hand een voorstel-ronde draaien. Weg met de rest van
+    # de lus (21 september 2026) — een ronde draaien die voorstellen maakt die niemand kan
+    # beoordelen, is precies wat er moest stoppen.
 
     elif mode in ("inwoner_new", "inwoner_list", "inwoner_assign"):
         # Inwoners (persona's): The Source maakt karakters aan en koppelt ze aan rollen.

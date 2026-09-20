@@ -188,7 +188,6 @@ class Village:
         self.bus.subscribe("noochie_weighed_in",          self._observe)
         self.bus.subscribe("kennis_geraadpleegd",         self._observe)   # kennis-eerst zichtbaar in system_log
         self.bus.subscribe("board_pulse_completed",       self._observe)
-        self.bus.subscribe("project_proposals_generated", self._observe)
         # Twee autonome rondes aan de BESTAANDE dagcadans (dag_begint) — geen tweede timer erbij, en
         # dus geen tweede plek waar het ritme kan verlopen. Infra-subscribe (zoals Matchmaker en
         # Reconciler): beide handlers zijn deterministisch, doen geen netwerk-I/O en publiceren niet
@@ -199,7 +198,6 @@ class Village:
         #   2. de voorstel-ronde: zet niets op het bord, elk voorstel wacht op de mens (cap + dedup
         #      remmen de ruis).
         self.bus.subscribe("dag_begint",                  self._on_board_pulse)
-        self.bus.subscribe("dag_begint",                  self._on_propose_projects)
         # Generieke databron-collector + dode-bron-sensor (16 sept 2026): verplaatst uit
         # website_watcher, want dit was dorpsbrede infrastructuur op een rol-thread — zelfde
         # koppelfout als de dagbel-op-facilitator van 28 augustus. Zie Village._veilig_databron_puls.
@@ -221,14 +219,14 @@ class Village:
         except Exception as exc:      # noqa: BLE001 — de cadans is belangrijker dan deze puls
             logging.getLogger("village.board").warning("bord-puls overgeslagen: %s", exc)
 
-    def _on_propose_projects(self, e: Event) -> None:
-        """De voorstel-generator, één ronde per dagcadans. Fail-soft: een fout hier mag de dagpuls
-        nooit omvertrekken."""
-        try:
-            from nooch_village.project_proposals import generate_proposals
-            generate_proposals(self.context, records=self.records, bus=self.bus)
-        except Exception as exc:      # noqa: BLE001 — de cadans is belangrijker dan deze ronde
-            logging.getLogger("village.proposals").warning("voorstel-ronde overgeslagen: %s", exc)
+    # HIER STOND `_on_propose_projects`: de voorstel-generator, één ronde per dagcadans. Weg op
+    # 21 september 2026, en de reden is niet dat hij stuk was maar dat hij in het NIETS produceerde.
+    # De enige plek waar een mens een voorstel kon aannemen of afwijzen was de Founder Flow, en dat
+    # scherm is in fase 1-9 verwijderd. De generator bleef intussen elke dag draaien: op productie
+    # stonden 10 voorstellen te wachten, de oudste 43 dagen, die niemand kón beoordelen.
+    #
+    # Dat is dezelfde vorm als de triage-keten van 20 september: een lus die werk maakt zonder
+    # uitgang naar een mens. Stefans besluit: de hele lus weg, geen nieuw scherm erbij.
 
     def _on_escalation(self, e: Event) -> None:
         proposal_dict = e.data.get("proposal", {})
