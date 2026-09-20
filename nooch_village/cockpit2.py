@@ -3361,6 +3361,23 @@ def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
         if lead and lead != rol:
             door = bestemming(st, rol=lead, _lead_hop=True)
             return {**door, "via": f"{rol} heeft geen vervuller"}
+        # DE KLIM LOOPT DOOD, EN DAN IS DE FOUNDER HET ADRES — niet de rol zelf.
+        #
+        # `_circle_lead_van` slaat gearchiveerde records over, en dat is terecht: werk bij een
+        # opgeheven Circle Lead neerleggen is hetzelfde als weggooien. Maar hij klimt één niveau en
+        # stopt, en bij een CIRKEL die in zijn geheel is opgeheven is er dus geen lead meer. Dan
+        # viel dit terug op `{"soort": "project", "doel_id": rol}` — de rol die net is vastgesteld
+        # als "kan niets". Gemeten op prod, 20 september 2026: twee weesprojecten van de opgeheven
+        # `compliance`-rol, en `village afslank_wezen` stelde voor ze te "verhuizen" naar diezelfde
+        # dode rol. Dat is geen verhuizing maar een lus die het origineel archiveert.
+        #
+        # De terugval is dezelfde als overal elders sinds vandaag: alles wat niemand kan dragen komt
+        # bij de founder (CLAUDE.md, "AI is instrument, geen rol"). Geen model, geen keuze.
+        from nooch_village import signaal
+        founder = signaal.terugval(st)
+        if founder:
+            return {"soort": "inbox", "doel_type": "person", "doel_id": founder,
+                    "via": f"{rol} heeft geen vervuller en de cirkel geen Circle Lead"}
     return {"soort": "project", "doel_type": "role", "doel_id": rol, "via": ""}
 
 

@@ -18,12 +18,17 @@ Drie guards, en ze zijn geen van drieën optioneel:
    deze stap bij dit project ligt. Een marker op het item zou hetzelfde feit op een tweede plek
    zetten, en dat drijft uiteen — dezelfde regel als `reference, don't copy`.
 
-Droge loop is de default, en hij BEPAALT WEL DE ONTVANGER — hij schrijft alleen niet.
+Droge loop is de default, en hij bepaalt hetzelfde als de echte pas — hij schrijft alleen niet.
 
-Dat kost een modelcall per stap, en dat is precies de bedoeling: de vraag vóór het toepassen is niet
-"hoeveel items" maar "waar landen ze". Een droge loop die alleen telt, laat de enige beslissing die
-ertoe doet ongemeten. Valt de ladder terug op de founder, dan is deze pas geen ROUTERING maar een
-stapel van 33 op één inbox — een andere handeling, met een ander besluit erachter.
+DE BESTEMMING IS SINDS 20 SEPTEMBER 2026 GEEN VRAAG MEER. Hier stond dat de droge loop de ontvanger
+moest bepalen omdat "waar landen ze" de beslissing was die ertoe deed, en dat een terugval op de
+founder deze pas van een ROUTERING in een stapel-op-één-inbox zou veranderen. Dat is nu precies wat
+hij is, en met opzet: alles wat vastloopt komt eerst bij de founder, hij bepaalt waar het heen gaat
+(CLAUDE.md, "AI is instrument, geen rol"). Een model dat die keuze maakte legde werk op het bord van
+een collega zonder dat iemand het vooraf zag.
+
+Wat de modelcall nog doet is een VOORSTEL formuleren — welke rol dit lijkt te bezitten, en waarom —
+dat als tekst meereist. Valt hij weg, dan gaat het bericht zonder die regel naar dezelfde persoon.
 """
 from __future__ import annotations
 
@@ -107,14 +112,15 @@ def pas(data_dir: str, *, apply: bool = False, owner: str = "", reason_fn=None) 
                 # Wél de ontvanger bepalen, niet schrijven: zonder dat meet een droge loop de enige
                 # beslissing niet die ertoe doet.
                 try:
-                    rol, persoon, grond = _mens_ontvanger(st, p, tekst, p.get("owner") or "",
-                                                          trail_of(p), reason_fn)
+                    rol, persoon, grond, suggestie = _mens_ontvanger(
+                        st, p, tekst, p.get("owner") or "", trail_of(p), reason_fn)
                     naar = (_naam_van(st, rol) if rol else _persoon_van(st, persoon))
                 except Exception as e:                # noqa: BLE001 — meten mag nooit breken
                     log.warning("ontvanger niet te bepalen (%s)", e)
-                    naar, grond = "(onbekend)", "kon niet bepaald worden"
+                    naar, grond, suggestie = "(onbekend)", "kon niet bepaald worden", ""
                 verslag["geland"].append({"pid": p["id"], "rol": p.get("owner"), "naam": naam,
-                                          "stap": tekst[:90], "ref": f"→ {naar}", "grond": grond})
+                                          "stap": tekst[:90], "ref": f"→ {naar}", "grond": grond,
+                                          "suggestie": suggestie})
                 verslag["verdeling"][naar] = verslag["verdeling"].get(naar, 0) + 1
                 verslag["gronden"][grond] = verslag["gronden"].get(grond, 0) + 1
                 continue
@@ -128,7 +134,8 @@ def pas(data_dir: str, *, apply: bool = False, owner: str = "", reason_fn=None) 
                     else _persoon_van(st, uit.get("persoon")))
             verslag["geland"].append({"pid": p["id"], "rol": p.get("owner"), "naam": naam,
                                       "stap": tekst[:90], "ref": uit.get("ref", ""),
-                                      "grond": uit.get("grond", "")})
+                                      "grond": uit.get("grond", ""),
+                                      "suggestie": uit.get("suggestie", "")})
             verslag["verdeling"][naar] = verslag["verdeling"].get(naar, 0) + 1
             verslag["gronden"][uit.get("grond", "")] = \
                 verslag["gronden"].get(uit.get("grond", ""), 0) + 1

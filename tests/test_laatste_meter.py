@@ -11,8 +11,18 @@ item(s)") in plaats van een VRAAG aan iemand die hem kan beantwoorden.
 
 Drie eigenschappen, en dit bestand houdt ze alle drie vast:
   1. het landt via `route_werk` in een échte inbox — bestaande mechaniek, geen vierde kanaal;
-  2. de ontvanger is GEGROND gekozen: mens-vervulde rol die het bezit → opdrachtgever → founder;
+  2. de ontvanger is de FOUNDER, altijd;
   3. de tekst is wélgevormd: wie vastzit, waar hij op vastzit, en wat hij concreet nodig heeft.
+
+EIGENSCHAP 2 IS OP 20 SEPTEMBER 2026 OMGEDRAAID. Hier stond: "de ontvanger is GEGROND gekozen:
+mens-vervulde rol die het bezit → opdrachtgever → founder". Die eerste stap was een model dat een
+collega werk gaf, uitgevoerd in dezelfde codepad, zonder dat iemand het vooraf zag — met vijf mensen
+op veertien mens-bemande rollen geen theoretisch risico. Besluit van Stefan: *"niet de ladder, altijd
+naar mij direct. Ik wil eerst alles zelf zien voordat het verder gaat."*
+
+Het model mag nog steeds iets VINDEN; die zin reist mee als voorstel in de herkomst-regel. Het
+gedrag van die grens staat in `test_bestemming_is_altijd_de_founder`, de brede vorm-bewaking in
+`test_geen_model_routering`.
 """
 from __future__ import annotations
 
@@ -20,7 +30,7 @@ import os
 
 import pytest
 
-from nooch_village import cockpit2, escalation_router as er
+from nooch_village import cockpit2, escalation_router as er, signaal
 from nooch_village.human_inbox import FOUNDER_ROLE_ID
 
 
@@ -57,24 +67,28 @@ def _mens_rol(st, rid: str, monkeypatch, extra: set = frozenset()):
 
 # ── 1. Het landt in een échte inbox, via bestaande mechaniek ─────────────────
 
-def test_de_stap_landt_in_de_inbox_van_de_gekozen_mens(st, tmp_path, monkeypatch):
+def test_de_stap_landt_in_de_inbox_van_de_founder(st, tmp_path, monkeypatch):
+    """Het model krijgt hier alle ruimte: het wijst met stelligheid een bestaande rol aan. Vroeger
+    landde het werk dan bij díé rol; nu bij de founder, met de rolnaam als voorstel erachter."""
     rol = "mother_earth__nooch__creator_of_shoes"
     if st.records.get(rol) is None:
         pytest.skip("rol niet in de seed")
-    mens = _mens_rol(st, rol, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: {"role": rol, "kind": "human_external"})
     p = _project(st)
     uit = er.naar_mens(data_dir=str(tmp_path), project=p, from_role="harry_hemp",
                        from_naam="Scientist", waarom="het vraagt een mens of externe partij",
                        item_text="Laat de samples testen in een erkend lab (TÜV of SGS)")
-    assert uit and uit["soort"] == "inbox" and uit["rol"] == rol
-    # BIJ DE MENS, MET DE ROL ALS CONTEXT. Een rol is een mandaat, geen postbus: heeft hij precies
-    # één vervuller, dan is dát het adres. De rol reist mee in `rol` zodat de context niet wegvalt.
-    bij_mens = _dm_aan(cockpit2._Stores(str(tmp_path)), mens.id)
-    assert bij_mens, "niets bij de vervuller aangekomen"
+    st2 = cockpit2._Stores(str(tmp_path))
+    founder = signaal.terugval(st2)
+    assert uit and uit["soort"] == "inbox"
+    assert uit["persoon"] == founder and uit["rol"] == ""
+    bij_mens = _dm_aan(st2, founder)
+    assert bij_mens, "niets bij de founder aangekomen"
     # `rol` was een apart veld op het inbox-item; een DM draagt alleen tekst. De rol-context moet
     # dus IN de tekst staan — en dat is beter, want zo ziet de lezer hem zonder uitklappen.
-    assert any("Scientist" in t or rol in t for t in bij_mens), "de rol-context is weg"
+    assert any("Scientist" in t for t in bij_mens), "de rol-context is weg"
+    # En het oordeel van het model is niet weggegooid: het staat er als VOORSTEL.
+    assert uit["suggestie"].startswith("voorstel:")
 
 
 def test_er_komt_geen_vierde_kanaal_bij():
@@ -86,75 +100,39 @@ def test_er_komt_geen_vierde_kanaal_bij():
     assert "notif.add" not in bron
 
 
-# ── 2. De ontvanger is gegrond gekozen ──────────────────────────────────────
-
-def test_eerst_een_mens_vervulde_rol_die_het_bezit(st, tmp_path, monkeypatch):
-    rol = "mother_earth__nooch__website_developer"
-    if st.records.get(rol) is None:
-        pytest.skip("rol niet in de seed")
-    _mens_rol(st, rol, monkeypatch)
-    monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: {"role": rol, "kind": "human_external"})
-    _r, _p, grond = er._mens_ontvanger(st, _project(st), "publiceer de pagina", "harry_hemp", [],
-                                       None)
-    assert (_r, grond) == (rol, "deze rol bezit dit werk")
-
-
-def test_een_AI_ROL_is_geen_kandidaat_ook_al_bezit_hij_het(st, tmp_path, monkeypatch):
-    """DE KERN VAN 'MENS-VERVULD'. Dit is de vraag ná 'geen enkele AI-rol bezit dit'. Nog een
-    AI-rol voorstellen laat het werk opnieuw stranden — precies wat de hop-teller al probeerde."""
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)          # alleen de founder is 'mens'
-    gezien = {}
-
-    def _spion(item_text, doel, kandidaten, from_role, reason_fn, **kw):
-        gezien["ids"] = {k["id"] for k in kandidaten}
-        return {"role": "harry_hemp", "kind": "human_external"}   # een AI-rol voorstellen
-    monkeypatch.setattr(er, "_vraag_llm", _spion)
-    rol, _p, _g = er._mens_ontvanger(st, _project(st), "iets", "compliance", [], None)
-    assert "harry_hemp" not in gezien["ids"], "een AI-rol stond op de kandidatenlijst"
-    assert rol == FOUNDER_ROLE_ID                        # fail-closed → het vangnet
-
-
-def test_zonder_zekere_rol_valt_hij_terug_op_de_opdrachtgever(st, tmp_path, monkeypatch):
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
-    monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: {"role": "NONE"})
-    persoon = st.people.add("Stefan", "stefan@nooch.earth")
-    pid = persoon.id if hasattr(persoon, "id") else persoon
-    rol, wie, grond = er._mens_ontvanger(st, _project(st, opdrachtgever=pid), "iets",
-                                         "harry_hemp", [], None)
-    assert (rol, wie) == ("", pid) and grond == "jij vroeg om dit project"
-
-
-def test_en_anders_de_founder(st, tmp_path, monkeypatch):
-    """Het eerlijke antwoord als niets gegrond is — niet 'dan maar niet'."""
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
-    monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)      # geen model
-    rol, wie, grond = er._mens_ontvanger(st, _project(st), "iets", "harry_hemp", [], None)
-    assert rol == FOUNDER_ROLE_ID and wie == ""
-    assert "geen rol bezit dit" in grond
-
-
-def test_een_rol_die_dit_werk_al_zag_krijgt_het_niet_terug(st, tmp_path, monkeypatch):
-    """Dezelfde guard als bij de AI-handoff: het spoor maakt A→B→A onmogelijk."""
-    rol = "mother_earth__nooch__website_developer"
-    if st.records.get(rol) is None:
-        pytest.skip("rol niet in de seed")
-    _mens_rol(st, rol, monkeypatch, extra={FOUNDER_ROLE_ID})
-    monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: {"role": rol})
-    p = _project(st)
-    p["handoff_trail"] = [rol]
-    gekozen, _w, _g = er._mens_ontvanger(st, p, "iets", "harry_hemp", [rol], None)
-    assert gekozen != rol
-
+# ── 2. De ontvanger is de founder, altijd ───────────────────────────────────
+#
+# WAT HIER WEG IS (20 september 2026): vijf tests over de oude keuze-ladder. Ze toetsten allemaal
+# een regel die niet meer bestaat, en het is de moeite waard te noteren wát ze vasthielden:
+#
+#   `..._eerst_een_mens_vervulde_rol_die_het_bezit`     het model koos de ontvanger → nu een voorstel
+#   `..._een_AI_ROL_is_geen_kandidaat`                  een AI-rol stond niet op de kandidatenlijst,
+#                                                       want werk daar strandde. De suggestie MAG hem
+#                                                       nu noemen — een voorstel strandt niet, en de
+#                                                       lezer ziet zelf dat er geen mens op zit.
+#   `..._zonder_zekere_rol_valt_hij_terug_op_de_opdrachtgever`
+#                                                       DIT IS EEN ECHT VERLIES: wie om een project
+#                                                       vroeg, hoorde het als het klem kwam te zitten.
+#                                                       Dat spoor is weg; alles komt bij de founder,
+#                                                       en die geeft het door. Bewust, niet vergeten.
+#   `..._en_anders_de_founder`                          het vangnet is nu de hoofdweg
+#   `..._een_rol_die_dit_werk_al_zag_krijgt_het_niet_terug`
+#                                                       de A→B→A-guard. Die kan niet meer misgaan:
+#                                                       er wordt niet meer doorverwezen, dus er is
+#                                                       geen tweede hop om te bewaken.
+#
+# Wat ervoor in de plaats komt staat hierboven (`..._landt_in_de_inbox_van_de_founder`) en, op
+# functieniveau, in `test_bestemming_is_altijd_de_founder`.
 
 # ── 3. Wélgevormd: wie, waarop, en wat er nodig is ──────────────────────────
 
 def test_de_melding_noemt_de_rol_de_plek_en_de_vraag(st, tmp_path, monkeypatch):
-    mens = _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)
     er.naar_mens(data_dir=str(tmp_path), project=_project(st), from_role="harry_hemp",
                  from_naam="Scientist", waarom="het vraagt een mens of externe partij",
                  item_text="Laat de samples testen in een erkend lab (TÜV of SGS)")
-    tekst = _dm_aan(cockpit2._Stores(str(tmp_path)), mens.id)[-1]
+    st2 = cockpit2._Stores(str(tmp_path))
+    tekst = _dm_aan(st2, signaal.terugval(st2))[-1]
     assert "Scientist" in tekst                              # WIE
     assert "erkend lab" in tekst                             # WAT hij nodig heeft
     assert "mens-/extern item(s)" not in tekst               # niet de oude, vage vorm
@@ -165,13 +143,12 @@ def test_de_melding_noemt_de_rol_de_plek_en_de_vraag(st, tmp_path, monkeypatch):
 def test_het_bron_project_reist_mee_zodat_de_lus_terugloopt(st, tmp_path, monkeypatch):
     """Zonder het project is de melding een dood briefje: de lezer kan wel iets doen, maar niet
     zien wát er stilstaat of het weer in beweging zetten."""
-    mens = _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)
     p = _project(st)
     er.naar_mens(data_dir=str(tmp_path), project=p, from_role="harry_hemp", from_naam="Scientist",
                  waarom="x", item_text="iets")
-    # bij de VERVULLER, niet bij de rol — zie `route_werk`
     st2 = cockpit2._Stores(str(tmp_path))
+    mens = st2.people.get(signaal.terugval(st2))
     # Het bron-project reist mee als `herkomst` op het bericht — het enige veld dat B2 bewaarde,
     # juist omdat de lezer anders niet kan zien wát er stilstaat.
     entries = [e for k in st2.channels.kanalen_van(mens.id) for e in st2.channels.trail(k)]

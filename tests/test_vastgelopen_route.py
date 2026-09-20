@@ -12,9 +12,10 @@ import pytest
 from nooch_village import cockpit2, escalation_router as er, vastgelopen_route as vr
 from nooch_village.human_inbox import FOUNDER_ROLE_ID
 
-#: de mens die de founder-rol vervult in deze fixtures — het ADRES sinds de
-#: vervuller-pass; de rol blijft de context op het item.
-FOUNDER_PERSOON = "p-founder"
+#: de mens die de founder-rol vervult in deze fixtures — het ADRES sinds de vervuller-pass, en
+#: sinds 20 september 2026 het ENIGE adres: alles wat vastloopt komt eerst bij de founder.
+#: De fixture maakt hem als echt persoon-record aan; deze naam is waar de tests op matchen.
+FOUNDER_NAAM = "Stefan Wobben"
 
 MENS = "vastgelopen op 1 item(s) — wacht op een mens of externe partij"
 ROLWERK = "vastgelopen op 1 item(s) — payload onvolledig na herstelpoging: veld term"
@@ -30,11 +31,25 @@ def dd(tmp_path, monkeypatch):
     # delegeert er sinds B2 naartoe, en de signaal-routering (die het bericht bezorgt) leest
     # dezelfde functie. Eén plek patchen dekt nu allebei — dat was precies het doel van die
     # samenvoeging.
+    # DE PERSOON BESTAAT ECHT in deze fixture, en dat is sinds 20 september 2026 nodig: de
+    # bestemming is geen ROL meer maar de founder als MENS (`signaal.terugval`), en het rapport
+    # zoekt zijn naam op in `people`. Een los persoon-id zonder record leverde "p-founder" in de
+    # verdeling op — precies het onleesbare id dat de test hieronder verbiedt.
     from nooch_village import signaal as _sig
+    st0 = cockpit2._Stores(str(tmp_path))
+    persoon = st0.people.add("Stefan Wobben", "stefan@nooch.earth")
     monkeypatch.setattr(_sig, "mensen_van",
-                        lambda _st, rol: [FOUNDER_PERSOON] if rol == FOUNDER_ROLE_ID else [])
+                        lambda _st, rol: [persoon.id]
+                        if rol in (FOUNDER_ROLE_ID, _sig.TERUGVAL_ROL) else [])
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)      # geen model → founder
     return str(tmp_path)
+
+
+def _founder_id(dd):
+    """Het persoon-id van de founder in deze fixture. Opgevraagd via `signaal.terugval` en niet als
+    constante: de fixture maakt het record aan, en dit is dezelfde weg die de code zelf loopt."""
+    from nooch_village import signaal as _sig
+    return _sig.terugval(cockpit2._Stores(dd))
 
 
 def _dm_aan(st, persoon_id):
@@ -65,7 +80,7 @@ def test_een_mens_park_reden_landt_wel(dd):
     v = vr.pas(dd, apply=True)
     assert v["in_aanmerking"] == 1 and len(v["geland"]) == 1
     assert v["geland"][0]["pid"] == pid
-    n = _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
+    n = _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
     assert n and "erkend lab" in n[-1]
 
 
@@ -88,7 +103,7 @@ def test_twee_keer_draaien_levert_geen_tweede_melding(dd):
     tweede = vr.pas(dd, apply=True)
     assert len(eerste["geland"]) == 1
     assert tweede["geland"] == [] and tweede["al_gemeld"] == 1
-    n = _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
+    n = _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
     assert len(n) == 1, "dezelfde vraag twee keer verstuurd"
 
 
@@ -106,7 +121,7 @@ def test_droge_loop_schrijft_niets(dd):
     _vastgelopen(dd)
     v = vr.pas(dd)                                     # geen apply
     assert len(v["geland"]) == 1 and v["toegepast"] is False
-    assert not _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
+    assert not _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
 
 
 def test_filteren_op_één_rol(dd):
@@ -137,13 +152,13 @@ def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     v = vr.pas(dd)
     assert v["toegepast"] is False
     assert sum(v["verdeling"].values()) == 1
-    assert list(v["gronden"]) == ["geen rol bezit dit, en het project heeft geen opdrachtgever"]
+    assert list(v["gronden"]) == ["alles wat vastloopt komt eerst bij jou"]
     # en nog steeds niets geschreven — de founder kreeg geen DM
-    assert not [e for k in _dm_kanalen(dd) if FOUNDER_PERSOON in k
+    assert not [e for k in _dm_kanalen(dd) if _founder_id(dd) in k
                 for e in _trail(dd, k)]
 
 
 def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):
     """Een id in een verdeling is niet te lezen; de vraag is welke MENS dit krijgt."""
     _vastgelopen(dd)
-    assert "Strategic Lead" in " ".join(vr.pas(dd)["verdeling"])
+    assert FOUNDER_NAAM in " ".join(vr.pas(dd)["verdeling"])

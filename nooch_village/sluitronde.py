@@ -114,8 +114,11 @@ def _panel(titel: str, ctx: dict, lenzen: list[dict], reason_fn, open_werk: int 
 
 def beslis_kans(kans: dict, lenzen: list[dict], active_scopes: list[str], *,
                 reason_fn=reason, now: float, ttl_days: int = 14) -> dict:
-    """Beslis over één kans. Puur (muteert niets). Geeft een besluit-dict:
-    {actie: 'verlopen'|'nee'|'project'|'escaleer', reden, owner_rol?, scope?, stemmen?}."""
+    """Weeg één kans. Puur (muteert niets). Geeft een besluit-dict:
+    {actie: 'verlopen'|'nee'|'escaleer', reden, advies?, voorgestelde_rol?, scope?, stemmen?}.
+
+    `project` bestaat sinds 20 september 2026 niet meer als uitkomst: het panel adviseert, de mens
+    beslist. Zie de toelichting bij de panel-aanroep hieronder."""
     ctx = kans.get("context") or {}
     titel = ctx.get("title") or kans.get("subject") or ""
     leeftijd = (now - (kans.get("created_at") or now)) / DAY
@@ -127,24 +130,39 @@ def beslis_kans(kans: dict, lenzen: list[dict], active_scopes: list[str], *,
     if dup:
         return {"actie": "nee", "reden": f"al gedekt door bestaand project: {dup[:70]}"}
 
+    # HIER BESLISTE HET PANEL, en dat is op 20 september 2026 vervallen (CLAUDE.md, "AI is
+    # instrument, geen rol"). Het model gaf drie dingen terug die allemaal doorwerkten zonder dat
+    # iemand ze vooraf zag: een ja (→ `pj.create` op een rol die het model aanwees), een nee
+    # (→ `inbox.resolve(rejected)`, en dan zag de mens de kans nooit) en een `owner_rol`.
+    #
+    # Het OORDEEL blijft, want dat is waar het panel voor bestaat: de stemmen per rol-lens, de
+    # kernreden, de waarde en een uitgeschreven scope zijn echt werk en schelen een mens tijd. Wat
+    # vervalt is dat het zichzelf uitvoert. Alles wat door het panel gaat komt bij de founder —
+    # "ik wil eerst alles zelf zien voordat het verder gaat" — met het oordeel erbij als voorstel.
+    #
+    # De twee DETERMINISTISCHE takken hierboven (verlopen op leeftijd, nee op scope-overlap) blijven
+    # wél beslissen. Dat zijn regels, geen oordelen: ze staan in de code, ze zijn na te rekenen, en
+    # ze verschijnen alle twee in het rapport.
     data = _panel(titel, ctx, lenzen, reason_fn, open_werk=len(active_scopes))
     if not isinstance(data, dict):
         return {"actie": "escaleer", "reden": "kon niet automatisch beoordelen (LLM weg) — naar jou"}
     stemmen = data.get("stemmen") if isinstance(data.get("stemmen"), list) else []
+    try:
+        waarde = int(data.get("waarde") or 3)
+    except (ValueError, TypeError):
+        waarde = 3
+    ja = str(data.get("besluit", "")).strip().lower().startswith("ja")
+    kern = data.get("reden") or ("" if ja else "past niet binnen de purpose")
+    # De voorgestelde trekker is TEKST, geen adres: hij gaat mee in het voorstel en wijst niemand
+    # aan. Accepteren is een handeling van de lezer.
+    rol = (data.get("owner_rol") or "").strip()
+    advies = "het panel zegt JA" if ja else "het panel zegt NEE"
     if data.get("onomkeerbaar"):
-        return {"actie": "escaleer", "stemmen": stemmen,
-                "reden": (data.get("reden") or "onomkeerbaar gevolg") + " (onomkeerbaar → naar jou)"}
-    if str(data.get("besluit", "")).strip().lower().startswith("ja"):
-        try:
-            waarde = int(data.get("waarde") or 3)
-        except (ValueError, TypeError):
-            waarde = 3
-        return {"actie": "project", "stemmen": stemmen, "reden": data.get("reden", ""),
-                "owner_rol": (data.get("owner_rol") or "").strip(),
-                "waarde": max(1, min(5, waarde)),
-                "scope": (data.get("scope") or titel).strip()}
-    return {"actie": "nee", "stemmen": stemmen,
-            "reden": data.get("reden") or "past niet binnen de purpose"}
+        advies += " en noemt het gevolg onomkeerbaar"
+    return {"actie": "escaleer", "stemmen": stemmen, "waarde": max(1, min(5, waarde)),
+            "advies": advies, "voorgestelde_rol": rol,
+            "scope": (data.get("scope") or titel).strip(),
+            "reden": f"{advies} ({waarde}/5)" + (f" — {kern}" if kern else "") + " — naar jou"}
 
 
 def _extract(raw):
