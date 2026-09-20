@@ -56,7 +56,10 @@ def test_nooch_roles_tab(tmp_path):
     # maar op één plek — de zijbalk — en die wordt in `_send` gevuld, niet in `render_node`. Op
     # deze hoogte hoort hij er dus juist NIET meer te staan; zijn aanwezigheid zou betekenen dat
     # de dubbele weergave terug is.
-    assert "c2-rail" not in page and "Organization" not in page
+    # Op de MARKUP van de boom, niet op het woord: sinds fase 11 draagt de zijbalk zelf een
+    # flyout-knop met `title='Organization'` (de ingeklapte rail), en dat is precies NIET de
+    # dubbele weergave die deze regel bewaakt — de boom zelf wordt hier nog steeds niet gerenderd.
+    assert "c2-rail" not in page and "<div class='tree'>" not in page
     # kernrollen apart + purpose onder de rol + toewijs-icoon
     assert "Core roles" in page and "Circle Lead" in page
     assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer

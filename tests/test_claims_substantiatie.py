@@ -63,8 +63,14 @@ def _records_met_claimseigenaar(role_id="claims_eigenaar"):
     zonder opvolger) en zonder domein-eigenaar maakt het bord bewust géén taak aan. Deze tests gaan
     over onderbouwing en vindplaats, niet over routing, dus ze horen een eigenaar te hebben."""
     from nooch_village import claims_board
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     rollen = [SimpleNamespace(id=role_id, archived=False, slaapt=False,
                               definition=SimpleNamespace(skills=[], domains=[claims_db.DOMEIN]))]
+    # DE FOUNDER HOORT ER OOK IN. De scan meldt sinds 20 september 2026 aan hem, en `signaal`
+    # leest de records die hier worden geïnjecteerd — een stub zonder founder laat het nieuwe pad
+    # stil doodlopen en de test zou dat als "geen melding" lezen.
+    rollen += [SimpleNamespace(id=FOUNDER_ROLE_ID, archived=False, slaapt=False,
+                               definition=SimpleNamespace(skills=[], domains=[]))]
     rollen += [SimpleNamespace(id=rid, archived=False, slaapt=False,
                                definition=SimpleNamespace(skills=[], domains=[]))
                for rid in claims_board.ROL_IDS.values()]
@@ -85,10 +91,17 @@ def _ctx(tmp_path, monkeypatch=None, ledger=None):
     # het" niet waar te nemen — vroeger schreef `NotifStore.add` een rij op een rol die niemand
     # las, en dat is precies het dead letter dat deze migratie wegneemt.
     from nooch_village.assignments import Assignments
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     from nooch_village.people import PeopleStore
     _mens = PeopleStore(os.path.join(str(tmp_path), "people.json")).add("Compliance", "c@t.nl")
-    Assignments(os.path.join(str(tmp_path), "assignments.json")).assign(
-        "claims_eigenaar", "person", _mens.id)
+    _assign = Assignments(os.path.join(str(tmp_path), "assignments.json"))
+    _assign.assign("claims_eigenaar", "person", _mens.id)
+    # EN EEN MENS OP DE FOUNDER-ROL. Sinds 20 september 2026 gaan de meldingen van de scan
+    # (scan-lijst kapot, scan vastgelopen, regressie) naar de founder en niet meer naar "de rol
+    # die het claims-domein bezit" — dat domein heeft sinds fase 5 geen eigenaar, dus die
+    # meldingen liepen dood. Zonder deze regel is het nieuwe pad niet waar te nemen: `signaal`
+    # levert alleen af bij een MENS.
+    _assign.assign(FOUNDER_ROLE_ID, "person", _mens.id)
     if monkeypatch is not None:
         kopie = tmp_path / "claims_database.json"
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
@@ -130,13 +143,17 @@ def test_risicoterm_zonder_bewijs_is_nooit_groen(tmp_path):
 
 
 def test_de_hele_scan_laat_een_onderbouwing_loze_claim_niet_vallen(tmp_path, monkeypatch):
-    """Van pagina tot bord: de claim overleeft de green-filter en landt als taak."""
+    """Van pagina tot melding: de claim overleeft de green-filter en wordt gerapporteerd.
+
+    Stond hier als "van pagina tot bord … en landt als taak". Sinds pijplijn-stap 3 (20 sept 2026)
+    maakt de scan geen taken meer aan; de vraag die deze test stelt is ongewijzigd — verdwijnt een
+    claim zonder onderbouwing stil? — alleen de plek waar hij landt is de melding en de weekmemo."""
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert uit["ok"] and uit["nieuw"] >= 1
-    taken = [ctx.projects.get(t["pid"]) for t in uit["aangemaakt"]]
-    assert any("ONTBREEKT" in (t.get("description") or "") for t in taken)
-    assert all(t["stoplicht"] != "green" for t in uit["aangemaakt"])
+    assert any(claims_substantiatie.ONTBREEKT in (b.get("onderbouwing") or "")
+               for b in uit["bevindingen"])
+    assert all(b["stoplicht"] != "green" for b in uit["bevindingen"])
 
 
 def test_rood_blijft_rood_ook_met_bewijs(tmp_path):

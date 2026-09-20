@@ -126,16 +126,21 @@ def test_een_kapotte_staat_start_leeg_MAAR_LUID(tmp_path, caplog):
 # ── de ontvanger ──────────────────────────────────────────────────────────────────────────────
 
 def test_de_memo_overleeft_een_mislukte_adressering(tmp_path, caplog):
-    """FAIL-SOFT MAAR LUID. De memo is de waarde; een kapotte lookup mag hem niet opeten. Zonder
-    ontvanger valt de pulslus terug op de founder — bij de verkeerde mens is beter dan bij niemand."""
+    """FAIL-SOFT MAAR LUID. De memo is de waarde; een kapotte lookup mag hem niet opeten.
+
+    Sinds 20 september 2026 (pijplijn stap 5) valt hij NIET meer terug op "" (waarna de pulslus er
+    zelf de founder van maakte), maar noemt hij de founder-rol zelf. Zelfde bestemming, één
+    aanname minder: wie de uitslag leest ziet nu wáár hij landt in plaats van een leeg veld dat
+    elders wordt ingevuld."""
     import logging
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     ctx = types.SimpleNamespace(data_dir=str(tmp_path))
     kapot = types.SimpleNamespace(radar=_radar(_item("iets")).radar)   # géén .records
     with caplog.at_level(logging.WARNING):
         uit = mm.MateriaalKwartaalSkill().run({"_stores": kapot, "_periode": "2026-Q3"}, ctx)
     assert uit["headsup"]                       # de memo staat er
-    assert uit["ontvanger"] == ""               # de pulslus valt terug op de founder
-    assert "ontvanger niet te bepalen" in caplog.text
+    assert uit["ontvanger"] == FOUNDER_ROLE_ID  # en hij landt bij de mens die altijd bestaat
+    assert "domein-eigenaar zoeken faalde" in caplog.text     # luid: de lookup is stuk
 
 
 def test_het_eigenaar_domein_komt_uit_de_feed_config(tmp_path):

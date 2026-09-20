@@ -91,6 +91,11 @@ HOOG_INZET: frozenset[str] = frozenset({
     "skill_claim_evidence",      # claim_evidence.py: "een rapport dat een verzonnen getal doorlaat"
     "skill_competitor_discover", # is dit merk een échte concurrent? met citaat-eis (scope 55)
     "skill_content_check",       # de laatste blik vóór publicatie tegen de merk-copyregels
+    # De weekmemo-synthese (20 sept 2026). Eén call per week, dus kosten zijn geen overweging — en
+    # het is de enige plek in de signaalpijplijn waar een model iets MAAKT in plaats van filtert.
+    # Stefans grond, letterlijk: "de synthese is waar de waarde zit". Vijf losse memo's zijn vijf
+    # lijstjes; de vraag waar die dingen elkaar raken beantwoordt geen van de vijf.
+    "weekmemo_synthese",
 })
 
 # ── En de tegenhanger: waar goedkoop de JUISTE keuze is ──────────────────────────────────────

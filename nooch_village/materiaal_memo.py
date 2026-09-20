@@ -192,6 +192,10 @@ class MateriaalKwartaalSkill(Skill):
         tekst = _schrijf_memo(context, periode, items)
         noteer_periode(data_dir, self.name, periode)
         ontv = ontvanger(st, data_dir, f"Kwartaaloverzicht materiaalrichtingen {periode}")
+        # HET VOORSTEL IS TEKST, GEEN ADRES (20 sept 2026). Wijst het model een rol aan, dan staat
+        # die zin ONDER de memo bij de mens die hem toch al kreeg — hij verplaatst hem niet.
+        if ontv.get("voorstel_regel"):
+            tekst = f"{tekst}\n\n{ontv['voorstel_regel']}"
         return {"ok": True, "periode": periode, "skipped": False, "aantal": len(items),
                 "ontvanger": ontv["rol"], "ontvanger_grond": ontv["waarom"],
                 "headsup": tekst}
@@ -251,11 +255,15 @@ def eigenaar_domein(data_dir: str) -> str:
 
 
 def ontvanger(st, data_dir: str, waarover: str) -> dict:
-    """De rol die deze memo hoort te lezen → {rol, mens, waarom, via}.
+    """De rol die deze memo hoort te lezen → {rol, mens, waarom, via, voorstel_regel}.
 
     ÉÉN LOOKUP voor de memo en voor het project dat er straks uit volgt (#434/#435): domein →
-    secretary-terugval → Circle Lead → founder, met de luide config-fout als het geconfigureerde
-    domein door niemand gehouden wordt. Geen rol-id in deze module."""
+    Circle Lead → founder, met de luide config-fout als het geconfigureerde domein door niemand
+    gehouden wordt. Geen rol-id in deze module.
+
+    DE SECRETARY-TERUGVAL STOND HIER TOT 20 SEPTEMBER 2026 tussen domein en Circle Lead: een
+    modelmatch op accountability-tekst die bepaalde wáár de memo landde. Die trede is weg (pijplijn
+    stap 5); wat het model ziet komt nu als `voorstel_regel` mee, als zin onder de memo."""
     from nooch_village.triage_rol import menselijke_eigenaar
     try:
         return menselijke_eigenaar(st, waarover, domein=eigenaar_domein(data_dir))
@@ -265,7 +273,8 @@ def ontvanger(st, data_dir: str, waarover: str) -> dict:
         # verkeerde mens in plaats van bij niemand.
         log.warning("ontvanger niet te bepalen voor %r — terugval op de founder", waarover,
                     exc_info=True)
-        return {"rol": "", "mens": None, "waarom": "ontvanger niet te bepalen", "via": "fout"}
+        return {"rol": "", "mens": None, "waarom": "ontvanger niet te bepalen", "via": "fout",
+                "voorstel": {}, "voorstel_regel": ""}
 
 
 # ── memo 2: de maandelijkse shortlist ─────────────────────────────────────────────────────────
@@ -339,6 +348,52 @@ def _nieuw_voor_de_mens(st, data_dir: str, sinds: float) -> list[dict]:
     Een 'nee' is definitief: één keer afgewezen betekent nooit meer voorleggen."""
     boek = voorgelegd(data_dir)
     return [it for it in _items(st, sinds) if sleutel_van(it) not in boek]
+
+
+#: Deze bron levert `selectie`: hooguit een handvol, liever nul dan een zwakke. Dat is de posture
+#: die `_schift` al hanteert ("liever nul dan een zwakke"), hier expliciet zodat de weekmemo hem
+#: niet hoeft te raden.
+DREMPEL = "selectie"
+
+
+def verzamel(st, data_dir: str, *, sinds: float = 0.0, maxaantal: int = 2,
+             context=None) -> list:
+    """De geschifte materiaalkandidaten, als `weekmemo.Signaal`.
+
+    DIT IS DE SHORTLIST-SKILL ZONDER DE AFLEVERING. Waar `MateriaalShortlistSkill` de selectie
+    onthield, een ontvanger opzocht en er een heads-up van maakte, geeft deze een lijst terug en
+    schrijft niets — ook het GEHEUGEN niet.
+
+    Dat laatste is een bewuste keuze en het verdient uitleg. `onthoud_voorgelegd` bestaat omdat de
+    feed dezelfde ontdekking blijft aanleveren; zonder dat boek duwt de schifting elke maand
+    hetzelfde omhoog tot de mens stopt met lezen. Maar onthouden is een SCHRIJF-actie, en dat mag
+    een verzamelaar niet (stap 7 zet daar een ratchet op). De memo onthoudt straks voor alle vijf
+    de bronnen tegelijk, op één plek — en dan is dit boek daar een onderdeel van in plaats van een
+    zesde plek waar hetzelfde feit leeft.
+
+    Tot die tijd LEEST hij het boek wel: al voorgelegde kandidaten vallen af. Lezen is geen
+    schrijven, en het alternatief is dat de eerste weekmemo de hele geschiedenis opnieuw voorlegt."""
+    from nooch_village.weekmemo import Signaal
+
+    kandidaten = _nieuw_voor_de_mens(st, data_dir, sinds)
+    if not kandidaten:
+        return []
+    gekozen = _schift(context, kandidaten, maxaantal)
+    per_sleutel = {sleutel_van(it): it for it in kandidaten}
+    uit = []
+    for k in gekozen:
+        bron_item = per_sleutel.get(k.get("sleutel")) or {}
+        uit.append(Signaal(
+            bron="materiaal", tekst=str(k.get("wat") or bron_item.get("content") or ""),
+            vindplaats=str(bron_item.get("link") or bron_item.get("source") or ""),
+            gevonden_op=float(bron_item.get("at") or 0.0),
+            herkomst=str(k.get("sleutel") or ""),
+            # `waarom` en `leverancier` zijn wat het MODEL ervan maakte; `wat` is de kandidaat.
+            # Ze staan apart zodat de memo de waarneming en het oordeel niet door elkaar haalt.
+            extra={"waarom": str(k.get("waarom") or ""),
+                   "leverancier": str(k.get("leverancier") or ""),
+                   "bron_naam": str(bron_item.get("source") or "")}))
+    return uit
 
 
 def _schift(context, kandidaten: list[dict], maxaantal: int) -> list[dict]:

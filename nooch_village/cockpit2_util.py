@@ -575,7 +575,24 @@ _SIDE_CIRCLE = "<!--c2-circle-->"
 _SIDE_ORG = "<div class='c2-org' id='c2-org'></div>"
 
 
-def _nav(context: str = "GlassFrog (PoC)") -> str:
+def _monogram(label: str) -> str:
+    """Twee letters als icoon-vorm. Geen icoonset erbij halen voor vijf items, en twee letters
+    blijven leesbaar in zwart-wit — dezelfde afweging als bij de statusvormen."""
+    return (label.strip()[:2] or "?").upper()
+
+
+def _side_item(href: str, label: str) -> str:
+    """Eén navigatie-item: het monogram voor de rail, het woord voor de volle zijbalk.
+
+    BEIDE STAAN ALTIJD IN DE DOM; CSS kiest welke je ziet. Het alternatief — twee varianten
+    renderen — geeft twee plekken waar een nieuw item vergeten kan worden, en een schermlezer die
+    in de rail alleen nog "PR" hoort."""
+    return (f"<a href='{href}' title='{_e(label)}'>"
+            f"<span class='c2-mono' aria-hidden='true'>{_e(_monogram(label))}</span>"
+            f"<span class='c2-lbl'>{_e(label)}</span></a>")
+
+
+def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
     """De gedeelde zijbalk: logo, zoek, wie je bent, de navigatie en de organisatieboom.
 
     Elke pagina roept dit aan, dus de navigatie staat overal — één bron, zoals de topbar die hij
@@ -584,9 +601,20 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
 
     De Inbox is een KNOP en geen link: de drawer bestaat al als globale chrome
     (`render_inbox_chrome`) met launcher, badge en een "+ tension"-paneel. Het prototype toont hem
-    als lade, dus hier hoort hij als lade open te gaan en niet als pagina te navigeren."""
+    als lade, dus hier hoort hij als lade open te gaan en niet als pagina te navigeren.
+
+    `rail=True` klapt hem in tot een 64px icoon-rail (fase 11). Dat is voor een module die zélf een
+    lijst-paneel heeft — Messages heeft er drie nodig: navigatie, kanalen, gesprek. De navigatie is
+    de kolom die je tijdens het lezen van een gesprek het minst nodig hebt, dus die krimpt. Hij
+    verdwijnt NIET: een tweede navigatiemodel naast dit ene is precies wat fase 7 opruimde. De
+    organisatieboom zit dan achter een icoon met een flyout; in de volle zijbalk staat hij gewoon
+    open (`<details open>`, geen JS, en geen afhankelijkheid van UA-gedrag bij gesloten details)."""
+    zij = "c2-side c2-side--rail" if rail else "c2-side"
     return (
-        "<aside class='c2-side'>"
+        # De hamburger staat BUITEN de zijbalk, anders verdwijnt de knop samen met wat hij opent.
+        "<button type='button' class='c2-burger' onclick='navToggle()' "
+        "aria-label='Menu' aria-expanded='false'>\u2630</button>"
+        f"<aside class='{zij}'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
@@ -598,16 +626,20 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # Persoonlijke begroeting; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
         "<span class='c2-greet' id='c2-greet'></span>"
         "<nav class='c2-subnav'>"
-        + "".join(f"<a href='{h}'>{_e(l)}</a>" for h, l in _SIDE_ITEMS)
-        + "<button type='button' class='c2-navbtn' onclick='ibxToggle()'>Inbox"
+        + "".join(_side_item(h, l) for h, l in _SIDE_ITEMS)
+        + "<button type='button' class='c2-navbtn' onclick='ibxToggle()' title='Inbox'>"
+          "<span class='c2-mono' aria-hidden='true'>IN</span>"
+          "<span class='c2-lbl'>Inbox</span>"
           "<span class='c2-navct hide' id='c2-ibx-ct'>0</span></button>"
           "<div class='c2-subnav-div'></div>"
         + _SIDE_CIRCLE
-        + "<a href='/admin'>Admin</a>"
-          "</nav>"
+        + _side_item("/admin", "Admin")
+        + "</nav>"
+        + f"<details class='c2-orgfly'{'' if rail else ' open'}>"
+          "<summary title='Organization'>\u229e</summary>"
         + _SIDE_ORG
-        + "</aside>"
-        + _GS_LIVE_JS)
+        + "</details></aside>"
+        + _GS_LIVE_JS + _NAV_JS)
 
 
 # Live-zoek: terwijl je typt haalt dit de dropdown-resultaten op (fragment via /search?frag=1), debounced.
@@ -635,6 +667,24 @@ _GS_LIVE_JS = """<script>(function(){
  box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,180);});
  box.addEventListener('focus',show);
  document.addEventListener('click',function(e){if(!e.target.closest('.c2-search'))hide();});
+})();</script>"""
+
+
+#: De hamburger werkt alleen als dit script draait, dus zet het script zelf de klasse die hem
+#: nodig maakt. Zonder JS blijft de zijbalk op mobiel staan zoals hij altijd stond — een menu dat
+#: je niet kunt openen omdat een bestand niet laadde is erger dan een menu dat altijd zichtbaar is.
+_NAV_JS = """<script>(function(){
+ document.body.classList.add('navjs');
+ window.navToggle=function(){
+   var open=document.body.classList.toggle('navopen');
+   var b=document.querySelector('.c2-burger');
+   if(b)b.setAttribute('aria-expanded',open?'true':'false');
+ };
+ // Een keuze sluit het menu. Zonder dit blijft de overlay over de pagina hangen die je net opende.
+ document.addEventListener('click',function(e){
+   if(!document.body.classList.contains('navopen'))return;
+   if(e.target.closest&&e.target.closest('.c2-side a'))window.navToggle();
+ });
 })();</script>"""
 
 

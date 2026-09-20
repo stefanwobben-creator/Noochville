@@ -454,3 +454,45 @@
 
 /* punt 4 · de opslaan-balk van het inline formulier */
 .nu .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }
+
+/* ── Fase 11, laag 1: de atomen in dit systeem ───────────────────────────────────────────────
+   De basisvormen staan in nooch.css (die ook geldt op schermen die niet meedoen); hier krijgen ze
+   de taal van dit systeem: scherpe hoeken, zwarte lijn, groen als vulling. */
+
+/* 2a — het voortgangs-atoom. Vierkant, één lijn, en de vulling draagt de betekenis. */
+.nu progress.nu-progress { height: 8px; border: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); }
+.nu progress.nu-progress::-webkit-progress-bar { background: var(--nu-surface); border-radius: 0; }
+.nu progress.nu-progress::-webkit-progress-value { background: var(--nu-accent); border-radius: 0; }
+.nu progress.nu-progress::-moz-progress-bar { background: var(--nu-accent); border-radius: 0; }
+
+/* 1a — het rol-icoon: exact de twee vormen die `.nu-status--ok` en `--open` hierboven al dragen,
+   zonder kader en zonder woord ernaast (het woord staat in de `.sr`-span). Geen nieuwe vorm en
+   geen nieuwe kleur — dezelfde taal als het bord en de checklist. */
+.nu .nu-status--icoon { border: 0; padding: 0; background: none; gap: 0; margin-right: .4em; }
+.nu .nu-status--icoon.nu-status--ok::before { background: var(--nu-accent); }
+.nu .nu-status--icoon.nu-status--open::before { border: 1px solid var(--nu-muted);
+  background: none; }
+
+/* 1b/3b — de moleculen: alleen wat de rij bij elkaar houdt. */
+.nu .pchips { gap: .3rem; }
+.nu .msg-tijd { color: var(--nu-muted); }
+.nu .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
+/* De ingeklapte rail: de footer-offset hierboven is hard 232px, dus die moet mee. */
+.nu .c2-side--rail ~ .c2-foot { margin-left: 80px; }
+.nu .c2-side--rail { border-right: var(--nu-border); }
+.nu .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
+.nu .c2-side--rail .c2-orgfly[open] .c2-org { border: var(--nu-border); border-radius: 0; }
+.nu .c2-burger { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
+
+/* De kaart op het bord in dit systeem. `.pcard` was tot nu toe onzichtbaar voor de dekkings-
+   ratchet doordat de view hem alleen als `pcard{verz}` (mét placeholder) rendeerde; sinds de
+   voorkant-herindeling (fase 11, 1b) staat hij er kaal. Daarmee komt ook zijn oude taal boven:
+   een groene hover-gloed met schaduw, en `--coral` voor een verzwakte kaart. Hier krijgt hij de
+   taal van dit systeem: geen schaduw, de lijn draagt de nadruk, en rood is `--nu-danger`. */
+.nu .pcard { transition: none; }
+.nu .pcard:hover { border-color: var(--nu-accent); box-shadow: none;
+  outline: 1.5px solid var(--nu-accent); outline-offset: -3px; }
+.nu .pcard.verzwakt { border-color: var(--nu-danger); }
+.nu .pcard-link { color: var(--nu-text); }
+.nu .pmeta { color: var(--nu-muted); }

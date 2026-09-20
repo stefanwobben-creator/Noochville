@@ -347,9 +347,13 @@ def _progress_badge(p: dict) -> str:
     # maken het besluit zichtbaar op de kaart zelf, zonder doorklikken.
     from nooch_village.projects import not_answered_note
     weg = not_answered_note(p)
+    # HET ATOOM, NIET TWEE DIVS (fase 11, 2a). `<progress>` draagt zijn eigen waarde — een
+    # schermlezer leest "60%" en er is geen `style='width:60%'` meer nodig. Dat laatste is de
+    # reden dat dit atoom bestaat: dezelfde balk stond hier, in de doelkop en in de checklist,
+    # drie keer anders gebouwd, en twee ervan met een inline breedte.
     return (f"<div class='pbadge' title='{done}/{total}"
             f"{' · ' + _e(weg) if weg else ''}'>"
-            f"<div class='pbar'><div style='width:{pct}%'></div></div>"
+            f"<progress class='nu-progress' value='{pct}' max='100'></progress>"
             f"<span>{pct}%{' ⤳' if weg else ''}</span></div>")
 
 
@@ -396,8 +400,25 @@ def _doel_kop(st: _Stores, goal: str) -> str:
     return (f"<div class='card doel'><div class='cl-head'><h3>🎯 {_e(d['titel'])}</h3>"
             f"<span class='kc-actions'>{dl} <a class='btn sm' href='/goal?id={_e(d['id'])}'>open goal</a></span></div>"
             f"<div class='pbadge' title='{v['punten']} of {v['totaal']} (done counts 1, open projects their checklist ratio)'>"
-            f"<progress class='pbar wide' value='{v['pct']}' max='100'></progress>"
+            f"<progress class='nu-progress wide' value='{v['pct']}' max='100'></progress>"
             f"<span>{v['pct']}% · {v['af']}/{v['totaal']} done</span></div></div>")
+
+
+def _kaart_chips(st: _Stores, p: dict) -> str:
+    """De etiketten-rij op de kaart (fase 11, 1b): doel, batch/label, deadline-indien-gezet.
+
+    ÉÉN RIJ, ÉÉN ATOOM. Alle drie zijn `.chip` — hetzelfde atoom dat de rest van het systeem al
+    gebruikt. Wat er niet is, staat er niet: een kaart zonder deadline toont geen lege
+    deadline-chip, want "niet ingevuld" is geen etiket."""
+    chips = [_doel_chip(st, p)]
+    label = p.get("label")
+    if label and label in _LABELS:
+        chips.append(f"<span class='chip muted'>{_e(str(label))}</span>")
+    due = p.get("deadline") or p.get("due")
+    if due:
+        chips.append(f"<span class='chip outline'>{_IC_CLOCK}{_e(_fmt_due(due) or str(due))}</span>")
+    rij = "".join(c for c in chips if c)
+    return f"<div class='pchips'>{rij}</div>" if rij else ""
 
 
 def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
@@ -407,16 +428,22 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     bar = ""
     if p.get("label") in _LABELS and _LABELS.get(p.get("label")):
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
-    meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
+    meta = (f"<div class='muted pmeta'>"
             f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
-    inner = (f"{bar}{_doel_chip(st, p)}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
-             f"{meta}{_kaart_status(st, p)}{_progress_badge(p)}")
+    # DE VOORKANT, VAN BOVEN NAAR BENEDEN (fase 11, 1b): waar gaat dit over → waar hoort het bij →
+    # hoe ver is het → van wie is het. Dat is de volgorde waarin je een kaart op een bord leest:
+    # eerst herkennen, dan plaatsen, dan de stand. De titel stond hier ONDER het doel-etiket, dus
+    # de kaart begon met een categorie in plaats van met zijn onderwerp.
+    #
+    # ALLEEN BESTAANDE VELDEN. Geen nieuw datamodel: het doel-etiket, het label, de deadline en de
+    # checklist-stand stonden allemaal al in het project — ze stonden alleen niet op de voorkant.
+    inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
+             f"{_kaart_chips(st, p)}{_progress_badge(p)}{meta}{_kaart_status(st, p)}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
         # het detail blijft dus achter login, maar de kaart is niet langer een dode div.
-        return (f"<a class='card pcard{verz}' href='{_e(href)}' "
-                f"style='display:block;text-decoration:none;color:inherit'>{inner}</a>")
+        return (f"<a class='card pcard pcard-link{verz}' href='{_e(href)}'>{inner}</a>")
     return (f"<div class='card pcard{verz}' data-pid='{_e(pid)}' data-href='{href}' draggable=\"true\">"
             f"{inner}</div>")
 

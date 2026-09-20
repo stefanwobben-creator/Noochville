@@ -1969,6 +1969,785 @@ Stefan:
 **Nog niet bevestigd door Stefan**: of dit voorstel (rail-inklap op desktop, drill-down op mobiel)
 het uitgangspunt wordt voor de Messages-scoping-ronde, of dat hij een andere richting wil.
 
+## Fase 10, B2 tweede helft: de echte poort gevonden, villageraad en waarde_audit uitgezocht (20 sept)
+
+**Naamscorrectie eerst**: "village poort" bleek niet `triage_rol.py` maar `tensie_poort.py` (513
+regels). `triage_rol.py` (413 regels) heeft nul notif-verwijzingen en vier levende aanroepers
+(`materiaal_memo.py`, `cockpit2.py`, twee testbestanden) — terecht ongemoeid gelaten, dit was nooit
+in scope. `tensie_poort.py` is wél weggehaald, samen met `relaunch_park.py` (dit was "rp.park" uit de
+eerdere lijst) + zijn CLI-tak, `spanning_ontstaat.py`, en beide bijbehorende testbestanden.
+
+Drie stukjes uit `tensie_poort.py` gingen nooit over de inbox en zijn verhuisd in plaats van
+verwijderd: `kern()` (deterministische sjabloon-swap, gebruikt door `bevinding` én `zelf_verwerking`)
+naar `systeemtaal.py`; `match()` (het oordeel "wie bezit dit werk") naar `escalation_router.py`, waar
+`roster`/`_vraag_llm`/`kies_ontvanger` al wonen; `_VRAAGT_BESLUIT`/`_GEEN_BEWIJS`/`_BESLUIT_DOMEIN`
+naar `zelf_verwerking.py`, waarvan `founder_behoefte` de enige lezer is. Twee guards uit
+`test_tensie_poort.py` zijn meeverhuisd, de bewijsgrens staat nu op `founder_behoefte` (die zelf nog
+geen test had).
+
+**Drie ratchets zijn verbreed in plaats van ingekort**, omdat hun onderwerp verdween: de
+caller-cap-test leest nu een AST-scan op de verzendfuncties (`stuur`/`stuur_op_pad`/`_signaleer`/
+`post`, 24 call-sites) in plaats van een veld dat niet meer bestaat; de statusvocabulaire-test
+verbood niet langer één specifiek label maar controleert nu dat geen enkel bestand buiten
+`projects.py` een eigen statuslijst uitschrijft (vond meteen `web_base._STATUS_VORM`, die een eigen
+compleetheidstest kreeg); de volle-tekst-test toetst nu `ChannelStore.post`/preview in plaats van het
+verdwenen `NotifStore.add`, met drie eerder weggevallen store-onafhankelijke tests terug. Ook een
+losstaande, niet aan deze opruiming gerelateerde ordeningsbug in `test_scope58` is en passant
+gefixt.
+
+**Villageraad (606 regels)**: bevestigd dood. Geen crontab, geen systemd-timer, geen route, geen
+daemon-aanroep, alleen het handmatige `village villageraad`-commando. Laatste output
+`villageraad_2026-08-26.md`/`.jsonl`, niets sindsdien. De premisse is ook verlopen: op prod heeft van
+de 18 rollen er nog maar 1 een AI-vervuller (noochie), de rest is mens-vervuld — "de AI-raad die zelf
+spanningen opwerpt" bestaat feitelijk niet meer. Dit bevestigt exact wat Stefan zelf al zei
+("villageraad bestaat niet meer want de AI zijn weg"). **Besluit: verwijderen.** Enige complicatie:
+`waarde_audit.py:335` importeert `labels`/`rollen` uit villageraad — die twee helpers verhuizen eerst
+naar `waarde_audit.py` (of een klein gedeeld hulpbestand), dan pas gaat `villageraad.py` weg.
+`villageraad.jsonl` blijft liggen als archief, net als `notifications.json`.
+
+**Waarde_audit (752 regels)**: dit beantwoordde Stefans vraag "wat is dit?" — geen vergeten hoekje,
+maar de actieve bron van waarheid voor `village afslanken` (rollen slapend leggen, skills intrekken),
+met een expliciete foutmelding als het ontbreekt (`cli.py:972`). Meet per rol/skill vier signalen die
+een mens echt raakten: project afgerond met outcome, pagina door een mens bewerkt, besluit genomen,
+certificaat gebankt. **Besluit: blijft ongewijzigd staan**, geen actie in B2. Wel een bevinding zonder
+voorgestelde fix: het signaal `besluit_genomen` komt uit `notifications.json`, een store die is
+opgeheven — het bestand blijft als archief maar krijgt geen nieuwe rijen meer, dus dat signaal telt
+vanaf nu alleen nog wat er vóór de opruiming gebeurde. Claude Code heeft dit als waarneming in de
+moduledocstring gezet en bewust niets opgelost; wie dit signaal weer wil laten meetellen heeft een
+nieuwe bron nodig (bijv. een uitkomst op de DM zelf), geen mechanische telling.
+
+**Nog open bij Stefan, geen codebeslissing**: beide laatste audit-outputs (villageraad 26 aug,
+waarde_audit 28 aug) zijn bijna een maand oud. Hoorde iemand `village waarde_audit`/`village
+villageraad` periodiek te draaien, en is dat blijven liggen of bewust gepauzeerd? Relevant nu bekend
+is dat `afslanken` middenin op waarde_audit leunt.
+
+Met deze twee besluiten kan B2 zich afronden: villageraad-helpers verhuizen, `villageraad.py` weg,
+volledige suite draaien, dan rapporteren als af. Nog steeds geen deploy.
+
+## Fase 10, B2 compleet (20 sept): volle suite groen, geen deploy
+
+**Status**: 3.868 passed, 1 xfailed, 0 failed. Twee commits: `444746a` (tweede helft + de poort) en
+`8530b3c` (villageraad). Nog steeds niet gedeployed.
+
+**Villageraad-helpers**: `rollen()`/`labels()`/`_naam()` bleken twee lezers te hebben buiten de raad
+(`waarde_audit.rollen_regels`, `views/vangst.rol_namen`), dus zijn ze niet naar `waarde_audit.py`
+verhuisd zoals eerder voorgesteld, maar naar `org.py`: `villageraad.rollen()` → `org.levende_rollen()`,
+`villageraad.labels()` → `org.unieke_namen()`, `villageraad._naam()` → `org.naam_van()`. Terechte
+keuze: dit is een vraag over de org-boom, niet over een council-pass. Onderweg een echte bug gevonden
+en gefixt: `unieke_namen()` heeft de volle recordlijst nodig als tweede argument, niet alleen de
+rollenlijst, want de ouder van een rol is een cirkel en cirkels zitten niet in de rollen-only lijst.
+Met alleen de rollen viel de ontdubbeling van meerdere Circle Leads stil weg, zonder fout of log,
+precies het soort stille bug dat deze hele opruimronde blijft blootleggen.
+
+**Weg**: `villageraad.py` (606 regels), `tests/test_villageraad.py`, de CLI-tak. `villageraad.jsonl`
+blijft als archief liggen (waarde_audit leest het nog), met een aangepaste bronregel
+("villageraad (archief)") zodat niemand denkt dat het getal nog groeit. `waarde_audit.py` is verder
+ongewijzigd gebleven, zoals besloten; de aantekening over het bevroren `besluit_genomen`-signaal staat
+er als waarneming.
+
+**B2 in totaal, alle verdwenen modules**: `notifications.py`, `views/inbox.py`, `notif_migratie.py`,
+`notif_opruiming.py`, `spanning_ontstaat.py`, `tensie_poort.py`, `relaunch_park.py`, `villageraad.py`.
+Gered en verhuisd in plaats van gesneuveld: preview/volledig → `tekstpreview.py`, `kern()` →
+`systeemtaal.py`, `match()` → `escalation_router.py`, de drie founder-domeinpatronen →
+`zelf_verwerking.py`, rollen/labels → `org.py`. Netto: `nooch_village/` van 72.621 naar 69.160 regels
+(−3.461), `tests/` van 59.489 naar 56.692 (−2.797), gemeten tussen `6cc9470` (vóór B2) en `8530b3c`
+(nu).
+
+**Nog open, geen actie genomen**: het zichtbaarheidspunt voor de A+B1+B2-deploy (lade weg, `/inbox`
+404, ongelezen-indicator pas in fase 11) — ligt bij Stefan; Admin·Skills-schrijfbaarheid (open sinds
+fase 7); fase 11 (UX-microinteracties), aangekondigd maar niet gestart; de 63 kleur-alleen-statussen
+buiten de negentien schermen; `Pillow` in `requirements.txt` heeft geen gebruiker meer sinds de
+EPIC-globe weg is (dezelfde al eerder genoteerde open dependency-schrap).
+
+**Belangrijk voor het vervolg**: Stefan heeft, terwijl B2 nog liep, een veel grotere richtingvraag
+geopperd (zie sectie hieronder) — "helemaal anders opbouwen, veel meer menselijk werk en beslissingen
+first, AI veel gerichter inzetten dan nu." `waarde_audit`/`afslanken` (het mechaniek dat op basis van
+vier automatisch gemeten signalen rollen slapend legt en skills intrekt, zonder mensbeslissing
+ertussen) is precies het soort automatisme dat tegen die visie zou kunnen ingaan. B2 is afgerond
+zonder dat mechaniek aan te raken, dus dat gesprek staat nog volledig open en is niet stilzwijgend
+opgelost door deze fase.
+
+## Richtingvraag van Stefan, opgehelderd (20 sept): "AI is instrument, geen rol"
+
+Tijdens de B2-afronding zei Stefan, in reactie op de villageraad/waarde_audit-paste-back: "nee die
+kunnen weg, ik ga helemaal anders opbouwen veel meer menselijk werk en beslissingen first en veel
+gerichter AI inzetten dan wa we nu doen." Dit kwam vóórdat Claude Code's B2-voltooiing binnenkwam, en
+is dus niet meegenomen in de B2-uitvoering. Twee verhelderingsvragen zijn gesteld en beantwoord:
+
+**Antwoord**: AI-rollen bestaan niet meer, met **Noochie als enige, bewust genoemde uitzondering**
+(wordt langzaam opnieuw opgebouwd, geen precedent voor nieuwe AI-rollen). Omdat AI-rollen niet meer
+bestaan, bestaat hun autonomie en beslissingsbevoegdheid ook niet meer. Mensen beoordelen; tools geven
+inzicht in trends/cijfers, dat is een instrument, geen AI-rol.
+
+**Concreet betekent dit**: `waarde_audit` past hier al in (het meet, het oordeelt niet, blijft dus
+terecht ongewijzigd, geen conflict met dit principe). De aandachtspunten zijn de plekken waar een LLM
+wél een organisatorisch effect heeft zonder mensbeslissing ertussen: mogelijk `village afslanken`
+(rollen slapend leggen, skills intrekken, nog te checken of dat al mens-bevestigd gebeurt of
+automatisch), `escalation_router.match()` ("wie bezit dit werk", nu deels LLM-oordeel) en
+`zelf_verwerking`'s besluit-domeinen (`_VRAAGT_BESLUIT`/`_GEEN_BEWIJS`/`_BESLUIT_DOMEIN`).
+
+**Besloten (20 sept)**: het principe wordt vastgelegd als nieuwe HARDE REGEL in `CLAUDE.md`
+("AI is instrument, geen rol", met dezelfde geen-big-bang-retrofit-clausule als de andere twee
+regels van vandaag), en Claude Code doet daarna een **read-only inventarisatie** (geen wijzigingen,
+zelfde opzet als de atom-debt-lijst): welke plekken gebruiken een LLM voor een organisatorisch oordeel
+met effect zonder mensbevestiging, met expliciete check op de drie genoemde kandidaten plus een
+bredere grep (`_vraag_llm`, `anthropic`, `google-genai`/gemini). Nog geen besluit over wat er met de
+gevonden plekken gebeurt, dat komt na de inventarisatie.
+
+## Inventarisatie "AI is instrument": eerste vier kandidaten uitgezocht (20 sept)
+
+De HARDE REGEL staat in `CLAUDE.md`, commit `4e12d43`, als eigen sectie direct vóór "Autorisatie —
+elke nieuwe dispatch-tak". Claude Code's bredere sweep over de resterende 34 modules met een
+LLM-aanroep loopt nog; onderstaand zijn de vier expliciet genoemde kandidaten uitgezocht en
+beoordeeld tegen het nieuwe principe.
+
+**`escalation_router.match()`** (regel 180): roept een LLM aan (via roster → `_vraag_llm` →
+`kies_ontvanger`), fail-closed bij twijfel. Enige aanroeper is `zelf_verwerking.verwerk()`, op zijn
+beurt alleen bereikbaar via `village zelf_verwerking` (CLI, mens start het, dry-run is de default,
+`--live` nodig om `verwerkingen.jsonl` te schrijven). Effect van de uitkomst: **geen** — wordt alleen
+als telling uitgelezen door `waarde_audit`. Compliant: mens start het, mens leest het, geen
+automatisch organisatorisch gevolg. Bijvangst: `escalation_router.escaleer()`/`route_item()` hebben
+nul productie-aanroepers meer, alleen een testbestand roept ze nog aan — dode code, meenemen in de
+sweep-conclusies, geen aparte actie nu nodig.
+
+**`escalation_router.naar_mens()`/`_mens_ontvanger()`** (regel 356/322): bepaalt wie een vastgelopen
+stap krijgt toegewezen. Effect is **direct** — `route_werk()` levert meteen af, zonder bevestiging van
+die specifieke keuze. Enige aanroeper: `vastgelopen_route.py`, via `village vastgelopen_route
+[--apply]` (CLI, mens start het, dry-run is default, draait niet mee in de dagelijkse pulse). De
+`--apply`-vlag beveiligt de hele batch, maar bevestigt nooit de individuele modelkeuze wie iets
+krijgt. Dit is de scherpste van de vier gevallen en de enige die nog een open vraag heeft: toont het
+dry-run-rapport per toewijzing de onderbouwing (herbeoordeelbaar), of alleen een kale naam
+(afvink-risico)? Nog niet beantwoord door Claude Code.
+
+**`zelf_verwerking`'s besluit-domeinen** (`_VRAAGT_BESLUIT`/`_GEEN_BEWIJS`/`_BESLUIT_DOMEIN`, via
+`founder_behoefte()`): bevestigd **geen LLM**, pure regexes, deterministisch. Geen kwestie.
+
+**`village afslanken`**: nul LLM-aanroepen in `afslanken.py` of `waarde_audit.py`, volledig
+deterministisch. Twee expliciete mensdrempels: `--apply` voor schrijven, en
+`AfhankelijkheidNietBevestigd`/`--afhankelijkheden-gelezen` vóór een rol slapend leggen of skill
+intrekken. Volledig compliant, bevestigt de eerdere "blijft ongewijzigd"-conclusie nu met de
+daadwerkelijke code erbij.
+
+**Bijvangst, zelf gemeld door Claude Code**: `cockpit2.py:3455`'s `route_werk()` roept nog
+`_rolsuggestie()` aan (LLM via `triage_rol.classificeer`), maar het resultaat wordt nergens meer
+gebruikt — een weeskind van het weghalen van de `extra=`-parameter op `notif.add` eerder vandaag
+tijdens B2. Geen principekwestie, wel een lopende, zinloze modelaanroep per lead-hop/routing-actie.
+**Besloten**: dit meteen wegnemen, niet parkeren onder de geen-big-bang-retrofit-clausule — die
+clausule is bedoeld voor statische structurele schuld die kan blijven liggen, niet voor een aanroep
+die op dit moment nog steeds geld en latency kost bij elke uitvoering.
+
+**Nog open**: het `vastgelopen_route`-vraagstuk hierboven, en de rest van de 34-modules-sweep.
+
+## Inventarisatie "AI is instrument": volledige sweep binnen, plus de dry-run-vraag beantwoord (20 sept)
+
+**De `vastgelopen_route`-vraag van hierboven**: het rapport is een halve kale lijst. Je ziet per
+toewijzing wie het krijgt, niet waarom (welke rol/opdrachtgever, welk bewijs). De grond wordt wél per
+item berekend (in `pas()`), maar `rapport()` print die sleutel nergens — hij verschijnt alleen
+onderaan als telling over de hele batch. En juist de grootste groep binnen die telling ("deze rol
+bezit dit werk", 14 van 18) is de minst informatieve: de bewering, niet het bewijs. Praktisch gevolg:
+je kunt een foute toewijzing alleen zien als je zelf al weet dat iemand dit niet hoort te krijgen —
+"de batch goedkeuren" is dus geen blinde stempel, maar ook geen echte beoordeling, het is een
+steekproef op je eigen geheugen. Er is een oude testdocstring die dit letterlijk voorspelde ("een
+droge loop die alleen telt laat de vraag onbeantwoord die het besluit draagt") — één stap is toen
+opgelost (bestemming tonen), de volgende (de grond tonen) is blijven liggen.
+
+**Herzien na Stefans reactie op het voorbeeld**: het voorbeeld uit het rapport ("Harry Hemp ...
+Decide whether to permanently exclude this overlap → Lotte Mulder") noemt Harry Hemp als de rol waar
+het werk vastliep. Stefan: "Harry Hemp kan geen bericht naar Lotte sturen, want Harry Hemp is
+opgeruimd" — en herhaalt het eerder gestelde uitgangspunt: alles wat ergens blijft zweven, hoort als
+DM in zíjn (de founder-)inbox te landen, waar hij het zelf opruimt, niet bij een door het model
+gekozen andere rol of persoon.
+
+Dat verandert de fix. Niet "toon de grond erbij" (transparantie over een AI-gekozen ontvanger), maar
+de vraag of `_mens_ontvanger` überhaupt een ontvanger zou moeten kiezen — onder "AI is instrument,
+geen rol" is de eenvoudigste, meest compliant vorm dat vastgelopen werk altijd naar de founder-inbox
+gaat, zonder dat een model bepaalt wie de mens is die het oppakt. Twee dingen aan Claude Code:
+1. **Data-vraag, eerst**: is "Harry Hemp" een echte rol uit de huidige data (org/roles), of een
+   verzonnen voorbeeldnaam in het rapport? Als het een echte rol is die nog in de brondata van
+   `vastgelopen_route`/`org.py` voorkomt terwijl rollen zijn opgeruimd, is dat een apart
+   datalek-signaal (stale rollen die nog meedraaien in routering) — los van de ontwerpvraag hieronder.
+2. **Ontwerpvraag**: verander `_mens_ontvanger()` zodat vastgelopen werk altijd naar Stefan (de
+   founder) gaat, in plaats van een rol-eigenaar of "wie hoort dit werk" te laten kiezen door het
+   model. Dat is geen transparantie-toevoeging maar het weghalen van een AI-organisatiekeuze — precies
+   het soort wijziging die de HARDE REGEL beoogt. Nog niet doorvoeren zonder Stefans akkoord op de
+   precieze vorm (bijvoorbeeld: gaat dit ten koste van gevallen waar een rol-eigenaar wél zinvol is,
+   of is founder-inbox-altijd inderdaad de bedoeling voor élk vastgelopen geval?).
+
+`sluitronde.py` heeft exact dezelfde vorm (panel stemt, `--apply` gate op batchniveau, kiest ook een
+trekkende rol) — dezelfde twee vragen gelden daar net zo goed.
+
+**Datavraag uitgezocht (20 sept)**: drie lagen. (1) De naam zelf was slordig gekozen door Claude Code:
+`harry_hemp` is een echt record-id, maar de weergavenaam (wat `rapport()` print) is "Scientist" —
+"Harry Hemp" had dus nooit in een echt rapport kunnen staan, dat was een test-bijnaam die abusievelijk
+als voorbeeld diende. (2) Prod-staat geverifieerd: `harry_hemp` (Scientist) staat inderdaad op
+`archived: true` (`data/governance_records.json`, 18 sept) — de rol is terecht opgeruimd. Claude Code
+ving hier zelf een fout op onderweg: zijn eigen lokale snapshot (9 sept) zei nog `archived: false` en
+had niet vertrouwd moeten worden. (3) Speelt een opgeruimde rol nog mee in de routering? Twee kanten:
+als **ontvanger** nee, hard afgeschermd — `escalation_router.roster()` filtert archived/slapend eruit
+vóórdat het model een kandidatenlijst ziet, met expliciete reden in het comment. Als **afzender**
+(eigenaar van het vastgelopen project) wordt dit niet gecontroleerd — `pas()` kijkt alleen naar de
+projectstatus, nooit naar de staat van de eigenaar. Verdedigbaar (werk vastgelopen bij een rol die niet
+meer bestaat is precies wat je wilt herrouteren) maar impliciet, geen uitgesproken keuze. In de
+praktijk vandaag: nul impact — van 41 blocked projects passeren er 3 de eerste guard, beide eigenaren
+leven nog; `village vastgelopen_route` zou vandaag 9 stappen routeren, geen daarvan vanaf een
+opgeruimde rol.
+
+**Bijvangst**: 256 van de 442 projecten stonden op naam van een opgeruimde rol; de afslanking heeft er
+254 correct gearchiveerd. Twee zijn blijven hangen (beide bij Compliance, zelf niet gearchiveerd, niet
+blocked dus buiten bereik van `vastgelopen_route`) — precies waar `village afslank_wezen` voor is, het
+commando dat Claude Code vanochtend al repareerde (crashte op de verwijderde notifications-import) en
+alleen nog groen getest heeft, niet tegen prod gedraaid.
+
+**`afslank_wezen` dry-run tegen prod (20 sept)**: gedraaid, niets geschreven. Uitkomst: **niet
+toepassen**. `--apply` zou de twee Compliance-weesprojecten archiveren en herscheppen bij diezelfde
+dode `compliance` — netto slechter dan niets doen (ze staan nu tenminste nog zichtbaar open). Oorzaak
+gevonden: `cockpit2._circle_lead_van('compliance')` geeft `''` terug omdat de hele
+noochville-subcirkel (incl. zijn Circle Lead) gearchiveerd is; de klim-functie stijgt één niveau en
+stopt, in plaats van door te klimmen naar `mother_earth__nooch__circle_lead`, die wél leeft. Er
+bestaat een levende `mother_earth__nooch__compliance`-rol (vervuller: Stefan) waar deze twee projecten
+voor een mens evident naartoe horen — de code ziet alleen het dode, losse `compliance`-id.
+
+## Ontwerpbeslissing: routering wordt geen modelvraag meer, voor beide A2-plekken (20 sept)
+
+Claude Code's voorstel voor `_mens_ontvanger` (vastgelopen_route) en `sluitronde._panel`, beide met
+dezelfde vorm (model kiest een adres, systeem levert er direct aan af, mens ziet de keuze niet):
+
+1. **Haal de keuze weg, niet het model.** Vervang de modelkeuze door de bestaande, deterministische
+   ladder die elk ander bericht in het dorp al gebruikt: `signaal.ontvangers` → vervuller → Circle
+   Lead → terugval (founder). Getest tegen prod-data (`compliance`→terugval Stefan, `harry_hemp`→
+   terugval Stefan, `financial_controller`→vervuller Stefan, `strategic_lead_founder_steward`→
+   vervuller Stefan). Lost **passant** het Compliance-weesgeval hierboven op, want deze ladder heeft
+   wél de founder-terugval die `cockpit2._circle_lead_van` mist — één implementatie in plaats van twee
+   van dezelfde routeringsregel.
+2. **Degradeer het modelantwoord tot tekst, niet adres.** `escalation_router.match()`'s
+   grond-string (rol, kind, waarom) blijft nuttig als toegevoegde suggestie in het bericht zelf, niet
+   als bestemming. Maakt de modelaanroep optioneel: geen krediet → bericht landt nog steeds bij de
+   juiste mens via de ladder, alleen zonder suggestieregel. Nu is het omgekeerd — geen krediet
+   verandert stilletjes de ontvanger.
+3. **Toewijzen wordt een menselijke handeling met bestaande infrastructuur.** Fase 8's
+   mention-routing (`@rolnaam` in een bericht landt bij de vervuller) is al de accepteer-knop: een
+   mens antwoordt, het werk verhuist met een spoor. Geen nieuw scherm, geen nieuwe dispatch-tak.
+
+Voor `sluitronde` dezelfde drie zetten, met één extra knip: die aanroep bevat nu twee besluiten
+tegelijk (wie trekt de kans, én gaat de kans door). Het "wie" verdwijnt zoals hierboven. Het "of"
+stopt met zelf schrijven: `--apply` betekent straks "schrijf het voorstel" in plaats van "voer de
+uitkomst uit" — per kans één bericht met de stem van het panel, de redenering en de scope, de kans
+blijft pending tot een mens hem afhandelt. Al het denkwerk van het panel blijft (de scope opstellen is
+echt werk), alleen de zelfuitvoering verdwijnt.
+
+**De ene echte keuze — Stefans besluit (20 sept)**: altijd naar Stefan direct, of via de ladder
+(vervuller → Circle Lead → Stefan als terugval)? Claude Code adviseerde de ladder; Stefan kiest
+expliciet **(a) altijd naar hemzelf**, met een principiële reden die verder gaat dan deze ene
+routeringsvraag: "in principe zou AI geen spanningen meer moeten sensen, en ik wil eerst controle over
+alles wat binnenkomt voordat ik het open zet voor de rest." Dat is een bewuste, voor nu geldende
+overgangskeuze (het woord "eerst" laat ruimte om dit later te verruimen naar de ladder), niet een
+correctie op de analyse — de kosten die Claude Code noemde (Stefan wordt het knooppunt) zijn gezien en
+bewust geaccepteerd zolang hij zelf alles wil zien voordat het verder gaat.
+
+Dit relativeert niet de eerste twee zetten hierboven (de modelkeuze verdwijnt, het modelantwoord wordt
+hooguit een tekstsuggestie) — alleen de bestemming verandert van "de ladder" naar "altijd Stefan".
+
+**Bredere implicatie, nog niet besloten, wel genoteerd**: Stefans "AI zou geen spanningen meer moeten
+sensen" raakt direct `inhabitant._classify_llm`/`triage()` uit categorie A hierboven — precies het
+mechanisme dat in de dagpuls autonoom bepaalt bij welke rol werk hoort (spanning-sensing/routering
+zonder mens ertussen). Dat viel bewust buiten de scope van dit besluit (andere vorm, eigen besluit
+nodig), maar Stefans principiële uitspraak wijst daar wel direct naartoe als volgende, waarschijnlijk
+hoge-prioriteit kandidaat.
+
+**Extra, in dezelfde ademtocht (20 sept)**: Stefan, eerlijk: "heel veel oude spanningen kunnen gewoon
+weg, ik weet dat allemaal al." En op de vraag of hij eerst een inventaris wil zien voordat er iets
+weg mag: nee — "er is eigenlijk niets in de history wat ik écht zou willen bewaren, als het belangrijk
+is komt het wel terug als mens sensed spanning." Dat is dus geen "inventariseer en dan kies", maar een
+generieke, voor het geheel geldende opruiminstructie: de bestaande AI-gesensde spanning-geschiedenis
+heeft geen beschermwaarde, omdat een echt relevante spanning vanzelf terugkomt zodra een mens hem
+signaleert.
+
+**Besloten**: geen inhoudelijke review vooraf nodig. Wel, uit dezelfde discipline als bij villageraad
+(waar `waarde_audit` een verborgen afhankelijkheid bleek te hebben): eerst kort checken of iets anders
+in de codebase nog leest uit de spanning-store(s) vóór ze leeggemaakt worden, en de data archiveren
+(zoals `villageraad.jsonl`) in plaats van hard te verwijderen — tenzij Stefan expliciet liever
+gewoon weg wil. Aan Claude Code: eerst lokaliseren + afhankelijkheidscheck, dan pas opruimen.
+
+**Ook besloten**: de CLAUDE.md-belofte ("een model beslist niet") wordt afgedwongen met een ratchet-
+test (AST-scan die faalt zodra `kies_ontvanger`/`_vraag_llm` op een pad staat dat schrijft) — dit is
+precies het geval waarvoor `docs/CONVENTIES.md`'s waarneembaarheidsregel is opgeschreven. Meteen
+meebouwen, geen aparte stap.
+
+## Alle drie besluiten uitgevoerd (20 sept, commit `fc26653`): 3873 passed, 1 xfailed
+
+**Besluit 1 — bestemming is overal de founder**: `_mens_ontvanger` geeft nu altijd `signaal.terugval
+(st)` terug (was: modelkeuze); `sluitronde._panel` levert nu altijd een escalatie op in plaats van
+zelf een project aan te maken of af te wijzen; `cockpit2.bestemming` valt bij een doodlopende
+lead-hop terug op de founder in plaats van de rol zelf. Het modelantwoord is tekst geworden:
+`match()`'s grond reist mee als voorstelregel ("dit lijkt van Creator of Shoes — ..."), accepteren is
+`@rol` antwoorden in de DM (bestond al sinds fase 8). De stille fout van de oude versie is er ook mee
+verdwenen: wegvallend modelkrediet verandert de bestemming niet meer, alleen de voorstelregel
+verdwijnt (met test).
+
+**Eén bewust, opgebiecht verlies**: de opdrachtgever van een vastgelopen project hoort dit niet meer
+automatisch — dat was de tweede trede van de oude ladder. Alles komt nu bij Stefan uit, hij geeft het
+zelf door. Dat is precies wat Stefan vroeg ("ik wil eerst controle over alles"), dus geen probleem,
+wel iets om je bewust van te zijn nu het is opgeleverd.
+
+**Twee losse vervolgvragen van Claude Code, nog niet beantwoord**:
+- Sluitronde behield twee deterministische takken (verlopen op leeftijd, afwijzen op scope-overlap)
+  — regels, geen oordelen, staan in de code en in het rapport. Vraag: wil je die ook eerst zien?
+  Mijn advies: nee, deterministisch en al zichtbaar in het rapport, geen aparte review nodig — tenzij
+  je zelf de code even wilt inzien.
+- `MENS_SITE` staat nog in `llm_keuze.HOOG_INZET` (het duurdere modeltier), met als reden dat een
+  verkeerde ontvanger vroeger via het spoor onomkeerbaar was. Die reden is vervallen nu het een
+  weggooibaar voorstel is. Open kostenvraag: mag dit naar een goedkoper model? Tot een besluit blijft
+  het op het huidige tier draaien.
+
+**Besluit 2 — de klim valt terug op de founder**: gebouwd en getest
+(`test_een_rol_zonder_vervuller_en_zonder_lead_valt_terug_op_de_founder`), met de reden zichtbaar in
+het `via`-veld. **Nog niet effectief**: dit staat alleen op de branch, prod draait nog `8ecf29a`. De
+twee Compliance-weesprojecten zijn dus nog niet opgelost — dat gebeurt pas bij een deploy, die Stefan
+nog niet heeft goedgekeurd. Sluit aan bij de eerder genoteerde, nog onbeantwoorde deploy-vraag
+(sidebar/inbox-zichtbaarheid) — de lijst met klaarstaande, ongedeployde fixes groeit.
+
+**De ratchet, met een eigen zelfcorrectie**: de eerste versie van `test_geen_model_routering.py` keek
+alleen binnen één functie en miste de echte bug (een `return` tussen keuze en aflevering) — hij
+slaagde voor zijn eigen test maar niet voor zijn doel. Herbouwd om de uitkomst over returnwaarden heen
+te volgen, per tuple-positie (anders zou hij het hele antwoord — inclusief de goede voorstelregel —
+afkeuren). Aangevuld met `test_bestemming_is_altijd_de_founder.py`. Sluitronde had nul tests, heeft er
+nu drie.
+
+**Besluit 3 — spanning-geschiedenis opgeruimd**: vier bestanden gevonden en met de villageraad-
+discipline gecheckt (`notifications.json` 371 rijen, `verwerkingen.jsonl` 13, `autonomie_signaal.jsonl`
+3, `villageraad.jsonl` 13) — alle vier gearchiveerd naar `data/archief/<naam>.20260920` (sha256-
+geverifieerd vóór legen), daarna leeggemaakt. `gaps.jsonl` (119 KB, capaciteit-tekorten, geen
+spanningen, heeft een levende schrijver) is bewust overgeslagen — vraag aan Stefan: moet die ook weg?
+Mijn advies: nee, ander onderwerp, geen reden om mee te nemen.
+
+**Zelfgevonden en hersteld tijdens de uitvoering**: het opruimscript liep als root, waardoor de vier
+bestanden root-eigendom werden en `notifications.json` zijn `0600`-rechten verloor — de `nooch`-
+service had er niet meer in kunnen schrijven. Eigenaarschap en rechten teruggezet, services
+geverifieerd (actief, cockpit antwoordt, NotifStore leest de lege store, geen journal-fouten).
+
+**Sweep-lijst aangevuld**: `escalation_router.mens_kandidaten` heeft sinds vandaag ook geen aanroeper
+meer — bundelen met `escaleer()`/`route_item()` op de al bestaande opruimstapel.
+
+## Tempo omgezet naar één geconcentreerde ronde, en volledige beslissing per module (20 sept)
+
+Op de vraag of we het resterende werk stuk voor stuk of in één keer doen: Stefan koos voor één
+geconcentreerde sessie. Reden voor de omslag: hij had het gevoel dat de negen fasen van de eerdere
+grote opruimronde (dode rolklassen, NotifStore/inbox, AI-projectuitvoering/Founder Flow, UI-herbouw)
+dit al hadden moeten wegnemen. **Verheldering**: dat is geen mislukte opruiming — die fasen richtten
+zich op zichtbare AI-collega-architectuur en dode code, niet op losse, ingebedde LLM-oordelen in
+verder legitieme tools. De lat "AI is instrument, geen rol" is pas deze fase gelegd; onder de oude,
+impliciete standaard was zo'n aanroep normaal ontwerp. Vandaar dat dit nu pas, in deze ronde, boven
+water komt.
+
+Stefan kreeg de volledige lijst met uitleg per module en gaf per stuk zijn besluit. Twee open vragen
+zijn met `AskUserQuestion` voorgelegd en beantwoord (categorie D: blijft staan; de samenvoeg-cluster:
+geen voorkeur, dus mijn eigen lezing aangehouden — zie hieronder).
+
+**Definitieve besluiten, per module**:
+- `inhabitant.py` `_classify_llm`/`triage()` (spanning-sensing/routering in de dagpuls) — **weg**.
+- `legal_signaal.py` `beoordeel`/`check()`, `claims_modelpas.py` `extra_kandidaten`,
+  `materiaal_memo.py` `_schift`, `skills_impl/claim_evidence.py` `_verify_brand`,
+  `claims_context.py` `beoordeel` — **samenvoegen tot één pijplijn**. Stefans eigen aanwijzingen
+  ("3 combineren met 2", "7 combineren met 3 en 4", "12 combineren met 3 en 4") vormen via 3 als
+  schakel feitelijk één cluster, niet twee aparte — dat is de lezing die is aangehouden. Vorm: signalen
+  verzamelen en false positives eruit filteren (de huidige `claims_context`/`claims_modelpas`/
+  `claim_evidence`-logica), dat wordt een memo (materiaal_memo's "vertaal naar memo"), en die memo is
+  wat een mens activeert (legal_signaal's rol) — in plaats van vijf losse plekken die elk zelf al dan
+  niet een mens inschakelen of iets aanmaken. Nog niet uitgewerkt tot een concreet ontwerp, dat is aan
+  Claude Code.
+- `skills_impl/escaleer.py` `_classify` — **weg**.
+- `scope_nudge.py` `match_project_to_role` — **weg**.
+- `skill_match.py` `plan_offers` — **houden**, ongewijzigd.
+- `wizard.py` `plan_items` — **houden**, ongewijzigd.
+- `library_skills.py` `KeywordReviewSkill._llm` — **houden**, ongewijzigd.
+- `governance_review.py` — **houden**, maar wel via een bericht naar Stefan laten lopen (zelfde
+  mens-toewijzingspatroon als vandaag bij `vastgelopen_route`/`sluitronde`), niet los laten hangen
+  zonder duidelijke aanroeper.
+- `cockpit2.py` `_finetune_voorstellen` (stelt twee alternatieve werkinstructies voor een AI-persona
+  voor, mens kiest, Kroniek-log) — **weg**.
+- Categorie C (dode code, geen aanroeper) — **opruimen**, zoals al voorgesteld.
+- Categorie D (puur inzicht, geen organisatorisch effect) — **blijft staan**, expliciet bevestigd:
+  dit is precies het soort "AI geeft inzicht in trends/cijfers" dat Stefans eigen principe toestaat.
+
+Volgende stap: dit compacte besluitenoverzicht naar Claude Code, met het verzoek om vooral het
+samenvoeg-ontwerp (2+3+4+7+12) als voorstel terug te brengen voordat het gebouwd wordt — dat is de
+enige plek hier die nog een ontwerpkeuze vergt, de rest is een rechte verwijder- of behoud-opdracht.
+
+**Volgende besluit, al klaargezet door Claude Code**: `inhabitant._classify_llm`/`triage()` — de
+enige van de onderzochte categorie-A-plekken die in de dagpuls draait zonder dat een mens hem start.
+Dit is precies het mechanisme dat Stefans eigen uitspraak raakt ("AI zou geen spanningen meer moeten
+sensen").
+
+## `inhabitant._classify_llm`/`triage()` uitgezocht: hele keten weg (20 sept)
+
+**Hoe het werkt**: `sense_tension` → `triage()` → `_classify_llm` (het model antwoordt met
+`STRUCTURAL`/`OWN`/`OTHER:<rol-id>`/`TACTICAL`) → `triage_engine.classify()` routeert op basis
+daarvan. Twee kritieke gebreken in de classifier zelf: (1) het modelantwoord wint altijd — zodra het
+model iets zegt, draaien de deterministische checks (trefwoord, purpose-overlap, domein-match)
+helemaal niet; de deterministische laag is dus geen vangnet, alleen een terugval voor als er geen
+modelantwoord is. (2) geen validatie op de genoemde rol — in tegenstelling tot
+`escalation_router.kies_ontvanger` (die een onbekende/uitgesloten rol expliciet weigert) heeft
+`triage` die guard niet.
+
+**Drie structurele gaten, los van het model**: de gekozen capability is altijd de eerste skill in het
+DNA van de aangewezen rol — heeft die rol geen skills, dan verdampt de spanning spoorloos
+(`tension_routed`, niemand luistert mee). De Matchmaker routeert vervolgens op capability, niet op de
+door het model gekozen rol — een goede rolkeuze garandeert dus niet dat het werk daar landt. En
+`human_intervention_needed`, de bedoelde "escaleer naar mens"-uitgang, bereikt in werkelijkheid geen
+mens — het is alleen een regel in `system_log.jsonl`.
+
+**Wat het op prod deed**: 47 spanningen gesensd en getrieerd. 26 van de 38 rol-aanwijzingen (68%)
+noemden een rol die inmiddels gearchiveerd is of niet bestaat; nog 2 noemden een levende rol zonder
+skills (verdampt evengoed). `human_intervention_needed`: 0 keer, betrouwbaar gemeten. Of
+`help_requested` ooit echt werk heeft afgeleverd is niet uit het log af te leiden.
+
+**Waarom het nu toevallig stilligt**: de 4 huidige bewoners kunnen geen spanning sensen; de enige drie
+codeplekken die dat kunnen hebben zelf geen aanroepers (of Noochie slaapt). De drie rollen die
+historisch de 47 spanningen produceerden (librarian, website_watcher, concurrent_scout) zijn alle
+drie gearchiveerd. Het ligt dus stil bij toeval, niet bij besluit — `village afslanken wek noochie`
+zet het in één commando weer aan, en dan routeert een model werk terwijl CLAUDE.md dat sinds gisteren
+verbiedt. De AST-ratchet vangt dit niet (`ask()` staat niet in de bewaakte lijst).
+
+**Opties van Claude Code**: (A) laten staan, kost niets vandaag maar is een tijdbom; (B) alleen
+`_classify_llm` eruit, deterministische classifier laten routeren — kleinste ingreep, lost de drie
+structurele gaten niet op; (C) alles naar Stefan zoals bij `_mens_ontvanger`, maar dat beëindigt de
+rol-naar-rol-samenwerking uit CLAUDE.md's Triage-hoofdstuk; (D) de hele keten weg
+(`sense_tension`/`triage`/`_classify_llm`/`_route_to_role`/`_try_tactical_or_escalate`) — raakt twee
+harde regels en de architectuurbeschrijving, dus een architectuurbesluit, geen opruiming.
+
+**Besloten (20 sept)**: **optie D, de hele keten weg**. Reden: het past bij Stefans eigen principe
+("AI zou geen spanningen meer moeten sensen"), en het is vandaag goedkoop omdat er toch al geen
+levende producent is en de keten nooit heeft bewezen waarde te leveren (68% foute adressen, nul
+gemeten mens-escalaties). De week-lang-meten-optie is expliciet afgewezen — met de huidige stilstand
+levert dat vermoedelijk niets op. Consequentie, expliciet benoemd: dit raakt ook CLAUDE.md's
+Triage-hoofdstuk en de architectuurbeschrijving bovenaan — dat document moet mee worden bijgewerkt,
+niet alleen de code verwijderd.
+
+## Hele besluitenpakket uitgevoerd (20 sept): 3778 passed, 2000+ regels weg, zes commits, geen deploy
+
+**1. Triage-keten weg (`dfe4c58`)**: naast de aangewezen functies ook alles dat er alleen voor
+bestond — `triage_engine.py`, `matchmaker.py`, `ask`/`offer`/`_on_accountability_requested`,
+`propose_close`/`ask_accountability`/`deliver`/`handle`/`Circle.handle`, `models.Task`/
+`models.Response`, de Task-tak in `run()`, `Inbox.deliver`, plus `village triage`/`triage_demo` en
+fase 3 van `village simulate`. Verantwoording: `.offer(` had nul aanroepers dus
+`_on_accountability_requested` viel altíjd in de tak die zelf een `sense_tension` deed — dat
+mechanisme bestond uit precies de regel die wegging. En `ask()` had exact twee aanroepers, beide in
+triage — de Matchmaker had dus geen producent meer over. Terecht meegenomen, geen scope-verruiming.
+Noochie's `_weigh_in`-oordeel gaat niet verloren: `_persist_daily` schreef het toch al naar
+`noochie_daily.json` (wat de cockpit toont), de spanning was een tweede kopie — de vier Noochie-tests
+zijn verlegd naar dat verdict in plaats van geschrapt. CLAUDE.md bijgewerkt: architectuur telt nu twee
+lagen, harde regels 6 en 9 aangepast, Triage-hoofdstuk vervangen door de vier structurele gaten die
+er los van het model al in zaten — precies zoals gevraagd, geen kaal "verwijderd".
+
+**3/4/5. Drie modeloordelen weg (`faedcab`)**: `escaleer._classify` weg (de fail-open eronder blijft:
+bij twijfel zichtbaar een beslissing). `scope_nudge.match_project_to_role` weg, en met dat oordeel
+ook de hele nudge (`_nudge_scope_matches`, puls-wiring, drie helpers, ledger). **Noemenswaardig**:
+deze ene aanroep was 3150 van 8478 modelaanroepen — 37% van al het modelverbruik in de hele codebase.
+`_finetune_voorstellen` weg, met een scherpe reden: een model dat zijn eigen persona-werkinstructie
+herschrijft is precies de zichzelf-in-stand-houdende lus die de nieuwe regel wil voorkomen.
+
+**7. `governance_review` via bericht (`5c3d280`)**: bleek bij nader inzien geen adreswijziging maar
+een echte lus-fix. De voorstellen gingen naar `HumanInbox.add_opportunity`, waar `sluitronde` ze weer
+oppakte — een raadspanel (zelf ook een model) zei er ja/nee tegen en maakte bij ja een project aan.
+Eén model afgetikt door een tweede model is geen mensdrempel. Nu gaat elk voorstel als DM naar Stefan.
+Ook `route_teleology_to_roloverleg`/`_parse_teleology_opportunity` weg (zelfde patroon, voor
+rolwijzigingsvoorstellen).
+
+**8. Categorie C opgeruimd (`2f1b344`)**: `escalation_router` (escaleer/route_item/mens_kandidaten),
+roloverleg (3), inbox_actions (8), `inhabitant._payload_opnieuw`, `umbrella.py`, en de verweesde
+triage-acceptatiemeting. **Twee zelfcorrecties, belangrijk voor het vervolg**: `triage_rol.classificeer`
+is NIET dood — `menselijke_eigenaar` (triage_rol.py:394) roept 'm aan, en dat is de lookup waarmee
+`materiaal_memo` bepaalt bij welke rol een memo hoort. Dus een levend modeloordeel in een daemon-pad,
+hoort in het pijplijnvoorstel, niet in opruiming — correct er niet stilzwijgend meegenomen.
+`bevinding.py` is wél dood (villageraad was de laatste importer) maar bewust laten staan: een hele
+module met vijf testbestanden en een eigen plek in `docs/CONVENTIES.md`, dus een besluit, geen
+opruiming. **Besloten**: ook weg, samen met het bijwerken van zijn vermelding in
+`docs/CONVENTIES.md` (niet alleen schrappen, zoals bij CLAUDE.md's Triage-hoofdstuk net goed is
+gedaan) — dezelfde discipline toepassen.
+
+**Zelfgevonden fout, hersteld**: het knip-script voor `_payload_opnieuw` sneed ook vier
+class-attributen van `Inhabitant` en een `@classmethod` mee. 35 tests vielen om, teruggehaald uit HEAD
+en de diff nagelopen. De suite ving het — zonder die testdekking was het er stil doorheen geglipt.
+
+**6/9. Ongewijzigd**: `skill_match.plan_offers`, `wizard.plan_items`,
+`library_skills.KeywordReviewSkill._llm` en heel categorie D — niet aangeraakt, zoals besloten.
+
+**Nog open, het enige punt met een echte ontwerpkeuze**: het pijplijnvoorstel
+(`legal_signaal`+`claims_context`+`claims_modelpas`+`claim_evidence`+`materiaal_memo`), nu inclusief
+`triage_rol.classificeer` sinds die aantoonbaar levend en relevant bleek. Claude Code schrijft dit uit
+in een volgend bericht, nog niets gebouwd.
+
+**Nog steeds openstaand, niet vergeten**: geen van de zes commits van vandaag (of de eerdere van deze
+fase) is gedeployed. De ongedeployde stapel blijft groeien, en CLAUDE.md's architectuurbeschrijving
+wijkt nu materieel af van wat op prod draait — dat verschil wordt met elke ronde groter.
+
+## Stefan: niet blijven hangen in kleine stappen, drie dingen nu doorpakken (20 sept)
+
+Stefan, expliciet: niet vasthouden aan veel kleine incrementele veranderingen uit het verleden, maar
+doorpakken. Drie concrete dingen genoemd: de resterende CSS/visueel-systeem-afronding, de oude inbox
+helemaal weg (inclusief deployen, niet alleen op de branch), en de nog niet bevestigde Messages-
+navigatie.
+
+**Messages-navigatie — bevestigd, geen verdere vraag nodig**: het voorstel uit de prototype-sectie
+hierboven (desktop: globale zijbalk klapt in tot een 64px-icoonrail zodra je in Messages zit, mobiel:
+drill-down met hamburger-slide-over) wordt aangehouden. Geen tegensignaal ontvangen op dit specifieke
+punt en het past bij "doorpakken" — Claude Code kan dit bouwen als onderdeel van fase 11.
+
+**CSS/visueel systeem**: de resterende 63 kleur-alleen-statussen buiten de negentien al aangepakte
+schermen (fase 9), en fase 11's al volledig gespecificeerde atoms/molecules/patterns-lijst (rol-
+status-icoon, `.nu-progress`, kanaal-ongelezen-indicator, sleep-patroon op het Projects-bord, etc.) —
+"aangekondigd maar niet gestart." Nu bouwen, in de vastgelegde volgorde (atoms → molecules →
+patterns), niet per scherm losse CSS verzinnen.
+
+**Deploy-volgorde voor de oude-inbox-verwijdering — besloten**: eerst het kleine, al gespecificeerde
+fase-11-onderdeel bouwen dat een ongelezen-indicator op kanalen zet (kanaal-ongelezen-modifier op
+`.msg-kanaal`), dán pas deployen. Reden: zonder die indicator verdwijnt bij deploy de zijbalk-lade en
+`/inbox` (404) zonder enige vervanging, en collega's die net inloggen zien geen signaal meer welk
+kanaal ongelezen is — dat voelt als "berichten kwijt", niet als een verbetering. Dit is de enige
+fase-11-prioriteit die de deploy blokkeert; de rest van fase 11 kan parallel of erna.
+
+**Samengevat, aan Claude Code**: bouw eerst de kanaal-ongelezen-indicator (fase 11, onderdeel 3a),
+dan de rest van fase 11 (inclusief de Messages-navigatie hierboven, nu bevestigd) en de resterende
+63 kleur-alleen-statussen, en zodra de indicator klaar en getest is: deploy alles wat nu al klaarstaat
+(B2, de vier LLM-besluiten van vandaag, de oude-inbox-verwijdering) in één keer — niet nog een ronde
+laten liggen.
+
+**Bewust buiten deze beslissing gelaten**: de andere categorie-A-plekken (`inhabitant._classify_llm`,
+`legal_signaal`, `claims_site_scan`) hebben een andere vorm (draaien in de daemon zonder enige
+batch-start door een mens) en verdienen elk hun eigen besluit — dat komt later, apart.
+
+## Pijplijnvoorstel klaar en besloten (20 sept)
+
+Claude Code's meting die het voorstel stuurde: de twee claim-filters staan op de verkeerde paden.
+`claims_context` (haalt valse positieven weg) draait alleen op het scherm waarnaar Stefan al kijkt.
+`claims_modelpas` (voegt modelvondsten toe, bewust ruim afgesteld — "bij twijfel meldt het model de
+zin") draait alleen in de dagpuls, en dáár worden er automatisch projecten van gemaakt op naam van
+een rol. Het gefilterde pad heeft dus al een mens erbij; het ongefilterde pad niet — en dat is precies
+het pad dat op recall staat. Vandaar dat samenvoegen meer oplevert dan alleen minder regels.
+
+**Voorgestelde pijplijn, vier stappen**: (1) verzamelen — elke bron levert ruwe signalen in één
+gedeelde vorm (`bron, tekst, vindplaats, gevonden_op, herkomst`), eigen ritme per bron blijft (legal
+dagelijks, materiaal maandelijks); (2) filteren — een gedeelde, deterministische grondings-poort
+(het fragment moet letterlijk in de brontekst staan, elimineert hallucinatie) plus een expliciete,
+per-bron-drempel (legal fail-closed, claims_modelpas op recall, claims_context op precisie — bewust
+niet gemiddeld, drie verschillende, elk verdedigbare houdingen voor hun eigen onderwerp); (3) memo —
+materiaal_memo's vorm (leesstuk, geen store; onthoudt wat al voorgelegd is; "liever nul dan een
+zwakke", geen memo bij een lege ronde); (4) activeren — de memo als DM bij Stefan, met
+`triage_rol.menselijke_eigenaar` als voorstelregel in plaats van adres (zoals `_mens_ontvanger`
+gisteren) — daarmee de laatste levende modelroutering in de codebase weg.
+
+**Bewust niet meegenomen**: `claim_evidence` als skill blijft apart (I/O met externe pagina's en
+SerpAPI, geen filterlogica; de pijplijn hergebruikt alleen zijn grondings-poort en statusvocabulaire).
+De regex-database (`claims_db`) blijft de enige bron van een "rood" wetsoordeel — dat blijft een
+harde grens, verplaatst niet naar modelinzicht.
+
+**Stefans drie besluiten**:
+1. **`claims_board` uit de dagpuls — ja.** De duurste van de drie keuzes: compliance-werk begint
+   voortaan bij Stefan, geen automatische projectaanmaak meer op naam van een rol. Volume is niet
+   nul (`claims_site_scan` is de default pulse-skill, `claim_evidence` draaide 105 keer) — dit gaat
+   Stefan echt tijd kosten, met open ogen aanvaard.
+2. **Eén gecombineerde memo over alle bronnen heen, niet één per bron — tegen Claude Code's eigen
+   advies in.** Reden van Stefan: de synthese over bronnen heen is juist waar waarde ontstaat, en
+   daar mag een duurder model voor gebruikt worden. **Cadans, door Stefan zelf gecorrigeerd**: mijn
+   voorstel om dagelijks te draaien (zodat legal niet zou wachten op materiaal's langzamere ritme)
+   was niet nodig — **wekelijks is voldoende**. De per-bron-drempel uit stap 2 blijft ongewijzigd,
+   alleen de synthesestap (stap 3) wordt gecombineerd, wekelijks, met het duurdere model.
+3. **De 84 wachtende radar-items en de bestaande openstaande claim-projecten kunnen weg.** Zelfde
+   discipline als bij de spanning-geschiedenis eerder vandaag: archiveren (niet hard verwijderen),
+   niet alsnog door de nieuwe pijplijn halen.
+
+Aan Claude Code: bouwplan uitwerken op basis van deze drie besluiten plus de cadans-invulling, nog
+niet bouwen zonder dat plan gezien te hebben — zelfde patroon als steeds deze fase.
+
+## Bouwplan pijplijn ontvangen en goedgekeurd (20 sept)
+
+**Nulmeting op prod wijkt fors af van de aanname in de brief**: 339 wachtende radar-items (van 938
+totaal: 339 wacht, 304 goedgekeurd, 295 afgewezen), niet 84. Open claim-projecten: 3 (niet
+"bestaande" in het vage), alle future, van 46 claims_fix-projecten totaal waarvan 43 al af of
+gearchiveerd. **Verschuiving**: de claims-kant is triviaal, de radar-kant (339, niet 84) is de
+eigenlijke opruiming. Stefans "kunnen weg"-besluit stond op het verkeerde getal toen hij het nam —
+gemeld, maar niet aanleiding om de aanpak te wijzigen: het gebeurt via archiveren (status
+`gearchiveerd`, bestand niet leeggemaakt, want de 304/295 zijn geschiedenis waar de adapters op
+terugkijken), niet hard verwijderen, en pas als laatste stap na bewezen werking van de nieuwe stroom
+— dat maakt de aanpak veilig ongeacht de schaal.
+
+**Bouwplan, zeven stappen, goedgekeurd**: (1) gedeelde grondings-poort (`weekmemo.gegrond`),
+één implementatie i.p.v. drie, laag risico, met een stopmoment als de drie bestaande implementaties
+blijken te verschillen; (2) één signaalvorm + vijf bron-adapters (legal_signaal, claims_modelpas,
+claims_context, claim_evidence, materiaal_memo), elk met zijn eigen drempel als veld, niet in de
+pijplijn; (3) `claims_board` uit de dagpuls (sluit het filter-gat dat de hele aanleiding was); (4) de
+weekmemo zelf — één synthese per ISO-week over alle vijf bronnen, nieuwe call-site
+`weekmemo_synthese` in `llm_keuze.HOOG_INZET` (eerste toevoeging sinds 13 september, met Stefans
+eigen reden erbij in de ratchet-test), fail-open met een kale, bronvermelde opsomming als het model
+uitvalt — belangrijker nu dan bij vijf losse memo's, want nu valt bij uitval alles tegelijk weg;
+(5) bezorging als DM bij Stefan, `triage_rol.classificeer` wordt een voorstelregel i.p.v. een adres
+(laatste levende modelroutering in de codebase, de AST-ratchet vangt 'm voortaan); (6) archiveren,
+apart en als laatste, na goedkeuring van de uitkomst van 1–5; (7) twee nieuwe ratchets (bestaande
+routeringsratchet blijft slagen; nieuwe guard dat een verzamelaar niet mag schrijven). Commit-
+volgorde bewust: weekmemo (4) vóór het afsluiten van de oude aflevering (3), dan 3+5 in één commit
+zodat er geen week is waarin compliance-vondsten nergens landen.
+
+**Go gegeven op stappen 1 t/m 5 en 7**; stap 6 (archiveren) volgt apart na zien van de uitkomst.
+
+**Openstaande vraag aan Claude Code**: gaat `afslank_wezen`'s eigen `_circle_lead_van`-aanroep ook
+over op dezelfde ladder als onderdeel van deze wijziging (zodat de twee Compliance-weesprojecten
+vanzelf goed routeren zodra dit gebouwd is), of blijft dat een aparte, nog openstaande reparatie?
+
+**`_rolsuggestie` is weg** (functie + aanroep, reden in het comment). `triage_rol.py` zelf blijft
+staan: `menselijke_eigenaar` heeft nog een eigen lezer in `materiaal_memo`. De rest van `triage_rol`
+(`classificeer`, `noteer_uitkomst`, de acceptatiemeting, en `cockpit2._noteer_triage` die hem voedde)
+ligt nu dood — meegenomen in de sweep-conclusies hieronder, geen aparte actie.
+
+**De volledige sweep** (34 modules), ingedeeld naar risico:
+
+**Categorie A — direct effect, geen mens ertussen, draait in de dagpuls** (de scherpste groep):
+- `inhabitant.py` `_classify_llm`/`triage()` ✓ geverifieerd — bepaalt bij welke rol werk hoort, routeert
+  meteen naar iemands inbox. Geen mens, alleen een event als spoor achteraf.
+- `legal_signaal.py` `beoordeel`/`check()` ✓ geverifieerd — bepaalt of een nieuwsbericht Nooch raakt.
+  Bij "nee" ziet niemand het signaal ooit. Gewired in de dagpuls. **Dit is de scherpste losse plek**:
+  het enige geval waar een fout van het model onzichtbaar blijft, niet alleen fout.
+- `claims_modelpas.py` `extra_kandidaten` ✓ geverifieerd — beslist welke tekstfragmenten als
+  milieuclaim gelden zonder regex-match. Effect: een project op naam van een rol, plus een bericht.
+  Default pulse-skill.
+- `materiaal_memo.py` `_schift` — kiest welke 1-2 van tot 60 signalen de shortlist halen; wat
+  afvalt ziet niemand.
+- `skills_impl/escaleer.py` `_classify` — bepaalt of iets een bevinding is (niemand ziet het) of een
+  beslissing (founder/rol krijgt een DM), én wie die ontvangt. Kanttekening: de checklist-uitvoerder
+  die dit pad voedde is 19 sept al verwijderd, dus onduidelijk hoe vaak dit nog vuurt — vraag aan
+  Claude Code: is dit pad nu nog bereikbaar in productie?
+- `scope_nudge.py` `match_project_to_role` — stuurt een scope-nudge naar een rol. Laag risico, en
+  Noochie staat op prod op slapend, dus dit tikt nu niet.
+- `skills_impl/claim_evidence.py` `_verify_brand` — bepaalt per merk/claim of iets bevestigd is; dat
+  voedt of een milieuclaim in de Kroniek als "onderbouwd" (groen, geen taak) geldt. De sweep weet zelf
+  niet zeker of dit in de praktijk een claim groen kán maken zonder mensbeoordeling — vraag aan Claude
+  Code: kan dat, en zo ja, is dat gewenst?
+
+Twee van deze zeven (`claims_modelpas` en `claim_evidence`) raken rechtstreeks milieuclaims — precies
+het domein waar Nooch op "proof, not words" staat en waar een verkeerde automatische classificatie
+reputatie- en zelfs juridisch risico is (greenwashing-toetsing kijkt naar precies dit soort claims).
+Samen met `legal_signaal` (onzichtbare no's) zijn dit de drie waar ik zou beginnen als er geprioriteerd
+moet worden, boven de andere vier in categorie A.
+
+**Categorie A2 — direct effect per item, maar een mens startte de batch**: `sluitronde.py` `_panel`
+(panel stemt over een kans, zet onomkeerbaar, kiest trekkende rol — `--apply` gate op batchniveau,
+geen per-kans-bevestiging) en `vastgelopen_route.py` (zie hierboven). Zelfde vorm, zelfde soort fix
+denkbaar.
+
+**Categorie B — mét mens ertussen, compliant**: `skill_match.plan_offers`, `wizard.plan_items`,
+`claims_context.beoordeel`, `library_skills.KeywordReviewSkill._llm` (advies, geen enkel pad schrijft
+dit door naar `Library.curate` zonder mensactie), `governance_review` (geen productie-aanroeper
+gevonden, alleen tests), `cockpit2._finetune_voorstellen`. Geen actie nodig.
+
+**Categorie C — LLM-oordeel met organisatorische strekking, maar niet gewired** (dode code of geen
+aanroeper): `escalation_router.escaleer()`/`route_item()` ✓ (al bekend), `roloverleg.tension_validity`,
+`roloverleg.amend_with_reaction`/`flip_facet`, `inbox_actions.pick_governance_target` + 4 andere,
+`inhabitant._payload_opnieuw`, `bevinding.herschrijf` (alleen tests), `umbrella.umbrella_terms` (geen
+aanroeper), `governance_review.*`, en sinds vandaag ook `triage_rol.classificeer`/`noteer_uitkomst`.
+Geen urgentie, meenemen zodra er toch in gewerkt wordt.
+
+Losstaand, buiten de strikte definitie maar wel relevant: `views/metrics._llm_says_comparable` zet
+een break-migratie om naar backcast, waarna de meetreeks anders wordt behandeld — een mens start de
+opslagactie maar ziet dit methodologische oordeel niet vooraf. Geen toewijzing, wel een besluit dat
+cijfers beïnvloedt die elders (o.a. `waarde_audit`) weer als basis dienen. Voeg toe aan de
+prioriteitslijst hierboven: als er íets stilletjes cijfers vervormt, is dat dit.
+
+**Categorie D — puur inzicht, geen effect**: lange lijst (coherence, roles._reflect, verslag,
+views/noochie, skills_impl/voorstel en tegenspraak, deliverable_kop, leesextract, reeds_bekend,
+materiaal_memo._schrijf_memo, inbox_actions.answer_pending_questions, wizard.sharpen_outcome/
+guess_impact, kennis_embeddings, llm_keuze) — geen actie. Twee zijaantekeningen: `keyword_nominations`
+gebruikt helemaal geen LLM (was een misvatting); en `inoreader_ingest` heeft nog `llm_reason`/
+`mission`/`focus` in zijn signatuur terwijl de LLM-poort op 19 sept is weggehaald — de ingest is nu
+ongefilterd. **Vraag aan Claude Code**: is dat bewust (filtering gebeurt elders) of een onbedoeld
+bijeffect van de poort-verwijdering? Los randgeval: `roles._weigh_in` is zelf inzicht, maar roept bij
+`niet_ok` `sense_tension` aan, wat weer de triage-routering uit categorie A voedt — het oordeel is
+inzicht, het gevolg niet.
+
+**Mijn advies aan Stefan**: geen van de categorie-A-plekken hoeft vandaag te worden omgebouwd — dat
+zou zelf een big-bang zijn en gaat in tegen de net vastgelegde regel. Wel vier dingen nu, klein en
+losstaand van de rest: (1) de data-vraag over "Harry Hemp" (echte, nog niet opgeruimde rol, of
+verzonnen voorbeeld?) — eerst uitzoeken, dat bepaalt of er ook een stale-data-probleem is naast het
+ontwerpprobleem; (2) de ontwerpvraag of `_mens_ontvanger()` (en `sluitronde`'s `_panel`) vastgelopen
+werk altijd naar Stefans eigen inbox moet sturen in plaats van een door het model gekozen
+rol-eigenaar — dat is Stefans eigen, eerder gestelde uitgangspunt en principieel een schonere
+oplossing dan alleen de grond tonen; (3) de drie overige openstaande verificatievragen aan Claude Code
+(escaleer-bereikbaarheid, claim_evidence-groen-zonder-mens, inoreader-ingest-filtering); en (4) een
+expliciete keuze van Stefan over de volgorde waarin categorie A wordt aangepakt zodra er toch in
+gewerkt wordt — suggestie: `legal_signaal` eerst (onzichtbare fout), dan de twee claims-plekken, dan
+de rest. Geen conclusie nodig over wát er per plek verandert — dat is een ontwerpkeuze per geval.
+
+## 3a klaar, drie dingen geblokkeerd voordat fase 11 en de deploy verdergaan (20 sept, commit `9c12821`)
+
+**3a (kanaal-ongelezen-indicator)**: klaar en getest (3738 passed). Modifier op `.msg-kanaal`, geen
+nieuwe component, drie dragers (vet, telling, tint — nooit kleur alleen). Eén aanname in de eigen
+spec bleek fout en stuurde het ontwerp: er bestonden geen "bestaande lees-tijdstippen" om op te lezen
+(`ChannelStore` heeft geen leesstatus, en `NotifStore`, die dat wél had, is in B2 opgeheven). Geen
+nieuwe store gebouwd — "wanneer heeft deze persoon dit gelezen" hangt aan `PeopleStore`, ongelezen
+zelf is nooit opgeslagen maar een vergelijking tussen twee tijdstippen (zelfde vorm als
+`wiki.grond_status`). Drie valkuilen zijn getest: je eigen bericht telt niet mee, het kanaal dat je nú
+open hebt staat in de lijst nog als ongelezen, en de stand loopt nooit terug.
+
+**Terechte correctie op mij**: ik zei "Messages-navigatie bevestigd zoals voorgesteld" zonder te
+zeggen wáár dat voorstel staat. Claude Code zocht in de fase-11-spec en in
+`ux_voorstel_best_practices_20sept.md`, vond het daar niet, en twijfelde terecht of het bestond —
+**het staat wél**, in ditzelfde bestand, sectie "Messages-prototype gebouwd (20 sept)" (rail-inklap
+naar 64px op desktop, org-boom achter een flyout-icoon; op mobiel een hamburger-overlay met
+drill-down in drie niveaus). Die sectie zegt zelf nog "geen bouwinstructie, nog niet bevestigd door
+Stefan" — dat klopte toen hij geschreven werd, maar is inmiddels achterhaald: het is nu bevestigd.
+**Verduidelijkt**: de proza-beschrijving in die sectie (met de concrete maten: 64px rail, drie
+mobiele niveaus) ís de bouwspec. Er is geen aparte prototype-HTML nodig voor dit deel — de losse
+Design-canvas-Artifact van gisteren was verkennend materiaal, geen bronbestand.
+
+**Nog wel een echt gat**: het HTML-prototype waar `ux_voorstel_best_practices_20sept.md` naar
+verwijst voor laag 1 en 2 (klopt, niet nodig, spec is concreet genoeg) én laag 3 (sleep-patroon op
+het Projects-bord, checklist-klik — hier is het prototype wél de enige gedragsspec) ontbreekt. Ik heb
+'m ook niet. **Aan Stefan gevraagd**: waar staat die link?
+
+**Deploy — groen licht**: de blokkerende voorwaarde (3a klaar en getest) is gehaald. Er staan twaalf
+ongedeployde commits (B2, villageraad, de vijf LLM-besluiten van vandaag, de categorie-C-opruiming,
+bevinding.py, 3a), prod draait nog `8ecf29a`. Claude Code's eigen advies — nu deployen wat klaarstaat
+(incl. 3a), fase 11 laag 1+2 in een tweede ronde, laag 3 wachten op het prototype — **overgenomen**.
+Twaalf commits in één keer is al genoeg risico om niet ook nog fase 11 erbovenop te stapelen.
+
+## Deploy uitgevoerd en live op prod (20 sept, commit `462bcaf`/`462bcaf9e`)
+
+De twaalf klaarstaande commits zijn gedeployed. Vooraf een databack-up gezet
+(`backups/data_20sept_predeploy.tgz`, 100MB). PR #518 groen (2× tests + GitGuardian), squash-merged
+naar main, `deploy.sh` gedraaid: health-check HTTP 303, beide services actief, geen journal-fouten.
+
+**Smoke-test op echte productiedata**: 41 DM-kanalen, `/messages` rendert (18.950 tekens); de
+ongelezen-indicator (3a) werkt op Stefans eigen kanalen; `bestemming(compliance)` valt nu correct
+terug op Stefan Wobbens inbox, wat de twee wees-projecten bij Compliance daadwerkelijk oplost;
+`notifications.py`, `views/inbox.py` en `matchmaker.py` bestaan niet meer op de server.
+
+**De merge zelf had 13 conflicten** (hetzelfde squash-artefact-patroon als bij PR #517). Claude Code
+heeft eerst gecontroleerd dat main geen commits miste die niet ook in de branch zaten, toen overal de
+branch-versie genomen, en **daarna de merge-uitkomst byte-voor-byte tegen de branch vergeleken** in
+plaats van te vertrouwen op "geen conflicten meer". Die laatste stap was geen overbodige
+voorzichtigheid: `git checkout --ours` had een modify/delete-conflict niet schoon opgelost en had
+stilletjes 4 bestanden/467 regels teruggezet, waaronder een `cli.py`-pad dat nog de inmiddels
+verwijderde `st.notif`-store aanriep — een dode code-route zonder testdekking, alleen gevonden door
+te vergelijken, niet doordat git "klaar" zei.
+
+**Eén open vraag van Claude Code**: tijdens de merge zijn 747 regels briefwijzigingen gestashed en
+staan nu weer in de werkmap, maar zijn niet gecommit naar git en dus niet meegegaan naar main/prod.
+Claude Code heeft ze bewust niet zelf gecommit ("het zijn jouw woorden") en vraagt of Stefan ze alsnog
+gecommit wil hebben.
+
+**Mijn antwoord daarop**: commit ze. Het zijn legitieme, eerder al besproken briefinhoud (geen
+scratch-tekst), en ze laten staan in een ongecommitte werkmap is het enige scenario waarin ze
+alsnog stil verloren kunnen gaan (een volgende git-operatie, een schijfprobleem, een nieuwe stash).
+Er is geen reden om ze apart te houden van de rest van de brief-historie.
+
+**Nu live op prod**: B2 (het opruimwerk van fase 8), de vijf "AI is instrument"-besluiten (routering
+weg bij `vastgelopen_route`/`sluitronde`, hele triage-keten weg, governance-loop dicht,
+`scope_nudge` weg, `_finetune_voorstellen` weg), de categorie-C-opruiming, `bevinding.py` weg, en de
+ongelezen-indicator (3a).
+
+**Drie dingen staan nog open, in Stefans eigen volgorde**: (1) pijplijnstappen 1 t/m 5 en 7 (al
+akkoord, Claude Code begint bij stap 1, de gedeelde grondings-poort); (2) fase 11 laag 1+2 in een
+tweede ronde, inclusief de nu bevestigde Messages-navigatie; (3) stap 6 (archiveren) pas na Stefans
+review van de uitkomst van 1-5.
+
 ## Wat hierna nog open staat
 
 - De geplande-taak-mechaniek zelf (nodig voor: het maandrapport dat straks in de Wiki-schermen uit
@@ -1980,6 +2759,14 @@ het uitgangspunt wordt voor de Messages-scoping-ronde, of dat hij een andere ric
 - De schermen die in fase 9 bewust zijn overgeslagen (te bepalen tijdens die fase zelf) — apart te
   beslissen: los laten, of een tiende fase.
 - orphan_report.py: of hij ooit handmatig op de server heeft gedraaid, staat nog open bij Stefan.
+- `village waarde_audit`/`village villageraad`: hoort iemand dit periodiek te draaien? Beide laatste
+  outputs zijn bijna een maand oud (26/28 aug), relevant nu bekend is dat `afslanken` op de eerste
+  leunt.
+- `vastgelopen_route`/`naar_mens()`: is het dry-run-rapport per toewijzing herbeoordeelbaar (toont
+  onderbouwing) of alleen een kale naam? Enige nog openstaande vraag uit de "AI is instrument"-
+  inventarisatie, gesteld aan Claude Code, nog niet beantwoord.
+- Rest van de sweep over de resterende 34 LLM-modules ("AI is instrument"-inventarisatie) — Claude
+  Code meldt zich zodra die binnen is.
 - weten_we_dit_al (skills_impl) migreren van zijn eigen kennisbank.json-store naar de Wiki-laag
   (AttachmentStore), zodat kennis nog maar op één plek zit — bewust uitgesteld tijdens fase 2, geen
   onderdeel van deze opruimronde.

@@ -378,6 +378,43 @@ def _al_lopend(ledger, bevinding: dict, db: dict) -> dict | None:
     return None
 
 
+#: De stoplichten waarover een mens iets moet beslissen. Groen is geen nul maar een uitkomst
+#: ("deze claim is onderbouwd"); hij telt alleen niet als werk.
+MELDBAAR = ("red", "orange", claims_db.ESCALEREN)
+
+
+def nieuwe_bevindingen(ledger, db: dict, bevindingen: list[dict]) -> dict:
+    """Welke bevindingen vragen een BESLISSING die nog nergens loopt? → {nieuw, overgeslagen, lopend}
+
+    LEEST ALLEEN. Dit was tot 20 september 2026 de eerste helft van `zet_op_bord` en bestond niet
+    los; toen de wekelijkse scan stopte met taken aanmaken (pijplijn stap 3) zou die helft mee zijn
+    verdwenen — en dat is precies de regel die in de kop van `claims_site_scan` staat: "levert
+    alleen NIEUWE bevindingen — wat al in de werklijst staat of al als taak loopt, telt niet".
+
+    Eén definitie, twee lezers (`zet_op_bord` hieronder en de scan). Zou de scan zijn eigen versie
+    krijgen, dan drijven "al bekend" op het bord en "al bekend" in de memo uiteen zonder dat iets
+    zich meldt (CLAUDE.md, reference don't copy).
+
+    `lopend` zegt WAAR het al loopt, zodat een mens na een 'niets nieuws' kan doorklikken in plaats
+    van het te moeten geloven."""
+    bestaand = _bestaande_sleutels(ledger, db)
+    nieuw, overgeslagen, lopend = [], 0, []
+    for b in bevindingen:
+        if b.get("stoplicht") not in MELDBAAR:
+            continue
+        if _dekt(b, bestaand):
+            overgeslagen += 1
+            bestaat = _al_lopend(ledger, b, db)
+            if bestaat and bestaat not in lopend:
+                lopend.append(bestaat)
+            continue
+        nieuw.append(b)
+        # Binnen één run niet dubbel: twee vindplaatsen van dezelfde claim zijn één beslissing.
+        bestaand.add(taak_sleutel(b))
+        bestaand.update(_zoektermen(b))
+    return {"nieuw": nieuw, "overgeslagen": overgeslagen, "lopend": lopend}
+
+
 def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
                 rol_voor, trigger: str = "human") -> dict:
     """Maak een taak per rode/oranje bevinding die nog nergens loopt, en stuur de rol een bericht.
@@ -391,18 +428,10 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
     een bord dat niemand die dag opent."""
     ledger = omgeving.projects
     records = getattr(omgeving, "records", None)
-    bestaand = _bestaande_sleutels(ledger, db)
-    aangemaakt, overgeslagen, lopend, zonder_eigenaar = [], 0, [], []
-    from nooch_village.claims_db import ESCALEREN
-    for b in bevindingen:
-        if b.get("stoplicht") not in ("red", "orange", ESCALEREN):
-            continue
-        if _dekt(b, bestaand):
-            overgeslagen += 1
-            bestaat = _al_lopend(ledger, b, db)
-            if bestaat and bestaat not in lopend:
-                lopend.append(bestaat)
-            continue
+    schifting = nieuwe_bevindingen(ledger, db, bevindingen)
+    aangemaakt, zonder_eigenaar = [], []
+    overgeslagen, lopend = schifting["overgeslagen"], schifting["lopend"]
+    for b in schifting["nieuw"]:
         sleutel = taak_sleutel(b)
         titel, beschrijving = taak_tekst(b, b.get("url") or bron)
         eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records, b.get("stoplicht", ""),
@@ -429,8 +458,6 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
                            "pagina": b.get("pagina") or "",
                            "onderbouwing": b.get("onderbouwing", ""),
                            "herkomst": b.get("herkomst", "")})
-        bestaand.add(sleutel)                          # binnen één run niet dubbel
-        bestaand.update(_zoektermen(b))
     return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,
             "zonder_eigenaar": zonder_eigenaar,
             "rood": sum(1 for t in aangemaakt if t["stoplicht"] == "red")}

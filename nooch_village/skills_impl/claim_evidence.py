@@ -48,20 +48,22 @@ _VERIFY_PROMPT = (
     "Page:\n{text}"
 )
 
-_MIN_SNIPPET = 20        # een citaat korter dan dit is te generiek om als grond te tellen
+# `_MIN_SNIPPET` en `_norm` stonden hier; allebei zijn ze op 20 september 2026 naar `weekmemo`
+# verhuisd, waar de grondings-poort nu voor beide bronnen leeft. Zie `_grounded` hieronder.
 _MIN_PAGE = 200          # minder tekst → pagina niet zinvol leesbaar
-
-
-def _norm(s: str) -> str:
-    """Whitespace-genormaliseerd en case-fold, voor de letterlijk-in-tekst-check."""
-    return re.sub(r"\s+", " ", s or "").strip().casefold()
 
 
 def _grounded(snippet: str, text: str) -> bool:
     """Grondings-poort: het citaat moet (genormaliseerd) letterlijk in de paginatekst staan én niet
-    triviaal kort zijn. Zo dekt de skill de faalmodus van de autonome variant af: geen gehallucineerd bewijs."""
-    s = _norm(snippet)
-    return len(s) >= _MIN_SNIPPET and s in _norm(text)
+    triviaal kort zijn. Zo dekt de skill de faalmodus van de autonome variant af: geen
+    gehallucineerd bewijs.
+
+    `streng=True`: leestekens tellen WEL mee. Hier is het citaat het bewijs — een Kroniek-record dat
+    grondt op een zin die net iets anders op de pagina staat, is geen bewijs maar een parafrase, en
+    daar beroept zich later iemand op. De regel zelf staat sinds 20 september 2026 in `weekmemo`;
+    zie daar waarom hij verhuisde en wat het verschil met `streng=False` precies is."""
+    from nooch_village.weekmemo import gegrond
+    return gegrond(snippet, text, streng=True)
 
 
 def _parse_json(raw: str) -> dict | None:
@@ -94,6 +96,66 @@ _OORDEEL = {
     "leeg":        "nothing found — pages readable, no such claim on them",
     "fout":        "failed — search or fetch failed, no page could be read",
 }
+
+
+#: Deze bron levert `precisie`: de Kroniek draagt oordelen die er al liggen, en een verkeerd
+#: doorgegeven oordeel is duurder dan een gemist. Zelfde grond als `streng=True` bij de
+#: grondings-poort hierboven: hier is het citaat het bewijs.
+DREMPEL = "precisie"
+
+#: De statussen die iets te MELDEN hebben. `bevestigd` is een claim die staat — dat is nieuws voor
+#: de weekmemo (een concurrent die zijn claim wél onderbouwt), en `fout` betekent dat we het niet
+#: konden nakijken, wat óók iets is om te weten. `leeg` haalt de memo niet: "we vonden de claim
+#: niet" is de normale uitkomst van een scan en zou de memo vullen met afwezigheid.
+MELDBAAR = ("bevestigd", "fout")
+
+
+def verzamel(ledger, *, sinds: float = 0.0, skill: str = "claim_evidence") -> list:
+    """De Kroniek-records van deze skill, als `weekmemo.Signaal`.
+
+    LEEST ALLEEN, en dat is hier makkelijker dan bij de andere adapters: deze skill was al
+    side-effect-free (de rol/dispatch-laag schreef de records, niet de skill zelf). De verzamelaar
+    leest dezelfde Kroniek terug.
+
+    GEEN MODELAANROEP. De andere vier bronnen laten een model iets beoordelen; hier is het oordeel
+    al geveld en vastgelegd op het moment van de run. Nog een keer vragen zou een tweede oordeel
+    over hetzelfde feit zijn — en dat is precies wat de Kroniek moet voorkomen."""
+    from nooch_village.weekmemo import Signaal
+
+    uit = []
+    for r in (ledger.all_records() if ledger is not None else []):
+        if str(r.get("skill") or "") != skill:
+            continue
+        if str(r.get("status") or "") not in MELDBAAR:
+            continue
+        try:
+            ts = float(r.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            ts = 0.0
+        if ts < sinds:
+            continue
+        meta = r.get("meta") if isinstance(r.get("meta"), dict) else {}
+        merk = str(meta.get("brand") or meta.get("merk") or "")
+        claim = str(r.get("query") or "")
+        if not merk and " — " in claim:
+            # HET MERK ZIT IN DE QUERY. De skill stelt zijn vraag als "<merk> — <claim>" en zet
+            # `meta.brand` niet altijd; op de echte Kroniek (8 records, 20 sept) was dat bij alle
+            # acht zo. Zonder deze regel leest elk bewijs-signaal als "een merk — claim 'Vivo —
+            # biodegradable…'": het merk stond er wél, maar twee keer verstopt. Splitsen is hier
+            # geen gok maar het omgekeerde van hoe de vraag is samengesteld.
+            merk, claim = (deel.strip() for deel in claim.split(" — ", 1))
+        uit.append(Signaal(
+            bron="bewijs",
+            # De TEKST is wat er is vastgesteld, in gewone woorden. Een lezer die "bevestigd" ziet
+            # zonder te weten waarover, heeft niets.
+            tekst=(f"{merk or 'een merk'} — claim {claim!r}: {r.get('status')}").strip(),
+            vindplaats=str(r.get("source") or ""),
+            gevonden_op=ts,
+            herkomst=str(r.get("id") or ""),
+            extra={"status": str(r.get("status") or ""), "merk": merk, "claim": claim,
+                   "citaat": str(meta.get("citaat") or meta.get("evidence") or "")}))
+    uit.sort(key=lambda s: -s.gevonden_op)
+    return uit
 
 
 class ClaimEvidenceSkill(Skill):

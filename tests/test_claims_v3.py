@@ -618,6 +618,9 @@ def test_scan_neemt_escaleren_mee(tmp_path, monkeypatch):
     ctx.settings = {}
     pagina = "<html><body>Onze pure, schone schoenen</body></html>"
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina)}, ctx)
-    eigenaren = {t["owner"] for t in uit["aangemaakt"]}
-    assert eigenaren == {"compliance"}
-    assert all(t["titel"].startswith("⚖️") for t in uit["aangemaakt"])
+    # Sinds stap 3 (20 sept 2026) maakt de scan geen taken meer aan, dus de eigenaar-assertie is
+    # vervallen; de vraag die deze test stelt is onveranderd: valt `escaleren` weg zoals groen?
+    stoplichten = {b["stoplicht"] for b in uit["bevindingen"]}
+    assert claims_db.ESCALEREN in stoplichten
+    assert "green" not in stoplichten
+    assert ctx.projects.all() == []

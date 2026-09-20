@@ -170,9 +170,14 @@ def _scan_omgeving(tmp_path, monkeypatch, *, laat_schrijven_falen: bool):
             raise OSError("schijf vol")
         monkeypatch.setattr(cdb, "overlay_set_status", _kapot)
 
+    # DE NAAD IS VERHUISD (20 september 2026): de scan meldt via `signaal.stuur_op_pad` in plaats
+    # van via `claims_board.bericht_aan_rol`. Dat is geen implementatiedetail maar het punt van de
+    # wijziging — `bericht_aan_rol` maakt bij een AI-bemande rol een PROJECT aan, en dat is precies
+    # het automatische werk dat hier weg moest.
     berichten = []
-    monkeypatch.setattr("nooch_village.claims_board.bericht_aan_rol",
-                        lambda ctx, rol, tekst, **k: berichten.append((rol, tekst)) or [rol])
+    monkeypatch.setattr("nooch_village.signaal.stuur_op_pad",
+                        lambda dd, soort, doel, tekst, **k: berichten.append((doel, tekst))
+                        or [f"dm:{doel}"])
 
     class _Ctx:
         data_dir = dd

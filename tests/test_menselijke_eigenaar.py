@@ -5,6 +5,12 @@ oordeelt én bezit" alleen per toeval kloppen, en breekt het stil zodra de org v
 
 WAAROM GEEN VASTE ID: `creator_of_shoes` is vandaag het antwoord, niet de regel. Rolvervulling en
 rol-eigenaarschap veranderen; een bevroren id wijst dan stil naar de verkeerde plek.
+
+WAT ER OP 20 SEPTEMBER 2026 VERANDERDE (pijplijn stap 5). De ladder had een tweede trede: hield
+niemand het domein, dan matchte `classificeer` de tekst tegen de accountabilities en DAT werd het
+adres. Een model dat een ontvanger aanwijst wijst werk toe, en dat is de grens uit CLAUDE.md ("AI
+is instrument, geen rol"). De trede is weg; het modeloordeel reist mee als `voorstel_regel` — een
+zin in het bericht, die niets verplaatst. `test_het_modelvoorstel_is_nooit_het_adres` is de guard.
 """
 from __future__ import annotations
 
@@ -35,9 +41,16 @@ def _dm_teksten(st_of_dd, rol_of_persoon=None):
 
 @pytest.fixture
 def dorp(monkeypatch):
-    """Een dorp waarin ik per test bepaal wie welke rol vervult."""
-    staat = {"match": "", "mensen": {}, "lead": {}}
+    """Een dorp waarin ik per test bepaal wie welk domein houdt en wie welke rol vervult.
 
+    `eigenaar` is de VERKLARING (wie houdt het domein) en `match` is wat het MODEL ervan vindt.
+    Ze staan bewust los van elkaar: precies daarin zit het verschil dat deze tests bewaken."""
+    staat = {"eigenaar": "", "match": "", "mensen": {}, "lead": {}}
+
+    monkeypatch.setattr(triage_rol, "domein_eigenaar",
+                        lambda st, domein: {"rol": staat["eigenaar"],
+                                            "grond": (f"houdt het domein {domein!r}"
+                                                      if staat["eigenaar"] else "geen eigenaar")})
     monkeypatch.setattr(triage_rol, "classificeer",
                         lambda tekst, records, **kw: {"rol": staat["match"],
                                                       "grond": "gematcht door de secretary"})
@@ -51,36 +64,59 @@ def _st():
     return types.SimpleNamespace(records=object())
 
 
-def test_een_bemande_rol_krijgt_het_werk(dorp):
-    dorp["match"] = "creator_of_shoes"
+def test_de_bemande_domein_eigenaar_krijgt_het_werk(dorp):
+    """Het adres is een governance-feit: deze rol HOUDT dit domein."""
+    dorp["eigenaar"] = "creator_of_shoes"
     dorp["mensen"] = {"creator_of_shoes": ["lotte"]}
-    uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X")
+    uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X", domein="Materials")
     assert uit["rol"] == "creator_of_shoes" and uit["mens"] == "lotte"
     assert uit["via"] == ""                               # geen omleiding nodig
+    assert uit["voorstel_regel"] == ""                    # niets te voorstellen: het is verklaard
+
+
+def test_het_modelvoorstel_is_nooit_het_adres(dorp):
+    """DE GUARD. Het model wijst een rol aan die bestaat, bemand is en perfect zou passen — en het
+    bericht gaat er tóch niet heen. Een modeloordeel met organisatorisch effect hoort een
+    mensbeslissing ervóór te hebben, niet erna als correctie."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    dorp["eigenaar"] = ""                                 # niemand houdt het domein
+    dorp["match"] = "creator_of_shoes"                    # het model weet het zeker
+    dorp["mensen"] = {"creator_of_shoes": ["lotte"], FOUNDER_ROLE_ID: ["stefan"]}
+    uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X", domein="Materials")
+    assert uit["rol"] == FOUNDER_ROLE_ID and uit["mens"] == "stefan"
+    assert uit["voorstel"]["rol"] == "creator_of_shoes"   # het oordeel gaat niet verloren …
+    assert "creator_of_shoes" in uit["voorstel_regel"]    # … het wordt een zin
+    assert "niet toegewezen" in uit["voorstel_regel"]
 
 
 def test_een_AI_VERVULDE_rol_is_een_dead_letter(dorp):
     """DE GUARD. Een persona leest de NotifStore nooit, dus een bericht daarheen valt stil.
     `bestemming()` hopt hier NIET — die vraagt of de rol kan UITVOEREN, en dat kan een persona.
     Wij vragen of er iemand LEEST, en dat is een andere vraag."""
-    dorp["match"] = "harry_hemp"
+    dorp["eigenaar"] = "harry_hemp"
     dorp["mensen"] = {"harry_hemp": [], "nooch_lead": ["stefan"]}   # AI-vervuld → geen mens
     dorp["lead"] = {"harry_hemp": "nooch_lead"}
-    uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X")
+    uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X", domein="Materials")
     assert uit["rol"] == "nooch_lead" and uit["mens"] == "stefan"
     assert "geen menselijke vervuller" in uit["via"]
 
 
-def test_geen_gegronde_match_valt_open_naar_de_lead(dorp):
+def test_zonder_domein_eigenaar_gaat_het_naar_de_founder(dorp):
+    """Niets verklaard = niet stil gokken. Het gaat naar het laatste adres dat altijd bestaat."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    dorp["eigenaar"] = ""
     dorp["match"] = ""
+    dorp["mensen"] = {FOUNDER_ROLE_ID: ["stefan"]}
     uit = triage_rol.menselijke_eigenaar(_st(), "iets onherkenbaars")
-    assert uit["via"].startswith("geen gegronde match")
+    assert uit["rol"] == FOUNDER_ROLE_ID
+    assert uit["via"].startswith("geen rol houdt dit domein")
+    assert uit["voorstel_regel"] == ""                    # geen match = geen zin
 
 
 def test_ook_de_lead_onbemand_valt_open_naar_de_founder(dorp):
     """Nooit stil laten vallen: er is altijd een laatste adres."""
     from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    dorp["match"] = "harry_hemp"
+    dorp["eigenaar"] = "harry_hemp"
     dorp["mensen"] = {}
     dorp["lead"] = {"harry_hemp": "lege_lead"}
     uit = triage_rol.menselijke_eigenaar(_st(), "sample aanvragen bij X")
@@ -91,11 +127,11 @@ def test_ook_de_lead_onbemand_valt_open_naar_de_founder(dorp):
 def test_de_uitkomst_is_leesbaar_zonder_de_code_ernaast(dorp):
     """`via` en `waarom` zijn er voor de droge run: een bestemming zonder uitleg dwingt de lezer
     de code te openen om te zien of hij klopt."""
-    dorp["match"] = "harry_hemp"
+    dorp["eigenaar"] = "harry_hemp"
     dorp["mensen"] = {"nooch_lead": ["stefan"]}
     dorp["lead"] = {"harry_hemp": "nooch_lead"}
-    uit = triage_rol.menselijke_eigenaar(_st(), "x")
-    assert uit["waarom"] == "gematcht door de secretary"
+    uit = triage_rol.menselijke_eigenaar(_st(), "x", domein="Materials")
+    assert uit["waarom"] == "houdt het domein 'Materials'"
     assert "harry_hemp" in uit["via"]
 
 

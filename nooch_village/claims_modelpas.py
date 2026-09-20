@@ -41,7 +41,10 @@ BRON_LETTER = "M"                  # naast de bestaande A (EU-wet), B (ACM), C (
 
 _MAX_TEKST = 6000                  # per pagina; genoeg voor de copy, begrensd in tokens
 _MAX_KANDIDATEN = 12               # een pagina met meer dan dit is een herschrijf-opdracht, geen lijst
-_MIN_FRAGMENT = 20                 # korter is te generiek om als vindplaats te dienen
+# De minimumlengte staat sinds 20 september 2026 in `weekmemo.MIN_FRAGMENT` — één getal voor
+# beide bronnen, in plaats van twee keer 20 die toevallig gelijk waren. `_norm` blijft hier wél
+# staan: `_al_gevlagd` hieronder gebruikt hem om te zien of de regex deze claim al ving, en dat is
+# een andere vraag dan gronden.
 _NIET_WOORD = re.compile(r"[^a-z0-9]+")
 
 
@@ -121,9 +124,59 @@ def _extract(raw):
 
 def _gegrond(fragment: str, tekst: str) -> bool:
     """Grondings-poort: het fragment moet (genormaliseerd) letterlijk in de tekst staan en niet
-    triviaal kort zijn. Zo kan een model geen claim verzinnen die een taak wordt."""
-    f = _norm(fragment)
-    return len(f) >= _MIN_FRAGMENT and f in _norm(tekst)
+    triviaal kort zijn. Zo kan een model geen claim verzinnen die een taak wordt.
+
+    `streng=False`: leestekens tellen niet mee. Dat past bij de posture van deze module — bij
+    twijfel meldt het model de zin, want een onterechte vlag kost een muisklik en een gemiste claim
+    een boete. Een model dat correct citeert maar een komma anders zet, verliest zijn vondst hier
+    dus niet. De regel zelf staat sinds 20 september 2026 in `weekmemo`; zie daar waarom hij
+    verhuisde en wat het verschil met `streng=True` precies is."""
+    from nooch_village.weekmemo import gegrond
+    return gegrond(fragment, tekst, streng=False)
+
+
+#: Deze bron levert `recall`: bij twijfel melden. Dat staat in de kop van deze module en het is
+#: geen stijlkeuze — een onterechte vlag kost een muisklik, een gemiste claim een boete.
+DREMPEL = "recall"
+
+
+def verzamel(data_dir: str, *, sinds: float = 0.0) -> list:
+    """De modelvondsten uit de laatste site-scan, als `weekmemo.Signaal`.
+
+    LEEST DE SCAN-MARKER, want deze bron kan niet zelf verzamelen. De andere adapters lezen uit
+    opgeslagen data (radar, Kroniek); deze werkt op PAGINATEKST, en die bestaat alleen tijdens een
+    scan. Tot 20 september 2026 gingen de bevindingen rechtstreeks naar `claims_board` en waren ze
+    daarna weg — de marker droeg alleen tellingen. Sinds die datum bewaart `markeer_week` ze
+    (afgekapt op `BEVINDINGEN_CAP`), en leest deze adapter ze terug.
+
+    ALLEEN DE MODELVONDSTEN. Wat de regex vond is geen vondst van deze bron; die heeft zijn eigen
+    weg (het scherm, en `claims_context` als filter erop). Hier staat wat de recall-pas TOEVOEGDE
+    aan wat de lijst al wist — dat is precies het deel dat tot vandaag ongefilterd een project werd."""
+    from nooch_village.skills_impl.claims_site_scan import laatste_run
+    from nooch_village.weekmemo import Signaal
+
+    marker = laatste_run(data_dir) or {}
+    try:
+        at = float(marker.get("at") or 0.0)
+    except (TypeError, ValueError):
+        at = 0.0
+    if at < sinds:
+        return []
+    uit = []
+    for b in (marker.get("bevindingen") or []):
+        if str(b.get("herkomst") or "") != HERKOMST:
+            continue                                  # regex-bevindingen zijn niet van deze bron
+        gevonden = (b.get("gevonden") or [""])[0]
+        uit.append(Signaal(
+            bron="claim_model", tekst=str(gevonden or b.get("term") or ""),
+            vindplaats=str(b.get("url") or b.get("pagina") or ""),
+            gevonden_op=at, herkomst=str(b.get("term") or ""),
+            extra={"stoplicht": str(b.get("stoplicht") or ""),
+                   "pagina": str(b.get("pagina") or ""),
+                   "week": str(marker.get("last_week") or ""),
+                   "afgekapt": len(marker.get("bevindingen") or [])
+                               < int(marker.get("bevindingen_totaal") or 0)}))
+    return uit
 
 
 def _al_gevlagd(fragment: str, bestaande: list[dict]) -> bool:
