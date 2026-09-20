@@ -187,29 +187,34 @@ def test_de_projecttitel_wordt_op_een_woordgrens_afgekapt():
 
 # ── Twee gesprekken, twee breinen (29 aug 2026) ─────────────────────────────
 
-def test_de_twee_router_vragen_draaien_niet_op_hetzelfde_brein():
-    """Dezelfde prompt, een andere afweging.
+def test_de_twee_router_vragen_draaien_nu_op_hetzelfde_brein():
+    """Deze test heette `..._niet_op_hetzelfde_brein`, en de reden waarom staat hieronder — want hij
+    klopte, en het is de VERANDERING die hem omdraaide, niet een nieuw inzicht.
 
-    Gesprek 1 ("bezit een andere AI-rol dit?") is TRIAGE: een grove keuze met een goedkope fout,
-    want verkeerd gerouteerd werk komt terug via de hop-teller. Gesprek 2 ("welke MENS doet dit?")
-    is een OORDEEL waarvan de fout blijft plakken — het spoor (`vastgelopen_route.al_geland`) zorgt
-    dat een verkeerde ontvanger vandaag een betere morgen buitensluit.
+    Gesprek 1 ("bezit een andere AI-rol dit?") was altijd triage: een grove keuze met een goedkope
+    fout, want verkeerd gerouteerd werk komt terug via de hop-teller. Gesprek 2 ("welke MENS doet
+    dit?") was een OORDEEL waarvan de fout bleef plakken: het spoor (`vastgelopen_route.al_geland`)
+    zorgde dat een verkeerde ontvanger vandaag een betere morgen buitensloot. Gemeten op prod gaven
+    drie identieke droge loops over dezelfde 17 stappen drie verschillende verdelingen — het
+    goedkope model kón die vraag niet reproduceerbaar beantwoorden.
 
-    Gemeten op prod: drie identieke droge loops over dezelfde 17 stappen gaven drie verschillende
-    verdelingen (5, 2, 4 van de 17 kregen een rol), en op negen vrijwel identieke stappen koos
-    hetzelfde model vier keer wél en vijf keer NONE. Alle 17 kregen antwoord — er was geen
-    quota-probleem. Het goedkope model kán deze vraag niet reproduceerbaar beantwoorden."""
+    Sinds 20 september 2026 KIEST gesprek 2 niets meer. De bestemming is altijd de founder en het
+    antwoord is een voorstelzin in de herkomst-regel. Daarmee is het dezelfde soort vraag geworden
+    als gesprek 1: een grove keuze met een goedkope fout. Dus dezelfde ladder.
+
+    Het MEETPUNT blijft gescheiden (`MENS_SITE` ≠ `ROUTE_SITE`): het zijn nog steeds twee vragen, en
+    ze apart kunnen tellen is precies hoe de meting hierboven ooit boven water kwam."""
     from nooch_village import llm_keuze as lk
-    assert er.ROUTE_SITE in lk.GOEDKOOP
-    assert er.MENS_SITE in lk.HOOG_INZET and er.MENS_SITE not in lk.GOEDKOOP
-    assert lk.ladder_voor(er.MENS_SITE) != lk.ladder_voor(er.ROUTE_SITE)
-    assert lk.ladder_voor(er.MENS_SITE).split(",")[0].startswith("anthropic:claude-sonnet")
+    assert er.ROUTE_SITE in lk.GOEDKOOP and er.MENS_SITE in lk.GOEDKOOP
+    assert er.MENS_SITE not in lk.HOOG_INZET
+    assert lk.ladder_voor(er.MENS_SITE) == lk.ladder_voor(er.ROUTE_SITE)
+    assert er.MENS_SITE != er.ROUTE_SITE, "twee vragen, twee meetpunten"
 
 
-def test_de_mens_vraag_geeft_zijn_ladder_ook_echt_door(st, tmp_path, monkeypatch):
-    """De HOOG_INZET-lijst alleen is niet genoeg: `reason()` kijkt daar niet zelf in. Precies de val
-    waar `wizard_plan` in zat — in de lijst, maar zonder ladder, dus stil op de dorpsladder."""
-    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
+def test_de_mens_vraag_blijft_apart_gemeten(st, tmp_path, monkeypatch):
+    """De ladder is goedkoop geworden, het MEETPUNT niet verdwenen. Zonder eigen `call_site` valt
+    deze vraag samen met de routeer-calls in `llm_usage.jsonl` en is de volgende meting onmogelijk —
+    precies de val waar `wizard_plan` in zat, maar dan andersom."""
     gezien = {}
 
     def _vang(prompt, **kw):
@@ -220,7 +225,7 @@ def test_de_mens_vraag_geeft_zijn_ladder_ook_echt_door(st, tmp_path, monkeypatch
                                                                  "accountabilities": []}])
     er._mens_ontvanger(st, _project(st), "iets", "harry_hemp", [], _vang)
     assert gezien["call_site"] == er.MENS_SITE
-    assert (gezien["ladder"] or "").split(",")[0].startswith("anthropic:claude-sonnet")
+    assert gezien["ladder"] is None, "geen eigen kop meer — de dorpsladder volstaat"
 
 
 def test_het_eerste_gesprek_blijft_goedkoop(st, tmp_path, monkeypatch):
@@ -235,9 +240,7 @@ def test_het_eerste_gesprek_blijft_goedkoop(st, tmp_path, monkeypatch):
     assert gezien["call_site"] == er.ROUTE_SITE and gezien["ladder"] is None
 
 
-def test_vandaag_verandert_er_niets_aan_de_uitkomst():
-    """Eerlijk over wat deze fix nú doet: de premium-kop is onbetaald, dus `met_dorpsstaart` levert
-    nog steeds de dorpstredes. De verandering werkt zodra het krediet er is — niet eerder."""
-    from nooch_village import llm, llm_keuze as lk
-    tredes = lk.ladder_voor(er.MENS_SITE).split(",")
-    assert tredes[1:] == llm.dorpsladder().split(","), "de goedkope staart is weggevallen"
+# WAT HIER WEG IS (20 september 2026): `test_vandaag_verandert_er_niets_aan_de_uitkomst`. Die was
+# eerlijk over de premium-kop op `MENS_SITE` — onbetaald, dus `met_dorpsstaart` leverde in de
+# praktijk toch de dorpstredes, en de fix zou pas werken zodra het krediet er was. Die kop is er nu
+# af: de vraag verdient hem niet meer. Er valt dus niets meer te melden over wanneer hij aanslaat.
