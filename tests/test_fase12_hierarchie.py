@@ -44,7 +44,10 @@ GEEN_CONTAINER_LIJN = ("btn", "pill", "chip", "badge", "cl-filter", "nu-status",
                        "ibx-plus", "ibx-btn", "ibx-alaan", "ibx-add", "ibx-launch",
                        "wz-btn", "wz-add", "wz-chip", "wz-badge", "c2-burger",
                        # En het voortgangs-atoom: informatie, dus geen kader.
-                       "nu-progress")
+                       "nu-progress",
+                       # Derde ronde (21 sept): een VELD is geen container. Zie
+                       # `test_een_veld_draagt_een_onderlijn_geen_kader`.
+                       "ctrl", "fieldform", "title-edit")
 
 #: Het token dat de zwaarste lijn draagt. Eén plek, zodat "2px" hier geen tweede waarheid wordt.
 CONTAINER_TOKEN = "var(--nu-border)"
@@ -193,3 +196,50 @@ def test_het_voortgangs_atoom_is_informatie_geen_container():
     body = _body(r"^\.nu progress\.nu-progress$")
     assert re.search(r"border:\s*0", body)
     assert "var(--nu-border-subtle)" in body          # de baan, subtiel en niet zwart
+
+
+# ── derde ronde: een veld is geen container (21 september 2026) ──────────────────────────────
+
+#: De besturingselementen die een onderlijn dragen in plaats van een kader.
+VELDEN = ("input[type=text]", "input[type=search]", "input[type=email]", "input[type=number]",
+          "textarea", "select")
+
+
+def test_een_veld_draagt_een_onderlijn_geen_kader():
+    """DE AANLEIDING, geteld: de projectkaart-modal had tien losse 2px-kaders in één blik — titel,
+    pakket-label, omschrijving, checklist, elk hand-off-knopje en elk veld in de Details-kolom.
+
+    De fase-12-regel zei dat een invoerveld als container zijn kader mocht houden. Dat klopt op een
+    scherm met één veld en valt om op een scherm met twaalf: precies de muur van hokjes die fase 12
+    moest opheffen, nu in veldvorm. Een veld krijgt nu de lijn waar je TYPT en nergens anders."""
+    regels = {sel: body for sel, body in _regels()}
+    veldregel = next((b for s, b in regels.items()
+                      if s.startswith(".nu input[type=text]") and "border-bottom" in b), None)
+    assert veldregel, "de gedeelde veldregel bestaat niet"
+    assert "border: 0" in veldregel
+    assert "border-bottom: 1.5px solid var(--nu-text)" in veldregel
+    for veld in VELDEN:
+        assert veld in " ".join(regels), f"{veld} valt buiten de veldregel"
+
+
+def test_de_plek_waar_je_typt_is_de_enige_die_opvalt():
+    """Zonder focus-markering ruil je een muur van hokjes in voor een vlakte zonder oriëntatie."""
+    focus = [b for s, b in _regels() if ":focus" in s and "border-bottom-color" in b]
+    assert focus, "een veld in focus hoort zich te onderscheiden"
+    assert any("var(--nu-accent)" in b for b in focus)
+
+
+def test_omhulsels_houden_hun_kader():
+    """De andere kant van dezelfde regel. Een kaart, een popover of de modal zelf IS een omhulsel;
+    die 2px is precies wat een veld ervan onderscheidt. Verdwijnt dit, dan is er geen hiërarchie
+    meer over — alleen nog een vlakte."""
+    houders = " | ".join(sel for sel, body in _regels() if CONTAINER_TOKEN in body)
+    for klasse in ("card", "ovl-box", "datepop", "fbubble", "pkaart"):
+        assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", houders), (
+            f".{klasse} is een omhulsel en hoort {CONTAINER_TOKEN} te dragen")
+
+
+def test_de_rij_om_een_veld_draagt_geen_eigen_lijn():
+    """`.fieldform` is een rij met een veld en een knop erin. Een lijn om de rij én onder het veld
+    is twee lijnen voor één ding — en dat is hoe de muur van hokjes ontstond."""
+    assert "border-bottom: 0" in _body(r"^\.nu \.fieldform$")
