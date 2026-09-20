@@ -74,12 +74,36 @@ def _tree_html(st: _Stores, current_id: str) -> str:
                        if org.is_circle(k) or _name(k).strip().lower() not in _CORE_ROLE_NAMES],
                       key=lambda r: (not org.is_circle(r), _name(r).lower()))
 
+    def bezet_icoon(rec) -> str:
+        """Bezet of vacant, als klein icoon vóór de rolnaam (fase 11, 1a).
+
+        DEZELFDE VORMTAAL als het bord en de checklist: gevulde cirkel = bezet, gestippelde cirkel
+        = vacant. Geen nieuwe kleur en geen nieuwe vorm — `.nu-status--icoon` is een kaderloze
+        variant van het bestaande statusatoom, niet een tweede systeem.
+
+        HET WOORD STAAT ERBIJ, in een `.sr`-span. Een vorm alleen is geen status: in zwart-wit,
+        of voor wie die tinten niet onderscheidt, zijn twee cirkeltjes twee cirkeltjes. Dat is de
+        regel uit de kop van nooch-ui.css, en hij geldt ook als de vorm klein is.
+
+        Fail-soft: een onleesbare assignments-store maakt van de boom geen foutpagina. Geen
+        uitspraak is dan beter dan de bewering "vacant" — dat is precies de bewering die op
+        14 augustus 37 onterechte meldingen opleverde."""
+        try:
+            bezet = bool(st.assign.fillers_of(rec.id, record=rec))
+        except Exception:                                    # noqa: BLE001
+            return ""
+        soort, woord = ("ok", "filled") if bezet else ("open", "vacant")
+        return (f"<span class='nu-status nu-status--icoon nu-status--{soort}' "
+                f"aria-hidden='true'></span><span class='sr'>{woord}: </span>")
+
     def node_li(rec, depth: int) -> str:
         is_c = org.is_circle(rec)
         cls = ("c" if is_c else "") + (" here" if rec.id == current_id else "")
         link = f"<a class='{cls}' href='/node?id={_e(rec.id)}'"
         if not is_c:
-            return f"<li>{link}>{_e(_name(rec))}</a></li>"
+            # Alleen ROLLEN dragen het icoon. Een cirkel is geen stoel waar iemand in zit; een
+            # bezet/vacant-merkteken erop zou een vraag beantwoorden die niemand stelt.
+            return f"<li>{link}>{bezet_icoon(rec)}{_e(_name(rec))}</a></li>"
         inner = "".join(node_li(k, depth + 1) for k in kids_of(rec))
         if depth == 0:
             # De anchor (Mother Earth) blijft een vaste kop, niet inklapbaar.

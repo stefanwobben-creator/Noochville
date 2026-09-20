@@ -147,7 +147,9 @@ def test_kaart_is_link_in_publieke_view(tmp_path):
     st.projects.create(ROLE, "Visible", "human", status="running")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="", add=False)
-    assert "<a class='card pcard' href='/project?pid=" in html
+    # `.pcard-link` verving de inline `display:block;text-decoration:none` (fase 11, 1b) — de
+    # klikbaarheid is hier de vraag, niet de vorm.
+    assert "<a class='card pcard pcard-link' href='/project?pid=" in html
     assert "data-pid" not in html              # geen modal-afhankelijke div in read-only
 
 

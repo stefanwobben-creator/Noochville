@@ -38,7 +38,14 @@ def dorp():
 
 
 def _namen(html: str) -> list[str]:
-    return re.findall(r"class='msg-kanaal[^']*'[^>]*>([^<]+)</a>", html)
+    """De kanaalnamen uit de gerenderde lijst.
+
+    LEEST `.msg-knaam` EN NIET DE HELE `<a>`. Sinds fase 11 (3b) bestaat de rij uit drie delen —
+    naam, tijdstip, ongelezen-teller — dus de oude regex (`>([^<]+)</a>`) vond niets meer en gaf
+    een lege lijst terug. De test op regel ~100 telt die lijst tegen een BOVENgrens en bleef dus
+    groen omdat hij niets meer zag, niet omdat er niets mis was. Precies de stille meetfout waar
+    `test_alle_vijf_de_bronnen_vallen_onder_de_regel` in de pijplijn-ratchet ook voor bestaat."""
+    return re.findall(r"class='msg-knaam'>([^<]+)</span>", html)
 
 
 def test_zonder_zoekterm_is_de_projectlijst_afgekapt(dorp):
@@ -104,3 +111,58 @@ def test_geen_treffer_zegt_dat_ook(dorp):
     st, ik = dorp
     html = render_messages(st, ik=ik, csrf_token="t", q="zoiets-bestaat-niet")
     assert "No channel matches that" in html
+
+
+# ── Fase 11, laag 1+2: de kanaalrij, de rail en de drill-down ────────────────────────────────
+
+def test_de_kanaalrij_draagt_naam_en_tijdstip(dorp):
+    """3b: naam, wanneer, en hoeveel nieuw — in die volgorde. Zonder tijdstip moet je een kanaal
+    openen om te weten of er deze week nog iets gebeurd is, en dat is precies de vraag die een
+    lijst hoort te beantwoorden."""
+    st, ik = dorp
+    html = render_messages(st, ik=ik)
+    assert "msg-knaam" in html and "msg-tijd" in html
+    assert _namen(html), "de namen moeten leesbaar blijven in de rij"
+
+
+def test_een_kanaal_zonder_gesprek_toont_geen_tijdstip():
+    """GEEN DATA IS GEEN NUL. Een leeg kanaal heeft geen laatste bericht; "01/01/70" ziet eruit
+    als data terwijl het een bug is."""
+    from nooch_village.views.messages import _kort_tijd
+    assert _kort_tijd(0) == ""
+    assert _kort_tijd(1_700_000_000.0)                      # een echt tijdstip levert wél tekst
+
+
+def test_messages_klapt_de_zijbalk_in_tot_een_rail(dorp):
+    """Drie kolommen (navigatie, kanalen, gesprek) passen alleen als de eerste krimpt. Het WOORD
+    blijft in de DOM — een rail die alleen monogrammen rendert laat een schermlezer 'PR' horen."""
+    st, ik = dorp
+    html = render_messages(st, ik=ik)
+    assert "c2-side--rail" in html
+    assert "c2-mono" in html and "c2-lbl" in html
+    assert "Projects" in html
+
+
+def test_de_mobiele_lijst_stand_markeert_niets_als_gelezen(dorp):
+    """DE VAL VAN DRILL-DOWN. "Het openen is het lezen" klopt alleen als je het gesprek ZIET; in
+    de lijst-stand is de draad juist verborgen. Zou hij tóch markeren, dan is het ongelezen-merk
+    weg van een kanaal dat niemand las."""
+    st, ik = dorp
+    k = channels.project_kanaal(st.projects.all()[0]["id"])
+    st.channels.post(k, "iets nieuws", author_type="person", author_id="iemand_anders")
+    render_messages(st, ik=ik, kanaal=k, lijst=True)
+    assert not st.people.gezien(ik).get(k)
+    render_messages(st, ik=ik, kanaal=k)
+    assert st.people.gezien(ik).get(k)
+
+
+def test_de_drill_down_stand_staat_in_de_markup(dorp):
+    """Eén rendering, twee standen: `data-mob` zegt welk niveau een telefoon toont. Desktop ziet
+    beide panelen — daarom mag hier niets verdwijnen uit de DOM."""
+    st, ik = dorp
+    lijst = render_messages(st, ik=ik, lijst=True)
+    draad = render_messages(st, ik=ik)
+    assert "data-mob='lijst'" in lijst and "data-mob='draad'" in draad
+    for html in (lijst, draad):
+        assert "msg-lijst" in html and "msg-draad" in html   # beide panelen blijven staan
+    assert "msg-terug" in draad                              # en de weg terug staat er

@@ -5110,8 +5110,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 if _st is not None and _SIDE_CIRCLE in body:
                     try:
                         _cid = _home_node(_st.records.all())
+                        # Zelfde vorm als de vaste items (`_side_item`): monogram voor de
+                        # ingeklapte rail, woord voor de volle zijbalk. Zou deze link het woord
+                        # kaal dragen, dan staat er in de rail één item uit te steken.
+                        from nooch_village.cockpit2_util import _side_item
                         body = body.replace(_SIDE_CIRCLE,
-                                            f"<a href='/node?id={_e(_cid)}'>Circle</a>" if _cid else "", 1)
+                                            _side_item(f"/node?id={_e(_cid)}", "Circle") if _cid else "", 1)
                     except Exception:
                         body = body.replace(_SIDE_CIRCLE, "", 1)
                 # Persoonlijke begroeting in de header: voornaam van de ingelogde persoon, klikbaar
@@ -5256,7 +5260,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_messages(st, ik=_ik, kanaal=(qs.get("k") or [""])[0],
                                            csrf_token=effective_csrf,
                                            msg=(qs.get("msg") or [""])[0],
-                                           q=(qs.get("q") or [""])[0]))
+                                           q=(qs.get("q") or [""])[0],
+                                           lijst=bool((qs.get("list") or [""])[0])))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een

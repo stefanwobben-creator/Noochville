@@ -1606,3 +1606,95 @@ summary.pchip:hover{border-color:var(--gray)}
 .qadd-bar{margin-top:.5rem}
 .att-body[data-qadd-open]{cursor:text}
 .editor-prev{padding:.5rem .6rem;border-top:1px solid var(--border);min-height:3rem}
+
+/* ═══ Fase 11, laag 1: atomen ═══════════════════════════════════════════════════════════════
+   Basisdefinities, buiten `.nu`. Het `.nu`-systeem herdefinieert ze (nooch-ui.css, dat ná dit
+   bestand wordt geladen); een scherm dat niet meedoet houdt deze. Zonder die basis is het
+   rol-icoon een LEEG span op elk niet-nu-scherm — en de zijbalk staat op álle schermen. */
+
+/* Onzichtbaar voor het oog, hoorbaar voor een schermlezer. Nodig zodra een VORM iets zegt:
+   de vorm draagt de betekenis voor wie kijkt, dit draagt hem voor wie luistert. */
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
+/* 2a — het voortgangs-atoom. Eén balkje, overal hetzelfde, en een ECHT <progress>-element:
+   dat kent zijn eigen waarde (schermlezer, `value`/`max`) en heeft geen inline breedte nodig.
+   Dat laatste is geen detail — de twee balkjes die het vervangt deden `style='width:42%'`, en
+   dat is precies de inline-style-schuld die de ratchet afbouwt. */
+progress.nu-progress{appearance:none;-webkit-appearance:none;border:none;display:block;
+  width:100%;height:6px;background:var(--border);border-radius:999px;overflow:hidden}
+progress.nu-progress::-webkit-progress-bar{background:var(--border);border-radius:999px}
+progress.nu-progress::-webkit-progress-value{background:var(--green);border-radius:999px}
+progress.nu-progress::-moz-progress-bar{background:var(--green);border-radius:999px}
+progress.nu-progress.wide{height:8px}
+
+/* 1a — het rol-status-icoon: dezelfde twee vormen als `.nu-status`, zonder kader of woord ernaast.
+   Gevuld = bezet, gestippeld = vacant. Het WOORD staat in een `.sr`-span ernaast, want een vorm
+   alleen is geen status (zie de kop van nooch-ui.css). */
+.nu-status--icoon{display:inline-flex;align-items:center;vertical-align:middle;
+  border:0;padding:0;background:none;margin-right:.4em}
+.nu-status--icoon::before{content:"";width:.5em;height:.5em;flex:none;border-radius:50%}
+.nu-status--icoon.nu-status--ok::before{background:var(--green)}
+.nu-status--icoon.nu-status--open::before{border:1px solid var(--subtle);background:none}
+
+/* 1b/3b — de kaart- en kanaalrij-moleculen: alleen layout, de atomen doen de rest. */
+.pmeta{font-size:.72rem;margin-top:.25rem}
+.pcard-link{display:block;text-decoration:none;color:inherit}
+.pchips{display:flex;flex-wrap:wrap;gap:.25rem;margin:.3rem 0}
+.msg-knaam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-tijd{flex:0 0 auto;font-size:11px;color:var(--gray);font-variant-numeric:tabular-nums}
+.msg-kanaal{display:flex;align-items:center;gap:.4rem}
+.msg-kanaal.on .msg-tijd{color:inherit;opacity:.75}
+.msg-terug{display:none}
+/* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.
+   Beide panelen blijven in de DOM — het is een CSS-keuze, geen tweede rendering. */
+@media(max-width:760px){
+  .msg-terug{display:inline-flex}
+  .msg-layout[data-mob='draad'] .msg-lijst{display:none}
+  .msg-layout[data-mob='lijst'] .msg-draad{display:none}
+}
+
+/* ── Fase 11: de zijbalk als 64px icoon-rail, en de hamburger op mobiel ──────────────────────
+   WAAROM EEN RAIL. Een module met een eigen lijst-paneel (Messages) heeft drie kolommen nodig:
+   globale navigatie, kanalenlijst, gesprek. Drie volle kolommen passen niet; de globale navigatie
+   is de kolom die je tijdens het lezen van een gesprek het minst nodig hebt, dus die klapt in tot
+   iconen. Hij VERDWIJNT niet — dat zou een tweede navigatiemodel opleveren. */
+.c2-side--rail{width:64px;padding:1rem .35rem;align-items:center}
+.c2-side--rail ~ *{margin-left:80px}
+.c2-side--rail .c2-lbl,.c2-side--rail .c2-search,.c2-side--rail .c2-greet,
+.c2-side--rail .c2-subnav-div{display:none}
+.c2-side--rail .c2-subnav a,.c2-side--rail .c2-navbtn{justify-content:center;padding:.5rem 0}
+.c2-side--rail .c2-logo img{max-width:40px}
+/* Het monogram is de icoon-vorm van dit systeem: geen icoonset erbij halen voor vijf items, en
+   het blijft leesbaar in zwart-wit. Het volledige label blijft in de DOM (`.c2-lbl`, verborgen)
+   plus in `title`, dus een schermlezer leest "Projects" en niet "P". */
+.c2-mono{font-weight:700;font-size:13px;letter-spacing:.02em}
+.c2-side:not(.c2-side--rail) .c2-mono{display:none}
+/* De organisatieboom achter één icoon: je hebt hem niet nodig terwijl je leest, maar hij mag
+   ook niet weg zijn. Klik = flyout naast de rail. Native <details>, geen JS. */
+.c2-orgfly{width:100%}
+.c2-orgfly>summary{list-style:none;cursor:pointer;text-align:center;padding:.5rem 0;
+  font-size:15px;color:var(--ink)}
+.c2-orgfly>summary::-webkit-details-marker{display:none}
+.c2-orgfly>summary:hover{background:var(--surface)}
+.c2-side:not(.c2-side--rail) .c2-orgfly>summary{display:none}
+.c2-side--rail .c2-orgfly .c2-org{display:none}
+.c2-side--rail .c2-orgfly[open] .c2-org{display:block;position:fixed;left:64px;top:1rem;
+  width:250px;max-height:80vh;overflow:auto;z-index:40;padding:.7rem .8rem;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+
+/* De hamburger: alleen mobiel, en alleen als JS draait. Zonder JS blijft de zijbalk staan zoals
+   hij was — een menu dat je niet kunt openen omdat een script niet laadde, is erger dan een
+   menu dat altijd zichtbaar is. Daarom zet het script zelf `body.navjs`. */
+.c2-burger{display:none}
+@media(max-width:760px){
+  .c2-burger{display:inline-flex;align-items:center;justify-content:center;position:fixed;
+    left:10px;top:10px;z-index:60;width:40px;height:40px;font-size:18px;line-height:1;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    color:var(--ink);cursor:pointer}
+  body.navjs .c2-side{display:none}
+  body.navjs.navopen .c2-side{display:flex;position:fixed;inset:0;z-index:50;width:auto;
+    flex-direction:column;align-items:stretch;overflow-y:auto;padding-top:3.4rem}
+  body.navjs.navopen .c2-org{display:block}
+  body.navjs .c2-main,body.navjs .c2-wrap{padding-top:2.6rem}
+}

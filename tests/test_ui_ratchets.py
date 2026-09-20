@@ -96,7 +96,13 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 64   # B2 (20 sept 2026): -1, de ibx-familie ging mee met views/inbox.py. Daarvóór +1
+_PREFIX_CEILING = 65   # +1 'nu-' (fase 11, 20 sept 2026): het DESIGN-SYSTEEM zelf, en daarmee het
+                       #      tegenovergestelde van een scherm-eigen prefix. `nu-status` en
+                       #      `nu-progress` stonden al in nooch-ui.css maar werden nooit door een
+                       #      governeerde view gerenderd; met het rol-icoon in de organisatieboom
+                       #      (1a) en het voortgangs-atoom (2a) gebeurt dat nu wel. Deze familie
+                       #      hoort te groeien waar de scherm-eigen families krimpen.
+                       # Daarvóór 64: B2 (20 sept 2026): -1, de ibx-familie ging mee met views/inbox.py. Daarvóór +1 B2 (20 sept 2026): -1, de ibx-familie ging mee met views/inbox.py. Daarvóór +1
                        # 'editor-' — GEDEELD COMPONENT, geen scherm-eigen familie: de
                        #      inline-editor van cockpit2_util wordt door de wall-comment ÉN
                        #      het conceptverslag gebruikt. Hij verving twee ad-hoc bouwsels

@@ -82,6 +82,31 @@ def _laatst(st, kanaal: str) -> float:
     return float((e or {}).get("at") or 0)
 
 
+def _kort_tijd(at: float, nu: float | None = None) -> str:
+    """Wanneer er voor het laatst iets gezegd is, in maximaal vier tekens (fase 11, 3b).
+
+    WAAROM NIET `_stamp`. Die geeft een volledige datum-tijd, en dat past niet in een rij van
+    210px naast een naam en een ongelezen-teller — dan valt de naam weg, en de naam is waarop je
+    zoekt. Vandaag toont de klok, deze week de dag, daarvoor de datum: hoe ouder, hoe grover, want
+    bij iets van vorige maand is het uur niet meer de vraag.
+
+    Leeg bij 0: een kanaal waarin nog nooit iets is gezegd heeft geen tijdstip, en "01 Jan 1970"
+    is geen tijdstip maar een bug die eruitziet als data."""
+    import time as _t
+    if not at:
+        return ""
+    nu = _t.time() if nu is None else nu
+    verschil = nu - at
+    lok = _t.localtime(at)
+    if verschil < 0 or verschil >= 365 * 24 * 3600:
+        return _t.strftime("%d/%m/%y", lok)
+    if verschil < 12 * 3600 and _t.localtime(nu).tm_yday == lok.tm_yday:
+        return _t.strftime("%H:%M", lok)
+    if verschil < 7 * 24 * 3600:
+        return _t.strftime("%a", lok)
+    return _t.strftime("%d %b", lok)
+
+
 def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int]]:
     """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL vóór filteren.
 
@@ -130,7 +155,13 @@ def _bericht(st, e: dict) -> str:
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
-                    msg: str = "", q: str = "") -> str:
+                    msg: str = "", q: str = "", lijst: bool = False) -> str:
+    """Het Messages-scherm. `lijst=True` is de MOBIELE kanalenlijst (drill-down, niveau 2).
+
+    DRILL-DOWN IS EEN CSS-KEUZE, GEEN TWEEDE RENDERING. Beide panelen staan altijd in de DOM; op
+    een telefoon toont `data-mob` er één. Zo blijft er één weergave om te onderhouden, werkt de
+    terug-pijl zonder JS, en is elke stand een deelbare URL — hetzelfde uitgangspunt als het
+    zoekveld hieronder, dat bewust een GET-formulier is en geen JS-filter."""
     groepen, totaal = _kanalen(st, ik, q)
     if not kanaal:
         # OPEN OP IETS DAT GEZEGD IS. De eerste versie pakte simpelweg het eerste kanaal, en dat
@@ -194,7 +225,10 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                  f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
                  f"value='topic_add'>Create</button></div></form></details>")
 
-    lijst = []
+    # `rijen`, NIET `lijst`: die naam is sinds fase 11 de parameter die de mobiele drill-down-stand
+    # draagt. De eerste versie hergebruikte hem hier en overschreef dus zijn eigen argument — het
+    # scherm stond daarna altijd in lijst-stand, en markeerde daardoor nooit meer iets als gelezen.
+    rijen = []
     for groep, rij in groepen.items():
         if not rij:
             continue
@@ -204,25 +238,34 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                       f"&middot; search for the rest</span>")
         elif q:
             aantal = f" <span class='msg-telling'>{len(rij)} of {totaal[groep]}</span>"
-        lijst.append(f"<p class='muted msg-groep'>{_e(groep)}{aantal}</p>")
+        rijen.append(f"<p class='muted msg-groep'>{_e(groep)}{aantal}</p>")
         for k in rij:
             aan = " on" if k == kanaal else ""
             qs = f"&q={_e(q)}" if q else ""
             n = ongelezen.get(k, 0)
             merk = " msg-kanaal--nieuw" if n else ""
             stip = f"<span class='msg-nieuw'>{n if n < 10 else '9+'}</span>" if n else ""
-            lijst.append(f"<a class='msg-kanaal{aan}{merk}' href='/messages?k={_e(k)}{qs}'>"
-                         f"{_e(_label(st, k, ik))}{stip}</a>")
+            # DRIE DELEN, VASTE VOLGORDE (fase 11, 3b): naam, wanneer, hoeveel nieuw. De naam mag
+            # afkappen (daar is hij het breedst en het minst kritisch), de andere twee nooit — een
+            # afgekapte teller of tijd is erger dan geen.
+            tijd = _kort_tijd(_laatst(st, k))
+            klok = f"<span class='msg-tijd'>{_e(tijd)}</span>" if tijd else ""
+            rijen.append(f"<a class='msg-kanaal{aan}{merk}' href='/messages?k={_e(k)}{qs}'>"
+                         f"<span class='msg-knaam'>{_e(_label(st, k, ik))}</span>{klok}{stip}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
-    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(lijst) or leeg}</nav>"
+    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(rijen) or leeg}</nav>"
 
     # HET OPENEN IS HET LEZEN. Geen aparte "markeer als gelezen"-knop: dat is een tweede handeling
     # voor iets wat je met je ogen al deed, en hij loopt gegarandeerd achter op de werkelijkheid.
     # Fail-soft: lukt het markeren niet, dan blijft het kanaal ongelezen staan — vervelend, maar de
     # andere kant (stil op gelezen zetten wat je niet zag) is erger.
     trail = st.channels.trail(kanaal) if kanaal else []
-    if ik and kanaal:
+    # NIET IN DE LIJST-STAND. "Het openen is het lezen" klopt alleen als je het gesprek ook ZIET;
+    # op een telefoon toont de lijst-stand juist de kanalenlijst, met de draad verborgen. Zonder
+    # deze voorwaarde markeert het openen van de lijst het kanaal dat toevallig als voordeur is
+    # gekozen als gelezen — en dan is het ongelezen-merk weg voor iets dat niemand las.
+    if ik and kanaal and not lijst:
         laatste = trail[-1] if trail else None
         if laatste is not None:
             try:
@@ -253,12 +296,22 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                    "author.</p>")
 
     kop = _e(_label(st, kanaal, ik)) if kanaal else "Messages"
+    # NIVEAU 3 → NIVEAU 2. Op desktop staat de lijst er gewoon naast, dus daar is deze link ruis;
+    # `.msg-terug` toont hem alleen op telefoonbreedte. Een gewone link, geen knop: hij navigeert.
+    qs_t = f"&q={_e(q)}" if q else ""
+    terug = (f"<a class='msg-terug flink' href='/messages?list=1&amp;k={_e(kanaal)}{qs_t}'>"
+             f"&larr; All channels</a>")
     main = (f"<div class='c2-main'><h1>Messages</h1>"
             f"<p class='muted'>One channel type, four flavours: a project, a circle, a topic of "
             f"your own, or a person. "
             f"Your queue is on <a href='/inbox'>Inbox</a> &mdash; that is work to handle, not talk.</p>"
             f"{_banner(msg)}"
-            f"<div class='msg-layout'>{nav}"
-            f"<section class='msg-draad'><h2 class='msg-kop'>{kop}</h2>{draad}{schrijf}</section>"
+            f"<div class='msg-layout' data-mob='{'lijst' if lijst else 'draad'}'>{nav}"
+            f"<section class='msg-draad'>{terug}<h2 class='msg-kop'>{kop}</h2>"
+            f"{draad}{schrijf}</section>"
             f"</div></div>")
-    return _page("Messages", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+    # DE ZIJBALK KLAPT IN (fase 11). Messages heeft zijn eigen lijst-paneel, en drie volle kolommen
+    # naast elkaar passen niet. De rail houdt de navigatie bereikbaar zonder de kanalenlijst te
+    # verdringen; de organisatieboom zit hier achter zijn icoon, want die heb je tijdens een
+    # gesprek niet nodig.
+    return _page("Messages", f"{_DS_LINK}{_nav(rail=True)}<div class='c2-wrap'>{main}</div>")

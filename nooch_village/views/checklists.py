@@ -62,7 +62,7 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
                f"<button class='cl-check ok{(' on' if status is True else '')}' type='submit' name='ok' value='1' title='check'>✓</button>"
                f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='no check'>✗</button></form>")
-        rm = (f"<form method='post' action='/action' style='display:inline'>"
+        rm = (f"<form method='post' action='/action' class='fentry-inline'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
               f"<input type='hidden' name='cid' value='{_e(cid)}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
@@ -325,6 +325,38 @@ def _ck_sleep_js(csrf: str, nxt: str, waak: bool = False) -> str:
         f"waak={'true' if waak else 'false'};")
 
 
+#: De stand meteen zien, zonder op de herlaadbeurt te wachten (fase 11, 2b).
+#:
+#: WAT DIT NIET IS: een tweede opslagpad. De POST die eronder zit blijft exact wat hij was en is
+#: leidend; dit script raakt alleen wat je ZIET, in de seconde tussen je klik en de herlaadbeurt.
+#: Zonder JS verandert er niets aan het gedrag — je ziet de nieuwe stand dan gewoon ná de POST.
+#:
+#: De teller telt niet opnieuw maar verschuift met één, vanaf het getal dat de SERVER gaf. Zelf
+#: tellen zou hier iets anders betekenen dan daar: overgeslagen items tellen op de server niet mee
+#: in de noemer (`checklist_progress`), en een vakje dat "overgeslagen" is heeft dus geen plek in
+#: die breuk. Daarom doet een `.b-skip`-vakje hier niets — de herlaadbeurt zegt het juiste.
+_CK_LIVE_JS = """<script>(function(){
+ if(document.body.dataset.ckLive)return; document.body.dataset.ckLive='1';
+ document.addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('.ck-box[data-ck-item]'):null;
+  if(!b||b.classList.contains('b-skip'))return;
+  var id=b.getAttribute('data-ck-item'), was=b.getAttribute('data-ck-done')==='1';
+  b.classList.toggle('on',!was); b.textContent=was?'':'\u2713';
+  b.setAttribute('data-ck-done',was?'0':'1');
+  var li=b.closest('.ck-item'), t=li?li.querySelector('.ck-txt>span'):null;
+  if(t)t.classList.toggle('ck-done',!was);
+  var bar=document.querySelector('progress[data-ck-bar="'+id+'"]');
+  if(!bar)return;
+  var tot=parseInt(bar.getAttribute('data-ck-tot')||'0',10); if(!tot)return;
+  var done=Math.round(bar.value*tot/100)+(was?-1:1);
+  done=Math.max(0,Math.min(tot,done));
+  var pct=Math.round(100*done/tot); bar.value=pct;
+  var tel=document.querySelector('[data-ck-tel="'+id+'"]');
+  if(tel)tel.textContent=pct+'% ('+done+'/'+tot+')';
+ });
+})();</script>"""
+
+
 def _mag_waken(p: dict, st) -> bool:
     """Kan er op dit moment een ROL aan deze lijst werken? Alleen dan gaat de pagina meekijken.
 
@@ -541,8 +573,14 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
         items = cl.get("items", [])
         done, tot = checklist_progress(cl)          # overgeslagen items tellen niet mee in de noemer
         pct = round(100 * done / tot) if tot else 0
-        bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pct}%'></div></div>"
-               f"<span class='muted'>{pct}% ({done}/{tot})</span></div>") if tot else ""
+        # HETZELFDE ATOOM als op de projectkaart en in de doelkop (fase 11, 2a). Stond hier als
+        # twee geneste divs met twee inline breedtes; de `flex:1` die erbij stond deed niets — dat
+        # regelt `.ck-prog .pbar` al. `data-ck-bar` is de haak voor de live-stand hieronder.
+        bar = (f"<div class='ck-prog'>"
+               f"<progress class='nu-progress' value='{pct}' max='100' "
+               f"data-ck-bar='{_e(cl['id'])}' data-ck-tot='{tot}'></progress>"
+               f"<span class='muted' data-ck-tel='{_e(cl['id'])}'>{pct}% ({done}/{tot})</span>"
+               f"</div>") if tot else ""
         # Het uitvoerplan is een VOORSTEL tot een mens het goedkeurt (projects.plan_wacht_op_akkoord).
         # Deze knop is de enige weg naar akkoord; zonder hem staat de daemon stil en zie je niet waarom.
         poort = ""
@@ -577,9 +615,14 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             state, box_extra = _cl_item_state(it, d, skill)
             clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                       f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
-            chk = (f"<form method='post' action='/action'>{hid()}{clitem}"
+            # `data-ck-item` koppelt het vakje aan de balk van DEZELFDE lijst (fase 11, 2b). De
+            # POST blijft precies zoals hij was — de opslag is leidend; dit is alleen de weergave
+            # die meteen meebeweegt in plaats van pas na de herlaadbeurt.
+            chk = (f"<form method='post' action='/action' class='ck-chk'>{hid()}{clitem}"
                    f"<button class='ck-box{' on' if d else ''}{box_extra}' type='submit' name='action' "
-                   f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
+                   f"value='check_toggle' data-ck-item='{_e(cl['id'])}' "
+                   f"data-ck-done='{'1' if d else '0'}'>{'✓' if d else ''}</button></form>"
+                   ) if rw else ("☑" if d else "☐")
             rm = (f"<form method='post' action='/action'>{hid()}{clitem}"
                   f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
             # ⠿ SLEEPGREEP, NIET DE HELE REGEL. Een `draggable` <li> vecht met tekstselectie en met
@@ -624,7 +667,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                # veld; een voorbeeld laat zien wat er in hoort en hoe fijn een item mag zijn.
                f"<input name='text' placeholder='E.g. Ask three suppliers for a sample'>"
                f"<button class='btn ok' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
-        delc = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+        delc = (f"<form method='post' action='/action' class='fentry-inline'>{hid()}"
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                 f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
                 f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
@@ -656,6 +699,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 + f"{delc}</div>"
                 f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     if rw and out:
+        out += _CK_LIVE_JS
         out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""),
                             waak=_mag_waken(p, st))
     return out

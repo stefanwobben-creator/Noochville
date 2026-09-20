@@ -23,12 +23,15 @@ CIRCLE = "mother_earth__nooch"
 # Niet-vermelde governeerde views moeten 0 zijn (schoon). Verlaag een getal zodra je opruimt.
 _STYLE_WHITELIST = {
     "views/overview.py": 28,
-    "views/projects.py": 19,
+    "views/projects.py": 17,   # -2 (fase 11): de voortgangsbalk werd `<progress class='nu-progress'>`
+                               # (geen `style='width:x%'` meer) en de kaart-link kreeg `.pcard-link`
     "views/strategy.py": 14,
     "views/werkoverleg.py": 8,    # -2: de 0-10-schaal is weg (check-out is ja/nee)
     "views/metrics.py": 8,
     "views/roloverleg.py": 7,
-    "views/checklists.py": 5,
+    "views/checklists.py": 1,   # -4 (fase 11): hetzelfde progress-atoom (twee inline breedtes weg,
+                                # plus een `flex:1` die `.ck-prog .pbar` al deed) en twee
+                                # `display:inline`-formulieren naar de bestaande `.fentry-inline`
     "cockpit2.py": 7,
     "views/noochie.py": 5,
     "views/feed.py": 1,    # -3: de comment-editor werd inline (`.fentry-edit`) en de
