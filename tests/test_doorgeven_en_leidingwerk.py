@@ -9,6 +9,11 @@
    "no skill · needs a human" terwijl `web_zoek` bestaat en in rugzak `buiten` zit. DERDE keer dat
    dezelfde verwarring toesloeg; daarom staat het antwoord nu in `skillset.py`.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 1 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 import pytest
@@ -103,20 +108,6 @@ def test_het_formulier_is_een_at_veld_en_geen_projectformulier():
 
 
 # ── 2. De modal is een modal ─────────────────────────────────────────────────
-
-def test_projectlinks_in_de_verwerk_pagina_openen_bovenaan():
-    """De verwerk-pagina draait als iframe in de inbox-lade. Zonder `target=_top` opent de hele site
-    zich in een strook van 460 pixels."""
-    import inspect
-    from nooch_village.views import inbox as V
-    src = inspect.getsource(V)
-    for regel in src.splitlines():
-        if "href='/project?pid=" in regel:
-            assert "target='_top'" in regel, f"projectlink zonder _top: {regel.strip()[:90]}"
-
-
-# ── 3. Eén antwoord op 'welke skills mag deze rol voeren' ────────────────────
-
 def test_zonder_context_is_het_gewoon_het_dna():
     """Elke oudere aanroeper gedraagt zich als voorheen; niets verandert stil van gedrag."""
     assert skillset.van_record(_rol(["escaleer"])) == {"escaleer"}

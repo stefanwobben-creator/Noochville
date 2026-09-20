@@ -18,6 +18,11 @@ DE TESTEN HIERONDER TOETSEN DE INVARIANT, NIET DE INHOUD. Ze schrijven nergens e
 gebruikt en dat de sets sluitend zijn. Een achtste status valt dan luid om op de plek die hem mist,
 in plaats van stil als "?" of als rauwe sleutel op het scherm te verschijnen.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 1 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 import ast
@@ -134,18 +139,3 @@ def test_geen_enkele_module_somt_de_statussen_nog_zelf_op():
 
 
 # ── 4. De inbox-status, dezelfde fout een laag hoger ─────────────────────────
-
-def test_de_inbox_chip_kent_alle_vier_de_notificatie_toestanden():
-    """`NotifStore.status_of` geeft vier waarden; `views/inbox._STATUS` kende er drie, dus een
-    AFGEHANDELDE spanning kreeg de groene 'nieuw'-chip. Zelfde vorm als de projectstatussen: een
-    vocabulaire dat op twee plekken leeft en waarvan de ene helft een waarde mist."""
-    from nooch_village.views.inbox import _STATUS
-    from nooch_village.notifications import NotifStore
-    toestanden = {
-        NotifStore.status_of({}),                      # nieuw
-        NotifStore.status_of({"read": True}),          # gelezen
-        NotifStore.status_of({"processed": True}),     # verwerkt
-        NotifStore.status_of({"done": True}),          # klaar
-    }
-    ontbreekt = toestanden - set(_STATUS)
-    assert not ontbreekt, f"_STATUS mist {sorted(ontbreekt)} — die vallen terug op de 'nieuw'-chip"

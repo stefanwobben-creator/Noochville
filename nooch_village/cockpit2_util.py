@@ -131,6 +131,31 @@ def _rol_labels(kandidaten, alle=None) -> dict:
     return labels
 
 
+
+def _at_doelen(st) -> list:
+    """Wie kun je met `@` kiezen: WAKKERE rollen en personen. Meer niet.
+
+    Slapende en gearchiveerde rollen staan er bewust niet bij — werk beloven aan een bureau waar
+    niemand zit is precies wat we bij de afslanking wilden voorkomen, en het is dezelfde regel als
+    in de wizard-rolkiezer en de uitkomst-rollijst van het werkoverleg.
+
+    Cirkels ook niet: een cirkel heeft geen handen (harde regel 7), die delegeert."""
+    from nooch_village import org
+    alle = st.records.all()
+    rollen = [r for r in alle
+              if not org.is_circle(r) and not getattr(r, "archived", False)
+              and not getattr(r, "slaapt", False)]
+    labels = _rol_labels(rollen, alle)                 # Circle Lead ≠ Circle Lead: welke cirkel?
+    uit = [{"id": r.id, "kind": "role", "label": labels.get(r.id) or _name(r)} for r in rollen]
+    try:                                               # personen zijn een aanvulling, geen vereiste
+        for p in st.people.all():
+            naam = (getattr(p, "name", "") or "").strip()
+            if naam:
+                uit.append({"id": p.id, "kind": "person", "label": naam})
+    except Exception:                                  # noqa: BLE001 — zonder personen kies je een rol
+        pass
+    return sorted(uit, key=lambda d: d["label"].lower())
+
 def _initials(name: str) -> str:
     return "".join(w[0] for w in name.split()[:2]).upper() or "?"
 

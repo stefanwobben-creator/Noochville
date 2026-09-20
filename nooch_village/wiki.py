@@ -283,7 +283,15 @@ def voorstel_velden(pagina, *, voorstel: str, waarom: str, van_naam: str, van_id
 
     titel = getattr(pagina, "title", "") or getattr(pagina, "id", "")
     spanning = waarom.strip() or f"“{titel}” zegt volgens {van_naam or 'iemand'} niet het juiste"
-    snippet = f"voorstel voor pagina {titel}: {spanning}"   # geen eigen cap (#389)
+    # DE VOORGESTELDE TEKST HOORT IN HET BERICHT. Tot B2 stond alleen dit zinnetje in de snippet en
+    # zat de eigenlijke tekst in `extra["pagina"]["body"]`, die het inbox-scherm uitklapte. Nu is
+    # het bericht een DM en is er geen scherm dat dat blok openvouwt — dan staat er "iemand stelt
+    # iets voor" zonder wát. Dat is geen suggestie maar een raadsel, en de hele afspraak is dat de
+    # rolvervuller zélf de pagina aanpast als hij het ermee eens is. Daar heeft hij de tekst voor
+    # nodig, plus de permalink om hem te kunnen plakken.
+    snippet = (f"voorstel voor pagina {titel}: {spanning}"
+               f" — voorgestelde tekst: {voorstel.strip()}"
+               f" — pagina: {pagina_url(getattr(pagina, 'id', ''))}")
     extra = {
         "type": zv.NAAR_ROL,
         "bevinding": {"ok": True, "spanning": spanning,

@@ -12,6 +12,10 @@ Het systeem wéét het, het scherm zegt het niet:
 4. **Een lopende kaart zei niet of er iemand werkte.** Vier heel verschillende toestanden zagen er
    identiek uit, waaronder 'onbemand' — de toestand waarin het antwoord "nooit" is.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): zes tests over het inbox-paneel. `/inbox`, de
+# lade en `NotifStore` bestaan niet meer — de wachtrij is een DM-stroom geworden. De rest
+# van dit bestand gaat over het BORD en blijft ongewijzigd.
 from __future__ import annotations
 
 import pytest
@@ -117,52 +121,16 @@ class _St:
         self.records = _Map({r: object() for r in rollen})
 
 
-def test_een_item_dat_naar_bestaand_werk_wijst_krijgt_een_deur():
-    from nooch_village.views.inbox import _al_op_het_bord
-    st = _St({"p1": {"id": "p1", "scope": "Fix the word greener on the impact page"}})
-    html = _al_op_het_bord(st, {"project_id": "p1", "by": "compliance"})
-    assert "already has a project" in html
-    assert "/project?pid=p1" in html
-    assert "greener" in html                           # je ziet wélk project, niet 'een project'
 
 
-def test_zonder_project_id_gebeurt_er_niets():
-    from nooch_village.views.inbox import _al_op_het_bord
-    assert _al_op_het_bord(_St({}), {"tekst": "iets", "by": "compliance"}) == ""
 
 
-def test_een_mention_van_een_mens_houdt_het_gewone_scherm():
-    """CORRECTIE OP MEZELF. Mijn eerste versie keek alleen naar `project_id`, en een @mention in een
-    projectfeed draagt dat veld ook. Die is juist wél een gesprek waar een besluit bij hoort; hem de
-    besluitknoppen afnemen zou het probleem omkeren in plaats van oplossen."""
-    from nooch_village.views.inbox import _al_op_het_bord
-    st = _St({"p1": {"id": "p1", "scope": "Bron-project"}}, rollen=())
-    assert _al_op_het_bord(st, {"project_id": "p1", "by": "stefan"}) == ""
 
 
-def test_zonder_afzender_verandert_er_niets():
-    from nooch_village.views.inbox import _al_op_het_bord
-    st = _St({"p1": {"id": "p1", "scope": "Bron-project"}})
-    assert _al_op_het_bord(st, {"project_id": "p1"}) == ""
 
 
-def test_een_verwijzing_naar_een_verdwenen_project_levert_geen_dode_knop():
-    """Fail-soft én stil. Een dode link is erger dan geen link: die kost je een klik om te ontdekken
-    dat er niets is, en precies dat maakte de inbox onbetrouwbaar."""
-    from nooch_village.views.inbox import _al_op_het_bord
-    assert _al_op_het_bord(_St({}), {"project_id": "weg", "by": "compliance"}) == ""
 
 
-def test_een_stukke_store_breekt_het_paneel_niet():
-    from nooch_village.views.inbox import _al_op_het_bord
-    class Stuk:
-        @property
-        def records(self): raise RuntimeError("store stuk")
-    try:
-        uit = _al_op_het_bord(Stuk(), {"project_id": "p1", "by": "compliance"})
-    except Exception:                                   # noqa: BLE001
-        pytest.fail("het inbox-paneel mag nooit vallen op een stukke projectstore")
-    assert uit == ""
 
 
 # ── 4. De kaart meldt alleen nog het doodlopende geval ───────────────────────

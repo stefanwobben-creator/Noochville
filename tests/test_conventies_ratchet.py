@@ -205,14 +205,14 @@ def test_het_bord_toont_zelf_geen_formulier():
 
 
 def test_de_bekende_ingangen_wijzen_naar_de_wizard():
-    """Gedrag naast de telling: het bord en de inbox mogen niet zelf een project maken."""
-    from nooch_village.views.inbox import _outcome_form
+    """Gedrag naast de telling: het bord mag niet zelf een project maken.
+
+    De inbox stond hier als tweede ingang bij. Die is in B2 (20 september 2026) verdwenen samen met
+    `/inbox` en `_outcome_form`; het bord is de overgebleven ingang."""
     from nooch_village.views.projects import _quickadd
 
     bord = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
     assert "/project/nieuw?" in bord and "proj_add" not in bord
-    inbox = _outcome_form("project", "n", "t", "tekst", "<option>r</option>", "", "/inbox", "u")
-    assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
 
 
 def test_de_conventies_staan_opgeschreven():

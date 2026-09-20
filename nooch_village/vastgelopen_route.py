@@ -60,11 +60,18 @@ def al_geland(st, pid: str, item_text: str) -> bool:
     kern = (item_text or "").strip()[:60]
     if not kern:
         return True                                   # niets te vragen → niets te doen
-    for n in st.notif.all():
-        if (n.get("bron_project") or n.get("project_id")) != pid:
+    # HET SPOOR IS SINDS B2 EEN DM (20 september 2026). De redenering verandert niet: we kijken of
+    # er al een BERICHT over deze stap bij dit project ligt, en niet naar een vlaggetje ernaast.
+    # Alleen de plek waar het spoor staat is verhuisd van `NotifStore` naar de kanalen.
+    from nooch_village import channels
+    for kanaal in st.channels.bestaande():
+        if channels.soort_van(kanaal) != channels.DM:
             continue
-        if kern in (n.get("snippet") or ""):
-            return True
+        for e in st.channels.trail(kanaal, limit=10_000):
+            if (e.get("herkomst") or {}).get("project") != pid:
+                continue
+            if kern in (e.get("text") or ""):
+                return True
     return False
 
 

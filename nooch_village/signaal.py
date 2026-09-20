@@ -31,8 +31,14 @@ NAAR_PERSOON, NAAR_VERVULLER, NAAR_TERUGVAL, MEERDERE, ONBEKEND = (
 
 
 def mensen_van(st, rol: str) -> list[str]:
-    rec = st.records.get(rol)
-    return [f.id for f in st.assign.fillers_of(rol, rec) if f.type == "person"] if rec else []
+    """De mensen die deze rol vervullen. Fail-soft: een stukke store levert geen vervullers op in
+    plaats van een exceptie — dit pad wordt ook door schermen gebruikt (`cockpit2.mens_vervullers`)
+    en een kapotte records-store mag een pagina niet omver halen."""
+    try:
+        rec = st.records.get(rol)
+        return [f.id for f in st.assign.fillers_of(rol, rec) if f.type == "person"] if rec else []
+    except Exception:                                         # noqa: BLE001
+        return []
 
 
 def terugval(st) -> str:

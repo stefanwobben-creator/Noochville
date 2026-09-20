@@ -14,6 +14,11 @@ Nu twee velden met ÉÉN waarheid: `tekst` is volledig, `snippet` is de afgeleid
 lijst. Geen twee feiten — de afleiding staat op één plek (`preview`), dus verander die en alles
 verandert mee.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 1 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 from nooch_village.notifications import NotifStore, PREVIEW_MAX, preview, volledig
@@ -69,31 +74,6 @@ def test_de_verrijker_krijgt_de_volle_tekst_niet_de_preview():
     bron = inspect.getsource(so.maak_verrijker)
     assert "volledig(n)" in bron
     assert 'n.get("snippet")' not in bron
-
-
-def test_de_verwerkpagina_toont_de_volle_tekst(tmp_path):
-    """De LIJST houdt de preview — daar is hij voor. De verwerk-kant leest de waarheid."""
-    from nooch_village import cockpit2
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    n = st.notif.add("person", st.people.all()[0].id, "", by="rol", snippet=LANG)
-    html = cockpit2.render_verwerk(st, st.notif._find(n["id"]), csrf_token="t")
-    assert LANG[-60:] in html, "het einde van de spanning staat niet op het scherm"
-    # EN DE LIJST HOUDT HET KORT — maar "kort" gaat over wat je ZIET, niet over wat er in de HTML
-    # staat. Deze guard toetste of de volle tekst nergens in de pagina voorkwam, en dat brak toen de
-    # afgebroken regel een `title=` kreeg met de hele zin erin: een regel die afbreekt zonder de rest
-    # ergens te laten zien is een doodlopende weg.
-    #
-    # De bedoeling van de guard blijft overeind, dus hij toetst hem nu waar hij zit: de ZICHTBARE
-    # regel is een preview, en de hover is begrensd.
-    import re as _re
-    lijst = cockpit2.render_inbox(st, [("person", st.people.all()[0].id)], csrf_token="t")
-    zichtbaar = _re.sub(r"<[^>]+>", " ", lijst)          # attributen eruit, tekst over
-    assert LANG[-60:] not in zichtbaar, "de volle tekst staat ZICHTBAAR in de lijst"
-    hovers = _re.findall(r"title='([^']*)'", lijst)
-    assert all(len(h) <= 400 for h in hovers), "een hover zonder grens is een tweede volledige tekst"
-
 
 def test_er_is_één_afleidingsplek():
     """`reference, don't copy`: de preview is een AFLEIDING, geen tweede feit. Wordt hij ergens

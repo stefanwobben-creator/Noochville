@@ -24,6 +24,12 @@ def _dm_teksten(st):
             uit += [e.get("text") or "" for e in st.channels.trail(k)]
     return uit
 
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. `route_werk` levert sinds B2 een DM bij de mens in
+    plaats van een item in een wachtrij; de routering zelf is ongewijzigd."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
+
 def test_sharpen_fail_soft():
     # LLM levert niets → ruw idee terug (mens kan alsnog verder)
     assert sharpen_outcome("kijk naar zolen", reason_fn=lambda *a, **k: None) == "kijk naar zolen"
@@ -105,29 +111,15 @@ def test_alleen_wakkere_rollen_plus_individuele_actie(tmp_path):
     assert "Individual action" in opts
 
 
-def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
-    """Drie manieren om een project te maken werd er één. Beide knoppen bouwen dezelfde URL."""
+def test_de_bordknop_opent_de_wizard_en_maakt_zelf_geen_project(tmp_path):
+    """Drie manieren om een project te maken werd er één, en sinds B2 is de bordknop de enige
+    overgebleven ingang — de inbox-knop verdween met `/inbox` en `_outcome_form`."""
     from nooch_village.views.projects import _quickadd
-    from nooch_village.views.inbox import _outcome_form
     bord = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
     assert "/project/nieuw?" in bord and "proj_add" not in bord
     # Het bord heeft geen eigen velden meer: het is een DEUR met de context die de kolom al weet.
     # Velden die eruitzien als een creatie-vorm maar doorsturen beloven iets anders dan ze doen.
     assert "role=" in bord and "<textarea" not in bord
-    inbox = _outcome_form("project", "nid", "t", "de spanningstekst", "<option>r</option>", "",
-                          "/inbox", "u1")
-    assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
-    assert "ruw=de+spanningstekst" in inbox              # de spanningstekst als zaad
-    # GEEN ROL MEE, en dat is de beslissing van 29 aug 2026: uit de inbox maak je een project voor
-    # een rol die je ZELF vervult (`mine=1` scopet de wizard-kiezer). Werk bij een andere rol
-    # neerleggen is een verzoek, en een verzoek is een actie met `@` — een rol is baas over zijn
-    # eigen bord. Daarom ook geen tekstveld hier: een ingang is een deur, geen formulier.
-    assert "mine=1" in inbox and "role=" not in inbox
-    assert "<textarea" not in inbox and "<select" not in inbox
-    # de governance-route staat er ongewijzigd naast en neemt gewoon op
-    gov = _outcome_form("roloverleg", "nid", "t", "x", "<option>r</option>", "", "/inbox", "u2")
-    assert "notif_outcome" in gov and "/project/nieuw" not in gov
-
 
 def test_de_ai_is_een_bonus_geen_poort(tmp_path):
     """Sterker dan een overslaan-knop: de AI-stappen zitten OPGEVOUWEN en laden pas als je ze
@@ -208,8 +200,8 @@ def test_de_stappen_zijn_bewerkbaar_en_gaan_naar_de_project_checklist(tmp_path):
 # ── B4: wie kan dit oppakken, en de lus terug ───────────────────────────────
 
 def test_toewijzen_gebruikt_dezelfde_routing_als_het_werkoverleg(tmp_path):
-    """Geen tweede routing. Een mens-vervulde rol krijgt het in zijn inbox; een AI-vervulde rol
-    krijgt een project, want die leest de NotifStore nooit."""
+    """Geen tweede routing. Een mens-vervulde rol krijgt een DM; een AI-vervulde rol krijgt een
+    project, want een AI leest geen berichten."""
     from nooch_village import cockpit2 as c2
     st = _st(tmp_path)
     rid = "mother_earth__nooch__website_developer"
@@ -217,9 +209,8 @@ def test_toewijzen_gebruikt_dezelfde_routing_als_het_werkoverleg(tmp_path):
 
     st.assign.assign(rid, "person", p.id)                     # mens vervult de rol
     soort, ref = c2.route_werk(st, tekst="site nakijken", rol=rid, opdrachtgever=p.id)
-    assert soort == "inbox" and "inbox" in ref
-    n = next(x for x in st.notif.all() if "site nakijken" in (x.get("snippet") or ""))
-    assert n["opdrachtgever"] == p.id                          # de lus kan sluiten
+    assert soort == "inbox" and "inbox" in ref      # de routenaam is niet meegewijzigd
+    assert [t for t in _dm_aan(st, p.id) if "site nakijken" in t]
 
     # Alleen de MENSEN eraf, de AI-vervuller blijft: dat is de projectroute-casus. Álles weghalen
     # maakt de rol volledig onbemand, en dat is sinds de vervuller-pass een ander geval — dan gaat

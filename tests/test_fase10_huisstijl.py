@@ -193,7 +193,6 @@ _DEKKING_PLAFOND = {
     "messages.py": 1,
     "roloverleg.py": 1,      # `pdisc` zet alleen background:none/border:none
     "doelen.py": 0,
-    "inbox.py": 0,
     "overview.py": 0,
     "search.py": 0,
     "site_audit.py": 0,

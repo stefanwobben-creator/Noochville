@@ -26,11 +26,22 @@ def dd(tmp_path, monkeypatch):
     # `mens_vervullers` en niet meer `door_mens_bemand`: `route_werk` kijkt sinds de vervuller-pass
     # naar WIE een rol draagt, niet naar of hij gedragen wordt. De founder-rol krijgt hier één
     # vervuller, dus het werk landt bij die mens met de rol als context.
-    monkeypatch.setattr(cockpit2, "mens_vervullers",
+    # Patch op `signaal.mensen_van` en niet meer op `cockpit2.mens_vervullers`: die laatste
+    # delegeert er sinds B2 naartoe, en de signaal-routering (die het bericht bezorgt) leest
+    # dezelfde functie. Eén plek patchen dekt nu allebei — dat was precies het doel van die
+    # samenvoeging.
+    from nooch_village import signaal as _sig
+    monkeypatch.setattr(_sig, "mensen_van",
                         lambda _st, rol: [FOUNDER_PERSOON] if rol == FOUNDER_ROLE_ID else [])
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)      # geen model → founder
     return str(tmp_path)
 
+
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. Het SPOOR van een melding is sinds B2 een bericht in
+    een kanaal in plaats van een rij in een wachtrij; de redenering eromheen is ongewijzigd."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
 
 def _vastgelopen(dd, *, reden=MENS, stap="Laat de samples testen in een erkend lab") -> str:
     st = cockpit2._Stores(dd)
@@ -54,8 +65,8 @@ def test_een_mens_park_reden_landt_wel(dd):
     v = vr.pas(dd, apply=True)
     assert v["in_aanmerking"] == 1 and len(v["geland"]) == 1
     assert v["geland"][0]["pid"] == pid
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
-    assert n and "erkend lab" in (n[-1].get("snippet") or "")
+    n = _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
+    assert n and "erkend lab" in n[-1]
 
 
 # ── Guard 2: alleen wat nu nog open is ──────────────────────────────────────
@@ -77,7 +88,7 @@ def test_twee_keer_draaien_levert_geen_tweede_melding(dd):
     tweede = vr.pas(dd, apply=True)
     assert len(eerste["geland"]) == 1
     assert tweede["geland"] == [] and tweede["al_gemeld"] == 1
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
+    n = _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
     assert len(n) == 1, "dezelfde vraag twee keer verstuurd"
 
 
@@ -86,7 +97,7 @@ def test_de_idempotentie_hangt_aan_de_MELDING_niet_aan_een_vlag():
     uiteen zodra iemand de inbox opruimt. Zelfde regel als `reference, don't copy`."""
     import inspect
     bron = inspect.getsource(vr.al_geland)
-    assert "st.notif.all()" in bron
+    assert "st.channels" in bron          # het spoor is de verstuurde DM, geen losse vlag
 
 
 # ── De droge loop is de default ─────────────────────────────────────────────
@@ -95,8 +106,7 @@ def test_droge_loop_schrijft_niets(dd):
     _vastgelopen(dd)
     v = vr.pas(dd)                                     # geen apply
     assert len(v["geland"]) == 1 and v["toegepast"] is False
-    assert not [x for x in cockpit2._Stores(dd).notif.all()
-                if x.get("target_id") == FOUNDER_PERSOON]
+    assert not _dm_aan(cockpit2._Stores(dd), FOUNDER_PERSOON)
 
 
 def test_filteren_op_één_rol(dd):

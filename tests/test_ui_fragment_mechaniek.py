@@ -30,7 +30,6 @@ JS = ROOT / "static" / "nooch.js"
 PLAFOND = {
     "cockpit2_util.py": 1,
     "views/claims.py": 1,
-    "views/inbox.py": 2,
     "views/noochie.py": 1,
     "views/projects.py": 1,         # de modal-controller zélf — dit IS de gastheer van fragmenten
 }

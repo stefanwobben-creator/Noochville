@@ -13,6 +13,11 @@ tests/test_project_dod_poort.py) — maar deze test gaat niet over die poort. Hi
 van een weigering, en die vorm moet herkenbaar blijven voor elke andere weigering in de cockpit.
 De strings hieronder zijn daarom voorbeelden, geen aanroepen.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 3 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 import re
@@ -124,33 +129,3 @@ def _projects_js() -> str:
 
 
 # ── hetzelfde oppervlak, tweede bestand: de inbox-drawer ──────────────────────────────────────
-
-def _inbox_js() -> str:
-    from nooch_village.views.inbox import _IBX_JS
-    return _IBX_JS
-
-
-def test_de_drawer_leest_dezelfde_markering():
-    """De drawer kreeg bij #425 een `r.ok`-poort, en die was even blind als die van de projecten:
-    hij mat het transport. Een inhoudelijke weigering ("✗ …", "No access — …") kwam als 200 binnen
-    en zette de drawer op groen."""
-    js = _inbox_js()
-    assert "q.get('ok')!=='0'" in js
-    assert "ibxWeigering(r.url)" in js
-
-
-def test_de_weigering_wordt_gecontroleerd_binnen_de_ok_tak():
-    """Juist DAAR zit het gat: buiten de ok-tak vangt de bestaande 403-melding het al af."""
-    js = _inbox_js()
-    blok = js[js.index("function ibxPost"):js.index("function ibxRefresh")]
-    assert "if(r.ok){var w=ibxWeigering(r.url);" in blok
-    # en hij mag niet stilletjes doorlopen naar succes
-    assert blok.index("ibxWeigering(r.url)") < blok.index("ibxMelding('');return r;")
-
-
-def test_de_getypte_tekst_overleeft_ook_een_inhoudelijke_weigering():
-    """`ibxAddSubmit` leegt alleen in de then-tak. Door te throwen bij een weigering blijft de
-    spanning staan — dezelfde regel als bij de 403."""
-    js = _inbox_js()
-    blok = js[js.index("function ibxPost"):js.index("function ibxRefresh")]
-    assert "throw new Error('ibxPost geweigerd')" in blok

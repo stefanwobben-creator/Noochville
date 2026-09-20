@@ -29,7 +29,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/middelen` | `render_middelen` | `nooch_village/views/overview.py` |
 | `/person` | `render_person` | `nooch_village/views/overview.py` |
 | `/admin` | `render_admin` | `nooch_village/views/overview.py` |
-| `/inbox` | `render_inbox_frag` | `nooch_village/views/inbox.py` |
 | `/search` | `render_search_fragment` | `nooch_village/views/search.py` |
 | `/skills` | `render_skills` | `nooch_village/views/skills.py` |
 | `/goals` | `render_goals` | `nooch_village/views/doelen.py` |
@@ -40,7 +39,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/keywords` | `render_keyword_lens` | `nooch_village/views/keyword_lens.py` |
 | `/long-term-trends` | `(inline)` | `cockpit2.py` |
 | `/metrics2` | `render_metrics2` | `nooch_village/views/metrics2.py` |
-| `/inbox/verwerk` | `render_verwerk` | `nooch_village/views/inbox.py` |
 | `/catalog` | `render_catalog` | `nooch_village/views/catalog.py` |
 | `/kpi_new` | `render_kpi_composer` | `nooch_village/views/metrics.py` |
 | `/noochie` | `render_noochie` | `nooch_village/views/noochie.py` |
@@ -64,7 +62,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `decision_sheet_log` | `_act_decision_sheet_log` |
 | `tag_onderhoud_run` | `_act_tag_onderhoud_run` |
 | `copy_stack_inclusie` | `_act_copy_stack_inclusie` |
-| `verzoek_besluit` | `_act_verzoek_besluit` |
 | `kb_insight_link` | `_act_kb_insight_link` |
 | `kb_insight_unlink` | `_act_kb_insight_unlink` |
 | `kb_link` | `_act_kb_link` |
@@ -119,12 +116,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `feed_edit` | `_act_feed_edit` |
 | `feed_remove` | `_act_feed_remove` |
 | `wall_outcome` | `_act_wall_outcome` |
-| `notif_outcome` | `_act_notif_outcome` |
-| `notif_klaar` | `_act_notif_klaar` |
 | `goedkeur` | `_act_goedkeur` |
-| `notif_delete` | `_act_notif_delete` |
 | `notif_add` | `_act_notif_add` |
-| `notif_archive` | `_act_notif_archive` |
 | `metrics2_fav` | `_act_metrics2_fav` |
 | `metrics2_unfav` | `_act_metrics2_unfav` |
 | `metrics2_form` | `_act_metrics2_form` |
@@ -317,4 +310,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_42 routes · 145 dispatch-acties · 28 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_40 routes · 140 dispatch-acties · 28 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._

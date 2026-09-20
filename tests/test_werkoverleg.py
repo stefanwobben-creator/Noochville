@@ -7,6 +7,12 @@ C = "mother_earth__nooch"
 RID = "mother_earth__nooch__website_developer"
 
 
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. Sinds B2 (20 sept 2026) landt werk als DM bij de mens
+    in plaats van als item in een wachtrij; de routering — wie het krijgt — is ongewijzigd."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
+
 def _dd(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
@@ -191,10 +197,10 @@ def test_een_actie_komt_terug_via_de_inbox(tmp_path):
     _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
-    items = [n for n in st.notif.all() if "Cosh login" in (n.get("snippet") or "")]
-    assert len(items) == 1
-    assert items[0]["type"] == "actie"                    # eigen type, geen verzoek
-    assert items[0]["target_id"] == RID
+    from nooch_village import signaal
+    wie, _ = signaal.ontvangers(st, "role", RID)
+    items = [t for persoon in wie for t in _dm_aan(st, persoon) if "Cosh login" in t]
+    assert len(items) == len(wie) >= 1        # bij de vervuller(s) van de rol, en nergens anders
     # en NIET meer als vreemd checklist-item op een willekeurig lopend project
     los = [t for p in st.projects.all() for cl in p.get("checklists", [])
            for t in cl.get("items", []) if "Cosh login" in t.get("text", "")]
@@ -211,8 +217,7 @@ def test_een_actie_bij_een_persoon_gaat_naar_die_persoon(tmp_path):
     _nxt, msg = _uitkomst(dd, iid, otype="actie", persoon=p.id, tekst="reply to complaint")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
-    n = next(x for x in st.notif.all() if "reply to complaint" in (x.get("snippet") or ""))
-    assert (n["target_type"], n["target_id"]) == ("person", p.id)
+    assert [t for t in _dm_aan(st, p.id) if "reply to complaint" in t]
 
 
 def test_een_rol_zonder_mens_krijgt_geen_dead_letter(tmp_path):

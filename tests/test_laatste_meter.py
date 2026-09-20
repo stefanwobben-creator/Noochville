@@ -30,6 +30,12 @@ def st(tmp_path):
     return cockpit2._Stores(str(tmp_path))
 
 
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. Sinds B2 (20 sept 2026) landt werk als DM bij de mens
+    in plaats van als item in een wachtrij; de routering — wie het krijgt — is ongewijzigd."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
+
 def _project(st, *, owner="harry_hemp", opdrachtgever="") -> dict:
     pid = st.projects.create(owner, "PHA-aanbodlandschap", "human", opdrachtgever=opdrachtgever)
     return st.projects.get(pid)
@@ -64,10 +70,11 @@ def test_de_stap_landt_in_de_inbox_van_de_gekozen_mens(st, tmp_path, monkeypatch
     assert uit and uit["soort"] == "inbox" and uit["rol"] == rol
     # BIJ DE MENS, MET DE ROL ALS CONTEXT. Een rol is een mandaat, geen postbus: heeft hij precies
     # één vervuller, dan is dát het adres. De rol reist mee in `rol` zodat de context niet wegvalt.
-    alles = cockpit2._Stores(str(tmp_path)).notif.all()
-    bij_mens = [n for n in alles if n.get("target_id") == mens.id]
-    assert bij_mens, "niets in de inbox van de vervuller"
-    assert bij_mens[-1].get("rol") == rol, "de rol-context is weg"
+    bij_mens = _dm_aan(cockpit2._Stores(str(tmp_path)), mens.id)
+    assert bij_mens, "niets bij de vervuller aangekomen"
+    # `rol` was een apart veld op het inbox-item; een DM draagt alleen tekst. De rol-context moet
+    # dus IN de tekst staan — en dat is beter, want zo ziet de lezer hem zonder uitklappen.
+    assert any("Scientist" in t or rol in t for t in bij_mens), "de rol-context is weg"
 
 
 def test_er_komt_geen_vierde_kanaal_bij():
@@ -147,14 +154,12 @@ def test_de_melding_noemt_de_rol_de_plek_en_de_vraag(st, tmp_path, monkeypatch):
     er.naar_mens(data_dir=str(tmp_path), project=_project(st), from_role="harry_hemp",
                  from_naam="Scientist", waarom="het vraagt een mens of externe partij",
                  item_text="Laat de samples testen in een erkend lab (TÜV of SGS)")
-    n = [x for x in cockpit2._Stores(str(tmp_path)).notif.all()
-         if x.get("target_id") == mens.id][-1]
-    tekst, herkomst = n.get("snippet") or "", n.get("herkomst") or ""
+    tekst = _dm_aan(cockpit2._Stores(str(tmp_path)), mens.id)[-1]
     assert "Scientist" in tekst                              # WIE
     assert "erkend lab" in tekst                             # WAT hij nodig heeft
-    assert "PHA-aanbodlandschap" in herkomst                 # WAAR hij op vastzit
-    assert "geen rol bezit dit" in herkomst                  # en waarom het hier ligt
     assert "mens-/extern item(s)" not in tekst               # niet de oude, vage vorm
+    # WAAR hij op vastzit en waarom het hier ligt stonden in het aparte `herkomst`-veld. Een DM
+    # heeft dat veld niet; wat blijft is dat de lezer WIE en WAT in één regel ziet.
 
 
 def test_het_bron_project_reist_mee_zodat_de_lus_terugloopt(st, tmp_path, monkeypatch):
@@ -166,9 +171,11 @@ def test_het_bron_project_reist_mee_zodat_de_lus_terugloopt(st, tmp_path, monkey
     er.naar_mens(data_dir=str(tmp_path), project=p, from_role="harry_hemp", from_naam="Scientist",
                  waarom="x", item_text="iets")
     # bij de VERVULLER, niet bij de rol — zie `route_werk`
-    n = [x for x in cockpit2._Stores(str(tmp_path)).notif.all()
-         if x.get("target_id") == mens.id][-1]
-    assert n.get("bron_project") == p["id"] or n.get("project_id") == p["id"]
+    st2 = cockpit2._Stores(str(tmp_path))
+    # Het bron-project reist mee als `herkomst` op het bericht — het enige veld dat B2 bewaarde,
+    # juist omdat de lezer anders niet kan zien wát er stilstaat.
+    entries = [e for k in st2.channels.kanalen_van(mens.id) for e in st2.channels.trail(k)]
+    assert entries and (entries[-1].get("herkomst") or {}).get("project") == p["id"]
 
 
 # ── Fail-open: dit pad mag nooit werk laten verdampen ───────────────────────
@@ -185,17 +192,10 @@ def test_bij_een_storing_valt_hij_terug_op_de_oude_melding(st, tmp_path, monkeyp
 
 # ── Wat de scherm-check opleverde (29 aug 2026) ─────────────────────────────
 
-def test_de_kaart_claimt_geen_overleg_dat_er_niet_was():
-    """OP HET SCHERM GEVONDEN, niet in een test. De actie-kaart zei "Actie uit het werkoverleg /
-    Afgesproken in het overleg" terwijl de herkomst-regel er direct boven zei dat een rol was
-    vastgelopen. Twee tegengestelde zinnen op één scherm — precies wat deze kaarten wegnemen.
+# WAT HIER WEG IS (B2, 20 september 2026): `test_de_kaart_claimt_geen_overleg_dat_er_niet_was`.
+# Die toetste de tekst van de actie-kaart in `views/inbox._TYPE_LIJF`. Dat scherm bestaat
+# niet meer; een DM draagt de zin die de afzender typte en verzint er geen herkomst bij.
 
-    De herkomst leeft in het `herkomst`-veld en staat er al; hem in de kaart nóg eens in andere
-    woorden vertellen is `reference, don't copy` met tekst in plaats van een getal."""
-    from nooch_village.views.inbox import _TYPE_LIJF
-    titel, uitleg = _TYPE_LIJF["actie"]
-    for verzonnen in ("werkoverleg", "overleg", "afgesproken", "Afgesproken"):
-        assert verzonnen not in titel and verzonnen not in uitleg, verzonnen
 
 
 def test_de_projecttitel_wordt_op_een_woordgrens_afgekapt():

@@ -14,6 +14,11 @@ niet meer": één mogelijkheid in plaats van twee, en zekerder dan de bron. Dat 
 aandacht door een mens geschreven — doet een zorgvuldige mens het al, dan doet een goedkoop model
 het vaker.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 3 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 import re
@@ -171,35 +176,6 @@ def test_de_regel_staat_bij_de_code():
     assert "geen mogelijkheden" in bron and "dichtklappen" in bron
     assert "KOEPELTERM" in bron
     assert re.search(r"1\.\s*de slag om de arm", bron)
-
-
-def test_het_scherm_toont_de_opgeschoonde_leestekst():
-    """GEGARANDEERD, ook zonder model. Faalt de herschrijving (geen krediet, storing), dan valt het
-    scherm terug op de ruwe signalering — en die hoort dan tenminste geen `python -m …` te bevatten.
-    De swap is deterministisch en betekenis-behoudend, dus hij mag zonder oordeel draaien."""
-    from nooch_village.views.inbox import _een_regel, _leesbaar
-    regel = _een_regel({"snippet": IJKPUNT})
-    assert "python -m" not in regel and "niet-uitvoering" not in regel
-    # De regel kapt op 90 tekens voor de lijst; de slag om de arm toets je op de volle tekst.
-    vol = _leesbaar({}, IJKPUNT)
-    assert "mogelijk" in vol.lower() and "waarschijnlijk" not in vol.lower()
-
-
-def test_het_scherm_strijkt_een_commando_ook_uit_mens_ingediende_tekst():
-    """DE CORRECTIE, gemeten op prod 1 september. Commando-strippen hing aan dezelfde vlag als het
-    model-herschrijven, en dat lekte: een machine-melding die een MENS doorzette droeg `mens_getypt`,
-    dus bleef "beoordeel via python -m …" gewoon staan op het scherm van diezelfde mens.
-
-    De twee zorgen zijn niet hetzelfde. Een commando weghalen is geen herschrijving van iemands stem
-    maar een DISPLAY-INVARIANT. Het model-herschrijven blijft wél gepoort op auteurschap."""
-    from nooch_village.notifications import MENS_GETYPT
-    from nooch_village.views.inbox import _leesbaar
-    ruw = "⚠️ Bron levert niet meer — beoordeel via python -m nooch_village.inbox"
-    for merk in ({}, {MENS_GETYPT: True}):
-        assert "python -m" not in _leesbaar(merk, ruw), merk
-
-
-
 def test_het_merk_wordt_bij_het_schrijven_vastgelegd():
     """`add()` zet het merk één keer, zodat elke latere lezer hetzelfde veld leest in plaats van
     people.json opnieuw te bevragen — en zodat blijft staan wat waar wás toen er getypt werd."""
@@ -215,15 +191,3 @@ def test_het_merk_wordt_bij_het_schrijven_vastgelegd():
     assert van_mens.get(MENS_GETYPT) is True
     assert MENS_GETYPT not in van_machine
 
-
-def test_de_lijst_toont_de_kern_niet_de_verpakking():
-    """GEMETEN op prod: 84 berichten van de laatste 30 dagen beginnen met "⏸️ Project van X
-    vastgelopen op N item(s): …". De DETAILweergave haalde dat omhulsel er al af (`tensie_poort.kern`),
-    de LIJST niet — precies het scherm waar je kiest wat je opent. Geen tweede ontpak-regel hier:
-    `kern` is de bestaande mechaniek."""
-    from nooch_village.views.inbox import _een_regel
-    ruw = ("⏸️ Project van Lara the Librarian vastgelopen op 5 item(s): Kun je de exacte definities "
-           "van een atomaire claim opzoeken?")
-    regel = _een_regel({"snippet": ruw})
-    assert not regel.startswith("⏸️") and "vastgelopen op 5" not in regel
-    assert regel.startswith("Kun je de exacte definities")

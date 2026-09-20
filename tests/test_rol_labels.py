@@ -8,6 +8,11 @@ Drie schermen tonen dezelfde lijst en hadden het alle drie: de inbox ("From whic
 projectwizard en de vangst-balk van het werkoverleg. Eén helper, drie aanroepers — geen drie
 varianten die na één wijziging uit de pas lopen.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 1 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 from types import SimpleNamespace as N
@@ -81,22 +86,15 @@ def _st(org):
     return N(records=N(all=lambda: org, get=lambda i: next((r for r in org if r.id == i), None)),
              projects=N(all=lambda: []))
 
+def test_alle_rolkiezers_gebruiken_dezelfde_helper():
+    """ÉÉN MECHANIEK PER DING. Deze schermen tonen dezelfde lijst; eigen varianten lopen na de
+    eerste wijziging uit de pas, en dan is het scherm waar niemand keek weer onkiesbaar.
 
-def test_de_inbox_dropdown_toont_de_cirkel():
-    from nooch_village.views.inbox import _person_role_options
-    html = _person_role_options(_st(ORG), [("role", "lead_n"), ("role", "lead_v"), ("role", "sci")])
-    assert "Circle Lead (Nooch)" in html and "Circle Lead (Noochville)" in html
-    assert ">Scientist<" in html                       # uniek → kaal
-    assert html.count(">Circle Lead<") == 0            # geen enkele kale dubbelganger meer
-
-
-def test_alle_drie_de_rolkiezers_gebruiken_dezelfde_helper():
-    """ÉÉN MECHANIEK PER DING. Drie schermen tonen dezelfde lijst; drie eigen varianten lopen na de
-    eerste wijziging uit de pas, en dan is het scherm waar niemand keek weer onkiesbaar."""
+    Het waren er drie; de inbox-kiezer (`views/inbox._person_role_options`) is in B2 verdwenen met
+    het scherm zelf."""
     import inspect
 
-    from nooch_village.views import inbox, vangst, wizard
-    for mod, fn in ((inbox, "_person_role_options"), (wizard, "_role_options"),
-                    (vangst, "_rol_opties")):
+    from nooch_village.views import vangst, wizard
+    for mod, fn in ((wizard, "_role_options"), (vangst, "_rol_opties")):
         bron = inspect.getsource(getattr(mod, fn))
         assert "_rol_labels(" in bron, f"{mod.__name__}.{fn} disambigueert niet"

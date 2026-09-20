@@ -45,7 +45,8 @@ def test_elke_action_fetch_leest_de_server_markering():
 
 def test_de_klasse_is_niet_leeg():
     """Een ratchet die niets telt bewaakt niets — dit is de validatie van het meetinstrument."""
-    assert len(list(_action_fetches())) >= 5
+    # Was >= 5; views/inbox.py droeg er een. Dat bestand is in B2 verdwenen met het scherm.
+    assert len(list(_action_fetches())) >= 4
 
 
 def test_ook_de_slapende_oppervlakken_zijn_gedekt():
