@@ -93,16 +93,17 @@ def _rollen(st, circle: str) -> list:
 # daar werk neerleggen is het laten verdwijnen bij iemand die niet draait.
 
 def alle_rollen(st) -> list:
-    from nooch_village.villageraad import rollen as levende_rollen
-    return sorted((r for r in levende_rollen(st.records) if not getattr(r, "slaapt", False)),
+    from nooch_village import org
+    return sorted((r for r in org.levende_rollen(st.records.all())
+                   if not getattr(r, "slaapt", False)),
                   key=lambda r: _name(r).lower())
 
 
 def rol_namen(st) -> dict:
-    """{rol_id: unieke weergavenaam}. Dezelfde helper als de villageraad — drie rollen die
+    """{rol_id: unieke weergavenaam}. Dezelfde helper als de waarde-audit — drie rollen die
     allemaal 'Circle Lead' heten zijn in een autocomplete niet uit elkaar te houden."""
-    from nooch_village.villageraad import labels
-    return labels(alle_rollen(st), st.records)
+    from nooch_village import org
+    return org.unieke_namen(alle_rollen(st), st.records.all())
 
 
 def rol_uit_naam(st, naam: str) -> tuple:

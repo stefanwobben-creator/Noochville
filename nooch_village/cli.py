@@ -1083,39 +1083,6 @@ def main() -> None:
         print(tekst)
         print(f"\n\u2192 verslag: {uit}")
 
-    elif mode == "villageraad":
-        # De council-pass: elke rol leest de Kroniek en zijn eigen wiki-pagina's vanuit purpose en
-        # accountabilities, en werpt alleen spanningen op die aan een record of pagina vastzitten.
-        # DRY-RUN by default: pas met --apply gaan de kaarten als DM naar de mens die de
-        # ontvangende rol vervult en wordt het spoor geschreven. Het verslag gaat naar
-        # data/output/villageraad_<datum>.md.
-        import os
-        from nooch_village import villageraad as vr
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        apply = "--apply" in sys.argv
-        opnieuw = "--opnieuw" in sys.argv
-        cap = next((int(a.split("=", 1)[1]) for a in sys.argv[2:] if a.startswith("cap=")),
-                   vr.CAP_PER_ROL)
-        print(f"\U0001f3db\ufe0f  Villageraad — {'LIVE' if apply else 'DRY-RUN'}, cap {cap} per rol\u2026")
-        rapport = vr.raad(records=st.records, att=st.att, ledger=st.evidence,
-                          assignments=st.assign, data_dir=ctx.data_dir,
-                          apply=apply, cap=cap, opnieuw=opnieuw)
-        tekst = vr.rapport_tekst(rapport)
-        uit = os.path.join(ctx.data_dir, "output", f"villageraad_{rapport['datum']}.md")
-        os.makedirs(os.path.dirname(uit), exist_ok=True)
-        with open(uit, "w", encoding="utf-8") as fh:
-            fh.write(tekst + "\n")
-        print(tekst)
-        print(f"\n\u2192 verslag: {uit}")
-        if not apply:
-            print("DRY-RUN \u2014 er is niets verzonden en niets vastgelegd. "
-                  "Draai opnieuw met --apply.")
-
     elif mode == "les":
         # DE SCHRIJFKANT VAN DE LEERLUS. De leeskant draaide al (de kans-reflex las huis-regels, de
         # zoekstrategie leest sinds 8 september zoeklessen), maar er was geen enkele productie-weg

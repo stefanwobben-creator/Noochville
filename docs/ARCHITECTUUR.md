@@ -276,7 +276,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `strategy.json` | `pinboard.py` |
 | `triage_uitkomsten.jsonl` | `triage_rol.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
-| `villageraad.jsonl` | `villageraad.py` |
 
 
 ### (d2) Meerdere schrijvers — eigenaarschap niet af te leiden
@@ -306,7 +305,8 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `rugzakken.json` |
 | `seed_surges.json` |
 | `trend_signals.jsonl` |
+| `villageraad.jsonl` |
 
 
 ---
-_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 35 daarbuiten met één schrijver · 6 met meerdere · 7 zonder gevonden schrijver._
+_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 34 daarbuiten met één schrijver · 6 met meerdere · 8 zonder gevonden schrijver._

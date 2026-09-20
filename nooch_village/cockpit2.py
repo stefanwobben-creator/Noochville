@@ -250,8 +250,9 @@ def _bootstrap(dd: str) -> None:
     # een antwoord dat niemand meer las: een LLM-call per melding, in het niets.
     #
     # `bevinding.py` en `zelf_verwerking.py` staan er NOG WEL. Ik had ze eerst meeverwijderd, en dat
-    # was fout: ze hebben eigen aanroepers buiten de poort (`villageraad`, `founder_kaart`, `wiki`,
-    # `cli` en deze module). Alleen de HAAK is weg, niet het gereedschap eronder.
+    # was fout: ze hebben eigen aanroepers buiten de poort (`founder_kaart`, `wiki`, `cli` en deze
+    # module; `villageraad` was er de vijfde, tot die op 20 september 2026 zelf wegging). Alleen de
+    # HAAK is weg, niet het gereedschap eronder.
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
