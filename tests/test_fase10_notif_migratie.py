@@ -148,3 +148,66 @@ def test_een_droogloop_rapporteert_geen_vergelijking(dorp):
     assert "droogloop" in droog
     echt = notif_migratie.rapport_tekst(notif_migratie.migreer(st.notif, st.channels, apply=True))
     assert "vóór" in echt and "✓ tellingen kloppen" in echt
+
+
+# ── stap 2: /inbox leest uit de kanalen ──────────────────────────────────────
+
+def _targets(st, rollen):
+    return [("role", r) for r in rollen]
+
+
+def test_de_kanaal_wachtrij_is_dezelfde_als_de_notifstore_wachtrij(dorp):
+    """De kern van stap 2. Zou dit uiteenlopen, dan mist iemand werk zonder dat iets het zegt."""
+    st = dorp
+    from nooch_village import notif_migratie as nm
+    t = _targets(st, [LEVEND, OPGEHEVEN])
+    nm.hersync(st.notif, st.channels)
+    uit_kanaal = {n["id"] for n in nm.open_uit_kanalen(st.channels, t)}
+    uit_store = {n["id"] for n in st.notif.open_for_targets(t)}
+    assert uit_kanaal == uit_store and uit_kanaal
+
+
+def test_een_inbox_actie_landt_in_het_kanaal_zonder_sync_aanroep(dorp):
+    """`NotifStore` blijft tot stap 3 de schrijver. `hersync` draait vlak vóór het lezen, dus een
+    actie hoeft zichzelf niet te spiegelen — en kan dus ook niet vergeten dat te doen."""
+    st = dorp
+    from nooch_village import notif_migratie as nm
+    t = _targets(st, [LEVEND, OPGEHEVEN])
+    nm.hersync(st.notif, st.channels)
+    open_voor = len(nm.open_uit_kanalen(st.channels, t))
+    doel = st.notif.open_for_targets(t)[0]
+    # `archive_item` weigert wat nog niet verwerkt is ("alleen wat verwerkt is mag weg"), dus eerst
+    # verwerken. Dat is geen omweg in de test maar de echte volgorde op het scherm.
+    st.notif.mark_item_processed(doel["id"], outcome="afgehandeld")
+    assert st.notif.archive_item(doel["id"]) is True        # alleen NotifStore aangeraakt
+    nm.hersync(st.notif, st.channels)
+    assert len(nm.open_uit_kanalen(st.channels, t)) == open_voor - 1
+
+
+def test_alle_velden_die_het_scherm_leest_komen_mee(dorp):
+    """De eerste versie kopieerde twaalf handgekozen velden; de view gebruikt er zeventien. Een
+    handgekozen lijst is een tweede plek waar een veld vergeten kan worden."""
+    st = dorp
+    from nooch_village import notif_migratie as nm
+    nodig = ("bevinding", "by", "entry_id", "herkomst", "id", "ok", "pagina", "poort",
+             "project_id", "snippet", "target_id", "target_type", "triage_grond", "triage_rol",
+             "triage_vorm", "type", "voorstel")
+    bron = next(n for n in st.notif.all() if n.get("target_id") == LEVEND)
+    bron.update({k: f"waarde-{k}" for k in nodig if k not in bron})
+    st.notif._save()
+    nm.hersync(st.notif, st.channels)
+    uit = next(n for n in nm.open_uit_kanalen(st.channels, _targets(st, [LEVEND]))
+               if n["id"] == bron["id"])
+    for k in nodig:
+        assert k in uit, k
+
+
+def test_de_route_valt_terug_op_notifstore_als_de_kanalen_falen(dorp, monkeypatch):
+    """Fail-OPEN, en dat is hier de juiste kant. Een lege inbox laat iemand denken dat er geen werk
+    ligt; dat is erger dan een scherm op de oude bron."""
+    st = dorp
+    from nooch_village import notif_migratie as nm
+    monkeypatch.setattr(nm, "hersync", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk")))
+    t = _targets(st, [LEVEND, OPGEHEVEN])
+    assert {n["id"] for n in cockpit2._inbox_items(st, t)} == \
+           {n["id"] for n in st.notif.open_for_targets(t)}

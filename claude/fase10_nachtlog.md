@@ -559,3 +559,41 @@ de vormkeuze: een opgeheven rol houdt gewoon zijn kanaal met historie erin, en e
 aangewezen te worden.
 
 Tien tests. Suite: 4.098 passed, 1 failed (de bekende), 1 xfailed.
+
+## inbox-migratie, stap 2 van 3 — `/inbox` leest uit de kanalen
+
+`NotifStore` staat er nog en **blijft de schrijver**. Wat verandert is de LEZER: `/inbox` en de
+lade halen hun rol-items nu uit `role:<id>`-kanalen.
+
+**Eén plek die het bij elkaar houdt, niet dertien.** Zolang stap 3 niet is gezet, staat hetzelfde
+feit op twee plekken — precies wat `reference, don't copy` normaal verbiedt. De volgorde lost dat
+op: `hersync()` draait vlak vóór het lezen, in `_inbox_items`. Een inbox-actie hoeft zichzelf dus
+niet te spiegelen en kan dat ook niet vergeten. Het alternatief — een sync-aanroep in elke
+schrijf-tak — is dertien plekken die het allemaal moeten onthouden.
+
+**Fail-open, bewust de andere kant op dan gebruikelijk.** Faalt de kanaal-lezing, dan valt de route
+terug op `NotifStore`. Een lege inbox is hier het gevaarlijke antwoord: dan denkt iemand dat er geen
+werk ligt. Liever de bron die sinds juni werkt dan een stil scherm. Test erop.
+
+### Een echte fout in stap 1, gevonden door stap 2
+
+Ik had `VERWERKING_VELDEN` als **handgekozen lijst van twaalf** gebouwd. Toen `/inbox` erop ging
+lezen bleek de view er **zeventien** te gebruiken: `herkomst`, `pagina`, `voorstel`,
+`triage_grond`, `triage_rol`, `triage_vorm` en `ok` stonden er niet bij. Met de oude lijst zouden
+die velden stil leeg zijn geweest — en dat merk je pas als een scherm een half item toont.
+
+Nu gaat **alles** mee, met een overslaan-lijst van drie (`id`, `at`, `tekst`, want die staan al op
+het bericht zelf). Een handgekozen lijst is een tweede plek waar een veld vergeten kan worden.
+`VERWERKING_VELDEN` bestaat nog, maar alleen als **telijst voor de guard** — daar wil je de
+oordelen juist met naam en toenaam terugzien.
+
+Dat is precies waarom je de drie stappen wilde: deze fout was in één grote commit pas na het
+verwijderen van `NotifStore` opgevallen, en dan was er geen bron meer om uit te herstellen.
+
+### Nog een testfout van mezelf
+
+`archive_item` weigert wat nog niet verwerkt is (*"alleen wat verwerkt is mag weg"*). Mijn test
+archiveerde direct en concludeerde dat de sync stuk was. De volgorde verwerken → archiveren is de
+echte volgorde op het scherm; de test volgt hem nu.
+
+Vier tests erbij (14 totaal in dit bestand). Suite: 4.102 passed, 1 failed (de bekende), 1 xfailed.

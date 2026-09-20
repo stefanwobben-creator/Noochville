@@ -56,10 +56,19 @@ PROJECT, CIRCLE, DM, TOPIC, ROLE = "project", "circle", "dm", "topic", "role"
 #: trail, maar met een verwerkingsgeschiedenis eronder die een gewoon bericht niet heeft.
 COMMENT, NOTIFICATIE = "comment", "notificatie"
 
-#: De velden van een NotifStore-rij die MEE MOETEN. Letterlijk overgenomen, niet samengevat en niet
-#: herleid tot een status — dat is de harde eis bij de migratie (besluit Stefan, 20 sept 2026).
-#: 185 outcomes en 54 poort-oordelen zijn vastgelegde oordelen van een mens; die mogen niet in een
-#: afgeleid statusveld verdwijnen.
+#: Wat er NIET in het `verwerking`-blok hoeft, omdat het al op het bericht zelf staat.
+#: Al het andere gaat mee — ALLES, niet een handgekozen lijst. Dat is de harde eis bij de migratie
+#: (besluit Stefan, 20 sept 2026) in zijn letterlijke vorm.
+#:
+#: WAAROM ALLES EN NIET EEN LIJST. De eerste versie noemde twaalf velden op. Toen `/inbox` erop
+#: ging lezen bleek de view er zeventien te gebruiken: `herkomst`, `pagina`, `voorstel`,
+#: `triage_grond`, `triage_rol`, `triage_vorm`, `ok` stonden er niet bij. Een handgekozen lijst is
+#: een tweede plek waar een veld vergeten kan worden, en dat merk je pas als het scherm leeg blijft.
+VERWERKING_OVERSLAAN = ("id", "at", "tekst")
+
+#: De velden die de migratie-guard TELT. Dit is bewust wél een lijst: het zijn de oordelen van een
+#: mens (185 outcomes, 54 poort-oordelen op prod) en die wil je met naam en toenaam terugzien in
+#: het rapport, niet als "alles klopt".
 VERWERKING_VELDEN = ("read", "processed", "archived", "done", "deleted",
                      "outcome", "poort", "verwerkingen", "type", "bevinding",
                      "project_id", "entry_id")
@@ -125,7 +134,8 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie")
+    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie",
+                      "werk_verwerking_bij")
     _STATE = "_data"
     _default = dict
 
@@ -220,12 +230,26 @@ class ChannelStore(JsonStore):
             "author": {"type": "role" if n.get("by") else "", "id": str(n.get("by") or "")},
             "text": str(n.get("tekst") or n.get("snippet") or ""),
             "at": float(n.get("at") or 0),
-            "verwerking": {v: n[v] for v in VERWERKING_VELDEN if v in n},
+            "verwerking": {k: v for k, v in n.items() if k not in VERWERKING_OVERSLAAN},
         }
         rij.append(entry)
         rij.sort(key=lambda e: float(e.get("at") or 0))
         self._save()
         return entry
+
+    def werk_verwerking_bij(self, kanaal: str, entry_id: str, verwerking: dict) -> bool:
+        """Ververs het `verwerking`-blok van één bericht. Alleen voor `notif_migratie.hersync`.
+
+        Zolang `NotifStore` de schrijver is (stap 1 en 2), is dit de enige manier waarop een
+        inbox-actie in het kanaal landt. Raakt `text` en `at` bewust NIET aan: die zijn het bericht
+        zelf, en een verwerking mag de tekst van een spanning niet herschrijven."""
+        rij = (self._data.get("kanalen") or {}).get(kanaal) or []
+        for e in rij:
+            if e.get("id") == entry_id:
+                e["verwerking"] = dict(verwerking)
+                self._save()
+                return True
+        return False
 
     # ── lezen ────────────────────────────────────────────────────────────────
     def trail(self, kanaal: str, limit: int = TRAIL_MAX) -> list[dict]:

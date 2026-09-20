@@ -84,6 +84,62 @@ def migreer(notif, kanalen, *, apply: bool = False) -> dict:
     return rapport
 
 
+def hersync(notif, kanalen) -> dict:
+    """Breng de kanalen bij met `NotifStore`, in één pass. Stap 2 leunt hierop.
+
+    ZOLANG STAP 3 NIET IS GEZET, IS `NotifStore` DE SCHRIJVER. Elke inbox-actie (gelezen,
+    verwerkt, uitkomst, poort, archiveren) schrijft nog steeds daar. Het kanaal is in stap 2 de
+    LEZER. Twee plekken met hetzelfde feit is normaal gesproken precies wat `reference, don't copy`
+    verbiedt — hier is het tijdelijk en bewust, en dit is de enige plek die ze bij elkaar houdt:
+    één functie, aangeroepen vlak vóór het lezen, in plaats van een sync-aanroep verspreid over
+    elke schrijf-actie. Drift is daarmee niet mogelijk, want er wordt nooit uit een verouderde
+    kopie gelezen.
+
+    In stap 3 verdwijnt deze functie samen met `NotifStore`.
+    """
+    rijen = {n["id"]: n for n in _rol_rijen(notif)}
+    bij, nieuw = 0, 0
+    for n in rijen.values():
+        kanaal = channels.role_kanaal(n["target_id"])
+        entry = next((e for e in kanalen.trail(kanaal, limit=10_000)
+                      if e.get("id") == n.get("id")), None)
+        if entry is None:
+            if kanalen.plaats_notificatie(kanaal, n) is not None:
+                nieuw += 1
+            continue
+        vers = {k: v for k, v in n.items() if k not in channels.VERWERKING_OVERSLAAN}
+        if entry.get("verwerking") != vers:
+            kanalen.werk_verwerking_bij(kanaal, n["id"], vers)
+            bij += 1
+    return {"nieuw": nieuw, "bijgewerkt": bij, "totaal": len(rijen)}
+
+
+def open_uit_kanalen(kanalen, targets) -> list[dict]:
+    """De inbox-wachtrij, maar gelezen uit de KANALEN in plaats van uit `NotifStore`.
+
+    Geeft dicts met dezelfde vorm als `NotifStore.open_for_targets` teruggaf, zodat de view niet
+    hoeft te weten waar zijn items vandaan komen. Dat is geen truc om een herschrijving te
+    vermijden: de vorm ís hetzelfde feit, alleen op een andere plek opgeslagen.
+
+    Alleen rol-doelen. Persoon-gerichte items zijn niet gemigreerd (besluit: buiten deze ronde),
+    dus die haalt de aanroeper nog bij `NotifStore` vandaan.
+    """
+    rollen = [i for t, i in targets if t == "role"]
+    uit = []
+    for rol in rollen:
+        for e in kanalen.trail(channels.role_kanaal(rol), limit=10_000):
+            if e.get("kind") != channels.NOTIFICATIE:
+                continue
+            v = dict(e.get("verwerking") or {})
+            if v.get("archived") or v.get("deleted") or v.get("done"):
+                continue
+            v.update({"id": e.get("id"), "at": e.get("at"),
+                      "tekst": e.get("text") or "", "target_type": "role", "target_id": rol})
+            v.setdefault("snippet", (e.get("text") or "")[:160])
+            uit.append(v)
+    return sorted(uit, key=lambda n: -(n.get("at") or 0))
+
+
 def rapport_tekst(r: dict) -> str:
     regels = [f"rol-gerichte notificaties : {r['rol_rijen']}",
               f"persoon-gericht (blijft)  : {r['persoon_rijen']}",
