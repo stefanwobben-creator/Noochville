@@ -1080,6 +1080,11 @@ _NU_ROUTES = frozenset({
     "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
     "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
     "/inbox", "/inbox/verwerk", "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
+    # Fase 10, groep B. `/middelen` en `/rolefillers` draaien op DEZELFDE `overview.py` als
+    # `/node`, `/person` en `/admin`, die er al in stonden — dezelfde rendercode zag er dus anders
+    # uit afhankelijk van de URL. Dat was een gat in deze lijst, geen besluit. `/site-audit` is in
+    # fase 7 aangeraakt (taalresten) maar viel toen buiten de fase-9-scope.
+    "/middelen", "/rolefillers", "/site-audit",
 })
 
 _STATIC_TYPES = {

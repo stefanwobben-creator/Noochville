@@ -270,3 +270,27 @@ def test_kleuren_zonder_merkdekking_worden_binnen_nu_geneutraliseerd():
     nog = {k for k in _NOG_TE_DOEN
            if not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)}
     assert nog == _NOG_TE_DOEN, f"al afgehandeld, haal ze uit _NOG_TE_DOEN: {_NOG_TE_DOEN - nog}"
+
+
+def test_routes_van_dezelfde_view_zitten_allemaal_in_de_nu_scope():
+    """Groep B. `/middelen` en `/rolefillers` draaiden op dezelfde `overview.py` als `/node`,
+    `/person` en `/admin` — maar stonden niet in `_NU_ROUTES`. Dezelfde rendercode zag er dus
+    anders uit afhankelijk van de URL.
+
+    Structureel geschreven: lees route→view uit de vindkaart, en eis dat een view die ÉÉN route in
+    de scope heeft, ze allemaal in de scope heeft. Zo valt een volgende splitsing ook op."""
+    from nooch_village.cockpit2 import _NU_ROUTES
+
+    kaart = (REPO / "docs" / "ARCHITECTUUR.md").read_text()
+    per_view: dict[str, set[str]] = {}
+    for m in re.finditer(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", kaart, re.M):
+        per_view.setdefault(m.group(3), set()).add(m.group(1))
+
+    # `cockpit2.py` is geen view maar de dispatcher: hij "rendert" ook /login, /logout en /file.
+    # Dat die niet in de scope zitten is juist het besluit, geen gat.
+    per_view.pop("cockpit2.py", None)
+
+    gespleten = {v: sorted(r - set(_NU_ROUTES))
+                 for v, r in per_view.items()
+                 if r & set(_NU_ROUTES) and r - set(_NU_ROUTES)}
+    assert not gespleten, f"view met routes binnen én buiten de nu-scope: {gespleten}"

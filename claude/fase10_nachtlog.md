@@ -128,3 +128,29 @@ doelen.py 0 · inbox.py 0 · overview.py 0 · search.py 0 · wiki.py 0 · wizard
 Wat rest is groep C (`roloverleg.py`, `werkoverleg.py` — nooit herbouwd) plus drie restjes.
 
 Suite: 4.056 passed, 1 failed (de bekende), 1 xfailed.
+
+## 04:05 — groep B: `/middelen`, `/rolefillers`, `/site-audit`
+
+**Wat.** Drie routes aan `_NU_ROUTES` toegevoegd. `/middelen` en `/rolefillers` draaiden op
+**dezelfde `overview.py`** als `/node`, `/person` en `/admin`, die er al in stonden — dezelfde
+rendercode zag er dus anders uit afhankelijk van de URL. Dat was een gat in de lijst, geen besluit.
+`/site-audit` was in fase 7 aangeraakt (taalresten) en viel daardoor ten onrechte buiten fase 9.
+
+**Niet alleen de route.** Ik heb eerst `site_audit.py` gemeten vóór ik de route toevoegde — anders
+herhaal ik de wizard-fout (body-klasse zonder markup-dekking). Eén open klasse: `.seg`, met een
+`--radius-pill`. Meteen meegenomen.
+
+**Een test met een eigen vorm.** `test_routes_van_dezelfde_view_zitten_allemaal_in_de_nu_scope`
+leest route→view uit de vindkaart en eist dat een view die één route in de scope heeft, ze
+allemaal in de scope heeft. Zo valt een volgende splitsing vanzelf op. `cockpit2.py` is
+uitgezonderd met reden: dat is de dispatcher en geen view — die "rendert" ook `/login` en `/file`,
+en dát die buiten de scope vallen is juist het besluit.
+
+**Een bestaande test moest mee.** `test_de_geparkeerde_schermen_staan_er_bewust_niet_in` (fase 9)
+noemde `/site-audit` als geparkeerd. Die regel is weggehaald mét de reden erbij in de docstring,
+niet stilzwijgend — een stille wijziging daar is over een jaar onverklaarbaar.
+
+`docs/ARCHITECTUUR.md` gaf geen diff: er zijn geen nieuwe routes of dispatch-acties, alleen een
+uitbreiding van een bestaande lijst.
+
+Suite: 4.057 passed, 1 failed (de bekende), 1 xfailed.

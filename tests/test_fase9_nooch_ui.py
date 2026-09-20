@@ -64,9 +64,14 @@ def test_de_negentien_schermen_staan_erin():
 
 def test_de_geparkeerde_schermen_staan_er_bewust_niet_in():
     """/claims en /metrics2 zijn geparkeerd voor een eventuele tiende fase; de rest is in
-    fase 1-8 nooit qua UI aangeraakt."""
+    fase 1-8 nooit qua UI aangeraakt.
+
+    `/site-audit` stond hier tot 20 september 2026 ook in. Fase 10 heeft hem alsnog opgenomen: hij
+    WAS in fase 7 aangeraakt (taalresten) en viel dus ten onrechte buiten de scope. Bewust hier
+    weggehaald en niet stilzwijgend — dat is precies het soort wijziging dat een jaar later
+    onverklaarbaar is."""
     for pad in ("/claims", "/metrics2", "/catalog", "/skills", "/copy-check", "/decision-coach",
-                "/site-audit", "/keywords", "/rapport", "/login"):
+                "/keywords", "/rapport", "/login"):
         assert pad not in _NU_ROUTES, pad
 
 

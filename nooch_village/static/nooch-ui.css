@@ -390,3 +390,6 @@
 .nu .tree-c { font-family: var(--nu-font); color: var(--nu-text); }
 .nu .stack-av { border-color: var(--nu-surface); }
 .nu .av.green, .nu .green { background: var(--nu-text); color: var(--nu-surface); }
+
+/* groep B · `/site-audit` — de laatste pil buiten de negentien schermen */
+.nu .seg { border: var(--nu-border); border-radius: 0; }
