@@ -721,6 +721,33 @@ Nieuwe UI (formulieren, lijsten, kaarten) hergebruikt ALTIJD bestaande design-sy
   opnieuw het probleem dat de CSS-opruiming al één keer moest oplossen — ad-hoc,
   niet-herbruikbare UI-stukjes die elders straks weer opnieuw worden uitgevonden.
 
+## AI is instrument, geen rol (HARDE REGEL)
+
+**AI-rollen met eigen autonomie en beslissingsbevoegdheid bestaan niet meer in NoochVille.** De
+enige uitzondering is **Noochie**, die bewust en langzaam opnieuw wordt opgebouwd. Noochie is geen
+precedent: uit "Noochie mag dit" volgt nooit "dus deze nieuwe AI-rol ook".
+
+Alle overige inzet van een LLM is een **instrument**. Het toont inzicht — een trend, een cijfer, een
+samenvatting, een suggestie — en daar houdt het op. Een LLM:
+
+- **beslist niet** en **routeert niet** (wie iets toegewezen krijgt);
+- **escaleert niet** (of iets wordt opgevolgd, en door wie);
+- **legt geen rol slapend** en **trekt geen skill in**.
+
+**De regel:** elke plek waar een LLM-uitkomst een ORGANISATORISCH effect heeft — wie iets krijgt
+toegewezen, of iets wordt opgevolgd, een rol- of skillstatus die verandert — heeft een **expliciete
+mensbeslissing ertussen vóórdat het effect optreedt**. Niet erna als correctie, niet als
+"terugdraaibaar", niet als log dat iemand had kunnen lezen: ervóór.
+
+Dit is dezelfde grens als "Harde grens: zelfverbetering stopt bij voorstellen" en als de
+geboren-versus-bemenst-splitsing, nu toegepast op OORDEEL in plaats van op capaciteit. Een model dat
+een rol aanwijst doet structureel hetzelfde als een rol die zichzelf een skill geeft: het verandert
+de organisatie zonder dat een mens tekende.
+
+**Geen big-bang-retrofit.** Bestaande code die dit nog niet zo doet blijft zoals hij is totdat je er
+toch al in zit voor iets anders — dan neem je 'm mee. Zelfde ratchet-principe als de
+inline-style-regel en de atom-regel hierboven: monotone daling, geen losse opruimronde.
+
 ## Autorisatie — elke nieuwe dispatch-tak
 
 Elke nieuwe `dispatch`-tak krijgt bij aanmaken direct een bewuste autorisatielaag.
