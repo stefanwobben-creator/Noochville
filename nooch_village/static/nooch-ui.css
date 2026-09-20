@@ -141,10 +141,33 @@
 .nu .cl-filter { border: 1.5px solid transparent; border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-weight: 700; }
 .nu .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
+/* ── FASE 12, TWEEDE HERZIENING: een VELD is geen container (21 september 2026) ──────────────
+   De regel "een invoerveld is een container en houdt zijn 2px-kader" klopte op een scherm met
+   één veld en viel om op een scherm met twaalf. De projectkaart-modal telde er tien in één blik:
+   titel, pakket-label, omschrijving, checklist, elk hand-off-knopje, en elk los veld in de
+   Details-kolom (status, assignee, mission impact, business, effort, role). Precies de muur van
+   hokjes die fase 12 moest opheffen — nu in veldvorm.
+
+   DE HERZIENING, en hij geldt dorpsbreed en niet per scherm: een besturingselement draagt een
+   ONDERLIJN, geen kader. De lijn staat waar je typt, en nergens anders. Wat NIET verandert: een
+   kaart, een tabel, een popover of de modal zelf houdt zijn 2px — die zijn wél een omhulsel, en
+   dát onderscheid is de hele rolverdeling.
+
+   Waarom een onderlijn en niet "niets": een veld moet vindbaar blijven. Hij ligt op de bodem van
+   het veld, dus de ruimte tussen twee velden wordt wit in plaats van een rij randen die elkaar
+   raken. Bij focus wordt hij dikker en groen — de plek waar je bent, is de enige die opvalt. */
 .nu input[type=text], .nu input[type=search], .nu input[type=email], .nu input[type=number],
-.nu textarea, .nu select {
-  font-family: var(--nu-font); border: var(--nu-border); border-radius: 0;
-  background: var(--nu-surface); color: var(--nu-text); }
+.nu input[type=url], .nu input[type=date], .nu input[type=password],
+.nu textarea, .nu select, .nu .ctrl, .nu .fieldform, .nu .title-edit {
+  font-family: var(--nu-font); border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
+.nu input[type=text]:focus, .nu input[type=search]:focus, .nu input[type=email]:focus,
+.nu input[type=number]:focus, .nu input[type=url]:focus, .nu input[type=date]:focus,
+.nu input[type=password]:focus, .nu textarea:focus, .nu select:focus {
+  border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
+/* `.fieldform` is een RIJ met een veld en een knop erin; de onderlijn hoort bij het veld, niet om
+   de rij heen. Vandaar hier geen lijn — de kinderen dragen hem al. */
+.nu .fieldform { border-bottom: 0; }
 .nu .c2-search input { border-color: var(--nu-text); }
 .nu :focus-visible { outline: 3px solid var(--nu-neon); outline-offset: -1px; }
 
@@ -245,13 +268,15 @@
 .nu .attcard { background: var(--nu-surface); border: var(--nu-border); border-radius: 0; }
 .nu .att-pop { border-radius: 0; }
 .nu .att-pop input[type=text], .nu .att-pop input[name=url], .nu .att-pop input[name=title] {
-  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  border: 0; border-bottom: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text);
   font-family: var(--nu-font); }
 
 .nu .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
   font-weight: 600; }
 .nu .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
-.nu .qadd-form textarea { border: var(--nu-border); border-radius: 0; box-shadow: none;
+.nu .qadd-form textarea { border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0; box-shadow: none;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 .nu .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
 
@@ -306,9 +331,11 @@
    Rood blijft als `--nu-danger` bestaan: een foutkleur is functioneel nodig, ook al staat hij niet
    op een productfoto. Dat is een keuze, geen meting — daarom staat hij hier benoemd. */
 
-/* 1 · Omhulsels: 1px crème rand + 9px radius → 2px zwart, vierkant */
-.nu .ctrl, .nu .fieldform, .nu .fbubble, .nu .box-details, .nu .datepop,
-.nu .vzblock, .nu .ovl-box, .nu .pkaart-rail, .nu .title-edit {
+/* 1 · Omhulsels: 1px crème rand + 9px radius → 2px zwart, vierkant.
+   `.ctrl`, `.fieldform` en `.title-edit` stonden hier óók in, en dat was de fout die de
+   veldregel hieronder repareert: dat zijn BESTURINGSELEMENTEN, geen omhulsels. */
+.nu .fbubble, .nu .box-details, .nu .datepop,
+.nu .vzblock, .nu .ovl-box, .nu .pkaart-rail {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   box-shadow: none; color: var(--nu-text); }
 .nu .pkaart-rail { border-left: var(--nu-border); border-top: none;
@@ -489,7 +516,8 @@
 .nu .kpidata-v { color: var(--nu-text); }
 
 /* punt 1a · het zoekveld boven de kanalenlijst */
-.nu .msg-zoek input[type=search] { border: var(--nu-border); border-radius: 0;
+.nu .msg-zoek input[type=search] { border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 .nu .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
 
