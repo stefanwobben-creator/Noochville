@@ -6,7 +6,7 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from nooch_village.web_base import _e, _page, _banner
+from nooch_village.web_base import _e, _field, _page, _banner
 from nooch_village.cockpit2_util import (
     _DS_LINK,
     _name, _initials, _tabbar, _avatar, _age, _md, md_editor,
@@ -338,88 +338,91 @@ def _members_html(st: _Stores, rec, csrf_token: str = "") -> str:
 
 
 def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
-    """Admin-pagina 'Deelnemers': mensen toevoegen, wijzigen (naam/e-mail), wachtwoord
-    resetten en verwijderen. Login vereist (route niet publiek). Eén plek voor people-beheer,
-    los van de Members-tab van een cirkel."""
+    """Admin-pagina 'People': mensen toevoegen, wijzigen, wachtwoord resetten en verwijderen.
+
+    DIT SCHERM IS NOOIT MEEGEGAAN met fase 9/10/12 (gevonden 21 september 2026, door zelf in te
+    loggen en te kijken in plaats van op een rapport te vertrouwen). Het droeg een eigen
+    `<style>`-blok, zeventien kale `<input>`s zonder gekoppeld label, en twaalf inline styles —
+    terwijl `_field()`, `.qadd-form`, `.card` en `.att-lbl` al bestonden. Het resultaat zag eruit
+    als een ander product dan de rest van de cockpit.
+
+    Wat het nu gebruikt, en waarom precies dat: `.card` voor de container (de enige rol die een
+    kader hoort te dragen), `.qadd-form` voor het toevoeg-formulier (hetzelfde patroon als elk
+    ander 'voeg iets toe'-blok), `_field()` voor elk veld (label en veld als onlosmakelijk paar) en
+    `.btn`-varianten voor de knoppen. Geen eigen CSS, geen inline styles.
+
+    TWEE DODE LINKS ZIJN HIER WEGGEHAALD: "Inhabitants (AI personas)" wees naar `/inwoners` en
+    "Founder Flow" naar `/founder`. Beide routes bestaan niet meer; ze gaven een 404. Zie de
+    commit voor wat er áchter die schermen nog aan dode code stond."""
     people = st.people.all()
     rw = bool(csrf_token)
 
     def _status(p):
         if getattr(p, "last_login", 0):
-            return f"<span class='chip green'>active</span> <span class='muted'>· {_e(_age(p.last_login))}</span>"
+            return (f"<span class='chip'>active</span>"
+                    f"<span class='muted'> · {_e(_age(p.last_login))}</span>")
         if getattr(p, "password_hash", ""):
             return "<span class='chip outline'>invited</span>"
         return "<span class='chip muted'>no access</span>"
 
-    rows = ""
+    def _hid(pid: str, nxt: str = "/admin") -> str:
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                f"<input type='hidden' name='next' value='{_e(nxt)}'>")
+
+    rijen = ""
     for p in people:
         nrol = len(st.assign.roles_of("person", p.id))
         if rw:
-            edit = (
-                f"<form method='post' action='/action' class='fieldform' style='gap:.4rem'>"
-                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
-                f"<input type='hidden' name='next' value='/admin'>"
-                f"<input type='text' name='name' value='{_e(p.name)}' aria-label='name'>"
-                f"<input type='email' name='email' value='{_e(p.email)}' aria-label='email'>"
-                f"<button class='btn ok sm' type='submit' name='action' value='person_edit'>save</button>"
-                f"</form>")
-            pw = (f"<form method='post' action='/action' style='display:inline'>"
-                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                  f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
-                  f"<button class='btn sm' type='submit' name='action' value='person_reset_password'>"
-                  f"reset password</button></form>")
-            warn = (f" — also removes {nrol} role assignment(s)" if nrol else "")
-            rm = (f"<form method='post' action='/action' style='display:inline'>"
-                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                  f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
-                  f"<input type='hidden' name='next' value='/admin'>"
-                  f"<button class='dellink' type='submit' name='action' value='person_remove' "
-                  f"onclick=\"return confirm('Delete {_e(p.name)}?{warn}')\">delete</button></form>")
-            actions = f"<div class='admin-act'>{pw} {rm}</div>"
+            # Eén rij = één formulier met twee velden naast elkaar. `_field` koppelt label en veld;
+            # de id's moeten uniek zijn omdat elke rij dezelfde veldnamen draagt.
+            hoofd = (f"<form method='post' action='/action' class='qadd-form admin-row-form'>"
+                     f"{_hid(p.id)}"
+                     + _field("Name", "name", value=p.name, fid=f"f-naam-{p.id}")
+                     + _field("Email", "email", kind="email", value=p.email,
+                              fid=f"f-mail-{p.id}")
+                     + f"<div class='qadd-row'>"
+                       f"<button class='btn ok sm' type='submit' name='action' "
+                       f"value='person_edit'>Save</button></div></form>")
+            warn = f" — also removes {nrol} role assignment(s)" if nrol else ""
+            acties = (f"<form method='post' action='/action'>{_hid(p.id)}"
+                      f"<button class='btn sm' type='submit' name='action' "
+                      f"value='person_reset_password'>Reset password</button></form>"
+                      f"<form method='post' action='/action'>{_hid(p.id)}"
+                      f"<button class='btn ghost sm' type='submit' name='action' "
+                      f"value='person_remove' "
+                      f"onclick=\"return confirm('Delete {_e(p.name)}?{warn}')\">Delete</button>"
+                      f"</form>")
         else:
-            edit = f"<b>{_e(p.name)}</b> <span class='muted'>· {_e(p.email) or 'no email'}</span>"
-            actions = ""
-        rows += (f"<div class='admin-row'><div class='admin-main'>{edit}</div>"
-                 f"<div class='admin-meta'>{_status(p)} <span class='muted'>· {nrol} role(s)</span>"
-                 f"{actions}</div></div>")
+            hoofd = (f"<b>{_e(p.name)}</b>"
+                     f"<span class='muted'> · {_e(p.email) or 'no email'}</span>")
+            acties = ""
+        rijen += (f"<div class='admin-row'><div class='admin-main'>{hoofd}</div>"
+                  f"<div class='admin-meta'>{_status(p)}"
+                  f"<span class='muted'> · {nrol} role(s)</span>"
+                  f"<span class='admin-act'>{acties}</span></div></div>")
 
-    add = ""
+    toevoegen = ""
     if rw:
-        add = (
-            f"<details class='c2-add' open style='margin-bottom:1rem'>"
-            f"<summary style='cursor:pointer;font-weight:600'>+ Add person</summary>"
-            f"<form method='post' action='/action' style='margin-top:.75rem;display:grid;gap:.5rem;max-width:380px'>"
+        toevoegen = (
+            f"<details class='qadd' open><summary class='muted'>＋ Add person</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='action' value='person_add'>"
             f"<input type='hidden' name='next' value='/admin'>"
-            f"<input type='text' name='voornaam' placeholder='First name' required>"
-            f"<input type='text' name='achternaam' placeholder='Last name' required>"
-            f"<input type='email' name='email' placeholder='Email address' required>"
-            f"<button class='btn ok' type='submit'>Add</button>"
-            f"</form></details>")
+            + _field("First name", "voornaam", required=True)
+            + _field("Last name", "achternaam", required=True)
+            + _field("Email address", "email", kind="email", required=True)
+            + f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Add</button></div>"
+              f"</form></details>")
 
-    css = ("<style>"
-           ".admin-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;"
-           "flex-wrap:wrap;padding:.55rem 0;border-bottom:1px solid var(--border)}"
-           ".admin-main{flex:1 1 340px;min-width:0}"
-           ".admin-main .fieldform input[name=name]{flex:0 1 11rem}"
-           ".admin-main .fieldform input[name=email]{flex:1 1 13rem}"
-           ".admin-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.85rem}"
-           ".admin-act{display:inline-flex;gap:.4rem;margin-left:.4rem}"
-           "</style>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>People <span class='chip'>admin</span></h1>"
-            # Mensen staan hier; de AI-inwoners hebben hun eigen dossier-overzicht.
-            f"<p class='muted'><a href='/inwoners'>→ Inhabitants (AI personas)</a> · "
-            f"<a href='/founder'>→ Founder Flow (autonomy training loop)</a></p>{_banner(msg)}"
-            f"<p class='muted'>Add, edit, reset password or remove people. "
-            f"This page requires login.</p>{add}"
-            f"<div class='c2-sec'><h3>People ({len(people)})</h3>{rows or '<span class=muted>No one yet.</span>'}</div></div>")
-    inner = (f"{_DS_LINK}{css}"
-             f"{_nav()}"
-             f"<div class='c2-wrap'>{main}</div>")
-    return _page("People — admin", inner)
+            f"<p class='muted'>Add, edit, reset a password or remove people. "
+            f"This page requires login.</p>{_banner(msg)}{toevoegen}"
+            f"<div class='c2-sec'><h3>People ({len(people)})</h3>"
+            f"<div class='card'>{rijen or '<p class=muted>No one yet.</p>'}</div></div></div>")
+    return _page("People — admin", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
 
 def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:

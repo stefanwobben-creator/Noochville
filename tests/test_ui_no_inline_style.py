@@ -22,7 +22,8 @@ CIRCLE = "mother_earth__nooch"
 # Per-bestand plafond voor bestaande inline style=-schuld (audit dd 2026-07-05, totaal 137).
 # Niet-vermelde governeerde views moeten 0 zijn (schoon). Verlaag een getal zodra je opruimt.
 _STYLE_WHITELIST = {
-    "views/overview.py": 28,
+    "views/overview.py": 22,   # -6 (21 sept): /admin herschreven op het designsysteem —
+                               # eigen <style>-blok en inline styles eruit, `_field`/`.qadd-form` erin
     "views/projects.py": 17,   # -2 (fase 11): de voortgangsbalk werd `<progress class='nu-progress'>`
                                # (geen `style='width:x%'` meer) en de kaart-link kreeg `.pcard-link`
     "views/strategy.py": 14,
