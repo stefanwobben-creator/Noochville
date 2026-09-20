@@ -3332,28 +3332,6 @@ def _circle_lead_van(st, rol: str) -> str:
     return ""
 
 
-def _rolsuggestie(st, tekst: str, rol: str) -> dict:
-    """De rolsuggestie als `extra`-velden, of {} als er niets gegronds te zeggen valt.
-
-    Fail-soft en fail-STIL is hier niet hetzelfde: valt de classificatie uit, dan komt er geen
-    suggestie MAAR WEL een reden mee (`triage_grond`), zodat het scherm kan zeggen "geen rol
-    gevonden" in plaats van niets. Een lege band laat de lezer raden of we niets vonden of niet
-    hebben gekeken."""
-    try:
-        from nooch_village.triage_rol import classificeer
-        cirkel = resolve_circle_id(rol, st.records) if rol else ""
-        uit = classificeer(tekst, st.records, cirkel=cirkel)
-    except Exception as e:                                   # noqa: BLE001 — nooit de routering breken
-        logging.getLogger("village.triage").warning("rolsuggestie faalde: %s", e)
-        return {"triage_grond": "classificatie niet gedraaid"}
-    velden = {"triage_vorm": uit.get("vorm", ""), "triage_grond": uit.get("grond", "")}
-    if uit.get("rol"):
-        velden["triage_rol"] = uit["rol"]
-        velden["triage_accountability"] = uit["accountability"]
-        velden["triage_waarom"] = uit.get("waarom", "")
-    return velden
-
-
 def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
                _lead_hop: bool = False) -> dict:
     """WAAR zou dit werk landen? Zelfde beslissing als `route_werk`, zonder iets te schrijven.
@@ -3443,16 +3421,18 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     if best.get("via"):
         # De ontvanger moet zien waaróm dit bij hem ligt en niet bij de rol die het vroeg.
         tekst = f"[{best['via']}] {tekst}"
-    # DE TRIAGE-STAP, en hij staat hier en NIET in `bestemming`. Dat is met opzet: `bestemming` is
-    # de pure functie die de droge run gebruikt, en daar een modelaanroep in zetten maakt een
-    # voorbeschouwing duur en onvoorspelbaar. De classificatie verandert de BESTEMMING ook niet —
-    # ze annoteert. Stefan accepteert, overschrijft of houdt hem zelf.
+    # HIER STOND DE TRIAGE-STAP (`_rolsuggestie` → `triage_rol.classificeer`): een modelaanroep die
+    # een rol voorstelde mét de accountability waarop hij matcht, als annotatie bij het werk. Hij
+    # veranderde de bestemming niet — de lezer accepteerde, overschreef of hield hem zelf.
     #
-    # Alleen waar hij iets toevoegt: werk dat via de lead-hop komt (niemand vervult de rol) of dat
-    # als project op een AI-bord landt. Bij een mens met naam is er niets te raden.
-    _suggestie = {}
-    if best.get("via") or best["soort"] == "project":
-        _suggestie = _rolsuggestie(st, tekst, rol)
+    # ZIJN LEZER IS IN B2 VERDWENEN. De suggestie reisde mee als `extra`-velden op `notif.add`, en
+    # die velden droegen het inbox-scherm. Sinds 20 september 2026 is een melding een DM en heeft
+    # een DM geen velden; de aanroep bleef staan, het resultaat ging nergens heen. Dat is niet
+    # gratis: het kostte een modelaanroep per lead-hop en per project-routering, elke keer opnieuw.
+    #
+    # `triage_rol.py` zelf blijft staan — `menselijke_eigenaar` heeft een eigen lezer in
+    # `materiaal_memo`. Wat er NU dood in ligt (`classificeer`, `noteer_uitkomst`, de
+    # acceptatie-meting) staat op de sweep-lijst; dat kost niets zolang het wacht, dit wel.
     if best["soort"] == "inbox":
         # Ook hier stond het `MENS_GETYPT`-merk; zie de toelichting bij `_act_proj_feed`.
         # OOK DIT IS EEN GEWONE DM (B2). `roloverleg.py` houdt toewijzing én afronding al zélf bij,
