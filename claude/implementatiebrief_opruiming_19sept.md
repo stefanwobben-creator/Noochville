@@ -504,6 +504,18 @@ apart rapporteren en per punt apart committen — niet alles in één grote comm
 
 ## Punt 1 — Messages: zoek/filter, en het losse-kanaal-concept
 
+> **HERZIENING van een besluit uit fase 8, vastgelegd op 20 september 2026.**
+> Bij fase 8 (19 september) is expliciet gekozen: *"Cirkelkanalen: één per bestaande cirkel. Geen
+> vrije onderwerp-kanalen zoals #batch-4."* Punt 1 hieronder draait dat om. De reden: op productie
+> staan **442** niet-gearchiveerde projecten en dus 442 projectkanalen. Met dat aantal is Messages
+> onbruikbaar zonder zoeken én zonder zelf een kanaal te kunnen beginnen — "zoals bij Slack".
+> Dit staat hier als expliciete herziening en niet als stille uitbreiding, zodat niemand over een
+> half jaar twee besluiten naast elkaar vindt zonder te weten welke wint.
+>
+> Bijbehorende keuzes (Stefan, 20 september): het kanaal-id wordt `topic:<id>` met de naam apart
+> (niet `topic:<naam>`), iedereen die is ingelogd mag er een aanmaken, en er komt in deze ronde
+> **geen** lidmaatschap-begrip — iedereen ziet alle losse kanalen.
+
 Bouw sowieso een zoek/filterveld boven de projectkanalen-lijst — dat staat los van de rest en lost
 het acute onbruikbaarheidsprobleem op.
 

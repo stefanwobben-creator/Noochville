@@ -29,6 +29,8 @@ def _label(st, kanaal: str, ik: str = "") -> str:
     if soort == channels.CIRCLE:
         rec = st.records.get(doel)
         return _name(rec) if rec is not None else doel
+    if soort == channels.TOPIC:
+        return st.channels.naam_van(kanaal) or doel
     ander = next((x for x in channels.dm_leden(kanaal) if x != ik), "")
     return _person_name(st, ander) or ander or "direct"
 
@@ -60,7 +62,10 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
             if not getattr(r, "archived", False) and getattr(r, "type", None)
             and str(getattr(r.type, "value", r.type)) == "circle"]
     dms = st.channels.kanalen_van(ik) if ik else []
-    groepen = {"Projects": proj, "Circles": cirk, "Direct": dms}
+    # Losse kanalen: ALLE, ook lege. Een kanaal dat je net hebt aangemaakt en niet ziet staan,
+    # lijkt mislukt. En iedereen ziet ze allemaal — er is bewust geen lidmaatschap-begrip.
+    onderwerpen = st.channels.topics()
+    groepen = {"Projects": proj, "Circles": cirk, "Topics": onderwerpen, "Direct": dms}
     totaal = {g: len(r) for g, r in groepen.items()}
 
     naald = " ".join((q or "").split()).lower()
@@ -98,7 +103,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         # LET OP: `groepen` is hier al gefilterd en afgekapt. Voor de voordeur wil je juist het
         # volledige veld, anders hangt "waar land ik" af van een zoekterm.
         alles, _ = _kanalen(st, ik, "")
-        volgorde = [k for g in ("Direct", "Projects", "Circles") for k in alles[g]]
+        volgorde = [k for g in ("Direct", "Topics", "Projects", "Circles") for k in alles[g]]
         kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
                       volgorde[0] if volgorde else "")
 
@@ -112,6 +117,21 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             f"<div class='qadd-row'><button class='btn sm' type='submit'>Search</button>"
             + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if q else "")
             + "</div></form>")
+
+    # Een kanaal beginnen. Tot 20 september kon dat niet: een kanaal bestond omdat zijn onderwerp
+    # bestond (een project, een cirkel, een persoon). Dit is het eerste kanaal dat een mens zelf
+    # maakt — zie `_act_topic_add` voor de poort en voor de herziening die eraan voorafging.
+    nieuw = ""
+    if csrf_token and ik:
+        nieuw = (f"<details class='qadd'><summary class='muted'>＋ new channel</summary>"
+                 f"<form method='post' action='/action' class='qadd-form'>"
+                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='next' value='/messages'>"
+                 f"<label class='att-lbl' for='topic-naam'>Channel name</label>"
+                 f"<input id='topic-naam' name='naam' maxlength='80' "
+                 f"placeholder='Batch 4, Packaging, Trade fair…'>"
+                 f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+                 f"value='topic_add'>Create</button></div></form></details>")
 
     lijst = []
     for groep, rij in groepen.items():
@@ -131,7 +151,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                          f"{_e(_label(st, k, ik))}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
-    nav = f"<nav class='msg-lijst'>{zoek}{''.join(lijst) or leeg}</nav>"
+    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(lijst) or leeg}</nav>"
 
     trail = st.channels.trail(kanaal) if kanaal else []
     draad = "".join(_bericht(st, e) for e in trail) or (
@@ -154,7 +174,8 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
 
     kop = _e(_label(st, kanaal, ik)) if kanaal else "Messages"
     main = (f"<div class='c2-main'><h1>Messages</h1>"
-            f"<p class='muted'>One channel type, three flavours: a project, a circle, or a person. "
+            f"<p class='muted'>One channel type, four flavours: a project, a circle, a topic of "
+            f"your own, or a person. "
             f"Your queue is on <a href='/inbox'>Inbox</a> &mdash; that is work to handle, not talk.</p>"
             f"{_banner(msg)}"
             f"<div class='msg-layout'>{nav}"

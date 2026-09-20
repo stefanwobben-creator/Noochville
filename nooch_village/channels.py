@@ -50,7 +50,7 @@ import uuid
 from nooch_village.util import JsonStore
 
 #: Kanaalsoorten. De prefix staat in het id zelf, zodat een kanaal-id overal zelf-verklarend is.
-PROJECT, CIRCLE, DM = "project", "circle", "dm"
+PROJECT, CIRCLE, DM, TOPIC = "project", "circle", "dm", "topic"
 
 TEKST_MAX = 1500
 TRAIL_MAX = 500          # per kanaal bewaard; ouder verdwijnt niet, maar wordt niet meer getoond
@@ -62,6 +62,18 @@ def project_kanaal(pid: str) -> str:
 
 def circle_kanaal(record_id: str) -> str:
     return f"{CIRCLE}:{record_id}"
+
+
+def topic_kanaal(topic_id: str) -> str:
+    return f"{TOPIC}:{topic_id}"
+
+
+def _sleutel(naam: str) -> str:
+    """De naam gestript tot waar hij op botst: spaties samengevouwen, hoofdletters weg.
+
+    "Batch 4", "batch-4" en "Batch  4" zijn voor een mens hetzelfde kanaal. Zonder deze normalisatie
+    krijg je er drie, en dan heeft niemand meer het gesprek dat hij zoekt."""
+    return " ".join(str(naam or "").replace("-", " ").split()).casefold()
 
 
 def dm_kanaal(person_a: str, person_b: str) -> str:
@@ -90,7 +102,7 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post",)
+    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic")
     _STATE = "_data"
     _default = dict
 
@@ -100,6 +112,7 @@ class ChannelStore(JsonStore):
         self._ledger = ledger
         super().__init__(path)
         self._data.setdefault("kanalen", {})
+        self._data.setdefault("namen", {})
 
     # ── schrijven ────────────────────────────────────────────────────────────
     def post(self, kanaal: str, tekst: str, *, author_type: str = "human",
@@ -121,6 +134,42 @@ class ChannelStore(JsonStore):
         self._data.setdefault("kanalen", {}).setdefault(kanaal, []).append(entry)
         self._save()
         return entry
+
+    def maak_topic(self, naam: str, *, door: str = "") -> str:
+        """Een los kanaal met een eigen naam. Geeft het kanaal-id terug, of "" bij een lege naam.
+
+        HET ID IS GEEN SLUG. Een `topic:<id>` met de naam apart in `namen`, en niet `topic:<naam>`.
+        Zelfde argument als bij het gesorteerde DM-id: identiteit hoort niet aan een weergavestring
+        te hangen. Hernoemen breekt de trail dus niet, en dat is geen theorie — dit is het eerste
+        kanaal waarvan de naam door een mens is verzonnen en dus ooit verandert.
+
+        IDEMPOTENT OP DE GENORMALISEERDE NAAM. Wie "Batch 4" maakt terwijl "batch-4" al bestaat,
+        krijgt het bestaande kanaal. Twee halve gesprekken onder bijna dezelfde naam is precies het
+        probleem dat een losse-kanaal-functie hoort op te lossen, niet te veroorzaken."""
+        naam = " ".join(str(naam or "").split())[:80]
+        if not naam:
+            return ""
+        sleutel = _sleutel(naam)
+        for kanaal, bestaande_naam in (self._data.get("namen") or {}).items():
+            if _sleutel(bestaande_naam) == sleutel:
+                return kanaal
+        kanaal = topic_kanaal(uuid.uuid4().hex[:10])
+        self._data.setdefault("namen", {})[kanaal] = naam
+        self._data.setdefault("kanalen", {}).setdefault(kanaal, [])
+        self._data.setdefault("makers", {})[kanaal] = door or ""
+        self._save()
+        return kanaal
+
+    def hernoem_topic(self, kanaal: str, naam: str) -> bool:
+        """Alleen de naam verandert; het kanaal-id en dus de hele trail blijven staan.
+
+        Dit is waarvóór het losse id bestaat. Zonder deze methode koopt optie A niets."""
+        naam = " ".join(str(naam or "").split())[:80]
+        if not naam or soort_van(kanaal) != TOPIC or kanaal not in (self._data.get("namen") or {}):
+            return False
+        self._data["namen"][kanaal] = naam
+        self._save()
+        return True
 
     # ── lezen ────────────────────────────────────────────────────────────────
     def trail(self, kanaal: str, limit: int = TRAIL_MAX) -> list[dict]:
@@ -144,6 +193,18 @@ class ChannelStore(JsonStore):
         staan hier NIET in: die leven in de ledger (zie de kop van deze module)."""
         return sorted(k for k, v in (self._data.get("kanalen") or {}).items()
                       if v and (not soort or soort_van(k) == soort))
+
+    def topics(self) -> list[str]:
+        """Alle losse kanalen, ook lege. Anders zie je een kanaal dat je net hebt aangemaakt niet
+        staan tot iemand er iets in zegt — en dan lijkt het aanmaken mislukt.
+
+        Iedereen ziet ze allemaal: er is bewust GEEN lidmaatschap-begrip in deze ronde (besluit
+        Stefan, 20 september 2026). Dat is een tweede nieuw datamodel-concept en hoort niet in
+        dezelfde ronde als het eerste."""
+        return sorted((self._data.get("namen") or {}), key=lambda k: self.naam_van(k).lower())
+
+    def naam_van(self, kanaal: str) -> str:
+        return str((self._data.get("namen") or {}).get(kanaal) or "")
 
     def laatste(self, kanaal: str) -> dict | None:
         rij = self.trail(kanaal, limit=1)

@@ -1306,7 +1306,8 @@ def _act_msg_post(c):
     from nooch_village import channels
     nxt, st, g, username = c.nxt, c.st, c.g, c.username
     kanaal = (g("kanaal") or "").strip()
-    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE, channels.DM):
+    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE,
+                                          channels.DM, channels.TOPIC):
         return nxt, "✗ unknown channel"
     ik = _web_actor_id(username, st)
     if not ik:
@@ -1315,6 +1316,35 @@ def _act_msg_post(c):
         return nxt, "✗ that conversation is not yours"
     entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
     return nxt, ("💬 posted" if entry else "✗ a message needs text")
+
+
+def _act_topic_add(c):
+    """Een los kanaal aanmaken: een onderwerp zonder project, cirkel of persoon eronder.
+
+    # AUTHZ: iedereen-ingelogd — dit VOEGT een gespreksplek toe en overschrijft of verwijdert
+    # niets. Zelfde niveau als `_claims_gate` sinds fase 5, en als `msg_post` hierboven: meedoen
+    # aan een gesprek is deelnemen, geen structuurmutatie. Een herkende auteur is wél nodig, zodat
+    # er van elk kanaal een maker bekend is.
+
+    DIT DRAAIT EEN EERDER BESLUIT OM. Bij fase 8 (19 september 2026) is expliciet gekozen: "één
+    cirkelkanaal per bestaande cirkel, geen vrije onderwerp-kanalen zoals #batch-4". Op 20
+    september is dat herzien, en de reden staat in `claude/implementatiebrief_opruiming_19sept.md`
+    bij fase 10 punt 1: met 442 projectkanalen is Messages onbruikbaar zonder zoeken én zonder zelf
+    een kanaal te kunnen beginnen. Een herziening, geen stille uitbreiding.
+
+    GEEN LIDMAATSCHAP. Iedereen ziet alle losse kanalen. Dat is een tweede nieuw datamodel-begrip
+    en hoort niet in dezelfde ronde als het eerste (besluit Stefan)."""
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to start a channel — a channel needs an owner"
+    naam = " ".join((g("naam") or "").split())
+    if not naam:
+        return nxt, "✗ give the channel a name"
+    kanaal = st.channels.maak_topic(naam, door=ik)
+    if not kanaal:
+        return nxt, "✗ give the channel a name"
+    return f"/messages?k={urllib.parse.quote(kanaal)}", f"💬 channel “{naam}” is open"
 
 
 def _act_keep_in_wiki(c):
@@ -5155,6 +5185,7 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "msg_post": _act_msg_post,
+    "topic_add": _act_topic_add,
     "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,

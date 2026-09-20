@@ -409,3 +409,43 @@ navigatie-familie die later bijkomt valt daarmee ook op. `:hover`- en `.on`-vari
 uitgezonderd; die erven het van de basisregel.
 
 Suite: 4.068 passed, 1 failed (de bekende), 1 xfailed.
+
+## punt 1b — het vierde kanaalsoort
+
+Gebouwd volgens besluit 4 en 5: `topic:<id>` met de naam apart, iedereen-ingelogd mag er een
+aanmaken, geen lidmaatschap-begrip.
+
+**Twee eigenschappen dragen de hele keuze**, en daar staat elk een eigen test op:
+
+1. **Het id is geen slug.** Er staat een assert dat "batch" níét in het kanaal-id voorkomt — anders
+   is optie A alleen op papier gekozen. En: hernoemen laat de trail intact. Zonder
+   `hernoem_topic()` koopt optie A niets, dus die methode is er ook.
+2. **Aanmaken is idempotent op de genormaliseerde naam.** "Batch 4", "batch-4", "BATCH  4" en
+   "Batch  4" geven allemaal hetzelfde kanaal. Dat was jouw expliciete argument voor optie A, dus
+   het hoort in de code te staan en niet alleen in de bedoeling.
+
+**Eén regel omgedraaid ten opzichte van projectkanalen.** Een leeg projectkanaal staat níét in de
+lijst (een leeg project is geen gesprek maar een project). Een leeg topic-kanaal staat er **wel**:
+een kanaal dat je net hebt aangemaakt en niet terugziet, lijkt mislukt.
+
+**De herziening staat in de brief**, als blok boven punt 1, met de reden en de drie bijbehorende
+keuzes. Niet stil uitgebreid.
+
+`docs/ARCHITECTUUR.md` is geregenereerd — `topic_add` is een nieuwe dispatch-actie.
+
+Acht tests. Suite: 4.076 passed, 1 failed (de bekende), 1 xfailed.
+
+### ⚠ Eén ding uit je bericht herken ik niet
+
+Je schreef bij de bouwvolgorde: *"dan pas punt 1b (het vierde kanaalsoort + **de inbox-migratie van
+gisteravond**, met besluit 4 en 5 hierboven als antwoord)"*.
+
+**Er is gisteravond geen inbox-migratie geweest.** Fase 8 heeft juist expliciet níét gemigreerd: de
+338 rol-notificaties zijn ongewijzigd op `/inbox` blijven staan, `NotifStore` bestaat onveranderd
+naast de kanaallaag, en jij gaf daar op 19 september akkoord op ("geen tweede partij voor een DM bij
+333 van de 338; het read/processed/archived/outcome/poort-model is geen boolean"). Vannacht heb ik
+`inbox.py` alleen **visueel** aangepakt — 50 klasse-gebruiken, nul gedragswijziging.
+
+Ik heb hier dus niets aan gebouwd, omdat ik niet weet wat je bedoelt. Drie mogelijkheden: je
+bedoelt de visuele inbox-stap van vannacht (die is af), je bedoelt dat de 338 nu alsnog naar kanalen
+moeten (dat is een nieuw en groot besluit), of het komt uit een andere draad. Zeg welke.
