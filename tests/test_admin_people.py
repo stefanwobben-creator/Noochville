@@ -23,7 +23,9 @@ def test_admin_toont_beheercontrols_in_schrijfmodus(tmp_path):
     dd, st = _st(tmp_path)
     html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
     assert "People" in html
-    assert "person_add" in html and "name='voornaam'" in html
+    # `_field()` schrijft dubbele quotes; de test ging op de enkele-quote-vorm die de handmatige
+    # markup had. Op de VELDNAAM toetsen, niet op hoe de helper hem aanhaalt (21 sept 2026).
+    assert "person_add" in html and 'name="voornaam"' in html
     assert "person_edit" in html and "person_remove" in html and "person_reset_password" in html
 
 
@@ -760,3 +762,58 @@ def test_m_unpin_lead_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "m_unpin", _pin_form(), username="niemand@nergens.nl")
     assert "not recognised" in msg
+
+
+# ── de huisstijl (21 september 2026) ─────────────────────────────────────────
+#
+# DIT SCHERM IS NOOIT MEEGEGAAN met fase 9/10/12, en dat bleek pas toen Stefan zelf inlogde en
+# keek. Het droeg een eigen `<style>`-blok, zeventien kale inputs zonder gekoppeld label en twaalf
+# inline styles — terwijl `_field()`, `.qadd-form`, `.card` en `.att-lbl` al bestonden. Een scherm
+# dat eruitziet als een ander product is geen smaakkwestie: het is een scherm waar de regels van
+# het systeem niet golden, en dus ook de toegankelijkheidsregels niet.
+
+def test_admin_gebruikt_het_designsysteem(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Iemand", "iemand@nooch.earth")
+    html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
+    for klasse in ("card", "qadd-form", "att-lbl", "btn"):
+        assert klasse in html, f"/admin hoort .{klasse} te gebruiken"
+
+
+def test_admin_heeft_geen_eigen_css_meer(tmp_path):
+    """De layout-klassen staan in nooch.css; de view levert markup, geen stylesheet."""
+    dd, st = _st(tmp_path)
+    html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
+    kop, _, rest = html.partition("</head>")
+    assert "<style" not in rest, "een view hoort geen <style>-blob te bevatten"
+    assert "style=" not in rest, "geen inline styles in de body"
+
+
+def test_elk_veld_heeft_een_gekoppeld_label(tmp_path):
+    """`_field()` levert label en veld als paar. Zeventien losse inputs betekende zeventien velden
+    die een schermlezer als naamloos voorleest en waar een labelklik niets doet."""
+    dd, st = _st(tmp_path)
+    st.people.add("Iemand", "iemand@nooch.earth")
+    html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
+    assert not re.findall(r"<label(?![^>]*for=)", html)
+    # elk zichtbaar veld draagt een id waar een label naar wijst
+    ids = set(re.findall(r"<input[^>]*\bid=\"([^\"]+)\"", html))
+    fors = set(re.findall(r"<label[^>]*\bfor=\"([^\"]+)\"", html))
+    assert ids and ids <= fors, f"velden zonder label: {sorted(ids - fors)}"
+
+
+def test_de_twee_dode_links_zijn_weg(tmp_path):
+    """`/inwoners` en `/founder` bestaan niet meer als route; ze gaven een 404. Een link die een
+    404 oplevert is erger dan geen link: hij belooft functionaliteit die er niet is."""
+    dd, st = _st(tmp_path)
+    html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
+    assert "/inwoners" not in html and "/founder" not in html
+
+
+def test_die_routes_bestaan_inderdaad_niet():
+    """De keerzijde: komt een van beide schermen ooit terug, dan hoort de link mee terug te komen
+    en faalt deze test luid genoeg om dat te merken."""
+    import pathlib
+    bron = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "cockpit2.py").read_text()
+    for route in ('"/inwoners"', '"/founder"'):
+        assert route not in bron, f"{route} bestaat weer als route — zet de link terug op /admin"

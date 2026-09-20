@@ -73,15 +73,41 @@ def test_geen_nieuwe_labels_zonder_for():
 # (admin-blok, opruimkandidaat), cockpit2 (fragment-injectie in _frag + login-flow).
 _STYLE_BLOCK_WHITELIST = {
     "views/callbar.py": 1,
-    "views/overview.py": 1,
-    "cockpit2.py": 2,
+    # /admin droeg het laatste <style>-blok van deze view; weg op 21 september 2026.
+    "views/overview.py": 0,
+    # 2 → 1 op 21 september: de telling negeert sindsdien docstrings, en één van deze
+    # twee was een ZIN over een blob, geen blob.
+    "cockpit2.py": 1,
 }
+
+
+def _zonder_uitleg(src: str) -> str:
+    """De bron zonder docstrings en comments.
+
+    DE CODE, NIET DE UITLEG. Deze telling ging op de ruwe tekst, en toen /admin werd opgeruimd
+    beschreef de nieuwe docstring wát er was weggehaald — met het woord erin. De ratchet telde die
+    zin mee en eiste dat de blob terugkwam. Een guard die uitleg verbiedt, wordt uitgezet."""
+    import ast
+    try:
+        boom = ast.parse(src)
+    except SyntaxError:
+        return src
+    weg = []
+    for node in ast.walk(boom):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) \
+                and isinstance(node.value.value, str):
+            weg.append((node.lineno, node.end_lineno))
+    regels = src.splitlines()
+    for a, b in weg:
+        for i in range(a - 1, min(b, len(regels))):
+            regels[i] = ""
+    return "\n".join(r for r in regels if not r.strip().startswith("#"))
 
 
 def test_geen_nieuwe_style_blokken():
     for full in _governed_files():
         rel = os.path.relpath(full, _PKG).replace(os.sep, "/")
-        count = open(full, encoding="utf-8").read().count("<style")
+        count = _zonder_uitleg(open(full, encoding="utf-8").read()).count("<style")
         ceiling = _STYLE_BLOCK_WHITELIST.get(rel, 0)
         assert count <= ceiling, (
             f"{rel}: {count} <style>-blokken, plafond {ceiling}. CSS hoort in "

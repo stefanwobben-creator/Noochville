@@ -1471,3 +1471,17 @@ progress.nu-progress.wide{height:8px}
    én waar hij stond als je je bedenkt. */
 .pcard.pdrag-bron{opacity:.35;transform:none}
 .pcard.pdrag-bron:hover{transform:none}
+
+/* ── /admin: de People-beheerpagina (21 september 2026) ──────────────────────────────────────
+   Alleen LAYOUT; vorm, kleur en velden komen uit het designsysteem. Deze regels stonden als
+   `<style>`-blok ín de view — de enige die nog over was nadat de ratchet er op één was gezet. */
+.admin-row{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;
+  flex-wrap:wrap;padding:.6rem .7rem;border-bottom:1px solid var(--border)}
+.admin-row:last-child{border-bottom:none}
+.admin-main{flex:1 1 340px;min-width:0}
+.admin-meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-size:.85rem}
+.admin-act{display:inline-flex;gap:.4rem;flex-wrap:wrap}
+/* De twee velden van een rij naast elkaar in plaats van onder elkaar: een lijst van vijf mensen
+   wordt anders een kolom van vijftien regels. */
+.admin-row-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:.5rem}
+.admin-row-form .att-lbl{flex:0 0 100%}
