@@ -135,6 +135,50 @@ def _gegrond(fragment: str, tekst: str) -> bool:
     return gegrond(fragment, tekst, streng=False)
 
 
+#: Deze bron levert `recall`: bij twijfel melden. Dat staat in de kop van deze module en het is
+#: geen stijlkeuze — een onterechte vlag kost een muisklik, een gemiste claim een boete.
+DREMPEL = "recall"
+
+
+def verzamel(data_dir: str, *, sinds: float = 0.0) -> list:
+    """De modelvondsten uit de laatste site-scan, als `weekmemo.Signaal`.
+
+    LEEST DE SCAN-MARKER, want deze bron kan niet zelf verzamelen. De andere adapters lezen uit
+    opgeslagen data (radar, Kroniek); deze werkt op PAGINATEKST, en die bestaat alleen tijdens een
+    scan. Tot 20 september 2026 gingen de bevindingen rechtstreeks naar `claims_board` en waren ze
+    daarna weg — de marker droeg alleen tellingen. Sinds die datum bewaart `markeer_week` ze
+    (afgekapt op `BEVINDINGEN_CAP`), en leest deze adapter ze terug.
+
+    ALLEEN DE MODELVONDSTEN. Wat de regex vond is geen vondst van deze bron; die heeft zijn eigen
+    weg (het scherm, en `claims_context` als filter erop). Hier staat wat de recall-pas TOEVOEGDE
+    aan wat de lijst al wist — dat is precies het deel dat tot vandaag ongefilterd een project werd."""
+    from nooch_village.skills_impl.claims_site_scan import laatste_run
+    from nooch_village.weekmemo import Signaal
+
+    marker = laatste_run(data_dir) or {}
+    try:
+        at = float(marker.get("at") or 0.0)
+    except (TypeError, ValueError):
+        at = 0.0
+    if at < sinds:
+        return []
+    uit = []
+    for b in (marker.get("bevindingen") or []):
+        if str(b.get("herkomst") or "") != HERKOMST:
+            continue                                  # regex-bevindingen zijn niet van deze bron
+        gevonden = (b.get("gevonden") or [""])[0]
+        uit.append(Signaal(
+            bron="claim_model", tekst=str(gevonden or b.get("term") or ""),
+            vindplaats=str(b.get("url") or b.get("pagina") or ""),
+            gevonden_op=at, herkomst=str(b.get("term") or ""),
+            extra={"stoplicht": str(b.get("stoplicht") or ""),
+                   "pagina": str(b.get("pagina") or ""),
+                   "week": str(marker.get("last_week") or ""),
+                   "afgekapt": len(marker.get("bevindingen") or [])
+                               < int(marker.get("bevindingen_totaal") or 0)}))
+    return uit
+
+
 def _al_gevlagd(fragment: str, bestaande: list[dict]) -> bool:
     """Raakt dit fragment een bevinding die de regex al vond? Dan is het dezelfde claim en hoeft
     hij niet twee keer op het bord."""

@@ -55,6 +55,17 @@ log = logging.getLogger("village.claims_scan")
 
 MARKER = "claims_site_scan_last_week.json"
 
+#: Hoeveel bevindingen de marker meedraagt. De marker droeg tot 20 september 2026 alleen TELLINGEN;
+#: de bevindingen zelf gingen rechtstreeks naar `claims_board` en waren daarna weg. De weekmemo
+#: leest ze terug (pijplijn stap 2), dus ze moeten de scan overleven — en dat kan hier, want de
+#: marker is er blijkens zijn eigen docstring voor "wat hij vond, zonder een tweede opslagplek".
+#:
+#: DE CAP IS EEN VANGNET, GEEN FILTER. Een normale week levert een handvol bevindingen; veertig is
+#: daar ruim boven. Loopt het hoger op, dan is dát het signaal — en de memo hoeft de veertigste
+#: bevinding niet te tonen om dat duidelijk te maken. `bevindingen_totaal` houdt het echte aantal
+#: bij, zodat een afgekapte week zichtbaar afgekapt is in plaats van stil kleiner te lijken.
+BEVINDINGEN_CAP = 40
+
 # Beleefdheid tussen twee pagina's van dezelfde host. Zonder pauze antwoordt Shopify op de tweede
 # pagina met een 429 en scande de wekelijkse run in de praktijk 2 van de 5 pagina's — terwijl hij
 # 'ok' meldde. Een scan die driekwart van de site niet ziet is gevaarlijker dan een scan die traag is.
@@ -120,6 +131,25 @@ def resterend(paginas: list[dict], gedekt) -> list[dict]:
     return [p for p in paginas if (p.get("label") or p.get("url")) not in al_gezien]
 
 
+def _kort_bevinding(b: dict) -> dict:
+    """Een bevinding zoals de marker hem bewaart: genoeg om hem in een memo te kunnen lezen én
+    terug te vinden, en niet meer. De volledige paginatekst hoort hier niet — die staat op de
+    pagina zelf, en de marker is geen kopie van de site."""
+    return {
+        "term": str(b.get("term") or "")[:160],
+        "gevonden": [str(g)[:300] for g in (b.get("gevonden") or [])[:2]],
+        "stoplicht": str(b.get("stoplicht") or ""),
+        "pagina": str(b.get("pagina") or ""),
+        "url": str(b.get("url") or ""),
+        "herkomst": str(b.get("herkomst") or ""),
+        # DE ZINNEN ERBIJ, EN ALLEEN DIE. `claims_context` kan zonder context niet oordelen — hij
+        # moet zien of de term wordt GEDAAN of alleen BESPROKEN, en daar is de zin eromheen voor
+        # nodig. De volledige paginatekst opslaan zou de marker een kopie van de site maken;
+        # hooguit drie zinnen van 220 tekens is begrensd en genoeg om het oordeel op te baseren.
+        "contexten": [str(c)[:220] for c in (b.get("contexten") or [])[:3]],
+    }
+
+
 def markeer_week(data_dir: str, week: str, uitkomst: dict | None = None) -> None:
     """Zet de weekmarker. Naast `last_week` gaat de uitkomst mee, zodat de rolpagina kan tonen
     wanneer de scan draaide en wat hij vond — zonder een tweede opslagplek.
@@ -129,10 +159,15 @@ def markeer_week(data_dir: str, week: str, uitkomst: dict | None = None) -> None
     from nooch_village.util import atomic_write_json
     vorige = laatste_run(data_dir)
     pogingen = int(vorige.get("pogingen", 0) or 0) if vorige.get("last_week") == week else 0
+    rij = {"last_week": week, "at": time.time(), "pogingen": pogingen + 1, **(uitkomst or {})}
+    # DE BEVINDINGEN AFKAPPEN, MAAR HET AANTAL NIET. Zie `BEVINDINGEN_CAP`: een afgekapte week moet
+    # zichtbaar afgekapt zijn, anders leest de memo veertig als "dit was alles".
+    bev = rij.get("bevindingen")
+    if isinstance(bev, list):
+        rij["bevindingen_totaal"] = len(bev)
+        rij["bevindingen"] = [_kort_bevinding(b) for b in bev[:BEVINDINGEN_CAP]]
     try:
-        atomic_write_json(os.path.join(data_dir, MARKER),
-                          {"last_week": week, "at": time.time(), "pogingen": pogingen + 1,
-                           **(uitkomst or {})})
+        atomic_write_json(os.path.join(data_dir, MARKER), rij)
     except Exception:
         pass                      # markeren mislukt = hooguit een dubbele scan, nooit een crash
 
@@ -501,7 +536,13 @@ class ClaimsSiteScanSkill(Skill):
         # claim die 'sitewide' staat kan op een pagina zitten die deze week nog niet gehaald is.
         statussen, status_mislukt = self._verifieer_werklijst(context, db, paginateksten,
                                                               volledig=dekking_compleet)
-        markeer_week(data_dir, week, {"nieuw": len(verslag["aangemaakt"]),
+        # De zinnen rond elke bevinding, uit de tekst die we NU nog hebben. Na deze puls is die weg.
+        from nooch_village.claims_context import zinnen_rond as _zinnen
+        for _b in bevindingen:
+            _tekst = paginateksten.get(_b.get("pagina") or "") or ""
+            _b["contexten"] = _zinnen(_tekst, _b.get("gevonden") or [_b.get("term", "")])
+        markeer_week(data_dir, week, {"bevindingen": bevindingen,
+                                      "nieuw": len(verslag["aangemaakt"]),
                                       "overgeslagen": verslag["overgeslagen"],
                                       "gescand": len(paginateksten),
                                       "gedekt": nieuw_gedekt,

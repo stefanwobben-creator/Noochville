@@ -83,6 +83,60 @@ def beoordeel(tekst: str, bevindingen: list[dict], *, reason_fn=reason) -> bool:
     return True
 
 
+#: Deze bron levert `precisie`: hij HAALT WEG, en te veel weghalen is hier de dure fout. Daarom
+#: staat er in de prompt ook "bij twijfel: claim (streng)" — een filter dat twijfelt, filtert niet.
+DREMPEL = "precisie"
+
+
+def verzamel(data_dir: str, *, sinds: float = 0.0, reason_fn=reason) -> list:
+    """De regex-bevindingen uit de laatste site-scan die de contextlaag OVERLEVEN, als
+    `weekmemo.Signaal`.
+
+    HET SPIEGELBEELD VAN `claims_modelpas.verzamel`, en dat verschil is de hele reden dat deze
+    pijplijn bestaat. Die adapter levert wat het model TOEVOEGDE; deze levert wat de regex vond
+    minus wat de contextlaag WEGWEEGT (kritiek, ontkenning, citaat, definitie, een ander merk).
+
+    Tot 20 september 2026 liepen die twee op gescheiden paden: de recall-pas draaide in de dagpuls
+    en maakte projecten aan, de contextlaag draaide alleen op het scherm. Het ongefilterde pad was
+    dus het pad dat autonoom werk aanmaakte. Hier komen ze voor het eerst achter elkaar."""
+    from nooch_village.claims_modelpas import HERKOMST as MODEL_HERKOMST
+    from nooch_village.skills_impl.claims_site_scan import laatste_run
+    from nooch_village.weekmemo import Signaal
+
+    marker = laatste_run(data_dir) or {}
+    try:
+        at = float(marker.get("at") or 0.0)
+    except (TypeError, ValueError):
+        at = 0.0
+    if at < sinds:
+        return []
+    # Een regex-bevinding draagt GEEN herkomst; alleen de modelvondsten stempelen zichzelf. Dus
+    # "niet van het model" is hier de juiste test, en niet een eigen stempel die niemand zet.
+    regex_bev = [b for b in (marker.get("bevindingen") or [])
+                 if str(b.get("herkomst") or "") != MODEL_HERKOMST]
+    if not regex_bev:
+        return []
+    # DE CONTEXT TERUGGEVEN AAN `beoordeel`. Die vraagt om de paginatekst en zoekt daar de zinnen
+    # rond elke term in op. Die tekst bestaat niet meer — de scan bewaarde bewust alleen de zinnen
+    # zelf (zie `_kort_bevinding`). Ze weer aan elkaar plakken geeft `zinnen_rond` precies wat hij
+    # nodig heeft, zonder dat de marker de hele site draagt.
+    tekst = " ".join(z for b in regex_bev for z in (b.get("contexten") or []))
+    uitslag = {"tekst": tekst, "bevindingen": regex_bev}
+    verrijk(uitslag, reason_fn=reason_fn)               # zet `in_context` op wat wegvalt
+    uit = []
+    for b in (uitslag.get("bevindingen") or []):
+        gevonden = (b.get("gevonden") or [""])[0]
+        uit.append(Signaal(
+            bron="claim_regex", tekst=str(gevonden or b.get("term") or ""),
+            vindplaats=str(b.get("url") or b.get("pagina") or ""),
+            gevonden_op=at, herkomst=str(b.get("term") or ""),
+            extra={"stoplicht": str(b.get("stoplicht") or ""),
+                   "pagina": str(b.get("pagina") or ""),
+                   "week": str(marker.get("last_week") or ""),
+                   "weggewogen": len(uitslag.get("in_context") or [])}))
+    return uit
+
+
 def herweeg(uitslag: dict) -> dict:
     """Split 'geen-claim'-bevindingen af naar `uitslag['in_context']` en herbereken tellingen en
     score. Groen en escaleren blijven ongemoeid (die beoordeelt de contextlaag niet)."""
