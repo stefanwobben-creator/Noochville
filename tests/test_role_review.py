@@ -7,7 +7,6 @@ from nooch_village.governance_examples import GovernanceExamples
 from nooch_village.governance_review import (review_role, review_all_roles, _parse_review,
                                              review_role_teleology, teleology_review_all_roles,
                                              _parse_teleology, _ing_start)
-from nooch_village.human_inbox import HumanInbox
 from nooch_village.models import Record, RoleDefinition, RecordType
 
 
@@ -56,29 +55,48 @@ def _recs(tmp_path):
     return r
 
 
-def test_review_all_roles_vult_inbox_en_skipt_kernrollen(tmp_path):
+
+
+def _dorp(tmp_path):
+    """Een dorp met een founder, zodat `signaal.terugval` een mens vindt om aan te leveren."""
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    return dd
+
+
+def _berichten(dd):
+    """De DM-teksten in het dorp. De voorstellen van de rolreview landen sinds 20 september 2026
+    hier en niet meer als kans in de human inbox — zie de kop van `governance_review`."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [e.get("text") or "" for k in st.channels.bestaande()
+            if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+
+
+def test_review_all_roles_bericht_de_founder_en_skipt_kernrollen(tmp_path):
     recs = _recs(tmp_path)
     ge = GovernanceExamples(str(tmp_path / "ge.json"))   # leeg → grounding fail-closed, prima
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
-    res = review_all_roles(recs, ge, inbox,
+    dd = _dorp(tmp_path)
+    res = review_all_roles(recs, ge, dd,
                            llm_reason=lambda p: "SUGGESTIE: Aanscherpen van dit aandachtsgebied\n"
                                                 "WAAROM: helderder")
     # facilitator (kernrol) + wortelcirkel overgeslagen; scout + librarian gereviewd
     assert res["reviewed"] == 2 and res["proposed"] == 2
-    opps = [i for i in inbox.all() if i["type"] == "opportunity"]
-    assert len(opps) == 2
-    assert all(o["context"]["by"] == "facilitator" for o in opps)
-    assert any("scout" in o["subject"] for o in opps)
-    assert not any("facilitator" in o["subject"] for o in opps)   # kernrol niet gereviewd
+    msgs = _berichten(dd)
+    assert len(msgs) == 2
+    assert any("scout" in m for m in msgs)
+    assert not any("facilitator" in m for m in msgs)              # kernrol niet gereviewd
+    assert all("waarom: helderder" in m for m in msgs)            # de onderbouwing reist mee
 
 
 def test_review_all_roles_failclosed_geen_voorstellen(tmp_path):
     recs = _recs(tmp_path)
     ge = GovernanceExamples(str(tmp_path / "ge.json"))
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
-    res = review_all_roles(recs, ge, inbox, llm_reason=lambda p: None)
+    dd = _dorp(tmp_path)
+    res = review_all_roles(recs, ge, dd, llm_reason=lambda p: None)
     assert res["reviewed"] == 2 and res["proposed"] == 0
-    assert [i for i in inbox.all() if i["type"] == "opportunity"] == []
+    assert _berichten(dd) == []
 
 
 # ── Teleologie-review (EN, B1, -ing) ────────────────────────────────────────────
@@ -111,57 +129,31 @@ def test_review_role_teleology_failclosed_en_levert():
     assert out["purpose"].startswith("Guarding") and len(out["accountabilities"]) == 2
 
 
-def test_teleology_review_all_roles_legt_vast_en_skipt_kernrollen(tmp_path):
+def test_teleology_review_bericht_de_founder_en_skipt_kernrollen(tmp_path):
     recs = _recs(tmp_path)
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
-    res = teleology_review_all_roles(recs, inbox, llm_reason=lambda p: _TELE_OK)
+    dd = _dorp(tmp_path)
+    res = teleology_review_all_roles(recs, dd, llm_reason=lambda p: _TELE_OK)
     assert res["reviewed"] == 2 and res["proposed"] == 2 and res["incomplete"] == 0
-    opps = [i for i in inbox.all() if i["type"] == "opportunity"]
-    assert len(opps) == 2 and all(o["context"]["by"] == "facilitator" for o in opps)
-    assert any("Teleologie-review 'scout'" in o["subject"] for o in opps)
-    assert not any("facilitator" in o["subject"] for o in opps)      # kernrol overgeslagen
-    scout = next(o for o in opps if "scout" in o["subject"])
-    assert "Guarding" in scout["context"]["wat"] and "Watching" in scout["context"]["wat"]
+    msgs = _berichten(dd)
+    assert len(msgs) == 2
+    assert any("Teleologie-review 'scout'" in m for m in msgs)
+    assert not any("facilitator" in m for m in msgs)                 # kernrol overgeslagen
+    scout = next(m for m in msgs if "scout" in m)
+    # De VOLLEDIGE herschrijving moet in het bericht staan: zonder purpose én accountabilities
+    # valt er niets te beoordelen, en dat is het enige wat dit voorstel nog doet.
+    assert "Guarding" in scout and "Watching" in scout
 
 
-def test_parse_teleology_opportunity():
-    from nooch_village.governance_review import _parse_teleology_opportunity
-    subject = "Teleologie-review 'scout': purpose + accountabilities (EN, B1, -ing)"
-    wat = ("Purpose (EN): Guarding the market awareness**\n\nAccountabilities (EN, B1, -ing):\n"
-           "- Watching competitor movements**\n- Reporting trends weekly\n\n"
-           "⚠️ Nog niet in -ing-vorm: Watch X")
-    rid, purpose, accs = _parse_teleology_opportunity(subject, wat)
-    assert rid == "scout"
-    assert purpose == "Guarding the market awareness"                # ** gestript
-    assert accs == ["Watching competitor movements", "Reporting trends weekly"]  # ⚠️-regel weg
-
-
-def test_route_teleology_naar_roloverleg(tmp_path):
-    from nooch_village.governance_review import (teleology_review_all_roles,
-                                                 route_teleology_to_roloverleg)
-    from nooch_village.roloverleg import Agenda
-    recs = _recs(tmp_path)
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
-    teleology_review_all_roles(recs, inbox, llm_reason=lambda p: _TELE_OK)     # 2 kansen (scout, librarian)
-    agenda = Agenda(str(tmp_path / "agenda.json"))
-    res = route_teleology_to_roloverleg(inbox, recs, agenda)
-    assert res["routed"] == 2
-    items = agenda.open()
-    assert len(items) == 2 and all(i["kind"] == "amend_role" and i["by"] == "secretary" for i in items)
-    scout = next(i for i in items if i["role_id"] == "scout")
-    assert scout["change"]["purpose"].startswith("Guarding")
-    assert "Watching competitor movements closely" in scout["change"]["add_accountabilities"]
-    assert scout["change"]["remove_accountabilities"] == ["markt kijken"]      # oude eruit
-    # herdraaien dedupt (Agenda.add op signatuur)
-    assert route_teleology_to_roloverleg(inbox, recs, agenda)["routed"] == 2
-    assert len(agenda.open()) == 2
-
+# WAT HIER WEG IS (20 september 2026): `test_parse_teleology_opportunity` en
+# `test_route_teleology_naar_roloverleg`. Die toetsten dat een teleologie-kans uit de human inbox
+# terug te lezen was en als `amend_role` op de roloverleg-agenda belandde — een door een model
+# geschreven purpose, in de wachtrij voor structuurwijziging, zonder mens ertussen. De route is weg;
+# het voorstel komt nu als bericht bij de founder en wat ermee gebeurt begint bij hem.
 
 def test_teleology_markeert_niet_ing(tmp_path):
     recs = _recs(tmp_path)
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
+    dd = _dorp(tmp_path)
     bad = "PURPOSE: Market observation\nACCOUNTABILITIES:\n- Watch the market\nWAAROM: x"
-    res = teleology_review_all_roles(recs, inbox, llm_reason=lambda p: bad)
+    res = teleology_review_all_roles(recs, dd, llm_reason=lambda p: bad)
     assert res["incomplete"] == 2                                    # 'Watch' is niet -ing → gemarkeerd
-    opp = next(i for i in inbox.all() if i["type"] == "opportunity")
-    assert "Nog niet in -ing-vorm" in opp["context"]["wat"]
+    assert "Nog niet in -ing-vorm" in _berichten(dd)[0]
