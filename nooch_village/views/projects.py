@@ -217,12 +217,19 @@ def _effort_control(p, rw: bool, hid) -> str:
 
 
 def _missie_dot(p) -> str:
-    """Kleine missie-impact-kleurstip voor de bordkaart (geen tekst/pills): groen (versterkt) / grijs
-    (neutraal) / rood (verzwakt). Ongelabeld = geen stip. Business-impact staat bewust NIET op de kaart."""
+    """Missie-impact op de bordkaart: een VORM plus een woord. Ongelabeld = geen merkteken.
+    Business-impact staat bewust NIET op de kaart.
+
+    Dit was een kleurstip met de betekenis in een `title`, en daarmee leunde hij op twee dingen die
+    allebei kunnen wegvallen: kleur (zwart-wit, kleurenblindheid) en hover (een title verschijnt
+    niet op een telefoon en niet in een schermlezer die de naam al voorleest). De vorm draagt het
+    nu — gevulde cirkel, open ring, driehoek — en het woord staat ernaast in een `.sr`-span."""
     col = dict(_MISSIE_OPTS).get(p.get("missie_impact", ""))
     if not col:
         return ""
-    return f"<span class='mdot {col}' title='Mission impact: {_e(_IMPACT_LABEL.get(p['missie_impact'], p['missie_impact']))}'></span>"
+    woord = _IMPACT_LABEL.get(p["missie_impact"], p["missie_impact"])
+    return (f"<span class='mdot {col}' aria-hidden='true'></span>"
+            f"<span class='sr'>Mission impact: {_e(woord)}. </span>")
 
 
 def _verzwakt_block(p, hid, rw: bool) -> str:

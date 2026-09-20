@@ -234,11 +234,16 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .imp-pill.n{background:var(--cream-2);color:var(--gray)}
 .imp-pill.r{background:var(--error-tint);color:var(--coral)}
 .imp-pill.l{background:var(--cream);color:var(--muted)}
-/* Missie-impact-kleurstip op de bordkaart (alleen de stip, geen tekst): g=groen, n=grijs, r=rood. */
+/* Missie-impact op de bordkaart. DRIE VORMEN, niet drie kleuren: gevulde cirkel = versterkt,
+   open ring = neutraal, driehoek = verzwakt. De kleur versterkt het, maar draagt het niet — in
+   zwart-wit, of voor wie deze tinten niet onderscheidt, waren dit drie identieke stippen met een
+   betekenis die alleen in een `title` stond (en een title verschijnt niet op een telefoon).
+   Dezelfde vormtaal als `.nu-status::before` en de bordkolommen; het woord staat in een `.sr`-span
+   naast de stip, zodat een schermlezer het óók krijgt. */
 .mdot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;margin-right:.35rem;vertical-align:middle;flex:none}
 .mdot.g{background:var(--green)}
-.mdot.n{background:var(--gray)}
-.mdot.r{background:var(--coral)}
+.mdot.n{background:none;border:1.5px solid var(--gray);box-sizing:border-box}
+.mdot.r{background:var(--coral);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)}
 /* Missie verzwakt: rode kaart-rand (signaal, geen blokkade) + infoblok in de modal. */
 .pcard.verzwakt{border-color:var(--coral)}
 .vzblock{border:1px solid var(--coral);background:var(--error-tint);border-radius:var(--radius);padding:.7rem .85rem;margin-bottom:.7rem}
@@ -614,8 +619,11 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ibx-thumb.on{transform:translate(-50%,-50%) scale(1) rotate(0)}
 /* grotere textarea's in de verwerk-formulieren */
 .wo-oc textarea{min-height:88px}
-.cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
-.cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
+/* Rijstatus met TWEE dragers: de tint én de rand-stijl links. Solide = gemist, gestippeld = nog
+   te doen, niets = gedaan. Een rand-stijl overleeft zwart-wit en kleurenblindheid waar een tint
+   dat niet doet; het woord zelf staat in een `.sr`-span vooraan de rij. */
+.cl-attn{background:var(--error-tint);border-left:3px solid var(--coral)}
+.cl-todo{background:var(--yellow-light);border-left:3px dashed var(--yellow)}
 .cl-add{display:inline-block}
 .cl-add>summary{list-style:none;cursor:pointer}
 .cl-add>summary::-webkit-details-marker{display:none}
