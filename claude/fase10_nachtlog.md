@@ -505,3 +505,57 @@ waarop iemand gaat plakken.
 `docs/ARCHITECTUUR.md` geregenereerd — `/md-preview` is een nieuwe route.
 
 Vijf tests. Suite: 4.088 passed, 1 failed (de bekende), 1 xfailed.
+
+## inbox-migratie, stap 1 van 3 — schrijven naast NotifStore
+
+**Niets verwijderd.** `NotifStore`, `/inbox` en `/inbox/verwerk` staan er ongewijzigd.
+
+Nieuw: `channels.ROLE` + `role_kanaal()`, `ChannelStore.plaats_notificatie()`, de module
+`notif_migratie.py` en het commando `village notif_migratie [--apply]` (droogloop by default).
+
+**Getoetst op écht productiedata**, op een lokale kopie van `notifications.json`:
+
+```
+rol-gerichte notificaties : 338      persoon-gericht (blijft): 33
+geschreven                : 338      kanalen                 : 17
+
+veld           vóór      ná
+outcome         185     185
+poort            54      54
+verwerkingen     83      83
+read            259     259
+processed       258     258
+archived        225     225
+done             33      33
+deleted          52      52          ✓ tellingen kloppen
+```
+
+De harde eis haalt het dus: **185 outcomes en 54 poort-oordelen komen er exact doorheen.** De
+kopie is na de test verwijderd.
+
+**Drie dingen uit de bouw die het melden waard zijn:**
+
+1. **Het id van de notificatie wordt het id van het bericht.** Daardoor is de migratie idempotent
+   (tweede run schrijft 0) én blijft elk bericht terug te voeren op zijn bron zolang `NotifStore`
+   er nog staat. Dat laatste is precies wat stap 1 bruikbaar maakt om te controleren.
+2. **`at` komt uit de notificatie, niet van de klok.** Anders staat drie maanden gesprek op de dag
+   van de migratie en is de volgorde weg.
+3. **De negatieve test kostte me een ronde en leverde een inzicht op.** Ik brak de guard door een
+   `poort`-veld uit een bericht te halen — en de guard bleef "klopt". Reden: elke schrijfmethode van
+   `ChannelStore` herlaadt onder het slot (`JsonStore._WRITE_METHODS`), dus mijn mutatie in het
+   geheugen werd bij de volgende schrijfactie weggegooid. Prettige eigenschap, maar een test die
+   dat niet weet toetst niets. Staat nu als comment in de test.
+
+**Eén echte bug die de prod-droogloop aan het licht bracht.** De droogloop printte óók de
+ná-kolom, en die staat dan logischerwijs op nul: acht regels `← WIJKT AF` met eronder
+`✓ tellingen kloppen`. Dat leest als van alles behalve als *"er is nog niets gebeurd"* — dezelfde
+fout als de neutrale `▸` bij een no-op deploy die ooit een ronde kostte. Een droogloop toont nu
+alleen de huidige telling plus `◌ droogloop — de ná-telling en de guard volgen bij --apply`.
+
+**Wat opviel maar geen actie vraagt:** van de 17 rolkanalen horen er meerdere bij rollen die niet
+meer leven — `the_source` (36 items), `mother_earth__nooch__noochville__circle_lead` (49),
+`librarian` (8). Die hebben geen open items en vallen dus buiten de negentien, maar ze bevestigen
+de vormkeuze: een opgeheven rol houdt gewoon zijn kanaal met historie erin, en er hoeft niemand
+aangewezen te worden.
+
+Tien tests. Suite: 4.098 passed, 1 failed (de bekende), 1 xfailed.

@@ -50,7 +50,19 @@ import uuid
 from nooch_village.util import JsonStore
 
 #: Kanaalsoorten. De prefix staat in het id zelf, zodat een kanaal-id overal zelf-verklarend is.
-PROJECT, CIRCLE, DM, TOPIC = "project", "circle", "dm", "topic"
+PROJECT, CIRCLE, DM, TOPIC, ROLE = "project", "circle", "dm", "topic", "role"
+
+#: Berichtsoorten binnen een kanaal. Een `notificatie` is een gemigreerd inbox-item: dezelfde
+#: trail, maar met een verwerkingsgeschiedenis eronder die een gewoon bericht niet heeft.
+COMMENT, NOTIFICATIE = "comment", "notificatie"
+
+#: De velden van een NotifStore-rij die MEE MOETEN. Letterlijk overgenomen, niet samengevat en niet
+#: herleid tot een status — dat is de harde eis bij de migratie (besluit Stefan, 20 sept 2026).
+#: 185 outcomes en 54 poort-oordelen zijn vastgelegde oordelen van een mens; die mogen niet in een
+#: afgeleid statusveld verdwijnen.
+VERWERKING_VELDEN = ("read", "processed", "archived", "done", "deleted",
+                     "outcome", "poort", "verwerkingen", "type", "bevinding",
+                     "project_id", "entry_id")
 
 TEKST_MAX = 1500
 TRAIL_MAX = 500          # per kanaal bewaard; ouder verdwijnt niet, maar wordt niet meer getoond
@@ -62,6 +74,17 @@ def project_kanaal(pid: str) -> str:
 
 def circle_kanaal(record_id: str) -> str:
     return f"{CIRCLE}:{record_id}"
+
+
+def role_kanaal(record_id: str) -> str:
+    """Het kanaal van een ROL, niet van zijn huidige vervuller.
+
+    Waarom niet het persoonskanaal: een notificatie is aan de rol gericht. Zet je de historie van
+    compliance in de DM van wie die rol vandaag vervult, dan loopt ze de deur uit zodra iemand
+    anders hem krijgt. Zelfde regel als bij het topic-id — identiteit hangt niet aan de huidige
+    invulling. Bijkomend: een GEARCHIVEERDE rol houdt gewoon zijn kanaal, dus er hoeft voor de
+    negentien open items op opgeheven rollen niemand aangewezen te worden."""
+    return f"{ROLE}:{record_id}"
 
 
 def topic_kanaal(topic_id: str) -> str:
@@ -102,7 +125,7 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic")
+    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie")
     _STATE = "_data"
     _default = dict
 
@@ -170,6 +193,39 @@ class ChannelStore(JsonStore):
         self._data["namen"][kanaal] = naam
         self._save()
         return True
+
+    def plaats_notificatie(self, kanaal: str, n: dict) -> dict | None:
+        """Eén NotifStore-rij als bericht in een kanaal. Alleen voor de migratie.
+
+        DRIE DINGEN DIE HIER ANDERS ZIJN DAN BIJ `post`, en alle drie met opzet:
+
+        1. **Het id van de notificatie wordt het id van het bericht.** Daardoor is de migratie
+           idempotent (tweemaal draaien voegt niets toe) én blijft elk bericht terug te voeren op
+           de rij waar het uit komt, zolang `NotifStore` er nog staat.
+        2. **`at` komt uit de notificatie**, niet van de klok. Anders staat de hele historie op de
+           dag van de migratie en is de volgorde van drie maanden gesprek weg.
+        3. **`verwerking` wordt LETTERLIJK overgenomen.** Geen samenvatting, geen afgeleide status.
+           Zie `VERWERKING_VELDEN`.
+
+        Geeft None als het bericht er al staat — dat is geen fout maar de idempotentie."""
+        nid = str(n.get("id") or "")
+        if not nid or not kanaal:
+            return None
+        rij = self._data.setdefault("kanalen", {}).setdefault(kanaal, [])
+        if any(e.get("id") == nid for e in rij):
+            return None
+        entry = {
+            "id": nid,
+            "kind": NOTIFICATIE,
+            "author": {"type": "role" if n.get("by") else "", "id": str(n.get("by") or "")},
+            "text": str(n.get("tekst") or n.get("snippet") or ""),
+            "at": float(n.get("at") or 0),
+            "verwerking": {v: n[v] for v in VERWERKING_VELDEN if v in n},
+        }
+        rij.append(entry)
+        rij.sort(key=lambda e: float(e.get("at") or 0))
+        self._save()
+        return entry
 
     # ── lezen ────────────────────────────────────────────────────────────────
     def trail(self, kanaal: str, limit: int = TRAIL_MAX) -> list[dict]:
