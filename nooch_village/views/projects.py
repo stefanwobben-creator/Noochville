@@ -855,12 +855,11 @@ def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
             f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-# De review-baan voor voorstellen (status `proposed`) stond hier, in twee smaken: op de rol-tab en
-# op de cirkel-tab. Hij is 11 aug 2026 verhuisd naar de Founder Flow (/founder). Reden: adjudicatie
-# hoort op één plek. Verspreid over het projectenbord moest je per rol en per cirkel langs om te
-# zien wat op je oordeel wachtte, en zag je nooit hoeveel er in totaal lag.
-# De rendering leeft nu in `views/founder_flow._voorstellen_sectie`; de dispatch-takken
-# (proj_proposal_accept/reject) en `project_proposals` zijn ongewijzigd.
+# De review-baan voor voorstellen (status `proposed`) stond hier en is 11 aug 2026 verhuisd naar de
+# Founder Flow. Die is in fase 1-9 verwijderd, en daarmee verdween de enige plek waar een mens een
+# voorstel kon aannemen of afwijzen — terwijl de generator elke dag doordraaide. De hele lus is op
+# 21 september 2026 opgeheven (besluit Stefan); dit comment beschreef tot die dag een scherm dat al
+# een week weg was.
 
 
 def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str:

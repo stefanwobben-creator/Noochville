@@ -55,8 +55,8 @@ def test_dezelfde_status_is_geen_gebeurtenis(tmp_path):
 
 
 def test_ook_de_machine_overgangen_lopen_door_de_setter(tmp_path):
-    """De review-parkeerplaats, de scheduler (wait_for), approve en accept_proposal: allemaal via
-    `_zet_status`. De bron bewaakt dat er geen tweede schrijfpad voor `status` bestaat. De rol die
+    """De review-parkeerplaats, de scheduler (wait_for) en approve: allemaal via `_zet_status`.
+    (`accept_proposal` stond hier ook, tot de voorstel-lus op 21 september 2026 verviel.) De bron bewaakt dat er geen tweede schrijfpad voor `status` bestaat. De rol die
     werkt (record_progress) verandert de status NIET meer: werk gebeurt aan een project dat een mens
     actief maakte (scope 49)."""
     bron = inspect.getsource(P.ProjectLedger)
@@ -70,9 +70,9 @@ def test_ook_de_machine_overgangen_lopen_door_de_setter(tmp_path):
     d = pl.create("rol", "Concept", "human", status="draft")
     pl.approve(d, "stefan")
     assert pl.get(d)["status_log"][-1]["naar"] == "future"        # goedgekeurd = slapend, tot de sleep
-    v = pl.create("rol", "Voorstel", "role", status="proposed")
-    pl.accept_proposal(v, person="p1")
-    assert pl.get(v)["status_log"][-1] == {**pl.get(v)["status_log"][-1], "naar": "future", "door": "p1"}
+    # HIER STOND `accept_proposal` als vierde machine-overgang. De voorstel-lus is op
+    # 21 september 2026 opgeheven; wat deze test bewaakt — élke statuswissel loopt door één setter —
+    # wordt door de drie overgangen hierboven net zo hard vastgehouden.
 
 
 def test_de_tijdlijn_is_afgeleid(tmp_path):

@@ -126,7 +126,7 @@ STATUSSEN = ("draft", "proposed", "running", "blocked", "future", "done")
 
 #: Waarmee een project mag BEGINNEN (`create` weigert de rest). Standaard `future`: slapend, tot een
 #: mens het naar Active sleept. `running` alleen voor de "+ add project"-deur ónder Active.
-START_STATUSSEN = ("future", "running", "draft", "proposed")
+START_STATUSSEN = ("future", "running", "draft")
 
 #: Klaar; hier beweegt niets meer.
 KLAAR = frozenset({"done"})
@@ -1150,44 +1150,13 @@ class ProjectLedger:
         self._maybe_reload()
         return [p for p in self._projects.values() if p.get("status") == "draft"]
 
-    # ── de voorstel-baan (status 'proposed') ───────────────────────────────────
-    # Een voorstel is GEEN project op het bord: het is een vraag aan de mens. De status staat
-    # daarom bewust buiten élke autonome lus — `activate_pulse` kijkt alleen naar future/blocked,
-    # `_tend_projects` naar LOPEND en `project_worker._eligible` naar running-en-nog-niet-gewerkt.
-    # Zo kan een voorstel niet stilletjes uitgevoerd, voorbereid of geactiveerd worden. De mens is
-    # de enige poort. (tests/test_proposed_veiligheid.py bevriest die garantie.)
-
-    def proposals(self) -> list[dict]:
-        """Openstaande projectvoorstellen (status proposed), nieuwste eerst."""
-        self._maybe_reload()
-        return sorted((p for p in self._projects.values()
-                       if p.get("status") == "proposed" and not p.get("archived")),
-                      key=lambda p: p.get("created_at", 0), reverse=True)
-
-    def accept_proposal(self, pid: str, *, person: str = "") -> bool:
-        """De mens neemt een voorstel aan → het wordt een gewoon standalone root-project in
-        TOEKOMST en gaat vanaf daar de normale flow in (de mens activeert het zelf; de bord-puls
-        raakt root-projecten bewust niet aan). `person` = de mens die het aanneemt (de trekker)."""
-        p = self._projects.get(pid)
-        if p is None or p.get("status") != "proposed":
-            return False
-        self._zet_status(p, "future", person or "")
-        if person:
-            p["person"] = person
-        self._touch(p)
-        self._save()
-        return True
-
-    def reject_proposal(self, pid: str) -> bool:
-        """De mens wijst een voorstel af → weg van het bord. Dat het is afgewezen wordt onthouden
-        in de voorstel-overlay (project_proposals.py), niet hier: het project verdwijnt, de
-        herinnering blijft, zodat dezelfde bron nooit opnieuw hetzelfde voorstelt."""
-        p = self._projects.get(pid)
-        if p is None or p.get("status") != "proposed":
-            return False
-        del self._projects[pid]
-        self._save()
-        return True
+    # HIER STOND DE VOORSTEL-BAAN (`proposals`, `accept_proposal`, `reject_proposal`). De lus die
+    # hem voedde is op 21 september 2026 opgeheven: de generator draaide elke dag door terwijl de
+    # enige plek waar een mens ja of nee kon zeggen (de Founder Flow) al weg was.
+    #
+    # `proposed` blijft in `STATUSSEN` staan, en dat is geen slordigheid: de voorstellen die er ooit
+    # zijn gemaakt staan gearchiveerd in de data en moeten leesbaar blijven. Hij is wél uit
+    # `START_STATUSSEN` gehaald — een NIEUW project kan niet meer als voorstel beginnen.
 
     def record_progress(self, pid: str, note: str) -> bool:
         """Leg autonome voortgang vast: een rol heeft (omkeerbaar, met eigen skills) aan dit
@@ -1597,7 +1566,7 @@ _WRITE_METHODS = (
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_resultaat",
     "set_item_offer", "accept_item_offer", "plan_akkoord", "set_checklist_uitvoer",
-    "edit", "approve", "discard", "accept_proposal", "reject_proposal",
+    "edit", "approve", "discard",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future",
