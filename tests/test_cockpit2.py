@@ -52,7 +52,11 @@ def test_nooch_roles_tab(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch", "roles", csrf_token="t")
     assert "Creator of Shoes" in page and "Marketing Lead" in page
-    assert "Organization" in page                              # org-boom (rail)
+    # De organisatieboom stond hier in een eigen rechterrail. Sinds fase 10 punt 3 staat hij nog
+    # maar op één plek — de zijbalk — en die wordt in `_send` gevuld, niet in `render_node`. Op
+    # deze hoogte hoort hij er dus juist NIET meer te staan; zijn aanwezigheid zou betekenen dat
+    # de dubbele weergave terug is.
+    assert "c2-rail" not in page and "Organization" not in page
     # kernrollen apart + purpose onder de rol + toewijs-icoon
     assert "Core roles" in page and "Circle Lead" in page
     assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer

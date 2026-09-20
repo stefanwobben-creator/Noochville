@@ -293,3 +293,35 @@ def test_routes_van_dezelfde_view_zitten_allemaal_in_de_nu_scope():
                  for v, r in per_view.items()
                  if r & set(_NU_ROUTES) and r - set(_NU_ROUTES)}
     assert not gespleten, f"view met routes binnen én buiten de nu-scope: {gespleten}"
+
+
+# ── Punt 3: het dubbele Organization-paneel ──────────────────────────────────────────────────
+
+def test_geen_enkele_view_rendert_nog_een_eigen_organisatieboom():
+    """Punt 3, structureel: de boom stond in de zijbalk (`_nav`) ÉN in een `.c2-rail` op vijf
+    schermen. Twee keer dezelfde boom op één pagina. Zoek naar het patroon `c2-rail` in elke view,
+    niet naar de vijf namen — dan valt een zesde die later opduikt ook op."""
+    fout = []
+    for p in sorted(VIEWS.glob("*.py")):
+        t = p.read_text()
+        if "c2-rail" in t:
+            fout.append(p.name)
+    assert not fout, f"views met een eigen rechterrail: {fout}"
+
+
+def test_de_zijbalk_markeert_de_huidige_node():
+    """Wat de rail extra deed — de huidige node openklappen en markeren — mag niet verdwijnen.
+    Het is verhuisd naar `_send`: het `id` uit de query gaat mee naar `_tree_html`."""
+    bron = (REPO / "nooch_village" / "cockpit2.py").read_text()
+    blok = re.search(r"if _st is not None and _SIDE_ORG in body:(.*?)except Exception", bron, re.S)
+    assert blok, "de injectie van de zijbalk-boom is niet te vinden"
+    assert '== "/node"' in blok.group(1)
+    assert "_tree_html(_st, _hier)" in blok.group(1)
+
+
+def test_de_rollenlijst_blijft_bereikbaar():
+    """"Geen functionaliteit verdwijnt": de volledige rollenlijst hing niet aan de rail maar aan de
+    Roles-tab, en die moet er dus nog zijn."""
+    bron = (VIEWS / "overview.py").read_text()
+    assert "_tabbar(" in bron
+    assert re.search(r"['\"]roles['\"]", bron, re.I), "de Roles-tab is niet meer te vinden"

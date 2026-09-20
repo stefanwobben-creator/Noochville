@@ -5390,13 +5390,22 @@ def make_handler(data_dir: str, csrf_token: str,
                 # DE ORGANISATIEBOOM ZAT IN DE RECHTERRAIL en staat sinds fase 7 in de zijbalk
                 # links, bij de rest van de navigatie (prototype v15). Hij wordt hier gevuld en niet
                 # in `_nav()` zelf, omdat hij de records nodig heeft en `_nav()` geen stores kent —
-                # zelfde patroon als de begroeting hieronder. Pagina's met een EIGEN rail (de
-                # node-pagina's) houden die; daar staat de boom met de huidige node opengeklapt.
+                # zelfde patroon als de begroeting hieronder.
+                #
+                # FASE 10 PUNT 3: de node-pagina's hielden tot nu toe hun EIGEN rail met dezelfde
+                # boom erin — twee keer hetzelfde op één scherm. Die rail is weg. Wat die rail
+                # extra deed, de huidige node openklappen en markeren, gebeurt nu hier: het `id`
+                # uit de query gaat mee naar `_tree_html`. Zo verdwijnt de dubbele weergave zonder
+                # dat de positie-in-de-organisatie verloren gaat.
                 if _st is not None and _SIDE_ORG in body:
                     try:
                         from nooch_village.views.overview import _tree_html
+                        _hier = ""
+                        if (self.path or "").split("?", 1)[0] == "/node":
+                            _hier = urllib.parse.parse_qs(
+                                urllib.parse.urlparse(self.path).query).get("id", [""])[0]
                         body = body.replace(
-                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, '')}</div>", 1)
+                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, _hier)}</div>", 1)
                     except Exception:
                         pass
                 # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde

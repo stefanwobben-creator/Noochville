@@ -881,15 +881,19 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                 f"</div>")
     else:
         meet = ""
-    # Breadcrumb weggehaald (founder 23 jul): de hiërarchie staat al in de organisatieboom-rail rechts.
+    # GEEN RECHTERRAIL MEER (fase 10 punt 3). De organisatieboom stond hier én in de zijbalk
+    # links: twee keer dezelfde boom op hetzelfde scherm. De linker blijft, deze gaat weg.
+    # Er verdwijnt niets: de volledige rollenlijst staat op de Roles-tab hieronder, en de positie
+    # in de organisatie (welke node je open hebt) wordt nu in de ZIJBALK gemarkeerd — `_send`
+    # geeft de huidige node-id door aan `_tree_html`, wat de rail hiervoor deed.
+    # Breadcrumb was al eerder weg (founder 23 jul), om dezelfde reden: de hiërarchie stond er al.
     main = (f"<div class='c2-main'>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
-    rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
-             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
+             f"<div class='c2-wrap'>{main}</div>{modal}")
     return _page(_name(rec), inner)
 
 
@@ -1022,12 +1026,11 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
             f"<div class='muted'>{_e(subtitle)}</div>"
             f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
-    rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
-             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
+             f"<div class='c2-wrap'>{main}</div>{modal}")
     return _page(name, inner)
 
 

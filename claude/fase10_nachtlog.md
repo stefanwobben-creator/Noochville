@@ -184,3 +184,47 @@ vorm en geen kleur: `mform` (`font-family:inherit`), `mdot` (een ronde stip), `c
 `_NOG_TE_DOEN` in de kleurtest is van acht klassen terug naar één (`mdot`).
 
 Suite: 4.057 passed, 1 failed (de bekende), 1 xfailed.
+
+## 04:50 — punt 3: het dubbele Organization-paneel
+
+**Wat.** De organisatieboom stond in de zijbalk links **én** in een `.c2-rail` rechts. Twee keer
+dezelfde boom op één scherm. De rail is weg.
+
+**Breder dan alleen Circle-pagina's, bewust.** De opdracht noemde Circle-pagina's, maar dezelfde
+rail stond op **vijf** plekken: `overview.py` (2×: `/node` en `/person`), `skills.py`,
+`site_audit.py` en `doelen.py`. Alleen `/node` opruimen laat vier schermen met dezelfde dubbeling
+staan — en dat is precies hoe `/middelen` en `/rolefillers` ontstonden. Alle vijf dus, en
+`doelen._rail()` is als dode functie verwijderd in plaats van met een `noqa` blijven staan.
+
+### ⚠ Eén afwijking die je moet zien
+
+Je zei twee dingen die elkaar hier net raken: *"de organisatieboom blijft in de linkerbalk staan
+(ongewijzigd)"* en *"geen functionaliteit verdwijnt"*.
+
+De rail deed namelijk **iets extra's** dat de zijbalk niet deed: hij klapte de huidige node open en
+markeerde hem. De zijbalk riep `_tree_html(st, '')` aan — zonder huidige node. Verwijder ik de rail
+zonder meer, dan verdwijnt die positie-aanduiding.
+
+**Mijn keuze:** functionaliteit behouden. `_send` geeft nu het `id` uit de query door aan
+`_tree_html` als het pad `/node` is. Gevolg: op een node-pagina klapt de zijbalk open en staat de
+huidige node gemarkeerd — zie `claude/fase9_screenshots/circle-desktop.png`, waar "Nooch" neon
+oplicht en de dertien rollen eronder staan.
+
+De prijs is dat de zijbalk op node-pagina's dus **niet letterlijk ongewijzigd** blijft. Wil je dat
+wél, dan is het één regel terug (`_tree_html(_st, "")`) en accepteer je dat de "waar ben ik"-markering
+verdwijnt. Zeg maar welke van de twee.
+
+**Tests.** Drie, structureel: geen enkele view rendert nog een `c2-rail` (op patroon, dus een zesde
+die later opduikt valt ook op), de zijbalk markeert de huidige node, en de Roles-tab bestaat nog.
+
+**Een bestaande test moest mee.** `test_nooch_roles_tab` controleerde dat "Organization" op de
+node-pagina staat — dat kwam uit de rail. `render_node` levert die string nu terecht niet meer op;
+de boom wordt pas in `_send` geïnjecteerd. De assert is omgedraaid mét de reden erbij: staat hij er
+wél, dan is de dubbeling terug.
+
+**Nog een observatie, niet aangeraakt.** De tab-labels (`Overview`, `Roles`, `Members`, …) staan in
+onderkast terwijl de knoppen ernaast wél hoofdletters dragen. Zelfde open vraag als de
+zijbalk-navigatie van eerder vannacht. Geen van beide stond in de vier typografiepunten, dus ik heb
+ze laten staan.
+
+Suite: 4.060 passed, 1 failed (de bekende), 1 xfailed.
