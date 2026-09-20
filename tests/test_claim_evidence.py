@@ -114,3 +114,75 @@ def test_counts_over_meerdere_merken():
          patch("nooch_village.llm.reason", _reason(True, True, "gecertificeerd biodegradable volgens ISO 14855")):
         res = ClaimEvidenceSkill().run({"brands": ["A", "B", "C"], "claim": "biodegradable"}, _ctx())
     assert res["counts"]["bevestigd"] == 3 and len(res["rows"]) == 3
+
+
+# ── De verzamelaar (pijplijn stap 2, 20 sept 2026) ──────────────────────────
+#
+# Deze adapter is de makkelijkste van de vijf, en om een reden die het noteren waard is: de skill
+# was al side-effect-free (de rol/dispatch-laag schreef de Kroniek-records, niet de skill). De
+# verzamelaar leest dezelfde Kroniek terug en hoeft dus niets te ontvlechten.
+#
+# En hij vraagt GEEN model. Bij de andere vier beoordeelt een model iets; hier is het oordeel al
+# geveld en vastgelegd tijdens de run. Nog een keer vragen zou een tweede oordeel over hetzelfde
+# feit zijn — precies wat de Kroniek moet voorkomen.
+
+def _ledger(tmp_path):
+    from nooch_village.evidence_ledger import EvidenceLedger
+    return EvidenceLedger(str(tmp_path / "evidence.jsonl"))
+
+
+def test_verzamel_leest_de_kroniek_en_vraagt_geen_model(tmp_path, monkeypatch):
+    from nooch_village.skills_impl.claim_evidence import verzamel
+    import nooch_village.llm as llm
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("de verzamelaar riep een model aan")))
+
+    led = _ledger(tmp_path)
+    led.record(role_id="r", skill="claim_evidence", query="carbon neutral",
+               source="https://veja.com/x", status="bevestigd",
+               meta={"brand": "Veja", "citaat": "certified by SGS"})
+    uit = verzamel(led)
+    assert len(uit) == 1
+    s = uit[0]
+    assert s.bron == "bewijs"
+    assert "Veja" in s.tekst and "carbon neutral" in s.tekst and "bevestigd" in s.tekst
+    assert s.vindplaats == "https://veja.com/x"
+    assert s.extra["status"] == "bevestigd" and s.extra["citaat"] == "certified by SGS"
+
+
+def test_leeg_haalt_de_memo_niet(tmp_path):
+    """"We vonden de claim niet" is de normale uitkomst van een scan. Die in de memo zetten vult
+    hem met afwezigheid, en dan leest niemand hem nog. `bevestigd` en `fout` zeggen wél iets: het
+    eerste is een claim die staat, het tweede dat we het niet konden nakijken."""
+    from nooch_village.skills_impl.claim_evidence import verzamel
+    led = _ledger(tmp_path)
+    led.record(role_id="r", skill="claim_evidence", query="vegan", source="https://a", status="leeg")
+    led.record(role_id="r", skill="claim_evidence", query="bio", source="https://b", status="fout")
+    assert [s.extra["status"] for s in verzamel(led)] == ["fout"]
+
+
+def test_alleen_de_eigen_skill(tmp_path):
+    """De Kroniek is van het hele dorp. Zonder dit filter zou deze adapter de records van elke
+    andere skill als bewijs-signaal doorgeven."""
+    from nooch_village.skills_impl.claim_evidence import verzamel
+    led = _ledger(tmp_path)
+    led.record(role_id="r", skill="claim_evidence", query="a", source="x", status="bevestigd")
+    led.record(role_id="r", skill="claims_check", query="b", source="y", status="bevestigd")
+    assert [s.extra["claim"] for s in verzamel(led)] == ["a"]
+
+
+def test_sinds_kapt_de_geschiedenis_af(tmp_path):
+    from nooch_village.skills_impl.claim_evidence import verzamel
+    led = _ledger(tmp_path)
+    led.record(role_id="r", skill="claim_evidence", query="oud", source="x",
+               status="bevestigd", ts=1000.0)
+    led.record(role_id="r", skill="claim_evidence", query="nieuw", source="y",
+               status="bevestigd", ts=9000.0)
+    assert [s.extra["claim"] for s in verzamel(led, sinds=5000.0)] == ["nieuw"]
+    assert [s.extra["claim"] for s in verzamel(led)] == ["nieuw", "oud"]    # nieuwste eerst
+
+
+def test_de_drempel_staat_op_de_bron():
+    from nooch_village.skills_impl.claim_evidence import DREMPEL
+    from nooch_village.weekmemo import DREMPELS
+    assert DREMPEL == "precisie" and DREMPEL in DREMPELS

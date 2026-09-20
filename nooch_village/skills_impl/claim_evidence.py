@@ -98,6 +98,59 @@ _OORDEEL = {
 }
 
 
+#: Deze bron levert `precisie`: de Kroniek draagt oordelen die er al liggen, en een verkeerd
+#: doorgegeven oordeel is duurder dan een gemist. Zelfde grond als `streng=True` bij de
+#: grondings-poort hierboven: hier is het citaat het bewijs.
+DREMPEL = "precisie"
+
+#: De statussen die iets te MELDEN hebben. `bevestigd` is een claim die staat — dat is nieuws voor
+#: de weekmemo (een concurrent die zijn claim wél onderbouwt), en `fout` betekent dat we het niet
+#: konden nakijken, wat óók iets is om te weten. `leeg` haalt de memo niet: "we vonden de claim
+#: niet" is de normale uitkomst van een scan en zou de memo vullen met afwezigheid.
+MELDBAAR = ("bevestigd", "fout")
+
+
+def verzamel(ledger, *, sinds: float = 0.0, skill: str = "claim_evidence") -> list:
+    """De Kroniek-records van deze skill, als `weekmemo.Signaal`.
+
+    LEEST ALLEEN, en dat is hier makkelijker dan bij de andere adapters: deze skill was al
+    side-effect-free (de rol/dispatch-laag schreef de records, niet de skill zelf). De verzamelaar
+    leest dezelfde Kroniek terug.
+
+    GEEN MODELAANROEP. De andere vier bronnen laten een model iets beoordelen; hier is het oordeel
+    al geveld en vastgelegd op het moment van de run. Nog een keer vragen zou een tweede oordeel
+    over hetzelfde feit zijn — en dat is precies wat de Kroniek moet voorkomen."""
+    from nooch_village.weekmemo import Signaal
+
+    uit = []
+    for r in (ledger.all_records() if ledger is not None else []):
+        if str(r.get("skill") or "") != skill:
+            continue
+        if str(r.get("status") or "") not in MELDBAAR:
+            continue
+        try:
+            ts = float(r.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            ts = 0.0
+        if ts < sinds:
+            continue
+        meta = r.get("meta") if isinstance(r.get("meta"), dict) else {}
+        merk = str(meta.get("brand") or meta.get("merk") or "")
+        claim = str(r.get("query") or "")
+        uit.append(Signaal(
+            bron="bewijs",
+            # De TEKST is wat er is vastgesteld, in gewone woorden. Een lezer die "bevestigd" ziet
+            # zonder te weten waarover, heeft niets.
+            tekst=(f"{merk or 'een merk'} — claim {claim!r}: {r.get('status')}").strip(),
+            vindplaats=str(r.get("source") or ""),
+            gevonden_op=ts,
+            herkomst=str(r.get("id") or ""),
+            extra={"status": str(r.get("status") or ""), "merk": merk, "claim": claim,
+                   "citaat": str(meta.get("citaat") or meta.get("evidence") or "")}))
+    uit.sort(key=lambda s: -s.gevonden_op)
+    return uit
+
+
 class ClaimEvidenceSkill(Skill):
     name = "claim_evidence"
     cost = "credits"               # SerpAPI-zoek + pagina-fetches per merk
