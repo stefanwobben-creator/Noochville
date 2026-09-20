@@ -207,6 +207,150 @@
     root.querySelectorAll("form[data-qadd-dirty] .qadd-bar").forEach(function (b) { b.hidden = true; });
   }
 
+  /* ── Het sleeppatroon op het bord (fase 11, laag 3) ──────────────────────────────────────
+   *
+   * EIGEN POINTER-IMPLEMENTATIE EN NIET DE NATIVE HTML5-DRAG, en dat is de hele reden dat deze
+   * functie bestaat. De native API geeft je één ding niet: zeggenschap over hoe het gesleepte
+   * ding eruitziet. `setDragImage` neemt een momentopname en de browser tekent die plat en
+   * schaduwloos — dus de hover-lift viel wég op het moment dat je écht ging slepen, precies waar
+   * het "optillen" hoorde te beginnen. Stefans woorden: het oppakken mag meer physical affordance.
+   *
+   * Hier tilt de kaart op en BLIJFT hij opgetild: een kloon volgt de pointer, opgeschaald,
+   * gekanteld en met een schaduw eronder (`.pdrag-ghost`), terwijl de plek van herkomst als
+   * contour blijft staan (`.pdrag-bron`).
+   *
+   * ALLEEN MUIS EN PEN. Op touch doet dit niets, met opzet: een sleepgebaar dat scrollen blokkeert
+   * maakt een bord op een telefoon onbruikbaar, en de statuswissel heeft daar al een weg (de
+   * knop/dropdown op de kaart zelf). Slepen is een versnelling, geen vervanging — dezelfde regel
+   * die de toegankelijkheidsval uit de fase-11-spec afdekt.
+   *
+   * `opties.onDrop(pid, naar)` krijgt de uitkomst; wát er dan gebeurt (formulier posten en
+   * herladen op de volle pagina, fetch en verversen in de modal) weet dit bestand niet. Zo staat
+   * het gedrag één keer en de afhandeling per scherm.
+   */
+  var DREMPEL = 5;        // px; hieronder is het een klik en geen sleep
+
+  NV.bord = function (root, opties) {
+    root = root || document;
+    opties = opties || {};
+    if (!opties.onDrop) return;
+    root.querySelectorAll(".pcard[data-pid]").forEach(function (kaart) {
+      if (kaart.getAttribute("data-nv-sleep")) return;
+      kaart.setAttribute("data-nv-sleep", "1");
+      // De native vlag uit: anders vecht de browser-drag met deze.
+      kaart.setAttribute("draggable", "false");
+      kaart.addEventListener("pointerdown", function (e) {
+        if (e.button !== 0 || e.pointerType === "touch") return;
+        if (e.target.closest("a,button,input,select,textarea,summary")) return;
+        start(kaart, e, root, opties);
+      });
+    });
+  };
+
+  function start(kaart, e0, root, opties) {
+    var pid = kaart.getAttribute("data-pid");
+    var vak = kaart.getBoundingClientRect();
+    var dx = e0.clientX - vak.left, dy = e0.clientY - vak.top;
+    var ghost = null, kolom = null, bezig = false;
+
+    function beweeg(e) {
+      if (!bezig) {
+        if (Math.abs(e.clientX - e0.clientX) < DREMPEL &&
+            Math.abs(e.clientY - e0.clientY) < DREMPEL) return;
+        bezig = true;
+        window.__pdrag = true;            // de klik-naar-detail-hook slaat deze beurt over
+        ghost = kaart.cloneNode(true);
+        ghost.className = kaart.className + " pdrag-ghost";
+        ghost.style.width = vak.width + "px";
+        document.body.appendChild(ghost);
+        kaart.classList.add("pdrag-bron");
+      }
+      // DE AFFORDANCE ZELF: opschalen, kantelen, en meebewegen. Eén transform, dus de browser
+      // hoeft niets te herberekenen buiten de compositielaag.
+      ghost.style.transform = "translate3d(" + (e.clientX - dx) + "px," + (e.clientY - dy) +
+                              "px,0) scale(1.04) rotate(-2deg)";
+      var onder = kolomOnder(e.clientX, e.clientY, root);
+      if (onder !== kolom) {
+        if (kolom) kolom.classList.remove("over");
+        kolom = onder;
+        if (kolom) kolom.classList.add("over");
+      }
+    }
+
+    function stop(e) {
+      document.removeEventListener("pointermove", beweeg);
+      document.removeEventListener("pointerup", stop);
+      document.removeEventListener("pointercancel", stop);
+      if (!bezig) return;                 // het was een klik; die mag zijn gang gaan
+      if (ghost) ghost.remove();
+      kaart.classList.remove("pdrag-bron");
+      var naar = kolom && kolom.getAttribute("data-to");
+      if (kolom) kolom.classList.remove("over");
+      // De vlag pas ná deze beurt terug: anders opent de klik die bij het loslaten hoort
+      // alsnog de kaart.
+      setTimeout(function () { window.__pdrag = false; }, 60);
+      if (naar && naar !== huidigeKolom(kaart)) opties.onDrop(pid, naar);
+    }
+
+    document.addEventListener("pointermove", beweeg);
+    document.addEventListener("pointerup", stop);
+    document.addEventListener("pointercancel", stop);
+  }
+
+  // De kolom onder de pointer. Via `elementFromPoint` en niet via de muis-events van de kolom
+  // zelf: de ghost hangt onder de cursor, en een element dat de pointer opvangt zou elke
+  // dragover-achtige meting vertroebelen (vandaar ook `pointer-events:none` op `.pdrag-ghost`).
+  function kolomOnder(x, y, root) {
+    var el = document.elementFromPoint(x, y);
+    var kol = el && el.closest ? el.closest(".pcol[data-to]") : null;
+    return kol && (root === document || root.contains(kol)) ? kol : null;
+  }
+
+  function huidigeKolom(kaart) {
+    var kol = kaart.closest(".pcol[data-to]");
+    return kol ? kol.getAttribute("data-to") : null;
+  }
+
+  /* ── De checklist beweegt mee bij de klik (fase 11, laag 2 en 3, prototype sectie 3) ──────
+   *
+   * HIER EN NIET IN HET FRAGMENT, en dat verschil is precies wat de handmatige doorloop van
+   * 20 september blootlegde. Dit stond als `<script>` ín de checklist-HTML, en dat werkt op een
+   * volle pagina — maar de projectkaart opent normaal in de MODAL, en die zet zijn inhoud met
+   * `innerHTML`. Een script dat zo binnenkomt voert de browser nooit uit. De microinteractie was
+   * dus onzichtbaar op precies de plek waar je hem het vaakst zou zien, zonder dat iets faalde.
+   *
+   * Eén gedelegeerde listener op `document` heeft dat probleem niet: hij bestaat al vóór het
+   * fragment er is, en blijft gelden voor elk fragment dat erna komt.
+   *
+   * WAT DIT NIET IS: een tweede opslagpad. De POST eronder blijft wat hij was en is leidend; dit
+   * raakt alleen wat je ZIET, in de seconde tussen je klik en de herlaadbeurt. Zonder JS gebeurt
+   * precies wat er altijd gebeurde.
+   *
+   * De teller telt niet opnieuw maar verschuift met één, vanaf het getal dat de SERVER gaf:
+   * overgeslagen items tellen daar niet mee in de noemer, dus zelf tellen zou hier iets anders
+   * betekenen dan daar. Een `.b-skip`-vakje doet daarom niets.
+   */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".ck-box[data-ck-item]") : null;
+    if (!b || b.classList.contains("b-skip")) return;
+    var id = b.getAttribute("data-ck-item"), was = b.getAttribute("data-ck-done") === "1";
+    b.classList.toggle("on", !was);
+    b.textContent = was ? "" : "\u2713";
+    b.setAttribute("data-ck-done", was ? "0" : "1");
+    var li = b.closest(".ck-item"), t = li && li.querySelector(".ck-txt>span");
+    if (t) t.classList.toggle("ck-done", !was);
+    var bar = document.querySelector('progress[data-ck-bar="' + id + '"]');
+    if (!bar) return;
+    var tot = parseInt(bar.getAttribute("data-ck-tot") || "0", 10);
+    if (!tot) return;
+    var done = Math.round((bar.value * tot) / 100) + (was ? -1 : 1);
+    done = Math.max(0, Math.min(tot, done));
+    var pct = Math.round((100 * done) / tot);
+    bar.value = pct;
+    var tel = document.querySelector('[data-ck-tel="' + id + '"]');
+    if (tel) tel.textContent = pct + "% (" + done + "/" + tot + ")";
+  });
+
   // Idempotent: `data-nv-wired` per formulier, zodat een fragment dat opnieuw langskomt geen
   // tweede listener krijgt. Een dubbele listener post elke actie twee keer.
   NV.wire = function (root) {
