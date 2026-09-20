@@ -803,3 +803,62 @@ Services actief, `/`, `/messages` en `/inbox` alle drie 303, geen fouten in de l
 
 **`NotifStore` staat er nog** — dat is de hele opzet van twee stappen: de bron blijft naast de
 kopie staan tot iemand heeft kunnen kijken of de 371 leesbaar zijn aangekomen.
+
+## B2 — begonnen, en opnieuw bewust gestopt vóór de commit
+
+Staat in de stash als `B2-wip`. De boom is groen en gelijk aan wat er op prod draait.
+
+### Wat er af is (in de stash)
+
+- de twee laatste `st.notif.add`-plekken om naar `_signaleer` — **`.notif.add` komt nergens meer voor**
+- `_act_verzoek_besluit` (113 regels) en zijn registratie eruit, vindkaart bijgewerkt
+- acht beslis-tests uit `test_wiki_verzoek.py` verwijderd, met de reden in het bestand
+- drie routerings-tests in `test_inbox_flows.py` omgezet naar DM-assertions
+
+### Een echte bug die dit blootlegde
+
+**Het pagina-voorstel verloor zijn inhoud.** De DM droeg alleen het zinnetje *"voorstel voor pagina
+HyphaLite: hier ontbreekt de herkomst"* — de voorgestelde tékst zat in `extra["pagina"]["body"]`,
+dat het inbox-scherm uitklapte. Zonder dat scherm krijgt de ontvanger "iemand stelt iets voor"
+zonder wát, en dat is geen suggestie maar een raadsel. Juist bij dit besluit telt dat: de afspraak
+is dat de rolvervuller de pagina zélf aanpast als hij het ermee eens is, en daar heeft hij de tekst
+plus de permalink voor nodig. `wiki.voorstel_velden` zet ze nu in het bericht.
+
+Dat is precies het soort ding dat alleen zichtbaar wordt door te kijken wat de mens ontvangt.
+
+### Waarom ik stop
+
+Na die stappen staan er nog **acht** falende tests, en ze horen niet bij deze stap:
+
+| test | hoort bij |
+|---|---|
+| `test_weigeren_houdt_zijn_eigen_woord` | de herschrijf-poort |
+| `test_onbewerkt_doorzetten_telt_niet_als_mensgeschreven` | `MENS_GETYPT` |
+| `test_bewerken_maakt_het_wel_jouw_tekst` | idem |
+| `test_de_suggestie_annoteert_maar_verplaatst_niets` | de triage-band van het inbox-scherm |
+| vier andere | `notif_outcome` — een inbox-actie die in B2b verdwijnt |
+
+Ik hoopte op een knip waar B2a op zichzelf groen kan zijn. Die is er niet: de overgebleven
+afnemers van `NotifStore` zijn de inbox-acties en de poort, en die vallen pas weg in B2b/B2d. Ze nú
+herschrijven is werk voor een scherm dat over een stap verdwijnt.
+
+De echte omvang van wat er nog ligt, gemeten:
+
+```
+views/inbox.py        1.182 regels   — levert ook `_at_doelen` aan checklists.py en cockpit2
+notifications.py        428 regels
+bevinding.py            453 regels   } de poort
+zelf_verwerking.py      402 regels   }
+spanning_ontstaat.py     59 regels   }
+vier dispatch-acties: notif_outcome · notif_klaar · notif_archive · notif_delete
+twee routes + de lade-chrome + `_person_targets` + `_person_role_options`
+```
+
+Dat is één aaneengesloten stuk, geen vier losse commits: haal je de acties weg zonder het scherm,
+dan staat er een scherm met dode knoppen; haal je het scherm weg zonder `_at_doelen` te verhuizen,
+dan breken de checklists.
+
+**Mijn voorstel: B2 als eigen beurt, in één aaneengesloten verwijdering, met de suite als
+leidraad.** De stash is het startpunt; niets is verloren. En de volgorde uit de scope blijft staan:
+de poort (drie modules) gaat er als láátste uit, zodat een fout in de omzetting niet in dezelfde
+commit zit als een dode-code-opruiming.
