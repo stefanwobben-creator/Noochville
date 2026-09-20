@@ -12,9 +12,16 @@ enige nieuwe familie is `msg-`, voor de tweekoloms-indeling (kanalenlijst links,
 """
 from __future__ import annotations
 
+import logging
+
 from nooch_village import channels
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp
 from nooch_village.web_base import _e, _page, _banner
+
+#: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
+#: verder tellen verandert niets aan wat de lezer ziet — en het scheelt bij 442 kanalen een hoop
+#: werk per pageload. Wie een kanaal een jaar niet opende krijgt "9+", en dat is het juiste antwoord.
+_ONGELEZEN_CAP = 50
 
 
 def _label(st, kanaal: str, ik: str = "") -> str:
@@ -136,6 +143,31 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
                       volgorde[0] if volgorde else "")
 
+    # ── ongelezen: een VERGELIJKING, geen opgeslagen vlag ────────────────────
+    #
+    # Per kanaal: hoeveel berichten kwamen er ná het moment dat deze mens het kanaal voor het laatst
+    # opende, en niet van hemzelf. Dat laatste is de helft die je makkelijk vergeet — je eigen
+    # bericht als "ongelezen" tonen maakt de indicator meteen onbetrouwbaar, en een indicator die
+    # er één keer naast zit kijk je daarna niet meer aan.
+    #
+    # Het kanaal dat je NU opent markeren we hieronder pas, ná het tellen: anders staat het nooit
+    # als ongelezen in de lijst waar je het net in aanklikte, en zie je nooit wat je zojuist opende.
+    ongelezen: dict = {}
+    if ik:
+        gz = st.people.gezien(ik)
+        for groep_rij in groepen.values():
+            for k in groep_rij:
+                sinds = float(gz.get(k) or 0)
+                n = 0
+                for e in st.channels.trail(k, limit=_ONGELEZEN_CAP):
+                    if float(e.get("at") or 0) <= sinds:
+                        continue
+                    if (e.get("author") or {}).get("id") == ik:
+                        continue                       # je eigen woorden zijn niet nieuw voor jou
+                    n += 1
+                if n:
+                    ongelezen[k] = n
+
     # Het zoekveld is een GET-formulier en geen JS-filter: zo werkt hij zonder scripts, is de
     # uitkomst deelbaar als URL, en hoeven er geen 442 regels naar de browser die je toch verbergt.
     zoek = (f"<form class='msg-zoek' method='get' action='/messages'>"
@@ -176,13 +208,28 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         for k in rij:
             aan = " on" if k == kanaal else ""
             qs = f"&q={_e(q)}" if q else ""
-            lijst.append(f"<a class='msg-kanaal{aan}' href='/messages?k={_e(k)}{qs}'>"
-                         f"{_e(_label(st, k, ik))}</a>")
+            n = ongelezen.get(k, 0)
+            merk = " msg-kanaal--nieuw" if n else ""
+            stip = f"<span class='msg-nieuw'>{n if n < 10 else '9+'}</span>" if n else ""
+            lijst.append(f"<a class='msg-kanaal{aan}{merk}' href='/messages?k={_e(k)}{qs}'>"
+                         f"{_e(_label(st, k, ik))}{stip}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
     nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(lijst) or leeg}</nav>"
 
+    # HET OPENEN IS HET LEZEN. Geen aparte "markeer als gelezen"-knop: dat is een tweede handeling
+    # voor iets wat je met je ogen al deed, en hij loopt gegarandeerd achter op de werkelijkheid.
+    # Fail-soft: lukt het markeren niet, dan blijft het kanaal ongelezen staan — vervelend, maar de
+    # andere kant (stil op gelezen zetten wat je niet zag) is erger.
     trail = st.channels.trail(kanaal) if kanaal else []
+    if ik and kanaal:
+        laatste = trail[-1] if trail else None
+        if laatste is not None:
+            try:
+                st.people.markeer_gezien(ik, kanaal, float(laatste.get("at") or 0))
+            except Exception:                          # noqa: BLE001
+                logging.getLogger("village.messages").debug(
+                    "gezien-stand niet bijgewerkt", exc_info=True)
     draad = "".join(_bericht(st, e) for e in trail) or (
         "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
