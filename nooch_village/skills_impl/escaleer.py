@@ -124,7 +124,14 @@ class EscaleerSkill(Skill):
             return {"error": "ontbrekende parameter: 'reden' is verplicht"}
         aard = ((payload or {}).get("aard") or "").strip().lower()
         if aard not in _AARDEN:
-            aard = self._classify(reden, context)     # LLM, fail-open → 'beslissing'
+            # HIER BESLISTE EEN MODEL of dit een bevinding was (stil vastleggen) of een beslissing
+            # (naar een mens). Dat is "of iets wordt opgevolgd", en dat mag een model niet bepalen
+            # (CLAUDE.md, "AI is instrument, geen rol"). Weg, en wat overblijft is de fail-open die
+            # er altijd al onder zat: bij twijfel een BESLISSING, dus zichtbaar bij een mens.
+            #
+            # De rol kan het nog steeds zelf zeggen — `aard="bevinding"` in de payload werkt
+            # ongewijzigd. Dat is een rol die zijn eigen werk benoemt, geen model dat raadt.
+            aard = "beslissing"
         if aard == "bevinding":
             return self._bevinding(reden)
         return self._beslissing(reden, payload or {}, context)
@@ -167,28 +174,6 @@ class EscaleerSkill(Skill):
                 "kanaal": kanalen[0]}
 
     # ── LLM-hulpjes (begrensd, fail-soft) ─────────────────────────────────────────────────────────
-    @staticmethod
-    def _classify(reden: str, context=None) -> str:
-        """Bevinding of beslissing? Fail-OPEN naar 'beslissing': liever een keuze zichtbaar bij de mens
-        dan stil weggeslikt. Geen LLM → 'beslissing'."""
-        try:
-            from nooch_village.llm import reason
-            prompt = (
-                "An autonomous role wants to escalate something. Decide what it IS:\n"
-                "- FINDING: an outcome or conclusion of its own work, including an honest null result "
-                "('nothing qualifies', 'no source found'). It asks no choice of a human.\n"
-                "- DECISION: a choice is needed that the role itself may not make "
-                "('may we drop the requirement?', 'which of these two?').\n\n"
-                f"Text: \"{reden[:400]}\"\n\n"
-                "Answer with EXACTLY one word: FINDING or DECISION.")
-            out = reason(prompt, call_site="escaleer_classify", max_tokens=8)
-            low = (out or "").strip().lower()
-            if "finding" in low or "bevinding" in low:       # de oude NL-token blijft herkend
-                return "bevinding"
-        except Exception:
-            pass
-        return "beslissing"
-
     @staticmethod
     def _als_keuze(reden: str) -> str:
         """Herformuleer een reden tot een EXPLICIETE, beantwoordbare keuze. Leest het al als een vraag

@@ -2628,32 +2628,13 @@ def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | 
         pass
 
 
-def _finetune_voorstellen(persona) -> list:
-    """Twee alternatieven voor de prompt-extra: strakker en ruimer. Fail-closed: bij een
-    onbruikbaar antwoord een lege lijst, nooit een half voorstel."""
-    huidig = (persona.prompt_extra or "").strip() or "(no prompt extra yet)"
-    prompt = (f"Je helpt bij het finetunen van een werkinstructie voor een AI-inwoner.\n"
-              f"Inwoner: {persona.name} ({persona.mbti}). Karakter: {persona.instructions}\n"
-              f"Huidige werkinstructie: {huidig}\n\n"
-              f"Geef TWEE alternatieven, elk maximaal twee zinnen:\n"
-              f"STRAKKER: <scherper, minder ruimte voor interpretatie>\n"
-              f"RUIMER: <meer ruimte, maar nog steeds concreet>\n"
-              f"Antwoord met exact die twee regels, zonder inleiding.")
-    try:
-        from nooch_village import llm
-        out = llm.reason(prompt, call_site="persona_finetune", max_tokens=300)
-    except Exception:
-        out = None
-    if not out:
-        return []
-    uit = []
-    for regel in out.splitlines():
-        for kop, naam in (("STRAKKER:", "strakker"), ("RUIMER:", "ruimer")):
-            if regel.strip().upper().startswith(kop):
-                tekst = regel.split(":", 1)[1].strip()
-                if tekst:
-                    uit.append({"naam": naam, "tekst": tekst})
-    return uit
+# HIER STOND `_finetune_voorstellen`: twee alternatieve werkinstructies voor een persona
+# (strakker/ruimer), door een model geschreven. Weg op 20 september 2026. Hij beslíste niets —
+# de mens koos — maar een persona-werkinstructie is de KARAKTERBESCHRIJVING waarop een
+# AI-inwoner draait, en een model dat zijn eigen instructie herschrijft is de zelfverbeterings-
+# lus die CLAUDE.md sluit ("Harde grens: zelfverbetering stopt bij voorstellen").
+#
+# Bewerken kan gewoon met de hand; `_persona_kroniek` legt elke wijziging vast zoals altijd.
 
 
 def _act_rov2_add(c):

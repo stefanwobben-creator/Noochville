@@ -107,7 +107,7 @@ def test_de_dorpsladder_hangt_als_staart_eronder():
 def test_triage_en_routing_blijven_goedkoop():
     """DE tweede guard. Geen kop = de dorpsladder."""
     for site in ("classify_tension", "cockpit_mention_triage", "escalation_route",
-                 "escaleer_keuze", "scope_nudge_match", "governance_target_pick"):
+                 "escaleer_keuze", "governance_target_pick"):
         assert lk.ladder_voor(site) is None, site
     assert lk.GOEDKOOP & lk.HOOG_INZET == set()      # geen site kan allebei zijn
 

@@ -114,7 +114,7 @@ HOOG_INZET: frozenset[str] = frozenset({
 GOEDKOOP: frozenset[str] = frozenset({
     "classify_tension", "cockpit_mention_triage", "escalation_route", "escalation_mens",
     "escaleer_keuze",
-    "escaleer_classify", "scope_nudge_match", "governance_target_pick", "news_driver_pick",
+    "governance_target_pick", "news_driver_pick",
     "cockpit_match_pair", "cockpit_match_keycheck",
     # De verband-vraag van de Librarian ("hangen deze twee kaarten écht samen?") is triage: een
     # ja/nee met een goedkope fout, want de uitkomst gaat als voorstel naar de human-inbox en een

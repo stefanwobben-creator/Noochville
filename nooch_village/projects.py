@@ -310,55 +310,6 @@ class ProjectLedger:
         """Alle niet-afgeronde projecten (status niet terminal) — de scan-lijst voor Noochie's nudge."""
         return [p for p in self._projects.values() if p.get("status") not in _TERMINAL]
 
-    def already_scope_nudged(self, pid: str, role_id: str) -> bool:
-        """Heeft Noochie deze rol al eens voor dit project genudged? (dedup, geen herhaal-nudge)."""
-        p = self._projects.get(pid)
-        return bool(p) and role_id in (p.get("scope_nudges") or [])
-
-    def mark_scope_nudge(self, pid: str, role_id: str) -> None:
-        """Leg vast dat Noochie deze rol voor dit project heeft genudged (idempotent, persistent)."""
-        p = self._projects.get(pid)
-        if p is None:
-            return
-        lst = p.setdefault("scope_nudges", [])
-        if role_id not in lst:
-            lst.append(role_id)
-            self._touch(p)
-            self._save()
-
-    # ── Het oordeel van de scope-nudge: onthouden wat er al beoordeeld is ────────────────────
-    #
-    # DE VLOER VOOR DE DUURSTE LLM-POST VAN HET DORP. `scope_nudge_match` was 3150 van de 8478
-    # calls (37%) en leverde 165 nudges op — 5,2%. Gemeten oorzaak: de lus vraagt het model élke
-    # puls opnieuw over ELK actief project, terwijl er per dag maar 2% van die projecten verandert
-    # (7 van de 332 in 24 uur). Hetzelfde project, dezelfde tekst, dezelfde rollen, elke dag weer
-    # dezelfde vraag.
-    #
-    # Dit is de vorm van `kennis_dedup`: een deterministische vloer waar het kan, het model alleen
-    # voor wat de vloer niet kan uitsluiten. Hier is de vloer een vingerafdruk van de INVOER —
-    # projecttekst plus de kandidaat-rollen met hun skills en accountabilities. Verandert er niets
-    # aan de invoer, dan verandert het antwoord ook niet.
-    #
-    # FAIL-OPEN, en dat is hier de gevaarlijke kant: een vingerafdruk die wordt weggeschreven na een
-    # call die NIET beantwoord werd (model weg, quota op) zou 'geen match' vastzetten tot iemand het
-    # project aanraakt. De aanroeper schrijft daarom alleen als het model echt antwoordde.
-
-    def scope_nudge_checked(self, pid: str) -> str:
-        """De vingerafdruk van de invoer waarop dit project het laatst beoordeeld is ('' = nooit)."""
-        p = self._projects.get(pid)
-        return str((p or {}).get("scope_nudge_check") or "")
-
-    def mark_scope_nudge_checked(self, pid: str, vinger: str) -> None:
-        """Leg vast dat deze invoer beoordeeld is. Geen `_touch`: dit is machine-onderhoud, geen
-        wijziging aan het project — zou het `updated_at` bumpen, dan zou de nudge-lus zichzelf
-        eeuwig als 'veranderd' zien en was de vloer meteen weer weg."""
-        p = self._projects.get(pid)
-        if p is None or not vinger:
-            return
-        if p.get("scope_nudge_check") != vinger:
-            p["scope_nudge_check"] = vinger
-            self._save()
-
     def start(self, pid: str, door: str = "") -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
@@ -1649,7 +1600,7 @@ _WRITE_METHODS = (
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
-    "mark_formalized", "to_future", "mark_scope_nudge", "mark_scope_nudge_checked",
+    "mark_formalized", "to_future",
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
     "set_item_human", "set_item_payload",
