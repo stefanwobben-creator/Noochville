@@ -23,6 +23,19 @@ def _stores(tmp_path):
     return dd, cockpit2._Stores(dd)
 
 
+def _entries(dd):
+    """Alle DM-regels in het dorp. Sinds 20 september 2026 landt een kaart hier en niet in een
+    inbox; de trail-regel draagt de tekst, de afzender en de herkomst."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [e for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM
+            for e in st.channels.trail(k)]
+
+
+def _dms(dd):
+    return [e.get("text") or "" for e in _entries(dd)]
+
+
 def _bevinding_ok(tekst, *, rol, records=None, reason_fn=None, ladder=""):
     """Een model dat altijd een bruikbare bevinding teruggeeft — zodat de tests de PIJPLIJN meten
     en niet de LLM."""
@@ -39,7 +52,7 @@ def _bevinding_slecht(tekst, *, rol, records=None, reason_fn=None, ladder=""):
 @pytest.fixture()
 def geen_llm(monkeypatch):
     """De pijplijn mag in een test nooit een echte call doen."""
-    monkeypatch.setattr("nooch_village.tensie_poort.match",
+    monkeypatch.setattr("nooch_village.escalation_router.match",
                         lambda *a, **k: ("", "", "geen match"))
 
 
@@ -75,8 +88,8 @@ def test_dode_bron_draagt_het_kroniek_record(tmp_path):
     assert obs[0]["anker"] == laatste["id"]
     assert obs[0]["anker_soort"] == "kroniek"
     assert laatste["id"] in obs[0]["bewijs"]
-    # Het bewijs staat vooraan in de snippet, want de store kapt op 160 tekens.
-    assert vr._snippet(obs[0]).startswith(f"Kroniek-record {laatste['id']}")
+    # Het bewijs staat vooraan in de ruwe signalering: een melding zonder anker is niet na te trekken.
+    assert vr._ruw(obs[0]).startswith(f"Kroniek-record {laatste['id']}")
 
 
 def test_vervallen_grond_op_eigen_pagina_draagt_de_pagina(tmp_path):
@@ -108,15 +121,15 @@ def test_onverzendbare_bevinding_blijft_hangen_met_reden(tmp_path, monkeypatch, 
         st.evidence.record(role_id=OWNER, skill="epo_patents", query="hennepvezel",
                            source="ops.epo.org", status="fout")
     r = vr.raad(records=st.records, att=st.att, ledger=st.evidence, assignments=st.assign,
-                notif=st.notif, data_dir=dd, apply=True)
+                data_dir=dd, apply=True)
     assert len(r["rijen"]) == 1
     assert r["rijen"][0]["verzendbaar"] is False
     assert r["rijen"][0]["verzonden"] is False
-    assert st.notif.all() == []                                   # niets bij iemand geland
+    assert _dms(dd) == []                                         # niets bij iemand geland
     assert r["hangt"] and "lege signalering" in vr.rapport_tekst(r)
 
 
-def test_founder_kaart_landt_in_de_inbox_met_bewijs(tmp_path, monkeypatch, geen_llm):
+def test_founder_kaart_landt_als_dm_met_bewijs(tmp_path, monkeypatch, geen_llm):
     dd, st = _stores(tmp_path)
     monkeypatch.setattr("nooch_village.bevinding.herschrijf", _bevinding_ok)
     # Een spanning die om een besluit in een voorbehouden domein vraagt → founder.
@@ -126,14 +139,19 @@ def test_founder_kaart_landt_in_de_inbox_met_bewijs(tmp_path, monkeypatch, geen_
                  "Kroniek-record rec-1 (claim_evidence · fout)")]
         if rec.id == OWNER else []))
     r = vr.raad(records=st.records, att=st.att, ledger=st.evidence, assignments=st.assign,
-                notif=st.notif, data_dir=dd, apply=True)
+                data_dir=dd, apply=True)
     kaarten = [x for x in r["rijen"] if x["type"] == zv.FOUNDER]
     assert kaarten, [x["type"] for x in r["rijen"]]
-    item = st.notif.all()[0]
-    assert item["target_id"] == FOUNDER_ROL and item["by"] == OWNER
-    assert item["type"] == zv.FOUNDER                              # het type reist mee
-    assert item["raad"]["anker"] == "rec-1"
-    assert "rec-1" in item["snippet"]                              # het anker overleeft de 160-cap
+    assert kaarten[0]["naar"] == FOUNDER_ROL and kaarten[0]["verzonden"] is True
+
+    # Wat vroeger een inbox-item met velden was, is nu één DM-tekst. Alles wat de lezer nodig heeft
+    # om te kunnen antwoorden moet daar IN staan — met het anker voorop, want daarmee trekt hij het na.
+    entry = _entries(dd)[0]
+    assert entry["herkomst"]["raad"]["anker"] == "rec-1"
+    assert entry["herkomst"]["raad"]["type"] == zv.FOUNDER         # het type reist mee
+    assert "rec-1" in entry["text"]
+    assert "voorstel:" in entry["text"] and "grond:" in entry["text"]
+    assert entry["author"]["id"] == OWNER
     k = kaarten[0]["kaart"]
     assert k["bewijs"] and k["voorstel"] and k["rol_id"] == OWNER
 
@@ -147,7 +165,7 @@ def test_tweede_ronde_werpt_dezelfde_observatie_niet_opnieuw_op(tmp_path, monkey
         st.evidence.record(role_id=OWNER, skill="epo_patents", query="hennepvezel",
                            source="ops.epo.org", status="fout")
     kw = dict(records=st.records, att=st.att, ledger=st.evidence, assignments=st.assign,
-              notif=st.notif, data_dir=dd)
+              data_dir=dd)
     eerste = vr.raad(**kw, apply=True)
     assert len(eerste["rijen"]) == 1
     tweede = vr.raad(**kw, apply=True)

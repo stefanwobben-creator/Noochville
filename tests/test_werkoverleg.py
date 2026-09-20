@@ -220,6 +220,15 @@ def test_een_actie_bij_een_persoon_gaat_naar_die_persoon(tmp_path):
     assert [t for t in _dm_aan(st, p.id) if "reply to complaint" in t]
 
 
+def _dm_regels(dd):
+    """Alle DM-regels in het dorp. Sinds B2 (20 september 2026) is een melding aan een mens een DM
+    en geen rij in een NotifStore; "er is niets geschreven" betekent dus: geen DM."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [e for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM
+            for e in st.channels.trail(k)]
+
+
 def test_een_rol_zonder_mens_krijgt_geen_dead_letter(tmp_path):
     """Een AI-vervulde rol leest de NotifStore nooit. Daar een bericht neerleggen is het stil
     verliezen — dan blijft de projectroute de eerlijke."""
@@ -239,7 +248,7 @@ def test_een_rol_zonder_mens_krijgt_geen_dead_letter(tmp_path):
     _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
-    assert [n for n in st.notif.all() if "Cosh login" in (n.get("snippet") or "")] == []
+    assert [e for e in _dm_regels(dd) if "Cosh login" in (e.get("text") or "")] == []
     scopes = [str(p.get("scope")) for p in st.projects.all()]
     assert any("Cosh login" in sc for sc in scopes)       # als project, niet in het niets
 

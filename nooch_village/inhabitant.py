@@ -367,12 +367,13 @@ class Inhabitant(threading.Thread):
         (en niet een persoon) overleeft bovendien een wisseling van vervuller."""
         if not rol_id:
             return
-        try:
-            from nooch_village.notifications import NotifStore
-            pad = os.path.join(self.context.data_dir, "notifications.json")
-            NotifStore(pad).add("role", rol_id, project_id, by=self.id, snippet=snippet)
-        except Exception:                                    # noqa: BLE001
-            self.log.warning("melding aan '%s' mislukt", rol_id, exc_info=True)
+        # Een ROL als adres blijft het uitgangspunt; `signaal` zoekt er de mens bij die hem
+        # vervult, of valt terug op de founder. Zo overleeft de melding nog steeds een wisseling
+        # van vervuller, maar komt hij wél aan bij iemand die hem leest.
+        from nooch_village import signaal
+        if not signaal.stuur_op_pad(self.context.data_dir, "role", rol_id, snippet, by=self.id,
+                                    herkomst={"project": project_id} if project_id else None):
+            self.log.warning("melding aan '%s' kwam nergens aan", rol_id)
 
     def _notify_founder(self, project_id: str, snippet: str) -> None:
         """Heads-up naar de founder-rol. Het bijzondere geval van `_notify_rol`.

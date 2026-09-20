@@ -21,6 +21,13 @@ Vier signalen, elk een VERGELIJKING op bestaande records, elk met een id dat je 
 | `besluit_genomen` | `notifications.json`, een verwerking met een echte uitkomst | een ja, een nee, een suggestie of een project — geen "niks nodig" |
 | `certificaat_gebankt` | bestanden in `data/certificaten/` | een certificaat dat een claim kan dragen |
 
+**`notifications.json` IS BEVROREN (20 september 2026).** `NotifStore` en het inbox-scherm zijn
+opgeheven; meldingen zijn DM's geworden en een DM draagt geen verwerk-record. De 371 bestaande
+notificaties blijven als bestand staan — ze zijn de enige plek waar staat dat een mens een besluit
+NAM — maar er komt geen rij meer bij. Gevolg voor deze meting: `besluit_genomen` telt alleen nog
+wat er vóór die datum gebeurde. Dat is een waarneming, geen besluit: wie dit signaal terug wil,
+heeft een nieuwe bron nodig (bijvoorbeeld een uitkomst op de DM zelf), geen nieuwe telling.
+
 **Wat NIET telt, en waarom.** `ping` (doorgestuurd naar een andere rol) en `none` ("niks nodig")
 zijn routering en afsluiting, geen uitkomst. `dod_outcome` is de definitie van klaar, niet het
 bewijs dat het klaar is. Een Kroniek-record met status `bevestigd` is bewijs dát een bron antwoordde,

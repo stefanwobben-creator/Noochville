@@ -22,7 +22,7 @@ keuze die stil wordt weggeslikt (veiligheid > accuratesse). Een bevinding is noo
 transparant op het projectbord en in De Kroniek.
 
 SCOPE 57 (skill-review 12-09-2026, live: 121 escaleer-items, 20 beslissingen, 0 als mens-taak). Een
-beslissing gaf `{aard, naar, reden, notif_id}` terug: `reden` is metadata voor de uitvoerlaag, dus de
+beslissing gaf `{aard, naar, reden, kanaal}` terug: `reden` is metadata voor de uitvoerlaag, dus de
 wall toonde letterlijk "beslissing", het item werd afgevinkt alsof de vraag beantwoord was, en de
 notificatie droeg geen project_id — de tensie-poort maakte er een NIEUW rol-project van dat opnieuw
 een escaleer-item plande. Nu draagt een beslissing zijn vraag onder `text`, zegt `wacht_op_mens`, en
@@ -96,7 +96,7 @@ class EscaleerSkill(Skill):
                     "van: str (optional — the escalating role, shown as sender)")
     required_payload = ("reden",)  # 'naar' alleen bij beslissing; ontbrekende 'aard' wordt geclassificeerd
     output_schema = ("ok, aard ('bevinding'|'beslissing'), text (the finding, or 'Decision requested "
-                     "from <role>: <choice>'), reden | beslissing: naar, notif_id, wacht_op_mens=True")
+                     "from <role>: <choice>'), reden | beslissing: naar, kanaal, wacht_op_mens=True")
 
     def validate_payload(self, payload: dict, context) -> list:
         """`aard` is een enum: een verzonnen waarde ('vraag', 'finding') zou live stil naar de
@@ -154,17 +154,17 @@ class EscaleerSkill(Skill):
         # aan hangen en maakte er een nieuw project van — de lus uit de skill-review.
         pid = str(payload.get("_project_id") or payload.get("project_id") or "")
         dd = getattr(context, "data_dir", ".") or "."
-        try:
-            from nooch_village.notifications import NotifStore
-            notif = NotifStore(os.path.join(dd, "notifications.json"))
-            # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
-            n = notif.add("role", naar, pid, by=van, snippet=f"⤴ beslissing gevraagd: {keuze}")
-        except Exception as e:
-            return {"error": f"escalatie kon niet landen: {e}"}
+        from nooch_village import signaal
+        kanalen = signaal.stuur_op_pad(dd, "role", naar, f"⤴ beslissing gevraagd: {keuze}",
+                                       by=van, herkomst={"project": pid} if pid else None)
+        if not kanalen:
+            return {"error": "escalatie kon niet landen: geen mens gevonden om te vragen"}
         return {"ok": True, "aard": "beslissing", "naar": naar, "reden": keuze,
                 "text": f"Decision requested from {naar}: {keuze}",
                 "wacht_op_mens": True,                # de uitvoerlaag: mens-taak, niet afvinken
-                "notif_id": n.get("id", "")}
+                # `notif_id` was het id van de inbox-rij; die bestaat sinds B2 niet meer. Het
+                # KANAAL is nu het spoor, en dat is bruikbaarder: daar staat het gesprek.
+                "kanaal": kanalen[0]}
 
     # ── LLM-hulpjes (begrensd, fail-soft) ─────────────────────────────────────────────────────────
     @staticmethod
@@ -218,5 +218,5 @@ class EscaleerSkill(Skill):
         aard = result.get("aard") or "beslissing"
         return [{"role_id": role_id, "skill": self.name,
                  "query": (result.get("reden") or "")[:200], "source": "escaleer",
-                 "status": "bevestigd", "result_ref": result.get("notif_id", ""),
+                 "status": "bevestigd", "result_ref": result.get("kanaal", ""),
                  "meta": {"aard": aard, "naar": result.get("naar")}}]

@@ -117,6 +117,19 @@ def test_filteren_op_één_rol(dd):
 
 # ── De droge loop moet de ENIGE beslissing meten die ertoe doet ──────────────
 
+def _dm_kanalen(dd):
+    """De DM-kanalen in het dorp. Sinds B2 (20 september 2026) landt een melding aan een mens hier
+    en niet in een NotifStore; een kanaal-id draagt de twee persoon-ids die erin zitten."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [k for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM]
+
+
+def _trail(dd, kanaal):
+    from nooch_village import signaal
+    return signaal._MiniStores(dd).channels.trail(kanaal)
+
+
 def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     """Een droge loop die alleen TELT laat de vraag onbeantwoord die het besluit draagt: routeren we,
     of dumpen we 33 items op één inbox? Dat zijn twee verschillende handelingen."""
@@ -125,8 +138,9 @@ def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     assert v["toegepast"] is False
     assert sum(v["verdeling"].values()) == 1
     assert list(v["gronden"]) == ["geen rol bezit dit, en het project heeft geen opdrachtgever"]
-    assert not [x for x in cockpit2._Stores(dd).notif.all()          # en nog steeds niets geschreven
-                if x.get("target_id") == FOUNDER_PERSOON]
+    # en nog steeds niets geschreven — de founder kreeg geen DM
+    assert not [e for k in _dm_kanalen(dd) if FOUNDER_PERSOON in k
+                for e in _trail(dd, k)]
 
 
 def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):

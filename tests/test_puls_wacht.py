@@ -24,6 +24,24 @@ from nooch_village import puls_wacht as pw
 _ECHTE = pw.log_activiteit_vandaag        # vóór de autouse-stub hieronder
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 def _bel(tmp_path, dag: str):
     (tmp_path / "timekeeper_last_day.json").write_text(json.dumps({"last_day": dag}))
 
@@ -109,20 +127,26 @@ def test_een_stille_daemon_is_wel_alarm(tmp_path, monkeypatch):
 
 def test_het_alarm_gaat_naar_drie_kanalen(tmp_path, capsys):
     """Als er één stilvalt is dat precies het geval waarvoor dit bestaat."""
-    from nooch_village.notifications import NotifStore
+    # EEN DORP IS NODIG OM TE KUNNEN BEZORGEN. `NotifStore.add` schreef vroeger een rij ongeacht
+    # of de doelrol bestond; een DM moet een MENS vinden, en daarvoor zijn records en assignments
+    # nodig. Dat is een echte consequentie van B2 en staat als bevinding in het nachtlog: draait
+    # het alarm in een dorp waar de records onleesbaar zijn, dan blijven alleen het alarmbestand
+    # en stdout over. Die twee zijn hier ook getoetst, en dat is precies waarom het er drie zijn.
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(str(tmp_path))
     _bel(tmp_path, "2026-08-27")
     uit = pw.controleer(str(tmp_path), {}, nu=VANDAAG)
     pw.alarm(str(tmp_path), uit)
     assert (tmp_path / pw.ALARM_LOG).exists()                       # 1. plat bestand
     assert "PULS-ALARM" in (tmp_path / pw.ALARM_LOG).read_text()
-    items = NotifStore(str(tmp_path / "notifications.json")).all()  # 2. founder-inbox
-    assert items and "PULS-ALARM" in (items[0].get("tekst") or "")
+    items = _dm_teksten(str(tmp_path))                              # 2. een DM bij de founder
+    assert items and any("PULS-ALARM" in t for t in items)
     assert "PULS-ALARM" in capsys.readouterr().out                  # 3. stdout → cron/systemd
 
 
 def test_het_alarm_valt_niet_om_op_een_kapotte_store(tmp_path, capsys, monkeypatch):
     """Het schreeuwen zelf mag nooit stuk gaan aan een van zijn kanalen."""
-    monkeypatch.setattr("nooch_village.notifications.NotifStore.add",
+    monkeypatch.setattr("nooch_village.channels.ChannelStore.post",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk")))
     pw.alarm(str(tmp_path), {"redenen": ["iets"]})
     assert "PULS-ALARM" in capsys.readouterr().out

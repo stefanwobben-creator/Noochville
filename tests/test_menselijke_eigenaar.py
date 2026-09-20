@@ -15,6 +15,24 @@ import pytest
 from nooch_village import triage_rol
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 @pytest.fixture
 def dorp(monkeypatch):
     """Een dorp waarin ik per test bepaal wie welke rol vervult."""
@@ -92,4 +110,6 @@ def test_notify_rol_is_niet_meer_hardwired_op_de_founder():
     # veranderde. Een assertie over de hele bron zou de uitleg verbieden in plaats van de hardwire.
     code = src[src.index('"""', src.index('"""') + 3) + 3:]
     assert "FOUNDER_ROLE_ID" not in code              # de rol komt van de aanroeper
-    assert 'NotifStore(pad).add("role", rol_id' in src
+    # Was `NotifStore(pad).add("role", rol_id`. Sinds B2 loopt dit via `signaal.stuur_op_pad`,
+    # maar het punt van deze test is onveranderd: de ROL is het adres, niet de founder.
+    assert 'stuur_op_pad(self.context.data_dir, "role", rol_id' in src

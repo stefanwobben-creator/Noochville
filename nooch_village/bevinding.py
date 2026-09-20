@@ -384,9 +384,9 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
 
     `ok=False` betekent: dit is niet verzendbaar en degradeert naar 'moet herschreven'. Nooit een
     halve kaart: liever zichtbaar onaf dan onzichtbaar onbegrijpelijk."""
-    from nooch_village import tensie_poort as tp
+    from nooch_village.systeemtaal import kern
 
-    ruw = tp.kern(tekst)                      # eerst de verpakking eraf
+    ruw = kern(tekst)                         # eerst de verpakking eraf
     uit = {"spanning": "", "voorstel": "", "ok": False, "reden": "", "ruw": ruw}
     if not ruw:
         uit["reden"] = "lege signalering"

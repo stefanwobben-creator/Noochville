@@ -103,8 +103,6 @@ from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_ca
                                        reground_seed as _reground_seed,
                                        migrate_definitions as _migrate_definitions)
 from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
-from nooch_village import notifications
-from nooch_village.notifications import NotifStore
 from nooch_village.doelen import DoelStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -147,7 +145,6 @@ class _Stores:
             migrate_persona_bindings(self.records, self.assign)
         except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
             pass
-        self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         # De gespreklaag (fase 8): cirkel- en DM-kanalen wonen hier, project-kanalen
         # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
         self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
@@ -241,22 +238,20 @@ def _bootstrap(dd: str) -> None:
     # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
     # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
     # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
-    try:
-        from nooch_village.notif_opruiming import archiveer_stale_onbemand
-        _op = archiveer_stale_onbemand(st.notif, st.records, st.assign)
-        if _op.get("gearchiveerd"):
-            logging.getLogger("village.cockpit").info(
-                "opruiming: %d stale onbemand-notificatie(s) ingetrokken", _op["gearchiveerd"])
-    except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("opruiming overgeslagen: %s", _e)
-    # De haak bij het ONTSTAAN: elke nieuwe spanning voor een mens-bemande rol krijgt meteen zijn
-    # bevinding (in gewone taal) en zijn type. Eén call per spanning, niet in een batch — wie hem
-    # later opent leest de al-geschreven tekst. Fail-soft: valt dit om, dan blijft de rauwe
-    # notificatie staan, want een niet-verrijkte spanning is nog steeds een spanning.
-    try:
-        from nooch_village.spanning_ontstaat import maak_verrijker
-    except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("spanning-verrijker niet gezet: %s", _e)
+    # HIER STOND `notif_opruiming.archiveer_stale_onbemand`: die trok "[rol X onbemand]"-meldingen
+    # in zodra de rol wél bemand bleek. Een pleister op een bug die al gefixt was — zie de les in
+    # CLAUDE.md, "een fix hoort zijn eigen notificaties in te trekken". De store waar hij in
+    # opruimde bestaat niet meer, dus de pleister ook niet. Het onderliggende gat (een emissie die
+    # weet uit welke regel hij voortkomt) is nog steeds niet gedicht; dat staat in CLAUDE.md.
+    # HIER STOND DE HAAK BIJ HET ONTSTAAN (`spanning_ontstaat.maak_verrijker`): elke nieuwe
+    # spanning kreeg meteen een bevinding in gewone taal en een type. Die haak hing aan
+    # `NotifStore.add` en had twee afnemers — de inbox-routering (het type) en `views/inbox._regel`
+    # (de herschreven zin). Allebei zijn ze in B2 verdwenen, dus de haak schreef vanaf dat moment
+    # een antwoord dat niemand meer las: een LLM-call per melding, in het niets.
+    #
+    # `bevinding.py` en `zelf_verwerking.py` staan er NOG WEL. Ik had ze eerst meeverwijderd, en dat
+    # was fout: ze hebben eigen aanroepers buiten de poort (`villageraad`, `founder_kaart`, `wiki`,
+    # `cli` en deze module). Alleen de HAAK is weg, niet het gereedschap eronder.
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
@@ -388,35 +383,6 @@ def _person_targets(st: _Stores, username: str) -> list:
         except Exception:
             continue
     return targets
-
-
-def _notif_gate(st: _Stores, username: str | None, nid: str) -> str | None:
-    """Mag deze mens iets doen met dít inbox-item? Geeft een foutmelding terug, anders None.
-
-    DE POORT ZAT IN DE KNOP EN NIET IN DE CODE. `render_inbox` toont uitsluitend items uit
-    `open_for_targets(_person_targets(...))`, dus op het scherm zie je alleen je eigen wachtrij.
-    De handlers eronder namen echter een kale `nid` aan en deden hun werk: lezen, verwerken,
-    archiveren, weggooien. Een POST met een vreemd id kon dus de wachtrij van iemand anders
-    opschonen, en juist bij deze zes acties merkt de eigenaar dat niet — het item is gewoon weg,
-    zonder spoor op zijn scherm.
-
-    Dat is exact het patroon waar `_act_goedkeur` zelf voor waarschuwt: "een view is een verzoek en
-    geen garantie: een POST kan met de hand gestuurd worden."
-
-    De doelverzameling is dezelfde als die van het scherm (`_person_targets`): jezelf als persoon
-    plus elke rol die je vervult. Guest (auth uit) mag alles; een item dat niet bestaat laten we
-    door, zodat de handler zelf zijn eigen "item not found" kan geven en deze poort geen tweede
-    bron van waarheid wordt over wat er bestaat."""
-    if username == "guest":
-        return None
-    if st.people.by_email(username) is None:
-        return "No access — user not recognised"
-    n = st.notif._find((nid or "").strip())
-    if n is None:
-        return None                                      # bestaat niet: de handler zegt dat zelf
-    if (n.get("target_type"), n.get("target_id")) in set(_person_targets(st, username)):
-        return None
-    return "No access — this item is not in your inbox"
 
 
 def _scoped_project_opts(st: _Stores, n) -> str:
@@ -2149,7 +2115,7 @@ def _act_feed_remove(c):
 
 
 def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
-                               extra: dict, entry_id: str) -> int:
+                               entry_id: str) -> int:
     """Route elke @-vermelding naar het DM-kanaal van de bedoelde mens. Geeft het aantal terug.
 
     DE AFZENDER MOET EEN MENS ZIJN. Een DM is tussen twee mensen; een persona of een niet-herkende
@@ -2216,11 +2182,10 @@ def _act_proj_feed(c):
                 _auteur = (_p.id if _p is not None else "dialoog")
             elif aid:
                 _auteur = aid
-            # Het PAD zegt of een mens dit typte: `atype == "human"`. Dat blijft waar als we de
-            # persoon niet kunnen thuisbrengen (uitgelogd, onbekend e-mail) — en juist dan zou de
-            # poort de woorden van die mens herschrijven. Het merk hoort dus bij het pad, niet bij
-            # de auteur-herkenning.
-            _getypt = {notifications.MENS_GETYPT: True} if atype == "human" else {}
+            # HET MERK `MENS_GETYPT` IS WEG (B2, 20 september 2026). Het bestond om de
+            # herschrijf-poort te vertellen dat een mens deze woorden letterlijk typte; die poort
+            # (`spanning_ontstaat` + `bevinding`) is met de inbox verdwenen. Er is niets meer dat
+            # andermans tekst zou kunnen herschrijven, dus een waarschuwing daartegen is ruis.
             # EEN @-VERMELDING IS EEN BERICHT, GEEN NOTIFICATIE (fase 8). Tot 19 september 2026 werd
             # elke vermelding een rij in de NotifStore. Dat is de juiste vorm voor werk dat
             # afgehandeld moet worden — daar staan er 338 van — maar niet voor "hé, kijk jij hier
@@ -2229,11 +2194,10 @@ def _act_proj_feed(c):
             #
             # Een vermelding van een ROL landt bij de mensen die hem vervullen, elk in hun eigen
             # DM met de afzender. Heeft de rol geen mens-vervuller, dan valt hij terug op de
-            # notificatie: fail-closed, want werk bij niemand neerleggen is stiller en erger dan
-            # een melding te veel.
+            # terugval: de Circle Lead van zijn cirkel, en anders de founder. Werk bij niemand
+            # neerleggen is stiller en erger dan een melding te veel.
             _gemeld = _vermeldingen_naar_kanalen(st, ment, pid=g("pid"), tekst=g("text"),
-                                                 auteur=_auteur, extra=_getypt,
-                                                 entry_id=entry["id"])
+                                                 auteur=_auteur, entry_id=entry["id"])
             if _gemeld:
                 msg += f" · {_gemeld} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
@@ -3106,21 +3070,12 @@ def _act_vangst_verwerk(c):
             # HIER BLIJFT ROL WÉL VERPLICHT (zie hierboven, `_act_vangst_uitkomst`). Dit is de
             # AI-route: de spanning wordt getypeerd en beoordeeld, en dat oordeel rust op de
             # accountabilities van een rol. Zonder rol is er niets om aan te toetsen.
-            # DE BESTAANDE PIJPLIJN, letterlijk: `add` zonder `type` betekent dat de haak van
-            # `spanning_ontstaat` de bevinding schrijft en de typering doet. Hier wordt dus niets
-            # getypeerd; hier wordt alleen doorgegeven wie het inbracht, zodat het bij het verwerken
-            # zíjn spanning wordt en niet die van het overleg.
-            #
-            # De haak wordt hier EXPLICIET op deze store gezet. `_bootstrap` zet hem ook, maar op een
-            # `_Stores` die daarna wordt weggegooid, en elke request bouwt een verse — dus in het
-            # web-pad draaide hij nergens. Hem procesbreed aanzetten zou van élke notificatie in de
-            # cockpit een model-aanroep in de request maken; dat is een eigen besluit, geen bijvangst
-            # van dit scherm. Daarom precies hier, op de ene plek die erom vraagt.
-            try:
-                from nooch_village.spanning_ontstaat import maak_verrijker
-            except Exception as e:                       # noqa: BLE001 — fail-soft, luid
-                logging.getLogger("village.cockpit").warning(
-                    "vangst: verrijk-haak niet gezet (%s) — de spanning gaat rauw door", e)
+            # HIER HING DE VERRIJK-HAAK (`spanning_ontstaat.maak_verrijker`). Die haak zat op
+            # `NotifStore.add` en liet een model de verse spanning herschrijven en typeren vóór hij
+            # in de inbox landde. De inbox is weg, de haak is met B2 met pensioen gegaan, en het
+            # oordeel dat hij droeg — bevinding + typering — heeft geen lezer meer. Wat hier nog
+            # wél gebeurt is het enige dat altijd de bedoeling was: doorgeven WIE het inbracht,
+            # zodat het bij het verwerken zíjn spanning is en niet die van het overleg.
             doel = wiki.ontvanger(rol, st.records, st.assign)
             if not doel.get("rol"):
                 return nxt, "✗ no mailbox found for this role"
@@ -3498,10 +3453,7 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     if best.get("via") or best["soort"] == "project":
         _suggestie = _rolsuggestie(st, tekst, rol)
     if best["soort"] == "inbox":
-        # `van_mens` komt van de AANROEPER, want die weet of de tekst is ingetikt of voorgevuld.
-        # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
-        # mee door een mens-pad en krijgt hij de bescherming die voor mensentaal bedoeld was.
-        _merk = {} if van_mens is None else {notifications.MENS_GETYPT: bool(van_mens)}
+        # Ook hier stond het `MENS_GETYPT`-merk; zie de toelichting bij `_act_proj_feed`.
         # OOK DIT IS EEN GEWONE DM (B2). `roloverleg.py` houdt toewijzing én afronding al zélf bij,
         # los van welke wachtrij dan ook — de DM is puur de melding erbovenop. Er viel hier dus
         # nooit iets vast te leggen wat elders niet al stond, en een tweede administratie van
@@ -3657,11 +3609,8 @@ def _act_wall_outcome(c):
         # Systeem-entry op de BRON-wall: de audittrail (met herkomst) leeft op de wall.
         pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} created: {title}",
                           kind="system", author_type="human", author_id=aid)
-        # Kwam dit uit de inbox (nid meegegeven)? Dan is die mention nu verwerkt: leg de uitkomst + reden
-        # vast als historie en haal 'm uit de nieuw/gelezen-wachtrij. Eén klik: uitkomst maken én afvinken.
-        nid = (g("nid") or "").strip()
-        if nid:
-            st.notif.mark_item_processed(nid, outcome=f"{_LBL[otype]}: {title}", by=_person_name(st, aid))
+        # Hier stond een tak voor "kwam dit uit de inbox (`nid` meegegeven)": die markeerde het
+        # item als verwerkt. De inbox bestaat sinds B2 niet meer, dus `nid` komt nooit meer binnen.
         return nxt, f"✓ {_LBL[otype]} created"
 
 
@@ -3810,7 +3759,7 @@ def _act_notif_add(c):
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
         # AUTHZ: iedereen-ingelogd — een spanning voelen mag iedereen, en hij landt in je EIGEN
         # wachtrij (de handler bepaalt het doel zelf uit `username`, niet uit het formulier). De
-        # poort die ertoe doet zit op het verwerken ervan; zie `_notif_gate`.
+        # poort die ertoe doet zit op het verwerken ervan.
         st, g, username = c.st, c.g, c.username
         text = (g("text") or "").strip()
         role = (g("role") or "").strip()
@@ -3867,7 +3816,7 @@ def _noteer_triage(data_dir: str, n: dict, **kw) -> None:
 
 def _volledig_van(n: dict) -> str:
     """De volle tekst van een spanning — dezelfde die het formulier voorvult."""
-    from nooch_village.notifications import volledig
+    from nooch_village.tekstpreview import volledig
     return volledig(n or {})
 
 
@@ -5917,30 +5866,12 @@ def make_handler(data_dir: str, csrf_token: str,
                     # sluit de bron. Deed de wizard dit niet, dan bleef de spanning open terwijl het
                     # project al bestond — het subsidie-geval. Fail-soft: een mislukte terugkoppeling
                     # mag nooit het zojuist gemaakte project ongedaan lijken te maken.
-                    _nid = g1("nid")
-                    if _nid:
-                        try:
-                            _actor = (st.people.by_email(username)
-                                      if username and username != "guest" else None)
-                            _by = _person_name(st, _actor.id) if _actor else ""
-                            st.notif.add_outcome(_nid, intent="doen", otype="project", ref=pid,
-                                                 label=f"project: {titel[:60]}", by=_by)
-                            st.notif.mark_done(_nid, by=_by)
-                            # DE LINK MOET BEIDE KANTEN OP. De spanning wees naar het project,
-                            # maar het project noemde de spanning nergens — geen feed-entry, geen
-                            # veld. En juist dát is de rechtvaardiging om de gesloten spanning uit
-                            # de inbox te halen: hij is niet weg, hij is terug te vinden vanaf het
-                            # bord. Zonder deze regel was die belofte niet waar.
-                            _n = st.notif._find(_nid)
-                            _tekst = str((_n or {}).get("snippet") or "")[:200]
-                            pj.add_feed_entry(
-                                pid,
-                                f"Ontstaan uit een spanning in de inbox ({_nid}): {_tekst}",
-                                kind="system", author_type="human",
-                                author_id=(_actor.id if _actor else ""))
-                        except Exception:
-                            logging.getLogger("cockpit2.wizard").exception(
-                                "spanning %s niet gesloten na project %s", _nid, pid)
+                    # HIER STOND DE TERUGKOPPELING NAAR HET INBOX-ITEM: `add_outcome`,
+                    # `mark_done` en een feed-entry "ontstaan uit een spanning in de inbox". De
+                    # inbox bestaat sinds B2 niet meer, dus `nid` komt hier nooit meer binnen. De
+                    # belofte die dat blok waarmaakte — een gesloten spanning is niet weg maar
+                    # terug te vinden vanaf het bord — hoeft niet meer waargemaakt te worden: er
+                    # wordt niets meer gesloten, en het bericht blijft in het kanaal staan.
                     # Seed het levende einddocument met de DoD als kop. Vanaf hier is de projectpoort
                     # doc-gedreven: Done kan pas als het document van deze seed afwijkt (echt antwoord).
                     try:

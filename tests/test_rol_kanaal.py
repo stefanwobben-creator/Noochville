@@ -27,11 +27,28 @@ from nooch_village.assignments import (Assignments, bemand, bemensing, door_mens
                                        migrate_persona_bindings)
 from nooch_village.governance import Records
 from nooch_village.models import Record, RecordType, RoleDefinition
-from nooch_village.notifications import NotifStore
 from nooch_village.projects import ProjectLedger
 
 
-def _omg(tmp_path, *, fillers=None, persona_id=None):
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
+def _omg(tmp_path, *, fillers=None, persona_id=None, lead_mens=True):
     """Een omgeving met echte stores. `fillers` gaat in de assignments-store, `persona_id` op het
     record — de twee lagen die uit elkaar liepen."""
     dd = str(tmp_path)
@@ -40,16 +57,40 @@ def _omg(tmp_path, *, fillers=None, persona_id=None):
                     definition=RoleDefinition(purpose="c"), members=["rolx"]))
     recs.put(Record(id="rolx", type=RecordType.ROLE, parent="cirkel",
                     definition=RoleDefinition(purpose="p"), persona_id=persona_id))
+    recs.put(Record(id="cirkel__circle_lead", type=RecordType.ROLE, parent="cirkel",
+                    definition=RoleDefinition(purpose="lead")))
     asg = Assignments(os.path.join(dd, "assignments.json"))
     for t, i in (fillers or []):
         asg.assign("rolx", t, i)
+    # EEN MENS OP DE CIRCLE LEAD. Sinds B2 gaat een melding naar een PERSOON; zonder vervuller is
+    # "valt terug op de Circle Lead" niet waar te nemen, want er is dan niemand om het aan te
+    # geven. Vroeger schreef `NotifStore.add` een rij op een rol die niemand las — precies het
+    # dead letter dat deze migratie wegneemt.
+    from nooch_village.people import PeopleStore
+    mensen = PeopleStore(os.path.join(dd, "people.json"))
+    if lead_mens:
+        lead = mensen.add("Lead Mens", "lead@test.nl")
+        asg.assign("cirkel__circle_lead", "person", lead.id)
     return SimpleNamespace(data_dir=dd, dd=dd, records=recs, assign=asg,
-                           notif=NotifStore(os.path.join(dd, "notifications.json")),
                            projects=ProjectLedger(os.path.join(dd, "projects.json")))
 
 
 def _snippets(omg):
-    return [n.get("snippet", "") for n in omg.notif.all()] if hasattr(omg.notif, "all") else []
+    """De berichtteksten die dit dorp heeft verstuurd.
+
+    Heette `_snippets` naar het `snippet`-veld van `NotifStore`; sinds B2 (20 sept 2026) zijn het
+    DM-teksten. De naam is gelaten zoals hij is omdat de tests eromheen erover gaan: wát er aan
+    wie gemeld is. Waar dat vandaan gelezen wordt is precies wat hier één keer staat."""
+    from nooch_village import channels
+    dd = getattr(omg, "dd", None) or getattr(omg, "data_dir", None)
+    st = omg if hasattr(omg, "channels") else None
+    if st is None and dd:
+        from nooch_village import signaal
+        st = signaal._MiniStores(str(dd))
+    if st is None:
+        return []
+    return [e.get("text") or "" for k in st.channels.bestaande()
+            if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
 
 
 # ── De bemensings-check zelf ────────────────────────────────────────────────
@@ -232,10 +273,12 @@ def test_bericht_faalt_nog_steeds_zacht():
 def test_notificatie_blijft_de_audittrail(tmp_path):
     """Het project is het werk; de notificatie blijft staan als 'dit is doorgegeven', met een
     verwijzing naar het project dat eruit ontstond."""
+    # Een AI-vervulde rol: het werk wordt een project, en de MELDING gaat naar de mens die het
+    # dichtst bij die rol staat — hier de Circle Lead. Dat is de audittrail "dit is doorgegeven".
     omg = _omg(tmp_path, fillers=[("persona", "a1")])
     claims_board.bericht_aan_rol(omg, "rolx", "Bank the evidence")
     snips = _snippets(omg)
-    assert snips and "Als project op je bord gezet" in snips[0]
+    assert any("Als project op je bord gezet" in s for s in snips)
 
 
 # ── De done-when moet TOETSBAAR zijn, niet netjes ───────────────────────────

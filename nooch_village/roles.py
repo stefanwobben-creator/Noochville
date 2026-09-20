@@ -298,13 +298,10 @@ class Noochie(Inhabitant):
 
     def _notify_role(self, role_id: str, pid: str) -> None:
         """Notificatie aan de genudgede rol, zodat de nudge de rol ook echt bereikt (fail-soft)."""
-        try:
-            import os
-            from nooch_village.notifications import NotifStore
-            NotifStore(os.path.join(self.context.data_dir, "notifications.json")).add(
-                "role", role_id, pid, by="noochie", snippet="scope-nudge: dit lijkt binnen jouw scope")
-        except Exception:
-            pass
+        from nooch_village import signaal
+        signaal.stuur_op_pad(self.context.data_dir, "role", role_id,
+                             "scope-nudge: dit lijkt binnen jouw scope", by="noochie",
+                             herkomst={"project": pid} if pid else None)
 
     def _nudge_scope_matches(self, event: Event = None) -> None:
         """Loop actieve projecten langs; waar één rol (niet de eigenaar, niet Noochie) het project binnen

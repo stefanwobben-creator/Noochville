@@ -570,46 +570,10 @@ def _project_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=N
     return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": "projects"}
 
 
-def _inbox_targets(st: _Stores, node: str) -> set:
-    rec = st.records.get(node)
-    if rec is not None and org.is_circle(rec):
-        return {("role", r.id) for r in org.roles_of(st.records.all(), rec.id)} | {("role", rec.id)}
-    return {("role", node)}
-
-
-def _inbox_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=None):
-    tgts = _inbox_targets(st, node)
-    items = [n for n in st.notif.all()
-             if (n.get("target_type"), n.get("target_id")) in tgts and not n.get("deleted")]
-    if dim == "per_type":                            # uitkomsten per type (uit de verwerkingen)
-        counts: dict = {}
-        for n in items:
-            for v in st.notif.verwerkingen_of(n):
-                counts[v.get("otype") or "unknown"] = counts.get(v.get("otype") or "unknown", 0) + 1
-        rows = sorted(((k, v) for k, v in counts.items()), key=lambda x: -x[1])
-        return {"kind": "breakdown", "rows": rows, "unit": ""}
-    if measure == "open":
-        n = sum(1 for it in items if not it.get("processed") and not it.get("archived"))
-        return {"kind": "number", "value": n, "unit": ""}
-    # measure == "verwerkt": verwerkte spanningen per dag (op verwerkmoment = laatste verwerking, anders at)
-    by_day: dict = {}
-    for it in items:
-        if not it.get("processed"):
-            continue
-        vs = st.notif.verwerkingen_of(it)
-        at = (vs[-1].get("at") if vs else None) or it.get("at")
-        if not at:
-            continue
-        e = by_day.setdefault(_day_key(at), [0, at])
-        e[0] += 1
-        e[1] = max(e[1], at)
-    samples = [{"at": at, "value": c, "datum": d} for d, (c, at) in by_day.items()]
-    pts = filter_samples(samples, cutoff, end)
-    if dim == "over_tijd":
-        return {"kind": "series", "points": pts, "unit": "", "chart": "line"}
-    return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": ""}
-
-
+# DE INBOX-METRIEK IS WEG (B2, 20 september 2026). `inbox:<node>` telde open en verwerkte
+# spanningen en brak uitkomsten uit per type — allemaal velden van het verwerkingsmodel dat met
+# `NotifStore` is verdwenen. Een metriek over een wachtrij die niet meer bestaat is geen metriek
+# maar een grafsteen.
 def _co2_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
     """Dorpsbrede LLM-uitstoot/-gebruik uit de dag-observaties (bron=co2_village, gevoed door de pulse)."""
     metric, bron = _obs_key_for_indicator("co2_village", measure)
@@ -751,7 +715,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
     if source.startswith("projects:"):
         return _project_fetch(st, source[len("projects:"):], measure, dim, cutoff, end)
     if source.startswith("inbox:"):
-        return _inbox_fetch(st, source[len("inbox:"):], measure, dim, cutoff, end)
+        return {"kind": "number", "value": None, "unit": "",
+                "fout": "de inbox-metriek is vervallen met de inbox (B2)"}
     if source == "co2":
         return _co2_fetch(st, measure, dim, cutoff, end)
     if source.startswith("kpi:"):

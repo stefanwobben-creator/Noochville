@@ -147,3 +147,29 @@ def raakt(tekst: str) -> list[str]:
     iets te blokkeren."""
     laag = str(tekst or "").lower()
     return [b for b, _ in SWAPS if re.search(r"\b" + re.escape(b) + r"\b", laag)]
+
+
+# ── Het sjabloon eraf ───────────────────────────────────────────────────────
+#
+# Hier stond tot 20 september 2026 de tensie-poort omheen (`tensie_poort.kern`). Die poort trieerde
+# de founder-inbox en is met de inbox zelf verdwenen; deze swap niet, want hij doet wat de rest van
+# dit bestand doet: een deterministische, gratis schoonmaak vóór het model. De sjablonen zijn de
+# verpakkingen die het dorp zelf om een melding heen zette — "⏸️ Project van X vastgelopen op …",
+# "🙋 rol:", "[rol X onbemand]". Ze domineerden de tekst en duwden elk oordeel naar de verpakking
+# in plaats van naar het werk eronder.
+_SJABLOON = (
+    re.compile(r"^⏸️?\s*Project van .{0,60}? vastgelopen op \d+ [^:]*:\s*", re.I),
+    re.compile(r"Deze taak vereist een mens of externe partij:\s*", re.I),
+    re.compile(r"^🙋\s*[a-z0-9_]+:\s*", re.I),
+    re.compile(r"^⤴\s*(?:escalatie|beslissing gevraagd):\s*", re.I),
+    re.compile(r"^\[rol [a-z0-9_]+ onbemand\]\s*", re.I),
+    re.compile(r"—\s*de hop-limiet is bereikt.*$", re.I),
+)
+
+
+def kern(tekst: str) -> str:
+    """De tekst zonder sjabloon: wát moet er gebeuren, los van hoe het is ingepakt."""
+    uit = " ".join((tekst or "").split())
+    for pat in _SJABLOON:
+        uit = pat.sub("", uit).strip()
+    return uit.strip(" '\"“”")

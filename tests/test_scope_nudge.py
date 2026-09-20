@@ -10,7 +10,6 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus
 from nooch_village.skills import SkillRegistry
 from nooch_village.projects import ProjectLedger
-from nooch_village.notifications import NotifStore
 from nooch_village import scope_nudge
 
 
@@ -23,6 +22,24 @@ _ROSTER = [
      "accountabilities": ["woordenschat"], "skills": ["curate"]},
 ]
 
+
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
 
 def test_match_geldig_met_skill_in_dna():
     out = scope_nudge.match_project_to_role(
@@ -85,6 +102,11 @@ def _make_noochie(tmp_path, ledger, records):
 
 
 def test_noochie_nudgt_matchende_rol_en_dedupt(tmp_path, monkeypatch):
+    # De nudge is sinds B2 een DM, en die moet een MENS vinden — dus is er een echt dorp nodig
+    # (records + assignments), niet alleen de gestubde roster hieronder. De stub blijft staan voor
+    # de MATCH; het dorp is er voor de BEZORGING.
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(str(tmp_path))
     lg = ProjectLedger(str(tmp_path / "p.json"))
     pid = lg.create("owner_role", "Barefoot-claim screenen", "human")
     records = SimpleNamespace(all=lambda: [
@@ -107,8 +129,8 @@ def test_noochie_nudgt_matchende_rol_en_dedupt(tmp_path, monkeypatch):
     assert any("@Scientist" in e.get("text", "") and "openalex_evidence" in e.get("text", "")
                for e in log)                                       # nudge-comment geplaatst
     assert lg.already_scope_nudged(pid, "harry_hemp")              # gemarkeerd
-    notifs = NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", "harry_hemp")])
-    assert len(notifs) == 1                                        # notificatie aan de rol
+    notifs = [t for t in _dm_teksten(str(tmp_path)) if "scope-nudge" in t]
+    assert len(notifs) == 1                                        # DM aan de rolvervuller
 
     # tweede puls → geen dubbele nudge (dedup)
     n_before = len(lg.get(pid)["log"])

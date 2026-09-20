@@ -103,11 +103,15 @@ _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 #   projects_cli._status_icon       4 van de 7; de rest werd "?"
 #   views/metrics._PROJ_STATUS_LABEL 6 van de 7; `proposed` viel er rauw uit op het scherm
 #
-# Twee dingen gingen daar echt mis. `tensie_poort.LEVEND` MIST `draft` en `proposed`, dus een
-# spanning die aan zo'n project hangt valt door `geborgd()` heen, wordt behandeld alsof er geen
-# project bij hoort, en komt bij de founder terecht. Dat is de notificatiestapel die al twee keer
+# Twee dingen gingen daar echt mis. `tensie_poort.LEVEND` MISTE `draft` en `proposed`, dus een
+# spanning die aan zo'n project hing viel door `geborgd()` heen, werd behandeld alsof er geen
+# project bij hoorde, en kwam bij de founder terecht. Dat is de notificatiestapel die al twee keer
 # met de hand is weggeveegd. En het woord `"active"` daarin is exact het woord waarop de
 # projectbadge op 7 september strandde: de KOLOM heet Active, de STATUS niet.
+#
+# `tensie_poort` en `relaunch_park` bestaan niet meer (20 sept 2026, met de founder-inbox). De les
+# blijft staan en heeft nu een project-brede bewaker: `test_status_vocabulaire` scant elk bestand
+# op een overgetypte statuslijst, niet alleen de lezers die toen bestonden.
 #
 # De vier afgeleide sets hieronder beantwoorden elk een andere vraag; ze hebben allemaal minstens
 # twee aanroepers. Wie een vijfde nodig heeft, leidt hem hier af en somt hem niet elders op.

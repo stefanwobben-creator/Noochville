@@ -317,12 +317,13 @@ def leg_vast(data_dir: str, rij: dict) -> bool:
 
 # ── één observatie door de bestaande pijplijn ───────────────────────────────
 
-def _snippet(obs: dict) -> str:
-    """De ruwe signalering zoals hij op de kaart onder “ruwe signalering” komt te staan.
+def _ruw(obs: dict) -> str:
+    """De ruwe signalering. Het BEWIJS staat vooraan: een melding waarvan het anker is weggevallen
+    is precies de melding die niemand kan natrekken.
 
-    De store kapt op 160 tekens, dus het BEWIJS staat vooraan: een kaart waarvan het anker is
-    weggevallen is precies de kaart die niemand kan natrekken."""
-    return f"{obs['bewijs']} — {obs['tekst']}"[:160]
+    Hier stond `[:160]` omdat `NotifStore` op 160 kapte. Die store bestaat niet meer en
+    `ChannelStore` bewaart 1500 tekens, dus de cap is weg — hij gooide het enige exemplaar weg."""
+    return f"{obs['bewijs']} — {obs['tekst']}"
 
 
 def verwerk_observatie(obs: dict, *, records, reason_fn=None, data_dir: str = "") -> dict:
@@ -394,18 +395,33 @@ def ontvanger_van(rij: dict, records, assignments) -> dict:
     return {"rol": "", "reden": ""}                        # zelf/info verlaten de rol niet
 
 
-def _extra(rij: dict, k: dict) -> dict:
-    """Wat er bij het ONTSTAAN al bekend is, mee op het item. Het type staat erop, dus de
-    herschrijf-haak slaat dit item over — hij zou een al geschreven antwoord overschrijven."""
-    return {"type": rij.get("type"), "bevinding": rij.get("bevinding") or {},
-            "raad": {"soort": rij["soort"], "anker": rij["anker"],
-                     "anker_soort": rij["anker_soort"], "bewijs": rij["bewijs"],
-                     "vanuit": k.get("vanuit", ""), "wat_nodig": k.get("wat_nodig", "")}}
+def _bericht(obs: dict, k: dict) -> str:
+    """De kaart als bericht. Sinds 20 september 2026 is de bestemming een DM en geen inbox-item.
+
+    Een DM heeft geen velden om een kaart mee op te bouwen — hij heeft één tekst. Wat in de kaart
+    afzonderlijk stond (bevinding, voorstel, wat is er nodig, waarop rust het) staat er daarom ÍN,
+    in die volgorde: eerst wat er aan de hand is, dan wat de rol voorstelt, dan wat hij nodig heeft,
+    en als laatste de grond zodat de lezer het kan natrekken. Niets weglaten — een bericht dat je
+    niet kunt natrekken is een bericht dat je niet kunt beantwoorden."""
+    stukken = [k.get("bevinding") or obs["tekst"]]
+    if k.get("voorstel"):
+        stukken.append(f"voorstel: {k['voorstel']}")
+    if k.get("wat_nodig"):
+        stukken.append(f"nodig: {k['wat_nodig']}")
+    stukken.append(f"grond: {_ruw(obs)}")
+    return " — ".join(stukken)
+
+
+def _herkomst(rij: dict) -> dict:
+    """Waar dit bericht vandaan komt, mee op de trail-regel. Geen kaart-payload meer: alleen wat
+    nodig is om het punt terug te vinden — welk soort observatie, welk anker, welk type."""
+    return {"raad": {"soort": rij["soort"], "anker": rij["anker"],
+                     "anker_soort": rij["anker_soort"], "type": rij.get("type") or ""}}
 
 
 # ── de ronde ────────────────────────────────────────────────────────────────
 
-def raad(*, records, att, ledger, assignments=None, notif=None, data_dir: str = "",
+def raad(*, records, att, ledger, assignments=None, data_dir: str = "",
          apply: bool = False, cap: int = CAP_PER_ROL, reason_fn=None, vandaag: str = "",
          opnieuw: bool = False) -> dict:
     """De volledige council-pass. `apply=False` schrijft niets en verstuurt niets."""
@@ -436,10 +452,12 @@ def raad(*, records, att, ledger, assignments=None, notif=None, data_dir: str = 
             rij["naar"] = doel.get("rol") or ""
             rij["omleiding"] = doel.get("reden") or ""
             rij["verzonden"] = False
-            if apply and rij["verzendbaar"] and rij["naar"] and notif is not None:
-                n = notif.add("role", rij["naar"], "", by=rol, snippet=_snippet(o),
-                              extra=_extra(rij, rij["kaart"]))
-                rij["verzonden"], rij["notif_id"] = True, n.get("id", "")
+            if apply and rij["verzendbaar"] and rij["naar"] and data_dir:
+                from nooch_village import signaal
+                gelande = signaal.stuur_op_pad(data_dir, "role", rij["naar"],
+                                               _bericht(o, rij["kaart"]), by=rol,
+                                               herkomst=_herkomst(rij))
+                rij["verzonden"], rij["kanalen"] = bool(gelande), gelande
             if apply:
                 zv.leg_vast(data_dir, rij["verwerking"])
                 leg_vast(data_dir, {"sleutel": rij["sleutel"], "rol": rol, "soort": o["soort"],

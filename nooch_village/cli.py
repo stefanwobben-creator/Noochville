@@ -696,24 +696,6 @@ def main() -> None:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
 
 
-    elif mode == "notif_migratie":
-        # Stap A van twee: elke notificatie als DM-bericht bij de mens die hem aangaat.
-        # DRY-RUN by default. Er wordt niets verwijderd — NotifStore en /inbox blijven staan tot
-        # stap B, zodat een fout hier niet 371 items meeneemt.
-        from nooch_village import notif_migratie
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        st = _Stores(load_context(BASE_DIR).data_dir)
-        apply = "--apply" in sys.argv
-        rapport = notif_migratie.migreer(st.notif, st, apply=apply)
-        print(notif_migratie.rapport_tekst(rapport))
-        if not apply:
-            print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply.")
-        elif not rapport["klopt"]:
-            sys.exit(1)
-
     elif mode == "site_audit":
         # De lampjes van de shop: bereikbaar, Lighthouse (mobiel), claims. Eén run, één snapshot
         # (append-only), en de wissels sinds de vorige run. Scope 45; de weekklok is scope 47.
@@ -876,41 +858,6 @@ def main() -> None:
                 print(f"   [{r['rol']}] {r['tensie'][:80]}")
                 print(f"      {r['behoefte']}")
 
-    elif mode == "relaunch":
-        # Bulk-parkering op één verklaard feit (de site wordt herbouwd) en één trigger terug.
-        # Default DRY-RUN; `--live` voert uit. `open` haalt alles in één keer terug.
-        import os
-        from nooch_village import relaunch_park as rp
-        from nooch_village.cockpit2 import _Stores, _person_targets
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        sub = sys.argv[2] if len(sys.argv) > 2 else "park"
-        mail = next((a for a in sys.argv[2:] if "@" in a), "")
-        if sub == "open":
-            uit = rp.heropen(ctx.data_dir, projects=st.projects)
-            print(f"↩ {uit['teruggehaald']} item(s) terug voor herbeoordeling na relaunch:")
-            for r in uit["items"]:
-                print(f"   [{r.get('soort')}] {str(r.get('tekst'))[:88]}")
-        elif sub == "lijst":
-            staand = rp.geparkeerd(ctx.data_dir)
-            print(f"geparkeerd op '{rp.REDEN}': {len(staand)} item(s) — {rp.VOORWAARDE}")
-            for r in staand:
-                print(f"   [{r.get('soort'):<18}] {str(r.get('tekst'))[:84]}")
-        else:
-            live = "--live" in sys.argv
-            targets = _person_targets(st, mail) if mail else None
-            uit = rp.park(ctx.data_dir, projects=st.projects, notif=st.notif if mail else None,
-                          targets=targets, dry_run=not live)
-            print(f"{'LIVE' if live else 'DRY-RUN'} — {uit['projecten']} project(en), "
-                  f"{uit['notificaties']} notificatie(s)")
-            for s_, n in sorted(uit["per_soort"].items(), key=lambda kv: -kv[1]):
-                print(f"   {n:>3}  {s_}")
-            print(f"\nreden: {rp.REDEN} — {rp.VOORWAARDE}")
-            for r in uit["items"][:40]:
-                print(f"   [{r['soort']:<18}] {r['tekst'][:80]}")
-
     elif mode == "certs":
         # De cert-wachtlijst: welke claim is onderbouwd en welke wacht nog op een certificaat.
         # Leest alleen. `--ingest` leest nieuwe certificaten uit data/certificaten/ in.
@@ -948,48 +895,6 @@ def main() -> None:
                 print(f"   {merk} {rij['claim'][:46]:<46} {rij['status']:<12} {rij['reden'][:60]}")
                 if rij["status"] == "pending":
                     print(f"      → {cr.opdracht(rij)}")
-
-    elif mode == "poort":
-        # De tensie-poort over de founder-inbox. Default DRY-RUN: meten mag nooit per ongeluk
-        # opruimen. `--live` voert uit (routeren als project, filteren archiveren).
-        import os
-        from nooch_village.cockpit2 import _Stores, _person_targets
-        from nooch_village import tensie_poort as tpoort
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        mail = next((a for a in sys.argv[2:] if "@" in a), "")
-        if not mail:
-            print("Gebruik: village poort <e-mail-van-de-mens> [--live]"); sys.exit(1)
-        live = "--live" in sys.argv
-        targets = _person_targets(st, mail)
-        # --lever-af schuift werk naar andere borden; dat is de risicovolle helft en staat UIT
-        # tot de steekproef schoon is. Zonder die vlag wordt er alleen getrieerd en vastgehouden.
-        uit = tpoort.draai(notif=st.notif, projects=st.projects, records=st.records,
-                           targets=targets, dry_run=not live,
-                           lever_af="--lever-af" in sys.argv)
-        r = uit["rapport"]
-        print(f"\n{'LIVE' if live else 'DRY-RUN'} — {r['in']} open item(s) door de poort")
-        for deur, n in sorted(uit["per_deur"].items(), key=lambda kv: -kv[1]):
-            print(f"   {n:>3}  {deur}")
-        print(f"\n   weggefilterd: {r['weggefilterd']}  |  mens-todo: {r['mens_todo']}  |  "
-              f"zichtbaar: {r['zichtbaar_voor_mens']} → {r['na_dedup']} na dedup")
-        if uit["projecten"]:
-            print(f"\n   werk afgeleverd als project:")
-            for pr in uit["projecten"]:
-                print(f"     → {pr['rol']}  ({pr['project']})")
-        print("\n== wat de founder overhoudt ==")
-        from nooch_village import founder_kaart as fkaart
-        for g in uit["bundels"]:
-            print(f"\n[{g['deur']}] {g['klasse'] or g['sleutel']} — {g['aantal']} melding(en)")
-            for m in g["meldingen"][:20]:
-                n = next((x for x in st.notif.all() if x.get("id") == m["id"]), None) or {}
-                k = fkaart.kaart(n or {"snippet": m["tekst"], "by": ""},
-                                 projects=st.projects, records=st.records)
-                print("   " + fkaart.render(k).replace("\n", "\n   "))
-                if not k["hoort_hier"]:
-                    print("   ⚠ dit raakt geen founder-bevoegdheid — kandidaat voor herroutering")
 
     elif mode == "healthcheck":
         import os
@@ -1149,7 +1054,7 @@ def main() -> None:
         else:
             print(f"{_res['gevonden']} wees-project(en):")
             for _w in _res["items"]:
-                from nooch_village.notifications import preview as _prev
+                from nooch_village.tekstpreview import preview as _prev
                 print(f"  {_w['rol']:<28} {str(_w['status']):<9} {_prev(_w['titel'], 52)}")
                 print(f"      → {_w['naar']}")
                 if _w.get("origineel"):
@@ -1181,8 +1086,9 @@ def main() -> None:
     elif mode == "villageraad":
         # De council-pass: elke rol leest de Kroniek en zijn eigen wiki-pagina's vanuit purpose en
         # accountabilities, en werpt alleen spanningen op die aan een record of pagina vastzitten.
-        # DRY-RUN by default: pas met --apply landen de kaarten in de inbox en wordt het spoor
-        # geschreven. Het verslag gaat naar data/output/villageraad_<datum>.md.
+        # DRY-RUN by default: pas met --apply gaan de kaarten als DM naar de mens die de
+        # ontvangende rol vervult en wordt het spoor geschreven. Het verslag gaat naar
+        # data/output/villageraad_<datum>.md.
         import os
         from nooch_village import villageraad as vr
         from nooch_village.cockpit2 import _Stores
@@ -1197,7 +1103,7 @@ def main() -> None:
                    vr.CAP_PER_ROL)
         print(f"\U0001f3db\ufe0f  Villageraad — {'LIVE' if apply else 'DRY-RUN'}, cap {cap} per rol\u2026")
         rapport = vr.raad(records=st.records, att=st.att, ledger=st.evidence,
-                          assignments=st.assign, notif=st.notif, data_dir=ctx.data_dir,
+                          assignments=st.assign, data_dir=ctx.data_dir,
                           apply=apply, cap=cap, opnieuw=opnieuw)
         tekst = vr.rapport_tekst(rapport)
         uit = os.path.join(ctx.data_dir, "output", f"villageraad_{rapport['datum']}.md")

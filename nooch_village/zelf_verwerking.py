@@ -63,9 +63,33 @@ _STRUCTUREEL = re.compile(r"structure\w*|terugkeren\w*|meermaals|telkens|elke we
 _STRUCTUUR_OBJECT = re.compile(r"\brol\b|\brollen\b|accountabilit|verantwoordelijkheid|"
                                r"\bdomein\b|\bpolicy\b|beleidsregel|mandaat|governance", re.I)
 
-# Wanneer is het écht van de founder? Een besluit-vraag ÉN een voorbehouden domein. De domeinen
-# staan al in de poort; hier telt bovendien dat er om een besluit gevraagd wordt — anders is
-# "het gaat over compliance" genoeg om iemand anders zijn werk op het bureau van de mens te leggen.
+# Wanneer is het écht van de founder? Een besluit-vraag ÉN een voorbehouden domein. Beide tests
+# stonden tot 20 september 2026 in `tensie_poort`; die poort trieerde de founder-inbox en is met de
+# inbox verdwenen. De drie patronen hieronder niet: ze zeggen niets over een inbox, ze zeggen iets
+# over een TEKST, en dit is sindsdien hun enige lezer. Dat er om een besluit gevraagd wordt telt
+# bovendien mee — anders is "het gaat over compliance" genoeg om iemand anders zijn werk op het
+# bureau van de mens te leggen.
+_BESLUIT_DOMEIN = {
+    # 'herformulering' hoort erbij: een publieke claim herschrijven IS compliance-werk, ook als het
+    # woord 'claim' toevallig niet in de zin staat. Zonder dit viel zo'n item op ONBESLIST — wel
+    # zichtbaar (niet stil), maar op de verkeerde stapel.
+    "compliance": re.compile(r"claim|compliance|juridisch|EmpCo|ACM|greenwash|richtlijn|"
+                             r"herformulering|reformulat", re.I),
+    "merk":       re.compile(r"merk|brand|tone of voice|positionering", re.I),
+    "strategie":  re.compile(r"strategie|strategy|koers|doelstelling", re.I),
+    "geld":       re.compile(r"budget|kosten|prijs|betaal|investering|€", re.I),
+    "governance": re.compile(r"governance|nieuwe rol|rol aanmaken|skill toekennen|mandaat", re.I),
+}
+# "mist harde bewijzen", "zonder onderbouwing", "heeft nog aanvullende bewijsvoering nodig".
+_GEEN_BEWIJS = re.compile(r"mist (?:harde? )?bewij(?:s|zen)|mist onderbouwing|"
+                          r"zonder (?:definitie|onderbouwing|validatie)|geen (?:hard[e]? )?bewij(?:s|zen)|"
+                          r"aanvullende bewijsvoering|ontbreek\w*.{0,20}bewij(?:s|zen)|"
+                          r"niet onderbouwd|mist certifice\w*|zonder certifice\w*|"
+                          r"mist bron|zonder bron", re.I)
+
+_VRAAGT_BESLUIT = re.compile(r"beslissing gevraagd|goedkeuring|escalatie|approval|"
+                             r"vereist .*(goedkeuring|akkoord)|herformulering", re.I)
+
 _BEVOEGDHEID = {
     "merk":       "een uitspraak over het merk en de missie",
     "strategie":  "een koerskeuze",
@@ -101,14 +125,12 @@ def eigen_domein(tekst: str, rol: str, records, *, drempel: int = 2) -> str:
 
 def founder_behoefte(tekst: str) -> tuple[str, str]:
     """Vraagt dit om een bevoegdheid die alleen de founder heeft? → (domein, behoefte-regel)."""
-    from nooch_village import tensie_poort as tp
-
-    if not tp._VRAAGT_BESLUIT.search(tekst or ""):
+    if not _VRAAGT_BESLUIT.search(tekst or ""):
         return "", ""
-    if tp._GEEN_BEWIJS.search(tekst or ""):
+    if _GEEN_BEWIJS.search(tekst or ""):
         # Geen bewijs is geen bevoegdheidsvraag maar een bewijs-gat; dat spoor bestaat al.
         return "", ""
-    for naam, pat in tp._BESLUIT_DOMEIN.items():
+    for naam, pat in _BESLUIT_DOMEIN.items():
         if pat.search(tekst or ""):
             return naam, (f"ik heb jou nodig om {_BEVOEGDHEID.get(naam, naam)} vrij te geven — "
                           f"dat is een bevoegdheid die alleen jij hebt")
@@ -259,9 +281,9 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
     Volgorde: is dit een bevoegdheidsvraag → founder; kan ik het zelf → zelf; bezit een ander het
     → naar die rol; anders deel ik wat ik vond. De founder staat vooraan omdat het de smalste
     categorie is, niet omdat hij de eerste keuze is: valt hij af, dan probeert de rol álles zelf."""
-    from nooch_village import tensie_poort as tp
+    from nooch_village.systeemtaal import kern as _kern
 
-    kern = tp.kern(tekst)
+    kern = _kern(tekst)
     domein, behoefte = founder_behoefte(tekst)
     if domein:
         return {"uitkomst": FOUNDER, "rol": rol, "naar_rol": "", "domein": domein,
@@ -307,7 +329,8 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
             # jou" antwoorden en wijst altijd iemand anders aan. In de steekproef gaf dat vier
             # duidelijke missers: de copywriter die het herschrijven van een claim weggaf, en
             # compliance dat zijn eigen juridische oordeel naar de Librarian stuurde.
-            ander, kind, waarom = tp.match(kern, records, reason_fn=reason_fn)
+            from nooch_village import escalation_router as er
+            ander, kind, waarom = er.match(kern, records, reason_fn=reason_fn)
             if ander == rol:
                 return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "",
                         "behoefte": "", "tensie": kern, "eigen_accountability": "",

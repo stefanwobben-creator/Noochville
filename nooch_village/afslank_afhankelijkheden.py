@@ -48,7 +48,7 @@ import functools
 import pathlib
 import re
 
-from nooch_village.notifications import preview as _preview
+from nooch_village.tekstpreview import preview as _preview
 
 ROOT = pathlib.Path(__file__).resolve().parent
 

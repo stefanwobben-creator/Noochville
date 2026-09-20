@@ -1786,6 +1786,189 @@ Geen los "vraag aan jou"/"melding"-label bouwen — dat zou een tweede, aparte m
 te laten zien naast wat al gepland stond. Claude Code's eigen voorkeur (hergebruiken wat er al is)
 komt hiermee exact overeen met Fase 11.
 
+## Fase 10, live gebruik legt vier dingen bloot vóór de --apply-bevestiging (20 sept)
+
+Stefan gebruikte de live omgeving (na A+B1, nog vóór de `--apply` van de notif-migratie) en meldde
+vier dingen, los van elkaar:
+
+1. **`/inbox` staat er nog.** Precies wat eerder vandaag al voorspeld werd ("zolang de route bestaat,
+   blijft hij de default"): de route/het scherm is nooit verwijderd, alleen het schrijfpad erachter
+   is omgebouwd. Nu alles een plain DM is, dupliceert `/inbox` Messages zonder eigen functie.
+   **Besluit: `/inbox` (route + navigatie-item) helemaal weghalen.**
+2. **Project-kanalen zijn automatisch voor élk project, moet alleen voor actieve.** Sluit direct aan
+   bij de eerder gevonden schaal (442 niet-gearchiveerde project-kanalen). Aanname, direct benoemd:
+   "actief" = dezelfde status als de Active-kolom op het Projects-bord. Niet-actieve projecten
+   (Waiting/Done/Future/Archived) verliezen hun kanaal niet (berichten blijven bestaan, niets
+   verwijderen), maar het kanaal verdwijnt uit de standaard kanalenlijst — alleen zichtbaar via
+   zoeken/een archief-filter. Wordt een project weer actief, dan komt het kanaal gewoon terug in de
+   lijst. Puur een presentatiefilter op bestaande status, geen nieuw datamodel.
+3. **Bug, waarschijnlijk urgent: DM's staan niet in de kanalenlijst.** Het links-scrollen/rechts-
+   lezen-patroon (kanalenlijst links, gesprek rechts) bestaat al, maar toont kennelijk geen
+   persoon-kanalen. Dat is een probleem los van punt 1/2: de 371 zojuist gemigreerde berichten landen
+   grotendeels in DM's (Stefan 351, Lotte 14, Matthijs 5, Wytse 1) — als DM's niet in de lijst
+   verschijnen, is die hele migratie na `--apply` onzichtbaar in de UI. **Dit blokkeert niet de
+   `--apply` zelf (dat is puur een schrijfactie), maar wel de mogelijkheid om het resultaat visueel
+   te controleren.** Aanbeveling: eerst dit fixen, dan pas `--apply`, zodat er meteen gecontroleerd
+   kan worden — maar dat is Stefans afweging, niet de mijne.
+4. **Project-scherm "een beetje een rommeltje".** Te vaag om nu te scopen. Sluit vermoedelijk aan bij
+   wat al bekend is: `projects.py` stond al in de atoom-schuld-inventarisatie (37% privé-klassen,
+   grootste ad-hoc families `einddoc-`, `att-`, `rail-`) en de projectkaart-voorkant staat al gepland
+   in Fase 11 (laag 2, punt 1b). Gevraagd: een screenshot of concreter voorbeeld voordat dit een
+   eigen instructie wordt, anders is "rommelig" niet uitvoerbaar voor Claude Code.
+
+## Fase 10, bevestiging punt 2/3 en vier nieuwe dingen vanuit de projectdetailpagina (20 sept)
+
+**Punt 2 (kanalen alleen voor actieve projecten) en punt 3 (DM-bug, urgent) bevestigd: akkoord,
+fixen.**
+
+Vanuit een screenshot van de live projectdetailpagina (`village.nooch.earth/project`), vier nieuwe
+dingen:
+
+1. **De "pakket"-koppeling is één grote platte pulldown van alle gerelateerde projecten — werkt
+   niet.** Moet een cascade worden: eerst rol kiezen, dan pas de projecten van die rol. Dit is
+   dezelfde onderliggende schaal (442 projecten) die vandaag al drie keer eerder opdook (kanalenlijst,
+   org-boom, projectkaart). **Bouw dit als herbruikbare rol-eerst-projectkiezer (molecule, conform de
+   nieuwe HARDE REGEL van vandaag), niet als losse fix voor alleen dit ene veld** — dezelfde
+   "kies-uit-alles-platte-lijst"-fout zal elders terugkomen zolang er geen gedeeld patroon voor is.
+2. **Berichten verwijderen en inline bewerken, ook op de projectpagina.** De "Conversation"-sectie
+   hier is hetzelfde onderliggende kanaal-type als in Messages (project-kanaal, één van de drie
+   smaken) — wat er voor Messages gebouwd wordt (verwijderen, inline bewerken) geldt dus automatisch
+   ook hier, geen aparte implementatie nodig.
+3. **"Keep in wiki" communiceert zijn eigen scope niet.** Onduidelijk of het de bijlage, de checklist,
+   het hele project of alleen het bericht eronder bewaart. Kleine, concrete UX-fix: de knop moet
+   zeggen wát hij bewaart (bijv. "Keep bericht in wiki" in plaats van kaal "Keep in wiki"), of de
+   scope moet zichtbaar worden vóór het klikken.
+4. **Grotere reflectie, nog niet scopen als losse instructie**: Stefan overweegt of de wiki niet
+   andersom zou moeten werken — niet content vanuit projecten/berichten náár de wiki pushen
+   ("Keep in wiki"-knoppen overal), maar vanuit de wiki content uit projecten/berichten trekken
+   (pull). Dit raakt rechtstreeks bevinding 5 uit `ux_voorstel_best_practices_20sept.md`
+   (Obsidian-backlinks, "kennis is een netwerk, geen hiërarchische mapstructuur") en is een
+   architectuurvraag die de relatie tussen Wiki/Projects/Messages omdraait, geen kleine tweak.
+   Bewust niet in dezelfde beurt gescoped als 1-3: dit verdient een eigen, aparte scoping-ronde
+   (net als het cirkel-diagram destijds), niet blind meegenomen worden in de losse fixes hierboven.
+
+**Bevestigd (20 sept): punt 4 (wiki pull-in-plaats-van-push) wordt apart opgepakt**, los van deze
+fase-10-opruimronde. Staat hier alleen genoteerd zodat het niet zoekraakt — geen instructie, geen
+scope, tot Stefan er zelf aan toe is.
+
+## Fase 10, B2 gestart en weer geparkeerd: geen nette knip, één aaneengesloten beurt nodig (20 sept)
+
+**Akkoord op beide.** B2 is begonnen (laatste twee `.notif.add`-plekken om, `_act_verzoek_besluit`
+eruit, acht beslis-tests weg, drie routeringstests omgezet naar DM), maar Claude Code stopte terecht:
+geen knip bestaat waarbij een tussenstap op zichzelf groen is. Acht overgebleven falende tests horen
+allemaal bij dingen die pas in dezelfde beurt verdwijnen (de herschrijf-poort, MENS_GETYPT, de
+triage-band van het inbox-scherm, `notif_outcome`). Werk staat veilig in stash `B2-wip`, niets kwijt.
+
+**Een echte bug gevonden én al gefixt**: het pagina-voorstel verloor zijn inhoud onderweg naar de DM
+— de voorgestelde tekst zat in `extra["pagina"]["body"]`, dat alleen het (verdwijnende) inbox-scherm
+uitklapte. Zonder tekst en permalink kan de rolvervuller de pagina niet zelf aanpassen, en dat was
+nou net de hele afspraak van vandaag (mens beslist, mens past zelf aan). Terecht gevonden door te
+kijken naar wat de mens daadwerkelijk ontvangt, niet naar de code — precies de manier waarop de
+gast-zonder-ontvanger-bug eerder vandaag ook werd gevonden.
+
+**Akkoord op het voorstel: B2 als eigen, aaneengesloten beurt**, de suite als leidraad, de poort
+(`bevinding.py`, `zelf_verwerking.py`, `spanning_ontstaat.py`) als laatste stap zodat een fout in de
+omzetting niet in dezelfde commit zit als de dode-code-opruiming. `views/inbox.py` (1.182 regels)
+gaat hiermee ook weg — dit is dus de uitvoering van de eerder vandaag afgesproken `/inbox`-
+verwijdering, geen aparte instructie nodig. Let op de genoemde afhankelijkheid: `_at_doelen` moet
+naar `checklists.py` verhuizen vóór `inbox.py` weg mag, anders breekt de checklist-functionaliteit.
+Prod blijft ondertussen ongewijzigd op `8ecf29a` met de 371 gemigreerde berichten.
+
+## Fase 10, B2 eerste helft groen (20 sept, commit `5c9fdec`): inbox weg, twee bugs blootgelegd
+
+**Status**: 3.984 passed, 1 failed (de al bekende), 1 xfailed. **Niet gedeployed** — prod draait nog
+op `8ecf29a`.
+
+**Wat eruit is**: `views/inbox.py` (1.182 regels), de routes `/inbox` en `/inbox/verwerk` (nu 404),
+de lade uit de zijbalk-chrome, vier dispatch-acties en `_act_verzoek_besluit` (113 regels). `.notif.add`
+komt nergens meer voor — de laatste twee schrijfplekken zijn nu ook gewone DM's. `_at_doelen` is
+verhuisd naar `cockpit2_util` (waar `_rol_labels` al stond) vóórdat `inbox.py` weg mocht, precies de
+afhankelijkheid die hierboven al was genoteerd.
+
+**Twee dingen die dit blootlegde**:
+1. Het pagina-voorstel verloor zijn inhoud onderweg naar de DM (de voorgestelde tekst zat in
+   `extra["pagina"]["body"]`, dat alleen het verdwijnende inbox-scherm uitklapte) — **al gefixt**,
+   zie de vorige sectie hierboven; nu bevestigd in de groene stand.
+2. **Nieuw gevonden, via een omvallende test**: `cockpit2.mens_vervullers` en `signaal.mensen_van`
+   deden hetzelfde. De eerste delegeert nu naar de tweede, anders kon een scherm een andere
+   rolvervuller tonen dan het bericht dat er daadwerkelijk heen gaat — een stille inconsistentie die
+   pas opvalt als het misgaat.
+
+**Tests**: zes bestanden volledig verwijderd (gingen alleen over het scherm), plus 21 losse tests uit
+acht andere bestanden, elk met de reden in het bestand zelf genoteerd. Routeringstests zijn niet
+verwijderd maar omgezet naar DM-asserties — die bewaken wie het werk krijgt, en dat is ongewijzigd.
+Onderweg: een eerste verwijder-script knipte op "tot de volgende `def`" en at zo een helper-klasse op
+in `test_zichtbaarheid_bord_en_inbox.py` (99 regels weg, 45 tests stuk) — teruggedraaid en opnieuw
+gedaan op inspringing. Zes ratchets zijn meegezakt, waaronder `_PREFIX_CEILING` 65 → 64.
+
+**Nog open (tweede helft B2)**: NotifStore zelf en de poort. Nog zo'n vijftien call-sites verspreid
+over `cli.py`, `cockpit2` (het "maak er een project van"-pad dat uit de inbox kwam),
+`views/metrics.py` (een metriek over verwerkingen), `claims_board`, `human_inbox`, `inhabitant`,
+`puls_wacht`, `roles`, `escaleer`, `triage_rol`, `villageraad`, `wiki` en `views/vangst`. Daarna de
+drie poort-modules (`bevinding.py`, `zelf_verwerking.py`, `spanning_ontstaat.py`) als laatste stap.
+
+**Zichtbaarheidspunt voor bij de deploy-beslissing (nog niet beantwoord)**: zodra dit live gaat is de
+lade in de zijbalk weg en geeft `/inbox` 404 voor iedereen die inlogt. De 371 gemigreerde berichten
+staan op `/messages`, maar wie gewend was aan de lade met een getal erop vindt die niet meer terug —
+en de vervangende ongelezen-indicator (kanaalnaam vetgedrukt + stip/aantal) zit in fase 11, nog niet
+gebouwd. Dit hoeft nu geen besluit te zijn (B2 is niet af, er wordt niets gedeployed), maar moet wel
+worden meegewogen zodra de A+B1+B2-deploy in beeld komt: in één keer live met die tijdelijke leemte,
+of wachten tot fase 11's ongelezen-indicator er ook is.
+
+## Messages-prototype gebouwd (20 sept) — reageren op berichtacties en navigatie-inpassing
+
+Op Stefans verzoek ("prototype van messages in html met alle functionaliteit: bericht plaatsen,
+reageren, dm sturen, kanaal starten, kanaal vinden") is een interactief HTML-prototype gepubliceerd
+als eigen Artifact (Design-canvas), los van de repo — dit is verkenning voor de nog te plannen
+Messages-scoping-ronde, geen bouwinstructie voor Claude Code.
+
+**Drie artboards**:
+1. **Main** — het volledige, interactieve Messages-scherm: kanalenlijst links (Projecten/Cirkels/
+   Topics/Directe berichten/Signalen, met live zoeken en een archief-schakelaar voor niet-actieve
+   projecten), gesprek rechts. Alle vijf gevraagde acties werken: bericht plaatsen, reageren
+   (emoji-toggle met teller), DM sturen (incl. een collega zonder bestaand gesprek, om een DM vanaf
+   nul te tonen), kanaal starten (naam + type), kanaal vinden. Rollen als compliance/harry_hemp/
+   librarian/claims-checker staan niet als losse "personen" maar gebundeld in één Signalen-kanaal met
+   per bericht een herkomst-label ("via compliance") — de concrete uitwerking van "DM moet naar een
+   mens, niet naar een rol".
+2. **InContext** — hoe dit past náást de bestaande NoochVille-navigatie (zie vraag hieronder).
+3. **Mobile** — hoe dit werkt op een telefoonformaat (zie vraag hieronder).
+
+**Bericht-acties, na Stefans "ik mis nog een bericht verwijderen of editten" (20 sept)**: het
+prototype maakte in de eerste versie alleen eigen berichten bewerkbaar/verwijderbaar (Slack-stijl,
+zoals besproken voor de projectpagina). Berichten van anderen — inclusief Signalen — hadden nog geen
+enkele actie, en dat viel op als een gat. **Aangescherpt naar twee aparte acties, conform het eerder
+vandaag genomen besluit over vinken/verwijderen**:
+- **Eigen berichten** (elk kanaal): potlood = inline bewerken, prullenbak = verwijderen. Dit is
+  klassieke chat-bewerking van je eigen tekst.
+- **Signalen-berichten** (van "Systeem", niet van jou): een vinkje = markeer als verwerkt (dimt het
+  bericht, puur visueel, geen backend-effect — conform het eerdere besluit voor plain DM's) en een
+  prullenbak = verwijder 'm uit je overzicht.
+- **Berichten van collega's in een gedeeld kanaal** (DM/project/cirkel/topic): bewust géén bewerk-
+  of verwijderknop — dat zou andermans deel van een gedeeld gesprek aantasten. Alleen reageren kan
+  daar, wat al werkte. Dit onderscheid stond nog nergens expliciet vastgelegd; nu wel, voor als de
+  vraag terugkomt waarom niet elk bericht dezelfde knoppen heeft.
+
+**Navigatie-inpassing, naar aanleiding van Stefans vraag "hoe past dit in de hele interface, want er
+is ook nog een linkerkant-navigatie, klapt dit uit of past het naast elkaar, en hoe dan mobiel?"**
+(20 sept) — dit was in het eerste prototype niet beantwoord, het toonde Messages losstaand, alsof het
+het hele scherm is. Twee nieuwe artboards geven een concreet voorstel, nog niet bevestigd door
+Stefan:
+- **Desktop (InContext)**: de bestaande globale zijbalk (logo, zoeken, Projects/Messages/Wiki/Circle/
+  Admin, org-boom) klapt in tot een smalle icoon-rail (64px) zodra je in een module zit die zelf een
+  lijst-paneel nodig heeft, zoals Messages. Dat maakt ruimte voor Messages' eigen twee panelen
+  (kanalenlijst + gesprek) ernaast — drie kolommen naast elkaar past ruim binnen een normaal
+  schermbreedte. De org-boom verdwijnt niet, maar zit achter een klein icoon (flyout on klik), want
+  je hebt 'm niet nodig terwijl je aan het chatten bent.
+- **Mobiel (Mobile)**: geen drie kolommen naast elkaar, maar **drill-down**, het standaardpatroon
+  van Slack/vergelijkbare apps. Drie niveaus, elk vol scherm: (1) de globale navigatie zit achter een
+  hamburger-menu dat als overlay opent, (2) de kanalenlijst is het standaardscherm van Messages, (3)
+  tikken op een kanaal opent het gesprek vol scherm met een terug-pijl linksboven die je terugbrengt
+  naar de kanalenlijst.
+
+**Nog niet bevestigd door Stefan**: of dit voorstel (rail-inklap op desktop, drill-down op mobiel)
+het uitgangspunt wordt voor de Messages-scoping-ronde, of dat hij een andere richting wil.
+
 ## Wat hierna nog open staat
 
 - De geplande-taak-mechaniek zelf (nodig voor: het maandrapport dat straks in de Wiki-schermen uit

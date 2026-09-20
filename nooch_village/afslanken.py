@@ -5,8 +5,8 @@ herinnering. Dit bestand LEEST dat verslag en voert uit wat erin staat; verander
 verandert deze operatie mee.
 
 **Slapen is niet verwijderen.** Een slapende rol houdt zijn purpose, accountabilities, domeinen,
-versie en historie. Wat stopt is de uitvoering: geen thread (`Reconciler`), geen oordeel over zijn
-spanningen (`spanning_ontstaat`), en geen nieuw werk via de routering (`escalation_router.roster`).
+versie en historie. Wat stopt is de uitvoering: geen thread (`Reconciler`) en geen nieuw werk via
+de routering (`escalation_router.roster`).
 Eén commando zet hem terug:
 
     python -m nooch_village.village afslanken wek <rol_id>

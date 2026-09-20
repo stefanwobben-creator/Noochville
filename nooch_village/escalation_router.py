@@ -175,6 +175,33 @@ def kies_ontvanger(data: dict | None, kandidaten: list[dict], trail: list[str],
     return kandidaat
 
 
+def match(tekst: str, records, *, doel: str = "", van_rol: str = "",
+          reason_fn=None) -> tuple[str, str, str]:
+    """Wie bezit dit werk? → (rol_id, kind, waarom). Leeg rol_id = geen rol past.
+
+    Dezelfde drie stappen als `route_item` — roster, `_vraag_llm`, `kies_ontvanger` — maar zonder
+    project, ledger of aflevering: alleen het oordeel. `kind` is 'human_external' of
+    'missing_capability'; dat is wat de lezer daarna nodig heeft om te bepalen of hij het zelf doet.
+
+    De match MOET 'geen rol past' kunnen zeggen: zonder die uitspraak kan niemand ooit vaststellen
+    dat er een gat in de structuur zit, en zou elk item bij de eerste de beste rol landen.
+
+    Stond tot 20 september 2026 in `tensie_poort`, waar hij de founder-inbox trieerde. Die poort is
+    met de inbox verdwenen; dit oordeel niet — `zelf_verwerking.verwerk` is nu de lezer, en hij
+    hoort thuis bij de roster en de prompt die hij hergebruikt."""
+    kandidaten = roster(records, exclude={van_rol} if van_rol else set())
+    data = _vraag_llm(tekst, doel or "(onbekend)", kandidaten, van_rol or "(onbekend)", reason_fn)
+    if data is None:
+        # LLM weg = geen handoff. Het dorp mag langzamer worden, niet stiller: de lezer krijgt een
+        # lege rol mét reden terug en deelt wat hij vond, in plaats van stil te vallen.
+        return "", "", "geen LLM-antwoord — fail-closed, geen handoff"
+    kind = str(data.get("kind") or "")
+    rol = kies_ontvanger(data, kandidaten, [], van_rol or "")
+    if not rol:
+        return "", kind, f"de match zegt expliciet geen eigenaar (kind={kind or '?'})"
+    return rol, kind, f"purpose/accountability-eigenaarschap volgens de match (kind={kind or '?'})"
+
+
 def route_item(*, ledger, records, data_dir, project, clid, item, from_role, from_naam="",
                settings=None, reason_fn=None, notify=None) -> dict:
     """Routeer ÉÉN vastgelopen item. Geeft {actie, naar_rol, reason, capability, gap, trail}.

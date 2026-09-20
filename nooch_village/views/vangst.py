@@ -6,9 +6,10 @@ niet, dus wordt er níets genoteerd. Een punt dat nooit is vastgelegd bestaat ni
 verwerk-scherm erna ook is.
 
 **Vangen is niet verwerken.** Bij het vangen gebeurt er precies één ding: de zin wordt opgeslagen,
-met wie hem inbracht en wanneer. Geen model, geen typering, geen kaart. De bevinding-schrijver en de
-typering draaien pas bij het VERWERKEN, en dan langs exact dezelfde haak en typer als elke andere
-verse spanning — `NotifStore.add` zonder type, en `spanning_ontstaat` doet de rest.
+met wie hem inbracht en wanneer. Geen model, geen typering, geen kaart. Het VERWERKEN stuurt het punt
+daarna als DM naar de mens die de rol vervult (sinds B2, 20 september 2026). De verrijk-haak die de
+verse spanning liet herschrijven en typeren hing aan `NotifStore.add` en is met de inbox verdwenen —
+wat er bij het verwerken gebeurt is routeren, niet oordelen.
 
 **Waar het punt landt.** De vangst schrijft in de persistente werkoverleg-backlog van de cirkel
 (`backlog_add`) — er hoeft geen overleg open te staan, en bij het eerstvolgende overleg komt het punt
@@ -244,9 +245,9 @@ ELK_LID_WAARDE = "*"      # expliciete keuze "elk cirkellid" — te onderscheide
 # een PERSOON hangt en aan geen enkele rol. Dat is geen slordigheid maar de werkelijkheid van een
 # overleg — "Lotte belt de leverancier even" hoort bij Lotte, niet bij een mandaat.
 #
-# LET OP, DIT GELDT ALLEEN HIER. De AI-spanningen die getypeerd in de inbox belanden
-# (`vangst_verwerk` → `spanning_ontstaat` → `zelf_verwerking`) houden hun rol-borging: daar is de
-# rol de grond waarop een oordeel rust, en zonder rol is er geen accountability om aan te toetsen.
+# LET OP, DIT GELDT ALLEEN HIER. De spanningen die via `vangst_verwerk` naar een rol gaan houden
+# hun rol-borging: daar is de rol de grond waarop het oordeel van `zelf_verwerking` rust, en zonder
+# rol is er geen accountability om aan te toetsen.
 # Verruim die kant dus niet "voor de consistentie" — het zijn twee verschillende dingen.
 INDIVIDUELE_ACTIE = "Individuele actie"
 

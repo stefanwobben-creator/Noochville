@@ -40,13 +40,10 @@ def _notify_founder(inbox_path: str, *, by: str, snippet: str, extra: dict | Non
     (`noochie_memo`) is dat geen verrijking maar verminking — en een stille: de lezer ziet dan
     tekst die Noochie niet schreef, onder haar naam. Zonder `extra` verandert er niets voor de
     bestaande aanroepers."""
-    try:
-        from nooch_village.notifications import NotifStore
-        pad = os.path.join(os.path.dirname(inbox_path) or ".", "notifications.json")
-        # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
-        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet, extra=extra)
-    except Exception:
-        pass
+    # `extra` gaat niet meer mee: een DM draagt tekst, afzender en tijd (B2, 20 september 2026).
+    from nooch_village import signaal
+    signaal.stuur_op_pad(os.path.dirname(inbox_path) or ".", "role", FOUNDER_ROLE_ID,
+                         snippet, by=by)
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",

@@ -33,6 +33,24 @@ _PAGINA = """<html><head><title>Nooch — plastic-free shoes</title></head><body
 </body></html>"""
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 def _kroniek(tmp_path) -> EvidenceLedger:
     return EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl"))
 
@@ -55,7 +73,22 @@ def _records_met_claimseigenaar(role_id="claims_eigenaar"):
 
 
 def _ctx(tmp_path, monkeypatch=None, ledger=None):
-    """Scan-context met een wegwerpkopie van de claims-database (de scan schrijft statussen terug)."""
+    """Scan-context met een wegwerpkopie van de claims-database (de scan schrijft statussen terug).
+
+    Bootstrapt ook een dorp: een melding is sinds B2 een DM en moet een MENS vinden, dus records,
+    assignments en people moeten er zijn. Vroeger schreef `NotifStore.add` een rij ongeacht of er
+    iemand was om hem te lezen."""
+    from nooch_village import cockpit2 as _c2
+    _c2._bootstrap(str(tmp_path))
+    # EN EEN MENS OP DE CLAIMS-ROL. De scan meldt aan "wie het claims-domein bezit"; sinds B2 is
+    # dat bericht een DM en moet die rol dus iemand hébben. Zonder deze regel is "compliance hoort
+    # het" niet waar te nemen — vroeger schreef `NotifStore.add` een rij op een rol die niemand
+    # las, en dat is precies het dead letter dat deze migratie wegneemt.
+    from nooch_village.assignments import Assignments
+    from nooch_village.people import PeopleStore
+    _mens = PeopleStore(os.path.join(str(tmp_path), "people.json")).add("Compliance", "c@t.nl")
+    Assignments(os.path.join(str(tmp_path), "assignments.json")).assign(
+        "claims_eigenaar", "person", _mens.id)
     if monkeypatch is not None:
         kopie = tmp_path / "claims_database.json"
         kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
@@ -77,6 +110,15 @@ def _db():
 
 
 # ── Guard 1: een risico-term zonder bewijs komt nooit groen uit de scan ──────────────────────
+
+def _berichten(tmp_path) -> str:
+    """Alle verstuurde DM-tekst als één string. Was `notifications.json` rechtstreeks lezen; sinds
+    B2 (20 sept 2026) staan meldingen als bericht in een kanaal."""
+    from nooch_village import channels, signaal
+    mini = signaal._MiniStores(str(tmp_path))
+    return "\n".join(e.get("text") or "" for k in mini.channels.bestaande()
+                     if channels.soort_van(k) == channels.DM for e in mini.channels.trail(k))
+
 
 def test_risicoterm_zonder_bewijs_is_nooit_groen(tmp_path):
     bevindingen = [_bev(stoplicht="orange"), _bev(stoplicht="green", term="vegan",
@@ -271,8 +313,7 @@ def test_permanente_fout_zet_de_scan_niet_voor_altijd_vast(tmp_path, monkeypatch
     assert uit["ok"] and uit["volledig"] is True
     assert css.week_gedaan(str(tmp_path), css.period_key("week"))
     assert "bestaan niet meer" in uit["headsup"]
-    meldingen = json.loads((tmp_path / "notifications.json").read_text(encoding="utf-8"))
-    tekst = json.dumps(meldingen, ensure_ascii=False)
+    tekst = _berichten(tmp_path)
     assert "Scan-lijst" in tekst and "mission" in tekst
 
 
@@ -292,7 +333,7 @@ def test_hervatten_heeft_een_bovengrens_op_voortgang(tmp_path, monkeypatch):
     assert "lost zichzelf niet op" in uit["headsup"]
     labels = [g["capability"] for g in gap_ledger.alle(str(tmp_path))]
     assert ClaimsSiteScanSkill.GAT_ONLEESBARE_PAGINA in labels
-    tekst = (tmp_path / "notifications.json").read_text(encoding="utf-8")
+    tekst = _berichten(tmp_path)
     assert "blijft blind" in tekst and "mission" in tekst
 
 

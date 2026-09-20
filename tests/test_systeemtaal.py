@@ -176,18 +176,27 @@ def test_de_regel_staat_bij_de_code():
     assert "geen mogelijkheden" in bron and "dichtklappen" in bron
     assert "KOEPELTERM" in bron
     assert re.search(r"1\.\s*de slag om de arm", bron)
-def test_het_merk_wordt_bij_het_schrijven_vastgelegd():
-    """`add()` zet het merk één keer, zodat elke latere lezer hetzelfde veld leest in plaats van
-    people.json opnieuw te bevragen — en zodat blijft staan wat waar wás toen er getypt werd."""
-    import tempfile
+# WAT HIER WEG IS (B2, 20 september 2026): `test_het_merk_wordt_bij_het_schrijven_vastgelegd`.
+# Die toetste dat `NotifStore.add` het merk `MENS_GETYPT` zette, zodat de herschrijf-poort
+# andermans woorden met rust liet. Beide zijn weg: `NotifStore` is opgeheven en de poort die het
+# merk moest lezen bestond om de inbox-tekst te herschrijven. In een DM-laag is vrijwel álles
+# mens-tekst en wordt er sowieso niets herschreven — het merk heeft geen lezer meer.
+#
+# De LES staat in `docs/CONVENTIES.md` en geldt voor elke volgende poort: leg het feit vast op het
+# pad dat het weet, raad het nooit achteraf. Er is hier alleen geen poort meer om hem op te toetsen.
 
-    from nooch_village.notifications import MENS_GETYPT, NotifStore
-    from nooch_village.people import PeopleStore
-    dd = tempfile.mkdtemp()
-    p = PeopleStore(f"{dd}/people.json").add("Stefan", "s@n.nl")
-    store = NotifStore(f"{dd}/notifications.json", verrijker=lambda n: {})
-    van_mens = store.add("person", p.id, "", by=p.id, snippet="mijn eigen woorden")
-    van_machine = store.add("person", p.id, "", by="puls-wacht", snippet="een melding")
-    assert van_mens.get(MENS_GETYPT) is True
-    assert MENS_GETYPT not in van_machine
 
+
+# ── Het sjabloon eraf ───────────────────────────────────────────────────────
+#
+# Gered uit `tests/test_tensie_poort.py`, dat met de tensie-poort is verdwenen (20 sept 2026).
+# `kern` zelf niet: hij is geen poort-logica maar een deterministische schoonmaak, dezelfde familie
+# als de swaps hierboven, en `bevinding` en `zelf_verwerking` gebruiken hem allebei nog.
+
+def test_het_sjabloon_wordt_weggehaald():
+    """"Deze taak vereist een mens of externe partij" domineerde de tekst en duwde elk oordeel naar
+    de verpakking, terwijl het werk eronder gewoon van een rol is."""
+    from nooch_village.systeemtaal import kern
+    t = ("⏸️ Project van Harry Hemp vastgelopen op 1 mens-/extern item(s): Deze taak vereist een "
+         "mens of externe partij: 'Decide whether to permanently exclude this overlap'")
+    assert kern(t) == "Decide whether to permanently exclude this overlap"

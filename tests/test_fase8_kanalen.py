@@ -97,16 +97,19 @@ def test_een_vermelding_van_een_mens_landt_in_zijn_dm(tmp_path):
     assert trail[0]["herkomst"]["project"] == pid
 
 
-def test_de_vermelding_wordt_geen_notificatie_meer(tmp_path):
-    """Precies het dubbele dat fase 8 opheft: één vermelding, één plek."""
+def test_de_vermelding_landt_precies_een_keer(tmp_path):
+    """Precies het dubbele dat fase 8 opheft: één vermelding, één plek.
+
+    De test heette `..._wordt_geen_notificatie_meer` en telde dat de NotifStore níét meegroeide.
+    Die store bestaat sinds 20 september 2026 niet meer, dus die helft bewijst zichzelf. Wat blijft
+    is de andere helft, en dat was altijd de echte eis: één vermelding levert ÉÉN bericht op."""
     dd, st = _stores(tmp_path)
     _mens(st, "Testpersoon Een", "een@test.nl")
     _mens(st, "Testpersoon Twee", "twee@test.nl")
     pid = st.projects.create(OWNER, "Batch 4", "human", status="running")
-    voor = len(cockpit2._Stores(dd).notif.all())
     voor_dm = len(_dm_teksten(cockpit2._Stores(dd)))
     _wall(st, dd, pid, "@Testpersoon Twee even kijken?", "een@test.nl")
-    assert len(cockpit2._Stores(dd).notif.all()) == voor
+    assert len(_dm_teksten(cockpit2._Stores(dd))) == voor_dm + 1
 
 
 def test_een_rol_met_vervuller_bereikt_die_mens(tmp_path):
@@ -137,7 +140,6 @@ def test_een_rol_zonder_mens_valt_terug_op_een_mens(tmp_path):
     _wall(st, dd, pid, f"@{naam} pak jij dit op?", "een@test.nl")
     st2 = cockpit2._Stores(dd)
     assert len(_dm_teksten(st2)) == voor_dm + 1
-    assert st2.notif.all() == []                       # niets blijft in de oude wachtrij hangen
     # En hij landt bij een MENS, niet in een kanaal dat niemand leest.
     from nooch_village import signaal
     founder = signaal.terugval(st2)

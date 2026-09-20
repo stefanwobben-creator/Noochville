@@ -131,11 +131,9 @@ def alarm(data_dir: str, uitslag: dict) -> None:
             f.write(f"{datetime.now().isoformat(timespec='seconds')}  {boodschap}\n")
     except Exception:                                    # noqa: BLE001
         log.exception("alarm-logregel niet weggeschreven")
-    try:                                                 # 2. de inbox van de founder
-        from nooch_village.human_inbox import FOUNDER_ROLE_ID
-        from nooch_village.notifications import NotifStore
-        NotifStore(os.path.join(data_dir, "notifications.json")).add(
-            "role", FOUNDER_ROLE_ID, "", by="puls-wacht", snippet=boodschap)
-    except Exception:                                    # noqa: BLE001
-        log.exception("alarm-melding niet in de inbox gezet")
+    # 2. een bericht bij de founder. `stuur_op_pad` logt zelf als het misgaat en gooit niets —
+    # een alarm dat de alarmering omver haalt is erger dan een alarm dat niet aankomt.
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    from nooch_village import signaal
+    signaal.stuur_op_pad(data_dir, "role", FOUNDER_ROLE_ID, boodschap, by="puls-wacht")
     print(boodschap)                                     # 3. stdout → cron mailt, systemd logt

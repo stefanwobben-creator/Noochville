@@ -218,7 +218,6 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `projects` | `ProjectLedger` | `projects.json` |
 | `deliverables` | `DeliverableStore` | `deliverables.json` |
 | `ai` | `AITaskStore` | `ai_tasks.json` |
-| `notif` | `NotifStore` | `notifications.json` |
 | `channels` | `ChannelStore` | `channels.json` |
 | `agenda` | `Agenda` | `roloverleg_agenda.json` |
 | `noochie` | `NoochieStore` | `noochie.json` |
@@ -268,7 +267,6 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
 | `project_proposals.json` | `project_proposals.py` |
-| `relaunch_park.jsonl` | `relaunch_park.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
 | `sessions.json` | `cockpit2.py` |
@@ -303,6 +301,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 |---|
 | `co2_factoren.json` |
 | `llm_prijzen.json` |
+| `notifications.json` |
 | `pulse_heartbeat.json` |
 | `rugzakken.json` |
 | `seed_surges.json` |
@@ -310,4 +309,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_40 routes · 140 dispatch-acties · 28 stores in `_Stores` · 36 daarbuiten met één schrijver · 6 met meerdere · 6 zonder gevonden schrijver._
+_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 35 daarbuiten met één schrijver · 6 met meerdere · 7 zonder gevonden schrijver._

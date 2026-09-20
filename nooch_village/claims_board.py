@@ -112,11 +112,6 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
         assignments = getattr(context_of_stores, "assign", None)
         ledger = getattr(context_of_stores, "projects", None)
         data_dir = getattr(context_of_stores, "data_dir", None) or getattr(context_of_stores, "dd", ".")
-        if notif is None:
-            import os
-
-            from nooch_village.notifications import NotifStore
-            notif = NotifStore(os.path.join(data_dir, "notifications.json"))
         if assignments is None:
             import os
 
@@ -134,8 +129,14 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
             pid = _werk_project(ledger, rol_id, tekst, door, done_when)
         # De notificatie blijft óók staan: hij is de audittrail van "dit is doorgegeven", en voor
         # een mens-bemande rol is hij het hele kanaal.
+        # HET BERICHT BLIJFT ÓÓK STAAN: het is de audittrail van "dit is doorgegeven", en voor een
+        # mens-bemande rol is het het hele kanaal. Sinds B2 is dat een DM bij de mens die de rol
+        # vervult in plaats van een rij in de wachtrij.
+        from nooch_village import signaal
         snippet = tekst if not pid else f"📥 Als project op je bord gezet: {tekst}"
-        notif.add("role", rol_id, project_id or pid, by=door, snippet=snippet[:_SNIPPET_MAX])
+        signaal.stuur_op_pad(data_dir, "role", rol_id, snippet[:_SNIPPET_MAX], by=door,
+                             herkomst={"project": project_id or pid} if (project_id or pid) else None,
+                             omgeving=context_of_stores)
         doelen.append(rol_id)
 
         # bij_twijfel=True ("doe alsof bemand") en dus GEEN bericht. Dit is de plek waar een
@@ -146,8 +147,11 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
         if not bemand(rol_id, assignments, records, bij_twijfel=True):
             lead = _circle_lead_van(rol_id, records)
             if lead and lead != rol_id:
-                notif.add("role", lead, project_id or pid, by=door,
-                          snippet=f"[rol {rol_id.split('__')[-1]} onbemand] {tekst}"[:_SNIPPET_MAX])
+                signaal.stuur_op_pad(
+                    data_dir, "role", lead,
+                    f"[rol {rol_id.split('__')[-1]} onbemand] {tekst}"[:_SNIPPET_MAX], by=door,
+                    herkomst={"project": project_id or pid} if (project_id or pid) else None,
+                    omgeving=context_of_stores)
                 doelen.append(lead)
     except Exception:
         pass

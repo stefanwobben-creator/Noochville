@@ -85,12 +85,17 @@ def _plausible_get(url, **kw):
 
 def test_plausible_zonder_sleutel_is_een_fout_geen_lege_lijst():
     from nooch_village.skills_impl.plausible import PlausibleSkill
+    # DE PATCH MOET OM ÁLLE ASSERTIES HEEN. `is_configured` valt terug op `os.getenv`, en
+    # `config.load_context` zet de sleutels uit `.env` met `setdefault` in `os.environ`. Draaide er
+    # eerder in dezelfde sessie een test die de context laadde, dan stond `PLAUSIBLE_SITE_ID` er
+    # gewoon en was "niet geconfigureerd" onwaar — een test die afhangt van wie er vóór hem liep.
     with patch.dict(os.environ, {"PLAUSIBLE_API_KEY": "", "PLAUSIBLE_SITE_ID": ""}):
         r = PlausibleSkill().run({}, SimpleNamespace(settings={}))
-    assert C(r)[0] == "fout" and "PLAUSIBLE_API_KEY" in r["error"] and "rows" not in r
-    assert PlausibleSkill.required_env == ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
-    assert not PlausibleSkill().is_configured(SimpleNamespace(settings={"PLAUSIBLE_API_KEY": "k"}))
-    assert PlausibleSkill().is_configured(_plausible_ctx())
+        assert C(r)[0] == "fout" and "PLAUSIBLE_API_KEY" in r["error"] and "rows" not in r
+        assert PlausibleSkill.required_env == ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
+        assert not PlausibleSkill().is_configured(
+            SimpleNamespace(settings={"PLAUSIBLE_API_KEY": "k"}))
+        assert PlausibleSkill().is_configured(_plausible_ctx())
 
 
 def test_plausible_http_fout_op_het_aggregaat_is_een_fout_zonder_sleutel_in_de_tekst():
