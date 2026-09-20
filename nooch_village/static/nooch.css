@@ -230,15 +230,18 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .imp-pill{padding:.14rem .55rem;border-radius:var(--radius-pill);border:1px solid transparent;font:inherit;font-size:.7rem;font-weight:700;line-height:1.5;cursor:pointer;opacity:.5}
 .imp-pill:hover{opacity:.8}
 .imp-pill.on{opacity:1;box-shadow:inset 0 0 0 1.5px currentColor}
-.imp-pill.g{background:var(--green-tint);color:var(--green-dark)}
 .imp-pill.n{background:var(--cream-2);color:var(--gray)}
-.imp-pill.r{background:var(--error-tint);color:var(--coral)}
 .imp-pill.l{background:var(--cream);color:var(--muted)}
-/* Missie-impact-kleurstip op de bordkaart (alleen de stip, geen tekst): g=groen, n=grijs, r=rood. */
+/* Missie-impact op de bordkaart. DRIE VORMEN, niet drie kleuren: gevulde cirkel = versterkt,
+   open ring = neutraal, driehoek = verzwakt. De kleur versterkt het, maar draagt het niet — in
+   zwart-wit, of voor wie deze tinten niet onderscheidt, waren dit drie identieke stippen met een
+   betekenis die alleen in een `title` stond (en een title verschijnt niet op een telefoon).
+   Dezelfde vormtaal als `.nu-status::before` en de bordkolommen; het woord staat in een `.sr`-span
+   naast de stip, zodat een schermlezer het óók krijgt. */
 .mdot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;margin-right:.35rem;vertical-align:middle;flex:none}
 .mdot.g{background:var(--green)}
-.mdot.n{background:var(--gray)}
-.mdot.r{background:var(--coral)}
+.mdot.n{background:none;border:1.5px solid var(--gray);box-sizing:border-box}
+.mdot.r{background:var(--coral);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)}
 /* Missie verzwakt: rode kaart-rand (signaal, geen blokkade) + infoblok in de modal. */
 .pcard.verzwakt{border-color:var(--coral)}
 .vzblock{border:1px solid var(--coral);background:var(--error-tint);border-radius:var(--radius);padding:.7rem .85rem;margin-bottom:.7rem}
@@ -338,7 +341,6 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .kb-msg.jij{text-align:right}
 .kb-who{font-size:.7rem;font-weight:700;color:var(--subtle)}
 .kb-text{display:inline-block;text-align:left;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;margin-top:.15rem}
-.kb-msg.note .kb-text{background:var(--error-tint);border-color:var(--coral);color:var(--coral)}
 .kb-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem}
 .c2-wrap{margin-left:0}
 .noo-rail{position:fixed;top:0;left:0;bottom:0;width:2.6rem;background:var(--green-dark);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:.7rem 0;z-index:40}
@@ -361,7 +363,6 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .rov-by{flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
-.fkind.upd{background:var(--green-tint);color:var(--green-dark)}
 .fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
 @media(min-width:620px){.pgrid{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}}
@@ -614,8 +615,11 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ibx-thumb.on{transform:translate(-50%,-50%) scale(1) rotate(0)}
 /* grotere textarea's in de verwerk-formulieren */
 .wo-oc textarea{min-height:88px}
-.cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
-.cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
+/* Rijstatus met TWEE dragers: de tint én de rand-stijl links. Solide = gemist, gestippeld = nog
+   te doen, niets = gedaan. Een rand-stijl overleeft zwart-wit en kleurenblindheid waar een tint
+   dat niet doet; het woord zelf staat in een `.sr`-span vooraan de rij. */
+.cl-attn{background:var(--error-tint);border-left:3px solid var(--coral)}
+.cl-todo{background:var(--yellow-light);border-left:3px dashed var(--yellow)}
 .cl-add{display:inline-block}
 .cl-add>summary{list-style:none;cursor:pointer}
 .cl-add>summary::-webkit-details-marker{display:none}
@@ -1044,9 +1048,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kn-conf{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;text-align:right}
 .kn-arrow{color:var(--muted);align-self:center;font-size:1rem}
 .kn-word{font-size:.74rem;font-weight:700;border-radius:var(--radius-pill);padding:.12rem .6rem;white-space:nowrap}
-.kn-word.stevig{background:var(--green-tint);color:var(--green-dark)}
-.kn-word.groeit{background:var(--yellow-light);color:#8a6508}
-.kn-word.omstreden{background:var(--error-tint);color:var(--coral)}
 .kn-word.dun{background:var(--sand);color:var(--gray)}
 .kn-dots{letter-spacing:2px;font-size:.7rem}
 .kn-dots.stevig{color:var(--green)} .kn-dots.groeit{color:#B8860B}
@@ -1059,13 +1060,11 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kn-claim{font-family:var(--font-display);font-weight:800;font-size:1.3rem;line-height:1.25;margin:.3rem 0 .6rem;max-width:92%}
 .kn-sentence{font-size:.95rem;color:var(--gray);background:var(--cream-2);border-radius:var(--radius);padding:.7rem .85rem;margin:.6rem 0 1rem}
 .kn-sentence b{color:var(--ink)}
-.kn-caveat{font-size:.86rem;color:#8a6508;background:var(--yellow-light);border-radius:var(--radius);padding:.5rem .7rem;margin:0 0 1rem}
 .kn-kantel{font-size:.84rem;margin:.3rem 0 .5rem;padding:.35rem .6rem;border-left:3px solid var(--yellow);background:var(--cream-3);border-radius:0 var(--radius) var(--radius) 0}
 .kn-sec{margin:1.3rem 0}
 .kn-sectitle{font-family:var(--font-display);font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:.7rem 0 .5rem}
 .kn-note{display:flex;gap:.55rem;align-items:flex-start;font-size:.92rem;padding:.45rem 0;border-top:1px solid var(--cream-2)}
 .kn-note .kn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.5em}
-.kn-note.support .kn-dot{background:var(--green)} .kn-note.counter .kn-dot{background:var(--coral)}
 .kn-ntext{flex:1;min-width:0}
 .kn-src{color:var(--muted);font-size:.8rem;display:block;margin-top:.05rem}
 .kn-ann{color:var(--green-dark);font-size:.84rem;display:block;margin-top:.15rem;border-left:2px solid var(--green-tint);padding-left:.5rem}
@@ -1141,7 +1140,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kn-tagchips{position:absolute;z-index:8;top:calc(100% + .3rem);left:0;min-width:16rem;max-width:24rem;max-height:min(60vh,26rem);overflow:auto;display:flex;flex-wrap:wrap;gap:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.5rem .6rem}
 .kn-tagchips>p{flex-basis:100%;margin:.4rem 0 0}
 .kn-tagchip{border:none;cursor:pointer;font:inherit;display:inline-flex;align-items:center;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:600;line-height:1.5;background:var(--cream-2);color:var(--gray)}
-.kn-tagchip:hover{background:var(--green-tint);color:var(--green-dark)}
 .kn-stmtacties{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin-top:.3rem}
 .kn-stmtactie{margin:0;display:inline-block}
 .kn-actlink{border:none;background:none;box-shadow:none;padding:0;margin:0;font:inherit;font-size:.78rem;color:var(--muted);cursor:pointer;text-decoration:underline}
@@ -1279,7 +1277,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kn-sugg{background:var(--yellow-light);border:1px solid var(--yellow)}
 .kn-sugghead{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
 .kn-suggflag{background:var(--yellow);color:#5c4a00}
-.kn-strat{background:var(--green-tint);color:var(--green-dark);font-size:11px}
 .kn-suggbtns{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
 /* Spelvraag (founder, 19 jul): de claim is informatie, de vraag is verleiding — een kleine
    LLM herformuleert het cluster tot één vraag (spelvraag.py, gecachet, fail-soft naar
@@ -1290,8 +1287,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kn-spelstart{font-size:.78rem;margin:.1rem 0 .3rem}
 /* Zoekresultaten op de spel-pagina: wat al in het spel zit kleurt subtiel mee —
    groen steunt, rood spreekt tegen (zelfde betekenis als de kn-note-stippen). */
-.kn-inhand-sup{background:var(--green-tint);border-radius:var(--radius);padding:.45rem .5rem}
-.kn-inhand-cou{background:var(--error-tint);border-radius:var(--radius);padding:.45rem .5rem}
 
 /* ── Gedeelde shell: de vaste zijbalk links (fase 7, 19 sept 2026) ─────────────────────────────
    Verving de topbar (logo+zoek), de meta-footer (Goals · Metrics · People) en de
@@ -1410,7 +1405,6 @@ a.wz-btn{text-align:center;text-decoration:none;display:inline-block}
 .wz-foot{display:flex;gap:.6rem;align-items:center;margin-top:1.1rem}
 .wz-foot .wz-btn{flex:1}
 .wz-skip{background:none;border:none;color:var(--subtle);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
-.wz-was{background:var(--error-tint);border-radius:10px;padding:.6rem .8rem;font-size:.9rem;color:#8f5b52;margin-bottom:.5rem}
 .wz-now{background:var(--green-tint);border-radius:10px;padding:.75rem .85rem;border:1.5px solid var(--green)}
 .wz-now .lb{font-size:.68rem;font-weight:700;text-transform:uppercase;color:var(--green-dark);letter-spacing:.04em}
 .wz-now .tx{font-family:var(--font-display);font-weight:500;font-size:1.02rem;line-height:1.35;margin-top:.15rem}
@@ -1570,7 +1564,6 @@ summary.pchip:hover{border-color:var(--gray)}
 .rail-btn{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
   background:var(--surface);border-radius:var(--radius);padding:.35rem .6rem;font:inherit;
   font-size:.78rem;color:var(--ink);cursor:pointer}
-.rail-btn:hover:not([disabled]){background:var(--green-tint);border-color:var(--green)}
 .rail-btn[disabled]{opacity:.55;cursor:default}
 .rail-btn svg{width:1rem;height:1rem;flex:0 0 auto}
 

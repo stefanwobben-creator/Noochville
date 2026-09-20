@@ -74,13 +74,19 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
     danger = f"<span class='row-danger'>{rm}</span>" if rm else ""
     # Kleurcodering op rij-niveau, wederzijds uitsluitend: gemist=coral, te-doen=geel, gedaan=neutraal.
     # status is False (gemist) impliceert een rapport deze periode -> nooit tegelijk is_due (te-doen).
+    # DE RIJSTATUS DRAAGT DRIE DINGEN, niet één. De tint was er al; de rand-stijl (solide/
+    # gestippeld, zie nooch.css) overleeft zwart-wit, en het woord hieronder bereikt een
+    # schermlezer — die ziet noch de tint noch de rand. Zelfde redenering als de
+    # ongelezen-indicator in Messages, die bewust op gewicht, telling én tint tegelijk leunt.
     if status is False:
-        rowcls = " cl-attn"
+        rowcls, woord = " cl-attn", "Missed"
     elif ChecklistStore.is_due(item):
-        rowcls = " cl-todo"
+        rowcls, woord = " cl-todo", "Due"
     else:
-        rowcls = ""
-    return (f"<div class='cl-row{rowcls}'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}</div>"
+        rowcls, woord = "", ""
+    merk = f"<span class='sr'>{woord}: </span>" if woord else ""
+    return (f"<div class='cl-row{rowcls}'><div class='cl-main'>{merk}"
+            f"<span class='cl-desc'>{_e(item['description'])}</span> {tgt}</div>"
             f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{danger}</div></div>")
 
 
