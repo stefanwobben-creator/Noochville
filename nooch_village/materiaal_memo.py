@@ -341,6 +341,52 @@ def _nieuw_voor_de_mens(st, data_dir: str, sinds: float) -> list[dict]:
     return [it for it in _items(st, sinds) if sleutel_van(it) not in boek]
 
 
+#: Deze bron levert `selectie`: hooguit een handvol, liever nul dan een zwakke. Dat is de posture
+#: die `_schift` al hanteert ("liever nul dan een zwakke"), hier expliciet zodat de weekmemo hem
+#: niet hoeft te raden.
+DREMPEL = "selectie"
+
+
+def verzamel(st, data_dir: str, *, sinds: float = 0.0, maxaantal: int = 2,
+             context=None) -> list:
+    """De geschifte materiaalkandidaten, als `weekmemo.Signaal`.
+
+    DIT IS DE SHORTLIST-SKILL ZONDER DE AFLEVERING. Waar `MateriaalShortlistSkill` de selectie
+    onthield, een ontvanger opzocht en er een heads-up van maakte, geeft deze een lijst terug en
+    schrijft niets — ook het GEHEUGEN niet.
+
+    Dat laatste is een bewuste keuze en het verdient uitleg. `onthoud_voorgelegd` bestaat omdat de
+    feed dezelfde ontdekking blijft aanleveren; zonder dat boek duwt de schifting elke maand
+    hetzelfde omhoog tot de mens stopt met lezen. Maar onthouden is een SCHRIJF-actie, en dat mag
+    een verzamelaar niet (stap 7 zet daar een ratchet op). De memo onthoudt straks voor alle vijf
+    de bronnen tegelijk, op één plek — en dan is dit boek daar een onderdeel van in plaats van een
+    zesde plek waar hetzelfde feit leeft.
+
+    Tot die tijd LEEST hij het boek wel: al voorgelegde kandidaten vallen af. Lezen is geen
+    schrijven, en het alternatief is dat de eerste weekmemo de hele geschiedenis opnieuw voorlegt."""
+    from nooch_village.weekmemo import Signaal
+
+    kandidaten = _nieuw_voor_de_mens(st, data_dir, sinds)
+    if not kandidaten:
+        return []
+    gekozen = _schift(context, kandidaten, maxaantal)
+    per_sleutel = {sleutel_van(it): it for it in kandidaten}
+    uit = []
+    for k in gekozen:
+        bron_item = per_sleutel.get(k.get("sleutel")) or {}
+        uit.append(Signaal(
+            bron="materiaal", tekst=str(k.get("wat") or bron_item.get("content") or ""),
+            vindplaats=str(bron_item.get("link") or bron_item.get("source") or ""),
+            gevonden_op=float(bron_item.get("at") or 0.0),
+            herkomst=str(k.get("sleutel") or ""),
+            # `waarom` en `leverancier` zijn wat het MODEL ervan maakte; `wat` is de kandidaat.
+            # Ze staan apart zodat de memo de waarneming en het oordeel niet door elkaar haalt.
+            extra={"waarom": str(k.get("waarom") or ""),
+                   "leverancier": str(k.get("leverancier") or ""),
+                   "bron_naam": str(bron_item.get("source") or "")}))
+    return uit
+
+
 def _schift(context, kandidaten: list[dict], maxaantal: int) -> list[dict]:
     """De drie filters, door het model. Geeft [{sleutel, wat, waarom, leverancier, bron}].
 

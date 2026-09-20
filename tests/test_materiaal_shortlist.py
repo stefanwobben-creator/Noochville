@@ -145,3 +145,65 @@ def test_het_ritme_is_maandelijks(tmp_path, monkeypatch):
     assert skill.run({"_stores": st, "_periode": "2026-09"}, _ctx(tmp_path))["skipped"] is False
     assert skill.run({"_stores": st, "_periode": "2026-09"}, _ctx(tmp_path))["skipped"] is True
     assert skill.run({"_stores": st, "_periode": "2026-10"}, _ctx(tmp_path))["skipped"] is False
+
+
+# ── De verzamelaar (pijplijn stap 2, 20 sept 2026) ──────────────────────────
+#
+# `verzamel()` is de shortlist zonder de aflevering: signalen terug, niets geschreven — ook het
+# geheugen niet. Dat laatste is de bewuste knip van deze stap: onthouden is een SCHRIJF-actie, en
+# de memo gaat dat straks voor alle vijf de bronnen op één plek doen. Tot die tijd LEEST hij het
+# boek wel, anders legt de eerste weekmemo de hele geschiedenis opnieuw voor.
+
+def test_verzamel_levert_signalen_en_onthoudt_niets(tmp_path, monkeypatch):
+    d = str(tmp_path)
+    st = _st(_item("mycelium-leer schaalt naar productie", link="https://a.nl/1", source="Mat.nl"))
+    # `nr` is de index in de kandidatenlijst, niet de sleutel: een kandidaat die niet naar een
+    # bronsignaal verwijst bestaat niet (zie `_schift`), en dat is precies de guard die voorkomt
+    # dat het model er een verzint zonder link of bron.
+    _model(monkeypatch, json.dumps({"kandidaten": [
+        {"nr": 0, "wat": "mycelium-leer voor bovenwerk",
+         "waarom": "marktrijp en past bij de missie", "leverancier": "MycoCorp"}]}))
+
+    uit = mm.verzamel(st, d, context=_ctx(tmp_path))
+    assert len(uit) == 1
+    s = uit[0]
+    assert s.bron == "materiaal"
+    assert s.tekst == "mycelium-leer voor bovenwerk"
+    assert s.vindplaats == "https://a.nl/1"
+    assert s.extra["waarom"].startswith("marktrijp")        # het OORDEEL staat apart
+    assert s.extra["leverancier"] == "MycoCorp"
+    assert s.extra["bron_naam"] == "Mat.nl"
+    # Het geheugen is NIET geschreven: een verzamelaar schrijft niet.
+    assert mm.voorgelegd(d) == {}
+
+
+def test_verzamel_leest_het_geheugen_wel(tmp_path, monkeypatch):
+    """Lezen is geen schrijven. Zonder dit legt de eerste weekmemo alles opnieuw voor wat de
+    shortlist eerder al had afgedaan — en dan is de radar weer ruis."""
+    d = str(tmp_path)
+    st = _st(_item("al voorgelegd", link="https://a.nl/1"),
+             _item("nog nieuw", link="https://a.nl/2"))
+    mm.onthoud_voorgelegd(d, ["https://a.nl/1"])
+    gezien = {}
+
+    def _vang(*a, **k):
+        gezien["kandidaten"] = [i["link"] for i in a[1]] if len(a) > 1 else []
+        return []
+    monkeypatch.setattr(mm, "_schift", _vang)
+
+    mm.verzamel(st, d, context=_ctx(tmp_path))
+    assert gezien["kandidaten"] == ["https://a.nl/2"]
+
+
+def test_verzamel_zonder_kandidaten_vraagt_het_model_niet(tmp_path, monkeypatch):
+    """Liever nul dan een zwakke — en zonder kandidaten is er niets om te schiften. Een lege
+    modelaanroep kost krediet en levert per definitie niets op."""
+    def _nooit(*a, **k):
+        raise AssertionError("het model werd aangeroepen zonder kandidaten")
+    monkeypatch.setattr(mm, "_schift", _nooit)
+    assert mm.verzamel(_st(), str(tmp_path), context=_ctx(tmp_path)) == []
+
+
+def test_de_drempel_staat_op_de_bron():
+    from nooch_village.weekmemo import DREMPELS
+    assert mm.DREMPEL == "selectie" and mm.DREMPEL in DREMPELS
