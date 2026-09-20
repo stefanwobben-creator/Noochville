@@ -1365,6 +1365,361 @@ minuten gedraaid, alleen tegen een lokale kopie van `notifications.json`, nooit 
 3 bouwen én deployen — met NotifStore-verwijdering zelf (13 methodes, 46 aanroepen, 18 bronbestanden,
 37 testbestanden) onomkeerbaar, dus geen deploy vóór Stefan hem gezien heeft.
 
+## Fase 10, fundamentele vereenvoudiging van de NotifStore-migratie (20 sept) — de verwerkingsstate hoeft niet bewaard te worden
+
+**Stefan, voor de deploy van stap 1+2: "alles wat tot dusver in de inbox is gekomen kon ik niet echt
+veel mee, dus dat werkte sowieso niet, dus ook niet om te houden — ik denk dat als er iets
+gesignaleerd is het gewoon naar een DM kan en dan is de mens verantwoordelijk."** Dit is geen kleine
+correctie maar een terugtrekking van de "hard eis, niet-onderhandelbaar"-eis die hierboven staat.
+Expliciet nagevraagd en bevestigd:
+
+- **Dit geldt ook voor de al gemigreerde historie, niet alleen voor toekomstig gedrag.** De hele
+  verwerkingsstate-bewaar-exercitie (het `verwerking`-blok, de guard-test op 185 outcomes/54
+  poort-oordelen, het vijfde kanaalsoort `role:<record_id>`) was zorgvuldigheid voor een mechanisme
+  dat in de praktijk nooit bruikbaar bleek. Stap 1+2 zoals gebouwd (commits `a8aed27`, `3f261c7`)
+  worden hiermee **niet** de basis voor stap 3 — ze worden vervangen door een simpeler ontwerp,
+  hieronder.
+- **Voor de 19 niet-eenduidige open items op de vijf gearchiveerde rollen (compliance, librarian,
+  harry_hemp, copywriter, concurrent_scout): naar Stefans eigen DM**, als vangnet. Niet laten
+  vervallen, niet opnieuw een rol-kanaal ervoor optuigen.
+
+**Het nieuwe, simpele ontwerp: elke NotifStore-rij wordt één gewoon DM-bericht, geen aparte
+kanaalsoort, geen verwerking-blok, geen state machine.** Voor alle 371 rijen (niet alleen de 28 open
+— hetzelfde principe geldt voor de 343 al gesloten items, gewoon leesbare historie in een DM in
+plaats van een apart archief):
+- 33 rijen met een `entry_id` (de @-vermeldingen): DM naar de vermelde persoon, zoals fase 8 al
+  deed voor de wall-vermeldingen — geen wijziging.
+- 338 rol-rijen: DM naar de huidige vervuller van die rol. Is er geen levende vervuller (de vijf
+  gearchiveerde rollen): DM naar Stefan zelf, voor alle rijen van die rol, niet alleen de 19 open.
+- Geen `afgehandeld`/`verwerking`-veld nodig op het bericht — het is een gewoon berichtItems, de
+  mens die 'm ontvangt is verantwoordelijk, precies zoals elk ander DM-bericht. `at` blijft uit de
+  notificatie komen (niet de klok), dat principe verandert niet.
+- Het `role:<record_id>`-kanaalsoort uit de eerdere voorstellen: **vervalt**, niet meer nodig nu er
+  altijd een mens (rolvervuller of Stefan) als DM-ontvanger is.
+
+Gevraagd aan Claude Code: beoordeel zelf hoeveel van commit `a8aed27`/`3f261c7` herbruikbaar is
+(het idee "notificatie-id wordt bericht-id", "at uit de notificatie" blijven bijvoorbeeld gewoon
+goed) versus wat vervangen moet worden (het rol-kanaal-concept, het verwerking-blok, de
+guard-test-op-staat). Nog steeds niet in één keer: eerst de nieuwe opzet als voorstel, dan pas
+bouwen — dezelfde reden als eerder (dit raakt in potentie alle 371 items, een fout is duur om achteraf
+te herstellen als NotifStore eenmaal weg is). Stap 3 (NotifStore verwijderen) blijft de laatste,
+onomkeerbare stap, pas na Stefans akkoord op het herziene voorstel én na een periode op prod.
+
+## Fase 10, NotifStore-vereenvoudiging: signaal.py (commit `c8a7790`) en B1 in de stash (20 sept)
+
+**Gecommit**: `signaal.py`, één plek die bepaalt bij wie een melding landt, gebruikt door zowel de
+historische migratie als alles wat nieuw ontstaat — voorkomt dat dezelfde rol-id via twee losse
+implementaties op een dag uit elkaar kan gaan lopen. Suite 4.102 passed / 1 failed (bekende).
+
+**Eén bewust verschil tussen historie en nieuw werk, expliciet vastgelegd**: bij een rol met
+meerdere huidige vervullers parkeert de migratie (geen automatische keuze), maar een nieuwe melding
+gaat naar alle huidige vervullers tegelijk. Redenering, overgenomen: historie hoort precies één
+rustplaats te hebben, gekozen door een mens; nieuw werk mag liever dubbel aankomen dan bij niemand.
+
+**B1 (de tien schrijfplekken van `.notif.add` omzetten naar een DM) werkt functioneel — nul
+`.notif.add`-aanroepen meer in `cockpit2.py` — maar staat in de stash (`B1-writers-wip`), niet
+gecommit, niet gedeployed.** Reden, overgenomen zonder discussie: de suite gaat van 1 naar 44
+failures over twaalf testbestanden, allemaal van dezelfde vorm (`assert len(items) == 1` → `0 == 1`)
+— geen bugs, maar tests die vastleggen "er ontstaat een inbox-item" terwijl ze nu moeten vastleggen
+"er ontstaat een DM". Terecht geweigerd dit aan het eind van een lange beurt in één veeg te
+herschrijven; volledige suite groen vóór commit blijft de afspraak.
+
+**Twee gedragsbesluiten, voorgelegd in plaats van stilzwijgend gebouwd — beide akkoord:**
+1. `_settle_inbox(processed=True)` stuurt voortaan niets meer. Vier van de vijf aanroepen zetten
+   voorheen een item neer en markeerden het in dezelfde beweging als verwerkt — werk dat al gedaan
+   was op het moment dat het verscheen. Zonder verwerkingsmodel is er geen "al gedaan"-status meer
+   om aan te hangen, en een bericht over reeds afgerond werk is geen bericht maar een log. Terechte
+   conclusie: alleen `processed=False` levert nog een zinnig DM-bericht op.
+2. De extra velden (`type`, `rol`, `prive`, `opdrachtgever`, `MENS_GETYPT`, `afronding`,
+   `suggestie`) vervallen — die dienden het oude inbox-scherm, een DM heeft alleen tekst, afzender en
+   tijd. `bron_project` blijft als enige uitzondering, puur als herkomst ("from project X"), anders
+   is het bericht niet meer leesbaar op zichzelf. Consistent met de eerder besloten vereenvoudiging
+   (geen verwerkingsstate meer bewaren) — dit is dezelfde beslissing nu toegepast op de velden in
+   plaats van op de status.
+
+**De 11 geparkeerde rijen (rol met meerdere huidige vervullers, geen automatische keuze): behandel
+hetzelfde als "geen vervuller"** — naar Stefans eigen DM, net als bij de vijf gearchiveerde rollen
+zonder levende vervuller. Geen 11 losse handmatige toewijzingen nodig: het gaat om historie
+(grotendeels al gesloten items, net als de rest van de 371), en Stefan kan van daaruit zelf
+doorsturen als dat nodig blijkt. Uitzondering hierop is aan Stefan, maar dit is de pragmatische
+default die aansluit bij "dit leverde toch nooit veel op" — geen zwaar proces optuigen voor iets met
+lage waarde.
+
+**Akkoord op het voorgestelde vervolg**: B1 als eigen beurt, de 44 tests per bestand nagelopen (niet
+gehaast herschreven) zodat elk vastlegt "er ontstaat een DM" in plaats van "er ontstaat een
+inbox-item" — bij elke test expliciet checken of de nieuwe assertie ook echt de juiste ontvanger en
+inhoud verifieert, niet alleen `len() == 1` vervangen door een andere aanname. Daarna deploy van A+B1
+samen (niet A alleen, terecht — een halfslachtige tussenstand deployen heeft geen zin). B2 pas
+daarna.
+
+## Fase 10, B1 groen (commit `12c7f7a`) en de besluitwachtrij-vraag (20 sept)
+
+B1 staat: 4.104 passed, 1 failed (de bekende), 1 xfailed. Nog niet gedeployed. Van de tien
+schrijfplekken zijn er acht omgezet naar plain-DM; twee niet, en dat bleek geen restwerk maar een
+echte grens:
+
+1. **Het pagina-voorstel** is geen signalering maar een verzoek met een beslissing (accepteren/
+   weigeren/aanpassen).
+2. **De werkoverleg-actie** is toegewezen werk met een afrondknop.
+
+Samen goed voor 25 van de 43 gebroken tests — het bewijs dat dit een andere soort item is dan de
+rest: in de oude inbox zat, naast de meldingenlijst die nu een DM wordt, ook een echte
+**besluitwachtrij**. Gevolg: `spanning_ontstaat` (de typeer-/bevindingpoort) had alleen `NotifStore.
+add` als aanroeper en draait nergens meer op de acht omgezette paden — een module die stilviel
+zonder dat iets het zei.
+
+**Besluit: de besluitwachtrij krijgt een eigen kleine store** (voorstellen + acties, niets meer),
+niet NotifStore laten voortleven voor "nog even die twee flows." Reden: de vereenvoudiging van
+eerder vandaag ("iedere melding wordt een DM, mens verantwoordelijk") ging over pure signalering —
+deze twee waren dat nooit. Een pagina-voorstel en een toegewezen actie zijn objecten met echte
+status (pending/geaccepteerd/geweigerd, toegewezen/afgerond), geen mededeling. Ze op een DM
+proberen te persen verliest precies dat, en NotifStore "alleen nog voor twee flows" laten
+doorleven is uitstel, geen oplossing — dan is-ie nooit weg. Een eigen minimale store laat NotifStore
+daadwerkelijk sneuvelen zoals bedoeld, in plaats van hem onder een andere naam te laten voortbestaan.
+`spanning_ontstaat` moet meeverhuizen: de typeer-/bevindingpoort haakt straks in op de write-kant van
+deze nieuwe besluitwachtrij-store, niet meer op `NotifStore.add`.
+
+Twee bugs gevonden én al gefixt tijdens B1, akkoord, geen verdere actie: (1) een gast zonder
+gekoppelde ontvanger verloor zijn genoteerde spanning stilletjes — valt nu terug op Stefans DM in
+plaats van in het niets; (2) een zelf-regressie (jezelf vermelden maakte weer een gesprek met
+jezelf) gevangen door een bestaande test en gefixt.
+
+Correct gelaten: de twee documenten van vandaag (`implementatiebrief_opruiming_19sept.md`,
+`ux_voorstel_best_practices_20sept.md`) zijn niet aangeraakt — die horen niet in een Claude
+Code-commit. Fase 11 (UX-microinteracties) is bewust nog niet opgepakt.
+
+**Deploy-akkoord**: ga door met A+B1 — `deploy.sh`, snapshot, `village notif_migratie`-droogloop,
+rapport. Zoals altijd: geen `--apply` zonder dat rapport eerst gezien te hebben.
+
+## Fase 10/11, terugkoppeling op de HARDE REGEL, de besluitwachtrij-scope en de deploy-blokkade (20 sept)
+
+**Spoor 1a (CLAUDE.md, commit `38c7770`)** — geplaatst zoals gevraagd, geen verdere actie.
+
+**Spoor 1b (read-only inventarisatie van bestaande atoom-schuld)** — het kerngetal: 533 klassen
+totaal, 57 gedeeld (≥3 bestanden), 420 privé (precies 1 bestand). Bijna vier op de vijf klassen is
+dus "geen atoom". Grootste privé-aandeel: `wizard.py` (88%), `noochie.py` (67%), `search.py` (59%),
+`roloverleg.py` (50%), `checklists.py` (42%), `projects.py` (37%), `inbox.py` (36%), `metrics.py`
+(33%). Scherpste concreet bewijs: voor kaart/rij/knop-achtige dingen zijn er 10 gedeelde klassen
+tegenover 55 eigen varianten in één bestand (`metrics.py` alleen al 17, `projects.py` 14). Losse
+`<style>`/`style=`-schuld zit al onder de bestaande ratchet (`overview.py`, `strategy.py` als
+grootste twee) — geen nieuwe actie nodig, die guard dekt dat al. Geen fix gedaan, terecht: de
+monotone daling van de nieuwe regel betekent dat `wizard.py`, `roloverleg.py` en `metrics.py` de
+eerste kandidaten zijn zodra iemand ze toch aanraakt voor iets anders. Vastgelegd als lijst, niet
+als actie — precies de bedoeling.
+
+**Spoor 2 (besluitwachtrij-scope, `claude/fase10_scope_besluitwachtrij.md`, commit `8728638`)** —
+twee objecttypen, drie states in plaats van vijf vlaggen, wie schrijft/leest, en een bevriezende
+guard in plaats van een plafond. `spanning_ontstaat` verhuist naar de write-kant, terecht: dat is
+een vraag bij een verzoek, niet bij een mededeling.
+
+Eén open vraag stond erin, nu beantwoord: **verzoeken gaan naar de plek waar ze over gaan**
+(pagina-voorstel bij de wiki-pagina, werkoverleg-actie bij het werkoverleg) — geen aparte
+`/inbox`-sectie voor verzoeken. Reden: een tweede, apart soort inbox-scherm is precies het patroon
+dat vandaag al is afgeschaft omdat het niet werkte ("dit leverde toch nooit veel op" — dezelfde
+constatering die tot de DM-vereenvoudiging leidde). Het zorgpunt uit de scope-vraag ("dan is er geen
+enkele plek meer die zegt dat iets bij jou ligt") wordt opgevangen door dezelfde DM-laag die er al
+is: een nieuw voorstel of een nieuwe actie stuurt, net als elke andere melding, een DM naar wie moet
+handelen, met een link naar de plek waar de beslissing zelf plaatsvindt. Zo blijft er precies één
+plek die zegt "hier moet je iets mee" (Messages, zoals nu al voor alles geldt), zonder een tweede
+besluit-scherm te bouwen dat los staat van waar de beslissing inhoudelijk hoort.
+
+**Deploy** — geblokkeerd, niet door Claude Code maar door een actie bij Stefan: `deploy.sh` doet
+alleen een fast-forward naar `origin/main`, prod staat op `8ab787a`, al het werk zit in PR #517 (een
+nieuwe branch, `fase10-huisstijl-en-inbox` — de oude remote branch is bij de merge van #516
+opgeruimd). Draaien voegt nu niets toe. **Actie bij Stefan: PR #517 mergen.** Zodra dat gebeurd is,
+draait Claude Code zelfstandig door met wat al is afgesproken (`deploy.sh` → snapshot → `village
+notif_migratie`-droogloop → rapport), geen nieuwe instructie nodig — alleen het rapport wachten op
+een expliciet `--apply`-akkoord, zoals altijd.
+
+## Fase 10, PR #517 blijkt niet te mergen: 400+ bestanden "conflict" (20 sept)
+
+Stefan probeerde te mergen en GitHub meldt conflicten op 400+ bestanden (screenshots,
+`docs/ARCHITECTUUR.md`, meerdere `.py`/CSS-bestanden, `claude/implementatiebrief_opruiming_19sept.md`
+zelf). Uitgezocht via `git merge-base`/`git diff` (read-only, geen wijziging):
+
+**De oorzaak, geverifieerd**: `fase10-huisstijl-en-inbox` en `main` delen een merge-base van vóór
+zowel de fase 1-9-opruiming (#516) als het fase 10-werk. Beide takken zijn sindsdien onafhankelijk
+van elkaar doorontwikkeld: beide verwijderden grotendeels dezelfde oude code (vandaar de duizenden
+gedeelde deletions op beide kanten), en beide "creëerden" onder meer `claude/
+implementatiebrief_opruiming_19sept.md` zelf, ieder vanuit hun eigen kant. Git ziet dat als twee
+onafhankelijke toevoegingen van hetzelfde pad, geen inhoudelijke botsing — vandaar dat bijna alles
+als conflict verschijnt, niet omdat er tegenstrijdige beslissingen in zitten.
+
+**Voor de brief specifiek, geverifieerd door de content te vergelijken**: main's kopie (490 regels,
+uit #516) is een oude momentopname van dezelfde brief, van vóór fase 3-11. De branch-kopie (1392
+regels gecommit, plus 317 regels van mij nog ongecommit erbovenop) bevat exact diezelfde inhoud plus
+alle latere correcties en uitbreidingen. Geen echte inhoudelijke tegenstelling — main's versie is
+puur achterhaald. Voor dit bestand geldt: branch wint volledig.
+
+**Risico dat nog opgelost moet worden vóór er gemerged wordt**: mijn 317 ongecommitte regels op de
+brief bestaan nu alleen als bestand op schijf, niet als commit. Een merge starten terwijl dat er nog
+zo bij staat is riskant (git-mergegereedschap werkt op commits, niet op een vuile werkmap). Eerst
+committen, dan pas de merge proberen.
+
+**Advies, niet zelf uitgevoerd (dit hoort bij Claude Code, niet bij een web-UI-conflictresolutie
+over 400+ bestanden zonder de context waarom dingen verwijderd zijn)**:
+1. Commit eerst de huidige staat van de brief (los, doc-only, geen test-impact).
+2. Los de merge via de command line op (niet via GitHub's "Resolve conflicts"-editor — te groot,
+   te foutgevoelig zonder de context die Claude Code al heeft over waarom elk bestand is verwijderd
+   of gewijzigd).
+3. Voor de brief specifiek: neem de branch-versie volledig, main's kopie is stale.
+4. Voor de overige bestanden: per bestand beoordelen (niet blind "ours" toepassen) — sommige zijn
+   waarschijnlijk hetzelfde soort vals conflict, maar niet gegarandeerd allemaal.
+5. Volledige testsuite na het oplossen, rapport van de gemaakte keuzes vóór pushen.
+6. Dit lost alleen de PR-mergebaarheid op. Nog geen merge náár main, nog geen deploy — dat blijft
+   zoals afgesproken bij Stefan's expliciete akkoord.
+
+## Fase 11: UX-microinteracties en informatiedichtheid, atomair opgebouwd (20 sept)
+
+Aanleiding: een losse UX-review (los van fase 1-10, zie `ux_voorstel_best_practices_20sept.md` voor
+de volledige analyse en een werkend HTML-prototype) tegen Stefans eigen analyse van wat Slack,
+Notion, Obsidian, Duolingo, GlassFrog en Trello goed doen. Twee rondes feedback verwerkt: (1) geen
+cirkeldiagram voor de organisatie, de lijst blijft — alleen bezet/vacant zichtbaar; (2) niet alleen
+status tonen, ook laten voelen — echte microinteracties (slepen, hover, direct zichtbaar effect),
+niet alleen informatie toevoegen.
+
+**Zelfde discipline als de fase 9/10-huisstijl-opruiming: eerst het vocabulaire (atoms), dan de
+samengestelde onderdelen (molecules), dan het gedrag (patterns) — niet per scherm losse CSS/JS
+verzinnen.** Dit is precies de atomic-design-vraag die eerder deze fase (architectuurreview, 20
+sept) al signaleerde: goede atomen bestaan in `nooch-ui.css` (`.btn`, `.card`/`.box`/`.kpi`,
+`.pill`/`.chip`/`.badge`, `.nu-status` met `--ok`/`--open`/`--wait`/`--off`-modifiers), maar worden
+niet overal hergebruikt. Fase 11 moet die lijn doortrekken, niet een parallelle set verzinnen.
+
+```
+Bouw fase 11 in drie lagen, in deze volgorde — elke laag eerst af, met eigen tests en commit, voor je
+aan de volgende begint. Referentiebeeld en werkend gedrag staan in het HTML-prototype dat bij
+`ux_voorstel_best_practices_20sept.md` hoort (vraag Stefan om de link als je 'm niet kunt vinden);
+gebruik dat als gedragsspec (hoe het hoort te reageren), niet als CSS om te kopiëren (dat is een
+los prototype-bestand, geen `nooch-ui.css`).
+
+LAAG 1 — ATOMS (nieuw of hergebruikt, geen scherm-specifieke CSS)
+1a. Rol-status-icoon: hergebruik de bestaande `.nu-status`-vorm+kleur-taal (gevulde cirkel = bezet,
+    gestippelde cirkel = vacant) als klein icoon vóór een rolnaam in de organisatieboom. Geen nieuwe
+    kleur, geen nieuwe vorm — dezelfde visuele taal die het bord en de checklist al gebruiken.
+2a. Nieuw atoom `.nu-progress` (track + fill), klein en generiek: één balkje dat een percentage
+    toont. Dit wordt hergebruikt in zowel de projectkaart (checklist-voortgang) als de losse
+    checklist-weergave — bouw 'm dus als apart, herbruikbaar element, niet twee keer losse CSS.
+3a. Kanaal-ongelezen-indicator als modifier op de bestaande `.msg-kanaal`-klasse (vetgedrukt +
+    klein stipje/telling), geen nieuwe component.
+
+LAAG 2 — MOLECULES (samengesteld uit de atomen hierboven)
+1b. Projectkaart-voorkant (`.pkaart`-body uitgebreid, niet vervangen): titel, dan een rij chips
+    (bestaand `.chip`/`.pill`-atoom: batch, deadline-indien-gezet), dan `.nu-progress` met de
+    checklist-stand, dan owner/datum zoals nu. Alleen al bestaande projectvelden zichtbaar maken,
+    geen nieuw datamodel.
+2b. Checklist-rij: checkbox-atoom + label, gekoppeld aan de `.nu-progress` van hetzelfde project
+    (klik = direct bijwerken, geen aparte opslagactie nodig voor de visuele stand — de bestaande
+    checklist-opslag blijft leidend, dit is alleen de weergave die live meebeweegt).
+3b. Kanaal-rij in Messages: naam + de ongelezen-modifier uit 3a + tijdstip laatste bericht.
+
+LAAG 3 — PATTERNS (gedrag, niet alleen CSS)
+1c. Sleep-patroon op het Projects-bord: een kaart naar een andere kolom slepen wijzigt de status
+    van het project (zelfde statussen als de kolommen nu al vertegenwoordigen: actief/wacht/done/
+    toekomst). Visuele feedback tijdens het slepen: de kaart iets optillen (geen schaduw — een
+    randkleur-verandering of lichte transform, consistent met "geen schaduwen" uit de fase 9-regels),
+    de doelkolom een lichte kleurverandering zolang je erboven zweeft. Val terug op de bestaande
+    manier om een project van status te wisselen (dropdown/knop) voor toegankelijkheid — slepen is
+    een versnelling, geen vervanging van de enige manier.
+2c. Checklist-klik-patroon: klikken op een item toont het effect meteen (vinkje, doorhaling,
+    voortgangsbalk), zonder page-reload. De onderliggende opslag (huidige checklist-mechaniek) blijft
+    ongewijzigd — dit raakt alleen hoe snel je het ziet, niet wat er wordt opgeslagen.
+3c. Rol-status-icoon (1a) is puur visueel, geen eigen patroon nodig — geen klikgedrag, alleen
+    weergave van bestaande bezet/vacant-data.
+
+Volgorde van bouwen, laagste risico eerst: 3a/3b (kanaal-ongelezen, puur leeswerk op al bestaande
+lees-tijdstippen) → 1a (rol-icoon, puur leeswerk op bestaande rol-bemanningsdata) → 1b/2a
+(projectkaart-voorkant + progress-atoom, leeswerk op bestaande projectvelden) → 2b/2c
+(checklist-interactie) → 1c (sleep-patroon, het meeste JS-werk en het enige met een echte
+statuswijziging als gevolg, dus als laatste en met de meeste testaandacht).
+
+Testdiscipline zoals gebruikelijk: 3-5 structurele tests per atoom/molecule/pattern-laag apart,
+volledige suite voor/na elke laag, diff, commit per laag, rapporteer voor je doorgaat naar de
+volgende laag. Voor laag 3 (patterns) specifiek: een test die bevestigt dat slepen en de bestaande
+dropdown-methode tot dezelfde statuswijziging leiden (geen tweede, afwijkend pad naar dezelfde
+status).
+```
+
+## Fase 11, verduidelijking op de reikwijdte: staande regel in CLAUDE.md, niet alleen deze fase (20 sept)
+
+Stefans vraag, letterlijk: pak je dit (atoms/molecules/patterns) nu echt voor alles aan, of alleen
+voor de schermen die in fase 11 besproken zijn — "dit is het principe dat op infrastructuur voor
+alles moet gelden."
+
+Terecht onderscheid. Zoals Fase 11 hierboven is opgeschreven, is het een instructie die deze ene
+batch werk (bord, checklist, kanalen, org-icoon, sleep-patroon) in drie lagen structureert. Het
+is geen regel die vanzelf ook geldt voor het eerstvolgende scherm dat na deze fase gebouwd wordt —
+daarvoor moet het niet in de implementatiebrief staan (die is per-fase), maar in `CLAUDE.md`, het
+bestand dat Claude Code al als staande, verplichte regels leest (zo staat bijvoorbeeld de
+AUTHZ-labelplicht en de "geen inline style"-regel er al in, onder "UI — designsysteem (HARDE REGEL)").
+
+`CLAUDE.md` bevat die sectie al, met exact dezelfde onderliggende gedachte (hergebruik bestaande
+klassen, "reference, don't invent", geen ad-hoc CSS) — alleen benoemt die sectie nog niet expliciet
+de gelaagdheid atoms → molecules → patterns als bouwvolgorde voor élke nieuwe UI. Voorstel: één
+nieuwe HARDE REGEL-bullet aan die sectie toevoegen, in dezelfde toon en structuur als de bestaande
+bullets, zodat de regel automatisch voor al het toekomstige UI-werk geldt, ook zonder dat iedere
+fase het opnieuw hoeft te specificeren. Akkoord van Stefan verondersteld op basis van zijn vraag;
+onderstaande paste-back voegt de regel toe en laat Claude Code 'm zelf plaatsen en committen (net
+als elke andere wijziging aan `CLAUDE.md` hoort dat via Claude Code te lopen, niet via een externe
+edit buiten zijn eigen werkstroom om).
+
+```
+Voeg aan CLAUDE.md, in de sectie "## UI — designsysteem (HARDE REGEL)", een nieuwe bullet toe
+(na de bestaande bullets, vóór de "## Autorisatie"-sectie eronder):
+
+**Atomair opbouwen: atoms → molecules → patterns (HARDE REGEL).** Nieuwe UI wordt nooit in één stap
+als kant-en-klaar scherm gebouwd. Eerst de atomen (bestaande, of na expliciet besluit nieuwe
+basisklassen: knop, badge, status-vorm, voortgangsbalkje), dan de moleculen (samengestelde
+onderdelen die atomen combineren: een kaart, een rij, een filterbalk), dan pas het patroon (het
+scherm of de interactie die de moleculen inzet: een sleepbaar bord, een checklist met live
+voortgang, een kanalenlijst met ongelezen-indicator). Dit geldt voor élke nieuwe UI-scope, niet
+alleen voor scopes die dit expliciet benoemen — het is dezelfde discipline als de CSS-opruiming
+van fase 6/9 en staat hier generiek, niet per fase. Terugkoppeling op een UI-scope benoemt daarom
+expliciet welke laag (atom/molecule/pattern) elk gebouwd stuk is, net zoals de pariteitstabel-regel
+hierboven dat al voor prototype-scopes eist. Reden: zonder deze laagscheiding ontstaat opnieuw het
+probleem dat de CSS-opruiming al één keer moest oplossen — ad-hoc, niet-herbruikbare UI-stukjes die
+elders straks weer opnieuw worden uitgevonden.
+
+Commit deze wijziging apart (alleen CLAUDE.md, geen codewijziging erbij), met een duidelijke
+commit message, en bevestig kort dat 'm geplaatst is — geen verdere actie nodig, dit raakt geen
+tests.
+```
+
+## Fase 11, terugwerkende kracht: geen retrofit, zelfde ratchet als de inline-style-regel (20 sept)
+
+Stefans vraag: geldt dit voor al het toekomstige, of moeten bestaande schermen er ook met
+terugwerkende kracht aan voldoen?
+
+Nee, geen losse retrofit-actie. `CLAUDE.md` heeft dit precedent al, voor exact dezelfde soort
+regel: de "geen inline style"-guard (`tests/test_ui_no_inline_style.py`) telt per view en verlangt
+een **monotone daling**, geen big-bang-opruiming — "ruim je schuld op bij een view die je toch
+aanraakt." Zelfde redenering hier: bestaande schermen werken; ze in één aparte beurt omzetten naar
+atoms/molecules/patterns voegt risico toe zonder dat er een bug wordt opgelost, en concurreert om
+Claude Code's tijd met fases die dat wél doen (Fase 11 zelf, de NotifStore-vereenvoudiging). De
+HARDE REGEL-bullet is daarom aangevuld met dezelfde ratchet-clausule als de inline-style-regel.
+
+Eén aanvulling om de schuld niet onzichtbaar te laten worden (dat is precies waarom de inline-style-
+regel wél een teller heeft): een kort, read-only inventarisatieverzoek aan Claude Code, geen
+bouwwerk — welke bestaande views bevatten ad-hoc CSS/dubbele component-logica die niet uit atomen
+is opgebouwd. Dat geeft zicht op waar de schuld zit, zonder dat er nu iets aan gerepareerd hoeft te
+worden.
+
+```
+Twee dingen op de HARDE REGEL die je zojuist aan CLAUDE.md hebt toegevoegd (atoms → molecules →
+patterns), of gaat toevoegen als dat nog niet gebeurd is:
+
+1. Voeg aan het einde van die bullet deze zin toe:
+   "**Geen big-bang-retrofit:** bestaande schermen die dit patroon nog niet volgen, blijven zoals
+   ze zijn totdat je er toch aan werkt voor iets anders — dan neem je 'm mee. Zelfde ratchet-
+   principe als de inline-style-regel hierboven: monotone daling, geen losse opruimronde."
+   (Eén commit, alleen CLAUDE.md.)
+
+2. Los daarvan, geen CLAUDE.md-wijziging: maak een korte, read-only inventarisatie (geen bouwwerk,
+   geen commit nodig aan productiecode) van bestaande views die dit patroon nog niet volgen — ad-hoc
+   CSS-blokken, gedupliceerde kaart/rij-opbouw die niet uit bestaande atomen komt. Rapporteer de
+   lijst terug (view-naam + korte reden), zodat zichtbaar is waar de schuld zit. Geen prioritering
+   of fix nodig, puur zicht erop.
+```
+
 ## Wat hierna nog open staat
 
 - De geplande-taak-mechaniek zelf (nodig voor: het maandrapport dat straks in de Wiki-schermen uit
