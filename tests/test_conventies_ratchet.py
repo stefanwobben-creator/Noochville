@@ -30,7 +30,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
 STORES = {
     "agenda", "ai", "assign", "att", "checklists", "copy_stack", "defs", "doelen",
     "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "metrics",
-    "nom_kroniek", "nominations", "noochie", "notif", "observations", "people",
+    "nom_kroniek", "nominations", "noochie", "observations", "people",
     "channels", "personas", "project_docs", "projects", "radar", "records", "sources",
     "strategies", "werk",
 }
@@ -49,14 +49,18 @@ def test_de_stores_zijn_bevroren():
     assert weg == set(), f"store(s) verdwenen: {sorted(weg)} — haal ze uit STORES zodat de lijst klopt"
 
 
-# Er zijn DRIE postbussen, en ze zijn geen variant van elkaar:
+# Er zijn nog TWEE postbussen, en ze zijn geen variant van elkaar:
 #
-#   NotifStore  de inbox van een MENS — meldingen, spanningen, acties uit een overleg;
 #   Inbox       de werkwachtrij van een INWONER (thread) — toegewezen werk dat áf moet;
 #   HumanInbox  het geauthenticeerde lokale approval-oppervlak (governance, activaties).
 #
-# Een vierde is wél een tweede postbus: dan mist iemand de helft van zijn werk en merkt niemand het.
-POSTBUSSEN = {"NotifStore", "Inbox", "HumanInbox"}
+# `NotifStore` was de derde: de inbox van een MENS. Die is op 20 september 2026 opgeheven (B2) —
+# meldingen, spanningen en acties uit een overleg zijn DM's geworden in `ChannelStore`, waar de mens
+# ze leest naast al het andere dat aan hem gericht is. Een kanaal is geen postbus: er is geen aparte
+# plek meer waar werk voor een mens kan blijven liggen zonder dat hij ernaar kijkt.
+#
+# Een derde is wél een tweede postbus: dan mist iemand de helft van zijn werk en merkt niemand het.
+POSTBUSSEN = {"Inbox", "HumanInbox"}
 
 
 def test_er_komt_geen_vierde_postbus_bij():
@@ -205,20 +209,20 @@ def test_het_bord_toont_zelf_geen_formulier():
 
 
 def test_de_bekende_ingangen_wijzen_naar_de_wizard():
-    """Gedrag naast de telling: het bord en de inbox mogen niet zelf een project maken."""
-    from nooch_village.views.inbox import _outcome_form
+    """Gedrag naast de telling: het bord mag niet zelf een project maken.
+
+    De inbox stond hier als tweede ingang bij. Die is in B2 (20 september 2026) verdwenen samen met
+    `/inbox` en `_outcome_form`; het bord is de overgebleven ingang."""
     from nooch_village.views.projects import _quickadd
 
     bord = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
     assert "/project/nieuw?" in bord and "proj_add" not in bord
-    inbox = _outcome_form("project", "n", "t", "tekst", "<option>r</option>", "", "/inbox", "u")
-    assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
 
 
 def test_de_conventies_staan_opgeschreven():
     """Een regel die alleen in een test staat vindt niemand terug."""
     doc = (ROOT.parent / "docs" / "CONVENTIES.md").read_text(encoding="utf-8")
-    for mechaniek in ("NV.swap", "NotifStore", "de wizard", "data-qa-frag"):
+    for mechaniek in ("NV.swap", "ChannelStore", "de wizard", "data-qa-frag"):
         assert mechaniek in doc, mechaniek
     # De meta-les onder de projectcreatie-poort, de postbus-blinde-vlek, de afslank-poort én de
     # herschrijf-poort: alle vier waren een regel die niets kon waarnemen.

@@ -14,29 +14,36 @@ Nu twee velden met ÉÉN waarheid: `tekst` is volledig, `snippet` is de afgeleid
 lijst. Geen twee feiten — de afleiding staat op één plek (`preview`), dus verander die en alles
 verandert mee.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 6 test(s) over `NotifStore` zelf. Die store bestaat
+# niet meer. De twee tekst-hulpjes die hij droeg — `preview` en `volledig` — zijn verhuisd naar
+# `tekstpreview.py` en worden hier nog volledig getoetst: de afkap-regel is de les uit 566
+# notificaties waarvan er 193 onherstelbaar waren geamputeerd, en die les hoort niet mee te
+# verdwijnen met de store die hem veroorzaakte.
+
+
+# WAT HIER WEG IS (B2, 20 september 2026): 1 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
-from nooch_village.notifications import NotifStore, PREVIEW_MAX, preview, volledig
+from nooch_village.tekstpreview import PREVIEW_MAX, preview, volledig
 
 LANG = ("De leverancier reageert al drie weken niet op onze vragen over de zoolmaterialen, "
         "waardoor de hele levering van de nieuwe collectie stilligt en we niet kunnen bepalen "
         "of we de deadline van het najaar nog halen. Ik heb een besluit nodig over een alternatief.")
 
 
-def test_de_volle_tekst_wordt_bewaard(tmp_path):
-    st = NotifStore(str(tmp_path / "n.json"))
-    n = st.add("role", "r", "", by="rol", snippet=LANG)
-    assert n["tekst"] == LANG
-    assert volledig(n) == LANG
-    assert len(LANG) > PREVIEW_MAX, "de testtekst moet langer zijn dan de preview-cap"
 
 
-def test_de_preview_is_afgeleid_en_kort(tmp_path):
-    st = NotifStore(str(tmp_path / "n.json"))
-    n = st.add("role", "r", "", by="rol", snippet=LANG)
-    assert len(n["snippet"]) <= PREVIEW_MAX
-    assert n["snippet"].endswith("…")
-    assert LANG.startswith(n["snippet"][:40])
+
+
+
+
+
+
+
 
 
 def test_de_preview_kapt_op_een_woordgrens():
@@ -47,60 +54,47 @@ def test_de_preview_kapt_op_een_woordgrens():
     assert " " not in kort[-2:]
 
 
-def test_een_korte_tekst_krijgt_geen_ellips(tmp_path):
-    st = NotifStore(str(tmp_path / "n.json"))
-    n = st.add("role", "r", "", by="rol", snippet="kort en klaar")
-    assert n["snippet"] == "kort en klaar" and n["tekst"] == "kort en klaar"
+def test_een_korte_tekst_krijgt_geen_ellips():
+    assert preview("kort en klaar") == "kort en klaar"
 
 
 def test_oude_items_zonder_tekst_blijven_leesbaar():
     """Items van vóór deze fix hebben geen `tekst`, en hun origineel is weg. Beter de afgekapte
-    waarheid dan een leeg scherm — maar het is wél afgekapt, en dat is waarom dit veld bestaat."""
+    waarheid dan een leeg scherm — maar het is wél afgekapt, en dat is waarom dit veld bestaat.
+
+    `volledig` leest nog steeds een dict met `tekst`/`snippet`: de 371 gemigreerde notificaties
+    dragen die vorm in hun DM-herkomst, en de afslank-rapporten lezen hem."""
     assert volledig({"snippet": "oud en afgekapt"}) == "oud en afgekapt"
+    assert volledig({"tekst": "compleet", "snippet": "comp…"}) == "compleet"
     assert volledig({}) == ""
 
 
-def test_de_verrijker_krijgt_de_volle_tekst_niet_de_preview():
-    """Dit las `snippet`. De herschrijver kon dus nooit compleet maken wat hem incompleet werd
-    aangereikt — de amputatie plantte zich voort in de herschreven spanning."""
+def test_de_store_bewaart_de_volle_tekst():
+    """De kern van de meting, nu op de store die de berichten wél bewaart.
+
+    `ChannelStore.post` kapt op `TEKST_MAX` (1500) — dat is een opslaggrens, geen samenvatting. De
+    fout van 30 aug was een cap van 160 op het ENIGE veld, en die mag hier niet terugkeren: wie een
+    lijstweergave wil, leidt hem af met `preview`."""
     import inspect
 
-    from nooch_village import spanning_ontstaat as so
-    bron = inspect.getsource(so.maak_verrijker)
-    assert "volledig(n)" in bron
-    assert 'n.get("snippet")' not in bron
-
-
-def test_de_verwerkpagina_toont_de_volle_tekst(tmp_path):
-    """De LIJST houdt de preview — daar is hij voor. De verwerk-kant leest de waarheid."""
-    from nooch_village import cockpit2
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    n = st.notif.add("person", st.people.all()[0].id, "", by="rol", snippet=LANG)
-    html = cockpit2.render_verwerk(st, st.notif._find(n["id"]), csrf_token="t")
-    assert LANG[-60:] in html, "het einde van de spanning staat niet op het scherm"
-    # EN DE LIJST HOUDT HET KORT — maar "kort" gaat over wat je ZIET, niet over wat er in de HTML
-    # staat. Deze guard toetste of de volle tekst nergens in de pagina voorkwam, en dat brak toen de
-    # afgebroken regel een `title=` kreeg met de hele zin erin: een regel die afbreekt zonder de rest
-    # ergens te laten zien is een doodlopende weg.
-    #
-    # De bedoeling van de guard blijft overeind, dus hij toetst hem nu waar hij zit: de ZICHTBARE
-    # regel is een preview, en de hover is begrensd.
-    import re as _re
-    lijst = cockpit2.render_inbox(st, [("person", st.people.all()[0].id)], csrf_token="t")
-    zichtbaar = _re.sub(r"<[^>]+>", " ", lijst)          # attributen eruit, tekst over
-    assert LANG[-60:] not in zichtbaar, "de volle tekst staat ZICHTBAAR in de lijst"
-    hovers = _re.findall(r"title='([^']*)'", lijst)
-    assert all(len(h) <= 400 for h in hovers), "een hover zonder grens is een tweede volledige tekst"
+    from nooch_village import channels
+    bron = inspect.getsource(channels.ChannelStore.post)
+    assert "TEKST_MAX" in bron
+    assert "[:160]" not in bron, "de oude harde cap staat er weer"
+    assert channels.TEKST_MAX > PREVIEW_MAX * 5
 
 
 def test_er_is_één_afleidingsplek():
     """`reference, don't copy`: de preview is een AFLEIDING, geen tweede feit. Wordt hij ergens
     anders opnieuw uitgerekend, dan lopen ze uit de pas."""
-    import inspect
+    import ast
+    import pathlib
 
-    from nooch_village import notifications as nf
-    bron = inspect.getsource(nf.NotifStore.add)
-    assert "preview(volledig)" in bron
-    assert "[:160]" not in bron, "de oude harde cap staat er nog"
+    wortel = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
+    plekken = []
+    for f in sorted(wortel.rglob("*.py")):
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.FunctionDef) and node.name == "preview":
+                plekken.append(str(f.relative_to(wortel)))
+    assert plekken == ["tekstpreview.py"], (
+        f"de preview wordt op meer dan één plek uitgerekend: {plekken}")

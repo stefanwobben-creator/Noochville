@@ -56,8 +56,10 @@ def test_de_oude_stylesheet_is_niet_aangeraakt():
 
 # ── 2. de scope is één lijst ─────────────────────────────────────────────────
 def test_de_negentien_schermen_staan_erin():
+    # `/inbox` en `/inbox/verwerk` stonden hier tot B2 (20 sept 2026) bij. Het scherm bestaat niet
+    # meer: de wachtrij is een DM-stroom geworden. Weggehaald mét deze reden, niet stilzwijgend.
     for pad in ("/", "/projects", "/messages", "/wiki", "/pagina", "/node", "/person",
-                "/project", "/admin", "/search", "/inbox", "/goals", "/werkoverleg",
+                "/project", "/admin", "/search", "/goals", "/werkoverleg",
                 "/roloverleg2", "/vangst"):
         assert pad in _NU_ROUTES, pad
 

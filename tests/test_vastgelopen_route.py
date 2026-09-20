@@ -12,9 +12,10 @@ import pytest
 from nooch_village import cockpit2, escalation_router as er, vastgelopen_route as vr
 from nooch_village.human_inbox import FOUNDER_ROLE_ID
 
-#: de mens die de founder-rol vervult in deze fixtures — het ADRES sinds de
-#: vervuller-pass; de rol blijft de context op het item.
-FOUNDER_PERSOON = "p-founder"
+#: de mens die de founder-rol vervult in deze fixtures — het ADRES sinds de vervuller-pass, en
+#: sinds 20 september 2026 het ENIGE adres: alles wat vastloopt komt eerst bij de founder.
+#: De fixture maakt hem als echt persoon-record aan; deze naam is waar de tests op matchen.
+FOUNDER_NAAM = "Stefan Wobben"
 
 MENS = "vastgelopen op 1 item(s) — wacht op een mens of externe partij"
 ROLWERK = "vastgelopen op 1 item(s) — payload onvolledig na herstelpoging: veld term"
@@ -26,11 +27,36 @@ def dd(tmp_path, monkeypatch):
     # `mens_vervullers` en niet meer `door_mens_bemand`: `route_werk` kijkt sinds de vervuller-pass
     # naar WIE een rol draagt, niet naar of hij gedragen wordt. De founder-rol krijgt hier één
     # vervuller, dus het werk landt bij die mens met de rol als context.
-    monkeypatch.setattr(cockpit2, "mens_vervullers",
-                        lambda _st, rol: [FOUNDER_PERSOON] if rol == FOUNDER_ROLE_ID else [])
+    # Patch op `signaal.mensen_van` en niet meer op `cockpit2.mens_vervullers`: die laatste
+    # delegeert er sinds B2 naartoe, en de signaal-routering (die het bericht bezorgt) leest
+    # dezelfde functie. Eén plek patchen dekt nu allebei — dat was precies het doel van die
+    # samenvoeging.
+    # DE PERSOON BESTAAT ECHT in deze fixture, en dat is sinds 20 september 2026 nodig: de
+    # bestemming is geen ROL meer maar de founder als MENS (`signaal.terugval`), en het rapport
+    # zoekt zijn naam op in `people`. Een los persoon-id zonder record leverde "p-founder" in de
+    # verdeling op — precies het onleesbare id dat de test hieronder verbiedt.
+    from nooch_village import signaal as _sig
+    st0 = cockpit2._Stores(str(tmp_path))
+    persoon = st0.people.add("Stefan Wobben", "stefan@nooch.earth")
+    monkeypatch.setattr(_sig, "mensen_van",
+                        lambda _st, rol: [persoon.id]
+                        if rol in (FOUNDER_ROLE_ID, _sig.TERUGVAL_ROL) else [])
     monkeypatch.setattr(er, "_vraag_llm", lambda *a, **k: None)      # geen model → founder
     return str(tmp_path)
 
+
+def _founder_id(dd):
+    """Het persoon-id van de founder in deze fixture. Opgevraagd via `signaal.terugval` en niet als
+    constante: de fixture maakt het record aan, en dit is dezelfde weg die de code zelf loopt."""
+    from nooch_village import signaal as _sig
+    return _sig.terugval(cockpit2._Stores(dd))
+
+
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. Het SPOOR van een melding is sinds B2 een bericht in
+    een kanaal in plaats van een rij in een wachtrij; de redenering eromheen is ongewijzigd."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
 
 def _vastgelopen(dd, *, reden=MENS, stap="Laat de samples testen in een erkend lab") -> str:
     st = cockpit2._Stores(dd)
@@ -54,8 +80,8 @@ def test_een_mens_park_reden_landt_wel(dd):
     v = vr.pas(dd, apply=True)
     assert v["in_aanmerking"] == 1 and len(v["geland"]) == 1
     assert v["geland"][0]["pid"] == pid
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
-    assert n and "erkend lab" in (n[-1].get("snippet") or "")
+    n = _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
+    assert n and "erkend lab" in n[-1]
 
 
 # ── Guard 2: alleen wat nu nog open is ──────────────────────────────────────
@@ -77,7 +103,7 @@ def test_twee_keer_draaien_levert_geen_tweede_melding(dd):
     tweede = vr.pas(dd, apply=True)
     assert len(eerste["geland"]) == 1
     assert tweede["geland"] == [] and tweede["al_gemeld"] == 1
-    n = [x for x in cockpit2._Stores(dd).notif.all() if x.get("target_id") == FOUNDER_PERSOON]
+    n = _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
     assert len(n) == 1, "dezelfde vraag twee keer verstuurd"
 
 
@@ -86,7 +112,7 @@ def test_de_idempotentie_hangt_aan_de_MELDING_niet_aan_een_vlag():
     uiteen zodra iemand de inbox opruimt. Zelfde regel als `reference, don't copy`."""
     import inspect
     bron = inspect.getsource(vr.al_geland)
-    assert "st.notif.all()" in bron
+    assert "st.channels" in bron          # het spoor is de verstuurde DM, geen losse vlag
 
 
 # ── De droge loop is de default ─────────────────────────────────────────────
@@ -95,8 +121,7 @@ def test_droge_loop_schrijft_niets(dd):
     _vastgelopen(dd)
     v = vr.pas(dd)                                     # geen apply
     assert len(v["geland"]) == 1 and v["toegepast"] is False
-    assert not [x for x in cockpit2._Stores(dd).notif.all()
-                if x.get("target_id") == FOUNDER_PERSOON]
+    assert not _dm_aan(cockpit2._Stores(dd), _founder_id(dd))
 
 
 def test_filteren_op_één_rol(dd):
@@ -107,6 +132,19 @@ def test_filteren_op_één_rol(dd):
 
 # ── De droge loop moet de ENIGE beslissing meten die ertoe doet ──────────────
 
+def _dm_kanalen(dd):
+    """De DM-kanalen in het dorp. Sinds B2 (20 september 2026) landt een melding aan een mens hier
+    en niet in een NotifStore; een kanaal-id draagt de twee persoon-ids die erin zitten."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [k for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM]
+
+
+def _trail(dd, kanaal):
+    from nooch_village import signaal
+    return signaal._MiniStores(dd).channels.trail(kanaal)
+
+
 def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     """Een droge loop die alleen TELT laat de vraag onbeantwoord die het besluit draagt: routeren we,
     of dumpen we 33 items op één inbox? Dat zijn twee verschillende handelingen."""
@@ -114,12 +152,13 @@ def test_de_droge_loop_toont_waar_het_zou_landen(dd):
     v = vr.pas(dd)
     assert v["toegepast"] is False
     assert sum(v["verdeling"].values()) == 1
-    assert list(v["gronden"]) == ["geen rol bezit dit, en het project heeft geen opdrachtgever"]
-    assert not [x for x in cockpit2._Stores(dd).notif.all()          # en nog steeds niets geschreven
-                if x.get("target_id") == FOUNDER_PERSOON]
+    assert list(v["gronden"]) == ["alles wat vastloopt komt eerst bij jou"]
+    # en nog steeds niets geschreven — de founder kreeg geen DM
+    assert not [e for k in _dm_kanalen(dd) if _founder_id(dd) in k
+                for e in _trail(dd, k)]
 
 
 def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):
     """Een id in een verdeling is niet te lezen; de vraag is welke MENS dit krijgt."""
     _vastgelopen(dd)
-    assert "Strategic Lead" in " ".join(vr.pas(dd)["verdeling"])
+    assert FOUNDER_NAAM in " ".join(vr.pas(dd)["verdeling"])

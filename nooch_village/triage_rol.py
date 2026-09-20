@@ -250,63 +250,6 @@ BESTAND = "triage_uitkomsten.jsonl"
 UITKOMSTEN = ("geaccepteerd", "overschreven", "zelf", "anders")
 
 
-def noteer_uitkomst(data_dir: str, n: dict, *, gekozen_rol: str = "", gekozen_persoon: str = "",
-                    otype: str = "") -> str:
-    """Leg vast wat er met een rolsuggestie gebeurde. Geeft de uitkomst terug, of "".
-
-    Fail-soft en STIL mag hier: een meting die een handeling blokkeert is geen meting maar een
-    obstakel. Draagt het item geen suggestie, dan is er niets te meten."""
-    voorgesteld = str((n or {}).get("triage_rol") or "")
-    if not voorgesteld:
-        return ""
-    if otype and otype != "action":
-        uitkomst = "anders"
-    elif gekozen_rol and gekozen_rol == voorgesteld:
-        uitkomst = "geaccepteerd"
-    elif gekozen_rol or gekozen_persoon:
-        uitkomst = "overschreven"
-    else:
-        uitkomst = "zelf"
-    try:
-        import os
-        import time
-        pad = os.path.join(data_dir or ".", BESTAND)
-        os.makedirs(os.path.dirname(pad) or ".", exist_ok=True)
-        with open(pad, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"at": time.time(), "nid": (n or {}).get("id", ""),
-                                "voorgesteld": voorgesteld,
-                                "gekozen": gekozen_rol or gekozen_persoon or "",
-                                "otype": otype, "uitkomst": uitkomst,
-                                "accountability": str((n or {}).get("triage_accountability") or "")[:200],
-                                }, ensure_ascii=False) + "\n")
-    except Exception as e:                                   # noqa: BLE001 — nooit een handeling breken
-        log.warning("triage-meting niet vastgelegd: %s", e)
-    return uitkomst
-
-
-def acceptatie(data_dir: str) -> dict:
-    """De ratio waar dit allemaal om draait: hoe vaak was de suggestie bruikbaar?
-
-    `ratio` telt alleen de gevallen waarin de mens een ROL koos — accepteren of overschrijven. "Zelf
-    houden" en "andere uitkomst" zeggen niets over de suggestie: dan ging het werk ergens anders
-    heen om een reden die los staat van wie het zou moeten doen."""
-    import os
-    rijen = []
-    try:
-        with open(os.path.join(data_dir or ".", BESTAND), encoding="utf-8") as f:
-            for r in f:
-                try:
-                    rijen.append(json.loads(r))
-                except ValueError:
-                    continue
-    except FileNotFoundError:
-        return {"n": 0, "ratio": None, **{u: 0 for u in UITKOMSTEN}}
-    telling = {u: sum(1 for r in rijen if r.get("uitkomst") == u) for u in UITKOMSTEN}
-    keuzes = telling["geaccepteerd"] + telling["overschreven"]
-    return {"n": len(rijen), "ratio": (telling["geaccepteerd"] / keuzes) if keuzes else None,
-            **telling}
-
-
 # ── wie krijgt dit werk, als MENS? ────────────────────────────────────────────────────────────
 
 def domein_eigenaar(st, domein: str) -> dict:

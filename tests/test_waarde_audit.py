@@ -101,25 +101,37 @@ def test_alleen_een_definitie_van_klaar_is_geen_uitkomst(tmp_path):
     assert _rij(r)["uitkomsten"] == []
 
 
+# `notifications.json` IS SINDS 20 SEPTEMBER 2026 EEN ARCHIEF. `NotifStore` is opgeheven en er komt
+# geen rij meer bij; de 371 bestaande notificaties staan als DM in `ChannelStore` én blijven als
+# bestand staan, want de verwerk-records eraan (`verwerkingen`) zijn de enige plek waar staat dat
+# een mens een besluit NAM. Dat is precies wat `waarde_audit` hier telt, dus hij blijft het bestand
+# lezen en deze tests schrijven het rechtstreeks — er is geen store meer om het via te doen.
+#
+# Wat dat betekent voor de meting zelf (geen besluit, alleen een waarneming): dit signaal bevriest
+# op de stand van 20 september. Een rol die daarna een besluit uitlokt, verdient krediet dat deze
+# audit niet meer ziet.
+
+def _archief(dd, *notificaties):
+    _schrijf(dd, "notifications.json", list(notificaties))
+
+
 def test_niks_nodig_en_doorsturen_tellen_niet(tmp_path):
     dd = _dd(tmp_path)
-    st = cockpit2._Stores(dd)
-    n = st.notif.add("role", ROL, "", by=ROL, snippet="een spanning")
-    st.notif.add_outcome(n["id"], otype="none", ref="", label="niks nodig")
-    st.notif.add_outcome(n["id"], otype="ping", ref="", label="doorgestuurd")
+    _archief(dd, {"id": "n1", "by": ROL, "at": NU, "snippet": "een spanning",
+                  "verwerkingen": [{"otype": "none", "label": "niks nodig"},
+                                   {"otype": "ping", "label": "doorgestuurd"}]})
     r = wa.audit(dd, cockpit2._Stores(dd).records, nu=NU)
     assert _rij(r)["uitkomsten"] == []
 
 
 def test_een_echt_besluit_telt_wel(tmp_path):
     dd = _dd(tmp_path)
-    st = cockpit2._Stores(dd)
-    n = st.notif.add("role", ROL, "", by=ROL, snippet="een spanning")
-    st.notif.add_outcome(n["id"], otype="besluit_ja", ref="", label="ja")
+    _archief(dd, {"id": "n1", "by": ROL, "at": NU, "snippet": "een spanning",
+                  "verwerkingen": [{"otype": "besluit_ja", "label": "ja"}]})
     r = wa.audit(dd, cockpit2._Stores(dd).records, nu=NU)
     rij = _rij(r)
     assert [u["soort"] for u in rij["uitkomsten"]] == ["besluit_genomen"]
-    assert rij["uitkomsten"][0]["ref"] == n["id"]
+    assert rij["uitkomsten"][0]["ref"] == "n1"
 
 
 def test_pagina_telt_pas_als_een_mens_hem_aanraakte(tmp_path):

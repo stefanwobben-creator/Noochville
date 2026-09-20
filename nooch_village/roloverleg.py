@@ -249,35 +249,6 @@ def evaluate_objection(answers: dict, *, harm: str = "") -> dict:
 _EXEMPT_PROPOSERS = {"founder", "facilitator", "secretary"}   # Circle Lead / procesrollen
 
 
-def tension_validity(item: dict, *, llm_reason=None) -> tuple[bool, str]:
-    """Holacracy 'from your role' bij intake: een voorstel om een ÁNDERE rol te wijzigen is alleen
-    een geldige spanning als de indiener concreet kan benoemen hoe aannemen zíjn/háár eigen rol
-    helpt. Kan dat niet, dan mag de Facilitator de spanning ongeldig verklaren en het punt direct
-    schrappen, zónder het governance-proces te doorlopen.
-
-    Geeft (geldig, reden-bij-ongeldig). Deterministisch: een cross-rol-voorstel zonder benefit is
-    ongeldig. Is er wel een benefit en een LLM beschikbaar, dan toetst die nog of de benefit echt
-    aan de eigen rol raakt (fail-open: bij twijfel/geen-LLM geldig)."""
-    by = (item.get("by") or "").strip().lower()
-    target = (item.get("role_id") or "").strip().lower()
-    cross = bool(by) and bool(target) and by != target and by not in _EXEMPT_PROPOSERS
-    if not cross:
-        return True, ""                                     # eigen rol, of Circle Lead/procesrol
-    benefit = (item.get("benefit") or "").strip()
-    if not benefit:
-        return (False, f"geen baat voor de eigen rol benoemd: '{by}' stelt een wijziging voor aan "
-                f"'{target}', maar zegt niet hoe aannemen de eigen rol helpt (Holacracy: from your role)")
-    if llm_reason is not None:
-        ans = (llm_reason(
-            f"Een rol '{by}' stelt voor om rol '{target}' te wijzigen. Onderbouwing hoe het de eigen "
-            f"rol '{by}' helpt: \"{benefit}\". Raakt dit echt een spanning vanuit de rol '{by}' zelf "
-            "(niet alleen 'goed voor het dorp')? Antwoord met alleen JA of NEE.") or "").strip().upper()
-        if ans.startswith("NEE"):
-            return (False, f"de benoemde baat raakt geen spanning vanuit de eigen rol '{by}', "
-                    "maar een algemeen belang — dat is geen geldige eigen spanning")
-    return True, ""
-
-
 def secretary_check(item: dict, records) -> list[dict]:
     """Good-governance-check door de Secretaris: deterministische poort (G0-G4) + de
     -en-formuleercheck. Geeft een lijst issues [{level: 'blok'|'let op', msg}]; leeg = in orde."""
@@ -367,78 +338,6 @@ def _parse_role(text: str) -> dict:
     if domein.lower() in ("-", "geen", "none", ""):
         domein = ""
     return {"purpose": purpose, "accountabilities": accs[:10], "domein": domein[:140]}
-
-
-def amend_with_reaction(item: dict, reaction: str, *, role_snapshot: dict | None = None,
-                        examples_block: str = "", llm_reason=None) -> dict:
-    """De AI herziet op basis van jouw reactie de HELE rol (purpose + accountabilities + evt.
-    domein), Holacracy-correct en gegrond in de referentiebank. Voor een bestaande rol levert dit
-    een echte diff op (add/remove accountabilities) t.o.v. de huidige rol. Fail-closed zonder LLM
-    of zonder leesbaar antwoord → de wijziging blijft ongemoeid. Geeft de (nieuwe) change-dict."""
-    from nooch_village.governance_examples import ACCOUNTABILITY_RULES
-    change = dict(item.get("change", {}))
-    reaction = (reaction or "").strip()
-    if not reaction:
-        return change
-    if llm_reason is None:
-        import functools
-        from nooch_village.llm import reason as _reason
-        llm_reason = functools.partial(_reason, call_site="role_amend_with_reaction")
-    is_add = item.get("kind") == "add_role"
-    snap = role_snapshot or {}
-    # 'Huidige' rol zoals de mens 'm ziet: bij add_role = het voorstel; bij amend = de echte rol
-    # plus de al voorgestelde toevoeging.
-    if is_add:
-        cur_purpose = change.get("purpose", "")
-        cur_accs = list(change.get("add_accountabilities", []))
-    else:
-        cur_purpose = change.get("purpose") or snap.get("purpose", "")
-        cur_accs = list(dict.fromkeys(list(snap.get("accountabilities", []))
-                                      + list(change.get("add_accountabilities", []))))
-    acc_txt = "\n".join(f"- {a}" for a in cur_accs) or "- (nog geen)"
-    prompt = (
-        "Je herziet in een roloverleg (Holacracy) een hele rol op basis van de reactie van de mens.\n\n"
-        + ACCOUNTABILITY_RULES + "\n\n" + (examples_block + "\n\n" if examples_block else "")
-        + f"Rol nu:\nPURPOSE: {cur_purpose}\nACCOUNTABILITIES:\n{acc_txt}\n\n"
-        f"Reactie van de mens: {reaction}\n\n"
-        "Geef de VOLLEDIG herziene rol, met de reactie verwerkt. Behoud wat goed is, pas aan/voeg "
-        "toe/laat weg wat de reactie vraagt. Antwoord EXACT in dit formaat:\n"
-        "PURPOSE: <reden van bestaan, geen -en-vorm>\n"
-        "ACCOUNTABILITIES:\n- <accountability, -en-vorm>\n- <...>\n"
-        "DOMEIN: <exclusief beheer, of '-'>")
-    parsed = _parse_role(llm_reason(prompt) or "")
-    if not parsed["purpose"] and not parsed["accountabilities"]:
-        return change                                   # fail-closed: niets bruikbaars terug
-    new = dict(change)
-    if parsed["purpose"]:
-        new["purpose"] = parsed["purpose"]
-    desired = parsed["accountabilities"]
-    if desired:
-        if is_add:
-            new["add_accountabilities"] = desired       # nieuwe rol: de hele set is 'toe te voegen'
-        else:
-            real = list(snap.get("accountabilities", []))
-            dl = {d.lower() for d in desired}
-            rl = {r.lower() for r in real}
-            new["add_accountabilities"] = [d for d in desired if d.lower() not in rl]
-            new["remove_accountabilities"] = [r for r in real if r.lower() not in dl]
-    if parsed["domein"]:
-        new["add_domains"] = [parsed["domein"]]
-    return new
-
-
-def flip_facet(item: dict, *, examples_block: str = "", llm_reason=None) -> dict:
-    """Zet een amend-voorstel om tussen PURPOSE (ziel) en ACCOUNTABILITY (activiteit), voor als de
-    AI de bedoeling verkeerd inschatte. Geeft de nieuwe change-dict. Alleen zinvol bij amend_role."""
-    from nooch_village.inbox_actions import formulate_purpose, formulate_accountability
-    change = dict(item.get("change", {}))
-    title, reason = item.get("title", ""), item.get("reason", "")
-    is_purpose_now = bool(change.get("purpose")) and not change.get("add_accountabilities")
-    if is_purpose_now:
-        acc = formulate_accountability(title, reason, examples_block=examples_block, llm_reason=llm_reason)
-        return {"add_accountabilities": [acc]}
-    purpose = formulate_purpose(title, reason, examples_block=examples_block, llm_reason=llm_reason)
-    return {"purpose": purpose, "add_accountabilities": []}
 
 
 def apply_consented(agenda: Agenda, records) -> list[dict]:

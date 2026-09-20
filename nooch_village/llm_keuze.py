@@ -73,7 +73,6 @@ HOOG_INZET: frozenset[str] = frozenset({
     "plan_checklist",            # bepaalt WELK werk er gebeurt — een fout hier plant zich voort
     "plan_checklist_retry",
     "wizard_plan",               # dezelfde beslissing, maar door de mens gestart (de projectwizard)
-    "escalation_mens",           # WIE doet dit werk — een oordeel, en het spoor maakt de fout duur
     "skill_tegenspraak",         # de missie-critic; een zwak oordeel is erger dan geen oordeel
     "skill_synthesize",
     "skill_content_schrijven",   # gaat richting de site: hier landen claims
@@ -99,13 +98,23 @@ HOOG_INZET: frozenset[str] = frozenset({
 # beslissing met een goedkope fout: verkeerd gerouteerd werk komt terug, verkeerd geplande inhoud
 # niet. Deze sites houden expliciet de dorpsladder — ze staan hier zodat "dorpsbreed premium" niet
 # per ongeluk ook de hoogfrequente routeer-calls meeneemt.
-# `escalation_route` staat hier bewust WEL en `escalation_mens` bewust NIET. Het eerste gesprek van
-# de router ("bezit een andere AI-rol dit?") is triage: een grove keuze met een goedkope fout, want
-# verkeerd gerouteerd werk komt terug via de hop-teller. Het tweede ("welke MENS doet dit?") is een
-# oordeel waarvan de fout blijft plakken — zie de meting in escalation_router.MENS_SITE.
+# `escalation_mens` STOND HIER NIET en staat er sinds 20 september 2026 wel. De grond om hem duur te
+# houden was scherp en klopte: "welke MENS doet dit?" was een oordeel waarvan de fout BLIJFT PLAKKEN
+# — het spoor (`vastgelopen_route.al_geland`) zorgde dat een verkeerde ontvanger vandaag een betere
+# morgen buitensloot. Gemeten op prod gaven drie identieke droge loops over dezelfde 17 stappen drie
+# verschillende verdelingen; het goedkope model kón die vraag niet reproduceerbaar beantwoorden.
+#
+# Die grond is vervallen, niet weerlegd. Sinds "AI is instrument, geen rol" (CLAUDE.md) KIEST dat
+# antwoord niemand meer: de bestemming is altijd de founder en het modelantwoord is een voorstelzin
+# die hij leest en weggooit. Een voorstel dat er soms naast zit kost een blik, geen verkeerd bureau
+# — en dat is precies de definitie van "goedkope fout" die deze lijst hanteert.
+#
+# Wat hier NIET achter zit: dat het model beter is geworden, of dat de meting anders uitpakt. Als de
+# bestemming ooit weer een echte keuze wordt, hoort deze regel als eerste terug omhoog.
 GOEDKOOP: frozenset[str] = frozenset({
-    "classify_tension", "cockpit_mention_triage", "escalation_route", "escaleer_keuze",
-    "escaleer_classify", "scope_nudge_match", "governance_target_pick", "news_driver_pick",
+    "classify_tension", "cockpit_mention_triage", "escalation_route", "escalation_mens",
+    "escaleer_keuze",
+    "governance_target_pick", "news_driver_pick",
     "cockpit_match_pair", "cockpit_match_keycheck",
     # De verband-vraag van de Librarian ("hangen deze twee kaarten écht samen?") is triage: een
     # ja/nee met een goedkope fout, want de uitkomst gaat als voorstel naar de human-inbox en een

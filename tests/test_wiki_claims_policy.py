@@ -157,14 +157,19 @@ def test_wie_niet_mag_bewerken_mag_wel_voorstellen(dorp):
     a = _pagina(st)
     ontv = wiki.ontvanger(a.anchor, st.records, st.assign)
     assert ontv["rol"] == wcp.EIGENAAR        # compliance heeft een mens-vervuller → blijft daar
-    doel = [("role", wcp.EIGENAAR)]
-    voor = len(st.notif.for_targets(doel))
+    from nooch_village import signaal
+    wie, _ = signaal.ontvangers(st, "role", wcp.EIGENAAR)
+    tel = lambda: sum(len(st.channels.trail(k)) for p in wie
+                      for k in st.channels.kanalen_van(p))
+    voor = tel()
     veld = {"aid": a.id, "voorstel": a.body + "\n\nOne more line.",
             "waarom": "the scope rule is unclear"}
     _nxt, msg = cockpit2._act_pagina_voorstel(cockpit2._Ctx(
         st=st, g=lambda k, d="": veld.get(k, d), nxt="/pagina", form=None,
         username=derde.email, action="pagina_voorstel", data_dir=dd))
-    assert msg.startswith("✓") and len(st.notif.for_targets(doel)) == voor + 1
+    # Het voorstel komt als DM bij de mens die de eigenaar-rol vervult; `pagina_voorstel` is
+    # ongated en blijft dat, want een voorstel is geen mutatie.
+    assert msg.startswith("✓") and tel() == voor + len(wie)
 
 
 # ── de render-afspraak ───────────────────────────────────────────────────────

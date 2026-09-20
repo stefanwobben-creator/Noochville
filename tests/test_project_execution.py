@@ -15,6 +15,24 @@ from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE
 TODAY = "2026-07-08"
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 class _ResearchSkill(Skill):
     name = "openalex_evidence"
     description = "fake research skill (term → hits)"
@@ -94,16 +112,17 @@ def test_h_note_en_reset_item_fails(tmp_path, ledger):
 
 def test_means_gap_escaleert_zichtbaar_naar_founder(tmp_path):
     """Taak 2: een means-gap zet nu óók een heads-up-notificatie voor de founder (geen approve-knop)."""
-    from nooch_village.human_inbox import HumanInbox, FOUNDER_ROLE_ID
-    from nooch_village.notifications import NotifStore
+    # Een dorp is nodig: de heads-up is sinds B2 een DM en moet een mens vinden.
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(str(tmp_path))
+    from nooch_village.human_inbox import HumanInbox
     hi = HumanInbox(str(tmp_path / "human_inbox.json"))
     hi.add_means_gap("skill_ladder:openalex", "Skill-ladder uitgeput voor 'barefoot'",
                      role_id="harry_hemp", sensed_by="harry_hemp")
-    notif = NotifStore(str(tmp_path / "notifications.json"))
-    fnd = notif.for_targets([("role", FOUNDER_ROLE_ID)])
+    fnd = _dm_teksten(str(tmp_path))
     assert len(fnd) == 1
-    assert "Capaciteit ontbreekt" in fnd[0]["snippet"] and "nooch_village.inbox" in fnd[0]["snippet"]
-    assert "approve" not in fnd[0]["snippet"].lower()          # heads-up, geen beslis-knop
-    # dedup: dezelfde gap opnieuw → geen tweede notificatie
+    assert "Capaciteit ontbreekt" in fnd[0] and "nooch_village.inbox" in fnd[0]
+    assert "approve" not in fnd[0].lower()                     # heads-up, geen beslis-knop
+    # dedup: dezelfde gap opnieuw → geen tweede bericht
     hi.add_means_gap("skill_ladder:openalex", "nogmaals", role_id="harry_hemp")
-    assert len(NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", FOUNDER_ROLE_ID)])) == 1
+    assert len(_dm_teksten(str(tmp_path))) == 1

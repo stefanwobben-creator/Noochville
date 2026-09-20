@@ -70,20 +70,10 @@ class Record:
     activatie_reden: Optional[str] = None
 
 
-@dataclass
-class Task:
-    capability: str
-    payload: dict
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    request_id: Optional[str] = None
-    addressee: Optional[str] = None
-
-
-@dataclass
-class Response:
-    success: bool
-    data: Any = None
-    error: Optional[str] = None
+# HIER STONDEN `Task` EN `Response`: toegewezen werk van de Matchmaker naar de inbox van een
+# inwoner, en het antwoord erop. Beide zijn op 20 september 2026 met de triage-keten opgeheven —
+# de Matchmaker was hun enige producent. `Tension` blijft wél staan: die hoort bij het
+# governance-model (een voorstel draagt de spanning waaruit hij voortkwam), niet bij de dispatch.
 
 
 @dataclass

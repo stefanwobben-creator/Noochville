@@ -75,10 +75,6 @@ def main() -> None:
         from nooch_village.demos.analysis import intent_demo
         intent_demo()
 
-    elif mode == "triage":
-        from nooch_village.demos.analysis import triage_demo
-        triage_demo()
-
     elif mode == "ngram":
         from nooch_village.demos.analysis import ngram_demo
         ngram_demo()
@@ -696,24 +692,6 @@ def main() -> None:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
 
 
-    elif mode == "notif_migratie":
-        # Stap A van twee: elke notificatie als DM-bericht bij de mens die hem aangaat.
-        # DRY-RUN by default. Er wordt niets verwijderd — NotifStore en /inbox blijven staan tot
-        # stap B, zodat een fout hier niet 371 items meeneemt.
-        from nooch_village import notif_migratie
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        st = _Stores(load_context(BASE_DIR).data_dir)
-        apply = "--apply" in sys.argv
-        rapport = notif_migratie.migreer(st.notif, st, apply=apply)
-        print(notif_migratie.rapport_tekst(rapport))
-        if not apply:
-            print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply.")
-        elif not rapport["klopt"]:
-            sys.exit(1)
-
     elif mode == "site_audit":
         # De lampjes van de shop: bereikbaar, Lighthouse (mobiel), claims. Eén run, één snapshot
         # (append-only), en de wissels sinds de vorige run. Scope 45; de weekklok is scope 47.
@@ -876,41 +854,6 @@ def main() -> None:
                 print(f"   [{r['rol']}] {r['tensie'][:80]}")
                 print(f"      {r['behoefte']}")
 
-    elif mode == "relaunch":
-        # Bulk-parkering op één verklaard feit (de site wordt herbouwd) en één trigger terug.
-        # Default DRY-RUN; `--live` voert uit. `open` haalt alles in één keer terug.
-        import os
-        from nooch_village import relaunch_park as rp
-        from nooch_village.cockpit2 import _Stores, _person_targets
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        sub = sys.argv[2] if len(sys.argv) > 2 else "park"
-        mail = next((a for a in sys.argv[2:] if "@" in a), "")
-        if sub == "open":
-            uit = rp.heropen(ctx.data_dir, projects=st.projects)
-            print(f"↩ {uit['teruggehaald']} item(s) terug voor herbeoordeling na relaunch:")
-            for r in uit["items"]:
-                print(f"   [{r.get('soort')}] {str(r.get('tekst'))[:88]}")
-        elif sub == "lijst":
-            staand = rp.geparkeerd(ctx.data_dir)
-            print(f"geparkeerd op '{rp.REDEN}': {len(staand)} item(s) — {rp.VOORWAARDE}")
-            for r in staand:
-                print(f"   [{r.get('soort'):<18}] {str(r.get('tekst'))[:84]}")
-        else:
-            live = "--live" in sys.argv
-            targets = _person_targets(st, mail) if mail else None
-            uit = rp.park(ctx.data_dir, projects=st.projects, notif=st.notif if mail else None,
-                          targets=targets, dry_run=not live)
-            print(f"{'LIVE' if live else 'DRY-RUN'} — {uit['projecten']} project(en), "
-                  f"{uit['notificaties']} notificatie(s)")
-            for s_, n in sorted(uit["per_soort"].items(), key=lambda kv: -kv[1]):
-                print(f"   {n:>3}  {s_}")
-            print(f"\nreden: {rp.REDEN} — {rp.VOORWAARDE}")
-            for r in uit["items"][:40]:
-                print(f"   [{r['soort']:<18}] {r['tekst'][:80]}")
-
     elif mode == "certs":
         # De cert-wachtlijst: welke claim is onderbouwd en welke wacht nog op een certificaat.
         # Leest alleen. `--ingest` leest nieuwe certificaten uit data/certificaten/ in.
@@ -948,48 +891,6 @@ def main() -> None:
                 print(f"   {merk} {rij['claim'][:46]:<46} {rij['status']:<12} {rij['reden'][:60]}")
                 if rij["status"] == "pending":
                     print(f"      → {cr.opdracht(rij)}")
-
-    elif mode == "poort":
-        # De tensie-poort over de founder-inbox. Default DRY-RUN: meten mag nooit per ongeluk
-        # opruimen. `--live` voert uit (routeren als project, filteren archiveren).
-        import os
-        from nooch_village.cockpit2 import _Stores, _person_targets
-        from nooch_village import tensie_poort as tpoort
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        mail = next((a for a in sys.argv[2:] if "@" in a), "")
-        if not mail:
-            print("Gebruik: village poort <e-mail-van-de-mens> [--live]"); sys.exit(1)
-        live = "--live" in sys.argv
-        targets = _person_targets(st, mail)
-        # --lever-af schuift werk naar andere borden; dat is de risicovolle helft en staat UIT
-        # tot de steekproef schoon is. Zonder die vlag wordt er alleen getrieerd en vastgehouden.
-        uit = tpoort.draai(notif=st.notif, projects=st.projects, records=st.records,
-                           targets=targets, dry_run=not live,
-                           lever_af="--lever-af" in sys.argv)
-        r = uit["rapport"]
-        print(f"\n{'LIVE' if live else 'DRY-RUN'} — {r['in']} open item(s) door de poort")
-        for deur, n in sorted(uit["per_deur"].items(), key=lambda kv: -kv[1]):
-            print(f"   {n:>3}  {deur}")
-        print(f"\n   weggefilterd: {r['weggefilterd']}  |  mens-todo: {r['mens_todo']}  |  "
-              f"zichtbaar: {r['zichtbaar_voor_mens']} → {r['na_dedup']} na dedup")
-        if uit["projecten"]:
-            print(f"\n   werk afgeleverd als project:")
-            for pr in uit["projecten"]:
-                print(f"     → {pr['rol']}  ({pr['project']})")
-        print("\n== wat de founder overhoudt ==")
-        from nooch_village import founder_kaart as fkaart
-        for g in uit["bundels"]:
-            print(f"\n[{g['deur']}] {g['klasse'] or g['sleutel']} — {g['aantal']} melding(en)")
-            for m in g["meldingen"][:20]:
-                n = next((x for x in st.notif.all() if x.get("id") == m["id"]), None) or {}
-                k = fkaart.kaart(n or {"snippet": m["tekst"], "by": ""},
-                                 projects=st.projects, records=st.records)
-                print("   " + fkaart.render(k).replace("\n", "\n   "))
-                if not k["hoort_hier"]:
-                    print("   ⚠ dit raakt geen founder-bevoegdheid — kandidaat voor herroutering")
 
     elif mode == "healthcheck":
         import os
@@ -1107,29 +1008,6 @@ def main() -> None:
         else:
             print("\nDRY-RUN \u2014 er is niets geschreven. Draai opnieuw met --apply.")
 
-    elif mode == "triage_ratio":
-        # Hoe vaak was de rolsuggestie bruikbaar? Alleen tellen, geen oordeel — dit is het getal dat
-        # later mag bepalen of er een drempel komt, en dan pas als het erom vraagt.
-        from nooch_village.config import load_context as _lc2
-        from nooch_village.triage_rol import acceptatie as _acc
-        from nooch_village.village import BASE_DIR as _BD
-        _u = _acc(_lc2(_BD).data_dir)
-        if not _u["n"]:
-            print("nog niets gemeten — er is nog geen suggestie verwerkt.")
-        else:
-            print(f"suggesties verwerkt : {_u['n']}")
-            print(f"  geaccepteerd      : {_u['geaccepteerd']}")
-            print(f"  overschreven      : {_u['overschreven']}")
-            print(f"  zelf gehouden     : {_u['zelf']}")
-            print(f"  andere uitkomst   : {_u['anders']}")
-            if _u["ratio"] is None:
-                # `no_data ≠ nul`: niemand koos een rol, dus er valt niets te ratio-en.
-                print("\nacceptatieratio    : (nog niet te bepalen — nog geen rol gekozen)")
-            else:
-                print(f"\nacceptatieratio    : {_u['ratio']:.0%} "
-                      f"({_u['geaccepteerd']}/{_u['geaccepteerd'] + _u['overschreven']} keer dat "
-                      f"er een rol werd gekozen)")
-
     elif mode == "afslank_wezen":
         # Open projecten op een rol die niets meer kan (geen mens, geen AI, geen code). Ontstaan
         # doordat een rol slapend werd gelegd NÁ het aanmaken — de afslank-poort keek naar wat er
@@ -1149,7 +1027,7 @@ def main() -> None:
         else:
             print(f"{_res['gevonden']} wees-project(en):")
             for _w in _res["items"]:
-                from nooch_village.notifications import preview as _prev
+                from nooch_village.tekstpreview import preview as _prev
                 print(f"  {_w['rol']:<28} {str(_w['status']):<9} {_prev(_w['titel'], 52)}")
                 print(f"      → {_w['naar']}")
                 if _w.get("origineel"):
@@ -1177,38 +1055,6 @@ def main() -> None:
             fh.write(tekst + "\n")
         print(tekst)
         print(f"\n\u2192 verslag: {uit}")
-
-    elif mode == "villageraad":
-        # De council-pass: elke rol leest de Kroniek en zijn eigen wiki-pagina's vanuit purpose en
-        # accountabilities, en werpt alleen spanningen op die aan een record of pagina vastzitten.
-        # DRY-RUN by default: pas met --apply landen de kaarten in de inbox en wordt het spoor
-        # geschreven. Het verslag gaat naar data/output/villageraad_<datum>.md.
-        import os
-        from nooch_village import villageraad as vr
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        apply = "--apply" in sys.argv
-        opnieuw = "--opnieuw" in sys.argv
-        cap = next((int(a.split("=", 1)[1]) for a in sys.argv[2:] if a.startswith("cap=")),
-                   vr.CAP_PER_ROL)
-        print(f"\U0001f3db\ufe0f  Villageraad — {'LIVE' if apply else 'DRY-RUN'}, cap {cap} per rol\u2026")
-        rapport = vr.raad(records=st.records, att=st.att, ledger=st.evidence,
-                          assignments=st.assign, notif=st.notif, data_dir=ctx.data_dir,
-                          apply=apply, cap=cap, opnieuw=opnieuw)
-        tekst = vr.rapport_tekst(rapport)
-        uit = os.path.join(ctx.data_dir, "output", f"villageraad_{rapport['datum']}.md")
-        os.makedirs(os.path.dirname(uit), exist_ok=True)
-        with open(uit, "w", encoding="utf-8") as fh:
-            fh.write(tekst + "\n")
-        print(tekst)
-        print(f"\n\u2192 verslag: {uit}")
-        if not apply:
-            print("DRY-RUN \u2014 er is niets verzonden en niets vastgelegd. "
-                  "Draai opnieuw met --apply.")
 
     elif mode == "les":
         # DE SCHRIJFKANT VAN DE LEERLUS. De leeskant draaide al (de kans-reflex las huis-regels, de
@@ -1262,15 +1108,14 @@ def main() -> None:
         from nooch_village.config import load_context
         from nooch_village.village import BASE_DIR
         from nooch_village.human_inbox import HumanInbox
-        from nooch_village.projects import ProjectLedger, seed_document
-        from nooch_village.project_doc_store import ProjectDocStore
+        from nooch_village.projects import ProjectLedger
         from nooch_village.governance import Records
         from nooch_village import org
         from nooch_village import sluitronde as SR
         from nooch_village.cockpit2 import _load_env
         apply = "apply" in sys.argv[2:]
         ttl = 14
-        maxproj = 6
+        maxproj = 6            # genegeerd sinds 20-09-2026; zie de toelichting bij stap 4
         for a in sys.argv[2:]:
             if a.startswith("ttl="):
                 try:
@@ -1287,7 +1132,6 @@ def main() -> None:
         inbox = HumanInbox(os.path.join(dd, "human_inbox.json"))
         pj = ProjectLedger(os.path.join(dd, "projects.json"))
         recs = Records(os.path.join(dd, "governance_records.json"))
-        docs = ProjectDocStore(dd)
         role_ids = {r.id for r in recs.all() if not org.is_circle(r)}
         voorkeur = ["mother_earth__nooch__strategic_lead_founder_steward",
                     "mother_earth__nooch__mother_earth_steward",
@@ -1313,74 +1157,53 @@ def main() -> None:
         clusters = SR.cluster(fresh)
         print(f"SLUITRONDE — {len(kansen)} open kansen | panel: "
               f"{', '.join(l['naam'] for l in lenzen) or '(geen rol-lenzen)'} | ttl={ttl}d | "
-              f"cap={maxproj} projecten/ronde | modus: {'UITVOEREN' if apply else 'DRY-RUN (niets muteren)'}")
+              f"modus: {'UITVOEREN' if apply else 'DRY-RUN (niets muteren)'}")
         print(f"⌛ {len(vervallen)} kansen vervallen (>{ttl}d zonder actie) · "
               f"{len(fresh)} vers in {len(clusters)} thema-clusters\n")
         # 3) Eén oordeel per cluster (op de eerste als representant).
         besluiten = []
         for leden in clusters:
-            rep = leden[0]
-            b = SR.beslis_kans(rep, lenzen, active_scopes, now=now, ttl_days=ttl)
-            actie = b["actie"]
-            owner = None
-            if actie == "project":
-                owner = b.get("owner_rol") if b.get("owner_rol") in role_ids else None
-                if owner is None and (rep.get("context") or {}).get("by") in role_ids:
-                    owner = (rep.get("context") or {}).get("by")
-                if owner is None:
-                    actie, b["reden"] = "escaleer", "geen geschikte trekkerrol gevonden — naar jou"
-            besluiten.append({"leden": leden, "b": b, "actie": actie, "owner": owner})
-        # 4) Harde cap: rangschik project-clusters op waarde, hooguit `maxproj`; de rest → uitgesteld.
-        proj = sorted((x for x in besluiten if x["actie"] == "project"),
-                      key=lambda x: -(x["b"].get("waarde") or 3))
-        for i, x in enumerate(proj):
-            if i >= maxproj:
-                x["actie"] = "uitgesteld"
-                x["b"]["reden"] = f"boven de cap van {maxproj} deze ronde (nu niet) — waarde {x['b'].get('waarde', 3)}/5"
+            b = SR.beslis_kans(leden[0], lenzen, active_scopes, now=now, ttl_days=ttl)
+            besluiten.append({"leden": leden, "b": b, "actie": b["actie"]})
+        # 4) HIER STOND DE CAP (`maxproj`): rangschik de project-clusters op waarde en zet de rest op
+        #    uitgesteld. Die bestond omdat het panel zelf projecten aanmaakte en er anders tien per
+        #    ronde uit kwamen. Sinds 20 september 2026 maakt het panel niets meer aan — het
+        #    adviseert, de founder beslist — dus er is geen instroom meer om te cappen. `maxproj`
+        #    wordt genegeerd en blijft alleen als argument staan zodat een oud commando niet breekt.
         # 5) Toon + voer uit.
         tally = collections.Counter()
-        sym = {"nee": "✗", "project": "✓", "escaleer": "⚑", "uitgesteld": "…"}
+        sym = {"nee": "✗", "escaleer": "⚑"}
         for x in besluiten:
-            leden, b, actie, owner = x["leden"], x["b"], x["actie"], x["owner"]
+            leden, b, actie = x["leden"], x["b"], x["actie"]
             rep_titel = SR._titel_van(leden[0])[:60]
             grp = f" (+{len(leden) - 1} in cluster)" if len(leden) > 1 else ""
-            print(f"{sym.get(actie, '?')} {actie:10} «{rep_titel}»{grp}"
-                  f"{(' → ' + owner) if owner else ''}  — {b['reden'][:70]}")
+            print(f"{sym.get(actie, '?')} {actie:10} «{rep_titel}»{grp}  — {b['reden'][:80]}")
+            # HET VOORSTEL ERONDER, ingesprongen: de uitgeschreven scope en de rol die het panel in
+            # gedachten had zijn het werk dat het panel oplevert. Ze staan er als VOORSTEL, niet als
+            # gegeven — daarom een regel lager en met "voorstel:" ervoor.
+            if b.get("scope") and b["scope"][:60] != rep_titel:
+                print(f"     voorstel-scope: {b['scope'][:88]}")
+            if b.get("voorgestelde_rol"):
+                bekend = b["voorgestelde_rol"] in role_ids
+                print(f"     voorgestelde trekker: {b['voorgestelde_rol']}"
+                      f"{'' if bekend else '  (bestaat niet als rol)'}")
             tally[actie] += 1
             if not apply:
                 continue
             if actie == "nee":
+                # Deterministisch: deze kans valt al onder een actief project. Geen modeloordeel.
                 for k in leden:
                     inbox.resolve(k["id"], "rejected", reason=b["reden"])
-            elif actie == "uitgesteld":
-                for k in leden:
-                    inbox.resolve(k["id"], "deferred", reason=b["reden"])
             elif actie == "escaleer":
                 for k in leden[1:]:   # representant blijft pending als beslis-signaal; rest opzij
                     inbox.resolve(k["id"], "deferred", reason="cluster van een geëscaleerde kans")
-            elif actie == "project":
-                scope = (b.get("scope") or rep_titel)[:200]
-                try:
-                    pid = pj.create(owner, scope, "role", status="future",
-                                    done_when=scope, origin="sluitronde")
-                    try:
-                        docs.write(pid, seed_document(scope))
-                    except Exception:
-                        pass
-                    for k in leden:
-                        inbox.resolve(k["id"], "approved", reason=b["reden"],
-                                      extra={"project_id": pid, "besloten_door": "sluitronde"})
-                    active_scopes.append(scope)
-                except Exception as e:
-                    print(f"   ⚠ project maken mislukt: {e}")
         if apply:
             for k in vervallen:
                 inbox.resolve(k["id"], "rejected", reason=f"verlopen: >{ttl} dagen zonder actie")
         afgehandeld = len(vervallen) + sum(len(x["leden"]) for x in besluiten)
         print()
-        print(f"Klaar. projecten:{tally['project']}  nee:{tally['nee']}  uitgesteld:{tally['uitgesteld']}  "
-              f"naar jou:{tally['escaleer']}  vervallen:{len(vervallen)}  "
-              f"(kansen afgehandeld: {afgehandeld} van {len(kansen)})")
+        print(f"Klaar. naar jou:{tally['escaleer']}  al gedekt:{tally['nee']}  "
+              f"vervallen:{len(vervallen)}  (kansen afgehandeld: {afgehandeld} van {len(kansen)})")
         if not apply:
             print("(DRY-RUN — er is niets gemuteerd. Geef 'apply' mee om het uit te voeren.)")
 
@@ -1388,7 +1211,7 @@ def main() -> None:
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
-              "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
+              "purge | intent | ngram | reflect | simulate | harry_hemp | "
               "skills_naar_links | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "

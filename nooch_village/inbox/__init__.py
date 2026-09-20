@@ -1,23 +1,20 @@
 from __future__ import annotations
 from queue import Queue, Empty
-from nooch_village.models import Task
 
 
 class Inbox:
     """Eigen postbus per inwoner. Bewust een interface: de in-memory Queue
     is later vervangbaar door Redis/SQS zonder inwoner-logica aan te raken.
 
-    Twee soorten werk-items:
-    - Task  : toegewezen werk via de matchmaker (skill-dispatch).
-    - object: event-job (callable) via react(), draait op de eigen thread.
+    ÉÉN soort werk-item: de event-job (een callable) die `react()` erin legt en die op de eigen
+    thread van de inwoner draait. Er was een tweede — `Task`, toegewezen werk van de Matchmaker —
+    en die is op 20 september 2026 met de triage-keten opgeheven. De postbus zelf blijft: hij draagt
+    harde regel 9, en dat is de discipline die geneste cirkels later mogelijk houdt.
     """
 
     def __init__(self, owner: str):
         self.owner = owner
         self._q: Queue[object] = Queue()
-
-    def deliver(self, task: Task) -> None:
-        self._q.put(task)
 
     def enqueue(self, item: object) -> None:
         """Legt een event-job (of ander werk-item) in de inbox."""

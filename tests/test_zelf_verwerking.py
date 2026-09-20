@@ -339,3 +339,28 @@ def test_ook_werk_van_het_eigen_bord_valt_onder_de_regel(tmp_path):
     r = zv.verwerk("een taak op mijn bord", rol="harry_hemp", records=RECS, gebruik_llm=False,
                    voorstel="Mag ik hiermee verder?", van_eigen_bord=True, data_dir=str(tmp_path))
     assert r["uitkomst"] == zv.GOVERNANCE and r["autonomie_signaal"]
+
+
+# ── De bewijs-grens ─────────────────────────────────────────────────────────
+#
+# Gered uit `tests/test_tensie_poort.py`. Daar toetste dit dezelfde drie patronen via `tp.deur`, op
+# weg naar het bewijs-wachtspoor van een inbox die niet meer bestaat. De GRENS die ze bewaken leeft
+# wél door: `founder_behoefte` bezit sinds 20 sept 2026 `_VRAAGT_BESLUIT`, `_GEEN_BEWIJS` en
+# `_BESLUIT_DOMEIN` en is hun enige lezer.
+
+@pytest.mark.parametrize("tekst", [
+    "⤴ beslissing gevraagd: De claim mist harde bewijzen voor de nieuwe versie",
+    "⤴ beslissing gevraagd: De FAQ-pagina claimt 'clean' zonder definitie of validatie",
+    "⤴ beslissing gevraagd: de claim is niet onderbouwd en vraagt aanvullende bewijsvoering",
+])
+def test_een_claim_zonder_bewijs_is_geen_founder_behoefte(tekst):
+    """Het antwoord ligt al bij de bewijslaag: geen onderbouwing = niet claimbaar. De founder
+    beslist waar bewijs dubbelzinnig is, niet waar het ontbreekt."""
+    assert zv.founder_behoefte(tekst) == ("", "")
+
+
+def test_een_echte_compliance_vraag_is_wel_een_founder_behoefte():
+    """De grens: mét bewijs en een inhoudelijke vraag hoort het wél bij de founder."""
+    domein, behoefte = zv.founder_behoefte(
+        "⤴ beslissing gevraagd: is de geherformuleerde claim compliant met EmpCo?")
+    assert domein == "compliance" and "alleen jij hebt" in behoefte

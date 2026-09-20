@@ -1,7 +1,14 @@
 """Facilitator-rolreview: een eenmalig 'project' waarin elke dorp-rol langs de Holacracy-meetlat
 wordt gelegd, gegrond in de vertrouwelijke referentiebank (governance_examples). Per rol komt er
-ÉÉN concreet verbetervoorstel, dat als kans in de human inbox landt — mens-gated. Niks wordt
-automatisch toegepast: de Facilitator senst en stelt voor, jij beslist in de triage.
+ÉÉN concreet verbetervoorstel, en dat komt als BERICHT bij de founder — mens-gated. Niks wordt
+automatisch toegepast: de Facilitator senst en stelt voor, jij beslist.
+
+DE BESTEMMING IS VERANDERD OP 20 SEPTEMBER 2026, en dat is meer dan een adreswijziging. De
+voorstellen gingen naar `HumanInbox.add_opportunity`, en daar las `sluitronde` ze: een raadspanel
+dat er zelf ja/nee over zei en bij ja een project aanmaakte. Een modelvoorstel dat door een tweede
+model wordt afgetikt is geen mens-gate maar een lus. Nu gaat elk voorstel als DM naar de founder,
+hetzelfde patroon als `vastgelopen_route` en de sluitronde zelf: het model levert tekst, jij beslist
+wat ermee gebeurt.
 
 Respecteert de harde regels: sensing levert uitsluitend voorstellen op (geen self-execute), en
 de referentiebank wordt alleen hier (governance-formulering) geraadpleegd, nooit in content.
@@ -13,6 +20,24 @@ import re
 # liggen in de Grondwet vast, die herschrijf je niet met een verbetervoorstel.
 _SKIP = {"noochville", "facilitator", "secretary", "secretaris", "lead_link",
          "rep_link", "cirkel_lead", "circle_lead"}
+
+
+def _naar_founder(data_dir: str, titel: str, wat: str, waarom: str) -> bool:
+    """Eén voorstel als bericht bij de founder. Geeft terug of het ergens landde.
+
+    Zelfde vorm als `vastgelopen_route` en de sluitronde: wat de lezer moet beoordelen staat vóóraan,
+    de onderbouwing erachter. Fail-soft: een review mag niet omvallen omdat één bericht niet lukt,
+    maar hij mag ook niet stil zijn — daarom logt hij."""
+    import logging
+    from nooch_village import signaal
+    tekst = f"{titel} — {wat}" + (f" — waarom: {waarom}" if waarom else "")
+    try:
+        return bool(signaal.stuur_op_pad(data_dir, "role", signaal.TERUGVAL_ROL, tekst,
+                                         by="facilitator"))
+    except Exception:                                    # noqa: BLE001
+        logging.getLogger("village.governance_review").exception(
+            "rolreview-voorstel niet bezorgd: %s", titel)
+        return False
 
 
 def _collapse(text: str) -> str:
@@ -124,10 +149,10 @@ def review_role_teleology(role: dict, *, llm_reason=None) -> dict | None:
     return _parse_teleology(llm_reason(prompt))
 
 
-def teleology_review_all_roles(records, inbox, *, llm_reason=None) -> dict:
+def teleology_review_all_roles(records, data_dir, *, llm_reason=None) -> dict:
     """De governance-teleologie-review over alle operationele dorp-rollen (kernrollen/cirkels overslaan).
     De Facilitator herijkt per rol purpose + accountabilities naar de standaard (Engels, B1, -ing-vorm);
-    de Secretary legt elk resultaat vast als kans in de human inbox — mens-gated, niks auto-toegepast.
+    elk resultaat gaat als bericht naar de founder — mens-gated, niks auto-toegepast.
     Geeft {reviewed, proposed, skipped, incomplete}. Fail-closed: zonder LLM → 0 voorstellen."""
     from nooch_village.models import RecordType
     reviewed = proposed = skipped = incomplete = 0
@@ -149,60 +174,26 @@ def teleology_review_all_roles(records, inbox, *, llm_reason=None) -> dict:
         acc_block = "\n".join(f"- {a}" for a in res["accountabilities"]) or "- (geen)"
         wat = (f"Purpose (EN): {res['purpose']}\n\nAccountabilities (EN, B1, -ing):\n{acc_block}"
                + (f"\n\n⚠️ Nog niet in -ing-vorm: {'; '.join(niet_ing)}" if niet_ing else ""))
-        inbox.add_opportunity(
-            f"Teleologie-review '{rec.id}': purpose + accountabilities (EN, B1, -ing)",
-            by="facilitator", kind="governance", wat=wat, waarom=res["why"])
-        proposed += 1
+        if _naar_founder(data_dir,
+                         f"Teleologie-review '{rec.id}': purpose + accountabilities (EN, B1, -ing)",
+                         wat, res["why"]):
+            proposed += 1
     return {"reviewed": reviewed, "proposed": proposed, "skipped": skipped, "incomplete": incomplete}
 
 
-def _parse_teleology_opportunity(subject: str, wat: str):
-    """Lees (role_id, purpose, [accountabilities]) terug uit een teleologie-kans in de human inbox.
-    role_id staat in de titel ('Teleologie-review '<id>': …'); purpose + accountabilities in `wat`.
-    Strips markdown-vet (**) en laat de ⚠️-markeerregel weg."""
-    m = re.search(r"Teleologie-review '([^']+)'", subject or "")
-    role_id = m.group(1) if m else ""
-    pm = re.search(r"Purpose \(EN\):\s*(.+)", wat or "")
-    purpose = _collapse(pm.group(1)).replace("*", "").strip() if pm else ""
-    accs = []
-    for ln in (wat or "").splitlines():
-        ln = ln.strip()
-        if ln.startswith(("-", "*", "•")) and "Nog niet in -ing-vorm" not in ln:
-            a = _collapse(ln.lstrip("-*• ")).replace("*", "").strip()
-            if a:
-                accs.append(a[:200])
-    return role_id, purpose, accs
+# HIER STONDEN `_parse_teleology_opportunity` EN `route_teleology_to_roloverleg`. Die twee lazen
+# de teleologie-kansen terug uit de human inbox en zetten ze als `amend_role` op de
+# roloverleg-agenda — een door een model geschreven purpose en accountabilities, in de wachtrij
+# voor structuurwijziging, zonder dat een mens ertussen had gestaan. Weg op 20 september 2026.
+#
+# Het VOORSTEL blijft bestaan: het komt als bericht bij de founder (zie `_naar_founder`). Wil je
+# het doorvoeren, dan is dat een governance-handeling die jij start, niet een parser die een
+# LLM-tekst terugleest uit een wachtrij en er een change-record van maakt.
 
 
-def route_teleology_to_roloverleg(inbox, records, agenda) -> dict:
-    """De Secretary zet de teleologie-voorstellen (uit de human inbox) op de roloverleg-agenda, zodat de
-    mens ze 1-voor-1 in het roloverleg verwerkt. Per rol één amend_role: de nieuwe purpose, de oude
-    accountabilities eruit en de nieuwe (EN, B1, -ing) erin. Dedup via Agenda.add. Fail-closed per item:
-    geen role_id/record of lege inhoud → overslaan. Geeft {routed, skipped}."""
-    routed = skipped = 0
-    for it in inbox.all():
-        if it.get("type") != "opportunity" or "Teleologie-review" not in it.get("subject", ""):
-            continue
-        role_id, purpose, accs = _parse_teleology_opportunity(
-            it.get("subject", ""), (it.get("context", {}) or {}).get("wat", ""))
-        rec = records.get(role_id) if role_id else None
-        if rec is None or (not purpose and not accs):
-            skipped += 1
-            continue
-        current = list(getattr(rec.definition, "accountabilities", []) or [])
-        change = {"purpose": purpose or None,
-                  "remove_accountabilities": current, "add_accountabilities": accs}
-        agenda.add(role_id, "amend_role", change,
-                   reason="Teleologie-review: purpose als bestaansdoel + accountabilities in EN, B1, -ing.",
-                   by="secretary", title=f"Teleologie: {role_id}")
-        routed += 1
-    return {"routed": routed, "skipped": skipped}
-
-
-def review_all_roles(records, examples_store, inbox, *, llm_reason=None) -> dict:
-    """Loop alle operationele dorp-rollen langs, en zet per rol één verbetervoorstel als kans in
-    de human inbox (by='facilitator'). Mens-gated: jij verwerkt ze in de triage. Geeft
-    {reviewed, proposed, skipped}. Fail-closed: zonder LLM → 0 voorstellen."""
+def review_all_roles(records, examples_store, data_dir, *, llm_reason=None) -> dict:
+    """Loop alle operationele dorp-rollen langs en stuur per rol één verbetervoorstel naar de
+    founder. Geeft {reviewed, proposed, skipped}. Fail-closed: zonder LLM → 0 voorstellen."""
     from nooch_village.models import RecordType
     from nooch_village.governance_examples import few_shot_block
     reviewed = proposed = skipped = 0
@@ -221,9 +212,6 @@ def review_all_roles(records, examples_store, inbox, *, llm_reason=None) -> dict
         res = review_role(role, block, llm_reason=llm_reason)
         if not res:
             continue
-        inbox.add_opportunity(
-            f"Rol '{rec.id}' aanscherpen",
-            by="facilitator", kind="governance",
-            wat=res["suggestion"], waarom=res["why"])
-        proposed += 1
+        if _naar_founder(data_dir, f"Rol '{rec.id}' aanscherpen", res["suggestion"], res["why"]):
+            proposed += 1
     return {"reviewed": reviewed, "proposed": proposed, "skipped": skipped}

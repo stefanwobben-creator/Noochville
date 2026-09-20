@@ -56,6 +56,40 @@ def descendants(records, node_id: str) -> list:
     return out
 
 
+def levende_rollen(records) -> list:
+    """De rollen die meedoen: levend, geen cirkel. Een cirkel heeft geen handen (harde regel 7),
+    dus hij senst ook niet en hij voert ook niets uit — zijn leden doen dat.
+
+    Stond tot 20 september 2026 in `villageraad.py` als `rollen()`. Die module is opgeheven; deze
+    twee helpers niet, want ze gaan over de ORG-boom en niet over een council-pass. `waarde_audit`
+    en `views/vangst` waren altijd al hun andere lezers."""
+    return [r for r in _live(records) if not _is_circle(r)]
+
+
+def naam_van(rec) -> str:
+    """De weergavenaam van een record: zijn `definition.name`, anders zijn id."""
+    return getattr(getattr(rec, "definition", None), "name", "") or getattr(rec, "id", "")
+
+
+def unieke_namen(recs: list, alle: list) -> dict:
+    """Rol-id → leesbare naam, uniek gemaakt. Drie Circle Leads die allemaal "Circle Lead" heten
+    zijn in een verslag of een autocomplete niet uit elkaar te houden; een dubbele naam krijgt
+    daarom de cirkel erachter.
+
+    `alle` is de VOLLEDIGE recordlijst en niet alleen `recs`: de ouder van een rol is een cirkel,
+    en cirkels zitten per definitie niet in `recs`."""
+    per_id = {getattr(r, "id", ""): r for r in alle}
+    namen = [naam_van(r) for r in recs]
+    uit = {}
+    for rec, naam in zip(recs, namen):
+        if namen.count(naam) > 1:
+            ouder = per_id.get(getattr(rec, "parent", "") or "")
+            if ouder is not None:
+                naam = f"{naam} ({naam_van(ouder)})"
+        uit[getattr(rec, "id", "")] = naam
+    return uit
+
+
 def role_for_domain(records, domain: str):
     """De LEVENDE rol (of cirkel) die dit domein bezit, of None.
 

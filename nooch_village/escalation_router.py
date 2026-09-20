@@ -175,76 +175,32 @@ def kies_ontvanger(data: dict | None, kandidaten: list[dict], trail: list[str],
     return kandidaat
 
 
-def route_item(*, ledger, records, data_dir, project, clid, item, from_role, from_naam="",
-               settings=None, reason_fn=None, notify=None) -> dict:
-    """Routeer ÉÉN vastgelopen item. Geeft {actie, naar_rol, reason, capability, gap, trail}.
+def match(tekst: str, records, *, doel: str = "", van_rol: str = "",
+          reason_fn=None, call_site: str = ROUTE_SITE, ladder=None) -> tuple[str, str, str]:
+    """Wie bezit dit werk? → (rol_id, kind, waarom). Leeg rol_id = geen rol past.
 
-    actie ∈ handoff | human | park:
-      handoff — doorgegeven aan een andere rol (item hier overgeslagen, telt niet meer mee);
-      human   — niemand bezit het, of de hop-limiet is bereikt → zichtbaar bij de mens;
-      park    — van deze rol, maar de capaciteit ontbreekt → blijft hier staan (de klep parkeert).
-    In alle drie de gevallen ontstaat er een gat-record zodra er capaciteit ontbreekt."""
-    pid = project["id"]
-    item_id = item.get("id", "")
-    item_text = (item.get("text") or "").strip()
-    trail = trail_of(project)
-    hops = max_hops(settings)
-    scope = project.get("scope")
-    doel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
-            if isinstance(scope, dict) else str(scope or ""))
+    Dezelfde drie stappen als `route_item` — roster, `_vraag_llm`, `kies_ontvanger` — maar zonder
+    project, ledger of aflevering: alleen het oordeel. `kind` is 'human_external' of
+    'missing_capability'; dat is wat de lezer daarna nodig heeft om te bepalen of hij het zelf doet.
 
-    # Guard 1 — hop-teller. Op de limiet routeren we niet meer: dan gaat het naar de mens, ook al zou
-    # er nog een kandidaat zijn. Werk dat twee bureaus verder nog niet landt, is een mens-beslissing.
-    limiet_bereikt = len(trail) >= hops
-    kandidaten = roster(records, exclude={from_role, *trail})
-    data = None if (limiet_bereikt or not kandidaten) else _vraag_llm(
-        item_text, doel, kandidaten, from_role, reason_fn)
-    naar = kies_ontvanger(data, kandidaten, trail, from_role)
+    De match MOET 'geen rol past' kunnen zeggen: zonder die uitspraak kan niemand ooit vaststellen
+    dat er een gat in de structuur zit, en zou elk item bij de eerste de beste rol landen.
 
-    kind = str((data or {}).get("kind") or item.get("kind") or "").strip().lower()
-    if kind not in (gap_ledger.MISSING_CAPABILITY, gap_ledger.HUMAN_EXTERNAL):
-        kind = gap_ledger.MISSING_CAPABILITY     # onbekend → bouwbaar-tenzij-bewezen-anders
-    capability = str((data or {}).get("capability") or "").strip()
-
-    # Markeer vóór elke uitkomst: de router vuurt één keer per item, ook als er hierna iets misgaat.
-    _markeer_routed(ledger, pid, clid, item_id)
-
-    if naar:
-        nieuw_spoor = [*trail, from_role]
-        res = handoff(ledger, naar, item_text, done_criterium=item.get("reason") or "",
-                      records=records, van_pid=pid)
-        if res.get("ok"):
-            _zet_trail(ledger, res["pid"], nieuw_spoor)
-            ledger.set_item_skipped(pid, clid, item_id, True,
-                                    f"overgedragen aan {naar} (project {res['pid']}) — "
-                                    f"accountability ligt daar")
-            ledger.link(pid, res["pid"])
-            ledger.add_feed_entry(
-                pid, f"📤 Doorgegeven aan {naar}: {item_text[:120]}. Die rol bezit deze "
-                     f"accountability; ik niet. Spoor: {' → '.join(nieuw_spoor)}.",
-                kind="system", author_type="role", author_id=from_role)
-            _LOG.info("📤 router: '%s' → %s (spoor %s)", item_text[:60], naar, nieuw_spoor)
-            return {"actie": "handoff", "naar_rol": naar, "reason": kind, "capability": capability,
-                    "gap": None, "trail": nieuw_spoor, "pid": res["pid"]}
-        _LOG.warning("router: handoff naar %s mislukte (%s) — valt terug op parkeren",
-                     naar, res.get("error"))
-
-    # Geen ontvanger: dit is een gat. Vastleggen wat er ontbreekt, op de rol die het opliep.
-    gap = gap_ledger.record(data_dir, role=from_role, item_text=item_text, project_id=pid,
-                            reason=kind, capability=capability, hop_trail=trail, item_id=item_id)
-    mens = kind == gap_ledger.HUMAN_EXTERNAL or limiet_bereikt
-    geland = None
-    if mens:
-        waarom = ("de hop-limiet is bereikt — twee rollen konden dit niet oppakken"
-                  if limiet_bereikt else "geen enkele rol bezit dit; het vraagt een mens of "
-                                         "externe partij")
-        geland = naar_mens(data_dir=data_dir, project=project, item_text=item_text,
-                           from_role=from_role, from_naam=from_naam or from_role, waarom=waarom,
-                           reason_fn=reason_fn)
-        if geland is None and notify is not None:
-            notify(pid, f"🙋 {from_role}: '{item_text[:90]}' — {waarom}.")
-    return {"actie": "human" if mens else "park", "naar_rol": None, "reason": kind,
-            "capability": capability, "gap": gap, "trail": trail, "geland": geland}
+    Stond tot 20 september 2026 in `tensie_poort`, waar hij de founder-inbox trieerde. Die poort is
+    met de inbox verdwenen; dit oordeel niet — `zelf_verwerking.verwerk` is nu de lezer, en hij
+    hoort thuis bij de roster en de prompt die hij hergebruikt."""
+    kandidaten = roster(records, exclude={van_rol} if van_rol else set())
+    data = _vraag_llm(tekst, doel or "(onbekend)", kandidaten, van_rol or "(onbekend)", reason_fn,
+                      call_site=call_site, ladder=ladder)
+    if data is None:
+        # LLM weg = geen handoff. Het dorp mag langzamer worden, niet stiller: de lezer krijgt een
+        # lege rol mét reden terug en deelt wat hij vond, in plaats van stil te vallen.
+        return "", "", "geen LLM-antwoord — fail-closed, geen handoff"
+    kind = str(data.get("kind") or "")
+    rol = kies_ontvanger(data, kandidaten, [], van_rol or "")
+    if not rol:
+        return "", kind, f"de match zegt expliciet geen eigenaar (kind={kind or '?'})"
+    return rol, kind, f"purpose/accountability-eigenaarschap volgens de match (kind={kind or '?'})"
 
 
 # ── De laatste meter: van "wacht op een mens" naar werk op een bureau ────────────────────────────
@@ -275,56 +231,61 @@ def _kort(tekst: str, n: int) -> str:
     return (kort or tekst[:n]) + "…"
 
 
-def mens_kandidaten(records, assign, *, exclude: set) -> list[dict]:
-    """De roster, maar alleen de rollen waar een MENS op zit.
-
-    Waarom een aparte verzameling en niet de gewone roster: dit is de vraag ná "geen enkele AI-rol
-    bezit dit". Een tweede AI-rol voorstellen zou het werk opnieuw laten stranden, en precies dat
-    heeft de hop-teller al een keer geprobeerd. Hier telt alleen wie het écht kan oppakken."""
-    from nooch_village.assignments import door_mens_bemand
-    uit = []
-    for k in roster(records, exclude=exclude):
-        # bij_twijfel=False: een rol waarvan we niet kunnen vaststellen dat er een mens op zit, is
-        # geen kandidaat. Hier is dat de veilige kant: werk bij een onzekere rol neerleggen is
-        # precies het stranden dat deze functie moet voorkomen.
-        if door_mens_bemand(k["id"], assign, records, bij_twijfel=False):
-            uit.append(k)
-    return uit
-
-
 def _mens_ontvanger(st, project: dict, item_text: str, from_role: str, trail: list[str],
-                    reason_fn) -> tuple[str, str, str]:
-    """(rol_id, persoon_id, grond) — wie krijgt dit, en waaróm die.
+                    reason_fn) -> tuple[str, str, str, str]:
+    """(rol_id, persoon_id, grond, suggestie) — de bestemming is ALTIJD de founder.
 
-    De volgorde is van meest naar minst gegrond:
-      1. een MENS-VERVULDE ROL wiens accountability of purpose deze stap dekt. Fail-closed via
-         `kies_ontvanger`: bij twijfel, een verzonnen rol of een rol die dit werk al zag → geen keuze.
-      2. de OPDRACHTGEVER van het project — wie erom vroeg, hoort te horen dat het klem zit. Een
-         zwakkere grond dan 1 (hij vroeg het, hij kan het niet per se) maar wel een echt feit.
-      3. de FOUNDER — het bestaande vangnet, en de eerlijke uitkomst als niets anders gegrond is.
+    HIER KOOS EEN MODEL DE ONTVANGER, en dat is op 20 september 2026 vervallen (CLAUDE.md, "AI is
+    instrument, geen rol"). De oude volgorde was: een mens-vervulde rol die het model aanwees, dan
+    de opdrachtgever, dan de founder. Stap 1 was een organisatorisch besluit — werk op het bord van
+    een collega — genomen door een model, uitgevoerd in dezelfde codepad, zonder dat iemand het
+    vooraf zag. Met vijf mensen op veertien mens-bemande rollen was dat geen theoretisch risico.
 
-    Fail-OPEN op het model: geen antwoord betekent stap 2 of 3, nooit 'dan maar niet'. Werk dat
-    nergens landt is precies wat we hier weghalen."""
-    kandidaten = mens_kandidaten(st.records, st.assign, exclude={from_role, *trail})
-    if kandidaten:
-        scope = project.get("scope")
-        doel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
-                if isinstance(scope, dict) else str(scope or ""))
-        try:                                             # fail-soft: geen keuze-laag → dorpsladder
-            from nooch_village.llm_keuze import llm_voorkeur
-            ladder = llm_voorkeur(st, from_role, MENS_SITE)
-        except Exception:                                # noqa: BLE001
-            ladder = None
-        keuze = kies_ontvanger(_vraag_llm(item_text, doel, kandidaten, from_role, reason_fn,
-                                          call_site=MENS_SITE, ladder=ladder),
-                               kandidaten, trail, from_role)
-        if keuze:
-            return keuze, "", "deze rol bezit dit werk"
-    opdrachtgever = str(project.get("opdrachtgever") or "").strip()
-    if opdrachtgever and st.people.get(opdrachtgever) is not None:
-        return "", opdrachtgever, "jij vroeg om dit project"
+    WAT ERVOOR IN DE PLAATS KOMT is geen andere keuze maar GEEN keuze: vastgelopen werk komt eerst
+    bij de founder, altijd, en hij bepaalt waar het heen gaat. Dat is een besluit van Stefan zelf
+    ("ik wil eerst alles zelf zien voordat het verder gaat") en bewust NIET de ladder
+    vervuller → Circle Lead → founder die `signaal.ontvangers` hanteert: die verdeelt, en hier
+    wordt niet verdeeld.
+
+    HET MODEL MAG NOG STEEDS IETS VINDEN, maar alleen als TEKST. `match()` geeft een rol mét de
+    grond waarop hij matcht; die zin reist mee in het bericht als voorstel. De lezer accepteert hem
+    door in de DM `@rol` te antwoorden — dan is het toewijzen een menselijke handeling, met spoor.
+    Valt het model weg of is het krediet op, dan gaat het bericht gewoon zonder voorstelregel: de
+    ONTVANGER verandert daar niet meer door. Dat was de stille fout van de oude versie — geen
+    antwoord betekende een andere bestemming."""
+    from nooch_village import signaal
+
+    scope = project.get("scope")
+    doel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
+            if isinstance(scope, dict) else str(scope or ""))
+    try:                                             # fail-soft: geen keuze-laag → dorpsladder
+        from nooch_village.llm_keuze import llm_voorkeur
+        ladder = llm_voorkeur(st, from_role, MENS_SITE)
+    except Exception:                                # noqa: BLE001
+        ladder = None
+    suggestie = ""
+    try:
+        # DE LADDER EN HET MEETPUNT BLIJVEN STAAN, en dat is bewust geen vanzelfsprekendheid meer.
+        # `MENS_SITE` staat in `llm_keuze.HOOG_INZET` omdat dit "een OORDEEL was waarvan de fout
+        # blijft plakken": een verkeerde ontvanger vandaag sloot via het spoor een betere morgen
+        # uit. Die grond is vervallen — het is nu een voorstel dat een mens leest en weggooit. Of
+        # deze vraag nog een duur model verdient is daarmee een OPEN KOSTENVRAAG, en die verandert
+        # niemand stilzwijgend hier; tot dat besluit meet hij door op dezelfde plek.
+        rol, _kind, waarom = match(item_text, st.records, doel=doel, van_rol=from_role,
+                                   reason_fn=reason_fn, call_site=MENS_SITE, ladder=ladder)
+        if rol:
+            rec = st.records.get(rol)
+            naam = (getattr(getattr(rec, "definition", None), "name", "") or rol)
+            suggestie = f"voorstel: dit lijkt van {naam} — {waarom}"
+    except Exception as e:                               # noqa: BLE001 — een voorstel mag nooit blokkeren
+        _LOG.warning("rolvoorstel niet gelukt (%s) — het bericht gaat zonder voorstel", e)
+
+    founder = signaal.terugval(st)
+    if founder:
+        return "", founder, "alles wat vastloopt komt eerst bij jou", suggestie
+    # Geen founder-persoon te vinden: dan de founder-ROL, zodat het niet alsnog verdampt.
     from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    return FOUNDER_ROLE_ID, "", "geen rol bezit dit, en het project heeft geen opdrachtgever"
+    return FOUNDER_ROLE_ID, "", "alles wat vastloopt komt eerst bij jou", suggestie
 
 
 def naar_mens(*, data_dir: str, project: dict, item_text: str, from_role: str, from_naam: str,
@@ -337,8 +298,8 @@ def naar_mens(*, data_dir: str, project: dict, item_text: str, from_role: str, f
         from nooch_village.cockpit2 import _Stores, route_werk      # lui: zware module, geen cyclus
         st = _Stores(data_dir)
         pid = project.get("id", "")
-        rol, persoon, grond = _mens_ontvanger(st, project, item_text, from_role,
-                                              trail_of(project), reason_fn)
+        rol, persoon, grond, suggestie = _mens_ontvanger(st, project, item_text, from_role,
+                                                         trail_of(project), reason_fn)
         scope = project.get("scope")
         titel = (scope.get("titel") or scope.get("scope") or "" if isinstance(scope, dict)
                  else str(scope or ""))
@@ -347,10 +308,16 @@ def naar_mens(*, data_dir: str, project: dict, item_text: str, from_role: str, f
         tekst = f"{from_naam} heeft dit nodig: {item_text}".strip()
         herkomst = (f"↳ {from_naam} loopt vast in '{_kort(titel, 60)}' — {waarom} "
                     f"({grond})").strip()
+        # HET VOORSTEL STAAT ACHTER DE HERKOMST, niet ervoor. Wat de lezer moet DOEN komt eerst,
+        # waar het vandaan komt daarna, en wat een model ervan vindt als laatste — in die volgorde,
+        # zodat een voorstel nooit leest als een gegeven.
+        if suggestie:
+            herkomst = f"{herkomst} · {suggestie}"
         soort, ref = route_werk(st, tekst=tekst, rol=rol, persoon=persoon, herkomst=herkomst,
                                 door=from_role, opdrachtgever="", bron_project=pid)
         _LOG.info("🙋 laatste meter: '%s' → %s (%s)", item_text[:60], ref, grond)
-        return {"soort": soort, "ref": ref, "rol": rol, "persoon": persoon, "grond": grond}
+        return {"soort": soort, "ref": ref, "rol": rol, "persoon": persoon, "grond": grond,
+                "suggestie": suggestie}
     except Exception as e:                           # noqa: BLE001 — nooit de puls breken
         _LOG.warning("laatste meter mislukt (%s) — terugval op de oude melding", e)
         return None
@@ -372,35 +339,3 @@ def _zet_trail(ledger, pid: str, trail: list[str]) -> None:
     except Exception:                            # noqa: BLE001
         pass
 
-
-def escaleer(*, ledger, records, data_dir, project, clid, items, from_role, from_naam="",
-             settings=None, reason_fn=None, notify=None) -> dict:
-    """Routeer alle vastgelopen items van één park-beslissing.
-
-    Geeft {handoffs, gaps, resterend, mens}: `resterend` zijn de items die hier blijven staan — die
-    parkeren via de bestaande klep, zodat een doodgelopen doorverwijzing zichtbaar stilvalt bij de
-    rol waar hij eindigde in plaats van stil te sterven."""
-    uit = {"handoffs": [], "gaps": [], "resterend": [], "mens": 0, "geland": []}
-    for item in items:
-        if item.get("routed"):                   # al eerder gerouteerd → niet nog een LLM-call
-            uit["resterend"].append(item)
-            continue
-        try:
-            res = route_item(ledger=ledger, records=records, data_dir=data_dir, project=project,
-                             clid=clid, item=item, from_role=from_role, from_naam=from_naam,
-                             settings=settings, reason_fn=reason_fn, notify=notify)
-        except Exception as e:                   # noqa: BLE001 — routeren mag de puls nooit breken
-            _LOG.warning("router: item %s overgeslagen (%s)", item.get("id"), e)
-            uit["resterend"].append(item)
-            continue
-        if res["actie"] == "handoff":
-            uit["handoffs"].append(res)
-        else:
-            uit["resterend"].append(item)
-            if res.get("gap"):
-                uit["gaps"].append(res["gap"])
-            if res["actie"] == "human":
-                uit["mens"] += 1
-                if res.get("geland"):
-                    uit["geland"].append(res["geland"])
-    return uit

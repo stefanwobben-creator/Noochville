@@ -83,6 +83,15 @@ def test_roloverleg_add_role_op_agenda(tmp_path):
     assert any(it["kind"] == "add_role" and src_pid in it.get("example", "") for it in items)
 
 
+def _dm_regels(dd):
+    """Alle DM-regels in het dorp. Sinds B2 (20 september 2026) is een melding aan een mens een DM
+    en geen rij in een NotifStore; "er is niets geschreven" betekent dus: geen DM."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [e for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM
+            for e in st.channels.trail(k)]
+
+
 def test_info_is_geen_uitkomst_meer_en_valt_fail_closed(tmp_path):
     """'Info' is van alle drie de verwerk-schermen verdwenen (29 aug 2026). Op de wall was hij één
     keer in de hele historie gebruikt.
@@ -93,12 +102,12 @@ def test_info_is_geen_uitkomst_meer_en_valt_fail_closed(tmp_path):
 
     Een post met `otype=info` moet nu fail-closed afketsen, niet stil landen."""
     dd, src_pid, eid = _setup(tmp_path)
-    voor = len(cockpit2._Stores(dd).notif.all())
+    voor = len(_dm_regels(dd))
     _nxt, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="info", pid=src_pid, item=eid,
               content="even melden @iemand", toelichting="fyi"), username="guest")
     assert msg.startswith("✗")
-    assert len(cockpit2._Stores(dd).notif.all()) == voor
+    assert len(_dm_regels(dd)) == voor
 
 
 # ── harde rand 1: action op DONE — item eerst, dán reopen ───────────────────────────

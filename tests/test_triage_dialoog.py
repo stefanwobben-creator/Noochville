@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.inbox_actions import (
-    ask_role, answer_pending_questions, pick_governance_target, formulate_project)
+    ask_role, answer_pending_questions)
 from nooch_village.business_case import make_business_case
 
 
@@ -60,76 +60,5 @@ def test_beantwoording_fail_closed_zonder_llm(tmp_path):
     res = answer_pending_questions(inbox, llm_reason=lambda p: None)
     assert res["answered"] == 0 and res["pending"] == 1
     assert inbox.get(iid)["context"]["dialogue"][0]["answered"] is False
-
-
-def test_pick_governance_target_kiest_bestaande_rol(tmp_path):
-    out = pick_governance_target(["scout", "librarian", "analyst"],
-                                 "Social media bijhouden", "posts plaatsen",
-                                 llm_reason=lambda p: "scout")
-    assert out == "scout"
-
-
-def test_pick_governance_target_nieuw_en_fail_closed(tmp_path):
-    assert pick_governance_target(["scout"], "iets", "iets",
-                                  llm_reason=lambda p: "__new__") == "__new__"
-    # onbekend antwoord → fail-closed naar __new__
-    assert pick_governance_target(["scout"], "iets", "iets",
-                                  llm_reason=lambda p: "bestaat_niet") == "__new__"
-    # geen LLM-antwoord → __new__
-    assert pick_governance_target(["scout"], "iets", "iets", llm_reason=lambda p: None) == "__new__"
-    # lege roster → __new__
-    assert pick_governance_target([], "iets", "iets", llm_reason=lambda p: "x") == "__new__"
-
-
-def test_formulate_project_fail_closed(tmp_path):
-    assert formulate_project("Reviews tonen", "wat", llm_reason=lambda p: None) == "Reviews tonen"
-    out = formulate_project("Reviews tonen", "wat",
-                            llm_reason=lambda p: "Reviews zichtbaar op elke productpagina")
-    assert out == "Reviews zichtbaar op elke productpagina"
-
-
-def test_klaar_geblokkeerd_zolang_vraag_open(tmp_path):
-    """Veiligheid: je kunt niet afronden terwijl er nog een vraag openstaat (anders mis je
-    het antwoord uit de volgende puls)."""
-    from nooch_village.inbox_actions import decide_opportunity
-    inbox, iid = _inbox(tmp_path)
-    ask_role(inbox, iid, "Wat bedoel je?")
-    res = decide_opportunity(inbox, iid, "done")
-    assert res["ok"] is False and res["status"] == "blocked_question"
-    assert inbox.get(iid)["status"] == "pending"             # nog open
-    # antwoord komt binnen → dan mag afronden wel
-    answer_pending_questions(inbox, llm_reason=lambda p: "ANTWOORD 1: Dit en dat.")
-    res2 = decide_opportunity(inbox, iid, "done")
-    assert res2["ok"] and res2["status"] == "done"
-    assert inbox.get(iid)["status"] == "approved"            # nu weg uit de lijst
-
-
-def test_project_wordt_concept_en_keuren_we_goed(tmp_path):
-    """tac_project maakt een CONCEPT (draft) dat niet op het actieve bord staat; approve zet
-    'm op queued (op het bord), discard gooit 'm weg."""
-    from nooch_village.projects import ProjectLedger
-    from nooch_village.inbox_actions import decide_opportunity
-    inbox, iid = _inbox(tmp_path)
-    projects = ProjectLedger(str(tmp_path / "projects.json"))
-    res = decide_opportunity(inbox, iid, "add", destination="project", owner="scout",
-                             scope_override="Reviews zichtbaar op elke productpagina",
-                             project_status="draft", projects=projects)
-    assert res["ok"] and res["draft"] is True
-    d = projects.drafts()
-    assert len(d) == 1 and d[0]["status"] == "draft" and d[0]["owner"] == "scout"
-    assert projects.approve(d[0]["id"]) is True
-    assert projects.get(d[0]["id"])["status"] == "future"    # goedgekeurd: bij de rol, slapend tot de sleep
-    assert projects.drafts() == []
-    # discard werkt alleen op drafts
-    iid2 = projects.create("scout", "x", "human", status="draft")
-    assert projects.discard(iid2) is True and projects.get(iid2) is None
-
-
-
-
-
-
-
-
 
 

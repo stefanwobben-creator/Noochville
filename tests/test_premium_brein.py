@@ -44,12 +44,17 @@ def test_hoog_inzet_sites_staan_vast():
     daardoor stil op de dorpsladder terwijl de daemon-variant de Sonnet-kop kreeg. Eén beslissing,
     twee namen, twee modellen.
 
-    `escalation_mens` kwam er dezelfde dag bij, op een METING. Drie identieke droge loops over
-    dezelfde 17 vastgelopen stappen gaven drie verschillende verdelingen; op negen vrijwel
-    identieke stappen koos hetzelfde model vier keer wél een rol en vijf keer NONE. Alle 17 kregen
-    antwoord van mistral-small, dus het was geen quota. 'Welke mens doet dit werk' is geen triage
-    maar een oordeel — en het spoor maakt de fout duur: een verkeerde ontvanger vandaag sluit een
-    betere morgen uit.
+    `escalation_mens` kwam er dezelfde dag bij, op een METING, en is er op 20 september 2026 weer
+    AF — de enige regel die deze lijst ooit is kwijtgeraakt, dus hij verdient zijn eigen alinea.
+    De meting klopte: drie identieke droge loops over dezelfde 17 vastgelopen stappen gaven drie
+    verschillende verdelingen, en op negen vrijwel identieke stappen koos hetzelfde model vier keer
+    wél een rol en vijf keer NONE. Alle 17 kregen antwoord, dus het was geen quota. De grond was dat
+    het spoor de fout duur maakte: een verkeerde ontvanger vandaag sloot een betere morgen uit.
+
+    Die grond is vervallen, niet weerlegd. Sinds "AI is instrument, geen rol" kiest dat antwoord
+    niemand meer — de bestemming is altijd de founder, en wat het model zegt is een voorstelzin die
+    hij leest en weggooit. Een voorstel dat er soms naast zit kost een blik, geen verkeerd bureau.
+    Wordt de bestemming ooit weer een echte keuze, dan hoort deze regel als eerste terug.
 
     `verslag_assemblage` kwam er 5 sep 2026 bij, en om dezelfde reden als `einddocument`: het is
     hetzelfde stuk, maar dán. Het verschil is wat erna gebeurt — een mens BEVESTIGT het, en daarmee
@@ -71,7 +76,7 @@ def test_hoog_inzet_sites_staan_vast():
     een eigen `call_site`, dus geen call_site-plumbing nodig — alleen deze twee regels)."""
     assert lk.HOOG_INZET == {
         "einddocument", "verslag_assemblage", "plan_checklist", "plan_checklist_retry",
-        "wizard_plan", "escalation_mens", "skill_tegenspraak", "skill_synthesize",
+        "wizard_plan", "skill_tegenspraak", "skill_synthesize",
         "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
         "noochie_memo", "skill_claim_evidence", "skill_competitor_discover",
         "skill_content_check"}      # -skill_lead_beoordeling: die skill bestaat niet meer (BLOK A)
@@ -102,7 +107,7 @@ def test_de_dorpsladder_hangt_als_staart_eronder():
 def test_triage_en_routing_blijven_goedkoop():
     """DE tweede guard. Geen kop = de dorpsladder."""
     for site in ("classify_tension", "cockpit_mention_triage", "escalation_route",
-                 "escaleer_keuze", "scope_nudge_match", "governance_target_pick"):
+                 "escaleer_keuze", "governance_target_pick"):
         assert lk.ladder_voor(site) is None, site
     assert lk.GOEDKOOP & lk.HOOG_INZET == set()      # geen site kan allebei zijn
 

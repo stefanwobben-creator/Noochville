@@ -237,13 +237,11 @@ class Noochie(Inhabitant):
         "project_awaiting_review",
     )
 
-    _MAX_NUDGES_PER_PULSE = 5          # dek-plafond: Noochie overspoelt de borden niet met nudges
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # ── missie-werk ───────────────────────────────────────────────────────
         self.react("pulse_completed", self._on_pulse_completed)
-        self.react("pulse_completed", self._nudge_scope_matches)   # Level 3: proactief de juiste rol wijzen
         self.react("project_discovery_ready", self._on_discovery_ready)
         # ── bulletin-mandaat ──────────────────────────────────────────────────
         self._events_today: list[dict] = []
@@ -273,104 +271,16 @@ class Noochie(Inhabitant):
         self.log.info("🎯 discovery-advies: %d metrics beoordeeld, project terug bij eigenaar", len(advice))
 
     # ── Level 3: proactieve scope-nudge (optie 1 — alleen wijzen, de rol beslist) ────────────────
-    def _scope_roster(self, records) -> list:
-        """De roster voor de match: niet-gearchiveerde rollen (geen cirkels, niet Noochie zelf) MÉT
-        skills, elk met naam + accountabilities + skills. Zonder skills → weglaten (kan niets concreets)."""
-        from nooch_village import org
-        out = []
-        for r in records.all():
-            if getattr(r, "archived", False) or r.id == self.id or org.is_circle(r):
-                continue
-            sk = list(getattr(r.definition, "skills", []) or [])
-            if not sk:
-                continue
-            out.append({"role_id": r.id,
-                        "name": getattr(r.definition, "name", "") or r.id.split("__")[-1],
-                        "accountabilities": list(getattr(r.definition, "accountabilities", []) or []),
-                        "skills": sk})
-        return out
-
-    @staticmethod
-    def _project_text(p: dict) -> str:
-        """Scope + omschrijving + laatste dialoog van een project → context voor de match."""
-        recent = " | ".join(str(m.get("text", "")) for m in (p.get("log") or [])[-5:])
-        return f"{p.get('scope', '')}. {p.get('description', '') or ''}. Dialoog: {recent}".strip()
-
-    def _notify_role(self, role_id: str, pid: str) -> None:
-        """Notificatie aan de genudgede rol, zodat de nudge de rol ook echt bereikt (fail-soft)."""
-        try:
-            import os
-            from nooch_village.notifications import NotifStore
-            NotifStore(os.path.join(self.context.data_dir, "notifications.json")).add(
-                "role", role_id, pid, by="noochie", snippet="scope-nudge: dit lijkt binnen jouw scope")
-        except Exception:
-            pass
-
-    def _nudge_scope_matches(self, event: Event = None) -> None:
-        """Loop actieve projecten langs; waar één rol (niet de eigenaar, niet Noochie) het project binnen
-        haar accountabilities ÉN skill heeft, plaats een nudge-comment + notificatie. ALLEEN wijzen (optie
-        1): Noochie maakt zelf geen taken. Hard: de skill moet in het DNA (afgedwongen in scope_nudge).
-        Gededupt per (project, rol), gedekt op _MAX_NUDGES_PER_PULSE. Fail-closed: elke fout → geen nudge."""
-        projects = getattr(self.context, "projects", None)
-        records = getattr(self.context, "records", None)
-        if projects is None or records is None:
-            return
-        try:
-            from nooch_village.scope_nudge import invoer_vinger, match_project_to_role
-            roster = self._scope_roster(records)
-            if not roster:
-                return
-            done, gevraagd, overgeslagen = 0, 0, 0
-            for p in projects.active():
-                if done >= self._MAX_NUDGES_PER_PULSE:
-                    break
-                pid, owner = p.get("id"), p.get("owner")
-                text = self._project_text(p)
-                if not pid or not text:
-                    continue
-                # POORT 1 — een rol die dit project al genudged kreeg, kan er niets meer opleveren.
-                # Deze check stond ACHTER de call; hier haalt hij kandidaten weg vóór de call, en
-                # blijft er niets over, dan hoeft het model niet gebeld te worden.
-                al = set(p.get("scope_nudges") or [])
-                cand = [r for r in roster                                # niet de eigenaar nudgen
-                        if r["role_id"] != owner and r["role_id"] not in al]
-                if not cand:
-                    overgeslagen += 1
-                    continue
-                # POORT 2 — de vloer. Dezelfde tekst en dezelfde kandidaten geven hetzelfde antwoord;
-                # gemeten verandert er per dag 2% van de actieve projecten (7 van de 332). Dit is de
-                # vorm van `kennis_dedup`: deterministisch waar het kan, het model voor de rest.
-                vinger = invoer_vinger(text, cand)
-                if vinger and projects.scope_nudge_checked(pid) == vinger:
-                    overgeslagen += 1
-                    continue
-                m, beantwoord = match_project_to_role(text, cand, name=self.id, met_status=True)
-                gevraagd += 1
-                # FAIL-OPEN: alleen onthouden als het MODEL sprak. Een 'geen match' is een oordeel,
-                # 'geen model' is een storing — die vastleggen zou de nudge voor dit project stilzetten
-                # tot iemand het aanraakt.
-                if beantwoord:
-                    projects.mark_scope_nudge_checked(pid, vinger)
-                # De poort hierboven is een KOSTENFILTER (bespaart de call); deze is de GARANTIE
-                # (geen tweede nudge). Ze zeggen hetzelfde en dat is hier de bedoeling: de filter
-                # leunt op de machine-check in `match_project_to_role`, en die staat in een andere
-                # module. Zakt die ooit weg, dan vangt deze regel het — een dubbele nudge is voor de
-                # ontvanger niet te onderscheiden van een nieuwe vraag.
-                if not m or projects.already_scope_nudged(pid, m["role_id"]):
-                    continue
-                naam = m["name"] or m["role_id"]
-                projects.add_feed_entry(
-                    pid, f"@{naam}, dit lijkt binnen jouw scope (skill: {m['skill']}). Oppakken?",
-                    kind="comment", author_type="persona",
-                    author_id=getattr(self.record, "persona_id", "") or "")
-                projects.mark_scope_nudge(pid, m["role_id"])
-                self._notify_role(m["role_id"], pid)
-                done += 1
-            if done or gevraagd or overgeslagen:
-                self.log.info("🔔 Noochie: %d nudge(s) · %d model-vraag/vragen · %d overgeslagen "
-                              "door de vloer", done, gevraagd, overgeslagen)
-        except Exception as e:
-            self.log.debug("scope-nudge overgeslagen (fail-closed): %s", e)
+    # HIER STOND `_nudge_scope_matches`: elke puls actieve projecten langs, en waar het model
+    # één rol aanwees wiens accountabilities ÉN skill pasten, een @-comment plus een bericht
+    # naar die rol. Dat is een model dat werk toewijst, en dat mag niet meer (CLAUDE.md,
+    # "AI is instrument, geen rol"). Met `scope_nudge.match_project_to_role` vervalt de hele
+    # nudge: er blijft geen vraag over die zonder dat oordeel te beantwoorden is.
+    #
+    # Wat hier WEL uit te leren viel staat in `test_scope_nudge`-geschiedenis: deze post was met
+    # 3150 van 8478 calls 37% van al het modelverbruik van het dorp, en twee deterministische
+    # poorten ervoor (dedup per rol, invoer-vingerafdruk) haalden dat omlaag. Die vorm —
+    # goedkoop-deterministisch eerst, model voor de rest — blijft bruikbaar, het onderwerp niet.
 
     def _on_pulse_completed(self, event: Event) -> None:
         note_path = event.data.get("note_path")
@@ -420,24 +330,30 @@ class Noochie(Inhabitant):
             verdict = "niet_ok"
         findings, question = _parse_noochie_report(result)
 
+        # WAAR DIT OORDEEL HEEN GAAT, sinds 20 september 2026. Een `niet_ok` werd hier een
+        # `sense_tension`, en die ging de triage-keten in: een model bepaalde bij welke rol het
+        # hoorde en de Matchmaker leverde het af. Die keten is opgeheven (CLAUDE.md, "AI is
+        # instrument, geen rol"), dus er valt niets meer te sensen.
+        #
+        # HET OORDEEL VERDWIJNT NIET. `_persist_daily` hieronder schrijft verdict, reden,
+        # bevindingen én de reflectievraag naar `noochie_daily.json`, en dat is wat de cockpit
+        # toont — dat was altijd al de plek waar een mens dit leest. De spanning was de tweede
+        # kopie, en die kwam in de praktijk nergens aan.
+        #
+        # De dedup-hash blijft staan: hij voorkomt dat een ongewijzigd oordeel elke dag opnieuw
+        # als nieuw in het log verschijnt.
         if verdict == "ok":
             self.log.info("🎯 Missie-alignment: ok (%s)", reason_text)
-        elif verdict == "niet_ok":
-            self.log.info("🎯 Missie-alignment: niet_ok (%s)", reason_text)
-            h = hashlib.sha256(reason_text.encode()).hexdigest()[:16]
+        else:
+            tekst = reason_text if verdict == "niet_ok" else result
+            if verdict != "niet_ok":
+                self.log.info("🎯 Missie-alignment: onverstaanbaar antwoord — fail-closed als niet_ok")
+            h = hashlib.sha256(tekst.encode()).hexdigest()[:16]
             if getattr(self, "_last_weigh_hash", None) != h:
                 self._last_weigh_hash = h
-                self.sense_tension(reason_text, kind="operational")
+                self.log.warning("🎯 Missie-alignment: niet_ok — %s", tekst[:200])
             else:
-                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
-        else:  # unparseable
-            self.log.info("🎯 Missie-alignment: onverstaanbaar antwoord — fail-closed als niet_ok")
-            h = hashlib.sha256(result.encode()).hexdigest()[:16]
-            if getattr(self, "_last_weigh_hash", None) != h:
-                self._last_weigh_hash = h
-                self.sense_tension(result, kind="operational")
-            else:
-                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
+                self.log.info("🎯 missie-lens ongewijzigd — oordeel niet herhaald")
 
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
         self._persist_daily(verdict, reason_text or result, findings, question)

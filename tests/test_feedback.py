@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from nooch_village.feedback import Feedback, training_block
 from nooch_village.human_inbox import HumanInbox
-from nooch_village.inbox_actions import decide_opportunity
 from nooch_village.business_case import make_business_case
 
 
@@ -37,46 +36,3 @@ def test_training_block_positief_en_negatief_en_rolfilter():
     assert "Podcast" in training_block(items)
 
 
-def test_verdict_praise_sluit_en_logt(tmp_path):
-    inbox, iid = _inbox(tmp_path)
-    fb = Feedback(str(tmp_path / "feedback.json"))
-    res = decide_opportunity(inbox, iid, "praise", reason="goed idee", feedback=fb)
-    assert res["ok"] and res["status"] == "praise"
-    assert inbox.get(iid)["status"] == "resolved"          # uit de triage
-    assert fb.all()[0]["verdict"] == "praise" and fb.all()[0]["by"] == "herman"
-
-
-def test_verdict_not_now_en_elsewhere_sluiten_verschillend(tmp_path):
-    inbox, iid = _inbox(tmp_path)
-    fb = Feedback(str(tmp_path / "feedback.json"))
-    assert decide_opportunity(inbox, iid, "not_now", feedback=fb)["status"] == "not_now"
-    assert inbox.get(iid)["status"] == "deferred"
-    inbox2 = HumanInbox(str(tmp_path / "i2.json"))
-    iid2 = inbox2.add_opportunity("Ruilfeest", by="scout")
-    assert decide_opportunity(inbox2, iid2, "elsewhere", feedback=fb)["status"] == "elsewhere"
-    assert inbox2.get(iid2)["status"] == "resolved"
-    assert {f["verdict"] for f in fb.all()} == {"not_now", "elsewhere"}
-
-
-def test_soft_reject_geen_huisregel_maar_wel_signaal(tmp_path):
-    from nooch_village.constraints import Constraints
-    inbox, iid = _inbox(tmp_path)
-    fb = Feedback(str(tmp_path / "feedback.json"))
-    cons = Constraints(str(tmp_path / "constraints.json"))
-    decide_opportunity(inbox, iid, "soft_reject", reason="niet nu passend",
-                       constraints=cons, feedback=fb)
-    assert inbox.get(iid)["status"] == "rejected"
-    assert cons.texts() == []                              # GEEN harde huis-regel
-    assert fb.all()[0]["verdict"] == "soft_reject"
-
-
-def test_vision_drop_wel_huisregel_en_signaal(tmp_path):
-    from nooch_village.constraints import Constraints
-    inbox, iid = _inbox(tmp_path)
-    fb = Feedback(str(tmp_path / "feedback.json"))
-    cons = Constraints(str(tmp_path / "constraints.json"))
-    decide_opportunity(inbox, iid, "reject", reason="we bieden geen sokken aan",
-                       remember_constraint=True, constraints=cons, feedback=fb)
-    assert inbox.get(iid)["status"] == "rejected"
-    assert "geen sokken" in cons.texts()[0]               # harde huis-regel
-    assert fb.all()[0]["verdict"] == "vision_drop"

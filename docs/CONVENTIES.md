@@ -16,7 +16,7 @@
 | **fragment-swap** (een stuk pagina vervangt zichzelf) | `NV.swap` + `data-nv-mirror(-html)` | `static/nooch.js` |
 | **projectcreatie** (door een mens) | de wizard | `views/wizard.py` + `/project/nieuw` |
 | **project-checklist** (stappen ín een project) | de checklist op het project zelf | `projects.py::checklist_add` / `check_add` |
-| **meldingen aan een mens** | de inbox | `notifications.py::NotifStore` + `views/inbox.py` |
+| **meldingen aan een mens** | een DM in zijn kanalenlijst | `signaal.py::stuur` + `channels.py::ChannelStore` |
 | **bewijs / herkomst** | de Kroniek, append-only | `evidence_ledger.py` |
 | **overleg-archief** | het snapshot met de punten erin | `werkoverleg.py::_snapshot` |
 
@@ -24,19 +24,23 @@ Twee dingen die op elkaar lijken maar het níét zijn — verwar ze niet en voeg
 
 - **`ChecklistStore`** (`checklists.json`) is de *terugkerende cirkel-checklist* uit stap 2 van het
   werkoverleg. Dat is iets anders dan de checklist ván een project.
-- **`AITaskStore`** is werk dat een AI-rol uitvoert; de **inbox** is een melding aan een mens. Een
-  AI-vervulde rol leest de NotifStore nooit — daar werk neerleggen als bericht is het stil
-  verliezen. Zie de dead-letter-guard in `_act_vangst_uitkomst`.
+- **`AITaskStore`** is werk dat een AI-rol uitvoert; een **DM** is een melding aan een mens. Een
+  AI-vervulde rol leest geen berichten — daar werk neerleggen als bericht is het stil verliezen.
+  `signaal.ontvangers` lost daarom een rol altijd op naar MENSEN (vervuller → Circle Lead →
+  founder); wat geen mens bereikt wordt niet verstuurd.
 
-Er zijn **drie postbussen**, en ze zijn geen variant van elkaar:
+Er zijn **twee postbussen**, en ze zijn geen variant van elkaar:
 
 | klasse | van wie | waarvoor |
 |---|---|---|
-| `NotifStore` | een **mens** | meldingen, spanningen, acties uit een overleg |
 | `Inbox` | een **inwoner** (thread) | toegewezen werk dat áf moet — de betrouwbaarheidskant van de bus |
 | `HumanInbox` | de **founder**, lokaal en geauthenticeerd | approvals: governance-escalaties en rol-activaties |
 
-Een vierde is wél een tweede postbus: dan mist iemand de helft van zijn werk en merkt niemand het.
+Er waren er drie. `NotifStore` — de inbox van een mens — is op 20 september 2026 opgeheven: elke
+melding, spanning of actie uit een overleg is een DM geworden in `ChannelStore`, op dezelfde plek
+waar de mens al zijn andere gesprekken leest. Een kanaal is géén derde postbus; het is de ene plek.
+
+Een derde is wél een tweede postbus: dan mist iemand de helft van zijn werk en merkt niemand het.
 
 ## Fail-open op AI
 
@@ -91,8 +95,12 @@ er een feit in de data staat waaraan je hem kunt toetsen; anders is het een voor
 in een docstring belandde. Twee gevolgen bij elke nieuwe regel:
 
 1. **Leg het feit vast op het pad dat het weet.** Het schrijfpad weet of een mens zat te typen; die
-   kennis verdwijnt zodra er alleen een string overblijft. Vandaar `notifications.MENS_GETYPT` —
-   het pad merkt zijn eigen tekst, in plaats van dat de poort de afzender moet raden.
+   kennis verdwijnt zodra er alleen een string overblijft. Vandaar `MENS_GETYPT` — het pad merkte
+   zijn eigen tekst, in plaats van dat de poort de afzender moest raden. Dat merk is op 20 september
+   2026 met `NotifStore` verdwenen, niet omdat de les niet klopt maar omdat de vraag verdween: in
+   een DM-laag is vrijwel álles mens-tekst, en de herschrijf-poort die het merk moest tegenhouden
+   bestaat niet meer. De REGEL blijft staan voor elke volgende poort — leg het feit vast waar het
+   bekend is, raad het nooit achteraf.
 2. **Het pad wint van de afleiding.** Herkenning-achteraf faalt precies bij de randgevallen: `zelf`,
    `dialoog`, een uitgelogde gebruiker. Wie de regel op herkenning bouwt, schendt hem bij de mensen
    die hij het minst kent.
@@ -148,8 +156,14 @@ naast de drie alsof het er vier zijn — dan wordt de makkelijkste weg een uitko
 
 **Goed formuleren is de voorwaarde, niet een vierde keuze.** Je kunt een spanning alleen delen of
 borgen als er staat wát er aan de hand is; een onbegrijpelijk verzoek is niet weigerbaar maar
-onleesbaar. Dat is precies wat de leesbaarheidslaag levert (`systeemtaal` + `bevinding`), en waarom
-"aanpassen" geen aparte uitkomst is: het is de stap die overal beschikbaar hoort te zijn.
+onleesbaar. Daarom is "aanpassen" geen aparte uitkomst: het is de stap die overal beschikbaar hoort
+te zijn.
+
+De leesbaarheidslaag die dat leverde bestond uit twee tredes. Deel 1 (`systeemtaal`, deterministisch)
+staat er nog. Deel 2 (`bevinding`, het model dat een signalering herschreef) is op 20 september 2026
+opgeheven: zijn laatste lezer was `villageraad`, en die ging een dag eerder met pensioen. De EIS
+blijft — een verzoek dat niemand kan lezen is niet te beantwoorden — alleen ligt hij nu bij wie het
+schrijft in plaats van bij een herschrijver erachter.
 
 #### Wat de meting zei
 
@@ -167,9 +181,14 @@ van elkaar uitzagen:
 
 | waar | wat het zegt |
 |---|---|
-| `bevinding.feitbehoud` | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
-| regel 5 in de herschrijf-prompt | een geciteerde claim blijft staan, ook in het Engels |
+| `bevinding.feitbehoud` *(opgeheven 20-09-2026)* | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
+| regel 5 in de herschrijf-prompt *(idem)* | een geciteerde claim blijft staan, ook in het Engels |
 | COPYCHECK-001 | *"Quote the failing sentence, do not summarise"* |
+
+De eerste twee stonden in `bevinding`, en die module is weg. Ze staan hier NIET als historie maar
+als eis: zodra er weer een model tussen een feit en een lezer komt te staan, gelden ze opnieuw, en
+dan is `feitbehoud` het bewijs dat ze te MÉTEN zijn en niet alleen te vragen. COPYCHECK-001 draait
+gewoon door.
 
 Alle drie beschermen hetzelfde: de woorden waarop iemand zich straks beroept. Een geciteerde
 klantclaim staat er omdat iemand precies díe zin op de site zag; een falende zin moet je kunnen
@@ -182,9 +201,12 @@ Praktisch, in volgorde van hardheid:
 1. **Behoud het epistemische niveau.** `mogelijk` blijft `mogelijk`; `A of B` wordt niet stil één
    ervan; er komt geen getal, naam of oorzaak bij die de bron niet had.
 2. **Citaten blijven letterlijk**, ook als de rest vertaald wordt. Vertaal eromheen.
-3. **Herkomst poets je niet op.** `bevinding["ruw"]` en het blok "ruwe signalering" tonen wat er
-   werkelijk stond; alleen de LEESTEKST wordt leesbaar gemaakt.
-4. **Andermans woorden herschrijf je nooit** — zie `notifications.MENS_GETYPT` hierboven.
+3. **Herkomst poets je niet op.** `bevinding["ruw"]` bewaarde de tekst zoals hij binnenkwam naast
+   de herschreven versie; alleen de LEESTEKST werd leesbaar gemaakt. Dat veld is met `bevinding`
+   verdwenen, en daarmee is de regel niet minder waar maar makkelijker te overtreden: er is nu geen
+   plek meer die het origineel automatisch bewaart. Wie een tekst bewerkt vóór een ander hem leest,
+   bewaart zelf wat er stond.
+4. **Andermans woorden herschrijf je nooit** — zie `MENS_GETYPT` hierboven.
 
 En de keerzijde die dit werkbaar houdt: kan een herschrijving het feit niet behouden, dan is de ruwe
 tekst de uitkomst. **Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.**
@@ -237,11 +259,16 @@ model hield zich **keurig aan de zekerheidsregel** — `mogelijk` bleef gewoon s
 een as die niemand bewaakte. Een enkele check had hem doorgelaten, en de tekst las beter dan het
 origineel.
 
-| deelcheck | as | waar |
+| deelcheck | as | waar (in `bevinding`, opgeheven 20-09-2026) |
 |---|---|---|
-| slag om de arm | hoe ZEKER is het | gemeten (`bevinding.feitbehoud`) |
+| slag om de arm | hoe ZEKER is het | gemeten (`feitbehoud`) |
 | grond | is dit gegeven OPZOEKBAAR in de bron | gemeten (`_ongegronde_specifieken`) |
 | alternatieven heel | zijn er MOGELIJKHEDEN weggevallen | oordeel (in de prompt) |
+
+De drie ASSEN zijn de les, niet de implementatie. Ze zijn hier blijven staan omdat ze duur zijn
+betaald: elk van de drie is toegevoegd nádat een herschrijving er langs was geglipt, en de tweede
+werd pas gevonden doordat de eerste bestond. Bouw je ooit weer een herschrijver, dan begin je met
+deze drie en niet met één.
 
 Drie regels bij het toevoegen van een deelcheck:
 
@@ -600,7 +627,7 @@ niet één controle maar alle controles die daar ooit nog bij komen.
 
 | omzeiling | wat er stil misging |
 |---|---|
-| een eigen `notif.add` naast `route_werk` | een bericht aan een AI-rol werd een dead letter |
+| een eigen melding naast `route_werk` | een bericht aan een AI-rol werd een dead letter |
 | een script dat rechtstreeks in `AttachmentStore` schreef | een policy-body werd stil afgekapt; er bleef een half codeblok achter |
 
 Beide keren bestond de bewaakte route al (`route_werk`, `cockpit2._body_te_lang`), en beide keren

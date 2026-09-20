@@ -21,6 +21,13 @@ Vier signalen, elk een VERGELIJKING op bestaande records, elk met een id dat je 
 | `besluit_genomen` | `notifications.json`, een verwerking met een echte uitkomst | een ja, een nee, een suggestie of een project — geen "niks nodig" |
 | `certificaat_gebankt` | bestanden in `data/certificaten/` | een certificaat dat een claim kan dragen |
 
+**`notifications.json` IS BEVROREN (20 september 2026).** `NotifStore` en het inbox-scherm zijn
+opgeheven; meldingen zijn DM's geworden en een DM draagt geen verwerk-record. De 371 bestaande
+notificaties blijven als bestand staan — ze zijn de enige plek waar staat dat een mens een besluit
+NAM — maar er komt geen rij meer bij. Gevolg voor deze meting: `besluit_genomen` telt alleen nog
+wat er vóór die datum gebeurde. Dat is een waarneming, geen besluit: wie dit signaal terug wil,
+heeft een nieuwe bron nodig (bijvoorbeeld een uitkomst op de DM zelf), geen nieuwe telling.
+
 **Wat NIET telt, en waarom.** `ping` (doorgestuurd naar een andere rol) en `none` ("niks nodig")
 zijn routering en afsluiting, geen uitkomst. `dod_outcome` is de definitie van klaar, niet het
 bewijs dat het klaar is. Een Kroniek-record met status `bevestigd` is bewijs dát een bron antwoordde,
@@ -108,6 +115,9 @@ class Bronnen:
         self.kroniek = _lees_jsonl(os.path.join(d, "evidence_ledger.jsonl"))
         self.usage = _lees_jsonl(os.path.join(d, "llm_usage.jsonl"))
         self.verwerkingen = _lees_jsonl(os.path.join(d, "verwerkingen.jsonl"))
+        # ARCHIEF, net als `notifications.json` hierboven: `villageraad.py` is op 20 september 2026
+        # opgeheven (dood sinds 26 augustus, en de AI-raad-premisse eronder was verlopen — 14 van
+        # de 18 rollen zijn mens-vervuld). Het spoor blijft liggen, er komt geen schrijver meer.
         self.raad = _lees_jsonl(os.path.join(d, "villageraad.jsonl"))
         self.gaps = _lees_jsonl(os.path.join(d, "gaps.jsonl"))
         self.projects = _lees_json(os.path.join(d, "projects.json"), {})
@@ -332,13 +342,12 @@ def rollen_regels(b: Bronnen, kosten: dict, nu: float) -> list[dict]:
     from nooch_village import org
     from nooch_village.assignments import door_mens_bemand
 
-    from nooch_village.villageraad import labels, rollen as levende_rollen
-
     gebruik = gebruik_per_skill(b)
     uit_per_rol = uitkomsten_per_rol(b)
     # Drie rollen die allemaal "Circle Lead" heten zijn in een tabel niet uit elkaar te houden.
-    # Dezelfde helper als de villageraad gebruikt — één plek waar dat wordt opgelost.
-    namen = labels(levende_rollen(b.records), b.records) if b.records is not None else {}
+    # `org` lost dat op — één plek waar dat gebeurt, ook voor de rol-autocomplete in de vangst.
+    alle = b.records.all() if b.records is not None else []
+    namen = org.unieke_namen(org.levende_rollen(alle), alle)
     cert_rol = _cert_eigenaar(b.records)
     if b.certificaten and cert_rol:
         uit_per_rol.setdefault(cert_rol, []).append(
@@ -740,6 +749,6 @@ def rapport_tekst(rapport: dict) -> str:
             f"{sum(1 for n in b.notifs if n.get('verwerkingen'))} met een verwerk-record",
             f"- Certificaten: {len(b.certificaten)}",
             f"- Output-bestanden: {len(b.output)}",
-            f"- Zelf-verwerkingen: {len(b.verwerkingen)} · villageraad: {len(b.raad)} · "
+            f"- Zelf-verwerkingen: {len(b.verwerkingen)} · villageraad (archief): {len(b.raad)} · "
             f"gaten: {len(b.gaps)}", ""]
     return "\n".join(uit)

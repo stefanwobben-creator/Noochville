@@ -772,3 +772,146 @@ Niet mechanisch vervangen. Per test nagelopen wat hij vastlegde:
 `claude/ux_voorstel_best_practices_20sept.md` is nieuw — allebei van Stefan, tijdens dit werk. Ik
 laat ze staan; ze horen niet in een commit van mij. (De brief kondigt ook een **fase 11** aan over
 UX-microinteracties; die heb ik niet opgepakt.)
+
+## De migratie is uitgevoerd op productie
+
+**20 september, 09:45–09:55.** Snapshot `backups/data_2026-09-20_0945.tgz` (100 MB, 2.070
+bestanden), deploy naar `8ecf29a`, droogloop, en na akkoord `--apply`.
+
+```
+notificaties  371   geschreven 371   bestond al 0   geparkeerd 0   DM-kanalen 41
+routering:    vervuller 308 · persoon 33 · terugval 30
+berichten in de kanalen: 371  (+ 0 geparkeerd = 371)      ✓ alles verantwoord
+```
+
+Nagelopen ná het schrijven, op de echte store:
+
+| controle | uitkomst |
+|---|---|
+| berichten in de 41 DM-kanalen | 371, allemaal `kind="notificatie"` |
+| elke notificatie-id terug te vinden | **ja**, 0 kwijt |
+| berichten met een lege tekst | **0** |
+| tijdspanne | 30 juni 2026 – 19 september 2026 |
+| `NotifStore` | **371 rijen, onaangeroerd** |
+
+Per ontvanger: Stefan 351 · Lotte 14 · Matthijs 5 · Wytse 1.
+
+De `terugval` is 30 en niet 19: de elf rijen op rollen met twee vervullers horen er sinds het
+besluit van vanochtend bij. 19 + 11 = 30, en `geparkeerd` staat daarmee op 0.
+
+Services actief, `/`, `/messages` en `/inbox` alle drie 303, geen fouten in de logs.
+
+**`NotifStore` staat er nog** — dat is de hele opzet van twee stappen: de bron blijft naast de
+kopie staan tot iemand heeft kunnen kijken of de 371 leesbaar zijn aangekomen.
+
+## B2 — begonnen, en opnieuw bewust gestopt vóór de commit
+
+Staat in de stash als `B2-wip`. De boom is groen en gelijk aan wat er op prod draait.
+
+### Wat er af is (in de stash)
+
+- de twee laatste `st.notif.add`-plekken om naar `_signaleer` — **`.notif.add` komt nergens meer voor**
+- `_act_verzoek_besluit` (113 regels) en zijn registratie eruit, vindkaart bijgewerkt
+- acht beslis-tests uit `test_wiki_verzoek.py` verwijderd, met de reden in het bestand
+- drie routerings-tests in `test_inbox_flows.py` omgezet naar DM-assertions
+
+### Een echte bug die dit blootlegde
+
+**Het pagina-voorstel verloor zijn inhoud.** De DM droeg alleen het zinnetje *"voorstel voor pagina
+HyphaLite: hier ontbreekt de herkomst"* — de voorgestelde tékst zat in `extra["pagina"]["body"]`,
+dat het inbox-scherm uitklapte. Zonder dat scherm krijgt de ontvanger "iemand stelt iets voor"
+zonder wát, en dat is geen suggestie maar een raadsel. Juist bij dit besluit telt dat: de afspraak
+is dat de rolvervuller de pagina zélf aanpast als hij het ermee eens is, en daar heeft hij de tekst
+plus de permalink voor nodig. `wiki.voorstel_velden` zet ze nu in het bericht.
+
+Dat is precies het soort ding dat alleen zichtbaar wordt door te kijken wat de mens ontvangt.
+
+### Waarom ik stop
+
+Na die stappen staan er nog **acht** falende tests, en ze horen niet bij deze stap:
+
+| test | hoort bij |
+|---|---|
+| `test_weigeren_houdt_zijn_eigen_woord` | de herschrijf-poort |
+| `test_onbewerkt_doorzetten_telt_niet_als_mensgeschreven` | `MENS_GETYPT` |
+| `test_bewerken_maakt_het_wel_jouw_tekst` | idem |
+| `test_de_suggestie_annoteert_maar_verplaatst_niets` | de triage-band van het inbox-scherm |
+| vier andere | `notif_outcome` — een inbox-actie die in B2b verdwijnt |
+
+Ik hoopte op een knip waar B2a op zichzelf groen kan zijn. Die is er niet: de overgebleven
+afnemers van `NotifStore` zijn de inbox-acties en de poort, en die vallen pas weg in B2b/B2d. Ze nú
+herschrijven is werk voor een scherm dat over een stap verdwijnt.
+
+De echte omvang van wat er nog ligt, gemeten:
+
+```
+views/inbox.py        1.182 regels   — levert ook `_at_doelen` aan checklists.py en cockpit2
+notifications.py        428 regels
+bevinding.py            453 regels   } de poort
+zelf_verwerking.py      402 regels   }
+spanning_ontstaat.py     59 regels   }
+vier dispatch-acties: notif_outcome · notif_klaar · notif_archive · notif_delete
+twee routes + de lade-chrome + `_person_targets` + `_person_role_options`
+```
+
+Dat is één aaneengesloten stuk, geen vier losse commits: haal je de acties weg zonder het scherm,
+dan staat er een scherm met dode knoppen; haal je het scherm weg zonder `_at_doelen` te verhuizen,
+dan breken de checklists.
+
+**Mijn voorstel: B2 als eigen beurt, in één aaneengesloten verwijdering, met de suite als
+leidraad.** De stash is het startpunt; niets is verloren. En de volgorde uit de scope blijft staan:
+de poort (drie modules) gaat er als láátste uit, zodat een fout in de omzetting niet in dezelfde
+commit zit als een dode-code-opruiming.
+
+## B2 tweede helft — geparkeerd, want de omvang klopt niet met de schatting
+
+Staat in de stash als `B2-tweede-helft-wip`. De boom is groen op `5c9fdec` (de eerste helft).
+
+### Wat er in die stash wél af is
+
+- alle zes daemon-schrijvers om naar DM via een nieuwe `signaal.stuur_op_pad`
+  (`claims_board`, `human_inbox`, `inhabitant`, `puls_wacht`, `roles`, `escaleer`)
+- `notifications.py`, `notif_migratie.py`, `spanning_ontstaat.py` en `notif_opruiming.py` verwijderd
+- `preview`/`volledig` gered naar `tekstpreview.py` — die gaan niet over notificaties maar over
+  tekst, en `afslank_afhankelijkheden` gebruikt ze nog
+- de inbox-metriek uit `views/metrics.py`
+- ~40 tests omgezet of verwijderd over vijftien bestanden
+
+### Drie dingen die ik onderweg vond, en die het beeld veranderen
+
+**1. `bevinding.py` en `zelf_verwerking.py` zijn géén poort-modules.** Ik had ze meeverwijderd op
+grond van de scope ("de drie poort-modules"). Fout: ze hebben **vijf** aanroepers buiten de poort —
+`villageraad`, `founder_kaart`, `wiki`, `cli` en `cockpit2`. Alleen `spanning_ontstaat.py` wás de
+haak. Teruggezet.
+
+**2. De routering had een gat.** Een rol zonder mens viel direct terug op de founder en sloeg de
+**Circle Lead** over — terwijl `wiki.ontvanger` en `claims_board` die regel al hanteren. Een melding
+voor een AI-vervulde rol schoot dus langs de dichtstbijzijnde mens. Toegevoegd, met een test.
+
+**3. Het vangnet begaf het bij méér mensen.** `terugval()` gaf "" zodra de founder-rol méér dan één
+vervuller had — een vangnet dat faalt juist omdat er meer mensen beschikbaar zijn. Op prod heeft
+die rol er één, dus het werkte; op een test met twee verdween de melding zonder fout of log.
+
+### Waarom ik stop
+
+"Nog ~15 call-sites" was mijn eigen schatting en die klopt niet. Wat er nu nog op `NotifStore`
+draait zijn **hele subsystemen**, geen losse regels:
+
+| | omvang | wat het doet |
+|---|---:|---|
+| `village poort` (`triage_rol`) | 413 regels + CLI | triageert de OPEN inbox-items langs vijf deuren |
+| `village villageraad` | 588 regels, 4 notif-plekken | stuurt raadsbevindingen als notificatie |
+| `waarde_audit` | 745 regels, 7 notif-plekken | meet "besluit genomen" aan de verwerkingen |
+| `rp.park` | CLI-commando | parkeert notificaties met een reden |
+
+Die verwijderen of omleiden is geen opruiming meer maar **vier features wegnemen of herbouwen** —
+en daar is niets over afgesproken. `waarde_audit` meet zijn kernbegrip ("is hier een besluit
+genomen?") aan het verwerkingsmodel dat we net hebben opgeheven; dat is een ontwerpvraag, geen
+zoek-en-vervang.
+
+Ik ga dat niet stilzwijgend doen aan het eind van een lange beurt. De stash blijft staan.
+
+**Wat ik voorstel:** Stefan beslist per subsysteem — meenemen in B2, of laten staan op een
+afgeslankte `NotifStore` die alleen nog die vier bedient. Dat tweede is lelijk maar eerlijk: de
+inbox als SCHERM is weg (dat draait al), en wat overblijft is een interne werklijst van vier
+gereedschappen, geen mensfacing wachtrij.

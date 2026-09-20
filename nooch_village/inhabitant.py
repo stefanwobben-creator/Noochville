@@ -2,9 +2,8 @@ from __future__ import annotations
 import threading, logging, uuid, re, os, time
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
-from nooch_village.models import Task, Response, Record, Tension
+from nooch_village.models import Record
 from nooch_village.skills import SkillRegistry
-from nooch_village.triage_engine import TriageContext, classify as _triage_classify
 
 
 def _persona_ladder(context, role_id: str, call_site: str) -> str | None:
@@ -70,187 +69,6 @@ class Inhabitant(threading.Thread):
     # --- buitenkant: van buiten ben ik gewoon een rol ---
     def capabilities(self) -> list[str]:
         return list(self.dna.skills)
-
-    def deliver(self, task: Task) -> None:
-        self.inbox.deliver(task)
-
-    def ask(self, capability: str, payload: dict) -> str:
-        rid = uuid.uuid4().hex
-        self.bus.publish(Event("help_requested",
-            {"request_id": rid, "capability": capability, "payload": payload, "from": self.id}, self.id))
-        return rid
-
-    # --- spelregel 5: rol-vraagt-rol om een accountability (dorpsbreed) ---
-    def offer(self, accountability_key: str, handler) -> None:
-        """Bied een accountability aan die elke andere rol mag aanvragen (spelregel 5).
-        De eerste aanbieding abonneert op accountability_requested; de handler draait dan
-        op de eigen thread van deze inwoner (via react)."""
-        if not hasattr(self, "_offered"):
-            self._offered: dict = {}
-            self.react("accountability_requested", self._on_accountability_requested)
-        self._offered[accountability_key] = handler
-
-    def _on_accountability_requested(self, event: Event) -> None:
-        if event.data.get("target") != self.id:
-            return                                  # niet aan mij gericht
-        key = event.data.get("accountability")
-        handler = getattr(self, "_offered", {}).get(key)
-        if handler is None:
-            self.sense_tension(
-                f"Gevraagd om accountability '{key}' die ik niet aanbied; "
-                f"verzoeker: {event.data.get('from', '?')}", kind="operational")
-            return
-        self.log.info("📨 verzoek van %s: voer accountability '%s' uit",
-                      event.data.get("from", "?"), key)
-        result = handler(event.data.get("payload", {}))
-        # Sluit de generieke offer→complete-lus: elke AANGEBODEN accountability meldt af met een
-        # completion-event, zodat een wachter (bv. de ask_accountability-CLI) altijd antwoord krijgt —
-        # ook als de handler geen eigen, specifiek event publiceert (voorheen deed alleen nl_corpus dat,
-        # waardoor elke andere accountability eeuwig op 'geen antwoord' bleef staan).
-        self.bus.publish(Event("accountability_check_completed", {
-            "target":         self.id,
-            "accountability": key,
-            "from":           event.data.get("from", "?"),
-            "result":         result if isinstance(result, dict) else {},
-            "ok":             True,
-        }, self.id))
-
-    def propose_close(self, gap_key: str, reason: str) -> None:
-        """Stel voor een inbox-item (met deze gap_key) te sluiten omdat ik de accountability nu
-        dek: "ik dek dit nu, voorstel tot sluiten". De mens bevestigt met één klik; ik sluit
-        nooit zelf — dat zou de dichtgeklapte lus zijn (het systeem dat z'n eigen huiswerk
-        beoordeelt)."""
-        self.bus.publish(Event("resolution_proposed",
-            {"gap_key": gap_key, "reason": reason, "from": self.id}, self.id))
-
-    def ask_accountability(self, target_role: str, accountability_key: str,
-                           payload: dict | None = None) -> None:
-        """Vraag een andere rol een van diens accountabilities op te pakken (spelregel 5).
-        Geen commando: de rol-eigenaar beslist zelf of hij het doet of er een spanning van maakt.
-        Een mens-bemenste rol (bv. de founder in the_source) is gewoon een van de vragers."""
-        self.bus.publish(Event("accountability_requested", {
-            "target":         target_role,
-            "accountability": accountability_key,
-            "payload":        payload or {},
-            "from":           self.id,
-        }, self.id))
-
-    def sense_tension(self, description: str, kind: str = "operational",
-                      evidence: dict | None = None) -> None:
-        """Sens een spanning: logt naar het audittrail én triageert voor dispatch.
-
-        evidence: optioneel verifieerbaar herhalingsbewijs uit het logboek
-        (observaties/first_seen), zodat de poort echte feiten leest, geen woord."""
-        tension = Tension(sensed_by=self.id, description=description, kind=kind,
-                          evidence=evidence)
-        self.bus.publish(Event("tension_sensed",
-            {"by": self.id, "description": description, "kind": kind}, self.id))
-        self.triage(tension)
-
-    # ── Triage ─────────────────────────────────────────────────────────────────
-
-    def triage(self, tension: Tension) -> None:
-        """Classificeer en routeer een spanning via TriageEngine (dunne facade).
-
-        1. Structureel/terugkerend  → Proposal via proposal_raised (governance-engine)
-        2. Eigen werk               → zelf doen (al in uitvoering)
-        3. Andere rol               → routeer via help_requested of broadcast
-        4. Geen passende rol        → tactisch proberen; matchmaker escaleert naar mens
-        """
-        desc  = tension.description
-        desc_l = desc.lower()
-
-        llm = self._classify_llm(desc)
-        ctx = TriageContext(
-            role_id=self.id,
-            purpose=self.dna.purpose,
-            accountabilities=self.dna.accountabilities,
-            domains=getattr(self.dna, "domains", []),
-            records=getattr(self.context, "records", None),
-        )
-        result = _triage_classify(desc_l, ctx, llm_result=llm)
-
-        if result.classification == "structureel":
-            # Ging naar `_raise_governance_proposal` → voorstel → G0-G4 → Facilitator. Die hele
-            # keten is weg (BLOK A, 19 sept 2026): een inwoner schrijft geen governance-voorstellen
-            # meer. De classificatie zelf blijft staan en reist mee in `tension_triaged` hieronder,
-            # zodat een mens in het spoor nog kan zien dát dit als structureel werd gelezen.
-            self.log.info("🏛️ structurele spanning (geen voorstel meer): %s", desc[:120])
-        elif result.classification == "eigen-werk":
-            self._do_own_work(tension)
-        elif result.classification.startswith("andere-rol:"):
-            self._route_to_role(tension, result.target_role_id, result.target_capability)
-        else:
-            self._try_tactical_or_escalate(tension)
-
-        self.bus.publish(Event("tension_triaged", {
-            "by": self.id,
-            "description": desc[:80],
-            "classification": result.classification,
-        }, self.id))
-
-    def _do_own_work(self, tension: Tension) -> None:
-        """De spanning valt binnen mijn eigen rol — wordt hier al opgepakt."""
-        self.log.info("🔧 spanning in eigen scope (%s) → geen aparte actie", self.id)
-
-    def _route_to_role(self, tension: Tension, role_id: str, capability: str | None) -> None:
-        """Routeer naar een andere rol die beter bij de spanning past."""
-        if capability:
-            self.ask(capability, {"description": tension.description, "from": self.id})
-            self.log.info("🔀 spanning gerouteerd → %s via '%s'", role_id, capability)
-        else:
-            self.bus.publish(Event("tension_routed", {
-                "from": self.id, "to": role_id,
-                "description": tension.description[:80],
-            }, self.id))
-            self.log.info("🔀 spanning gerouteerd → %s (broadcast)", role_id)
-
-    def _try_tactical_or_escalate(self, tension: Tension) -> None:
-        """Geen passende rol gevonden. Probeer tactisch; matchmaker escaleert naar mens."""
-        self.log.info("🔀 geen passende rol → tactisch via help_requested")
-        self.ask("assistance", {
-            "description": tension.description,
-            "from": self.id,
-            "context": "geen passende rol gevonden in het dorp",
-        })
-
-    def _classify_llm(self, desc: str) -> str | None:
-        """Optionele LLM-classificatie. Geeft 'structural','own',<rol_id>,'tactical' of None."""
-        from nooch_village.llm import reason
-        records = getattr(self.context, "records", None)
-        if records is None:
-            return None
-        roster = "\n".join(
-            f"- {r.id}: {', '.join(r.definition.accountabilities[:3])}"
-            for r in records.all() if not r.archived and r.id != self.id
-        )
-        prompt = (
-            f"Jouw rol ({self.id}): {self.dna.purpose}\n"
-            f"Jouw accountabilities: {', '.join(self.dna.accountabilities)}\n"
-            f"Andere rollen:\n{roster}\n\n"
-            f"Gevoelde spanning: \"{desc}\"\n\n"
-            "Classificeer op EXACT ÉÉN regel (eerste match wint):\n"
-            "STRUCTURAL  — terugkerend, governance-structuur ontbreekt of niemand bezit het\n"
-            "OWN         — eenmalig werk dat binnen mijn eigen rol valt\n"
-            "OTHER:<id>  — werk dat bij een andere bestaande rol past (geef de rol-id)\n"
-            "TACTICAL    — eenmalig werk, geen passende rol"
-        )
-        out = reason(prompt, call_site="classify_tension",
-                     ladder=_persona_ladder(self.context, self.id, "classify_tension"))
-        if not out:
-            return None
-        out_l = out.strip().lower().split("\n")[0]
-        if out_l.startswith("structural"):
-            return "structural"
-        if out_l.startswith("own"):
-            return "own"
-        if out_l.startswith("other:"):
-            return out_l[6:].strip()
-        if out_l.startswith("tactical"):
-            return "tactical"
-        return None
-
-    # ── Periodieke reflectie ────────────────────────────────────────────────────
 
     def _maybe_reflect(self, event: Event) -> None:
         """Reflecteer periodiek, niet bij elke dag_begint-puls.
@@ -367,12 +185,13 @@ class Inhabitant(threading.Thread):
         (en niet een persoon) overleeft bovendien een wisseling van vervuller."""
         if not rol_id:
             return
-        try:
-            from nooch_village.notifications import NotifStore
-            pad = os.path.join(self.context.data_dir, "notifications.json")
-            NotifStore(pad).add("role", rol_id, project_id, by=self.id, snippet=snippet)
-        except Exception:                                    # noqa: BLE001
-            self.log.warning("melding aan '%s' mislukt", rol_id, exc_info=True)
+        # Een ROL als adres blijft het uitgangspunt; `signaal` zoekt er de mens bij die hem
+        # vervult, of valt terug op de founder. Zo overleeft de melding nog steeds een wisseling
+        # van vervuller, maar komt hij wél aan bij iemand die hem leest.
+        from nooch_village import signaal
+        if not signaal.stuur_op_pad(self.context.data_dir, "role", rol_id, snippet, by=self.id,
+                                    herkomst={"project": project_id} if project_id else None):
+            self.log.warning("melding aan '%s' kwam nergens aan", rol_id)
 
     def _notify_founder(self, project_id: str, snippet: str) -> None:
         """Heads-up naar de founder-rol. Het bijzondere geval van `_notify_rol`.
@@ -464,36 +283,9 @@ class Inhabitant(threading.Thread):
                           telling["geen_grant"], telling["fout"])
         return telling
 
-    def _payload_opnieuw(self, skill: str, tekst: str, schema: str, mist: list, huidig: dict):
-        """Leid de payload opnieuw af uit de item-tekst + het input_schema van de skill."""
-        from nooch_village.llm import reason as llm_reason
-        import json as _json
-        prompt = (
-            "Je vult de invoer (payload) voor één skill-aanroep in NoochVille (Nooch.earth, duurzame "
-            "veganistische schoenen). Een eerdere poging was onvolledig.\n\n"
-            f"SKILL: {skill}\n"
-            f"INPUT-VORM (input_schema): {schema or '(geen schema — leid af uit de taak)'}\n"
-            f"DE TAAK: {tekst}\n"
-            f"HUIDIGE PAYLOAD: {_json.dumps(huidig, ensure_ascii=False)[:500]}\n"
-            f"ONTBREEKT: {', '.join(mist) or '(onbekend — vul de hele payload opnieuw)'}\n\n"
-            "Vul de ontbrekende velden uit de taaktekst. Verzin GEEN identifiers, URL's, merknamen of "
-            "id's die niet in de taak staan — laat een veld liever leeg dan het te raden.\n"
-            "Antwoord UITSLUITEND met het JSON-object van de payload.")
-        raw = llm_reason(prompt, call_site="payload_herstel", json_mode=True, max_tokens=700)
-        if not raw:
-            return None
-        s = str(raw)
-        try:
-            return _json.loads(s[s.find("{"):s.rfind("}") + 1])
-        except (ValueError, IndexError):
-            return None
+    # HIER STOND `_payload_opnieuw`: een model dat de payload van een mislukte skill-aanroep
+    # opnieuw invulde. Nul aanroepers, weg op 20 september 2026.
 
-    # ── Wat telt als resultaat? ──────────────────────────────────────────────────────────────
-    # Hiervóór stonden hier drie allowlists (_LIST_KEYS/_TEXT_KEYS/_METRIC_KEYS): een skill moest
-    # zijn uitvoer in een sleutel stoppen die toevallig in die lijsten stond, anders las een
-    # geslaagde run als "leeg". Dat is drie keer misgegaan — projectverzoek (pid/titel),
-    # claims_check (bevindingen) en content_check — en kostte 87 weggegooide resultaten. Een
-    # allowlist die elke nieuwe skill een gezegende sleutelnaam laat raden, is stille koppeling.
     #
     # Nu andersom: alles wat GEEN metadata is en substantie draagt, telt. Zo hoeft geen enkele
     # nieuwe skill nog iets te raden.
@@ -712,15 +504,6 @@ class Inhabitant(threading.Thread):
             return reden
         return None
 
-    def handle(self, task: Task) -> Response:
-        fout = self._weiger(task.capability)
-        if fout:
-            return Response(success=False, error=fout)
-        ok, result = self._execute_skill(task.capability, task.payload)
-        if ok:
-            return Response(success=True, data=result)
-        return Response(success=False, error=result)
-
     def use_skill(self, capability: str, payload: dict) -> dict:
         """Zelf een eigen skill gebruiken (voor zelf-geinitieerd werk, niet via de matchmaker)."""
         fout = self._weiger(capability)
@@ -807,18 +590,14 @@ class Inhabitant(threading.Thread):
             item = self.inbox.take(timeout=0.5)
             if item is None:
                 continue
-            if isinstance(item, Task):
-                self.log.info("taak ontvangen: %s", item.capability)
-                resp = self.handle(item)
-                self.bus.publish(Event("task_completed", {
-                    "task_id": item.id, "by": self.id, "capability": item.capability,
-                    "success": resp.success, "data": resp.data, "error": resp.error,
-                    "request_id": item.request_id}, self.id))
-            else:  # event-job: callable die de handler met het event aanroept
-                try:
-                    item()
-                except Exception as e:
-                    self.log.error("event-handler faalde: %s", e)
+            # ALLEEN NOG EVENT-JOBS. Hier stond ook een `isinstance(item, Task)`-tak voor werk dat
+            # de Matchmaker had toegewezen. Die keten is op 20 september 2026 opgeheven; de inbox
+            # draagt sindsdien uitsluitend de callables die `react()` erin legt — de discipline uit
+            # harde regel 9 (handlers draaien op de eigen thread) blijft dus precies gelijk.
+            try:
+                item()
+            except Exception as e:
+                self.log.error("event-handler faalde: %s", e)
             self.inbox.done()
 
     def reload(self, record: Record) -> None:
@@ -848,12 +627,11 @@ class Circle(Inhabitant):
             caps.update(m.capabilities())          # later: cureren via Lead Link
         return sorted(caps)
 
-    def handle(self, task: Task) -> Response:
-        for m in self.members.values():            # delegeren, niet zelf uitvoeren
-            if task.capability in m.capabilities():
-                m.deliver(task)
-                return Response(success=True, data={"delegated_to": m.id})
-        return Response(success=False, error=f"cirkel '{self.id}' heeft geen member voor '{task.capability}'")
+    # HIER STOND `handle(task)`: de cirkel gaf een taak door aan het eerste lid dat de capability
+    # had — "een cirkel heeft geen handen: hij delegeert" (harde regel 7). Die regel geldt nog
+    # steeds; er is alleen geen `Task` meer om te delegeren sinds de Matchmaker is opgeheven. Hij
+    # leeft door in `capabilities()` hierboven, dat nog altijd de leden optelt in plaats van de
+    # cirkel zelf iets te laten kunnen.
 
     def start(self) -> None:
         for m in self.members.values():

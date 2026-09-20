@@ -30,7 +30,6 @@ from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition
-from nooch_village.notifications import NotifStore
 from nooch_village.projects import ProjectLedger, checklist_progress, PREP_CHECKLIST_TITLE
 from nooch_village.skills import Skill, SkillRegistry, ontbrekende_velden
 from nooch_village.skills_impl.escaleer import EscaleerSkill, rol_id_voor
@@ -39,6 +38,24 @@ TODAY = "2026-09-12"
 
 
 # ── gereedschap ──────────────────────────────────────────────────────────────
+
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
 
 class _Onderzoek(Skill):
     name = "openalex_evidence"
@@ -93,6 +110,10 @@ def _records(tmp_path, ids=()):
 
 
 def test_beslissing_draagt_de_vraag_en_het_project(tmp_path):
+    # Een dorp is nodig: de escalatie is sinds B2 een DM en moet dus een MENS vinden. Vroeger
+    # schreef `NotifStore.add` een rij ongeacht of de doelrol bestond.
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(str(tmp_path))
     ctx = SimpleNamespace(data_dir=str(tmp_path))
     with patch("nooch_village.llm.reason", return_value=None):
         r = EscaleerSkill().run({"reden": "drop the elastane requirement: yes or no?",
@@ -100,8 +121,13 @@ def test_beslissing_draagt_de_vraag_en_het_project(tmp_path):
     assert r["wacht_op_mens"] is True and r["aard"] == "beslissing"
     assert r["text"] == "Decision requested from the_source: drop the elastane requirement: yes or no?"
     assert Inhabitant._classify_result(r)[1] == ("text", "text")        # de vraag wint, niet 'aard'
-    n = NotifStore(f"{tmp_path}/notifications.json").for_targets([("role", "the_source")])
-    assert n and n[0]["project_id"] == "p-123"
+    # De vraag landt als DM bij een mens, met het project als herkomst — dat veld is het enige
+    # dat B2 bewaarde, juist omdat de lezer anders niet ziet waar de vraag over gaat.
+    from nooch_village import channels, signaal
+    mini = signaal._MiniStores(str(tmp_path))
+    entries = [e for k in mini.channels.bestaande()
+               if channels.soort_van(k) == channels.DM for e in mini.channels.trail(k)]
+    assert entries and (entries[-1].get("herkomst") or {}).get("project") == "p-123"
 
 
 def test_aard_buiten_de_enum_wordt_bij_het_plannen_geweigerd():

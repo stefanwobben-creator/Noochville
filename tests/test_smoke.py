@@ -27,7 +27,7 @@ def dd(tmp_path):
 
 
 def test_smoke_stores(dd):
-    """Kern-datalaag: records, catalogus-definities, dag-observaties, notificaties, werkoverleg."""
+    """Kern-datalaag: records, catalogus-definities, dag-observaties, kanalen, werkoverleg."""
     st = cockpit2._Stores(dd)
     assert st.records.get(CIRCLE) is not None                     # governance
     assert len(st.defs.all()) > 0                                 # catalogus geseed
@@ -35,7 +35,7 @@ def test_smoke_stores(dd):
                                  bron="plausible", datum="2026-07-05")
     rows = st.observations.daily_series("visitors_day", bron="plausible")
     assert rows and rows[-1]["value"] == 42                       # observatie round-trip
-    assert isinstance(st.notif.all(), list)
+    assert isinstance(st.channels.bestaande(), list)               # de DM-laag
     assert st.werk.get(CIRCLE) in (None,) or isinstance(st.werk.get(CIRCLE), dict)
 
 

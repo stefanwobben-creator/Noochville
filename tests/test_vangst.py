@@ -34,6 +34,15 @@ def _punten(dd):
 
 # ── 1. vangen schrijft alleen de zin ────────────────────────────────────────
 
+def _dm_regels(dd):
+    """Alle DM-regels in het dorp. Sinds B2 (20 september 2026) is een melding aan een mens een DM
+    en geen rij in een NotifStore; "er is niets geschreven" betekent dus: geen DM."""
+    from nooch_village import channels, signaal
+    st = signaal._MiniStores(dd)
+    return [e for k in st.channels.bestaande() if channels.soort_van(k) == channels.DM
+            for e in st.channels.trail(k)]
+
+
 def test_vangen_legt_vast_en_typeert_niets(tmp_path):
     dd = _dd(tmp_path)
     _post(dd, "vangst_add", circle=CIRCLE, punt="de leverancier belt nooit terug", next="/vangst")
@@ -42,8 +51,8 @@ def test_vangen_legt_vast_en_typeert_niets(tmp_path):
     assert [p["title"] for p in punten] == ["de leverancier belt nooit terug"]
     assert punten[0]["status"] == "open"
     assert punten[0].get("outcome") is None
-    # Niets getypeerd, niets geschreven: geen enkele kaart bij wie dan ook.
-    assert st.notif.all() == []
+    # Niets getypeerd, niets geschreven: geen enkel bericht bij wie dan ook.
+    assert _dm_regels(dd) == []
 
 
 def test_lege_enter_is_geen_fout(tmp_path):

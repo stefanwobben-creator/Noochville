@@ -49,6 +49,13 @@ def _persoon(dd):
 
 # ── 1. gedrag ───────────────────────────────────────────────────────────────
 
+def _dm_aan(st, persoon_id):
+    """De DM-teksten die deze persoon kreeg. `route_werk` levert sinds B2 (20 sept 2026) een DM bij
+    de mens in plaats van een item in een wachtrij — de ROUTERING (wie krijgt het, en precies één
+    keer) is ongewijzigd, en dat is wat deze tests bewaken."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
+
 def test_een_actie_landt_bij_de_persoon_en_nergens_anders(tmp_path):
     dd = _dd(tmp_path)
     p = _persoon(dd)
@@ -60,10 +67,11 @@ def test_een_actie_landt_bij_de_persoon_en_nergens_anders(tmp_path):
                                    "next": ["/"]}, username="guest")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
-    ns = [n for n in st.notif.all() if "reply to complaint" in (n.get("snippet") or "")]
-    assert len(ns) == 1, "de actie hoort precies één keer in een postbus te liggen"
-    assert (ns[0]["target_type"], ns[0]["target_id"]) == ("person", p.id)
-    assert ns[0]["type"] == "actie"
+    ns = [t for t in _dm_aan(st, p.id) if "reply to complaint" in t]
+    assert len(ns) == 1, "de actie hoort precies één keer bij één mens te landen"
+    # Het `type: actie`-veld is met de wachtrij verdwenen (besluit Stefan, 20 sept): een DM draagt
+    # tekst, afzender en tijd. Wat de test bewaakt — precies één postbus, en de juiste — staat
+    # hierboven en hieronder.
     los = [t for pr in st.projects.all() for cl in (pr.get("checklists") or [])
            for t in (cl.get("items") or []) if "reply to complaint" in (t.get("text") or "")]
     assert los == [], f"actie als checklist-item op een vreemd project: {los}"
@@ -100,7 +108,7 @@ _AANROEP = re.compile(r"_outcome_action\s*\(")
 # Totaal aantal treffers in de codebase (1 definitie + 3 aanroepen vanuit de inbox, waar de mens
 # het project aanwijst). MONOTOON DALEND: verdwijnt er een aanroep, verlaag het getal. Stijgt hij,
 # dan is er ergens een nieuwe plek die een project raadt — en dat is precies de bug.
-PLAFOND_TOTAAL = 4
+PLAFOND_TOTAAL = 3   # B2: -1, de inbox-aanhaak verdween met /inbox
 
 
 def test_de_overleg_uitkomst_haakt_niets_meer_aan_een_geraden_project():

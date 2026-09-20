@@ -20,6 +20,24 @@ from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nooch_village")
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 def _ledger(tmp_path) -> ProjectLedger:
     return ProjectLedger(str(tmp_path / "projects.json"))
 
@@ -411,6 +429,8 @@ def test_claims_check_blijft_puur_lokaal():
 def _inwoner(tmp_path, skills, resultaat):
     """Een generieke inwoner met de scan-skill in zijn DNA — precies zoals compliance
     materialiseert (geen CLASS_MAP-entry, dus geen eigen klasse)."""
+    from nooch_village import cockpit2 as _c2
+    _c2._bootstrap(str(tmp_path))
     from nooch_village.event_bus import EventBus
     from nooch_village.inhabitant import Inhabitant
     from nooch_village.models import Record, RecordType, RoleDefinition
@@ -436,12 +456,14 @@ def _inwoner(tmp_path, skills, resultaat):
 
 
 def _meldingen(tmp_path) -> list[str]:
-    from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    from nooch_village.notifications import NotifStore
-    pad = os.path.join(str(tmp_path), "notifications.json")
-    if not os.path.exists(pad):
-        return []
-    return [n.get("snippet", "") for n in NotifStore(pad).for_targets([("role", FOUNDER_ROLE_ID)])]
+    """De verstuurde berichten. Sinds B2 DM's in plaats van rijen in een wachtrij.
+
+    Er is een dorp nodig om te kunnen bezorgen (records + assignments + people): een DM gaat naar
+    een MENS. De `_inwoner`-fixture hieronder bootstrapt daarom."""
+    from nooch_village import channels, signaal
+    mini = signaal._MiniStores(str(tmp_path))
+    return [e.get("text") or "" for k in mini.channels.bestaande()
+            if channels.soort_van(k) == channels.DM for e in mini.channels.trail(k)]
 
 
 def test_zonder_grant_gebeurt_er_niets(tmp_path):

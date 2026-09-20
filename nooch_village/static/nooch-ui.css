@@ -125,6 +125,18 @@
 .nu .pkaart, .nu .kcard { border: var(--nu-border); background: var(--nu-surface); }
 .nu .msg-kanaal { border-radius: 0; }
 .nu .msg-kanaal.on { background: var(--nu-text); color: var(--nu-neon); }
+
+/* Ongelezen: een MODIFIER op de bestaande kanaalrij, geen nieuwe component (fase 11, 3a).
+   Drie dragers, want kleur alleen is hier geen optie: het gewicht (vet), de telling (een getal,
+   leesbaar in zwart-wit en door een schermlezer) en pas daarna de tint. Zelfde regel als de
+   bordkolommen hieronder — wie de tint niet ziet, ziet nog steeds dat er iets nieuw is. */
+.nu .msg-kanaal--nieuw { font-weight: 700; }
+.nu .msg-nieuw {
+  float: right; min-width: 1.15rem; padding: 0 .3rem; margin-left: .4rem;
+  font-size: 11px; font-weight: 700; line-height: 1.15rem; text-align: center;
+  background: var(--nu-text); color: var(--nu-neon); }
+/* In het OPEN kanaal draait het contrast om, anders valt het plaatje weg tegen de actieve rij. */
+.nu .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
 .nu .wiki-doms details { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
 
 /* ── Het bord: kolommen dragen een VORM, geen pasteltint ──────────────────────────────────────

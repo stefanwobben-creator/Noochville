@@ -103,8 +103,6 @@ from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_ca
                                        reground_seed as _reground_seed,
                                        migrate_definitions as _migrate_definitions)
 from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
-from nooch_village import notifications
-from nooch_village.notifications import NotifStore
 from nooch_village.doelen import DoelStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -147,7 +145,6 @@ class _Stores:
             migrate_persona_bindings(self.records, self.assign)
         except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
             pass
-        self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         # De gespreklaag (fase 8): cirkel- en DM-kanalen wonen hier, project-kanalen
         # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
         self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
@@ -241,22 +238,21 @@ def _bootstrap(dd: str) -> None:
     # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
     # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
     # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
-    try:
-        from nooch_village.notif_opruiming import archiveer_stale_onbemand
-        _op = archiveer_stale_onbemand(st.notif, st.records, st.assign)
-        if _op.get("gearchiveerd"):
-            logging.getLogger("village.cockpit").info(
-                "opruiming: %d stale onbemand-notificatie(s) ingetrokken", _op["gearchiveerd"])
-    except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("opruiming overgeslagen: %s", _e)
-    # De haak bij het ONTSTAAN: elke nieuwe spanning voor een mens-bemande rol krijgt meteen zijn
-    # bevinding (in gewone taal) en zijn type. Eén call per spanning, niet in een batch — wie hem
-    # later opent leest de al-geschreven tekst. Fail-soft: valt dit om, dan blijft de rauwe
-    # notificatie staan, want een niet-verrijkte spanning is nog steeds een spanning.
-    try:
-        from nooch_village.spanning_ontstaat import maak_verrijker
-    except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("spanning-verrijker niet gezet: %s", _e)
+    # HIER STOND `notif_opruiming.archiveer_stale_onbemand`: die trok "[rol X onbemand]"-meldingen
+    # in zodra de rol wél bemand bleek. Een pleister op een bug die al gefixt was — zie de les in
+    # CLAUDE.md, "een fix hoort zijn eigen notificaties in te trekken". De store waar hij in
+    # opruimde bestaat niet meer, dus de pleister ook niet. Het onderliggende gat (een emissie die
+    # weet uit welke regel hij voortkomt) is nog steeds niet gedicht; dat staat in CLAUDE.md.
+    # HIER STOND DE HAAK BIJ HET ONTSTAAN (`spanning_ontstaat.maak_verrijker`): elke nieuwe
+    # spanning kreeg meteen een bevinding in gewone taal en een type. Die haak hing aan
+    # `NotifStore.add` en had twee afnemers — de inbox-routering (het type) en `views/inbox._regel`
+    # (de herschreven zin). Allebei zijn ze in B2 verdwenen, dus de haak schreef vanaf dat moment
+    # een antwoord dat niemand meer las: een LLM-call per melding, in het niets.
+    #
+    # `bevinding.py` en `zelf_verwerking.py` staan er NOG WEL. Ik had ze eerst meeverwijderd, en dat
+    # was fout: ze hebben eigen aanroepers buiten de poort (`founder_kaart`, `wiki`, `cli` en deze
+    # module; `villageraad` was er de vijfde, tot die op 20 september 2026 zelf wegging). Alleen de
+    # HAAK is weg, niet het gereedschap eronder.
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
@@ -319,9 +315,6 @@ from nooch_village.views.metrics import (
 from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
-)
-from nooch_village.views.inbox import (
-    render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
 )
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
@@ -391,35 +384,6 @@ def _person_targets(st: _Stores, username: str) -> list:
         except Exception:
             continue
     return targets
-
-
-def _notif_gate(st: _Stores, username: str | None, nid: str) -> str | None:
-    """Mag deze mens iets doen met dít inbox-item? Geeft een foutmelding terug, anders None.
-
-    DE POORT ZAT IN DE KNOP EN NIET IN DE CODE. `render_inbox` toont uitsluitend items uit
-    `open_for_targets(_person_targets(...))`, dus op het scherm zie je alleen je eigen wachtrij.
-    De handlers eronder namen echter een kale `nid` aan en deden hun werk: lezen, verwerken,
-    archiveren, weggooien. Een POST met een vreemd id kon dus de wachtrij van iemand anders
-    opschonen, en juist bij deze zes acties merkt de eigenaar dat niet — het item is gewoon weg,
-    zonder spoor op zijn scherm.
-
-    Dat is exact het patroon waar `_act_goedkeur` zelf voor waarschuwt: "een view is een verzoek en
-    geen garantie: een POST kan met de hand gestuurd worden."
-
-    De doelverzameling is dezelfde als die van het scherm (`_person_targets`): jezelf als persoon
-    plus elke rol die je vervult. Guest (auth uit) mag alles; een item dat niet bestaat laten we
-    door, zodat de handler zelf zijn eigen "item not found" kan geven en deze poort geen tweede
-    bron van waarheid wordt over wat er bestaat."""
-    if username == "guest":
-        return None
-    if st.people.by_email(username) is None:
-        return "No access — user not recognised"
-    n = st.notif._find((nid or "").strip())
-    if n is None:
-        return None                                      # bestaat niet: de handler zegt dat zelf
-    if (n.get("target_type"), n.get("target_id")) in set(_person_targets(st, username)):
-        return None
-    return "No access — this item is not in your inbox"
 
 
 def _scoped_project_opts(st: _Stores, n) -> str:
@@ -1110,7 +1074,7 @@ def _tab_suffix(tab: str | None) -> str:
 _NU_ROUTES = frozenset({
     "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
     "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
-    "/inbox", "/inbox/verwerk", "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
+    "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
     # Fase 10, groep B. `/middelen` en `/rolefillers` draaien op DEZELFDE `overview.py` als
     # `/node`, `/person` en `/admin`, die er al in stonden — dezelfde rendercode zag er dus anders
     # uit afhankelijk van de URL. Dat was een gat in deze lijst, geen besluit. `/site-audit` is in
@@ -1488,13 +1452,14 @@ def _act_pagina_voorstel(c):
         cur, voorstel=voorstel, waarom=g("waarom"),
         van_naam=(getattr(van, "name", "") or username or "someone"), van_id=van_id or "",
         reden=ontv.get("reden") or "")
-    # NIET OMGEZET NAAR EEN DM, en dat is een grens die B1 blootlegde. Een pagina-voorstel is geen
-    # signalering maar een VERZOEK MET EEN BESLISSING: `verzoek_besluit` biedt accepteren, weigeren
-    # en aanpassen aan, en leest het item terug op `nid`. Een DM heeft geen plek om "hier moet nog
-    # over beslist worden" te dragen — dat is precies de state die uit het model verdwijnt.
-    # Zolang er geen vervanging is blijft dit op `NotifStore` staan; zie het nachtlog.
-    st.notif.add("role", ontv["rol"], "", by=van_id or (username or ""),
-                 snippet=snippet, extra=extra)
+    # OOK DIT IS EEN GEWONE DM (B2, besluit Stefan 20 september 2026). In B1 stond hier nog dat een
+    # pagina-voorstel een "verzoek met een beslissing" was en daarom niet naar een DM kon. Die
+    # redenering is ingetrokken, en terecht: een voorstel is door een mens gemaakt en heeft geen
+    # automatische consequentie. Het IS een suggestie. Wie de rol vervult past de pagina zelf aan
+    # als hij het ermee eens is — net als bij elke andere wiki-bewerking — en een genegeerd
+    # voorstel betekent gewoon dat de pagina blijft zoals hij was. Daar is geen status voor nodig,
+    # en dus ook geen wachtrij om hem in te bewaren.
+    _signaleer(st, "role", ontv["rol"], snippet, by=van_id or (username or ""))
     naar = _name(st.records.get(ontv["rol"])) or ontv["rol"]
     return nxt, f"✓ proposal sent to {naar}"
 
@@ -2151,7 +2116,7 @@ def _act_feed_remove(c):
 
 
 def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
-                               extra: dict, entry_id: str) -> int:
+                               entry_id: str) -> int:
     """Route elke @-vermelding naar het DM-kanaal van de bedoelde mens. Geeft het aantal terug.
 
     DE AFZENDER MOET EEN MENS ZIJN. Een DM is tussen twee mensen; een persona of een niet-herkende
@@ -2218,11 +2183,10 @@ def _act_proj_feed(c):
                 _auteur = (_p.id if _p is not None else "dialoog")
             elif aid:
                 _auteur = aid
-            # Het PAD zegt of een mens dit typte: `atype == "human"`. Dat blijft waar als we de
-            # persoon niet kunnen thuisbrengen (uitgelogd, onbekend e-mail) — en juist dan zou de
-            # poort de woorden van die mens herschrijven. Het merk hoort dus bij het pad, niet bij
-            # de auteur-herkenning.
-            _getypt = {notifications.MENS_GETYPT: True} if atype == "human" else {}
+            # HET MERK `MENS_GETYPT` IS WEG (B2, 20 september 2026). Het bestond om de
+            # herschrijf-poort te vertellen dat een mens deze woorden letterlijk typte; die poort
+            # (`spanning_ontstaat` + `bevinding`) is met de inbox verdwenen. Er is niets meer dat
+            # andermans tekst zou kunnen herschrijven, dus een waarschuwing daartegen is ruis.
             # EEN @-VERMELDING IS EEN BERICHT, GEEN NOTIFICATIE (fase 8). Tot 19 september 2026 werd
             # elke vermelding een rij in de NotifStore. Dat is de juiste vorm voor werk dat
             # afgehandeld moet worden — daar staan er 338 van — maar niet voor "hé, kijk jij hier
@@ -2231,11 +2195,10 @@ def _act_proj_feed(c):
             #
             # Een vermelding van een ROL landt bij de mensen die hem vervullen, elk in hun eigen
             # DM met de afzender. Heeft de rol geen mens-vervuller, dan valt hij terug op de
-            # notificatie: fail-closed, want werk bij niemand neerleggen is stiller en erger dan
-            # een melding te veel.
+            # terugval: de Circle Lead van zijn cirkel, en anders de founder. Werk bij niemand
+            # neerleggen is stiller en erger dan een melding te veel.
             _gemeld = _vermeldingen_naar_kanalen(st, ment, pid=g("pid"), tekst=g("text"),
-                                                 auteur=_auteur, extra=_getypt,
-                                                 entry_id=entry["id"])
+                                                 auteur=_auteur, entry_id=entry["id"])
             if _gemeld:
                 msg += f" · {_gemeld} genotificeerd"
             # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
@@ -2665,32 +2628,13 @@ def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | 
         pass
 
 
-def _finetune_voorstellen(persona) -> list:
-    """Twee alternatieven voor de prompt-extra: strakker en ruimer. Fail-closed: bij een
-    onbruikbaar antwoord een lege lijst, nooit een half voorstel."""
-    huidig = (persona.prompt_extra or "").strip() or "(no prompt extra yet)"
-    prompt = (f"Je helpt bij het finetunen van een werkinstructie voor een AI-inwoner.\n"
-              f"Inwoner: {persona.name} ({persona.mbti}). Karakter: {persona.instructions}\n"
-              f"Huidige werkinstructie: {huidig}\n\n"
-              f"Geef TWEE alternatieven, elk maximaal twee zinnen:\n"
-              f"STRAKKER: <scherper, minder ruimte voor interpretatie>\n"
-              f"RUIMER: <meer ruimte, maar nog steeds concreet>\n"
-              f"Antwoord met exact die twee regels, zonder inleiding.")
-    try:
-        from nooch_village import llm
-        out = llm.reason(prompt, call_site="persona_finetune", max_tokens=300)
-    except Exception:
-        out = None
-    if not out:
-        return []
-    uit = []
-    for regel in out.splitlines():
-        for kop, naam in (("STRAKKER:", "strakker"), ("RUIMER:", "ruimer")):
-            if regel.strip().upper().startswith(kop):
-                tekst = regel.split(":", 1)[1].strip()
-                if tekst:
-                    uit.append({"naam": naam, "tekst": tekst})
-    return uit
+# HIER STOND `_finetune_voorstellen`: twee alternatieve werkinstructies voor een persona
+# (strakker/ruimer), door een model geschreven. Weg op 20 september 2026. Hij beslíste niets —
+# de mens koos — maar een persona-werkinstructie is de KARAKTERBESCHRIJVING waarop een
+# AI-inwoner draait, en een model dat zijn eigen instructie herschrijft is de zelfverbeterings-
+# lus die CLAUDE.md sluit ("Harde grens: zelfverbetering stopt bij voorstellen").
+#
+# Bewerken kan gewoon met de hand; `_persona_kroniek` legt elke wijziging vast zoals altijd.
 
 
 def _act_rov2_add(c):
@@ -3108,21 +3052,12 @@ def _act_vangst_verwerk(c):
             # HIER BLIJFT ROL WÉL VERPLICHT (zie hierboven, `_act_vangst_uitkomst`). Dit is de
             # AI-route: de spanning wordt getypeerd en beoordeeld, en dat oordeel rust op de
             # accountabilities van een rol. Zonder rol is er niets om aan te toetsen.
-            # DE BESTAANDE PIJPLIJN, letterlijk: `add` zonder `type` betekent dat de haak van
-            # `spanning_ontstaat` de bevinding schrijft en de typering doet. Hier wordt dus niets
-            # getypeerd; hier wordt alleen doorgegeven wie het inbracht, zodat het bij het verwerken
-            # zíjn spanning wordt en niet die van het overleg.
-            #
-            # De haak wordt hier EXPLICIET op deze store gezet. `_bootstrap` zet hem ook, maar op een
-            # `_Stores` die daarna wordt weggegooid, en elke request bouwt een verse — dus in het
-            # web-pad draaide hij nergens. Hem procesbreed aanzetten zou van élke notificatie in de
-            # cockpit een model-aanroep in de request maken; dat is een eigen besluit, geen bijvangst
-            # van dit scherm. Daarom precies hier, op de ene plek die erom vraagt.
-            try:
-                from nooch_village.spanning_ontstaat import maak_verrijker
-            except Exception as e:                       # noqa: BLE001 — fail-soft, luid
-                logging.getLogger("village.cockpit").warning(
-                    "vangst: verrijk-haak niet gezet (%s) — de spanning gaat rauw door", e)
+            # HIER HING DE VERRIJK-HAAK (`spanning_ontstaat.maak_verrijker`). Die haak zat op
+            # `NotifStore.add` en liet een model de verse spanning herschrijven en typeren vóór hij
+            # in de inbox landde. De inbox is weg, de haak is met B2 met pensioen gegaan, en het
+            # oordeel dat hij droeg — bevinding + typering — heeft geen lezer meer. Wat hier nog
+            # wél gebeurt is het enige dat altijd de bedoeling was: doorgeven WIE het inbracht,
+            # zodat het bij het verwerken zíjn spanning is en niet die van het overleg.
             doel = wiki.ontvanger(rol, st.records, st.assign)
             if not doel.get("rol"):
                 return nxt, "✗ no mailbox found for this role"
@@ -3242,12 +3177,16 @@ def _kan_uitvoeren(st, rol: str) -> bool:
 
 
 def mens_vervullers(st, rol: str) -> list[str]:
-    """De MENSEN die deze rol vervullen. Eén plek, want drie schermen stelden dezelfde vraag."""
+    """De MENSEN die deze rol vervullen. Eén plek, want drie schermen stelden dezelfde vraag.
+
+    Sinds B2 is die ene plek `signaal.mensen_van`, want de signaal-routering stelt hem ook. Twee
+    implementaties zouden betekenen dat een scherm een andere vervuller ziet dan het bericht dat
+    erheen gaat — precies het soort verschil dat niemand opmerkt tot het misgaat."""
     if not rol:
         return []
     try:
-        rec = st.records.get(rol)
-        return [f.id for f in st.assign.fillers_of(rol, record=rec) if f.type == "person"]
+        from nooch_village import signaal
+        return signaal.mensen_van(st, rol)
     except Exception:                                         # noqa: BLE001
         return []
 
@@ -3374,28 +3313,6 @@ def _circle_lead_van(st, rol: str) -> str:
     return ""
 
 
-def _rolsuggestie(st, tekst: str, rol: str) -> dict:
-    """De rolsuggestie als `extra`-velden, of {} als er niets gegronds te zeggen valt.
-
-    Fail-soft en fail-STIL is hier niet hetzelfde: valt de classificatie uit, dan komt er geen
-    suggestie MAAR WEL een reden mee (`triage_grond`), zodat het scherm kan zeggen "geen rol
-    gevonden" in plaats van niets. Een lege band laat de lezer raden of we niets vonden of niet
-    hebben gekeken."""
-    try:
-        from nooch_village.triage_rol import classificeer
-        cirkel = resolve_circle_id(rol, st.records) if rol else ""
-        uit = classificeer(tekst, st.records, cirkel=cirkel)
-    except Exception as e:                                   # noqa: BLE001 — nooit de routering breken
-        logging.getLogger("village.triage").warning("rolsuggestie faalde: %s", e)
-        return {"triage_grond": "classificatie niet gedraaid"}
-    velden = {"triage_vorm": uit.get("vorm", ""), "triage_grond": uit.get("grond", "")}
-    if uit.get("rol"):
-        velden["triage_rol"] = uit["rol"]
-        velden["triage_accountability"] = uit["accountability"]
-        velden["triage_waarom"] = uit.get("waarom", "")
-    return velden
-
-
 def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
                _lead_hop: bool = False) -> dict:
     """WAAR zou dit werk landen? Zelfde beslissing als `route_werk`, zonder iets te schrijven.
@@ -3425,6 +3342,23 @@ def bestemming(st, *, rol: str = "", persoon: str = "", keuze_kan: bool = False,
         if lead and lead != rol:
             door = bestemming(st, rol=lead, _lead_hop=True)
             return {**door, "via": f"{rol} heeft geen vervuller"}
+        # DE KLIM LOOPT DOOD, EN DAN IS DE FOUNDER HET ADRES — niet de rol zelf.
+        #
+        # `_circle_lead_van` slaat gearchiveerde records over, en dat is terecht: werk bij een
+        # opgeheven Circle Lead neerleggen is hetzelfde als weggooien. Maar hij klimt één niveau en
+        # stopt, en bij een CIRKEL die in zijn geheel is opgeheven is er dus geen lead meer. Dan
+        # viel dit terug op `{"soort": "project", "doel_id": rol}` — de rol die net is vastgesteld
+        # als "kan niets". Gemeten op prod, 20 september 2026: twee weesprojecten van de opgeheven
+        # `compliance`-rol, en `village afslank_wezen` stelde voor ze te "verhuizen" naar diezelfde
+        # dode rol. Dat is geen verhuizing maar een lus die het origineel archiveert.
+        #
+        # De terugval is dezelfde als overal elders sinds vandaag: alles wat niemand kan dragen komt
+        # bij de founder (CLAUDE.md, "AI is instrument, geen rol"). Geen model, geen keuze.
+        from nooch_village import signaal
+        founder = signaal.terugval(st)
+        if founder:
+            return {"soort": "inbox", "doel_type": "person", "doel_id": founder,
+                    "via": f"{rol} heeft geen vervuller en de cirkel geen Circle Lead"}
     return {"soort": "project", "doel_type": "role", "doel_id": rol, "via": ""}
 
 
@@ -3485,30 +3419,26 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     if best.get("via"):
         # De ontvanger moet zien waaróm dit bij hem ligt en niet bij de rol die het vroeg.
         tekst = f"[{best['via']}] {tekst}"
-    # DE TRIAGE-STAP, en hij staat hier en NIET in `bestemming`. Dat is met opzet: `bestemming` is
-    # de pure functie die de droge run gebruikt, en daar een modelaanroep in zetten maakt een
-    # voorbeschouwing duur en onvoorspelbaar. De classificatie verandert de BESTEMMING ook niet —
-    # ze annoteert. Stefan accepteert, overschrijft of houdt hem zelf.
+    # HIER STOND DE TRIAGE-STAP (`_rolsuggestie` → `triage_rol.classificeer`): een modelaanroep die
+    # een rol voorstelde mét de accountability waarop hij matcht, als annotatie bij het werk. Hij
+    # veranderde de bestemming niet — de lezer accepteerde, overschreef of hield hem zelf.
     #
-    # Alleen waar hij iets toevoegt: werk dat via de lead-hop komt (niemand vervult de rol) of dat
-    # als project op een AI-bord landt. Bij een mens met naam is er niets te raden.
-    _suggestie = {}
-    if best.get("via") or best["soort"] == "project":
-        _suggestie = _rolsuggestie(st, tekst, rol)
+    # ZIJN LEZER IS IN B2 VERDWENEN. De suggestie reisde mee als `extra`-velden op `notif.add`, en
+    # die velden droegen het inbox-scherm. Sinds 20 september 2026 is een melding een DM en heeft
+    # een DM geen velden; de aanroep bleef staan, het resultaat ging nergens heen. Dat is niet
+    # gratis: het kostte een modelaanroep per lead-hop en per project-routering, elke keer opnieuw.
+    #
+    # `triage_rol.py` zelf blijft staan — `menselijke_eigenaar` heeft een eigen lezer in
+    # `materiaal_memo`. Wat er NU dood in ligt (`classificeer`, `noteer_uitkomst`, de
+    # acceptatie-meting) staat op de sweep-lijst; dat kost niets zolang het wacht, dit wel.
     if best["soort"] == "inbox":
-        # `van_mens` komt van de AANROEPER, want die weet of de tekst is ingetikt of voorgevuld.
-        # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
-        # mee door een mens-pad en krijgt hij de bescherming die voor mensentaal bedoeld was.
-        _merk = {} if van_mens is None else {notifications.MENS_GETYPT: bool(van_mens)}
-        # OOK NIET OMGEZET. Een werkoverleg-ACTIE is toegewezen werk met een afrondknop: hij komt
-        # terug via `_sluit_reden_terug` en `mark_done`, en de opdrachtgever krijgt bericht zodra
-        # hij af is. Dat is dezelfde grens als bij het pagina-voorstel: een DM kan "dit moet nog
-        # gebeuren" niet dragen. Zie het nachtlog — dit is wat B1 blootlegde.
-        st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
-                     snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
-                     extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
-                            "opdrachtgever": opdrachtgever, "bron_project": bron_project,
-                            **_merk, **_suggestie})
+        # Ook hier stond het `MENS_GETYPT`-merk; zie de toelichting bij `_act_proj_feed`.
+        # OOK DIT IS EEN GEWONE DM (B2). `roloverleg.py` houdt toewijzing én afronding al zélf bij,
+        # los van welke wachtrij dan ook — de DM is puur de melding erbovenop. Er viel hier dus
+        # nooit iets vast te leggen wat elders niet al stond, en een tweede administratie van
+        # hetzelfde feit is precies wat `reference, don't copy` verbiedt.
+        _signaleer(st, doel_type, doel_id, tekst, by=(door or "werkoverleg"),
+                   herkomst={"project": bron_project} if bron_project else None)
         return "inbox", "in de " + bestemming_tekst(st, best)
     eigenaar = doel_id or f"{_II_PREFIX}{bron_project or ''}"
     pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",
@@ -3658,11 +3588,8 @@ def _act_wall_outcome(c):
         # Systeem-entry op de BRON-wall: de audittrail (met herkomst) leeft op de wall.
         pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} created: {title}",
                           kind="system", author_type="human", author_id=aid)
-        # Kwam dit uit de inbox (nid meegegeven)? Dan is die mention nu verwerkt: leg de uitkomst + reden
-        # vast als historie en haal 'm uit de nieuw/gelezen-wachtrij. Eén klik: uitkomst maken én afvinken.
-        nid = (g("nid") or "").strip()
-        if nid:
-            st.notif.mark_item_processed(nid, outcome=f"{_LBL[otype]}: {title}", by=_person_name(st, aid))
+        # Hier stond een tak voor "kwam dit uit de inbox (`nid` meegegeven)": die markeerde het
+        # item als verwerkt. De inbox bestaat sinds B2 niet meer, dus `nid` komt nooit meer binnen.
         return nxt, f"✓ {_LBL[otype]} created"
 
 
@@ -3713,17 +3640,6 @@ def _act_goedkeur(c):
             return nxt, f"✗ {r.get('error') or 'could not save that'}"
         woord = {"approved": "✓ approved", "rejected": "✓ rejected", "deferred": "✓ deferred"}[besluit]
         return nxt, woord
-
-
-def _act_notif_delete(c):
-        # Prullenbak: ruis die je niet wilt verwerken uit de wachtrij halen (zacht, dismissed-vlag).
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Juist hier is de poort nodig: een
-        # weggegooid item verdwijnt van het scherm van de eigenaar zonder enig spoor.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        ok = c.st.notif.delete_item(c.g("nid"))
-        return c.nxt, ("🗑 weggegooid" if ok else "✗ item not found")
 
 
 def _act_metrics2_fav(c):
@@ -3822,7 +3738,7 @@ def _act_notif_add(c):
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
         # AUTHZ: iedereen-ingelogd — een spanning voelen mag iedereen, en hij landt in je EIGEN
         # wachtrij (de handler bepaalt het doel zelf uit `username`, niet uit het formulier). De
-        # poort die ertoe doet zit op het verwerken ervan; zie `_notif_gate`.
+        # poort die ertoe doet zit op het verwerken ervan.
         st, g, username = c.st, c.g, c.username
         text = (g("text") or "").strip()
         role = (g("role") or "").strip()
@@ -3867,194 +3783,10 @@ def _sluit_reden_terug(st, pj, n: dict, reden: str, *, aid: str, by: str,
         return ""
 
 
-def _act_notif_klaar(c):
-        # 'Klaar met deze spanning': het ENIGE sluitmodel. Sloot je met nul uitkomsten, dan legt de handler
-        # zelf 'geen uitkomst' vast (zichtbaar voor de raadsvergadering). Redirect naar de inbox met de
-        # zojuist-verwerkte spanning gemarkeerd — een klein viermoment.
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Sluiten is de zwaarste van de
-        # zes: het haalt de spanning uit de wachtrij van de eigenaar én legt een uitkomst vast op
-        # zijn naam.
-        st, nid = c.st, c.g("nid")
-        deny = _notif_gate(st, c.username, nid)
-        if deny:
-            return c.nxt, deny
-        n = st.notif._find(nid)
-        actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
-        by = _person_name(st, actor.id) if actor else ""
-        # DE VIERDE UITKOMST DRAAGT NU EEN REDEN, en dat is waar Decide-now's "nee" naartoe is.
-        # Negen van de twaalf Decide-now-gevallen waren een ACTIE (een antwoord waarmee een
-        # vastgelopen bewoner verder kon) en lopen nu via flow 1. De tiende vorm — "nee, want …" —
-        # paste in géén handelings-flow: actie, project en governance veronderstellen alle drie dát
-        # er iets gebeurt.
-        #
-        # DE REDEN GAAT TERUG, NIET ALLEEN DE OPSLAG IN. Sloeg hij alleen op, dan verdween de
-        # terugkoppeling die Decide-now's "nee" wél gaf — stil, en precies de degradatie die we bij
-        # de "iedereen"-tekst van de wall hebben weggehaald. Hij landt als comment op de bron-feed:
-        # dezelfde plek waar het antwoord van Decide-now landde, en een `comment`+`human`-entry zet
-        # `worked=False`, dus de bewoner pakt het zelf weer op.
-        reden = (c.g("reden") or "").strip()
-        if n is not None and reden:
-            _sluit_reden_terug(c.st, c.pj, n, reden, aid=(actor.id if actor else ""), by=by)
-        if n is not None and not st.notif.verwerkingen_of(n):
-            st.notif.add_outcome(nid, intent="none",
-                                 otype=("geen_uitkomst_met_reden" if reden else "none"),
-                                 label=(f"gesloten: {reden[:160]}" if reden else "geen uitkomst"),
-                                 by=by)
-        st.notif.mark_done(nid, by=by)
-        # Zelfde lus als bij een afgerond project: wie erom vroeg hoort dat het klaar is. Een
-        # afrondings-melding meldt zichzelf niet terug — anders pingen twee mensen elkaar eindeloos.
-        if n is not None and not n.get("afronding"):
-            meld_opdrachtgever(st, opdrachtgever=str(n.get("opdrachtgever") or ""),
-                               wat=str(n.get("snippet") or "")[:120],
-                               bron_project=str(n.get("bron_project") or ""), door=by)
-        return f"/inbox?done={nid}", "✓ done with this tension 🎉"
-
-
-def _noteer_triage(data_dir: str, n: dict, **kw) -> None:
-    """Wat deed de mens met de rolsuggestie? Fail-stil: een meting die een handeling blokkeert is
-    geen meting maar een obstakel."""
-    try:
-        from nooch_village.triage_rol import noteer_uitkomst
-        noteer_uitkomst(data_dir, n, **kw)
-    except Exception:                                        # noqa: BLE001
-        logging.getLogger("village.triage").debug("triage-uitkomst niet genoteerd", exc_info=True)
-
-
 def _volledig_van(n: dict) -> str:
     """De volle tekst van een spanning — dezelfde die het formulier voorvult."""
-    from nooch_village.notifications import volledig
+    from nooch_village.tekstpreview import volledig
     return volledig(n or {})
-
-
-def _act_notif_outcome(c):
-        # Eén uitkomst vastleggen vanuit de verwerk-wizard: maak 'm via dezelfde _outcome_*-helpers als de
-        # wall (met de bron-spanning als herkomst) ÉN voeg 'm toe aan het verwerk-record. Sluit het item
-        # NIET — zo kun je meerdere uitkomsten op één spanning stapelen; 'Klaar' sluit pas.
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`. Een uitkomst hangt aan de
-        # spanning van de eigenaar en verschijnt op zijn naam in de raadsvergadering.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        from nooch_village.inbox_wizard import intent_of, OTYPE_LABEL
-        nid = g("nid")
-        deny = _notif_gate(st, username, nid)
-        if deny:
-            return nxt, deny
-        n = st.notif._find(nid)
-        if n is None:
-            return nxt, "✗ tension not found"
-        otype = g("otype")
-        content = (g("content") or "").strip()
-        if not content:
-            return nxt, "✗ content is required"
-        src_pid, src_eid = n.get("project_id", ""), n.get("entry_id", "")
-        src_p = pj.get(src_pid) if src_pid else None
-        actor = st.people.by_email(username) if username and username != "guest" else None
-        aid = actor.id if actor else ""
-        by_name = _person_name(st, aid) if aid else (username or "")
-        prov = f"↳ uit inbox-spanning {nid}"
-        label = OTYPE_LABEL.get(otype, otype)
-        # AUTEURSCHAP KOMT UIT DE HERKOMST, NIET UIT `by`. Dit formulier is VOORGEVULD met de tekst
-        # van de bestaande spanning, dus wie hem onbewerkt doorzet stuurt MACHINETEKST door — met
-        # zijn eigen naam eronder. Op prod van 1 september leverde dat een melding op die "beoordeel
-        # via python -m nooch_village.inbox" nog droeg: de poort zag een mens als afzender en liet
-        # hem met rust, terwijl geen mens die woorden had geschreven.
-        #
-        # De afzender is niet de auteur. Bewerkt de mens de voorvulling wél, dan is het zijn tekst
-        # geworden en telt hij als mensgeschreven — dan is het vergelijken van de twee strings het
-        # eerlijkste dat we hebben.
-        _origineel = " ".join(str(_volledig_van(n)).split())
-        _bewerkt = " ".join(content.split())
-        _van_mens = bool(_bewerkt) and _bewerkt != _origineel
-        made = ""
-        if otype != "action":
-            _noteer_triage(c.data_dir, n, otype=otype)   # project/governance: de suggestie ging niet mee
-        if otype == "action":
-            # FLOW 1 — ACTIE. Twee landingsplekken, en het zijn er allebei bestaande:
-            #
-            #   · een LOPEND PROJECT gekozen → de actie wordt een stap in de checklist die dat
-            #     project al heeft. De rol van dat project bezit die lijst, dus de `@`-keuze doet
-            #     hier niets meer; dat staat ook zo op het formulier.
-            #   · anders → `route_werk`, DEZELFDE routing als het werkoverleg en de wizard: een
-            #     mens-vervulde rol krijgt het in zijn inbox, een AI-vervulde rol krijgt een project
-            #     (die leest de NotifStore nooit). Geen doel gekozen = jijzelf.
-            #
-            # Geen eigen actie- of projectvorm in de inbox: dat was precies de tweede mechaniek die
-            # #364 en #375 weghaalden, en hij mag hier niet terugkomen.
-            pid_link = g("pid_link")
-            if pid_link:
-                tgt = pj.get(pid_link)
-                if tgt is None:
-                    return nxt, "✗ target project not found"
-                # AUTHZ: rolvervuller of Circle Lead — een stap toevoegen raakt het bord van die rol
-                _deny = _role_gate(tgt.get("owner") or "", username, st)
-                if _deny:
-                    return nxt, _deny
-                _outcome_action(st, pid_link, content)
-                _prov_feed(st, pid_link, prov, aid)
-                pj.reopen(pid_link)
-                made = f"{label} in {str(tgt.get('scope') or pid_link)[:50]}"
-            else:
-                # `doel` is "role:<id>" of "person:<id>" uit de `@`-keuze; leeg = voor jezelf.
-                soort, _, doel_id = (g("doel") or "").partition(":")
-                # EXACT ÉÉN doel. `route_werk` laat een persoon van een rol winnen, dus een rol
-                # kiezen én stilzwijgend jezelf als persoon meesturen laat het werk bij JOU landen
-                # terwijl het scherm de ander noemt. Een test ving dat; het is precies de soort
-                # stille misrouting die #364 wegnam.
-                if soort == "role" and doel_id:
-                    rol, persoon = doel_id, ""
-                elif soort == "person" and doel_id:
-                    rol, persoon = "", doel_id
-                else:
-                    rol, persoon = "", (aid or "")
-                if rol:
-                    rrec = st.records.get(rol)
-                    if rrec is None or org.is_circle(rrec) or getattr(rrec, "slaapt", False) \
-                            or getattr(rrec, "archived", False):
-                        return nxt, "✗ that role cannot take work right now"
-                elif not persoon:
-                    return nxt, "✗ no one to give this to — log in or pick someone with @"
-                _s, ref = route_werk(st, tekst=content, rol=rol, persoon=persoon,
-                                     herkomst=f"↳ uit een spanning in de inbox",
-                                     door=aid, opdrachtgever=aid, bron_project=src_pid,
-                                     van_mens=_van_mens)
-                # DE BAND METEN, niet strenger maken. Grond stopt fabricatie, niet irrelevantie —
-                # dus is de vraag hoe váák een suggestie stoort, en dat weet alleen de mens die hem
-                # accepteerde, overschreef of negeerde. Geen UI erbij: de drie handelingen bestaan
-                # al, we noteren welke het werd.
-                _noteer_triage(c.data_dir, n, gekozen_rol=rol, gekozen_persoon=persoon,
-                               otype=otype)
-                made = f"{label} {ref}"
-        elif otype == "roloverleg":
-            if src_p is None:
-                return nxt, "✗ no source circle for a governance-meeting item"
-            circle = resolve_circle_id(src_p.get("owner") or "", st.records)
-            _deny = _member_gate(circle, username, st)
-            if _deny:
-                return nxt, _deny
-            _outcome_roloverleg(st, circle, content[:60], content[:60], content,
-                                by=f"inbox:{nid}", provenance=prov)
-            made = f"{label}: {content[:60]}"
-        else:
-            return nxt, "✗ unknown outcome"
-        # Audittrail op de bron-wall (als er een bron is) + de uitkomst in het verwerk-record.
-        if src_pid:
-            pj.add_feed_entry(src_pid, f"→ {label} created from the inbox: {content[:60]}",
-                              kind="system", author_type="human", author_id=aid)
-        st.notif.add_outcome(nid, intent=intent_of(otype), otype=otype, label=made, by=by_name)
-        # VERWERKEN TOT EEN UITKOMST *IS* DE VERWERKING. Hiervoor moest je daarna nog apart op
-        # "Done with this tension" klikken; wie dat niet deed hield een afgehandelde spanning in
-        # zijn inbox — en dat is precies wat er bij het subsidie-project misging. "Done" blijft
-        # bestaan, maar als de exit voor een spanning die géén uitkomst nodig heeft.
-        st.notif.mark_done(nid, by=by_name)
-        return nxt, f"✓ {label} vastgelegd — spanning gesloten."
-
-
-def _act_notif_archive(c):
-        # AUTHZ: rolvervuller of Circle Lead — zie `_notif_gate`.
-        deny = _notif_gate(c.st, c.username, c.g("nid"))
-        if deny:
-            return c.nxt, deny
-        ok = c.st.notif.archive_item(c.g("nid"))
-        return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ only processed items can be archived")
 
 
 def _act_wo_checkout(c):
@@ -4508,7 +4240,7 @@ def _act_check_handoff(c):
         getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
         if not getypt:
             return nxt, "✗ pick a role or person to hand this to"
-        from nooch_village.views.inbox import _at_doelen
+        from nooch_village.cockpit2_util import _at_doelen
         doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
         if doel is None:
             return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
@@ -4949,120 +4681,6 @@ def _act_kb_insight_unlink(c):
     return c.nxt, ("unlinked" if ok else "✗ unlinking failed")
 
 
-def _act_verzoek_besluit(c):
-    # AUTHZ: rolvervuller of Circle Lead — beslissen over een verzoek AAN jouw rol is operationeel
-    # werk binnen die rol. Wie de rol niet vervult, beslist niet over haar bord.
-    #
-    # Drie uitkomsten, en alle drie sluiten de spanning: accepteren zet het als project op het bord
-    # (dát is de handeling waar de kaart om vraagt), aanpassen stuurt een herformulering terug naar
-    # de vrager, weigeren sluit met een reden. Een verzoek dat blijft hangen is precies wat de
-    # kaart moest wegnemen.
-    nxt, st, g, username = c.nxt, c.st, c.g, c.username
-    nid, keuze, tekst = g("nid"), g("keuze"), g("tekst")
-    n = st.notif.get(nid) if hasattr(st.notif, "get") else None
-    n = n or next((x for x in st.notif.all() if x.get("id") == nid), None)
-    if n is None:
-        return nxt, "✗ deze spanning bestaat niet meer"
-    rol = str(n.get("target_id") or "")
-    fout = _role_gate(rol, username, st)
-    if fout:
-        return nxt, fout
-    bev = dict(n.get("bevinding") or {})
-    titel = (bev.get("voorstel") or bev.get("spanning") or n.get("snippet") or "")[:200]
-
-    pag = dict(n.get("pagina") or {})
-
-    def _terug(bericht: str) -> None:
-        """Antwoord aan de vrager, via DEZELFDE route als sluiten-met-reden (#401).
-
-        HIER STOND EEN TWEEDE IMPLEMENTATIE, en die verloor data. Ze stuurde een NotifStore-bericht
-        naar de vragende ROL — en 14 van de 29 rollen hebben geen menselijke vervuller, dus die
-        leest de NotifStore nooit. Elke weigering en elke herformulering aan zo'n rol verdween stil.
-        De docstring waarschuwde zelf voor die val, maar alleen voor het pagina-geval.
-
-        Nu: de reden landt als comment op de bron-feed (`comment` + `human` zet `worked=False`, dus
-        de bewoner pakt zijn eigen spanning weer op) — en DAARNAAST een inbox-bericht, maar alleen
-        als de vrager het ook leest. Die vraag stelt `route_werk`, niet dit scherm."""
-        if pag:
-            # Een pagina-voorstel komt van een MENS; die leest zijn persoon-inbox.
-            wie = str(pag.get("van_id") or "")
-            if wie:
-                _signaleer(st, "person", wie, bericht, by=rol)
-            return
-        # De zin is hier al gevormd ("✗ je verzoek is geweigerd: …") en draagt de juiste WERKWOORD:
-        # weigeren is geen sluiten. Alleen de route is gedeeld, niet de formulering.
-        _sluit_reden_terug(st, c.pj, n, bericht, aid=_web_actor_id(username, st),
-                           by=_name(st.records.get(rol)) or rol, kern=bericht)
-        van = str(n.get("by") or "")
-        if van and mens_vervullers(st, van):
-            _signaleer(st, "role", van, bericht, by=rol,
-                       herkomst={"project": n.get("project_id")} if n.get("project_id") else None)
-
-    if keuze == "accepteer" and pag:
-        # Een PAGINA-voorstel is al concreet: de tekst ís de vraag, dus accepteren is de handeling
-        # zelf (een nieuwe versie) en niet een project dat het nog een keer moet gaan doen.
-        # De artefact-poort geldt onverkort — schrijven mag alleen de vervuller van de eigenaar-rol
-        # of de Circle Lead van de omvattende cirkel, precies zoals bij artefact_edit.
-        cur = st.att.get(pag.get("aid") or "")
-        if cur is None or cur.kind != "note":
-            return nxt, "✗ deze pagina bestaat niet meer"
-        _deny = _artefact_gate(cur.anchor, username, st)
-        if _deny:
-            return nxt, _deny
-        nieuw = str(pag.get("body") or "")
-        te_lang = _body_te_lang(nieuw, cur.kind)
-        if te_lang:
-            return nxt, te_lang
-        actor_id = _web_actor_id(username, st)
-        gref = f"role:{cur.anchor}"
-        upd = st.att.update(cur.id, body=nieuw, actor_id=actor_id, actor_type="person",
-                            governance_ref=gref,
-                            change_note=f"voorstel van {pag.get('van_naam') or 'iemand'} aangenomen")
-        artefacts.log_change(c.data_dir, action="edit", artefact=upd, records=st.records,
-                             actor_id=actor_id, actor_type="person", governance_ref=gref)
-        st.notif.mark_item_processed(nid, outcome=f"toegepast op {cur.id}", by=username or "")
-        st.notif.archive_item(nid)
-        return nxt, f"✓ accepted — new version of {cur.id} saved"
-
-    if keuze == "accepteer":
-        # Deze tak is sinds de sloop-pass alleen nog bereikbaar voor een PAGINA-voorstel; het
-        # gewone operationele verzoek loopt door de drie uitkomsten (accepteren = Project, via de
-        # wizard). De code blijft staan omdat een pagina-voorstel dat GEEN pagina meer heeft (de
-        # note is verwijderd) hier alsnog uitkomt, en dan is een project op het bord van de
-        # eigenaar-rol de eerlijke uitkomst — geen stille fout.
-        from nooch_village.project_items import handoff
-        van = str(n.get("by") or "")
-        uit = handoff(st.projects, rol, titel, records=st.records, van_rol=van,
-                      van_accountability=_founder_kaart.eigen_accountability(
-                          van, str(n.get("snippet") or ""), st.records),
-                      spanning=bev.get("spanning") or str(n.get("snippet") or ""),
-                      vraag=bev.get("voorstel") or "")
-        if uit.get("error"):
-            return nxt, f"✗ {uit['error']}"
-        st.notif.mark_item_processed(nid, outcome=f"geaccepteerd → project {uit['pid']}",
-                                     by=username or "")
-        st.notif.archive_item(nid)
-        return nxt, f"✓ geaccepteerd — staat als project op het bord van {_name(st.records.get(rol))}"
-
-    if keuze == "aanpassen":
-        if not tekst.strip():
-            return nxt, "✗ schrijf op hoe het verzoek wél zou kloppen"
-        st.notif.add_outcome(nid, intent="aanpassen", otype="note", label=tekst[:200],
-                             by=username or "")
-        _terug(f"↩ herformulering gevraagd op je verzoek: {tekst[:120]}")
-        return nxt, "✓ herformulering teruggestuurd naar de vrager"
-
-    if keuze == "weiger":
-        if not tekst.strip():
-            return nxt, "✗ een weigering zonder reden leert de vrager niets"
-        st.notif.mark_item_processed(nid, outcome=f"geweigerd: {tekst[:160]}", by=username or "")
-        st.notif.archive_item(nid)
-        _terug(f"✗ je verzoek is geweigerd: {tekst[:120]}")
-        return nxt, "✓ geweigerd, met reden terug naar de vrager"
-
-    return nxt, "✗ onbekende keuze"
-
-
 def _act_copy_stack_inclusie(c):
     # AUTHZ: anchor-lead — org-brede configuratie. Welke rol meetelt in de schrijf-stack van een
     # andere rol raakt hoe elke tekst van die rol klinkt; dat is geen keuze van de schrijver.
@@ -5222,7 +4840,6 @@ ACTIONS = {
     "decision_sheet_log": _act_decision_sheet_log,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
-    "verzoek_besluit": _act_verzoek_besluit,
     "kb_insight_link": _act_kb_insight_link,
     "kb_insight_unlink": _act_kb_insight_unlink,
     "kb_link": _act_kb_link,
@@ -5277,12 +4894,8 @@ ACTIONS = {
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
-    "notif_outcome": _act_notif_outcome,
-    "notif_klaar": _act_notif_klaar,
     "goedkeur": _act_goedkeur,
-    "notif_delete": _act_notif_delete,
     "notif_add": _act_notif_add,
-    "notif_archive": _act_notif_archive,
     "metrics2_fav": _act_metrics2_fav,
     "metrics2_unfav": _act_metrics2_unfav,
     "metrics2_form": _act_metrics2_form,
@@ -5468,9 +5081,8 @@ def make_handler(data_dir: str, csrf_token: str,
             if chrome and self._session_username() is not None and "</body>" in body:
                 try:
                     _st = _Stores(data_dir)
-                    _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
                 except Exception:
-                    _st, _ro = None, ""
+                    _st = None
                 # DE ORGANISATIEBOOM ZAT IN DE RECHTERRAIL en staat sinds fase 7 in de zijbalk
                 # links, bij de rest van de navigatie (prototype v15). Hij wordt hier gevuld en niet
                 # in `_nav()` zelf, omdat hij de records nodig heeft en `_nav()` geen stores kent —
@@ -5523,7 +5135,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 # terugzetten één regel is en er nu geen halve opruiming in de weg zit.
                 body = body.replace(
                     "</body>",
-                    render_inbox_chrome(csrf_token, _ro) + _footer() + "</body>", 1)
+                    _footer() + "</body>", 1)
             body = self._nu_scope(body)
             b = body.encode("utf-8")
             self.send_response(code)
@@ -5761,22 +5373,6 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
-            if path == "/inbox":
-                # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
-                tgts = _person_targets(st, username)
-                # chrome=False: de drawer wordt door _send geïnjecteerd op ANDERE pagina's; deze route IS
-                # de drawer-inhoud (fragment) of de standalone-fallback, dus geen drawer-in-drawer.
-                if (qs.get("frag") or [""])[0]:
-                    self._send(render_inbox_frag(st, tgts, csrf_token=effective_csrf), chrome=False)
-                    return
-                nm = ""
-                if username and username != "guest":
-                    _p = st.people.by_email(username)
-                    nm = _p.name if _p else ""
-                done = (qs.get("done") or [""])[0]
-                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done),
-                           chrome=False)
-                return
             if path == "/search":
                 # Globale zoekopdracht vanuit de header: roles, projects, insights, signals.
                 # ?frag=1 → alleen de dropdown-inhoud (live terwijl je typt); anders de volle pagina.
@@ -5851,16 +5447,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 tot = (qs.get("tot") or [""])[0]
                 self._send(render_metrics2(st, rec, csrf_token=effective_csrf, win=win,
                                            compare=compare, van=van, tot=tot))
-                return
-            if path == "/inbox/verwerk":
-                # De twee-panelen-verwerkpagina voor één spanning: links de spanning, rechts de wizard.
-                # chrome=False: draait als modal-iframe binnen de drawer; geen tweede drawer injecteren.
-                nid = (qs.get("nid") or [""])[0]
-                n = st.notif._find(nid)
-                ro = _wall_outcome_opts(st)[0] if n is not None else ""
-                po = _scoped_project_opts(st, n) if n is not None else ""
-                self._send(render_verwerk(st, n, csrf_token=effective_csrf, role_opts=ro, pj_opts=po),
-                           chrome=False)
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld
@@ -6249,30 +5835,12 @@ def make_handler(data_dir: str, csrf_token: str,
                     # sluit de bron. Deed de wizard dit niet, dan bleef de spanning open terwijl het
                     # project al bestond — het subsidie-geval. Fail-soft: een mislukte terugkoppeling
                     # mag nooit het zojuist gemaakte project ongedaan lijken te maken.
-                    _nid = g1("nid")
-                    if _nid:
-                        try:
-                            _actor = (st.people.by_email(username)
-                                      if username and username != "guest" else None)
-                            _by = _person_name(st, _actor.id) if _actor else ""
-                            st.notif.add_outcome(_nid, intent="doen", otype="project", ref=pid,
-                                                 label=f"project: {titel[:60]}", by=_by)
-                            st.notif.mark_done(_nid, by=_by)
-                            # DE LINK MOET BEIDE KANTEN OP. De spanning wees naar het project,
-                            # maar het project noemde de spanning nergens — geen feed-entry, geen
-                            # veld. En juist dát is de rechtvaardiging om de gesloten spanning uit
-                            # de inbox te halen: hij is niet weg, hij is terug te vinden vanaf het
-                            # bord. Zonder deze regel was die belofte niet waar.
-                            _n = st.notif._find(_nid)
-                            _tekst = str((_n or {}).get("snippet") or "")[:200]
-                            pj.add_feed_entry(
-                                pid,
-                                f"Ontstaan uit een spanning in de inbox ({_nid}): {_tekst}",
-                                kind="system", author_type="human",
-                                author_id=(_actor.id if _actor else ""))
-                        except Exception:
-                            logging.getLogger("cockpit2.wizard").exception(
-                                "spanning %s niet gesloten na project %s", _nid, pid)
+                    # HIER STOND DE TERUGKOPPELING NAAR HET INBOX-ITEM: `add_outcome`,
+                    # `mark_done` en een feed-entry "ontstaan uit een spanning in de inbox". De
+                    # inbox bestaat sinds B2 niet meer, dus `nid` komt hier nooit meer binnen. De
+                    # belofte die dat blok waarmaakte — een gesloten spanning is niet weg maar
+                    # terug te vinden vanaf het bord — hoeft niet meer waargemaakt te worden: er
+                    # wordt niets meer gesloten, en het bericht blijft in het kanaal staan.
                     # Seed het levende einddocument met de DoD als kop. Vanaf hier is de projectpoort
                     # doc-gedreven: Done kan pas als het document van deze seed afwijkt (echt antwoord).
                     try:

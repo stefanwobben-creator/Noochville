@@ -43,7 +43,6 @@ _WHITELIST = {
     "definitions.py":    (1, "(b) cockpit-concurrent (_Stores)"),
     "metrics.py":        (1, "(b) cockpit-concurrent (_Stores)"),
     "noochie.py":        (1, "(b) cockpit-concurrent (_Stores)"),
-    "notifications.py":  (1, "(b) cockpit-concurrent (_Stores)"),
     "people.py":         (1, "(b) cockpit-concurrent (_Stores)"),
     "personas.py":       (1, "(b) cockpit-concurrent (_Stores) + occasionele CLI"),
     "roloverleg.py":     (1, "(b) cockpit-concurrent (_Stores, roloverleg-agenda)"),

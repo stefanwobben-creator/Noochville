@@ -106,9 +106,6 @@ def test_slapende_rol_krijgt_geen_thread(tmp_path):
         def subscribe(self, *a, **k): pass
         def publish(self, *a, **k): pass
 
-    class _MM:
-        def register(self, *a, **k): pass
-
     class _Reg:
         def get(self, *a, **k): return object()        # elke skill 'bestaat'
 
@@ -117,31 +114,18 @@ def test_slapende_rol_krijgt_geen_thread(tmp_path):
         data_dir = dd
         links = None
 
-    r = Reconciler(_recs(dd), _Bus(), _Reg(), _Ctx(), _MM(), class_map={})
+    r = Reconciler(_recs(dd), _Bus(), _Reg(), _Ctx(), class_map={})
     r.build()
     assert ROL not in r.live
     assert ROL in r.unmanned                            # zichtbaar gepauzeerd, niet verdwenen
 
 
-def test_de_slaaptoestand_van_de_AFZENDER_telt_niet_meer(tmp_path):
-    """BESLUIT van 30 aug 2026: de LEZER wint, niet de afzender.
-
-    Hier stond dat een spanning van een slapende rol niet herschreven werd — "slapen dempt het
-    oordeel". Dat was een rol-hulpje-regel uit de tijd dat dit een dienst aan een rol was. Zodra het
-    een communicatielaag is houdt hij geen stand: het ijkpunt-bericht van de puls-wacht komt van een
-    systeemcomponent zónder rol, laat staan een slaaptoestand, en het gaat wél naar een mens.
-
-    Een mens die iets leest verdient een leesbaar bericht, ongeacht wie het stuurde."""
-    import inspect
-
-    from nooch_village import spanning_ontstaat as so
-    bron = inspect.getsource(so.maak_verrijker)
-    assert "slaapt" not in bron, "de afzender-slaaptoestand is terug in de verrijker"
-    # en de poort kijkt alleen naar de lezer
-    from nooch_village import notifications as nm
-    poort = inspect.getsource(nm._is_mens_lezer)
-    assert "target_type" in poort and "by" not in poort.split('"""', 2)[2]
-
+# WAT HIER WEG IS (B2, 20 september 2026): `test_de_slaaptoestand_van_de_AFZENDER_telt_niet_meer`.
+# Die legde het besluit van 30 aug 2026 vast — de LEZER wint, niet de afzender — door in de bron van
+# `spanning_ontstaat.maak_verrijker` te controleren dat "slaapt" er niet meer in stond, en in
+# `notifications._is_mens_lezer` dat de poort alleen naar de lezer keek. Beide modules zijn
+# opgeheven: er wordt niets meer herschreven, dus er is geen afzender-toestand meer die het oordeel
+# kan dempen. Het besluit is niet teruggedraaid, zijn onderwerp is verdwenen.
 
 def test_slapende_rol_staat_niet_meer_op_de_roster(tmp_path):
     from nooch_village import escalation_router as er

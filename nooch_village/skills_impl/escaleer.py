@@ -22,7 +22,7 @@ keuze die stil wordt weggeslikt (veiligheid > accuratesse). Een bevinding is noo
 transparant op het projectbord en in De Kroniek.
 
 SCOPE 57 (skill-review 12-09-2026, live: 121 escaleer-items, 20 beslissingen, 0 als mens-taak). Een
-beslissing gaf `{aard, naar, reden, notif_id}` terug: `reden` is metadata voor de uitvoerlaag, dus de
+beslissing gaf `{aard, naar, reden, kanaal}` terug: `reden` is metadata voor de uitvoerlaag, dus de
 wall toonde letterlijk "beslissing", het item werd afgevinkt alsof de vraag beantwoord was, en de
 notificatie droeg geen project_id — de tensie-poort maakte er een NIEUW rol-project van dat opnieuw
 een escaleer-item plande. Nu draagt een beslissing zijn vraag onder `text`, zegt `wacht_op_mens`, en
@@ -96,7 +96,7 @@ class EscaleerSkill(Skill):
                     "van: str (optional — the escalating role, shown as sender)")
     required_payload = ("reden",)  # 'naar' alleen bij beslissing; ontbrekende 'aard' wordt geclassificeerd
     output_schema = ("ok, aard ('bevinding'|'beslissing'), text (the finding, or 'Decision requested "
-                     "from <role>: <choice>'), reden | beslissing: naar, notif_id, wacht_op_mens=True")
+                     "from <role>: <choice>'), reden | beslissing: naar, kanaal, wacht_op_mens=True")
 
     def validate_payload(self, payload: dict, context) -> list:
         """`aard` is een enum: een verzonnen waarde ('vraag', 'finding') zou live stil naar de
@@ -124,7 +124,14 @@ class EscaleerSkill(Skill):
             return {"error": "ontbrekende parameter: 'reden' is verplicht"}
         aard = ((payload or {}).get("aard") or "").strip().lower()
         if aard not in _AARDEN:
-            aard = self._classify(reden, context)     # LLM, fail-open → 'beslissing'
+            # HIER BESLISTE EEN MODEL of dit een bevinding was (stil vastleggen) of een beslissing
+            # (naar een mens). Dat is "of iets wordt opgevolgd", en dat mag een model niet bepalen
+            # (CLAUDE.md, "AI is instrument, geen rol"). Weg, en wat overblijft is de fail-open die
+            # er altijd al onder zat: bij twijfel een BESLISSING, dus zichtbaar bij een mens.
+            #
+            # De rol kan het nog steeds zelf zeggen — `aard="bevinding"` in de payload werkt
+            # ongewijzigd. Dat is een rol die zijn eigen werk benoemt, geen model dat raadt.
+            aard = "beslissing"
         if aard == "bevinding":
             return self._bevinding(reden)
         return self._beslissing(reden, payload or {}, context)
@@ -154,41 +161,19 @@ class EscaleerSkill(Skill):
         # aan hangen en maakte er een nieuw project van — de lus uit de skill-review.
         pid = str(payload.get("_project_id") or payload.get("project_id") or "")
         dd = getattr(context, "data_dir", ".") or "."
-        try:
-            from nooch_village.notifications import NotifStore
-            notif = NotifStore(os.path.join(dd, "notifications.json"))
-            # Geen eigen cap: de store bewaart de volle tekst en leidt de preview af (#389).
-            n = notif.add("role", naar, pid, by=van, snippet=f"⤴ beslissing gevraagd: {keuze}")
-        except Exception as e:
-            return {"error": f"escalatie kon niet landen: {e}"}
+        from nooch_village import signaal
+        kanalen = signaal.stuur_op_pad(dd, "role", naar, f"⤴ beslissing gevraagd: {keuze}",
+                                       by=van, herkomst={"project": pid} if pid else None)
+        if not kanalen:
+            return {"error": "escalatie kon niet landen: geen mens gevonden om te vragen"}
         return {"ok": True, "aard": "beslissing", "naar": naar, "reden": keuze,
                 "text": f"Decision requested from {naar}: {keuze}",
                 "wacht_op_mens": True,                # de uitvoerlaag: mens-taak, niet afvinken
-                "notif_id": n.get("id", "")}
+                # `notif_id` was het id van de inbox-rij; die bestaat sinds B2 niet meer. Het
+                # KANAAL is nu het spoor, en dat is bruikbaarder: daar staat het gesprek.
+                "kanaal": kanalen[0]}
 
     # ── LLM-hulpjes (begrensd, fail-soft) ─────────────────────────────────────────────────────────
-    @staticmethod
-    def _classify(reden: str, context=None) -> str:
-        """Bevinding of beslissing? Fail-OPEN naar 'beslissing': liever een keuze zichtbaar bij de mens
-        dan stil weggeslikt. Geen LLM → 'beslissing'."""
-        try:
-            from nooch_village.llm import reason
-            prompt = (
-                "An autonomous role wants to escalate something. Decide what it IS:\n"
-                "- FINDING: an outcome or conclusion of its own work, including an honest null result "
-                "('nothing qualifies', 'no source found'). It asks no choice of a human.\n"
-                "- DECISION: a choice is needed that the role itself may not make "
-                "('may we drop the requirement?', 'which of these two?').\n\n"
-                f"Text: \"{reden[:400]}\"\n\n"
-                "Answer with EXACTLY one word: FINDING or DECISION.")
-            out = reason(prompt, call_site="escaleer_classify", max_tokens=8)
-            low = (out or "").strip().lower()
-            if "finding" in low or "bevinding" in low:       # de oude NL-token blijft herkend
-                return "bevinding"
-        except Exception:
-            pass
-        return "beslissing"
-
     @staticmethod
     def _als_keuze(reden: str) -> str:
         """Herformuleer een reden tot een EXPLICIETE, beantwoordbare keuze. Leest het al als een vraag
@@ -218,5 +203,5 @@ class EscaleerSkill(Skill):
         aard = result.get("aard") or "beslissing"
         return [{"role_id": role_id, "skill": self.name,
                  "query": (result.get("reden") or "")[:200], "source": "escaleer",
-                 "status": "bevestigd", "result_ref": result.get("notif_id", ""),
+                 "status": "bevestigd", "result_ref": result.get("kanaal", ""),
                  "meta": {"aard": aard, "naar": result.get("naar")}}]

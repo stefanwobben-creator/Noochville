@@ -531,7 +531,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
     role_opts = ""
     if rw and st is not None:
         try:
-            from nooch_village.views.inbox import _at_doelen
+            from nooch_village.cockpit2_util import _at_doelen
             role_opts = "".join(f"<option value='@{_e(d['label'])}'></option>"
                                 for d in _at_doelen(st))
         except Exception:

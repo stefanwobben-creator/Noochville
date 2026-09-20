@@ -3,7 +3,7 @@ aan op reactie, consent → doorvoeren bij einde, schadelijk → blijft staan. T
 from __future__ import annotations
 
 from nooch_village.roloverleg import (
-    Agenda, secretary_check, amend_with_reaction, apply_consented, _proposal_from_item)
+    Agenda, secretary_check, apply_consented, _proposal_from_item)
 from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
 
@@ -58,24 +58,6 @@ def test_secretary_check_dubbel_in_dezelfde_rol(tmp_path):
     assert any("already has a similar accountability" in i["msg"] for i in issues)
 
 
-def test_amend_with_reaction_hele_rol_diff_en_failclosed():
-    item = {"id": "x", "role_id": "scout", "kind": "amend_role",
-            "change": {"add_accountabilities": ["Bijhouden van social media"]},
-            "reason": "t", "title": "t"}
-    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt"], "domains": []}
-    rev = ("PURPOSE: markt observeren\nACCOUNTABILITIES:\n"
-           "- Bewaken van alle online kanalen\n- Analyseren van trends\nDOMEIN: -")
-    out = amend_with_reaction(item, "maak het breder, haal 'volgen van de markt' weg",
-                              role_snapshot=snap, llm_reason=lambda p: rev)
-    # desired vervangt de hele set: nieuwe accountabilities erbij, de oude eruit (echte diff)
-    assert "Bewaken van alle online kanalen" in out["add_accountabilities"]
-    assert "Volgen van de markt" in out["remove_accountabilities"]
-    # geen reactie / geen LLM → ongemoeid
-    assert amend_with_reaction(item, "", llm_reason=lambda p: "x") == item["change"]
-    assert amend_with_reaction(item, "breder", role_snapshot=snap, llm_reason=lambda p: None) \
-        == item["change"]
-
-
 def test_apply_consented_adopt_en_objected_blijft(tmp_path):
     recs = _records(tmp_path)
     a = Agenda(str(tmp_path / "ag.json"))
@@ -91,51 +73,6 @@ def test_apply_consented_adopt_en_objected_blijft(tmp_path):
     assert "Bewaken van sociale kanalen" in recs.get("scout").definition.accountabilities
     assert a.get(ok_id) is None                              # geadopteerd → van de agenda
     assert a.get(bad_id)["status"] == "objected"            # geblokkeerd → blijft staan
-
-
-def test_triage_governance_agendeert_ipv_adopt(tmp_path):
-    from nooch_village.human_inbox import HumanInbox
-    from nooch_village.inbox_actions import decide_opportunity
-    recs = _records(tmp_path)
-    inbox = HumanInbox(str(tmp_path / "inbox.json"))
-    iid = inbox.add_opportunity("Social media bijhouden", by="scout", wat="posts plaatsen")
-    a = Agenda(str(tmp_path / "ag.json"))
-    res = decide_opportunity(inbox, iid, "add", destination="governance",
-                             owner="scout", records=recs, agenda=a)
-    assert res["gov_status"] == "agendeerd"
-    assert len(a.open()) == 1                                # op de agenda, niet doorgevoerd
-    assert "Social media bijhouden" not in str(recs.get("scout").definition.accountabilities)
-
-
-def test_suggest_accountabilities():
-    from nooch_village.inbox_actions import suggest_accountabilities
-    out = suggest_accountabilities("Copywriter", "Schrijven van copy", llm_reason=lambda p:
-                                   "Schrijven van blogcopy\n- Bewaken van de tone of voice\n3) Redigeren van teksten")
-    assert out == ["Schrijven van blogcopy", "Bewaken van de tone of voice", "Redigeren van teksten"]
-    assert suggest_accountabilities("x", "y", llm_reason=lambda p: None) == []
-
-
-
-
-
-
-def test_tension_validity_from_your_role():
-    from nooch_village.roloverleg import tension_validity
-    # rol stelt voor een ÁNDERE rol te wijzigen zonder baat voor de eigen rol → ongeldig
-    cross = {"by": "analyst", "role_id": "scout", "benefit": ""}
-    ok, why = tension_validity(cross)
-    assert ok is False and "eigen rol" in why
-    # mét baat → geldig (deterministisch, geen LLM)
-    assert tension_validity({**cross, "benefit": "anders blijf ik op data wachten"})[0] is True
-    # eigen rol → altijd geldig; Circle Lead/procesrol vrijgesteld
-    assert tension_validity({"by": "scout", "role_id": "scout", "benefit": ""})[0] is True
-    assert tension_validity({"by": "founder", "role_id": "scout", "benefit": ""})[0] is True
-    # LLM mag een 'algemeen belang'-baat alsnog afkeuren
-    ok2, _ = tension_validity({**cross, "benefit": "goed voor het dorp"},
-                             llm_reason=lambda p: "NEE")
-    assert ok2 is False
-
-
 
 
 def test_build_change_from_fields_amend_diff():
@@ -154,10 +91,6 @@ def test_build_change_from_fields_amend_diff():
     assert change["remove_domains"] == ["socials"]
 
 
-
-
-
-
 def test_rename_doorgevoerd_in_adopt(tmp_path):
     from nooch_village.governance import proposal_from_dict, proposal_to_dict
     from nooch_village.models import Proposal, GovernanceChange, ChangeKind
@@ -168,14 +101,6 @@ def test_rename_doorgevoerd_in_adopt(tmp_path):
     d = proposal_to_dict(p)
     assert d["change"]["rename"] == "Marktverkenner"
     assert proposal_from_dict(d).change.rename == "Marktverkenner"       # roundtrip
-
-
-
-
-
-
-
-
 
 
 def test_evaluate_objection_proces():
@@ -198,8 +123,6 @@ def test_evaluate_objection_proces():
     assert evaluate_objection({})["valid"] is False
 
 
-
-
 def test_auto_stollen_na_3x(tmp_path):
     from nooch_village.projects import ProjectLedger
     from nooch_village.roloverleg import Agenda, formalize_ripe_experiments
@@ -216,11 +139,5 @@ def test_auto_stollen_na_3x(tmp_path):
     assert it["change"]["add_accountabilities"] == ["Bewaken van sociale kanalen"]
     assert led.get(pid)["formalized"] is True
     assert formalize_ripe_experiments(led, ag) == 0          # dedup: niet nog eens
-
-
-
-
-
-
 
 

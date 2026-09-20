@@ -18,6 +18,11 @@ Wat hieronder vastligt, in volgorde van belang:
 4. **De ene inbox mag niet sneuvelen voor de andere.** Gaat de goedkeuringsrij stuk, dan blijft de
    spanningen-lade werken.
 """
+
+# WAT HIER WEG IS (B2, 20 september 2026): 3 test(s) over het inbox-scherm. `/inbox`,
+# `/inbox/verwerk`, de lade en `NotifStore` bestaan niet meer — de wachtrij is een
+# DM-stroom geworden. Verwijderd omdat hun onderwerp weg is, niet omdat ze faalden.
+
 from __future__ import annotations
 
 import os
@@ -173,41 +178,8 @@ def test_een_stukke_goedkeuringsrij_laat_de_spanningen_met_rust():
     assert goedkeuring.open_items(_Stuk()) == []
     assert goedkeuring.open_items(None) == []
 
-
-def test_de_view_vangt_een_ontbrekende_store():
-    """`_gk_items` leest een bestand dat er in een verse installatie nog niet is."""
-    import inspect
-    from nooch_village.views import inbox as V
-    src = inspect.getsource(V._gk_items)
-    assert "except Exception" in src and "return []" in src
-
-
-# ── 7. Het scherm ────────────────────────────────────────────────────────────
-
 def _st(tmp_path):
     from nooch_village import cockpit2
     return cockpit2._Stores(str(tmp_path))
 
 
-
-
-def test_een_activatie_toont_geen_ja_maar_wel_de_regel(tmp_path):
-    from nooch_village.views import inbox as V
-    hi = HumanInbox(os.path.join(str(tmp_path), "human_inbox.json"))
-    iid = hi.add_activation("slapende_rol", {"purpose": "p"})
-    html = V._gk_row(_st(tmp_path), hi.get(iid))
-    assert f"gkBeslis('{iid}','approved')" not in html     # geen ja-knop
-    assert f"gkBeslis('{iid}','rejected')" in html         # nee en later wél
-    assert f"gkBeslis('{iid}','deferred')" in html
-    assert "nooch_village.inbox approve" in html           # en de weg ernaartoe
-
-
-
-
-def test_zonder_goedkeuringen_verandert_er_niets_aan_de_lade(tmp_path):
-    """Zonder de rij ziet de inbox eruit zoals hij eruitzag. Een lege sectie-kop toevoegen zou de
-    lade drukker maken zonder iets te melden."""
-    from nooch_village.views import inbox as V
-    frag = V.render_inbox_frag(_st(tmp_path), [("role", "een_rol")])
-    assert "Waiting for your approval" not in frag
-    assert "data-count='0'" in frag

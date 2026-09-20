@@ -35,6 +35,24 @@ _BRONNEN = ("\nA | EU-richtlijn 2024/825 | https://eur-lex.europa.eu/x\n"
             "C | NL-omzetting EmpCo — PROXY (tracker) | https://www.internetconsultatie.nl/\n")
 
 
+def _dm_teksten(st_of_dd, rol_of_persoon=None):
+    """Alle DM-teksten in een dorp, of die van één rol/persoon.
+
+    Sinds B2 (20 sept 2026) landt een melding als DM bij de mens in plaats van als rij in
+    `NotifStore`. De routering — wie het krijgt — is ongewijzigd; alleen de plek is verhuisd."""
+    from nooch_village import channels, signaal
+    st = st_of_dd
+    if isinstance(st_of_dd, str):
+        st = signaal._MiniStores(st_of_dd)
+    if rol_of_persoon is None:
+        return [e.get("text") or "" for k in st.channels.bestaande()
+                if channels.soort_van(k) == channels.DM for e in st.channels.trail(k)]
+    wie, _ = signaal.ontvangers(st, "role", rol_of_persoon)
+    if not wie:
+        wie = [rol_of_persoon]
+    return [e.get("text") or "" for p in wie for k in st.channels.kanalen_van(p)
+            for e in st.channels.trail(k)]
+
 def _ctx(tmp_path, bronnen=_BRONNEN):
     # `records=None` volstond zolang de skill de eigenaar als naam kende. Sinds hij de rol uit het
     # CLAIMS-DOMEIN afleidt, moet het dorp in deze dubbel ook echt een houder van dat domein hebben
@@ -290,15 +308,27 @@ def _records_dubbel(ouder="cirkel", claims_eigenaar="compliance"):
     return _Records()
 
 
-def _omg(tmp_path, fillers=None, ouder="cirkel"):
+def _omg(tmp_path, fillers=None, ouder="cirkel", lead="lead-mens"):
+    """Een omgeving met dubbels voor records/assign en echte stores op schijf voor de rest.
+
+    `lead` zet een MENS op de Circle Lead van de omvattende cirkel. Sinds B2 gaat een melding naar
+    een persoon, dus "een onbemande rol bereikt tóch de Circle Lead" is alleen waar te nemen als
+    die lead ook iemand is. Vroeger schreef `NotifStore.add` een rij op een rol die niemand las —
+    en dat was precies het dead letter dat deze migratie wegneemt."""
+    alle = dict(fillers or {})
+    if lead:
+        alle.setdefault(f"{ouder}__circle_lead", [SimpleNamespace(type="person", id=lead)])
     return SimpleNamespace(projects=ProjectLedger(str(tmp_path / "p.json")),
-                           records=_records_dubbel(ouder), assign=_Assign(fillers or {}),
+                           records=_records_dubbel(ouder), assign=_Assign(alle),
                            data_dir=str(tmp_path))
 
 
 def _notifs(tmp_path):
-    from nooch_village.notifications import NotifStore
-    return NotifStore(str(tmp_path / "notifications.json")).all()
+    """De verstuurde berichten. Heette naar `NotifStore`; sinds B2 zijn het DM's."""
+    from nooch_village import channels, signaal
+    mini = signaal._MiniStores(str(tmp_path))
+    return [e.get("text") or "" for k in mini.channels.bestaande()
+            if channels.soort_van(k) == channels.DM for e in mini.channels.trail(k)]
 
 
 def test_bericht_aan_bemande_rol_gaat_alleen_daarheen(tmp_path):
@@ -313,7 +343,7 @@ def test_onbemande_rol_bereikt_toch_de_circle_lead(tmp_path):
     omg = _omg(tmp_path, {})
     doelen = claims_board.bericht_aan_rol(omg, "compliance", "er is iets gevonden")
     assert doelen == ["compliance", "cirkel__circle_lead"]
-    snippets = [n["snippet"] for n in _notifs(tmp_path)]
+    snippets = _notifs(tmp_path)
     assert any("onbemand" in s for s in snippets)
 
 
@@ -468,7 +498,7 @@ def test_scan_werkt_de_status_bij_en_meldt_regressie(tmp_path, monkeypatch):
     assert claims_db.load(str(pad), data_dir=ctx.data_dir)["werklijst"][0]["status"] == claims_db.AUTO_REGRESSIE
     assert claims_db.load_seed(str(pad))["werklijst"][0]["status"] == "live"   # seed ongemoeid
     assert "regressie" in uit["headsup"].lower()
-    assert any("Werklijst #13" in n["snippet"] for n in _notifs(tmp_path))
+    assert any("Werklijst #13" in t for t in _notifs(tmp_path))
 
 
 # ── Productprincipe: alles leeft in de repo ─────────────────────────────────

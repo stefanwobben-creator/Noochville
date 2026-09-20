@@ -94,6 +94,45 @@ class PeopleStore:
         self._save()
         return self._to_person(d)
 
+    # ── gezien-stand per kanaal ──────────────────────────────────────────────
+    #
+    # WAAROM HIER EN NIET IN EEN EIGEN STORE. Fase 11 punt 3a noemt de ongelezen-indicator "puur
+    # leeswerk op al bestaande lees-tijdstippen". Die tijdstippen bestonden niet: `ChannelStore`
+    # draagt geen enkele leesstatus, en de oude `NotifStore` — die wél een `read`-vlag had — is in
+    # B2 opgeheven. Er moest dus iets bij.
+    #
+    # Een eigen store zou een BESLUIT zijn (`test_conventies_ratchet.STORES` bevriest de lijst met
+    # precies die reden), en een duur besluit voor één getal per persoon per kanaal. Dit is geen
+    # nieuw ding in het dorp: het is een eigenschap van een MENS — wanneer heb ík dit gelezen — en
+    # mensen hebben al een store. `_to_person` filtert op de dataclass-velden, dus deze sleutel
+    # reist mee in het bestand zonder in `Person` te hoeven staan.
+    #
+    # BEWUST GEEN "ONGELEZEN"-TELLER OP HET BERICHT. Dat zou hetzelfde feit op twee plekken zetten
+    # (het bericht én de lezer) en uiteendrijven zodra er een tweede lezer bijkomt — `reference,
+    # don't copy`. Eén tijdstip per (mens, kanaal); ongelezen is een VERGELIJKING, net als
+    # `wiki.grond_status`: hij wordt bij het lezen uitgerekend, nooit opgeslagen.
+
+    def gezien(self, pid: str) -> dict:
+        """{kanaal: tijdstip} — wanneer deze mens elk kanaal voor het laatst opende."""
+        rij = self._items.get(pid) or {}
+        gz = rij.get("gezien")
+        return dict(gz) if isinstance(gz, dict) else {}
+
+    def markeer_gezien(self, pid: str, kanaal: str, at: float) -> None:
+        """Zet de gezien-stand van één kanaal. Loopt nooit terug: een oudere waarde wordt genegeerd,
+        zodat twee tabbladen elkaar niet op 'weer ongelezen' zetten."""
+        rij = self._items.get(pid)
+        if rij is None or not kanaal:
+            return
+        gz = rij.get("gezien")
+        if not isinstance(gz, dict):
+            gz = {}
+        if float(at or 0) <= float(gz.get(kanaal) or 0):
+            return
+        gz[kanaal] = float(at or 0)
+        rij["gezien"] = gz
+        self._save()
+
     def set_password(self, pid: str, password_hash: str, invited_at: float | None = None,
                      must_change: bool = True) -> None:
         """Admin-weg: zet een (temp-)wachtwoord. Standaard `must_change=True` → de gebruiker moet het bij
