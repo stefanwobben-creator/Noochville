@@ -213,8 +213,14 @@ def test_notif_add_zelf_spanning_toevoegen(tmp_path):
     cockpit2.dispatch(dd, "notif_add", {"text": ["eigen gedachte"], "role": [_OWNER], "next": ["/inbox"]},
                       username="guest")
     st2 = cockpit2._Stores(dd)
-    hits = [n for n in st2.notif.for_targets([("role", _OWNER)]) if n.get("snippet") == "eigen gedachte"]
-    assert len(hits) == 1 and hits[0]["by"] == "zelf"
+    # "+ tension" schrijft sinds 20 september 2026 een DM bij de mens die de rol vervult, niet een
+    # item in een wachtrij. De twee dingen die deze test bewaakt blijven staan: de tekst komt
+    # ongewijzigd aan, en de afzender is "zelf" (je noteert iets voor jezelf, niet namens iemand).
+    from nooch_village import channels, signaal
+    wie, _reden = signaal.ontvangers(st2, "role", _OWNER)
+    hits = [e for persoon in wie for k in st2.channels.kanalen_van(persoon)
+            for e in st2.channels.trail(k) if e.get("text") == "eigen gedachte"]
+    assert hits and all(h["author"]["id"] == "zelf" for h in hits)
 
 
 def test_actie_naar_een_andere_rol_landt_in_diens_inbox(tmp_path):

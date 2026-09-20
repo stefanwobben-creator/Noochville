@@ -664,6 +664,35 @@ def _dna_skill_for(st: _Stores, role, ask_text: str):
     return offers[0] if offers else None
 
 
+def _signaleer(st: _Stores, doel_type: str, doel_id: str, tekst: str, *,
+               by: str = "village", herkomst: dict | None = None) -> str:
+    """Eén signalering naar de mens die hem aangaat, als DM. Geeft het bericht-id (of "").
+
+    DIT VERVANGT `st.notif.add`. Sinds 20 september 2026 is er geen wachtrij meer met een
+    verwerkingsmodel; een signalering is een bericht en de ontvanger is verantwoordelijk, zoals bij
+    elk ander bericht. De routering (persoon / rolvervuller / terugval) staat in `signaal.py`, en is
+    dezelfde die de 371 bestaande rijen heeft gemigreerd — twee kopieën zouden betekenen dat
+    dezelfde rol-id vandaag bij de een landt en morgen bij de ander.
+
+    Fail-closed op de tekst (leeg = geen bericht), fail-OPEN op het doel: is er geen ontvanger te
+    bepalen, dan gaat het naar de terugval-rol. Een signalering die nergens landt is stiller dan
+    geen signalering, want de afzender denkt dat hij iets heeft gedaan."""
+    from nooch_village import signaal
+    tekst = " ".join(str(tekst or "").split())
+    if not tekst:
+        return ""
+    try:
+        kanalen = signaal.stuur(st, doel_type, doel_id, tekst, by=by, herkomst=herkomst)
+    except Exception:
+        logging.getLogger("cockpit2.signaal").exception("signalering faalde: %s/%s",
+                                                        doel_type, doel_id)
+        return ""
+    if not kanalen:
+        return ""
+    laatste = st.channels.laatste(kanalen[0]) or {}
+    return str(laatste.get("id") or "")
+
+
 def _settle_inbox(st: _Stores, role, pid: str, entry_id: str, ask_text: str, *,
                   processed: bool, reason: str):
     """Eén verwerkingsplek: zorg dat er een inbox-item voor deze rol op dit project bestaat en zet de
@@ -675,16 +704,17 @@ def _settle_inbox(st: _Stores, role, pid: str, entry_id: str, ask_text: str, *,
     rid = getattr(role, "id", "") or ""
     if not rid:
         return None
-    try:
-        open_items = [n for n in st.notif.for_targets([("role", rid)])
-                      if n.get("project_id") == pid and not n.get("processed") and not n.get("archived")]
-        n = open_items[0] if open_items else st.notif.add("role", rid, pid, entry_id,
-                                                          by=_name(role), snippet=ask_text or "")
-        if processed:
-            st.notif.mark_item_processed(n["id"], outcome=reason, by=_name(role))
-        return n
-    except Exception:
+    # GEDRAGSWIJZIGING, 20 september 2026. Dit zette vroeger een inbox-item neer en markeerde het
+    # meteen als "verwerkt" wanneer de rol het zelf had opgepakt. Zo'n item was per definitie werk
+    # dat al gedaan was — precies de ruis waarover Stefan zei: "alles wat tot dusver in de inbox is
+    # gekomen kon ik niet echt veel mee". Zonder verwerkingsmodel is er geen plek meer om "al
+    # gedaan" in te zetten, en een bericht sturen over werk dat af is, is geen bericht maar een log.
+    # Dus: `processed=True` stuurt niets meer, `processed=False` stuurt een DM naar de mens.
+    if processed:
         return None
+    bid = _signaleer(st, "role", rid, ask_text or "", by=_name(role),
+                     herkomst={"project": pid} if pid else None)
+    return {"id": bid} if bid else None
 
 
 def _mention_autotask_on() -> bool:
@@ -1458,6 +1488,11 @@ def _act_pagina_voorstel(c):
         cur, voorstel=voorstel, waarom=g("waarom"),
         van_naam=(getattr(van, "name", "") or username or "someone"), van_id=van_id or "",
         reden=ontv.get("reden") or "")
+    # NIET OMGEZET NAAR EEN DM, en dat is een grens die B1 blootlegde. Een pagina-voorstel is geen
+    # signalering maar een VERZOEK MET EEN BESLISSING: `verzoek_besluit` biedt accepteren, weigeren
+    # en aanpassen aan, en leest het item terug op `nid`. Een DM heeft geen plek om "hier moet nog
+    # over beslist worden" te dragen — dat is precies de state die uit het model verdwijnt.
+    # Zolang er geen vervanging is blijft dit op `NotifStore` staan; zie het nachtlog.
     st.notif.add("role", ontv["rol"], "", by=van_id or (username or ""),
                  snippet=snippet, extra=extra)
     naar = _name(st.records.get(ontv["rol"])) or ontv["rol"]
@@ -2135,10 +2170,19 @@ def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
             ontvangers = [tid]
         elif ty == "role" and afzender:
             ontvangers = [f.id for f in st.assign.fillers_of(tid) if f.type == "person"]
-        # Geen afzender, geen ontvanger, of jezelf vermelden → de oude weg.
+        # JEZELF VERMELDEN LEVERT NIETS OP. Eerst filteren, dán pas besluiten of er een andere weg
+        # nodig is — anders maakt `@jezelf` alsnog een kanaal met jezelf, en dat is precies wat
+        # fase 8 wilde voorkomen. Dit onderscheid (niets te doen vs. geen mens om heen te sturen)
+        # was er wél in de oude code en ging bijna verloren bij de omzetting naar DM.
+        zelf = bool(afzender) and ontvangers == [afzender]
         ontvangers = [o for o in ontvangers if o and o != afzender]
+        if zelf:
+            continue
         if not afzender or not ontvangers:
-            st.notif.add(ty, tid, pid, entry_id, by=auteur, snippet=tekst, extra=extra)
+            # Geen mens om heen te sturen: een rol zonder vervuller, of een auteur die geen kant
+            # van een DM kan zijn. `_signaleer` zoekt dan de rolvervuller of de terugval.
+            _signaleer(st, ty, tid, tekst, by=auteur,
+                       herkomst={"project": pid} if pid else None)
             n += 1
             continue
         for o in ontvangers:
@@ -3082,15 +3126,16 @@ def _act_vangst_verwerk(c):
             doel = wiki.ontvanger(rol, st.records, st.assign)
             if not doel.get("rol"):
                 return nxt, "✗ no mailbox found for this role"
-            n = st.notif.add("role", doel["rol"], "", by=(it.get("by_id") or (actor.id if actor else "")),
-                             snippet=tekst,     # met de hand ingetypt; ook als de vanger een gast is
-                             extra={notifications.MENS_GETYPT: True})
+            _signaleer(st, "role", doel["rol"], tekst,
+                       by=(it.get("by_id") or (actor.id if actor else "")))
             naam = _name(st.records.get(doel["rol"])) if st.records.get(doel["rol"]) else doel["rol"]
             waarom = f" ({doel['reden']})" if doel.get("reden") else ""
             detail = f"tension for {naam}{waarom}"
             st.werk.punt_resolve(circle, iid, otype, detail)
-            return nxt, f"✓ tension sent to {naam}" + (f" — {n.get('type') or 'not yet typed'}"
-                                                      if n.get("type") else "")
+            # De bevestiging noemde vroeger het TYPE dat de poort eraan gaf ("— naar_rol"). Dat veld
+            # bestond om de inbox te routeren en vervalt met de inbox; wat de lezer werkelijk wil
+            # weten is bij wie het terechtkwam, en dat staat er al.
+            return nxt, f"✓ tension sent to {naam}"
 
         if otype == "project":
             owner = g("owner")
@@ -3455,6 +3500,10 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
         # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
         # mee door een mens-pad en krijgt hij de bescherming die voor mensentaal bedoeld was.
         _merk = {} if van_mens is None else {notifications.MENS_GETYPT: bool(van_mens)}
+        # OOK NIET OMGEZET. Een werkoverleg-ACTIE is toegewezen werk met een afrondknop: hij komt
+        # terug via `_sluit_reden_terug` en `mark_done`, en de opdrachtgever krijgt bericht zodra
+        # hij af is. Dat is dezelfde grens als bij het pagina-voorstel: een DM kan "dit moet nog
+        # gebeuren" niet dragen. Zie het nachtlog — dit is wat B1 blootlegde.
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
@@ -3482,11 +3531,8 @@ def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = 
     if not opdrachtgever or st.people.get(opdrachtgever) is None:
         return ""
     try:
-        n = st.notif.add("person", opdrachtgever, bron_project or "", by=(door or "village"),
-                         snippet=f"Klaar: {wat}",   # geen eigen cap (#389)
-                         extra={"type": "actie", "herkomst": "↳ wat je vroeg is afgerond",
-                                "afronding": True, "bron_project": bron_project})
-        return n.get("id", "")
+        return _signaleer(st, "person", opdrachtgever, f"Klaar: {wat}", by=(door or "village"),
+                          herkomst={"project": bron_project} if bron_project else None)
     except Exception:                                          # noqa: BLE001
         logging.getLogger("cockpit2.lus").exception("afrondings-melding mislukt")
         return ""
@@ -3782,13 +3828,11 @@ def _act_notif_add(c):
         role = (g("role") or "").strip()
         if not text:
             return c.nxt, "✗ empty tension"
-        _getypt = {notifications.MENS_GETYPT: True}      # jij typte dit zelf, letterlijk
         if role and st.records.get(role) is not None:
-            st.notif.add("role", role, "", by="zelf", snippet=text, extra=_getypt)
+            _signaleer(st, "role", role, text, by="zelf")
         else:
             actor = st.people.by_email(username) if username and username != "guest" else None
-            st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text,
-                         extra=_getypt)
+            _signaleer(st, "person", actor.id if actor else "", text, by="zelf")
         return c.nxt, "✓ tension added"
 
 
@@ -4943,7 +4987,7 @@ def _act_verzoek_besluit(c):
             # Een pagina-voorstel komt van een MENS; die leest zijn persoon-inbox.
             wie = str(pag.get("van_id") or "")
             if wie:
-                st.notif.add("person", wie, "", by=rol, snippet=bericht)
+                _signaleer(st, "person", wie, bericht, by=rol)
             return
         # De zin is hier al gevormd ("✗ je verzoek is geweigerd: …") en draagt de juiste WERKWOORD:
         # weigeren is geen sluiten. Alleen de route is gedeeld, niet de formulering.
@@ -4951,7 +4995,8 @@ def _act_verzoek_besluit(c):
                            by=_name(st.records.get(rol)) or rol, kern=bericht)
         van = str(n.get("by") or "")
         if van and mens_vervullers(st, van):
-            st.notif.add("role", van, n.get("project_id") or "", by=rol, snippet=bericht)
+            _signaleer(st, "role", van, bericht, by=rol,
+                       herkomst={"project": n.get("project_id")} if n.get("project_id") else None)
 
     if keuze == "accepteer" and pag:
         # Een PAGINA-voorstel is al concreet: de tekst ís de vraag, dus accepteren is de handeling

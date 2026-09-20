@@ -225,8 +225,15 @@ def test_de_typ_paden_merken_hun_eigen_tekst():
     from nooch_village import cockpit2
     # Waren er drie; `_act_notif_besluit` (Decide-now) is weg. De vangst-tak markeert zijn tekst
     # via `extra=`, dus die staat in de dispatch-handler en niet in een eigen functie.
-    for fn in (cockpit2._act_proj_feed, cockpit2._act_notif_add):
+    #
+    # `_act_notif_add` STAAT HIER NIET MEER BIJ, en dat is geen slordigheid. Het merk bestaat om
+    # de herschrijf-poort (`spanning_ontstaat`) te vertellen dat een mens dit letterlijk typte. Die
+    # poort hangt aan `NotifStore.add`, en "+ tension" schrijft sinds 20 september 2026 een DM —
+    # er is dus niets meer dat die tekst zou kunnen herschrijven. Een merk tegen een gevaar dat
+    # niet bestaat is ruis; het merk hoort te staan waar de poort nog draait.
+    for fn in (cockpit2._act_proj_feed,):
         assert "MENS_GETYPT" in inspect.getsource(fn), fn.__name__
+    assert "MENS_GETYPT" not in inspect.getsource(cockpit2._act_notif_add)
 
 
 def test_het_dialoog_merk_hangt_aan_het_pad_niet_aan_de_persoon():

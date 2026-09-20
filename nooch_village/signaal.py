@@ -44,9 +44,18 @@ def ontvangers(st, doel_type: str, doel_id: str) -> tuple[list[str], str]:
     """(persoon_ids, reden). Lege lijst = niet te routeren; de reden zegt waarom."""
     doel_id = str(doel_id or "")
     if doel_type == "person":
-        return ([doel_id], NAAR_PERSOON) if st.people.get(doel_id) else ([], ONBEKEND)
+        if st.people.get(doel_id):
+            return [doel_id], NAAR_PERSOON
+        # ONBEKENDE PERSOON → TERUGVAL, niet weggooien. Dit is geen theorie: een GAST die via
+        # "+ tension" iets noteert had geen persoon-id, en onder de eerste versie van deze functie
+        # verdween dat punt spoorloos — het oude pad zette het nog als item op de pseudo-persoon
+        # "guest". Een genoteerde spanning die nergens aankomt is het ergste wat deze laag kan doen:
+        # de schrijver denkt dat hij iets heeft vastgelegd.
+        terug = terugval(st)
+        return ([terug], NAAR_TERUGVAL) if terug else ([], ONBEKEND)
     if doel_type != "role" or not doel_id:
-        return [], ONBEKEND
+        terug = terugval(st)
+        return ([terug], NAAR_TERUGVAL) if terug else ([], ONBEKEND)
     mensen = mensen_van(st, doel_id)
     if len(mensen) == 1:
         return mensen, NAAR_VERVULLER

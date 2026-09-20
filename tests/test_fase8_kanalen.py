@@ -43,6 +43,16 @@ def test_een_dm_is_richting_onafhankelijk():
     assert channels.dm_leden(channels.dm_kanaal("b", "a")) == ["a", "b"]
 
 
+def _dm_teksten(st):
+    """Alle DM-berichtteksten. Sinds de inbox-migratie (20 sept 2026) landt een signalering als DM
+    bij een mens in plaats van als item in een wachtrij."""
+    from nooch_village import channels
+    uit = []
+    for k in st.channels.bestaande():
+        if channels.soort_van(k) == channels.DM:
+            uit += [e.get("text") or "" for e in st.channels.trail(k)]
+    return uit
+
 def test_een_project_kanaal_is_de_bestaande_wall(tmp_path):
     """Geen migratie: het project-kanaal leest en schrijft `project["log"]` via de ledger. Zou het
     een eigen kopie zijn, dan lopen 442 bestaande gesprekken en zeven lezers uit de pas."""
@@ -94,6 +104,7 @@ def test_de_vermelding_wordt_geen_notificatie_meer(tmp_path):
     _mens(st, "Testpersoon Twee", "twee@test.nl")
     pid = st.projects.create(OWNER, "Batch 4", "human", status="running")
     voor = len(cockpit2._Stores(dd).notif.all())
+    voor_dm = len(_dm_teksten(cockpit2._Stores(dd)))
     _wall(st, dd, pid, "@Testpersoon Twee even kijken?", "een@test.nl")
     assert len(cockpit2._Stores(dd).notif.all()) == voor
 
@@ -111,16 +122,27 @@ def test_een_rol_met_vervuller_bereikt_die_mens(tmp_path):
     assert len(trail) == 1 and "pak jij dit op" in trail[0]["text"]
 
 
-def test_een_rol_zonder_mens_valt_terug_op_de_wachtrij(tmp_path):
-    """Fail-closed: werk bij niemand neerleggen is stiller en erger dan een melding te veel.
-    `mother_earth` is de anchor-cirkel en heeft geen mens-vervuller."""
+def test_een_rol_zonder_mens_valt_terug_op_een_mens(tmp_path):
+    """Deze test heette `..._valt_terug_op_de_wachtrij`. De wachtrij bestaat niet meer; de terugval
+    is sinds 20 september 2026 een DM bij de founder.
+
+    Het punt is onveranderd en het is waarom de test bestaat: werk bij niemand neerleggen is
+    stiller en erger dan een melding te veel. `mother_earth` is de anchor-cirkel en heeft geen
+    mens-vervuller, dus hier moet de terugval aantoonbaar werken."""
     dd, st = _stores(tmp_path)
     _mens(st, "Testpersoon Een", "een@test.nl")
     pid = st.projects.create(OWNER, "Batch 4", "human", status="running")
     naam = cockpit2._name(st.records.get("mother_earth"))
-    voor = len(cockpit2._Stores(dd).notif.all())
+    voor_dm = len(_dm_teksten(cockpit2._Stores(dd)))
     _wall(st, dd, pid, f"@{naam} pak jij dit op?", "een@test.nl")
-    assert len(cockpit2._Stores(dd).notif.all()) == voor + 1
+    st2 = cockpit2._Stores(dd)
+    assert len(_dm_teksten(st2)) == voor_dm + 1
+    assert st2.notif.all() == []                       # niets blijft in de oude wachtrij hangen
+    # En hij landt bij een MENS, niet in een kanaal dat niemand leest.
+    from nooch_village import signaal
+    founder = signaal.terugval(st2)
+    assert founder and any(founder in channels.dm_leden(k) for k in st2.channels.bestaande()
+                           if channels.soort_van(k) == channels.DM)
 
 
 def test_jezelf_vermelden_maakt_geen_gesprek_met_jezelf(tmp_path):

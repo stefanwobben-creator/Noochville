@@ -68,16 +68,32 @@ def test_een_rol_zonder_vervuller_valt_terug_op_de_founder(dorp):
     assert nm.ontvanger_van(st, n) == (st.founder.id, nm.NAAR_TERUGVAL)
 
 
-def test_een_rol_met_twee_vervullers_wordt_niet_geraden(dorp):
-    """Naar beiden is dubbel, naar de eerste is willekeur, naar de founder is een aanname. Parkeren."""
+def test_historie_van_een_rol_met_twee_vervullers_gaat_naar_de_terugval(dorp):
+    """Eerder parkeerde de migratie deze rijen zodat een mens kon kiezen. Stefan wees dat af: het is
+    historie van lage waarde en hij stuurt zelf door als het nodig blijkt. Elf rijen op prod.
+
+    Let op het verschil met een NIEUWE melding: die gaat wél naar alle vervullers (zie
+    `test_een_nieuwe_melding_gaat_naar_alle_vervullers`). Nieuw werk mag dubbel aankomen, historie
+    hoeft dat niet."""
     st = dorp
     st.assign.assign(LEVEND, "person", st.tweede.id)          # nu twee mensen
     n = st.notif.add("role", LEVEND, "p1", snippet="iets", by="claims-checker")
-    ontvanger, reden = nm.ontvanger_van(st, n)
-    assert ontvanger == "" and reden == nm.MEERDERE
+    assert nm.ontvanger_van(st, n) == (st.founder.id, nm.NAAR_TERUGVAL)
     r = nm.migreer(st.notif, st, apply=True)
-    assert r["geparkeerd"] == 1 and r["geparkeerde_rollen"][f"role:{LEVEND}"] == 1
-    assert r["klopt"] is True                                  # geparkeerd telt gewoon mee
+    assert r["geparkeerd"] == 0
+    assert st.channels.trail(channels.dm_kanaal("claims-checker", st.founder.id))
+
+
+def test_een_nieuwe_melding_gaat_naar_alle_vervullers(dorp):
+    """Het spiegelbeeld: `signaal.stuur` verdeelt wél. Deze twee regels staan naast elkaar en zijn
+    allebei bewust — zou iemand ze gelijktrekken, dan valt hier iets om."""
+    from nooch_village import signaal
+    st = dorp
+    st.assign.assign(LEVEND, "person", st.tweede.id)
+    kanalen = signaal.stuur(st, "role", LEVEND, "nieuw werk", by="claims-checker")
+    assert len(kanalen) == 2
+    for persoon in (st.mens.id, st.tweede.id):
+        assert channels.dm_kanaal("claims-checker", persoon) in kanalen
 
 
 def test_entry_id_speelt_geen_rol_in_de_routering(dorp):
@@ -187,3 +203,16 @@ def test_een_kanaal_met_jezelf_heet_yourself_en_mag_antwoorden(dorp):
     eigen = channels.dm_kanaal(st.mens.id, st.mens.id)
     assert _label(st, eigen, st.mens.id) == "Yourself"
     assert kan_antwoorden(st, eigen, st.mens.id) is True
+
+
+def test_een_onbekende_ontvanger_valt_terug_in_plaats_van_te_verdwijnen(dorp):
+    """Een gast die via "+ tension" iets noteert heeft geen persoon-id. Onder de eerste versie van
+    `ontvangers` verdween dat punt spoorloos, terwijl het oude pad het nog als item op de
+    pseudo-persoon "guest" zette. Een genoteerde spanning die nergens aankomt is het ergste wat
+    deze laag kan doen: de schrijver denkt dat hij iets heeft vastgelegd."""
+    from nooch_village import signaal
+    st = dorp
+    for doel_type, doel_id in (("person", ""), ("person", "bestaat-niet"), ("role", "")):
+        wie, reden = signaal.ontvangers(st, doel_type, doel_id)
+        assert wie == [st.founder.id] and reden == signaal.NAAR_TERUGVAL, (doel_type, doel_id)
+    assert signaal.stuur(st, "person", "", "een los punt", by="zelf")

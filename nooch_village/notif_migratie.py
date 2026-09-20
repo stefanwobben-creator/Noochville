@@ -49,11 +49,20 @@ NAAR_TERUGVAL, MEERDERE, ONBEKEND = signaal.NAAR_TERUGVAL, signaal.MEERDERE, sig
 def ontvanger_van(st, n: dict) -> tuple[str, str]:
     """(persoon_id, reden). Lege persoon_id = niet te routeren; de reden zegt waarom.
 
-    DE MIGRATIE PARKEERT bij meerdere vervullers, terwijl een NIEUWE melding naar allemaal gaat
-    (`signaal.stuur`). Dat verschil is bewust: historie hoort precies één plek te hebben, en een
-    mens beslist welke; nieuw werk mag liever dubbel aankomen dan nergens."""
+    BIJ MEERDERE VERVULLERS GAAT HISTORIE NAAR DE TERUGVAL, niet naar allemaal en niet naar een
+    parkeerplaats. Eerder parkeerde de migratie die elf rijen zodat een mens kon kiezen; Stefan
+    heeft dat op 20 september afgewezen met de reden dat het historie van lage waarde is: *"geen
+    losse handmatige toewijzing per rij nodig, ik stuur zelf door als dat nodig blijkt."* Elf rijen
+    op drie rollen (`mother_earth__nooch` en twee circle_leads) gaan dus naar de founder, net als
+    de rijen van de vijf opgeheven rollen.
+
+    Een NIEUWE melding gaat wél naar allemaal (`signaal.stuur`). Dat verschil blijft bewust: nieuw
+    werk mag liever dubbel aankomen dan nergens, historie hoeft dat niet."""
     wie, reden = signaal.ontvangers(st, n.get("target_type"), n.get("target_id"))
-    if reden == signaal.MEERDERE or len(wie) != 1:
+    if reden == signaal.MEERDERE:
+        terug = signaal.terugval(st)
+        return (terug, signaal.NAAR_TERUGVAL) if terug else ("", signaal.ONBEKEND)
+    if len(wie) != 1:
         return "", reden
     return wie[0], reden
 

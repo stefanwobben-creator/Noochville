@@ -53,7 +53,10 @@ def test_mention_mens_alleen_notificatie(tmp_path, monkeypatch):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
                                         "text": [f"@{person.name} kijk even"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
-    assert any(n["target_type"] == "person" for n in st.notif.all())     # notificatie zoals altijd
+    # De mens krijgt bericht zoals altijd — sinds 20 september als DM in plaats van als
+    # inbox-item. Wat de test bewaakt is onveranderd: een @-vermelding van een mens komt aan.
+    from nooch_village import channels
+    assert any(channels.soort_van(k) == channels.DM for k in st.channels.bestaande())
     # De poort laat dit met rust: een MENS typte deze woorden, en dan is het al mensentaal.
     # (In deze test is de auteur 'guest' en dus niet als persoon herkenbaar; het pad geeft nu wél
     # de echte auteur mee waar die er is — zie `_act_proj_feed`.)

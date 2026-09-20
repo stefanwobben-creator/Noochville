@@ -699,3 +699,76 @@ van beide wilde ik stilzwijgend committen.
 
 B1 als eigen beurt, met de 44 tests erbij en per testbestand nagelopen wat het vastlegt. Daarna B2.
 De stash staat klaar; niets is verloren.
+
+## stap B1 — nieuwe signaleringen gaan als DM
+
+Groen: 4.104 passed, 1 failed (de bekende), 1 xfailed. `NotifStore` staat er nog; opruimen is B2.
+
+### De 11 geparkeerde rijen zijn weg als categorie
+
+Per besluit gaan ze naar de terugval (de founder), net als de rijen van de opgeheven rollen. Het
+onderscheid tussen migratie en nieuwe melding blijft wél staan en heeft een eigen test:
+**historie → één ontvanger, nieuw werk → alle vervullers.** Nieuw werk mag dubbel aankomen,
+historie hoeft dat niet.
+
+### Drie dingen die B1 blootlegde, en die ik NIET heb omgezet
+
+Van de tien schrijfplekken zijn er **acht** omgezet. Twee niet, en dat is geen restwerk maar een
+grens die pas zichtbaar werd door het te proberen:
+
+1. **Het pagina-voorstel** (`pagina_voorstel` → `verzoek_besluit`). Dat is geen signalering maar een
+   **verzoek met een beslissing**: accepteren, weigeren, aanpassen — en `verzoek_besluit` leest het
+   item terug op `nid`. Een DM heeft geen plek om "hier moet nog over beslist worden" te dragen.
+2. **De werkoverleg-actie.** Toegewezen werk met een afrondknop: het komt terug via
+   `_sluit_reden_terug` en `mark_done`, en de opdrachtgever krijgt bericht zodra het af is.
+
+Samen waren die twee goed voor **25 van de 43 gebroken tests**. Dat is het bewijs dat ze een andere
+soort zijn: de inbox was niet alleen een meldingenlijst, er zat een **besluitwachtrij** in.
+
+3. **`spanning_ontstaat` heeft geen aanroeper meer.** De typeer- en bevinding-poort hing uitsluitend
+   aan `NotifStore.add`. Van de acht omgezette paden draait hij nergens meer; hij leeft alleen nog
+   op de twee paden hierboven. Een hele module die stilvalt zonder dat iets het zegt — precies waar
+   `village._meld_verweesde_pulse_skills` voor bestaat, maar dan voor een poort.
+
+**Dit verandert de opdracht voor B2.** "NotifStore verwijderen" kan niet zolang die besluitwachtrij
+er nog op draait. Er zijn twee wegen, en dat is een keuze voor Stefan:
+- de besluitwachtrij een eigen, kleine store geven (hij is klein: voorstellen + acties), of
+- `NotifStore` laten staan voor uitsluitend die twee flows en alleen `/inbox` als scherm opheffen.
+
+### Een bug die de tests aan het licht brachten
+
+**Een gast die via "+ tension" iets noteerde, verloor het.** `signaal.ontvangers` gaf een lege
+lijst voor een onbekend persoon, en `stuur` postte dan niets. Het oude pad zette het nog als item
+op de pseudo-persoon "guest". Een genoteerde spanning die nergens aankomt is het ergste wat deze
+laag kan doen: de schrijver denkt dat hij iets heeft vastgelegd. Nu valt een onbekende ontvanger
+terug op de founder, met een test erop.
+
+En één regressie die ik zelf introduceerde en die een bestaande test ving: **jezelf vermelden maakte
+weer een gesprek met jezelf.** De oude code filterde de afzender eruit vóór de terugval-tak; mijn
+omzetting deed dat erna. Het onderscheid "niets te doen" versus "geen mens om heen te sturen" was
+er wél en ging bijna verloren.
+
+### Wat er in de 44 tests is veranderd
+
+Niet mechanisch vervangen. Per test nagelopen wat hij vastlegde:
+
+- **Vier tests toetsten `status_of(...) == "verwerkt"`** — werk dat al gedaan was op het moment dat
+  het verscheen. Die assertie is nu het spiegelbeeld: er gaat **geen** bericht naar de mens. Drie
+  andere toetsen juist dat er wél een DM komt.
+- **`test_spanning_gaat_ongetypeerd_de_bestaande_haak_in`** heet nu
+  `test_een_gevangen_punt_gaat_ongewijzigd_naar_de_mens`: de haak draait niet meer (bevinding 3),
+  maar wat de naam beloofde — andermans woorden niet herschrijven — geldt onverkort.
+- **`test_een_rol_zonder_mens_valt_terug_op_de_wachtrij`** heet nu `..._valt_terug_op_een_mens`.
+- **`MENS_GETYPT` is uit `_act_notif_add` gehaald**, met een assert dat hij er níét meer staat: het
+  merk waarschuwt een poort die op dat pad niet meer draait, en een merk tegen een gevaar dat niet
+  bestaat is ruis.
+- Waar een telling op één stond terwijl de rol twee vervullers heeft, telt de test nu het **aantal
+  vervullers** in plaats van een los getal — anders breekt hij zodra iemand het zaad aanpast, om de
+  verkeerde reden.
+
+### Twee bestanden die ik niet heb aangeraakt
+
+`claude/implementatiebrief_opruiming_19sept.md` heeft 110 regels ongecommitte wijzigingen en
+`claude/ux_voorstel_best_practices_20sept.md` is nieuw — allebei van Stefan, tijdens dit werk. Ik
+laat ze staan; ze horen niet in een commit van mij. (De brief kondigt ook een **fase 11** aan over
+UX-microinteracties; die heb ik niet opgepakt.)
