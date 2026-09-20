@@ -48,20 +48,22 @@ _VERIFY_PROMPT = (
     "Page:\n{text}"
 )
 
-_MIN_SNIPPET = 20        # een citaat korter dan dit is te generiek om als grond te tellen
+# `_MIN_SNIPPET` en `_norm` stonden hier; allebei zijn ze op 20 september 2026 naar `weekmemo`
+# verhuisd, waar de grondings-poort nu voor beide bronnen leeft. Zie `_grounded` hieronder.
 _MIN_PAGE = 200          # minder tekst → pagina niet zinvol leesbaar
-
-
-def _norm(s: str) -> str:
-    """Whitespace-genormaliseerd en case-fold, voor de letterlijk-in-tekst-check."""
-    return re.sub(r"\s+", " ", s or "").strip().casefold()
 
 
 def _grounded(snippet: str, text: str) -> bool:
     """Grondings-poort: het citaat moet (genormaliseerd) letterlijk in de paginatekst staan én niet
-    triviaal kort zijn. Zo dekt de skill de faalmodus van de autonome variant af: geen gehallucineerd bewijs."""
-    s = _norm(snippet)
-    return len(s) >= _MIN_SNIPPET and s in _norm(text)
+    triviaal kort zijn. Zo dekt de skill de faalmodus van de autonome variant af: geen
+    gehallucineerd bewijs.
+
+    `streng=True`: leestekens tellen WEL mee. Hier is het citaat het bewijs — een Kroniek-record dat
+    grondt op een zin die net iets anders op de pagina staat, is geen bewijs maar een parafrase, en
+    daar beroept zich later iemand op. De regel zelf staat sinds 20 september 2026 in `weekmemo`;
+    zie daar waarom hij verhuisde en wat het verschil met `streng=False` precies is."""
+    from nooch_village.weekmemo import gegrond
+    return gegrond(snippet, text, streng=True)
 
 
 def _parse_json(raw: str) -> dict | None:
