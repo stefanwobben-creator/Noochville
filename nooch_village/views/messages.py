@@ -33,19 +33,43 @@ def _label(st, kanaal: str, ik: str = "") -> str:
     return _person_name(st, ander) or ander or "direct"
 
 
-def _kanalen(st, ik: str) -> dict[str, list[str]]:
-    """De kanalen die deze mens ziet, per groep.
+#: Hoeveel projectkanalen er ZONDER zoekterm getoond worden. Op productie staan er 442, en die
+#: lijst is geen lijst meer maar een muur — je scrolt langs honderden namen op zoek naar één.
+#: Cirkels (20) en DM's blijven altijd compleet: die zijn op te overzien en je kiest er bewust een.
+PROJECT_CAP = 25
+
+
+def _laatst(st, kanaal: str) -> float:
+    e = st.channels.laatste(kanaal)
+    return float((e or {}).get("at") or 0)
+
+
+def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int]]:
+    """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL vóór filteren.
 
     Projecten: die waar al een gesprek in staat — een leeg project-kanaal is geen gesprek maar een
     project, en dat staat op het bord. Cirkels: alle bestaande, ook lege, want een cirkelkanaal is
-    een plek waar je iets kúnt zeggen. Direct: alleen de jouwe."""
+    een plek waar je iets kúnt zeggen. Direct: alleen de jouwe.
+
+    Zonder zoekterm staan de projectkanalen op VOLGORDE VAN HET LAATSTE BERICHT en afgekapt op
+    `PROJECT_CAP`. Alfabetisch afkappen zou willekeurig zijn; op recentheid afkappen laat precies
+    zien waar het gesprek loopt. Mét zoekterm vervalt de cap — dan weet je wat je zoekt."""
     proj = [channels.project_kanaal(p["id"]) for p in st.projects.all()
             if (p.get("log") or []) and not p.get("archived")]
     cirk = [channels.circle_kanaal(r.id) for r in st.records.all()
             if not getattr(r, "archived", False) and getattr(r, "type", None)
             and str(getattr(r.type, "value", r.type)) == "circle"]
     dms = st.channels.kanalen_van(ik) if ik else []
-    return {"Projects": proj, "Circles": cirk, "Direct": dms}
+    groepen = {"Projects": proj, "Circles": cirk, "Direct": dms}
+    totaal = {g: len(r) for g, r in groepen.items()}
+
+    naald = " ".join((q or "").split()).lower()
+    if naald:
+        groepen = {g: [k for k in r if naald in _label(st, k, ik).lower()]
+                   for g, r in groepen.items()}
+    else:
+        groepen["Projects"] = sorted(proj, key=lambda k: -_laatst(st, k))[:PROJECT_CAP]
+    return groepen, totaal
 
 
 def _bericht(st, e: dict) -> str:
@@ -65,26 +89,49 @@ def _bericht(st, e: dict) -> str:
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
-                    msg: str = "") -> str:
-    groepen = _kanalen(st, ik)
+                    msg: str = "", q: str = "") -> str:
+    groepen, totaal = _kanalen(st, ik, q)
     if not kanaal:
         # OPEN OP IETS DAT GEZEGD IS. De eerste versie pakte simpelweg het eerste kanaal, en dat
         # was de anchor-cirkel: je landde op "Nothing said here yet" terwijl er drie kanalen
         # verderop wél gesprek stond. Een leeg kanaal als voordeur laat het scherm dood lijken.
-        volgorde = [k for g in ("Direct", "Projects", "Circles") for k in groepen[g]]
+        # LET OP: `groepen` is hier al gefilterd en afgekapt. Voor de voordeur wil je juist het
+        # volledige veld, anders hangt "waar land ik" af van een zoekterm.
+        alles, _ = _kanalen(st, ik, "")
+        volgorde = [k for g in ("Direct", "Projects", "Circles") for k in alles[g]]
         kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
                       volgorde[0] if volgorde else "")
+
+    # Het zoekveld is een GET-formulier en geen JS-filter: zo werkt hij zonder scripts, is de
+    # uitkomst deelbaar als URL, en hoeven er geen 442 regels naar de browser die je toch verbergt.
+    zoek = (f"<form class='msg-zoek' method='get' action='/messages'>"
+            f"<input type='hidden' name='k' value='{_e(kanaal)}'>"
+            f"<label class='att-lbl' for='msg-q'>Find a channel</label>"
+            f"<input id='msg-q' type='search' name='q' value='{_e(q)}' "
+            f"placeholder='Project, circle or person…'>"
+            f"<div class='qadd-row'><button class='btn sm' type='submit'>Search</button>"
+            + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if q else "")
+            + "</div></form>")
 
     lijst = []
     for groep, rij in groepen.items():
         if not rij:
             continue
-        lijst.append(f"<p class='muted msg-groep'>{_e(groep)}</p>")
+        aantal = ""
+        if groep == "Projects" and not q and totaal[groep] > len(rij):
+            aantal = (f" <span class='msg-telling'>{len(rij)} of {totaal[groep]} "
+                      f"&middot; search for the rest</span>")
+        elif q:
+            aantal = f" <span class='msg-telling'>{len(rij)} of {totaal[groep]}</span>"
+        lijst.append(f"<p class='muted msg-groep'>{_e(groep)}{aantal}</p>")
         for k in rij:
             aan = " on" if k == kanaal else ""
-            lijst.append(f"<a class='msg-kanaal{aan}' href='/messages?k={_e(k)}'>"
+            qs = f"&q={_e(q)}" if q else ""
+            lijst.append(f"<a class='msg-kanaal{aan}' href='/messages?k={_e(k)}{qs}'>"
                          f"{_e(_label(st, k, ik))}</a>")
-    nav = f"<nav class='msg-lijst'>{''.join(lijst) or '<p class=muted>No channels yet.</p>'}</nav>"
+    leeg = ("<p class='muted'>No channel matches that.</p>" if q
+            else "<p class='muted'>No channels yet.</p>")
+    nav = f"<nav class='msg-lijst'>{zoek}{''.join(lijst) or leeg}</nav>"
 
     trail = st.channels.trail(kanaal) if kanaal else []
     draad = "".join(_bericht(st, e) for e in trail) or (

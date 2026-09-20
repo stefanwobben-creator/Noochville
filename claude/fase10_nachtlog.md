@@ -367,3 +367,30 @@ Suite: 4.060 passed, 1 failed (de bekende `test_plausible_zonder_sleutel`), 1 xf
    tabbladen (`Overview`, `Roles`, …) staan in onderkast terwijl de knoppen ernaast wél
    hoofdletters dragen. De referentie heeft `SHOP STORE MISSION CONTACT` in hoofdletters. Viel
    buiten de vier punten, dus ik heb het laten staan.
+
+---
+
+# Ochtendronde — na Stefans zes besluiten
+
+## punt 1a — het zoek/filterveld in Messages
+
+**Twee ingrepen, niet één.** Een zoekveld alleen lost het niet op: zonder zoekterm stonden er nog
+steeds 442 regels in de lijst. Dus ook een cap op de projectgroep (`PROJECT_CAP = 25`), **op
+volgorde van het laatste bericht**. Alfabetisch afkappen is willekeurig; op recentheid afkappen
+laat precies zien waar het gesprek loopt. Cirkels (20) en DM's blijven altijd compleet.
+
+**Het veld is een GET-formulier, geen JS-filter.** Drie redenen: hij werkt zonder scripts, de
+uitkomst is deelbaar als URL, en er hoeven geen 442 regels naar de browser die je daarna verbergt.
+
+**Een stille cap is een leugen**, dus het scherm zegt `25 of 37 · search for the rest`. Daar staat
+ook een test op.
+
+**Eén ding dat ik onderweg tegenkwam:** de voordeur-keuze ("open op iets dat gezegd is") gebruikte
+`groepen`, en dat is ná het filteren. Daarmee zou je na een zoekopdracht op een ander kanaal landen
+dan ervoor. Nu roept hij `_kanalen(st, ik, "")` apart aan voor het volledige veld. Er staat een
+test op die precies dat vergelijkt.
+
+Zeven tests, op gedrag geschreven en niet op opmaak: ze bouwen een dorp met meer kanalen dan de cap
+en kijken wat er in en uit de lijst valt.
+
+Suite: 4.067 passed, 1 failed (de bekende), 1 xfailed.

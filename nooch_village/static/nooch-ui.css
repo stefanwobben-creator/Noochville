@@ -430,3 +430,8 @@
 
 /* 5 · Het laatste groen dat niet in de beelden staat */
 .nu .kpidata-v { color: var(--nu-text); }
+
+/* punt 1a · het zoekveld boven de kanalenlijst */
+.nu .msg-zoek input[type=search] { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+.nu .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }

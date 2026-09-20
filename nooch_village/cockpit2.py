@@ -5559,7 +5559,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 _ik = _web_actor_id(username, st)
                 self._send(render_messages(st, ik=_ik, kanaal=(qs.get("k") or [""])[0],
                                            csrf_token=effective_csrf,
-                                           msg=(qs.get("msg") or [""])[0]))
+                                           msg=(qs.get("msg") or [""])[0],
+                                           q=(qs.get("q") or [""])[0]))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
