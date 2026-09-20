@@ -167,7 +167,7 @@ def test_green_dark_ratchet():
     te halen; komt er één bij, dan is er een oude groene kleur teruggekropen op een scherm dat al
     om was.
     """
-    _PLAFOND = 46          # 20 sep 2026: 57 selectors met --green-dark, 11 hebben een nu-tegenhanger
+    _PLAFOND = 36          # 20 sep, na groep A+B+C: 57 selectors, 21 met een nu-tegenhanger
     zonder = []
     for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(OUD)):
         if "var(--green-dark)" not in body:
@@ -189,15 +189,16 @@ VIEWS = REPO / "nooch_village" / "views"
 #: die stijgt heeft een nieuwe klasse gekregen uit het oude palet — dat is de fout die deze hele
 #: fase opruimt, en dan wil je het bij het schrijven weten en niet bij een screenshot.
 _DEKKING_PLAFOND = {
-    "roloverleg.py": 33,     # groep C, komt vannacht nog
-    "werkoverleg.py": 13,    # groep C, idem
     "projects.py": 7,        # rest is vorm, geen kleur: mform, mdot, car
-    "vangst.py": 2,
     "messages.py": 1,
+    "roloverleg.py": 1,      # `pdisc` zet alleen background:none/border:none
     "doelen.py": 0,
     "inbox.py": 0,
     "overview.py": 0,
     "search.py": 0,
+    "site_audit.py": 0,
+    "vangst.py": 0,
+    "werkoverleg.py": 0,
     "wiki.py": 0,
     "wizard.py": 0,
 }
@@ -259,9 +260,7 @@ def test_kleuren_zonder_merkdekking_worden_binnen_nu_geneutraliseerd():
     # Wat er nog staat, met de view waar het thuishoort. Deze lijst mag alleen KORTER worden:
     # elke stap van groep A/C die een view aanpakt haalt er een paar af.
     _NOG_TE_DOEN = {
-        "rov-delrole", "rovm-close", "sec-issue",    # roloverleg.py
-        "cl-check",                                  # werkoverleg.py
-        "mdot",                                      # projects.py — ronde stip, vorm en geen kleur
+        "mdot",     # projects.py — een ronde stip van .55rem: vorm, geen kleur. Blijft staan.
     }
     gemist = [k for k in sorted(oude_klassen) if k in gebruikt
               and k not in _NOG_TE_DOEN

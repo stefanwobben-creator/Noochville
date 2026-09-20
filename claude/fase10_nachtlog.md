@@ -154,3 +154,33 @@ niet stilzwijgend — een stille wijziging daar is over een jaar onverklaarbaar.
 uitbreiding van een bestaande lijst.
 
 Suite: 4.057 passed, 1 failed (de bekende), 1 xfailed.
+
+## 04:25 — groep C: `roloverleg.py` en `werkoverleg.py`
+
+**Wat.** Deze twee stonden al in `_NU_ROUTES` maar zijn in fase 7/8 nooit herbouwd: ze kregen de
+body-klasse op grond van de fase-9-brief ("de governance- en tactical-meeting-modals krijgen
+dezelfde visuele stijl"), niet op grond van een herbouw. Daarom lag hier meer werk dan elders.
+
+**Eén inhoudelijke keuze, expliciet gemaakt.** `.is-new` en `.is-del` markeren wat er in een
+voorstel verandert. `.is-del` deed dat al met een dashed rand — die draagt vorm. `.is-new` had
+alléén een groene vulling. Die heeft er nu een rand bij, zodat ook daar de vorm het signaal draagt
+en niet de tint. Dat is dezelfde regel als bij de bordkolommen in fase 9 en bij `.rdr-row` in de
+inbox vannacht.
+
+**Resultaat.** `roloverleg.py` 33 → 1, `werkoverleg.py` 13 → 0.
+
+## Stand na groep A + B + C
+
+```
+projects.py 7 · messages.py 1 · roloverleg.py 1 · en acht views op 0
+                                                            TOTAAL 9
+green-dark-ratchet: 46 → 36 selectors zonder nu-tegenhanger
+```
+
+Van de **491 open klasse-gebruiken** waar deze fase mee begon staan er nog **9**. Wat er rest is
+vorm en geen kleur: `mform` (`font-family:inherit`), `mdot` (een ronde stip), `car`, `pdisc`
+(`background:none;border:none`). Die laat ik staan — er valt niets aan te herstylen.
+
+`_NOG_TE_DOEN` in de kleurtest is van acht klassen terug naar één (`mdot`).
+
+Suite: 4.057 passed, 1 failed (de bekende), 1 xfailed.

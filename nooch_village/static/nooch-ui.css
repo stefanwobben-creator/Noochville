@@ -393,3 +393,40 @@
 
 /* groep B · `/site-audit` — de laatste pil buiten de negentien schermen */
 .nu .seg { border: var(--nu-border); border-radius: 0; }
+
+/* ══ GROEP C · roloverleg.py en werkoverleg.py ═════════════════════════════════════════════════
+   Deze twee stonden al in `_NU_ROUTES` maar zijn in fase 7/8 nooit herbouwd: ze kregen de
+   body-klasse op grond van de fase-9-brief ("de governance- en tactical-meeting-modals krijgen
+   dezelfde visuele stijl"), niet op grond van een herbouw. Daarom lag hier meer werk dan bij de
+   rest van groep A.
+
+   Eén ding blijft bewust staan: `.is-new` en `.is-del` markeren wat er in een voorstel VERANDERT.
+   `.is-del` doet dat al met een dashed rand, dus die draagt vorm. `.is-new` had alleen een groene
+   vulling; die krijgt er een rand bij, zodat ook daar de vorm het signaal draagt en niet de tint. */
+
+/* 1 · Invoervelden en omhulsels */
+.nu .rovm-field, .nu .rov-addrow, .nu .rov-editor, .nu .rov-addgrid, .nu .rov-add,
+.nu .cl-check, .nu .wo-leave, .nu .wo-timer, .nu .wo-num, .nu .wo-mem, .nu .rovm-item {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .rov-foot { background: var(--nu-surface); border-top: var(--nu-border); }
+
+/* 2 · Grijstinten → één muted */
+.nu .rovm-iv, .nu .is-soon, .nu .rovm-was, .nu .rovm-close, .nu .rov-title,
+.nu .rov-more, .nu .rov-link, .nu .let, .nu .wo-mem-n {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .let { background: var(--nu-bg); }
+
+/* 3 · Wat verandert: vorm, niet alleen tint */
+.nu .is-new { background: var(--nu-bg-alt); border: var(--nu-border); }
+.nu .is-del { background: var(--nu-bg); border-color: var(--nu-text); }
+.nu .sec-issue { border-radius: 0; border: 1.5px solid var(--nu-text);
+  background: var(--nu-surface); color: var(--nu-text); }
+
+/* 4 · Fout en verwijderen blijven rood */
+.nu .rov-delrole { color: var(--nu-danger); }
+.nu .blok { background: var(--nu-surface); color: var(--nu-danger);
+  border: 1.5px solid var(--nu-danger); }
+
+/* 5 · Het laatste groen dat niet in de beelden staat */
+.nu .kpidata-v { color: var(--nu-text); }
