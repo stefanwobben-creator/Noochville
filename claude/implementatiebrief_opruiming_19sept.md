@@ -488,3 +488,65 @@ stoppen).
   bouw je een tabel voor dode deuren.
 - De schermen die in fase 9 bewust zijn overgeslagen (te bepalen tijdens die fase zelf) — apart te
   beslissen: los laten, of een tiende fase.
+
+---
+
+# Fase 10 — de hele Village in de nooch.earth-huisstijl, plus drie losse punten
+
+*Toegevoegd op 20 september 2026. De fase 10-tekst stond tot dan toe alleen in Stefans eigen
+Claude-project en niet in de repo; de versie die met PR #516 meekwam eindigde bij fase 9. Punt 1, 3
+en 4 staan hieronder letterlijk zoals Stefan ze gaf. Punt 2 is samengevat uit de opdracht van
+diezelfde avond, met de uitkomst van de inventarisatie erbij — zie
+`claude/fase10_huisstijl_inventarisatie.md` voor de volledige meting.*
+
+**Werkwijze voor alle vier de punten:** 3 à 5 tests per onderdeel, handmatige doorloop, per punt
+apart rapporteren en per punt apart committen — niet alles in één grote commit.
+
+## Punt 1 — Messages: zoek/filter, en het losse-kanaal-concept
+
+Bouw sowieso een zoek/filterveld boven de projectkanalen-lijst — dat staat los van de rest en lost
+het acute onbruikbaarheidsprobleem op.
+
+Voor het losse-kanaal-concept: doe eerst een korte inventarisatie van het huidige channel-datamodel
+(project/circle/dm, zie fase 8) en stel voor hoe een vierde soort — een los, zelf te noemen kanaal
+zonder project/cirkel/persoon eraan — daar het best in past (nieuwe kind, wie mag het aanmaken, hoe
+verschijnt het in de kanalenlijst). Leg dat voor voor je bouwt, dit is een nieuw
+datamodel-begrip.
+
+## Punt 2 — de huisstijl over de hele Village, niet alleen de negentien fase-9-schermen
+
+"Zorg dat Village ook in deze design stijl eruit ziet" was bedoeld voor de héle Village-app. Het
+bindende ijkpunt is de live nooch.earth-huisstijl, vastgelegd in
+`claude/huisstijl_referentie_productpagina.jpg` en `claude/huisstijl_referentie_email.png` — niet de
+fase-9-tokens op zich, en niet een beschrijving in woorden.
+
+**Kleurwaarden komen uit de pixels**, gesampled met een script, niet uit een beschrijving. De
+uitkomst van die sampling staat in `claude/fase10_huisstijl_inventarisatie.md` §5.
+
+**Knoppen:** groen blijft voorbehouden aan de primaire CTA, niet elke `.btn`. Secundaire en
+tertiaire knoppen worden wit/transparant met zwarte rand en zwarte tekst, in hetzelfde vocabulaire
+als de rest.
+
+**Scope: groep A, B én C**, in deze volgorde:
+
+- **Groep A** (route staat in `_NU_ROUTES`, maar de markup gebruikt het gedeelde vocabulaire niet —
+  `wizard.py`, `projects.py`, `inbox.py`, `roloverleg.py`, `overview.py` e.a.): begin met de
+  goedkoopste winst, de `att-*`- en `qadd-*`-families (~40 gebruiken over zes views in één klap),
+  daarna de rest van groep A.
+- **Groep B** (`/site-audit`, `/middelen`, `/rolefillers` — dezelfde rendercode als routes die wél
+  meedoen): de twee regels fixen, kost weinig.
+- **Groep C** (`/werkoverleg`, `/roloverleg2` — nooit herbouwd): als laatste, dat is de grootste
+  klus.
+
+## Punt 3 — het dubbele Organization-paneel op Circle-pagina's
+
+Verwijder of verklein het rechter Organization-paneel op Circle-pagina's. De organisatieboom blijft
+in de linkerbalk staan (ongewijzigd), de volledige rollenlijst blijft bereikbaar via de bestaande
+"Roles"-tab. Geen functionaliteit verdwijnt, alleen de dubbele weergave.
+
+## Punt 4 — inline bewerken in plaats van een apart bewerkformulier
+
+Onderzoek eerst hoe het huidige edit-formulier is opgebouwd (welke velden, hoe wordt opgeslagen,
+welke rechtencheck) voor je de UI omzet naar inline bewerken (in de pagina zelf klikken en typen,
+opslaan zonder aparte pagina-navigatie). Behoud dezelfde rechtencheck en dezelfde
+version/change_note-opslag als nu.
