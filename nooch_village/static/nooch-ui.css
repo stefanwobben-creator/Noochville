@@ -23,8 +23,8 @@
 .nu {
   --nu-neon: #00FF00;
   --nu-accent: #00A551;
-  --nu-accent-text: #14713C;
-  --nu-bg-alt: #E9FBE9;
+  --nu-accent-text: #1F9D55;
+  --nu-bg-alt: #E2FFE3;
   --nu-bg: #FFFAFA;
   --nu-surface: #FFFFFF;
   --nu-text: #000000;
@@ -177,3 +177,32 @@
 /* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
 .nu .cl-head h3 a { color: var(--nu-text); }
 .nu .msg-item { border-bottom: 1.5px solid var(--nu-border-subtle); }
+
+/* ── `att-*` en `qadd-*`: de twee families die overal terugkomen ───────────────────────────────
+   Deze twee zitten in zes van de elf herbouwde views (node/person/admin, wiki/pagina, vangst,
+   doelen, messages, projects) en waren samen goed voor ~40 klasse-gebruiken die de oude look
+   bleven dragen: 9px radius, crème rand, en op het qadd-tekstvak zelfs een schaduw. Eén blok
+   hier raakt ze allemaal — dat is de goedkoopste winst van groep A.
+   Specificiteit bewust `.nu .x y` (0,2,1) en niet `.nu y`: `.qadd-form textarea` is zelf (0,1,1)
+   en zou bij gelijke specificiteit op bronvolgorde gaan berusten. Dat is geen afspraak, dat is
+   toeval dat blijft werken tot iemand de link-volgorde omzet. */
+.nu .att-lbl { color: var(--nu-muted); font-family: var(--nu-font); letter-spacing: .06em; }
+.nu .att-body { color: var(--nu-text); }
+.nu .att-name { color: var(--nu-text); }
+.nu .att-ic { color: var(--nu-text); }
+.nu .att-sep { background: var(--nu-text); height: 1.5px; }
+/* `.attcard` stond niet in mijn eerste telling: die scande de views die ik al had
+   bekeken, en deze kaart leeft alleen in `projects.py`. De structurele test vond hem wel.
+   Zonder deze regel zat er een crème kaart met ronde hoeken óm zwart-gestylde inhoud. */
+.nu .attcard { background: var(--nu-surface); border: var(--nu-border); border-radius: 0; }
+.nu .att-pop { border-radius: 0; }
+.nu .att-pop input[type=text], .nu .att-pop input[name=url], .nu .att-pop input[name=title] {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+.nu .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
+  font-weight: 600; }
+.nu .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
+.nu .qadd-form textarea { border: var(--nu-border); border-radius: 0; box-shadow: none;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+.nu .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
