@@ -42,7 +42,14 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
 
 #: Functies die een model-afgeleid oordeel geven over wie werk bezit.
-BASIS_ORAKELS = {"_vraag_llm", "kies_ontvanger", "match"}
+#:
+#: `classificeer` STOND HIER NIET, en dat was een gat. Die functie matcht tekst tegen de actuele
+#: accountabilities en was tot 20 september 2026 het ADRES waar een memo heen ging als geen rol het
+#: domein hield (`triage_rol.menselijke_eigenaar`) — precies het gedrag dat deze ratchet hoort te
+#: vangen, en precies het gedrag dat hij niet zag. Toegevoegd bij pijplijn stap 7, in dezelfde
+#: beurt waarin die trede verdween: een ratchet die zijn eigen aanleiding niet dekt is theater, en
+#: dat geldt voor de tweede aanleiding net zo goed als voor de eerste.
+BASIS_ORAKELS = {"_vraag_llm", "kies_ontvanger", "match", "classificeer"}
 
 #: Modulealiassen waaronder `match` het orakel is. Zonder deze lijst gaat de ratchet af op
 #: `re.match(...)` en `pat.match(...)`, en een ratchet met valse alarmen wordt genegeerd.
@@ -245,6 +252,66 @@ def naar_mens(st, project, tekst, from_role):
     rol, persoon, grond = _mens_ontvanger(st, tekst, [], from_role, None)
     return route_werk(st, tekst=tekst, rol=rol, persoon=persoon)
 ''')
+
+
+def test_de_tweede_historische_bug_valt_op_in_zijn_directe_vorm():
+    """DE PLEK DIE DEZE RATCHET TOT 20 SEPTEMBER 2026 MISTE: `triage_rol.menselijke_eigenaar`.
+    De modelmatch bepaalde de rol, de rol werd het adres, en `stuur_op_pad` leverde af — en
+    `classificeer` stond niet in `BASIS_ORAKELS`. Nu wel."""
+    assert _scan('''
+def menselijke_eigenaar(st, tekst, reason_fn):
+    rol = classificeer(tekst, st.records, reason_fn=reason_fn)
+    return rol, "gematcht door de secretary"
+
+def stuur_memo(st, data_dir, tekst):
+    rol, waarom = menselijke_eigenaar(st, tekst, None)
+    return stuur_op_pad(data_dir, "role", rol, tekst)
+''', in_router=False)
+
+
+def test_de_get_vorm_ontsnapt_en_dat_is_gemeten():
+    """DE GRENS, EERLIJK VASTGELEGD — en dit is de vorm die de ECHTE bug had.
+
+    `rol = uitslag.get("rol") or ""` is een BoolOp om een attribute-call om een besmette naam. De
+    besmetting reist alleen door een kale `Call` of een kale `Name`, dus `rol` blijft schoon en de
+    ratchet zwijgt. Dat staat al in de kop ("volgt returnwaarden, geen attributen, geen dicts"),
+    maar het is makkelijk te lezen als een detail — het is de reden dat deze bug maanden kon staan.
+
+    WAAROM NIET GEWOON VERBREDEN. Geprobeerd op 20 september 2026 (elke naam die ergens in de
+    toegewezen waarde zit telt mee). Uitkomst: 5 treffers op echte code, alle vijf onterecht —
+    `escalation_router.route_werk(herkomst=…)` en `inbox.resolve(…, extra=summary)` dragen TEKST,
+    `cli.main`'s `k["id"]` en twee `wiki.ontvanger`-uitkomsten dragen een deterministisch adres met
+    een besmette INVOER. Vijf uitzonderingen op een ratchet van deze omvang is precies waar de kop
+    hierboven voor waarschuwt: "een ratchet met valse alarmen wordt genegeerd".
+
+    Daarom blijft de ratchet smal en staat de echte bewaking op deze plek in een GEDRAGSTEST
+    (`test_menselijke_eigenaar.test_het_modelvoorstel_is_nooit_het_adres`). Zelfde arbeidsdeling als
+    voor de drie bekende plekken die de kop noemt."""
+    assert not _scan('''
+def menselijke_eigenaar(st, tekst, reason_fn):
+    uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
+    rol = uitslag.get("rol") or ""
+    return rol, "gematcht door de secretary"
+
+def stuur_memo(st, data_dir, tekst):
+    rol, waarom = menselijke_eigenaar(st, tekst, None)
+    return stuur_op_pad(data_dir, "role", rol, tekst)
+''', in_router=False)
+
+
+def test_het_voorstel_naast_een_vast_adres_mag_wel():
+    """De vorm die er nu staat: het model levert een ZIN, het adres is een constante. Gaat de
+    ratchet hier toch af, dan keurt hij de oplossing af die hij zelf afdwong."""
+    assert not _scan('''
+def menselijke_eigenaar(st, tekst, reason_fn):
+    uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
+    regel = f"voorstel: dit raakt mogelijk {uitslag.get('rol')}"
+    return FOUNDER_ROLE_ID, regel
+
+def stuur_memo(st, data_dir, tekst):
+    rol, regel = menselijke_eigenaar(st, tekst, None)
+    return stuur_op_pad(data_dir, "role", rol, f"{tekst} - {regel}")
+''', in_router=False)
 
 
 def test_een_voorstel_in_de_tekst_mag_wel():
