@@ -224,8 +224,16 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
                     f"{_e(_name(eigenaar))}</a>")
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
            f"<h1>📄 <code class='pill'>{_e(a.id)}</code> {_e(a.title or a.id)}{eig_chip}</h1>"
+           f"<div class='wiki-kopbalk'>"
            f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
-           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>")
+           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           # DE BEWERKKNOP HOORT BOVENAAN EN ZICHTBAAR (21 september 2026). Hij zat als klein grijs
+           # "edit"-linkje ónder de hele inhoud: wie niet wist dat de tekst zelf klikbaar was, vond
+           # de bewerkmogelijkheid niet. Dit is dezelfde `<details>` en dezelfde ene
+           # `artefact_edit`-actie — alleen een tweede, vindbare ingang ernaartoe.
+           + (f"<button type='button' class='btn sm' data-qadd-opener>✎ Edit page</button>"
+              if can_edit else "")
+           + f"</div>")
 
     # `data-qadd-open`: klikken op de tekst opent het bewerk-formulier eronder (fase 10 punt 4).
     # Alleen voor wie mag bewerken — anders belooft een cursor iets wat de poort daarna weigert.
