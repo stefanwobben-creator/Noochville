@@ -150,9 +150,52 @@ van die 33 zit in de kennisbank.
 
 ---
 
-## 5. Wat ik NIET heb gedaan
+## 5. Drie besluiten van Stefan, uitgevoerd (20 september, avond)
+
+**Besluit 2 — legal dedupliceren.** `legal_signaal.check()` is weg, met `_vers()`, `VENSTER_UREN`,
+de `dag_begint`-haak en `HumanInbox.add_legal_signaal`. Eén bron, één uitgang. Wat je inlevert is
+snelheid (maandag → de weekmemo in plaats van dezelfde dag); wat je terugkrijgt is dat er geen twee
+beelden van dezelfde feed meer naast elkaar kunnen lopen. De LEZER bleef staan: `goedkeuring.py`
+kent het type nog, zodat bestaande items afhandelbaar blijven. Op prod bleken er overigens **nul**
+te liggen — de oude uitgang had niets openstaan.
+
+**Besluit 3 — het scan-gaatje.** De drie meldingen gaan naar de founder via één plek
+(`_meld_aan_mens`), die logt als hij nergens aankomt. De regressie gaat daarnaast nog steeds naar de
+rol die hem ooit fixte; dat is een aantoonbaar feit, en `signaal` zoekt daar zelf de mens bij zonder
+een project aan te maken.
+
+**Besluit 1 — gedeployed.** PR #519, squash-merge, prod op `7f58018a0`.
+
+| stap | uitkomst |
+|---|---|
+| suite lokaal vóór/ná | 3789 → 3825 passed, 1 xfailed |
+| CI op de PR | beide runs groen (3m12s en 4m02s) |
+| squash byte-voor-byte | tree-hash `a50e6de8…` op main **en** op de branch — identiek, niet alleen "geen conflicten" |
+| predeploy-snapshot | `backups/data_predeploy_2026-09-20_1824.tgz`, 100M, eigenaar `nooch` |
+| health `/` | 303 |
+| diepte `/login` (raakt people.json) | **200** |
+| eigendom-sweep `data/` | schoon, vóór én ná elke prod-actie |
+| services | `noochville-cockpit2` en `noochville-village` beide active, daemon boot zonder traceback |
+
+**Eén ding om te weten over deze deploy:** het draaiende `deploy.sh` was nog de OUDE versie — de
+geharde variant (diepte-check + eigendom-sweep) zat ín deze pull en ging dus pas mee ná de run.
+Bash leest het script bij het starten. Die twee checks heb ik daarom met de hand uitgevoerd, met de
+uitslagen hierboven. Vanaf de volgende deploy doet het script het zelf.
+
+**Smoke-test op echte data** (`village weekmemo`, droge run als `nooch`): alle vijf de adapters
+draaiden, **8 signalen** (7 bewijs, 1 legal), en het dure model maakte er een echte synthese van —
+inclusief de constatering dat twee Kroniek-records elkaar tegenspreken over dezelfde claim van
+Vivobarefoot, en een eerlijke "wat ik niet kon zien"-slotsectie. Er is niets bezorgd en niets
+onthouden: `data/weekmemo.json` bestaat nog niet. De **eerste echte memo komt bij de dagpuls van
+04:32**, en die markeert de week dan wel.
+
+Op dezelfde echte data ook de UI gerenderd (read-only): de organisatieboom draagt het rol-icoon en
+het bord rendert het voortgangs-atoom en de chips-rij, zonder inline breedte. Eén observatie: op
+prod is op dit moment **elke** rol in de boom bezet (een persona telt als vervuller), dus de
+gestippelde vacant-cirkel is vandaag nergens te zien. Geen fout — er is niets vacant.
+
+## 6. Wat NOG steeds niet is gedaan
 
 - **Stap 6 (archiveren van de radar-items)** — geblokkeerd tot jouw akkoord op de uitkomst van 1-5.
-- **Deployen of pushen** — 12 commits staan lokaal klaar. De eerste deploy van deze pijplijn is een
-  gedragswijziging op compliance; die wil je zelf kiezen.
-- **De twee open vragen uit §1** staan nog open.
+- **Fase 12 toepassen** — de audit ligt er, het besluit is aan jou.
+- **Fase 11 laag 3** (sleeppatroon) — wacht op het prototype-linkje.
