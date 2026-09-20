@@ -1617,7 +1617,8 @@ summary.pchip:hover{border-color:var(--gray)}
 progress.nu-progress{appearance:none;-webkit-appearance:none;border:none;display:block;
   width:100%;height:6px;background:var(--border);border-radius:999px;overflow:hidden}
 progress.nu-progress::-webkit-progress-bar{background:var(--border);border-radius:999px}
-progress.nu-progress::-webkit-progress-value{background:var(--green);border-radius:999px}
+progress.nu-progress::-webkit-progress-value{background:var(--green);border-radius:999px;
+  transition:width .35s ease}
 progress.nu-progress::-moz-progress-bar{background:var(--green);border-radius:999px}
 progress.nu-progress.wide{height:8px}
 
@@ -1691,3 +1692,47 @@ progress.nu-progress.wide{height:8px}
   body.navjs.navopen .c2-org{display:block}
   body.navjs .c2-main,body.navjs .c2-wrap{padding-top:2.6rem}
 }
+
+/* ═══ Fase 11, laag 3: het sleeppatroon op het bord ═════════════════════════════════════════
+   Gedragsspec: het prototype-artboard `project/Main.dc.html`, sectie 2 ("Trello — sleep een kaart,
+   en de kolom reageert direct"). Drie dingen die daar gebeuren en hier ontbraken:
+
+     1. de kaart TILT OP als je hem aanwijst (en de cursor zegt dat je hem kunt pakken);
+     2. er verschijnt een klein "sleep me"-hintje op een kaart die je níet vasthoudt;
+     3. de doelkolom LICHT OP zolang je erboven zweeft.
+
+   Punt 3 ontbrak het hardst: de JS zette al jaren een `.over`-klasse op de kolom en er was geen
+   enkele regel die daar iets mee deed. Het bord gaf dus geen enkele terugkoppeling tijdens het
+   slepen — je zag pas na het loslaten of je goed had gemikt. */
+
+/* Het pakbare atoom: de cursor zegt wat je kunt doen vóór je het doet. */
+.pcard{cursor:grab}
+.pcard:active{cursor:grabbing}
+/* De LIFT. `transform` staat los van de bestaande hover-rand/gloed (regel 152-153), zodat die
+   ongemoeid blijft; `will-change` houdt het vloeiend zonder de kaart uit zijn laag te trekken. */
+.pcard{transition:box-shadow .1s,border-color .1s,transform .12s ease}
+.pcard:hover{transform:translateY(-3px)}
+/* Het hintje. Verborgen tot je de kaart aanwijst, en weg zodra je hem écht vastpakt — dan wéét je
+   het al en zou het meeschuiven als ruis. */
+.pcard-hint{opacity:0;transition:opacity .15s ease;font-size:.68rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-top:.4rem}
+.pcard:hover .pcard-hint{opacity:1}
+.pcard.pdrag-bron .pcard-hint,.pdrag-ghost .pcard-hint{opacity:0}
+
+/* De doelkolom licht op. Twee dragers, niet één: de tint én de rand — dezelfde regel als bij de
+   statusindicatoren, want een tintverschil alleen ziet niet iedereen. */
+.pcol{transition:border-color .15s ease,background .15s ease}
+.pcol.over,.pcol[data-to].over{background:var(--green-tint);border-color:var(--green)}
+
+/* DE OPPAK-AFFORDANCE (Stefans aanscherping). De native HTML5-sleepafbeelding is een platte
+   momentopname die je niet kunt stylen, dus het "optillen" stopte precies waar het hoorde te
+   beginnen. Dit is de kaart die je in je hand hebt: opgeschaald, gekanteld en met een schaduw
+   eronder — de enige plek in dit systeem waar een schaduw mag, omdat hij hier iets zegt (dit ding
+   zweeft boven de rest) in plaats van iets versiert. Hij volgt de pointer via `translate3d`. */
+.pdrag-ghost{position:fixed;left:0;top:0;z-index:2000;pointer-events:none;margin:0;
+  transform-origin:center;will-change:transform;
+  box-shadow:0 12px 24px rgba(27,27,27,.28);cursor:grabbing}
+/* De plek waar de kaart vandáán komt blijft zichtbaar als contour: zo zie je wat je verplaatst
+   én waar hij stond als je je bedenkt. */
+.pcard.pdrag-bron{opacity:.35;transform:none}
+.pcard.pdrag-bron:hover{transform:none}
