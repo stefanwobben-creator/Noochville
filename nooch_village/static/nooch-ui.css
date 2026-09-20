@@ -42,9 +42,9 @@
 
 /* ── Typografie ────────────────────────────────────────────────────────────────────────────── */
 .nu h1 { font-family: var(--nu-font); font-weight: 700; font-size: clamp(1.5rem,1.4vw + 1rem,2rem);
-  line-height: 1.15; color: var(--nu-text); letter-spacing: -.01em; }
+  line-height: 1.15; color: var(--nu-text); text-transform: uppercase; letter-spacing: -.005em; }
 .nu h2, .nu h3 { font-family: var(--nu-font); font-weight: 700; color: var(--nu-text);
-  text-transform: none; letter-spacing: 0; }
+  text-transform: uppercase; letter-spacing: .01em; }
 .nu a { color: var(--nu-accent-text); }
 .nu .muted { color: var(--nu-muted); }
 
@@ -54,13 +54,14 @@
 .nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
 .nu .c2-subnav a, .nu .c2-navbtn { border-radius: 0; color: var(--nu-text); }
 .nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
-.nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 999px; }
+.nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
 
 /* ── Knoppen: zwart-op-wit, hover inverteert ──────────────────────────────────────────────── */
 .nu .btn {
   font-family: var(--nu-font); font-weight: 700; font-size: .9rem; border: var(--nu-border);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
-  padding: .5em 1em; min-height: 38px; box-shadow: none; }
+  padding: .5em 1em; min-height: 38px; box-shadow: none;
+  text-transform: uppercase; letter-spacing: .04em; }
 .nu .btn:hover { background: var(--nu-text); color: var(--nu-surface); }
 .nu .btn.ok { background: var(--nu-neon); border-color: var(--nu-text); color: var(--nu-text); }
 .nu .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
@@ -161,6 +162,7 @@
    `.addlink` en `.vswitch a` zijn links die als knop worden gelezen. Ze droegen nog de oude
    pill-vorm met groene vulling — één scherm met twee knopvormen leest als twee systemen. */
 .nu .addlink, .nu .vswitch a, .nu .flink {
+  text-transform: uppercase; letter-spacing: .04em;
   border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); font-weight: 700; padding: .3em .8em; }
 .nu .addlink:hover, .nu .vswitch a:hover, .nu .flink:hover {
@@ -206,3 +208,38 @@
 .nu .qadd-form textarea { border: var(--nu-border); border-radius: 0; box-shadow: none;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 .nu .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
+
+/* ── De eyebrow: één definitie voor wat er al elf keer stond ──────────────────────────────────
+   De referentie zet boven elke kop een klein hoofdletter-labeltje: THE PROOF, THE PRICE, THE PACT,
+   THE PEOPLE, WHAT'S IN IT. Dat component leek te ontbreken — maar het bestond al, elf keer, onder
+   elf namen: `.c2-sec h3`, `.tree h3`, `.pcol-h`, `.fkicker`, `.rovm-kind`, `.sec-kop`, `.menu-h`,
+   `.dk`, `.att-lbl`, `.cl-group h4`, `.chip.coral-solid` — en de structurele test vond er nog
+   vijf op de negentien schermen: `.psec-h`, `.pchip-k`, `.rail-kop`, `.wz-k`, `.wz-clab`.
+   Zestien namen dus, allemaal ~.7rem, uppercase, letter-spacing .04em, gewicht 700 — hetzelfde
+   ding, zestien keer apart opgeschreven.
+
+   Een TWAALFDE naam toevoegen zou dat erger maken. Dus: `.nu-eyebrow` is de definitie, en de elf
+   bestaande namen wijzen ernaar binnen `.nu`. Zelfde regel als `reference, don't copy`, nu op een
+   stijl in plaats van op een getal. Buiten `.nu` blijft alles zoals het was. */
+.nu .nu-eyebrow,
+.nu .c2-sec h3, .nu .tree h3, .nu .pcol-h, .nu .fkicker, .nu .rovm-kind,
+.nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab {
+  font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; }
+
+/* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom
+   zwart. Een grijze kop naast een zwart merkteken leest als twee verschillende dingen. */
+.nu .nu-eyebrow,
+.nu .c2-sec h3, .nu .tree h3, .nu .fkicker, .nu .rovm-kind,
+.nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab {
+  color: var(--nu-muted); }
+.nu .pcol-h { color: var(--nu-text); }
+
+/* ── De groepskop op het bord ─────────────────────────────────────────────────────────────────
+   `.swim-h` ("Creator of Shoes (4)") stond op `--green-dark` (#14713C) — de kleur die in geen van
+   beide referentiebeelden voorkomt. Het is bovendien een `div`, dus de kopregel `.nu h2, .nu h3`
+   liep er langs. Alleen de browser liet dat zien; in de bron is het een kop als elke andere. */
+.nu .swim-h { color: var(--nu-text); font-family: var(--nu-font); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .02em; }

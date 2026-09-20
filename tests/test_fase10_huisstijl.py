@@ -85,3 +85,96 @@ def test_geen_enkele_nieuwe_regel_valt_buiten_de_nu_scope():
     regels = [r.split("{")[0].strip() for r in _ONTCOM(NU).split("}") if "{" in r]
     buiten = [r for r in regels if r and not r.startswith(".nu") and not r.startswith("@")]
     assert not buiten, f"regels buiten de scope: {buiten}"
+
+
+# ── Typografie: de vier punten die de referentiebeelden letterlijk tonen ─────────────────────
+
+def test_koppen_staan_in_hoofdletters():
+    """NINE PLANTS, ONE SHOE · GROW A PAIR · QUESTIONS PEOPLE ACTUALLY ASKED. Er staat geen enkele
+    kop in onderkast op de productpagina. `.nu h2, .nu h3` zette hier eerst `text-transform: none`."""
+    for sel in (r"\.nu h1", r"\.nu h2, \.nu h3"):
+        blok = re.search(rf"{sel}\s*\{{([^}}]*)\}}", NU, re.S)
+        assert blok, sel
+        assert "text-transform: uppercase" in blok.group(1), sel
+    assert "text-transform: none" not in _ONTCOM(NU).split(".nu .pill")[0]
+
+
+def test_knoptekst_staat_in_hoofdletters():
+    """ORDER NOW · BECOME FOUNDING MEMBER · ALL REVIEWS · READ THE LETTERS."""
+    blok = re.search(r"\.nu \.btn \{([^}]*)\}", NU, re.S)
+    assert blok and "text-transform: uppercase" in blok.group(1)
+
+
+def test_geen_enkele_ronde_hoek_meer():
+    """Structureel, niet op naam: élke border-radius in het bestand moet 0 zijn, met als enige
+    uitzondering de 50% van de statusvormen — dat is vorm-codering, geen decoratie.
+    `.c2-navct` stond op 999px en was de laatste overgebleven pil."""
+    waarden = {w.strip() for w in re.findall(r"border-radius:\s*([^;}]+)", _ONTCOM(NU))}
+    assert waarden <= {"0", "50%"}, f"onverwachte radius: {waarden - {'0', '50%'}}"
+
+
+def test_elke_eyebrow_in_de_oude_css_wordt_aangestuurd():
+    """De vingerafdruk van een eyebrow: klein, hoofdletters, vet. Elke selector in nooch.css die
+    daaraan voldoet moet binnen `.nu` een tegenhanger hebben — anders staat er op een van de
+    negentien schermen nog een groen-of-grijs labeltje in de oude maatvoering."""
+    # Bewust buiten beeld, met de reden erbij. Geen stille uitzonderingen.
+    BUITEN = {
+        ".tile-t": "staat op /metrics2, een van de 27 geparkeerde schermen",
+        ".fkind": "geen enkele view rendert hem nog — dode CSS na fase 1-9",
+        ".einddoc-toggle": "idem, dode CSS",
+        ".smeta dt": "idem, dode CSS",
+        ".kn-spelvraag .wie": "kennisbank-UI, in fase 2b verwijderd — dode CSS",
+        ".wz-now .lb": "idem, dode CSS",
+    }
+    gemist = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(OUD)):
+        maat = re.search(r"font-size:\s*\.(\d+)rem", body)
+        if not (maat and int(maat.group(1)[:2].ljust(2, "0")) <= 78):
+            continue
+        if "text-transform:uppercase" not in body.replace(" ", ""):
+            continue
+        if "font-weight:700" not in body.replace(" ", ""):
+            continue
+        if sel.strip() in BUITEN:
+            continue
+        kern = sel.strip().split()[-1].lstrip(".")
+        if not re.search(rf"\.nu[^{{]*[\s.]{re.escape(kern)}\b", NU):
+            gemist.append(sel.strip())
+    assert not gemist, f"eyebrow-achtige selectors zonder nu-regel: {gemist}"
+
+
+def test_de_eyebrow_is_een_definitie_en_geen_twaalfde_naam():
+    """Elf namen wijzen naar één regel. Zou elk van die elf een eigen blok krijgen, dan is het
+    probleem dat deze stap oplost gewoon verplaatst."""
+    assert NU.count("text-transform: uppercase; letter-spacing: .06em") == 1
+    vorm = re.search(r"([^{}]*\.nu-eyebrow[^{}]*)\{[^}]*letter-spacing: \.06em", NU, re.S)
+    assert vorm and len(re.findall(r"\.nu ", vorm.group(1))) >= 10
+
+
+def test_link_knoppen_staan_ook_in_hoofdletters():
+    """`+ add project` en `by role / by person` zijn links die als knop gelezen worden. Ze vielen
+    buiten `.nu .btn` en bleven dus in onderkast staan terwijl de echte knoppen al om waren — in de
+    broncode onzichtbaar, in de browser meteen te zien."""
+    blok = re.search(r"\.nu \.addlink, \.nu \.vswitch a, \.nu \.flink \{([^}]*)\}", NU, re.S)
+    assert blok and "text-transform: uppercase" in blok.group(1)
+
+
+def test_green_dark_ratchet():
+    """#14713C komt in GEEN van beide referentiebeelden voor, en staat 57 keer in nooch.css.
+
+    Dit is een ratchet in de vorm die het dorp al kent (`_STYLE_WHITELIST`, `_PREFIX_CEILING`):
+    het getal mag alleen omlaag. Elke stap van groep A die een scherm aanpakt hoort er een paar af
+    te halen; komt er één bij, dan is er een oude groene kleur teruggekropen op een scherm dat al
+    om was.
+    """
+    _PLAFOND = 46          # 20 sep 2026: 57 selectors met --green-dark, 11 hebben een nu-tegenhanger
+    zonder = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(OUD)):
+        if "var(--green-dark)" not in body:
+            continue
+        kern = sel.strip().split(",")[0].strip().split()[-1].lstrip(".").split(":")[0]
+        if kern and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(kern)}\b", NU):
+            zonder.append(sel.strip()[:40])
+    assert len(zonder) <= _PLAFOND, (
+        f"{len(zonder)} selectors met --green-dark zonder nu-tegenhanger (plafond {_PLAFOND}). "
+        f"Gestegen? Dan is er een oude groentint teruggekomen: {zonder[:5]}")
