@@ -94,78 +94,10 @@ def intent_demo():
     print("\n================ einde intent demo ================")
 
 
-def triage_demo():
-    """Vier spanningen die elk een ander triage-pad bewandelen."""
-    v = Village(heartbeat_seconds=86400)
-    triaged: list[dict] = []
-    proposals_raised: list[dict] = []
-    human_needed: list[dict] = []
-
-    v.bus.subscribe("tension_triaged",
-                    lambda e: triaged.append(dict(e.data)))
-    v.bus.subscribe("proposal_raised",
-                    lambda e: proposals_raised.append({"id": e.data.get("proposal", {}).get("id", "?")}))
-    v.bus.subscribe("human_intervention_needed",
-                    lambda e: human_needed.append(dict(e.data)))
-
-    v.start()
-
-    watcher = v.reconciler.live.get("website_watcher")
-    if watcher is None:
-        print("⚠️  website_watcher-inwoner niet gevonden")
-        v.stop()
-        return
-
-    spanningen = [
-        ("bezoekersdata van afgelopen week analyseren",
-         "operational",
-         "eigen-werk (website-watcher-scope)"),
-        ("kandidaatwoord voor de bibliotheek: biobased sneakers",
-         "operational",
-         "andere-rol:librarian (domein)"),
-        ("niemand bezit het bijwerken van de materiaal-policy; "
-         "dit moet structureel belegd worden",
-         "governance",
-         "structureel → Proposal"),
-        ("de serverruimte heeft een airconditioning storing",
-         "operational",
-         "geen match → mens"),
-    ]
-
-    print("\n================ DEMO: triage ================\n")
-    for desc, kind, _ in spanningen:
-        watcher.sense_tension(desc, kind=kind)
-
-    for _ in range(100):
-        if len(triaged) >= len(spanningen):
-            break
-        time.sleep(0.1)
-    time.sleep(0.2)
-
-    v.stop()
-    time.sleep(0.1)
-
-    print(f"\n{'Spanning (kort)':<52} {'Verwacht':<30} {'Classificatie'}")
-    print("-" * 110)
-    triage_map = {t["description"][:51]: t["classification"] for t in triaged}
-    for desc, _, verwacht in spanningen:
-        key = desc[:51]
-        cls = triage_map.get(key, "?")
-        check = "✔" if (
-            (verwacht.startswith("eigen") and "eigen" in cls) or
-            (verwacht.startswith("andere") and "andere" in cls) or
-            (verwacht.startswith("structureel") and "structureel" in cls) or
-            (verwacht.startswith("geen") and "tactisch" in cls)
-        ) else "✘"
-        print(f"{check} {desc[:50]:<51} {verwacht:<30} {cls}")
-
-    if proposals_raised:
-        print(f"\n🏛️  Governance-voorstel aangemaakt: {proposals_raised[0].get('id')}")
-    if human_needed:
-        print(f"🙋 Human intervention gevraagd voor: "
-              f"{human_needed[0].get('payload', {}).get('description', human_needed[0].get('capability', '?'))[:60]}")
-
-    print("\n================ einde triage demo ================")
+# HIER STOND `triage_demo()`: vier spanningen door de classificatie, met de verwachte
+# uitkomst ernaast. De keten die hij toonde (sense_tension → triage → Matchmaker) is op
+# 20 september 2026 opgeheven; er valt niets meer te demonstreren. De CLI-tak `village
+# triage` is in dezelfde beurt verdwenen.
 
 
 def ngram_demo():

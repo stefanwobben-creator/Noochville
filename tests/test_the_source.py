@@ -21,7 +21,6 @@ from nooch_village.models import (
 )
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.human_inbox import HumanInbox
-from nooch_village.matchmaker import Matchmaker
 from nooch_village.skills import SkillRegistry
 from nooch_village.seeds import seed_records, migrate_records
 
@@ -90,9 +89,8 @@ def test_the_source_belandt_in_unmanned_niet_in_live(tmp_path):
         library=None, lexicon=None, records=recs,
         observations=None, monitoring=None, projects=None,
     )
-    matchmaker = Matchmaker(bus)
 
-    reconciler = Reconciler(recs, bus, registry, context, matchmaker, class_map={})
+    reconciler = Reconciler(recs, bus, registry, context, class_map={})
     reconciler.build()
 
     assert "the_source" in reconciler.unmanned, "the_source verwacht in unmanned"

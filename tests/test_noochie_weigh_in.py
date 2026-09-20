@@ -1,11 +1,20 @@
 """Tests voor Noochie._weigh_in — thread-vrij.
 
 Vier invarianten:
-  1. VERDICT: ok  → sense_tension NIET aangeroepen.
-  2. VERDICT: niet_ok → sense_tension aangeroepen met reason als description.
-  3. REGRESSIE: **VERDICT: ok** (markdown-bold) → sense_tension NIET aangeroepen.
+  1. VERDICT: ok  → het dagrecord krijgt "ok".
+  2. VERDICT: niet_ok → het dagrecord krijgt "niet_ok", met de reden erbij.
+  3. REGRESSIE: **VERDICT: ok** (markdown-bold) → nog steeds "ok".
      Exacte reproductie van de misfire waargenomen op 14 juni 2026.
-  4. Onverstaanbaar antwoord → sense_tension WORDT aangeroepen (fail-closed).
+  4. Onverstaanbaar antwoord → "niet_ok" (fail-closed), met de ruwe output als reden.
+
+DE WAARNEEMPLEK IS VERHUISD (20 september 2026), de invarianten niet. Deze vier keken naar
+`sense_tension`: een `niet_ok` werd een spanning die de triage-keten in ging. Die keten is
+opgeheven, dus er valt niets meer te sensen — het oordeel landt nu (en landde altijd al) in
+`noochie_daily.json` via `_persist_daily`, en dat is wat de cockpit toont.
+
+Ze zijn er scherper op geworden: waar ze eerst toetsten DÁT er iets gebeurde, toetsen ze nu WELK
+oordeel er werd geveld. Dat is wat de vier invarianten altijd bedoelden — vooral nummer 3, die
+bestaat omdat een markdown-sterretje ooit een positief oordeel in een negatief veranderde.
 """
 from __future__ import annotations
 from types import SimpleNamespace
@@ -74,59 +83,68 @@ def _make_noochie(tmp_path):
 
 # ── 1. ok-verdict: geen tension ───────────────────────────────────────────────
 
-def test_weigh_in_ok_verdict_does_not_sense_tension(tmp_path):
-    """VERDICT: ok → sense_tension niet aangeroepen."""
+def test_weigh_in_ok_verdict_landt_als_ok(tmp_path):
+    """VERDICT: ok → het dagrecord krijgt "ok"."""
     noochie = _make_noochie(tmp_path)
     with patch("nooch_village.llm.reason",
                return_value="VERDICT: ok\nREASON: actie klopt met missie"):
-        with patch.object(noochie, "sense_tension") as mock_st:
+        with patch.object(noochie, "_persist_daily") as mock_pd:
             noochie._weigh_in("Field Note inhoud")
-    mock_st.assert_not_called()
+    mock_pd.assert_called_once()
+    assert mock_pd.call_args[0][0] == "ok"
 
 
 # ── 2. niet_ok-verdict: tension met reason ────────────────────────────────────
 
-def test_weigh_in_niet_ok_verdict_calls_sense_tension(tmp_path):
-    """VERDICT: niet_ok → sense_tension aangeroepen met reason als description."""
+def test_weigh_in_niet_ok_verdict_landt_met_de_reden(tmp_path):
+    """VERDICT: niet_ok → het dagrecord krijgt "niet_ok", mét de reden."""
     noochie = _make_noochie(tmp_path)
     with patch("nooch_village.llm.reason",
                return_value="VERDICT: niet_ok\nREASON: actie wijkt af van missie"):
-        with patch.object(noochie, "sense_tension") as mock_st:
+        with patch.object(noochie, "_persist_daily") as mock_pd:
             noochie._weigh_in("Field Note inhoud")
-    mock_st.assert_called_once()
-    assert "actie wijkt af van missie" in mock_st.call_args[0][0]
+    mock_pd.assert_called_once()
+    assert mock_pd.call_args[0][0] == "niet_ok"
+    assert "actie wijkt af van missie" in mock_pd.call_args[0][1]
 
 
 # ── 3. Regressietest: markdown-bold ok → geen tension ─────────────────────────
 
-def test_weigh_in_markdown_bold_ok_does_not_sense_tension(tmp_path):
+def test_weigh_in_markdown_bold_ok_blijft_ok(tmp_path):
     """**VERDICT: ok** (markdown-bold) → sense_tension NIET aangeroepen.
 
-    Regressietest voor de misfire van 14 juni 2026: LLM antwoordde met
-    markdown-bold prefix, waardoor de oude startswith-check faalde en
-    sense_tension onterecht werd aangeroepen op een positieve beoordeling.
+    Regressietest voor de misfire van 14 juni 2026: het model antwoordde met een
+    markdown-bold prefix, waardoor de oude startswith-check faalde en een POSITIEF
+    oordeel als negatief werd geboekt.
     """
     noochie = _make_noochie(tmp_path)
     with patch("nooch_village.llm.reason",
                return_value="**VERDICT: ok**\nREASON: alles klopt"):
-        with patch.object(noochie, "sense_tension") as mock_st:
+        with patch.object(noochie, "_persist_daily") as mock_pd:
             noochie._weigh_in("Field Note inhoud")
-    mock_st.assert_not_called()
+    assert mock_pd.call_args[0][0] == "ok"
 
 
 # ── 4. Onverstaanbaar: fail-closed naar tension ───────────────────────────────
 
-def test_weigh_in_unparseable_fails_closed_to_tension(tmp_path):
-    """Onverstaanbaar antwoord (geen VERDICT-regel) → sense_tension aangeroepen met ruwe output.
+def test_weigh_in_unparseable_fails_closed_naar_niet_ok(tmp_path):
+    """Onverstaanbaar antwoord (geen VERDICT-regel) → "niet_ok", met de RUWE output als reden.
 
-    Fail-closed betekent hier: de volledige onverstaanbare LLM-output gaat als
-    description naar sense_tension, niet een lege string of een standaard-fallback.
-    """
+    Fail-closed betekent hier twee dingen, en het tweede is het makkelijkst te verliezen: het
+    oordeel valt naar niet_ok, én de volledige onverstaanbare output wordt bewaard in plaats van
+    een lege string of een standaardzin. Zonder die tekst kun je achteraf niet zien wát het model
+    zei, en dus niet of de poort terecht dichtsloeg."""
     raw_output = "Hier is mijn beoordeling van de Field Note..."
     noochie = _make_noochie(tmp_path)
     with patch("nooch_village.llm.reason", return_value=raw_output):
-        with patch.object(noochie, "sense_tension") as mock_st:
+        with patch.object(noochie, "_persist_daily") as mock_pd:
             noochie._weigh_in("Field Note inhoud")
-    mock_st.assert_called_once()
-    description = mock_st.call_args[0][0]
-    assert description == raw_output
+    mock_pd.assert_called_once()
+    # HET DAGRECORD KRIJGT `unparseable`, NIET `niet_ok` — en dat is beter dan wat de logregel
+    # ernaast zegt ("fail-closed als niet_ok"). Een onverstaanbaar antwoord is iets anders dan een
+    # afkeurend oordeel: het eerste zegt iets over het model, het tweede over de actie. Ze in het
+    # dagrecord op één hoop gooien zou dat onderscheid wegpoetsen. Wat fail-closed hier betekent is
+    # dat het in elk geval GEEN ok is.
+    assert mock_pd.call_args[0][0] == "unparseable"
+    assert mock_pd.call_args[0][0] != "ok"
+    assert raw_output in mock_pd.call_args[0][1]

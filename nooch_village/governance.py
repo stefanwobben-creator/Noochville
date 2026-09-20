@@ -702,12 +702,11 @@ def wordt_opgepakt(role_id: str, *, records=None, assignments=None,
 class Reconciler:
     """Bouwt het levende dorp uit de records en houdt het in lijn na governance-wijzigingen."""
 
-    def __init__(self, records, bus, registry, context, matchmaker, class_map=None):
+    def __init__(self, records, bus, registry, context, class_map=None):
         self.records = records
         self.bus = bus
         self.registry = registry
         self.context = context
-        self.matchmaker = matchmaker
         self.class_map = class_map or {}     # record-id -> Inhabitant-subklasse
         self.live: dict = {}
         self.unmanned: dict = {}             # rollen born maar zonder implementatie
@@ -731,8 +730,6 @@ class Reconciler:
                     member = self._materialize(mr)
                     if member is not None:           # None = onbemand
                         circle.add_member(member)
-                        self.matchmaker.register(member)
-            self.matchmaker.register(circle)
             return circle
         # SLAPEND: geen thread. Dat is precies wat slapen betekent — de rol blijft in het
         # register staan (hij is niet gearchiveerd), maar hij tickt niet, reageert niet op events
@@ -764,7 +761,6 @@ class Reconciler:
             return
         if rid in self.live:                       # bestaande inwoner: herlaad DNA, geen respawn
             self.live[rid].reload(record)
-            self.matchmaker.register(self.live[rid])
 
     def _on_governance_changed(self, e):
         """Verwerkt governance_changed voor wijzigingen buiten de amend_role-stroom."""
@@ -779,7 +775,6 @@ class Reconciler:
                     inh_cls = self.class_map[rid]
                     inh = inh_cls(record, self.bus, self.registry, self.context)
                     self.live[rid] = inh
-                    self.matchmaker.register(inh)
                     if not inh.is_alive():
                         inh.start()
                     log.info("nieuwe inwoner '%s' gestart na governance_changed", rid)

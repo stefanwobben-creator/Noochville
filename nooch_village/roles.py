@@ -417,24 +417,30 @@ class Noochie(Inhabitant):
             verdict = "niet_ok"
         findings, question = _parse_noochie_report(result)
 
+        # WAAR DIT OORDEEL HEEN GAAT, sinds 20 september 2026. Een `niet_ok` werd hier een
+        # `sense_tension`, en die ging de triage-keten in: een model bepaalde bij welke rol het
+        # hoorde en de Matchmaker leverde het af. Die keten is opgeheven (CLAUDE.md, "AI is
+        # instrument, geen rol"), dus er valt niets meer te sensen.
+        #
+        # HET OORDEEL VERDWIJNT NIET. `_persist_daily` hieronder schrijft verdict, reden,
+        # bevindingen én de reflectievraag naar `noochie_daily.json`, en dat is wat de cockpit
+        # toont — dat was altijd al de plek waar een mens dit leest. De spanning was de tweede
+        # kopie, en die kwam in de praktijk nergens aan.
+        #
+        # De dedup-hash blijft staan: hij voorkomt dat een ongewijzigd oordeel elke dag opnieuw
+        # als nieuw in het log verschijnt.
         if verdict == "ok":
             self.log.info("🎯 Missie-alignment: ok (%s)", reason_text)
-        elif verdict == "niet_ok":
-            self.log.info("🎯 Missie-alignment: niet_ok (%s)", reason_text)
-            h = hashlib.sha256(reason_text.encode()).hexdigest()[:16]
+        else:
+            tekst = reason_text if verdict == "niet_ok" else result
+            if verdict != "niet_ok":
+                self.log.info("🎯 Missie-alignment: onverstaanbaar antwoord — fail-closed als niet_ok")
+            h = hashlib.sha256(tekst.encode()).hexdigest()[:16]
             if getattr(self, "_last_weigh_hash", None) != h:
                 self._last_weigh_hash = h
-                self.sense_tension(reason_text, kind="operational")
+                self.log.warning("🎯 Missie-alignment: niet_ok — %s", tekst[:200])
             else:
-                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
-        else:  # unparseable
-            self.log.info("🎯 Missie-alignment: onverstaanbaar antwoord — fail-closed als niet_ok")
-            h = hashlib.sha256(result.encode()).hexdigest()[:16]
-            if getattr(self, "_last_weigh_hash", None) != h:
-                self._last_weigh_hash = h
-                self.sense_tension(result, kind="operational")
-            else:
-                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
+                self.log.info("🎯 missie-lens ongewijzigd — oordeel niet herhaald")
 
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
         self._persist_daily(verdict, reason_text or result, findings, question)

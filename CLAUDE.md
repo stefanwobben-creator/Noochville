@@ -37,15 +37,19 @@ Niet `python nooch_village/village.py` (dan breken de imports). Laat de `__init_
   `dispatch` en gedeelde helpers braken eerder cross-file tests die bij een deel-run onzichtbaar bleven.
   Smoke groen ≠ klaar om te committen.
 
-## Architectuur (drie lagen)
+## Architectuur (twee lagen)
 
 1. **Het marktplein** — `EventBus` (`event_bus.py`): broadcast van feiten/aankondigingen. Autonomie: inwoners reageren zelf op events die hen aangaan.
-2. **De postbus** — `Inbox` per inwoner (`inbox/__init__.py`): toegewezen werk dat áf moet. Betrouwbaarheid.
-3. **De matchmaker** — `Matchmaker` (`matchmaker.py`): hoort "wie kan dit?" en legt werk in de inbox van een capabele inwoner.
+2. **De postbus** — `Inbox` per inwoner (`inbox/__init__.py`): de event-jobs uit `react()`, die op de eigen thread van de inwoner draaien. Dit is de discipline uit harde regel 9 en de naad waarlangs de bus later een netwerk-bus kan worden.
+
+**Er was een derde laag: de matchmaker** (`Matchmaker`, `matchmaker.py`) — "wie kan dit?" → werk in
+de inbox van een capabele inwoner. Die is op 20 september 2026 opgeheven, samen met de triage-keten
+die zijn enige producent was (zie het Triage-hoofdstuk hieronder). De postbus bleef: hij droeg twee
+soorten werk en houdt er één over.
 
 Kerncomponenten:
-- `models.py` — `RoleDefinition` (DNA), `Record` (de waarheid), `Task`, `Response`, `Tension`, `RecordType`.
-- `inhabitant.py` — `Inhabitant` (leaf, één rol) en `Circle` (composite). Methodes: `handle`, `ask`, `use_skill`, `sense_tension`, `tick`, `react`, `reload`.
+- `models.py` — `RoleDefinition` (DNA), `Record` (de waarheid), `RecordType`.
+- `inhabitant.py` — `Inhabitant` (leaf, één rol) en `Circle` (composite). Methodes: `use_skill`, `tick`, `react`, `reload`.
 - `roles.py` — gespecialiseerde inwoners: `TimeKeeper` (hartslag → `dag_begint`), `GrowthAnalyst` (ochtend-puls).
 - `governance.py` — `Records` (json, de waarheid), `Secretary` (records bijhouden, geen veto), `Reconciler` (bouwt het levende dorp uit de records).
 - `skills.py` — `Skill` (ABC) + `SkillRegistry`. `skills_impl/` bevat de echte skills.
@@ -67,10 +71,10 @@ Data (allemaal in `data/`, gitignored):
 3. **Records = de waarheid, levende inwoners = een projectie.** De `Reconciler` bouwt het dorp uit de records. Meer verantwoordelijkheid krijgen = record amenderen (version bump) + `reload()` van DNA. GEEN respawn, geen state die alleen in de thread leeft.
 4. **De Secretary heeft GEEN veto.** Een voorstel wordt aangenomen tenzij het structureel ongeldig is. (Dit is de structurele poort. De volledige IDM met objectronde komt later, zie roadmap.)
 5. **Skills zijn echt en worden geinjecteerd via de `SkillRegistry`.** Geen mock-data die echte calls dood-codeert. Een skill faalt liever bewust "closed" dan dat hij iets verzint.
-6. **Inbox = toegewezen werk** (via de matchmaker). **Events = aankondigingen** (autonomie). **`tick()` = zelf-geinitieerd werk** (hartslag). Houd die drie gescheiden.
+6. **Inbox = de event-jobs uit `react()`** (betrouwbaarheid: ze draaien op de eigen thread). **Events = aankondigingen** (autonomie). **`tick()` = zelf-geinitieerd werk** (hartslag). Houd die drie gescheiden. De inbox droeg tot 20 september 2026 ook *toegewezen werk* via de matchmaker; die helft is met de triage-keten vervallen.
 7. **Een cirkel heeft geen handen: hij delegeert.** Laat een `Circle` nooit zelf werk uitvoeren in `handle`; hij routeert naar een member.
 8. **Niet de oude `src/`-generaties terughalen.** Die repo had drie onderling botsende base-classes (`Role` vs `BaseAgent`), drie versies van het datamodel, en een Plausible-agent met de echte API-call dood-gecodeerd áchter een `return` met mock-data. Dat is bewust vervangen.
-9. **Inwoners reageren op events via `self.react(event_name, handler)`, nooit direct via `self.bus.subscribe`.** De `react()`-wrapper deponeert het event-job in de eigen inbox; de handler draait dan op de eigen thread van de inwoner, niet op die van de afzender. Zo blokkeert een `publish()` nooit en werken inwoners parallel. Uitzonderingen (infra): `Matchmaker`, `Secretary`, `Reconciler` mogen direct subscriben — ze hebben lichte, snelle handlers zonder blocking I/O.
+9. **Inwoners reageren op events via `self.react(event_name, handler)`, nooit direct via `self.bus.subscribe`.** De `react()`-wrapper deponeert het event-job in de eigen inbox; de handler draait dan op de eigen thread van de inwoner, niet op die van de afzender. Zo blokkeert een `publish()` nooit en werken inwoners parallel. Uitzonderingen (infra): `Secretary` en `Reconciler` mogen direct subscriben — ze hebben lichte, snelle handlers zonder blocking I/O. (`Matchmaker` stond hier ook, tot hij op 20 september 2026 verviel.)
 10. **Sensing en zelfverbetering produceren UITSLUITEND spanningen en voorstellen.** Een inwoner mag via `_reflect()` gaten signaleren en `amend_role`/`add_role`-voorstellen doen. Hij mag NOOIT zelf nieuwe code schrijven, nieuwe threads starten, nieuwe skills registreren, of nieuwe externe API's aanroepen buiten zijn eigen `skills`-lijst. Uitbreiding van capaciteit is altijd mens-gated — identiek aan de geboren-versus-bemenst-splitsing voor rollen.
 
 ## Herkomst (source) van Records en Proposals
@@ -160,7 +164,7 @@ De taal van een output volgt de context:
 python -m nooch_village.village simulate
 ```
 
-Voert 7 fasen opeenvolgend uit: Roster+Lexicon → Governance → Triage → Reflectie →
+Voert 6 fasen opeenvolgend uit: Roster+Lexicon → Governance → Reflectie →
 Ngram live NL+EN → Librarian → Herkomst. Externe API-aanroepen (ngram) zijn beperkt
 tot 3 termen voor snelheid.
 
@@ -179,7 +183,7 @@ tot 3 termen voor snelheid.
 ## Governance (Holacracy) — model en status
 
 - **Rollen** hebben een purpose, accountabilities, domeinen en skills (`RoleDefinition`). **Cirkels** bevatten rollen.
-- **Spanningen** zijn de motor: elke inwoner kan er een sensen (`sense_tension`). Triage: operationeel → de inwoner handelt autonoom; governance → een voorstel dat de structuur wijzigt.
+- **Spanningen** zijn in het Holacracy-model de motor. In dit dorp senst GEEN CODE ze meer: `sense_tension` en de triage erachter zijn op 20 september 2026 opgeheven (zie het Triage-hoofdstuk). Een spanning komt van een mens, en wat ermee gebeurt beslist een mens.
 - **Domeinen = "libraries".** Lezen is vrij (via `context`); cureren/wijzigen is het exclusieve recht van de eigenaar. Dit is de enige Holacracy-uitzondering waarin toegang beperkt is.
 - **Twee poorten** bij een voorstel: procedureel (Holacracy-geldigheid) én inhoudelijk (de Nooch-waarden uit `CONTEXT.md`). Houd die gescheiden.
 - **Status nu:** structurele poort via de Secretary. **Nog niet gebouwd:** de volledige IDM (clarifying → reaction → objection-round met de vier validiteitscriteria → integration), Lead Link / Rep Link, en geneste governance per cirkel.
@@ -284,23 +288,34 @@ Een `add_role`-voorstel vereist **bewijs van herhaling** in zowel `trigger_examp
 ### Groeidagboek
 Bij elke `add_role`-adoptie publiceert de Secretary een `role_born`-event. De Village schrijft dit naar `data/groeidagboek.jsonl` met `role_id`, `purpose`, `trigger_example`, `rationale` en tijdstempel. Zo is de ontwikkelgeschiedenis van het dorp terug te lezen.
 
-## Triage — hoe een inwoner een spanning classificeert en routeert
+## Triage — opgeheven (20 september 2026)
 
-`Inhabitant.triage(tension)` classificeert in deze volgorde (eerste match wint):
+`Inhabitant.sense_tension()` en `triage()` bestaan niet meer, en met hen `_classify_llm`,
+`_route_to_role`, `_try_tactical_or_escalate`, `triage_engine.py` en de `Matchmaker`. Hier stond de
+beslistabel: structureel → governance-voorstel, eigen werk → zelf doen, andere rol → `ask(cap)` via
+de matchmaker, geen match → tactisch en dan naar de mens.
 
-| Prio | Signaal | Actie |
-|------|---------|-------|
-| 1 | Structureel/terugkerend trefwoord (`_STRUCTURAL_KW`) of LLM="structural" | `_raise_governance_proposal()` → `proposal_raised` → Facilitator + G0-G4 |
-| 2 | Overlap ≥6 tekens met eigen purpose/accountabilities, of LLM="own" | `_do_own_work()` — log, geen verdere actie (werk is al in scope) |
-| 3 | Domein-match bij andere rol (sterkste signaal), dan accountability-overlap ≥6 tekens, of LLM="other:<id>" | `_route_to_role()` → `ask(cap, ...)` of broadcast `tension_routed` |
-| 4 | Geen match | `_try_tactical_or_escalate()` → `ask("assistance", ...)` → Matchmaker → `human_intervention_needed` |
+**Waarom weg.** Het eerste signaal in die tabel was een modeloordeel dat bepaalde bij welke ROL werk
+terechtkwam, en dat is sinds "AI is instrument, geen rol" niet toegestaan. Bij het opruimen bleek de
+keten bovendien op vier plekken stuk, los van het model:
 
-`sense_tension(description, kind)` publiceert eerst `tension_sensed` (audittrail), dan roept hij `triage()` aan.
+- van de 47 spanningen die ooit door de triage gingen wezen **26 van de 38 rol-aanwijzingen (68%)**
+  een rol aan die gearchiveerd was of niet bestond — de LLM-tak valideerde de rol-id niet, anders dan
+  `escalation_router.kies_ontvanger`, dat precies daarvoor fail-closed is;
+- de gekozen capability was `skills[0]` van die rol; had de rol geen skills, dan werd het event
+  `tension_routed` gepubliceerd, en **daar luisterde niets naar**;
+- de Matchmaker routeerde op CAPABILITY en negeerde de gekozen rol, dus zelfs een goede keuze
+  belandde bij wie toevallig dezelfde skill had en de kortste wachtrij;
+- `human_intervention_needed` — de mens-uitgang van de hele keten — had als enige abonnee
+  `Village._observe`, dat er een regel van maakt in `system_log.jsonl`. Het bereikte nooit een mens.
 
-Scheiding van verantwoordelijkheden:
-- **Triage ≠ Poort**: triage classificeert *wie* het werk uitvoert; G0-G4 toetst *of* een voorstel geldig is. De ene roept de andere aan; ze dupliceren elkaars logica niet.
-- **Operationeel vs. governance**: structureel terugkerende spanning → governance; eenmalig werk → operationeel. De grens ligt bij de trefwoorden in `_STRUCTURAL_KW`.
-- **Default is tactisch**: als geen rol past, escaleer pas naar de mens nadat het tactisch geprobeerd is via de Matchmaker. Zo blijft het dorp zelf-redzaam.
+**Wat dit vervangt.** Niets, en dat is de bedoeling. Werk komt bij een mens via `signaal.stuur`
+(een DM), en wie iets oppakt bepaalt een mens — zie `route_werk` en de `@rol`-vermelding. Rol-naar-rol
+samenwerking zonder mens ertussen bestaat niet meer in dit dorp.
+
+**De Holacracy-kant.** Spanningen sensen blijft het model waar dit dorp op gebouwd is; wat verviel is
+de AUTOMATISCHE dispatch erachter. Komt dit ooit terug, dan als een lijst die een mens leest, niet
+als een router die zelf aflevert.
 
 ## TijdgeestWachter — nooit gebouwd, skill wel beschikbaar (gecorrigeerd 13 sept 2026)
 
@@ -350,10 +365,12 @@ Sensing is niet "een incident melden" maar "een gat observeren". Elk inwoner sen
   - State per rol in `data/reflect_<rol_id>.json`
 - Demo: `python -m nooch_village.village reflect` (stel `reflect_interval_seconds=0` in voor directe trigger)
 
-**Hoe een spanning er na gap-sensing uitziet:**
-- Doel-gap → `sense_tension(kind="operational")` → triage → meest waarschijnlijk eigen-werk of mens-escalatie
-- Missie-gap → `sense_tension(kind="governance")` + "accountability:" in beschrijving → triage → `_raise_governance_proposal` → `AMEND_ROLE` of `ADD_ROLE`
-- Zelf-gap → identiek aan missie-gap; het voorstel amendeert de eigen rol
+**Hoe een spanning er na gap-sensing uitzag** — en waarom dit nu een AGENDA is, geen beschrijving.
+Alle drie de paden eindigden in `sense_tension` → triage, en die keten bestaat sinds 20 september
+2026 niet meer. `_sense_gap` heeft bovendien geen enkele aanroeper; de drie niveaus hierboven zijn
+dus een model, geen draaiend mechanisme. Komt het terug, dan als een lijst die een mens leest:
+- Doel-gap → de puls schrijft hem al naar `pulse_history.jsonl` en `goal_state.json`
+- Missie-gap en zelf-gap → een voorstel aan een mens, niet aan een router
 
 ## Roadmap (depth-first, niet breadth-first)
 
@@ -410,10 +427,10 @@ operatie blijft autonoom binnen de rol (artikel 4 van Holacracy).
 Dit is de meest kritieke architectuurgrens in het systeem en mag NOOIT worden overschreden.
 
 ### Wat een inwoner WEL mag
-- Een gat signaleren via `sense_tension` of `_sense_gap`
+- Een gat signaleren (de mechaniek daarvoor is er nu niet; zie "Gap-sensing" hierboven)
 - Een `amend_role`- of `add_role`-voorstel genereren dat beschrijft wat een nieuwe bron of capaciteit zou doen
 - In dat voorstel een URL of bron noemen als audittrail voor de mens
-- Via triage en governance het voorstel laten beoordelen door de Facilitator
+- Het voorstel bij een mens laten landen (`signaal.stuur`), die erover beslist
 
 ### Wat een inwoner NOOIT mag
 - Zelf nieuwe code schrijven, uitvoeren of laden (ook geen `exec`, geen dynamische imports van externe modules)

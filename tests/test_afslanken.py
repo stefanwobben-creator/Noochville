@@ -106,9 +106,6 @@ def test_slapende_rol_krijgt_geen_thread(tmp_path):
         def subscribe(self, *a, **k): pass
         def publish(self, *a, **k): pass
 
-    class _MM:
-        def register(self, *a, **k): pass
-
     class _Reg:
         def get(self, *a, **k): return object()        # elke skill 'bestaat'
 
@@ -117,7 +114,7 @@ def test_slapende_rol_krijgt_geen_thread(tmp_path):
         data_dir = dd
         links = None
 
-    r = Reconciler(_recs(dd), _Bus(), _Reg(), _Ctx(), _MM(), class_map={})
+    r = Reconciler(_recs(dd), _Bus(), _Reg(), _Ctx(), class_map={})
     r.build()
     assert ROL not in r.live
     assert ROL in r.unmanned                            # zichtbaar gepauzeerd, niet verdwenen

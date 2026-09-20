@@ -75,10 +75,6 @@ def main() -> None:
         from nooch_village.demos.analysis import intent_demo
         intent_demo()
 
-    elif mode == "triage":
-        from nooch_village.demos.analysis import triage_demo
-        triage_demo()
-
     elif mode == "ngram":
         from nooch_village.demos.analysis import ngram_demo
         ngram_demo()
@@ -1238,7 +1234,7 @@ def main() -> None:
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
-              "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
+              "purge | intent | ngram | reflect | simulate | harry_hemp | "
               "skills_naar_links | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "

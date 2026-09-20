@@ -8,11 +8,10 @@ from nooch_village.governance import proposal_to_dict
 
 
 def simulate():
-    """Volledige simulatie van het dorp in 7 fasen.
+    """Volledige simulatie van het dorp in 6 fasen.
 
     1. Roster + Lexicon
     2. Governance-poort (G0-G4)
-    3. Triage (4 spanningen)
     4. Reflectie Harry Hemp
     5. Ngram locale-demo (live API, max 3 termen)
     6. Librarian keyword-beslissingen
@@ -31,7 +30,7 @@ def simulate():
     print(f"  (sandbox-data-dir: {_sim_dir} — productie wordt niet geraakt)")
 
     # ── 1. Roster + Lexicon ───────────────────────────────────────────
-    section("1 / 7 — ROSTER & LEXICON")
+    section("1 / 6 — ROSTER & LEXICON")
     v = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
 
     v.print_roster()
@@ -51,7 +50,7 @@ def simulate():
           f"| word_for(plastic_free, en)='{lex.word_for('plastic_free','en')}'")
 
     # ── 2. Governance — drie voorstellen ─────────────────────────────
-    section("2 / 7 — GOVERNANCE POORT (G0-G4)")
+    section("2 / 6 — GOVERNANCE POORT (G0-G4)")
     gov_results: dict = {}
 
     def _rec(outcome):
@@ -109,50 +108,13 @@ def simulate():
         print(f"  {label:<38} {r.get('outcome','?'):<13} {r.get('gate','-'):<5} "
               f"{r.get('reason','')[:42]}")
 
-    # ── 3. Triage — vier spanningen ───────────────────────────────────
-    section("3 / 7 — TRIAGE (4 spanningen)")
-    triaged: list[dict] = []
-    v.bus.subscribe("tension_triaged", lambda e: triaged.append(dict(e.data)))
-
-    watcher = v.reconciler.live.get("website_watcher")
-    if watcher:
-        spanningen = [
-            ("bezoekersdata per locale analyseren", "operational",
-             "eigen-werk (website_watcher-scope)"),
-            ("kandidaatwoord voor de bibliotheek: plasticvrij", "operational",
-             "andere-rol:librarian"),
-            ("niemand bezit de locale-policy structureel", "governance",
-             "structureel → Proposal"),
-            ("serverruimte koeling storing", "operational",
-             "geen match → mens"),
-        ]
-        for desc, kind, _ in spanningen:
-            watcher.sense_tension(desc, kind=kind)
-
-        for _ in range(80):
-            if len(triaged) >= len(spanningen):
-                break
-            time.sleep(0.1)
-        time.sleep(0.3)
-
-        print(f"  {'Spanning':<48} {'Verwacht':<26} {'Classificatie'}")
-        print("  " + "-" * 100)
-        triage_map = {t["description"][:47]: t["classification"] for t in triaged}
-        for desc, _, verwacht in spanningen:
-            key = desc[:47]
-            cls = triage_map.get(key, "?")
-            ok = ("✔" if (
-                (verwacht.startswith("eigen") and "eigen" in cls) or
-                (verwacht.startswith("andere") and "andere" in cls) or
-                (verwacht.startswith("structureel") and "structureel" in cls) or
-                (verwacht.startswith("geen") and "tactisch" in cls)
-            ) else "✘")
-            print(f"  {ok} {desc[:46]:<47} {verwacht:<26} {cls}")
-    else:
-        print("  ⚠️  website_watcher niet gevonden, triage overgeslagen")
+    # ── 3. HIER STOND TRIAGE ───────────────────────────────────────────
+    # Vier spanningen door `sense_tension`, met een tabel verwacht-versus-werkelijk erachter. De
+    # keten die dat demonstreerde (sense_tension → triage → Matchmaker → Task) is op 20 september
+    # 2026 opgeheven; er valt niets meer te classificeren. De simulatie telt daarom nog zes fasen.
 
     # ── 4. Reflectie — Harry Hemp ─────────────────────────────────────
-    section("4 / 7 — REFLECTIE (Harry Hemp gap-sensing)")
+    section("3 / 6 — REFLECTIE (Harry Hemp gap-sensing)")
     v.context.settings["reflect_interval_seconds"] = "0"
 
     reflect_means_gaps: list = []
@@ -178,7 +140,7 @@ def simulate():
     time.sleep(0.2)
 
     # ── 5. Ngram locale-demo (live, max 3 termen) ─────────────────────
-    section("5 / 7 — NGRAM LOCALE-DEMO (NL + EN, live API)")
+    section("4 / 6 — NGRAM LOCALE-DEMO (NL + EN, live API)")
     v2 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     v2.context.settings["tijdgeest_interval_seconds"] = "0"
 
@@ -232,7 +194,7 @@ def simulate():
     time.sleep(0.2)
 
     # ── 6. Librarian keyword-beslissingen ─────────────────────────────
-    section("6 / 7 — LIBRARIAN (meertalige kandidaat-woorden)")
+    section("5 / 6 — LIBRARIAN (meertalige kandidaat-woorden)")
     v3 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     decisions: dict = {}
     escalations: list = []
@@ -271,7 +233,7 @@ def simulate():
         print(f"  {w:<30} {c['locale']:<7} {st:<12} {d.get('reason','')[:35]}")
 
     # ── 7. Herkomst — roster met source-labels ────────────────────────
-    section("7 / 7 — HERKOMST ROSTER (seed / sensed / demo)")
+    section("6 / 6 — HERKOMST ROSTER (seed / sensed / demo)")
     v4 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     v4.print_roster()
 

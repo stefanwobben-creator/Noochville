@@ -9,7 +9,7 @@ from nooch_village.ai_tasks import AITaskStore
 from nooch_village.config import Context
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
-from nooch_village.models import Record, RecordType, RoleDefinition, Task
+from nooch_village.models import Record, RecordType, RoleDefinition
 from nooch_village.skills import Skill, SkillRegistry
 
 
@@ -57,13 +57,11 @@ def test_vlag_uit_koppeling_geeft_geen_toegang(tmp_path):
     inh = _inwoner(tmp_path, vlag="0", links=_link_store(tmp_path))
     assert inh.effective_skills() == set()
     assert inh.use_skill("site_health", {})["error"]
-    assert inh.handle(Task(capability="site_health", payload={})).success is False
 
 
 def test_vlag_uit_dna_werkt_gewoon(tmp_path):
     inh = _inwoner(tmp_path, dna_skills=["site_health"], vlag="0")
     assert inh.use_skill("site_health", {}) == {"ok": True}
-    assert inh.handle(Task(capability="site_health", payload={})).success is True
 
 
 # ── Vlag aan: de koppeling is de tweede sleutel ──────────────────────────────
@@ -72,7 +70,6 @@ def test_vlag_aan_koppeling_geeft_toegang(tmp_path):
     inh = _inwoner(tmp_path, vlag="1", links=_link_store(tmp_path))
     assert inh.effective_skills() == {"site_health"}
     assert inh.use_skill("site_health", {}) == {"ok": True}
-    assert inh.handle(Task(capability="site_health", payload={})).success is True
 
 
 def test_vlag_aan_dna_blijft_de_vloer(tmp_path):
@@ -101,7 +98,6 @@ def test_domeinskill_geweigerd_ondanks_dna(tmp_path):
     inh = _inwoner(tmp_path, dna_skills=["keyword_review"], vlag="0")
     fout = inh.use_skill("keyword_review", {})["error"]
     assert "bibliotheek" in fout and "domeinhouder" in fout
-    assert inh.handle(Task(capability="keyword_review", payload={})).success is False
 
 
 def test_domeinskill_geweigerd_ondanks_koppeling(tmp_path):
