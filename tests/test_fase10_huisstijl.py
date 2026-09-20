@@ -325,3 +325,21 @@ def test_de_rollenlijst_blijft_bereikbaar():
     bron = (VIEWS / "overview.py").read_text()
     assert "_tabbar(" in bron
     assert re.search(r"['\"]roles['\"]", bron, re.I), "de Roles-tab is niet meer te vinden"
+
+
+def test_navigatie_en_tabbladen_staan_in_hoofdletters():
+    """Besluit 3: dezelfde regel als voor koppen en knoppen, volledig doorgetrokken. De referentie
+    zet SHOP STORE MISSION CONTACT in de topbar.
+
+    Structureel: verzamel élk blok in nooch-ui.css dat een navigerend element aanstuurt (zijbalk,
+    subnav, tabs, link-knoppen) en eis dat ze allemaal `text-transform: uppercase` dragen. Zo valt
+    een vijfde navigatie-familie die later bijkomt ook op."""
+    NAVIGEREND = (".c2-subnav a", ".c2-navbtn", ".c2-tabs a", ".addlink", ".vswitch a", ".flink")
+    zonder = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(NU)):
+        raak = [n for n in NAVIGEREND if n in sel]
+        if not raak or ":hover" in sel or ".on" in sel:
+            continue
+        if "text-transform: uppercase" not in body:
+            zonder.append(sel.strip()[:60])
+    assert not zonder, f"navigerend element zonder hoofdletters: {zonder}"

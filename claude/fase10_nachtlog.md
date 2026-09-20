@@ -394,3 +394,18 @@ Zeven tests, op gedrag geschreven en niet op opmaak: ze bouwen een dorp met meer
 en kijken wat er in en uit de lijst valt.
 
 Suite: 4.067 passed, 1 failed (de bekende), 1 xfailed.
+
+## besluit 3 — hoofdletters in zijbalk-navigatie en tabbladen
+
+`PROJECTS · MESSAGES · WIKI · INBOX · CIRCLE · ADMIN` in de zijbalk, en
+`OVERVIEW · ROLES · MEMBERS · GOALS · WIKI · PROJECTS · CHECKLISTS · METRICS` op de tabbalk.
+
+De rolnamen in de organisatieboom blijven in normale schrijfwijze — dat is inhoud en geen
+navigatie. Zelfde grens als bij de projectkaarten op het bord.
+
+De test is structureel: verzamel élk blok in `nooch-ui.css` dat een navigerend element aanstuurt
+(zijbalk, subnav, tabs, link-knoppen) en eis `text-transform: uppercase`. Een vijfde
+navigatie-familie die later bijkomt valt daarmee ook op. `:hover`- en `.on`-varianten zijn
+uitgezonderd; die erven het van de basisregel.
+
+Suite: 4.068 passed, 1 failed (de bekende), 1 xfailed.
