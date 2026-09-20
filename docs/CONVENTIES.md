@@ -156,8 +156,14 @@ naast de drie alsof het er vier zijn — dan wordt de makkelijkste weg een uitko
 
 **Goed formuleren is de voorwaarde, niet een vierde keuze.** Je kunt een spanning alleen delen of
 borgen als er staat wát er aan de hand is; een onbegrijpelijk verzoek is niet weigerbaar maar
-onleesbaar. Dat is precies wat de leesbaarheidslaag levert (`systeemtaal` + `bevinding`), en waarom
-"aanpassen" geen aparte uitkomst is: het is de stap die overal beschikbaar hoort te zijn.
+onleesbaar. Daarom is "aanpassen" geen aparte uitkomst: het is de stap die overal beschikbaar hoort
+te zijn.
+
+De leesbaarheidslaag die dat leverde bestond uit twee tredes. Deel 1 (`systeemtaal`, deterministisch)
+staat er nog. Deel 2 (`bevinding`, het model dat een signalering herschreef) is op 20 september 2026
+opgeheven: zijn laatste lezer was `villageraad`, en die ging een dag eerder met pensioen. De EIS
+blijft — een verzoek dat niemand kan lezen is niet te beantwoorden — alleen ligt hij nu bij wie het
+schrijft in plaats van bij een herschrijver erachter.
 
 #### Wat de meting zei
 
@@ -175,9 +181,14 @@ van elkaar uitzagen:
 
 | waar | wat het zegt |
 |---|---|
-| `bevinding.feitbehoud` | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
-| regel 5 in de herschrijf-prompt | een geciteerde claim blijft staan, ook in het Engels |
+| `bevinding.feitbehoud` *(opgeheven 20-09-2026)* | de herschrijving mag niet zekerder of specifieker zijn dan de bron |
+| regel 5 in de herschrijf-prompt *(idem)* | een geciteerde claim blijft staan, ook in het Engels |
 | COPYCHECK-001 | *"Quote the failing sentence, do not summarise"* |
+
+De eerste twee stonden in `bevinding`, en die module is weg. Ze staan hier NIET als historie maar
+als eis: zodra er weer een model tussen een feit en een lezer komt te staan, gelden ze opnieuw, en
+dan is `feitbehoud` het bewijs dat ze te MÉTEN zijn en niet alleen te vragen. COPYCHECK-001 draait
+gewoon door.
 
 Alle drie beschermen hetzelfde: de woorden waarop iemand zich straks beroept. Een geciteerde
 klantclaim staat er omdat iemand precies díe zin op de site zag; een falende zin moet je kunnen
@@ -190,8 +201,11 @@ Praktisch, in volgorde van hardheid:
 1. **Behoud het epistemische niveau.** `mogelijk` blijft `mogelijk`; `A of B` wordt niet stil één
    ervan; er komt geen getal, naam of oorzaak bij die de bron niet had.
 2. **Citaten blijven letterlijk**, ook als de rest vertaald wordt. Vertaal eromheen.
-3. **Herkomst poets je niet op.** `bevinding["ruw"]` en het blok "ruwe signalering" tonen wat er
-   werkelijk stond; alleen de LEESTEKST wordt leesbaar gemaakt.
+3. **Herkomst poets je niet op.** `bevinding["ruw"]` bewaarde de tekst zoals hij binnenkwam naast
+   de herschreven versie; alleen de LEESTEKST werd leesbaar gemaakt. Dat veld is met `bevinding`
+   verdwenen, en daarmee is de regel niet minder waar maar makkelijker te overtreden: er is nu geen
+   plek meer die het origineel automatisch bewaart. Wie een tekst bewerkt vóór een ander hem leest,
+   bewaart zelf wat er stond.
 4. **Andermans woorden herschrijf je nooit** — zie `MENS_GETYPT` hierboven.
 
 En de keerzijde die dit werkbaar houdt: kan een herschrijving het feit niet behouden, dan is de ruwe
@@ -245,11 +259,16 @@ model hield zich **keurig aan de zekerheidsregel** — `mogelijk` bleef gewoon s
 een as die niemand bewaakte. Een enkele check had hem doorgelaten, en de tekst las beter dan het
 origineel.
 
-| deelcheck | as | waar |
+| deelcheck | as | waar (in `bevinding`, opgeheven 20-09-2026) |
 |---|---|---|
-| slag om de arm | hoe ZEKER is het | gemeten (`bevinding.feitbehoud`) |
+| slag om de arm | hoe ZEKER is het | gemeten (`feitbehoud`) |
 | grond | is dit gegeven OPZOEKBAAR in de bron | gemeten (`_ongegronde_specifieken`) |
 | alternatieven heel | zijn er MOGELIJKHEDEN weggevallen | oordeel (in de prompt) |
+
+De drie ASSEN zijn de les, niet de implementatie. Ze zijn hier blijven staan omdat ze duur zijn
+betaald: elk van de drie is toegevoegd nádat een herschrijving er langs was geglipt, en de tweede
+werd pas gevonden doordat de eerste bestond. Bouw je ooit weer een herschrijver, dan begin je met
+deze drie en niet met één.
 
 Drie regels bij het toevoegen van een deelcheck:
 

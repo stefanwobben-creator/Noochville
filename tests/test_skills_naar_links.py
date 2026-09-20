@@ -118,3 +118,28 @@ def test_run_logt_in_de_kroniek(tmp_path):
     rows = kroniek.all_records()
     assert len(rows) == 3
     assert all(r["action"] == "gelegd" and "opdrogen" in r["reden"] for r in rows)
+
+
+# Verhuisd uit `test_leesbaarheid.py` (20 september 2026). Die module ging over de
+# model-trede van de leesbaarheidslaag (`bevinding`), en die is opgeheven. Deze test ging
+# daar nooit over — hij bewaakt de MATCH-BRUG, en die hoort hier.
+def test_de_matching_brug_blijft_bij_de_taal_van_de_records():
+    """De weergave-labels zijn Engels; de brug waarop `skills_naar_links` matcht is dat NIET.
+
+    Accountability-teksten zijn mandaat: ze staan in governance-records en veranderen alleen via
+    een governance-ronde. Ze zijn dus nog Nederlands. Vertaalt iemand de brug mee, dan deelt hij
+    geen token meer met de belofte en komt de matcher stil op nul uit — geen fout, alleen 'niets
+    past'. Deze test is het vangnet daaronder, en mag weg zodra de records Engels zijn."""
+    from nooch_village import skill_labels
+    from nooch_village.skills_naar_links import _middel_signatuur
+
+    assert skill_labels.label("keyword_review").startswith("Judges")
+    assert skill_labels.match_label("keyword_review").startswith("Beoordeelt")
+    # De signatuur draagt de NEDERLANDSE stammen, want daar wordt tegen gematcht.
+    assert "beoord" in _middel_signatuur("keyword_review")
+
+
+# ── de grond-check: derde onafhankelijke deelcheck ──────────────────────────
+
+CLAIM_BRON = ('🟠 Claim-scan: 2 model-gevonden claim(s) zonder lijstterm — "This helps reduce…" '
+              '(faq), "We are on a mission…" (mission) (vermoeden, geen wet)')

@@ -20,53 +20,13 @@ from __future__ import annotations
 
 import pytest
 
-from nooch_village import bevinding, governance
+from nooch_village import governance
 
 
 # ── 1. De vindplaats overleeft de herschrijving ──────────────────────────────
 
 _RUW = ('🔴 Claim-scan: 1 nieuwe verboden claim(s) op nooch.earth '
         '— "greener" (impact) (1 taak op het bord)')
-
-
-def test_de_pagina_wordt_herkend_als_vindplaats():
-    assert bevinding.vindplaatsen_in(_RUW) == ['"greener" op de pagina impact']
-
-
-def test_een_telling_tussen_haakjes_is_geen_pagina():
-    """«(1 taak op het bord)» staat in dezelfde regel en ziet er hetzelfde uit. Zou die meetellen,
-    dan krijgt de lezer "Waar: ... op de pagina 1 taak op het bord" en is de regel erger dan niets."""
-    assert all("taak" not in v for v in bevinding.vindplaatsen_in(_RUW))
-
-
-def test_urls_tellen_ook_mee():
-    v = bevinding.vindplaatsen_in("scan faalde op https://nooch.earth/pages/impact, probeer later")
-    assert v == ["https://nooch.earth/pages/impact"]
-
-
-def test_de_verbouwde_plek_wordt_alsnog_expliciet_gemaakt():
-    """DE KERNTEST. Het model schreef "(over impact)" — de plek staat er wel maar leest als een
-    onderwerp. De expliciete regel eronder maakt er weer een vindplaats van."""
-    uit = bevinding.met_vindplaats(_RUW, 'De scan vond het woord "greener" (over impact).')
-    assert uit.endswith('Waar: "greener" op de pagina impact')
-    assert 'De scan vond' in uit                       # de menselijke zin blijft heel
-
-
-def test_zonder_vindplaats_verandert_er_niets():
-    tekst = "Er is iets misgegaan bij het ophalen."
-    assert bevinding.met_vindplaats("ruwe tekst zonder plek", tekst) == tekst
-
-
-def test_een_al_genoemde_url_wordt_niet_herhaald():
-    bron = "faalde op https://nooch.earth/impact"
-    tekst = "De scan kwam niet op https://nooch.earth/impact."
-    assert bevinding.met_vindplaats(bron, tekst) == tekst
-
-
-def test_lege_spanning_krijgt_geen_losse_waar_regel():
-    """Een afgekeurde herschrijving valt terug op de ruwe tekst. Daar een 'Waar:'-regel aan plakken
-    zou een lege kaart met alleen een vindplaats opleveren."""
-    assert bevinding.met_vindplaats(_RUW, "") == ""
 
 
 # ── 2. Delete loopt niet meer dood ───────────────────────────────────────────
@@ -119,18 +79,6 @@ class _St:
     def __init__(self, mapping, rollen=("compliance",)):
         self.projects = _Map(mapping)
         self.records = _Map({r: object() for r in rollen})
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ── 4. De kaart meldt alleen nog het doodlopende geval ───────────────────────

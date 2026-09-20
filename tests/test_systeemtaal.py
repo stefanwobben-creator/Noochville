@@ -99,7 +99,6 @@ def test_de_zin_eromheen_blijft_leesbaar():
     assert uit.startswith("De koppeling viel om") and uit.endswith("de bel weg.")
 
 
-
 # ── de swaps zelf ──────────────────────────────────────────────────────────
 
 def test_woordsoort_klopt():
@@ -138,36 +137,6 @@ def test_raakt_wijst_aan_zonder_te_wijzigen():
 
 # ── de bedrading ───────────────────────────────────────────────────────────
 
-def test_de_herschrijver_krijgt_de_ontjargonde_tekst():
-    """Het model ziet de opgeschoonde tekst; `ruw` blijft de ECHTE ruwe tekst, want dat veld is
-    herkomst en herkomst hoor je niet op te poetsen."""
-    from nooch_village import bevinding as bv
-    gezien = {}
-
-    def _nep(prompt, **kw):
-        gezien["prompt"] = prompt
-        return '{"spanning": "De dagpuls draaide niet op 29 augustus, en niemand meldde een fout.", ' \
-               '"voorstel": "Kijken wat er aan de hand is"}'
-
-    uit = bv.herschrijf(IJKPUNT, rol="facilitator", reason_fn=_nep)
-    assert "python -m" not in gezien["prompt"]
-    assert "achtergrondproces" in gezien["prompt"]
-    assert "mogelijk" in gezien["prompt"].lower()
-    assert "niet-uitvoering" in uit["ruw"], "de herkomst is opgepoetst"
-
-
-def test_een_bericht_dat_alleen_een_commando_was_valt_terug_op_het_origineel():
-    """Fail-open naar het ORIGINEEL, nooit naar niets: liever lelijk-maar-juist dan leeg."""
-    from nooch_village import bevinding as bv
-    gezien = {}
-
-    def _nep(prompt, **kw):
-        gezien["prompt"] = prompt
-        return '{"spanning": "", "voorstel": ""}'
-
-    bv.herschrijf("Draai systemctl restart noochville-village.", rol="x", reason_fn=_nep)
-    assert "systemctl" in gezien["prompt"]
-
 
 def test_de_regel_staat_bij_de_code():
     """Deze regel moet een herschrijving van de lijst overleven."""
@@ -184,7 +153,6 @@ def test_de_regel_staat_bij_de_code():
 #
 # De LES staat in `docs/CONVENTIES.md` en geldt voor elke volgende poort: leg het feit vast op het
 # pad dat het weet, raad het nooit achteraf. Er is hier alleen geen poort meer om hem op te toetsen.
-
 
 
 # ── Het sjabloon eraf ───────────────────────────────────────────────────────
