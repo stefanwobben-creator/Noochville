@@ -75,3 +75,29 @@ deze patroonregels zakten ook views die ik nog niet had aangeraakt:
    blijft staan.
 
 Suite: 4.056 passed, 1 failed (de bekende), 1 xfailed.
+
+## 03:25 — groep A, stap 2: `inbox.py` (`/inbox`, `/inbox/verwerk`)
+
+**Wat.** 37 klassen. Anders dan bij `projects.py` zat het zwaartepunt hier niet op randen maar op
+**groen als achtergrondvulling**: `--green-tint` achter de leesregel, de kop van de lade, de teller,
+de swipe-hint. Dat is precies de kleur-alleen-signalering die fase 9 uit het bord haalde, alleen
+dan in de lade.
+
+Aanpak: vulling rustig, **vorm blijft dragen**. `.rdr-row` houdt zijn dashed outline — dát is het
+signaal, niet de tint erachter. Verder drie pil-radiussen weg (`ibx-plus`, `ibx-hct`, `ibx-ct`) en
+alle grijstinten naar één `--nu-muted`.
+
+**Resultaat.** 50 open klasse-gebruiken → **0**.
+
+**Weer raakten de gedeelde regels andere views**: `vangst.py` 15 → 2, `wiki.py` 2 → 0,
+`doelen.py` 1 → 0, `overview.py` 9 → 6. Dat komt doordat `wo-oc`, `wo-ocd`, `gk`, `fsep`, `read`,
+`done` en `c2-bar` in meerdere views voorkomen.
+
+**Stand van de dekkings-ratchet:**
+
+```
+roloverleg.py 34 · wizard.py 24 · werkoverleg.py 13 · search.py 10 · projects.py 7
+overview.py 6 · vangst.py 2 · messages.py 1 · inbox.py 0 · doelen.py 0 · wiki.py 0
+```
+
+Suite: 4.056 passed, 1 failed (de bekende), 1 xfailed.

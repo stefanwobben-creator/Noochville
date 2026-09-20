@@ -307,3 +307,52 @@
   background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 .nu .danger { color: var(--nu-danger); }
 .nu .car { color: var(--nu-muted); }
+
+/* ══ GROEP A · inbox.py (/inbox, /inbox/verwerk — de lade en de verwerk-lezer) ═════════════════
+   37 klassen, en anders dan bij `projects.py` zit het zwaartepunt hier niet op randen maar op
+   GROEN als achtergrond: `--green-tint` achter de leesregel, de kop van de lade, de teller en de
+   swipe-hint. Dat is dezelfde kleur-alleen-signalering die fase 9 uit het bord haalde. De vorm
+   (de dashed outline op de actieve regel) blijft; alleen de vulling wordt rustig. */
+
+/* 1 · Omhulsels */
+.nu .ibx-row, .nu .wo-oc, .nu .rdr-tool, .nu .rdr-kader, .nu .rdr-vier,
+.nu .gk, .nu .ibx-drawer, .nu .ibx-modal {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+.nu .ibx-iframe { background: var(--nu-bg); }
+.nu .wo-ocd { background: var(--nu-bg); }
+
+/* 2 · Grijstinten → één muted */
+.nu .ibx-meta, .nu .ibx-sub, .nu .ibx-wat, .nu .ibx-sectie, .nu .ibx-empty,
+.nu .ibx-cli, .nu .ibx-x, .nu .ibx-trash, .nu .ibx-mx, .nu .fsep {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* 3 · Groen als vulling → rustig, met de vorm als drager
+       `.rdr-row` houdt zijn dashed outline: dát is het signaal, niet de tint erachter. */
+.nu .rdr-row { background: var(--nu-bg-alt); outline-color: var(--nu-text); }
+.nu .ibx-head { background: var(--nu-bg-alt); border-bottom: var(--nu-border); }
+.nu .ibx-kader, .nu .ibx-swipe { color: var(--nu-muted); }
+.nu .ibx-dot { background: var(--nu-text); }
+.nu .ibx-dot.read, .nu .read { background: var(--nu-muted); }
+
+/* 4 · De laatste pil-radiussen in dit scherm */
+.nu .ibx-plus, .nu .ibx-hct, .nu .ibx-ct { border-radius: 0; }
+.nu .ibx-plus { border: var(--nu-border); background: var(--nu-surface); color: var(--nu-text); }
+.nu .ibx-hct, .nu .ibx-ct { background: var(--nu-neon); color: var(--nu-text);
+  font-family: var(--nu-font); font-weight: 700; }
+
+/* 5 · Fout blijft rood, want een foutkleur is functioneel */
+.nu .ibx-err { color: var(--nu-danger); background: var(--nu-surface);
+  border: 1.5px solid var(--nu-danger); }
+
+/* 6 · De scrim onder de lade */
+.nu .ibx-scrim { background: rgba(0,0,0,.45); }
+
+/* 7 · De staart van inbox.py */
+.nu .ibx-btn, .nu .ibx-alaan, .nu .ibx-add {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); }
+.nu .ibx-add { border-width: 0 0 2px 0; }
+.nu .einddoc-body { color: var(--nu-text); }
+.nu .done { color: var(--nu-muted); }
+.nu .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }

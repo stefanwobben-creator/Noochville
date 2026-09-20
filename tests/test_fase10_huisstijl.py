@@ -189,17 +189,17 @@ VIEWS = REPO / "nooch_village" / "views"
 #: die stijgt heeft een nieuwe klasse gekregen uit het oude palet — dat is de fout die deze hele
 #: fase opruimt, en dan wil je het bij het schrijven weten en niet bij een screenshot.
 _DEKKING_PLAFOND = {
-    "projects.py": 8,        # 20 sep: van 102 → 8 (mform/mdot/car zijn vorm, geen kleur)
-    "inbox.py": 50,
-    "roloverleg.py": 35,
+    "roloverleg.py": 34,
     "wizard.py": 24,
-    "vangst.py": 15,
-    "werkoverleg.py": 14,
+    "werkoverleg.py": 13,
     "search.py": 10,
-    "overview.py": 9,
-    "wiki.py": 2,
-    "doelen.py": 1,
+    "projects.py": 7,        # rest is vorm, geen kleur: mform, mdot, car
+    "overview.py": 6,
+    "vangst.py": 2,
     "messages.py": 1,
+    "inbox.py": 0,
+    "doelen.py": 0,
+    "wiki.py": 0,
 }
 
 _VISUEEL = re.compile(r"(background|border|border-radius|box-shadow|color|font-family)\s*:", re.I)
@@ -259,7 +259,6 @@ def test_kleuren_zonder_merkdekking_worden_binnen_nu_geneutraliseerd():
     # Wat er nog staat, met de view waar het thuishoort. Deze lijst mag alleen KORTER worden:
     # elke stap van groep A/C die een view aanpakt haalt er een paar af.
     _NOG_TE_DOEN = {
-        "ibx-ct", "ibx-err", "ibx-sub",              # inbox.py
         "rov-delrole", "rovm-close", "sec-issue",    # roloverleg.py
         "cl-check",                                  # werkoverleg.py
         "mdot",                                      # projects.py — ronde stip, vorm en geen kleur
