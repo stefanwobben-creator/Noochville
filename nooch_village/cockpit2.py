@@ -370,6 +370,7 @@ def _owner_ai(st: _Stores, orec):
     return None
 
 
+
 def _person_targets(st: _Stores, username: str) -> list:
     """De inbox-doelen van de ingelogde mens: hemzelf als persoon ÉN elke rol die hij vervult. Zo bundelt
     de inbox mentions aan de persoon (individuele actie) en aan al zijn rollen. Onbekend/guest → []."""
@@ -663,6 +664,35 @@ def _dna_skill_for(st: _Stores, role, ask_text: str):
     return offers[0] if offers else None
 
 
+def _signaleer(st: _Stores, doel_type: str, doel_id: str, tekst: str, *,
+               by: str = "village", herkomst: dict | None = None) -> str:
+    """Eén signalering naar de mens die hem aangaat, als DM. Geeft het bericht-id (of "").
+
+    DIT VERVANGT `st.notif.add`. Sinds 20 september 2026 is er geen wachtrij meer met een
+    verwerkingsmodel; een signalering is een bericht en de ontvanger is verantwoordelijk, zoals bij
+    elk ander bericht. De routering (persoon / rolvervuller / terugval) staat in `signaal.py`, en is
+    dezelfde die de 371 bestaande rijen heeft gemigreerd — twee kopieën zouden betekenen dat
+    dezelfde rol-id vandaag bij de een landt en morgen bij de ander.
+
+    Fail-closed op de tekst (leeg = geen bericht), fail-OPEN op het doel: is er geen ontvanger te
+    bepalen, dan gaat het naar de terugval-rol. Een signalering die nergens landt is stiller dan
+    geen signalering, want de afzender denkt dat hij iets heeft gedaan."""
+    from nooch_village import signaal
+    tekst = " ".join(str(tekst or "").split())
+    if not tekst:
+        return ""
+    try:
+        kanalen = signaal.stuur(st, doel_type, doel_id, tekst, by=by, herkomst=herkomst)
+    except Exception:
+        logging.getLogger("cockpit2.signaal").exception("signalering faalde: %s/%s",
+                                                        doel_type, doel_id)
+        return ""
+    if not kanalen:
+        return ""
+    laatste = st.channels.laatste(kanalen[0]) or {}
+    return str(laatste.get("id") or "")
+
+
 def _settle_inbox(st: _Stores, role, pid: str, entry_id: str, ask_text: str, *,
                   processed: bool, reason: str):
     """Eén verwerkingsplek: zorg dat er een inbox-item voor deze rol op dit project bestaat en zet de
@@ -674,16 +704,17 @@ def _settle_inbox(st: _Stores, role, pid: str, entry_id: str, ask_text: str, *,
     rid = getattr(role, "id", "") or ""
     if not rid:
         return None
-    try:
-        open_items = [n for n in st.notif.for_targets([("role", rid)])
-                      if n.get("project_id") == pid and not n.get("processed") and not n.get("archived")]
-        n = open_items[0] if open_items else st.notif.add("role", rid, pid, entry_id,
-                                                          by=_name(role), snippet=ask_text or "")
-        if processed:
-            st.notif.mark_item_processed(n["id"], outcome=reason, by=_name(role))
-        return n
-    except Exception:
+    # GEDRAGSWIJZIGING, 20 september 2026. Dit zette vroeger een inbox-item neer en markeerde het
+    # meteen als "verwerkt" wanneer de rol het zelf had opgepakt. Zo'n item was per definitie werk
+    # dat al gedaan was — precies de ruis waarover Stefan zei: "alles wat tot dusver in de inbox is
+    # gekomen kon ik niet echt veel mee". Zonder verwerkingsmodel is er geen plek meer om "al
+    # gedaan" in te zetten, en een bericht sturen over werk dat af is, is geen bericht maar een log.
+    # Dus: `processed=True` stuurt niets meer, `processed=False` stuurt een DM naar de mens.
+    if processed:
         return None
+    bid = _signaleer(st, "role", rid, ask_text or "", by=_name(role),
+                     herkomst={"project": pid} if pid else None)
+    return {"id": bid} if bid else None
 
 
 def _mention_autotask_on() -> bool:
@@ -1080,6 +1111,11 @@ _NU_ROUTES = frozenset({
     "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
     "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
     "/inbox", "/inbox/verwerk", "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
+    # Fase 10, groep B. `/middelen` en `/rolefillers` draaien op DEZELFDE `overview.py` als
+    # `/node`, `/person` en `/admin`, die er al in stonden — dezelfde rendercode zag er dus anders
+    # uit afhankelijk van de URL. Dat was een gat in deze lijst, geen besluit. `/site-audit` is in
+    # fase 7 aangeraakt (taalresten) maar viel toen buiten de fase-9-scope.
+    "/middelen", "/rolefillers", "/site-audit",
 })
 
 _STATIC_TYPES = {
@@ -1301,15 +1337,52 @@ def _act_msg_post(c):
     from nooch_village import channels
     nxt, st, g, username = c.nxt, c.st, c.g, c.username
     kanaal = (g("kanaal") or "").strip()
-    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE, channels.DM):
+    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE,
+                                          channels.DM, channels.TOPIC):
         return nxt, "✗ unknown channel"
     ik = _web_actor_id(username, st)
     if not ik:
         return nxt, "✗ log in as a person to write — a message needs an author"
     if channels.soort_van(kanaal) == channels.DM and ik not in channels.dm_leden(kanaal):
         return nxt, "✗ that conversation is not yours"
+    # DE POORT STAAT OOK SERVER-SIDE, niet alleen als ontbrekend invoerveld. Een DM waarvan de
+    # tegenpartij een rol- of systeemnaam is (alle gemigreerde inbox-berichten) leest niemand; een
+    # bericht daarheen is een dead letter. Het scherm toont er geen veld, en deze regel zorgt dat
+    # een handmatige POST er ook niet langs komt.
+    from nooch_village.views.messages import kan_antwoorden
+    if not kan_antwoorden(st, kanaal, ik):
+        return nxt, "✗ nobody reads that channel — start a project or write to a person"
     entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
     return nxt, ("💬 posted" if entry else "✗ a message needs text")
+
+
+def _act_topic_add(c):
+    """Een los kanaal aanmaken: een onderwerp zonder project, cirkel of persoon eronder.
+
+    # AUTHZ: iedereen-ingelogd — dit VOEGT een gespreksplek toe en overschrijft of verwijdert
+    # niets. Zelfde niveau als `_claims_gate` sinds fase 5, en als `msg_post` hierboven: meedoen
+    # aan een gesprek is deelnemen, geen structuurmutatie. Een herkende auteur is wél nodig, zodat
+    # er van elk kanaal een maker bekend is.
+
+    DIT DRAAIT EEN EERDER BESLUIT OM. Bij fase 8 (19 september 2026) is expliciet gekozen: "één
+    cirkelkanaal per bestaande cirkel, geen vrije onderwerp-kanalen zoals #batch-4". Op 20
+    september is dat herzien, en de reden staat in `claude/implementatiebrief_opruiming_19sept.md`
+    bij fase 10 punt 1: met 442 projectkanalen is Messages onbruikbaar zonder zoeken én zonder zelf
+    een kanaal te kunnen beginnen. Een herziening, geen stille uitbreiding.
+
+    GEEN LIDMAATSCHAP. Iedereen ziet alle losse kanalen. Dat is een tweede nieuw datamodel-begrip
+    en hoort niet in dezelfde ronde als het eerste (besluit Stefan)."""
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to start a channel — a channel needs an owner"
+    naam = " ".join((g("naam") or "").split())
+    if not naam:
+        return nxt, "✗ give the channel a name"
+    kanaal = st.channels.maak_topic(naam, door=ik)
+    if not kanaal:
+        return nxt, "✗ give the channel a name"
+    return f"/messages?k={urllib.parse.quote(kanaal)}", f"💬 channel “{naam}” is open"
 
 
 def _act_keep_in_wiki(c):
@@ -1415,6 +1488,11 @@ def _act_pagina_voorstel(c):
         cur, voorstel=voorstel, waarom=g("waarom"),
         van_naam=(getattr(van, "name", "") or username or "someone"), van_id=van_id or "",
         reden=ontv.get("reden") or "")
+    # NIET OMGEZET NAAR EEN DM, en dat is een grens die B1 blootlegde. Een pagina-voorstel is geen
+    # signalering maar een VERZOEK MET EEN BESLISSING: `verzoek_besluit` biedt accepteren, weigeren
+    # en aanpassen aan, en leest het item terug op `nid`. Een DM heeft geen plek om "hier moet nog
+    # over beslist worden" te dragen — dat is precies de state die uit het model verdwijnt.
+    # Zolang er geen vervanging is blijft dit op `NotifStore` staan; zie het nachtlog.
     st.notif.add("role", ontv["rol"], "", by=van_id or (username or ""),
                  snippet=snippet, extra=extra)
     naar = _name(st.records.get(ontv["rol"])) or ontv["rol"]
@@ -2092,10 +2170,19 @@ def _vermeldingen_naar_kanalen(st, ment, *, pid: str, tekst: str, auteur: str,
             ontvangers = [tid]
         elif ty == "role" and afzender:
             ontvangers = [f.id for f in st.assign.fillers_of(tid) if f.type == "person"]
-        # Geen afzender, geen ontvanger, of jezelf vermelden → de oude weg.
+        # JEZELF VERMELDEN LEVERT NIETS OP. Eerst filteren, dán pas besluiten of er een andere weg
+        # nodig is — anders maakt `@jezelf` alsnog een kanaal met jezelf, en dat is precies wat
+        # fase 8 wilde voorkomen. Dit onderscheid (niets te doen vs. geen mens om heen te sturen)
+        # was er wél in de oude code en ging bijna verloren bij de omzetting naar DM.
+        zelf = bool(afzender) and ontvangers == [afzender]
         ontvangers = [o for o in ontvangers if o and o != afzender]
+        if zelf:
+            continue
         if not afzender or not ontvangers:
-            st.notif.add(ty, tid, pid, entry_id, by=auteur, snippet=tekst, extra=extra)
+            # Geen mens om heen te sturen: een rol zonder vervuller, of een auteur die geen kant
+            # van een DM kan zijn. `_signaleer` zoekt dan de rolvervuller of de terugval.
+            _signaleer(st, ty, tid, tekst, by=auteur,
+                       herkomst={"project": pid} if pid else None)
             n += 1
             continue
         for o in ontvangers:
@@ -3039,15 +3126,16 @@ def _act_vangst_verwerk(c):
             doel = wiki.ontvanger(rol, st.records, st.assign)
             if not doel.get("rol"):
                 return nxt, "✗ no mailbox found for this role"
-            n = st.notif.add("role", doel["rol"], "", by=(it.get("by_id") or (actor.id if actor else "")),
-                             snippet=tekst,     # met de hand ingetypt; ook als de vanger een gast is
-                             extra={notifications.MENS_GETYPT: True})
+            _signaleer(st, "role", doel["rol"], tekst,
+                       by=(it.get("by_id") or (actor.id if actor else "")))
             naam = _name(st.records.get(doel["rol"])) if st.records.get(doel["rol"]) else doel["rol"]
             waarom = f" ({doel['reden']})" if doel.get("reden") else ""
             detail = f"tension for {naam}{waarom}"
             st.werk.punt_resolve(circle, iid, otype, detail)
-            return nxt, f"✓ tension sent to {naam}" + (f" — {n.get('type') or 'not yet typed'}"
-                                                      if n.get("type") else "")
+            # De bevestiging noemde vroeger het TYPE dat de poort eraan gaf ("— naar_rol"). Dat veld
+            # bestond om de inbox te routeren en vervalt met de inbox; wat de lezer werkelijk wil
+            # weten is bij wie het terechtkwam, en dat staat er al.
+            return nxt, f"✓ tension sent to {naam}"
 
         if otype == "project":
             owner = g("owner")
@@ -3412,6 +3500,10 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
         # Zonder dat leidt de poort auteurschap af uit `by` — de indiener — en dan reist machinetekst
         # mee door een mens-pad en krijgt hij de bescherming die voor mensentaal bedoeld was.
         _merk = {} if van_mens is None else {notifications.MENS_GETYPT: bool(van_mens)}
+        # OOK NIET OMGEZET. Een werkoverleg-ACTIE is toegewezen werk met een afrondknop: hij komt
+        # terug via `_sluit_reden_terug` en `mark_done`, en de opdrachtgever krijgt bericht zodra
+        # hij af is. Dat is dezelfde grens als bij het pagina-voorstel: een DM kan "dit moet nog
+        # gebeuren" niet dragen. Zie het nachtlog — dit is wat B1 blootlegde.
         st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
                      snippet=tekst,          # geen eigen cap — de store leidt de preview af (#389)
                      extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
@@ -3439,11 +3531,8 @@ def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = 
     if not opdrachtgever or st.people.get(opdrachtgever) is None:
         return ""
     try:
-        n = st.notif.add("person", opdrachtgever, bron_project or "", by=(door or "village"),
-                         snippet=f"Klaar: {wat}",   # geen eigen cap (#389)
-                         extra={"type": "actie", "herkomst": "↳ wat je vroeg is afgerond",
-                                "afronding": True, "bron_project": bron_project})
-        return n.get("id", "")
+        return _signaleer(st, "person", opdrachtgever, f"Klaar: {wat}", by=(door or "village"),
+                          herkomst={"project": bron_project} if bron_project else None)
     except Exception:                                          # noqa: BLE001
         logging.getLogger("cockpit2.lus").exception("afrondings-melding mislukt")
         return ""
@@ -3739,13 +3828,11 @@ def _act_notif_add(c):
         role = (g("role") or "").strip()
         if not text:
             return c.nxt, "✗ empty tension"
-        _getypt = {notifications.MENS_GETYPT: True}      # jij typte dit zelf, letterlijk
         if role and st.records.get(role) is not None:
-            st.notif.add("role", role, "", by="zelf", snippet=text, extra=_getypt)
+            _signaleer(st, "role", role, text, by="zelf")
         else:
             actor = st.people.by_email(username) if username and username != "guest" else None
-            st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text,
-                         extra=_getypt)
+            _signaleer(st, "person", actor.id if actor else "", text, by="zelf")
         return c.nxt, "✓ tension added"
 
 
@@ -4900,7 +4987,7 @@ def _act_verzoek_besluit(c):
             # Een pagina-voorstel komt van een MENS; die leest zijn persoon-inbox.
             wie = str(pag.get("van_id") or "")
             if wie:
-                st.notif.add("person", wie, "", by=rol, snippet=bericht)
+                _signaleer(st, "person", wie, bericht, by=rol)
             return
         # De zin is hier al gevormd ("✗ je verzoek is geweigerd: …") en draagt de juiste WERKWOORD:
         # weigeren is geen sluiten. Alleen de route is gedeeld, niet de formulering.
@@ -4908,7 +4995,8 @@ def _act_verzoek_besluit(c):
                            by=_name(st.records.get(rol)) or rol, kern=bericht)
         van = str(n.get("by") or "")
         if van and mens_vervullers(st, van):
-            st.notif.add("role", van, n.get("project_id") or "", by=rol, snippet=bericht)
+            _signaleer(st, "role", van, bericht, by=rol,
+                       herkomst={"project": n.get("project_id")} if n.get("project_id") else None)
 
     if keuze == "accepteer" and pag:
         # Een PAGINA-voorstel is al concreet: de tekst ís de vraag, dus accepteren is de handeling
@@ -5150,6 +5238,7 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "msg_post": _act_msg_post,
+    "topic_add": _act_topic_add,
     "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
@@ -5385,13 +5474,22 @@ def make_handler(data_dir: str, csrf_token: str,
                 # DE ORGANISATIEBOOM ZAT IN DE RECHTERRAIL en staat sinds fase 7 in de zijbalk
                 # links, bij de rest van de navigatie (prototype v15). Hij wordt hier gevuld en niet
                 # in `_nav()` zelf, omdat hij de records nodig heeft en `_nav()` geen stores kent —
-                # zelfde patroon als de begroeting hieronder. Pagina's met een EIGEN rail (de
-                # node-pagina's) houden die; daar staat de boom met de huidige node opengeklapt.
+                # zelfde patroon als de begroeting hieronder.
+                #
+                # FASE 10 PUNT 3: de node-pagina's hielden tot nu toe hun EIGEN rail met dezelfde
+                # boom erin — twee keer hetzelfde op één scherm. Die rail is weg. Wat die rail
+                # extra deed, de huidige node openklappen en markeren, gebeurt nu hier: het `id`
+                # uit de query gaat mee naar `_tree_html`. Zo verdwijnt de dubbele weergave zonder
+                # dat de positie-in-de-organisatie verloren gaat.
                 if _st is not None and _SIDE_ORG in body:
                     try:
                         from nooch_village.views.overview import _tree_html
+                        _hier = ""
+                        if (self.path or "").split("?", 1)[0] == "/node":
+                            _hier = urllib.parse.parse_qs(
+                                urllib.parse.urlparse(self.path).query).get("id", [""])[0]
                         body = body.replace(
-                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, '')}</div>", 1)
+                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, _hier)}</div>", 1)
                     except Exception:
                         pass
                 # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde
@@ -5545,7 +5643,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 _ik = _web_actor_id(username, st)
                 self._send(render_messages(st, ik=_ik, kanaal=(qs.get("k") or [""])[0],
                                            csrf_token=effective_csrf,
-                                           msg=(qs.get("msg") or [""])[0]))
+                                           msg=(qs.get("msg") or [""])[0],
+                                           q=(qs.get("q") or [""])[0]))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
@@ -5675,7 +5774,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     _p = st.people.by_email(username)
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
-                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done),
+                           chrome=False)
                 return
             if path == "/search":
                 # Globale zoekopdracht vanuit de header: roles, projects, insights, signals.
@@ -5979,6 +6079,28 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send(_auth.login_page(next_url, error="Email address or password is incorrect."))
                 return
 
+
+            # ── Markdown-voorbeeld (fragment-endpoint voor de editor-werkbalk) ─────────────
+            if path == "/md-preview":
+                # AUTHZ: iedereen-ingelogd — dit LEEST niets en SCHRIJFT niets. Het rendert de tekst
+                # die de gebruiker zelf net heeft getypt en stuurt hem terug. Geen store wordt
+                # aangeraakt, dus er is niets om te beschermen behalve de sessie zelf.
+                #
+                # WAAROM SERVER-SIDE EN GEEN JS-RENDERER. Het voorbeeld moet exact hetzelfde tonen
+                # als wat je na opslaan ziet. Een markdown-parser in JS zou een TWEEDE renderer
+                # zijn naast `_md`, en die twee lopen uiteen zodra er één regel bij komt —
+                # `reference, don't copy`. Bovendien escapet `_md` eerst en pas daarna de
+                # opmaak-regexes; een eigen JS-versie zou dat opnieuw goed moeten doen.
+                if sessions is not None and self._session_username() is None:
+                    self.send_response(403); self.end_headers(); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self.send_response(403); self.end_headers(); return
+                tekst = (form.get("tekst") or [""])[0]
+                self._send(_md(tekst[:20000]) or "<p class='muted'>Nothing to preview yet.</p>",
+                           chrome=False)
+                return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
             if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):

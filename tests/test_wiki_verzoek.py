@@ -50,6 +50,13 @@ def _laatste(st, target_id):
 
 # ── routering: waar landt het verzoek? ──────────────────────────────────────
 
+def _dm_teksten_aan(st, persoon_id):
+    """De DM-teksten die deze persoon heeft gekregen. Het ANTWOORD op een verzoek is sinds
+    20 september 2026 een DM; het verzoek zelf staat nog in `NotifStore`, want dat draagt een
+    beslissing (accepteren/weigeren/aanpassen) en een DM kan dat niet."""
+    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+            for e in st.channels.trail(k)]
+
 def test_mens_vervulde_eigenaar_krijgt_het_zelf(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     _persoon(st, "Alice", "alice@nooch.earth", OWNER)
@@ -204,9 +211,8 @@ def test_weigeren_schrijft_niets_en_antwoordt_de_persoon(tmp_path):
     assert "geweigerd" in msg
     assert cockpit2._Stores(dd).att.get(a.id).body == "oud"
     # het antwoord gaat naar de PERSOON Bob — een 'rol' met zijn persoon-id zou nergens aankomen
-    terug = [x for x in cockpit2._Stores(dd).notif.all()
-             if x.get("target_type") == "person" and x.get("target_id") == bob.id]
-    assert terug and "geweigerd" in terug[-1]["snippet"]
+    terug = _dm_teksten_aan(cockpit2._Stores(dd), bob.id)
+    assert terug and "geweigerd" in terug[-1]
 
 
 def test_aanpassen_stuurt_herformulering_terug_zonder_te_schrijven(tmp_path):
@@ -221,9 +227,8 @@ def test_aanpassen_stuurt_herformulering_terug_zonder_te_schrijven(tmp_path):
         {"nid": [n["id"]], "keuze": ["aanpassen"], "tekst": ["noem ook de leverancier"], "next": ["/"]},
         username="alice@nooch.earth")
     assert cockpit2._Stores(dd).att.get(a.id).body == "oud"
-    terug = [x for x in cockpit2._Stores(dd).notif.all()
-             if x.get("target_type") == "person" and x.get("target_id") == bob.id]
-    assert terug and "herformulering" in terug[-1]["snippet"]
+    terug = _dm_teksten_aan(cockpit2._Stores(dd), bob.id)
+    assert terug and "herformulering" in terug[-1]
 
 
 def test_wie_de_rol_niet_vervult_kan_niet_beslissen(tmp_path):

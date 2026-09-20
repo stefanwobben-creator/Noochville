@@ -511,17 +511,27 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "") -> str:
     nxt = next_url or f"/node?id={a.anchor}&tab={_tab_for(a.kind)}"
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
-    return (f"<details class='qadd'><summary class='muted'>edit</summary>"
-            f"<form method='post' action='/action' class='qadd-form'>"
+    # INLINE BEWERKEN (fase 10 punt 4). Wat er NIET verandert: één formulier, één submit, één
+    # `artefact_edit`-actie, één `update()`-aanroep, één versie-entry met change_note "bewerkt".
+    # Wat wél verandert is waar de knop staat. De opslaan-balk is `hidden` tot er echt iets is
+    # getypt (`data-qadd-dirty`), en de tekst op de pagina opent het formulier bij een klik
+    # (`data-qadd-open`, zie nooch.js). De `<details>` blijft als drager staan en niet uit
+    # nostalgie: zonder JS is de "edit"-summary de enige manier om er nog in te komen, en op een
+    # lijst met twintig artefacten wil je geen twintig openstaande tekstvakken.
+    #
+    # Eén save-actie en dus ÉÉN change_note, bewust: per veld opslaan zou drie versie-entries
+    # geven voor wat de schrijver als één wijziging ervaart (besluit Stefan, 20 september 2026).
+    return (f"<details class='qadd' data-qadd-inline><summary class='muted'>edit</summary>"
+            f"<form method='post' action='/action' class='qadd-form' data-qadd-dirty>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<label class='att-lbl'>Title</label><input name='title' value='{_e(a.title)}'>"
             f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
             f"{urlf}"
-            f"<div class='qadd-row'>"
+            f"<div class='qadd-row qadd-bar'>"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Save</button>"
-            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"<button type='button' class='qadd-x' data-qadd-cancel "
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
@@ -881,15 +891,19 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                 f"</div>")
     else:
         meet = ""
-    # Breadcrumb weggehaald (founder 23 jul): de hiërarchie staat al in de organisatieboom-rail rechts.
+    # GEEN RECHTERRAIL MEER (fase 10 punt 3). De organisatieboom stond hier én in de zijbalk
+    # links: twee keer dezelfde boom op hetzelfde scherm. De linker blijft, deze gaat weg.
+    # Er verdwijnt niets: de volledige rollenlijst staat op de Roles-tab hieronder, en de positie
+    # in de organisatie (welke node je open hebt) wordt nu in de ZIJBALK gemarkeerd — `_send`
+    # geeft de huidige node-id door aan `_tree_html`, wat de rail hiervoor deed.
+    # Breadcrumb was al eerder weg (founder 23 jul), om dezelfde reden: de hiërarchie stond er al.
     main = (f"<div class='c2-main'>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
-    rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
-             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
+             f"<div class='c2-wrap'>{main}</div>{modal}")
     return _page(_name(rec), inner)
 
 
@@ -1022,12 +1036,11 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
             f"<div class='muted'>{_e(subtitle)}</div>"
             f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
-    rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
-             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
+             f"<div class='c2-wrap'>{main}</div>{modal}")
     return _page(name, inner)
 
 

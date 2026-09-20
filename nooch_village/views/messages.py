@@ -29,23 +29,81 @@ def _label(st, kanaal: str, ik: str = "") -> str:
     if soort == channels.CIRCLE:
         rec = st.records.get(doel)
         return _name(rec) if rec is not None else doel
-    ander = next((x for x in channels.dm_leden(kanaal) if x != ik), "")
-    return _person_name(st, ander) or ander or "direct"
+    if soort == channels.TOPIC:
+        return st.channels.naam_van(kanaal) or doel
+    leden = channels.dm_leden(kanaal)
+    # EEN KANAAL MET JEZELF BESTAAT ECHT. Op prod is er één (`dm:<stefan>|<stefan>`): notificaties
+    # waarvan de afzender dezelfde mens is als de vervuller van de doelrol — jij die je eigen rol
+    # aanspreekt. Zonder deze regel heet dat kanaal "direct", net als elk ander naamloos kanaal.
+    if leden and len(set(leden)) == 1:
+        return "Yourself"
+    ander = next((x for x in leden if x != ik), "")
+    naam = _person_name(st, ander)
+    if naam:
+        return naam
+    # De tegenpartij is geen persoon. Sinds de inbox-migratie kan dat: een gesignaleerd bericht
+    # draagt de ROL of het systeem dat het stuurde als tegenpartij. Toon dan de rolnaam, en anders
+    # de ruwe id — nooit "direct", want dan lijken twintig kanalen op elkaar.
+    rec = st.records.get(ander) if ander else None
+    return (_name(rec) if rec is not None else "") or ander or "direct"
 
 
-def _kanalen(st, ik: str) -> dict[str, list[str]]:
-    """De kanalen die deze mens ziet, per groep.
+def kan_antwoorden(st, kanaal: str, ik: str = "") -> bool:
+    """Mag er in dit kanaal geschreven worden?
+
+    Alleen als de tegenpartij van een DM een BESTAANDE PERSOON is. Bij 333 van de 338 gemigreerde
+    inbox-berichten is de afzender een rol- of systeemnaam (`compliance`, `claims-checker`, …), en
+    die leest geen berichten. Een antwoordveld dat niets bereikt is erger dan geen antwoordveld —
+    dat is het dead-letter-patroon dat in dit dorp al eens is vastgelegd."""
+    if channels.soort_van(kanaal) != channels.DM:
+        return True
+    leden = channels.dm_leden(kanaal)
+    if leden and len(set(leden)) == 1:
+        return True          # je eigen kanaal: notities aan jezelf mogen gewoon
+    ander = next((x for x in leden if x != ik), "")
+    return bool(ander) and st.people.get(ander) is not None
+
+
+#: Hoeveel projectkanalen er ZONDER zoekterm getoond worden. Op productie staan er 442, en die
+#: lijst is geen lijst meer maar een muur — je scrolt langs honderden namen op zoek naar één.
+#: Cirkels (20) en DM's blijven altijd compleet: die zijn op te overzien en je kiest er bewust een.
+PROJECT_CAP = 25
+
+
+def _laatst(st, kanaal: str) -> float:
+    e = st.channels.laatste(kanaal)
+    return float((e or {}).get("at") or 0)
+
+
+def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int]]:
+    """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL vóór filteren.
 
     Projecten: die waar al een gesprek in staat — een leeg project-kanaal is geen gesprek maar een
     project, en dat staat op het bord. Cirkels: alle bestaande, ook lege, want een cirkelkanaal is
-    een plek waar je iets kúnt zeggen. Direct: alleen de jouwe."""
+    een plek waar je iets kúnt zeggen. Direct: alleen de jouwe.
+
+    Zonder zoekterm staan de projectkanalen op VOLGORDE VAN HET LAATSTE BERICHT en afgekapt op
+    `PROJECT_CAP`. Alfabetisch afkappen zou willekeurig zijn; op recentheid afkappen laat precies
+    zien waar het gesprek loopt. Mét zoekterm vervalt de cap — dan weet je wat je zoekt."""
     proj = [channels.project_kanaal(p["id"]) for p in st.projects.all()
             if (p.get("log") or []) and not p.get("archived")]
     cirk = [channels.circle_kanaal(r.id) for r in st.records.all()
             if not getattr(r, "archived", False) and getattr(r, "type", None)
             and str(getattr(r.type, "value", r.type)) == "circle"]
     dms = st.channels.kanalen_van(ik) if ik else []
-    return {"Projects": proj, "Circles": cirk, "Direct": dms}
+    # Losse kanalen: ALLE, ook lege. Een kanaal dat je net hebt aangemaakt en niet ziet staan,
+    # lijkt mislukt. En iedereen ziet ze allemaal — er is bewust geen lidmaatschap-begrip.
+    onderwerpen = st.channels.topics()
+    groepen = {"Projects": proj, "Circles": cirk, "Topics": onderwerpen, "Direct": dms}
+    totaal = {g: len(r) for g, r in groepen.items()}
+
+    naald = " ".join((q or "").split()).lower()
+    if naald:
+        groepen = {g: [k for k in r if naald in _label(st, k, ik).lower()]
+                   for g, r in groepen.items()}
+    else:
+        groepen["Projects"] = sorted(proj, key=lambda k: -_laatst(st, k))[:PROJECT_CAP]
+    return groepen, totaal
 
 
 def _bericht(st, e: dict) -> str:
@@ -65,33 +123,75 @@ def _bericht(st, e: dict) -> str:
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
-                    msg: str = "") -> str:
-    groepen = _kanalen(st, ik)
+                    msg: str = "", q: str = "") -> str:
+    groepen, totaal = _kanalen(st, ik, q)
     if not kanaal:
         # OPEN OP IETS DAT GEZEGD IS. De eerste versie pakte simpelweg het eerste kanaal, en dat
         # was de anchor-cirkel: je landde op "Nothing said here yet" terwijl er drie kanalen
         # verderop wél gesprek stond. Een leeg kanaal als voordeur laat het scherm dood lijken.
-        volgorde = [k for g in ("Direct", "Projects", "Circles") for k in groepen[g]]
+        # LET OP: `groepen` is hier al gefilterd en afgekapt. Voor de voordeur wil je juist het
+        # volledige veld, anders hangt "waar land ik" af van een zoekterm.
+        alles, _ = _kanalen(st, ik, "")
+        volgorde = [k for g in ("Direct", "Topics", "Projects", "Circles") for k in alles[g]]
         kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
                       volgorde[0] if volgorde else "")
+
+    # Het zoekveld is een GET-formulier en geen JS-filter: zo werkt hij zonder scripts, is de
+    # uitkomst deelbaar als URL, en hoeven er geen 442 regels naar de browser die je toch verbergt.
+    zoek = (f"<form class='msg-zoek' method='get' action='/messages'>"
+            f"<input type='hidden' name='k' value='{_e(kanaal)}'>"
+            f"<label class='att-lbl' for='msg-q'>Find a channel</label>"
+            f"<input id='msg-q' type='search' name='q' value='{_e(q)}' "
+            f"placeholder='Project, circle or person…'>"
+            f"<div class='qadd-row'><button class='btn sm' type='submit'>Search</button>"
+            + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if q else "")
+            + "</div></form>")
+
+    # Een kanaal beginnen. Tot 20 september kon dat niet: een kanaal bestond omdat zijn onderwerp
+    # bestond (een project, een cirkel, een persoon). Dit is het eerste kanaal dat een mens zelf
+    # maakt — zie `_act_topic_add` voor de poort en voor de herziening die eraan voorafging.
+    nieuw = ""
+    if csrf_token and ik:
+        nieuw = (f"<details class='qadd'><summary class='muted'>＋ new channel</summary>"
+                 f"<form method='post' action='/action' class='qadd-form'>"
+                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='next' value='/messages'>"
+                 f"<label class='att-lbl' for='topic-naam'>Channel name</label>"
+                 f"<input id='topic-naam' name='naam' maxlength='80' "
+                 f"placeholder='Batch 4, Packaging, Trade fair…'>"
+                 f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+                 f"value='topic_add'>Create</button></div></form></details>")
 
     lijst = []
     for groep, rij in groepen.items():
         if not rij:
             continue
-        lijst.append(f"<p class='muted msg-groep'>{_e(groep)}</p>")
+        aantal = ""
+        if groep == "Projects" and not q and totaal[groep] > len(rij):
+            aantal = (f" <span class='msg-telling'>{len(rij)} of {totaal[groep]} "
+                      f"&middot; search for the rest</span>")
+        elif q:
+            aantal = f" <span class='msg-telling'>{len(rij)} of {totaal[groep]}</span>"
+        lijst.append(f"<p class='muted msg-groep'>{_e(groep)}{aantal}</p>")
         for k in rij:
             aan = " on" if k == kanaal else ""
-            lijst.append(f"<a class='msg-kanaal{aan}' href='/messages?k={_e(k)}'>"
+            qs = f"&q={_e(q)}" if q else ""
+            lijst.append(f"<a class='msg-kanaal{aan}' href='/messages?k={_e(k)}{qs}'>"
                          f"{_e(_label(st, k, ik))}</a>")
-    nav = f"<nav class='msg-lijst'>{''.join(lijst) or '<p class=muted>No channels yet.</p>'}</nav>"
+    leeg = ("<p class='muted'>No channel matches that.</p>" if q
+            else "<p class='muted'>No channels yet.</p>")
+    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(lijst) or leeg}</nav>"
 
     trail = st.channels.trail(kanaal) if kanaal else []
     draad = "".join(_bericht(st, e) for e in trail) or (
         "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
     schrijf = ""
-    if kanaal and csrf_token and ik:
+    if kanaal and not kan_antwoorden(st, kanaal, ik):
+        schrijf = ("<p class='muted'>No reply box: the other side of this channel is a role, not a "
+                   "person, and a role does not read messages. Need something done? Start a "
+                   "project or write to the person who fills the role.</p>")
+    elif kanaal and csrf_token and ik:
         schrijf = (f"<form method='post' action='/action' class='qadd-form'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
@@ -107,7 +207,8 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
 
     kop = _e(_label(st, kanaal, ik)) if kanaal else "Messages"
     main = (f"<div class='c2-main'><h1>Messages</h1>"
-            f"<p class='muted'>One channel type, three flavours: a project, a circle, or a person. "
+            f"<p class='muted'>One channel type, four flavours: a project, a circle, a topic of "
+            f"your own, or a person. "
             f"Your queue is on <a href='/inbox'>Inbox</a> &mdash; that is work to handle, not talk.</p>"
             f"{_banner(msg)}"
             f"<div class='msg-layout'>{nav}"

@@ -23,8 +23,8 @@
 .nu {
   --nu-neon: #00FF00;
   --nu-accent: #00A551;
-  --nu-accent-text: #14713C;
-  --nu-bg-alt: #E9FBE9;
+  --nu-accent-text: #1F9D55;
+  --nu-bg-alt: #E2FFE3;
   --nu-bg: #FFFAFA;
   --nu-surface: #FFFFFF;
   --nu-text: #000000;
@@ -42,9 +42,9 @@
 
 /* ── Typografie ────────────────────────────────────────────────────────────────────────────── */
 .nu h1 { font-family: var(--nu-font); font-weight: 700; font-size: clamp(1.5rem,1.4vw + 1rem,2rem);
-  line-height: 1.15; color: var(--nu-text); letter-spacing: -.01em; }
+  line-height: 1.15; color: var(--nu-text); text-transform: uppercase; letter-spacing: -.005em; }
 .nu h2, .nu h3 { font-family: var(--nu-font); font-weight: 700; color: var(--nu-text);
-  text-transform: none; letter-spacing: 0; }
+  text-transform: uppercase; letter-spacing: .01em; }
 .nu a { color: var(--nu-accent-text); }
 .nu .muted { color: var(--nu-muted); }
 
@@ -52,15 +52,19 @@
 .nu .card, .nu .box, .nu .kpi, .nu table {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
 .nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
-.nu .c2-subnav a, .nu .c2-navbtn { border-radius: 0; color: var(--nu-text); }
+/* Navigatie in hoofdletters, net als de koppen en de knoppen: de referentie zet SHOP STORE
+   MISSION CONTACT in de topbar. Dit is geen aparte smaakkeuze maar dezelfde regel doorgetrokken. */
+.nu .c2-subnav a, .nu .c2-navbtn { border-radius: 0; color: var(--nu-text);
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
 .nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
-.nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 999px; }
+.nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
 
 /* ── Knoppen: zwart-op-wit, hover inverteert ──────────────────────────────────────────────── */
 .nu .btn {
   font-family: var(--nu-font); font-weight: 700; font-size: .9rem; border: var(--nu-border);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
-  padding: .5em 1em; min-height: 38px; box-shadow: none; }
+  padding: .5em 1em; min-height: 38px; box-shadow: none;
+  text-transform: uppercase; letter-spacing: .04em; }
 .nu .btn:hover { background: var(--nu-text); color: var(--nu-surface); }
 .nu .btn.ok { background: var(--nu-neon); border-color: var(--nu-text); color: var(--nu-text); }
 .nu .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
@@ -101,7 +105,8 @@
   clip-path: polygon(50% 0, 100% 100%, 0 100%); }                                  /* driehoek */
 
 /* ── Tabs, filters, invoer ────────────────────────────────────────────────────────────────── */
-.nu .c2-tabs a { border-radius: 0; font-weight: 700; color: var(--nu-muted); }
+.nu .c2-tabs a { border-radius: 0; font-weight: 700; color: var(--nu-muted);
+  text-transform: uppercase; letter-spacing: .05em; }
 .nu .c2-tabs a.on { border: var(--nu-border); border-bottom-color: var(--nu-surface);
   background: var(--nu-surface); color: var(--nu-text); }
 .nu .cl-filter { border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
@@ -161,6 +166,7 @@
    `.addlink` en `.vswitch a` zijn links die als knop worden gelezen. Ze droegen nog de oude
    pill-vorm met groene vulling — één scherm met twee knopvormen leest als twee systemen. */
 .nu .addlink, .nu .vswitch a, .nu .flink {
+  text-transform: uppercase; letter-spacing: .04em;
   border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); font-weight: 700; padding: .3em .8em; }
 .nu .addlink:hover, .nu .vswitch a:hover, .nu .flink:hover {
@@ -177,3 +183,262 @@
 /* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
 .nu .cl-head h3 a { color: var(--nu-text); }
 .nu .msg-item { border-bottom: 1.5px solid var(--nu-border-subtle); }
+
+/* ── `att-*` en `qadd-*`: de twee families die overal terugkomen ───────────────────────────────
+   Deze twee zitten in zes van de elf herbouwde views (node/person/admin, wiki/pagina, vangst,
+   doelen, messages, projects) en waren samen goed voor ~40 klasse-gebruiken die de oude look
+   bleven dragen: 9px radius, crème rand, en op het qadd-tekstvak zelfs een schaduw. Eén blok
+   hier raakt ze allemaal — dat is de goedkoopste winst van groep A.
+   Specificiteit bewust `.nu .x y` (0,2,1) en niet `.nu y`: `.qadd-form textarea` is zelf (0,1,1)
+   en zou bij gelijke specificiteit op bronvolgorde gaan berusten. Dat is geen afspraak, dat is
+   toeval dat blijft werken tot iemand de link-volgorde omzet. */
+.nu .att-lbl { color: var(--nu-muted); font-family: var(--nu-font); letter-spacing: .06em; }
+.nu .att-body { color: var(--nu-text); }
+.nu .att-name { color: var(--nu-text); }
+.nu .att-ic { color: var(--nu-text); }
+.nu .att-sep { background: var(--nu-text); height: 1.5px; }
+/* `.attcard` stond niet in mijn eerste telling: die scande de views die ik al had
+   bekeken, en deze kaart leeft alleen in `projects.py`. De structurele test vond hem wel.
+   Zonder deze regel zat er een crème kaart met ronde hoeken óm zwart-gestylde inhoud. */
+.nu .attcard { background: var(--nu-surface); border: var(--nu-border); border-radius: 0; }
+.nu .att-pop { border-radius: 0; }
+.nu .att-pop input[type=text], .nu .att-pop input[name=url], .nu .att-pop input[name=title] {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+.nu .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
+  font-weight: 600; }
+.nu .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
+.nu .qadd-form textarea { border: var(--nu-border); border-radius: 0; box-shadow: none;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+.nu .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
+
+/* ── De eyebrow: één definitie voor wat er al elf keer stond ──────────────────────────────────
+   De referentie zet boven elke kop een klein hoofdletter-labeltje: THE PROOF, THE PRICE, THE PACT,
+   THE PEOPLE, WHAT'S IN IT. Dat component leek te ontbreken — maar het bestond al, elf keer, onder
+   elf namen: `.c2-sec h3`, `.tree h3`, `.pcol-h`, `.fkicker`, `.rovm-kind`, `.sec-kop`, `.menu-h`,
+   `.dk`, `.att-lbl`, `.cl-group h4`, `.chip.coral-solid` — en de structurele test vond er nog
+   vijf op de negentien schermen: `.psec-h`, `.pchip-k`, `.rail-kop`, `.wz-k`, `.wz-clab`.
+   Zestien namen dus, allemaal ~.7rem, uppercase, letter-spacing .04em, gewicht 700 — hetzelfde
+   ding, zestien keer apart opgeschreven.
+
+   Een TWAALFDE naam toevoegen zou dat erger maken. Dus: `.nu-eyebrow` is de definitie, en de elf
+   bestaande namen wijzen ernaar binnen `.nu`. Zelfde regel als `reference, don't copy`, nu op een
+   stijl in plaats van op een getal. Buiten `.nu` blijft alles zoals het was. */
+.nu .nu-eyebrow,
+.nu .c2-sec h3, .nu .tree h3, .nu .pcol-h, .nu .fkicker, .nu .rovm-kind,
+.nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
+.nu .gs-group, .nu .gs-kind {
+  font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; }
+
+/* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom
+   zwart. Een grijze kop naast een zwart merkteken leest als twee verschillende dingen. */
+.nu .nu-eyebrow,
+.nu .c2-sec h3, .nu .tree h3, .nu .fkicker, .nu .rovm-kind,
+.nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
+.nu .gs-group, .nu .gs-kind {
+  color: var(--nu-muted); }
+.nu .pcol-h { color: var(--nu-text); }
+
+/* ── De groepskop op het bord ─────────────────────────────────────────────────────────────────
+   `.swim-h` ("Creator of Shoes (4)") stond op `--green-dark` (#14713C) — de kleur die in geen van
+   beide referentiebeelden voorkomt. Het is bovendien een `div`, dus de kopregel `.nu h2, .nu h3`
+   liep er langs. Alleen de browser liet dat zien; in de bron is het een kop als elke andere. */
+.nu .swim-h { color: var(--nu-text); font-family: var(--nu-font); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .02em; }
+
+/* ══ GROEP A · projects.py (/projects, /project) ═══════════════════════════════════════════════
+   51 klassen droegen hier nog de oude look. Ze zijn niet op naam aangepakt maar per PATROON — wat
+   ze delen is een 1px crème rand met 9px radius, grijstinten uit een ander palet, of een
+   accentkleur die in geen van beide referentiebeelden voorkomt.
+
+   Over die accentkleuren, gemeten in plaats van aangenomen (elke pixel geteld):
+     --coral   #FF6B5B    0 px in de e-mail, 1 px op de productpagina   → geen merkkleur
+     --goal    #6A4FA0    0 px                5 px                      → geen merkkleur
+     ai-paars  #7A5BD1    0 px                0 px                      → geen merkkleur
+     --yellow  #FFCE2E   18 px              662 px                      → WEL aanwezig (de sterren)
+   Paars en koraal worden hier dus neutraal; geel blijft, want dat staat er echt.
+   Rood blijft als `--nu-danger` bestaan: een foutkleur is functioneel nodig, ook al staat hij niet
+   op een productfoto. Dat is een keuze, geen meting — daarom staat hij hier benoemd. */
+
+/* 1 · Omhulsels: 1px crème rand + 9px radius → 2px zwart, vierkant */
+.nu .ctrl, .nu .fieldform, .nu .fbubble, .nu .box-details, .nu .datepop,
+.nu .vzblock, .nu .ovl-box, .nu .pkaart-rail, .nu .title-edit {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+.nu .pkaart-rail { border-left: var(--nu-border); border-top: none;
+  border-right: none; border-bottom: none; }
+
+/* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
+.nu .railsplit, .nu .menu-sep, .nu .einddoc-split { background: var(--nu-text); height: 1.5px; }
+
+/* 3 · Grijstinten uit het oude palet → één muted */
+.nu .pf, .nu .fstamp, .nu .rail-l, .nu .psec-bij, .nu .pkaart-crumb, .nu .vz-t,
+.nu .mk, .nu .einddoc-sigsep, .nu .pbadge, .nu .pstatus {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .rail-v, .nu .ptitle-ro, .nu .einddoc-sig { color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+/* 4 · Groen dat niet in de beelden staat (#14713C / --green-tint) */
+.nu .menuitem { color: var(--nu-text); background: none; font-weight: 700; }
+.nu .menuitem.on { background: var(--nu-bg-alt); }
+.nu .pchip-v { color: var(--nu-text); font-weight: 600; }
+
+/* 5 · Accentkleuren zonder merkdekking → neutraal, betekenis blijft in het WOORD staan */
+.nu .doel { background: var(--nu-surface); border-color: var(--nu-text); }
+.nu .pbar { background: var(--nu-text); }
+.nu .av.ai, .nu .ai { background: var(--nu-text); color: var(--nu-surface); }
+.nu .av { background: var(--nu-text); color: var(--nu-surface); font-family: var(--nu-font); }
+.nu .dellink, .nu .vz-h { color: var(--nu-danger); font-family: var(--nu-font); }
+.nu .chip.coral-solid { background: var(--nu-danger); color: var(--nu-surface);
+  border-color: var(--nu-danger); }
+.nu .amber { background: var(--nu-bg); color: var(--nu-text); border: 1.5px solid var(--nu-text); }
+.nu .outline { background: none; border: var(--nu-border); color: var(--nu-text); }
+
+/* 6 · De overlay zelf */
+.nu .ovl { background: rgba(0,0,0,.55); }
+.nu .ovl-x { color: var(--nu-text); font-family: var(--nu-font); }
+.nu .psec-head { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .clabel { border-radius: 0; }
+
+/* 7 · De staart: nog een pil-radius, twee omhulsels en een losse coral */
+.nu .einddoc-seggroup { border: var(--nu-border); border-radius: 0; }
+.nu .einddoc-seg { background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); border-radius: 0; }
+.nu .einddoc-kern { color: var(--nu-text); }
+.nu .eff, .nu .cardmenu-b { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
+.nu .danger { color: var(--nu-danger); }
+.nu .car { color: var(--nu-muted); }
+
+/* ══ GROEP A · inbox.py (/inbox, /inbox/verwerk — de lade en de verwerk-lezer) ═════════════════
+   37 klassen, en anders dan bij `projects.py` zit het zwaartepunt hier niet op randen maar op
+   GROEN als achtergrond: `--green-tint` achter de leesregel, de kop van de lade, de teller en de
+   swipe-hint. Dat is dezelfde kleur-alleen-signalering die fase 9 uit het bord haalde. De vorm
+   (de dashed outline op de actieve regel) blijft; alleen de vulling wordt rustig. */
+
+/* 1 · Omhulsels */
+.nu .ibx-row, .nu .wo-oc, .nu .rdr-tool, .nu .rdr-kader, .nu .rdr-vier,
+.nu .gk, .nu .ibx-drawer, .nu .ibx-modal {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+.nu .ibx-iframe { background: var(--nu-bg); }
+.nu .wo-ocd { background: var(--nu-bg); }
+
+/* 2 · Grijstinten → één muted */
+.nu .ibx-meta, .nu .ibx-sub, .nu .ibx-wat, .nu .ibx-sectie, .nu .ibx-empty,
+.nu .ibx-cli, .nu .ibx-x, .nu .ibx-trash, .nu .ibx-mx, .nu .fsep {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* 3 · Groen als vulling → rustig, met de vorm als drager
+       `.rdr-row` houdt zijn dashed outline: dát is het signaal, niet de tint erachter. */
+.nu .rdr-row { background: var(--nu-bg-alt); outline-color: var(--nu-text); }
+.nu .ibx-head { background: var(--nu-bg-alt); border-bottom: var(--nu-border); }
+.nu .ibx-kader, .nu .ibx-swipe { color: var(--nu-muted); }
+.nu .ibx-dot { background: var(--nu-text); }
+.nu .ibx-dot.read, .nu .read { background: var(--nu-muted); }
+
+/* 4 · De laatste pil-radiussen in dit scherm */
+.nu .ibx-plus, .nu .ibx-hct, .nu .ibx-ct { border-radius: 0; }
+.nu .ibx-plus { border: var(--nu-border); background: var(--nu-surface); color: var(--nu-text); }
+.nu .ibx-hct, .nu .ibx-ct { background: var(--nu-neon); color: var(--nu-text);
+  font-family: var(--nu-font); font-weight: 700; }
+
+/* 5 · Fout blijft rood, want een foutkleur is functioneel */
+.nu .ibx-err { color: var(--nu-danger); background: var(--nu-surface);
+  border: 1.5px solid var(--nu-danger); }
+
+/* 6 · De scrim onder de lade */
+.nu .ibx-scrim { background: rgba(0,0,0,.45); }
+
+/* 7 · De staart van inbox.py */
+.nu .ibx-btn, .nu .ibx-alaan, .nu .ibx-add {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); }
+.nu .ibx-add { border-width: 0 0 2px 0; }
+.nu .einddoc-body { color: var(--nu-text); }
+.nu .done { color: var(--nu-muted); }
+.nu .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* ══ GROEP A · de staart: wizard.py, search.py, overview.py ═══════════════════════════════════
+   `wizard.py` (/project/nieuw) is de aanleiding van deze hele groep: de route stond al in
+   `_NU_ROUTES`, maar de wizard rendert met een eigen `wz-*`-familie en `nooch-ui.css` stuurde daar
+   geen enkele klasse van aan. Route in de lijst ≠ herstyled. Drie van de elf klassen hier dragen
+   een 999px-pil en één een box-shadow — allebei dingen die in de referentie nul keer voorkomen. */
+
+/* wizard.py */
+.nu .wz-hint, .nu .wz-who, .nu .wz-x, .nu .wz-rm {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .wz-btn, .nu .wz-chip, .nu .wz-add, .nu .wz-badge {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
+.nu .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; }
+.nu .wz-itxt { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font); }
+.nu .big { color: var(--nu-muted); }
+
+/* search.py — `gs-group` en `gs-kind` zijn eyebrows onder een andere naam en staan daarom in de
+   gedeelde eyebrow-definitie hierboven, niet in een eigen blok. */
+.nu .gs-empty, .nu .gs-snip, .nu .gs-more, .nu .gs-didyoumean {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .gs-hit { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); }
+.nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
+
+/* overview.py */
+.nu .manage-ico, .nu .fperson { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .tree-c { font-family: var(--nu-font); color: var(--nu-text); }
+.nu .stack-av { border-color: var(--nu-surface); }
+.nu .av.green, .nu .green { background: var(--nu-text); color: var(--nu-surface); }
+
+/* groep B · `/site-audit` — de laatste pil buiten de negentien schermen */
+.nu .seg { border: var(--nu-border); border-radius: 0; }
+
+/* ══ GROEP C · roloverleg.py en werkoverleg.py ═════════════════════════════════════════════════
+   Deze twee stonden al in `_NU_ROUTES` maar zijn in fase 7/8 nooit herbouwd: ze kregen de
+   body-klasse op grond van de fase-9-brief ("de governance- en tactical-meeting-modals krijgen
+   dezelfde visuele stijl"), niet op grond van een herbouw. Daarom lag hier meer werk dan bij de
+   rest van groep A.
+
+   Eén ding blijft bewust staan: `.is-new` en `.is-del` markeren wat er in een voorstel VERANDERT.
+   `.is-del` doet dat al met een dashed rand, dus die draagt vorm. `.is-new` had alleen een groene
+   vulling; die krijgt er een rand bij, zodat ook daar de vorm het signaal draagt en niet de tint. */
+
+/* 1 · Invoervelden en omhulsels */
+.nu .rovm-field, .nu .rov-addrow, .nu .rov-editor, .nu .rov-addgrid, .nu .rov-add,
+.nu .cl-check, .nu .wo-leave, .nu .wo-timer, .nu .wo-num, .nu .wo-mem, .nu .rovm-item {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .rov-foot { background: var(--nu-surface); border-top: var(--nu-border); }
+
+/* 2 · Grijstinten → één muted */
+.nu .rovm-iv, .nu .is-soon, .nu .rovm-was, .nu .rovm-close, .nu .rov-title,
+.nu .rov-more, .nu .rov-link, .nu .let, .nu .wo-mem-n {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .let { background: var(--nu-bg); }
+
+/* 3 · Wat verandert: vorm, niet alleen tint */
+.nu .is-new { background: var(--nu-bg-alt); border: var(--nu-border); }
+.nu .is-del { background: var(--nu-bg); border-color: var(--nu-text); }
+.nu .sec-issue { border-radius: 0; border: 1.5px solid var(--nu-text);
+  background: var(--nu-surface); color: var(--nu-text); }
+
+/* 4 · Fout en verwijderen blijven rood */
+.nu .rov-delrole { color: var(--nu-danger); }
+.nu .blok { background: var(--nu-surface); color: var(--nu-danger);
+  border: 1.5px solid var(--nu-danger); }
+
+/* 5 · Het laatste groen dat niet in de beelden staat */
+.nu .kpidata-v { color: var(--nu-text); }
+
+/* punt 1a · het zoekveld boven de kanalenlijst */
+.nu .msg-zoek input[type=search] { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+.nu .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* punt 4 · de opslaan-balk van het inline formulier */
+.nu .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }

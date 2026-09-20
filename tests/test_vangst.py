@@ -85,6 +85,19 @@ def test_scherm_toont_wie_het_inbracht(tmp_path):
 
 # ── 3. de inbrenger reist mee ───────────────────────────────────────────────
 
+def _dms(st):
+    """Alle DM-berichten in het dorp, nieuwste laatst.
+
+    Sinds de inbox-migratie (20 sept 2026) landt een gevangen punt als DM bij een mens, niet als
+    item in een wachtrij met een type en een bevinding. Die twee velden bestonden om de inbox te
+    kunnen routeren en filteren; een DM heeft alleen afzender, tekst en tijd."""
+    from nooch_village import channels
+    uit = []
+    for k in st.channels.bestaande():
+        if channels.soort_van(k) == channels.DM:
+            uit += [(k, e) for e in st.channels.trail(k)]
+    return sorted(uit, key=lambda x: x[1].get("at") or 0)
+
 def test_inbrenger_wordt_de_afzender_van_de_spanning(tmp_path, monkeypatch):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
@@ -92,47 +105,41 @@ def test_inbrenger_wordt_de_afzender_van_de_spanning(tmp_path, monkeypatch):
                              by="Stefan Wobben", by_id="p-stefan")
     _post(dd, "vangst_verwerk", circle=CIRCLE, iid=it["id"], otype="spanning", rol=ROL,
           next="/vangst")
-    items = cockpit2._Stores(dd).notif.all()
-    assert len(items) == 1
-    assert items[0]["by"] == "p-stefan"                 # niet 'werkoverleg', niet leeg
-    assert items[0]["snippet"] == "hier klopt iets niet aan de levertijden"
+    # DE INBRENGER IS DE AFZENDER — dat blijft de kern van deze test, alleen leest hij nu het
+    # DM-kanaal in plaats van een inbox-item. Het kanaal-id draagt de afzender, dus "niet
+    # 'werkoverleg', niet leeg" is hier te toetsen op de kanaalnaam zelf.
+    dms = _dms(cockpit2._Stores(dd))
+    assert len(dms) == 1
+    kanaal, bericht = dms[0]
+    assert "p-stefan" in kanaal                          # niet 'werkoverleg', niet leeg
+    assert bericht["author"]["id"] == "p-stefan"
+    assert bericht["text"] == "hier klopt iets niet aan de levertijden"
 
 
 # ── 4. verwerken hergebruikt wat er al staat ────────────────────────────────
 
-def test_spanning_gaat_ongetypeerd_de_bestaande_haak_in(tmp_path, monkeypatch):
-    """De kaart mag hier NIET al een type dragen: dan zou `NotifStore.add` de haak overslaan en
-    zou de vangst zijn eigen typering doen in plaats van de bestaande.
+def test_een_gevangen_punt_gaat_ongewijzigd_naar_de_mens(tmp_path):
+    """Deze test heette `test_spanning_gaat_ongetypeerd_de_bestaande_haak_in` en toetste dat
+    `vangst_verwerk` de typeer-haak van `spanning_ontstaat` liet draaien op `NotifStore.add`.
 
-    En de haak moet ECHT gezet worden op de store die de actie gebruikt. `_bootstrap` zet hem op een
-    `_Stores` die daarna wordt weggegooid, en elke request bouwt een verse — dus zonder deze regel
-    draait de bevinding-schrijver in het web-pad nergens."""
+    DIE HAAK DRAAIT HIER NIET MEER. Hij hing aan `NotifStore.add`, en dat pad is op 20 september
+    2026 vervangen door een DM. Zijn uitkomst (`type`, `bevinding`) voedde de inbox-routering en
+    -filtering, en die velden vervallen met de inbox zelf. `spanning_ontstaat` heeft daarmee geen
+    aanroeper meer — dat staat als bevinding in `claude/fase10_nachtlog.md` en is een beslissing
+    voor stap B2, niet iets om hier stilzwijgend op te ruimen.
+
+    Wat de naam beloofde en wél blijft gelden: een met de hand ingetypt punt komt ONGEWIJZIGD bij
+    de mens aan. Nooit andermans woorden herschrijven."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "een punt om te verwerken", by_id="p1")
-    gezien = {}
-
-    def _nep_verrijker(records, assignments, data_dir="", reason_fn=None, herschrijf=True):
-        gezien["herschrijf"] = herschrijf
-
-        def _fn(n):
-            gezien.update(n)
-            return {"type": "naar_rol",
-                    "bevinding": {"ok": True, "spanning": "x", "voorstel": "y"}}
-        return _fn
-
-    monkeypatch.setattr("nooch_village.spanning_ontstaat.maak_verrijker", _nep_verrijker)
     _post(dd, "vangst_verwerk", circle=CIRCLE, iid=it["id"], otype="spanning", rol=ROL,
           next="/vangst")
-    assert gezien.get("snippet") == "een punt om te verwerken"      # de haak is echt gedraaid
-    assert not gezien.get("type")                                   # ongetypeerd de haak in
-    item = cockpit2._Stores(dd).notif.all()[0]
-    assert item["type"] == "naar_rol"                               # de haak typeerde hem
-    assert item["bevinding"]["ok"] is True
-    # TYPEREN WEL, HERSCHRIJVEN NIET. Een gevangen punt is met de hand ingetypt, dus de zin blijft
-    # van de vanger — maar hij moet nog wél ergens heen, en dat is de typering. Zonder dit
-    # onderscheid zette 'nooit andermans woorden herschrijven' stilzwijgend de routering uit.
-    assert gezien["herschrijf"] is False
+    dms = _dms(cockpit2._Stores(dd))
+    assert len(dms) == 1
+    _kanaal, bericht = dms[0]
+    assert bericht["text"] == "een punt om te verwerken"
+    assert "Vangen" in render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
 
 
 def test_punt_wordt_project_op_het_bord_van_een_rol(tmp_path):
@@ -435,11 +442,14 @@ def test_de_inbox_vangt_een_los_punt_in_een_regel(tmp_path):
     dd = _dd(tmp_path)
     _nxt, msg = _post(dd, "notif_add", text="de zolen komen te laat", role="", next="/inbox")
     assert msg.startswith("✓")
-    items = cockpit2._Stores(dd).notif.all()
-    assert len(items) == 1
-    assert items[0]["snippet"] == "de zolen komen te laat"
-    assert items[0]["at"]                                   # wanneer: ja
-    assert not items[0].get("type")                         # geen uitkomst-keuze bij het noteren
+    dms = _dms(cockpit2._Stores(dd))
+    assert len(dms) == 1
+    _kanaal, bericht = dms[0]
+    assert bericht["text"] == "de zolen komen te laat"
+    assert bericht["at"]                                    # wanneer: ja
+    # "geen uitkomst-keuze bij het noteren" is nu structureel waar in plaats van een assertie op
+    # een leeg veld: een DM-bericht kent geen `type`.
+    assert set(bericht) == {"id", "kind", "author", "text", "at"}
 
 
 def test_de_inbox_vang_legt_de_opwerper_NIET_vast(tmp_path):
@@ -449,7 +459,8 @@ def test_de_inbox_vang_legt_de_opwerper_NIET_vast(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     _post(dd, "notif_add", text="een punt", role="", next="/inbox")
-    assert cockpit2._Stores(dd).notif.all()[0]["by"] == "zelf"
+    _kanaal, bericht = _dms(cockpit2._Stores(dd))[0]
+    assert bericht["author"]["id"] == "zelf"
 
     st.werk.backlog_add(CIRCLE, "een punt", by="Stefan Wobben", by_id="p-stefan")
     punt = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]

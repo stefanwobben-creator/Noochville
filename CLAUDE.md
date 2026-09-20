@@ -705,6 +705,21 @@ Nieuwe UI (formulieren, lijsten, kaarten) hergebruikt ALTIJD bestaande design-sy
   stijgen → de guard faalt; schone bestanden moeten 0 blijven. Ruim je schuld op bij een view die je
   toch aanraakt, verlaag dan het plafond (monotone daling naar nul). Nieuwe views hoef je niet meer
   handmatig toe te voegen — ze vallen automatisch onder de ratchet (plafond 0).
+- **Atomair opbouwen: atoms → molecules → patterns (HARDE REGEL).** Nieuwe UI wordt nooit in één
+  stap als kant-en-klaar scherm gebouwd. Eerst de atomen (bestaande, of na expliciet besluit nieuwe
+  basisklassen: knop, badge, status-vorm, voortgangsbalkje), dan de moleculen (samengestelde
+  onderdelen die atomen combineren: een kaart, een rij, een filterbalk), dan pas het patroon (het
+  scherm of de interactie die de moleculen inzet: een sleepbaar bord, een checklist met live
+  voortgang, een kanalenlijst met ongelezen-indicator). Dit geldt voor élke nieuwe UI-scope, niet
+  alleen voor scopes die dit expliciet benoemen — het is dezelfde discipline als de CSS-opruiming
+  van fase 6/9 en staat hier generiek, niet per fase. Terugkoppeling op een UI-scope benoemt daarom
+  expliciet welke laag (atom/molecule/pattern) elk gebouwd stuk is, net zoals de
+  pariteitstabel-regel hierboven dat al voor prototype-scopes eist. **Geen big-bang-retrofit:**
+  bestaande schermen die dit patroon nog niet volgen, blijven zoals ze zijn totdat je er toch aan
+  werkt voor iets anders — dan neem je 'm mee. Zelfde ratchet-principe als de inline-style-regel
+  hierboven: monotone daling, geen losse opruimronde. Reden: zonder deze laagscheiding ontstaat
+  opnieuw het probleem dat de CSS-opruiming al één keer moest oplossen — ad-hoc,
+  niet-herbruikbare UI-stukjes die elders straks weer opnieuw worden uitgevonden.
 
 ## Autorisatie — elke nieuwe dispatch-tak
 

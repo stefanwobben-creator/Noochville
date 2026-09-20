@@ -59,13 +59,39 @@ def test_eigen_comment_wijzigen_verwijderen(tmp_path):
     assert len(cockpit2._Stores(dd).projects.get(pid)["log"]) == 1
 
 
+def _dms_van(st, rol):
+    """De DM-berichten die de mens-vervuller van `rol` heeft gekregen.
+
+    Sinds de inbox-migratie (20 sept 2026) landt een signalering als DM bij de mens, niet als
+    inbox-item met een verwerkingsstatus. De tests hieronder toetsen daarom WIE er bericht krijgt
+    en WAT erin staat, en niet meer of een status op "verwerkt" is gezet — die status bestaat niet
+    meer."""
+    from nooch_village import channels, signaal
+    wie, _ = signaal.ontvangers(st, "role", rol)
+    uit = []
+    for persoon in wie:
+        for kanaal in st.channels.kanalen_van(persoon):
+            uit += st.channels.trail(kanaal)
+    return uit
+
 def test_mention_maakt_notificatie_en_highlight(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     person = cockpit2._Stores(dd).people.all()[0]
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
                                         "text": ["hoi @Website Developer kijk even"], "next": ["/"]}, username="guest")
-    notes = cockpit2._Stores(dd).notif.all()
-    assert len(notes) == 1 and notes[0]["target_type"] == "role" and notes[0]["target_id"] == rid
+    # De @-vermelding bereikt de MENS die de rol vervult, als DM. Vroeger was dit een inbox-item
+    # op de rol; wie hem las moest de rol vervullen. Nu is het rechtstreeks, en de test controleert
+    # dus ook dat de TEKST meekomt — een bericht bij de juiste persoon maar zonder inhoud is geen
+    # geslaagde vermelding.
+    st = cockpit2._Stores(dd)
+    from nooch_village import signaal
+    wie, _ = signaal.ontvangers(st, "role", rid)
+    dms = _dms_van(st, rid)
+    # De rol heeft in het zaad TWEE mens-vervullers, en een nieuwe melding gaat naar allemaal:
+    # liever dubbel aankomen dan nergens. De telling volgt dus het aantal vervullers en is geen
+    # los getal — anders breekt deze test zodra iemand het zaad aanpast, om de verkeerde reden.
+    assert len(dms) == len(wie) == 2
+    assert all("kijk even" in d["text"] for d in dms)
     # highlight in de bubble
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "class='ment'>@Website Developer" in frag
@@ -148,8 +174,11 @@ def test_triage_fit_nee_wijst_kort_af_en_verwerkt_item(tmp_path):
     last = st2.projects.get(pid)["log"][-1]
     assert last["author"]["type"] == "persona" and "niet mijn rol" in last["text"]
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "does not fit" in (n[0].get("outcome") or "")
+    # De rol heeft het ZELF afgehandeld (de afwijzing staat op de wall). Er hoeft dus niemand
+    # meer iets te doen, en er gaat geen bericht naar de mens. Vroeger kwam er een inbox-item dat
+    # meteen als "verwerkt" werd gemarkeerd — werk dat al gedaan was op het moment dat het
+    # verscheen. Precies de ruis waarom de inbox is opgeheven.
+    assert _dms_van(st2, rid) == []
 
 
 def test_triage_direct_antwoord_op_de_wall(tmp_path):
@@ -162,8 +191,8 @@ def test_triage_direct_antwoord_op_de_wall(tmp_path):
     last = st2.projects.get(pid)["log"][-1]
     assert "Kort antwoord" in last["text"]
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "answered directly" in (n[0].get("outcome") or "")
+    # Direct beantwoord op de wall → niets meer voor de mens. Zie de toelichting hierboven.
+    assert _dms_van(st2, rid) == []
 
 
 def test_create_task_from_voorstel_maakt_project_met_skill(tmp_path):
@@ -194,8 +223,9 @@ def test_triage_binnen_scope_verwerkt_zelf_via_inbox(tmp_path, monkeypatch):
     nieuw = [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
     assert len(nieuw) == 1                                        # binnen scope → zelf een project gemaakt
     assert nieuw[0]["checklists"][0]["items"][0].get("skill") == "openalex_evidence"
-    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "als project" in (n[0].get("outcome") or "")
+    # Zelf tot project gemaakt → de rol pakte het op, dus geen bericht naar de mens. Het project
+    # zelf is het spoor, en dat wordt hierboven al getoetst.
+    assert _dms_van(st2, rid) == []
 
 
 def test_triage_buiten_scope_blijft_nieuw_in_inbox(tmp_path, monkeypatch):
@@ -204,13 +234,24 @@ def test_triage_buiten_scope_blijft_nieuw_in_inbox(tmp_path, monkeypatch):
     monkeypatch.setenv("mention_autotask", "1")
     monkeypatch.setattr(cockpit2, "_dna_skill_for", lambda st, role, ask: None)
     dd, rid, pid, codie = _setup(tmp_path)
+    # EEN ECHTE VRAAG OP DE WALL. Zonder die regel is `_ask_text` leeg en stuurt `_signaleer`
+    # niets — fail-closed op een bericht zonder inhoud. Vroeger kwam er dan een inbox-item met een
+    # lege tekst, en dat was nooit de bedoeling: een wachtrij-item zonder vraag kan niemand
+    # verwerken. De test zette die situatie per ongeluk op; hier staat nu wat er in productie
+    # gebeurt.
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["welke term gebruiken we hier?"], "next": ["/"]},
+                      username="guest")
     js = ('{"fit": "deels", "welk_stuk": "de meting", "kan_direct": false, '
           '"reactie": "Ik verwerk dit via mijn inbox."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
     st2 = cockpit2._Stores(dd)
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "nieuw"            # wacht op de mens
+    # Buiten scope → dit MOET bij de mens landen, want alleen hij kan besluiten wat ermee gebeurt.
+    # Hier is de assertie dus het spiegelbeeld van de drie hierboven: er komt wél een bericht, en
+    # de vraag zelf staat erin.
+    dms = _dms_van(st2, rid)
+    assert dms and all("term" in d["text"].lower() for d in dms)
 
 
 def test_triage_zonder_experiment_blijft_nieuw(tmp_path, monkeypatch):
@@ -219,12 +260,21 @@ def test_triage_zonder_experiment_blijft_nieuw(tmp_path, monkeypatch):
     monkeypatch.setattr(cockpit2, "_dna_skill_for",
                         lambda st, role, ask: {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
     dd, rid, pid, codie = _setup(tmp_path)
+    # EEN ECHTE VRAAG OP DE WALL. Zonder die regel is `_ask_text` leeg en stuurt `_signaleer`
+    # niets — fail-closed op een bericht zonder inhoud. Vroeger kwam er dan een inbox-item met een
+    # lege tekst, en dat was nooit de bedoeling: een wachtrij-item zonder vraag kan niemand
+    # verwerken. De test zette die situatie per ongeluk op; hier staat nu wat er in productie
+    # gebeurt.
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["welke term gebruiken we hier?"], "next": ["/"]},
+                      username="guest")
     js = ('{"fit": "ja", "welk_stuk": "", "kan_direct": false, "reactie": "Ik verwerk dit via mijn inbox."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
     st2 = cockpit2._Stores(dd)
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "nieuw"
+    # Experiment uit → de rol pakt niets zelf op, dus de vraag gaat naar de mens.
+    dms = _dms_van(st2, rid)
+    assert dms and all(d["text"] for d in dms)
 
 
 def test_mention_op_persona_naam_raakt_de_rol(tmp_path):

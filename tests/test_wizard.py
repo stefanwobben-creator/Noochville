@@ -14,6 +14,16 @@ def _st(tmp_path):
     return cockpit2._Stores(dd)
 
 
+def _dm_teksten(st):
+    """Alle DM-berichtteksten. Sinds de inbox-migratie (20 sept 2026) landt een signalering als DM
+    bij een mens in plaats van als item in een wachtrij."""
+    from nooch_village import channels
+    uit = []
+    for k in st.channels.bestaande():
+        if channels.soort_van(k) == channels.DM:
+            uit += [e.get("text") or "" for e in st.channels.trail(k)]
+    return uit
+
 def test_sharpen_fail_soft():
     # LLM levert niets → ruw idee terug (mens kan alsnog verder)
     assert sharpen_outcome("kijk naar zolen", reason_fn=lambda *a, **k: None) == "kijk naar zolen"
@@ -232,22 +242,29 @@ def test_de_lus_sluit_bij_een_afgerond_project(tmp_path):
     p = st.people.all()[0]
     pid = st.projects.create("mother_earth__nooch__website_developer", "Iets uitzoeken", "human",
                              opdrachtgever=p.id)
-    voor = len(st.notif.all())
+    voor = len(_dm_teksten(st))
     c2.meld_opdrachtgever(st, opdrachtgever=p.id, wat="Iets uitzoeken", bron_project=pid)
-    ns = [x for x in st.notif.all() if (x.get("snippet") or "").startswith("Klaar:")]
-    assert len(st.notif.all()) == voor + 1 and ns
-    assert ns[-1]["target_type"] == "person" and ns[-1]["target_id"] == p.id
-    assert ns[-1]["afronding"] is True                          # meldt zichzelf niet terug
+    # "Klaar: …" gaat naar de OPDRACHTGEVER als DM. Dat is een signalering (werk is af), geen
+    # verzoek met een beslissing — vandaar dat dit pad wél is omgezet en de werkoverleg-ACTIE niet.
+    ns = [t for t in _dm_teksten(st) if t.startswith("Klaar:")]
+    assert len(_dm_teksten(st)) == voor + 1 and ns
+    # De afronding landt in de DM van de opdrachtgever; het kanaal-id draagt zijn persoon-id.
+    from nooch_village import channels
+    assert any(p.id in channels.dm_leden(k) for k in st.channels.bestaande()
+               if channels.soort_van(k) == channels.DM)
+    # Het `afronding`-vlaggetje bestond om de inbox te kunnen filteren en vervalt met de inbox
+    # (besluit Stefan, 20 sept 2026). Wat het bewaakte — "meldt zichzelf niet terug" — is hierboven
+    # al getoetst: er komt precies één bericht bij, bij de opdrachtgever.
 
 
 def test_zonder_opdrachtgever_geen_melding(tmp_path):
     """Fail-closed: liever geen bericht dan een bericht aan niemand."""
     from nooch_village import cockpit2 as c2
     st = _st(tmp_path)
-    voor = len(st.notif.all())
+    voor = len(_dm_teksten(st))
     assert c2.meld_opdrachtgever(st, opdrachtgever="", wat="x") == ""
     assert c2.meld_opdrachtgever(st, opdrachtgever="bestaat-niet", wat="x") == ""
-    assert len(st.notif.all()) == voor
+    assert len(_dm_teksten(st)) == voor
 
 
 # ── B5: individuele actie hangt onder een cirkel, en die kies je niet stilzwijgend ──

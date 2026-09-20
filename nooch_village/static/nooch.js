@@ -130,10 +130,91 @@
     });
   }
 
+  // ── Inline bewerken (fase 10 punt 4) ──────────────────────────────────────────────────────
+  // Drie kleine dingen, en bewust niet meer dan dat:
+  //   1. klikken op de tekst opent het bewerk-formulier eronder;
+  //   2. de opslaan-balk verschijnt pas als er echt iets is getypt;
+  //   3. annuleren klapt dicht en zet de velden terug.
+  // Er wordt NIETS opgeslagen vanuit deze code: het blijft hetzelfde formulier met dezelfde ene
+  // submit naar `artefact_edit`. Zonder JS werkt alles nog: de "edit"-summary opent de <details>
+  // en de balk is dan gewoon zichtbaar (zie de `hidden`-reset hieronder).
+  function inlineEdit(root) {
+    root.querySelectorAll("[data-qadd-open]").forEach(function (el) {
+      if (el.dataset.nvWired) return;
+      el.dataset.nvWired = "1";
+      el.addEventListener("click", function (e) {
+        if (e.target.closest("a, button, input, textarea")) return;   // een link blijft een link
+        var kaart = el.closest(".c2-main") || document;
+        var det = kaart.querySelector("details[data-qadd-inline]");
+        if (det) { det.open = true; var f = det.querySelector("textarea, input[name=title]"); if (f) f.focus(); }
+      });
+    });
+    root.querySelectorAll("form[data-qadd-dirty]").forEach(function (f) {
+      if (f.dataset.nvWired) return;
+      f.dataset.nvWired = "1";
+      var bar = f.querySelector(".qadd-bar");
+      if (!bar) return;
+      var schoon = new FormData(f);
+      function vuil() {
+        var nu = new FormData(f);
+        var anders = false;
+        nu.forEach(function (v, k) { if (String(schoon.get(k)) !== String(v)) anders = true; });
+        bar.hidden = !anders;
+      }
+      f.addEventListener("input", vuil);
+      f.addEventListener("change", vuil);
+      var x = f.querySelector("[data-qadd-cancel]");
+      if (x) x.addEventListener("click", function () {
+        f.reset(); bar.hidden = true;
+        var det = f.closest("details"); if (det) det.open = false;
+      });
+    });
+  }
+
+  // ── Markdown-voorbeeld (fase 10 punt 4b) ──────────────────────────────────────────────────
+  // De knop wisselt tussen het tekstvak en de weergave. De weergave komt van de SERVER
+  // (`/md-preview` → `_md`), niet van een parser hier: dan toont het voorbeeld per definitie
+  // hetzelfde als wat je na opslaan ziet, en is er geen tweede renderer om uit de pas te lopen.
+  function mdPreview(root) {
+    root.querySelectorAll("[data-md-toggle]").forEach(function (knop) {
+      if (knop.dataset.nvWired) return;
+      knop.dataset.nvWired = "1";
+      knop.addEventListener("click", function () {
+        var ed = knop.closest("[data-md-preview]");
+        if (!ed) return;
+        var ta = ed.querySelector("textarea"), prev = ed.querySelector(".editor-prev");
+        if (!ta || !prev) return;
+        if (!prev.hidden) { prev.hidden = true; ta.hidden = false; knop.textContent = "👁"; return; }
+        var f = knop.closest("form");
+        var csrf = f ? (f.querySelector("input[name=csrf]") || {}).value || "" : "";
+        var body = new URLSearchParams({ csrf: csrf, tekst: ta.value });
+        prev.textContent = "…";
+        prev.hidden = false; ta.hidden = true; knop.textContent = "✎";
+        fetch("/md-preview", { method: "POST", body: body, credentials: "same-origin",
+                               headers: { "Content-Type": "application/x-www-form-urlencoded" } })
+          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+          .then(function (html) { prev.innerHTML = html; })
+          // Faalt de call, dan gaat het tekstvak meteen terug open. Een leeg voorbeeldvak zou
+          // lezen als "je tekst is weg", en dat is precies het moment waarop iemand gaat plakken.
+          .catch(function () { prev.hidden = true; ta.hidden = false; knop.textContent = "👁"; });
+      });
+    });
+  }
+
+  // Zonder JS zou de opslaan-knop onbereikbaar zijn, want `hidden` staat in de HTML. Deze regel
+  // draait die volgorde om: de balk is verborgen ZODRA de JS draait, en anders gewoon zichtbaar.
+  function barReset(root) {
+    root.querySelectorAll("form[data-qadd-dirty] .qadd-bar").forEach(function (b) { b.hidden = true; });
+  }
+
   // Idempotent: `data-nv-wired` per formulier, zodat een fragment dat opnieuw langskomt geen
   // tweede listener krijgt. Een dubbele listener post elke actie twee keer.
   NV.wire = function (root) {
-    (root || document).querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
+    root = root || document;
+    root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
+    barReset(root);
+    inlineEdit(root);
+    mdPreview(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);
