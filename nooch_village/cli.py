@@ -692,6 +692,24 @@ def main() -> None:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
 
 
+    elif mode == "notif_migratie":
+        # Stap A van twee: elke notificatie als DM-bericht bij de mens die hem aangaat.
+        # DRY-RUN by default. Er wordt niets verwijderd — NotifStore en /inbox blijven staan tot
+        # stap B, zodat een fout hier niet 371 items meeneemt.
+        from nooch_village import notif_migratie
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        st = _Stores(load_context(BASE_DIR).data_dir)
+        apply = "--apply" in sys.argv
+        rapport = notif_migratie.migreer(st.notif, st, apply=apply)
+        print(notif_migratie.rapport_tekst(rapport))
+        if not apply:
+            print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply.")
+        elif not rapport["klopt"]:
+            sys.exit(1)
+
     elif mode == "site_audit":
         # De lampjes van de shop: bereikbaar, Lighthouse (mobiel), claims. Eén run, één snapshot
         # (append-only), en de wissels sinds de vorige run. Scope 45; de weekklok is scope 47.
