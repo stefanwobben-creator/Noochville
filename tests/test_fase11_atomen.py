@@ -160,10 +160,14 @@ def test_de_checklist_koppelt_vakje_en_balk(dorp):
     assert "nu-progress" in html                                    # hetzelfde atoom
 
 
-def test_de_opslag_blijft_de_post_en_niet_het_scriptje(dorp):
+def test_de_opslag_blijft_de_post_en_niet_het_scriptje():
     """DE GRENS VAN 2B. Het scriptje raakt alleen wat je ziet; de waarheid blijft de POST die er
-    altijd al was. Zonder deze regel zou een tweede opslagpad ontstaan dat stil uit de pas loopt."""
-    from nooch_village.views.checklists import _CK_LIVE_JS
-    for verboden in ("fetch(", "XMLHttpRequest", "navigator.sendBeacon"):
-        assert verboden not in _CK_LIVE_JS
-    assert "check_toggle" not in _CK_LIVE_JS                        # het post niets zelf
+    altijd al was. Zonder deze regel zou een tweede opslagpad ontstaan dat stil uit de pas loopt.
+
+    De logica verhuisde op 20 september naar `static/nooch.js`: als `<script>` in het fragment
+    draaide hij niet in de modal (innerHTML voert scripts niet uit), en dat is juist waar je de
+    kaart meestal opent."""
+    js = (REPO / "nooch_village" / "static" / "nooch.js").read_text()
+    blok = js[js.index("ck-box[data-ck-item]") - 2000:js.index("ck-box[data-ck-item]") + 1500]
+    for verboden in ("fetch(", "XMLHttpRequest", "navigator.sendBeacon", "check_toggle"):
+        assert verboden not in blok, f"{verboden} hoort niet in de weergave-laag"

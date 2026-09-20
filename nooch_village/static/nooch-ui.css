@@ -543,3 +543,16 @@
 .nu .pcard.verzwakt { border-color: var(--nu-danger); }
 .nu .pcard-link { color: var(--nu-text); }
 .nu .pmeta { color: var(--nu-muted); }
+
+/* ── Fase 11, laag 3: het sleeppatroon in dit systeem ────────────────────────────────────────
+   De vormen komen uit nooch.css; hier krijgen ze de taal van dit systeem. De doelkolom gebruikt
+   de twee tokens die het bord al draagt, zodat "hier kan hij heen" dezelfde groen is als elders. */
+.nu .pcol.over, .nu .pcol[data-to].over {
+  background: var(--nu-bg-alt); border-color: var(--nu-accent); }
+.nu .pcard:hover { border-color: var(--nu-accent); }
+.nu .pcard-hint { color: var(--nu-accent-text); }
+/* De opgetilde kaart: scherp, zwart omlijnd, en de schaduw doet hier het werk dat een radius
+   elders zou doen — hij zegt "dit zweeft", niet "dit is zacht". */
+.nu .pdrag-ghost { border: var(--nu-border); background: var(--nu-surface);
+  box-shadow: 8px 8px 0 rgba(0,0,0,.18); }
+.nu progress.nu-progress::-webkit-progress-value { transition: width .35s ease; }

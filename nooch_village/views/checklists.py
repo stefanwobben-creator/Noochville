@@ -325,36 +325,14 @@ def _ck_sleep_js(csrf: str, nxt: str, waak: bool = False) -> str:
         f"waak={'true' if waak else 'false'};")
 
 
-#: De stand meteen zien, zonder op de herlaadbeurt te wachten (fase 11, 2b).
-#:
-#: WAT DIT NIET IS: een tweede opslagpad. De POST die eronder zit blijft exact wat hij was en is
-#: leidend; dit script raakt alleen wat je ZIET, in de seconde tussen je klik en de herlaadbeurt.
-#: Zonder JS verandert er niets aan het gedrag — je ziet de nieuwe stand dan gewoon ná de POST.
-#:
-#: De teller telt niet opnieuw maar verschuift met één, vanaf het getal dat de SERVER gaf. Zelf
-#: tellen zou hier iets anders betekenen dan daar: overgeslagen items tellen op de server niet mee
-#: in de noemer (`checklist_progress`), en een vakje dat "overgeslagen" is heeft dus geen plek in
-#: die breuk. Daarom doet een `.b-skip`-vakje hier niets — de herlaadbeurt zegt het juiste.
-_CK_LIVE_JS = """<script>(function(){
- if(document.body.dataset.ckLive)return; document.body.dataset.ckLive='1';
- document.addEventListener('click',function(e){
-  var b=e.target.closest?e.target.closest('.ck-box[data-ck-item]'):null;
-  if(!b||b.classList.contains('b-skip'))return;
-  var id=b.getAttribute('data-ck-item'), was=b.getAttribute('data-ck-done')==='1';
-  b.classList.toggle('on',!was); b.textContent=was?'':'\u2713';
-  b.setAttribute('data-ck-done',was?'0':'1');
-  var li=b.closest('.ck-item'), t=li?li.querySelector('.ck-txt>span'):null;
-  if(t)t.classList.toggle('ck-done',!was);
-  var bar=document.querySelector('progress[data-ck-bar="'+id+'"]');
-  if(!bar)return;
-  var tot=parseInt(bar.getAttribute('data-ck-tot')||'0',10); if(!tot)return;
-  var done=Math.round(bar.value*tot/100)+(was?-1:1);
-  done=Math.max(0,Math.min(tot,done));
-  var pct=Math.round(100*done/tot); bar.value=pct;
-  var tel=document.querySelector('[data-ck-tel="'+id+'"]');
-  if(tel)tel.textContent=pct+'% ('+done+'/'+tot+')';
- });
-})();</script>"""
+# DE STAND MEETEEN ZIEN staat in `static/nooch.js` en niet meer hier. Dit was een `<script>` in
+# dit fragment, en dat werkt op een volle pagina — maar de projectkaart opent normaal in de MODAL,
+# en die zet zijn inhoud met `innerHTML`. Een script dat zo binnenkomt voert de browser nooit uit,
+# dus de microinteractie was onzichtbaar op precies de plek waar je hem het vaakst ziet, zonder dat
+# er iets faalde. Gevonden bij de handmatige doorloop tegen het prototype (20 september 2026).
+#
+# De haken blijven hier: `data-ck-item` op het vakje, `data-ck-bar`/`data-ck-tot` op de balk en
+# `data-ck-tel` op de teller. Eén gedelegeerde listener in het gedeelde bestand leest ze.
 
 
 def _mag_waken(p: dict, st) -> bool:
@@ -699,7 +677,6 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 + f"{delc}</div>"
                 f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     if rw and out:
-        out += _CK_LIVE_JS
         out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""),
                             waak=_mag_waken(p, st))
     return out

@@ -437,8 +437,12 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     #
     # ALLEEN BESTAANDE VELDEN. Geen nieuw datamodel: het doel-etiket, het label, de deadline en de
     # checklist-stand stonden allemaal al in het project — ze stonden alleen niet op de voorkant.
+    # HET HINTJE (fase 11, laag 3, prototype sectie 2). Alleen op een kaart die je KUNT slepen:
+    # zonder csrf is er geen sleep-JS, en dan is de belofte vals. Hij verdwijnt zodra je de kaart
+    # écht vastpakt — dan weet je het al.
+    hint = ("<div class='pcard-hint'>✥ drag to another column</div>" if csrf_token else "")
     inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
-             f"{_kaart_chips(st, p)}{_progress_badge(p)}{meta}{_kaart_status(st, p)}")
+             f"{_kaart_chips(st, p)}{_progress_badge(p)}{meta}{_kaart_status(st, p)}{hint}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
@@ -511,22 +515,22 @@ def _drag_script(csrf_token: str, back: str) -> str:
         return ""
     return (
         "<script>(function(){"
-        f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
+        f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)};"
         # Drag-drop = volledige page-reload → scrollpositie herstellen op load (verticaal via het
         # window, horizontaal per .pboard-swimlane). Eenmalig: lezen-en-wissen uit sessionStorage.
         "try{var _ss=JSON.parse(sessionStorage.getItem('__nvscroll')||'null');if(_ss){"
         "sessionStorage.removeItem('__nvscroll');requestAnimationFrame(function(){"
         "window.scrollTo(_ss.x||0,_ss.y||0);var _bs=document.querySelectorAll('.pboard');"
         "(_ss.b||[]).forEach(function(sl,i){if(_bs[i])_bs[i].scrollLeft=sl;});});}}catch(e){}"
-        "document.querySelectorAll('.pcard').forEach(function(c){"
-        "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');window.__pdrag=true;"
-        "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
-        "c.addEventListener('dragend',function(){c.style.opacity='';setTimeout(function(){window.__pdrag=false;},60);});});"
-        "document.querySelectorAll('.pcol[data-to]').forEach(function(col){"
-        "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
-        "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
-        "col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');"
-        "if(!pid)return;var to=col.getAttribute('data-to');"
+        # HET SLEEPGEDRAG STAAT IN `NV.bord` (static/nooch.js), niet hier. Dit scherm zegt
+        # alleen wat er MOET GEBEUREN bij een drop: formulier posten en herladen. Stond hier tot
+        # 20 september als eigen native-drag-implementatie, en een tweede kopie in de modal — twee
+        # plekken die hetzelfde deden en allebei de kolom-oplichting misten.
+        # `nooch.js` laadt met `defer`, dus hij bestaat nog NIET wanneer dit inline-script draait.
+        # Zonder deze poort is `NV` undefined en sneuvelt het hele blok — inclusief het herstellen
+        # van de scrollpositie hierboven. Deferred scripts draaien vóór DOMContentLoaded, dus op
+        # dat moment is hij er gegarandeerd wel.
+        "function bordAan(){NV.bord(document,{onDrop:function(pid,to){"
         "var f=document.createElement('form');f.method='post';f.action='/action';"
         "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
         "a('csrf',csrf);a('pid',pid);a('next',next);"
@@ -535,7 +539,9 @@ def _drag_script(csrf_token: str, back: str) -> str:
         "try{var _bs=document.querySelectorAll('.pboard');"
         "sessionStorage.setItem('__nvscroll',JSON.stringify({x:window.scrollX,y:window.scrollY,"
         "b:[].map.call(_bs,function(b){return b.scrollLeft;})}));}catch(e){}"
-        "document.body.appendChild(f);f.submit();});});})();</script>")
+        "document.body.appendChild(f);f.submit();}});}"
+        "if(window.NV)bordAan();else document.addEventListener('DOMContentLoaded',bordAan);"
+        "})();</script>")
 
 
 _II_PREFIX = "ii:"   # Individual Initiative-pseudo-eigenaar per cirkel: 'ii:<circle_id>'
@@ -714,16 +720,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else if(e.key==='x'){var b=rows[sel]&&rows[sel].querySelector('.cl-check.no');if(b)b.click();}});mems.focus();}"
         # Projectenbord IN de modal: kaartjes slepen (fetch + reopen) en klik -> projectdetails.
         "var dcsrf=(bd.querySelector(\"input[name=csrf]\")||{}).value||'';"
-        "bd.querySelectorAll('.pcard[data-pid]').forEach(function(c){"
-        "c.setAttribute('draggable','true');"
-        "c.addEventListener('dragstart',function(e){window.__pdrag=true;e.dataTransfer.setData('text',c.getAttribute('data-pid'));"
-        "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
-        "c.addEventListener('dragend',function(){c.style.opacity='';setTimeout(function(){window.__pdrag=false;},60);});});"
-        "bd.querySelectorAll('.pcol[data-to]').forEach(function(col){"
-        "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
-        "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
-        "col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');"
-        "var pid=e.dataTransfer.getData('text');if(!pid)return;var to=col.getAttribute('data-to');"
+        # ZELFDE PATROON ALS DE VOLLE PAGINA (`NV.bord`), andere afhandeling: hier geen
+        # herlaadbeurt maar een fetch die alleen de overlay ververst. Tot 20 september stond het
+        # sleepgedrag hier als tweede kopie van de native-drag-versie hierboven.
+        "if(window.NV)NV.bord(bd,{onDrop:function(pid,to){"
         "var d=new URLSearchParams();d.set('csrf',dcsrf);d.set('pid',pid);d.set('next','/');"
         "if(to==='done'){d.set('action','proj_done');}else{d.set('action','proj_status');d.set('to',to);}"
         # response.ok-poort (zoals wire()): een niet-2xx toont de server-melding, nooit '✓ verplaatst'.
@@ -736,7 +736,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "var w=weigering(resp.url);"
         "if(w){reopen();toast(w.slice(0,140));return;}"
         "reopen();toast('\\u2713 moved');})"
-        ".catch(function(){reopen();toast('\\u26a0 not moved');});});});"
+        ".catch(function(){reopen();toast('\\u26a0 not moved');});}});"
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "var href=c.getAttribute('data-href');"
