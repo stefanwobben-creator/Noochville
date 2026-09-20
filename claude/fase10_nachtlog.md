@@ -862,3 +862,56 @@ dan breken de checklists.
 leidraad.** De stash is het startpunt; niets is verloren. En de volgorde uit de scope blijft staan:
 de poort (drie modules) gaat er als láátste uit, zodat een fout in de omzetting niet in dezelfde
 commit zit als een dode-code-opruiming.
+
+## B2 tweede helft — geparkeerd, want de omvang klopt niet met de schatting
+
+Staat in de stash als `B2-tweede-helft-wip`. De boom is groen op `5c9fdec` (de eerste helft).
+
+### Wat er in die stash wél af is
+
+- alle zes daemon-schrijvers om naar DM via een nieuwe `signaal.stuur_op_pad`
+  (`claims_board`, `human_inbox`, `inhabitant`, `puls_wacht`, `roles`, `escaleer`)
+- `notifications.py`, `notif_migratie.py`, `spanning_ontstaat.py` en `notif_opruiming.py` verwijderd
+- `preview`/`volledig` gered naar `tekstpreview.py` — die gaan niet over notificaties maar over
+  tekst, en `afslank_afhankelijkheden` gebruikt ze nog
+- de inbox-metriek uit `views/metrics.py`
+- ~40 tests omgezet of verwijderd over vijftien bestanden
+
+### Drie dingen die ik onderweg vond, en die het beeld veranderen
+
+**1. `bevinding.py` en `zelf_verwerking.py` zijn géén poort-modules.** Ik had ze meeverwijderd op
+grond van de scope ("de drie poort-modules"). Fout: ze hebben **vijf** aanroepers buiten de poort —
+`villageraad`, `founder_kaart`, `wiki`, `cli` en `cockpit2`. Alleen `spanning_ontstaat.py` wás de
+haak. Teruggezet.
+
+**2. De routering had een gat.** Een rol zonder mens viel direct terug op de founder en sloeg de
+**Circle Lead** over — terwijl `wiki.ontvanger` en `claims_board` die regel al hanteren. Een melding
+voor een AI-vervulde rol schoot dus langs de dichtstbijzijnde mens. Toegevoegd, met een test.
+
+**3. Het vangnet begaf het bij méér mensen.** `terugval()` gaf "" zodra de founder-rol méér dan één
+vervuller had — een vangnet dat faalt juist omdat er meer mensen beschikbaar zijn. Op prod heeft
+die rol er één, dus het werkte; op een test met twee verdween de melding zonder fout of log.
+
+### Waarom ik stop
+
+"Nog ~15 call-sites" was mijn eigen schatting en die klopt niet. Wat er nu nog op `NotifStore`
+draait zijn **hele subsystemen**, geen losse regels:
+
+| | omvang | wat het doet |
+|---|---:|---|
+| `village poort` (`triage_rol`) | 413 regels + CLI | triageert de OPEN inbox-items langs vijf deuren |
+| `village villageraad` | 588 regels, 4 notif-plekken | stuurt raadsbevindingen als notificatie |
+| `waarde_audit` | 745 regels, 7 notif-plekken | meet "besluit genomen" aan de verwerkingen |
+| `rp.park` | CLI-commando | parkeert notificaties met een reden |
+
+Die verwijderen of omleiden is geen opruiming meer maar **vier features wegnemen of herbouwen** —
+en daar is niets over afgesproken. `waarde_audit` meet zijn kernbegrip ("is hier een besluit
+genomen?") aan het verwerkingsmodel dat we net hebben opgeheven; dat is een ontwerpvraag, geen
+zoek-en-vervang.
+
+Ik ga dat niet stilzwijgend doen aan het eind van een lange beurt. De stash blijft staan.
+
+**Wat ik voorstel:** Stefan beslist per subsysteem — meenemen in B2, of laten staan op een
+afgeslankte `NotifStore` die alleen nog die vier bedient. Dat tweede is lelijk maar eerlijk: de
+inbox als SCHERM is weg (dat draait al), en wat overblijft is een interne werklijst van vier
+gereedschappen, geen mensfacing wachtrij.
