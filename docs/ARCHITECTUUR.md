@@ -275,6 +275,7 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `site_audit_dev.jsonl` | `site_audit.py` |
 | `strategy.json` | `pinboard.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
+| `weekmemo.json` | `weekmemo.py` |
 
 
 ### (d2) Meerdere schrijvers — eigenaarschap niet af te leiden
@@ -309,4 +310,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_40 routes · 140 dispatch-acties · 27 stores in `_Stores` · 34 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

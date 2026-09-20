@@ -56,6 +56,12 @@ def test_hoog_inzet_sites_staan_vast():
     hij leest en weggooit. Een voorstel dat er soms naast zit kost een blik, geen verkeerd bureau.
     Wordt de bestemming ooit weer een echte keuze, dan hoort deze regel als eerste terug.
 
+    `weekmemo_synthese` kwam er 20 sep 2026 bij, en het is de eerste toevoeging sinds de vier van
+    13 september. Eén call per week over alle vijf de signaalbronnen heen; kosten zijn hier geen
+    overweging. De grond is dat dit de ENIGE plek in die pijplijn is waar een model iets MAAKT in
+    plaats van filtert — de andere vier wegen een signaal, deze maakt er een leesstuk van. Stefan,
+    letterlijk: "de synthese is waar de waarde zit".
+
     `verslag_assemblage` kwam er 5 sep 2026 bij, en om dezelfde reden als `einddocument`: het is
     hetzelfde stuk, maar dán. Het verschil is wat erna gebeurt — een mens BEVESTIGT het, en daarmee
     wordt het orgkennis. Een zwakke samenvatting die je bevestigt is erger dan geen samenvatting:
@@ -79,7 +85,7 @@ def test_hoog_inzet_sites_staan_vast():
         "wizard_plan", "skill_tegenspraak", "skill_synthesize",
         "skill_content_schrijven", "skill_bulletin", "skill_voorstel", "noochie_weigh_in",
         "noochie_memo", "skill_claim_evidence", "skill_competitor_discover",
-        "skill_content_check"}      # -skill_lead_beoordeling: die skill bestaat niet meer (BLOK A)
+        "skill_content_check", "weekmemo_synthese"}      # -skill_lead_beoordeling: die skill bestaat niet meer (BLOK A)
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():
