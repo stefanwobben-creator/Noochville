@@ -224,7 +224,8 @@
 .nu .nu-eyebrow,
 .nu .c2-sec h3, .nu .tree h3, .nu .pcol-h, .nu .fkicker, .nu .rovm-kind,
 .nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
-.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab {
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
+.nu .gs-group, .nu .gs-kind {
   font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; }
 
@@ -233,7 +234,8 @@
 .nu .nu-eyebrow,
 .nu .c2-sec h3, .nu .tree h3, .nu .fkicker, .nu .rovm-kind,
 .nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
-.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab {
+.nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
+.nu .gs-group, .nu .gs-kind {
   color: var(--nu-muted); }
 .nu .pcol-h { color: var(--nu-text); }
 
@@ -356,3 +358,35 @@
 .nu .einddoc-body { color: var(--nu-text); }
 .nu .done { color: var(--nu-muted); }
 .nu .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* ══ GROEP A · de staart: wizard.py, search.py, overview.py ═══════════════════════════════════
+   `wizard.py` (/project/nieuw) is de aanleiding van deze hele groep: de route stond al in
+   `_NU_ROUTES`, maar de wizard rendert met een eigen `wz-*`-familie en `nooch-ui.css` stuurde daar
+   geen enkele klasse van aan. Route in de lijst ≠ herstyled. Drie van de elf klassen hier dragen
+   een 999px-pil en één een box-shadow — allebei dingen die in de referentie nul keer voorkomen. */
+
+/* wizard.py */
+.nu .wz-hint, .nu .wz-who, .nu .wz-x, .nu .wz-rm {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .wz-btn, .nu .wz-chip, .nu .wz-add, .nu .wz-badge {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
+.nu .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; }
+.nu .wz-itxt { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font); }
+.nu .big { color: var(--nu-muted); }
+
+/* search.py — `gs-group` en `gs-kind` zijn eyebrows onder een andere naam en staan daarom in de
+   gedeelde eyebrow-definitie hierboven, niet in een eigen blok. */
+.nu .gs-empty, .nu .gs-snip, .nu .gs-more, .nu .gs-didyoumean {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .gs-hit { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); }
+.nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
+
+/* overview.py */
+.nu .manage-ico, .nu .fperson { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .tree-c { font-family: var(--nu-font); color: var(--nu-text); }
+.nu .stack-av { border-color: var(--nu-surface); }
+.nu .av.green, .nu .green { background: var(--nu-text); color: var(--nu-surface); }

@@ -189,17 +189,17 @@ VIEWS = REPO / "nooch_village" / "views"
 #: die stijgt heeft een nieuwe klasse gekregen uit het oude palet — dat is de fout die deze hele
 #: fase opruimt, en dan wil je het bij het schrijven weten en niet bij een screenshot.
 _DEKKING_PLAFOND = {
-    "roloverleg.py": 34,
-    "wizard.py": 24,
-    "werkoverleg.py": 13,
-    "search.py": 10,
+    "roloverleg.py": 33,     # groep C, komt vannacht nog
+    "werkoverleg.py": 13,    # groep C, idem
     "projects.py": 7,        # rest is vorm, geen kleur: mform, mdot, car
-    "overview.py": 6,
     "vangst.py": 2,
     "messages.py": 1,
-    "inbox.py": 0,
     "doelen.py": 0,
+    "inbox.py": 0,
+    "overview.py": 0,
+    "search.py": 0,
     "wiki.py": 0,
+    "wizard.py": 0,
 }
 
 _VISUEEL = re.compile(r"(background|border|border-radius|box-shadow|color|font-family)\s*:", re.I)

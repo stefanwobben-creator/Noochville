@@ -101,3 +101,30 @@ overview.py 6 · vangst.py 2 · messages.py 1 · inbox.py 0 · doelen.py 0 · wi
 ```
 
 Suite: 4.056 passed, 1 failed (de bekende), 1 xfailed.
+
+## 03:45 — groep A, stap 3: `wizard.py`, `search.py`, `overview.py` → alle drie 0
+
+**`wizard.py` (`/project/nieuw`) was de aanleiding van deze hele groep.** De route stond al in
+`_NU_ROUTES`, maar de wizard rendert met een eigen `wz-*`-familie waarvan `nooch-ui.css` geen enkele
+klasse aanstuurde. Elf klassen, waarvan drie met een **999px-pil** (`wz-btn`, `wz-chip`, `wz-badge`)
+en één met een **box-shadow** (`wz-card`) — allebei dingen die in de referentie nul keer voorkomen.
+
+**Een test ving een fout van mij.** Ik had `gs-group` en `gs-kind` (search.py) een eigen blok met
+eyebrow-eigenschappen gegeven. `test_de_eyebrow_is_een_definitie_en_geen_twaalfde_naam` sloeg
+daarop aan: ik was precies bezig het probleem te maken dat die stap een uur eerder oploste — een
+twaalfde losse definitie in plaats van een verwijzing naar de ene. Nu staan ze in de gedeelde
+selector-lijst. Achttien namen, één definitie.
+
+Dat is de tweede keer vannacht dat een structurele test een gemiste plek vond (de eerste was
+`.attcard`). Beide keren omdat de test op een patroon zoekt en niet op een naam.
+
+**Stand van de dekkings-ratchet:**
+
+```
+roloverleg.py 33 · werkoverleg.py 13 · projects.py 7 · vangst.py 2 · messages.py 1
+doelen.py 0 · inbox.py 0 · overview.py 0 · search.py 0 · wiki.py 0 · wizard.py 0
+```
+
+Wat rest is groep C (`roloverleg.py`, `werkoverleg.py` — nooit herbouwd) plus drie restjes.
+
+Suite: 4.056 passed, 1 failed (de bekende), 1 xfailed.
