@@ -189,13 +189,21 @@ def test_wat_de_regex_al_vond_wordt_niet_dubbel_gevlagd(tmp_path):
     assert pas["verworpen"][0]["reden"] == "regex vond deze claim al"
 
 
-def test_modelvondst_gaat_naar_compliance_niet_naar_de_copywriter(tmp_path, monkeypatch):
-    """Er zit geen lijstterm en geen wetsartikel achter: het eerste werk is een oordeel."""
+def test_modelvondst_wordt_gemeld_maar_aan_niemand_toegewezen(tmp_path, monkeypatch):
+    """Er zit geen lijstterm en geen wetsartikel achter: het eerste werk is een OORDEEL, en dat is
+    van een mens.
+
+    Deze test heette `test_modelvondst_gaat_naar_compliance_niet_naar_de_copywriter` en ging over
+    de vraag welke ROL de taak kreeg. Sinds pijplijn-stap 3 (20 sept 2026) is dat de verkeerde
+    vraag: een modelvondst werd hier zonder mens een project op naam van een rol, en dat was het
+    ongefilterde pad dat de hele pijplijn opheft. De vondst wordt nog steeds gemeld — hij wordt
+    alleen niemands werk zonder dat iemand daarvoor tekende."""
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": _antwoord()}, ctx)
-    model = [t for t in uit["aangemaakt"] if t.get("herkomst") == claims_modelpas.HERKOMST]
-    assert model and all(t["owner"] == "compliance" for t in model)
-    assert "model-gevonden" in uit["headsup"]
+    model = [b for b in uit["bevindingen"] if b.get("herkomst") == claims_modelpas.HERKOMST]
+    assert model                                              # de vondst is er …
+    assert "model-gevonden" in uit["headsup"]                 # … en hij is zichtbaar …
+    assert ctx.projects.all() == []                           # … maar hij is van niemand
 
 
 # ── Guard 3: de prompt is gegrond in de records ──────────────────────────────────────────────
@@ -242,21 +250,27 @@ def test_onzekere_kandidaat_wordt_gevlagd_en_opgeschreven(tmp_path, monkeypatch)
     """Abstineren mag nooit betekenen: niks melden. Vlaggen én het gat vastleggen."""
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": _antwoord(zeker=False)}, ctx)
-    titels = " ".join(t["titel"] for t in uit["aangemaakt"])
-    assert "soil" in titels                                   # de onzekere claim staat op het bord
+    gemeld = " ".join(b["gevonden"] for b in uit["bevindingen"])
+    assert "soil" in gemeld                                   # de onzekere claim wordt gemeld
     clusters = gap_ledger.clusters(str(tmp_path))
     labels = [c["capability"] for c in clusters]
     assert ClaimsSiteScanSkill.GAT_CLASSIFICATIE in labels
 
 
-def test_gat_hangt_aan_het_project_dat_eruit_kwam(tmp_path, monkeypatch):
-    """Zonder project-koppeling rangschikt de Codie-backlog een terugkerend gat onderaan."""
+def test_het_gat_wordt_vastgelegd_ook_zonder_project(tmp_path, monkeypatch):
+    """Deze test heette `test_gat_hangt_aan_het_project_dat_eruit_kwam` en bewaakte de koppeling
+    tussen een gat en de taak die eruit voortkwam: `gap_ledger` rangschikt clusters op het aantal
+    GEBLOKKEERDE PROJECTEN.
+
+    Die taak bestaat niet meer (stap 3), dus er valt niets te koppelen. De eerlijke consequentie,
+    hier vastgelegd zodat hij niet als bug terugkomt: dit gat zakt in de backlog-rangschikking.
+    Wat NIET mag verdwijnen is het gat zelf — een onbeslisbaar geval blijft opgeschreven."""
     ctx = _ctx(tmp_path, monkeypatch)
     ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": _antwoord(zeker=False)}, ctx)
     cluster = [c for c in gap_ledger.clusters(str(tmp_path))
                if c["capability"] == ClaimsSiteScanSkill.GAT_CLASSIFICATIE][0]
-    assert cluster["n_projecten"] == 1
-    assert ctx.projects.get(cluster["projecten"][0]) is not None
+    assert cluster["n_records"] >= 1                           # het gat staat er
+    assert cluster["n_projecten"] == 0                        # en hangt bewust aan geen project
 
 
 def test_ambigu_bewijs_geeft_een_gat(tmp_path, monkeypatch):
@@ -273,7 +287,7 @@ def test_ambigu_bewijs_geeft_een_gat(tmp_path, monkeypatch):
 
 # ── Guard 5: een uitzondering verbergt niets ─────────────────────────────────────────────────
 
-def test_uitzondering_onderdrukt_de_taak_maar_niet_de_bevinding(tmp_path, monkeypatch):
+def test_uitzondering_onderdrukt_de_melding_maar_niet_de_bevinding(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path, monkeypatch)
     # Sitewide, want de nep-fetch geeft elke pagina dezelfde tekst; per-pagina wordt hieronder getest.
     claims_db.overlay_uitzondering(str(tmp_path), "These shoes are eco-friendly",
@@ -283,8 +297,8 @@ def test_uitzondering_onderdrukt_de_taak_maar_niet_de_bevinding(tmp_path, monkey
     assert gewhitelist, "de weggewuifde bevinding moet zichtbaar blijven"
     assert gewhitelist[0]["uitzondering"]["door"] == "stefan"
     assert gewhitelist[0]["term"]                             # mét de bevinding zelf, niet alleen een telling
-    titels = " ".join(t["titel"] for t in uit["aangemaakt"])
-    assert "eco-friendly" not in titels                       # maar geen taak meer
+    gemeld = " ".join(b["gevonden"] for b in uit["bevindingen"])
+    assert "eco-friendly" not in gemeld                       # maar niet meer als te wegen vondst
 
 
 def test_uitzondering_geldt_per_pagina(tmp_path):

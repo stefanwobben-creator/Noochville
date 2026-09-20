@@ -130,13 +130,17 @@ def test_risicoterm_zonder_bewijs_is_nooit_groen(tmp_path):
 
 
 def test_de_hele_scan_laat_een_onderbouwing_loze_claim_niet_vallen(tmp_path, monkeypatch):
-    """Van pagina tot bord: de claim overleeft de green-filter en landt als taak."""
+    """Van pagina tot melding: de claim overleeft de green-filter en wordt gerapporteerd.
+
+    Stond hier als "van pagina tot bord … en landt als taak". Sinds pijplijn-stap 3 (20 sept 2026)
+    maakt de scan geen taken meer aan; de vraag die deze test stelt is ongewijzigd — verdwijnt een
+    claim zonder onderbouwing stil? — alleen de plek waar hij landt is de melding en de weekmemo."""
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert uit["ok"] and uit["nieuw"] >= 1
-    taken = [ctx.projects.get(t["pid"]) for t in uit["aangemaakt"]]
-    assert any("ONTBREEKT" in (t.get("description") or "") for t in taken)
-    assert all(t["stoplicht"] != "green" for t in uit["aangemaakt"])
+    assert any(claims_substantiatie.ONTBREEKT in (b.get("onderbouwing") or "")
+               for b in uit["bevindingen"])
+    assert all(b["stoplicht"] != "green" for b in uit["bevindingen"])
 
 
 def test_rood_blijft_rood_ook_met_bewijs(tmp_path):

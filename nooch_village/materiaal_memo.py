@@ -192,6 +192,10 @@ class MateriaalKwartaalSkill(Skill):
         tekst = _schrijf_memo(context, periode, items)
         noteer_periode(data_dir, self.name, periode)
         ontv = ontvanger(st, data_dir, f"Kwartaaloverzicht materiaalrichtingen {periode}")
+        # HET VOORSTEL IS TEKST, GEEN ADRES (20 sept 2026). Wijst het model een rol aan, dan staat
+        # die zin ONDER de memo bij de mens die hem toch al kreeg — hij verplaatst hem niet.
+        if ontv.get("voorstel_regel"):
+            tekst = f"{tekst}\n\n{ontv['voorstel_regel']}"
         return {"ok": True, "periode": periode, "skipped": False, "aantal": len(items),
                 "ontvanger": ontv["rol"], "ontvanger_grond": ontv["waarom"],
                 "headsup": tekst}
@@ -251,11 +255,15 @@ def eigenaar_domein(data_dir: str) -> str:
 
 
 def ontvanger(st, data_dir: str, waarover: str) -> dict:
-    """De rol die deze memo hoort te lezen → {rol, mens, waarom, via}.
+    """De rol die deze memo hoort te lezen → {rol, mens, waarom, via, voorstel_regel}.
 
     ÉÉN LOOKUP voor de memo en voor het project dat er straks uit volgt (#434/#435): domein →
-    secretary-terugval → Circle Lead → founder, met de luide config-fout als het geconfigureerde
-    domein door niemand gehouden wordt. Geen rol-id in deze module."""
+    Circle Lead → founder, met de luide config-fout als het geconfigureerde domein door niemand
+    gehouden wordt. Geen rol-id in deze module.
+
+    DE SECRETARY-TERUGVAL STOND HIER TOT 20 SEPTEMBER 2026 tussen domein en Circle Lead: een
+    modelmatch op accountability-tekst die bepaalde wáár de memo landde. Die trede is weg (pijplijn
+    stap 5); wat het model ziet komt nu als `voorstel_regel` mee, als zin onder de memo."""
     from nooch_village.triage_rol import menselijke_eigenaar
     try:
         return menselijke_eigenaar(st, waarover, domein=eigenaar_domein(data_dir))
@@ -265,7 +273,8 @@ def ontvanger(st, data_dir: str, waarover: str) -> dict:
         # verkeerde mens in plaats van bij niemand.
         log.warning("ontvanger niet te bepalen voor %r — terugval op de founder", waarover,
                     exc_info=True)
-        return {"rol": "", "mens": None, "waarom": "ontvanger niet te bepalen", "via": "fout"}
+        return {"rol": "", "mens": None, "waarom": "ontvanger niet te bepalen", "via": "fout",
+                "voorstel": {}, "voorstel_regel": ""}
 
 
 # ── memo 2: de maandelijkse shortlist ─────────────────────────────────────────────────────────

@@ -13,7 +13,10 @@ Vier regels:
    stille nul. "Geen bevindingen" moet betekenen dat er niets was, niet dat er niets werkte.
 3. **Bewijs-eerst.** Een milieuclaim is alleen groen als de Kroniek hem onderbouwt; zonder
    bevestigd record wordt hij oranje "onderbouwing ontbreekt" (`claims_substantiatie`).
-4. **Geen bord-ruis.** Niets nieuws → één logregel, geen taken, geen heads-up.
+4. **Geen bord-ruis.** Niets nieuws → één logregel, geen heads-up. Sinds 20 september 2026 maakt
+   deze skill sowieso geen taken meer aan (pijplijn stap 3): hij WAARNEEMT. De bevindingen gaan
+   naar de weekmarker en van daar naar de weekmemo bij de founder; wat een taak moet worden maakt
+   een mens tot taak, met de bestaande "to board"-knop op /claims.
 
 Twee handmatige duwtjes, met verschillende betekenis: `force` slaat de week-poort over maar
 respecteert de dekking (hij helpt de scan vooruit), `herstart` gooit de dekking weg en doet de
@@ -27,8 +30,9 @@ Uitvoervorm (scope 56) — wat de uitvoerlaag (wall-note, verslag, pulslaag) erv
   0 nieuwe bevindingen            `no_data` + `reason`, ook bij bronfouten ("3 van 5 pagina's, 0
                                   bevindingen, 2 niet opgehaald") — een deelrun las tot scope 56 als
                                   'gelukt' met de paginalabels als "2 results"
-  nieuwe bevindingen              `aangemaakt[]` = de records (term, stoplicht, pagina, url, oordeel,
-                                  citaat) + `text` als leeswijzer
+  nieuwe bevindingen              `bevindingen[]` = de records (term, stoplicht, pagina, url,
+                                  oordeel, citaat) + `text` als leeswijzer. Heette `aangemaakt[]`
+                                  toen het nog aangemaakte TAKEN waren (tot stap 3).
 De run-administratie (gedekt, fouten, statussen, gewhitelist, gaten, …) staat onder `_scan`: een
 `_`-sleutel is voor de uitvoerlaag altijd metadata, dus hij kan de bevindingen niet meer wegduwen.
 """
@@ -323,23 +327,34 @@ def skip_uitkomst(week: str, reden: str, marker: dict | None = None) -> dict:
             "no_data": True, "reason": reason, "text": reason}
 
 
-def taak_record(taak: dict, bevindingen: list[dict]) -> dict:
-    """Eén aangemaakte taak als RECORD voor de uitvoerlaag: mét `url`, `oordeel` en `citaat`, zodat
-    het verslag "• 🔴 Vervang: eco-friendly (https://…/) — red — “eco-friendly” (home) — …" leest en
-    niet alleen de titel. De bron-bevinding wordt op (gevonden, pagina) teruggezocht — dezelfde
-    koppeling als `_oogst_gaten` gebruikt."""
-    sleutel = (claims_board.normaliseer(taak.get("gevonden", "")), taak.get("pagina") or "")
-    bron = next((b for b in bevindingen
-                 if (claims_board.normaliseer((b.get("gevonden") or [""])[0]),
-                     b.get("pagina") or "") == sleutel), {})
-    stoplicht = str(taak.get("stoplicht") or "")
-    oordeel = stoplicht + (f" — source {bron['bron']}" if bron.get("bron") else "")
-    if taak.get("onderbouwing"):
-        oordeel += f" — evidence: {taak['onderbouwing']}"
-    citaat = f"'{taak.get('gevonden') or '?'}' on page '{taak.get('pagina') or '?'}'"
-    if bron.get("waarom"):
-        citaat += f" — {bron['waarom']}"
-    return {**taak, "term": bron.get("term", ""), "url": bron.get("url", ""),
+def _vindplaats_rij(b: dict) -> dict:
+    """Een bevinding in de vorm die `claims_board.vindplaatsen` leest.
+
+    Die formatteerder is geschreven voor AANGEMAAKTE TAKEN en leest `gevonden` als tekst; een
+    bevinding draagt daar een LIJST. Eén plek die dat vertaalt is beter dan twee formatteerders —
+    de melding moet er hetzelfde uitzien als hij altijd deed."""
+    return {"gevonden": (b.get("gevonden") or [""])[0], "pagina": b.get("pagina") or "",
+            "stoplicht": b.get("stoplicht")}
+
+
+def bevinding_record(b: dict) -> dict:
+    """Eén bevinding als RECORD voor de uitvoerlaag: mét `url`, `oordeel` en `citaat`, zodat het
+    verslag "• 🔴 eco-friendly (https://…/) — red — “eco-friendly” (home) — …" leest.
+
+    HIER STOND `taak_record`, dat hetzelfde deed voor een AANGEMAAKTE TAAK en de bron-bevinding
+    erbij terugzocht op (gevonden, pagina). Die omweg is weg met de taken zelf (stap 3): de
+    bevinding is nu het ding dat de uitvoerlaag toont, dus er valt niets meer terug te zoeken."""
+    stoplicht = str(b.get("stoplicht") or "")
+    oordeel = stoplicht + (f" — source {b['bron']}" if b.get("bron") else "")
+    if b.get("onderbouwing"):
+        oordeel += f" — evidence: {b['onderbouwing']}"
+    gevonden = (b.get("gevonden") or [""])[0]
+    citaat = f"'{gevonden or '?'}' on page '{b.get('pagina') or '?'}'"
+    if b.get("waarom"):
+        citaat += f" — {b['waarom']}"
+    return {"term": b.get("term", ""), "gevonden": gevonden, "pagina": b.get("pagina") or "",
+            "url": b.get("url", ""), "stoplicht": stoplicht,
+            "onderbouwing": b.get("onderbouwing", ""), "herkomst": b.get("herkomst", ""),
             "oordeel": oordeel, "citaat": citaat}
 
 
@@ -348,12 +363,16 @@ def kop_tekst(uit: dict, gevonden: int, tijdelijk: list, permanent: list, status
     gescand, paginas = int(uit.get("gescand") or 0), int(uit.get("paginas") or 0)
     gedekt = len((uit.get("_scan") or {}).get("gedekt") or [])
     kop = (f"{gescand} page(s) scanned this pulse, {gedekt} of {paginas} covered this week; "
-           f"{int(uit.get('nieuw') or 0)} new finding(s)")
+           f"{int(uit.get('nieuw') or 0)} finding(s) to weigh")
     if uit.get("rood"):
         kop += f" ({uit['rood']} red)"
+    # Het verschil tussen alles wat gezien is en wat een beslissing vraagt: groen (onderbouwd) of
+    # al lopend als taak of werklijst-item. Beide zijn een uitkomst, geen stilte.
     al = gevonden - int(uit.get("nieuw") or 0)
     if al > 0:
-        kop += f", {al} already on the board or in the work list"
+        loopt = int((uit.get("_scan") or {}).get("overgeslagen") or 0)
+        kop += (f", {al} need no decision ({loopt} already on the board or in the work list)"
+                if loopt else f", {al} green (substantiated, no action)")
     if statussen:
         kop += f", {len(statussen)} work-list status(es) updated"
     if tijdelijk:
@@ -383,22 +402,23 @@ def _claims_rol(context) -> str:
 class ClaimsSiteScanSkill(Skill):
     name = "claims_site_scan"
     cost = "free"
-    side_effect_free = False           # maakt taken aan op het bord
+    side_effect_free = False           # schrijft de weekmarker, werklijst-statussen en de gat-ledger
     required_env = ()
     description = ("Weekly self-scan of the fixed page set of nooch.earth against the claims "
-                   "database (EmpCo + ACM) plus the evidence question to the Kroniek: only NEW "
-                   "red/orange findings become tasks for the right role; what is already on the "
-                   "board or in the work list is skipped. One full coverage per ISO week, spread over "
-                   "pulses if the host throttles; an already-covered week is reported as such.")
+                   "database (EmpCo + ACM) plus the evidence question to the Kroniek. Reports "
+                   "red/orange findings; it creates no tasks — those are a human decision (the "
+                   "weekly memo carries them, the 'to board' button turns one into work). One full "
+                   "coverage per ISO week, spread over pulses if the host throttles; an "
+                   "already-covered week is reported as such.")
     input_schema = ("no fields required · force: bool (optional — skip the week gate but keep this "
                     "week's coverage) · herstart: bool (optional — discard this week's coverage and "
                     "rescan every page) · modelpas: bool (optional, default true — also run the LLM "
                     "recall pass for claims without a listed term)")
     output_schema = ("ok, week, skipped, text, nieuw, rood, gescand, paginas, volledig, vastgelopen, "
-                     "aangemaakt[{pid, owner, titel, stoplicht, gevonden, pagina, url, oordeel, "
-                     "citaat}], headsup, escalate, no_data+reason (nothing new), _scan{gedekt[], "
+                     "bevindingen[{term, gevonden, stoplicht, pagina, url, oordeel, citaat}], "
+                     "headsup, escalate, no_data+reason (nothing new), _scan{gedekt[], "
                      "fouten[], statussen[], statussen_mislukt[], gewhitelist[], gaten[], "
-                     "overgeslagen, model_gevonden, modelpas_ok, modelpas_mislukt}")
+                     "overgeslagen, lopend[], model_gevonden, modelpas_ok, modelpas_mislukt}")
 
     def _verifieer_werklijst(self, context, db: dict, paginateksten: dict,
                              volledig: bool = True) -> tuple[list[dict], list[str]]:
@@ -508,12 +528,24 @@ class ClaimsSiteScanSkill(Skill):
                     "escalate": {"reason": "geen enkele pagina kon worden opgehaald: "
                                            + fout_tekst(fouten)}}
 
+        # HIER STOND `claims_board.zet_op_bord`: elke rode/oranje bevinding werd meteen een project
+        # op naam van een ROL, zonder dat een mens ernaar keek. Weg op 20 september 2026 (pijplijn
+        # stap 3), op Stefans besluit: "compliance-werk begint voortaan bij Stefan". De bevindingen
+        # gaan nu naar de weekmarker (hieronder) en van daar via `claims_modelpas.verzamel` en
+        # `claims_context.verzamel` naar de weekmemo, die bij een MENS landt. Wat een taak moet
+        # worden, maakt die mens zelf tot taak — de knop "to board" op /claims doet dat nog steeds.
+        #
+        # De projectenbord-check blijft staan, maar op een andere vraag: `_verifieer_werklijst`
+        # zoekt bij een regressie op wie hem ooit fixte, en dat leest de ledger.
         if getattr(context, "projects", None) is None:
             return {"ok": False, "week": week,
                     "escalate": {"reason": "geen projectenbord beschikbaar in de context"}}
-        verslag = claims_board.zet_op_bord(
-            context, db, bevindingen,
-            bron=f"wekelijkse site-scan {week}", rol_voor=_rol_voor, trigger="role")
+        # WAT VRAAGT EEN BESLISSING DIE NOG NERGENS LOOPT. Dezelfde schifting die `zet_op_bord`
+        # hiervoor deed — nu read-only en als aparte functie, want die regel ("alleen NIEUWE
+        # bevindingen") staat in de kop van deze skill en hoort niet met de taken te verdwijnen.
+        schifting = claims_board.nieuwe_bevindingen(context.projects, db, bevindingen)
+        meldbaar = schifting["nieuw"]
+        rood = sum(1 for b in meldbaar if b.get("stoplicht") == "red")
 
         # Tijdelijk versus permanent:
         #   tijdelijk (429/5xx/timeout) → de week NIET afsluiten; de volgende puls pakt de rest op.
@@ -542,8 +574,8 @@ class ClaimsSiteScanSkill(Skill):
             _tekst = paginateksten.get(_b.get("pagina") or "") or ""
             _b["contexten"] = _zinnen(_tekst, _b.get("gevonden") or [_b.get("term", "")])
         markeer_week(data_dir, week, {"bevindingen": bevindingen,
-                                      "nieuw": len(verslag["aangemaakt"]),
-                                      "overgeslagen": verslag["overgeslagen"],
+                                      "nieuw": len(meldbaar),
+                                      "overgeslagen": schifting["overgeslagen"],
                                       "gescand": len(paginateksten),
                                       "gedekt": nieuw_gedekt,
                                       "paginas": len(paginas),
@@ -567,28 +599,29 @@ class ClaimsSiteScanSkill(Skill):
                 f"🚧 Site-scan blijft blind op {len(tijdelijk)} pagina('s): "
                 f"{', '.join(f['label'] for f in tijdelijk)} — {fout_tekst(tijdelijk, 1)}. "
                 f"Al {MAX_PULSEN_ZONDER_VOORTGANG} pulsen geen enkele nieuwe pagina erbij.")
-        gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen, tijdelijk,
+        gaten = self._oogst_gaten(data_dir, signalen, bevindingen, tijdelijk,
                                   vastgelopen, rol=_claims_rol(context))
-        headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen,
+        headsup = self._headsup(meldbaar, statussen, tijdelijk, permanent, signalen, vastgelopen,
                                 len(nieuw_gedekt), len(paginas))
-        aangemaakt = [taak_record(t, bevindingen) for t in verslag["aangemaakt"]]
+        gevonden = [bevinding_record(b) for b in meldbaar]
         uit = {"ok": True, "week": week, "skipped": False, "headsup": headsup,
                "gescand": len(paginateksten), "paginas": len(paginas),
                "volledig": dekking_compleet or vastgelopen, "vastgelopen": vastgelopen,
-               "nieuw": len(aangemaakt), "rood": verslag["rood"], "aangemaakt": aangemaakt,
+               "nieuw": len(gevonden), "rood": rood, "bevindingen": gevonden,
                # De run-administratie onder één `_`-sleutel: voor de uitvoerlaag is dat metadata, dus
                # de paginalabels of de statuslijst kunnen de bevindingen niet meer wegduwen — en een
                # deelrun zonder bevindingen leest niet meer als 'gelukt · 2 results'.
                "_scan": {"gedekt": nieuw_gedekt, "fouten": fouten,
                          "statussen": statussen, "statussen_mislukt": status_mislukt,
-                         "overgeslagen": verslag["overgeslagen"],
+                         "overgeslagen": schifting["overgeslagen"],
+                         "lopend": schifting["lopend"],
                          "model_gevonden": signalen["model_gevonden"],
                          "modelpas_ok": signalen["modelpas_ok"],
                          "modelpas_mislukt": signalen["modelpas_mislukt"],
                          "gewhitelist": signalen["gewhitelist"], "gaten": gaten},
                "escalate": None}
         uit["text"] = kop_tekst(uit, len(bevindingen), tijdelijk, permanent, statussen)
-        if not aangemaakt:
+        if not gevonden:
             # Geen nieuwe bevinding is een ANTWOORD ("niets nieuws op de site"), geen kennisgat — ook
             # als er pagina's niet gehaald zijn: dan zegt de reden precies hoeveel, zodat "niets
             # gevonden" nooit stil "niet gekeken" betekent. Tot scope 56 gold dat alleen voor de
@@ -607,21 +640,21 @@ class ClaimsSiteScanSkill(Skill):
     GAT_SUBSTANTIATIE = "claim-substantiatie niet machinaal vast te stellen"
     GAT_ONLEESBARE_PAGINA = "eigen pagina lezen zonder door de edge geblokkeerd te worden"
 
-    def _oogst_gaten(self, data_dir: str, signalen: dict, verslag: dict, bevindingen: list[dict],
+    def _oogst_gaten(self, data_dir: str, signalen: dict, bevindingen: list[dict],
                      tijdelijk: list[dict] | None = None,
                      vastgelopen: bool = False, rol: str = "") -> list[dict]:
         """Leg per onbeslisbaar geval één capaciteitsgat vast in de gat-ledger van de Codie-backlog.
 
-        Het project-id van de taak die uit de bevinding kwam gaat mee waar dat kan: `gap_ledger`
-        rangschikt clusters op het aantal GEBLOKKEERDE PROJECTEN, dus zonder die koppeling zou een
-        echt terugkerend gat onderaan de backlog blijven staan."""
-        pid_van = {claims_board.normaliseer(t.get("gevonden", "")): t["pid"]
-                   for t in verslag["aangemaakt"] if t.get("gevonden")}
+        ZONDER PROJECT-KOPPELING SINDS 20 SEPTEMBER 2026. `gap_ledger` rangschikt clusters op het
+        aantal GEBLOKKEERDE PROJECTEN, en de taak die dat project was maakte deze scan zelf aan —
+        dat doet hij niet meer (stap 3). Er is dus geen project om te blokkeren; een pid verzinnen
+        zou het gat zwaarder laten wegen dan het meetbaar is. Gevolg, eerlijk opgeschreven: deze
+        gaten zakken in de backlog-rangschikking. Komt een gat structureel terug, dan is dát het
+        signaal, en niet een telling die wij zelf voeden."""
 
         def leg_vast(capability: str, tekst: str, gevonden: str = "") -> dict | None:
             return gap_ledger.record(
-                data_dir, role=rol, item_text=tekst,
-                project_id=pid_van.get(claims_board.normaliseer(gevonden), ""),
+                data_dir, role=rol, item_text=tekst, project_id="",
                 reason=gap_ledger.MISSING_CAPABILITY, capability=capability)
 
         gaten = []
@@ -656,32 +689,41 @@ class ClaimsSiteScanSkill(Skill):
                 (b.get("gevonden") or [""])[0]))
         return [g for g in gaten if g]
 
-    def _headsup(self, verslag: dict, statussen: list[dict], tijdelijk: list[dict],
+    def _headsup(self, meldbaar: list[dict], statussen: list[dict], tijdelijk: list[dict],
                  permanent: list[dict], signalen: dict | None = None,
                  vastgelopen: bool = False, gedekt: int = 0, totaal: int = 0) -> str | None:
         """Wat de mens moet zien. De generieke pulslaag stuurt dit door naar de founder.
 
-        Alleen bij ROOD (oranje is werk voor de rol, geen alarm voor de founder) of bij een
-        regressie — plus altijd een regel als de scan pagina's niet zag: een onvolledige scan die
-        'niets gevonden' meldt is precies de stille fout die dit ritme moet uitsluiten."""
+        Alleen bij ROOD of bij een regressie — plus altijd een regel als de scan pagina's niet zag:
+        een onvolledige scan die 'niets gevonden' meldt is precies de stille fout die dit ritme moet
+        uitsluiten.
+
+        WAAROM ROOD HIER BLIJFT, nu de rest naar de weekmemo gaat. Een rood stoplicht komt uit de
+        regex plus `claims_db` — een deterministisch wetsoordeel, geen modelvondst. Dat een week
+        wachten zou betekenen dat een verboden claim tot zeven dagen ongezien op de site staat, en
+        dat is een ander soort risico dan "hier moet iemand naar kijken". Oranje en de modelvondsten
+        wachten wél op de memo: die zijn een vermoeden, en een dagelijks vermoeden is ruis."""
         regressies = [s for s in statussen if s["naar"] == claims_db.AUTO_REGRESSIE]
+        rood = [b for b in meldbaar if b.get("stoplicht") == "red"]
+        vind = [_vindplaats_rij(b) for b in meldbaar]
         kern = None
         if regressies:
             # Een teruggekeerde claim weegt zwaarder dan een nieuwe: iemand dacht dat dit af was.
             kern = (f"↩️ Claim-regressie: {len(regressies)} eerder opgeloste claim(s) staan "
                     f"weer op de site (#{', #'.join(str(r['nr']) for r in regressies)})")
-        elif verslag["rood"]:
+        elif rood:
             # Spiegel van de regressie-tak: mét identifiers. Een telling alleen dwingt de mens de
             # cockpit te openen om te weten of dit erg is; term + pagina zegt dat meteen.
-            kern = (f"🔴 Claim-scan: {verslag['rood']} nieuwe verboden claim(s) op nooch.earth "
-                    f"— {claims_board.vindplaatsen(verslag['aangemaakt'], stoplicht='red')} "
-                    f"({len(verslag['aangemaakt'])} taak/taken op het bord)")
-        # Modelvondsten die tot een taak leidden: die verdienen een eigen regel, want een claim die
-        # geen lijstterm raakt is precies wat de scan tot nu toe miste.
-        model = [t for t in verslag["aangemaakt"] if t.get("herkomst") == claims_modelpas.HERKOMST]
+            kern = (f"🔴 Claim-scan: {len(rood)} verboden claim(s) op nooch.earth "
+                    f"— {claims_board.vindplaatsen(vind, stoplicht='red')} "
+                    f"(niets op het bord gezet — dat is jouw keuze)")
+        # Modelvondsten: een eigen regel, want een claim die geen lijstterm raakt is precies wat de
+        # scan tot nu toe miste. Ze worden geen taak meer; ze staan hier en in de weekmemo.
+        model = [b for b in meldbaar if b.get("herkomst") == claims_modelpas.HERKOMST]
         if model:
             regel = (f"{len(model)} model-gevonden claim(s) zonder lijstterm "
-                     f"— {claims_board.vindplaatsen(model)} (vermoeden, geen wet)")
+                     f"— {claims_board.vindplaatsen([_vindplaats_rij(b) for b in model])} "
+                     f"(vermoeden, geen wet)")
             kern = f"{kern} · {regel}" if kern else f"🟠 Claim-scan: {regel}"
         gemist = []
         if tijdelijk and vastgelopen:

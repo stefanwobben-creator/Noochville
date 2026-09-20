@@ -169,3 +169,35 @@ def test_de_drempels_staan_op_de_bron(module, verwacht):
     van beide schuiven, dan wordt de een een slechtere vinder of de ander een slechter filter."""
     from nooch_village.weekmemo import DREMPELS
     assert module.DREMPEL == verwacht and module.DREMPEL in DREMPELS
+
+
+def test_het_merk_komt_uit_de_query_als_meta_het_niet_draagt(tmp_path):
+    """Op de echte Kroniek (20 sept 2026) droeg geen van de acht records een `meta.brand`; het merk
+    stond in de query, als "<merk> — <claim>". Zonder deze splitsing leest elk bewijs-signaal in de
+    weekmemo als "een merk — claim 'Vivobarefoot — biodegradable…'" — het merk stond er dan wél,
+    maar op de verkeerde plek en twee keer verstopt."""
+    from nooch_village.evidence_ledger import EvidenceLedger
+    from nooch_village.skills_impl.claim_evidence import verzamel
+
+    led = EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl"))
+    led.record(role_id="r", skill="claim_evidence",
+               query="Vivobarefoot — biodegradable OR compostable",
+               source="https://vivobarefoot.com/x", status="bevestigd",
+               result_ref="The outsole is compostable.")
+    sig = verzamel(led)[0]
+    assert sig.extra["merk"] == "Vivobarefoot"
+    assert sig.extra["claim"] == "biodegradable OR compostable"
+    assert sig.tekst.startswith("Vivobarefoot — claim")
+
+
+def test_een_query_zonder_merk_blijft_ongemoeid(tmp_path):
+    """Geen scheidingsteken = niets te splitsen. Een merk verzinnen is erger dan er geen noemen."""
+    from nooch_village.evidence_ledger import EvidenceLedger
+    from nooch_village.skills_impl.claim_evidence import verzamel
+
+    led = EvidenceLedger(str(tmp_path / "evidence_ledger.jsonl"))
+    led.record(role_id="r", skill="claim_evidence", query="plastic-free",
+               source="https://x/y", status="bevestigd", result_ref="quote")
+    sig = verzamel(led)[0]
+    assert sig.extra["merk"] == "" and sig.extra["claim"] == "plastic-free"
+    assert sig.tekst.startswith("een merk — claim")

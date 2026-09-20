@@ -93,16 +93,24 @@ def test_het_domein_gaat_VOOR_de_classificatie(monkeypatch):
     assert geroepen == []                                     # het model is niet aangeroepen
 
 
-def test_zonder_eigenaar_valt_hij_terug_op_de_secretary(monkeypatch):
+def test_zonder_eigenaar_gaat_het_naar_de_founder_en_het_model_wordt_een_voorstel(monkeypatch):
+    """Deze test heette `test_zonder_eigenaar_valt_hij_terug_op_de_secretary`: hield niemand het
+    domein, dan bepaalde `classificeer` het ADRES. Die trede is weg op 20 september 2026 (pijplijn
+    stap 5) — een model mag een ontvanger voorstellen, nooit aanwijzen.
+
+    Wat het model ziet gaat niet verloren; het wordt een zin in het bericht."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
     monkeypatch.setattr(triage_rol, "classificeer",
                         lambda *a, **k: {"rol": "harry_hemp", "grond": "gematcht"})
     import nooch_village.cockpit2 as c
     monkeypatch.setattr(c, "mens_vervullers", lambda st, rol: ["iemand"])
     st = _st(_rol("x", []))
     uit = triage_rol.menselijke_eigenaar(st, "sample", domein="Materials")
-    assert uit["rol"] == "harry_hemp"
+    assert uit["rol"] == FOUNDER_ROLE_ID                      # het adres, niet de modelmatch
+    assert uit["voorstel"]["rol"] == "harry_hemp"             # het oordeel, als voorstel
+    assert "harry_hemp" in uit["voorstel_regel"]
     # de reden van de terugval reist mee, zodat een droge run leesbaar blijft
-    assert "wordt door niemand gehouden" in uit["waarom"] and "gematcht" in uit["waarom"]
+    assert "wordt door niemand gehouden" in uit["waarom"]
 
 
 def test_de_feed_draagt_de_domeinnaam_en_niet_de_code():

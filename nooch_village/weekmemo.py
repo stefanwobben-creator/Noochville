@@ -37,10 +37,13 @@ stap, naast het feit dat de regel nu op één plek staat.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 
 from nooch_village.util import JsonStore
+
+log = logging.getLogger("village.weekmemo")
 
 #: Korter dan dit is te generiek om als vindplaats te dienen: een fragment van tien tekens komt in
 #: elke pagina wel ergens voor, en dan grondt de poort niets meer. Beide implementaties hanteerden
@@ -222,7 +225,26 @@ def _regel(s) -> str:
     return kop + waar + (f"\n  bron zegt: {duiding[:300]}" if duiding else "")
 
 
-def _kaal(signalen: list, periode: str) -> str:
+def _bron_regels(rapport: dict | None) -> str:
+    """Wat elke bron deze ronde deed, in één regel. Leeg rapport = lege regel.
+
+    GEEN DATA IS GEEN NUL (CLAUDE.md). Een bron die uitviel en een bron die niets vond zien er in
+    een lijst signalen identiek uit — namelijk afwezig. Deze regel is het enige verschil tussen
+    "er gebeurde niets bij legal" en "legal kon niet gelezen worden", en zonder dat verschil leest
+    de founder een stille storing als een rustige week."""
+    if not rapport:
+        return ""
+    stukken = []
+    for bron in sorted(rapport):
+        stand = rapport[bron] or {}
+        if stand.get("fout"):
+            stukken.append(f"{bron}: NIET GELEZEN ({str(stand['fout'])[:120]})")
+        else:
+            stukken.append(f"{bron}: {int(stand.get('aantal') or 0)}")
+    return " · ".join(stukken)
+
+
+def _kaal(signalen: list, periode: str, rapport: dict | None = None) -> str:
     """De memo zonder model: een opsomming mét bronnen, gegroepeerd per bron.
 
     FAIL-OPEN MET DE FEITEN, en dat weegt hier zwaarder dan bij `materiaal_memo` waar dit vandaan
@@ -233,13 +255,16 @@ def _kaal(signalen: list, periode: str) -> str:
     for s in signalen:
         per_bron.setdefault(s.bron, []).append(s)
     stukken = [f"🗂 Signalen week {periode} — {len(signalen)} stuks, geen synthese beschikbaar."]
+    bronregel = _bron_regels(rapport)
+    if bronregel:
+        stukken.append(f"Bronnen deze ronde: {bronregel}")
     for bron in sorted(per_bron):
         stukken.append(f"\n{bron} ({len(per_bron[bron])}):")
         stukken += [f"- {_regel(s)}" for s in per_bron[bron]]
     return "\n".join(stukken)
 
 
-def stel_op(signalen: list, periode: str, *, reason_fn=None) -> str:
+def stel_op(signalen: list, periode: str, *, reason_fn=None, rapport: dict | None = None) -> str:
     """De weekmemo als tekst. Nooit leeg als er signalen zijn.
 
     DE PROMPTREGELS ZIJN OVERGENOMEN VAN `materiaal_memo._schrijf_memo`, want die zijn daar duur
@@ -253,7 +278,7 @@ def stel_op(signalen: list, periode: str, *, reason_fn=None) -> str:
     Anders leest het een modelvondst met dezelfde stelligheid als een vastgesteld Kroniek-feit."""
     if not signalen:
         return ""
-    kaal = _kaal(signalen, periode)
+    kaal = _kaal(signalen, periode, rapport)
     in_prompt = signalen[:PROMPT_CAP]
     rest = len(signalen) - len(in_prompt)
     regels = "\n".join(_regel(s) for s in in_prompt)
@@ -287,10 +312,173 @@ def stel_op(signalen: list, periode: str, *, reason_fn=None) -> str:
         uit = reason_fn(prompt, call_site=CALL_SITE, max_tokens=1200,
                         ladder=ladder_voor(CALL_SITE))
     except Exception:                                              # noqa: BLE001
-        import logging
-        logging.getLogger("village.weekmemo").warning(
-            "weekmemo: model niet bereikbaar — kale opsomming met bronnen", exc_info=True)
+        log.warning("weekmemo: model niet bereikbaar — kale opsomming met bronnen", exc_info=True)
         return kaal
     if not uit:
         return kaal
     return f"🗂 Weekmemo {periode}\n\n{str(uit).strip()}\n\n({len(signalen)} signalen)"
+
+
+# ── Stap 5: de ronde — verzamelen, één memo, één adres ──────────────────────────────────────────
+#
+# HIER KOMT DE PIJPLIJN UIT. Stap 1 t/m 4 bouwden losse delen die niemand aanriep: een poort, vijf
+# adapters en een synthese. Dit is de aanroeper, en tegelijk de enige uitgang — en dat laatste is
+# de hele operatie. Tot vandaag liep compliance-werk langs `claims_board`: een modelvondst werd
+# zonder mens een project op naam van een ROL. Vanaf nu is er één adres en dat is een MENS.
+#
+# WAAROM DE FOUNDER EN NIET "DE JUISTE ROL". Precies omdat "de juiste rol" een oordeel is, en een
+# model dat dat oordeel velt wijst werk toe — de grens uit CLAUDE.md ("AI is instrument, geen rol").
+# Een vast adres kan niet stilletjes verschuiven. Wie het werk daarna oppakt, beslist de mens die
+# de memo leest.
+#
+# WAT EEN VERZAMELAAR NIET MAG: schrijven. Alle vijf de adapters zijn side-effect-free; het
+# ONTHOUDEN gebeurt hier, één keer, ná bezorging. Stap 7 zet daar een ratchet op.
+
+#: Hoe ver de ronde terugkijkt. Acht dagen bij een weekritme, en die dag speling is met opzet: een
+#: signaal dat precies op de grens binnenkomt zou anders tussen twee rondes door vallen. Dubbel
+#: tellen kan niet — `nieuw()` leest het boek, en dat is per herkomst.
+VENSTER = 8 * 24 * 3600
+
+#: Wie de memo verstuurt. Niet een rol: de pijplijn is dorpswerk, geen rolwerk — precies de reden
+#: dat hij aan de dagcadans hangt en niet aan een rol-grant.
+AFZENDER = "village"
+
+
+def _veilig(bron: str, rapport: dict, haal) -> list:
+    """Eén adapter aanroepen zonder dat zijn val de andere vier meesleept.
+
+    EEN STUKKE BRON MAG DE MEMO NIET STIL MAKEN, en dat is hier zwaarder dan bij vijf losse memo's:
+    daar viel één memo uit, hier zou één uitzondering de hele week wegnemen. Wat er misging komt in
+    het rapport en dus in de memo — een lezer moet kunnen zien dat legal niet gelezen kón worden,
+    anders leest hij een storing als een rustige week."""
+    try:
+        uit = list(haal() or [])
+    except Exception as e:                                        # noqa: BLE001
+        log.warning("weekmemo: bron %r kon niet verzameld worden", bron, exc_info=True)
+        rapport[bron] = {"fout": f"{type(e).__name__}: {e}"}
+        return []
+    rapport[bron] = {"aantal": len(uit)}
+    return uit
+
+
+def verzamel_alles(data_dir: str, *, sinds: float = 0.0, omgeving=None,
+                   reason_fn=None) -> tuple[list, dict]:
+    """(signalen, rapport) over alle vijf de bronnen.
+
+    De volgorde is die van de memo-prompt: eerst wat van buiten komt (legal), dan wat wij over
+    onszelf zien (de twee claim-passen), dan wat al vaststaat (bewijs), dan de verkenning
+    (materiaal). Binnen een bron blijft de sortering van de adapter zelf staan.
+
+    `omgeving` is optioneel en is de daemon-`Context` of het cockpit-`_Stores`-object: het levert
+    de Kroniek (`evidence_ledger.van_context`) zonder die van schijf te herlezen, zodat een test
+    met gestubde stores hetzelfde meet als productie (harde regel 2: injectie boven globals)."""
+    import types
+
+    rapport: dict = {}
+    signalen: list = []
+
+    def _legal():
+        from nooch_village import legal_signaal
+        return legal_signaal.verzamel(data_dir, sinds=sinds, reason_fn=reason_fn)
+
+    def _regex():
+        from nooch_village import claims_context
+        return (claims_context.verzamel(data_dir, sinds=sinds, reason_fn=reason_fn)
+                if reason_fn is not None else claims_context.verzamel(data_dir, sinds=sinds))
+
+    def _model():
+        from nooch_village import claims_modelpas
+        return claims_modelpas.verzamel(data_dir, sinds=sinds)
+
+    def _bewijs():
+        from nooch_village.evidence_ledger import van_context
+        from nooch_village.skills_impl.claim_evidence import verzamel as verz
+        ctx = omgeving if omgeving is not None else types.SimpleNamespace(data_dir=data_dir)
+        return verz(van_context(ctx), sinds=sinds)
+
+    def _materiaal():
+        from nooch_village import materiaal_memo
+        st = omgeving if getattr(omgeving, "records", None) is not None else materiaal_memo._stores(data_dir)
+        return materiaal_memo.verzamel(st, data_dir, sinds=sinds, context=omgeving)
+
+    for bron, haal in (("legal", _legal), ("claim_regex", _regex), ("claim_model", _model),
+                       ("bewijs", _bewijs), ("materiaal", _materiaal)):
+        signalen += _veilig(bron, rapport, haal)
+    return signalen, rapport
+
+
+def _bezorg_bij_de_founder(data_dir: str, tekst: str, omgeving=None) -> list[str]:
+    """De memo als DM bij de founder. Geeft de kanalen terug waarin hij landde (leeg = nergens).
+
+    VAST ADRES, GEEN LOOKUP. `signaal.stuur_op_pad` zoekt bij de founder-ROL de mens die hem
+    vervult — dat is een governance-feit, geen modeloordeel. Er is bewust geen tak die 'de juiste
+    rol' kiest: dat was de oude uitgang."""
+    from nooch_village import signaal
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    return signaal.stuur_op_pad(data_dir, "role", FOUNDER_ROLE_ID, tekst,
+                                by=AFZENDER, omgeving=omgeving)
+
+
+def ronde(data_dir: str, *, omgeving=None, periode: str = "", nu: float | None = None,
+          reason_fn=None, bezorg=None, force: bool = False, dry: bool = False) -> dict:
+    """Eén weekronde: verzamelen → wat nog niet is voorgelegd → memo → bij de founder.
+
+    DE VOLGORDE IS DE VEILIGHEID. Markeren gebeurt ALS LAATSTE en alleen na een geslaagde
+    bezorging. Andersom (eerst markeren, dan sturen) verliest een week stil zodra de DM niet
+    aankomt: het ritme zegt dan "deze week gedaan" terwijl niemand iets heeft gezien. Hetzelfde
+    geldt voor het boek — een signaal dat als 'voorgelegd' geboekt staat maar nooit is voorgelegd,
+    komt nooit meer terug.
+
+    DE LEGE RONDE WORDT WÉL GEMARKEERD, en dat is geen inconsistentie: er is niets verloren
+    gegaan, en zonder markering verzamelt de daemon elke dag van de week opnieuw (vier
+    modelaanroepen per dag) om weer tot dezelfde nul te komen.
+
+    `dry=True` doet alles behalve bezorgen en onthouden — de droge run uit de werkafspraken, zodat
+    een mens de eerste memo kan lezen voordat hij verstuurd wordt."""
+    import time
+
+    from nooch_village.checklists import period_key
+
+    periode = periode or period_key("week")
+    uit = {"periode": periode, "gedraaid": False, "reden": "", "aantal": 0,
+           "rapport": {}, "tekst": "", "kanalen": []}
+    if not force and al_gedraaid(data_dir, periode):
+        uit["reden"] = "deze week al gedraaid"
+        return uit
+
+    nu = time.time() if nu is None else nu
+    signalen, rapport = verzamel_alles(data_dir, sinds=max(0.0, nu - VENSTER),
+                                       omgeving=omgeving, reason_fn=reason_fn)
+    uit["rapport"] = rapport
+    verse = nieuw(data_dir, signalen)
+    if not verse:
+        # GEEN MEMO BIJ EEN LEGE RONDE. Een memo die "niets gevonden" meldt leert je hem ongeopend
+        # weg te klikken, en dan mis je de week dat er wél iets staat (stap 4, en dezelfde regel
+        # als "geen bord-ruis" in de scan).
+        if not dry:
+            markeer_gedraaid(data_dir, periode, aantal=0)
+        uit.update(gedraaid=not dry, reden="geen nieuwe signalen — geen memo")
+        return uit
+
+    uit["tekst"] = stel_op(verse, periode, reason_fn=reason_fn, rapport=rapport)
+    uit["aantal"] = len(verse)
+    if dry:
+        uit["reden"] = "droge run — niets bezorgd, niets onthouden"
+        return uit
+
+    kanalen = (bezorg or _bezorg_bij_de_founder)(data_dir, uit["tekst"], omgeving)
+    uit["kanalen"] = list(kanalen or [])
+    if not uit["kanalen"]:
+        # NIET MARKEREN. De volgende puls probeert het opnieuw; dat is beter dan een week die als
+        # gedaan boekt terwijl niemand hem heeft gezien.
+        log.warning("weekmemo %s: bezorging kwam nergens aan — week NIET gemarkeerd, de volgende "
+                    "puls probeert opnieuw", periode)
+        uit["reden"] = "bezorging mislukt — week niet gemarkeerd"
+        return uit
+
+    onthoud(data_dir, [s.herkomst for s in verse])
+    markeer_gedraaid(data_dir, periode, aantal=len(verse))
+    uit.update(gedraaid=True, reden=f"{len(verse)} signaal/signalen bezorgd")
+    log.info("🗂 weekmemo %s: %d signaal/signalen naar de founder (%s)", periode, len(verse),
+             ", ".join(uit["kanalen"]))
+    return uit

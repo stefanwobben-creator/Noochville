@@ -31,6 +31,30 @@ def main() -> None:
         demo()
 
 
+    elif mode == "weekmemo":
+        # De weekmemo met de hand: standaard een DROGE RUN (toon de memo, bezorg niets, onthoud
+        # niets), pas met --doen echt versturen. Zelfde werkafspraak als elk script dat data
+        # wijzigt: eerst zien wat eruit komt, dan pas schrijven.
+        #
+        # `--force` negeert de weekpoort, zodat je een al gedraaide week opnieuw kunt bekijken.
+        import os
+        from nooch_village import weekmemo
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        doen = "--doen" in sys.argv[2:]
+        uit = weekmemo.ronde(ctx.data_dir, omgeving=ctx, dry=not doen,
+                             force="--force" in sys.argv[2:])
+        bronnen = ", ".join(
+            f"{b}: {v.get('fout') or v.get('aantal')}" for b, v in sorted(uit["rapport"].items()))
+        print(f"🗂 weekmemo {uit['periode']} — {uit['reden'] or 'klaar'}")
+        print(f"   bronnen: {bronnen or 'geen'}")
+        if uit["tekst"]:
+            print("\n" + uit["tekst"])
+        if uit["kanalen"]:
+            print(f"\n✅ bezorgd in: {', '.join(uit['kanalen'])}")
+        elif not doen:
+            print("\nDroge run. Draai met --doen om hem echt bij de founder te bezorgen.")
+
     elif mode == "governance":
         from nooch_village.demos.governance_demos import governance_demo
         governance_demo()

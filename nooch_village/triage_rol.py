@@ -303,54 +303,82 @@ def domein_eigenaar(st, domein: str) -> dict:
     return {"rol": "", "grond": f"domein {domein!r} wordt door niemand gehouden"}
 
 
+def voorstel_regel(voorstel: dict | None) -> str:
+    """Het modeloordeel als ZIN, nooit als adres. Leeg als er niets te voorstellen valt.
+
+    DIT IS DE HELE VERANDERING VAN 20 SEPTEMBER 2026 (pijplijn stap 5). `classificeer` matcht tekst
+    tegen de actuele accountabilities en was tot vandaag het ADRES waar een memo heen ging als geen
+    rol het domein hield. Een model dat een rol aanwijst doet structureel hetzelfde als een rol die
+    zichzelf een skill geeft: het verandert de organisatie zonder dat een mens tekende (CLAUDE.md,
+    "AI is instrument, geen rol"). Als tekst mag het wél — dat is het instrument: het toont inzicht,
+    en de mens die het leest beslist."""
+    v = voorstel or {}
+    rol = str(v.get("rol") or "")
+    if not rol:
+        return ""
+    grond = str(v.get("grond") or "").strip()
+    return (f"💡 Voorstel (niet toegewezen): dit raakt mogelijk @{rol.split('__')[-1]}"
+            + (f" — {grond}" if grond else "") + ". Jij beslist wie het oppakt.")
+
+
+def _voorstel(st, tekst: str, *, reason_fn=None) -> dict:
+    """De rol die het model bij deze tekst ziet → {rol, grond}. Fail-soft: een val is geen rol.
+
+    Wordt ALLEEN aangeroepen als er geen domein-eigenaar is. Twee redenen: dan is "van wie is dit?"
+    ook echt een open vraag, en een modelaanroep per memo voor een zin die niemand nodig heeft is
+    verspilling."""
+    try:
+        uitslag = classificeer(tekst, st.records, reason_fn=reason_fn) or {}
+    except Exception:                                        # noqa: BLE001
+        log.warning("voorstel-classificatie faalde voor %r — geen voorstel", tekst, exc_info=True)
+        return {}
+    return {"rol": str(uitslag.get("rol") or ""), "grond": str(uitslag.get("grond") or "")}
+
+
 def menselijke_eigenaar(st, tekst: str, *, reason_fn=None, domein: str = "") -> dict:
-    """De rol die dit werk hoort te dragen ÉN door een mens vervuld wordt.
+    """De MENS die dit werk hoort te lezen → {rol, mens, waarom, via, voorstel, voorstel_regel}.
 
-    ÉÉN LOOKUP, TWEE GEBRUIKEN: de memo-ontvanger en de landing van het project dat eruit volgt.
-    Zou de memo naar de ene rol gaan en het project naar de andere, dan kan "één persoon oordeelt
-    én bezit" alleen per toeval kloppen — en breekt het stil zodra de org verschuift.
+    HET ADRES IS EEN VERKLARING, GEEN GEVOLGTREKKING. Tot 20 september 2026 stond hier een ladder
+    die begon bij `domein_eigenaar` en, als niemand het domein hield, doorschoof naar
+    `classificeer` — een modelmatch op accountability-tekst. Die tweede trede is weg: een LLM mag
+    een ontvanger voorstellen, nooit aanwijzen. Wat het model ervan vindt reist nu mee als
+    `voorstel_regel`, een zin in het bericht, en verandert niets aan waar het bericht landt.
 
-    Geen vaste rol-id. `classificeer` matcht de tekst tegen de ACTUELE accountabilities, dus een
-    andere vervuller én een verplaatste eigenaar-rol worden allebei gevolgd.
-
-    DRIE FAIL-OPENS, want dit mag nooit stil wegvallen:
-      geen gegronde match      → Circle Lead van de cirkel
-      rol zonder MENS          → Circle Lead. Let op: een AI-vervulde rol is hier net zo goed
-                                 onbruikbaar als een lege — een persona leest de NotifStore nooit,
-                                 dus een bericht daarheen is een dead letter (zie CLAUDE.md).
-                                 `bestemming()` hopt hier NIET, want die vraagt of de rol kan
-                                 UITVOEREN, en dat kan een persona; wij vragen of er iemand LEEST.
+    DE LADDER, en elke trede is een governance-feit:
+      domein-eigenaar          een rol die dit domein HOUDT (een akte, geen oordeel)
+      rol zonder MENS          → Circle Lead. Een AI-vervulde rol is hier net zo onbruikbaar als
+                                 een lege: een persona leest de NotifStore nooit, dus een bericht
+                                 daarheen is een dead letter. `bestemming()` hopt hier NIET — die
+                                 vraagt of de rol kan UITVOEREN (dat kan een persona); wij vragen
+                                 of er iemand LEEST.
+      geen domein-eigenaar     → er is niets verklaard, dus het gaat naar de founder. Dat is geen
+                                 verlies: het model wijst nog steeds aan wie het zou kunnen zijn,
+                                 maar als voorstel op het bureau van de mens.
       ook de lead onbemand     → de founder-rol, het laatste adres dat altijd bestaat
 
-    Geeft {rol, mens, waarom, via} — `via` vertelt hoe hij daar kwam, zodat een droge run leesbaar
-    is zonder de code ernaast te leggen."""
+    Geeft ook `via` mee — hoe hij daar kwam — zodat een droge run leesbaar is zonder de code
+    ernaast te leggen."""
     from nooch_village.cockpit2 import mens_vervullers, _circle_lead_van   # noqa: PLC0415
     from nooch_village.human_inbox import FOUNDER_ROLE_ID                  # noqa: PLC0415
 
-    # DOMEIN EERST: een verklaring gaat vóór een gevolgtrekking. Houdt niemand het domein (of is er
-    # geen geconfigureerd), dan neemt de secretary het over — `domein_eigenaar` heeft het verschil
-    # tussen "niets geconfigureerd" en "config-fout" dan al geLOGD.
     dom = domein_eigenaar(st, domein)
-    if dom["rol"]:
-        rol, waarom = dom["rol"], dom["grond"]
-    else:
-        uitslag = classificeer(tekst, st.records, reason_fn=reason_fn)
-        rol = uitslag.get("rol") or ""
-        waarom = uitslag.get("grond") or ""
-        if domein:
-            waarom = f"{dom['grond']}; {waarom}"
+    rol, waarom = dom["rol"], dom["grond"]
+    # Alleen vragen als er niets verklaard is; anders kost het een modelaanroep voor een zin die
+    # niemand nodig heeft.
+    voorstel = {} if rol else _voorstel(st, tekst, reason_fn=reason_fn)
 
     def _mens(r):
         return (mens_vervullers(st, r) or [None])[0] if r else None
 
+    uit = {"voorstel": voorstel, "voorstel_regel": voorstel_regel(voorstel)}
     if rol and _mens(rol):
-        return {"rol": rol, "mens": _mens(rol), "waarom": waarom, "via": ""}
+        return {**uit, "rol": rol, "mens": _mens(rol), "waarom": waarom, "via": ""}
 
-    reden = ("geen gegronde match" if not rol
+    reden = ("geen rol houdt dit domein" if not rol
              else f"{rol} heeft geen menselijke vervuller")
     lead = _circle_lead_van(st, rol) if rol else ""
     if lead and _mens(lead):
-        return {"rol": lead, "mens": _mens(lead), "waarom": waarom, "via": reden}
+        return {**uit, "rol": lead, "mens": _mens(lead), "waarom": waarom, "via": reden}
 
-    return {"rol": FOUNDER_ROLE_ID, "mens": _mens(FOUNDER_ROLE_ID), "waarom": waarom,
+    return {**uit, "rol": FOUNDER_ROLE_ID, "mens": _mens(FOUNDER_ROLE_ID), "waarom": waarom,
             "via": f"{reden}; ook de Circle Lead is onbemand"}

@@ -137,6 +137,13 @@ def verzamel(ledger, *, sinds: float = 0.0, skill: str = "claim_evidence") -> li
         meta = r.get("meta") if isinstance(r.get("meta"), dict) else {}
         merk = str(meta.get("brand") or meta.get("merk") or "")
         claim = str(r.get("query") or "")
+        if not merk and " — " in claim:
+            # HET MERK ZIT IN DE QUERY. De skill stelt zijn vraag als "<merk> — <claim>" en zet
+            # `meta.brand` niet altijd; op de echte Kroniek (8 records, 20 sept) was dat bij alle
+            # acht zo. Zonder deze regel leest elk bewijs-signaal als "een merk — claim 'Vivo —
+            # biodegradable…'": het merk stond er wél, maar twee keer verstopt. Splitsen is hier
+            # geen gok maar het omgekeerde van hoe de vraag is samengesteld.
+            merk, claim = (deel.strip() for deel in claim.split(" — ", 1))
         uit.append(Signaal(
             bron="bewijs",
             # De TEKST is wat er is vastgesteld, in gewone woorden. Een lezer die "bevestigd" ziet

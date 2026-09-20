@@ -339,18 +339,26 @@ def _ctx(tmp_path, monkeypatch=None):
                            records=_records_met_claimseigenaar())
 
 
-def test_scan_maakt_taak_van_nieuwe_term_en_is_weekidempotent(tmp_path, monkeypatch):
+def test_scan_meldt_de_nieuwe_term_maar_maakt_er_geen_taak_van(tmp_path, monkeypatch):
+    """DE POORT VAN PIJPLIJN-STAP 3 (20 september 2026). Deze test heette
+    `test_scan_maakt_taak_van_nieuwe_term_en_is_weekidempotent` en bewees het tegenovergestelde:
+    elke rode/oranje bevinding werd hier een project op naam van een rol, zonder mens ertussen.
+
+    Wat blijft: de scan MELDT precies hetzelfde als eerst, inclusief de schifting op wat al loopt
+    ("zero waste" staat in de werklijst). Wat weg is: het aanmaken. Compliance-werk begint bij een
+    mens — de memo draagt de bevinding, de "to board"-knop maakt er werk van."""
     ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert uit["ok"] and not uit["skipped"]
     assert uit["nieuw"] >= 1
-    titels = [t["titel"] for t in uit["aangemaakt"]]
-    assert any("eco-friendly" in t.lower() for t in titels)
-    assert not any("zero waste" in t.lower() for t in titels)     # staat al in de werklijst
+    gevonden = [b["gevonden"].lower() for b in uit["bevindingen"]]
+    assert any("eco-friendly" in g for g in gevonden)
+    assert not any("zero waste" in g for g in gevonden)           # staat al in de werklijst
+    assert ctx.projects.all() == []                               # HET PUNT: geen enkel project
 
     tweede = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert tweede["skipped"] is True                              # tweede puls dezelfde week
-    assert len(ctx.projects.all()) == uit["nieuw"]
+    assert ctx.projects.all() == []
 
 
 def test_scan_escaleert_als_geen_enkele_pagina_laadt(tmp_path):
@@ -399,7 +407,11 @@ def test_force_slaat_de_weekpoort_over_maar_respecteert_de_dekking(tmp_path, mon
 
     derde = ClaimsSiteScanSkill().run({"herstart": True, "_fetch": fetch}, ctx)
     assert derde["skipped"] is False
-    assert derde["nieuw"] == 0                                    # alles loopt inmiddels
+    # Vóór stap 3 stond hier `nieuw == 0`: de eerste run had er taken van gemaakt, dus bij een
+    # herstart liep alles al. Er worden geen taken meer aangemaakt, dus dezelfde pagina levert
+    # dezelfde bevindingen op — en dat is juist de bedoeling: de scan is een waarnemer geworden.
+    assert derde["nieuw"] == eerste["nieuw"] and derde["nieuw"] > 0
+    assert ctx.projects.all() == []
 
 
 def test_scan_paginas_komen_uit_de_database():
