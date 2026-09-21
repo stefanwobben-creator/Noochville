@@ -133,6 +133,61 @@ class PeopleStore:
         rij["gezien"] = gz
         self._save()
 
+    # ── welke kanalen staan in JOUW lijst ────────────────────────────────────
+    #
+    # WAAROM HIER, EN NIET OP HET KANAAL. Tot vandaag had Messages geen begrip van "mijn lijst":
+    # elk project met een gesprek erin WAS een kanaal, en dus stonden er 123 in de lijst — een
+    # muur waar je langs scrolt op zoek naar één. Kanalen horen bewust te zijn (besluit Stefan,
+    # 21 september 2026): je zoekt een project op en voegt het toe, of het staat er niet.
+    #
+    # Dat "toegevoegd" is een eigenschap van een MENS, niet van een kanaal. Een vlag op het kanaal
+    # zou betekenen dat iedereen hetzelfde volgt, en dan drijft hij uiteen zodra er een tweede
+    # lezer bijkomt — `reference, don't copy`. Het staat daarom naast `gezien` hierboven, met
+    # exact hetzelfde argument: het is een eigenschap van de lezer, en lezers hebben al een store.
+    # Geen nieuwe store dus; die lijst is in `test_conventies_ratchet.STORES` bewust bevroren.
+    #
+    # HET PROJECT-KANAAL ZELF VERANDERT NIET. `project["log"]` blijft waar het is; een kanaal
+    # verdwijnt uit de LIJST, niet uit de data. Geen migratie, dus ook geen kans op verlies.
+
+    def gevolgd(self, pid: str) -> dict:
+        """{kanaal: sinds-wanneer} — de kanalen die deze mens in zijn lijst heeft gezet."""
+        rij = self._items.get(pid) or {}
+        gv = rij.get("gevolgd")
+        return dict(gv) if isinstance(gv, dict) else {}
+
+    def volgt(self, pid: str, kanaal: str) -> bool:
+        return bool(kanaal) and kanaal in self.gevolgd(pid)
+
+    def volg(self, pid: str, kanaal: str, at: float | None = None) -> bool:
+        """Zet een kanaal in de lijst van deze mens. Idempotent: het tijdstip van de EERSTE keer
+        blijft staan, zodat "sinds wanneer volg ik dit" niet bij elk bezoek verspringt."""
+        rij = self._items.get(pid)
+        if rij is None or not kanaal:
+            return False
+        gv = rij.get("gevolgd")
+        if not isinstance(gv, dict):
+            gv = {}
+        if kanaal in gv:
+            return False
+        gv[kanaal] = float(at if at is not None else time.time())
+        rij["gevolgd"] = gv
+        self._save()
+        return True
+
+    def ontvolg(self, pid: str, kanaal: str) -> bool:
+        """Haal een kanaal uit de lijst. Het GESPREK blijft bestaan — dit gaat alleen over wat jij
+        ziet staan. Terugvinden doe je via zoeken, net als de eerste keer."""
+        rij = self._items.get(pid)
+        if rij is None or not kanaal:
+            return False
+        gv = rij.get("gevolgd")
+        if not isinstance(gv, dict) or kanaal not in gv:
+            return False
+        del gv[kanaal]
+        rij["gevolgd"] = gv
+        self._save()
+        return True
+
     def set_password(self, pid: str, password_hash: str, invited_at: float | None = None,
                      must_change: bool = True) -> None:
         """Admin-weg: zet een (temp-)wachtwoord. Standaard `must_change=True` → de gebruiker moet het bij
