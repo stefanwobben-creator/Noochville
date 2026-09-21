@@ -59,6 +59,24 @@
 .nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
 .nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
 
+/* 21 september · de twee overleg-knoppen, en de live-stand.
+   DRIE KLASSEN DIEP OM EEN REDEN: `.nu .c2-subnav a` hierboven is (0,2,1) en zet `color`. Een
+   regel op `.nu .c2-overleg` zou daar gelijk mee staan en dan beslist de bronvolgorde — precies
+   de val waar de basis-laag al in trapte. `.nu .c2-subnav a.c2-overleg` is (0,3,1) en wint.
+   GROEN BESTAAT HIER NIET: fase 9 haalde groen als vulling weg. De live-stand krijgt daarom de
+   bestaande actief-behandeling uit deze laag — zwart vlak, neon tekst, zoals `.msg-kanaal.on` —
+   en het stipje wordt neon in plaats van wit. Dezelfde betekenis, de taal van dit palet. */
+.nu .c2-subnav a.c2-overleg { background: var(--nu-bg-alt); color: var(--nu-text);
+  border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  text-transform: uppercase; }
+.nu .c2-subnav a.c2-overleg:hover { background: var(--nu-text); color: var(--nu-surface); }
+/* `text-transform` staat er ook hier, en dat is geen herhaling om de guard tevreden te stellen:
+   deze regel is specifieker dan de basis erboven, dus wie hier ooit `text-transform: none` zet
+   zou de hoofdletters stil uitzetten. De guard eist hem per blok om precies die reden. */
+.nu .c2-subnav a.c2-overleg--live { background: var(--nu-text); color: var(--nu-neon);
+  border-color: var(--nu-text); text-transform: uppercase; }
+.nu .c2-live { background: var(--nu-neon); }
+
 /* ── Knoppen: zwart-op-wit, hover inverteert ────────────────────────────────────────────────
    FASE 12 — ÉÉN LIJNDIKTE PER ROL. Deze knop droeg `--nu-border` (2px): exact de lijn van een
    container. Een knop naast een kaart las daardoor als nóg een vlak, en dat was Stefans klacht
