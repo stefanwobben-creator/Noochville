@@ -30,6 +30,18 @@ JS = (pathlib.Path(__file__).resolve().parents[1]
 OWNER = "mother_earth__nooch__creator_of_shoes"
 
 
+def _nav_ingevuld(cid: str = "mother_earth__nooch") -> str:
+    """De balk zoals een PAGINA hem toont, niet zoals `_nav()` hem teruggeeft.
+
+    `_nav()` heeft geen stores en laat twee plekken open als placeholder: de Circle-knop en de
+    twee overleg-knoppen, want die dragen allebei een cirkel-id. `_send` vult ze in. Een test die
+    alleen `_nav()` leest, kijkt dus langs precies het deel dat op 21 september stukging."""
+    from nooch_village.cockpit2_util import _SIDE_CIRCLE, _SIDE_OVERLEG, _side_item, overleg_items
+    h = _nav()
+    h = h.replace(_SIDE_CIRCLE, _side_item(f"/node?id={cid}", "Circle", "ci"), 1)
+    return h.replace(_SIDE_OVERLEG, overleg_items(cid), 1)
+
+
 def _dorp(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
@@ -61,7 +73,7 @@ def test_de_balk_klapt_nooit_om_naar_horizontaal():
 
 
 def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
-    h = _nav()
+    h = _nav_ingevuld()
     for sleutel in ("zoek", "pr", "me", "ci"):
         assert f"data-nav-paneel='{sleutel}'" in h, sleutel
     # WI en AD springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
@@ -76,9 +88,9 @@ def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
 def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
     """Zonder deze regel is de balk bij een JS-fout een rij dode elementen. De knop draagt zijn
     href, en `preventDefault` gebeurt pas als het paneel echt opengaat."""
-    h = _nav()
+    h = _nav_ingevuld()
     for sleutel, href in (("zoek", "/search"), ("pr", "/projects"),
-                          ("me", "/messages"), ("ci", "/node")):
+                          ("me", "/messages"), ("ci", "/node?id=mother_earth__nooch")):
         stuk = h.split(f"data-nav-paneel='{sleutel}'")[0][-160:]
         assert f"href='{href}'" in stuk, f"{sleutel} heeft geen val-terug-link"
     assert "e.preventDefault()" in JS
@@ -87,9 +99,9 @@ def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
 def test_de_twee_overleggen_zijn_geen_kanaal_en_geen_paneel():
     """CORRECTIE OP HET PROTOTYPE (Stefan, 21 september 2026): Werkoverleg en Roloverleg stonden
     daar eerst als kanaal. Het zijn twee bestaande schermen; één klik, geen lijst ervoor."""
-    h = _nav()
+    h = _nav_ingevuld()
     for href in ("/werkoverleg", "/roloverleg2"):
-        assert f"class='c2-overleg' href='{href}'" in h
+        assert f"class='c2-overleg' href='{href}?circle=" in h
         stuk = h.split(href)[1][:160]
         assert "data-nav-paneel" not in stuk
     # en ze staan los van de PR/ME/WI/CI/AD-groep, onder een eigen scheiding
@@ -190,3 +202,55 @@ def test_een_dm_blijft_buiten_de_zoek(tmp_path):
     for term in ("geheime", "vertrouwelijks"):
         res = dict(_zoek(st2, [term])[0])
         assert res["Channels"] == [] and res["Messages"] == [], term
+
+
+# ── 5. Elke knop in de balk gaat ergens heen dat bestaat ─────────────────────
+#
+# DE LES VAN 21 SEPTEMBER, 's MIDDAGS. De twee overleg-knoppen linkten kaal naar `/werkoverleg` en
+# `/roloverleg2`. Beide routes bestaan — maar ze zijn niet dorpsbreed: ze tonen HET OVERLEG VAN EEN
+# CIRKEL en beginnen met `st.records.get(circle_id)`. Zonder `?circle=` is dat None, en kreeg je
+# "No circle." en "Unknown.". Eén gedeelde oorzaak, geen twee ontbrekende routes.
+#
+# Het gat zat niet in de code maar in de dekking: er was geen enkele test die een link uit de balk
+# ook echt OPVROEG. Dat is wat hieronder gebeurt.
+
+def test_de_overleg_knoppen_dragen_de_cirkel_waar_ze_over_gaan():
+    from nooch_village.cockpit2_util import overleg_items
+    h = overleg_items("mother_earth__nooch")
+    assert "/werkoverleg?circle=mother_earth__nooch" in h
+    assert "/roloverleg2?circle=mother_earth__nooch" in h
+
+
+def test_zonder_cirkel_staat_er_geen_knop():
+    """Fail-closed: een knop naar een overleg dat niet bestaat is erger dan geen knop. Precies wat
+    er misging — er stónd een knop, hij deed alleen niets."""
+    from nooch_village.cockpit2_util import overleg_items
+    assert overleg_items("") == ""
+
+
+def test_de_overleg_links_leveren_een_echt_scherm_op(tmp_path):
+    """DE TEST DIE ER NIET WAS. Hij volgt de link uit de balk tot in de renderer en controleert dat
+    daar geen "not found" uitkomt. Een assertie op de HTML van de balk alleen had dit nooit
+    gevangen: de href zag er prima uit."""
+    from nooch_village.cockpit2 import _home_node
+    from nooch_village.cockpit2_util import overleg_items
+    from nooch_village.views.werkoverleg import render_werkoverleg
+    from nooch_village.views.roloverleg import render_roloverleg2
+    dd, st, ik = _dorp(tmp_path)
+    cid = _home_node(st.records.all())
+    assert cid, "geen cirkel gevonden om naartoe te linken"
+    assert f"circle={cid}" in overleg_items(cid)
+    for render in (render_werkoverleg, render_roloverleg2):
+        uit = render(st, cid, csrf_token="t")
+        assert "Not found" not in uit and "No circle" not in uit and "Unknown" not in uit, (
+            f"{render.__name__} geeft een niet-gevonden-pagina voor circle={cid}")
+
+
+def test_de_balk_draagt_circle_precies_een_keer():
+    """Er stonden er TWEE: een statische `/node` naast de placeholder die `_send` invult. In de
+    rail waren dat twee knoppen "CI" onder elkaar, die naar verschillende plekken gingen."""
+    from nooch_village.cockpit2_util import _SIDE_CIRCLE
+    h = _nav()
+    assert h.count(">Circle<") == 0, "Circle staat hardgecodeerd in de balk"
+    assert h.count(_SIDE_CIRCLE) == 1, "de cirkel-placeholder hoort er precies één keer te staan"
+    assert "href='/node'" not in h

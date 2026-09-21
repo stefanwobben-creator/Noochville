@@ -32,7 +32,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
-    _SIDE_ORG, _SIDE_CIRCLE,
+    _SIDE_ORG, _SIDE_CIRCLE, _SIDE_OVERLEG,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -5116,17 +5116,27 @@ def make_handler(data_dir: str, csrf_token: str,
                 # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde
                 # node waar '/' vóór fase 7 op landde. Nu landt '/' op Projects en is de cirkel een
                 # eigen nav-item, precies zoals in het prototype.
-                if _st is not None and _SIDE_CIRCLE in body:
+                # DE CIRKEL-AFHANKELIJKE HELFT VAN DE BALK. `_nav()` heeft geen stores en kan
+                # dus niet weten over WELKE cirkel het gaat; `_send` wel. Twee plekken, dezelfde
+                # bron (`_home_node`): de Circle-knop en de twee overleg-knoppen.
+                if _st is not None and (_SIDE_CIRCLE in body or _SIDE_OVERLEG in body):
                     try:
                         _cid = _home_node(_st.records.all())
                         # Zelfde vorm als de vaste items (`_side_item`): monogram voor de
                         # ingeklapte rail, woord voor de volle zijbalk. Zou deze link het woord
                         # kaal dragen, dan staat er in de rail één item uit te steken.
-                        from nooch_village.cockpit2_util import _side_item
-                        body = body.replace(_SIDE_CIRCLE,
-                                            _side_item(f"/node?id={_e(_cid)}", "Circle") if _cid else "", 1)
+                        from nooch_village.cockpit2_util import _side_item, overleg_items
+                        body = body.replace(
+                            _SIDE_CIRCLE,
+                            _side_item(f"/node?id={_e(_cid)}", "Circle", "ci") if _cid else "", 1)
+                        # `/werkoverleg` en `/roloverleg2` tonen het overleg van EEN CIRKEL en
+                        # beginnen met `st.records.get(circle_id)`. Zonder dit id gaven ze "No
+                        # circle." en "Unknown." — geen ontbrekende routes maar een ontbrekende
+                        # parameter, op de enige plek die de cirkel niet in handen had.
+                        body = body.replace(_SIDE_OVERLEG, overleg_items(_cid), 1)
                     except Exception:
                         body = body.replace(_SIDE_CIRCLE, "", 1)
+                        body = body.replace(_SIDE_OVERLEG, "", 1)
                 # Persoonlijke begroeting in de header: voornaam van de ingelogde persoon, klikbaar
                 # naar de eigen persoonspagina (/person?id=...).
                 if _st is not None:
