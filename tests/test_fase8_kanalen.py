@@ -179,14 +179,23 @@ def test_een_dm_heet_naar_de_ander(tmp_path):
     assert _label(st, channels.dm_kanaal(ik.id, jij.id), jij.id) == "Testpersoon Een"
 
 
-def test_de_wachtrij_blijft_apart(tmp_path):
-    """338 rol-notificaties zijn werk, geen gesprek. Ze op dit scherm zetten maakt van een chat
-    een lijst die je moet bijhouden."""
+def test_het_scherm_belooft_geen_wachtrij_die_niet_bestaat(tmp_path):
+    """DEZE TEST STOND OP ZIJN KOP. Hij eiste `"/inbox" in html`: Messages moest naar de wachtrij
+    VERWIJZEN, want 338 rol-notificaties zijn werk en geen gesprek.
+
+    Die wachtrij bestaat niet. Er is geen route `/inbox` in `do_GET`, geen `views/inbox.py`, en de
+    knop in de zijbalk riep `ibxToggle()` aan — een functie die nergens in de repo staat. De test
+    bewaakte dus een link naar een 404, en hield hem daar sinds fase 8 in stand.
+
+    Wat hij nu bewaakt is dezelfde zorg vanaf de andere kant: het scherm mag geen wachtrij
+    beloven die er niet is. Komt de functie ooit terug, dan hoort déze assertie te vallen — en dan
+    is er ook echt een pagina om naartoe te wijzen (besluit Stefan, 21 september 2026)."""
     from nooch_village.views.messages import render_messages
     dd, st = _stores(tmp_path)
     ik = _mens(st, "Testpersoon Een", "een@test.nl")
     html = render_messages(st, ik=ik.id, csrf_token="t")
-    assert "/inbox" in html                      # verwijzing, geen inhoud
+    assert "/inbox" not in html
+    assert "<nav class='msg-lijst'>" in html      # wat er wél staat: de kanalenlijst
 
 
 # ── 4. de poort op schrijven ─────────────────────────────────────────────────

@@ -3,9 +3,10 @@
 Drie soorten kanalen in één lijst, precies zoals het prototype ze toont: Projects, Circles,
 Direct. Ze verschillen in waar ze over gaan, niet in wat ze zijn — één trail, één invoerveld.
 
-WAT HIER NIET STAAT: je wachtrij. Die is `/inbox`, en dat blijft zo. Een kanaal is een gesprek dat
-doorloopt; een inbox-item is werk dat afgehandeld moet worden. Ze op één scherm zetten maakt van de
-338 open werk-items ruis in een chat, en van een chat een lijst die je moet bijhouden.
+DE VERWIJZING NAAR `/inbox` IS WEG (21 september 2026). Die regel stond hier sinds fase 8 en
+beloofde "je wachtrij staat op Inbox" — maar er is geen route `/inbox` in `do_GET`, geen
+`views/inbox.py`, en de knop in de zijbalk riep een functie aan die niet bestaat. Een link naar
+een 404, onder een alinea die uitlegt waarom het scherm hem niet zelf toont.
 
 Hergebruikt het bestaande idioom: `.card`, `.c2-sec`, `.qadd-form`, `.fentry`-achtige regels. De
 enige nieuwe familie is `msg-`, voor de tweekoloms-indeling (kanalenlijst links, draad rechts).
@@ -303,8 +304,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
              f"&larr; All channels</a>")
     main = (f"<div class='c2-main'><h1>Messages</h1>"
             f"<p class='muted'>One channel type, four flavours: a project, a circle, a topic of "
-            f"your own, or a person. "
-            f"Your queue is on <a href='/inbox'>Inbox</a> &mdash; that is work to handle, not talk.</p>"
+            f"your own, or a person.</p>"
             f"{_banner(msg)}"
             f"<div class='msg-layout' data-mob='{'lijst' if lijst else 'draad'}'>{nav}"
             f"<section class='msg-draad'>{terug}<h2 class='msg-kop'>{kop}</h2>"

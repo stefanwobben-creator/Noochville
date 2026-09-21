@@ -27,7 +27,11 @@ CSS = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
 _ONT = re.sub(r"/\*.*?\*/", " ", CSS, flags=re.S)
 
 #: De families die zijn opgeruimd, met wat er nog wél van leeft.
-OPGERUIMD = ("kn-", "imp-pill", "wz-was", "wz-now", "rail-btn", "fkind", "avatar")
+OPGERUIMD = ("kn-", "imp-pill", "wz-was", "wz-now", "rail-btn", "fkind", "avatar",
+             # 21 september 2026: de inbox-lade. 72 regels in twee stylesheets voor een
+             # scherm dat nooit gerenderd werd — `ibxToggle` en `render_inbox_chrome`
+             # bestaan allebei niet. Zie `test_nav_ia`.
+             "ibx-")
 
 #: De enige overlevende: hergebruikt door de claims-view, dus hij hoort te blijven.
 OVERLEVER = "kn-searchbox"
@@ -93,3 +97,43 @@ def test_de_css_is_nog_geldig():
     controle die wordt uitgezet."""
     assert CSS.count("{") == CSS.count("}"), "ongebalanceerde accolades na het knippen"
     assert not re.search(r"\{\s*\}", _ONT), "lege regel overgebleven na het knippen"
+
+
+# ── De inbox-lade (21 september 2026) ────────────────────────────────────────────────────────
+#
+# Het gevaarlijkste deel van die opruiming was niet het weghalen maar het KNIPPEN: zeventien van
+# de regels deelden hun selectorlijst met een levende klasse (`.nu .ibx-row, .nu .wo-oc, .nu
+# .rdr-tool, …`). Wie zo'n regel in zijn geheel weggooit, haalt de vorm weg bij het werkoverleg en
+# de radar-lezer — en dat merk je pas op een screenshot.
+
+NU_CSS = (REPO / "nooch_village" / "static" / "nooch-ui.css").read_text()
+
+#: De levende klassen die in de gedeelde selectorlijsten van de lade meeliftten.
+MEELIFTERS = ("wo-oc", "rdr-tool", "rdr-kader", "rdr-vier", "fsep", "ck-item")
+
+
+def test_de_lade_is_uit_beide_stylesheets_weg():
+    """Geen enkele `ibx-`-selector meer, in geen van beide bestanden. (De prose mag hem noemen —
+    dat is de uitleg waaróm hij weg is, en die hoort te blijven staan.)"""
+    for naam, css in (("nooch.css", CSS), ("nooch-ui.css", NU_CSS)):
+        zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+        rest = re.findall(r"[^{}]*\.ibx-[a-z-]*[^{}]*\{", zonder)
+        assert not rest, f"{naam} draagt nog {len(rest)} ibx-selector(s): {rest[:2]}"
+
+
+def test_de_meelifters_hebben_hun_vorm_gehouden():
+    """DE ANDERE KANT. Elke klasse die met de lade in één selectorlijst stond, moet nog steeds
+    door minstens één regel bediend worden. Zonder deze test leest de vorige als "knip alles weg
+    waar ibx in staat", en dat is precies de manier waarop dit fout gaat."""
+    for klasse in MEELIFTERS:
+        gevonden = any(re.search(rf"\.{re.escape(klasse)}(?![\w-])", sel)
+                       for css in (CSS, NU_CSS)
+                       for sel in re.findall(r"([^{}]*)\{", re.sub(r"/\*.*?\*/", " ", css, flags=re.S)))
+        assert gevonden, f".{klasse} liftte mee met de lade en is per ongeluk meegeknipt"
+
+
+def test_de_tweede_stylesheet_is_ook_nog_geldig():
+    """Zelfde goedkope controle als hierboven, nu voor `nooch-ui.css` — daar is óók in geknipt."""
+    assert NU_CSS.count("{") == NU_CSS.count("}"), "ongebalanceerde accolades in nooch-ui.css"
+    assert not re.search(r"\{\s*\}", re.sub(r"/\*.*?\*/", " ", NU_CSS, flags=re.S)), (
+        "lege regel overgebleven in nooch-ui.css")

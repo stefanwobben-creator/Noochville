@@ -29,12 +29,19 @@ def test_messages_staat_er_pas_in_sinds_er_data_achter_zit():
     assert "Messages" in h and "/messages" in h
 
 
-def test_de_inbox_is_een_lade_geen_pagina():
-    """De drawer bestaat al als globale chrome, met badge en een +-knop voor een nieuwe spanning.
-    Hem als link naar /inbox zetten zou een tweede ingang naar dezelfde functie maken."""
+def test_de_inbox_staat_er_niet_meer_in_geen_van_beide_vormen():
+    """DEZE TEST BEWAAKTE EEN DODE KNOP. Hij eiste `ibxToggle()` in de zijbalk — een functie die
+    nergens in de repo gedefinieerd is — op gezag van een docstring die naar `render_inbox_chrome`
+    verwees, dat evenmin bestaat. Er is ook nooit een route `/inbox` geweest: hij staat niet in
+    `do_GET` en dus niet in de route-tabel van `docs/ARCHITECTUUR.md`. De knop gaf een JS-fout en
+    verder niets.
+
+    Wat hij nu bewaakt is het omgekeerde: geen knop, geen link, en geen aanroep van een functie die
+    er niet is. Messages dekt de functie (besluit Stefan, 21 september 2026)."""
     h = _nav()
-    assert "ibxToggle()" in h and "Inbox" in h
-    assert "href='/inbox'" not in h
+    assert "Inbox" not in h
+    assert "ibxToggle" not in h
+    assert "/inbox" not in h
 
 
 def test_de_footer_draagt_geen_navigatie_meer():
