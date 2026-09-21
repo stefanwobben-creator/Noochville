@@ -634,9 +634,21 @@ def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "",
     body = _artefact_body_html(a, st=st, pags=pags)
     actions = anders
     if can_edit:
-        # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een .qadd-row
-        # náást 'archiveren'); 'archiveren' als losse actie eronder.
-        actions = (f"{_artefact_edit_form(a, csrf_token)}"
+        # EEN NOTE WORDT HIER NIET MEER BEWERKT (21 september 2026). Een note IS een wiki-pagina,
+        # en die heeft sinds vandaag een inline editor op zijn eigen permalink: je klikt in de
+        # tekst en typt daar. Het oude formulier hier laten staan zou een TWEEDE bewerkpad zijn
+        # voor precies hetzelfde object — twee plekken die uiteen gaan lopen zodra er aan één van
+        # de twee iets verandert. Dus: hier de weg ernaartoe, daar het bewerken.
+        # Een tool of policy is geen wiki-pagina (een tool heeft een URL-veld) en houdt zijn
+        # formulier onveranderd.
+        if a.kind == wiki.PAGINA_KIND:
+            bewerk = (f"<div class='qadd-row'><a class='btn sm' "
+                      f"href='{_e(wiki.pagina_url(a.id))}'>✎ Edit on its page</a></div>")
+        else:
+            # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een
+            # .qadd-row náást 'archiveren'); 'archiveren' als losse actie eronder.
+            bewerk = _artefact_edit_form(a, csrf_token)
+        actions = (f"{bewerk}"
                    f"<div class='qadd-row'>{_artefact_archive_form(a, csrf_token)}</div>")
     extras = _wiki_extras(a, st, pags, csrf_token, can_edit)
     return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"

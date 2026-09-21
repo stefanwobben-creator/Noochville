@@ -13,7 +13,7 @@ from __future__ import annotations
 import html as _html_mod
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _md, _name
+from nooch_village.cockpit2_util import _DS_LINK, _nav, _md, _name, opmaak_werkbalk
 from nooch_village import wiki
 
 # Status → chip-icoon. Bewust vijf verschillende tekens: 'gegrond' en 'ongecontroleerd' mogen op
@@ -206,10 +206,60 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
+# ── De inline editor (21 september 2026) ─────────────────────────────────────────────────────
+#
+# WAT HIER WEG IS. Tot vandaag stond de opgemaakte tekst bovenaan in een kader, en opende "Edit
+# page" daarONDER een tweede blok: een los TITLE-veld plus een textarea met de RUWE markdown
+# (`## Four conditions`, `- **On the list.**`). Je las dus op de ene plek en typte op de andere,
+# met dezelfde inhoud twee keer op het scherm — en je moest scrollen om van het een naar het ander
+# te komen. Dat model is vervangen, niet verbeterd.
+#
+# WAT ERVOOR IN DE PLAATS KOMT. De tekst zelf wordt bewerkbaar, op de plek waar hij staat, met de
+# opmaak zichtbaar terwijl je typt. Eén kopie op het scherm, en opslaan gebeurt waar je las.
+#
+# DE OPSLAG VERANDERT NIET. Wat de browser terugstuurt is HTML; `_md_naar_bron` (PR 2) maakt daar
+# weer markdown van, en dat is wat in `AttachmentStore` belandt. Eén `artefact_edit`-actie, één
+# `update()`, één versie-entry — precies als hiervoor.
+#
+# DE WERKBALK LEUNT OP `document.execCommand`. Geen editor-library: de opmaaktaal van `_md` telt
+# zes constructies, en daar is een bibliotheek van tienduizenden regels een vreemde eend bij. De
+# knoppen produceren `<strong>`/`<em>`/`<del>`/`<h4>`/`<ul>` — exact de tags die `_md_naar_bron`
+# in zijn whitelist heeft staan.
+#
+# JS IS VEREIST, en dat is een besluit (Stefan, 21 september 2026), geen omissie. Er is bewust
+# geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
+# vervanging moest opheffen.
+
+def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
+    """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek."""
+    inhoud = (_body_html(a.body, pags) if a.body
+              else "<p class='muted'>This page has no text yet.</p>")
+    lees = f"<div class='card'><div class='att-body wiki-body' id='wiki-body'>{inhoud}</div></div>"
+    if not can_edit or not csrf_token:
+        return lees
+
+    # De verborgen velden worden bij het versturen door `nooch.js` gevuld met wat er in de twee
+    # bewerkbare elementen staat. Het formulier staat ONDER de tekst maar is geen tweede kopie:
+    # er staat niets in dat je kunt lezen, alleen de opslaan-balk.
+    return (opmaak_werkbalk() + lees
+            + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+              f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+              f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+              f"<input type='hidden' name='title' id='wiki-titel-veld' value=''>"
+              f"<input type='hidden' name='body_html' id='wiki-body-veld' value=''>"
+              f"<div class='qadd-row qadd-bar'>"
+              f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>"
+              f"Save</button>"
+              f"<button type='button' class='qadd-x' data-wiki-cancel aria-label='cancel'>✕</button>"
+              f"<span class='muted wiki-hint'>Click in the text and type. Formatting stays visible."
+              f"</span></div></form>")
+
+
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
                   msg: str = "", persoon: str = "") -> str:
     """Eén wiki-pagina. Onbekende id of een ander artefact-soort → nette melding, geen lege pagina."""
-    from nooch_village.views.overview import (_artefact_edit_form, _artefact_versions_html,
+    from nooch_village.views.overview import (_artefact_versions_html,
                                               _can_edit_artefacts, _dt)
 
     a = st.att.get(aid)
@@ -228,31 +278,25 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     if eigenaar is not None:
         eig_chip = (f" <a class='chip' href='/node?id={_e(a.anchor)}&tab=notes'>"
                     f"{_e(_name(eigenaar))}</a>")
+    # De titel is een eigen element omdat hij BEWERKBAAR wordt, op zijn plek in de kop. Het losse
+    # TITLE-veld onder aan de pagina is daarmee vervallen.
+    titel = f"<span id='wiki-titel' class='wiki-titel'>{_e(a.title or a.id)}</span>"
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
-           f"<h1>📄 <code class='pill'>{_e(a.id)}</code> {_e(a.title or a.id)}{eig_chip}</h1>"
+           f"<h1>📄 <code class='pill'>{_e(a.id)}</code> {titel}{eig_chip}</h1>"
            f"<div class='wiki-kopbalk'>"
            f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
            f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
-           # DE BEWERKKNOP HOORT BOVENAAN EN ZICHTBAAR (21 september 2026). Hij zat als klein grijs
-           # "edit"-linkje ónder de hele inhoud: wie niet wist dat de tekst zelf klikbaar was, vond
-           # de bewerkmogelijkheid niet. Dit is dezelfde `<details>` en dezelfde ene
-           # `artefact_edit`-actie — alleen een tweede, vindbare ingang ernaartoe.
-           + (f"<button type='button' class='btn sm' data-qadd-opener>✎ Edit page</button>"
+           + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
               if can_edit else "")
            + f"</div>")
 
-    # `data-qadd-open`: klikken op de tekst opent het bewerk-formulier eronder (fase 10 punt 4).
-    # Alleen voor wie mag bewerken — anders belooft een cursor iets wat de poort daarna weigert.
-    _open = " data-qadd-open" if can_edit else ""
-    body = (f"<div class='card'><div class='att-body'{_open}>{_body_html(a.body, pags)}</div></div>"
-            if a.body else "<div class='card muted'>This page has no text yet.</div>")
-    # Eigenaar bewerkt; ieder ander doet een voorstel. Geen csrf-token = geen schrijf-sessie
-    # (publieke view), dan ook geen voorstelknop.
-    bewerk = (_artefact_edit_form(a, csrf_token, next_url=wiki.pagina_url(a.id))
-              if can_edit else (_voorstel_form(st, a, csrf_token) if csrf_token else ""))
+    body = _wiki_editor(a, pags, csrf_token, can_edit)
+    # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
+    # schrijf-sessie (publieke view), dan ook geen voorstelknop.
+    voorstel = "" if can_edit else (_voorstel_form(st, a, csrf_token) if csrf_token else "")
     hist = _artefact_versions_html(a)
 
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{bewerk}{hist}"
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{voorstel}{hist}"
             f"{_feiten_sectie(a, st, csrf_token, can_edit)}"
             f"{_besluiten_sectie(a, st, persoon)}"
             f"{_backlink_sectie(a, pags)}</div>")

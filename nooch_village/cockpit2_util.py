@@ -590,6 +590,38 @@ def md_editor(name: str, value: str = "", rows: int = 6,
             f"</div>{_WRAPSEL_JS}")
 
 
+# ── De werkbalk voor bewerken IN de tekst (21 september 2026) ────────────────────────────────
+#
+# Zusje van `md_editor` hierboven, en hij woont hier om dezelfde reden: de knoppentaal van een
+# opmaak-werkbalk (`editor-tb`, `tb-b`, `tb-sep`) hoort op ÉÉN plek te staan. Het verschil zit
+# in wat de knop aanstuurt — `md_editor` schrijft tekens in een textarea (`wrapSel`), deze roept
+# `document.execCommand` aan op een `contenteditable`. Dezelfde vorm, andere motor.
+
+#: De werkbalk-knoppen: (commando, argument, label, titel). `formatBlock` maakt een kop, de rest
+#: is een inline-opmaak die `_md` kent. Geen link-knop — `_md` ondersteunt `[tekst](url)` wel,
+#: maar een linkdialoog is een scherm op zich en hoort bij een eigen scope.
+_OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
+               ("italic", "", "<i>I</i>", "Italic"),
+               ("strikeThrough", "", "<s>S</s>", "Strikethrough"),
+               ("", "", "", ""),                       # scheiding
+               ("insertUnorderedList", "", "&bull;", "List"),
+               ("formatBlock", "h4", "H", "Heading"))
+
+
+def opmaak_werkbalk() -> str:
+    """Zelfde atomen als de bestaande markdown-werkbalk (`.editor-tb`, `.tb-b`, `.tb-sep`), zodat
+    er geen tweede knoppentaal ontstaat voor dezelfde handeling."""
+    knoppen = []
+    for cmd, arg, label, titel in _OPMAAK_KNOPPEN:
+        if not cmd:
+            knoppen.append("<span class='tb-sep'></span>")
+            continue
+        extra = f" data-wiki-arg='{_e(arg)}'" if arg else ""
+        knoppen.append(f"<button type='button' class='tb-b' data-wiki-cmd='{_e(cmd)}'{extra} "
+                       f"title='{_e(titel)}'>{label}</button>")
+    return f"<div class='editor-tb wiki-tb' id='wiki-tb' hidden>{''.join(knoppen)}</div>"
+
+
 def _ic(path: str) -> str:
     return (f"<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' "
             f"stroke-linecap='round' stroke-linejoin='round'>{path}</svg>")

@@ -30,7 +30,7 @@ from nooch_village import claims_labels as _claims_labels
 from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
-    _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
+    _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
     _SIDE_ORG, _SIDE_CIRCLE,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
@@ -1223,14 +1223,25 @@ def _act_artefact_edit(c):
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
-        te_lang = _body_te_lang(g("body"), cur.kind) if "body" in form else ""
+        # TWEE INGANGEN, ÉÉN OPSLAG. De wiki-editor laat je in de tekst zelf typen en stuurt dus
+        # HTML terug (`body_html`); het formulier op een tool of policy stuurt markdown (`body`).
+        # Beide komen hier binnen en worden hier markdown — dat is wat er wordt bewaard. De
+        # omzetting staat VÓÓR de lengtecontrole, anders wordt een pagina afgekeurd op de lengte
+        # van zijn opmaak in plaats van op die van zijn tekst.
+        if "body_html" in form and "body" not in form:
+            nieuw_body = _md_naar_bron(g("body_html"))
+        elif "body" in form:
+            nieuw_body = g("body")
+        else:
+            nieuw_body = None
+        te_lang = _body_te_lang(nieuw_body, cur.kind) if nieuw_body is not None else ""
         if te_lang:
             return nxt, te_lang
         gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
         actor_id = _web_actor_id(username, st)
         upd = st.att.update(cur.id,
                             title=(g("title") if "title" in form else None),
-                            body=(g("body") if "body" in form else None),
+                            body=nieuw_body,
                             url=(g("url") if "url" in form else None),
                             actor_id=actor_id, actor_type="person",
                             governance_ref=gref, change_note="bewerkt")

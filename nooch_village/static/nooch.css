@@ -1407,3 +1407,18 @@ progress.nu-progress.wide{height:8px}
 .wiki-kopbalk{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;
   flex-wrap:wrap}
 .wiki-kopbalk>p{margin:0;flex:1 1 20rem}
+/* ── De wiki-pagina in bewerkstand (21 september 2026) ───────────────────────────────────────
+   ATOOM. Eén toestandsklasse, `wiki-aan`, en verder niets nieuws: de tekst houdt exact de vorm die
+   hij als LEESTEKST had. Dat is het hele punt van inline bewerken — zou het invoerveld er anders
+   uitzien dan de pagina, dan is het alsnog een formulier, alleen op een andere plek.
+   Wat er bij komt is één zichtbaar signaal dat je nu in de tekst staat (een accentlijn links) en
+   een cursor die dat bevestigt. Geen kader: een kader is de container-taal, en dit is een veld —
+   zie de regel die daar in fase 12 voor is vastgelegd. */
+.wiki-aan{outline:none;cursor:text;box-shadow:-3px 0 0 0 var(--green)}
+.wiki-body.wiki-aan{padding-left:.55rem}
+h1 .wiki-titel.wiki-aan{padding-left:.4rem}
+/* MOLECUUL. De werkbalk hoort bij de tekst eronder, niet bij de kop erboven: hij zweeft mee in
+   beeld zodat je hem ook halverwege een lange pagina nog hebt. */
+.wiki-tb{position:sticky;top:0;z-index:5;border-radius:var(--radius) var(--radius) 0 0}
+.wiki-form{margin-top:.5rem}
+.wiki-hint{font-size:.78rem;align-self:center}

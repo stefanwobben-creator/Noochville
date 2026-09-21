@@ -71,15 +71,23 @@ def test_zonder_schrijfsessie_geen_van_beide(tmp_path):
 
 # ── de Notes-tab van de rol ─────────────────────────────────────────────────
 
-def test_notes_tab_eigenaar_bewerkt_daar_ook(tmp_path):
+def test_notes_tab_stuurt_de_eigenaar_naar_de_pagina(tmp_path):
+    """DIT HEETTE `..._bewerkt_daar_ook`, en dat "ook" was het probleem. Sinds de inline editor
+    (21 september 2026) bewerk je een note in de tekst zelf, op zijn permalink. Het formulier hier
+    laten staan zou een TWEEDE bewerkpad zijn voor precies hetzelfde object.
+
+    Wat deze test bewaakt is onveranderd: het scherm weerspiegelt de poort. De eigenaar krijgt
+    hier de weg naar het bewerken, een ander krijgt het voorstelpad (de test hieronder)."""
+    from nooch_village import wiki
     dd, st = _st(tmp_path)
     _mens(st, "Eigenaar", "eig@x.nl", OWNER)
-    _pagina(st)
+    a = _pagina(st)
     st2 = cockpit2._Stores(dd)
     html = _artefact_tab_html(st2, st2.records.get(OWNER), "note", "t", "eig@x.nl",
                               titel="Notes", leeg="geen")
-    assert "value='artefact_edit'" in html
-    assert "value='pagina_voorstel'" not in html
+    assert "value='artefact_edit'" not in html          # niet hier
+    assert wiki.pagina_url(a.id) in html                # maar wel de weg ernaartoe
+    assert "value='pagina_voorstel'" not in html        # de eigenaar stelt niet voor
 
 
 def test_notes_tab_niet_eigenaar_kan_nu_ook_voorstellen(tmp_path):
