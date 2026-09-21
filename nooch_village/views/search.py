@@ -184,13 +184,67 @@ def _gesprekken(st, termen):
                 uit.append({"url": f"/project?id={p.get('id')}", "kind": "message",
                             "titel": titel or str(p.get("id") or ""),
                             "snip": _snip(str(e.get("text") or ""))})
-    for k in st.channels.bestaande(channels.CIRCLE):
-        for e in st.channels.trail(k):
-            if _match(str(e.get("text") or ""), termen):
-                rec = st.records.get(channels.doel_van(k))
-                uit.append({"url": f"/messages?k={k}", "kind": "message",
-                            "titel": _name(rec) if rec is not None else channels.doel_van(k),
-                            "snip": _snip(str(e.get("text") or ""))})
+    # CIRKEL, DOEL ÉN LOS KANAAL. Tot 21 september stond hier alleen `CIRCLE`. De doel-kanalen
+    # (`goal:`) en losse kanalen (`topic:`) bestaan sinds PR 4/5 en vielen daarmee stilzwijgend
+    # buiten de zoek: wat daar gezegd was, was onvindbaar. `bestaande()` geeft alleen kanalen met
+    # minstens één bericht, dus dit kost niets voor lege kanalen.
+    for soort in (channels.CIRCLE, channels.GOAL, channels.TOPIC):
+        for k in st.channels.bestaande(soort):
+            for e in st.channels.trail(k):
+                if _match(str(e.get("text") or ""), termen):
+                    uit.append({"url": f"/messages?k={k}", "kind": "message",
+                                "titel": _kanaalnaam(st, k),
+                                "snip": _snip(str(e.get("text") or ""))})
+    return uit
+
+
+def _kanaalnaam(st, kanaal: str) -> str:
+    """De leesbare naam van een kanaal, zonder de Messages-view te hoeven laden.
+
+    `messages._label` kent er meer (een DM heet naar de ander), maar die staan hier bewust niet in:
+    DM's blijven buiten de zoek. Deze functie dekt precies wat wél doorzoekbaar is."""
+    from nooch_village import channels as _c
+    soort, doel = _c.soort_van(kanaal), _c.doel_van(kanaal)
+    if soort == _c.CIRCLE:
+        wortel = st.records.root()
+        if wortel is not None and doel == wortel.id:
+            return "General"
+        rec = st.records.get(doel)
+        return _name(rec) if rec is not None else doel
+    if soort == _c.GOAL:
+        d = st.doelen.get(doel) or {}
+        return d.get("label") or d.get("titel") or doel
+    if soort == _c.TOPIC:
+        return st.channels.naam_van(kanaal) or doel
+    return doel
+
+
+def _kanalen(st, termen):
+    """De kanalen zelf, op NAAM.
+
+    WAAROM DIT EEN EIGEN GROEP IS. `_gesprekken` hierboven zoekt in de TEKST van berichten. Zoek
+    je op "MITH", dan vind je berichten waarin dat woord valt — maar niet het MITH-kanaal zelf, en
+    dat is meestal precies wat je zocht. Een kanaal is een plek, en een plek vind je op zijn naam.
+
+    DM'S BLIJVEN ERBUITEN, zoals bij `_gesprekken`: de namen van iemands privégesprekken zijn zelf
+    ook informatie ("met wie praat jij").
+    """
+    from nooch_village import channels as _c
+    uit = []
+    wortel = st.records.root()
+    kandidaten = []
+    if wortel is not None:
+        kandidaten.append(_c.circle_kanaal(wortel.id))
+    kandidaten += [_c.goal_kanaal(d["id"]) for d in st.doelen.all() if d.get("status") == "open"]
+    kandidaten += st.channels.topics()
+    kandidaten += [k for k in st.channels.bestaande(_c.CIRCLE)
+                   if wortel is None or k != _c.circle_kanaal(wortel.id)]
+    for k in kandidaten:
+        naam = _kanaalnaam(st, k)
+        if _match(naam, termen):
+            uit.append({"url": f"/messages?k={k}", "kind": "channel", "titel": naam,
+                        "snip": {"circle": "circle", "goal": "goal", "topic": "channel"}.get(
+                            _c.soort_van(k), "channel")})
     return uit
 
 
@@ -242,7 +296,10 @@ def _words(st, termen):
 # route die niet meer bestaat.
 _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
             ("Projects", _projects), ("Steps", _checklist_items), ("Pages", _pages),
-            ("Messages", _gesprekken), ("Insights", _insights), ("Words", _words))
+            # "Channels" (de plek) vóór "Messages" (wat daar gezegd is): zoek je op "MITH", dan wil
+            # je meestal het kanaal en niet de veertig berichten waarin het woord valt.
+            ("Channels", _kanalen), ("Messages", _gesprekken),
+            ("Insights", _insights), ("Words", _words))
 
 
 def _zoek(st, termen) -> tuple[list, list]:

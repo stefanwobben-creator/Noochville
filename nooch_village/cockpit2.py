@@ -5396,6 +5396,21 @@ def make_handler(data_dir: str, csrf_token: str,
                 else:
                     self._send(render_search(st, _q))
                 return
+            if path == "/nav-paneel":
+                # De uitklappanelen van de navigatiebalk. Puur leeswerk, altijd chrome=False:
+                # dit is een fragment dat in een openstaande pagina wordt gezet, geen scherm.
+                #
+                # LAZY, EN DAT IS DE HELE REDEN DAT HET EEN ROUTE IS. Het paneel meerenderen met
+                # elke pagina zou elk scherm laten betalen voor een projectlijst (442) en een
+                # kanalenlijst (123) die je meestal niet opent.
+                from nooch_village.views.navpaneel import render_nav_paneel
+                _p = (qs.get("p") or [""])[0]
+                _ik = _web_actor_id(username, st)
+                self._send(render_nav_paneel(st, _p, _ik,
+                                             q=(qs.get("q") or [""])[0],
+                                             welke=(qs.get("welke") or ["mijn"])[0]),
+                           chrome=False)
+                return
             if path == "/skills":
                 # Skills-catalogus: wat kan het dorp al, en waarvoor moet tooling komen.
                 # Puur leeswerk. De human inbox voedt het 'gewenst'-blok; fail-soft als hij

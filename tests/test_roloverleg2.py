@@ -19,7 +19,11 @@ def test_meeting_knop_op_cirkel(tmp_path):
     assert f"/roloverleg2?circle={C}" in node and "Governance meeting" in node
     # een rol heeft geen meeting-knop
     role = cockpit2.render_node(cockpit2._Stores(dd), RID, "overview", csrf_token="t")
-    assert "roloverleg2" not in role
+    # ALLEEN IN DE INHOUD KIJKEN. Sinds 21 september staat Roloverleg als vaste knop op de
+    # navigatiebalk, op élke pagina — dat is navigatie en niet de "Governance meeting"-knop waar
+    # deze test over gaat. De hele pagina afzoeken zou nu de balk meetellen en de bewering
+    # onzichtbaar verzwakken.
+    assert "roloverleg2" not in role.split("<div class='c2-main'>")[-1]
 
 
 def test_agendapunt_bestaande_rol_en_nieuwe_rol(tmp_path):

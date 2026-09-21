@@ -1,0 +1,557 @@
+<title>NoochVille Navigatie</title>
+<style>
+  :root{
+    --bg:#FBF7F1;
+    --panel:#FFFFFF;
+    --ink:#141414;
+    --green:#2E6E44;
+    --green-soft-bg:#DCEFE0;
+    --green-soft-text:#2E6E44;
+    --line:#141414;
+    --muted:#6B6459;
+    --badge-bg:#141414;
+    --badge-text:#7BDB89;
+    --gold-bg:#F4E7C7;
+    --gold-text:#7A5B12;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#171512;
+      --panel:#211E19;
+      --ink:#F3EEE5;
+      --green:#7BDB89;
+      --green-soft-bg:#243B2B;
+      --green-soft-text:#9BEAA6;
+      --line:#F3EEE5;
+      --muted:#B7AF9F;
+      --badge-bg:#F3EEE5;
+      --badge-text:#171512;
+      --gold-bg:#3A2F14;
+      --gold-text:#E8CE85;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#171512;
+    --panel:#211E19;
+    --ink:#F3EEE5;
+    --green:#7BDB89;
+    --green-soft-bg:#243B2B;
+    --green-soft-text:#9BEAA6;
+    --line:#F3EEE5;
+    --muted:#B7AF9F;
+    --badge-bg:#F3EEE5;
+    --badge-text:#171512;
+    --gold-bg:#3A2F14;
+    --gold-text:#E8CE85;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    padding-inline:20px;
+    padding-block:28px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px;}
+
+  .intro h1{
+    font-size:clamp(22px,3.4vw,30px);
+    margin:0 0 8px;
+    text-wrap:balance;
+    letter-spacing:-0.01em;
+  }
+  .intro p{
+    margin:0 0 6px;
+    color:var(--muted);
+    max-width:66ch;
+    line-height:1.55;
+    font-size:14.5px;
+  }
+  .intro strong{color:var(--ink);}
+  .fixnote{
+    border:2px solid var(--gold-text);
+    background:var(--gold-bg);
+    color:var(--gold-text);
+    padding:10px 12px;
+    font-size:13px;
+    line-height:1.55;
+    max-width:66ch;
+    font-weight:600;
+  }
+  .fixnote b{font-weight:800;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .legend span{
+    font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+    background:var(--green-soft-bg);color:var(--green-soft-text);
+    padding:5px 9px;border:1px solid var(--green-soft-text);
+  }
+
+  /* ---- app shell ---- */
+  .shell{
+    border:2px solid var(--line);
+    background:var(--panel);
+    display:flex;
+    min-height:480px;
+    overflow:hidden;
+  }
+  .rail{
+    background:var(--bg);
+    border-right:2px solid var(--line);
+    width:80px;
+    flex:0 0 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    padding:14px 8px;
+    gap:4px;
+    overflow-y:auto;
+  }
+  .logo{font-weight:800;font-size:16px;letter-spacing:-0.02em;margin:0 0 10px 2px;}
+  .logo::before{content:"/ ";color:var(--green);}
+
+  .railbtn{
+    all:unset;box-sizing:border-box;
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:2px;
+    font-weight:800;
+    font-size:11.5px;
+    letter-spacing:.04em;
+    color:var(--green);
+    padding:9px 4px;
+    border:2px solid transparent;
+    text-align:center;
+    width:100%;
+  }
+  .railbtn:hover{border-color:var(--green);}
+  .railbtn:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+  .railbtn[aria-expanded="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .railbtn[data-disabled="true"]{opacity:.42;cursor:default;}
+  .railbtn .dot{background:var(--badge-bg);color:var(--badge-text);font-size:9px;font-weight:800;padding:1px 4px;line-height:1.4;}
+  .railbtn .shortcut{font-size:9px;font-weight:700;opacity:.6;letter-spacing:0;}
+
+  .divider{height:2px;background:var(--line);margin:8px 2px;flex:0 0 auto;}
+
+  .railbtn.quick{
+    font-size:9.5px;
+    line-height:1.25;
+    white-space:normal;
+    padding:8px 3px;
+    color:var(--ink);
+    background:var(--green-soft-bg);
+    border:2px solid var(--green-soft-text);
+  }
+  .railbtn.quick:hover{background:var(--green-soft-text);color:var(--panel);}
+  .railbtn.quick.active{background:var(--ink);border-color:var(--ink);color:var(--bg);}
+
+  .content{flex:1 1 auto;display:flex;min-width:0;}
+
+  .panel{
+    width:0;flex:0 0 auto;overflow:hidden;
+    border-right:0 solid var(--line);
+    background:var(--panel);
+    transition:width .22s ease, border-width .22s ease;
+  }
+  .panel.open{width:300px;border-right-width:2px;}
+  .panel-inner{width:300px;padding:16px;height:100%;overflow-y:auto;}
+
+  .panel-inner h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;color:var(--muted);}
+  .search{
+    width:100%;border:2px solid var(--line);background:var(--bg);
+    color:var(--ink);padding:8px 9px;font-size:12.5px;font-weight:600;margin-bottom:14px;
+  }
+  .search::placeholder{color:var(--muted);font-weight:600;}
+
+  .seg{display:flex;border:2px solid var(--line);margin-bottom:14px;}
+  .seg button{
+    all:unset;flex:1;text-align:center;font-size:11px;font-weight:800;
+    letter-spacing:.03em;text-transform:uppercase;padding:7px 4px;cursor:pointer;color:var(--ink);
+  }
+  .seg button.active{background:var(--ink);color:var(--bg);}
+
+  .grouplabel{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;}
+  .grouplabel:first-of-type{margin-top:0;}
+
+  .row{
+    all:unset;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    width:100%;padding:8px 8px;font-size:13px;font-weight:700;color:var(--ink);
+    cursor:pointer;border:2px solid transparent;
+  }
+  .row:hover{border-color:var(--green);}
+  .row:focus-visible{outline:2px solid var(--green);}
+  .row[aria-current="true"]{background:var(--green-soft-bg);border-color:var(--green-soft-text);}
+  .row .sub{font-weight:600;color:var(--muted);font-size:11.5px;}
+  .row .tag{font-size:9.5px;font-weight:800;letter-spacing:.03em;background:var(--green-soft-bg);color:var(--green-soft-text);padding:2px 5px;white-space:nowrap;}
+  .row .kind{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  .empty{font-size:12px;color:var(--muted);line-height:1.5;padding:6px 8px 2px;}
+
+  .preview{flex:1 1 auto;padding:26px;display:flex;flex-direction:column;gap:10px;min-width:0;}
+  .preview .eyebrow{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .preview h3{margin:0;font-size:21px;text-wrap:balance;}
+  .preview .meta{font-size:13px;color:var(--muted);}
+  .preview .placeholder-body{margin-top:8px;border-top:2px solid var(--line);padding-top:14px;color:var(--muted);font-size:13px;line-height:1.6;max-width:52ch;}
+  .preview ul.checklist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-width:52ch;}
+  .preview ul.checklist li{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;border-bottom:1px solid var(--line);padding-bottom:5px;}
+  .preview .status{font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;}
+  .status.done{background:var(--green-soft-bg);color:var(--green-soft-text);}
+  .status.open{background:var(--gold-bg);color:var(--gold-text);}
+  .hint{font-size:12px;color:var(--muted);font-style:italic;}
+
+  footer.note{border-top:2px solid var(--line);padding-top:14px;font-size:12.5px;color:var(--muted);line-height:1.6;max-width:70ch;}
+  footer.note strong{color:var(--ink);}
+
+  @media (max-width:700px){
+    body{padding-inline:16px;}
+    .shell{min-height:0;}
+    .content{flex-direction:column;}
+    .panel{width:auto !important;max-height:0;border-right:0 !important;transition:max-height .22s ease, border-width .22s ease;}
+    .panel.open{max-height:600px;border-bottom:2px solid var(--line);}
+    .panel-inner{width:auto;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .panel{transition:none;}
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="intro">
+    <h1>Eén balk, geen losse pagina&#39;s: navigatie als accordeon</h1>
+    <p>
+      Klik op <strong>ZOEK</strong>, <strong>PR</strong>, <strong>ME</strong> of <strong>CI</strong> in de
+      balk hieronder: in plaats van naar een nieuwe pagina te springen, klapt de lijst direct naast de
+      balk open. De balk zelf blijft altijd verticaal, ook smal &mdash; alleen wat ernaast staat schuift
+      onder elkaar als de ruimte krap wordt, nooit de balk zelf.
+    </p>
+  </div>
+
+  <div class="fixnote">
+    Aangepast na jouw feedback: (1) Werkoverleg/Roloverleg zijn geen kanalen meer &mdash; eigen directe
+    knoppen onderaan de balk die het echte overleg openen, geen chat. (2) Er is nu een <b>ZOEK</b>-knop
+    bovenaan die in één keer door personen, rollen, projecten, kanalen én wiki heen zoekt, los van het
+    zoekveld binnen Messages dat alleen kanalen filtert. (3) De balk blijft verticaal, ook op een smal
+    scherm &mdash; hij klapt niet meer om naar horizontaal.
+  </div>
+
+  <div class="shell">
+    <nav class="rail" id="rail">
+      <div class="logo">nooch</div>
+      <button class="railbtn" data-panel="zoek" aria-expanded="false">ZOEK<span class="shortcut">/</span></button>
+      <button class="railbtn" data-panel="pr" aria-expanded="false">PR</button>
+      <button class="railbtn" data-panel="me" aria-expanded="false">ME</button>
+      <button class="railbtn" data-panel="wi" data-disabled="true" aria-expanded="false">WI</button>
+      <button class="railbtn" data-panel="in" data-disabled="true" aria-expanded="false">IN <span class="dot">0</span></button>
+      <button class="railbtn" data-panel="ci" aria-expanded="false">CI</button>
+      <button class="railbtn" data-panel="ad" data-disabled="true" aria-expanded="false">AD</button>
+      <div class="divider"></div>
+      <button class="railbtn quick" data-quick="werkoverleg">WERK<br>OVERLEG</button>
+      <button class="railbtn quick" data-quick="roloverleg">ROL<br>OVERLEG</button>
+    </nav>
+
+    <div class="content">
+      <aside class="panel" id="panel">
+        <div class="panel-inner" id="panelInner"></div>
+      </aside>
+
+      <main class="preview" id="preview">
+        <div class="eyebrow">Voorbeeld</div>
+        <h3>Kies links een item</h3>
+        <p class="meta">De rechterkant laadt hier zonder paginasprong.</p>
+        <p class="hint">(In het echte scherm staat hier de bestaande pagina-inhoud &mdash; dit is alleen het navigatiegedrag.)</p>
+      </main>
+    </div>
+  </div>
+
+  <footer class="note">
+    <strong>Wat dit niet verandert:</strong> Wiki (WI), Inbox (IN) en Admin (AD) blijven zoals ze zijn.
+    <strong>Wat wel verandert:</strong> Projects, Messages en Circle worden een uitklappaneel naast de
+    balk in plaats van een paginasprong. <strong>Werkoverleg en Roloverleg</strong> zijn hun eigen directe
+    knop &mdash; geen kanaal, geen accordeon-lijst, één klik naar het echte overlegscherm, zoals in de
+    bestaande werkoverleg- en roloverleg-prototypes. <strong>Zoeken</strong> is nu twee lagen: globaal
+    (ZOEK-knop, alles) en lokaal (het zoekveld binnen Messages, alleen kanalen) &mdash; net als "/" nu al
+    doet op de bestaande site, alleen dan ook toegankelijk vanaf elk scherm.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var MIJN_PROJECTEN = [
+    { naam: "Zomercollectie fotografie", tag: "WEBSITE" },
+    { naam: "Leverancier herbeoordeling", tag: "SUPPLY CHAIN" },
+    { naam: "Claims-check batch 4", tag: "BATCH 4" },
+    { naam: "STCB rapportage Q3", tag: "STCB" }
+  ];
+  var ALLE_PROJECTEN_EXTRA = [
+    { naam: "Zolen-leverancier testbatch", tag: "SUPPLY CHAIN" },
+    { naam: "Website performance-audit", tag: "WEBSITE" },
+    { naam: "MITH verpakkingsontwerp", tag: "MITH" }
+  ];
+  var GOALS = ["WEBSITE", "STCB", "MITH", "BATCH 4", "SUPPLY CHAIN"];
+  var CHANNELS = ["Kantoor & logistiek"];
+  var ROLES = [
+    { naam: "Lead Link", wie: "Stefan" },
+    { naam: "Secretary", wie: "Lotte" },
+    { naam: "Compliance", wie: "Lotte" },
+    { naam: "Materials & Sourcing", wie: "open — niemand" },
+    { naam: "Website & Content", wie: "Nina" },
+    { naam: "Supply Chain", wie: "Matthis" }
+  ];
+  var WIKI = ["Claims policy", "Materials architecture", "Concurrentiedossier"];
+
+  // Eén doorzoekbare index over alles heen — dit is wat ZOEK opent.
+  var SEARCH_INDEX = []
+    .concat(["Stefan","Lotte","Nina","Matthis"].map(function(n){ return {kind:"Persoon", naam:n}; }))
+    .concat(ROLES.map(function(r){ return {kind:"Rol", naam:r.naam, sub:r.wie}; }))
+    .concat(MIJN_PROJECTEN.concat(ALLE_PROJECTEN_EXTRA).map(function(p){ return {kind:"Project", naam:p.naam, sub:p.tag}; }))
+    .concat(["Nooch"].concat(GOALS).concat(CHANNELS).map(function(c){ return {kind:"Kanaal", naam:c}; }))
+    .concat(WIKI.map(function(w){ return {kind:"Wiki", naam:w}; }));
+
+  var DISABLED_NOTE = {
+    wi: "Wiki blijft een eigen pagina, zoals nu.",
+    "in": "Inbox verdwijnt straks (aparte opruiming), dus hier geen accordeon bouwen.",
+    ad: "Admin blijft een aparte pagina — instellingen, geen lijstje om uit te kiezen."
+  };
+
+  var railEl = document.getElementById("rail");
+  var panelEl = document.getElementById("panel");
+  var panelInnerEl = document.getElementById("panelInner");
+  var previewEl = document.getElementById("preview");
+  var openKey = null;
+  var projectFilter = "mijn";
+
+  function clearQuickActive(){
+    Array.prototype.forEach.call(railEl.querySelectorAll(".railbtn.quick"), function(b){
+      b.classList.remove("active");
+    });
+  }
+  function clearExpanded(except){
+    Array.prototype.forEach.call(railEl.querySelectorAll(".railbtn[data-panel]"), function(b){
+      b.setAttribute("aria-expanded", b === except ? "true" : "false");
+    });
+  }
+
+  railEl.addEventListener("click", function(e){
+    var quick = e.target.closest(".railbtn.quick");
+    if(quick){
+      openKey = null;
+      panelEl.classList.remove("open");
+      clearExpanded(null);
+      clearQuickActive();
+      quick.classList.add("active");
+      if(quick.getAttribute("data-quick") === "werkoverleg") renderWerkoverleg();
+      else renderRoloverleg();
+      return;
+    }
+
+    var btn = e.target.closest(".railbtn[data-panel]");
+    if(!btn) return;
+    var key = btn.getAttribute("data-panel");
+    clearQuickActive();
+
+    if(btn.getAttribute("data-disabled") === "true"){
+      openKey = key;
+      clearExpanded(btn);
+      panelEl.classList.add("open");
+      panelInnerEl.innerHTML = '<h2>' + key.toUpperCase() + '</h2><p class="empty">' + DISABLED_NOTE[key] + '</p>';
+      return;
+    }
+
+    if(openKey === key){
+      openKey = null;
+      panelEl.classList.remove("open");
+      clearExpanded(null);
+      return;
+    }
+    openKey = key;
+    clearExpanded(btn);
+    panelEl.classList.add("open");
+    if(key === "zoek") renderZoek();
+    else if(key === "pr") renderProjects();
+    else if(key === "me") renderMessages();
+    else if(key === "ci") renderCircle();
+  });
+
+  function setPreview(eyebrow, title, meta, body){
+    previewEl.innerHTML =
+      '<div class="eyebrow">' + eyebrow + '</div>' +
+      '<h3>' + title + '</h3>' +
+      '<p class="meta">' + meta + '</p>' +
+      '<div class="placeholder-body">' + body + '</div>';
+  }
+
+  function renderWerkoverleg(){
+    previewEl.innerHTML =
+      '<div class="eyebrow">Werkoverleg — spanning uit het dagelijkse werk</div>' +
+      '<h3>Werkoverleg · deze week</h3>' +
+      '<p class="meta">Verwerkt spanning uit het dagelijkse werk. Maakt of wijzigt geen rollen, ' +
+      'accountabilities of domeinen — dat gaat naar Roloverleg. Accountabilities staan vast op de wiki.</p>' +
+      '<ul class="checklist">' +
+        '<li><span>Wekelijkse voorraadcheck gedaan</span><span class="status done">Af</span></li>' +
+        '<li><span>Leveranciersstatus bijgewerkt</span><span class="status open">Wacht op antwoord</span></li>' +
+        '<li><span>Wachtlijst-mail verstuurd</span><span class="status done">Af</span></li>' +
+      '</ul>' +
+      '<p class="hint">Rechtstreeks vanaf de balk geopend — geen kanaal, geen accordeon-lijst ervoor.</p>';
+  }
+
+  function renderRoloverleg(){
+    previewEl.innerHTML =
+      '<div class="eyebrow">Governance · alleen structuur</div>' +
+      '<h3>Roloverleg</h3>' +
+      '<p class="meta">Alleen structurele wijzigingen: rollen aanmaken, accountabilities toevoegen of ' +
+      'verwijderen, domeinen aanpassen. Geen dagelijkse spanning — dat is Werkoverleg.</p>' +
+      '<div class="placeholder-body">Openstaand voorstel: domein toevoegen aan Materials &amp; Sourcing.<br>' +
+      'Vorig overleg: 14 sept — 2 voorstellen, beide aangenomen.</div>' +
+      '<p class="hint">Rechtstreeks vanaf de balk geopend — geen kanaal, geen accordeon-lijst ervoor.</p>';
+  }
+
+  function renderZoek(){
+    var html = '<h2>Zoeken — overal</h2>';
+    html += '<input class="search" id="globalSearch" placeholder="Personen, rollen, projecten, kanalen, wiki…" autofocus />';
+    html += '<div id="zoekResults"></div>';
+    panelInnerEl.innerHTML = html;
+
+    var input = document.getElementById("globalSearch");
+    var results = document.getElementById("zoekResults");
+
+    function renderResults(q){
+      if(!q){
+        results.innerHTML = '<p class="empty">Typ om te zoeken over alle personen, rollen, projecten, kanalen en wiki-pagina&#39;s tegelijk.</p>';
+        return;
+      }
+      var hits = SEARCH_INDEX.filter(function(item){
+        return item.naam.toLowerCase().indexOf(q.toLowerCase()) !== -1;
+      });
+      if(hits.length === 0){
+        results.innerHTML = '<p class="empty">Niets gevonden voor &ldquo;' + q + '&rdquo;.</p>';
+        return;
+      }
+      var byKind = {};
+      hits.forEach(function(h){ (byKind[h.kind] = byKind[h.kind] || []).push(h); });
+      var out = "";
+      Object.keys(byKind).forEach(function(kind){
+        out += '<div class="grouplabel">' + kind + '</div>';
+        byKind[kind].forEach(function(h){
+          out += '<button class="row" data-kind="zoekresultaat" data-naam="' + h.naam + '" data-groep="' + kind + '">' +
+            '<span>' + h.naam + (h.sub ? ' <span class="sub">— ' + h.sub + '</span>' : '') + '</span>' +
+            '<span class="kind">' + kind + '</span></button>';
+        });
+      });
+      results.innerHTML = out;
+      bindRows();
+    }
+
+    input.addEventListener("input", function(){ renderResults(input.value.trim()); });
+    renderResults("");
+    setTimeout(function(){ input.focus(); }, 0);
+
+    setPreview("Zoeken", "Eén zoekveld voor alles",
+      "Personen, rollen, projecten, kanalen en wiki-pagina&#39;s in één lijst, in plaats van per scherm apart.",
+      "Typ links iets, bijvoorbeeld &ldquo;mate&rdquo; of &ldquo;lotte&rdquo;, om te zien hoe de resultaten groeperen.");
+  }
+
+  function renderProjects(){
+    var html = '<h2>Projects</h2>';
+    html += '<div class="seg">' +
+      '<button data-filter="mijn" class="' + (projectFilter==="mijn"?"active":"") + '">Mijn projecten</button>' +
+      '<button data-filter="alle" class="' + (projectFilter==="alle"?"active":"") + '">Alle projecten</button>' +
+      '</div>';
+    var list = projectFilter === "alle" ? MIJN_PROJECTEN.concat(ALLE_PROJECTEN_EXTRA) : MIJN_PROJECTEN;
+    list.forEach(function(p){
+      html += '<button class="row" data-kind="project" data-naam="' + p.naam + '" data-tag="' + p.tag + '">' +
+        '<span>' + p.naam + '</span><span class="tag">' + p.tag + '</span></button>';
+    });
+    html += projectFilter === "alle"
+      ? '<p class="empty">+152 meer — zoek of filter op doel.</p>'
+      : '<p class="empty">Alleen projecten die je zelf volgt. Wissel naar &ldquo;Alle projecten&rdquo; om te zoeken en toe te voegen.</p>';
+    panelInnerEl.innerHTML = html;
+    panelInnerEl.querySelector(".seg").addEventListener("click", function(e){
+      var b = e.target.closest("button[data-filter]");
+      if(!b) return;
+      projectFilter = b.getAttribute("data-filter");
+      renderProjects();
+    });
+    bindRows();
+    setPreview("Projects — standaard: mijn projecten", "Kies een project",
+      "De lijst opent al gefilterd op wat je zelf volgt, in plaats van alle 159.",
+      "Klik een project hierboven om de preview te zien.");
+  }
+
+  function renderMessages(){
+    var html = '<h2>Messages</h2>';
+    html += '<input class="search" placeholder="Zoek een kanaal…" />';
+    html += '<div class="grouplabel">General</div>';
+    html += '<button class="row" data-kind="channel" data-naam="Nooch">Nooch</button>';
+    html += '<div class="grouplabel">Goals</div>';
+    GOALS.forEach(function(g){ html += '<button class="row" data-kind="goal" data-naam="' + g + '">' + g + '</button>'; });
+    html += '<div class="grouplabel">Channels</div>';
+    CHANNELS.forEach(function(c){ html += '<button class="row" data-kind="channel" data-naam="' + c + '">' + c + '</button>'; });
+    html += '<div class="grouplabel">Projects</div>';
+    html += '<p class="empty">Nog geen projecten gevolgd. Zoek hierboven en voeg toe.</p>';
+    panelInnerEl.innerHTML = html;
+    bindRows();
+    setPreview("Messages", "Kies een kanaal",
+      "Alleen nog echte kanalen — Werkoverleg en Roloverleg staan nu links op de balk, niet hier tussen.",
+      "Klik een kanaal hierboven om de preview te zien.");
+  }
+
+  function renderCircle(){
+    var html = '<h2>Circle</h2>';
+    ROLES.forEach(function(r){
+      html += '<button class="row" data-kind="role" data-naam="' + r.naam + '" data-wie="' + r.wie + '">' +
+        '<span>' + r.naam + '</span><span class="sub">' + r.wie + '</span></button>';
+    });
+    panelInnerEl.innerHTML = html;
+    bindRows();
+    setPreview("Circle — alle rollen", "Kies een rol",
+      "Rechtstreeks vanuit de balk in beeld, niet pas na een aparte paginasprong.",
+      "Klik een rol hierboven om de preview te zien.");
+  }
+
+  function bindRows(){
+    var rows = panelInnerEl.querySelectorAll(".row[data-kind]");
+    Array.prototype.forEach.call(rows, function(row){
+      row.addEventListener("click", function(){
+        Array.prototype.forEach.call(rows, function(r){ r.removeAttribute("aria-current"); });
+        row.setAttribute("aria-current","true");
+        var kind = row.getAttribute("data-kind");
+        var naam = row.getAttribute("data-naam");
+
+        if(kind === "project"){
+          var tag = row.getAttribute("data-tag");
+          setPreview("Project · " + tag, naam,
+            "Voorbeeldweergave — echte pagina toont hier voortgang, log en betrokken rollen.",
+            "Dit project hangt onder doel " + tag + ". Ontvolgen verwijdert het alleen uit jouw lijst, nooit uit de projectdata.");
+        } else if(kind === "goal"){
+          setPreview("Goal-kanaal", naam,
+            "Automatisch aanwezig zolang het doel bestaat, stabiel bij hernoemen.",
+            "Iedereen die aan " + naam + " werkt zit hier, ongeacht wie welke rol heeft.");
+        } else if(kind === "channel"){
+          setPreview("Channel", naam, "Bewust aangemaakt of het dorpsbrede kanaal.", "Gewone chat — geen governance-functie.");
+        } else if(kind === "role"){
+          var wie = row.getAttribute("data-wie");
+          setPreview("Rol", naam, "Gehouden door: " + wie,
+            "Rolbadges als deze zouden ook naast berichten in Goal-kanalen kunnen staan — apart backlog-idee.");
+        } else if(kind === "zoekresultaat"){
+          var groep = row.getAttribute("data-groep");
+          openKey = null;
+          panelEl.classList.remove("open");
+          clearExpanded(null);
+          setPreview("Gevonden via zoeken", naam, groep,
+            "Eén zoekopdracht, resultaat uit een van de vijf categorieën — geen aparte zoekactie per scherm nodig.");
+        }
+      });
+    });
+  }
+
+})();
+</script>
