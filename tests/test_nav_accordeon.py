@@ -74,7 +74,7 @@ def test_de_balk_klapt_nooit_om_naar_horizontaal():
 
 def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
     h = _nav_ingevuld()
-    for sleutel in ("zoek", "pr", "ci", "org"):
+    for sleutel in ("pr", "ci", "org"):
         assert f"data-nav-paneel='{sleutel}'" in h, sleutel
     # WI, AD én ME springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
     # tussenlijst is dan een extra klik zonder winst. Messages kwam er op 21 september bij — zie
@@ -92,7 +92,7 @@ def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
     """Zonder deze regel is de balk bij een JS-fout een rij dode elementen. De knop draagt zijn
     href, en `preventDefault` gebeurt pas als het paneel echt opengaat."""
     h = _nav_ingevuld()
-    for sleutel, href in (("zoek", "/search"), ("pr", "/projects"),
+    for sleutel, href in (("pr", "/projects"),
                           ("ci", "/node?id=mother_earth__nooch"), ("org", "/node")):
         stuk = h.split(f"data-nav-paneel='{sleutel}'")[0][-160:]
         assert f"href='{href}'" in stuk, f"{sleutel} heeft geen val-terug-link"
@@ -179,12 +179,36 @@ def test_een_onbekend_paneel_geeft_niets(tmp_path):
 
 
 # ── 4. Zoeken in het paneel ──────────────────────────────────────────────────
-def test_het_zoekpaneel_gebruikt_de_bestaande_zoekmachine(tmp_path):
-    """GEEN TWEEDE ZOEKMACHINE. `views/search.py` doorzoekt al tien bronnen met per groep een
-    eigen fail-soft. Een tweede index zou een tweede antwoord geven op "wat is vindbaar"."""
+def test_het_zoekveld_is_de_enige_ingang(tmp_path):
+    """DIT HEETTE `test_het_zoekpaneel_gebruikt_de_bestaande_zoekmachine`, en het paneel is er op
+    22 september 2026 uit (eis Stefan).
+
+    Er waren TWEE zoek-ingangen in de balk: het altijd zichtbare `c2-search`-veld (met de
+    `/`-sneltoets en een typeahead-dropdown) en een "Search"-knop die een paneel opende — allebei
+    naar dezelfde `/search`-inhoud. De knop had zijn reden toen hij gebouwd werd: in de rail-stand
+    was het veld verborgen, dus op /messages was er geen zoek. Die rail verviel op 21 september
+    (#544) en daarmee de reden voor de knop, zonder dat iemand hem weghaalde.
+
+    Wat deze test nu bewaakt: het veld is er, het draagt de sneltoets en de typeahead, en het
+    paneel is fail-closed leeg."""
     dd, st, ik = _dorp(tmp_path)
-    assert "Type to search" in render_nav_paneel(st, "zoek", ik)        # drempel van 2 tekens
-    h = render_nav_paneel(st, "zoek", ik, q="mycelium")
+    h = _nav_ingevuld()
+    assert "id='gs-input'" in h and "id='gs-drop'" in h      # veld + typeahead
+    assert "action='/search'" in h or 'action="/search"' in h
+    assert "c2-kbd" in h                                      # de `/`-sneltoets staat erbij
+    assert ">Search<" not in h, "de dubbele ingang staat er nog"
+    assert "zoek" not in PANELEN
+    assert render_nav_paneel(st, "zoek", ik) == ""            # fail-closed
+
+
+def test_de_zoekmachine_zelf_is_onaangeroerd(tmp_path):
+    """DE TWEE GATEN DIE BIJ DE KNOP WERDEN GEDICHT ZITTEN IN DE ZOEKMACHINE, niet in het paneel:
+    de groep `Channels` (kanalen op naam) en de goal- en topic-trails in `Messages`. Die zijn met
+    de knop niet meegegaan — ze werken via het veld, want dat gaat naar dezelfde `_zoek`."""
+    from nooch_village.views.search import _GROEPEN, render_search_fragment
+    dd, st, ik = _dorp(tmp_path)
+    assert "Channels" in [label for label, _fn in _GROEPEN]
+    h = render_search_fragment(st, "mycelium")
     assert "gs-group" in h and "Projects" in h
 
 
@@ -330,16 +354,14 @@ def test_het_paneel_eindigt_vóór_de_inhoud_begint():
 
 
 # ── 7. Zoeken zegt niet twee keer hetzelfde ──────────────────────────────────
-def test_het_zoekveld_herhaalt_de_paneeltitel_niet(tmp_path):
-    """"SEARCH" als paneeltitel en "SEARCH EVERYTHING" er direct onder is hetzelfde woord twee
-    keer. Het label mag niet wég — een zoekveld zonder label is voor een schermlezer een naamloos
-    invoerveld — dus het gaat in `.sr`."""
-    dd, st, ik = _dorp(tmp_path)
-    h = render_nav_paneel(st, "zoek", ik)
-    assert "Search everything" in h                      # nog steeds in de DOM
-    label = h.split("Search everything")[0][-60:]
-    assert "class='sr'" in label, "het label staat nog zichtbaar onder de titel"
-    assert "c2-pkop" in h                                 # en de titel blijft
+def test_het_zoekveld_draagt_nog_steeds_een_label(tmp_path):
+    """DEZE TEST GING OVER EEN DUBBELING BINNEN HET PANEEL ("SEARCH" als titel, "SEARCH EVERYTHING"
+    eronder). Het paneel is weg, en daarmee die dubbeling — maar de onderliggende eis niet: een
+    zoekveld zonder label is voor een schermlezer een naamloos invoerveld. Het veld in de balk
+    heeft er een, en die mag niet stilletjes sneuvelen bij een volgende opruiming."""
+    h = _nav_ingevuld()
+    veld = h.split("id='gs-input'")[1][:200]
+    assert "aria-label='global search'" in veld or "aria-label=\"global search\"" in veld
 
 
 # ── 8. De organisatieboom is een paneel geworden ─────────────────────────────
