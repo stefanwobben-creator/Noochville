@@ -874,7 +874,14 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # Persoonlijke begroeting; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
         "<span class='c2-greet' id='c2-greet'></span>"
         "<nav class='c2-subnav'>"
-        + _side_item("/search", "Search", "zoek")
+        # HIER STOND EEN "SEARCH"-ITEM dat het zoekpaneel opende. Het zoekVELD staat er al, één
+        # regel hoger, met de `/`-sneltoets en een typeahead-dropdown — en beide gingen naar
+        # dezelfde `/search`-inhoud. Twee ingangen naar één ding.
+        #
+        # De knop had zijn reden toen hij gebouwd werd: in de rail-stand was `.c2-search`
+        # verborgen, dus op /messages was er géén zoek. Die rail is op 21 september 2026 vervallen
+        # (#544) en de balk is overal even breed — daarmee verviel de reden voor de knop zonder
+        # dat iemand hem weghaalde. Weg op 22 september (eis Stefan).
         + "".join(_side_item(h, l, pn) for h, l, pn in _SIDE_ITEMS)
         + "<div class='c2-subnav-div'></div>"
         # EÉN Circle-item, niet twee. De eerste versie zette er een statische `/node` naast deze

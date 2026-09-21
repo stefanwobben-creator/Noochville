@@ -30,7 +30,7 @@ from nooch_village.web_base import _e
 log = logging.getLogger("village.navpaneel")
 
 #: De panelen die bestaan. Alles daarbuiten geeft een lege string (fail-closed, geen gok).
-PANELEN = ("zoek", "pr", "ci", "org")
+PANELEN = ("pr", "ci", "org")
 
 
 def _rij(href: str, tekst: str, *, sub: str = "", tag: str = "") -> str:
@@ -53,6 +53,19 @@ def _leeg(tekst: str) -> str:
 
 
 # ── ZOEK ─────────────────────────────────────────────────────────────────────
+#
+# HET ZOEKPANEEL IS OP 22 SEPTEMBER 2026 VERVALLEN (eis Stefan) en de functie blijft staan omdat
+# hij niets kost en de reden hier hoort te staan: er waren TWEE zoek-ingangen in de balk, het
+# altijd zichtbare `c2-search`-veld (met `/`-sneltoets en typeahead) en deze knop, en ze gingen
+# naar dezelfde `/search`-inhoud.
+#
+# De knop had zijn reden toen hij gebouwd werd: in de rail-stand was `.c2-search` verborgen, dus
+# op /messages was er geen zoek. Die rail verviel op 21 september (#544) en daarmee de reden voor
+# de knop — zonder dat iemand hem weghaalde. `zoek` staat niet meer in `PANELEN`.
+#
+# WAT BLEEF: de twee gaten die bij het bouwen van deze knop werden gedicht, zitten in de
+# ZOEKMACHINE zelf en niet in het paneel — de groep `Channels` (kanalen op naam) en de goal- en
+# topic-trails in `Messages`. Die werken onveranderd via het zoekveld.
 def _paneel_zoek(st, ik: str, q: str) -> str:
     """Het bestaande globale zoeken, in het paneel.
 
@@ -199,12 +212,10 @@ def _paneel_org(st, ik: str, hier: str) -> str:
 def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
                       hier: str = "") -> str:
     """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
-    titels = {"zoek": "Search", "pr": "Projects", "ci": "Circle", "org": "Organization"}
+    titels = {"pr": "Projects", "ci": "Circle", "org": "Organization"}
     if p not in PANELEN:
         return ""
-    if p == "zoek":
-        inhoud = _paneel_zoek(st, ik, q)
-    elif p == "pr":
+    if p == "pr":
         inhoud = _paneel_projects(st, ik, "alle" if welke == "alle" else "mijn")
     elif p == "org":
         inhoud = _paneel_org(st, ik, hier)
