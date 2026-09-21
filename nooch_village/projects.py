@@ -409,6 +409,27 @@ class ProjectLedger:
                 return True
         return False
 
+    def add_entry_bijlage(self, pid: str, entry_id: str, meta: dict) -> bool:
+        """Hang een geüpload bestand aan één regel in de feed van dit project.
+
+        DE TWEELING VAN `add_reaction`, en om dezelfde reden: een projectKANAAL in Messages ís
+        `project["log"]`. Hangt de bijlage ergens anders, dan zie je hem in het ene scherm wel en
+        in het andere niet — en dan is "welk bestand hoort bij dit bericht" een vraag met twee
+        antwoorden.
+
+        LET OP: dit is iets anders dan `attach_file`. Die hangt een bestand aan het PROJECT (de
+        bijlagenstrook op de kaart); dit hangt hem aan een BERICHT in de draad."""
+        p = self._projects.get(pid)
+        if p is None or not entry_id or not meta:
+            return False
+        for entry in p.get("log", []):
+            if entry.get("id") == entry_id:
+                entry.setdefault("bijlagen", []).append(meta)
+                self._touch(p)
+                self._save()
+                return True
+        return False
+
     def attach_add(self, pid: str, url: str = "", title: str = "", kind: str = "link") -> dict | None:
         """Voeg een verrijking-card toe (Trello-stijl bijlage). Nu: een link met optionele titel.
         Geeft de toegevoegde card terug."""
@@ -1561,7 +1582,8 @@ def heeft_seed_vorm(doc_text: str = "") -> bool:
 # bij — de guard-test tests/test_projectledger_concurrency.py::test_alle_schrijfpaden_gesynchroniseerd
 # faalt zodra een methode die _save aanroept niet in deze lijst staat. Reads staan er bewust NIET in.
 _WRITE_METHODS = (
-    "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
+    "create", "start", "set_due", "set_dod", "add_reaction", "add_entry_bijlage",
+    "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_resultaat",

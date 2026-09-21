@@ -59,6 +59,43 @@ PROJECT, CIRCLE, DM, TOPIC, GOAL = "project", "circle", "dm", "topic", "goal"
 COMMENT, NOTIFICATIE = "comment", "notificatie"
 
 
+#: WAT ER AAN EEN BERICHT MAG HANGEN, en hoe het geserveerd wordt.
+#:
+#: EEN ALLOWLIST EN GEEN BLOKLIJST, want ons eigen domein draagt de sessie. Een bestand dat wij
+#: inline serveren draait op onze origin: een geüploade `.svg` of `.html` is dan geen plaatje maar
+#: script met toegang tot de ingelogde sessie. Een bloklijst vergeet altijd iets; een allowlist
+#: vergeet hooguit een nuttig bestandstype, en dat merk je meteen.
+#:
+#: `inline` = tonen in de draad (alleen afbeelding en PDF). Al het andere gaat als download, met
+#: `Content-Disposition: attachment`. `nosniff` staat op alles — ook op de inline-types, want
+#: zonder dat mag de browser alsnog zelf iets anders van de bytes maken.
+BIJLAGE_TYPES = {
+    ".png":  ("image/png", True),
+    ".jpg":  ("image/jpeg", True),
+    ".jpeg": ("image/jpeg", True),
+    ".webp": ("image/webp", True),
+    ".gif":  ("image/gif", True),
+    ".pdf":  ("application/pdf", True),
+    ".txt":  ("text/plain; charset=utf-8", False),
+    ".md":   ("text/plain; charset=utf-8", False),
+    ".csv":  ("text/csv; charset=utf-8", False),
+    ".docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", False),
+    ".xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", False),
+    ".pptx": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", False),
+}
+
+
+def bijlage_type(naam: str) -> tuple[str, bool] | None:
+    """(mimetype, inline?) voor deze bestandsnaam, of None als hij niet op de lijst staat.
+
+    OP DE EXTENSIE, en bewust niet op wat de browser als type meestuurt: dat veld komt van de
+    client en is dus geen bewijs. De extensie bepaalt ook waarmee wij hem serveren — zo kan een
+    `.txt` die zich als `text/html` aandient nooit als HTML uitkomen."""
+    import os as _os
+    ext = _os.path.splitext(naam or "")[1].lower()
+    return BIJLAGE_TYPES.get(ext)
+
+
 TEKST_MAX = 1500
 TRAIL_MAX = 500          # per kanaal bewaard; ouder verdwijnt niet, maar wordt niet meer getoond
 
@@ -124,7 +161,7 @@ class ChannelStore(JsonStore):
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
     _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie",
-                      "add_reaction")
+                      "add_reaction", "add_bijlage")
     _STATE = "_data"
     _default = dict
 
@@ -156,6 +193,40 @@ class ChannelStore(JsonStore):
         self._data.setdefault("kanalen", {}).setdefault(kanaal, []).append(entry)
         self._save()
         return entry
+
+    def add_bijlage(self, kanaal: str, entry_id: str, meta: dict) -> bool:
+        """Hang een geüpload bestand aan een bericht in dit kanaal.
+
+        DE BIJLAGE ZIT AAN HET BERICHT, niet aan het kanaal. Dat is dezelfde keuze als bij
+        `reactions`, en hij lost hetzelfde probleem op: een kanaalbericht heeft twee achterkanten
+        (een projectkanaal is `project["log"]` via de ledger, de rest staat hier). Aan het bericht
+        hangen laat één mechanisme op allebei werken.
+
+        HET BESTAND ZELF IS AL WEGGESCHREVEN door de multipart-tak in `do_POST`; hier landt alleen
+        de registratie. Zelfde rolverdeling als `ProjectLedger.attach_file`."""
+        if not (kanaal and entry_id and isinstance(meta, dict) and meta.get("stored")):
+            return False
+        if soort_van(kanaal) == PROJECT:
+            if self._ledger is None:
+                return False
+            return bool(self._ledger.add_entry_bijlage(doel_van(kanaal), entry_id, meta))
+        for e in (self._data.get("kanalen") or {}).get(kanaal) or []:
+            if e.get("id") == entry_id:
+                e.setdefault("bijlagen", []).append(meta)
+                self._save()
+                return True
+        return False
+
+    def bijlage(self, kanaal: str, bijlage_id: str) -> dict | None:
+        """De bijlage met dit id in dit kanaal, of None.
+
+        OP KANAAL ÉN ID, nooit op id alleen. Zou je op id alleen kunnen zoeken, dan is het id de
+        sleutel en is de leescheck op het kanaal te omzeilen door de juiste string te raden."""
+        for e in self.trail(kanaal, limit=TRAIL_MAX):
+            for b in (e.get("bijlagen") or []):
+                if b.get("id") == bijlage_id:
+                    return b
+        return None
 
     def add_reaction(self, kanaal: str, entry_id: str, emoji: str) -> bool:
         """Een emoji-reactie op een bericht in dit kanaal. Per emoji een teller.

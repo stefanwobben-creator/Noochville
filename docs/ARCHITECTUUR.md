@@ -52,6 +52,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/copy-prompt` | `render_copy_prompt` | `nooch_village/views/copy_prompt.py` |
 | `/roloverleg2` | `render_roloverleg2` | `nooch_village/views/roloverleg.py` |
 | `/metric_export` | `(inline)` | `cockpit2.py` |
+| `/bijlage` | `(inline)` | `cockpit2.py` |
 | `/file` | `(inline)` | `cockpit2.py` |
 
 
@@ -310,4 +311,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_42 routes · 139 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_43 routes · 139 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

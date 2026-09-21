@@ -41,6 +41,7 @@ from nooch_village.views.feed import (
     _hilite_mentions, _feed_entry_html, _feed_author_options,
     _wall_outcome_opts,
 )
+from nooch_village import channels
 from nooch_village.governance import Records
 from nooch_village import acc_ids, skill_meta, skill_links
 from nooch_village.skill_links import SkillLinkKroniek
@@ -5228,6 +5229,23 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
             self._schrijf(data)
 
+        def _send_bijlage(self, data: bytes, mime: str, naam: str, *, inline: bool):
+            """Bytes met de twee regels die bij ons eigen domein horen.
+
+            `nosniff` op ALLES, ook op een plaatje: zonder die header mag de browser alsnog zelf
+            iets anders van de bytes maken dan wat wij zeggen. En inline alleen voor wat de
+            allowlist als inline markeert — al het andere gaat als download, zodat een bestand
+            nooit als pagina op onze origin uitkomt."""
+            veilig = os.path.basename(naam or "bestand").replace('"', "") or "bestand"
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Disposition",
+                             f'{"inline" if inline else "attachment"}; filename="{veilig}"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self._schrijf(data)
+
         def _send_json(self, payload: dict, code: int = 200):
             b = json.dumps(payload).encode("utf-8")
             self.send_response(code)
@@ -5703,8 +5721,41 @@ def make_handler(data_dir: str, csrf_token: str,
                 with open(full, "rb") as fh:
                     self._send_bytes(fh.read(), "application/pdf")
                 return
+            if path == "/bijlage":
+                # Een bestand dat aan een BERICHT hangt. De poort is het leesrecht op het KANAAL,
+                # server-side bij elk verzoek — de URL is geen sleutel: wie hem doorstuurt geeft
+                # geen toegang weg, de ontvanger moet door dezelfde poort.
+                from nooch_village.views.messages import mag_kanaal_lezen
+                _kan = (qs.get("kanaal") or [""])[0]
+                _ik = _web_actor_id(username, st)
+                if not mag_kanaal_lezen(st, _kan, _ik):
+                    self._send("<p>Not found</p>", 404); return    # geen 403: bestaan is ook info
+                _b = st.channels.bijlage(_kan, (qs.get("id") or [""])[0])
+                _full = os.path.join(data_dir, _b["stored"]) if _b else None
+                if not (_full and os.path.exists(_full)):
+                    self._send("<p>File not found</p>", 404); return
+                with open(_full, "rb") as fh:
+                    _data = fh.read()
+                _t = channels.bijlage_type(_b.get("name", ""))
+                if _t is None:
+                    # Op de schijf maar niet meer op de lijst (de allowlist kan krimpen). Dan
+                    # downloaden als kale bytes, nooit alsnog inline.
+                    _mt, _inline = "application/octet-stream", False
+                else:
+                    _mt, _inline = _t
+                self._send_bijlage(_data, _mt, _b.get("name", "bestand"), inline=_inline)
+                return
             if path == "/file":
-                p = st.projects.get((qs.get("pid") or [""])[0])
+                # DE POORT DIE HIER NIET STOND. Deze route zocht het project op, pakte de bijlage
+                # en stuurde de bytes — zonder één leescheck. Elke ingelogde gebruiker kon zo elk
+                # projectbestand ophalen, ook van een project met `private: True`; op productie
+                # stonden er 48 bestanden achter. Gevonden bij het ontwerp van `/bijlage`
+                # (22 september 2026) en in dezelfde beurt gedicht, met DEZELFDE check.
+                from nooch_village.views.messages import mag_project_lezen
+                _pid = (qs.get("pid") or [""])[0]
+                if not mag_project_lezen(st, _pid, _web_actor_id(username, st)):
+                    self._send("<p>Not found</p>", 404); return
+                p = st.projects.get(_pid)
                 aid = (qs.get("aid") or [""])[0]
                 att = next((a for a in (p.get("attachments") or [])
                             if a.get("id") == aid and a.get("kind") == "file"), None) if p else None
@@ -6068,6 +6119,45 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") == "kanaal_bijlage":
+                    # AUTHZ: iedereen-ingelogd die in dit kanaal mag SCHRIJVEN. Dat is dezelfde
+                    # voorwaarde als het antwoordveld (`kan_antwoorden`), en bewust geen tweede
+                    # regel: staat er geen antwoordveld, dan staat er ook geen paperclip. Uploaden
+                    # naar een kanaal dat niemand leest is hetzelfde dead letter als een bericht,
+                    # maar dan eentje die 20 MB schijf kost.
+                    from nooch_village.views.messages import kan_antwoorden, mag_kanaal_lezen
+                    _st = _Stores(data_dir)
+                    _ik = _web_actor_id(username, _st)
+                    _kan = fields.get("kanaal", "")
+                    if not (_ik and mag_kanaal_lezen(_st, _kan, _ik)
+                            and kan_antwoorden(_st, _kan, _ik)):
+                        self._send("No access to this channel", 403); return
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:
+                        self._send(err[0], err[1]); return
+                    fname, blob = files["file"]
+                    safe = os.path.basename(fname).replace("\\", "_")[:120]
+                    soort = channels.bijlage_type(safe)
+                    if soort is None:
+                        self._send("Dit bestandstype kan niet worden bijgevoegd", 415); return
+                    # Het bericht eerst: de bijlage hangt aan een BERICHT, dus zonder bericht is er
+                    # niets om hem aan te hangen. De tekst is het onderschrift, of anders de naam —
+                    # een lege regel in de draad zegt niets over wat er gedeeld werd.
+                    tekst = " ".join((fields.get("tekst") or "").split()) or f"📎 {safe}"
+                    entry = _st.channels.post(_kan, tekst, author_type="human", author_id=_ik)
+                    if entry is None:
+                        self._send("Could not post the message", 400); return
+                    bid = uuid.uuid4().hex[:10]
+                    veilig_kanaal = _kan.replace(":", "_").replace("/", "_").replace("|", "_")
+                    rel = os.path.join("kanaalbijlagen", veilig_kanaal, bid + "_" + safe)
+                    full = os.path.join(data_dir, rel)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "wb") as fh:
+                        fh.write(blob)
+                    _st.channels.add_bijlage(_kan, entry["id"], {
+                        "id": bid, "name": safe, "stored": rel, "size": len(blob),
+                        "mime": soort[0], "at": time.time()})
+                    self._redirect(fields.get("next", "/messages"), "📎 bijlage toegevoegd"); return
                 if fields.get("action") == "kb_atoom_ref_pdf":
                     # AUTHZ: iedereen-ingelogd — kennisbank. Een PDF als bronlink bij een atoom.
                     # Statements-herontwerp: de PDF wordt óók bewaard (data/kbref/) en reference
