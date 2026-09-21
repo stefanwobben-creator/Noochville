@@ -538,9 +538,20 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-band-edit>summary::-webkit-details-marker{display:none}
 .wo-band-edit>summary:hover{color:var(--ink)}
 .wo-band-edit[open]{flex:1 1 100%;margin-top:.5rem}
-/* De status-keuze naast Opslaan. Twee opties die je in één blik ziet zijn geen keuzelijst. */
-.wo-staat{align-items:center;gap:.8rem}
+/* ── Eén kaart per spanning, met LIJNEN erbinnen in plaats van dozen ─────────────────────────
+   Het verwerkscherm had vier randen in elkaar: de verwerken-balk (`.box-details`), daarin de
+   spanningsband, daarin het formulier, en de uitkomstenlijst er los onder zónder kader. Box in
+   box in box leest als vier losse dingen in plaats van één spanning die je behandelt.
+   De buitenkaart is `.wo-ocd`; alles daarbinnen wordt gescheiden door een dunne lijn — precies
+   wat de `wo-`-familie elders al doet (`.wo-ocd > summary`, `.rdr-row`). */
+.wo-ocd .wo-band{border:0;border-bottom:1px solid var(--border);border-radius:0;
+  background:none;padding:.1rem 0 .6rem;margin-bottom:.7rem}
+.wo-ocd .wo-band-edit[open]{padding-bottom:.4rem}
+/* De uitkomstenlijst hoorde erbij maar stond er los onder. Zelfde kaart, eigen sectie. */
+.wo-ocd .c2-sec{margin:.9rem 0 .2rem;padding-top:.7rem;border-top:1px solid var(--border)}
+/* De status-keuze is een gewone rastercel geworden; Opslaan lijnt rechts uit onder zijn kolom. */
 .wo-staat-lbl{margin:0}
+.wo-opslaan{display:flex;align-items:flex-end;justify-content:flex-end}
 /* Rijstatus met TWEE dragers: de tint én de rand-stijl links. Solide = gemist, gestippeld = nog
    te doen, niets = gedaan. Een rand-stijl overleeft zwart-wit en kleurenblindheid waar een tint
    dat niet doet; het woord zelf staat in een `.sr`-span vooraan de rij. */

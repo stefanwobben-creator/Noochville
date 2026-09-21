@@ -159,11 +159,24 @@ class WerkoverlegStore:
     # leeglopen — en dan lijkt vastgelegd werk verdwenen.
 
     def punten(self, circle: str) -> list:
-        """Alle gevangen punten van deze cirkel, nieuwste eerst. Backlog én lopende agenda."""
+        """Alle gevangen punten van deze cirkel, OUDSTE EERST. Backlog én lopende agenda.
+
+        DE VOLGORDE IS DE INDIEN-VOLGORDE, en niets anders (eis Stefan, 21 september 2026). Hij
+        stond op nieuwste-eerst, en dat is voor een agenda de verkeerde kant op: een overleg werkt
+        van boven naar beneden door wat er ligt, en wie iets toevoegde zag het bovenaan springen
+        terwijl de rest opschoof.
+
+        EN HIJ HERSCHIKT NOOIT OP STATUS. Afgetikte punten blijven staan waar ze stonden —
+        doorgestreept, niet verplaatst. Sorteren op "onverwerkt eerst" laat de lijst onder je
+        handen bewegen precies op het moment dat je iets afvinkt, en dan raak je kwijt waar je
+        was. Dat een punt is afgehandeld is een EIGENSCHAP van het punt, geen plek in de rij.
+
+        `actief_punt` kiest wél het eerste nog niet afgetikte punt als er geen expliciet punt
+        openstaat — dat is de SELECTIE, niet de volgorde, en die twee zijn hier bewust los."""
         st = self._m.get(circle) or {}
         uit = [{**i, "bron": "agenda"} for i in st.get("agenda", [])]
         uit += [{**i, "bron": "backlog"} for i in st.get("backlog", [])]
-        return sorted(uit, key=lambda i: -(i.get("created_at") or 0))
+        return sorted(uit, key=lambda i: (i.get("created_at") or 0))
 
     def punt_get(self, circle: str, iid: str) -> dict | None:
         """Eén punt, waar het ook staat. Geeft het LEVENDE item terug (niet de kopie uit `punten`)."""

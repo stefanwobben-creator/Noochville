@@ -415,6 +415,15 @@
 .nu .wo-band { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); }
 .nu .wo-band-edit > summary { color: var(--nu-muted); font-family: var(--nu-font); }
+/* 21 september · binnen de kaart geen tweede en derde kader.
+   DRIE KLASSEN DIEP OM DEZELFDE REDEN ALS BIJ DE LIVE-KNOP: `.nu .wo-band` en `.nu .wo-oc` zijn
+   allebei (0,2,0) en zetten `border`. Een regel op `.nu .wo-ocd` zou daar niet overheen komen;
+   `.nu .wo-ocd .wo-band` is (0,3,0) en wint. De buitenkaart houdt zijn 2px lijn, de blokken
+   erbinnen worden gescheiden door een dunne lijn. */
+.nu .wo-ocd .wo-band { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; background: none; }
+.nu .wo-ocd .wo-oc { border: 0; border-radius: 0; background: none; }
+.nu .wo-ocd .c2-sec { border-top: 1.5px solid var(--nu-border-subtle); }
 .nu .wo-staat-lbl { color: var(--nu-muted); font-family: var(--nu-font); }
 
 .nu .fsep{

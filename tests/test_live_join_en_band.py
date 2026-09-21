@@ -145,7 +145,7 @@ def test_de_band_gebruikt_hetzelfde_opslagpad(tmp_path):
 def test_de_keuze_staat_er_alleen_bij_een_project(tmp_path):
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
-    rij = re.search(r"<div class='qadd-row wo-staat'[^>]*>", h)
+    rij = re.search(r"<div class='wo-staat'[^>]*>", h)
     assert rij and " hidden>" in rij.group(0), "de keuze staat open bij een actie-uitkomst"
     assert "this.value!=='project'" in h
 
@@ -159,7 +159,7 @@ def test_de_keuze_is_het_widget_en_de_taal_van_het_bord(tmp_path):
     from nooch_village.views.projects import _PROJ_CHIP
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
-    rij = re.search(r"<div class='qadd-row wo-staat'.*?</div>", h, re.S).group(0)
+    rij = re.search(r"<div class='wo-staat'.*?</select></div>", h, re.S).group(0)
     assert "<select class='ctrl'" in rij and "radio" not in rij
     assert f">{_PROJ_CHIP['running'][0]}<" in rij and f">{_PROJ_CHIP['blocked'][0]}<" in rij
     assert "value='running' selected" in rij and "value='blocked'" in rij
@@ -301,3 +301,100 @@ def test_het_stipje_staat_nooit_op_zijn_eigen_kleur():
         assert knop_bg and stip_bg
         assert knop_bg.group(1).strip() != stip_bg.group(1).strip(), (
             f"stip en knop delen dezelfde vulling ({knop_bg.group(1).strip()})")
+
+
+# ── 5. De vorm van het verwerkscherm (21 september 2026, na de screenshot) ───
+#
+# Vier dingen uit de live-doorloop. Drie visueel, één functioneel — en die laatste is geen
+# smaakkwestie: een agenda die onder je handen herschikt terwijl je hem afwerkt, kost je je plek.
+
+def test_de_agenda_staat_op_indien_volgorde_oudste_bovenaan(tmp_path):
+    """DE FUNCTIONELE EIS. Hij stond op nieuwste-eerst: wie iets toevoegde zag het bovenaan
+    springen terwijl de rest opschoof. Een overleg werkt van boven naar beneden door wat er ligt."""
+    dd, st, mens = _dorp(tmp_path)
+    ids = []
+    for n in ("eerste", "tweede", "derde"):
+        ids.append(st.werk.backlog_add(CIRCLE, n, by_id=mens.id)["id"])
+    punten = cockpit2._Stores(dd).werk.punten(CIRCLE)
+    assert [p["title"] for p in punten] == ["eerste", "tweede", "derde"]
+    assert [p["id"] for p in punten] == ids
+
+
+def test_afvinken_verplaatst_een_punt_niet(tmp_path):
+    """EN HIJ HERSCHIKT NOOIT OP STATUS. Dat een punt is afgehandeld is een EIGENSCHAP van het
+    punt, geen plek in de rij — doorgestreept blijven staan, niet naar onderen springen."""
+    dd, st, mens = _dorp(tmp_path)
+    for n in ("eerste", "tweede", "derde"):
+        st.werk.backlog_add(CIRCLE, n, by_id=mens.id)
+    st2 = cockpit2._Stores(dd)
+    midden = st2.werk.punten(CIRCLE)[1]
+    st2.werk.punt_afvinken(CIRCLE, midden["id"], True)
+    na = cockpit2._Stores(dd).werk.punten(CIRCLE)
+    assert [p["title"] for p in na] == ["eerste", "tweede", "derde"]
+    assert na[1]["status"] == "done"
+
+
+def test_de_selectie_mag_wel_het_eerste_open_punt_kiezen(tmp_path):
+    """Volgorde en selectie zijn twee dingen. De lijst blijft staan; welk punt er OPEN staat mag
+    wél het eerste nog niet afgetikte zijn — anders land je op iets dat al af is."""
+    from nooch_village.views.vangst import actief_punt
+    dd, st, mens = _dorp(tmp_path)
+    for n in ("eerste", "tweede"):
+        st.werk.backlog_add(CIRCLE, n, by_id=mens.id)
+    st2 = cockpit2._Stores(dd)
+    eerste = st2.werk.punten(CIRCLE)[0]
+    st2.werk.punt_afvinken(CIRCLE, eerste["id"], True)
+    punten = cockpit2._Stores(dd).werk.punten(CIRCLE)
+    assert punten[0]["title"] == "eerste"                    # de volgorde staat vast
+    assert actief_punt(punten) == punten[1]["id"]            # de selectie slaat 'm over
+
+
+def _binnen_kaart(css: str, klasse: str) -> dict:
+    """De declaraties van de regel die `klasse` BINNEN `.wo-ocd` aanstuurt.
+
+    OP WOORDGRENS ZOEKEN, niet op substring: `.wo-ocd` bevat letterlijk `.wo-oc`, dus een naïeve
+    `in`-test vond de kaartregel zelf en concludeerde dat het formulier zijn kader nog had."""
+    heel = re.compile(rf"{re.escape(klasse)}(?![\w-])")
+    zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+    for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", zonder):
+        if ".wo-ocd" in sel and heel.search(sel) and "summary" not in sel and "[open]" not in sel:
+            return {k.strip(): v.strip() for k, v in
+                    (d.split(":", 1) for d in body.split(";") if ":" in d)}
+    return {}
+
+
+def test_er_staat_geen_doos_in_een_doos_in_een_doos():
+    """DRIE KADERS IN ELKAAR. De verwerken-balk had er een, de spanningsband erin nóg een, en het
+    formulier daarin een derde. Box in box in box leest als vier losse dingen in plaats van één
+    spanning die je behandelt. Eén buitenkaart, en lijnen erbinnen."""
+    nu = (pathlib.Path(__file__).resolve().parents[1]
+          / "nooch_village" / "static" / "nooch-ui.css").read_text()
+    for css, klassen in ((CSS, (".wo-band",)), (nu, (".wo-band", ".wo-oc"))):
+        for klasse in klassen:
+            regels = _binnen_kaart(css, klasse)
+            assert regels, f"{klasse} wordt binnen de kaart niet aangestuurd"
+            assert regels.get("border") == "0", f"{klasse} houdt zijn eigen kader"
+            assert "border-bottom" in regels or "background" in regels
+
+
+def test_de_uitkomstenlijst_hoort_bij_dezelfde_kaart():
+    """Hij stond er zonder kader los onder, en oogde daardoor aangeplakt. Geen eigen doos erbij —
+    een scheidingslijn, want het is een sectie van dezelfde kaart."""
+    regels = _binnen_kaart(CSS, ".c2-sec")
+    assert regels.get("border-top", "").endswith("var(--border)")
+    assert "padding-top" in regels
+
+
+def test_het_formulier_is_een_raster_en_geen_zwevende_knop(tmp_path):
+    """Vinkje en Opslaan stonden in losse flexrijen ONDER het raster: Opslaan zweefde rechts met
+    een gat ernaast, het vinkje lijnde nergens op uit. Nu acht rastercellen — vinkje onder de
+    linkerkolom, Opslaan onder de rechter."""
+    dd, st, mens = _dorp(tmp_path)
+    h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
+    grid = h.split("rov-addgrid'>")[1].rsplit("</div></form>", 1)[0]
+    cellen = re.findall(r"<div[^>]*>", grid)
+    assert len(cellen) == 8, f"het raster heeft {len(cellen)} cellen in plaats van 8"
+    assert "qadd-row" not in h, "er staat nog een flexrij buiten het raster"
+    # het vinkje in de linkerkolom (cel 7), Opslaan in de rechter (cel 8)
+    helften = grid.split("<div class='wo-opslaan'>")
+    assert "type='checkbox'" in helften[0] and "Opslaan" in helften[1]
