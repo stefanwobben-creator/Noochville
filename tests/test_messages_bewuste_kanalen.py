@@ -197,21 +197,38 @@ def test_maar_hij_wordt_nooit_onbereikbaar(tmp_path):
     assert k in groepen["Channels"]
 
 
-def test_de_voordeur_is_general_als_er_nergens_iets_gezegd_is(tmp_path):
-    """Gemeten in een doorloop over de draaiende cockpit, op een vers dorp met vijf doelen: je
-    landde op "Website", omdat dat toevallig het eerste open doel was. Een willekeurig doel als
-    voordeur suggereert dat DAAR iets speelt. Staat er wél ergens iets, dan blijft de regel
-    ongewijzigd: open op iets dat gezegd is."""
-    dd, st, ik, pids = _dorp(tmp_path, projecten=0)
-    for t, l in (("Website live", "Website"), ("Rapport MITH", "MITH")):
-        st.doelen.add(t, label=l)
-    st2 = cockpit2._Stores(dd)
-    kop = re.search(r"class='msg-kop'>([^<]*)", render_messages(st2, ik=ik, csrf_token="t"))
-    assert kop and kop.group(1) == "General"
+def test_de_voordeur_is_altijd_general(tmp_path):
+    """DE REGEL WAS "OPEN OP IETS DAT GEZEGD IS", en dat leverde op productie een landing op in
+    `dm:Candy Cotton|…` — een willekeurige DM, alfabetisch eerste van de 35 die allemaal een
+    bericht hadden. Gemeten bij een klik-doorloop, niet beredeneerd.
 
-    # en zodra er ergens iets staat, wint dat weer
-    k = channels.goal_kanaal(st2.doelen.all()[1]["id"])
-    st2.channels.post(k, "hier gebeurt iets", author_id=ik)
+    Ongevraagd in andermans privégesprek landen is het probleem; "meest recent actief" lost dat
+    niet op, want dat kan net zo goed weer een DM zijn. General is in dit hele traject de voordeur
+    van het dorp (besluit Stefan, 21 september 2026)."""
+    dd, st, ik, pids = _dorp(tmp_path, projecten=1)
+    st.doelen.add("Website live", label="Website")
+    st2 = cockpit2._Stores(dd)
+
+    # Er staat van alles: een project met een gesprek, een doel met een gesprek, een DM.
+    st2.channels.post(channels.goal_kanaal(st2.doelen.all()[0]["id"]), "druk hier", author_id=ik)
+    ander = st2.people.add("Ander Mens", "ander@test.nl")
+    st2.channels.post(channels.dm_kanaal(ik, ander.id), "hoi", author_id=ander.id)
+    st2.people.volg(ik, channels.project_kanaal(pids[0]))
+
     st3 = cockpit2._Stores(dd)
-    kop2 = re.search(r"class='msg-kop'>([^<]*)", render_messages(st3, ik=ik, csrf_token="t"))
-    assert kop2 and kop2.group(1) == "MITH"
+    kop = re.search(r"class='msg-kop'>([^<]*)", render_messages(st3, ik=ik, csrf_token="t"))
+    assert kop and kop.group(1) == "General", "je landt in een ander gesprek dan het dorpskanaal"
+
+
+def test_je_landt_nooit_ongevraagd_in_een_dm(tmp_path):
+    """DE GUARD, in de vorm waarin het misging. Niet "de voordeur is General" maar "de voordeur is
+    geen privégesprek" — die tweede overleeft ook een toekomstige herschikking van de volgorde."""
+    dd, st, ik, pids = _dorp(tmp_path, projecten=0)
+    ander = st.people.add("Ander Mens", "ander@test.nl")
+    # Een DM die alfabetisch vóór alles komt, precies zoals "Candy Cotton" dat deed.
+    st.channels.post(channels.dm_kanaal("Aaa Eerste", ik), "iets persoonlijks", author_id=ik)
+    st2 = cockpit2._Stores(dd)
+    html = render_messages(st2, ik=ik, csrf_token="t")
+    assert "iets persoonlijks" not in html
+    kop = re.search(r"class='msg-kop'>([^<]*)", html)
+    assert kop and kop.group(1) == "General"

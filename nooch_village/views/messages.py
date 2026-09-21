@@ -231,14 +231,20 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         # LET OP: `groepen` is hier al gefilterd. Voor de voordeur wil je juist het volledige veld,
         # anders hangt "waar land ik" af van een zoekterm.
         alles, _t, _g = _kanalen(st, ik, "")
-        volgorde = [k for g in ("Direct", "Projects", "Goals", "Channels", "General")
+        # DE VOORDEUR IS GENERAL, altijd (besluit Stefan, 21 september 2026).
+        #
+        # HIER STOND "open op iets dat gezegd is", in de volgorde Direct → Projects → Goals →
+        # Channels → General. Dat klonk goed — een leeg kanaal als voordeur laat het scherm dood
+        # lijken — maar Direct staat vooraan en `kanalen_van` sorteert op kanaal-id. Op productie
+        # landde je daardoor in `dm:Candy Cotton|…`: een willekeurige DM, alfabetisch eerste van de
+        # 35 die allemaal een bericht hadden. Gemeten bij een klik-doorloop, niet beredeneerd.
+        #
+        # "Meest recent actief" lost dat niet op: dat kan net zo goed weer een DM zijn. Ongevraagd
+        # in andermans privégesprek landen is het probleem, niet welk gesprek precies. General is
+        # in dit hele traject de voordeur van het dorp — dan hoort de landing dat ook te zijn.
+        volgorde = [k for g in ("General", "Goals", "Channels", "Projects", "Direct")
                     for k in alles[g]]
-        # IS ER NERGENS IETS GEZEGD, dan is General de voordeur en niet "het eerste doel in de
-        # lijst". Gemeten in een doorloop op een vers dorp: je landde op "Website" omdat dat
-        # toevallig het eerste open doel was. Een willekeurig doel als voordeur suggereert dat
-        # DAAR iets speelt.
-        kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
-                      (alles["General"] or volgorde or [""])[0])
+        kanaal = volgorde[0] if volgorde else ""
 
     # OPENEN IS TOEVOEGEN (besluit Stefan). Een projectkanaal dat je opent hoort daarna in je
     # lijst te staan; anders moet je hem elke keer opnieuw opzoeken en is "toevoegen" een tweede
