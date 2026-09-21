@@ -2952,7 +2952,10 @@ def _act_vangst_uitkomst(c):
         # en heeft daar zijn eigen agenda.
         #
         # Fail-closed: alles wat niet expliciet "wachtend" is, is gewoon volgende.
-        _wacht = (g("staat") == "wachtend") and otype == "project"
+        # DE WAARDE IS DE PROJECTSTATUS ZELF ("blocked"), niet een eigen woord dat hier naar
+        # vertaald moet worden. Het formulier spreekt de taal van de plek waar het schrijft; een
+        # eigen enum ertussen is de vertaalslag waar de oude `staat` aan onderdoor ging.
+        _wacht = (g("staat") == "blocked") and otype == "project"
         rol, reden = rol_uit_naam(st, g("rol"))
         ruw_rol = g("rol").strip()
         individueel = (not ruw_rol) or ruw_rol.lower() == INDIVIDUELE_ACTIE.lower()

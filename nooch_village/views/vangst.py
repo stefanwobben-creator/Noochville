@@ -431,16 +431,21 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     #
     # NIET BIJ GOVERNANCE: die uitkomst gaat naar het roloverleg en heeft daar zijn eigen agenda.
     # Een keuze tonen die nergens landt is erger dan geen keuze.
-    radios = "".join(
-        f"<label class='kc-radio' for='vst-{_e(iid)}-{w}'>"
-        f"<input type='radio' id='vst-{_e(iid)}-{w}' name='staat' value='{w}'"
-        f"{' checked' if w == VOLGENDE else ''}>{_e(lbl)}</label>"
-        for w, lbl in ((VOLGENDE, "Volgende"), (WACHTEND, "In afwachting")))
+    # HETZELFDE WIDGET ALS OP HET PROJECTENBORD, en dezelfde WOORDEN (besluit Stefan, 21 september
+    # 2026). Een eigen radio-paar met een eigen vocabulaire ("Volgende"/"In afwachting") zou een
+    # tweede taal zijn voor precies de statussen die het bord al "Active" en "Waiting" noemt — en
+    # dit formulier schrijft dáárheen. De opgeslagen waarden zijn dus ook de projectstatussen
+    # zelf; `VOLGENDE`/`WACHTEND` blijven read-only voor uitkomsten van vóór 29 augustus.
+    from nooch_village.views.projects import _PROJ_CHIP
+    keuzes = "".join(
+        f"<option value='{k}'{' selected' if k == 'running' else ''}>"
+        f"{_e(_PROJ_CHIP[k][0])}</option>" for k in ("running", "blocked"))
     # Verborgen bij het laden: het eerste type in de lijst is 'actie'. Zou hij zichtbaar beginnen
     # en bij de eerste keuze wegspringen, dan flikkert het formulier bij het openen.
     verborgen = "" if UITKOMST_SOORTEN[0][0] == "project" else " hidden"
     afsluit = (f"<div class='qadd-row wo-staat' data-staat-voor='{_e(iid)}'{verborgen}>"
-               f"<span class='att-lbl wo-staat-lbl'>Status</span>{radios}</div>"
+               f"<label class='att-lbl wo-staat-lbl' for='vst-{_e(iid)}'>Status</label>"
+               f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
                f"<div class='qadd-row'>"
                f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
                f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"

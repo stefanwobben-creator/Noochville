@@ -150,6 +150,25 @@ def test_de_keuze_staat_er_alleen_bij_een_project(tmp_path):
     assert "this.value!=='project'" in h
 
 
+def test_de_keuze_is_het_widget_en_de_taal_van_het_bord(tmp_path):
+    """GEEN TWEEDE VOCABULAIRE VOOR DEZELFDE STATUS. Dit begon als een eigen radio-paar met eigen
+    woorden ("Volgende"/"In afwachting") — twee termen voor precies de statussen die het bord al
+    "Active" en "Waiting" noemt, terwijl dit formulier dáárheen schrijft. Nu: hetzelfde
+    `.ctrl`-pulldown-atoom als op het bord, dezelfde labels uit `_PROJ_CHIP`, en de opgeslagen
+    waarden zijn de projectstatussen zelf (besluit Stefan, 21 september 2026)."""
+    from nooch_village.views.projects import _PROJ_CHIP
+    dd, st, mens = _dorp(tmp_path)
+    h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
+    rij = re.search(r"<div class='qadd-row wo-staat'.*?</div>", h, re.S).group(0)
+    assert "<select class='ctrl'" in rij and "radio" not in rij
+    assert f">{_PROJ_CHIP['running'][0]}<" in rij and f">{_PROJ_CHIP['blocked'][0]}<" in rij
+    assert "value='running' selected" in rij and "value='blocked'" in rij
+    # en geen eigen enum meer op het schrijfpad
+    bron = (pathlib.Path(__file__).resolve().parents[1]
+            / "nooch_village" / "cockpit2.py").read_text()
+    assert 'g("staat") == "blocked"' in bron
+
+
 def test_in_afwachting_zet_het_project_op_blocked(tmp_path):
     """DE KERN VAN DE AFSPRAAK. De keuze schrijft naar de plek waar de waarheid al staat, niet
     naast die plek. Zou hij een eigen veld op de uitkomst zetten, dan houden twee plekken
@@ -160,7 +179,7 @@ def test_in_afwachting_zet_het_project_op_blocked(tmp_path):
     cockpit2.dispatch(dd, "vangst_uitkomst", {
         "csrf": ["t"], "circle": [CIRCLE], "iid": [it["id"]], "otype": ["project"],
         "tekst": ["Nieuwe leverancier zoeken"], "rol": ["Creator of shoes"], "persoon": [""],
-        "staat": ["wachtend"], "next": ["/x"]}, username="sec@test.nl")
+        "staat": ["blocked"], "next": ["/x"]}, username="sec@test.nl")
     st2 = cockpit2._Stores(dd)
     nieuw = [p for p in st2.projects.all() if p["id"] not in voor]
     assert len(nieuw) == 1
@@ -178,7 +197,7 @@ def test_volgende_laat_het_project_gewoon_beginnen(tmp_path):
     cockpit2.dispatch(dd, "vangst_uitkomst", {
         "csrf": ["t"], "circle": [CIRCLE], "iid": [it["id"]], "otype": ["project"],
         "tekst": ["Nieuwe leverancier zoeken"], "rol": ["Creator of shoes"], "persoon": [""],
-        "staat": ["volgende"], "next": ["/x"]}, username="sec@test.nl")
+        "staat": ["running"], "next": ["/x"]}, username="sec@test.nl")
     st2 = cockpit2._Stores(dd)
     nieuw = [p for p in st2.projects.all() if p["id"] not in voor]
     assert len(nieuw) == 1 and nieuw[0]["status"] != "blocked"
@@ -193,6 +212,6 @@ def test_een_wachtstand_op_een_governance_punt_doet_niets(tmp_path):
     cockpit2.dispatch(dd, "vangst_uitkomst", {
         "csrf": ["t"], "circle": [CIRCLE], "iid": [it["id"]], "otype": ["governance"],
         "tekst": ["Domein toevoegen"], "rol": ["Creator of shoes"], "persoon": [""],
-        "staat": ["wachtend"], "next": ["/x"]}, username="sec@test.nl")
+        "staat": ["blocked"], "next": ["/x"]}, username="sec@test.nl")
     st2 = cockpit2._Stores(dd)
     assert {p["id"] for p in st2.projects.all()} == voor      # geen project, dus niets geblokkeerd
