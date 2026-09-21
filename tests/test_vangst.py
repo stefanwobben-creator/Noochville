@@ -562,7 +562,7 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     # `route_werk` naar iemands inbox, een governance-punt naar het roloverleg — daar landt een
     # wachtstand nergens, en een keuze die nergens landt is erger dan geen keuze.
     assert "name='staat'" in html
-    assert "<div class='qadd-row wo-staat' data-staat-voor=" in html
+    assert "<div class='wo-staat' data-staat-voor=" in html
     assert " hidden>" in html.split("wo-staat")[1][:120]
     assert "this.value!=='project'" in html
     # en het twee-koloms raster van de referentie

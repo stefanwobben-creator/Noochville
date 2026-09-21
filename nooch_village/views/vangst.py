@@ -443,18 +443,24 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     # Verborgen bij het laden: het eerste type in de lijst is 'actie'. Zou hij zichtbaar beginnen
     # en bij de eerste keuze wegspringen, dan flikkert het formulier bij het openen.
     verborgen = "" if UITKOMST_SOORTEN[0][0] == "project" else " hidden"
-    afsluit = (f"<div class='qadd-row wo-staat' data-staat-voor='{_e(iid)}'{verborgen}>"
-               f"<label class='att-lbl wo-staat-lbl' for='vst-{_e(iid)}'>Status</label>"
-               f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
-               f"<div class='qadd-row'>"
-               f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
-               f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
-               f"Alleen zichtbaar voor de cirkel</label>"
-               f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
-               f"Opslaan</button></div>")
+    # ALLES IN HETZELFDE RASTER, ook de afsluitrij. De status, het vinkje en Opslaan stonden in
+    # losse `.qadd-row`-flexrijen ONDER het raster: die volgen het kolomraster niet, dus Opslaan
+    # zweefde rechts met een gat ernaast en het vinkje lijnde nergens op uit. Nu is het één raster
+    # van vier rijen — vinkje onder de linkerkolom (Wat/Rol), Opslaan onder de rechter
+    # (Te nemen actie/Persoon), precies zoals de velden erboven.
+    rij3 = (f"<div class='wo-staat' data-staat-voor='{_e(iid)}'{verborgen}>"
+            f"<label class='att-lbl' for='vst-{_e(iid)}'>Status</label>"
+            f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
+            f"<div></div>")
+    rij4 = (f"<div><label class='kc-radio' for='vpr-{_e(iid)}'>"
+            f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
+            f"Alleen zichtbaar voor de cirkel</label></div>"
+            f"<div class='wo-opslaan'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
+            f"Opslaan</button></div>")
     return (f"<form method='post' action='/action' class='wo-oc'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}"
-            f"<div class='rov-addgrid'>{rij1}{rij2}</div>{afsluit}</form>")
+            f"<div class='rov-addgrid'>{rij1}{rij2}{rij3}{rij4}</div></form>")
 
 
 def _herkomst_regel(st, it: dict) -> str:
