@@ -302,9 +302,18 @@ def _md(text: str) -> str:
 # oftewel: door de editor heen en weer halen verandert niets aan wat je op het scherm ziet.
 
 #: tag → (voor, na) in de bron. Bewust dezelfde tekens die `_md` produceert, geen synoniemen.
+# `strike` STOND HIER NIET, EN DAT KOSTTE EEN LIVE BUG (gevonden bij de klik-doorloop van
+# 21 september 2026). Doorhalen wérkte op het scherm, maar was na opslaan en herladen platte tekst:
+# Chrome's `execCommand("strikeThrough")` levert `<strike>`, niet `<del>` en niet `<s>`. Die tag
+# viel buiten de whitelist en werd dus — precies zoals afgesproken — zijn eigen tekst. Fail-closed
+# deed hier exact wat het moest, alleen op een tag die er wél in hoorde.
+#
+# DE ECHTE FOUT ZAT IN DE TEST, niet in de code. `test_de_werkbalk_gebruikt_alleen_tags_die_de
+# _omzetter_kent` voerde `<del>x</del>` in als "wat de knop oplevert" — een AANNAME over de
+# browser, opgeschreven als meting. Hij test nu alle vormen die een browser werkelijk produceert.
 _BRON_INLINE = {"strong": ("**", "**"), "b": ("**", "**"),
                 "em": ("*", "*"), "i": ("*", "*"),
-                "del": ("~~", "~~"), "s": ("~~", "~~")}
+                "del": ("~~", "~~"), "s": ("~~", "~~"), "strike": ("~~", "~~")}
 
 #: tags die een regel afsluiten. `div` en `p` staan erbij omdat een contenteditable ze zelf maakt.
 _BRON_BLOK = ("h4", "li", "div", "p")
@@ -605,7 +614,10 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                ("strikeThrough", "", "<s>S</s>", "Strikethrough"),
                ("", "", "", ""),                       # scheiding
                ("insertUnorderedList", "", "&bull;", "List"),
-               ("formatBlock", "h4", "H", "Heading"))
+               # DE PUNTHAKEN ZIJN VERPLICHT. `formatBlock` met "h4" doet in Chrome en Safari
+               # niets — geen fout, geen effect; alleen met "<h4>" maakt hij een kop. Dat is de
+               # tweede helft van dezelfde bug als bij `strike`: een aanname over de browser.
+               ("formatBlock", "<h4>", "H", "Heading"))
 
 
 def opmaak_werkbalk() -> str:
