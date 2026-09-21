@@ -743,10 +743,23 @@ _NU_LINK = (f'<link rel="stylesheet" href="/static/nooch-ui.css?v={_NU_VERSION}"
 # Goals en Metrics zijn GEEN zijbalk-items meer maar tabs op de cirkel, zoals in het prototype.
 # Hun routes (`/goals`, `/metrics2`) blijven bestaan — geen dode links, dezelfde regel als bij de
 # vorige nav-slanking.
+#: (href, label, paneel). `paneel` leeg = gewone paginasprong; anders klapt er een lijst open
+#: NAAST de balk in plaats van dat je het scherm verlaat. PR, ME en CI zijn lijsten waar je iets
+#: uit kiest; WI en AD niet — daar val je binnen op een scherm, en dan is een tussenlijst een
+#: extra klik zonder winst. (IN stond hier ook, tot bleek dat die knop een functie aanriep die
+#: niet bestond; zie #531.)
 _SIDE_ITEMS = (
-    ("/projects", "Projects"),
-    ("/messages", "Messages"),
-    ("/wiki",     "Wiki"),
+    ("/projects", "Projects", "pr"),
+    ("/messages", "Messages", "me"),
+    ("/wiki",     "Wiki",     ""),
+)
+
+#: Werkoverleg en Roloverleg zijn GEEN kanalen (correctie Stefan, 21 september 2026). Het zijn twee
+#: bestaande schermen, en ze horen dus als directe knop op de balk — geen paneel, geen lijst ervoor.
+#: Ze staan onder een scheiding, los van de PR/ME/WI/CI/AD-groep, omdat ze een ander soort ding zijn.
+_SIDE_OVERLEG = (
+    ("/werkoverleg", "Werk&shy;overleg"),
+    ("/roloverleg2", "Rol&shy;overleg"),
 )
 
 #: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
@@ -761,13 +774,23 @@ def _monogram(label: str) -> str:
     return (label.strip()[:2] or "?").upper()
 
 
-def _side_item(href: str, label: str) -> str:
+def _side_item(href: str, label: str, paneel: str = "") -> str:
     """Eén navigatie-item: het monogram voor de rail, het woord voor de volle zijbalk.
 
     BEIDE STAAN ALTIJD IN DE DOM; CSS kiest welke je ziet. Het alternatief — twee varianten
     renderen — geeft twee plekken waar een nieuw item vergeten kan worden, en een schermlezer die
-    in de rail alleen nog "PR" hoort."""
-    return (f"<a href='{href}' title='{_e(label)}'>"
+    in de rail alleen nog "PR" hoort.
+
+    MET `paneel` WORDT HET EEN KNOP en geen link. Dat is geen opmaakdetail: een element dat een
+    paneel open- en dichtklapt is een knop, draagt `aria-expanded`, en hoort niet in de tab-volgorde
+    te beloven dat je ergens heen gaat. Zonder JS blijft de knop stil staan — daarom draagt hij óók
+    de href, zodat de val-terug een echte navigatie is en geen dood element."""
+    if not paneel:
+        return (f"<a href='{href}' title='{_e(label)}'>"
+                f"<span class='c2-mono' aria-hidden='true'>{_e(_monogram(label))}</span>"
+                f"<span class='c2-lbl'>{_e(label)}</span></a>")
+    return (f"<a href='{href}' title='{_e(label)}' data-nav-paneel='{_e(paneel)}' "
+            f"aria-expanded='false' aria-controls='c2-paneel'>"
             f"<span class='c2-mono' aria-hidden='true'>{_e(_monogram(label))}</span>"
             f"<span class='c2-lbl'>{_e(label)}</span></a>")
 
@@ -808,15 +831,27 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
         # Persoonlijke begroeting; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
         "<span class='c2-greet' id='c2-greet'></span>"
         "<nav class='c2-subnav'>"
-        + "".join(_side_item(h, l) for h, l in _SIDE_ITEMS)
+        + _side_item("/search", "Search", "zoek")
+        + "".join(_side_item(h, l, pn) for h, l, pn in _SIDE_ITEMS)
+        + _side_item("/node", "Circle", "ci")
         + "<div class='c2-subnav-div'></div>"
         + _SIDE_CIRCLE
         + _side_item("/admin", "Admin")
+        # De twee overleggen, onder een eigen scheiding. Een ander soort knop, dus ook zichtbaar
+        # een ander blok — geen zesde item in dezelfde rij.
+        + "<div class='c2-subnav-div'></div>"
+        + "".join(f"<a class='c2-overleg' href='{h}'>{l}</a>" for h, l in _SIDE_OVERLEG)
         + "</nav>"
         + f"<details class='c2-orgfly'{'' if rail else ' open'}>"
           "<summary title='Organization'>\u229e</summary>"
         + _SIDE_ORG
         + "</details></aside>"
+        # HET PANEEL STAAT LEEG IN DE DOM en wordt pas gevuld als je een knop indrukt. Zou de
+        # inhoud meekomen met elke pageload, dan betaalt élk scherm in het dorp voor een
+        # projectlijst en een kanalenlijst die je meestal niet opent — op productie 442 projecten
+        # en 123 kanalen, per keer. Zie `views/navpaneel.py`.
+        + "<aside class='c2-paneel' id='c2-paneel' hidden>"
+          "<div class='c2-paneel-in' id='c2-paneel-in'></div></aside>"
         + _GS_LIVE_JS + _NAV_JS)
 
 

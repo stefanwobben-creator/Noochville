@@ -454,6 +454,98 @@
     });
   }
 
+  // ── De navigatiebalk als accordeon (21 september 2026) ────────────────────────────────────
+  //
+  // PR, ME en CI waren paginasprongen: je verliet het scherm waar je mee bezig was om een lijst te
+  // zien. Nu klapt die lijst open NAAST de balk en blijft je inhoud rechts staan. WI en AD blijven
+  // een sprong — daar kies je niets uit een lijst.
+  //
+  // ÉÉN PANEEL TEGELIJK, en nogmaals klikken sluit. Twee open panelen naast elkaar is geen
+  // navigatie meer maar een tweede scherm; en een knop die alleen opent laat de lezer zoeken naar
+  // een kruisje dat er niet hoeft te zijn.
+  //
+  // ZONDER JS BLIJFT ALLES WERKEN: de knoppen dragen hun `href` (Projects → /projects), dus als
+  // deze code niet draait is het gewoon weer een link. Daarom `preventDefault` pas NADAT we weten
+  // dat we het paneel echt openen.
+  function navPaneel(root) {
+    var paneel = root.querySelector("#c2-paneel");
+    var binnen = root.querySelector("#c2-paneel-in");
+    var knoppen = root.querySelectorAll("[data-nav-paneel]");
+    if (!paneel || !binnen || !knoppen.length || paneel.dataset.nvWired) return;
+    paneel.dataset.nvWired = "1";
+    var open = null;
+
+    function sluit() {
+      open = null;
+      paneel.hidden = true;
+      document.body.classList.remove("navpaneel-open");
+      Array.prototype.forEach.call(knoppen, function (k) {
+        k.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    function vul(url) {
+      return fetch(url, { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+        .then(function (html) {
+          binnen.innerHTML = html;
+          NV.wire(binnen);
+          var z = binnen.querySelector("[data-nav-zoek]");
+          if (z) z.focus();
+        })
+        // Een leeg paneel leest als "er is niets", en dat is iets anders dan "het laden lukte
+        // niet". Dezelfde regel als bij de md-voorbeeldknop: fail-soft, maar niet stil.
+        .catch(function () {
+          binnen.innerHTML = "<p class='muted c2-pleeg'>Could not load this panel. " +
+            "Try again, or use the page itself.</p>";
+        });
+    }
+
+    Array.prototype.forEach.call(knoppen, function (knop) {
+      knop.addEventListener("click", function (e) {
+        var sleutel = knop.getAttribute("data-nav-paneel");
+        e.preventDefault();
+        if (open === sleutel) { sluit(); return; }
+        open = sleutel;
+        Array.prototype.forEach.call(knoppen, function (k) {
+          k.setAttribute("aria-expanded", k === knop ? "true" : "false");
+        });
+        paneel.hidden = false;
+        document.body.classList.add("navpaneel-open");
+        binnen.innerHTML = "<p class='muted c2-pleeg'>…</p>";
+        vul("/nav-paneel?p=" + encodeURIComponent(sleutel));
+      });
+    });
+
+    // Escape sluit. Een paneel dat over je scherm heen staat en alleen met de muis weg kan, is op
+    // een toetsenbord een val.
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && open) sluit();
+    });
+
+    // Binnen het paneel: een link met `data-nav-frag` vervangt de INHOUD in plaats van te
+    // navigeren (het My/All-filter bij Projects, en straks meer). Alles zonder dat attribuut is
+    // een gewone link en hoort het paneel te verlaten.
+    binnen.addEventListener("click", function (e) {
+      var a = e.target.closest("a[data-nav-frag]");
+      if (!a) return;
+      e.preventDefault();
+      vul(a.getAttribute("href"));
+    });
+
+    // Live zoeken in het paneel: dezelfde bron als de dropdown (`/search`), dus geen tweede
+    // parser en geen tweede idee van wat vindbaar is.
+    var timer = null;
+    binnen.addEventListener("input", function (e) {
+      var veld = e.target.closest("[data-nav-zoek]");
+      if (!veld) return;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        vul("/nav-paneel?p=zoek&q=" + encodeURIComponent(veld.value));
+      }, 220);
+    });
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -461,6 +553,7 @@
     inlineEdit(root);
     mdPreview(root);
     wikiEdit(root);
+    navPaneel(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);

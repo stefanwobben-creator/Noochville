@@ -977,13 +977,58 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .c2-kbd{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);pointer-events:none;
   font:inherit;font-size:11px;font-weight:700;color:var(--gray);
   border:1px solid var(--border);border-radius:3px;padding:0 .25rem}
+/* DE BALK BLIJFT VERTICAAL, OOK SMAL (21 september 2026, expliciet besluit Stefan).
+   Hier stond `flex-direction:row` onder 760px: de zijbalk klapte om naar een horizontale rij
+   boven de inhoud. Dat is de standaardreflex voor een smal scherm en hier de verkeerde — het
+   maakt van één navigatiemodel twee, precies wat fase 7 opruimde, en de accordeon heeft een
+   verticale balk nodig om een paneel NAAST te kunnen zetten.
+   Smal betekent dus: de balk krimpt tot de rail, en wat ernaast stond gaat eronder staan. */
 @media(max-width:760px){
-  .c2-side{position:static;width:auto;inset:auto;flex-direction:row;flex-wrap:wrap;
-    align-items:center;border-right:0;border-bottom:1px solid var(--border)}
-  .c2-side ~ *{margin-left:0}
-  .c2-subnav{flex:1 1 100%;flex-direction:row;flex-wrap:wrap}
-  .c2-subnav a,.c2-navbtn{width:auto}
+  .c2-side{width:64px;padding:1rem .35rem;align-items:center}
+  .c2-side ~ *{margin-left:80px}
+  .c2-side .c2-lbl,.c2-side .c2-search,.c2-side .c2-greet,.c2-side .c2-subnav-div{display:none}
   .c2-org{display:none}
+}
+/* ── Het uitklappaneel naast de balk (21 september 2026) ─────────────────────────────────────
+   ATOOM: één paneel, vaste breedte, tegen de balk aan. Het schuift niet over de inhoud heen maar
+   duwt hem op — anders lees je een lijst bovenop de tekst die je aan het lezen was.
+   Op een smal scherm staat hij ONDER de balk in plaats van ernaast; de balk zelf blijft verticaal
+   (zie de media-query hierboven). */
+.c2-paneel{position:fixed;left:232px;top:0;bottom:0;width:300px;z-index:29;box-sizing:border-box;
+  overflow-y:auto;padding:1rem .8rem;background:var(--card);border-right:1px solid var(--border)}
+body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
+.c2-pkop{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray);
+  margin:0 0 .8rem}
+/* MOLECUUL: de rij. Zelfde bouw als een kanaalrij in Messages — naam links, bijschrift rechts,
+   naam mag afkappen en het bijschrift niet. Geen nieuwe familie: `nv-` is het paneel zelf. */
+.c2-prij{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  padding:.4rem .5rem;border-radius:var(--radius);font-size:13.5px;font-weight:600;
+  color:var(--ink);text-decoration:none;border:1px solid transparent}
+.c2-prij:hover{border-color:var(--green);background:var(--surface)}
+.c2-pnaam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c2-psub{flex:0 0 auto;font-size:11px;font-weight:600;color:var(--gray)}
+.c2-prij .chip{flex:0 0 auto}
+.c2-pgroep{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--subtle);margin:1rem 0 .3rem}
+.c2-pgroep:first-of-type{margin-top:0}
+.c2-pleeg{font-size:12.5px;line-height:1.5;padding:.3rem .5rem}
+.c2-pseg{margin-bottom:.7rem}
+.c2-pzoek{margin-bottom:.6rem}
+.c2-pzoek input{width:100%;box-sizing:border-box;padding:.45rem .6rem;font:inherit;
+  font-size:13.5px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);color:var(--ink)}
+.c2-pzoekuit .gs-group{margin:.7rem 0}
+.c2-pzoekuit .gs-group h2{font-size:12px}
+/* De twee overleg-knoppen: een ander soort ding dan de navigatie erboven, dus ook zichtbaar
+   anders — gevuld in plaats van kaal, en onder een eigen scheiding. */
+.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:11.5px;font-weight:700;
+  line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
+  background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius)}
+.c2-overleg:hover{background:var(--green);color:#fff}
+@media(max-width:760px){
+  .c2-paneel{position:static;width:auto;inset:auto;border-right:0;
+    border-bottom:1px solid var(--border);max-height:60vh}
+  body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:80px}
 }
 .c2-greet{flex:none;color:var(--gray);font-size:13.5px;white-space:nowrap;padding:0 .55rem}
 .c2-greet a{color:inherit;text-decoration:none;border-bottom:1px solid transparent}
