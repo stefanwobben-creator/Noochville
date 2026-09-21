@@ -757,10 +757,25 @@ _SIDE_ITEMS = (
 #: Werkoverleg en Roloverleg zijn GEEN kanalen (correctie Stefan, 21 september 2026). Het zijn twee
 #: bestaande schermen, en ze horen dus als directe knop op de balk — geen paneel, geen lijst ervoor.
 #: Ze staan onder een scheiding, los van de PR/ME/WI/CI/AD-groep, omdat ze een ander soort ding zijn.
-_SIDE_OVERLEG = (
-    ("/werkoverleg", "Werk&shy;overleg"),
-    ("/roloverleg2", "Rol&shy;overleg"),
-)
+#:
+#: ZE DRAGEN EEN CIRKEL-ID, EN DAAROM ZIJN HET PLACEHOLDERS. De eerste versie linkte kaal naar
+#: `/werkoverleg` en `/roloverleg2`. Beide routes bestaan, maar ze zijn niet dorpsbreed: ze tonen
+#: HET OVERLEG VAN EEN CIRKEL en beginnen met `st.records.get(circle_id)`. Zonder `?circle=` is dat
+#: None en kreeg je "No circle." respectievelijk "Unknown." — één gedeelde oorzaak, geen twee
+#: ontbrekende routes. `_nav()` heeft geen stores en kan die cirkel dus niet zelf opzoeken;
+#: `_send` vult hem in, net als bij `_SIDE_CIRCLE` hieronder.
+_SIDE_OVERLEG = "<!--c2-overleg-->"
+
+
+def overleg_items(circle_id: str) -> str:
+    """De twee overleg-knoppen, mét de cirkel waar ze over gaan. Leeg zonder cirkel: een knop naar
+    een overleg dat niet bestaat is erger dan geen knop."""
+    if not circle_id:
+        return ""
+    return "".join(
+        f"<a class='c2-overleg' href='{h}?circle={_e(circle_id)}'>{l}</a>"
+        for h, l in (("/werkoverleg", "Werk&shy;overleg"),
+                     ("/roloverleg2", "Rol&shy;overleg")))
 
 #: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
 #: `_nav()` heeft geen stores). Zelfde patroon als de begroeting.
@@ -833,14 +848,16 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
         "<nav class='c2-subnav'>"
         + _side_item("/search", "Search", "zoek")
         + "".join(_side_item(h, l, pn) for h, l, pn in _SIDE_ITEMS)
-        + _side_item("/node", "Circle", "ci")
         + "<div class='c2-subnav-div'></div>"
+        # EÉN Circle-item, niet twee. De eerste versie zette er een statische `/node` naast deze
+        # placeholder — in de rail stonden toen twee knoppen "CI" onder elkaar, allebei anders.
+        # Dit is de cirkel-bewuste: `_send` weet welke cirkel, `_nav` niet.
         + _SIDE_CIRCLE
         + _side_item("/admin", "Admin")
         # De twee overleggen, onder een eigen scheiding. Een ander soort knop, dus ook zichtbaar
         # een ander blok — geen zesde item in dezelfde rij.
         + "<div class='c2-subnav-div'></div>"
-        + "".join(f"<a class='c2-overleg' href='{h}'>{l}</a>" for h, l in _SIDE_OVERLEG)
+        + _SIDE_OVERLEG
         + "</nav>"
         + f"<details class='c2-orgfly'{'' if rail else ' open'}>"
           "<summary title='Organization'>\u229e</summary>"
