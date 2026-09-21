@@ -83,8 +83,14 @@ def _randkleur(body: str) -> str:
 # ── de container houdt de zwaarste lijn ──────────────────────────────────────────────────────
 
 def test_de_container_draagt_de_zwaarste_lijn():
-    """Als dit omvalt is de hele rolverdeling zinloos: er is dan geen lijn meer om je aan te meten."""
-    body = _body(r"\.nu \.card, \.nu \.box")
+    """Als dit omvalt is de hele rolverdeling zinloos: er is dan geen lijn meer om je aan te meten.
+
+    `.nu .card` STOND HIER IN DE SELECTOR, en is er op 21 september 2026 uit (opdracht Stefan, met
+    metingen). Reden: een kaart is geen container maar een ITEM. Op /projects staan er 159 van, en
+    als er 159 containers op één scherm staan is er geen hiërarchie meer maar een raster van
+    hokjes — juist waar de lijndikte-regel het hardst nodig is, viel hij plat. De zwaarste lijn
+    blijft voor blokken op PAGINANIVEAU: `.box`, `.kpi`, een tabel, de zijbalk, de modal."""
+    body = _body(r"\.nu \.box, \.nu \.kpi")
     assert CONTAINER_TOKEN in body
     assert "border-radius: 0" in body and "box-shadow: none" in body   # scherp en plat blijft
 
@@ -236,9 +242,24 @@ def test_omhulsels_houden_hun_kader():
     die 2px is precies wat een veld ervan onderscheidt. Verdwijnt dit, dan is er geen hiërarchie
     meer over — alleen nog een vlakte."""
     houders = " | ".join(sel for sel, body in _regels() if CONTAINER_TOKEN in body)
-    for klasse in ("card", "ovl-box", "datepop", "fbubble", "pkaart"):
+    # `card` en `pkaart` STONDEN HIER, en zijn er op 21 september 2026 uit. Een kaart in een lijst
+    # is geen omhulsel maar een item; zie `test_de_container_draagt_de_zwaarste_lijn`. Wat
+    # overblijft is wat écht een omhulsel is: een overlay, een popover, een bubbel.
+    for klasse in ("ovl-box", "datepop", "fbubble"):
         assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", houders), (
             f".{klasse} is een omhulsel en hoort {CONTAINER_TOKEN} te dragen")
+
+    # EN DE ANDERE KANT, nieuw: een kaart draagt de DUNNE lijn, en een ACTIEVE kaart weer de dikke.
+    # Zonder die tweede helft leest de wijziging als "haal de randen weg" in plaats van als een
+    # hiërarchie die eindelijk iets onderscheidt.
+    subtiel = " | ".join(sel for sel, body in _regels()
+                         if "border: 1.5px solid var(--nu-border-subtle)" in body)
+    for klasse in ("card", "pkaart", "kcard"):
+        assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", subtiel), (
+            f".{klasse} is een item en hoort de dunne lijn te dragen")
+    actief = " | ".join(sel for sel, body in _regels() if "border-width: 2px" in body)
+    assert "hover" in actief and "pdrag-ghost" in actief, (
+        "een actieve of gesleepte kaart hoort zijn zware lijn terug te krijgen")
 
 
 def test_de_rij_om_een_veld_draagt_geen_eigen_lijn():

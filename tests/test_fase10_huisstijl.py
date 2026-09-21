@@ -96,7 +96,11 @@ def test_koppen_staan_in_hoofdletters():
         blok = re.search(rf"{sel}\s*\{{([^}}]*)\}}", NU, re.S)
         assert blok, sel
         assert "text-transform: uppercase" in blok.group(1), sel
-    assert "text-transform: none" not in _ONTCOM(NU).split(".nu .pill")[0]
+    # HIER STOND `"text-transform: none" not in …`: nergens in de laag vóór `.nu .pill` mocht
+    # iets in onderkast staan. Dat klopte toen alles om moest; sinds de rebalans van 21 september
+    # 2026 is onderkast juist het RUSTIGE register waar secundair werk in leest (gemeten: 48% van
+    # de tekst stond in hoofdletters). De bewering die overblijft is de bewering die deze test
+    # altijd was: KOPPEN staan in hoofdletters.
 
 
 def test_knoptekst_staat_in_hoofdletters():
@@ -151,12 +155,21 @@ def test_de_eyebrow_is_een_definitie_en_geen_twaalfde_naam():
     assert vorm and len(re.findall(r"\.nu ", vorm.group(1))) >= 10
 
 
-def test_link_knoppen_staan_ook_in_hoofdletters():
-    """`+ add project` en `by role / by person` zijn links die als knop gelezen worden. Ze vielen
-    buiten `.nu .btn` en bleven dus in onderkast staan terwijl de echte knoppen al om waren — in de
-    broncode onzichtbaar, in de browser meteen te zien."""
+def test_link_knoppen_zijn_secundair_en_dus_niet_in_hoofdletters():
+    """DEZE TEST STOND OM, EN IS OP 21 SEPTEMBER 2026 OMGEDRAAID (opdracht Stefan, met metingen).
+
+    Hij eiste hoofdletters op `+ add project` en `by role / by person`: links die als knop gelezen
+    worden, en die "in onderkast bleven terwijl de echte knoppen al om waren". Dat was consequent
+    — en precies daarin zat het probleem. Gemeten op /projects: 48% van alle tekst in hoofdletters,
+    89% bold. Als een secundaire link dezelfde behandeling krijgt als de topnav en de primaire
+    knop, is er geen verschil meer tussen "waar ben ik" en "wat kan ik hier nog meer".
+
+    Wat blijft: ze dragen hun rand en hun `.nu`-font, dus ze lezen nog steeds als knop."""
     blok = re.search(r"\.nu \.addlink, \.nu \.vswitch a, \.nu \.flink \{([^}]*)\}", NU, re.S)
-    assert blok and "text-transform: uppercase" in blok.group(1)
+    assert blok
+    assert "text-transform: none" in blok.group(1)
+    assert "font-weight: 500" in blok.group(1)
+    assert "border: 1.5px solid var(--nu-text)" in blok.group(1)     # nog steeds een knop
 
 
 def test_green_dark_ratchet():
@@ -337,7 +350,12 @@ def test_navigatie_en_tabbladen_staan_in_hoofdletters():
     Structureel: verzamel élk blok in nooch-ui.css dat een navigerend element aanstuurt (zijbalk,
     subnav, tabs, link-knoppen) en eis dat ze allemaal `text-transform: uppercase` dragen. Zo valt
     een vijfde navigatie-familie die later bijkomt ook op."""
-    NAVIGEREND = (".c2-subnav a", ".c2-navbtn", ".c2-tabs a", ".addlink", ".vswitch a", ".flink")
+    # `.addlink`, `.vswitch a` en `.flink` STONDEN HIER, en zijn er op 21 september 2026 uit:
+    # dat zijn secundaire ACTIES ("+ add project", "by role / by person"), geen navigatie. Ze in
+    # hoofdletters houden maakte ze even luid als de topnav — zie
+    # `test_link_knoppen_zijn_secundair_en_dus_niet_in_hoofdletters`. Wat overblijft is de echte
+    # navigatie, en die staat nog steeds voluit in kapitalen.
+    NAVIGEREND = (".c2-subnav a", ".c2-navbtn", ".c2-tabs a")
     zonder = []
     for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", _ONTCOM(NU)):
         raak = [n for n in NAVIGEREND if n in sel]
