@@ -396,6 +396,16 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     opts = "".join(f"<option value='{k}'>{_e(lbl)}</option>" for k, lbl, _ in UITKOMST_SOORTEN)
     eerste_veld = UITKOMST_SOORTEN[0][2]
 
+    # DE STAAT-RIJ HOORT ALLEEN BIJ EEN PROJECT. Hij schrijft naar `status=blocked` op het project,
+    # en die plek bestaat alleen daar: een actie gaat via `route_werk` naar iemands inbox of naar
+    # een bestaand project (geen wachtstand op het werk zelf), een governance-punt naar het
+    # roloverleg (eigen agenda). Een keuze tonen die nergens landt is erger dan geen keuze.
+    #
+    # Inline attribuut en geen <script>-blok, om dezelfde reden als de label-wissel hierboven: een
+    # script in een fragment draait niet als de modal het via innerHTML invoegt, een
+    # attribuut-handler wél.
+    swap += (f"var s=document.querySelector('[data-staat-voor=\\'{iid}\\']');"
+             f"if(s)s.hidden=(this.value!=='project');")
     rij1 = (f"<div><label class='att-lbl' for='vu-{_e(iid)}'>Wat</label>"
             f"<select id='vu-{_e(iid)}' name='otype' onchange=\"{swap}\">{opts}</select></div>"
             f"<div><label class='att-lbl' id='{lbl_id}' for='vut-{_e(iid)}'>{_e(eerste_veld)}</label>"
@@ -406,11 +416,37 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
             f"{_rol_datalist(st, dl)}</div>"
             f"<div><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
             f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>")
-    # Volgende / In afwachting als twee radio's naast elkaar, zoals in de referentie — niet als
-    # dropdown. Twee opties die je in één blik ziet zijn geen keuzelijst.
-    # GEEN staat-keuze meer. De wachtstatus leeft op projectniveau; hem hier óók vragen levert
-    # twee plekken op die hetzelfde bijhouden en na een week uit de pas lopen.
-    afsluit = (f"<div class='qadd-row'>"
+    # VOLGENDE / IN AFWACHTING KOMT TERUG, MAAR ANDERS DAN HIJ WEGGING.
+    #
+    # Hij heeft hier gezeten en is er op 29 augustus uitgehaald met een goede reden, die hier stond:
+    # "de wachtstatus leeft op projectniveau; hem hier óók vragen levert twee plekken op die
+    # hetzelfde bijhouden en na een week uit de pas lopen." Dat bezwaar is niet vervallen.
+    #
+    # Wat vervalt is de OPLOSSING van toen (de keuze helemaal weglaten). De keuze is een echte
+    # functie — je legt vast of hier meteen aan gewerkt wordt of dat er eerst iets anders moet —
+    # en die ontbrak. Hij schrijft daarom naar de plek waar de waarheid al staat in plaats van
+    # naast die plek: "in afwachting" zet het PROJECT op blocked, of legt de actie in de wachtrij
+    # van de ontvanger. Er komt geen veld bij op de uitkomst zelf. Zo is de radio een
+    # snelkoppeling naar de bestaande staat, geen tweede kopie ervan.
+    #
+    # NIET BIJ GOVERNANCE: die uitkomst gaat naar het roloverleg en heeft daar zijn eigen agenda.
+    # Een keuze tonen die nergens landt is erger dan geen keuze.
+    # HETZELFDE WIDGET ALS OP HET PROJECTENBORD, en dezelfde WOORDEN (besluit Stefan, 21 september
+    # 2026). Een eigen radio-paar met een eigen vocabulaire ("Volgende"/"In afwachting") zou een
+    # tweede taal zijn voor precies de statussen die het bord al "Active" en "Waiting" noemt — en
+    # dit formulier schrijft dáárheen. De opgeslagen waarden zijn dus ook de projectstatussen
+    # zelf; `VOLGENDE`/`WACHTEND` blijven read-only voor uitkomsten van vóór 29 augustus.
+    from nooch_village.views.projects import _PROJ_CHIP
+    keuzes = "".join(
+        f"<option value='{k}'{' selected' if k == 'running' else ''}>"
+        f"{_e(_PROJ_CHIP[k][0])}</option>" for k in ("running", "blocked"))
+    # Verborgen bij het laden: het eerste type in de lijst is 'actie'. Zou hij zichtbaar beginnen
+    # en bij de eerste keuze wegspringen, dan flikkert het formulier bij het openen.
+    verborgen = "" if UITKOMST_SOORTEN[0][0] == "project" else " hidden"
+    afsluit = (f"<div class='qadd-row wo-staat' data-staat-voor='{_e(iid)}'{verborgen}>"
+               f"<label class='att-lbl wo-staat-lbl' for='vst-{_e(iid)}'>Status</label>"
+               f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
+               f"<div class='qadd-row'>"
                f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
                f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
                f"Alleen zichtbaar voor de cirkel</label>"
@@ -439,30 +475,43 @@ def _herkomst_regel(st, it: dict) -> str:
 
 
 def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
-    """De spanningstekst als KLEINE bewerkbare titel, niet als blok dat om invulling vraagt.
+    """De spanning die je verwerkt, als BAND bovenaan het formulier.
 
-    Het grote tekstvak stond bovenaan en bleef in de praktijk leeg: in een live overleg is er geen
-    tijd om een spanning uit te schrijven. Alleen wie een punt VOORAF invoert vult hem, en dan moet
-    hij er gewoon staan. Daarom: ingevuld → je leest hem meteen; leeg → één klein "⚡ None" dat je
-    kunt openklappen als je hem tóch wilt vullen, en dat verder niets van je vraagt."""
+    WAT HIER STOND EN WAAROM HET TOCH VERANDERT. Dit was een klein uitklapje — "⚡ None" als er
+    niets stond — met een goede reden: het grote tekstvak dat er ooit stond bleef in een live
+    overleg altijd leeg, want daar is geen tijd om een spanning uit te schrijven. Die reden klopt
+    nog steeds, en daarom vraagt de band ook nu niets: hij TOONT.
+
+    Wat er misging is iets anders: als drager van "dit is het punt dat we nu behandelen" was een
+    klein grijs regeltje te licht. Je ziet niet waar je bent. De band is breed, heeft een rand en
+    een icoon, en de bewerk-affordance zit ernaast in plaats van eromheen — klikken op de tekst
+    opent dus niets meer per ongeluk.
+
+    LEEG IS EEN EIGEN TOESTAND, geen leeg vlak: dan staat er wat er te doen is ("nog geen spanning
+    opgeschreven"), niet niets. Een lege band leest als een weergavefout.
+
+    Geen GlassFrog-kleuren (besluit Stefan): crème, zwarte rand, de bestaande `wo-`-familie."""
     iid = it["id"]
     sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
     tekst = (it.get("note") or {}).get("spanning") or ""
-    herkomst = _herkomst_regel(st, it)
 
     kort = " ".join(tekst.split())
-    samenvatting = (f"⚡ {_e(kort[:110])}{'…' if len(kort) > 110 else ''}" if kort
-                    else "<span class='muted'>⚡ None</span>")
+    body = (f"<span class='wo-band-tekst'>{_e(kort)}</span>" if kort
+            else "<span class='wo-band-tekst muted'>nog geen spanning opgeschreven</span>")
     veld = _field("Spanning", "tekst", kind="textarea", value=tekst, fid=f"vs-{iid}",
                   placeholder="optioneel — meestal vul je dit vooraf in, niet tijdens het overleg",
                   attrs=f'onchange="{sub}"')
-    bewerk = (f"<details class='wo-ocd box-details'><summary>{samenvatting}</summary>"
+    # De potloodknop opent hetzelfde `vangst_tekst`-formulier als hiervoor; één opslagpad, één
+    # actie. Alleen de ingang is verplaatst en zichtbaar gemaakt.
+    bewerk = (f"<details class='wo-band-edit'>"
+              f"<summary title='spanning bewerken' aria-label='spanning bewerken'>&#9998;</summary>"
               f"<form method='post' action='/action' class='wo-oc'>"
               f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}{veld}"
               f"<input type='hidden' name='action' value='vangst_tekst'></form></details>")
     # De herkomst staat op de kop van de uitkomsten-tabel (zoals in de referentie), NIET hier —
     # anders lees je hem twee keer op één scherm.
-    return bewerk
+    return (f"<div class='wo-band'><span class='wo-band-ic' aria-hidden='true'>&#9889;</span>"
+            f"{body}{bewerk}</div>")
 
 
 def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = "") -> str:

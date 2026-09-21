@@ -392,6 +392,12 @@
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   box-shadow: none; color: var(--nu-text); }
 .nu .wo-ocd { background: var(--nu-bg); }
+/* 21 september · de spanningsband is een CONTAINER en houdt dus zijn lijn — hij draagt het punt
+   dat je nu behandelt. 2px zwart, geen radius; de tint eronder vervalt (fase 9: vorm boven tint). */
+.nu .wo-band { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); }
+.nu .wo-band-edit > summary { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .wo-staat-lbl { color: var(--nu-muted); font-family: var(--nu-font); }
 
 .nu .fsep{
   color: var(--nu-muted); font-family: var(--nu-font); }

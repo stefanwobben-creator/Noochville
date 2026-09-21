@@ -524,6 +524,23 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
   border:1px solid var(--border);border-radius:7px;background:var(--surface)}
 /* grotere textarea's in de verwerk-formulieren */
 .wo-oc textarea{min-height:88px}
+/* ── De spanningsband bovenaan het verwerk-formulier (21 september 2026) ─────────────────────
+   MOLECUUL. Hier stond een klein grijs uitklapje ("⚡ None"); als drager van "dit is het punt dat
+   we nu behandelen" was dat te licht — je zag niet waar je was. De band is breed, heeft een rand
+   en een icoon, en de bewerk-ingang zit ERNAAST: klikken op de tekst opent dus niets per ongeluk.
+   Crème met zwarte rand, bestaande `wo-`-familie — geen GlassFrog-kleuren (besluit Stefan). */
+.wo-band{display:flex;align-items:flex-start;gap:.55rem;margin:0 0 .7rem;padding:.6rem .7rem;
+  background:var(--cream-2);border:1px solid var(--ink);border-radius:var(--radius)}
+.wo-band-ic{flex:0 0 auto;line-height:1.5}
+.wo-band-tekst{flex:1 1 auto;min-width:0;font-weight:600;line-height:1.45}
+.wo-band-edit{flex:0 0 auto}
+.wo-band-edit>summary{cursor:pointer;list-style:none;color:var(--gray);padding:0 .2rem}
+.wo-band-edit>summary::-webkit-details-marker{display:none}
+.wo-band-edit>summary:hover{color:var(--ink)}
+.wo-band-edit[open]{flex:1 1 100%;margin-top:.5rem}
+/* De status-keuze naast Opslaan. Twee opties die je in één blik ziet zijn geen keuzelijst. */
+.wo-staat{align-items:center;gap:.8rem}
+.wo-staat-lbl{margin:0}
 /* Rijstatus met TWEE dragers: de tint én de rand-stijl links. Solide = gemist, gestippeld = nog
    te doen, niets = gedaan. Een rand-stijl overleeft zwart-wit en kleurenblindheid waar een tint
    dat niet doet; het woord zelf staat in een `.sr`-span vooraan de rij. */
@@ -1025,6 +1042,16 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
   line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
   background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius)}
 .c2-overleg:hover{background:var(--green);color:#fff}
+/* ATOOM — "hier loopt nu iets". Groen en niet rood: rood leest als opname/stop, groen als kom
+   erbij. Het stipje is NOOIT de enige drager — de knoptekst wordt "Join meeting" — want een
+   kleurverschil overleeft zwart-wit en kleurenblindheid niet. */
+.c2-overleg--live{background:var(--green);color:#fff;border-color:var(--green-dark)}
+.c2-live{display:inline-block;width:7px;height:7px;margin-right:.35rem;border-radius:50%;
+  background:#fff;animation:nv-puls 1.6s ease-in-out infinite}
+@keyframes nv-puls{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
+/* Wie geen beweging wil, krijgt ze niet — en verliest niets: het stipje blijft staan, de tekst
+   zegt het al. Zelfde regel als bij `.ck-item.bezig`. */
+@media (prefers-reduced-motion: reduce){.c2-live{animation:none}}
 @media(max-width:760px){
   .c2-paneel{position:static;width:auto;inset:auto;border-right:0;
     border-bottom:1px solid var(--border);max-height:60vh}

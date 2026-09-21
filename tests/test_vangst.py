@@ -505,7 +505,12 @@ def test_een_kaal_agendapunt_toont_geen_groot_spanningsvak(tmp_path):
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "Checkout hapert", by_id="p1")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
-    assert "⚡ None" in html
+    # HIER STOND `"⚡ None" in html`. De spanningstekst was een klein uitklapje; sinds
+    # 21 september is het een BAND bovenaan het verwerk-formulier. De bewering eronder is
+    # onveranderd en is waar het deze test om ging: een kaal punt krijgt géén groot invulvak dat
+    # om tekst vraagt — de band TOONT, hij vraagt niets.
+    assert "nog geen spanning opgeschreven" in html
+    assert "wo-band" in html
     assert "beschrijf hier wat er speelt" not in html        # het oude, dwingende blok is weg
     # en het uitkomst-formulier staat vóór de uitkomstenlijst
     assert html.index("name='otype'") < html.index("Uitkomsten van het overleg")
@@ -547,9 +552,19 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     assert "— Kies persoon —" in html and "Elk cirkellid" in html
     assert "Individuele actie" in html          # eerste rol-optie, rol is niet verplicht
     assert "Alleen zichtbaar voor de cirkel" in html
-    # GEEN staat-keuze meer: de wachtstatus leeft op projectniveau.
-    assert "name='staat'" not in html
-    assert "In afwachting" not in html
+    # DE STAAT-KEUZE IS TERUG (besluit Stefan, 21 september 2026), maar anders dan hij wegging.
+    # Hij is op 29 augustus weggehaald omdat hij een eigen veld op de uitkomst was naast de
+    # wachtstatus op het project — twee plekken die hetzelfde bijhouden. Nu schrijft hij naar
+    # `status=blocked` op het PROJECT zelf: een snelkoppeling naar de bestaande waarheid.
+    #
+    # En daarom staat hij er alleen bij een PROJECT-uitkomst: verborgen bij het laden (het eerste
+    # type in de lijst is 'actie') en zichtbaar zodra je 'project' kiest. Een actie gaat via
+    # `route_werk` naar iemands inbox, een governance-punt naar het roloverleg — daar landt een
+    # wachtstand nergens, en een keuze die nergens landt is erger dan geen keuze.
+    assert "name='staat'" in html
+    assert "<div class='qadd-row wo-staat' data-staat-voor=" in html
+    assert " hidden>" in html.split("wo-staat")[1][:120]
+    assert "this.value!=='project'" in html
     # en het twee-koloms raster van de referentie
     assert "rov-addgrid" in html
 
@@ -634,7 +649,9 @@ def test_een_oude_staat_blijft_leesbaar(tmp_path):
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "In afwachting" in html               # de oude waarde staat er nog
     assert "<strong>Staat</strong>" in html      # met zijn kolom
-    assert "name='staat'" not in html            # maar je kunt hem nergens meer invullen
+    # `name='staat'` mag weer bestaan — de keuze is op 21 september teruggekomen, nu schrijvend
+    # naar het project. Wat deze test bewaakt is onveranderd: een OUDE uitkomst blijft leesbaar,
+    # ook als de invoerkant intussen van vorm veranderde.
 
 
 def test_zonder_oude_records_verdwijnt_de_staat_kolom(tmp_path):

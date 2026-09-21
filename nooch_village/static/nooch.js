@@ -546,6 +546,59 @@
     });
   }
 
+  // ── De live-knop: draait er een werkoverleg? (21 september 2026) ──────────────────────────
+  //
+  // POLLING EN GEEN WEBSOCKET, met de meting erbij: de vraag kost 0,31 ms op de server zolang je
+  // alleen de store bouwt die hem kan beantwoorden (alle stores bouwen kost 70 ms — zie de route).
+  // Vijf mensen die elke 20 seconden vragen is ~0,08 ms serverwerk per seconde. Een websocket-laag
+  // is dan infrastructuur voor een probleem dat er niet is.
+  //
+  // DRIE DINGEN DIE EEN POLLER BESCHAAFD HOUDEN:
+  //  * niets vragen als het tabblad verborgen is — een weggeklikt venster hoeft niets te weten;
+  //  * bij een fout het interval VERDUBBELEN in plaats van doorrammen (een server die het even
+  //    niet trekt, trekt het al helemaal niet met vijf clients die blijven kloppen);
+  //  * de server stuurt HTML terug, geen JSON: zo bepaalt één plek hoe een live-knop eruitziet.
+  function overlegPoll(root) {
+    var houder = root.querySelector(".c2-subnav");
+    if (!houder || houder.dataset.nvPoll) return;
+    var eerste = houder.querySelector("a.c2-overleg");
+    if (!eerste) return;                                  // geen cirkel, geen knoppen, niets te doen
+    var m = /circle=([^&]+)/.exec(eerste.getAttribute("href") || "");
+    if (!m) return;
+    houder.dataset.nvPoll = "1";
+
+    var BASIS = 20000, wacht = BASIS, timer = null;
+
+    function plan(ms) { clearTimeout(timer); timer = setTimeout(vraag, ms); }
+
+    function vraag() {
+      if (document.hidden) { plan(BASIS); return; }
+      fetch("/overleg-status?circle=" + encodeURIComponent(m[1]), { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+        .then(function (html) {
+          wacht = BASIS;
+          // Alleen vervangen als er écht iets anders staat: anders verliest een knop die je net
+          // aanwijst zijn hover, en een schermlezer leest hem elke 20 seconden opnieuw voor.
+          var nu = Array.prototype.map.call(houder.querySelectorAll("a.c2-overleg"),
+                                            function (a) { return a.outerHTML; }).join("");
+          if (nu === html) return;
+          Array.prototype.forEach.call(houder.querySelectorAll("a.c2-overleg"), function (a, i) {
+            if (i === 0) a.insertAdjacentHTML("beforebegin", html);
+            a.remove();
+          });
+        })
+        .catch(function () { wacht = Math.min(wacht * 2, 5 * 60 * 1000); })
+        .then(function () { plan(wacht); });
+    }
+
+    // Terug op het tabblad = meteen kijken. Wie terugkomt na een half uur wil niet nog twintig
+    // seconden naar een knop staren die niet klopt.
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) plan(200);
+    });
+    plan(BASIS);
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -554,6 +607,7 @@
     mdPreview(root);
     wikiEdit(root);
     navPaneel(root);
+    overlegPoll(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);

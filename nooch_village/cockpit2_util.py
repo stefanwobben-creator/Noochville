@@ -767,15 +767,33 @@ _SIDE_ITEMS = (
 _SIDE_OVERLEG = "<!--c2-overleg-->"
 
 
-def overleg_items(circle_id: str) -> str:
+def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
     """De twee overleg-knoppen, mét de cirkel waar ze over gaan. Leeg zonder cirkel: een knop naar
-    een overleg dat niet bestaat is erger dan geen knop."""
+    een overleg dat niet bestaat is erger dan geen knop.
+
+    DRAAIT ER EEN WERKOVERLEG, DAN WORDT DE KNOP EEN UITNODIGING. Wie later binnenkomt kan nu
+    alleen weten dat er iets loopt door erop te klikken; dat is precies de informatie die op de
+    knop hoort te staan.
+
+    TWEE DRAGERS, geen kleur alleen: het rondje ÉN de tekst veranderen ("Join meeting"). Een
+    pulserend groen stipje dat het enige verschil is, is onzichtbaar in zwart-wit en voor wie
+    groen niet ziet. Groen en niet rood, bewust: rood leest hier als "opname/stop", groen als
+    "kom erbij".
+
+    ALLEEN WERKOVERLEG deze ronde. Roloverleg heeft geen open/dicht-staat — zijn agenda is een
+    lijst governance-voorstellen, en "er loopt nu een roloverleg" bestaat daar niet als feit. Die
+    staat erbij bouwen is echt werk en een eigen klus (besluit Stefan, 21 september 2026)."""
     if not circle_id:
         return ""
-    return "".join(
-        f"<a class='c2-overleg' href='{h}?circle={_e(circle_id)}'>{l}</a>"
-        for h, l in (("/werkoverleg", "Werk&shy;overleg"),
-                     ("/roloverleg2", "Rol&shy;overleg")))
+    uit = []
+    for h, label in (("/werkoverleg", "Werk&shy;overleg"),
+                     ("/roloverleg2", "Rol&shy;overleg")):
+        live = werk_open and h == "/werkoverleg"
+        cls = "c2-overleg" + (" c2-overleg--live" if live else "")
+        stip = "<span class='c2-live' aria-hidden='true'></span>" if live else ""
+        tekst = "Join meeting" if live else label
+        uit.append(f"<a class='{cls}' href='{h}?circle={_e(circle_id)}'>{stip}{tekst}</a>")
+    return "".join(uit)
 
 #: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
 #: `_nav()` heeft geen stores). Zelfde patroon als de begroeting.
