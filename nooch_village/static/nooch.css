@@ -1411,6 +1411,18 @@ progress.nu-progress.wide{height:8px}
 /* De reactie-voet onder een bericht: dezelfde chips en dezelfde kiezer als in de projectfeed,
    alleen de plaatsing is nieuw. Hij staat er pas als er iets te tonen of te kiezen valt. */
 .msg-reacties{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;margin-top:.3rem}
+/* Bijlagen onder een bericht. Een afbeelding krijgt een voorbeeld, de rest een regel met naam en
+   grootte — je wilt weten wat je opent vóór je 12 MB binnenhaalt. */
+.msg-bijlagen{display:flex;flex-direction:column;gap:.3rem;margin-top:.4rem}
+.msg-bijlage{display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;font-size:13px;
+  text-decoration:none;color:var(--ink);border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface)}
+.msg-bijlage:hover{border-color:var(--green)}
+.msg-bijlage-naam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-bijlage--beeld{display:inline-block;padding:0;border:0;background:none;max-width:280px}
+.msg-bijlage--beeld img{display:block;max-width:100%;height:auto;border:1px solid var(--border);
+  border-radius:var(--radius)}
+.msg-bijlage-add{margin-bottom:.5rem}
 .msg-terug{display:none}
 /* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.
    Beide panelen blijven in de DOM — het is een CSS-keuze, geen tweede rendering. */

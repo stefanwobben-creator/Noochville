@@ -16,6 +16,7 @@ enige nieuwe familie is `msg-`, voor de tweekoloms-indeling (kanalenlijst links,
 from __future__ import annotations
 
 import logging
+import urllib.parse
 
 from nooch_village import channels
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp
@@ -67,6 +68,50 @@ def _label(st, kanaal: str, ik: str = "") -> str:
     # de ruwe id — nooit "direct", want dan lijken twintig kanalen op elkaar.
     rec = st.records.get(ander) if ander else None
     return (_name(rec) if rec is not None else "") or ander or "direct"
+
+
+def mag_project_lezen(st, pid: str, ik: str) -> bool:
+    """Mag deze mens dit project zien?
+
+    `private` betekent "alleen voor deze cirkel" (zie de knop op de projectkaart), dus dat is de
+    vraag die hier gesteld wordt: ben je lid van de cirkel van de eigenaar-rol. Een niet-privé
+    project is voor iedereen die is ingelogd, zoals het bord dat ook toont.
+
+    Fail-closed: onbekend project of onbekende mens → nee."""
+    from nooch_village.cockpit2 import resolve_circle_id, is_circle_member
+    p = st.projects.get(pid or "")
+    if p is None or not ik:
+        return False
+    if not p.get("private"):
+        return True
+    cid = resolve_circle_id(p.get("owner") or "", st.records)
+    return bool(cid) and is_circle_member(ik, cid, st.records, st.assign)
+
+
+def mag_kanaal_lezen(st, kanaal: str, ik: str) -> bool:
+    """Mag deze mens dit kanaal lezen? ÉÉN regel, en alles wat een bijlage serveert vraagt hem.
+
+    De soorten volgen precies de lijst die `_kanalen` toont:
+
+        dm:       alleen de twee deelnemers — zoals `kanalen_van` al bepaalt
+        project:  het leesrecht van dat project (privé = alleen die cirkel)
+        circle:   iedereen die is ingelogd
+        goal:     idem
+        topic:    idem — er is bewust geen lidmaatschap-begrip op losse kanalen
+
+    WAAROM DIT BESTAAT EN NIET "HET PAD RAADT NIEMAND". Een bijlage-URL mag geen sleutel zijn:
+    wie de link doorstuurt hoort geen toegang weg te geven, de ontvanger moet door dezelfde poort.
+    Daarom een route die eerst vraagt en dan pas leest, in plaats van een statisch pad.
+
+    Fail-closed op een onbekende soort: liever niets serveren dan gokken."""
+    if not ik or not kanaal:
+        return False
+    soort = channels.soort_van(kanaal)
+    if soort == channels.DM:
+        return ik in channels.dm_leden(kanaal)
+    if soort == channels.PROJECT:
+        return mag_project_lezen(st, channels.doel_van(kanaal), ik)
+    return soort in (channels.CIRCLE, channels.GOAL, channels.TOPIC)
 
 
 def kan_antwoorden(st, kanaal: str, ik: str = "") -> bool:
@@ -242,6 +287,29 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     return groepen, totaal, gevolgd
 
 
+def _bijlagen_html(e: dict, kanaal: str) -> str:
+    """De bestanden onder een bericht. Een afbeelding als voorbeeld, de rest als regel met naam.
+
+    DE LINK GAAT NAAR `/bijlage?kanaal=…`, niet naar een pad op schijf. Dat is het hele punt van
+    die route: hij vraagt eerst of jij dit kanaal mag lezen. Een statisch pad zou de URL tot
+    sleutel maken, en dan geeft doorsturen toegang weg."""
+    rijen = []
+    for b in (e.get("bijlagen") or []):
+        url = (f"/bijlage?kanaal={urllib.parse.quote(kanaal)}"
+               f"&id={urllib.parse.quote(str(b.get('id') or ''))}")
+        naam = str(b.get("name") or "bestand")
+        kb = int(b.get("size") or 0) // 1024
+        if str(b.get("mime") or "").startswith("image/"):
+            rijen.append(f"<a class='msg-bijlage msg-bijlage--beeld' href='{_e(url)}' "
+                         f"target='_blank' rel='noopener'>"
+                         f"<img src='{_e(url)}' alt='{_e(naam)}' loading='lazy'></a>")
+        else:
+            rijen.append(f"<a class='msg-bijlage' href='{_e(url)}'>"
+                         f"<span class='msg-bijlage-naam'>{_e(naam)}</span>"
+                         f"<span class='muted'>{kb} kB</span></a>")
+    return f"<div class='msg-bijlagen'>{''.join(rijen)}</div>" if rijen else ""
+
+
 def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
     a = e.get("author") or {}
     wie = (_person_name(st, a.get("id")) if a.get("type") in ("human", "person") else "") or "Someone"
@@ -260,6 +328,7 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
     from nooch_village.views.feed import reactie_blok
     rx, picker = reactie_blok(e, csrf_token, {"kanaal": kanaal}) if kanaal else ("", "")
     voet = f"<div class='msg-reacties'>{rx}{picker}</div>" if (rx or picker) else ""
+    voet = _bijlagen_html(e, kanaal) + voet
     return (f"<div class='msg-item'><div class='msg-meta'>{_e(wie)} &middot; "
             f"{_e(_stamp(e.get('at')))}{herk}</div>"
             f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div>")
@@ -424,7 +493,31 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                    "person, and a role does not read messages. Need something done? Start a "
                    "project or write to the person who fills the role.</p>")
     elif kanaal and csrf_token and ik:
-        schrijf = (f"<form method='post' action='/action' class='qadd-form'>"
+        # DE PAPERCLIP VOLGT HET ANTWOORDVELD, één voorwaarde. Hij staat in dezelfde tak, dus er
+        # is geen tweede regel die kan gaan afwijken: waar je niet kunt schrijven, kun je ook
+        # niets bijvoegen.
+        #
+        # EIGEN FORMULIER, want dit is `multipart/form-data` en het antwoordveld is dat niet. Eén
+        # ronde: het bericht wordt hier geplaatst en het bestand hangt er direct aan.
+        bijlage_form = (
+            f"<details class='qadd msg-bijlage-add'>"
+            f"<summary class='muted'>📎 attach a file</summary>"
+            f"<form method='post' action='/action' class='qadd-form' "
+            f"enctype='multipart/form-data'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
+            f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"
+            f"<input type='hidden' name='action' value='kanaal_bijlage'>"
+            f"<label class='att-lbl' for='msg-file'>File</label>"
+            f"<input id='msg-file' type='file' name='file' required "
+            f"accept='{_e(','.join(sorted(channels.BIJLAGE_TYPES)))}'>"
+            f"<label class='att-lbl' for='msg-file-tekst'>Caption (optional)</label>"
+            f"<input id='msg-file-tekst' name='tekst' maxlength='200' "
+            f"placeholder='What is this?'>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Upload</button>"
+            f"<span class='muted'>max 20 MB &middot; image, pdf, txt, csv, docx, xlsx, pptx</span>"
+            f"</div></form></details>")
+        schrijf = bijlage_form + (f"<form method='post' action='/action' class='qadd-form'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
                    f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"

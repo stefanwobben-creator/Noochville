@@ -606,6 +606,15 @@
 /* 1b/3b — de moleculen: alleen wat de rij bij elkaar houdt. */
 .nu .pchips { gap: .3rem; }
 .nu .msg-tijd { color: var(--nu-muted); }
+/* 22 september · bijlagen onder een bericht. De rij is een ITEM in een lijst, dus de dunne lijn
+   (zie de rebalans van gisteren); het voorbeeld van een afbeelding krijgt er een omdat hij anders
+   op een witte achtergrond geen rand heeft om tegen te staan. */
+.nu .msg-bijlage { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+.nu .msg-bijlage:hover { border-color: var(--nu-text); }
+.nu .msg-bijlage--beeld { border: 0; background: none; }
+.nu .msg-bijlage--beeld img { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+.nu .msg-bijlage-naam { font-family: var(--nu-font); }
 .nu .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
 .nu .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
 .nu .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
