@@ -5712,7 +5712,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send_bytes(body.encode("utf-8"), "text/csv; charset=utf-8", fname)
                 return
             if path.startswith("/kbref/"):
-                # Kennisbank-bron-PDF's (kb_atoom_ref_pdf): geserveerd uit data/kbref/.
+                # Kennisbank-bron-PDF's, geserveerd uit data/kbref/. ALLEEN NOG LEZEN: de
+                # actie die hier schreef (kb_atoom_ref_pdf) is vervallen met de kennisbank-
+                # schermen. De route blijft staan zodat de bestanden die er al liggen (5 op
+                # productie) opvraagbaar blijven; er komt niets meer bij.
                 # Basename-only tegen path-traversal; alleen .pdf. Achter de auth-check.
                 fname = os.path.basename(urllib.parse.unquote(path[len("/kbref/"):]))
                 full = os.path.join(data_dir, "kbref", fname)
@@ -6158,113 +6161,20 @@ def make_handler(data_dir: str, csrf_token: str,
                         "id": bid, "name": safe, "stored": rel, "size": len(blob),
                         "mime": soort[0], "at": time.time()})
                     self._redirect(fields.get("next", "/messages"), "📎 bijlage toegevoegd"); return
-                if fields.get("action") == "kb_atoom_ref_pdf":
-                    # AUTHZ: iedereen-ingelogd — kennisbank. Een PDF als bronlink bij een atoom.
-                    # Statements-herontwerp: de PDF wordt óók bewaard (data/kbref/) en reference
-                    # wordt het geserveerde pad (/kbref/…) — zo opent de Bron-link in het detail
-                    # het document zelf. Oudere references (kale document-labels) blijven geldig
-                    # en renderen als tekst (fail-soft).
-                    err = _upload_error(files, _upload_max_bytes())
-                    if err:
-                        self._send(err[0], err[1]); return
-                    fname, blob = files["file"]
-                    nxt = fields.get("next", "/kennisbank")
-                    kbref_pad = _save_kbref_pdf(data_dir, fname, blob)
-                    _notes = _Stores(data_dir).notes
-                    ok = _notes.set_reference(fields.get("atom_id", ""), kbref_pad)
-                    # Bron-propagatie (founder dd 2026-07-18): zelfde genormaliseerde
-                    # bron zonder reference → krijgt dezelfde PDF-link mee.
-                    extra = _notes.propagate_reference(fields.get("atom_id", "")) if ok else 0
-                    msg = ("🔗 PDF linked as a source link"
-                           + (f" — also set on {extra} other card(s) with the same source"
-                              if extra else "")) if ok else "✗ note not found"
-                    self._redirect(nxt, msg)
-                    return
-                if fields.get("action") == "kb_intake_pdf":
-                    # AUTHZ: iedereen-ingelogd — kennisbank-intake. PDF = source-adapter:
-                    # tekst-extractie + chunken, elke chunk door de bestaande atomiser
-                    # (ledger per chunk → her-uploaden idempotent; een gefaalde chunk
-                    # komt bij een volgende upload vanzelf terug).
-                    err = _upload_error(files, _upload_max_bytes())
-                    if err:
-                        self._send(err[0], err[1]); return
-                    from nooch_village.kennisbank_sources import van_pdf
-                    fname, blob = files["file"]
-                    chunks = van_pdf(blob, os.path.basename(fname))
-                    if chunks is None:
-                        self._redirect(fields.get("next", "/kennisbank"),
-                                       "✗ no text layer found in this PDF (a scan? "
-                                       "OCR is out of scope for v1)"); return
-                    nieuw_alles: list[str] = []
-                    dubbel_alles = mislukt = 0
-                    for chunk_raw, label in chunks:
-                        uitkomst = kb_intake(chunk_raw, label, data_dir)
-                        if uitkomst is None:
-                            mislukt += 1
-                            continue
-                        _nieuw, _dubbel = uitkomst
-                        nieuw_alles.extend(_nieuw)
-                        dubbel_alles += _dubbel
-                    delen = [f"✂️ {len(nieuw_alles)} notities uit {len(chunks)} delen"]
-                    if dubbel_alles:
-                        delen.append(f"{dubbel_alles} al bekend")
-                    if mislukt:
-                        delen.append(f"{mislukt} deel/delen mislukt — upload nogmaals "
-                                     f"voor de rest (niets raakt dubbel)")
-                    nxt = "/kennisbank" + (f"?nieuw={','.join(nieuw_alles)}" if nieuw_alles else "")
-                    self._redirect(nxt, " · ".join(delen)); return
-                if fields.get("action") == "kb_bron_add":
-                    # AUTHZ: iedereen-ingelogd — kennisbank zone 2. Eén ingang: tekst OF bestand →
-                    # auto-detect → adapter → atomiser → STAGING-batch (niet direct de bibliotheek;
-                    # de mens kijkt na op /kennisbank/staging).
-                    from nooch_village.kennisbank_sources import (bron_reference,
-                                                                  detect_and_extract)
-                    username = self._session_username()
-                    fname, blob = files.get("file", ("", b""))
-                    res = detect_and_extract(text=fields.get("bron_text", ""),
-                                             filename=fname if blob else "", data=blob)
-                    if res["chunks"] is None:
-                        self._redirect("/kennisbank?open=bron",
-                                       f"✗ {res.get('error') or 'niets herkend'}"); return
-                    stores = _Stores(data_dir)
-                    atoms: list[dict] = []
-                    label = res["chunks"][0][1]
-                    mislukt = 0
-                    # Atomiciteit-bovengrens per document (fix-brief bug 2): een lang stuk of een
-                    # referentielijst mag niet in tientallen mini-kaartjes ontploffen. Zodra de cap
-                    # gehaald is stoppen we met verdere chunks — de mens ziet in de staging wat er is.
-                    _DOC_CAP = 40
-                    for craw, clabel in res["chunks"]:
-                        got = atomiseer(craw, clabel, tabular=res["tabular"])
-                        if got is None:
-                            mislukt += 1
-                            continue
-                        atoms += got
-                        label = clabel
-                        if len(atoms) >= _DOC_CAP:
-                            atoms = atoms[:_DOC_CAP]
-                            break
-                    if not atoms:
-                        self._redirect("/kennisbank?open=bron",
-                                       "✗ the atomiser returned nothing usable"); return
-                    # Founder 19 jul: de link of PDF die bij het aanmaken is GEBRUIKT wordt
-                    # de reference van alle kaartjes — een geplakte URL, of de bewaarde
-                    # bron-PDF (data/kbref/, zelfde recept als kb_atoom_ref_pdf). Die wint
-                    # van een LLM-overgetypte DOI (kan doodlopen); alleen bij geplakte
-                    # tekst blijft de atomiser-reference staan.
-                    kbref_pad = ""
-                    if blob and (fname or "").lower().endswith(".pdf"):
-                        kbref_pad = _save_kbref_pdf(data_dir, fname, blob)
-                    echte_bron = bron_reference(fields.get("bron_text", ""), kbref_pad)
-                    if echte_bron:
-                        for a in atoms:
-                            a["reference"] = echte_bron
-                    bid = stores.staging.create(res["kind"], label, atoms,
-                                                tabular=res["tabular"],
-                                                by=(username if username != "guest" else ""))
-                    extra = f" · {mislukt} deel/delen mislukt" if mislukt else ""
-                    self._redirect(f"/kennisbank/staging?batch={bid}",
-                                   f"✂️ {len(atoms)} voorstellen uit {res['kind']} — even nakijken{extra}")
+                if fields.get("action") in _KB_UPLOAD_WEG:
+                    # AUTHZ: iedereen-ingelogd — zelfde poort als de oude kennisbank-intake had.
+                    # NIET BESCHIKBAAR, GEEN CRASH. Deze drie acties (kb_intake_pdf,
+                    # kb_atoom_ref_pdf, kb_bron_add) hoorden bij de kennisbank-schermen die in
+                    # #516 zijn verwijderd — met de views verdwenen ook kennisbank_intake
+                    # (`kb_intake`/`atomiseer`) en de stores `notes` en `staging`. De takken
+                    # bleven staan en riepen namen aan die niet meer bestaan: de handler gooide
+                    # NameError/AttributeError en de verbinding werd verbroken zónder antwoord
+                    # (curl: status 000). Er is geen knop meer die hier post; dit vangt een oud
+                    # tabblad of een bookmark op met een leesbare melding in plaats van een dode
+                    # verbinding. Terug bouwen = de schermen terug bouwen, niet een import.
+                    self._redirect(fields.get("next", "/"),
+                                   "✗ knowledge-base intake is unavailable — the knowledge-base "
+                                   "screens were removed on 20 September 2026")
                     return
                 self._redirect(fields.get("next", "/"), ""); return
             raw = self.rfile.read(length).decode("utf-8") if length else ""
@@ -6330,18 +6240,11 @@ def _match_ladder() -> str:
     return os.getenv("LLM_MATCH_LADDER", "anthropic")
 
 
-def _save_kbref_pdf(data_dir: str, fname: str, blob: bytes) -> str:
-    """Bewaar een bron-PDF in data/kbref/ en geef het geserveerde pad (/kbref/…) terug —
-    de ene plek voor dit opslag-recept (kb_atoom_ref_pdf én kb_bron_add gebruiken hem)."""
-    safe = os.path.basename(fname).replace("\\", "_")[:120]
-    if not safe.lower().endswith(".pdf"):
-        safe += ".pdf"
-    stored = uuid.uuid4().hex[:8] + "_" + safe
-    full = os.path.join(data_dir, "kbref", stored)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "wb") as fh:
-        fh.write(blob)
-    return "/kbref/" + stored
+# De drie upload-acties van de verwijderde kennisbank-intake. Ze staan hier als NAMEN en niet
+# als werkende takken: de schermen, de atomiser (kennisbank_intake) en de stores `notes` en
+# `staging` zijn in #516 verwijderd, dus er is niets meer om naartoe te posten. Zie de tak in
+# do_POST voor waarom ze niet gewoon vervallen zijn.
+_KB_UPLOAD_WEG = ("kb_intake_pdf", "kb_atoom_ref_pdf", "kb_bron_add")
 
 
 def _upload_max_bytes() -> int:
