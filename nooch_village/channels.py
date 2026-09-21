@@ -123,7 +123,8 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie")
+    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie",
+                      "add_reaction")
     _STATE = "_data"
     _default = dict
 
@@ -155,6 +156,31 @@ class ChannelStore(JsonStore):
         self._data.setdefault("kanalen", {}).setdefault(kanaal, []).append(entry)
         self._save()
         return entry
+
+    def add_reaction(self, kanaal: str, entry_id: str, emoji: str) -> bool:
+        """Een emoji-reactie op een bericht in dit kanaal. Per emoji een teller.
+
+        EEN PROJECTKANAAL GAAT LANGS DE LEDGER, net als `post` en `trail`. Daar woont de trail
+        (`project["log"]`) en daar staat de teller dus ook — `ProjectLedger.add_reaction` deed dit
+        al voor de projectfeed, en dat is precies hetzelfde bericht. Het hier nog eens uitschrijven
+        zou betekenen dat een reactie op de projectpagina en een reactie in Messages op twee
+        plekken worden bijgehouden, op dezelfde regel.
+
+        Geen id op het bericht = geen reactie. Dat is het oude schema; fail-closed."""
+        emoji = (emoji or "").strip()
+        if not (kanaal and entry_id and emoji):
+            return False
+        if soort_van(kanaal) == PROJECT:
+            if self._ledger is None:
+                return False
+            return bool(self._ledger.add_reaction(doel_van(kanaal), entry_id, emoji))
+        for e in (self._data.get("kanalen") or {}).get(kanaal) or []:
+            if e.get("id") == entry_id:
+                r = e.setdefault("reactions", {})
+                r[emoji] = int(r.get(emoji, 0)) + 1
+                self._save()
+                return True
+        return False
 
     def maak_topic(self, naam: str, *, door: str = "") -> str:
         """Een los kanaal met een eigen naam. Geeft het kanaal-id terug, of "" bij een lege naam.
