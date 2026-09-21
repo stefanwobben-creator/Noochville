@@ -146,27 +146,38 @@ def _pagina_html(tmp_path, can_edit=True):
 
 
 def test_de_bewerkknop_staat_bovenaan_en_is_zichtbaar(tmp_path):
+    """Ongewijzigd van strekking; alleen het haakje heet anders. `data-qadd-opener` opende het
+    formulier onder de pagina, `data-wiki-start` zet de tekst zelf in bewerkstand."""
     html = _pagina_html(tmp_path)
-    assert "data-qadd-opener" in html, "er hoort een expliciete bewerkknop te staan"
+    assert "data-wiki-start" in html, "er hoort een expliciete bewerkknop te staan"
     assert "Edit page" in html
     # BOVENAAN: vóór de inhoud, niet eronder. Dat was precies het probleem.
-    assert html.index("data-qadd-opener") < html.index("att-body"), "de knop staat onder de tekst"
-    assert "btn" in html.split("data-qadd-opener")[0][-120:], "de knop draagt het knop-atoom"
+    assert html.index("data-wiki-start") < html.index("att-body"), "de knop staat onder de tekst"
+    assert "btn" in html.split("data-wiki-start")[0][-120:], "de knop draagt het knop-atoom"
 
 
 def test_wie_niet_mag_bewerken_krijgt_geen_knop(tmp_path):
     """Een knop die een poort daarna weigert, belooft iets wat niet kan."""
     html = _pagina_html(tmp_path, can_edit=False)
-    assert "data-qadd-opener" not in html
+    assert "data-wiki-start" not in html
+    assert "contenteditable" not in html and "wiki-form" not in html
 
 
-def test_de_knop_opent_hetzelfde_formulier_als_de_tekst(tmp_path):
-    """Eén formulier, één submit, één `artefact_edit`. De knop is een tweede INGANG, geen tweede
-    opslagpad — anders ontstaat er een tweede waarheid over wat er is opgeslagen."""
+def test_er_is_maar_een_plek_waar_de_tekst_staat(tmp_path):
+    """DIT IS DE KERN VAN DE VERVANGING. Het oude model zette de opgemaakte tekst bovenaan en het
+    bewerkformulier — met dezelfde tekst als ruwe markdown — eronder. Twee kopieën op één scherm,
+    en typen op een andere plek dan waar je leest.
+
+    Nu staat de tekst één keer op de pagina en wordt hij daar bewerkbaar. Het formulier dat
+    overblijft draagt geen inhoud, alleen de opslaan-balk en de verborgen velden."""
     html = _pagina_html(tmp_path)
-    assert html.count("value='artefact_edit'") == 1
-    assert "data-qadd-inline" in html           # het bestaande formulier
-    assert "data-qadd-open" in html             # en de tekst blijft ook klikbaar
+    assert html.count("value='artefact_edit'") == 1        # nog steeds één opslagpad
+    assert html.count("Wat tekst.") == 1                   # en één kopie van de inhoud
+    # Het Facts-formulier heeft nog wél een textarea (voor een citaat) en dat hoort zo: de
+    # Facts-sectie blijft ongewijzigd. Wat weg moest is het BODY-vak met de ruwe markdown.
+    assert "name='body'" not in html and 'name="body"' not in html
+    assert "data-qadd-inline" not in html                  # het oude formulier is weg
+    assert "wiki-form" in html and "body_html" in html     # wat ervoor in de plaats kwam
 
 
 def test_de_opener_is_bedraad_in_het_gedeelde_bestand():
@@ -175,4 +186,4 @@ def test_de_opener_is_bedraad_in_het_gedeelde_bestand():
     import pathlib
     js = (pathlib.Path(__file__).resolve().parents[1]
           / "nooch_village" / "static" / "nooch.js").read_text()
-    assert "data-qadd-opener" in js and "scrollIntoView" in js
+    assert "data-wiki-start" in js and "contentEditable" in js

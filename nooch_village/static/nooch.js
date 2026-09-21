@@ -376,12 +376,91 @@
 
   // Idempotent: `data-nv-wired` per formulier, zodat een fragment dat opnieuw langskomt geen
   // tweede listener krijgt. Een dubbele listener post elke actie twee keer.
+  // ── De wiki-editor: de tekst zelf is het invoerveld (21 september 2026) ───────────────────
+  //
+  // Tot vandaag opende "Edit page" een los formulier ONDER de pagina, met een textarea vol ruwe
+  // markdown terwijl de opgemaakte tekst gewoon bovenaan bleef staan. Twee kopieën van dezelfde
+  // inhoud, en typen op een andere plek dan waar je leest. Dit vervangt dat model.
+  //
+  // WAT HIER BEWUST NIET GEBEURT: markdown maken. Deze code zet alleen `contenteditable` aan,
+  // laat de browser zijn eigen opmaak-tags produceren, en stuurt de HTML op. De omzetting naar
+  // markdown doet de SERVER (`_md_naar_bron`), want anders staat er een tweede opmaak-kenner
+  // naast `_md` en lopen die twee uiteen zodra er één regel bijkomt.
+  function wikiEdit(root) {
+    var start = root.querySelector("[data-wiki-start]");
+    var body = root.querySelector("#wiki-body");
+    var titel = root.querySelector("#wiki-titel");
+    var form = root.querySelector("#wiki-form");
+    var tb = root.querySelector("#wiki-tb");
+    if (!start || !body || !titel || !form || start.dataset.nvWired) return;
+    start.dataset.nvWired = "1";
+
+    var origineel = { body: body.innerHTML, titel: titel.textContent };
+    var bezig = false;
+
+    function editeerbaar(aan) {
+      body.contentEditable = aan ? "true" : "false";
+      // `plaintext-only` houdt opmaak UIT de titel; een titel met een vetgedrukt woord erin is
+      // geen titel maar een zin. Niet elke browser kent de waarde — dan valt hij terug op
+      // gewoon bewerkbaar, en de server neemt toch alleen de tekst.
+      titel.contentEditable = aan ? "plaintext-only" : "false";
+      if (aan && titel.contentEditable !== "plaintext-only") titel.contentEditable = "true";
+      body.classList.toggle("wiki-aan", aan);
+      titel.classList.toggle("wiki-aan", aan);
+      if (tb) tb.hidden = !aan;
+      form.hidden = !aan;
+      bezig = aan;
+    }
+
+    start.addEventListener("click", function () {
+      if (bezig) return;
+      origineel = { body: body.innerHTML, titel: titel.textContent };
+      editeerbaar(true);
+      body.focus();
+    });
+
+    var annuleer = form.querySelector("[data-wiki-cancel]");
+    if (annuleer) annuleer.addEventListener("click", function () {
+      body.innerHTML = origineel.body;
+      titel.textContent = origineel.titel;
+      editeerbaar(false);
+    });
+
+    // De werkbalk. `styleWithCSS=false` is de hele reden dat dit zonder library kan: mét CSS
+    // levert de browser `<span style="font-weight:bold">`, en dat is geen tag die de server kent
+    // — de vetgedrukte tekst zou dan bij het opslaan gewoon gewone tekst worden.
+    if (tb) tb.querySelectorAll("[data-wiki-cmd]").forEach(function (knop) {
+      knop.addEventListener("mousedown", function (e) { e.preventDefault(); });  // focus blijft staan
+      knop.addEventListener("click", function () {
+        try { document.execCommand("styleWithCSS", false, false); } catch (e) { /* oud */ }
+        document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || null);
+        body.focus();
+      });
+    });
+
+    // Plakken gaat als PLATTE TEKST. Wie een stuk uit Word of een website plakt, brengt anders
+    // een halve stylesheet mee; de server gooit die toch weg, en dan zie je pas na het opslaan
+    // dat je opmaak verdwenen is. Zo zie je meteen wat je krijgt.
+    body.addEventListener("paste", function (e) {
+      if (!bezig) return;
+      e.preventDefault();
+      var tekst = (e.clipboardData || window.clipboardData).getData("text/plain");
+      document.execCommand("insertText", false, tekst);
+    });
+
+    form.addEventListener("submit", function () {
+      document.getElementById("wiki-titel-veld").value = titel.textContent.trim();
+      document.getElementById("wiki-body-veld").value = body.innerHTML;
+    });
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
     barReset(root);
     inlineEdit(root);
     mdPreview(root);
+    wikiEdit(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);
