@@ -215,3 +215,89 @@ def test_een_wachtstand_op_een_governance_punt_doet_niets(tmp_path):
         "staat": ["blocked"], "next": ["/x"]}, username="sec@test.nl")
     st2 = cockpit2._Stores(dd)
     assert {p["id"] for p in st2.projects.all()} == voor      # geen project, dus niets geblokkeerd
+
+
+# ── 4. De live-knop moet ook echt renderen ───────────────────────────────────
+#
+# GEVONDEN IN DE LIVE-DOORLOOP, niet door een test. De knop werd wél "Join meeting", maar bleef
+# zwart-op-crème: `.c2-subnav a` (0,1,1) zet `background:none` en `color:var(--ink)`, en won
+# daarmee van `.c2-overleg--live` (0,1,0). Specificiteit wint van bronvolgorde, dus hoger in het
+# bestand zetten had niets geholpen. Het WITTE stipje stond op een crème vlak en was onzichtbaar;
+# het enige signaal dat overbleef was de tekstwissel.
+#
+# Dezelfde fout trof óók de gewone overleg-knoppen: die hebben hun groene tint nooit gehad.
+
+def _spec(sel: str) -> tuple:
+    """(id's, klassen, elementen) — de drie tellers van CSS-specificiteit, genoeg voor deze vraag."""
+    sel = re.sub(r"::?[a-z-]+(\([^)]*\))?", " ", sel)          # pseudo's tellen niet mee hier
+    ids = len(re.findall(r"#[\w-]+", sel))
+    klassen = len(re.findall(r"[.\[][\w-]+", sel))
+    elementen = len(re.findall(r"(?:^|[\s>+~])([a-z][\w-]*)", sel))
+    return (ids, klassen, elementen)
+
+
+def _regels(css: str, naald: str, *, zet: str = "") -> list:
+    """De selectors van regels die `naald` bevatten — en, met `zet`, alleen die ook die
+    eigenschap zetten.
+
+    DAT FILTER IS NODIG EN NIET KOSMETISCH. `.c2-side--rail .c2-subnav a` is (0,2,1) maar zet
+    alleen `justify-content` en `padding`: hij is geen concurrent voor de kleur. Een toets die
+    hem meetelt eist een specificiteit die niets oplost — en dwingt daarmee een steeds langere
+    selector af voor een conflict dat niet bestaat."""
+    zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+    return [sel.strip() for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", zonder)
+            if naald in sel and (not zet or re.search(rf"(^|;)\s*{zet}\s*:", body))]
+
+
+def test_de_live_knop_wint_van_de_nav_regel():
+    """DE GUARD. Niet "de regel staat er" maar "de regel wint" — dat is wat er misging."""
+    nav = [s for s in _regels(CSS, ".c2-subnav a", zet="background")
+           if "hover" not in s and ".c2-overleg" not in s]
+    assert nav, "de nav-regel is verdwenen; deze toets meet dan niets meer"
+    hoogste_nav = max(_spec(s) for r in nav for s in r.split(","))
+    for klasse in (".c2-overleg", ".c2-overleg--live"):
+        regels = [s for s in _regels(CSS, klasse) if "hover" not in s]
+        assert regels, f"{klasse} heeft geen regel meer"
+        for r in regels:
+            for sel in r.split(","):
+                if klasse in sel:
+                    assert _spec(sel) > hoogste_nav, (
+                        f"{sel.strip()} {_spec(sel)} verliest van {hoogste_nav} — "
+                        f"de knop rendert dan kleurloos, zoals op 21 september live bleek")
+
+
+def test_ook_in_de_nu_laag_wint_hij():
+    """`.nu .c2-subnav a` zet óók `color`. Een regel op `.nu .c2-overleg` zou daar gelijk mee
+    staan en dan beslist de bronvolgorde — dezelfde val, één laag hoger."""
+    nu = (pathlib.Path(__file__).resolve().parents[1]
+          / "nooch_village" / "static" / "nooch-ui.css").read_text()
+    nav = [s for s in _regels(nu, ".nu .c2-subnav a", zet="color")
+           if "hover" not in s and ".c2-overleg" not in s]
+    assert nav
+    hoogste = max(_spec(s) for r in nav for s in r.split(","))
+    live = [s for s in _regels(nu, ".c2-overleg--live")]
+    assert live, "de nu-laag kent de live-stand niet"
+    for r in live:
+        for sel in r.split(","):
+            if ".c2-overleg--live" in sel:
+                assert _spec(sel) > hoogste, f"{sel.strip()} verliest van {hoogste}"
+
+
+def test_het_stipje_staat_nooit_op_zijn_eigen_kleur():
+    """Wit op wit of neon op neon is geen stip. De knop-achtergrond en de stip-vulling moeten uit
+    verschillende tokens komen — in beide lagen."""
+    nu = (pathlib.Path(__file__).resolve().parents[1]
+          / "nooch_village" / "static" / "nooch-ui.css").read_text()
+    for css, stip_naald in ((CSS, ".c2-live"), (nu, ".nu .c2-live")):
+        live_naald = ".c2-overleg--live"
+        zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+        regels = [(sel.strip(), body) for sel, body in
+                  re.findall(r"([^{}]*)\{([^{}]*)\}", zonder)]
+        knop = next(b for sel, b in regels if live_naald in sel and "hover" not in sel)
+        stip = next(b for sel, b in regels
+                    if stip_naald in sel and "background" in b)
+        knop_bg = re.search(r"background:\s*([^;}]+)", knop)
+        stip_bg = re.search(r"background:\s*([^;}]+)", stip)
+        assert knop_bg and stip_bg
+        assert knop_bg.group(1).strip() != stip_bg.group(1).strip(), (
+            f"stip en knop delen dezelfde vulling ({knop_bg.group(1).strip()})")

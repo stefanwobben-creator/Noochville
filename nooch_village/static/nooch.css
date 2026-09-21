@@ -1037,15 +1037,25 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .c2-pzoekuit .gs-group{margin:.7rem 0}
 .c2-pzoekuit .gs-group h2{font-size:12px}
 /* De twee overleg-knoppen: een ander soort ding dan de navigatie erboven, dus ook zichtbaar
-   anders — gevuld in plaats van kaal, en onder een eigen scheiding. */
-.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:11.5px;font-weight:700;
-  line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
+   anders — gevuld in plaats van kaal, en onder een eigen scheiding.
+
+   ELKE REGEL HIER STAAT ONDER `.c2-subnav`, EN DAT IS GEEN NETHEID MAAR DE BUG.
+   Ze stonden als `.c2-overleg` (0,1,0) en verloren daarmee van `.c2-subnav a` (0,1,1) hierboven,
+   die `background:none` en `color:var(--ink)` zet. Specificiteit wint van bronvolgorde: hoger in
+   het bestand zetten had niets geholpen. Gevolg op de live site: de knoppen bleven zwart-op-crème
+   — óók de gewone, niet alleen de live — en het WITTE stipje van de live-knop stond op een crème
+   vlak en was dus onzichtbaar. Het enige signaal dat overbleef was de tekstwissel.
+
+   `tests/test_live_join_en_band.py::test_de_live_knop_wint_van_de_nav_regel` rekent die
+   specificiteit uit en faalt zodra een van de twee weer de verkeerde kant op beweegt. */
+.c2-subnav a.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:11.5px;
+  font-weight:700;line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
   background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius)}
-.c2-overleg:hover{background:var(--green);color:#fff}
+.c2-subnav a.c2-overleg:hover{background:var(--green);color:#fff}
 /* ATOOM — "hier loopt nu iets". Groen en niet rood: rood leest als opname/stop, groen als kom
    erbij. Het stipje is NOOIT de enige drager — de knoptekst wordt "Join meeting" — want een
    kleurverschil overleeft zwart-wit en kleurenblindheid niet. */
-.c2-overleg--live{background:var(--green);color:#fff;border-color:var(--green-dark)}
+.c2-subnav a.c2-overleg--live{background:var(--green);color:#fff;border-color:var(--green-dark)}
 .c2-live{display:inline-block;width:7px;height:7px;margin-right:.35rem;border-radius:50%;
   background:#fff;animation:nv-puls 1.6s ease-in-out infinite}
 @keyframes nv-puls{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
