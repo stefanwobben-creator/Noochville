@@ -143,6 +143,49 @@ def _projectkanalen_met_gesprek(st) -> list[str]:
             if (p.get("log") or []) and not p.get("archived")]
 
 
+def _is_mens(st, wie: str) -> bool:
+    """Is deze tegenpartij een MENS uit de people-store?
+
+    OP ID, NAAM ÉN E-MAIL, en dat is geen slordigheid maar precies het geval dat overblijft. De
+    meeste DM-kanalen dragen een persoon-id aan beide kanten; een handvol draagt een NAAM
+    ("Stefan Wobben") of een e-mailadres ("stefan@nooch.earth") als afzender — overblijfsels van
+    de inbox-migratie. Die horen bij een mens en niet bij een rol, en ze op id alleen beoordelen
+    zou ze bij het systeem zetten.
+
+    Alles wat hier niet doorheen komt is een rol of een systeemnaam (`compliance`, `dialoog`,
+    `claims-checker`, `Lara the Librarian`): die leest de berichten niet, en daar hoort een eigen
+    groep bij."""
+    if not wie:
+        return False
+    if st.people.get(wie) is not None:
+        return True
+    sleutel = wie.strip().casefold()
+    return any(sleutel in ((p.name or "").strip().casefold(),
+                           (p.email or "").strip().casefold())
+               for p in st.people.all())
+
+
+def _dm_groepen(st, ik: str) -> tuple[list, list]:
+    """De DM-kanalen van deze mens, gesplitst in (echte gesprekken, rol- en systeemafzenders).
+
+    WAAROM DIT EEN WEERGAVE IS EN GEEN MIGRATIE. Er lag een voorstel voor een vijfde kanaalsoort
+    `role:<record_id>`, en dat is in dezelfde implementatiebrief weer INGETROKKEN: "vervalt, niet
+    meer nodig nu er altijd een mens (rolvervuller of Stefan) als DM-ontvanger is". Dat argument
+    staat nog; wat er nog wél mis is, is dat 37 rol-afzenders tussen twee echte gesprekken staan.
+    Dat is een LIJST-probleem, en het wordt hier opgelost waar het zit — zonder één kanaal-id te
+    verplaatsen, dus zonder migratie en zonder kans op verlies.
+
+    Een gesprek met jezelf blijft Direct: dat is een notitie aan jezelf, geen systeemafzender."""
+    uit_direct, uit_rollen = [], []
+    for k in (st.channels.kanalen_van(ik) if ik else []):
+        leden = channels.dm_leden(k)
+        if leden and len(set(leden)) == 1:
+            uit_direct.append(k)
+            continue
+        (uit_direct if all(_is_mens(st, x) for x in leden) else uit_rollen).append(k)
+    return uit_direct, uit_rollen
+
+
 def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int], set[str]]:
     """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL en welke hij volgt.
 
@@ -181,10 +224,10 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     onderwerpen = st.channels.topics() + andere_cirkels
     projecten_alles = _projectkanalen_met_gesprek(st)
     projecten = [k for k in projecten_alles if k in gevolgd]
-    dms = st.channels.kanalen_van(ik) if ik else []
+    dms, rollen = _dm_groepen(st, ik)
 
     groepen = {"General": alg, "Goals": doelen, "Channels": onderwerpen,
-               "Projects": projecten, "Direct": dms}
+               "Projects": projecten, "Direct": dms, "Roles & system": rollen}
     totaal = {g: len(r) for g, r in groepen.items()}
     totaal["Projects"] = len(projecten_alles)      # "3 of 123" — wat je volgt van wat er is
 
@@ -199,7 +242,7 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     return groepen, totaal, gevolgd
 
 
-def _bericht(st, e: dict) -> str:
+def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
     a = e.get("author") or {}
     wie = (_person_name(st, a.get("id")) if a.get("type") in ("human", "person") else "") or "Someone"
     herk = ""
@@ -210,9 +253,16 @@ def _bericht(st, e: dict) -> str:
         titel = sc if isinstance(sc, str) else ""
         herk = (f"<span class='muted'> &middot; from project "
                 f"<a href='/project?id={_e(h['project'])}'>{_e(titel or h['project'])}</a></span>")
+    # REACTIES: HETZELFDE COMPONENT ALS DE PROJECTFEED, niet een tweede versie ervan. `reactie_blok`
+    # is uit `_feed_entry_html` gelicht toen dit scherm het ook nodig had; zou Messages zijn eigen
+    # emoji-lijst en eigen kiezer krijgen, dan is de ene lijst na één wijziging langer dan de
+    # andere zonder dat iemand het merkt.
+    from nooch_village.views.feed import reactie_blok
+    rx, picker = reactie_blok(e, csrf_token, {"kanaal": kanaal}) if kanaal else ("", "")
+    voet = f"<div class='msg-reacties'>{rx}{picker}</div>" if (rx or picker) else ""
     return (f"<div class='msg-item'><div class='msg-meta'>{_e(wie)} &middot; "
             f"{_e(_stamp(e.get('at')))}{herk}</div>"
-            f"<div class='msg-text'>{_e(e.get('text') or '')}</div></div>")
+            f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div>")
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
@@ -365,7 +415,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             except Exception:                          # noqa: BLE001
                 logging.getLogger("village.messages").debug(
                     "gezien-stand niet bijgewerkt", exc_info=True)
-    draad = "".join(_bericht(st, e) for e in trail) or (
+    draad = "".join(_bericht(st, e, kanaal, csrf_token) for e in trail) or (
         "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
     schrijf = ""

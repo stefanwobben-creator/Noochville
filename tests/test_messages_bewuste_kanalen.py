@@ -232,3 +232,128 @@ def test_je_landt_nooit_ongevraagd_in_een_dm(tmp_path):
     assert "iets persoonlijks" not in html
     kop = re.search(r"class='msg-kop'>([^<]*)", html)
     assert kop and kop.group(1) == "General"
+
+
+# ── 6. Rol- en systeemafzenders staan niet tussen je gesprekken ──────────────
+#
+# GEMETEN OP PRODUCTIE: 42 DM-kanalen, waarvan 2 een echt gesprek tussen twee mensen. De andere
+# 40 dragen een ROL of een systeemnaam als tegenpartij (`compliance`, `claims-checker`, `dialoog`,
+# `Lara the Librarian`) — overblijfsels van de inbox-migratie. Die lezen geen berichten, en ze
+# stonden tussen de twee gesprekken die dat wél zijn.
+#
+# DIT IS EEN WEERGAVE EN GEEN MIGRATIE. Er lag een voorstel voor een vijfde kanaalsoort
+# `role:<record_id>`; dat is in dezelfde implementatiebrief weer ingetrokken ("vervalt, niet meer
+# nodig nu er altijd een mens als DM-ontvanger is"). Dat argument staat nog. Wat overbleef is een
+# lijst-probleem, en dat wordt hier opgelost — zonder één kanaal-id te verplaatsen.
+
+def test_een_rol_als_tegenpartij_hoort_niet_bij_direct(tmp_path):
+    from nooch_village.views.messages import _dm_groepen
+    dd, st, ik, pids = _dorp(tmp_path)
+    mens = st.people.add("Echte Collega", "collega@test.nl")
+    st.channels.post(channels.dm_kanaal(ik, mens.id), "hoi", author_id=ik)
+    st.channels.post(channels.dm_kanaal(ik, "compliance"), "scan af", author_id="compliance")
+    st.channels.post(channels.dm_kanaal(ik, "claims-checker"), "3 claims", author_id="claims-checker")
+    st2 = cockpit2._Stores(dd)
+    direct, rollen = _dm_groepen(st2, ik)
+    assert [channels.dm_leden(k) for k in direct] == [sorted([ik, mens.id])]
+    assert len(rollen) == 2
+
+
+def test_een_afzender_op_NAAM_of_E_MAIL_blijft_een_mens(tmp_path):
+    """DE RIJEN DIE STEFAN ZELF BEOORDEELT. Drie kanalen dragen een persoonsnaam ("Stefan Wobben",
+    2x) of een e-mailadres ("stefan@nooch.earth") als afzender-id in plaats van een persoon-id.
+    Op id alleen beoordelen zou ze bij het systeem zetten, en dan verdwijnen ze uit het zicht
+    vóórdat hij ernaar heeft kunnen kijken."""
+    from nooch_village.views.messages import _dm_groepen, _is_mens
+    dd, st, ik, pids = _dorp(tmp_path)
+    # Een NIEUWE naam, want `people.add` dedupliceert op naam: bestond "Stefan Wobben" al (uit de
+    # bootstrap), dan krijg je die terug zónder dat het e-mailadres wordt gezet, en dan meet deze
+    # test niets. Zelfde soort meetfout als de lege `_namen()`-regex van fase 11.
+    mens = st.people.add("Twijfel Tester", "twijfel@test.nl")
+    assert mens.email == "twijfel@test.nl", "de proefpersoon kreeg geen e-mailadres"
+    assert _is_mens(st, mens.id) and _is_mens(st, "Twijfel Tester") and _is_mens(st, "twijfel@test.nl")
+    assert not _is_mens(st, "compliance") and not _is_mens(st, "")
+    for tegen in ("Twijfel Tester", "twijfel@test.nl"):
+        st.channels.post(channels.dm_kanaal(ik, tegen), "iets", author_id=tegen)
+    st2 = cockpit2._Stores(dd)
+    direct, rollen = _dm_groepen(st2, ik)
+    assert len(direct) == 2 and rollen == []
+
+
+def test_een_notitie_aan_jezelf_blijft_direct(tmp_path):
+    """Een kanaal met jezelf bestaat echt (op prod één). Dat is een notitie aan jezelf, geen
+    systeemafzender."""
+    from nooch_village.views.messages import _dm_groepen
+    dd, st, ik, pids = _dorp(tmp_path)
+    st.channels.post(channels.dm_kanaal(ik, ik), "onthouden", author_id=ik)
+    direct, rollen = _dm_groepen(cockpit2._Stores(dd), ik)
+    assert len(direct) == 1 and rollen == []
+
+
+def test_de_groep_staat_op_het_scherm_en_de_gesprekken_blijven_heel(tmp_path):
+    dd, st, ik, pids = _dorp(tmp_path)
+    st.channels.post(channels.dm_kanaal(ik, "compliance"), "scan af", author_id="compliance")
+    st2 = cockpit2._Stores(dd)
+    html = render_messages(st2, ik=ik, csrf_token="t")
+    assert "Roles &amp; system" in html or "Roles & system" in html
+    # en het gesprek zelf is onaangeroerd — dit is een weergave, geen migratie
+    assert len(st2.channels.trail(channels.dm_kanaal(ik, "compliance"))) == 1
+
+
+# ── 7. Reacties in Messages ─────────────────────────────────────────────────
+def test_een_bericht_in_een_kanaal_kan_een_reactie_dragen(tmp_path):
+    dd, st, ik, pids = _dorp(tmp_path)
+    k = channels.circle_kanaal("mother_earth")
+    e = st.channels.post(k, "iets gezegds", author_id=ik)
+    _nxt, msg = cockpit2.dispatch(dd, "react_add", {
+        "csrf": ["t"], "kanaal": [k], "item": [e["id"]], "emoji": ["👍"], "next": ["/messages"]},
+        username="lijst@test.nl")
+    assert "geplaatst" in msg
+    assert cockpit2._Stores(dd).channels.trail(k)[0]["reactions"] == {"👍": 1}
+
+
+def test_een_reactie_op_een_projectkanaal_landt_op_het_project(tmp_path):
+    """REFERENCE, DON'T COPY. Een projectkanaal IS `project["log"]` — dezelfde regel die de
+    projectfeed toont. Een reactie daarop hoort dus op het project te staan en niet een tweede
+    keer in `channels.json`, anders zie je 'm op de ene pagina wel en op de andere niet."""
+    dd, st, ik, pids = _dorp(tmp_path)
+    k = channels.project_kanaal(pids[0])
+    eid = st.projects.get(pids[0])["log"][0]["id"]
+    cockpit2.dispatch(dd, "react_add", {
+        "csrf": ["t"], "kanaal": [k], "item": [eid], "emoji": ["🎉"], "next": ["/messages"]},
+        username="lijst@test.nl")
+    st2 = cockpit2._Stores(dd)
+    assert st2.projects.get(pids[0])["log"][0]["reactions"] == {"🎉": 1}
+    import json
+    import os
+    pad = f"{dd}/channels.json"
+    ruw = json.load(open(pad)) if os.path.exists(pad) else {}
+    assert k not in (ruw.get("kanalen") or {}), "de reactie is óók in channels.json beland"
+
+
+def test_de_kiezer_is_hetzelfde_component_als_in_de_projectfeed(tmp_path):
+    """Zou Messages zijn eigen emoji-lijst krijgen, dan is de ene na één wijziging langer dan de
+    andere zonder dat iemand het merkt."""
+    from nooch_village.views.feed import _EMOJIS_FULL
+    dd, st, ik, pids = _dorp(tmp_path)
+    k = channels.circle_kanaal("mother_earth")
+    st.channels.post(k, "iets", author_id=ik)
+    html = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
+    assert "emoji-pick" in html and "emo-grid" in html
+    assert html.count("value='react_add'") == len(_EMOJIS_FULL)
+
+
+def test_zonder_schrijfsessie_geen_kiezer(tmp_path):
+    """Fail-closed: geen csrf = geen knop die straks afketst."""
+    dd, st, ik, pids = _dorp(tmp_path)
+    k = channels.circle_kanaal("mother_earth")
+    st.channels.post(k, "iets", author_id=ik)
+    html = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="")
+    assert "emoji-pick" not in html
+
+
+def test_een_bericht_zonder_id_draagt_geen_reactie(tmp_path):
+    """Het oude schema. Een knop die niets kan raken hoort er niet te staan."""
+    from nooch_village.views.feed import reactie_blok
+    rx, picker = reactie_blok({"text": "oud"}, "t", {"kanaal": "x"})
+    assert rx == "" and picker == ""

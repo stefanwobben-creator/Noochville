@@ -1408,6 +1408,9 @@ progress.nu-progress.wide{height:8px}
 /* De uit-je-lijst-knop hoort bij de kop van het gesprek, niet eronder: het is een eigenschap van
    dit kanaal, geen actie op de inhoud. Bestaand `.flink`-atoom, alleen de plaatsing is nieuw. */
 .msg-uit{display:inline;margin-left:.6rem;font-size:.72rem}
+/* De reactie-voet onder een bericht: dezelfde chips en dezelfde kiezer als in de projectfeed,
+   alleen de plaatsing is nieuw. Hij staat er pas als er iets te tonen of te kiezen valt. */
+.msg-reacties{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;margin-top:.3rem}
 .msg-terug{display:none}
 /* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.
    Beide panelen blijven in de DOM — het is een CSS-keuze, geen tweede rendering. */

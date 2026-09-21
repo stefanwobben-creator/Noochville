@@ -160,6 +160,43 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
             f"{proj}{act}{note}{rov}</details>")
 
 
+def reactie_blok(entry: dict, csrf_token: str, velden: dict) -> tuple[str, str]:
+    """De emoji-reacties van één bericht: (de tellers, de kiezer). Gedeeld door de projectfeed en
+    de kanalen in Messages.
+
+    DIT STOND INLINE IN `_feed_entry_html`, en Messages had helemaal niets. Het er een tweede keer
+    uitschrijven zou precies de fout zijn die `docs/CONVENTIES.md` verbiedt: twee vormen van
+    hetzelfde die na één wijziging uit de pas lopen — en dan is de emoji-lijst op het ene scherm
+    langer dan op het andere zonder dat iemand het merkt.
+
+    `velden` is wat de POST moet dragen om het bericht terug te vinden: `{"pid": …}` voor een
+    projectfeed, `{"kanaal": …}` voor een kanaal. Eén actie (`react_add`), twee adressen.
+
+    Geen id op het bericht = geen reacties. Dat is het oude schema; fail-closed, geen knop die
+    straks niets raakt."""
+    rx = "".join(f"<span class='chip outline'>{emo} {cnt}</span>"
+                 for emo, cnt in (entry.get("reactions") or {}).items())
+    eid = entry.get("id")
+    if not (csrf_token and eid):
+        return rx, ""
+    verborgen = "".join(f"<input type='hidden' name='{_e(k)}' value='{_e(v)}'>"
+                        for k, v in velden.items())
+    btns = "".join(
+        f"<form method='post' action='/action' class='emo-f' data-k='{_e(kw)}' style='display:inline'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        f"{verborgen}"
+        f"<input type='hidden' name='item' value='{_e(eid)}'>"
+        f"<input type='hidden' name='emoji' value='{emo}'>"
+        f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
+        for emo, kw in _EMOJIS_FULL)
+    picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reaction' "
+              f"aria-label='add reaction'>{_ICON_ADD_EMOJI}</summary>"
+              f"<div class='emoji-pop'>"
+              f"<input class='emo-search' type='text' placeholder='Search emoji…' oninput='emoFilter(this)'>"
+              f"<div class='emo-grid'>{btns}</div></div></details>")
+    return rx, picker
+
+
 def _feed_entry_html(st, entry: dict, role_name: str = "",
                      pid: str = "", csrf_token: str = "", mention_names=(),
                      outcome_opts=None, terug: str = "") -> str:
@@ -174,23 +211,8 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
     else:
         who = f"<b class='fname'>{_e(nm)}</b>"
-    rx = "".join(f"<span class='chip outline'>{emo} {cnt}</span>" for emo, cnt in (entry.get("reactions") or {}).items())
-    picker = ""
     eid = entry.get("id")
-    if csrf_token and eid:
-        btns = "".join(
-            f"<form method='post' action='/action' class='emo-f' data-k='{_e(kw)}' style='display:inline'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='item' value='{_e(eid)}'>"
-            f"<input type='hidden' name='emoji' value='{emo}'>"
-            f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
-            for emo, kw in _EMOJIS_FULL)
-        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reaction' "
-                  f"aria-label='add reaction'>{_ICON_ADD_EMOJI}</summary>"
-                  f"<div class='emoji-pop'>"
-                  f"<input class='emo-search' type='text' placeholder='Search emoji…' oninput='emoFilter(this)'>"
-                  f"<div class='emo-grid'>{btns}</div></div></details>")
+    rx, picker = reactie_blok(entry, csrf_token, {"pid": pid})
     bubble = _md(entry.get("text", ""))
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)

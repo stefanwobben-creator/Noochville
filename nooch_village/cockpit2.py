@@ -2092,12 +2092,22 @@ def _act_attach_remove(c):
 
 
 def _act_react_add(c):
-        nxt, g, pj = c.nxt, c.g, c.pj
+        nxt, g, pj, st = c.nxt, c.g, c.pj, c.st
         msg = ""
         # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
         # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        if pj.add_reaction(g("pid"), g("item"), g("emoji")):
+        # sessie-check in do_POST dekt "ingelogd = mag". Dat geldt net zo voor een kanaal: een
+        # duimpje is meedoen aan een gesprek, geen structuurwijziging.
+        #
+        # ÉÉN ACTIE, TWEE ADRESSEN. `kanaal` komt uit Messages, `pid` uit de projectfeed. Een
+        # tweede actie voor "hetzelfde duimpje maar elders" zou twee plekken geven die na één
+        # wijziging uit de pas lopen — en een projectkanaal komt via `ChannelStore.add_reaction`
+        # sowieso weer bij dezelfde ledger uit.
+        if g("kanaal"):
+            gelukt = st.channels.add_reaction(g("kanaal"), g("item"), g("emoji"))
+        else:
+            gelukt = pj.add_reaction(g("pid"), g("item"), g("emoji"))
+        if gelukt:
             msg = "✓ reactie geplaatst"
         return nxt, msg
 
