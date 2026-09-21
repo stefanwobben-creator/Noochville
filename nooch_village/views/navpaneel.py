@@ -30,7 +30,7 @@ from nooch_village.web_base import _e
 log = logging.getLogger("village.navpaneel")
 
 #: De panelen die bestaan. Alles daarbuiten geeft een lege string (fail-closed, geen gok).
-PANELEN = ("zoek", "pr", "me", "ci")
+PANELEN = ("zoek", "pr", "me", "ci", "org")
 
 
 def _rij(href: str, tekst: str, *, sub: str = "", tag: str = "") -> str:
@@ -66,8 +66,12 @@ def _paneel_zoek(st, ik: str, q: str) -> str:
     DM'S BLIJVEN ERBUITEN. Dat is een bestaand besluit en geen omissie: een privégesprek
     doorzoekbaar maken voor iedereen die is ingelogd is geen zoekfunctie maar een lek."""
     from nooch_village.views.search import render_search_fragment
+    # HET LABEL STAAT ER WEL, MAAR JE ZIET HET NIET. Boven dit veld staat al "SEARCH" als
+    # paneeltitel; "Search everything" eronder is hetzelfde woord twee keer. Weghalen mag niet —
+    # een zoekveld zonder label is voor een schermlezer een naamloos invoerveld — dus hij gaat in
+    # `.sr`, het bestaande visueel-verborgen atoom.
     veld = (f"<form class='c2-pzoek' method='get' action='/search' role='search'>"
-            f"<label class='att-lbl' for='c2-pq'>Search everything</label>"
+            f"<label class='sr' for='c2-pq'>Search everything</label>"
             f"<input id='c2-pq' type='search' name='q' value='{_e(q)}' autocomplete='off' "
             f"placeholder='People, roles, projects, channels, wiki…' data-nav-zoek>"
             f"</form>")
@@ -164,10 +168,32 @@ def _paneel_circle(st, ik: str) -> str:
     return "".join(uit) or _leeg("No roles yet.")
 
 
+# ── ORG ──────────────────────────────────────────────────────────────────────
+def _paneel_org(st, ik: str, hier: str) -> str:
+    """De organisatieboom, als gewoon paneel naast de balk.
+
+    HIJ HING ERONDER, IN EEN EIGEN UITKLAPJE. `_nav()` zette hem onderaan de zijbalk in een
+    `<details class='c2-orgfly'>` — een tweede uitklap-mechanisme naast de panelen, op een plek
+    waar je hem alleen vond door naar beneden te scrollen. Nu is het een nav-item zoals de andere,
+    met dezelfde flyout ernaast (voorstel Stefan, 21 september 2026).
+
+    DEZELFDE BOOM, NIET EEN TWEEDE. `_tree_html` is de functie die `_send` ook in de zijbalk
+    injecteerde; hier wordt hij alleen op een andere plek gerenderd. Een eigen boomweergave zou
+    betekenen dat "waar zit deze rol" twee antwoorden heeft zodra er aan één iets verandert."""
+    from nooch_village.views.overview import _tree_html
+    try:
+        return f"<div class='c2-org'>{_tree_html(st, hier)}</div>"
+    except Exception:                                      # noqa: BLE001
+        log.debug("organisatieboom niet te renderen", exc_info=True)
+        return _leeg("The organization tree could not be loaded.")
+
+
 # ── de route ─────────────────────────────────────────────────────────────────
-def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn") -> str:
+def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
+                      hier: str = "") -> str:
     """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
-    titels = {"zoek": "Search", "pr": "Projects", "me": "Messages", "ci": "Circle"}
+    titels = {"zoek": "Search", "pr": "Projects", "me": "Messages", "ci": "Circle",
+              "org": "Organization"}
     if p not in PANELEN:
         return ""
     if p == "zoek":
@@ -176,6 +202,8 @@ def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "
         inhoud = _paneel_projects(st, ik, "alle" if welke == "alle" else "mijn")
     elif p == "me":
         inhoud = _paneel_messages(st, ik)
+    elif p == "org":
+        inhoud = _paneel_org(st, ik, hier)
     else:
         inhoud = _paneel_circle(st, ik)
     return f"<h2 class='c2-pkop'>{_e(titels[p])}</h2>{inhoud}"

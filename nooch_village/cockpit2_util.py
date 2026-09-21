@@ -798,7 +798,9 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
 #: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
 #: `_nav()` heeft geen stores). Zelfde patroon als de begroeting.
 _SIDE_CIRCLE = "<!--c2-circle-->"
-_SIDE_ORG = "<div class='c2-org' id='c2-org'></div>"
+# `_SIDE_ORG` STOND HIER. De organisatieboom werd met elke pagina meegerenderd in de zijbalk; hij
+# is op 21 september 2026 een nav-paneel geworden (`/nav-paneel?p=org`) en wordt dus opgehaald als
+# je erop klikt. Eén uitklap-mechanisme in de balk in plaats van twee.
 
 
 def _monogram(label: str) -> str:
@@ -872,15 +874,20 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
         # Dit is de cirkel-bewuste: `_send` weet welke cirkel, `_nav` niet.
         + _SIDE_CIRCLE
         + _side_item("/admin", "Admin")
+        # ORGANISATIE ALS GEWOON NAV-ITEM (voorstel Stefan, 21 september 2026). Hij hing als
+        # `<details class='c2-orgfly'>` onder de balk: een tweede uitklap-mechanisme naast de
+        # panelen, op een plek waar je hem alleen vond door naar beneden te scrollen. Nu dezelfde
+        # knop en dezelfde flyout als Projects, Messages en Circle.
+        + _side_item("/node", "Organization", "org")
         # De twee overleggen, onder een eigen scheiding. Een ander soort knop, dus ook zichtbaar
         # een ander blok — geen zesde item in dezelfde rij.
         + "<div class='c2-subnav-div'></div>"
         + _SIDE_OVERLEG
         + "</nav>"
-        + f"<details class='c2-orgfly'{'' if rail else ' open'}>"
-          "<summary title='Organization'>\u229e</summary>"
-        + _SIDE_ORG
-        + "</details></aside>"
+        # HIER STOND HET ORG-UITKLAPJE (`c2-orgfly`). Het is een nav-item geworden met een
+        # flyout, zoals de andere; een tweede uitklap-mechanisme onder de balk hoefde niet te
+        # blijven bestaan naast het eerste.
+        + "</aside>"
         # HET PANEEL STAAT LEEG IN DE DOM en wordt pas gevuld als je een knop indrukt. Zou de
         # inhoud meekomen met elke pageload, dan betaalt élk scherm in het dorp voor een
         # projectlijst en een kanalenlijst die je meestal niet opent — op productie 442 projecten

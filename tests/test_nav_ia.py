@@ -16,7 +16,9 @@ def test_de_zijbalk_draagt_de_hele_navigatie():
     aside. Dat is het punt: drie plekken navigatie liepen uiteen."""
     h = _nav()
     assert "c2-side" in h and "c2-logo" in h and "class='c2-search'" in h and "c2-greet" in h
-    assert "c2-org" in h                                     # de boom staat hier, niet rechts
+    # De boom staat hier als KNOP (paneel), niet meer als meegerenderd blok — zie
+    # `test_nav_accordeon.py::test_de_organisatieboom_is_een_paneel_geworden`.
+    assert "data-nav-paneel='org'" in h
     for href, label in (("/projects", "Projects"), ("/wiki", "Wiki"), ("/admin", "Admin")):
         assert href in h and label in h
 

@@ -27,16 +27,25 @@ def _stores(tmp_path):
 
 # ── 1. één navigatie ─────────────────────────────────────────────────────────
 def test_de_zijbalk_bevat_navigatie_zoek_en_de_boom():
+    """`c2-org` STOND HIER. De boom werd met elke pagina meegerenderd in de zijbalk; sinds
+    21 september is hij een nav-paneel dat je ophaalt als je erop klikt. Hij hoort nog steeds bij
+    de rest van de navigatie — wat deze test bewaakt — maar als knop, niet als meegerenderd blok."""
     h = _nav()
-    for stuk in ("c2-side", "c2-search", "c2-subnav", "c2-org"):
+    for stuk in ("c2-side", "c2-search", "c2-subnav"):
         assert stuk in h, stuk
+    assert "data-nav-paneel='org'" in h and "Organization" in h
 
 
 def test_de_organisatieboom_staat_links_en_niet_meer_rechts(tmp_path):
     """Hij zat in de `c2-rail` die `_send` rechts injecteerde. Twee plekken navigatie is één te
-    veel; sinds fase 7 hoort hij bij de rest, in de zijbalk."""
+    veel; sinds fase 7 hoort hij bij de rest, links.
+
+    SINDS 21 SEPTEMBER IS DAT EEN PANEEL en niet meer een injectie in de zijbalk — hij wordt
+    opgehaald als je op Organization klikt. De bewering is onveranderd: links, één plek, en niet
+    meer via de rechter rail."""
+    from nooch_village.views.navpaneel import PANELEN
     src = open("nooch_village/cockpit2.py", encoding="utf-8").read()
-    assert "_SIDE_ORG in body" in src
+    assert "org" in PANELEN
     assert "c2-rail" not in src.split("def _send")[1].split("def _send_bytes")[0]
 
 

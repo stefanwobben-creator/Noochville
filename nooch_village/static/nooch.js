@@ -513,7 +513,15 @@
         paneel.hidden = false;
         document.body.classList.add("navpaneel-open");
         binnen.innerHTML = "<p class='muted c2-pleeg'>…</p>";
-        vul("/nav-paneel?p=" + encodeURIComponent(sleutel));
+        // De organisatieboom klapt de tak open waar je NU staat. Een fragment weet niet op welke
+        // pagina het landt, dus de client geeft het mee — precies wat de oude zijbalk-injectie
+        // server-side deed toen de boom nog met elke pagina meekwam.
+        var hier = "";
+        if (location.pathname === "/node") {
+          hier = new URLSearchParams(location.search).get("id") || "";
+        }
+        vul("/nav-paneel?p=" + encodeURIComponent(sleutel) +
+            (hier ? "&hier=" + encodeURIComponent(hier) : ""));
       });
     });
 

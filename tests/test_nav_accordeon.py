@@ -253,4 +253,115 @@ def test_de_balk_draagt_circle_precies_een_keer():
     h = _nav()
     assert h.count(">Circle<") == 0, "Circle staat hardgecodeerd in de balk"
     assert h.count(_SIDE_CIRCLE) == 1, "de cirkel-placeholder hoort er precies één keer te staan"
-    assert "href='/node'" not in h
+    # `href='/node'` MAG WEER, maar precies één keer en alleen als val-terug van Organization.
+    # De oorspronkelijke fout was een tweede CIRCLE-knop; dit is een ander item met een ander
+    # paneel, dat zonder JS naar de organisatie navigeert.
+    assert h.count("href='/node'") == 1
+    stuk = h.split("href='/node'")[1][:80]
+    assert "data-nav-paneel='org'" in stuk
+
+
+# ── 6. Het paneel moet ook echt náást de inhoud staan ────────────────────────
+#
+# GEVONDEN IN DE DOORLOOP, met de meting erbij: het paneel liep tot x=764 terwijl de inhoud al op
+# x=580 begon — 184px overlap. Twee dingen tegelijk, met één oorzaak.
+
+def _decls(css: str, selector: str, *, moet: str = "") -> dict:
+    """De declaraties van de EERSTE regel op `selector` die `moet` zet.
+
+    Dat filter is nodig: `.c2-paneel` heeft twee regels — de brede-schermvorm (`position:fixed`,
+    `left`, `width`) en de smalle (`position:static`, `width:auto`). Zonder `moet` pak je er
+    willekeurig een, en dan meet de toets de verkeerde."""
+    zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+    for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", zonder):
+        if selector in sel and (not moet or moet in body):
+            return {k.strip(): v.strip() for k, v in
+                    (d.split(":", 1) for d in body.split(";") if ":" in d)}
+    return {}
+
+
+def test_geen_enkele_css_variabele_is_ongedefinieerd():
+    """`--card` werd zes keer gebruikt en was nergens gedefinieerd. Een browser geeft dan een lege
+    string terug, dus `background:var(--card)` is géén achtergrond — de zijbalk én het paneel
+    waren doorzichtig. Geen foutmelding, want een ontbrekende variabele is geldige CSS."""
+    from nooch_village.web_base import _CSS
+    nu = (pathlib.Path(__file__).resolve().parents[1]
+          / "nooch_village" / "static" / "nooch-ui.css").read_text()
+    bekend = set(re.findall(r"(--[a-z0-9-]+)\s*:", _CSS + nu))
+    for naam, css in (("nooch.css", CSS), ("nooch-ui.css", nu)):
+        gebruikt = set(re.findall(r"var\((--[a-z0-9-]+)\)", css))
+        assert not (gebruikt - bekend), f"{naam} gebruikt ongedefinieerd: {gebruikt - bekend}"
+
+
+def test_het_paneel_schuift_niet_mee_met_de_sibling_marge():
+    """DE OORZAAK, en hij zat niet in de breedte. Het paneel is een SIBLING van de zijbalk, dus
+    `.c2-side ~ *{margin-left}` trof hem ook — en `margin-left` SCHUIFT een `position:fixed`
+    element. Daardoor stond hij 232px verder naar rechts dan zijn eigen `left` zegt."""
+    zonder = re.sub(r"/\*.*?\*/", " ", CSS, flags=re.S)
+    sibling = [sel.strip() for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", zonder)
+               if ".c2-side ~" in sel and "margin-left" in body]
+    assert sibling, "de sibling-marge is verdwenen; deze toets meet dan niets"
+    for sel in sibling:
+        assert ":not(.c2-paneel)" in sel, (
+            f"{sel} schuift het paneel mee; het overlapt dan de inhoud")
+
+
+def test_het_paneel_eindigt_vóór_de_inhoud_begint():
+    """DE REKENSOM, niet de selector. Links + breedte van het paneel moet passen binnen de marge
+    die de inhoud opschuift — anders staat het paneel er nog steeds overheen, hoe de regel ook
+    geschreven is."""
+    paneel = _decls(CSS, ".c2-paneel", moet="position:fixed")
+    assert paneel, "de paneelregel is niet te vinden"
+    links = int(re.sub(r"\D", "", paneel["left"]))
+    breed = int(re.sub(r"\D", "", paneel["width"]))
+    duw = _decls(CSS, "body.navpaneel-open .c2-side ~ *", moet="margin-left:548")
+    marge = int(re.sub(r"\D", "", duw["margin-left"]))
+    assert links + breed <= marge, (
+        f"paneel loopt tot {links + breed}px, de inhoud begint op {marge}px — "
+        f"{links + breed - marge}px overlap")
+
+
+# ── 7. Zoeken zegt niet twee keer hetzelfde ──────────────────────────────────
+def test_het_zoekveld_herhaalt_de_paneeltitel_niet(tmp_path):
+    """"SEARCH" als paneeltitel en "SEARCH EVERYTHING" er direct onder is hetzelfde woord twee
+    keer. Het label mag niet wég — een zoekveld zonder label is voor een schermlezer een naamloos
+    invoerveld — dus het gaat in `.sr`."""
+    dd, st, ik = _dorp(tmp_path)
+    h = render_nav_paneel(st, "zoek", ik)
+    assert "Search everything" in h                      # nog steeds in de DOM
+    label = h.split("Search everything")[0][-60:]
+    assert "class='sr'" in label, "het label staat nog zichtbaar onder de titel"
+    assert "c2-pkop" in h                                 # en de titel blijft
+
+
+# ── 8. De organisatieboom is een paneel geworden ─────────────────────────────
+def test_de_organisatieboom_is_een_paneel_geworden(tmp_path):
+    """Hij hing als los `<details class='c2-orgfly'>` ONDER de balk: een tweede uitklap-mechanisme
+    naast de panelen, op een plek waar je hem alleen vond door naar beneden te scrollen."""
+    dd, st, ik = _dorp(tmp_path)
+    h = _nav()
+    assert "c2-orgfly" not in h, "het losse uitklapje staat er nog"
+    assert "data-nav-paneel='org'" in h
+    paneel = render_nav_paneel(st, "org", ik)
+    assert "c2-org" in paneel and "Organization" in paneel
+
+
+def test_de_boom_komt_uit_dezelfde_functie_als_hiervoor(tmp_path):
+    """DEZELFDE BOOM, NIET EEN TWEEDE. Een eigen boomweergave zou betekenen dat "waar zit deze
+    rol" twee antwoorden heeft zodra er aan één iets verandert."""
+    from nooch_village.views.overview import _tree_html
+    dd, st, ik = _dorp(tmp_path)
+    paneel = render_nav_paneel(st, "org", ik)
+    direct = _tree_html(st, "")
+    assert direct and direct in paneel
+
+
+def test_de_boom_klapt_open_waar_je_staat(tmp_path):
+    """Wat de oude injectie extra deed mag niet verdwijnen. `hier` komt nu van de client, want
+    een fragment weet niet op welke pagina het landt."""
+    dd, st, ik = _dorp(tmp_path)
+    rol = "mother_earth__nooch__creator_of_shoes"
+    met = render_nav_paneel(st, "org", ik, hier=rol)
+    zonder = render_nav_paneel(st, "org", ik)
+    assert met != zonder, "de boom reageert niet op waar je staat"
+    assert "data-nav-paneel" not in met                    # het paneel is inhoud, geen knoppen
