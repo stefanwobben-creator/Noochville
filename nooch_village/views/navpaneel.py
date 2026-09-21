@@ -30,7 +30,7 @@ from nooch_village.web_base import _e
 log = logging.getLogger("village.navpaneel")
 
 #: De panelen die bestaan. Alles daarbuiten geeft een lege string (fail-closed, geen gok).
-PANELEN = ("zoek", "pr", "me", "ci", "org")
+PANELEN = ("zoek", "pr", "ci", "org")
 
 
 def _rij(href: str, tekst: str, *, sub: str = "", tag: str = "") -> str:
@@ -112,8 +112,15 @@ def _paneel_projects(st, ik: str, welke: str) -> str:
 
 
 # ── ME ───────────────────────────────────────────────────────────────────────
+#
+# HET MESSAGES-PANEEL IS OP 21 SEPTEMBER 2026 VERVALLEN (eis Stefan) en de functie blijft staan
+# omdat hij niets kost en de reden hier hoort te staan: Messages is als enige van de vijf een
+# scherm dat zelf al uit lijst + detail bestaat. Een paneel kon daar alleen de lijst van tonen —
+# een kopie van wat de pagina zelf heeft — terwijl het gesprek nergens was en je vorige scherm
+# ernaast bleef staan. `me` staat daarom niet meer in `PANELEN`; de knop is een paginasprong,
+# zoals Wiki en Admin.
 def _paneel_messages(st, ik: str) -> str:
-    """De kanalenlijst uit PR 5, op een andere plek gerenderd.
+    """De kanalenlijst uit PR 5, op een andere plek gerenderd. NIET MEER BEREIKBAAR — zie hierboven.
 
     DIT IS EEN RENDER-PLEK-WIJZIGING EN GEEN NIEUWE LIJST: `_kanalen` is dezelfde functie die
     `/messages` gebruikt, met dezelfde vier vaste lagen en dezelfde "alleen wat jij volgt" voor
@@ -192,16 +199,13 @@ def _paneel_org(st, ik: str, hier: str) -> str:
 def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
                       hier: str = "") -> str:
     """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
-    titels = {"zoek": "Search", "pr": "Projects", "me": "Messages", "ci": "Circle",
-              "org": "Organization"}
+    titels = {"zoek": "Search", "pr": "Projects", "ci": "Circle", "org": "Organization"}
     if p not in PANELEN:
         return ""
     if p == "zoek":
         inhoud = _paneel_zoek(st, ik, q)
     elif p == "pr":
         inhoud = _paneel_projects(st, ik, "alle" if welke == "alle" else "mijn")
-    elif p == "me":
-        inhoud = _paneel_messages(st, ik)
     elif p == "org":
         inhoud = _paneel_org(st, ik, hier)
     else:
