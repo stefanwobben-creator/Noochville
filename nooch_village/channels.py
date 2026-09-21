@@ -5,6 +5,8 @@ alles. De drie soorten verschillen in waar ze OVER gaan, niet in wat ze zijn:
 
     project:<pid>      het gesprek bij een project (wat tot nu toe "de wall" heette)
     circle:<record>    het gesprek van een cirkel
+    goal:<doel_id>     het gesprek bij een doel — de taxonomie die Projects al kent
+    topic:<id>         een los kanaal dat een mens zelf aanmaakt
     dm:<a>|<b>         tussen twee mensen; de twee id's staan gesorteerd, zodat A→B en B→A
                        gegarandeerd hetzelfde kanaal zijn en er nooit twee halve gesprekken ontstaan
 
@@ -50,7 +52,7 @@ import uuid
 from nooch_village.util import JsonStore
 
 #: Kanaalsoorten. De prefix staat in het id zelf, zodat een kanaal-id overal zelf-verklarend is.
-PROJECT, CIRCLE, DM, TOPIC = "project", "circle", "dm", "topic"
+PROJECT, CIRCLE, DM, TOPIC, GOAL = "project", "circle", "dm", "topic", "goal"
 
 #: Berichtsoorten binnen een kanaal. Een `notificatie` is een gemigreerd inbox-item: dezelfde
 #: trail, maar met een verwerkingsgeschiedenis eronder die een gewoon bericht niet heeft.
@@ -72,6 +74,19 @@ def circle_kanaal(record_id: str) -> str:
 
 def topic_kanaal(topic_id: str) -> str:
     return f"{TOPIC}:{topic_id}"
+
+
+def goal_kanaal(doel_id: str) -> str:
+    """Het kanaal van een doel (`data/doelen.json`).
+
+    EEN EIGEN SOORT, EN GEEN VOORAF AANGEMAAKT LOS KANAAL met de doelnaam erin. Dat laatste was de
+    goedkopere weg — `maak_topic("MITH")` en klaar — en precies daarom fout: de naam van een doel
+    is een weergavestring die een mens verandert, en dan wijst het kanaal nergens meer naar. Met
+    `goal:<doel_id>` verwijst het kanaal naar het DOEL, en volgt een hernoeming vanzelf. Dezelfde
+    afweging als bij `maak_topic`, waar het id bewust geen slug van de naam is.
+
+    Geen tweede opslag: de trail leeft in `channels.json`, net als die van een topic."""
+    return f"{GOAL}:{doel_id}"
 
 
 def _sleutel(naam: str) -> str:
