@@ -48,8 +48,14 @@ def _body_html(body: str, pags: list) -> str:
             # Bestaat (nog) niet, of de titel is niet uniek: zichtbaar laten staan als
             # verlanglijst-item. Nooit stilzwijgend naar een gok linken, nooit automatisch
             # aanmaken — een pagina krijgt een eigenaar, en dat is een besluit.
-            return f"<span class='chip muted' title='no unique page with this name'>{m.group(1)}</span>"
-        return f"<a class='pill' href='{_e(wiki.pagina_url(doel.id))}'>{_e(doel.title or doel.id)}</a>"
+            return (f"<span class='chip muted' data-ref='{_e(ref)}' "
+                    f"title='no unique page with this name'>{m.group(1)}</span>")
+        # `data-ref` draagt de ORIGINELE verwijzing mee, niet de opgeloste titel. De inline-editor
+        # stuurt deze HTML terug en `_md_naar_bron` moet er weer `[[…]]` van maken; zonder dit
+        # attribuut zou `[[COMPLI-021]]` terugkomen als de titel van de pagina waar hij heen wees,
+        # en dat is een andere verwijzing dan wat de schrijver typte.
+        return (f"<a class='pill' data-ref='{_e(ref)}' "
+                f"href='{_e(wiki.pagina_url(doel.id))}'>{_e(doel.title or doel.id)}</a>")
 
     return wiki.LINK_RE.sub(_sub, html)
 

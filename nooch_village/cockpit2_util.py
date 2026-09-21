@@ -4,6 +4,7 @@ import hashlib as _hashlib
 import os as _os
 import re
 import time as _time
+from html.parser import HTMLParser as _HTMLParser
 
 from nooch_village.web_base import _e
 
@@ -273,6 +274,141 @@ def _md(text: str) -> str:
         out.append("</ul>")
     html = "".join(out)
     return html[:-4] if html.endswith("<br>") else html
+
+
+# ── De weg terug: opgemaakte HTML → de markdown-bron ─────────────────────────────────────────
+#
+# WAAROM DIT OP DE SERVER STAAT. De wiki-editor laat je in de tekst zelf typen (contenteditable),
+# dus wat de browser terugstuurt is HTML. Ergens moet daar weer markdown van gemaakt worden, want
+# de OPSLAG blijft markdown — er wordt nooit HTML bewaard. Die omzetting hoort hier, naast `_md`,
+# en niet in JS: dan zou er een tweede opmaak-kenner bestaan naast deze, en die twee lopen uiteen
+# zodra er één regel bijkomt. Dezelfde afweging die de voorbeeldknop al maakte (`/md-preview`
+# haalt zijn weergave bij `_md` zelf op, niet bij een parser in de browser).
+#
+# Bijvangst die zwaarder weegt dan hij lijkt: een omzetter in Python is met pytest te bewijzen op
+# de 105 echte pagina's. Een omzetter in JS niet — er is in deze stack geen JS-testrunner.
+#
+# FAIL-CLOSED OP EEN GESLOTEN WHITELIST. Een browser maakt bij Enter en bij plakken zijn eigen
+# HTML (`<div>`, `<p>`, `<span style=…>`, hele Word-fragmenten). Alles wat hieronder niet met naam
+# staat, wordt zijn eigen TEKST — nooit ruwe HTML die straks in de opslag belandt.
+#
+# WAT NIET TERUGKOMT, EN DAT IS GEEN BUG. `_md` gooit zelf al dingen weg: hij strippt de
+# inspringing van een lijst- of kopregel, normaliseert CRLF, en haalt de laatste `<br>` weg. `_md`
+# is dus niet omkeerbaar op eindwitruimte, en deze functie doet niet alsof. De eigenschap die WEL
+# hard is, en die `tests/test_md_bron.py` op elke echte pagina aantoont:
+#
+#     _md(_md_naar_bron(_md(bron))) == _md(bron)
+#
+# oftewel: door de editor heen en weer halen verandert niets aan wat je op het scherm ziet.
+
+#: tag → (voor, na) in de bron. Bewust dezelfde tekens die `_md` produceert, geen synoniemen.
+_BRON_INLINE = {"strong": ("**", "**"), "b": ("**", "**"),
+                "em": ("*", "*"), "i": ("*", "*"),
+                "del": ("~~", "~~"), "s": ("~~", "~~")}
+
+#: tags die een regel afsluiten. `div` en `p` staan erbij omdat een contenteditable ze zelf maakt.
+_BRON_BLOK = ("h4", "li", "div", "p")
+
+
+class _BronParser(_HTMLParser):
+    """Loopt de opgemaakte HTML af en schrijft de markdown-bron terug.
+
+    Geen DOM-boom: `_md` produceert een platte reeks, dus een lineaire lezer met één stapel voor
+    de open inline-tags is genoeg — en hij kan niet omvallen op HTML die niet goed genest is,
+    want die krijgt hij van een browser."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.uit: list[str] = []
+        self._ref = ""            # de oorspronkelijke [[verwijzing]], als die er was
+        self._href = ""
+        self._linktekst: list[str] = []
+        #: kwam het laatste regeleinde van een BLOK-grens (`</li>`, `</h4>`, `</p>`) of van een
+        #: `<br>`? Dat verschil beslist of het eindregeleinde erbij hoort; zie `_md_naar_bron`.
+        self._blok_einde = False
+
+    # ── hulpjes ──────────────────────────────────────────────────────────────
+    def _schrijf(self, tekst: str) -> None:
+        (self._linktekst if self._href or self._ref else self.uit).append(tekst)
+        if tekst:
+            self._blok_einde = False
+
+    def _nieuwe_regel(self) -> None:
+        """Eén regeleinde, nooit twee achter elkaar door een blok-tag. Een browser sluit een
+        alinea met `</p>` én begint de volgende met `<p>`; dat zijn twee signalen voor één
+        overgang, en wie ze allebei telt laat de tekst bij elke bewerking verder uit elkaar staan."""
+        if self.uit and not self.uit[-1].endswith("\n"):
+            self.uit.append("\n")
+        self._blok_einde = True
+
+    # ── de drie haken van HTMLParser ─────────────────────────────────────────
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if tag == "br":
+            self.uit.append("\n")
+            self._blok_einde = False          # een <br> IS de tekst, geen scheiding eromheen
+        elif tag in _BRON_INLINE:
+            self._schrijf(_BRON_INLINE[tag][0])
+        elif tag == "h4":
+            self._nieuwe_regel(); self.uit.append("## ")
+        elif tag == "li":
+            self._nieuwe_regel(); self.uit.append("- "); self._in_li = True
+        elif tag in ("a", "span"):
+            # Een wiki-verwijzing draagt zijn ORIGINELE tekst mee (`data-ref`), want op het scherm
+            # staat de opgeloste titel en die is niet hetzelfde. Zonder dat attribuut zou
+            # `[[compliance-beleid]]` terugkomen als de titel van de pagina waar hij heen wees.
+            self._ref = d.get("data-ref") or ""
+            self._href = "" if self._ref else (d.get("href") or "")
+            self._linktekst = []
+        elif tag in _BRON_BLOK:
+            self._nieuwe_regel()
+
+    def handle_endtag(self, tag):
+        if tag in _BRON_INLINE:
+            self._schrijf(_BRON_INLINE[tag][1])
+        elif tag in ("a", "span"):
+            label = "".join(self._linktekst)
+            if self._ref:
+                self.uit.append(f"[[{self._ref}]]")
+            elif self._href.startswith(("http://", "https://")):
+                self.uit.append(f"[{label}]({self._href})")
+            else:
+                # DEZELFDE POORT ALS `_md`, EEN STAP EERDER. `_md` weigert al een link zonder
+                # http(s)-schema, dus een `javascript:`-url zou toch als platte tekst renderen —
+                # maar hij zou dan wél in de OPSLAG staan, klaar voor de dag waarop iemand een
+                # tweede renderer schrijft die minder streng is. Hier houdt alleen de tekst over.
+                self.uit.append(label)
+            self._ref = self._href = ""
+            self._linktekst = []
+            self._blok_einde = False
+        elif tag in ("h4", "li", "div", "p"):
+            self._nieuwe_regel()
+
+    def handle_data(self, data):
+        self._schrijf(data)
+
+
+def _md_naar_bron(html: str) -> str:
+    """De omgekeerde van `_md`: opgemaakte HTML terug naar de markdown-bron.
+
+    Alles buiten de whitelist hierboven degradeert naar platte tekst. Geeft nooit HTML terug."""
+    parser = _BronParser()
+    parser.feed(html or "")
+    parser.close()
+    uit = "".join(parser.uit).replace("\r\n", "\n").replace("\r", "\n")
+    # Regeleindes die alleen uit blok-grenzen komen mogen zich niet opstapelen. Drie of meer is
+    # nooit iets anders dan twee.
+    while "\n\n\n" in uit:
+        uit = uit.replace("\n\n\n", "\n\n")
+    # Aan het BEGIN hetzelfde verhaal als aan het eind: een `<br>` vooraan is de lege regel die
+    # de schrijver typte. Hij wordt dus niet weggepoetst — `_md` zet hem straks gewoon terug.
+    # HET EINDREGELEINDE IS NIET ALTIJD HETZELFDE DING, en dat is de subtielste regel hier.
+    # Sluit de tekst af met een BLOK (`</li>`, `</h4>`), dan is het laatste regeleinde de grens
+    # van dat blok en hoort het niet in de bron: `- a` rendert naar `<ul><li>a</li></ul>` en moet
+    # als `- a` terugkomen, niet als `- a\n`. Komt het van een `<br>`, dan is het de lege regel die
+    # de schrijver zelf typte, en die hoort te blijven — anders verspringt de weergave bij het
+    # eerste het beste opslaan.
+    return uit.rstrip("\n") if parser._blok_einde else uit
 
 
 def _md_doc(text: str) -> str:
