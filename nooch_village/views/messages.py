@@ -1,7 +1,9 @@
 """Messages — de gesprek-laag op één scherm (`/messages`, fase 8).
 
-Drie soorten kanalen in één lijst, precies zoals het prototype ze toont: Projects, Circles,
-Direct. Ze verschillen in waar ze over gaan, niet in wat ze zijn — één trail, één invoerveld.
+KANALEN ZIJN BEWUST (21 september 2026). Tot vandaag WAS elk project met een gesprek een kanaal:
+123 op productie, plus 42 DM's. Dat is geen lijst maar een muur. De lijst heeft nu vier vaste
+lagen — General (de wortelcirkel), één kanaal per open doel, losse kanalen, en je DM's — plus
+Projects, en die vult je zelf door er een te openen of op te zoeken.
 
 DE VERWIJZING NAAR `/inbox` IS WEG (21 september 2026). Die regel stond hier sinds fase 8 en
 beloofde "je wachtrij staat op Inbox" — maar er is geen route `/inbox` in `do_GET`, geen
@@ -35,8 +37,19 @@ def _label(st, kanaal: str, ik: str = "") -> str:
         titel = sc if isinstance(sc, str) else (sc or {}).get("goal", "") if isinstance(sc, dict) else ""
         return titel or doel
     if soort == channels.CIRCLE:
+        # De WORTELCIRKEL heet "General" en niet "Mother Earth". Dit is het kanaal van het hele
+        # dorp; wie hem opzoekt zoekt "algemeen", niet de naam van de cirkel die toevallig bovenaan
+        # staat. De cirkel zelf houdt zijn naam overal elders.
+        wortel = st.records.root()
+        if wortel is not None and doel == wortel.id:
+            return "General"
         rec = st.records.get(doel)
         return _name(rec) if rec is not None else doel
+    if soort == channels.GOAL:
+        d = st.doelen.get(doel)
+        # Het LABEL, want dat is wat Projects ook toont (WEBSITE, STCB, MITH…). De volledige titel
+        # staat op /goals; hier moet hij naast een tijd en een teller passen.
+        return (d or {}).get("label") or (d or {}).get("titel") or doel
     if soort == channels.TOPIC:
         return st.channels.naam_van(kanaal) or doel
     leden = channels.dm_leden(kanaal)
@@ -72,10 +85,10 @@ def kan_antwoorden(st, kanaal: str, ik: str = "") -> bool:
     return bool(ander) and st.people.get(ander) is not None
 
 
-#: Hoeveel projectkanalen er ZONDER zoekterm getoond worden. Op productie staan er 442, en die
-#: lijst is geen lijst meer maar een muur — je scrolt langs honderden namen op zoek naar één.
-#: Cirkels (20) en DM's blijven altijd compleet: die zijn op te overzien en je kiest er bewust een.
-PROJECT_CAP = 25
+# HIER STOND `PROJECT_CAP = 25`: hoeveel projectkanalen er zonder zoekterm getoond werden. Die cap
+# is op 21 september 2026 niet verhoogd maar VERVANGEN. Hij liet je nog steeds langs namen scrollen
+# die je niet zocht — hij maakte het probleem zichtbaar ("25 of 159 · search for the rest") zonder
+# het op te lossen. Een project staat nu in je lijst omdat jij het hebt toegevoegd, en anders niet.
 
 
 def _laatst(st, kanaal: str) -> float:
@@ -108,35 +121,82 @@ def _kort_tijd(at: float, nu: float | None = None) -> str:
     return _t.strftime("%d %b", lok)
 
 
-def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int]]:
-    """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL vóór filteren.
+def _wortelkanaal(st) -> str:
+    """Het kanaal van de wortelcirkel — "General" op het scherm. Leeg als er geen wortel is."""
+    wortel = st.records.root()
+    return channels.circle_kanaal(wortel.id) if wortel is not None else ""
 
-    Projecten: die waar al een gesprek in staat — een leeg project-kanaal is geen gesprek maar een
-    project, en dat staat op het bord. Cirkels: alle bestaande, ook lege, want een cirkelkanaal is
-    een plek waar je iets kúnt zeggen. Direct: alleen de jouwe.
 
-    Zonder zoekterm staan de projectkanalen op VOLGORDE VAN HET LAATSTE BERICHT en afgekapt op
-    `PROJECT_CAP`. Alfabetisch afkappen zou willekeurig zijn; op recentheid afkappen laat precies
-    zien waar het gesprek loopt. Mét zoekterm vervalt de cap — dan weet je wat je zoekt."""
-    proj = [channels.project_kanaal(p["id"]) for p in st.projects.all()
+def _doelkanalen(st) -> list[str]:
+    """Eén kanaal per OPEN doel, in de volgorde die Projects ook aanhoudt.
+
+    Deze staan er altijd, zonder dat iemand ze aanmaakt: de doel-taxonomie bestaat al als
+    eersteklas begrip (`data/doelen.json`, de filterbalk boven het bord), dus een kanaal per doel
+    is geen nieuw concept maar dezelfde indeling op een tweede plek. Een gesloten doel valt vanzelf
+    uit de lijst; zijn gesprek blijft bestaan en is via zoeken terug te vinden."""
+    return [channels.goal_kanaal(d["id"]) for d in st.doelen.all()
+            if d.get("status") == "open"]
+
+
+def _projectkanalen_met_gesprek(st) -> list[str]:
+    return [channels.project_kanaal(p["id"]) for p in st.projects.all()
             if (p.get("log") or []) and not p.get("archived")]
-    cirk = [channels.circle_kanaal(r.id) for r in st.records.all()
-            if not getattr(r, "archived", False) and getattr(r, "type", None)
-            and str(getattr(r.type, "value", r.type)) == "circle"]
-    dms = st.channels.kanalen_van(ik) if ik else []
+
+
+def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, int], set[str]]:
+    """De kanalen die deze mens ziet, per groep, plus per groep het TOTAAL en welke hij volgt.
+
+    WAT HIER OP 21 SEPTEMBER 2026 IS VERVANGEN, en waarom het geen aanscherping van het oude model
+    is. Elk project met een gesprek WAS een kanaal: 123 op productie, plus 42 DM's. Die lijst was
+    geen lijst maar een muur, en de cap van 25 ("25 of 159 · search for the rest") maakte dat
+    zichtbaar zonder het op te lossen — je scrolde nog steeds langs namen die je niet zocht.
+
+    Nu zijn kanalen BEWUST (besluit Stefan). De lijst heeft vier vaste lagen en één die je zelf
+    vult:
+
+        General    het kanaal van de wortelcirkel — het hele dorp, altijd zichtbaar
+        Goals      één per open doel; dezelfde taxonomie die het bord al gebruikt
+        Channels   losse kanalen die een mens aanmaakt (+ new channel)
+        Projects   ALLEEN wat jij volgt; leeg tot je iets toevoegt
+        Direct     ongewijzigd
+
+    DE ANDERE CIRKELS HEBBEN GEEN EIGEN RIJ MEER. Er zijn er twee (Mother Earth en Nooch) en de
+    tweede is nog leeg; die valt samen met General tot de cirkel actief wordt (besluit Stefan).
+    "Actief" is hier geen code-wijziging maar een VERGELIJKING: zodra er iets in zo'n kanaal staat,
+    verschijnt hij onder Channels. Zo kan een gesprek nooit onbereikbaar worden doordat een lijst
+    hem niet noemt — dezelfde regel als bij `wiki.grond_status`, die ook bij het lezen wordt
+    uitgerekend in plaats van opgeslagen.
+
+    ZOEKEN ZIET ALLES. Mét zoekterm komen ook de projectkanalen die je NIET volgt terug, want
+    anders is een project dat je nog niet hebt toegevoegd onvindbaar — en dat is precies de enige
+    manier waarop deze wijziging iets kapot zou maken."""
+    gevolgd = set(st.people.gevolgd(ik)) if ik else set()
+
+    alg = [k for k in (_wortelkanaal(st),) if k]
+    doelen = _doelkanalen(st)
     # Losse kanalen: ALLE, ook lege. Een kanaal dat je net hebt aangemaakt en niet ziet staan,
-    # lijkt mislukt. En iedereen ziet ze allemaal — er is bewust geen lidmaatschap-begrip.
-    onderwerpen = st.channels.topics()
-    groepen = {"Projects": proj, "Circles": cirk, "Topics": onderwerpen, "Direct": dms}
+    # lijkt mislukt. Plus de cirkelkanalen die niet General zijn én waar iets in staat.
+    wortel = _wortelkanaal(st)
+    andere_cirkels = [k for k in st.channels.bestaande(channels.CIRCLE) if k != wortel]
+    onderwerpen = st.channels.topics() + andere_cirkels
+    projecten_alles = _projectkanalen_met_gesprek(st)
+    projecten = [k for k in projecten_alles if k in gevolgd]
+    dms = st.channels.kanalen_van(ik) if ik else []
+
+    groepen = {"General": alg, "Goals": doelen, "Channels": onderwerpen,
+               "Projects": projecten, "Direct": dms}
     totaal = {g: len(r) for g, r in groepen.items()}
+    totaal["Projects"] = len(projecten_alles)      # "3 of 123" — wat je volgt van wat er is
 
     naald = " ".join((q or "").split()).lower()
     if naald:
+        groepen["Projects"] = projecten_alles      # zoeken ziet ook wat je niet volgt
         groepen = {g: [k for k in r if naald in _label(st, k, ik).lower()]
                    for g, r in groepen.items()}
     else:
-        groepen["Projects"] = sorted(proj, key=lambda k: -_laatst(st, k))[:PROJECT_CAP]
-    return groepen, totaal
+        # Op volgorde van het laatste bericht: dan staat bovenaan waar het gesprek loopt.
+        groepen["Projects"] = sorted(projecten, key=lambda k: -_laatst(st, k))
+    return groepen, totaal, gevolgd
 
 
 def _bericht(st, e: dict) -> str:
@@ -163,17 +223,30 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
     een telefoon toont `data-mob` er één. Zo blijft er één weergave om te onderhouden, werkt de
     terug-pijl zonder JS, en is elke stand een deelbare URL — hetzelfde uitgangspunt als het
     zoekveld hieronder, dat bewust een GET-formulier is en geen JS-filter."""
-    groepen, totaal = _kanalen(st, ik, q)
+    groepen, totaal, gevolgd = _kanalen(st, ik, q)
     if not kanaal:
         # OPEN OP IETS DAT GEZEGD IS. De eerste versie pakte simpelweg het eerste kanaal, en dat
         # was de anchor-cirkel: je landde op "Nothing said here yet" terwijl er drie kanalen
         # verderop wél gesprek stond. Een leeg kanaal als voordeur laat het scherm dood lijken.
-        # LET OP: `groepen` is hier al gefilterd en afgekapt. Voor de voordeur wil je juist het
-        # volledige veld, anders hangt "waar land ik" af van een zoekterm.
-        alles, _ = _kanalen(st, ik, "")
-        volgorde = [k for g in ("Direct", "Topics", "Projects", "Circles") for k in alles[g]]
+        # LET OP: `groepen` is hier al gefilterd. Voor de voordeur wil je juist het volledige veld,
+        # anders hangt "waar land ik" af van een zoekterm.
+        alles, _t, _g = _kanalen(st, ik, "")
+        volgorde = [k for g in ("Direct", "Projects", "Goals", "Channels", "General")
+                    for k in alles[g]]
+        # IS ER NERGENS IETS GEZEGD, dan is General de voordeur en niet "het eerste doel in de
+        # lijst". Gemeten in een doorloop op een vers dorp: je landde op "Website" omdat dat
+        # toevallig het eerste open doel was. Een willekeurig doel als voordeur suggereert dat
+        # DAAR iets speelt.
         kanaal = next((k for k in volgorde if st.channels.trail(k, limit=1)),
-                      volgorde[0] if volgorde else "")
+                      (alles["General"] or volgorde or [""])[0])
+
+    # OPENEN IS TOEVOEGEN (besluit Stefan). Een projectkanaal dat je opent hoort daarna in je
+    # lijst te staan; anders moet je hem elke keer opnieuw opzoeken en is "toevoegen" een tweede
+    # handeling voor iets wat je met je klik al zei. De andere soorten staan er sowieso, dus die
+    # hoeven niet gevolgd te worden.
+    if ik and kanaal and channels.soort_van(kanaal) == channels.PROJECT and not lijst:
+        if st.people.volg(ik, kanaal):
+            groepen, totaal, gevolgd = _kanalen(st, ik, q)
 
     # ── ongelezen: een VERGELIJKING, geen opgeslagen vlag ────────────────────
     #
@@ -235,8 +308,11 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             continue
         aantal = ""
         if groep == "Projects" and not q and totaal[groep] > len(rij):
+            # "3 of 123" leest nu anders dan hiervoor: wat JIJ volgt, van wat er bestaat. De
+            # oude tekst ("search for the rest") suggereerde dat de lijst afgekapt was; hij is
+            # niet afgekapt, hij is van jou.
             aantal = (f" <span class='msg-telling'>{len(rij)} of {totaal[groep]} "
-                      f"&middot; search for the rest</span>")
+                      f"&middot; search to add more</span>")
         elif q:
             aantal = f" <span class='msg-telling'>{len(rij)} of {totaal[groep]}</span>"
         rijen.append(f"<p class='muted msg-groep'>{_e(groep)}{aantal}</p>")
@@ -251,8 +327,17 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             # afgekapte teller of tijd is erger dan geen.
             tijd = _kort_tijd(_laatst(st, k))
             klok = f"<span class='msg-tijd'>{_e(tijd)}</span>" if tijd else ""
+            # NIET-GEVOLGD IS EEN EIGEN TOESTAND, GEEN AFWEZIGHEID. Bij het zoeken staan er
+            # projectkanalen tussen die je (nog) niet volgt; zonder merkteken zie je niet welke
+            # van de treffers al van jou is en welke je zou toevoegen. Twee dragers, want kleur
+            # alleen is nooit genoeg: een gestippelde rand én het woord "add".
+            nieuw_voor_jou = (groep == "Projects" and ik and k not in gevolgd)
+            merk += " msg-kanaal--vreemd" if nieuw_voor_jou else ""
+            toevoeg = (f"<span class='msg-add' aria-hidden='true'>+ add</span>"
+                       if nieuw_voor_jou else "")
             rijen.append(f"<a class='msg-kanaal{aan}{merk}' href='/messages?k={_e(k)}{qs}'>"
-                         f"<span class='msg-knaam'>{_e(_label(st, k, ik))}</span>{klok}{stip}</a>")
+                         f"<span class='msg-knaam'>{_e(_label(st, k, ik))}</span>"
+                         f"{toevoeg}{klok}{stip}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
     nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(rijen) or leeg}</nav>"
@@ -297,14 +382,26 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                    "author.</p>")
 
     kop = _e(_label(st, kanaal, ik)) if kanaal else "Messages"
+    # UIT JE LIJST HALEN MOET KUNNEN, anders is "openen is toevoegen" een eenrichtingsdeur: één
+    # klik op een zoekresultaat en het staat er voorgoed. Alleen bij een PROJECT, want de andere
+    # soorten staan er sowieso — een knop die niets doet is erger dan geen knop.
+    if (ik and csrf_token and kanaal and channels.soort_van(kanaal) == channels.PROJECT
+            and kanaal in gevolgd):
+        kop += (f"<form method='post' action='/action' class='msg-uit'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
+                f"<input type='hidden' name='next' value='/messages'>"
+                f"<button class='flink' type='submit' name='action' value='kanaal_ontvolg'>"
+                f"remove from list</button></form>")
     # NIVEAU 3 → NIVEAU 2. Op desktop staat de lijst er gewoon naast, dus daar is deze link ruis;
     # `.msg-terug` toont hem alleen op telefoonbreedte. Een gewone link, geen knop: hij navigeert.
     qs_t = f"&q={_e(q)}" if q else ""
     terug = (f"<a class='msg-terug flink' href='/messages?list=1&amp;k={_e(kanaal)}{qs_t}'>"
              f"&larr; All channels</a>")
     main = (f"<div class='c2-main'><h1>Messages</h1>"
-            f"<p class='muted'>One channel type, four flavours: a project, a circle, a topic of "
-            f"your own, or a person.</p>"
+            f"<p class='muted'>One channel type, five flavours: the village, a goal, a topic of "
+            f"your own, a project you added, or a person. Projects only show up once you open or "
+            f"search for them.</p>"
             f"{_banner(msg)}"
             f"<div class='msg-layout' data-mob='{'lijst' if lijst else 'draad'}'>{nav}"
             f"<section class='msg-draad'>{terug}<h2 class='msg-kop'>{kop}</h2>"

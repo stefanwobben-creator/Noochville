@@ -1331,6 +1331,28 @@ def _act_msg_post(c):
     return nxt, ("💬 posted" if entry else "✗ a message needs text")
 
 
+def _act_kanaal_ontvolg(c):
+    """Haal een kanaal uit JOUW lijst in Messages.
+
+    # AUTHZ: iedereen-ingelogd — dit raakt uitsluitend de eigen lijst van de ingelogde mens. Er
+    # wordt niets verwijderd en niemand anders merkt er iets van; het kanaal en zijn hele trail
+    # blijven staan. Fail-closed op de identiteit: zonder herkende mens is er geen lijst om uit te
+    # halen, en dan doet deze actie niets.
+
+    HET TEGENWICHT VAN "OPENEN IS TOEVOEGEN". Zonder deze actie zou één klik op een zoekresultaat
+    een kanaal voorgoed in je lijst zetten, en dan is de lijst binnen een week weer de muur die
+    hij was. Terugvinden doe je zoals de eerste keer: zoeken."""
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to manage your channel list"
+    kanaal = g("kanaal") or ""
+    if not st.people.ontvolg(ik, kanaal):
+        return nxt, "✗ that channel is not on your list"
+    from nooch_village.views.messages import _label
+    return nxt, f"✓ {_label(st, kanaal, ik)} removed from your list — search to find it again"
+
+
 def _act_topic_add(c):
     """Een los kanaal aanmaken: een onderwerp zonder project, cirkel of persoon eronder.
 
@@ -4844,6 +4866,7 @@ ACTIONS = {
     "artefact_archive": _act_artefact_archive,
     "msg_post": _act_msg_post,
     "topic_add": _act_topic_add,
+    "kanaal_ontvolg": _act_kanaal_ontvolg,
     "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,

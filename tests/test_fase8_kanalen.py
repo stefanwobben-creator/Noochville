@@ -164,8 +164,11 @@ def test_messages_toont_de_drie_soorten(tmp_path):
     pid = st.projects.create(OWNER, "Batch 4", "human", status="running")
     st.channels.post(channels.project_kanaal(pid), "projectpraat", author_id=ik.id)
     st.channels.post(channels.dm_kanaal(ik.id, jij.id), "hoi", author_id=ik.id)
+    st.people.volg(ik.id, channels.project_kanaal(pid))      # bewust toegevoegd aan zijn lijst
     html = render_messages(st, ik=ik.id, csrf_token="t")
-    for stuk in ("Projects", "Circles", "Direct", "Batch 4", "Testpersoon Twee"):
+    # "Circles" is per 21 september 2026 "General": er is één dorpskanaal, en de tweede cirkel
+    # valt daarmee samen tot hij actief wordt. Projects toont alleen wat deze mens volgt.
+    for stuk in ("General", "Projects", "Direct", "Batch 4", "Testpersoon Twee"):
         assert stuk in html, stuk
 
 

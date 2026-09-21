@@ -102,7 +102,9 @@ def test_een_leeg_topic_staat_toch_in_de_lijst(dorp):
     st, mens, _ = dorp
     st.channels.maak_topic("Trade fair", door=mens.id)
     html = render_messages(st, ik=mens.id, csrf_token="t")
-    assert "Topics" in html and "Trade fair" in html
+    # De groep heet sinds 21 september "Channels": Goals kreeg zijn eigen laag, en
+    # "Topics" naast "Goals" las als twee woorden voor hetzelfde soort ding.
+    assert "Channels" in html and "Trade fair" in html
 
 
 def test_er_is_geen_lidmaatschap_begrip(dorp):
@@ -111,5 +113,5 @@ def test_er_is_geen_lidmaatschap_begrip(dorp):
     ander = st.people.add("Tweede Mens", "tweede@test.nl")
     st.channels.maak_topic("Packaging", door=mens.id)
     from nooch_village.views.messages import _kanalen
-    groepen, _ = _kanalen(st, ander.id, "")
-    assert len(groepen["Topics"]) == 1
+    groepen, _t, _g = _kanalen(st, ander.id, "")
+    assert len(groepen["Channels"]) == 1

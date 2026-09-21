@@ -1290,6 +1290,17 @@ progress.nu-progress.wide{height:8px}
 .msg-tijd{flex:0 0 auto;font-size:11px;color:var(--gray);font-variant-numeric:tabular-nums}
 .msg-kanaal{display:flex;align-items:center;gap:.4rem}
 .msg-kanaal.on .msg-tijd{color:inherit;opacity:.75}
+/* ATOOM — "staat nog niet in jouw lijst". Bij het zoeken komen ook projectkanalen terug die je
+   niet volgt; zonder merkteken zie je niet welke treffer al van jou is en welke je zou toevoegen.
+   TWEE DRAGERS, want kleur alleen is nooit genoeg bij een statusverschil: een gestippelde rand
+   (overleeft zwart-wit en kleurenblindheid) én het woord "add" in de rij zelf. */
+.msg-kanaal--vreemd{border:1px dashed var(--border)}
+.msg-add{flex:0 0 auto;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--gray);border:1px solid var(--border);border-radius:var(--radius);padding:0 .3rem}
+.msg-kanaal--vreemd:hover .msg-add{color:var(--green-dark);border-color:var(--green)}
+/* De uit-je-lijst-knop hoort bij de kop van het gesprek, niet eronder: het is een eigenschap van
+   dit kanaal, geen actie op de inhoud. Bestaand `.flink`-atoom, alleen de plaatsing is nieuw. */
+.msg-uit{display:inline;margin-left:.6rem;font-size:.72rem}
 .msg-terug{display:none}
 /* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.
    Beide panelen blijven in de DOM — het is een CSS-keuze, geen tweede rendering. */
