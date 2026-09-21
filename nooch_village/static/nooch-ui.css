@@ -486,6 +486,16 @@
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 .nu .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
 
+/* 21 september · "staat nog niet in jouw lijst", in de nu-taal.
+   De GESTIPPELDE rand blijft — dat is de tweede drager naast het woord "add", en vorm overleeft
+   zwart-wit waar een tint dat niet doet. Wat weggaat is het doosje óm dat woord: een klein etiket
+   is informatie, geen container, en die regel ligt in fase 12 vast. */
+.nu .msg-kanaal--vreemd { border: 1.5px dashed var(--nu-border-subtle); border-radius: 0; }
+.nu .msg-add { border: 0; border-radius: 0; background: none; color: var(--nu-muted);
+  font-family: var(--nu-font); }
+.nu .msg-kanaal--vreemd:hover .msg-add { color: var(--nu-text); }
+.nu .msg-uit { color: var(--nu-muted); font-family: var(--nu-font); }
+
 /* punt 4 · de opslaan-balk van het inline formulier */
 .nu .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }
 

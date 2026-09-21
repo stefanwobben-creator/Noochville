@@ -1,13 +1,20 @@
-"""Punt 1a — het zoek/filterveld boven de kanalenlijst van `/messages`.
+"""Het zoek/filterveld boven de kanalenlijst van `/messages`, en wat die lijst toont.
 
-Waarom dit er is, met een getal: op productie staan **442** niet-gearchiveerde projecten, en
-`_kanalen` maakte van elk een kanaal in de lijst. Dat is geen lijst meer maar een muur. Twee
-ingrepen: een zoekveld, en zonder zoekterm een cap op de projectgroep — op volgorde van het
-laatste bericht, want alfabetisch afkappen is willekeurig en op recentheid afkappen laat zien waar
-het gesprek loopt.
+WAAROM DIT ER IS, MET EEN GETAL: op productie staan 442 niet-gearchiveerde projecten, en `_kanalen`
+maakte van elk mét gesprek een kanaal in de lijst — 123 stuks. Dat is geen lijst maar een muur.
+Punt 1a (20 september 2026) zette er een zoekveld en een CAP van 25 op: de 25 meest recente, met
+"search for the rest" eronder.
 
-De tests zijn op GEDRAG geschreven en niet op de opmaak: ze bouwen een dorp met meer kanalen dan
-de cap en kijken wat er in en uit de lijst valt.
+DE CAP IS OP 21 SEPTEMBER VERVANGEN, niet verhoogd. Een cap laat je nog steeds langs namen scrollen
+die je niet zocht; hij maakte het probleem zichtbaar zonder het op te lossen. Nu zijn kanalen
+BEWUST: Projects toont alleen wat JIJ volgt, en volgen doe je door een kanaal te openen of op te
+zoeken. `PROJECT_CAP` bestaat niet meer.
+
+Wat onveranderd bleef en hier nog steeds getoetst wordt: het zoekveld is een GET-formulier (geen
+JS-filter), zoeken is hoofdletter- en spatie-ongevoelig, de voordeur hangt niet van de zoekterm af,
+en een leeg kanaal toont geen tijdstip.
+
+De tests zijn op GEDRAG geschreven en niet op de opmaak.
 """
 from __future__ import annotations
 
@@ -17,7 +24,7 @@ import tempfile
 import pytest
 
 from nooch_village import channels, cockpit2
-from nooch_village.views.messages import PROJECT_CAP, _kanalen, render_messages
+from nooch_village.views.messages import _kanalen, render_messages
 
 OWNER = "mother_earth__nooch__creator_of_shoes"
 
@@ -28,12 +35,18 @@ def dorp():
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     ik = st.people.add("Zoek Tester", "zoek@test.nl")
-    # Ruim boven de cap, met oplopende tijd zodat "laatste bericht" een echte volgorde heeft.
-    for i in range(PROJECT_CAP + 12):
+    # Veel meer projecten dan iemand wil zien, met oplopende tijd zodat "laatste bericht" een echte
+    # volgorde heeft. Eén op de drie heet "mycelium" — dat is waar de zoektests op mikken.
+    for i in range(37):
         pid = st.projects.create(OWNER, f"Project {i:02d} mycelium" if i % 3 == 0
                                  else f"Project {i:02d} leer", "human", status="running")
         st.projects.add_feed_entry(pid, f"bericht {i}", kind="comment",
                                    author_type="human", author_id=ik.id)
+    # En drie die deze mens heeft toegevoegd. Dat is wat zijn lijst hoort te tonen — de andere 34
+    # bestaan wel, maar niet voor hem tot hij ze opzoekt.
+    gevolgd = [channels.project_kanaal(p["id"]) for p in st.projects.all()[:3]]
+    for k in gevolgd:
+        st.people.volg(ik.id, k)
     return st, ik.id
 
 
@@ -48,31 +61,38 @@ def _namen(html: str) -> list[str]:
     return re.findall(r"class='msg-knaam'>([^<]+)</span>", html)
 
 
-def test_zonder_zoekterm_is_de_projectlijst_afgekapt(dorp):
+def test_zonder_zoekterm_zie_je_alleen_wat_je_volgt(dorp):
+    """DE VERVANGING VAN DE CAP. Niet "de 25 recentste van 37" maar "de 3 die van jou zijn".
+    Het verschil is dat het tweede een keuze is en het eerste een afkapping."""
     st, ik = dorp
-    groepen, totaal = _kanalen(st, ik, "")
-    assert totaal["Projects"] == PROJECT_CAP + 12          # ze bestaan allemaal
-    assert len(groepen["Projects"]) == PROJECT_CAP         # maar je ziet er PROJECT_CAP
-    assert totaal["Circles"] == len(groepen["Circles"])    # cirkels nooit afkappen
+    groepen, totaal, gevolgd = _kanalen(st, ik, "")
+    assert totaal["Projects"] == 37                        # ze bestaan allemaal
+    assert len(groepen["Projects"]) == 3                   # je ziet wat je toevoegde
+    assert set(groepen["Projects"]) == gevolgd
+    assert len(groepen["General"]) == 1                    # het dorpskanaal staat er altijd
 
 
-def test_de_afkapping_houdt_het_recentste_gesprek(dorp):
-    """Alfabetisch afkappen zou willekeurig zijn. Het laatst besproken project hoort er sowieso in."""
+def test_de_eigen_lijst_staat_op_volgorde_van_het_laatste_bericht(dorp):
+    """Alfabetisch sorteren zou willekeurig zijn; op recentheid laat zien waar het gesprek loopt.
+    Dat argument overleeft het wegvallen van de cap ongewijzigd — het ging nooit over afkappen
+    maar over volgorde."""
     st, ik = dorp
-    groepen, _ = _kanalen(st, ik, "")
-    laatste = channels.project_kanaal(
-        max(st.projects.all(), key=lambda p: (p.get("log") or [{}])[-1].get("at", 0))["id"])
-    assert laatste in groepen["Projects"]
+    groepen, _t, _g = _kanalen(st, ik, "")
+    op_tijd = sorted(groepen["Projects"],
+                     key=lambda k: -(st.channels.laatste(k) or {}).get("at", 0))
+    assert groepen["Projects"] == op_tijd
 
 
-def test_zoeken_heft_de_cap_op_en_filtert_op_label(dorp):
+def test_zoeken_ziet_ook_wat_je_niet_volgt(dorp):
+    """DE ENIGE MANIER WAAROP DEZE WIJZIGING IETS KAPOT ZOU MAKEN: een project dat je nog niet hebt
+    toegevoegd onvindbaar maken. Mét zoekterm komt het hele veld terug, niet alleen je eigen lijst."""
     st, ik = dorp
-    groepen, totaal = _kanalen(st, ik, "mycelium")
+    groepen, totaal, gevolgd = _kanalen(st, ik, "mycelium")
     gevonden = groepen["Projects"]
-    assert len(gevonden) > 0
+    assert len(gevonden) > len(gevolgd), "zoeken toont niet meer dan je eigen lijst"
     assert all("mycelium" in _lbl(st, k, ik) for k in gevonden)
-    # de cap geldt niet meer bij een zoekterm, en er valt echt iets af
-    assert len(gevonden) < totaal["Projects"]
+    assert len(gevonden) < totaal["Projects"]              # en er valt echt iets af
+    assert any(k not in gevolgd for k in gevonden)         # inclusief niet-gevolgde
 
 
 def _lbl(st, k, ik):
@@ -82,9 +102,9 @@ def _lbl(st, k, ik):
 
 def test_zoeken_is_hoofdletter_en_spatie_ongevoelig(dorp):
     st, ik = dorp
-    a, _ = _kanalen(st, ik, "MYCELIUM")
-    b, _ = _kanalen(st, ik, "  mycelium  ")
-    c, _ = _kanalen(st, ik, "mycelium")
+    a, _ta, _ga = _kanalen(st, ik, "MYCELIUM")
+    b, _tb, _gb = _kanalen(st, ik, "  mycelium  ")
+    c, _tc, _gc = _kanalen(st, ik, "mycelium")
     assert a["Projects"] == b["Projects"] == c["Projects"] != []
 
 
@@ -98,13 +118,16 @@ def test_de_voordeur_hangt_niet_van_de_zoekterm_af(dorp):
     assert zonder and met and zonder.group(1) == met.group(1)
 
 
-def test_het_scherm_zegt_hoeveel_er_verborgen_zijn(dorp):
-    """Een stille cap is een leugen: je denkt dat dit alles is. Het aantal moet op het scherm."""
+def test_het_scherm_zegt_hoeveel_je_volgt_van_hoeveel(dorp):
+    """Een stille lijst is een leugen: je denkt dat dit alles is. Het aantal moet op het scherm —
+    en de tekst erbij is veranderd van "search for the rest" (dat klinkt als afgekapt) naar
+    "search to add more" (dat zegt wat je moet doen)."""
     st, ik = dorp
     html = render_messages(st, ik=ik, csrf_token="t")
-    assert f"{PROJECT_CAP} of {PROJECT_CAP + 12}" in html
-    assert "search for the rest" in html
-    assert len(_namen(html)) <= PROJECT_CAP + 30           # niet alsnog alles gerenderd
+    assert "3 of 37" in html
+    assert "search to add more" in html
+    assert "search for the rest" not in html
+    assert len(_namen(html)) < 37, "de hele muur staat alsnog op het scherm"
 
 
 def test_geen_treffer_zegt_dat_ook(dorp):
@@ -123,6 +146,8 @@ def test_de_kanaalrij_draagt_naam_en_tijdstip(dorp):
     html = render_messages(st, ik=ik)
     assert "msg-knaam" in html and "msg-tijd" in html
     assert _namen(html), "de namen moeten leesbaar blijven in de rij"
+    # Het tijdstip hoort bij een kanaal waarin iets GEZEGD is. General is leeg en toont er geen —
+    # dat is de regel hieronder, en de reden dat deze test een gevolgd project nodig heeft.
 
 
 def test_een_kanaal_zonder_gesprek_toont_geen_tijdstip():
