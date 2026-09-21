@@ -1423,6 +1423,11 @@ progress.nu-progress.wide{height:8px}
 .msg-bijlage--beeld img{display:block;max-width:100%;height:auto;border:1px solid var(--border);
   border-radius:var(--radius)}
 .msg-bijlage-add{margin-bottom:.5rem}
+/* Een gesprek beginnen dat er nog niet is. Zelfde vorm als "+ new channel" eronder: een
+   uitklapje boven de lijst, geen apart scherm. */
+.msg-nieuw-dm{margin-bottom:.4rem}
+.msg-nieuw-dm input[type=search]{width:100%;box-sizing:border-box}
+.msg-leeg{font-size:12.5px;padding:.3rem .5rem}
 .msg-terug{display:none}
 /* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.
    Beide panelen blijven in de DOM — het is een CSS-keuze, geen tweede rendering. */
