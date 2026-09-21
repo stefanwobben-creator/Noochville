@@ -1003,6 +1003,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
   cursor:pointer;text-align:left;width:100%}
 .c2-subnav a:hover,.c2-navbtn:hover{background:var(--surface)}
 .c2-subnav-div{height:1px;background:var(--border);margin:.4rem .55rem}
+/* HET MONOGRAM IS VOOR DE SMALLE BALK, het woord voor de brede — beide staan altijd in de DOM en
+   de CSS kiest. Deze regel stond als `.c2-side:not(.c2-side--rail) .c2-mono{display:none}` en ging
+   mee toen de rail werd opgeruimd (#544): sindsdien stond er "SE SEARCH / PR PROJECTS" onder
+   elkaar, allebei zichtbaar. Gevonden op een screenshot, niet in een test — zelfde soort gat als
+   de doorzichtige zijbalk. Nu andersom geschreven: standaard verborgen, zichtbaar als de balk
+   krimpt (zie de media-query onderaan). */
+.c2-mono{display:none}
 .c2-navct{background:var(--green);color:#fff;border-radius:var(--radius-pill);
   font-size:11px;font-weight:700;padding:.05rem .4rem}
 .c2-org{font-size:13px;overflow-y:auto}
@@ -1021,6 +1028,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
   .c2-side{width:64px;padding:1rem .35rem;align-items:center}
   .c2-side ~ *:not(.c2-paneel){margin-left:80px}
   .c2-side .c2-lbl,.c2-side .c2-search,.c2-side .c2-greet,.c2-side .c2-subnav-div{display:none}
+  .c2-side .c2-mono{display:inline}
   .c2-org{display:none}
 }
 /* ── Het uitklappaneel naast de balk (21 september 2026) ─────────────────────────────────────

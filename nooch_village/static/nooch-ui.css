@@ -49,7 +49,35 @@
 .nu .muted { color: var(--nu-muted); }
 
 /* ── Vlakken: 2px rand, geen radius, geen schaduw ─────────────────────────────────────────── */
-.nu .card, .nu .box, .nu .kpi, .nu table {
+/* ══ REBALANS (21 september 2026) ══════════════════════════════════════════════════════════════
+   GEMETEN OP /projects, niet op indruk: 89% van de tekst bold, 48% hoofdletters, 337 gerande
+   elementen waarvan 159 kaarten met een volle 2px zwarte rand en 6,4-8px padding ertegenaan.
+
+   De lijndikte-hiërarchie uit fase 12 (2px container, 1,5px knop) BESTOND al — maar bij 159
+   bijna-identieke kaarten op één bord is bijna alles een container, dus juist waar de hiërarchie
+   het hardst nodig is valt hij plat. Hetzelfde met gewicht: als alles vet is, is niets nadruk.
+
+   DRIE GERICHTE WIJZIGINGEN, GEEN REDESIGN:
+     1. listitem-kaarten → `--nu-border-subtle` (1,5px #E6E7E8). 2px zwart blijft voor
+        PAGE-LEVEL containers (zijbalk, bord-omlijsting) en voor een kaart die ACTIEF is
+        (hover, geselecteerd, gesleept) — daar is de zware lijn weer betekenisvol.
+     2. kaarttitels, metadata, hints en secundaire knoppen → gewicht 400-500, geen hoofdletters.
+        Bold + uppercase blijft voor topnav, sectielabels en primaire CTA's.
+     3. kaart-padding van 6,4-8px naar 14-16px.
+
+   NIET AANGERAAKT (merkvragen, apart te bespreken): `border-radius: 0`, `box-shadow: none`,
+   `--nu-bg` en het kleurgebruik op canvasniveau. */
+
+/* 1 · De kaart is geen container. `.box`, `.kpi` en `table` houden hun 2px: dat zijn blokken op
+   paginaniveau, geen items in een lijst. */
+.nu .card, .nu .pkaart, .nu .kcard, .nu .attcard, .nu .gs-hit {
+  border: 1.5px solid var(--nu-border-subtle); }
+/* ACTIEF IS WEER ZWAAR. Hover, gesleept en de bron waar je vandaan komt: daar zegt de dikke lijn
+   iets, en dat kan pas nu de rest hem niet meer draagt. */
+.nu .pkaart:hover, .nu .pcard:hover, .nu .pdrag-ghost, .nu .pcard.pdrag-bron {
+  border-width: 2px; }
+
+.nu .box, .nu .kpi, .nu table {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
 .nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
 /* Navigatie in hoofdletters, net als de koppen en de knoppen: de referentie zet SHOP STORE
@@ -95,8 +123,21 @@
    want de rand telt mee in de hoogte — weghalen zou de knop 3px korter maken dan zijn buren. */
 .nu .btn.ok { background: var(--nu-neon); border-color: transparent; color: var(--nu-text); }
 .nu .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
-.nu .btn.ghost { border-color: var(--nu-border-subtle); color: var(--nu-muted); font-weight: 600;
-  background: none; }
+/* 3 · Lucht in de kaart. Gemeten: 6,4-8px padding tegen een 2px rand — een dichtgeknepen vlak.
+   Nu 14,4 x 15,2px. Dit staat in de `.nu`-laag en niet in `nooch.css`, want de oude laag (met
+   z'n crème en radius) draait nog op o.a. de inlogpagina en is hier niet in scope. */
+.nu .card, .nu .pcol .card, .nu .pkaart, .nu .kcard, .nu .attcard, .nu .gs-hit {
+  padding: .9rem .95rem; }
+
+/* 2b · De kaart zelf leest weer als tekst. `.ptitle` stond op 600 en de metadata eronder in
+   hoofdletters; een lijst van 159 kaarten werd daarmee 159 keer een kop. */
+.nu .ptitle, .nu .pcard-head .ptitle { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.nu .pmeta, .nu .pcard-hint, .nu .pkaart-crumb { font-weight: 400; text-transform: none; }
+
+/* 2 · Secundair is secundair. Een ghost-knop die even vet en even hard in hoofdletters staat als
+   de primaire, is geen tweede niveau maar een tweede eerste niveau. */
+.nu .btn.ghost { border-color: var(--nu-border-subtle); color: var(--nu-muted); font-weight: 500;
+  text-transform: none; letter-spacing: 0; background: none; }
 .nu .btn.ghost:hover { background: var(--nu-text); color: var(--nu-surface);
   border-color: var(--nu-text); }
 .nu .btn.sm { padding: .3em .8em; min-height: 30px; font-size: .8rem; }
@@ -115,8 +156,11 @@
 .nu .pill, .nu .chip, .nu .badge {
   display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
   border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
-  padding: .15em .6em; font-size: .72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .03em; }
+  padding: .15em .6em; font-size: .72rem;
+  /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
+     en kostte het scherm zijn rustpunt. `.nu-status` houdt zijn gewicht wél: daar IS de chip het
+     signaal, en die leunt bovendien op vorm plus woord. */
+  font-weight: 500; text-transform: none; letter-spacing: .01em; }
 .nu .pill.muted, .nu .chip.muted, .nu .badge.ro {
   border-color: var(--nu-border-subtle); color: var(--nu-muted);
   text-transform: none; letter-spacing: 0; font-weight: 600; }
@@ -157,7 +201,7 @@
 /* FASE 12 — EEN RIJ FILTERS IS GEEN RIJ DOOSJES. In rust geen lijn; actief blijft gevuld, want
    dáár is het onderscheid dat je moet zien. Zelfde keuze als bij de kanaalrij, die dit al deed. */
 .nu .cl-filter { border: 1.5px solid transparent; border-radius: 0; background: var(--nu-surface);
-  color: var(--nu-text); font-weight: 700; }
+  color: var(--nu-text); font-weight: 500; }
 .nu .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
 /* ── FASE 12, TWEEDE HERZIENING: een VELD is geen container (21 september 2026) ──────────────
    De regel "een invoerveld is een container en houdt zijn 2px-kader" klopte op een scherm met
@@ -192,7 +236,7 @@
 /* ── Het bord en de gesprek-trail ─────────────────────────────────────────────────────────── */
 .nu .pkaart, .nu .kcard, .nu .msg-item, .nu .fentry {
   border-radius: 0; box-shadow: none; }
-.nu .pkaart, .nu .kcard { border: var(--nu-border); background: var(--nu-surface); }
+.nu .pkaart, .nu .kcard { background: var(--nu-surface); }
 .nu .msg-kanaal { border-radius: 0; }
 .nu .msg-kanaal.on { background: var(--nu-text); color: var(--nu-neon); }
 
@@ -235,16 +279,18 @@
 @media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
 
 /* ── Groeperings- en filterknoppen in de bordkop ─────────────────────────────────────────── */
-.nu .pkaart, .nu .pcol .card { border: var(--nu-border); }
+.nu .pcol .card { border: 1.5px solid var(--nu-border-subtle); }
 .nu .c2-sec > h1 + p.muted { max-width: 720px; }
 
 /* ── De resterende knop-achtigen: alles vierkant, zwart-op-wit ───────────────────────────────
    `.addlink` en `.vswitch a` zijn links die als knop worden gelezen. Ze droegen nog de oude
    pill-vorm met groene vulling — één scherm met twee knopvormen leest als twee systemen. */
 .nu .addlink, .nu .vswitch a, .nu .flink {
-  text-transform: uppercase; letter-spacing: .04em;
+  /* Secundaire links. Ze stonden in hoofdletters én vet, net als de topnav — dan is er geen
+     verschil meer tussen "waar ben ik" en "wat kan ik hier nog meer". */
+  text-transform: none; letter-spacing: 0;
   border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
-  color: var(--nu-text); font-family: var(--nu-font); font-weight: 700; padding: .3em .8em; }
+  color: var(--nu-text); font-family: var(--nu-font); font-weight: 500; padding: .3em .8em; }
 .nu .addlink:hover, .nu .vswitch a:hover, .nu .flink:hover {
   background: var(--nu-text); color: var(--nu-surface); text-decoration: none; }
 .nu .vswitch a.on { background: var(--nu-neon); color: var(--nu-text); }
@@ -276,7 +322,8 @@
 /* `.attcard` stond niet in mijn eerste telling: die scande de views die ik al had
    bekeken, en deze kaart leeft alleen in `projects.py`. De structurele test vond hem wel.
    Zonder deze regel zat er een crème kaart met ronde hoeken óm zwart-gestylde inhoud. */
-.nu .attcard { background: var(--nu-surface); border: var(--nu-border); border-radius: 0; }
+.nu .attcard { background: var(--nu-surface);
+  border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
 .nu .att-pop { border-radius: 0; }
 .nu .att-pop input[type=text], .nu .att-pop input[name=url], .nu .att-pop input[name=title] {
   border: 0; border-bottom: 1.5px solid var(--nu-text); border-radius: 0;
@@ -284,7 +331,7 @@
   font-family: var(--nu-font); }
 
 .nu .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
-  font-weight: 600; }
+  font-weight: 500; }
 .nu .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
 .nu .qadd-form textarea { border: 0; border-bottom: 1.5px solid var(--nu-text);
   border-radius: 0; box-shadow: none;
@@ -363,9 +410,9 @@
   font-family: var(--nu-font); }
 
 /* 4 · Groen dat niet in de beelden staat (#14713C / --green-tint) */
-.nu .menuitem { color: var(--nu-text); background: none; font-weight: 700; }
+.nu .menuitem { color: var(--nu-text); background: none; font-weight: 500; }
 .nu .menuitem.on { background: var(--nu-bg-alt); }
-.nu .pchip-v { color: var(--nu-text); font-weight: 600; }
+.nu .pchip-v { color: var(--nu-text); font-weight: 400; }
 
 /* 5 · Accentkleuren zonder merkdekking → neutraal, betekenis blijft in het WOORD staan */
 .nu .doel { background: var(--nu-surface); border-color: var(--nu-text); }
@@ -463,8 +510,8 @@
    gedeelde eyebrow-definitie hierboven, niet in een eigen blok. */
 .nu .gs-empty, .nu .gs-snip, .nu .gs-more, .nu .gs-didyoumean {
   color: var(--nu-muted); font-family: var(--nu-font); }
-.nu .gs-hit { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
-  color: var(--nu-text); }
+.nu .gs-hit { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); }
 .nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
 /* overview.py */
