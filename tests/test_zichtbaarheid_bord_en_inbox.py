@@ -18,6 +18,8 @@ Het systeem wéét het, het scherm zegt het niet:
 # van dit bestand gaat over het BORD en blijft ongewijzigd.
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from nooch_village import governance
@@ -432,7 +434,7 @@ def test_wie_geen_beweging_wil_krijgt_ze_niet():
 def test_een_snel_antwoord_toont_helemaal_geen_wachtteken():
     """De vertraging IS het ontwerp. Een indicator die oplicht en meteen weer weg is, is drukte;
     binnen een halve seconde voelt een antwoord als direct en hoort er niets te verschijnen."""
-    decl = _regel(_css(), ".ck-item.bezig,.ibx-row.gk.bezig")
+    decl = _regel(_css(), ".ck-item.bezig")
     assert "animation:ck-wacht" in decl
     tijden = [d for d in decl.split("animation:")[1].split(";")[0].split()
               if d.endswith("s") and d[0].isdigit() or d.startswith(".")]
@@ -446,25 +448,33 @@ def test_een_traag_antwoord_blijft_niet_stil():
     zonder spinner die de aandacht opeist."""
     css = _css()
     assert "@keyframes ck-wacht" in css
-    assert "infinite" in _regel(css, ".ck-item.bezig,.ibx-row.gk.bezig")
+    assert "infinite" in _regel(css, ".ck-item.bezig")
 
 
-def test_bezig_heeft_een_vorm_voor_beide_lijsten():
+def test_bezig_staat_precies_een_keer_beschreven():
     """Reference, don't copy — ook in css. Twee keer dezelfde opacity uitschrijven is het feit op
-    twee plekken dat uiteendrijft zodra iemand er één aanpast."""
+    twee plekken dat uiteendrijft zodra iemand er één aanpast.
+
+    DIT HEETTE `..._voor_beide_lijsten`, en die tweede lijst was de inbox-lade. Die bleek op
+    21 september 2026 nooit te hebben bestaan (`ibxToggle` is nergens gedefinieerd) en is
+    verwijderd. De regel die deze test bewaakt is daarmee niet vervallen maar juist makkelijker te
+    schenden: wie straks een tweede lijst met een wachtstand bouwt, schrijft `opacity:.45` er
+    gedachteloos bij. Dus toetst hij nu het GETAL in plaats van de selectorlijst: de vorm van
+    `bezig` hoort in precies één regel te staan, wie hem ook gebruikt."""
     css = _css()
-    gedeeld = _regel(css, ".ck-item.bezig,.ibx-row.gk.bezig")
-    assert "opacity:.45" in gedeeld and "pointer-events:none" in gedeeld
-    # De inbox heeft geen eigen bezig-regel meer naast de gedeelde. Een regel die met díe selector
-    # BEGINT (na een regeleinde) zou de tweede plek zijn waar dezelfde vorm staat.
-    assert "\n.ibx-row.gk.bezig{" not in css
+    vorm = _regel(css, ".ck-item.bezig")
+    assert "opacity:.45" in vorm and "pointer-events:none" in vorm
+    zonder_commentaar = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+    dragers = [sel for sel, blok in re.findall(r"([^{}]*)\{([^{}]*)\}", zonder_commentaar)
+               if "opacity:.45" in blok.replace(" ", "") and "pointer-events:none" in blok]
+    assert len(dragers) == 1, f"de bezig-vorm staat op {len(dragers)} plekken: {dragers}"
 
 
 def test_het_dimmen_blijft_ook_zonder_beweging():
     """Het ademen is versiering, het dimmen is de status zelf: die blijft ook bij reduced motion."""
     css = _css()
     blok = css.split("@media (prefers-reduced-motion: reduce)")[1].split("\n}")[0].replace(" ", "")
-    assert ".ck-item.bezig,.ibx-row.gk.bezig{animation:none}" in blok
+    assert ".ck-item.bezig{animation:none}" in blok
     assert "opacity" not in blok, "reduced motion mag het dimmen niet meenemen"
 
 

@@ -21,9 +21,8 @@ bij is gekomen. Deze test kijkt naar de TOKENS, niet naar hoe iets eruitziet.
 
 DE TWEEDE RONDE (20 september, besluit Stefan): de families die in de eerste ronde buiten de zes
 afgesproken regels vielen, zijn alsnog meegenomen — zelfde regel, consequent doorgetrokken. Bij het
-doorvoeren bleek de eerste telling (negen selectors) te grof: vier daarvan zijn CONTAINERS
-(`ibx-drawer`, `ibx-row`, `ibx-head`, `wz-card`, `cardmenu-b`, `eff`) en die horen hun lijn juist te
-houden. `test_de_containers_in_die_families_houden_hun_lijn` bewaakt dat, want een regel die "haal
+doorvoeren bleek de eerste telling (negen selectors) te grof: een deel daarvan zijn CONTAINERS
+(`wz-card`, `cardmenu-b`, `eff`) en die horen hun lijn juist te houden. `test_de_containers_in_die_families_houden_hun_lijn` bewaakt dat, want een regel die "haal
 overal het kader weg" wordt, sloopt de rolverdeling van de andere kant.
 """
 from __future__ import annotations
@@ -41,7 +40,8 @@ GEEN_CONTAINER_LIJN = ("btn", "pill", "chip", "badge", "cl-filter", "nu-status",
                        "c2-tabs", "c2-subnav", "msg-kanaal", "amber", "outline",
                        # Tweede ronde (20 sept, besluit Stefan): dezelfde regel doorgetrokken naar
                        # de families die in de eerste ronde buiten de zes vielen.
-                       "ibx-plus", "ibx-btn", "ibx-alaan", "ibx-add", "ibx-launch",
+                       # (`ibx-plus`, `ibx-btn`, `ibx-alaan`, `ibx-add` en `ibx-launch` stonden
+                       # hier ook, tot op 21 september bleek dat de inbox-lade nooit bestond.)
                        "wz-btn", "wz-add", "wz-chip", "wz-badge", "c2-burger",
                        # En het voortgangs-atoom: informatie, dus geen kader.
                        "nu-progress",
@@ -184,7 +184,9 @@ def test_de_containers_in_die_families_houden_hun_lijn():
     horen de zwaarste lijn juist te dragen. Zonder deze test leest de vorige als "haal overal het
     kader weg", en dan is de hiërarchie van de andere kant net zo hard weg."""
     houders = " | ".join(sel for sel, body in _regels() if CONTAINER_TOKEN in body)
-    for klasse in ("ibx-drawer", "ibx-row", "ibx-head", "wz-card", "cardmenu-b", "eff"):
+    # (`ibx-drawer`, `ibx-row` en `ibx-head` stonden hier ook; de lade waar ze bij hoorden bleek
+    # op 21 september 2026 niet te bestaan en is met stylesheet en al verwijderd.)
+    for klasse in ("wz-card", "cardmenu-b", "eff"):
         assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", houders), (
             f".{klasse} is een container en hoort {CONTAINER_TOKEN} te dragen")
 

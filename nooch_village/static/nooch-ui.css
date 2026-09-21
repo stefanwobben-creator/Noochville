@@ -216,13 +216,6 @@
   color: var(--nu-muted); }
 @media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
 
-/* ── De inbox-launcher: zwart-op-neon, en niet meer bovenop de zijbalk ───────────────────── */
-/* De launcher is een PRIMAIRE actie: neon vulling, dus geen rand erbovenop (fase 12). */
-.nu .ibx-launch { left: auto; right: 20px; border-radius: 0; border: 2px solid transparent;
-  background: var(--nu-neon); box-shadow: none; }
-.nu .ibx-launch.zero { background: var(--nu-surface); }
-.nu .ibx-launch:hover { transform: none; background: var(--nu-text); color: var(--nu-surface); }
-
 /* ── Groeperings- en filterknoppen in de bordkop ─────────────────────────────────────────── */
 .nu .pkaart, .nu .pcol .card { border: var(--nu-border); }
 .nu .c2-sec > h1 + p.muted { max-width: 720px; }
@@ -387,53 +380,25 @@
 .nu .danger { color: var(--nu-danger); }
 .nu .car { color: var(--nu-muted); }
 
-/* ══ GROEP A · inbox.py (/inbox, /inbox/verwerk — de lade en de verwerk-lezer) ═════════════════
-   37 klassen, en anders dan bij `projects.py` zit het zwaartepunt hier niet op randen maar op
-   GROEN als achtergrond: `--green-tint` achter de leesregel, de kop van de lade, de teller en de
-   swipe-hint. Dat is dezelfde kleur-alleen-signalering die fase 9 uit het bord haalde. De vorm
-   (de dashed outline op de actieve regel) blijft; alleen de vulling wordt rustig. */
-
-/* 1 · Omhulsels */
-.nu .ibx-row, .nu .wo-oc, .nu .rdr-tool, .nu .rdr-kader, .nu .rdr-vier,
-.nu .gk, .nu .ibx-drawer, .nu .ibx-modal {
+/* ══ Wat er van de inbox-lade overblijft: de regels die hij DEELDE ════════════════════════════
+   Hier stond GROEP A · inbox.py — 37 klassen voor de uitschuiflade en zijn verwerk-lezer. Die
+   lade heeft nooit bestaan: `_nav()` riep `ibxToggle()` aan, een functie die nergens gedefinieerd
+   is, en `render_inbox_chrome` uit de docstring ernaast bestaat ook niet. De knop deed dus niets
+   en de stylesheet kleedde een scherm aan dat nergens gerenderd werd (21 september 2026).
+   Wat hieronder staat zijn de regels waarin een `ibx-`-selector MEELIFTTE op een levende: het
+   werkoverleg (`wo-`), de radar-lezer (`rdr-`) en de scheider. Die houden hun vorm; alleen de
+   dode helft van de selectorlijst is eruit. */
+.nu .wo-oc,.nu .rdr-tool,.nu .rdr-kader,.nu .rdr-vier{
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   box-shadow: none; color: var(--nu-text); }
-.nu .ibx-iframe { background: var(--nu-bg); }
 .nu .wo-ocd { background: var(--nu-bg); }
 
-/* 2 · Grijstinten → één muted */
-.nu .ibx-meta, .nu .ibx-sub, .nu .ibx-wat, .nu .ibx-sectie, .nu .ibx-empty,
-.nu .ibx-cli, .nu .ibx-x, .nu .ibx-trash, .nu .ibx-mx, .nu .fsep {
+.nu .fsep{
   color: var(--nu-muted); font-family: var(--nu-font); }
 
 /* 3 · Groen als vulling → rustig, met de vorm als drager
        `.rdr-row` houdt zijn dashed outline: dát is het signaal, niet de tint erachter. */
 .nu .rdr-row { background: var(--nu-bg-alt); outline-color: var(--nu-text); }
-.nu .ibx-head { background: var(--nu-bg-alt); border-bottom: var(--nu-border); }
-.nu .ibx-kader, .nu .ibx-swipe { color: var(--nu-muted); }
-.nu .ibx-dot { background: var(--nu-text); }
-.nu .ibx-dot.read, .nu .read { background: var(--nu-muted); }
-
-/* 4 · De laatste pil-radiussen in dit scherm */
-.nu .ibx-plus, .nu .ibx-hct, .nu .ibx-ct { border-radius: 0; }
-.nu .ibx-plus { border: 1.5px solid var(--nu-text); background: var(--nu-surface);
-  color: var(--nu-text); }
-.nu .ibx-hct, .nu .ibx-ct { background: var(--nu-neon); color: var(--nu-text);
-  font-family: var(--nu-font); font-weight: 700; }
-
-/* 5 · Fout blijft rood, want een foutkleur is functioneel */
-.nu .ibx-err { color: var(--nu-danger); background: var(--nu-surface);
-  border: 1.5px solid var(--nu-danger); }
-
-/* 6 · De scrim onder de lade */
-.nu .ibx-scrim { background: rgba(0,0,0,.45); }
-
-/* 7 · De staart van inbox.py */
-.nu .ibx-btn, .nu .ibx-alaan, .nu .ibx-add {
-  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
-  color: var(--nu-text);
-  font-family: var(--nu-font); }
-.nu .ibx-add { border-width: 0 0 2px 0; }
 .nu .einddoc-body { color: var(--nu-text); }
 .nu .done { color: var(--nu-muted); }
 .nu .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }

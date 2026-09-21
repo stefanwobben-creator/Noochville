@@ -599,9 +599,11 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
     vervangt. `context` blijft in de signatuur voor compat (niet getoond); ~40 aanroepers geven
     hem niet mee en hoeven daarom niet aangeraakt te worden.
 
-    De Inbox is een KNOP en geen link: de drawer bestaat al als globale chrome
-    (`render_inbox_chrome`) met launcher, badge en een "+ tension"-paneel. Het prototype toont hem
-    als lade, dus hier hoort hij als lade open te gaan en niet als pagina te navigeren.
+    HIER STOND EEN INBOX-KNOP, en hij deed niets. Het `onclick` riep `ibxToggle()` aan — een
+    functie die nergens in de repo gedefinieerd is — en de docstring beloofde een lade
+    (`render_inbox_chrome`) die net zo min bestaat. Klikken gaf een JS-fout in de console en verder
+    niets. Weg op 21 september 2026, samen met de 72 stylesheet-regels die hem aankleedden.
+    Wat de functie zou moeten doen, doet Messages.
 
     `rail=True` klapt hem in tot een 64px icoon-rail (fase 11). Dat is voor een module die zélf een
     lijst-paneel heeft — Messages heeft er drie nodig: navigatie, kanalen, gesprek. De navigatie is
@@ -627,11 +629,7 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
         "<span class='c2-greet' id='c2-greet'></span>"
         "<nav class='c2-subnav'>"
         + "".join(_side_item(h, l) for h, l in _SIDE_ITEMS)
-        + "<button type='button' class='c2-navbtn' onclick='ibxToggle()' title='Inbox'>"
-          "<span class='c2-mono' aria-hidden='true'>IN</span>"
-          "<span class='c2-lbl'>Inbox</span>"
-          "<span class='c2-navct hide' id='c2-ibx-ct'>0</span></button>"
-          "<div class='c2-subnav-div'></div>"
+        + "<div class='c2-subnav-div'></div>"
         + _SIDE_CIRCLE
         + _side_item("/admin", "Admin")
         + "</nav>"
