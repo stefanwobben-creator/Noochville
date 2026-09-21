@@ -158,12 +158,20 @@ def test_een_kanaal_zonder_gesprek_toont_geen_tijdstip():
     assert _kort_tijd(1_700_000_000.0)                      # een echt tijdstip levert wél tekst
 
 
-def test_messages_klapt_de_zijbalk_in_tot_een_rail(dorp):
-    """Drie kolommen (navigatie, kanalen, gesprek) passen alleen als de eerste krimpt. Het WOORD
-    blijft in de DOM — een rail die alleen monogrammen rendert laat een schermlezer 'PR' horen."""
+def test_de_zijbalk_is_op_messages_net_zo_breed_als_overal(dorp):
+    """DIT HEETTE `..._klapt_de_zijbalk_in_tot_een_rail`, en die rail is er op 21 september 2026
+    uitgehaald (eis Stefan).
+
+    De redenering was: drie kolommen (navigatie, kanalen, gesprek) passen alleen als de eerste
+    krimpt. Dat klopt als rekensom, maar het maakt van één navigatiemodel twee — precies wat
+    fase 7 opruimde — en je verliest de woorden op het scherm waar je ze het hardst nodig hebt:
+    als je uit een gesprek komt weet je niet meer welke twee letters waar heen gingen. De ruimte
+    komt uit de kanalenlijst (210px), niet uit de navigatie.
+
+    Het WOORD stond en staat in de DOM; alleen de CSS besliste wat je zag."""
     st, ik = dorp
     html = render_messages(st, ik=ik)
-    assert "c2-side--rail" in html
+    assert "c2-side--rail" not in html, "de zijbalk klapt hier nog in"
     assert "c2-mono" in html and "c2-lbl" in html
     assert "Projects" in html
 

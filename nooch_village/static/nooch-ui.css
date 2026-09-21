@@ -560,11 +560,7 @@
 .nu .pchips { gap: .3rem; }
 .nu .msg-tijd { color: var(--nu-muted); }
 .nu .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
-/* De ingeklapte rail: de footer-offset hierboven is hard 232px, dus die moet mee. */
-.nu .c2-side--rail ~ .c2-foot { margin-left: 80px; }
-.nu .c2-side--rail { border-right: var(--nu-border); }
 .nu .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
-.nu .c2-side--rail .c2-orgfly[open] .c2-org { border: var(--nu-border); border-radius: 0; }
 .nu .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
   background: var(--nu-surface); }
 

@@ -31,7 +31,11 @@ OPGERUIMD = ("kn-", "imp-pill", "wz-was", "wz-now", "rail-btn", "fkind", "avatar
              # 21 september 2026: de inbox-lade. 72 regels in twee stylesheets voor een
              # scherm dat nooit gerenderd werd — `ibxToggle` en `render_inbox_chrome`
              # bestaan allebei niet. Zie `test_nav_ia`.
-             "ibx-")
+             "ibx-",
+             # 21 september 2026: de 64px icoon-rail. Hij bestond voor één scherm (/messages) en
+             # die uitzondering is vervallen — een balk die ergens anders breed is dan overal, is
+             # een tweede navigatiemodel. De `rail`-parameter van `_nav` ging mee.
+             "c2-side--rail")
 
 #: De enige overlevende: hergebruikt door de claims-view, dus hij hoort te blijven.
 OVERLEVER = "kn-searchbox"
