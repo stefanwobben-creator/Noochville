@@ -988,8 +988,14 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    Alles wat ná de zijbalk in de DOM komt schuift op via de sibling-selector hieronder. */
 .c2-side{position:fixed;left:0;top:0;bottom:0;width:216px;z-index:30;box-sizing:border-box;
   display:flex;flex-direction:column;gap:.85rem;padding:1rem .75rem;overflow-y:auto;
-  background:var(--card);border-right:1px solid var(--border)}
-.c2-side ~ *{margin-left:232px}
+  background:var(--surface);border-right:1px solid var(--border)}
+/* `:not(.c2-paneel)` IS DE HELE BUG, en hij was niet te zien aan één regel.
+   Het paneel is een SIBLING van de zijbalk, dus deze marge trof hem ook — en `margin-left` op
+   een `position:fixed` element SCHUIFT hem: 232 (left) + 232 (margin) = 464, plus 300 breed is
+   764, terwijl de content op 580 begint. 184px overlap, precies wat de meting gaf.
+   De marge ophogen naar 764 zou het overlappen oplossen én een dood gat van 232px laten tussen
+   zijbalk en paneel. Het paneel hoort hier gewoon buiten: zijn plek staat in zijn eigen `left`. */
+.c2-side ~ *:not(.c2-paneel){margin-left:232px}
 .c2-subnav{display:flex;flex-direction:column;gap:.1rem}
 .c2-subnav a,.c2-navbtn{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
   padding:.42rem .55rem;border-radius:var(--radius);font-size:14px;font-weight:600;
@@ -1013,7 +1019,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    Smal betekent dus: de balk krimpt tot de rail, en wat ernaast stond gaat eronder staan. */
 @media(max-width:760px){
   .c2-side{width:64px;padding:1rem .35rem;align-items:center}
-  .c2-side ~ *{margin-left:80px}
+  .c2-side ~ *:not(.c2-paneel){margin-left:80px}
   .c2-side .c2-lbl,.c2-side .c2-search,.c2-side .c2-greet,.c2-side .c2-subnav-div{display:none}
   .c2-org{display:none}
 }
@@ -1023,7 +1029,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    Op een smal scherm staat hij ONDER de balk in plaats van ernaast; de balk zelf blijft verticaal
    (zie de media-query hierboven). */
 .c2-paneel{position:fixed;left:232px;top:0;bottom:0;width:300px;z-index:29;box-sizing:border-box;
-  overflow-y:auto;padding:1rem .8rem;background:var(--card);border-right:1px solid var(--border)}
+  overflow-y:auto;padding:1rem .8rem;background:var(--surface);border-right:1px solid var(--border)}
 body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .c2-pkop{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray);
   margin:0 0 .8rem}
@@ -1314,7 +1320,7 @@ summary.pchip:hover{border-color:var(--gray)}
 /* ── /wiki: de dorpsbrede index (fase 7) — domeinkolom links, kaarten rechts ─────────────────── */
 .c2-wiki{display:flex;gap:1.2rem;align-items:flex-start}
 .wiki-doms{flex:0 0 220px;max-width:220px}
-.wiki-doms details{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);
+.wiki-doms details{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
   margin-bottom:.4rem}
 .wiki-doms summary{cursor:pointer;padding:.45rem .6rem;font-weight:600;font-size:13.5px;
   display:flex;justify-content:space-between;gap:.5rem}
@@ -1330,7 +1336,7 @@ summary.pchip:hover{border-color:var(--gray)}
 .msg-kanaal{display:block;padding:.35rem .5rem;border-radius:var(--radius);font-size:13.5px;
   font-weight:600;color:var(--ink);text-decoration:none}
 .msg-kanaal:hover{background:var(--surface)}
-.msg-kanaal.on{background:var(--ink);color:var(--card)}
+.msg-kanaal.on{background:var(--ink);color:var(--surface)}
 .msg-draad{flex:1;min-width:0}
 .msg-kop{font-size:1rem;margin:0 0 .6rem}
 .msg-item{border-bottom:1px solid var(--border);padding:.5rem 0}
@@ -1430,7 +1436,7 @@ progress.nu-progress.wide{height:8px}
 .c2-side--rail .c2-orgfly .c2-org{display:none}
 .c2-side--rail .c2-orgfly[open] .c2-org{display:block;position:fixed;left:64px;top:1rem;
   width:250px;max-height:80vh;overflow:auto;z-index:40;padding:.7rem .8rem;
-  background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
 
 /* De hamburger: alleen mobiel, en alleen als JS draait. Zonder JS blijft de zijbalk staan zoals
    hij was — een menu dat je niet kunt openen omdat een script niet laadde, is erger dan een
@@ -1439,7 +1445,7 @@ progress.nu-progress.wide{height:8px}
 @media(max-width:760px){
   .c2-burger{display:inline-flex;align-items:center;justify-content:center;position:fixed;
     left:10px;top:10px;z-index:60;width:40px;height:40px;font-size:18px;line-height:1;
-    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
     color:var(--ink);cursor:pointer}
   body.navjs .c2-side{display:none}
   body.navjs.navopen .c2-side{display:flex;position:fixed;inset:0;z-index:50;width:auto;

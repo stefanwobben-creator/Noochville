@@ -32,7 +32,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
-    _SIDE_ORG, _SIDE_CIRCLE, _SIDE_OVERLEG,
+    _SIDE_CIRCLE, _SIDE_OVERLEG,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -5122,17 +5122,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 # extra deed, de huidige node openklappen en markeren, gebeurt nu hier: het `id`
                 # uit de query gaat mee naar `_tree_html`. Zo verdwijnt de dubbele weergave zonder
                 # dat de positie-in-de-organisatie verloren gaat.
-                if _st is not None and _SIDE_ORG in body:
-                    try:
-                        from nooch_village.views.overview import _tree_html
-                        _hier = ""
-                        if (self.path or "").split("?", 1)[0] == "/node":
-                            _hier = urllib.parse.parse_qs(
-                                urllib.parse.urlparse(self.path).query).get("id", [""])[0]
-                        body = body.replace(
-                            _SIDE_ORG, f"<div class='c2-org' id='c2-org'>{_tree_html(_st, _hier)}</div>", 1)
-                    except Exception:
-                        pass
+                # HIER WERD DE ORGANISATIEBOOM IN DE ZIJBALK GEÏNJECTEERD. De boom is op
+                # 21 september 2026 een nav-paneel geworden (`/nav-paneel?p=org`), zoals Projects
+                # en Messages: hij wordt opgehaald als je erop klikt, niet meegerenderd met elke
+                # pagina. Daarmee vervalt deze injectie én de `_SIDE_ORG`-placeholder.
                 # De Circle-link in de zijbalk wijst naar de operationele cirkel (Nooch), dezelfde
                 # node waar '/' vóór fase 7 op landde. Nu landt '/' op Projects en is de cirkel een
                 # eigen nav-item, precies zoals in het prototype.
@@ -5460,9 +5453,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 from nooch_village.views.navpaneel import render_nav_paneel
                 _p = (qs.get("p") or [""])[0]
                 _ik = _web_actor_id(username, st)
+                # `hier` = de node waar je vandaan komt, zodat de boom die tak openklapt en
+                # markeert. Dat deed de oude zijbalk-injectie ook; het komt nu van de client,
+                # want een fragment weet niet op welke pagina het landt.
                 self._send(render_nav_paneel(st, _p, _ik,
                                              q=(qs.get("q") or [""])[0],
-                                             welke=(qs.get("welke") or ["mijn"])[0]),
+                                             welke=(qs.get("welke") or ["mijn"])[0],
+                                             hier=(qs.get("hier") or [""])[0]),
                            chrome=False)
                 return
             if path == "/skills":

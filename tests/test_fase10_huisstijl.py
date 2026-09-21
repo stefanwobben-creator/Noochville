@@ -310,12 +310,16 @@ def test_geen_enkele_view_rendert_nog_een_eigen_organisatieboom():
 
 def test_de_zijbalk_markeert_de_huidige_node():
     """Wat de rail extra deed — de huidige node openklappen en markeren — mag niet verdwijnen.
-    Het is verhuisd naar `_send`: het `id` uit de query gaat mee naar `_tree_html`."""
-    bron = (REPO / "nooch_village" / "cockpit2.py").read_text()
-    blok = re.search(r"if _st is not None and _SIDE_ORG in body:(.*?)except Exception", bron, re.S)
-    assert blok, "de injectie van de zijbalk-boom is niet te vinden"
-    assert '== "/node"' in blok.group(1)
-    assert "_tree_html(_st, _hier)" in blok.group(1)
+
+    HET IS TWEE KEER VERHUISD. Eerst van de rechter rail naar `_send` (fase 10), en op
+    21 september van `_send` naar het org-paneel. Een fragment weet niet op welke pagina het
+    landt, dus `hier` komt nu van de client: de JS leest `?id=` op `/node` en geeft hem mee.
+    De eis is onveranderd — de boom klapt de tak open waar je staat."""
+    js = (REPO / "nooch_village" / "static" / "nooch.js").read_text()
+    assert 'location.pathname === "/node"' in js
+    assert '"&hier=" + encodeURIComponent(hier)' in js
+    bron = (REPO / "nooch_village" / "views" / "navpaneel.py").read_text()
+    assert "_tree_html(st, hier)" in bron
 
 
 def test_de_rollenlijst_blijft_bereikbaar():
