@@ -120,7 +120,11 @@ def test_er_komt_nooit_werkzame_markup_uit_ook_niet_bij_kapotte_invoer():
     ("<div>een<br></div>", "een"),                           # de trailing br van een lege regel
     ("<b>vet</b> en <strong>ook vet</strong>", "**vet** en **ook vet**"),
     ("<i>schuin</i> en <em>ook schuin</em>", "*schuin* en *ook schuin*"),
+    # DRIE VORMEN VOOR ÉÉN KNOP. Chrome's execCommand("strikeThrough") levert `<strike>`,
+    # Safari `<s>`, en `_md` zelf rendert `~~` als `<del>`. Dat `<strike>` hier ontbrak kostte een
+    # live bug: doorhalen werkte op het scherm en was na opslaan weg (21 september 2026).
     ("<s>door</s> en <del>ook door</del>", "~~door~~ en ~~ook door~~"),
+    ("<strike>door</strike> en <s>ook door</s>", "~~door~~ en ~~ook door~~"),
 ])
 def test_de_rommel_van_de_browser_geeft_dezelfde_bron(html, bron):
     """`document.execCommand('bold')` levert in de ene browser `<b>` en in de andere `<strong>`.

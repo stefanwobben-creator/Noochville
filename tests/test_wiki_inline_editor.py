@@ -24,6 +24,10 @@ from nooch_village.views.wiki import render_pagina
 JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
+#: De werkbalk zoals hij gerenderd wordt — het argument reist als HTML-attribuut mee.
+from nooch_village.cockpit2_util import opmaak_werkbalk as _werkbalk      # noqa: E402
+JS_WERKBALK = _werkbalk()
+
 
 def _dorp(tmp_path, *, can_edit: bool = True, body: str = "Wat **tekst** hier."):
     dd = str(tmp_path / "poc")
@@ -194,16 +198,66 @@ def test_de_werkbalk_schrijft_tags_en_geen_stijlen():
     assert 'execCommand("styleWithCSS", false, false)' in JS
 
 
+#: Wat `execCommand` WERKELIJK oplevert, per commando, per browser. Niet één vorm per knop maar
+#: alle vormen die in het wild voorkomen — dat onderscheid is precies waar de vorige versie van
+#: deze test op stukging (zie `test_doorhalen_overleeft_het_opslaan` hieronder).
+_ECHTE_UITKOMSTEN = {
+    "bold": ("<b>x</b>", "<strong>x</strong>"),
+    "italic": ("<i>x</i>", "<em>x</em>"),
+    # Chrome: <strike>. Firefox: <strike> of <s>. Safari: <s>. Alle drie moeten door.
+    "strikeThrough": ("<strike>x</strike>", "<s>x</s>", "<del>x</del>"),
+    "insertUnorderedList": ("<ul><li>x</li></ul>", '<ul class="fbul"><li>x</li></ul>'),
+    "formatBlock": ("<h4>x</h4>",),
+}
+
+#: Wat er in de bron hoort te staan als de knop gewerkt heeft. `x` alleen = de opmaak is weg.
+_VERWACHT = {"bold": "**x**", "italic": "*x*", "strikeThrough": "~~x~~",
+             "insertUnorderedList": "- x", "formatBlock": "## x"}
+
+
 def test_de_werkbalk_gebruikt_alleen_tags_die_de_omzetter_kent():
-    """De knoppen mogen niets produceren wat `_md_naar_bron` daarna weggooit. Dat zou je pas
-    merken als je tekst na het opslaan zijn opmaak kwijt is."""
+    """DEZE TEST STOND EERST TE LIEGEN, en dat kostte een live bug. Hij voerde `<del>x</del>` in
+    als "wat de strikethrough-knop oplevert" — een AANNAME over de browser, opgeschreven als
+    meting. Chrome levert `<strike>`, die tag viel buiten de whitelist, en doorhalen werd bij het
+    opslaan stilletjes platte tekst. Fail-closed deed precies wat het moest; de tag hoorde er
+    alleen in.
+
+    Nu voert hij per knop ELKE vorm in die een browser werkelijk produceert, en toetst hij niet
+    "er komt iets anders dan x uit" maar wat er exact in de bron hoort te staan."""
     from nooch_village.cockpit2_util import _OPMAAK_KNOPPEN, _md_naar_bron
-    proef = {"bold": "<strong>x</strong>", "italic": "<em>x</em>",
-             "strikeThrough": "<del>x</del>", "insertUnorderedList": "<ul><li>x</li></ul>",
-             "formatBlock": "<h4>x</h4>"}
     for cmd, _arg, _label, _titel in _OPMAAK_KNOPPEN:
         if not cmd:
             continue
-        assert cmd in proef, f"knop {cmd} heeft geen bekende uitkomst"
-        assert _md_naar_bron(proef[cmd]).strip() not in ("x", ""), (
-            f"{cmd} levert HTML die de omzetter niet als opmaak herkent")
+        assert cmd in _ECHTE_UITKOMSTEN, f"knop {cmd} heeft geen gemeten uitkomst"
+        for html in _ECHTE_UITKOMSTEN[cmd]:
+            assert _md_naar_bron(html).strip() == _VERWACHT[cmd], (
+                f"{cmd} levert {html} en dat wordt {_md_naar_bron(html)!r} "
+                f"in plaats van {_VERWACHT[cmd]!r} — de opmaak valt bij het opslaan weg")
+
+
+def test_doorhalen_overleeft_het_opslaan(tmp_path):
+    """DE LIVE BUG, als test. Op village.nooch.earth: doorhalen wérkte zichtbaar tijdens het
+    bewerken en was na opslaan en herladen weg — zonder foutmelding, want er ging niets kapot.
+    De drie vormen gaan hier door de hele keten: HTML in, markdown in de opslag, opmaak terug op
+    het scherm."""
+    from nooch_village.cockpit2_util import _md
+    for html in _ECHTE_UITKOMSTEN["strikeThrough"]:
+        dd, st, a, mens = _dorp(tmp_path / html[:3].strip("<"))
+        cockpit2.dispatch(dd, "artefact_edit", {
+            "csrf": ["TOK"], "aid": [a.id], "body_html": [f"Een zin met {html} erin"],
+            "next": ["/pagina"]}, username="b@t.nl")
+        bron = cockpit2._Stores(dd).att.get(a.id).body
+        assert bron == "Een zin met ~~x~~ erin", f"{html} ging verloren: {bron!r}"
+        assert "<del>x</del>" in _md(bron), "en op het scherm komt hij niet terug"
+
+
+def test_de_kopknop_geeft_zijn_argument_in_punthaken_door():
+    """`formatBlock` met "h4" doet in Chrome en Safari niets: geen fout, geen effect. Alleen met
+    "<h4>" maakt hij een kop. Bij de klik-doorloop had de H-knop inderdaad geen zichtbaar effect.
+
+    Dit is dezelfde soort fout als bij `strike`: een aanname over de browser-API die nergens werd
+    getoetst omdat hij in geen enkele Python-assertie voorkwam."""
+    from nooch_village.cockpit2_util import _OPMAAK_KNOPPEN
+    arg = next(a for cmd, a, _l, _t in _OPMAAK_KNOPPEN if cmd == "formatBlock")
+    assert arg == "<h4>", "zonder punthaken maakt formatBlock geen kop"
+    assert "&lt;h4&gt;" in JS_WERKBALK, "het attribuut hoort het argument te dragen"
