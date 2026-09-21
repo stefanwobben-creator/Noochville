@@ -750,7 +750,16 @@ _NU_LINK = (f'<link rel="stylesheet" href="/static/nooch-ui.css?v={_NU_VERSION}"
 #: niet bestond; zie #531.)
 _SIDE_ITEMS = (
     ("/projects", "Projects", "pr"),
-    ("/messages", "Messages", "me"),
+    # MESSAGES IS GEEN PANEEL (eis Stefan, 21 september 2026). Hij was het wel, en het leverde een
+    # halve Messages op: het paneel toonde de kanalenlijst terwijl je nog op je vorige scherm
+    # stond, dus het gesprek was nergens en de oude pagina keek er langs. Klikken op een kanaal
+    # bracht je alsnog op `/messages`, maar de tussenstand las als kapot.
+    #
+    # De diepere reden dat het niet past: Messages is als ENIGE van de vijf een scherm dat zelf al
+    # uit lijst + detail bestaat. Een paneel kan daar alleen de lijst van tonen, en die lijst is
+    # een kopie van wat de pagina zelf al heeft. Bij Projects, Circle en Organization voegt het
+    # paneel iets toe dat de pagina niet heeft; hier haalde het iets weg.
+    ("/messages", "Messages", ""),
     ("/wiki",     "Wiki",     ""),
 )
 

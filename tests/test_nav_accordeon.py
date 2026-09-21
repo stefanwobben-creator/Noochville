@@ -20,7 +20,7 @@ import re
 
 from nooch_village import channels, cockpit2
 from nooch_village.cockpit2_util import _nav
-from nooch_village.views.navpaneel import render_nav_paneel
+from nooch_village.views.navpaneel import PANELEN, render_nav_paneel
 
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
@@ -74,10 +74,13 @@ def test_de_balk_klapt_nooit_om_naar_horizontaal():
 
 def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
     h = _nav_ingevuld()
-    for sleutel in ("zoek", "pr", "me", "ci"):
+    for sleutel in ("zoek", "pr", "ci", "org"):
         assert f"data-nav-paneel='{sleutel}'" in h, sleutel
-    # WI en AD springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
-    # tussenlijst is dan een extra klik zonder winst.
+    # WI, AD én ME springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
+    # tussenlijst is dan een extra klik zonder winst. Messages kwam er op 21 september bij — zie
+    # `test_messages_is_geen_paneel_want_het_scherm_is_al_lijst_plus_detail`.
+    me = h.split("/messages")[1][:120]
+    assert "data-nav-paneel" not in me
     wi = h.split("/wiki")[1][:120]
     assert "data-nav-paneel" not in wi
     ad = h.split("/admin")[1][:120]
@@ -90,7 +93,7 @@ def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
     href, en `preventDefault` gebeurt pas als het paneel echt opengaat."""
     h = _nav_ingevuld()
     for sleutel, href in (("zoek", "/search"), ("pr", "/projects"),
-                          ("me", "/messages"), ("ci", "/node?id=mother_earth__nooch")):
+                          ("ci", "/node?id=mother_earth__nooch"), ("org", "/node")):
         stuk = h.split(f"data-nav-paneel='{sleutel}'")[0][-160:]
         assert f"href='{href}'" in stuk, f"{sleutel} heeft geen val-terug-link"
     assert "e.preventDefault()" in JS
@@ -126,20 +129,25 @@ def test_het_paneel_staat_leeg_in_de_pagina():
 
 
 # ── 3. Wat de panelen tonen is bestaande data ────────────────────────────────
-def test_het_messages_paneel_is_dezelfde_lijst_als_het_scherm(tmp_path):
-    """EEN RENDER-PLEK-WIJZIGING, GEEN NIEUWE LIJST. Zou dit paneel zijn eigen kanalenlijst
-    opbouwen, dan geeft "wat staat er in mijn lijst" twee antwoorden zodra er aan één iets
-    verandert."""
-    from nooch_village.views.messages import _kanalen
+def test_messages_is_geen_paneel_want_het_scherm_is_al_lijst_plus_detail(tmp_path):
+    """HET WAS EEN PANEEL, EN DAT LEVERDE EEN HALVE MESSAGES OP. Je klikte ME vanaf een ander
+    scherm, kreeg de kanalenlijst naast de balk — en het gesprek was nergens, want je stond nog op
+    je vorige pagina, die er gewoon naast bleef staan. Klikken op een kanaal bracht je alsnog op
+    `/messages`, maar de tussenstand las als kapot.
+
+    De diepere reden: Messages is als ENIGE van de vijf een scherm dat zelf al uit lijst + detail
+    bestaat. Een paneel kan daar alleen de lijst van tonen, en die lijst is een kopie van wat de
+    pagina zelf al heeft. Bij Projects, Circle en Organization voegt het paneel iets toe dat de
+    pagina niet heeft; hier haalde het iets weg (eis Stefan, 21 september 2026)."""
     dd, st, ik = _dorp(tmp_path)
-    st.people.volg(ik, channels.project_kanaal(st.projects.all()[0]["id"]))
-    st2 = cockpit2._Stores(dd)
-    groepen, _t, _g = _kanalen(st2, ik, "")
-    h = render_nav_paneel(st2, "me", ik)
-    assert "General" in h and "Website" in h
-    for k in groepen["Projects"]:
-        assert f"k={channels.PROJECT}" in h.replace("%3A", "=")   # het gevolgde project staat erin
-    assert h.count("c2-prij") == sum(len(r) for r in groepen.values())
+    assert "me" not in PANELEN
+    assert render_nav_paneel(st, "me", ik) == ""          # fail-closed, geen half scherm
+    h = _nav_ingevuld()
+    me = h.split("/messages")[1][:120]
+    assert "data-nav-paneel" not in me, "Messages opent nog een paneel"
+    # en de lijst bestaat gewoon nog, één klik verder, in zijn volledige vorm
+    from nooch_village.views.messages import render_messages
+    assert "msg-lijst" in render_messages(st, ik=ik, csrf_token="t")
 
 
 def test_het_projects_paneel_opent_op_mijn_projecten(tmp_path):
