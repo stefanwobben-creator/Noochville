@@ -417,4 +417,12 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
     # naast elkaar passen niet. De rail houdt de navigatie bereikbaar zonder de kanalenlijst te
     # verdringen; de organisatieboom zit hier achter zijn icoon, want die heb je tijdens een
     # gesprek niet nodig.
-    return _page("Messages", f"{_DS_LINK}{_nav(rail=True)}<div class='c2-wrap'>{main}</div>")
+    # `rail=True` STOND HIER, en dat was de enige plek. De zijbalk klapte op /messages in tot een
+    # 64px icoon-rail omdat drie volle kolommen niet pasten: navigatie, kanalenlijst, gesprek.
+    #
+    # WEG OP 21 SEPTEMBER 2026 (eis Stefan). Een balk die op één scherm anders breed is dan op alle
+    # andere, is een tweede navigatiemodel — precies wat fase 7 opruimde — en je verliest de woorden
+    # op het scherm waar je ze het hardst nodig hebt: als je uit een gesprek komt weet je niet meer
+    # welke twee letters waar heen gingen. De ruimte komt uit de kanalenlijst (210px), niet uit de
+    # navigatie.
+    return _page("Messages", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

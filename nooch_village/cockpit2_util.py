@@ -830,7 +830,7 @@ def _side_item(href: str, label: str, paneel: str = "") -> str:
             f"<span class='c2-lbl'>{_e(label)}</span></a>")
 
 
-def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
+def _nav(context: str = "GlassFrog (PoC)") -> str:
     """De gedeelde zijbalk: logo, zoek, wie je bent, de navigatie en de organisatieboom.
 
     Elke pagina roept dit aan, dus de navigatie staat overal — één bron, zoals de topbar die hij
@@ -843,18 +843,17 @@ def _nav(context: str = "GlassFrog (PoC)", rail: bool = False) -> str:
     niets. Weg op 21 september 2026, samen met de 72 stylesheet-regels die hem aankleedden.
     Wat de functie zou moeten doen, doet Messages.
 
-    `rail=True` klapt hem in tot een 64px icoon-rail (fase 11). Dat is voor een module die zélf een
-    lijst-paneel heeft — Messages heeft er drie nodig: navigatie, kanalen, gesprek. De navigatie is
-    de kolom die je tijdens het lezen van een gesprek het minst nodig hebt, dus die krimpt. Hij
-    verdwijnt NIET: een tweede navigatiemodel naast dit ene is precies wat fase 7 opruimde. De
-    organisatieboom zit dan achter een icoon met een flyout; in de volle zijbalk staat hij gewoon
-    open (`<details open>`, geen JS, en geen afhankelijkheid van UA-gedrag bij gesloten details)."""
-    zij = "c2-side c2-side--rail" if rail else "c2-side"
+    `rail=True` STOND HIER: op /messages klapte de balk in tot 64px, want drie kolommen
+    (navigatie, kanalen, gesprek) passen niet. Die uitzondering is op 21 september 2026 vervallen
+    (eis Stefan) — een balk die op één scherm anders breed is dan op alle andere, is een tweede
+    navigatiemodel, precies wat fase 7 opruimde. De ruimte komt uit de kanalenlijst, niet uit de
+    navigatie. De parameter had daarna nog één aanroeper en nu geen, dus hij is weg; de
+    `c2-side--rail`-CSS ging in dezelfde beurt mee."""
     return (
         # De hamburger staat BUITEN de zijbalk, anders verdwijnt de knop samen met wat hij opent.
         "<button type='button' class='c2-burger' onclick='navToggle()' "
         "aria-label='Menu' aria-expanded='false'>\u2630</button>"
-        f"<aside class='{zij}'>"
+        "<aside class='c2-side'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"

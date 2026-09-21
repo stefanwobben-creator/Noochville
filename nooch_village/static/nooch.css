@@ -1408,23 +1408,10 @@ progress.nu-progress.wide{height:8px}
   .msg-layout[data-mob='draad'] .msg-lijst{display:none}
   .msg-layout[data-mob='lijst'] .msg-draad{display:none}
 }
-
-/* ── Fase 11: de zijbalk als 64px icoon-rail, en de hamburger op mobiel ──────────────────────
-   WAAROM EEN RAIL. Een module met een eigen lijst-paneel (Messages) heeft drie kolommen nodig:
-   globale navigatie, kanalenlijst, gesprek. Drie volle kolommen passen niet; de globale navigatie
-   is de kolom die je tijdens het lezen van een gesprek het minst nodig hebt, dus die klapt in tot
-   iconen. Hij VERDWIJNT niet — dat zou een tweede navigatiemodel opleveren. */
-.c2-side--rail{width:64px;padding:1rem .35rem;align-items:center}
-.c2-side--rail ~ *{margin-left:80px}
-.c2-side--rail .c2-lbl,.c2-side--rail .c2-search,.c2-side--rail .c2-greet,
-.c2-side--rail .c2-subnav-div{display:none}
-.c2-side--rail .c2-subnav a,.c2-side--rail .c2-navbtn{justify-content:center;padding:.5rem 0}
-.c2-side--rail .c2-logo img{max-width:40px}
 /* Het monogram is de icoon-vorm van dit systeem: geen icoonset erbij halen voor vijf items, en
    het blijft leesbaar in zwart-wit. Het volledige label blijft in de DOM (`.c2-lbl`, verborgen)
    plus in `title`, dus een schermlezer leest "Projects" en niet "P". */
 .c2-mono{font-weight:700;font-size:13px;letter-spacing:.02em}
-.c2-side:not(.c2-side--rail) .c2-mono{display:none}
 /* De organisatieboom achter één icoon: je hebt hem niet nodig terwijl je leest, maar hij mag
    ook niet weg zijn. Klik = flyout naast de rail. Native <details>, geen JS. */
 .c2-orgfly{width:100%}
@@ -1432,11 +1419,6 @@ progress.nu-progress.wide{height:8px}
   font-size:15px;color:var(--ink)}
 .c2-orgfly>summary::-webkit-details-marker{display:none}
 .c2-orgfly>summary:hover{background:var(--surface)}
-.c2-side:not(.c2-side--rail) .c2-orgfly>summary{display:none}
-.c2-side--rail .c2-orgfly .c2-org{display:none}
-.c2-side--rail .c2-orgfly[open] .c2-org{display:block;position:fixed;left:64px;top:1rem;
-  width:250px;max-height:80vh;overflow:auto;z-index:40;padding:.7rem .8rem;
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
 
 /* De hamburger: alleen mobiel, en alleen als JS draait. Zonder JS blijft de zijbalk staan zoals
    hij was — een menu dat je niet kunt openen omdat een script niet laadde, is erger dan een
