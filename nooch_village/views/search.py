@@ -97,7 +97,11 @@ def _people(st, termen):
         if _match(p.name, termen):
             rollen = rollen_van.get(p.id, [])
             snip = ", ".join(rollen[:5]) if rollen else (p.email or "no role yet")
-            uit.append({"url": f"/person?id={p.id}", "kind": "person",
+            # `id` ERBIJ (22 september 2026). Hij zat alleen in de `url`, en de nieuwe
+            # "begin een gesprek"-ingang in Messages heeft hem kaal nodig. Hem daar uit de URL
+            # terugvissen zou een tweede interpretatie van dezelfde string zijn; `_hit_html`
+            # gebruikt alleen url/titel/snip, dus dit verandert niets aan de zoekpagina.
+            uit.append({"url": f"/person?id={p.id}", "kind": "person", "id": p.id,
                         "titel": p.name, "snip": snip})
     return uit
 

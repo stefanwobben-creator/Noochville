@@ -290,12 +290,18 @@ def test_een_notitie_aan_jezelf_blijft_direct(tmp_path):
     assert len(direct) == 1 and rollen == []
 
 
-def test_de_groep_staat_op_het_scherm_en_de_gesprekken_blijven_heel(tmp_path):
+def test_de_rolkanalen_staan_niet_meer_in_de_lijst_maar_wel_in_de_data(tmp_path):
+    """DEZE TEST EISTE DE GROEP OP HET SCHERM, en die is er op 22 september 2026 uit (eis Stefan):
+    "Roles & system verbergen, niet wissen". Een dag eerder was de groep zelf de verbetering —
+    37 rol-afzenders uit Direct — en nu blijkt dat je die 37 regels ook gewoon niet wilt zien.
+
+    De helft die telde is onveranderd, en dat is wat deze test nu bewaakt: het gesprek staat er
+    nog, precies zoals het stond. Verbergen is geen migratie."""
     dd, st, ik, pids = _dorp(tmp_path)
     st.channels.post(channels.dm_kanaal(ik, "compliance"), "scan af", author_id="compliance")
     st2 = cockpit2._Stores(dd)
     html = render_messages(st2, ik=ik, csrf_token="t")
-    assert "Roles &amp; system" in html or "Roles & system" in html
+    assert "Roles &amp; system" not in html and "Roles & system" not in html
     # en het gesprek zelf is onaangeroerd — dit is een weergave, geen migratie
     assert len(st2.channels.trail(channels.dm_kanaal(ik, "compliance"))) == 1
 
