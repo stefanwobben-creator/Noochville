@@ -2942,6 +2942,17 @@ def _act_vangst_uitkomst(c):
         # GEEN staat meer op een nieuwe uitkomst: de wachtstatus leeft op projectniveau. Oude
         # uitkomsten houden hun waarde — dit stopt alleen de aanwas, het wist niets.
         prive = g("prive") == "1"
+        # DE STAAT-KEUZE GELDT ALLEEN BIJ EEN PROJECT, en dat is geen halve uitvoering maar de
+        # consequentie van de afspraak: hij schrijft naar de plek waar de waarheid al staat, en
+        # die plek bestaat alleen bij een project (`status=blocked`).
+        #
+        # Een ACTIE gaat via `route_werk` naar de inbox van een mens of naar een bestaand project;
+        # daar is geen wachtstand op het werk zelf. Er een veld bij verzinnen is precies de
+        # duplicatie die op 29 augustus is opgeruimd. Een GOVERNANCE-punt gaat naar het roloverleg
+        # en heeft daar zijn eigen agenda.
+        #
+        # Fail-closed: alles wat niet expliciet "wachtend" is, is gewoon volgende.
+        _wacht = (g("staat") == "wachtend") and otype == "project"
         rol, reden = rol_uit_naam(st, g("rol"))
         ruw_rol = g("rol").strip()
         individueel = (not ruw_rol) or ruw_rol.lower() == INDIVIDUELE_ACTIE.lower()
@@ -2980,7 +2991,13 @@ def _act_vangst_uitkomst(c):
             pid = _outcome_project(st, eigenaar, tekst, provenance=prov, actor_id=aid)
             if prive:
                 st.projects.edit(pid, private=True, allow_done=True)
-            ref = "project aangemaakt"
+            # "IN AFWACHTING" SCHRIJFT NAAR HET PROJECT ZELF, niet naar een veld op de uitkomst.
+            # De wachtstatus leeft op projectniveau en hoort daar te blijven; de radio is een
+            # snelkoppeling ernaartoe, geen tweede plek die hetzelfde bijhoudt. Precies daarom is
+            # de keuze op 29 augustus weggehaald — en daarom kan hij nu wél terug.
+            if _wacht:
+                st.projects.block(pid, "wacht — besloten in het werkoverleg", door=aid)
+            ref = "project aangemaakt" + (" (in afwachting)" if _wacht else "")
         elif otype == "actie":
             # EEN ACTIE KOMT TERUG VIA DE INBOX, bij de persoon die hem kreeg. De regel zelf staat
             # in `route_werk` — gedeeld met de project-wizard, want twee kopieën van dezelfde
@@ -5133,7 +5150,9 @@ def make_handler(data_dir: str, csrf_token: str,
                         # beginnen met `st.records.get(circle_id)`. Zonder dit id gaven ze "No
                         # circle." en "Unknown." — geen ontbrekende routes maar een ontbrekende
                         # parameter, op de enige plek die de cirkel niet in handen had.
-                        body = body.replace(_SIDE_OVERLEG, overleg_items(_cid), 1)
+                        body = body.replace(
+                            _SIDE_OVERLEG,
+                            overleg_items(_cid, werk_open=_st.werk.is_open(_cid)), 1)
                     except Exception:
                         body = body.replace(_SIDE_CIRCLE, "", 1)
                         body = body.replace(_SIDE_OVERLEG, "", 1)
@@ -5236,6 +5255,28 @@ def make_handler(data_dir: str, csrf_token: str,
             # Publieke views krijgen geen CSRF-token → geen schrijfknoppen
             effective_csrf = csrf_token if username else ""
 
+            if path == "/overleg-status":
+                # DE LIVE-STATUS VAN HET WERKOVERLEG, voor de knop in de balk.
+                #
+                # DEZE ROUTE STAAT BEWUST VÓÓR `_Stores(data_dir)`, en dat is het hele ontwerp.
+                # Gemeten op productie: alle stores bouwen kost 70 ms per verzoek, en de vraag
+                # zelf — `is_open` — kost 0,31 ms als je alleen de store bouwt die hem kan
+                # beantwoorden. Een poller die elke 20 seconden 70 ms serverwerk aanzet voor een
+                # ja/nee is geen polling maar een lek.
+                #
+                # Server-gerenderd en geen JSON: de knoppen komen uit dezelfde `overleg_items` als
+                # in de balk, dus er is geen tweede plek die bepaalt hoe een live-knop eruitziet.
+                from nooch_village.werkoverleg import WerkoverlegStore
+                from nooch_village.cockpit2_util import overleg_items
+                _cid = (qs.get("circle") or [""])[0]
+                _open = False
+                try:
+                    _open = bool(_cid) and WerkoverlegStore(
+                        os.path.join(data_dir, "werkoverleg.json")).is_open(_cid)
+                except Exception:                      # noqa: BLE001
+                    _open = False                      # fail-closed: liever geen uitnodiging
+                self._send(overleg_items(_cid, werk_open=_open), chrome=False)
+                return
             st = _Stores(data_dir)
             # ── Wachtwoordwijziging (self-service + verplichte eerste-login/na-reset-poort) ──
             if path == "/wachtwoord":
