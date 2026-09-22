@@ -37,6 +37,11 @@ _SOORT_LABEL = {
 }
 
 
+#: Wat er staat als een artefact nog geen tekst heeft. Op ÉÉN plek, want drie soorten pagina's
+#: zeggen het: een note zonder body, een policy zonder body, en de tool die op prod leeg is
+#: (TOOL-WEBSIT-001). Een pagina die dan niets zegt, ziet eruit als een fout.
+_GEEN_TEKST = "<p class='muted'>This page has no text yet.</p>"
+
 #: `<li>[ ] ` of `<li>[x] ` aan het begin van een lijstitem. De weg terug (`_md_naar_bron`) kent
 #: het vakje wél — anders eet de wiki bij elke bewerking zijn eigen vinkjes op.
 _TAAK_RE = re.compile(r"<li>\[([ xX])\] ")
@@ -265,8 +270,7 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
     # blokken niet nodig. Visueel verandert er niets — een `<div>` op de plek van een `<br>`-regel
     # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
-    inhoud = (_body_html(a.body, pags, blokken=True) if a.body
-              else "<p class='muted'>This page has no text yet.</p>")
+    inhoud = _body_html(a.body, pags, blokken=True) if a.body else _GEEN_TEKST
     # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
     # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
@@ -294,18 +298,98 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
               f"</span></div></form>")
 
 
+def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> str:
+    """De permalink van een policy of tool: een LEESPAGINA, geen tweede editor.
+
+    WAAROM DIT EEN EIGEN PAGINA IS en niet de note-pagina met een ruimere `if`. Gemeten over de
+    14 artefacten die op prod een dode link hadden: een policy heeft altijd een `domain` en nooit
+    een url, een tool altijd een url en nooit een domein, en allebei hebben ze nul feiten en nul
+    `[[links]]`. Drie dingen van de note-pagina passen hier dus niet:
+
+      1. FEITEN leven in `meta["feiten"]`, en `artefacts._feiten_van` geeft voor een niet-note
+         bewust een lege lijst. Een feiten-formulier hier zou feiten opleveren die de
+         context-laag nooit leest.
+      2. `[[LINKS]]` lossen op tegen `wiki.paginas`, en dat zijn notes. Een verwijzing vanuit een
+         policy komt nergens op uit — `_artefact_body_html` zegt dat al.
+      3. BEWERKEN gebeurt bij de eigenaar-rol, op het formulier dat daar staat. Een note is het
+         tegenovergestelde geval (die wordt júist op zijn permalink bewerkt), en `_artefact_own_card`
+         legt uit waarom je die twee niet allebei mag hebben: twee bewerkpaden voor hetzelfde
+         object lopen uiteen zodra er aan één van de twee iets verandert.
+
+    Punt 3 faalt bovendien STIL als je het negeert. `_act_artefact_edit` is niet op soort gepoort
+    en zou een policy gewoon opslaan, maar `pagina_feit_add`, `pagina_feit_del` en
+    `pagina_voorstel` zijn dat wél: die antwoorden met "✗ page not found". Een pagina die die
+    formulieren toont, belooft iets wat de actie daarna weigert.
+
+    Wat deze pagina dus wél doet: tonen wat er staat, met het veld erbij waar de soort om draait
+    (het domein van een policy, de url van een tool), plus de versiehistorie en de weg naar de
+    plek waar hij bewerkt wordt."""
+    from nooch_village.views.overview import (_KIND_ICON, _artefact_versions_html,
+                                              _can_edit_artefacts, _dt, _tab_for)
+
+    eigenaar = st.records.get(a.anchor)
+    can_edit = bool(eigenaar is not None
+                    and _can_edit_artefacts(st, eigenaar, csrf_token, username))
+    tab = _tab_for(a.kind)
+    thuis = f"/node?id={_e(a.anchor)}&tab={_e(tab)}"
+
+    eig_chip = (f" <a class='chip' href='{thuis}'>{_e(_name(eigenaar))}</a>"
+                if eigenaar is not None else "")
+    # Het domein hoort bij een policy zoals de url bij een tool: het is niet een extraatje maar
+    # waar het ding aan hangt. Zelfde chip als op de kaart (`_artefact_head`), geen eigen variant.
+    dom_chip = (f" <span class='chip muted'>{_e(a.domain)}</span>"
+                if a.kind == "policy" and getattr(a, "domain", "") else "")
+
+    kop = (f"<div class='c2-bar'><a href='{thuis}'>← {_e(tab)}</a></div>"
+           f"<h1>{_KIND_ICON.get(a.kind, '')} <code class='pill'>{_e(a.id)}</code> "
+           f"{_e(a.title or a.id)}{dom_chip}{eig_chip}</h1>"
+           f"<div class='wiki-kopbalk'>"
+           f"<p class='muted'>Edited on the owning role, not here &mdash; one place per artefact. "
+           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           + (f"<a class='btn sm' href='{thuis}'>&#9998; Edit on the role</a>"
+              if can_edit else "")
+           + f"</div>")
+
+    # De url is het punt van een tool: zonder hem is de pagina minder waard dan de kaart waar hij
+    # vandaan komt. Zelfde vorm als daar.
+    url_regel = (f"<div class='card'><div class='muted'>"
+                 f"<a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
+                 f"</div></div>" if a.kind == "tool" and getattr(a, "url", "") else "")
+
+    # Kale markdown, geen `[[link]]`-oplossing: dit soort kent dat idioom niet (zie 2 hierboven).
+    lees = (f"<div class='card'><div class='att-body'>"
+            f"{_md(a.body) if a.body else _GEEN_TEKST}</div></div>")
+
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}"
+            f"{_artefact_versions_html(a)}</div>")
+    return _page(f"{a.title or a.id} — {a.kind}",
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+
+
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
                   msg: str = "", persoon: str = "") -> str:
-    """Eén wiki-pagina. Onbekende id of een ander artefact-soort → nette melding, geen lege pagina."""
+    """De permalink van een artefact. Een note krijgt de wiki-pagina (feiten, backlinks, de
+    inline editor); een policy of tool de leespagina hierboven. Onbekend id of een soort die het
+    dorp niet kent → nette melding, geen lege pagina.
+
+    DE POORT IS `ARTEFACT_KINDS`, en met opzet niet een lijstje hier. Dat is dezelfde lijst waar
+    `_WIKI_SOORTEN` zijn chips uit haalt, en juist het uiteenlopen van die twee was de bug: de
+    index linkte policies en tools naar een pagina die alleen notes doorliet, goed voor 28 dode
+    links naar 14 artefacten op prod. Komt er ooit een vierde soort bij, dan krijgt die hier
+    automatisch een pagina in plaats van opnieuw een dode link."""
+    from nooch_village.attachments import ARTEFACT_KINDS
     from nooch_village.views.overview import (_artefact_versions_html,
                                               _can_edit_artefacts, _dt)
 
     a = st.att.get(aid)
-    if a is None or a.kind != wiki.PAGINA_KIND:
+    if a is None or a.kind not in ARTEFACT_KINDS:
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
                 "<h1>Page not found</h1><p class='muted'>There is no page with this id. "
-                "A page is a role note; open a role and use its Notes tab.</p></div>")
+                "A page is a note, policy or tool; open the role that owns it and use its "
+                "Notes, Policies or Tools tab.</p></div>")
         return _page("Page not found", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+    if a.kind != wiki.PAGINA_KIND:
+        return _artefact_pagina(st, a, csrf_token, username, msg)
 
     eigenaar = st.records.get(a.anchor)
     can_edit = bool(eigenaar is not None
