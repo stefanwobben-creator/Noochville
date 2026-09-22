@@ -98,6 +98,12 @@
   text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
 .nu .c2-subnav a:hover, .nu .c2-navbtn:hover, .nu .wo-step:hover {
   background: var(--nu-text); color: var(--nu-surface); }
+/* De actieve nav-knop in de nu-laag: zelfde twee dragers, de tinten van het huis.
+   `text-transform` staat erbij omdat `test_navigatie_en_tabbladen_staan_in_hoofdletters` dat van
+   ÉLKE regel op een navigerend element eist — de waarde verandert hier niets, de belofte wel:
+   een nav-regel die de huisstijl niet uitspreekt, is een plek waar hij stil kan wegvallen. */
+.nu .c2-subnav [aria-current] { border-left-color: var(--nu-text);
+  background: var(--nu-bg-alt); color: var(--nu-text); text-transform: uppercase; }
 /* De stap waar je STAAT is geen hover: hij blijft staan als je de muis weghaalt. Zelfde
    markering als de overleg-knoppen hierboven — lichte groene vulling, zwarte tekst. */
 .nu .wo-step.on { background: var(--nu-bg-alt); color: var(--nu-text); }

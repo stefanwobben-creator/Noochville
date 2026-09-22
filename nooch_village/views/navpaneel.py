@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import urllib.parse
 
-from nooch_village import channels, org
+from nooch_village import channels
 from nooch_village.web_base import _e
 
 log = logging.getLogger("village.navpaneel")
@@ -156,35 +156,46 @@ def _paneel_messages(st, ik: str) -> str:
 
 # ── CI ───────────────────────────────────────────────────────────────────────
 def _paneel_circle(st, ik: str) -> str:
-    """De rollen van de cirkel waar je in zit, met wie ze vervult.
+    """De rollen van JOUW cirkel, met wie ze vervult. Eén cirkel, niet de hele boom.
 
-    De wortelcirkel is het vertrekpunt zolang er één werkende cirkel is; `org.children` geeft de
-    leden. Een rol zonder vervuller staat er MET die melding bij — "open" is informatie, geen
-    lege regel."""
+    HIJ TOONDE ZE ALLEMAAL. De lus liep over `[wortel] + alle niet-gearchiveerde cirkels` en
+    zette van elk de leden onder elkaar — terwijl de docstring hier ("de cirkel waar je in zit")
+    en de href van de knop (`/node?id=<operationele cirkel>`) allebei ÉÉN cirkel beloofden. Wat
+    je kreeg was Organization, plat. Twee nav-items met dezelfde inhoud, en dat is precies wat
+    opviel.
+
+    DEZELFDE BRON ALS DE KNOP, letterlijk `_home_node`. Die vult `_send` al in de href; hem hier
+    opnieuw afleiden zou betekenen dat "welke cirkel is de mijne" op twee plekken wordt
+    beantwoord — het patroon dat in dit dorp al twee keer een bug opleverde (de goal-kanaal-lijst
+    en de platslag-regel).
+
+    `ik` IS NOG STEEDS ONGEBRUIKT, en dat is nu een bewuste stand: er is één operationele cirkel
+    en iedereen kijkt naar dezelfde. Wordt het dorp ooit een boom met meerdere teams, dan is dit
+    de plek waar het persoonlijk wordt — en dan is het een keuze, geen vergeten parameter.
+
+    Een rol zonder vervuller staat er MET die melding bij — "open" is informatie, geen lege
+    regel."""
+    from nooch_village.cockpit2 import _home_node
     from nooch_village.cockpit2_util import _name
-    wortel = st.records.root()
-    if wortel is None:
+    recs = st.records.all()
+    cid = _home_node(recs)
+    cirkel = st.records.get(cid) if cid else None
+    if cirkel is None:
         return _leeg("No circle yet.")
-    uit = []
-    for cirkel in [wortel] + [r for r in st.records.all()
-                              if org.is_circle(r) and not r.archived and r.id != wortel.id]:
-        leden = [r for r in st.records.all()
-                 if not r.archived and getattr(r, "parent", None) == cirkel.id]
-        if not leden:
-            continue
-        uit.append(_groep(_name(cirkel)))
-        for rec in leden:
-            namen = []
-            try:
-                for f in st.assign.fillers_of(rec.id, record=rec):
-                    if getattr(f, "type", "") == "person":
-                        pers = st.people.get(getattr(f, "id", ""))
-                        if pers is not None:
-                            namen.append(pers.name)
-            except Exception:                                  # noqa: BLE001
-                log.debug("vervullers niet te lezen voor %s", rec.id, exc_info=True)
-            uit.append(_rij(f"/node?id={rec.id}", _name(rec),
-                            sub=", ".join(namen) or "open — nobody"))
+    leden = [r for r in recs if not r.archived and getattr(r, "parent", None) == cirkel.id]
+    uit = [_groep(_name(cirkel))] if leden else []
+    for rec in leden:
+        namen = []
+        try:
+            for f in st.assign.fillers_of(rec.id, record=rec):
+                if getattr(f, "type", "") == "person":
+                    pers = st.people.get(getattr(f, "id", ""))
+                    if pers is not None:
+                        namen.append(pers.name)
+        except Exception:                                  # noqa: BLE001
+            log.debug("vervullers niet te lezen voor %s", rec.id, exc_info=True)
+        uit.append(_rij(f"/node?id={rec.id}", _name(rec),
+                        sub=", ".join(namen) or "open — nobody"))
     return "".join(uit) or _leeg("No roles yet.")
 
 
