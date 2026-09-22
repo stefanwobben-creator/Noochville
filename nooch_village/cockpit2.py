@@ -1313,6 +1313,53 @@ def _act_pagina_feit_add(c):
     return nxt, f"➕ fact added ({upd.id})"
 
 
+def _vermeldingen_in_kanaal(st, kanaal: str, tekst: str, afzender: str) -> int:
+    """Elke @-vermelding in een kanaalbericht wordt één signalering. Geeft het aantal terug.
+
+    EEN BERICHT IN EEN KANAAL IS GEEN BERICHT AAN IEMAND. Wie niet toevallig in dat kanaal kijkt,
+    mist het. `@naam` is precies het moment waarop de schrijver zegt dat het wél voor iemand is,
+    en dan hoort het bij die persoon te landen — in zijn DM, zoals elke andere signalering.
+
+    DEZELFDE ROUTERING ALS DE REST, en dat is het hele punt van `_signaleer`: persoon → die mens,
+    rol → zijn vervuller(s), geen vervuller → de Circle Lead en anders de founder. Hier een eigen
+    lus over `assign.fillers_of` schrijven zou de tweede kopie zijn die de docstring van
+    `_signaleer` verbiedt — dan landt dezelfde rol-id vandaag bij de een en morgen bij de ander.
+
+    DRIE KEER NIET STUREN, en elke reden is een andere:
+
+      1. `@jezelf` — een bericht aan jezelf is geen signalering.
+      2. JE ZIT AL IN DAT GESPREK. `signaal.stuur` post in `dm_kanaal(afzender, ontvanger)`. Is dat
+         hetzelfde kanaal als waar je nu typt, dan zou de signalering letterlijk dezelfde tekst
+         twee regels lager herhalen. We vragen `signaal.ontvangers` dus vooraf wie het zouden
+         worden — dezelfde functie die `stuur` zelf gebruikt, geen nagebouwde variant.
+      3. TWEE KEER DEZELFDE NAAM, of een persona-naam naast de rolnaam die hij vervult: beide
+         wijzen naar hetzelfde doel. Ontdubbeld op (soort, id), dus maximaal één melding per doel.
+
+    Wat hier NIET wordt opgelost: een rol met twee vervullers waarvan er één je gespreksgenoot is.
+    Die krijgt zijn kopie alsnog, want `stuur` stuurt naar alle vervullers en dat per ontvanger
+    onderdrukken zou de routering opnieuw moeten uitschrijven. `stuur` kiest daar bewust voor
+    dubbel boven niemand; die afweging blijft van hem."""
+    from nooch_village import channels, signaal
+    from nooch_village.views.feed import _mentionables, _mentions_in
+    _, by_name = _mentionables(st)
+    gezien: set = set()
+    n = 0
+    for ty, tid, _nm in _mentions_in(tekst, by_name):
+        # Een persona-naam staat in `by_name` als de ROL die hij vervult, dus die valt vanzelf
+        # onder "role". Een ander soort is er niet; komt hij er ooit, dan moet iemand hier kijken.
+        if ty not in ("person", "role") or (ty, tid) in gezien:
+            continue
+        gezien.add((ty, tid))
+        wie, _reden = signaal.ontvangers(st, ty, tid)
+        blijft = [p for p in wie
+                  if p and p != afzender and channels.dm_kanaal(afzender, p) != kanaal]
+        if not blijft:
+            continue
+        if _signaleer(st, ty, tid, tekst, by=afzender, herkomst={"kanaal": kanaal}):
+            n += 1
+    return n
+
+
 def _act_msg_post(c):
     """Eén bericht in een kanaal (fase 8).
 
@@ -1341,7 +1388,12 @@ def _act_msg_post(c):
     if not kan_antwoorden(st, kanaal, ik):
         return nxt, "✗ nobody reads that channel — start a project or write to a person"
     entry = st.channels.post(kanaal, g("tekst"), author_type="human", author_id=ik)
-    return nxt, ("💬 posted" if entry else "✗ a message needs text")
+    if not entry:
+        return nxt, "✗ a message needs text"
+    # PAS NA HET PLAATSEN. Lukt het bericht niet, dan is er niets om iemand op te wijzen; en
+    # een signalering die vooruitloopt op een bericht dat er niet komt is een verwijzing naar niets.
+    gemeld = _vermeldingen_in_kanaal(st, kanaal, g("tekst"), ik)
+    return nxt, "💬 posted" + (f" · {gemeld} mentioned" if gemeld else "")
 
 
 def _act_kanaal_ontvolg(c):
