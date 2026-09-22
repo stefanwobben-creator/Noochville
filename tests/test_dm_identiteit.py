@@ -4,7 +4,10 @@
    inbox-migratie: die schreef de afzender weg zoals hij 'm aantrof — soms een id, soms een naam
    ("Stefan Wobben"), soms een e-mailadres. Voor de lezer waren het drie gesprekken met zichzelf.
 2. EEN GESPREK BEGINNEN DAT NOG NIET BESTAAT. Een DM kon pas gevonden worden nadat er al een
-   bericht in stond — wie het eerste wilde sturen had geen ingang.
+   bericht in stond — wie het eerste wilde sturen had geen ingang. De OPLOSSING is op
+   22 september 2026 vervangen: er kwam eerst een "＋ new conversation"-zoekblok bij, en dat is
+   nu weer weg omdat `Direct` zelf iedereen toont. De belofte is dezelfde gebleven en de tests
+   hieronder toetsen hem op de nieuwe plek; zie `tests/test_messages_direct_iedereen.py`.
 3. "ROLES & SYSTEM" UIT DE LIJST. Verbergen, niet wissen: de kanalen blijven staan.
 """
 from __future__ import annotations
@@ -108,7 +111,11 @@ def test_twee_keer_draaien_doet_de_tweede_keer_niets(tmp_path):
 # ── 2. Een gesprek beginnen ─────────────────────────────────────────────────
 def test_je_kunt_iemand_vinden_die_nog_niets_gezegd_heeft(tmp_path):
     """HET GAT. `kanalen_van` leest `channels.json`, en daar staat niets tot iemand iets zegt. Wie
-    het eerste bericht wilde sturen had dus geen ingang."""
+    het eerste bericht wilde sturen had dus geen ingang.
+
+    HETZELFDE GAT, ANDERE OPLOSSING (22 september 2026). Eerst was het een zoekblok met
+    `wie=bosbes`; nu staat Bob gewoon in Direct, zónder dat je iets typt. De test eist dus niet
+    langer dat je hem kunt ZOEKEN maar dat hij er STAAT — dat is een sterkere eis, geen zwakkere."""
     import re
     dd = _dorp(tmp_path, {})
     st = cockpit2._Stores(dd)
@@ -116,7 +123,7 @@ def test_je_kunt_iemand_vinden_die_nog_niets_gezegd_heeft(tmp_path):
     bob = st.people.add("Bob Bosbes", "bob@test.nl")
     st2 = cockpit2._Stores(dd)
     assert st2.channels.kanalen_van(ik.id) == []              # er bestaat nog niets
-    h = render_messages(st2, ik=ik.id, csrf_token="t", wie="bosbes")
+    h = render_messages(st2, ik=ik.id, csrf_token="t")
     assert "Bob Bosbes" in h
     assert channels.dm_kanaal(ik.id, bob.id) in re.findall(r"k=(dm:[^'&]*)", h)
 
@@ -125,34 +132,37 @@ def test_de_bron_is_dezelfde_als_de_globale_zoek():
     """Een eigen personenlijst hier zou een tweede antwoord geven op "wie werkt hier"."""
     import inspect
     from nooch_village.views import messages
-    bron = inspect.getsource(messages.render_messages)
+    # De aanroep verhuisde van `render_messages` (het zoekblok) naar `_dm_groepen` (de lijst
+    # zelf). De belofte is ongewijzigd: één bron voor "wie werkt hier".
+    bron = inspect.getsource(messages._dm_groepen)
     assert "from nooch_village.views.search import _people" in bron
 
 
 def test_jezelf_staat_er_niet_bij(tmp_path):
-    """Je eigen kanaal heet al "Yourself" in de lijst; er een tweede ingang naartoe zetten maakt
-    twee rijen voor hetzelfde gesprek."""
+    """Je eigen kanaal heet al "Yourself" zodra het bestaat; een lege rij met je eigen naam
+    erbij maakt twee ingangen naar hetzelfde gesprek. Toetste eerst het zoekblok, nu de lijst."""
     dd = _dorp(tmp_path, {})
     st = cockpit2._Stores(dd)
     ik = st.people.add("Alice Aardbei", "alice@test.nl")
-    h = render_messages(cockpit2._Stores(dd), ik=ik.id, csrf_token="t", wie="aardbei")
-    blok = h.split("msg-nieuw-dm")[1].split("</details>")[0]
-    assert "Alice Aardbei" not in blok
+    direct, _rollen = _dm_groepen(cockpit2._Stores(dd), ik.id)
+    assert channels.dm_kanaal(ik.id, ik.id) not in direct
 
 
-def test_geen_treffer_zegt_dat_ook(tmp_path):
+# `test_geen_treffer_zegt_dat_ook` STOND HIER. Hij toetste de melding "Nobody by that name" in
+# het zoekblok. Er is geen zoekveld meer om niets te vinden: Direct toont iedereen, en "iedereen"
+# is nooit leeg zolang je zelf bestaat. De test is dus niet afgezwakt maar zonder onderwerp.
+
+
+def test_zonder_schrijfsessie_geen_schrijfbalk(tmp_path):
+    """Heette `test_zonder_schrijfsessie_geen_ingang` en toetste dat het zoekblok wegbleef.
+    Dat blok is er niet meer; de belofte eronder wél: zonder schrijfsessie geen schrijfveld."""
     dd = _dorp(tmp_path, {})
     st = cockpit2._Stores(dd)
     ik = st.people.add("Alice Aardbei", "alice@test.nl")
-    h = render_messages(cockpit2._Stores(dd), ik=ik.id, csrf_token="t", wie="zzzz")
-    assert "Nobody by that name" in h
-
-
-def test_zonder_schrijfsessie_geen_ingang(tmp_path):
-    dd = _dorp(tmp_path, {})
-    st = cockpit2._Stores(dd)
-    ik = st.people.add("Alice Aardbei", "alice@test.nl")
-    assert "msg-nieuw-dm" not in render_messages(cockpit2._Stores(dd), ik=ik.id, csrf_token="")
+    bob = st.people.add("Bob Bosbes", "bob@test.nl")
+    k = channels.dm_kanaal(ik.id, bob.id)
+    h = render_messages(cockpit2._Stores(dd), ik=ik.id, kanaal=k, csrf_token="")
+    assert "id='msg-tekst'" not in h and "value='msg_post'" not in h
 
 
 # ── 3. Verbergen, niet wissen ───────────────────────────────────────────────
@@ -191,4 +201,7 @@ def test_de_splitsing_blijft_bestaan(tmp_path):
     ik = st.people.add("Alice Aardbei", "alice@test.nl")
     st.channels.post(channels.dm_kanaal(ik.id, "compliance"), "x", author_id="compliance")
     direct, rollen = _dm_groepen(cockpit2._Stores(dd), ik.id)
-    assert direct == [] and len(rollen) == 1
+    # `direct` is niet meer leeg — hij bevat sinds 22 september elke MENS in het dorp. Waar het
+    # om gaat is dat de rol-afzender er niet tussen staat, en dat is wat hier wordt getoetst.
+    assert len(rollen) == 1
+    assert channels.dm_kanaal(ik.id, "compliance") not in direct

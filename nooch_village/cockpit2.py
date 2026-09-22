@@ -5617,8 +5617,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                            csrf_token=effective_csrf,
                                            msg=(qs.get("msg") or [""])[0],
                                            q=(qs.get("q") or [""])[0],
-                                           lijst=bool((qs.get("list") or [""])[0]),
-                                           wie=(qs.get("wie") or [""])[0]))
+                                           lijst=bool((qs.get("list") or [""])[0])))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
