@@ -54,6 +54,17 @@ from nooch_village.util import JsonStore
 #: Kanaalsoorten. De prefix staat in het id zelf, zodat een kanaal-id overal zelf-verklarend is.
 PROJECT, CIRCLE, DM, TOPIC, GOAL = "project", "circle", "dm", "topic", "goal"
 
+#: WAAR EEN MENS IN MAG SCHRIJVEN — alle vijf. Deze lijst staat hier en niet bij de poorten in
+#: `cockpit2.py`, omdat hij daar twee keer los is uitgeschreven en allebei de keren `GOAL` miste:
+#: je kon een doel-kanaal openen en lezen (`mag_kanaal_lezen` kent hem wél), kreeg een schrijfbalk
+#: te zien, en op Send "✗ unknown channel". De tweede kopie (bewerken/verwijderen) nam de fout een
+#: maand later braaf over. Dat is de `reference, don't copy`-regel uit CLAUDE.md: een feit dat op
+#: twee plekken leeft, drijft uiteen zonder dat iets zich meldt.
+#:
+#: Dit gaat over de SOORT, niet over toegang. Of JIJ in dít kanaal mag schrijven beslissen
+#: `mag_kanaal_lezen` en `kan_antwoorden` in `views/messages.py`; die poort blijft er los op staan.
+SCHRIJFBAAR = (PROJECT, CIRCLE, DM, TOPIC, GOAL)
+
 #: Berichtsoorten binnen een kanaal. Een `notificatie` is een gemigreerd inbox-item: dezelfde
 #: trail, maar met een verwerkingsgeschiedenis eronder die een gewoon bericht niet heeft.
 COMMENT, NOTIFICATIE = "comment", "notificatie"

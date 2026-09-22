@@ -1412,8 +1412,7 @@ def _act_msg_post(c):
     from nooch_village import channels
     nxt, st, g, username = c.nxt, c.st, c.g, c.username
     kanaal = (g("kanaal") or "").strip()
-    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE,
-                                          channels.DM, channels.TOPIC):
+    if channels.soort_van(kanaal) not in channels.SCHRIJFBAAR:
         return nxt, "✗ unknown channel"
     ik = _web_actor_id(username, st)
     if not ik:
@@ -1441,8 +1440,7 @@ def _eigen_bericht_poort(c):
     alles klopt; is hij gevuld, dan zijn de andere drie leeg."""
     from nooch_village import channels
     kanaal = (c.g("kanaal") or "").strip()
-    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE,
-                                          channels.DM, channels.TOPIC):
+    if channels.soort_van(kanaal) not in channels.SCHRIJFBAAR:
         return "", "", "", "✗ unknown channel"
     ik = _web_actor_id(c.username, c.st)
     if not ik:
