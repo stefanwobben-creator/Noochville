@@ -271,7 +271,14 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .emoji-pick>summary svg{width:18px;height:18px}
 .emoji-pick>summary::-webkit-details-marker{display:none}
 .emoji-pick[open]>summary,.emoji-pick>summary:hover{color:var(--green-dark)}
-.emoji-pop{position:absolute;left:0;top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.4rem;z-index:6;width:230px}
+/* HET POPUP-RECEPT STAAT ÉÉN KEER — besluit Stefan, 22 september 2026: de @-lijst hergebruikt
+   de styling van de reactie-kiezer. Deze twee stonden het al bijna identiek uit te schrijven
+   (oppervlak, rand, radius, schaduw); gedeeld in plaats van gekopieerd, zodat een wijziging
+   aan de ene niet stilletjes langs de andere loopt. Plaats, breedte, padding en z-index
+   verschillen wél en blijven per klasse staan: de kiezer hangt onder zijn eigen knop, de
+   @-lijst onder een invoerveld. */
+.emoji-pop,.mention-pop{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.emoji-pop{position:absolute;left:0;top:1.5rem;padding:.4rem;z-index:6;width:230px}
 .emo-search{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;margin-bottom:.35rem;font-size:.82rem}
 .emo-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.1rem;max-height:170px;overflow:auto}
 .emo-f{display:inline}
@@ -438,9 +445,13 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
 .ment{color:var(--green-dark);font-weight:600}
-.mention-pop{position:absolute;left:0;right:auto;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:8;min-width:180px;max-height:200px;overflow:auto}
+.mention-pop{position:absolute;left:0;right:auto;top:100%;margin-top:2px;z-index:8;min-width:180px;max-height:200px;overflow:auto}
 .mention-it{display:block;width:100%;text-align:left;border:none;background:none;padding:.35rem .6rem;cursor:pointer;font-size:.85rem}
-.mention-it:hover{background:var(--cream-2)}
+/* De toetsenbord-keuze is DEZELFDE markering als de muis-hover: één aangewezen rij, of je nu
+   pijltjes gebruikt of aanwijst. `aria-selected` is hier geen extra klasse maar de stand zelf,
+   die een schermlezer ook voorleest. */
+.mention-it:hover,.mention-it[aria-selected="true"]{background:var(--cream-2);box-shadow:inset 2px 0 0 var(--green)}
+.mention-it .gs-kind{margin-right:.4rem}
 .nt-list .nt-item{padding:.3rem 0;border-bottom:1px solid var(--border)}
 .nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}

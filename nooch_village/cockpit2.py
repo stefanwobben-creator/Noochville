@@ -322,7 +322,8 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.site_audit import render_site_audit
 from nooch_village.views.doelen import render_goals, render_goal
-from nooch_village.views.search import render_search, render_search_fragment
+from nooch_village.views.search import (mention_hits, render_search,
+                                        render_search_fragment)
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village import founder_kaart as _founder_kaart
 from nooch_village.copy_stack import StackConfig as CopyStackConfig
@@ -5676,6 +5677,20 @@ def make_handler(data_dir: str, csrf_token: str,
                 # staat los hiervan en blijft werken; alleen het zoekveld vindt dan niets.
                 from nooch_village import giphy
                 self._send_json({"hits": giphy.zoek((qs.get("q") or [""])[0])})
+            if path == "/mention-search":
+                # AUTHZ: iedereen-ingelogd — @-typhulp in een invoerveld.
+                #
+                # WAAROM DAT DE JUISTE POORT IS: deze route geeft namen van mensen en rollen
+                # terug, en precies die namen toont `/search` al aan iedereen die is ingelogd —
+                # het zijn letterlijk dezelfde twee functies. Een strengere poort hier zou
+                # suggereren dat er iets extra's uit komt; dat is niet zo.
+                #
+                # EN WAT ER NIET UIT KOMT: geen id, geen e-mailadres, geen URL. Alleen een label
+                # en een soort, want meer heeft de typhulp niet nodig. Komt er ooit een
+                # notificatie of een koppeling achter de vermelding, dan is dat een eigen
+                # besluit met een eigen autorisatievraag ("wie mag wie pingen") — geen veld dat
+                # hier alvast meelift.
+                self._send_json({"hits": mention_hits(st, (qs.get("q") or [""])[0])})
                 return
             if path == "/nav-paneel":
                 # De uitklappanelen van de navigatiebalk. Puur leeswerk, altijd chrome=False:
