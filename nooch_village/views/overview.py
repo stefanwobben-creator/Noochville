@@ -23,7 +23,6 @@ from nooch_village.views.projects import (
 from nooch_village import (org, artefacts, acc_ids, skill_meta, skill_links,
                            skill_labels, wiki, claims_db)
 from nooch_village.registry_factory import shared_registry
-from nooch_village.radar_store import feeds_for_role
 from nooch_village.cockpit2_util import _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
@@ -742,7 +741,11 @@ _ROLE_TOOLS = {
     # ene Library-oppervlak.
     "librarian": [
         ("Library", "Approved words, ranked by opportunity", "/woordenschat"),
-        ("Oracle", "What the organization knows — signals and versioned insights", "/kennisbank")],
+        # Lege href = uitgeschakelde kaart. Het Oracle-scherm (/kennisbank) is met de rest
+        # van de kennisbank-schermen in #516 verwijderd; de opgeslagen inzichten staan er
+        # nog (kennisbank.json), het scherm niet. Weghalen zou het vermogen stil laten
+        # verdwijnen, laten staan gaf een kale 404.
+        ("Oracle", "The screen was removed on 20 September 2026 — the stored insights are still in the data", "")],
     "concurrent_scout": [
         ("Keywords — analysis", "Opportunity + suggestions, ranked", "/keywords?lens=trends")],
     "harry_hemp": [
@@ -777,6 +780,19 @@ _DOMAIN_TOOLS = {
 }
 
 
+def _tool_kaart(label: str, desc: str, href: str) -> str:
+    """Eén tool-kaart. Lege href = het scherm bestaat niet (meer): dan géén link, maar een
+    zichtbaar uitgeschakelde kaart met de reden in de beschrijving. Waarom niet gewoon
+    weghalen: een kaart die stilletjes verdwijnt laat niemand merken dat er een vermogen weg
+    is. Waarom niet laten staan: een dode link laat het wél merken, maar als een kale 404."""
+    if not href:
+        return (f"<div class='card muted'><b>🛠 {_e(label)}</b> "
+                f"<span class='chip muted'>○ not available</span>"
+                f"<div class='muted'>{_e(desc)}</div></div>")
+    return (f"<a class='card' href='{href}'><b>🛠 {_e(label)}</b>"
+            f"<div class='muted'>{_e(desc)}</div></a>")
+
+
 def _role_tools_html(rec) -> str:
     """De tool-schermen die onder deze rol wonen, als kaarten bovenaan de Tools-tab. Geen
     eigenaar-mapping en geen domein-mapping → lege string (dan toont de tab alleen radar +
@@ -788,10 +804,7 @@ def _role_tools_html(rec) -> str:
             tools.append((label, desc, href.replace("{rol}", _e(rid))))
     if not tools:
         return ""
-    cards = "".join(
-        f"<a class='card' href='{href}'><b>🛠 {_e(label)}</b>"
-        f"<div class='muted'>{_e(desc)}</div></a>"
-        for label, desc, href in tools)
+    cards = "".join(_tool_kaart(label, desc, href) for label, desc, href in tools)
     return (f"<div class='c2-sec'><h3>This role's tools</h3>"
             f"<div class='tile-grid'>{cards}</div></div>")
 
@@ -818,17 +831,6 @@ def _ritme_html(st: _Stores, rec) -> str:
         rijen += (f"<div class='c2-sec'><b>{_e(r['naam'])}</b> {chip}"
                   f"<div class='muted'>{_e(r['uitkomst'])}</div></div>")
     return f"<div class='c2-sec'><h3>Recurring rhythm</h3>{rijen}</div>"
-
-
-def _radar_verwijzing(st: _Stores, rec) -> str:
-    """De radar verhuisde van de rol-pagina's naar de centrale Signalen-pagina van de
-    library (founder, 19 jul): rollen halen hun informatie voortaan uit de kennisbank
-    (kennis-eerst). Voor rollen die een feed hadden blijft hier één rustige verwijzing."""
-    if not feeds_for_role(rec.id, st.dd):
-        return ""
-    return ("<div class='c2-sec'><p class='muted'>🛰 Radar signals now live centrally at "
-            "<a href='/signals'>Signals (library)</a>; this role reads its context from the "
-            "<a href='/kennisbank'>knowledge base</a>.</p></div>")
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
@@ -893,7 +895,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                                             leeg="No notes on this role/circle yet.",
                                             van_rapport=van_rapport))
         if soort in ("all", "tool"):
-            delen.append(_role_tools_html(rec) + _ritme_html(st, rec) + _radar_verwijzing(st, rec)
+            delen.append(_role_tools_html(rec) + _ritme_html(st, rec)
                          + _artefact_tab_html(st, rec, "tool", csrf_token, username, titel="Tools",
                                               leeg="No tools on this role/circle yet."))
         content = "".join(delen)
