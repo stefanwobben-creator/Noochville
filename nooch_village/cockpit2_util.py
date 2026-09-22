@@ -928,21 +928,33 @@ _NU_LINK = (f'<link rel="stylesheet" href="/static/nooch-ui.css?v={_NU_VERSION}"
 # Hun routes (`/goals`, `/metrics2`) blijven bestaan — geen dode links, dezelfde regel als bij de
 # vorige nav-slanking.
 #: (href, label, paneel). `paneel` leeg = gewone paginasprong; anders klapt er een lijst open
-#: NAAST de balk in plaats van dat je het scherm verlaat. PR, ME en CI zijn lijsten waar je iets
-#: uit kiest; WI en AD niet — daar val je binnen op een scherm, en dan is een tussenlijst een
-#: extra klik zonder winst. (IN stond hier ook, tot bleek dat die knop een functie aanriep die
-#: niet bestond; zie #531.)
+#: NAAST de balk in plaats van dat je het scherm verlaat. Alleen CI is nog zo'n lijst; WI, AD, ME
+#: en PR niet — daar val je binnen op een scherm, en dan is een tussenlijst een extra klik zonder
+#: winst. (IN stond hier ook, tot bleek dat die knop een functie aanriep die niet bestond; zie
+#: #531.)
 _SIDE_ITEMS = (
-    ("/projects", "Projects", "pr"),
+    # PROJECTS IS GEEN PANEEL MEER (eis Stefan, 23 september 2026) — dezelfde beweging die
+    # Messages twee dagen eerder maakte, en om dezelfde reden. Het paneel gaf een LIJST van
+    # projecten terwijl `/projects` het BORD is: kolommen, kaarten, groepering per rol of
+    # persoon. Je koos dus eerst een project uit een platte lijst om daarna op een bord te
+    # landen dat je meteen had kunnen zien. De lijst liet bovendien bewust van alles weg
+    # (status, doel, kolom) wat het bord wél toont.
+    #
+    # Het oude argument hieronder — "bij Projects voegt het paneel iets toe dat de pagina niet
+    # heeft" — klopte alleen zolang je het paneel als filter las ("mijn projecten"). Dat filter
+    # bestaat op het bord zelf als groepering, dus er ging niets verloren.
+    ("/projects", "Projects", ""),
     # MESSAGES IS GEEN PANEEL (eis Stefan, 21 september 2026). Hij was het wel, en het leverde een
     # halve Messages op: het paneel toonde de kanalenlijst terwijl je nog op je vorige scherm
     # stond, dus het gesprek was nergens en de oude pagina keek er langs. Klikken op een kanaal
     # bracht je alsnog op `/messages`, maar de tussenstand las als kapot.
     #
-    # De diepere reden dat het niet past: Messages is als ENIGE van de vijf een scherm dat zelf al
-    # uit lijst + detail bestaat. Een paneel kan daar alleen de lijst van tonen, en die lijst is
-    # een kopie van wat de pagina zelf al heeft. Bij Projects, Circle en Organization voegt het
-    # paneel iets toe dat de pagina niet heeft; hier haalde het iets weg.
+    # De diepere reden dat het niet past: Messages is een scherm dat zelf al uit lijst + detail
+    # bestaat. Een paneel kan daar alleen de lijst van tonen, en die lijst is een kopie van wat de
+    # pagina zelf al heeft. (Dit argument noemde Projects nog als tegenvoorbeeld — "daar voegt het
+    # paneel iets toe". Sinds 23 september geldt dat ook voor Projects niet meer: zie de comment
+    # bij het item hierboven. Wat overblijft is Circle, en dat is precies het item waarvan nu de
+    # vraag ligt of het als concept nog bestaansrecht heeft.)
     ("/messages", "Messages", ""),
     ("/wiki",     "Wiki",     ""),
 )

@@ -74,13 +74,15 @@ def test_de_balk_klapt_nooit_om_naar_horizontaal():
 
 def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
     h = _nav_ingevuld()
-    for sleutel in ("pr", "ci", "org"):
+    for sleutel in ("ci", "org"):
         assert f"data-nav-paneel='{sleutel}'" in h, sleutel
-    # WI, AD én ME springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
-    # tussenlijst is dan een extra klik zonder winst. Messages kwam er op 21 september bij — zie
-    # `test_messages_is_geen_paneel_want_het_scherm_is_al_lijst_plus_detail`.
+    # WI, AD, ME én PR springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
+    # tussenlijst is dan een extra klik zonder winst. Messages kwam er op 21 september bij,
+    # Projects op 23 september — zie de twee `..._is_geen_paneel_...`-toetsen hieronder.
     me = h.split("/messages")[1][:120]
     assert "data-nav-paneel" not in me
+    pr = h.split("/projects")[1][:120]
+    assert "data-nav-paneel" not in pr
     wi = h.split("/wiki")[1][:120]
     assert "data-nav-paneel" not in wi
     ad = h.split("/admin")[1][:120]
@@ -92,8 +94,7 @@ def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
     """Zonder deze regel is de balk bij een JS-fout een rij dode elementen. De knop draagt zijn
     href, en `preventDefault` gebeurt pas als het paneel echt opengaat."""
     h = _nav_ingevuld()
-    for sleutel, href in (("pr", "/projects"),
-                          ("ci", "/node?id=mother_earth__nooch"), ("org", "/node")):
+    for sleutel, href in (("ci", "/node?id=mother_earth__nooch"), ("org", "/node")):
         stuk = h.split(f"data-nav-paneel='{sleutel}'")[0][-160:]
         assert f"href='{href}'" in stuk, f"{sleutel} heeft geen val-terug-link"
     assert "e.preventDefault()" in JS
@@ -157,17 +158,30 @@ def test_messages_is_geen_paneel_want_het_scherm_is_al_lijst_plus_detail(tmp_pat
     assert "msg-lijst" in render_messages(st, ik=ik, csrf_token="t")
 
 
-def test_het_projects_paneel_opent_op_mijn_projecten(tmp_path):
-    """Standaard "mijn projecten", met dezelfde definitie als de persoon-lens: een project is van
-    jou als zijn eigenaar-rol door jou wordt vervuld. Een tweede definitie zou hier stilletjes een
-    andere lijst geven dan op je eigen pagina."""
+def test_projects_is_geen_paneel_want_de_pagina_is_al_het_bord(tmp_path):
+    """DEZE TOETS STOND ER ANDERSOM (`test_het_projects_paneel_opent_op_mijn_projecten`), tot
+    Projects op 23 september 2026 een gewone paginasprong werd.
+
+    Waarom het niet paste: het paneel gaf een LIJST van projecten terwijl `/projects` het BORD is
+    — kolommen, kaarten, groepering per rol of persoon. Je koos dus eerst een project uit een
+    platte lijst om daarna op een bord te landen dat je meteen had kunnen zien, en die lijst liet
+    bewust van alles weg (status, doel, kolom) wat het bord wél toont. Het enige dat het paneel
+    toevoegde was het filter "mijn projecten", en dat bestaat op het bord zelf als groepering.
+
+    Zelfde vorm als `test_messages_is_geen_paneel_want_het_scherm_is_al_lijst_plus_detail`: de
+    knop opent niets meer, de route is fail-closed, en het scherm erachter is nog compleet."""
     dd, st, ik = _dorp(tmp_path)
-    mijn = render_nav_paneel(st, "pr", ik)
-    assert "My projects" in mijn and mijn.count("c2-prij") == 3
-    # een mens zonder rollen ziet bij "mijn" niets, en bij "alle" alles
-    vreemd = st.people.add("Zonder Rol", "zonder@test.nl")
-    assert render_nav_paneel(st, "pr", vreemd.id).count("c2-prij") == 0
-    assert render_nav_paneel(st, "pr", vreemd.id, welke="alle").count("c2-prij") == 3
+    assert "pr" not in PANELEN
+    assert render_nav_paneel(st, "pr", ik) == ""          # fail-closed, geen half scherm
+    h = _nav_ingevuld()
+    pr = h.split("/projects")[1][:120]
+    assert "data-nav-paneel" not in pr, "Projects opent nog een paneel"
+    # en het bord bestaat gewoon nog, één klik verder, in zijn volledige vorm
+    from nooch_village.views.projects import render_projects_screen
+    rec = st.records.get("mother_earth__nooch")
+    bord = render_projects_screen(st, rec, csrf_token="t", username=None)
+    assert "pcol" in bord, "het bord toont geen kolommen"
+    assert bord.count("pcard") >= 3, "de drie projecten staan niet als kaart op het bord"
 
 
 def test_het_circle_paneel_meldt_een_rol_zonder_vervuller(tmp_path):

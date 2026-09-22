@@ -123,12 +123,15 @@ def test_de_avatar_krijgt_de_initialen_en_de_volledige_naam(tmp_path):
 
 # ── 3. Wat niet stuk mag: paneel, hamburger, live-zoek ──────────────────────────────────────
 def test_de_paneelknoppen_houden_hun_hele_contract():
-    """Projects, Circle en Organization openen een uitklap. Het mechanisme hangt aan drie
-    dingen tegelijk — `data-nav-paneel` (welk paneel), `aria-expanded` (de stand) en
-    `aria-controls` (waar het landt) — plus de `href` als val-terug zonder JS. Alle vier, want
-    met drie ervan werkt hij half."""
+    """Circle en Organization openen een uitklap. Het mechanisme hangt aan drie dingen tegelijk —
+    `data-nav-paneel` (welk paneel), `aria-expanded` (de stand) en `aria-controls` (waar het
+    landt) — plus de `href` als val-terug zonder JS. Alle vier, want met drie ervan werkt hij half.
+
+    PROJECTS STOND HIER, tot hij op 23 september 2026 een gewone paginasprong werd (het paneel gaf
+    een lijst terwijl `/projects` het bord is). Alleen `org` komt nog uit `_nav()` zelf — `ci` is
+    cirkel-afhankelijk en wordt door `_send` ingevuld, zie de assert onderaan."""
     html = _nav()
-    for paneel, href in (("pr", "/projects"), ("org", "/node")):
+    for paneel, href in (("org", "/node"),):
         el = re.search(rf"<a [^>]*data-nav-paneel='{paneel}'[^>]*>", html)
         assert el, paneel
         assert "aria-expanded=" in el.group(0) and "aria-controls='c2-paneel'" in el.group(0)
