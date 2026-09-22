@@ -583,9 +583,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "t.value=pre+s.slice(c);t.focus();t.selectionStart=t.selectionEnd=pre.length;close();});box.appendChild(b);});"
         "t.parentNode.style.position='relative';t.parentNode.appendChild(box);});"
         "t.addEventListener('blur',function(){setTimeout(close,200);});}"
-        "window.emoFilter=function(inp){var q=inp.value.toLowerCase();"
-        "inp.parentNode.querySelectorAll('.emo-f').forEach(function(f){"
-        "var k=f.getAttribute('data-k')||'';f.style.display=(!q||k.indexOf(q)>-1)?'':'none';});};"
+        # `emoFilter` STOND HIER en is naar nooch.js verhuisd. Hij werd alleen meegestuurd
+        # op schermen die deze modal renderen, dus in Messages bestond de functie niet en
+        # deed het zoekveld van de reactie-kiezer daar niets. Nu staat hij op elke pagina,
+        # data-gestuurd (`data-emo-zoek`), zoals de rest van de mechaniek.
         # Leest de server-markering uit de gevolgde redirect: `ok=0` betekent geweigerd, en
         # `msg` draagt de reden die de mens moet lezen. Geen markering → gewoon gelukt.
         "function weigering(u){try{var q=new URL(u,location.origin).searchParams;"

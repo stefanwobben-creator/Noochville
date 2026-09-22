@@ -19,7 +19,7 @@ import logging
 import urllib.parse
 
 from nooch_village import channels
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp, _ICON_STICKER
+from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp, _ICON_STICKER, _avatar
 from nooch_village.web_base import _e, _page, _banner
 
 #: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
@@ -320,9 +320,40 @@ def _bijlagen_html(e: dict, kanaal: str) -> str:
     return f"<div class='msg-bijlagen'>{''.join(rijen)}</div>" if rijen else ""
 
 
-def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
+#: Zoveel seconden tussen twee berichten van dezelfde persoon tellen nog als één blok.
+#: Vijf minuten: lang genoeg voor iemand die zijn zin in drieën typt, kort genoeg dat een
+#: reactie van een uur later zijn eigen kop en tijd terugkrijgt.
+_GROEP_S = 300
+
+
+def _zelfde_spreker(e: dict, vorige: dict | None) -> bool:
+    """Hoort dit bericht bij het blok van het vorige? Zelfde auteur én kort erna."""
+    if not vorige:
+        return False
+    a, b = e.get("author") or {}, vorige.get("author") or {}
+    if (a.get("type"), a.get("id")) != (b.get("type"), b.get("id")):
+        return False
+    return abs(float(e.get("at") or 0) - float(vorige.get("at") or 0)) <= _GROEP_S
+
+
+def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
+             vorige: dict | None = None) -> str:
+    """Eén bericht in de draad.
+
+    DRIE STANDEN, en ze staan hier bij elkaar omdat ze elkaars tegenhanger zijn:
+
+      * VAN JOU (`ik`): rechts, met een tint. Geen avatar — je weet wie jij bent, en een rail
+        met tien keer je eigen initialen is ruis.
+      * VAN EEN ANDER: links, met een avatar in een eigen kolom. Dat is de rail: de avatar
+        staat náást de tekst en niet erboven, zodat het oog één lijn heeft om langs te lezen.
+      * EEN VERVOLG (`vorige`): zelfde spreker, binnen vijf minuten. Dan geen kop en geen
+        avatar meer — alleen de tekst, uitgelijnd onder het blok. Wie drie zinnen achter
+        elkaar typt hoort geen drie keer zijn eigen naam te zien staan.
+    """
     a = e.get("author") or {}
     wie = (_person_name(st, a.get("id")) if a.get("type") in ("human", "person") else "") or "Someone"
+    van_mij = bool(ik) and a.get("type") in ("human", "person") and a.get("id") == ik
+    vervolg = _zelfde_spreker(e, vorige)
     herk = ""
     h = e.get("herkomst") or {}
     if h.get("project"):
@@ -339,9 +370,16 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
     rx, picker = reactie_blok(e, csrf_token, {"kanaal": kanaal}) if kanaal else ("", "")
     voet = f"<div class='msg-reacties'>{rx}{picker}</div>" if (rx or picker) else ""
     voet = _bijlagen_html(e, kanaal) + voet
-    return (f"<div class='msg-item'><div class='msg-meta'>{_e(wie)} &middot; "
-            f"{_e(_stamp(e.get('at')))}{herk}</div>"
-            f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div>")
+    # De avatarkolom staat er ALTIJD bij een ander, ook leeg bij een vervolgbericht: zo blijft
+    # de tekst op dezelfde lijn staan in plaats van bij elk vervolg naar links te springen.
+    rail = ("" if van_mij else
+            f"<div class='msg-av'>{'' if vervolg else _avatar(wie, a.get('type') == 'persona')}</div>")
+    kop = ("" if vervolg else
+           f"<div class='msg-meta'>{_e(wie)} &middot; {_e(_stamp(e.get('at')))}{herk}</div>")
+    cls = ("msg-item" + (" msg-item--ik" if van_mij else "")
+           + (" msg-item--volg" if vervolg else ""))
+    return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
+            f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div></div>")
 
 
 def _sticker_kiezer(kanaal: str, csrf_token: str) -> str:
@@ -571,7 +609,8 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             except Exception:                          # noqa: BLE001
                 logging.getLogger("village.messages").debug(
                     "gezien-stand niet bijgewerkt", exc_info=True)
-    draad = "".join(_bericht(st, e, kanaal, csrf_token) for e in trail) or (
+    draad = "".join(_bericht(st, e, kanaal, csrf_token, ik, trail[i - 1] if i else None)
+                    for i, e in enumerate(trail)) or (
         "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
     schrijf = ""
@@ -587,8 +626,11 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         # EIGEN FORMULIER, want dit is `multipart/form-data` en het antwoordveld is dat niet. Eén
         # ronde: het bericht wordt hier geplaatst en het bestand hangt er direct aan.
         bijlage_form = (
+            # IN DE BALK IS DE PAPERCLIP EEN ICOON, geen regel met tekst: hij staat naast twee
+            # andere iconen, en "attach a file" zou de rij uit elkaar trekken. Het woord blijft
+            # bestaan voor wie het niet ziet — `title` voor de muis, `aria-label` voor de rest.
             f"<details class='qadd msg-bijlage-add'>"
-            f"<summary class='muted'>📎 attach a file</summary>"
+            f"<summary class='muted' title='attach a file' aria-label='attach a file'>📎</summary>"
             f"<form method='post' action='/action' class='qadd-form' "
             f"enctype='multipart/form-data'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -604,28 +646,29 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Upload</button>"
             f"<span class='muted'>max 20 MB &middot; image, pdf, txt, csv, docx, xlsx, pptx</span>"
             f"</div></form></details>")
-        # GEREEDSCHAP BOVEN HET VELD, EN BUITEN HET SCHRIJFFORMULIER. Allebei dragen ze hun
-        # eigen <form> (de paperclip post multipart, elke sticker post zijn eigen naam), en een
-        # <form> in een <form> is geen HTML: de browser gooit de binnenste weg en je klikt op
-        # een knop die niets doet. Vandaar één `.qadd-row` ernaast in plaats van erin — geen
-        # nieuwe klasse, dezelfde rij die overal de knoppen naast elkaar zet.
-        gereedschap = (f"<div class='qadd-row'>{bijlage_form}"
-                       f"{_sticker_kiezer(kanaal, csrf_token)}</div>")
-        # ONDER HET VELD, NIET ERBOVEN. De kiezer klapt naar beneden open (`.emoji-pop` hangt
-        # onder zijn knop); staat de rij bovenaan, dan legt hij zich over het tekstvak waar je
-        # net in typte. Onderaan klapt hij open in de lege ruimte eronder — en het is meteen de
-        # plek waar een chatbalk zijn gereedschap heeft.
-        schrijf = (f"<form method='post' action='/action' class='qadd-form'>"
+        # ── ÉÉN INVOERBALK ───────────────────────────────────────────────────────────────
+        # Paperclip, emoji, sticker, veld en verstuur-knop in één rij. Wat je NIET ziet is dat
+        # het drie losse formulieren naast elkaar zijn: de paperclip post multipart, elke
+        # sticker post zijn eigen naam, en het tekstveld post `msg_post`. Een <form> in een
+        # <form> is geen HTML — de browser gooit de binnenste weg en je klikt op een knop die
+        # niets doet (gevonden bij de stickerkiezer, #556). Ze staan dus NAAST elkaar in een
+        # flexrij, niet in elkaar: de balk is opmaak, de formulieren zijn structuur.
+        from nooch_village.views.feed import emoji_kiezer, emoji_invoeg_knoppen
+        emoji = emoji_kiezer(emoji_invoeg_knoppen("msg-tekst"), titel="emoji")
+        schrijf = (f"<div class='msg-balk'>"
+                   f"<div class='msg-balk-tools'>{bijlage_form}{emoji}"
+                   f"{_sticker_kiezer(kanaal, csrf_token)}</div>"
+                   f"<form method='post' action='/action' class='msg-schrijf'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
                    f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"
-                   f"<label class='att-lbl' for='msg-tekst'>Write a message</label>"
+                   f"<label class='sr' for='msg-tekst'>Write a message</label>"
                    # `data-mention` = de @-typhulp uit nooch.js. Puur typen: wat je kiest
                    # wordt platte tekst, er hangt geen notificatie of link achter.
-                   f"<textarea id='msg-tekst' name='tekst' rows='2' data-mention "
+                   f"<textarea id='msg-tekst' name='tekst' rows='1' data-mention "
                    f"placeholder='Write a reply, or ask a colleague to weigh in…'></textarea>"
-                   f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
-                   f"value='msg_post'>Post</button></div></form>") + gereedschap
+                   f"<button class='btn ok sm' type='submit' name='action' "
+                   f"value='msg_post'>Send</button></form></div>")
     elif kanaal and not ik:
         schrijf = ("<p class='muted'>Log in as a person to write here &mdash; a message needs an "
                    "author.</p>")

@@ -160,6 +160,35 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
             f"{proj}{act}{note}{rov}</details>")
 
 
+def emoji_kiezer(knoppen: str, icoon: str = "", titel: str = "reaction") -> str:
+    """De SCHIL van de emoji-kiezer: knop, popup, zoekveld, raster. Eén plek.
+
+    WAAROM DIT EEN EIGEN FUNCTIE IS. De kiezer heeft twee gebruikers met hetzelfde uiterlijk en
+    een andere actie: onder een bericht plaatst hij een REACTIE (een formulier per emoji), in de
+    invoerbalk zet hij het teken in je TEKST (een knop per emoji, JS). Zou de tweede zijn eigen
+    schil krijgen, dan is de emoji-lijst op het ene scherm na één wijziging langer dan op het
+    andere — precies wat `reactie_blok` hieronder zelf al beschrijft.
+
+    Wat de aanroeper levert is dus alleen de inhoud van het raster; de rest staat hier."""
+    return (f"<details class='emoji-pick'><summary class='emoji-add' title='{_e(titel)}' "
+            f"aria-label='{_e(titel)}'>{icoon or _ICON_ADD_EMOJI}</summary>"
+            f"<div class='emoji-pop'>"
+            f"<input class='emo-search' type='text' placeholder='Search emoji…' data-emo-zoek>"
+            f"<div class='emo-grid'>{knoppen}</div></div></details>")
+
+
+def emoji_invoeg_knoppen(doel: str) -> str:
+    """De emoji's als INVOEGKNOPPEN voor een tekstveld, met dezelfde lijst en dezelfde klassen
+    als de reactie-variant. `doel` is de id van het veld waar het teken in belandt.
+
+    `type='button'`, en dat is geen detail: deze knoppen staan in de invoerbalk náást het
+    schrijfformulier, en een knop zonder type is een submit."""
+    return "".join(
+        f"<button type='button' class='emo' data-emo-invoeg='{_e(doel)}' "
+        f"data-k='{_e(kw)}' title='{_e(kw)}'>{emo}</button>"
+        for emo, kw in _EMOJIS_FULL)
+
+
 def reactie_blok(entry: dict, csrf_token: str, velden: dict) -> tuple[str, str]:
     """De emoji-reacties van één bericht: (de tellers, de kiezer). Gedeeld door de projectfeed en
     de kanalen in Messages.
@@ -189,12 +218,7 @@ def reactie_blok(entry: dict, csrf_token: str, velden: dict) -> tuple[str, str]:
         f"<input type='hidden' name='emoji' value='{emo}'>"
         f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
         for emo, kw in _EMOJIS_FULL)
-    picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reaction' "
-              f"aria-label='add reaction'>{_ICON_ADD_EMOJI}</summary>"
-              f"<div class='emoji-pop'>"
-              f"<input class='emo-search' type='text' placeholder='Search emoji…' oninput='emoFilter(this)'>"
-              f"<div class='emo-grid'>{btns}</div></div></details>")
-    return rx, picker
+    return rx, emoji_kiezer(btns)
 
 
 def _feed_entry_html(st, entry: dict, role_name: str = "",

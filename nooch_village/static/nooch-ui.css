@@ -334,7 +334,21 @@
 
 /* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
 .nu .cl-head h3 a { color: var(--nu-text); }
-.nu .msg-item { border-bottom: 1.5px solid var(--nu-border-subtle); }
+/* DE SCHEIDINGSLIJN PER BERICHT IS WEG (22 sept 2026). Hij droeg "hier begint een nieuw
+   bericht"; dat doen nu de avatar, de kop en de tint van je eigen bubbel. Een lijn onder élke
+   regel is dan ruis in iets wat je van boven naar beneden leest.
+   Wat je van JEZELF schrijft draagt `--nu-bg-alt`: dezelfde lichte groene vulling die dit
+   systeem al gebruikt voor "dit is de actieve/eigen stand" (`.nu .wo-step.on`, de
+   overleg-knoppen). Geen nieuwe kleur, geen tweede conventie. */
+.nu .msg-item { border-bottom: 0; }
+.nu .msg-item--ik .msg-body { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+.nu .msg-balk { border-top: 1.5px solid var(--nu-border-subtle); }
+.nu .msg-balk .msg-bijlage-add > .qadd-form { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); box-shadow: none; }
+.nu .msg-balk .msg-bijlage-add > summary { color: var(--nu-muted); }
+.nu .msg-balk .msg-bijlage-add[open] > summary,
+.nu .msg-balk .msg-bijlage-add > summary:hover { color: var(--nu-accent-text); }
 
 /* ── `att-*` en `qadd-*`: de twee families die overal terugkomen ───────────────────────────────
    Deze twee zitten in zes van de elf herbouwde views (node/person/admin, wiki/pagina, vangst,

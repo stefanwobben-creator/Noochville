@@ -853,6 +853,46 @@
     setTimeout(function () { laag.remove(); }, 2600);
   }
 
+  // ── De emoji-kiezer: zoeken, en invoegen in een tekstveld ─────────────────────────────────
+  // ZOEKEN STOND IN EEN INLINE-SCRIPT dat alleen op schermen met de project-modal werd
+  // meegestuurd (`window.emoFilter` in `_modal_html`). In Messages bestond die functie niet,
+  // dus het zoekveld in de reactie-kiezer deed daar al die tijd niets — `oninput` riep een
+  // naam aan die er niet was. Hier staat hij één keer, op elke pagina.
+  function emoKiezer(root) {
+    root.querySelectorAll("[data-emo-zoek]").forEach(function (veld) {
+      if (veld.dataset.nvEmo) return;
+      veld.dataset.nvEmo = "1";
+      veld.addEventListener("input", function () {
+        var q = veld.value.trim().toLowerCase();
+        // Het doelwit is de KNOP of zijn formulier: onder een bericht zit elke emoji in een
+        // eigen <form class='emo-f'>, in de invoerbalk is het een losse <button>. Allebei
+        // dragen `data-k` met de zoekwoorden, dus we verbergen wat die draagt.
+        veld.parentNode.querySelectorAll("[data-k]").forEach(function (el) {
+          var k = el.getAttribute("data-k") || "";
+          el.style.display = (!q || k.indexOf(q) > -1) ? "" : "none";
+        });
+      });
+    });
+    // Invoegen in het schrijfveld. Geen submit, geen reactie: alleen tekst erbij op de plek
+    // waar de cursor staat.
+    root.querySelectorAll("[data-emo-invoeg]").forEach(function (knop) {
+      if (knop.dataset.nvEmo) return;
+      knop.dataset.nvEmo = "1";
+      knop.addEventListener("click", function () {
+        var veld = document.getElementById(knop.getAttribute("data-emo-invoeg"));
+        if (!veld) return;
+        var teken = knop.textContent.trim();
+        var a = veld.selectionStart, b = veld.selectionEnd;
+        veld.value = veld.value.slice(0, a) + teken + veld.value.slice(b);
+        veld.focus();
+        veld.selectionStart = veld.selectionEnd = a + teken.length;
+        veld.dispatchEvent(new Event("input", { bubbles: true }));
+        var det = knop.closest("details");
+        if (det) det.open = false;                   // gekozen is klaar
+      });
+    });
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -865,6 +905,7 @@
     stickers(root);
     mentions(root);
     feest(root);
+    emoKiezer(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);
