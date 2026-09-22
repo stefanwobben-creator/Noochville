@@ -620,7 +620,9 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
                    f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"
                    f"<label class='att-lbl' for='msg-tekst'>Write a message</label>"
-                   f"<textarea id='msg-tekst' name='tekst' rows='2' "
+                   # `data-mention` = de @-typhulp uit nooch.js. Puur typen: wat je kiest
+                   # wordt platte tekst, er hangt geen notificatie of link achter.
+                   f"<textarea id='msg-tekst' name='tekst' rows='2' data-mention "
                    f"placeholder='Write a reply, or ask a colleague to weigh in…'></textarea>"
                    f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
                    f"value='msg_post'>Post</button></div></form>") + gereedschap

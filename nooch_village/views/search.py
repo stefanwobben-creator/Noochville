@@ -106,6 +106,44 @@ def _people(st, termen):
     return uit
 
 
+# ── @-typhulp ───────────────────────────────────────────────────────────────────────────────
+# Max 8 in de lijst. Meer dan dat lees je niet meer terwijl je typt, en een dropdown die het
+# scherm vult staat in de weg van waar je mee bezig was.
+_MENTION_MAX = 8
+_MENTION_MENSEN = 5      # deelplafond: één veelgebruikte letter mag de rollen er niet uit duwen
+
+
+def mention_hits(st, q: str, limiet: int = _MENTION_MAX) -> list[dict]:
+    """De treffers voor `@` in een invoerveld: mensen en rollen, in één lijst.
+
+    GEEN TWEEDE PERSONENLIJST. Dit roept `_people` en `_roles` aan en neemt alleen hun titel
+    over. Wie hier verschijnt is dus per definitie wie de zoekpagina ook vindt: dezelfde
+    woord-prefix-match, dezelfde `archived`-filter, dezelfde naamsbepaling. Een eigen lus over
+    `st.people.all()` zou de tweede interpretatie zijn die `reference, don't copy` verbiedt —
+    en dan is de ene lijst na één wijziging anders dan de andere zonder dat iemand het merkt.
+
+    MENSEN EERST, MAAR NOOIT ALLEEN MENSEN. Je noemt vaker een mens dan een rol, dus die staan
+    bovenaan; tegelijk mag "s" niet acht mensen opleveren en nul rollen. Vandaar een deelplafond
+    dat pas wordt opgerekt als er geen rollen zijn om de rest mee te vullen — zo staat de lijst
+    altijd vol en blijft hij gegroepeerd.
+
+    LEGE `q` GEEFT DE EERSTE TREFFERS, NIET NIETS. Je hebt dan net `@` getypt; `_match` met nul
+    termen is waar voor alles, en dat is hier precies goed. Een lege dropdown ziet eruit als kapot.
+
+    PUUR TYPHULP: wat je kiest wordt platte tekst. Er hangt geen notificatie, geen link en geen
+    koppeling achter — dat is een apart besluit met een eigen autorisatievraag ("wie mag wie
+    pingen"), niet iets dat je hier stilzwijgend meekrijgt."""
+    termen = [t for t in (q or "").lower().split() if t]
+    mensen = [{"label": h["titel"], "kind": "person"} for h in _people(st, termen)]
+    # `_roles` levert rollen én cirkels; die soort blijft staan zoals hij is. Een cirkel is van
+    # buiten gewoon een rol (harde regel 1), maar hem "role" noemen zou informatie weggooien die
+    # de badge gratis kan tonen — en `.gs-circle` bestaat al.
+    rollen = [{"label": h["titel"], "kind": h["kind"]} for h in _roles(st, termen)]
+    n_mensen = min(len(mensen), max(_MENTION_MENSEN, limiet - len(rollen)))
+    n_rollen = min(len(rollen), limiet - n_mensen)
+    return mensen[:n_mensen] + rollen[:n_rollen]
+
+
 def _accountabilities(st, termen):
     """Losse accountabilities die matchen: waar is deze verantwoordelijkheid belegd (welke rol) en
     door wie wordt die rol vervuld? Klik opent de rol-pagina. Dit beantwoordt 'waar is X belegd?'."""

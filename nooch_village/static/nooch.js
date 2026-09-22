@@ -679,6 +679,142 @@
     root.querySelectorAll("[data-giphy]").forEach(giphyZoek);
   }
 
+  // ── @-vermelding: typhulp bij het typen ───────────────────────────────────────────────────
+  // Zet `data-mention` op een <textarea> of <input> en hij krijgt een @-lijst. Verder niets:
+  // de keuze wordt PLATTE TEKST ("@Stefan Wobben "). Geen notificatie, geen link, geen
+  // koppeling — dat is een apart besluit, en wel een met een eigen autorisatievraag.
+  //
+  // DRIE DINGEN DIE DE INLINE-VERSIE OP DE PROJECTFEED NIET HEEFT, en de reden dat dit er staat:
+  //  * de lijst komt van de SERVER (`/mention-search`) in plaats van uit een volledige
+  //    namenlijst die met elke pagina meereist — die groeit mee met de organisatie en staat
+  //    in elk scherm waar je hem ooit nodig zou kunnen hebben;
+  //  * pijltjes + Enter, niet alleen muis. Wie typt heeft zijn handen al op het toetsenbord;
+  //  * de lijst hangt op de BODY met paginacoördinaten, dus het veld hoeft zelf geen
+  //    positie-context te hebben (de inline-versie zet daarvoor `parentNode.style.position`,
+  //    en dat is een stijl-wijziging aan iemand anders' element).
+  function mentionVeld(veld) {
+    if (veld.dataset.nvMention) return;                       // dubbel bedraden = dubbele lijst
+    veld.dataset.nvMention = "1";
+
+    var pop = null, hits = [], idx = -1, timer = null, teller = 0;
+
+    // Het @-woord waar de cursor NU in staat. Voorwaarde: de @ staat aan het begin of na
+    // witruimte — anders zou een e-mailadres ("a@b") de lijst openen.
+    function token() {
+      var tot = veld.value.slice(0, veld.selectionStart);
+      var m = /(^|\s)@([^\s@]{0,40})$/.exec(tot);
+      return m ? { term: m[2], start: tot.length - m[2].length - 1 } : null;
+    }
+
+    function sluit() {
+      if (pop) { pop.remove(); pop = null; }
+      hits = []; idx = -1;
+      veld.removeAttribute("aria-activedescendant");
+      veld.setAttribute("aria-expanded", "false");
+    }
+
+    function plaats() {
+      if (!pop) return;
+      var r = veld.getBoundingClientRect();
+      pop.style.left = (r.left + window.pageXOffset) + "px";
+      pop.style.top = (r.bottom + window.pageYOffset + 4) + "px";
+    }
+
+    function merk() {
+      Array.prototype.forEach.call(pop.children, function (el, i) {
+        el.setAttribute("aria-selected", i === idx ? "true" : "false");
+      });
+      if (idx >= 0) {
+        veld.setAttribute("aria-activedescendant", pop.children[idx].id);
+        pop.children[idx].scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function kies(i) {
+      // HET @-WOORD WORDT HIER OPNIEUW OPGEZOCHT en niet onthouden vanaf het moment dat de
+      // lijst werd opgehaald. Dat was de bug: `toon()` begint met opruimen, en dat wiste de
+      // onthouden positie — pijltjes werkten, Enter deed niets. Een positie in een tekst die
+      // ondertussen kan veranderen is afgeleide informatie; die hoor je af te leiden.
+      var t = token();
+      if (i < 0 || i >= hits.length || !t) return;
+      var caret = veld.selectionStart;
+      var voor = veld.value.slice(0, t.start) + "@" + hits[i].label + " ";
+      veld.value = voor + veld.value.slice(caret);
+      veld.focus();
+      veld.selectionStart = veld.selectionEnd = voor.length;
+      sluit();
+      // Andere bedrading (tellers, "er staat iets getypt"-knoppen) hoort dit te merken: wij
+      // veranderden de waarde met de hand, en dan komt er geen `input`-event vanzelf.
+      veld.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function toon(lijst) {
+      sluit();
+      if (!lijst.length) return;
+      hits = lijst;
+      pop = document.createElement("div");
+      pop.className = "mention-pop";
+      pop.setAttribute("role", "listbox");
+      lijst.forEach(function (h, i) {
+        var b = document.createElement("button");
+        b.type = "button";                       // anders is het in een formulier een submit
+        b.className = "mention-it";
+        b.id = "nv-ment-" + (++teller);
+        b.setAttribute("role", "option");
+        b.setAttribute("aria-selected", "false");
+        var k = document.createElement("span");
+        k.className = "gs-kind gs-" + (h.kind || "role");
+        k.textContent = h.kind || "role";
+        b.appendChild(k);
+        b.appendChild(document.createTextNode("@" + h.label));
+        // mousedown i.p.v. click: klikken haalt eerst de focus uit het veld, en dan is de
+        // cursorpositie weg waar we net in wilden invoegen.
+        b.addEventListener("mousedown", function (ev) { ev.preventDefault(); kies(i); });
+        pop.appendChild(b);
+      });
+      document.body.appendChild(pop);
+      idx = 0; merk(); plaats();
+      veld.setAttribute("aria-expanded", "true");
+    }
+
+    function vraag() {
+      var t = token();
+      if (!t) { sluit(); return; }
+      fetch("/mention-search?q=" + encodeURIComponent(t.term), { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) {
+          // Tussen vraag en antwoord kan de cursor verder zijn; dan is dit antwoord verouderd.
+          var nu = token();
+          return (nu && nu.term === t.term) ? (d.hits || []) : null;
+        }, function () { sluit(); return null; })  // stil: typhulp die faalt hoort niet te schreeuwen
+        // BEWUST BUITEN DIE CATCH. Een netwerkfout mag stil zijn, een fout in het TEKENEN niet:
+        // met één catch om het hele blok verdween een echte bug in de stilte (zie `kies`).
+        .then(function (lijst) { if (lijst) toon(lijst); });
+    }
+
+    veld.setAttribute("aria-expanded", "false");
+    veld.addEventListener("input", function () {
+      clearTimeout(timer);
+      if (!token()) { sluit(); return; }
+      timer = setTimeout(vraag, 120);              // niet per aanslag naar de server
+    });
+
+    veld.addEventListener("keydown", function (ev) {
+      if (!pop) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); idx = (idx + 1) % hits.length; merk(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); idx = (idx - 1 + hits.length) % hits.length; merk(); }
+      else if (ev.key === "Enter" || ev.key === "Tab") { ev.preventDefault(); kies(idx); }
+      else if (ev.key === "Escape") { ev.preventDefault(); sluit(); }
+    });
+
+    veld.addEventListener("blur", function () { setTimeout(sluit, 150); });
+    window.addEventListener("resize", plaats);
+  }
+
+  function mentions(root) {
+    root.querySelectorAll("[data-mention]").forEach(mentionVeld);
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -689,6 +825,7 @@
     navPaneel(root);
     overlegPoll(root);
     stickers(root);
+    mentions(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);
