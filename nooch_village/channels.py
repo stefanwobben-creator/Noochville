@@ -160,8 +160,8 @@ class ChannelStore(JsonStore):
     `ledger` wordt geïnjecteerd en niet geïmporteerd: dezelfde discipline als bij de EventBus —
     een store die zelf zijn buren opzoekt is een store die je niet los kunt testen."""
 
-    _WRITE_METHODS = ("post", "maak_topic", "hernoem_topic", "plaats_notificatie",
-                      "add_reaction", "add_bijlage")
+    _WRITE_METHODS = ("post", "bewerk", "verwijder", "maak_topic", "hernoem_topic",
+                      "plaats_notificatie", "add_reaction", "add_bijlage")
     _STATE = "_data"
     _default = dict
 
@@ -193,6 +193,74 @@ class ChannelStore(JsonStore):
         self._data.setdefault("kanalen", {}).setdefault(kanaal, []).append(entry)
         self._save()
         return entry
+
+    def _eigen(self, kanaal: str, entry_id: str, door: str) -> dict | None:
+        """De entry met dit id, maar ALLEEN als `door` hem zelf schreef. Anders None.
+
+        DIT IS DE POORT, en hij staat hier en niet in het scherm. Een knop die niet gerenderd
+        wordt houdt geen POST tegen; wie het formulier naspeelt met het id van een ander moet
+        op deze regel stuklopen en niet op de afwezigheid van een knop.
+
+        Een bericht van een ROL is van niemand, ook niet van de mens die de rol vervult: de
+        auteur-typen `human`/`person` zijn de enige twee die een mens aanwijzen. Fail-closed —
+        onbekend kanaal, onbekend id of een lege `door` geeft None."""
+        if not (kanaal and entry_id and door):
+            return None
+        for e in self.trail(kanaal, limit=TRAIL_MAX):
+            if e.get("id") != entry_id:
+                continue
+            a = e.get("author") or {}
+            if a.get("type") in ("human", "person") and a.get("id") == door:
+                return e
+            return None
+        return None
+
+    def bewerk(self, kanaal: str, entry_id: str, tekst: str, *, door: str) -> bool:
+        """Vervang de tekst van je EIGEN bericht. Lege tekst doet niets — fail-closed, net als
+        `post`: een leeg bericht bestaat niet, dus "bewerken naar leeg" is geen verwijdering
+        maar een fout. Verwijderen is een eigen actie, zie `verwijder`.
+
+        GEEN "edited"-MERKJE. `ProjectLedger.feed_edit` — de andere achterkant, die de
+        project-wall al gebruikt — kent het niet, en een merkje dat alleen op cirkel- en
+        DM-kanalen verschijnt laat hetzelfde bericht wél of niet als bewerkt lezen afhankelijk
+        van welk soort kanaal het toevallig is."""
+        tekst = " ".join(str(tekst or "").split())[:TEKST_MAX]
+        if not tekst or self._eigen(kanaal, entry_id, door) is None:
+            return False
+        if soort_van(kanaal) == PROJECT:
+            if self._ledger is None:
+                return False
+            return bool(self._ledger.feed_edit(doel_van(kanaal), entry_id, tekst))
+        for e in (self._data.get("kanalen") or {}).get(kanaal) or []:
+            if e.get("id") == entry_id:
+                e["text"] = tekst
+                self._save()
+                return True
+        return False
+
+    def verwijder(self, kanaal: str, entry_id: str, *, door: str) -> bool:
+        """Haal je EIGEN bericht weg. Echt weg, geen "message deleted"-plaatshouder.
+
+        WAAROM HARD EN NIET ZACHT: een projectkanaal IS `project["log"]`, en daar bestaat
+        `feed_remove` al — de project-wall verwijdert zo sinds fase 5. Een zachte verwijdering
+        hier zou betekenen dat hetzelfde bericht verdwijnt of een plaatshouder achterlaat,
+        afhankelijk van of je het vanaf de projectpagina of vanuit Messages weghaalt.
+
+        De bijlage-bestanden op schijf blijven staan en worden onbereikbaar: `bijlage()` zoekt
+        ze via de entry op, en die is er niet meer. Opruimen van wezen is een eigen klus."""
+        if self._eigen(kanaal, entry_id, door) is None:
+            return False
+        if soort_van(kanaal) == PROJECT:
+            if self._ledger is None:
+                return False
+            return bool(self._ledger.feed_remove(doel_van(kanaal), entry_id))
+        rij = (self._data.get("kanalen") or {}).get(kanaal) or []
+        over = [e for e in rij if e.get("id") != entry_id]
+        if len(over) == len(rij):
+            return False
+        self._data.setdefault("kanalen", {})[kanaal] = over
+        self._save()
+        return True
 
     def add_bijlage(self, kanaal: str, entry_id: str, meta: dict) -> bool:
         """Hang een geüpload bestand aan een bericht in dit kanaal.

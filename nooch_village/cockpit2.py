@@ -1406,8 +1406,53 @@ def _act_msg_post(c):
     return nxt, "💬 posted" + (f" · {gemeld} mentioned" if gemeld else "")
 
 
+def _eigen_bericht_poort(c):
+    """(ik, kanaal, item, fout) — de gedeelde voordeur van bewerken en wissen. `fout` is "" als
+    alles klopt; is hij gevuld, dan zijn de andere drie leeg."""
+    from nooch_village import channels
+    kanaal = (c.g("kanaal") or "").strip()
+    if channels.soort_van(kanaal) not in (channels.PROJECT, channels.CIRCLE,
+                                          channels.DM, channels.TOPIC):
+        return "", "", "", "✗ unknown channel"
+    ik = _web_actor_id(c.username, c.st)
+    if not ik:
+        return "", "", "", "✗ log in as a person — only the author can change a message"
+    return ik, kanaal, (c.g("item") or "").strip(), ""
+
+
+def _act_msg_edit(c):
+    """Je eigen bericht in een kanaal herschrijven.
+
+    # AUTHZ: iedereen-ingelogd — je eigen woorden bijstellen is deelnemen aan het gesprek, geen
+    # structuurmutatie; dezelfde regel als `msg_post`, waar dit de tegenhanger van is. De
+    # SCHERPERE poort ("alleen de auteur") zit een laag dieper, in `ChannelStore._eigen`: daar
+    # ligt de entry mét zijn auteur, en daar kan geen scherm tussenuit vallen.
+    """
+    ik, kanaal, item, fout = _eigen_bericht_poort(c)
+    if fout:
+        return _terug_naar(c, kanaal), fout
+    if c.st.channels.bewerk(kanaal, item, c.g("tekst"), door=ik):
+        return _terug_naar(c, kanaal), "✓ message edited"
+    return _terug_naar(c, kanaal), "✗ nothing changed — you can only edit your own message"
+
+
+def _act_msg_remove(c):
+    """Je eigen bericht in een kanaal weghalen.
+
+    # AUTHZ: iedereen-ingelogd — zie `_act_msg_edit`: ingelogd mag posten en dus ook zijn EIGEN
+    # bericht terugnemen. Wiens bericht het is beslist `ChannelStore._eigen`, niet dit scherm.
+    """
+    ik, kanaal, item, fout = _eigen_bericht_poort(c)
+    if fout:
+        return _terug_naar(c, kanaal), fout
+    if c.st.channels.verwijder(kanaal, item, door=ik):
+        return _terug_naar(c, kanaal), "🗑 message removed"
+    return _terug_naar(c, kanaal), "✗ nothing removed — you can only remove your own message"
+
+
 def _terug_naar(c, kanaal: str) -> str:
-    """Waar je na het plaatsen van een sticker weer uitkomt: in het gesprek.
+    """Waar je na een kanaal-actie weer uitkomt: in het gesprek. Gedeeld door de sticker- en
+    Giphy-knoppen en door bewerken/verwijderen.
 
     NIET `c.nxt`, EN DAAR LIEP IK IN. `dispatch` zet `nxt` op "/" als het formulier geen `next`
     draagt, en "/" is waar — dus een `or`-terugval eronder doet nooit iets. Gevolg: klikken op
@@ -5092,6 +5137,8 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "msg_post": _act_msg_post,
+    "msg_edit": _act_msg_edit,
+    "msg_remove": _act_msg_remove,
     "sticker_post": _act_sticker_post,
     "giphy_post": _act_giphy_post,
     "topic_add": _act_topic_add,
