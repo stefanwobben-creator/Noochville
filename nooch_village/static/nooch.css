@@ -1424,9 +1424,49 @@ summary.pchip:hover{border-color:var(--gray)}
 .msg-kanaal.on{background:var(--ink);color:var(--surface)}
 .msg-draad{flex:1;min-width:0}
 .msg-kop{font-size:1rem;margin:0 0 .6rem}
-.msg-item{border-bottom:1px solid var(--border);padding:.5rem 0}
+/* ── De draad: een rail links, een bubbel rechts ─────────────────────────────────────────────
+   DE SCHEIDINGSLIJN PER BERICHT IS WEG. Hij was de enige drager van "hier begint een nieuw
+   bericht"; nu doen de avatar, de kop en — bij jezelf — de tint dat, en dan is een lijn onder
+   élke regel alleen nog ruis in een gesprek dat je van boven naar beneden leest.
+   De avatarkolom staat er altijd bij een ander, óók leeg bij een vervolgbericht: zo blijft de
+   tekst op dezelfde lijn in plaats van bij elk vervolg naar links te springen. */
+.msg-item{display:flex;gap:.55rem;align-items:flex-start;padding:.4rem 0}
+.msg-item--volg{padding-top:.05rem}
+.msg-av{flex:0 0 22px;width:22px}
+.msg-body{min-width:0;flex:1 1 auto}
 .msg-meta{font-size:12px;color:var(--gray);margin-bottom:.15rem}
 .msg-text{font-size:14px;white-space:pre-wrap}
+/* Van jezelf: rechts, met de tint die overal in dit dorp "dit is van jou/goed" betekent —
+   dezelfde `--green-tint` als `.chip` en `.wo-step.on`. Geen nieuwe kleur, geen tweede
+   conventie. De bubbel is maximaal 78% breed, anders is "rechts" niet te zien. */
+.msg-item--ik{justify-content:flex-end}
+.msg-item--ik .msg-body{flex:0 1 auto;max-width:78%;background:var(--green-tint);
+  border-radius:var(--radius);padding:.35rem .6rem}
+.msg-item--ik .msg-meta{text-align:right}
+/* ── De invoerbalk: één rij, drie formulieren ────────────────────────────────────────────────
+   Paperclip, emoji, sticker, veld en knop staan náást elkaar en niet in elkaar: elk gereedschap
+   draagt zijn eigen <form>, en een <form> in een <form> is geen HTML. De balk is dus opmaak. */
+.msg-balk{display:flex;align-items:flex-end;gap:.5rem;margin-top:.6rem;padding-top:.6rem;
+  border-top:1px solid var(--border);flex-wrap:wrap}
+.msg-balk-tools{display:flex;align-items:center;gap:.5rem;flex:0 0 auto;padding-bottom:.3rem}
+.msg-schrijf{display:flex;align-items:flex-end;gap:.5rem;flex:1 1 220px;min-width:0}
+.msg-schrijf textarea{flex:1 1 auto;min-width:0;resize:vertical;min-height:2.1rem}
+/* De paperclip is in de balk een ICOON, geen uitklapregel met tekst: hij staat naast twee
+   andere iconen en een blokje "attach a file" zou de rij uit elkaar trekken. */
+/* DE KIEZERS KLAPPEN OMHOOG IN DE BALK. `.emoji-pop` hangt standaard ONDER zijn knop
+   (`top:1.5rem`), en de balk staat onderaan het gesprek: gemeten viel de popup dan op
+   818px in een venster van 616px — je zag 'm gewoon niet. Hier dus andersom, en met
+   `bottom` in plaats van een negatieve `top`, zodat een langere lijst naar boven groeit
+   en niet over de balk heen zakt. */
+.msg-balk .emoji-pop{top:auto;bottom:1.9rem}
+.msg-balk .msg-bijlage-add{margin:0}
+.msg-balk .msg-bijlage-add>summary{list-style:none;cursor:pointer;color:var(--subtle)}
+.msg-balk .msg-bijlage-add>summary::-webkit-details-marker{display:none}
+.msg-balk .msg-bijlage-add[open]>summary,.msg-balk .msg-bijlage-add>summary:hover{color:var(--green-dark)}
+.msg-balk .msg-bijlage-add[open]{position:relative}
+.msg-balk .msg-bijlage-add>.qadd-form{position:absolute;bottom:2rem;left:0;z-index:7;width:19rem;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:.6rem}
 @media(max-width:760px){.msg-layout{flex-direction:column}.msg-lijst{max-width:none;flex-basis:auto}}
 .msg-zoek{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.7rem}
 .msg-zoek input[type=search]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font:inherit;font-size:.86rem}

@@ -118,9 +118,16 @@ def test_emoji_reactie(tmp_path):
     assert "emoji-pick" in frag and "chip outline" in frag and "👍 2" in frag
     # zoekbare picker met gecureerde set
     assert "emo-search" in frag and "emo-grid" in frag and "🚀" in frag
+    # HET ZOEKEN ZAT IN EEN INLINE-SCRIPT van de project-modal (`window.emoFilter`) en is op
+    # 22 september 2026 naar nooch.js verhuisd. Reden: dat script werd alleen meegestuurd op
+    # schermen die de modal renderen, dus in Messages bestond de functie niet en deed het
+    # zoekveld van dezelfde kiezer daar niets. Deze test toetste dat het script meereisde; wat
+    # hij hoort te bewaken is dat de kiezer ZOEKBAAR is, en dat is nu een attribuut dat de
+    # gedeelde mechaniek oppakt.
+    assert "data-emo-zoek" in frag                 # de kiezer draagt de zoek-haak
     node = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch__website_developer",
                                 "projects", csrf_token="t")
-    assert "emoFilter" in node
+    assert "nooch.js" in node                      # ... en de mechaniek die hem bedient laadt
 
 
 def test_datum_card_datepicker(tmp_path):
