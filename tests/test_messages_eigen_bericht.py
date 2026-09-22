@@ -70,51 +70,17 @@ def _diepste_formulier(html: str) -> int:
     return t.max
 
 
-# ── 1. De mensenlijst staat er meteen ───────────────────────────────────────────────────────
-def test_de_mensen_staan_er_zonder_dat_je_iets_typt(tmp_path):
-    dd, st, ik, ander = _dorp(tmp_path)
-    blok = _nieuw_dm_blok(render_messages(st, ik=ik.id, kanaal=_kanaal(), csrf_token="t"))
-    assert "Ander Iemand" in blok
-    assert channels.dm_kanaal(ik.id, ander.id) in blok
-
-
-def test_het_blok_staat_open_zonder_zoekterm(tmp_path):
-    """Een lijst die er is maar dicht zit, is voor wie 'm zoekt hetzelfde als geen lijst."""
-    dd, st, ik, _a = _dorp(tmp_path)
-    blok = _nieuw_dm_blok(render_messages(st, ik=ik.id, kanaal=_kanaal(), csrf_token="t"))
-    assert blok.startswith("<details class='qadd msg-nieuw-dm' open>")
-
-
-def test_het_blok_is_weer_dicht_te_klappen(tmp_path):
-    """`.qadd[open]>summary{display:none}` verbergt de regel waarmee je een quick-add sluit —
-    logisch voor iets dat je na gebruik dichtdoet, fout voor een lijst die standaard openstaat.
-    Zonder deze uitzondering is "＋ new conversation" onzichtbaar én onklikbaar zodra de pagina
-    laadt, en staat het veld er voorgoed."""
-    kaal = re.sub(r"/\*.*?\*/", " ", CSS, flags=re.S)
-    per = {s.strip(): b for s, b in re.findall(r"([^{}]+)\{([^{}]*)\}", kaal)}
-    assert "display:none" in per.get(".qadd[open]>summary", ""), \
-        "de familie-regel is weg — dan is de uitzondering hieronder zinloos geworden"
-    assert "display:block" in per.get(".msg-nieuw-dm[open]>summary", "")
-
-
-def test_zoeken_filtert_de_lijst_en_ontsluit_hem_niet(tmp_path):
-    """MUTATIE-CONTROLE op de test hierboven: die zou ook slagen als het veld niets meer deed."""
-    dd, st, ik, ander = _dorp(tmp_path)
-    blok = _nieuw_dm_blok(render_messages(st, ik=ik.id, kanaal=_kanaal(),
-                                          csrf_token="t", wie="Ander"))
-    assert "Ander Iemand" in blok
-    blok2 = _nieuw_dm_blok(render_messages(st, ik=ik.id, kanaal=_kanaal(),
-                                           csrf_token="t", wie="Zoekterm Zonder Treffer"))
-    assert "Ander Iemand" not in blok2
-    assert "Nobody by that name." in blok2
-
-
-def test_jezelf_staat_niet_in_de_lijst(tmp_path):
-    """Je eigen kanaal heet 'Yourself' en staat al in de kanalenlijst."""
-    dd, st, ik, _a = _dorp(tmp_path)
-    blok = _nieuw_dm_blok(render_messages(st, ik=ik.id, kanaal=_kanaal(), csrf_token="t"))
-    assert "Ander Iemand" in blok            # anders meet dit een lege lijst
-    assert "Ik Zelf" not in blok
+# ── 1. De mensenlijst ───────────────────────────────────────────────────────────────────────
+#
+# HIER STONDEN VIJF TESTS over "＋ new conversation": dat de mensen er zonder zoekterm stonden,
+# dat het blok openklapte, dat je het weer dicht kon doen, dat zoeken filterde, en dat je jezelf
+# er niet in zag. Dat blok is op 22 september 2026 vervallen — niet omdat het stuk was, maar
+# omdat het overbodig werd: `Direct` toont sindsdien IEDEREEN, dus een tweede ingang om iemand
+# te kiezen is een tweede antwoord op dezelfde vraag.
+#
+# De vijf beloftes zijn niet verdwenen, ze zijn VERHUISD naar de plek waar ze nu gelden:
+# `tests/test_messages_direct_iedereen.py`. Daar staat ook de test die eist dat dit blok,
+# zijn CSS en zijn `wie`-parameter écht weg zijn en niet half blijven hangen.
 
 
 # ── 2. Bewerken en verwijderen: het scherm ──────────────────────────────────────────────────

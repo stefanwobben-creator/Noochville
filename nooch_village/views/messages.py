@@ -221,7 +221,23 @@ def _dm_groepen(st, ik: str) -> tuple[list, list]:
     Dat is een LIJST-probleem, en het wordt hier opgelost waar het zit — zonder één kanaal-id te
     verplaatsen, dus zonder migratie en zonder kans op verlies.
 
-    Een gesprek met jezelf blijft Direct: dat is een notitie aan jezelf, geen systeemafzender."""
+    Een gesprek met jezelf blijft Direct: dat is een notitie aan jezelf, geen systeemafzender.
+
+    DIRECT TOONT IEDEREEN (22 september 2026), niet alleen wie je al eens geschreven hebt. Een
+    DM-kanaal BESTAAT pas zodra iemand er iets in zegt, dus een collega met wie je nooit sprak
+    stond hier niet — je zag een lijst van GESPREKKEN waar een lijst van MENSEN hoort te staan.
+    Om zo iemand te bereiken was er een apart "＋ new conversation"-zoekblok; dat is met deze
+    wijziging vervallen, want het bestond alleen omdat deze lijst incompleet was.
+
+    DEZELFDE BRON ALS DE GLOBALE ZOEK, letterlijk: `search._people`. Een eigen personenlijst hier
+    zou een tweede antwoord geven op "wie werkt hier" zodra er aan één iets verandert.
+
+    DE VOLGORDE IS NU ECHT DE VOLGORDE. Hij LEEK op laatste-bericht gesorteerd, maar
+    `kanalen_van` sorteert op kanaal-id — de alfabetische volgorde van twee hex-id's, dus
+    willekeurig. Lopende gesprekken staan nu bovenaan op hun laatste bericht, de nog lege rijen
+    eronder op naam (`_people` levert ze zo aan)."""
+    from nooch_village.views.search import _people
+
     uit_direct, uit_rollen = [], []
     for k in (st.channels.kanalen_van(ik) if ik else []):
         leden = channels.dm_leden(k)
@@ -229,6 +245,19 @@ def _dm_groepen(st, ik: str) -> tuple[list, list]:
             uit_direct.append(k)
             continue
         (uit_direct if all(_is_mens(st, x) for x in leden) else uit_rollen).append(k)
+    uit_direct.sort(key=lambda k: -_laatst(st, k))
+    if not ik:
+        return uit_direct, uit_rollen
+    bestaand = set(uit_direct) | set(uit_rollen)
+    for h in _people(st, []):
+        pid = h.get("id") or ""
+        # Jezelf niet: een notitie aan jezelf blijft staan als dat kanaal er al is, maar een lege
+        # rij met je eigen naam is geen gesprek dat je wilt beginnen.
+        if not pid or pid == ik:
+            continue
+        k = channels.dm_kanaal(ik, pid)
+        if k not in bestaand:
+            uit_direct.append(k)
     return uit_direct, uit_rollen
 
 
@@ -486,7 +515,7 @@ def _sticker_kiezer(kanaal: str, csrf_token: str) -> str:
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
-                    msg: str = "", q: str = "", lijst: bool = False, wie: str = "") -> str:
+                    msg: str = "", q: str = "", lijst: bool = False) -> str:
     """Het Messages-scherm. `lijst=True` is de MOBIELE kanalenlijst (drill-down, niveau 2).
 
     DRILL-DOWN IS EEN CSS-KEUZE, GEEN TWEEDE RENDERING. Beide panelen staan altijd in de DOM; op
@@ -560,47 +589,11 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if q else "")
             + "</div></form>")
 
-    # EEN GESPREK BEGINNEN DAT NOG NIET BESTAAT. Tot nu kon een DM pas gevonden worden nadat er
-    # al een bericht in stond: `kanalen_van` leest `channels.json`, en daar staat niets tot iemand
-    # iets zegt. Wie het eerste bericht wilde sturen had dus geen ingang.
-    #
-    # DEZELFDE BRON ALS DE GLOBALE ZOEK, letterlijk: `search._people`. Een eigen personenlijst hier
-    # zou een tweede antwoord geven op "wie werkt hier" zodra er aan één iets verandert.
-    #
-    # DUS OOK DEZELFDE BEPERKING: die functie matcht op NAAM, niet op e-mailadres. Het veld belooft
-    # daarom ook alleen een naam. Zou ik hier wél op e-mail zoeken, dan geeft dit veld treffers die
-    # de globale zoek niet geeft — en dan is "dezelfde bron" een halve waarheid. Moet e-mail erbij,
-    # dan hoort dat in `_people` en dus op beide plekken tegelijk.
-    #
-    # DE LIJST STOND ACHTER HET ZOEKVELD (22 september 2026). `if wie.strip():` — zonder
-    # zoekterm geen namen, dus wie het blok openklapte zag een leeg vak en moest een naam
-    # rááden die hij juist kwam opzoeken. Zoeken hoort een lijst te FILTEREN, niet te
-    # ontsluiten; bij een dorp van een handvol mensen is kiezen sneller dan typen.
-    # `_people(st, [])` geeft iedereen — `_match` is `all()` over nul termen en dus waar.
-    nieuw_dm = ""
-    if csrf_token and ik:
-        rijen_p = []
-        from nooch_village.views.search import _people
-        termen = [t for t in wie.lower().split() if t]
-        for h in _people(st, termen):
-            pid = h.get("id") or ""
-            if not pid or pid == ik:
-                continue                      # jezelf staat al als "Yourself" in de lijst
-            k = channels.dm_kanaal(ik, pid)
-            rijen_p.append(f"<a class='msg-kanaal' href='/messages?k={_e(k)}'>"
-                           f"<span class='msg-knaam'>{_e(h.get('titel') or pid)}</span></a>")
-        if not rijen_p:
-            rijen_p.append("<p class='muted msg-leeg'>Nobody by that name.</p>")
-        nieuw_dm = (f"<details class='qadd msg-nieuw-dm' open>"
-                    f"<summary class='muted'>＋ new conversation</summary>"
-                    f"<form method='get' action='/messages'>"
-                    f"<input type='hidden' name='k' value='{_e(kanaal)}'>"
-                    f"<label class='att-lbl' for='msg-wie'>Who do you want to write to?</label>"
-                    f"<input id='msg-wie' type='search' name='wie' value='{_e(wie)}' "
-                    f"placeholder='Name…'>"
-                    f"<div class='qadd-row'><button class='btn sm' type='submit'>Find</button>"
-                    + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if wie else "")
-                    + f"</div></form>{''.join(rijen_p)}</details>")
+    # "＋ NEW CONVERSATION" STOND HIER (weg op 22 september 2026). Een uitklapblok met een
+    # zoekveld om iemand te vinden met wie je nog geen DM had — het bestond alleen omdat Direct
+    # incompleet was: een DM-kanaal bestaat pas zodra er iets in staat. Nu `_dm_groepen` iedereen
+    # toont, is dit een tweede ingang naar dezelfde handeling, en dan heeft "waar kies ik iemand"
+    # twee antwoorden. Direct is de plek.
 
     # Een kanaal beginnen. Tot 20 september kon dat niet: een kanaal bestond omdat zijn onderwerp
     # bestond (een project, een cirkel, een persoon). Dit is het eerste kanaal dat een mens zelf
@@ -658,7 +651,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                          f"{toevoeg}{klok}{stip}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
-    nav = f"<nav class='msg-lijst'>{zoek}{nieuw_dm}{nieuw}{''.join(rijen) or leeg}</nav>"
+    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(rijen) or leeg}</nav>"
 
     # HET OPENEN IS HET LEZEN. Geen aparte "markeer als gelezen"-knop: dat is een tweede handeling
     # voor iets wat je met je ogen al deed, en hij loopt gegarandeerd achter op de werkelijkheid.

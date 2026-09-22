@@ -1568,11 +1568,6 @@ summary.pchip:hover{border-color:var(--gray)}
 .msg-zoek input[type=search]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font:inherit;font-size:.86rem}
 .msg-telling{font-weight:400;text-transform:none;letter-spacing:0;color:var(--subtle);font-size:.7rem}
 .qadd-bar{margin-top:.5rem}
-/* "＋ new conversation" STAAT STANDAARD OPEN (22 september 2026): de mensenlijst is de inhoud,
-   niet de beloning voor een zoekterm. `.qadd[open]>summary{display:none}` verbergt dan de enige
-   regel waarmee je 'm weer dichtklapt — goed voor een quick-add die je na gebruik sluit, fout
-   voor een lijst die er altijd is. Alleen hier terug aangezet, niet voor de familie. */
-.msg-nieuw-dm[open]>summary{display:block}
 .att-body[data-qadd-open]{cursor:text}
 .editor-prev{padding:.5rem .6rem;border-top:1px solid var(--border);min-height:3rem}
 
@@ -1645,8 +1640,6 @@ progress.nu-progress.wide{height:8px}
 .msg-bijlage-add{margin-bottom:.5rem}
 /* Een gesprek beginnen dat er nog niet is. Zelfde vorm als "+ new channel" eronder: een
    uitklapje boven de lijst, geen apart scherm. */
-.msg-nieuw-dm{margin-bottom:.4rem}
-.msg-nieuw-dm input[type=search]{width:100%;box-sizing:border-box}
 .msg-leeg{font-size:12.5px;padding:.3rem .5rem}
 .msg-terug{display:none}
 /* Mobiel is dit een DRILL-DOWN, geen twee kolommen: één niveau per scherm, met een terug-pijl.

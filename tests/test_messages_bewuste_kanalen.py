@@ -255,7 +255,11 @@ def test_een_rol_als_tegenpartij_hoort_niet_bij_direct(tmp_path):
     st.channels.post(channels.dm_kanaal(ik, "claims-checker"), "3 claims", author_id="claims-checker")
     st2 = cockpit2._Stores(dd)
     direct, rollen = _dm_groepen(st2, ik)
-    assert [channels.dm_leden(k) for k in direct] == [sorted([ik, mens.id])]
+    # NIET MEER OP AANTAL. Direct bevat sinds 22 september ook een lege rij per mens in het dorp;
+    # waar het hier om gaat is de SPLITSING: de mens staat erin, de twee rollen niet.
+    assert channels.dm_kanaal(ik, mens.id) in direct
+    assert channels.dm_kanaal(ik, "compliance") not in direct
+    assert channels.dm_kanaal(ik, "claims-checker") not in direct
     assert len(rollen) == 2
 
 
@@ -277,7 +281,10 @@ def test_een_afzender_op_NAAM_of_E_MAIL_blijft_een_mens(tmp_path):
         st.channels.post(channels.dm_kanaal(ik, tegen), "iets", author_id=tegen)
     st2 = cockpit2._Stores(dd)
     direct, rollen = _dm_groepen(st2, ik)
-    assert len(direct) == 2 and rollen == []
+    # Op de twee kanalen zelf en niet op het aantal: Direct draagt nu ook lege rijen (22 sept).
+    for tegen in ("Twijfel Tester", "twijfel@test.nl"):
+        assert channels.dm_kanaal(ik, tegen) in direct
+    assert rollen == []
 
 
 def test_een_notitie_aan_jezelf_blijft_direct(tmp_path):
@@ -287,7 +294,10 @@ def test_een_notitie_aan_jezelf_blijft_direct(tmp_path):
     dd, st, ik, pids = _dorp(tmp_path)
     st.channels.post(channels.dm_kanaal(ik, ik), "onthouden", author_id=ik)
     direct, rollen = _dm_groepen(cockpit2._Stores(dd), ik)
-    assert len(direct) == 1 and rollen == []
+    # Het kanaal met jezelf staat er ÉÉN keer in: het bestaat al, dus het aanvullen met lege
+    # rijen (22 sept) mag er geen tweede van maken — daarom `count` en niet `in`.
+    assert direct.count(channels.dm_kanaal(ik, ik)) == 1
+    assert rollen == []
 
 
 def test_de_rolkanalen_staan_niet_meer_in_de_lijst_maar_wel_in_de_data(tmp_path):
