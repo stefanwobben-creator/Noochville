@@ -31,12 +31,22 @@ def test_bootstrap_laadt_nooch(tmp_path):
     assert len(st.people.all()) == 6
 
 
-def test_meetings_alleen_op_cirkels(tmp_path):
+def test_meetings_staan_niet_meer_in_de_inhoud(tmp_path):
+    """De twee overleg-knoppen stonden tot 22 september 2026 ÓÓK in de hoofdkolom van
+    Overview, met een eigen live-status-check naast die van de zijbalk. Die dubbele render is
+    weg; de zijbalk (`overleg_items`) is de enige nog. De bewering is verplaatst, niet
+    geschrapt.
+
+    Meetings blijven een CIRKEL-functie; die bewering leeft nu in `overleg_items`, dat leeg
+    teruggeeft zonder cirkel-id. Hier blijft over: ze staan op géén enkele node-pagina nog in
+    de hoofdkolom — niet op een cirkel en niet op een rol."""
     st = _st(tmp_path)
-    circle = cockpit2.render_node(st, "mother_earth__nooch", "overview", csrf_token="t")
-    role = cockpit2.render_node(st, "mother_earth__nooch__website_developer", "overview", csrf_token="t")
-    assert "Tactical meeting" in circle and "Governance meeting" in circle
-    assert "Tactical meeting" not in role and "Governance meeting" not in role
+    for nid in ("mother_earth__nooch", "mother_earth__nooch__website_developer"):
+        inhoud = cockpit2.render_node(st, nid, "overview", csrf_token="t").split("class='c2-main'")[-1]
+        assert "Tactical meeting" not in inhoud and "Governance meeting" not in inhoud, nid
+    from nooch_village.cockpit2_util import overleg_items
+    assert overleg_items("") == ""                      # geen cirkel, geen knoppen
+    assert "Werk" in overleg_items("mother_earth__nooch")
 
 
 def test_root_overview(tmp_path):

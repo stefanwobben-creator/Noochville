@@ -314,7 +314,12 @@ def _wo_schil(crec, binnen: str, fragment: bool) -> str:
     from nooch_village.cockpit2_util import _nav
     return _page("Tactical meeting",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
-                 f"<div class='c2-main wo-breed'>{binnen}</div></div>")
+                 # GEEN EIGEN BREEDTE. `.wo-breed` (max-width 1160px) kwam mee toen de losse
+                 # "nog niet geopend"-pagina werd opgeheven: daar stond hij als inline
+                 # style en is toen klasse geworden in plaats van weggehaald. Gevolg was een
+                 # lege strook rechts die geen ander nu-scherm heeft, en het hardst zichtbaar
+                 # bij de Projects-stap waar vier kolommen naast elkaar juist ruimte willen.
+                 f"<div class='c2-main'>{binnen}</div></div>")
 
 
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",

@@ -29,7 +29,9 @@ _STYLE_WHITELIST = {
     "views/strategy.py": 14,
     # 8 → 4 (22 sept 2026): de losse "nog niet geopend"-pagina is vervallen, en met de
     # gedeelde schil (`_wo_schil`) verdwenen `margin-top:0`, `margin-top:1rem`, de
-    # `max-width` (nu `.wo-breed`) en de uitlegregel met `font-size:.8rem`.
+    # `max-width` en de uitlegregel met `font-size:.8rem`. Die max-width werd eerst
+    # `.wo-breed` en is op 22 september helemaal vervallen: het scherm hoort net zo breed
+    # te zijn als elk ander nu-scherm.
     "views/werkoverleg.py": 4,    # daarvóór 8; -2 daarvóór: de 0-10-schaal is weg
     "views/metrics.py": 8,
     "views/roloverleg.py": 7,
