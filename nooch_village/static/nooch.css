@@ -289,6 +289,23 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    en niet als spatie in de HTML: die zou de weg terug er één bij de zijne laten schrijven, en
    dan groeit de bron met een spatie per keer opslaan. */
 .wb-taak input{margin-right:.4em;vertical-align:baseline}
+/* ── De blok-greep (brok 3) ──────────────────────────────────────────────────────────────────
+   Hij hangt in de linkermarge van het blok en verschijnt pas als je er met de muis langs gaat —
+   zes grepen die altijd staan, maken van een pagina tekst een pagina knoppen. Op touch is er
+   geen hover; daar staat hij daarom altijd (zie de media-query onderaan dit blok). */
+.wb{position:relative}
+.wb-greep{position:absolute;left:-1.5rem;top:.1rem;opacity:0;transition:opacity .12s;user-select:none}
+.wb:hover>.wb-greep,.wb-greep:focus-within{opacity:1}
+.wb-greep-knop{border:none;background:none;color:var(--subtle);cursor:grab;font-size:.9rem;
+  line-height:1;padding:.1rem .2rem}
+.wb-greep-knop:active{cursor:grabbing}
+.wb-menu{position:absolute;left:0;top:1.3rem;z-index:5;display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:.15rem;min-width:8rem}
+.wb-menu-item{border:none;background:none;font:inherit;font-size:.82rem;text-align:left;
+  padding:.3rem .5rem;cursor:pointer;color:var(--ink);white-space:nowrap}
+.wb-menu-item:hover{background:var(--cream-2)}
+@media(hover:none){.wb-greep{opacity:1}}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
 .emoji-pick{position:relative;display:inline-block;padding:0;margin:0}
@@ -1781,7 +1798,10 @@ progress.nu-progress.wide{height:8px}
    een cursor die dat bevestigt. Geen kader: een kader is de container-taal, en dit is een veld —
    zie de regel die daar in fase 12 voor is vastgelegd. */
 .wiki-aan{outline:none;cursor:text;box-shadow:-3px 0 0 0 var(--green)}
-.wiki-body.wiki-aan{padding-left:.55rem}
+/* TIJDENS HET BEWERKEN EEN GOOT VOOR DE GREEP. Hij stond op .55rem en dan ligt de greep op de
+   rand van de kaart, half over het bewerk-kader heen — gemeten: greep op x=265, kaartrand op
+   x=264. Dit is de ruimte waar hij in past (1,5rem offset + de knop zelf). */
+.wiki-body.wiki-aan{padding-left:1.9rem}
 h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* MOLECUUL. De werkbalk hoort bij de tekst eronder, niet bij de kop erboven: hij zweeft mee in
    beeld zodat je hem ook halverwege een lange pagina nog hebt. */

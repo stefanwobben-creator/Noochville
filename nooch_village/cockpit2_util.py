@@ -242,9 +242,21 @@ _NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
 _STREEP_RE = re.compile(r"^-{3,}$")
 
 #: Het omhulsel van één blok in de blokstand. ÉÉN plek, want de renderer schrijft hem en de
-#: editor (brok 3) zoekt hem straks met `closest('.wb')` — twee spellingen is twee gedragingen.
+#: editor (brok 3) zoekt hem met `closest('.wb')` — twee spellingen is twee gedragingen.
 BLOK_OPEN = "<div class='wb' data-blok='{soort}'>"
 BLOK_DICHT = "</div>"
+
+#: INHOUD-TAG → BLOKSOORT. De enige plek waar die koppeling bestaat (brok 3, 22 september 2026).
+#: De renderer hieronder leest hem, en `views/wiki` geeft hem als `data-blok-soorten` mee aan de
+#: browser — de normaliseerpas in `nooch.js` heeft dus GEEN eigen lijst.
+#:
+#: WAAROM DAT HIER ZO STRENG IS. `document.execCommand("formatBlock")` vervángt het blok-omhulsel
+#: en `insertUnorderedList` nest juist ín het omhulsel; na zo'n commando klopt `data-blok` dus
+#: niet meer, en sinds brok 1 hangt daar de greep aan. Iets moet dat repareren, en dat iets kan
+#: alleen in de browser draaien — waar geen testrunner is. Hoe minder die pas zelf weet, hoe
+#: minder er stil kan afwijken. Wat niet in deze tabel staat is een alinea.
+BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
+                "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr"}
 
 
 def _md(text: str, blokken: bool = False) -> str:
@@ -307,12 +319,12 @@ def _md(text: str, blokken: bool = False) -> str:
         if kop:
             sluit_lijst()
             merk, tag = kop
-            out.append(f"{open_('h')}<{tag}>{kaal[len(merk):]}</{tag}>{dicht}")
+            out.append(f"{open_(BLOK_SOORTEN[tag])}<{tag}>{kaal[len(merk):]}</{tag}>{dicht}")
             continue
         # SCHEIDING. Drie of meer streepjes op een eigen regel; in de bron blijft het `---`.
         if _STREEP_RE.match(kaal):
             sluit_lijst()
-            out.append(f"{open_('hr')}<hr>{dicht}")
+            out.append(f"{open_(BLOK_SOORTEN['hr'])}<hr>{dicht}")
             continue
         # CITAAT. Eén regel per citaat — geen samengevoegd blok van opeenvolgende `>`-regels: dan
         # zou de weg terug moeten raden waar de regelovergangen stonden.
@@ -321,7 +333,8 @@ def _md(text: str, blokken: bool = False) -> str:
         # meer staat — en dan doet het citaat het nooit.
         if kaal.startswith("&gt; "):
             sluit_lijst()
-            out.append(f"{open_('q')}<blockquote>{kaal[5:]}</blockquote>{dicht}")
+            out.append(f"{open_(BLOK_SOORTEN['blockquote'])}<blockquote>"
+                       f"{kaal[5:]}</blockquote>{dicht}")
             continue
         # LIJSTEN, twee soorten. Ze sluiten elkaars blok: `- a` gevolgd door `1. b` zijn twee
         # lijsten, geen samengeraapte derde.
@@ -330,7 +343,8 @@ def _md(text: str, blokken: bool = False) -> str:
         if soort:
             if lijst != soort:
                 sluit_lijst()
-                out.append(open_(soort) + f"<{soort} class='{'fbul' if soort == 'ul' else 'fol'}'>")
+                out.append(open_(BLOK_SOORTEN[soort])
+                           + f"<{soort} class='{'fbul' if soort == 'ul' else 'fol'}'>")
                 lijst = soort
             out.append(f"<li>{genummerd.group(2) if genummerd else kaal[2:]}</li>")
             continue
@@ -413,6 +427,8 @@ class _BronParser(_HTMLParser):
         #: het item: een `<ul>` ertussen moet hem resetten.
         self._ol = False
         self._nr = 0
+        #: hoe diep zitten we in een `data-chrome`-element? Zie `handle_starttag`.
+        self._chrome = 0
 
     # ── hulpjes ──────────────────────────────────────────────────────────────
     def _schrijf(self, tekst: str) -> None:
@@ -431,6 +447,19 @@ class _BronParser(_HTMLParser):
     # ── de drie haken van HTMLParser ─────────────────────────────────────────
     def handle_starttag(self, tag, attrs):
         d = dict(attrs)
+        # `data-chrome` = DIT HOORT BIJ HET SCHERM, NIET BIJ DE TEKST (brok 3, 22 september 2026).
+        #
+        # De blok-greep is een knop ín een bewerkbaar veld, en alles binnen dat veld gaat bij het
+        # opslaan mee als `innerHTML`. De fail-closed-regel hierboven maakt van een tag die hij
+        # niet kent zijn eigen TEKST — gemeten: `<button>⠿</button>` in een blok gaf na opslaan
+        # letterlijk `⠿Een alinea.` in de bron. Voor chrome is dat precies de verkeerde kant op.
+        #
+        # DIT IS HET VANGNET, NIET DE EERSTE VERDEDIGING: de editor haalt zijn grepen er zelf uit
+        # vóór het versturen. Maar één gemiste strip is anders een vervuilde pagina, en dat is
+        # het soort fout dat je pas een week later in een diff terugziet.
+        if self._chrome or "data-chrome" in d:
+            self._chrome += 1
+            return
         if tag == "br":
             self.uit.append("\n")
             self._blok_einde = False          # een <br> IS de tekst, geen scheiding eromheen
@@ -474,6 +503,9 @@ class _BronParser(_HTMLParser):
             self._nieuwe_regel()
 
     def handle_endtag(self, tag):
+        if self._chrome:
+            self._chrome -= 1
+            return
         if tag in _BRON_INLINE:
             self._schrijf(_BRON_INLINE[tag][1])
         elif tag in ("a", "span"):
@@ -497,6 +529,8 @@ class _BronParser(_HTMLParser):
             self._ol = False
 
     def handle_data(self, data):
+        if self._chrome:
+            return                      # tekst ín chrome is een label, geen inhoud
         self._schrijf(data)
 
 
@@ -721,6 +755,43 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                # niets — geen fout, geen effect; alleen met "<h4>" maakt hij een kop. Dat is de
                # tweede helft van dezelfde bug als bij `strike`: een aanname over de browser.
                ("formatBlock", "<h4>", "H", "Heading"))
+
+
+#: HET /-MENU: welk bloktype je kunt invoegen, hoe het heet, en met welk commando. De vierde
+#: kolom is het argument voor `execCommand`.
+#:
+#: DIT STAAT HIER EN NIET IN JS, en dat is dezelfde regel als bij `BLOK_SOORTEN`: een lijst
+#: bloktypes in de browser zou de derde plek zijn waar het vocabulaire woont (naast `_md` en
+#: `_md_naar_bron`) en de enige waar geen test bij kan. De server rendert het menu als sjabloon;
+#: `nooch.js` kloont het en voert uit wat erin staat.
+#:
+#: GEEN KNOP ZONDER WEG TERUG — dezelfde regel als in brok 2. Elke tag hieronder staat in
+#: `_BRON_BLOK` (of is `p`, de terugval), en een test bewaakt dat.
+BLOK_MENU = (
+    ("p", "Tekst", "formatBlock", "<p>"),
+    ("h3", "Kop 1", "formatBlock", "<h3>"),
+    ("h4", "Kop 2", "formatBlock", "<h4>"),
+    ("h5", "Kop 3", "formatBlock", "<h5>"),
+    ("ul", "Lijst", "insertUnorderedList", ""),
+    ("ol", "Genummerde lijst", "insertOrderedList", ""),
+    ("blockquote", "Citaat", "formatBlock", "<blockquote>"),
+    ("hr", "Scheiding", "insertHorizontalRule", ""),
+)
+
+
+def blok_menu() -> str:
+    """Het sjabloon voor het /-menu. Verborgen; `nooch.js` kloont hem naar het blok waar je typt.
+
+    `data-chrome` hoewel hij BUITEN het bewerkbare veld staat: als hij er ooit in belandt (een
+    kloon die niet wordt opgeruimd, een plakactie) hoort hij nog steeds geen tekst te worden.
+    Dezelfde twee verdedigingen als bij de greep."""
+    knoppen = "".join(
+        f"<button type='button' class='wb-menu-item' data-wiki-cmd='{_e(cmd)}'"
+        + (f" data-wiki-arg='{_e(arg)}'" if arg else "")
+        + f">{_e(label)}</button>"
+        for _tag, label, cmd, arg in BLOK_MENU)
+    return (f"<div id='wb-menu-sjabloon' class='wb-menu' data-chrome hidden>"
+            f"{knoppen}</div>")
 
 
 def opmaak_werkbalk() -> str:

@@ -596,6 +596,12 @@
   background: var(--nu-surface); color: var(--nu-text); }
 .nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
+/* De blok-greep (brok 3): geen radius, de lijnen van het huis. */
+.nu .wb-menu { border: 1.5px solid var(--nu-text); border-radius: 0; box-shadow: none; }
+.nu .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
+.nu .wb-menu-item:hover { background: var(--nu-bg-alt); }
+.nu .wb-greep-knop { color: var(--nu-muted); }
+
 /* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
    zandtint; hier gaan ze mee met de rest van de nu-lijnen. */
 .nu blockquote { border-left-color: var(--nu-border-subtle); color: var(--nu-muted); }

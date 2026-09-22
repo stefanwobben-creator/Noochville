@@ -253,25 +253,54 @@
    */
   var DREMPEL = 5;        // px; hieronder is het een klik en geen sleep
 
-  NV.bord = function (root, opties) {
+  /* `NV.sleep` IS HET GEDEELDE STUK, `NV.bord` de eerste aanroeper (brok 3, 22 september 2026).
+   * Hiervoor stonden de selectors van het bord (`.pcard`, `.pcol`) ín deze functie gebakken. De
+   * wiki-blokken willen exact hetzelfde gedrag met andere selectors, en een tweede implementatie
+   * zou betekenen dat de ene na een wijziging anders sleept dan de andere.
+   *
+   *   opties.kaart   selector van het sleepbare ding, met zijn id-attribuut
+   *   opties.id      attribuut waar de identiteit in staat (`data-pid`, `data-blok-id`, …)
+   *   opties.doel    selector van het vak waarin je hem kunt laten vallen
+   *   opties.naar    attribuut op dat vak met de bestemming
+   *   opties.greep  optioneel: alleen een pointerdown hierbinnen start het slepen
+   *   opties.onDrop(id, naar, e)  `e` is de pointerup — voor wie de positie nodig heeft
+   */
+  NV.sleep = function (root, opties) {
     root = root || document;
     opties = opties || {};
-    if (!opties.onDrop) return;
-    root.querySelectorAll(".pcard[data-pid]").forEach(function (kaart) {
+    if (!opties.onDrop || !opties.kaart || !opties.doel) return;
+    root.querySelectorAll(opties.kaart).forEach(function (kaart) {
       if (kaart.getAttribute("data-nv-sleep")) return;
       kaart.setAttribute("data-nv-sleep", "1");
       // De native vlag uit: anders vecht de browser-drag met deze.
       kaart.setAttribute("draggable", "false");
       kaart.addEventListener("pointerdown", function (e) {
         if (e.button !== 0 || e.pointerType === "touch") return;
-        if (e.target.closest("a,button,input,select,textarea,summary")) return;
+        // MET `opties.greep` BEGINT HET SLEPEN ALLEEN DAAR. Op het bord pak je de kaart zelf;
+        // in een bewerkbaar veld zou dat vechten met het selecteren van woorden, dus daar is
+        // er één plek om beet te pakken.
+        if (opties.greep) {
+          if (!e.target.closest(opties.greep)) return;
+        } else if (e.target.closest("a,button,input,select,textarea,summary")) {
+          return;
+        }
         start(kaart, e, root, opties);
       });
     });
   };
 
+  NV.bord = function (root, opties) {
+    opties = opties || {};
+    if (!opties.onDrop) return;
+    NV.sleep(root, {
+      kaart: ".pcard[data-pid]", id: "data-pid",
+      doel: ".pcol[data-to]", naar: "data-to",
+      onDrop: opties.onDrop
+    });
+  };
+
   function start(kaart, e0, root, opties) {
-    var pid = kaart.getAttribute("data-pid");
+    var pid = kaart.getAttribute(opties.id);
     var vak = kaart.getBoundingClientRect();
     var dx = e0.clientX - vak.left, dy = e0.clientY - vak.top;
     var ghost = null, kolom = null, bezig = false;
@@ -292,7 +321,7 @@
       // hoeft niets te herberekenen buiten de compositielaag.
       ghost.style.transform = "translate3d(" + (e.clientX - dx) + "px," + (e.clientY - dy) +
                               "px,0) scale(1.04) rotate(-2deg)";
-      var onder = kolomOnder(e.clientX, e.clientY, root);
+      var onder = vakOnder(e.clientX, e.clientY, root, opties.doel);
       if (onder !== kolom) {
         if (kolom) kolom.classList.remove("over");
         kolom = onder;
@@ -307,12 +336,14 @@
       if (!bezig) return;                 // het was een klik; die mag zijn gang gaan
       if (ghost) ghost.remove();
       kaart.classList.remove("pdrag-bron");
-      var naar = kolom && kolom.getAttribute("data-to");
+      var naar = kolom && kolom.getAttribute(opties.naar);
       if (kolom) kolom.classList.remove("over");
       // De vlag pas ná deze beurt terug: anders opent de klik die bij het loslaten hoort
       // alsnog de kaart.
       setTimeout(function () { window.__pdrag = false; }, 60);
-      if (naar && naar !== huidigeKolom(kaart)) opties.onDrop(pid, naar);
+      // De POSITIE gaat mee: een kaart valt in een kolom, maar een blok valt vóór of ná een
+      // ander blok. Het bord negeert dit derde argument.
+      if (naar && naar !== huidigVak(kaart, opties)) opties.onDrop(pid, naar, e);
     }
 
     document.addEventListener("pointermove", beweeg);
@@ -323,15 +354,15 @@
   // De kolom onder de pointer. Via `elementFromPoint` en niet via de muis-events van de kolom
   // zelf: de ghost hangt onder de cursor, en een element dat de pointer opvangt zou elke
   // dragover-achtige meting vertroebelen (vandaar ook `pointer-events:none` op `.pdrag-ghost`).
-  function kolomOnder(x, y, root) {
+  function vakOnder(x, y, root, sel) {
     var el = document.elementFromPoint(x, y);
-    var kol = el && el.closest ? el.closest(".pcol[data-to]") : null;
+    var kol = el && el.closest ? el.closest(sel) : null;
     return kol && (root === document || root.contains(kol)) ? kol : null;
   }
 
-  function huidigeKolom(kaart) {
-    var kol = kaart.closest(".pcol[data-to]");
-    return kol ? kol.getAttribute("data-to") : null;
+  function huidigVak(kaart, opties) {
+    var kol = kaart.closest(opties.doel);
+    return kol ? kol.getAttribute(opties.naar) : null;
   }
 
   /* ── De checklist beweegt mee bij de klik (fase 11, laag 2 en 3, prototype sectie 3) ──────
@@ -386,6 +417,272 @@
   // laat de browser zijn eigen opmaak-tags produceren, en stuurt de HTML op. De omzetting naar
   // markdown doet de SERVER (`_md_naar_bron`), want anders staat er een tweede opmaak-kenner
   // naast `_md` en lopen die twee uiteen zodra er één regel bijkomt.
+  /* ── De normaliseerpas: het blokmodel heel houden (brok 3, 22 september 2026) ─────────────
+   *
+   * WAT ER STUK GAAT ZONDER DEZE PAS, gemeten in de echte editor en niet bedacht:
+   *
+   *     formatBlock         VERVANGT het `.wb`-omhulsel → er staat een kale <h4> op het hoogste
+   *                         niveau, zonder klasse en zonder `data-blok`
+   *     insertUnorderedList NEST een <ul> ín het omhulsel → `data-blok="p"` blijft staan terwijl
+   *                         er een lijst in zit
+   *
+   * Sinds brok 1 is dat omhulsel het ding waar de greep aan hangt en waarop `closest('.wb')`
+   * werkt. Eén druk op de H-knop van de bestaande werkbalk maakte dat al kapot — deze pas is
+   * dus een reparatie, geen voorwerk.
+   *
+   * HIJ IS BEWUST DOM. Hij kent geen markdown en geen syntaxis: hij kijkt naar de TAG van de
+   * inhoud en zet het bijbehorende `data-blok`. Die tabel komt van de server mee als
+   * `data-blok-soorten`; er is hier geen tweede lijst. Dat is geen voorzichtigheid maar
+   * noodzaak: er is in deze stack geen JS-testrunner, dus hoe minder dit weet, hoe minder er
+   * stil kan afwijken. Wat niet in de tabel staat is een alinea.
+   */
+  NV.blokNormaliseer = function (body) {
+    if (!body) return;
+    var soorten = {};
+    try { soorten = JSON.parse(body.getAttribute("data-blok-soorten") || "{}"); } catch (e) { return; }
+    // Zonder tabel geen oordeel: dan is elk blok even geldig en doen we niets.
+    if (!Object.keys(soorten).length) return;
+
+    function soortVan(el) {
+      return (el && soorten[el.tagName.toLowerCase()]) || "p";
+    }
+    // De inhoud van een blok is het eerste element dat GEEN chrome is (de greep uit stap 2).
+    function inhoudVan(blok) {
+      var k = blok.firstElementChild;
+      while (k && k.hasAttribute("data-chrome")) k = k.nextElementSibling;
+      return k;
+    }
+
+    Array.prototype.slice.call(body.childNodes).forEach(function (node) {
+      if (node.nodeType === 3) {
+        // Kale tekst op het hoogste niveau: witruimte weg, echte tekst in een blok.
+        if (!node.textContent.trim()) { node.remove(); return; }
+        var omhulsel = document.createElement("div");
+        body.insertBefore(omhulsel, node);
+        omhulsel.appendChild(node);
+        omhulsel.className = "wb";
+        omhulsel.setAttribute("data-blok", "p");
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      if (node.classList.contains("wb")) {
+        node.setAttribute("data-blok", soortVan(inhoudVan(node)));
+        return;
+      }
+      // Een kale tag (wat `formatBlock` achterlaat): er een omhulsel omheen.
+      var soort = soortVan(node);
+      var wrap = document.createElement("div");
+      body.insertBefore(wrap, node);
+      wrap.appendChild(node);
+      wrap.className = "wb";
+      wrap.setAttribute("data-blok", soort);
+    });
+
+    // EEN BLOK IN EEN BLOK IS GEEN BLOK MEER: `closest('.wb')` zou dan het verkeerde ding pakken.
+    // Dit gebeurt als de browser bij het slepen of plakken een bestaand blok in een ander schuift.
+    body.querySelectorAll(".wb .wb").forEach(function (diep) {
+      diep.classList.remove("wb");
+      diep.removeAttribute("data-blok");
+    });
+  };
+
+  /* ── De greep: één plek om een blok beet te pakken (brok 3, stap 2) ──────────────────────
+   *
+   * CHROME IN EEN BEWERKBAAR VELD, en dat is precies het lastige. Alles binnen `#wiki-body` gaat
+   * bij het opslaan mee als `innerHTML`, en de server maakt van een tag die hij niet kent zijn
+   * eigen TEKST. Gemeten vóór dit bestond: een knop in een blok gaf na opslaan letterlijk
+   * `⠿Een alinea.` in de bron. Twee verdedigingen dus, en allebei nodig:
+   *
+   *   1. de editor haalt elk `[data-chrome]` eruit vóór het versturen (zie de submit-handler);
+   *   2. de server negeert `data-chrome` in plaats van het tot tekst te maken (`_BronParser`).
+   *
+   * `contenteditable="false"` houdt de cursor eruit. Zonder dat typt iemand vroeg of laat ín
+   * zijn eigen greep, en dan staat er een ⠿ midden in een zin.
+   *
+   * HET MENU IS DE WEG ZONDER SLEPEN. Op touch sleept dit dorp niet (zelfde regel als het bord:
+   * een sleepgebaar dat scrollen blokkeert maakt een scherm op een telefoon onbruikbaar) en met
+   * een toetsenbord al helemaal niet. Omhoog, omlaag en verwijderen staan daarom in een menu
+   * onder dezelfde greep — één affordance, niet drie knopjes naast elkaar.
+   */
+  var GREEP_ACTIES = [
+    ["omhoog", "↑ omhoog"],
+    ["omlaag", "↓ omlaag"],
+    ["verwijder", "✕ verwijderen"]
+  ];
+
+  function greepVoor(blok) {
+    var g = document.createElement("span");
+    g.className = "wb-greep";
+    g.setAttribute("data-chrome", "");
+    g.contentEditable = "false";
+    var knop = document.createElement("button");
+    knop.type = "button";
+    knop.className = "wb-greep-knop";
+    knop.setAttribute("aria-label", "blok verplaatsen of wijzigen");
+    knop.textContent = "⠿";
+    g.appendChild(knop);
+    var menu = document.createElement("span");
+    menu.className = "wb-menu";
+    menu.hidden = true;
+    GREEP_ACTIES.forEach(function (paar) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "wb-menu-item";
+      b.setAttribute("data-wb-actie", paar[0]);
+      b.textContent = paar[1];
+      menu.appendChild(b);
+    });
+    g.appendChild(menu);
+    knop.addEventListener("click", function (e) {
+      e.preventDefault();
+      // Eén menu tegelijk: twee open menu's laten je raden bij welk blok je bezig bent.
+      blok.closest("[data-blok-soorten]").querySelectorAll(".wb-menu").forEach(function (m) {
+        if (m !== menu) m.hidden = true;
+      });
+      menu.hidden = !menu.hidden;
+    });
+    menu.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-wb-actie]");
+      if (!b) return;
+      e.preventDefault();
+      menu.hidden = true;
+      blokActie(blok, b.getAttribute("data-wb-actie"));
+    });
+    return g;
+  }
+
+  function blokActie(blok, actie) {
+    var body = blok.parentNode;
+    if (actie === "omhoog" && blok.previousElementSibling) {
+      body.insertBefore(blok, blok.previousElementSibling);
+    } else if (actie === "omlaag" && blok.nextElementSibling) {
+      body.insertBefore(blok.nextElementSibling, blok);
+    } else if (actie === "verwijder") {
+      blok.remove();
+    }
+    NV.blokNormaliseer(body);
+  }
+
+  // De grepen aan- of uitzetten. Ze bestaan alleen tijdens het bewerken: een greep op een pagina
+  // die je alleen leest, belooft iets dat niet kan.
+  function grepen(body, aan) {
+    body.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
+    if (!aan) return;
+    body.querySelectorAll(":scope > .wb").forEach(function (blok, i) {
+      blok.setAttribute("data-blok-id", "b" + i);
+      blok.insertBefore(greepVoor(blok), blok.firstChild);
+    });
+    NV.sleep(body, {
+      kaart: ".wb[data-blok-id]", id: "data-blok-id",
+      greep: ".wb-greep-knop",
+      doel: ".wb[data-blok-id]", naar: "data-blok-id",
+      onDrop: function (id, naar, e) {
+        var bron = body.querySelector(".wb[data-blok-id='" + id + "']");
+        var doel = body.querySelector(".wb[data-blok-id='" + naar + "']");
+        if (!bron || !doel || bron === doel) return;
+        // VÓÓR OF NÁ, naar waar je losliet. Alleen "op dit blok" laat je niet kiezen tussen
+        // boven en onder, en dan kun je nooit naar de laatste plek slepen.
+        var m = doel.getBoundingClientRect();
+        body.insertBefore(bron, e.clientY < m.top + m.height / 2 ? doel : doel.nextSibling);
+        NV.blokNormaliseer(body);
+        grepen(body, true);             // de id's opnieuw nummeren na de verplaatsing
+      }
+    });
+  }
+
+  /* ── Het /-menu: een blok invoegen waar je staat (brok 3, stap 3) ────────────────────────
+   *
+   * Typ een schuine streep in een LEEG blok en de lijst bloktypes verschijnt eronder. Alleen in
+   * een leeg blok: een `/` midden in een zin is een schuine streep, geen commando — dat is het
+   * verschil tussen een sneltoets en een val.
+   *
+   * DE LIJST KOMT VAN DE SERVER (`#wb-menu-sjabloon`). Hier staan geen bloktypes, geen labels en
+   * geen commando's: dit bestand kloont het sjabloon en voert uit wat erin staat. Een eigen
+   * lijst zou de derde plek zijn waar het vocabulaire woont, en de enige zonder test.
+   */
+  // Het tekstknooppunt dat ALLEEN de schuine streep bevat — de chrome overslaand, want de greep
+  // hangt in hetzelfde blok en bevat ook tekst. Het menu gaat alleen open als een blok precies
+  // "/" bevat, dus er is er hooguit één.
+  function streepNode(waar) {
+    var w = document.createTreeWalker(waar, NodeFilter.SHOW_TEXT, null);
+    var n;
+    while ((n = w.nextNode())) {
+      if (n.parentNode && n.parentNode.closest("[data-chrome]")) continue;
+      if (n.textContent.trim() === "/") return n;
+    }
+    return null;
+  }
+
+  function blokMenuKies(blok, knop, body) {
+    // DE STREEP BLIJFT STAAN TÓT NA HET COMMANDO, en dat is niet de volgorde die je zou kiezen.
+    // Gemeten: eerst leegmaken en dán `formatBlock` doet NIETS — een leeg blok met een
+    // samengevallen selectie heeft geen inhoud om op te werken, dus het bloktype veranderde
+    // niet. Het commando krijgt dus de streep als inhoud, en daarna halen we hem weg.
+    var n = streepNode(blok);
+    if (!n) return;
+    var r = document.createRange();
+    r.selectNodeContents(n);
+    var s = getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    body.focus();
+    try { document.execCommand("styleWithCSS", false, false); } catch (e) { /* oud */ }
+    document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || undefined);
+    // OPNIEUW ZOEKEN, niet `n` hergebruiken. Gemeten: `formatBlock` bouwt het element opnieuw op
+    // en het oude tekstknooppunt is daarna losgekoppeld — de streep bleef dan gewoon staan in
+    // het nieuwe blok. Het menu gaat alleen open bij een blok dat precies "/" is, dus er is er
+    // hooguit één te vinden.
+    var streep = streepNode(body);
+    if (streep) streep.remove();
+    NV.blokNormaliseer(body);
+    grepen(body, true);
+  }
+
+  /* DE TEKST VAN EEN BLOK, ZONDER DE CHROME. Gemeten in de browser en niet voorzien: de greep
+   * hangt ÍN het blok, dus `blok.textContent` bevat ook zijn menu-labels —
+   * "↑ omhoog↓ omlaag✕ verwijderen". Elk blok leek daardoor gevuld, en de /-lus hieronder kon
+   * nooit aanslaan. Het opslaan liep hier niet op stuk (de grepen gaan er eerst uit, en de
+   * server negeert `data-chrome`), maar alles wat de tekst van een blok LEEST wel. */
+  function blokTekst(blok) {
+    var k = blok.cloneNode(true);
+    k.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
+    return (k.textContent || "").trim();
+  }
+
+  function blokMenu(body) {
+    var sjabloon = document.getElementById("wb-menu-sjabloon");
+    if (!sjabloon) return;
+    var open = null;
+
+    function sluit() {
+      if (open) { open.remove(); open = null; }
+    }
+
+    body.addEventListener("input", function () {
+      var blok = getSelection().anchorNode;
+      blok = blok && (blok.nodeType === 1 ? blok : blok.parentNode);
+      blok = blok && blok.closest ? blok.closest(".wb") : null;
+      sluit();
+      if (!blok || blokTekst(blok) !== "/") return;
+      open = sjabloon.cloneNode(true);
+      open.removeAttribute("id");
+      open.hidden = false;
+      open.addEventListener("click", function (e) {
+        var knop = e.target.closest("[data-wiki-cmd]");
+        if (!knop) return;
+        e.preventDefault();
+        var doel = blok;
+        sluit();
+        blokMenuKies(doel, knop, body);
+      });
+      blok.appendChild(open);
+    });
+
+    body.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") sluit();
+    });
+  }
+
   function wikiEdit(root) {
     var start = root.querySelector("[data-wiki-start]");
     var body = root.querySelector("#wiki-body");
@@ -397,6 +694,7 @@
 
     var origineel = { body: body.innerHTML, titel: titel.textContent };
     var bezig = false;
+    blokMenu(body);
 
     function editeerbaar(aan) {
       body.contentEditable = aan ? "true" : "false";
@@ -407,6 +705,7 @@
       if (aan && titel.contentEditable !== "plaintext-only") titel.contentEditable = "true";
       body.classList.toggle("wiki-aan", aan);
       titel.classList.toggle("wiki-aan", aan);
+      grepen(body, aan);
       if (tb) tb.hidden = !aan;
       form.hidden = !aan;
       bezig = aan;
@@ -434,6 +733,8 @@
       knop.addEventListener("click", function () {
         try { document.execCommand("styleWithCSS", false, false); } catch (e) { /* oud */ }
         document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || null);
+        // Elk van deze commando's laat het blokmodel scheef achter; zie `NV.blokNormaliseer`.
+        NV.blokNormaliseer(body);
         body.focus();
       });
     });
@@ -449,6 +750,15 @@
     });
 
     form.addEventListener("submit", function () {
+      // WAT ER OP HET SCHERM STAAT IS WAT ER WORDT OPGESLAGEN. Typen en plakken laten óók blokken
+      // scheef achter (Enter in een kop, een alinea die uit elkaar valt); zonder deze pas belandt
+      // zo'n kale tag in de POST, en dan is de pagina na het herladen een blok kwijt.
+      NV.blokNormaliseer(body);
+      // DE GREPEN ERUIT VÓÓR HET UITLEZEN. Dit is de eerste van twee verdedigingen; de tweede
+      // staat op de server (`data-chrome` in `_BronParser`). Allebei, want dit is het enige punt
+      // waar chrome in de opgeslagen tekst kan lekken.
+      body.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
+      body.querySelectorAll("[data-blok-id]").forEach(function (b) { b.removeAttribute("data-blok-id"); });
       document.getElementById("wiki-titel-veld").value = titel.textContent.trim();
       document.getElementById("wiki-body-veld").value = body.innerHTML;
     });
