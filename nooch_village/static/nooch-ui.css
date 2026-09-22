@@ -80,6 +80,14 @@
 .nu .box, .nu .kpi, .nu table {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
 .nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
+/* De header draagt dezelfde 2px zwarte lijn als de balk ernaast: het is één omhulsel om het
+   scherm, alleen in twee stukken. De avatar is een cirkel met diezelfde rand — de enige ronde
+   vorm in dit systeem, en dat mag: een gezicht is geen kaart. */
+.nu .c2-header { background: var(--nu-surface); border-bottom: var(--nu-border); }
+.nu .c2-header .c2-search input { border-color: var(--nu-text); border-radius: 0; }
+.nu .c2-av { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-text);
+  color: var(--nu-text); font-family: var(--nu-font); }
+.nu .c2-av:hover { background: var(--nu-text); color: var(--nu-surface); }
 /* Navigatie in hoofdletters, net als de koppen en de knoppen: de referentie zet SHOP STORE
    MISSION CONTACT in de topbar. Dit is geen aparte smaakkeuze maar dezelfde regel doorgetrokken. */
 /* `.wo-step` HOORT HIER, want het is hetzelfde ding: een verticaal menu in een linkerkolom.

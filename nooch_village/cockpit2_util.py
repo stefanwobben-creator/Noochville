@@ -869,21 +869,42 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
     navigatie. De parameter had daarna nog één aanroeper en nu geen, dus hij is weg; de
     `c2-side--rail`-CSS ging in dezelfde beurt mee."""
     return (
-        # De hamburger staat BUITEN de zijbalk, anders verdwijnt de knop samen met wat hij opent.
+        # De hamburger staat BUITEN de header én buiten de zijbalk, anders verdwijnt de knop
+        # samen met wat hij opent.
         "<button type='button' class='c2-burger' onclick='navToggle()' "
         "aria-label='Menu' aria-expanded='false'>\u2630</button>"
-        "<aside class='c2-side'>"
+        # ── DE HORIZONTALE HEADER ──────────────────────────────────────────────────────────
+        # Logo, zoek en profiel stonden ONDER elkaar bovenin de zijbalk. Drie dingen die niets
+        # met elkaar te maken hebben, gestapeld in de kolom waar de navigatie hoort — en het
+        # zoekveld was daardoor zo breed als die kolom (216px) terwijl het het enige veld in
+        # het dorp is waar je een hele zin in typt.
+        # Nu een eigen balk over de volle breedte: logo links, zoek in het midden (max 520px),
+        # profiel rechts. De zijbalk houdt alleen nog navigatie.
+        "<header class='c2-header'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
+        # HET ZOEKFORMULIER IS VERPLAATST, NIET HERSCHREVEN. `_GS_LIVE_JS` hangt aan `#gs-input`
+        # en `#gs-drop`; beide id's blijven exact zoals ze waren, inclusief de `/`-sneltoets en
+        # de typeahead-dropdown.
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
         "<input id='gs-input' type='search' name='q' placeholder='Search people, roles, projects…' "
         "autocomplete='off' aria-label='global search'>"
         "<kbd class='c2-kbd' aria-hidden='true'>/</kbd>"
         "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"
-        # Persoonlijke begroeting; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
-        "<span class='c2-greet' id='c2-greet'></span>"
+        # WAS "Hoi Stefan". `_send` vult hier de initialen van de ingelogde persoon in, met de
+        # volle naam in title/aria-label en dezelfde link naar zijn eigen pagina. Leeg = niets
+        # te zien; een lege cirkel zou beloven dat er iemand achter zit.
+        "<span class='c2-av' id='c2-av'></span>"
+        "</header>"
+        "<aside class='c2-side'>"
         "<nav class='c2-subnav'>"
+        # DE TWEE OVERLEGGEN STAAN BOVENAAN. Ze stonden onderaan, achter een scheiding, als
+        # "een ander soort knop". Dat klopt nog steeds — het is een andere soort — maar het is
+        # ook de snelste ingang naar iets dat NU loopt, en daar hoort de plek bij waar je het
+        # eerst kijkt. De scheiding eronder houdt het verschil zichtbaar.
+        + _SIDE_OVERLEG
+        + "<div class='c2-subnav-div'></div>"
         # HIER STOND EEN "SEARCH"-ITEM dat het zoekpaneel opende. Het zoekVELD staat er al, één
         # regel hoger, met de `/`-sneltoets en een typeahead-dropdown — en beide gingen naar
         # dezelfde `/search`-inhoud. Twee ingangen naar één ding.
@@ -904,10 +925,6 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # panelen, op een plek waar je hem alleen vond door naar beneden te scrollen. Nu dezelfde
         # knop en dezelfde flyout als Projects, Messages en Circle.
         + _side_item("/node", "Organization", "org")
-        # De twee overleggen, onder een eigen scheiding. Een ander soort knop, dus ook zichtbaar
-        # een ander blok — geen zesde item in dezelfde rij.
-        + "<div class='c2-subnav-div'></div>"
-        + _SIDE_OVERLEG
         + "</nav>"
         # HIER STOND HET ORG-UITKLAPJE (`c2-orgfly`). Het is een nav-item geworden met een
         # flyout, zoals de andere; een tweede uitklap-mechanisme onder de balk hoefde niet te
