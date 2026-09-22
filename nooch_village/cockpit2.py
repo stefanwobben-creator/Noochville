@@ -1094,6 +1094,18 @@ _STATIC_TYPES = {
     "nooch-logo.png": "image/png",
 }
 
+#: De merk-stickers. De MAP is de bron van waarheid — een tweede lijst hier zou betekenen dat een
+#: sticker die je toevoegt een 404 geeft tot iemand deze regel bijwerkt. De whitelist blijft intact:
+#: alleen de namen die bij het opstarten daadwerkelijk in die map stonden komen erin, dus een naam
+#: met `..` erin kan er niet tussen komen. `test_stickers.py` bewaakt de inhoud en de grootte.
+_STICKER_MAP = os.path.join(os.path.dirname(__file__), "static", "stickers")
+try:
+    STICKERS = tuple(sorted(n for n in os.listdir(_STICKER_MAP) if n.endswith(".gif")))
+except OSError:                                        # map ontbreekt → geen stickers, geen crash
+    STICKERS = ()
+for _s in STICKERS:
+    _STATIC_TYPES["stickers/" + _s] = "image/gif"
+
 
 def role_context(st, role_id: str, fmt: str = "json"):
     """Serialiseer de volledige rol-context als (status, content_type, body).
@@ -5471,6 +5483,21 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send(render_search_fragment(st, _q), chrome=False)
                 else:
                     self._send(render_search(st, _q))
+                return
+            if path == "/giphy-zoek":
+                # AUTHZ: iedereen-ingelogd — dezelfde poort als de rest van Messages: meedoen aan
+                # een gesprek. Wat hier uitkomt zijn plaatjes uit het eigen merkkanaal, geen
+                # organisatie-inhoud.
+                #
+                # DE SLEUTEL KOMT HIER NOOIT VANDAAN. De route geeft alleen de gevonden URL's
+                # terug; `GIPHY_API_KEY` blijft in de omgeving van de server. Een clientside
+                # fetch naar Giphy zou die sleutel aan iedere bezoeker uitdelen.
+                #
+                # FAIL-SOFT, EN DAT IS EXPLICIET: geen sleutel, geen netwerk of een hikkende
+                # Giphy geeft `{"hits": []}` met status 200, niet een 5xx. De vaste rij stickers
+                # staat los hiervan en blijft werken; alleen het zoekveld vindt dan niets.
+                from nooch_village import giphy
+                self._send_json({"hits": giphy.zoek((qs.get("q") or [""])[0])})
                 return
             if path == "/nav-paneel":
                 # De uitklappanelen van de navigatiebalk. Puur leeswerk, altijd chrome=False:
