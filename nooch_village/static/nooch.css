@@ -277,6 +277,16 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .emo-f{display:inline}
 .emo{border:none;background:none;cursor:pointer;font-size:1.05rem;padding:.15rem;border-radius:var(--radius);width:100%}
 .emo:hover{background:var(--cream-2)}
+/* De stickerkiezer IS de reactie-kiezer met andere inhoud (besluit Stefan, 22 sept 2026):
+   zelfde <details>, zelfde .emoji-pop, zelfde .emo-grid. Eén modifier erbij in dezelfde
+   familie in plaats van een eigen st-*-stel, want emoji's zijn tekst en stickers zijn
+   plaatjes — dat verschil zit in de maat van de cel, niet in een ander component. */
+.emo-st{width:300px}
+.emo-st .emo-grid{grid-template-columns:repeat(4,1fr);gap:.2rem;max-height:210px}
+.emo-st .emo-grid:empty{display:none}
+.emo-st .emo{padding:.15rem;line-height:0;height:64px}
+.emo-st .emo img{width:100%;height:100%;object-fit:contain}
+.emo-st .emo-search{margin:.4rem 0 .35rem}
 .fstamp{color:var(--subtle);font-size:.72rem}
 .flink{border:none;background:none;color:var(--gray);font-size:.78rem;cursor:pointer;text-decoration:underline;padding:0}
 .flink:hover{color:var(--green-dark)}
@@ -1422,6 +1432,8 @@ progress.nu-progress.wide{height:8px}
 .msg-bijlage--beeld{display:inline-block;padding:0;border:0;background:none;max-width:280px}
 .msg-bijlage--beeld img{display:block;max-width:100%;height:auto;border:1px solid var(--border);
   border-radius:var(--radius)}
+.msg-bijlage--sticker{max-width:160px}
+.msg-bijlage--sticker img{border:0;border-radius:0;background:none}
 .msg-bijlage-add{margin-bottom:.5rem}
 /* Een gesprek beginnen dat er nog niet is. Zelfde vorm als "+ new channel" eronder: een
    uitklapje boven de lijst, geen apart scherm. */

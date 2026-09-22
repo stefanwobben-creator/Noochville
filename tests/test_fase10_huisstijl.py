@@ -203,7 +203,22 @@ VIEWS = REPO / "nooch_village" / "views"
 #: fase opruimt, en dan wil je het bij het schrijven weten en niet bij een screenshot.
 _DEKKING_PLAFOND = {
     "projects.py": 7,        # rest is vorm, geen kleur: mform, mdot, car
-    "messages.py": 1,
+    # 1 → 6 op 22 september 2026, en dit is een VERHOGING van een ratchet die hoort te
+    # dalen — dus met de reden erbij. De stickerkiezer hergebruikt de reactie-kiezer
+    # (`emoji-pick`, `emoji-pop`, `emo`, `emo-search`), op verzoek: "hergebruik de
+    # styling van de bestaande reactie-kiezer". Die vijf klassen staan nog op de oude
+    # look.
+    #
+    # WAT ER OP HET SCHERM VERANDERT: niets. Die kiezer rendert vandaag al onder elk
+    # bericht in Messages — alleen staat zijn markup in `feed.py` (`reactie_blok`) en
+    # telt deze ratchet waar de string GETYPT is, niet waar hij landt. De schuld
+    # verhuist dus van bestand, hij groeit niet op het scherm.
+    #
+    # Terug naar omlaag gaat via de `.nu`-laag: zodra `.nu .emoji-pop` c.s. een
+    # tegenhanger krijgen, telt geen van de vijf nog mee en kan dit plafond in één keer
+    # naar 1. Dat is een besluit over hoe de kiezer eruitziet op élk scherm, en hoort
+    # dus niet in een stickerkiezer-PR.
+    "messages.py": 6,
     "roloverleg.py": 1,      # `pdisc` zet alleen background:none/border:none
     "doelen.py": 0,
     "overview.py": 0,

@@ -1106,6 +1106,13 @@ except OSError:                                        # map ontbreekt → geen 
 for _s in STICKERS:
     _STATIC_TYPES["stickers/" + _s] = "image/gif"
 
+#: Wat er ECHT in de kiezer komt. `friday-dance.gif` staat er bewust niet in (Stefan, 22 sept
+#: 2026): de herkomst is onbevestigd — hij lijkt niet uit het eigen Nooch_Earth-kanaal te komen.
+#: Het bestand blijft wél geserveerd, zodat een bericht dat hem al draagt niet stukgaat; hij is
+#: alleen niet meer te KIEZEN. Komt de bevestiging, dan is dit één regel terug.
+_STICKER_UIT = ("friday-dance.gif",)
+STICKERS_PICKER = tuple(s for s in STICKERS if s not in _STICKER_UIT)
+
 
 def role_context(st, role_id: str, fmt: str = "json"):
     """Serialiseer de volledige rol-context als (status, content_type, body).
@@ -1394,6 +1401,123 @@ def _act_msg_post(c):
     # een signalering die vooruitloopt op een bericht dat er niet komt is een verwijzing naar niets.
     gemeld = _vermeldingen_in_kanaal(st, kanaal, g("tekst"), ik)
     return nxt, "💬 posted" + (f" · {gemeld} mentioned" if gemeld else "")
+
+
+def _terug_naar(c, kanaal: str) -> str:
+    """Waar je na het plaatsen van een sticker weer uitkomt: in het gesprek.
+
+    NIET `c.nxt`, EN DAAR LIEP IK IN. `dispatch` zet `nxt` op "/" als het formulier geen `next`
+    draagt, en "/" is waar — dus een `or`-terugval eronder doet nooit iets. Gevolg: klikken op
+    een sticker gooide je naar het projectenbord. Gevonden door te klikken, niet door te lezen:
+    de test dekte het plaatsen wél en de bestemming niet."""
+    gevraagd = c.g("next")
+    if gevraagd.startswith("/messages"):
+        return gevraagd
+    return "/messages?k=" + urllib.parse.quote(kanaal)
+
+
+def _sticker_poort(c):
+    """(ik, kanaal) als deze mens hier een sticker mag plaatsen, anders (None, melding).
+
+    DEZELFDE POORT ALS HET ANTWOORDVELD, en bewust geen tweede regel: een sticker is een
+    bericht. Staat er geen schrijfveld, dan staat de kiezer er ook niet, en dan hoort een
+    handmatige POST er net zo min langs te komen."""
+    from nooch_village.views.messages import kan_antwoorden, mag_kanaal_lezen
+    kanaal = (c.g("kanaal") or "").strip()
+    ik = _web_actor_id(c.username, c.st)
+    if not ik:
+        return None, "✗ log in as a person to write — a message needs an author"
+    if not (mag_kanaal_lezen(c.st, kanaal, ik) and kan_antwoorden(c.st, kanaal, ik)):
+        return None, "✗ nobody reads that channel"
+    return (ik, kanaal), ""
+
+
+def _sticker_hang(st, kanaal: str, ik: str, tekst: str, meta: dict) -> bool:
+    """Plaats het bericht en hang de sticker eraan. Hetzelfde recept als `kanaal_bijlage`:
+    eerst het bericht, want een bijlage hangt aan een BERICHT en niet aan een kanaal."""
+    entry = st.channels.post(kanaal, tekst, author_type="human", author_id=ik)
+    if entry is None:
+        return False
+    meta["at"] = time.time()
+    return bool(st.channels.add_bijlage(kanaal, entry["id"], meta))
+
+
+def _act_sticker_post(c):
+    """Een sticker uit de VASTE RIJ in een kanaal plaatsen.
+
+    # AUTHZ: iedereen-ingelogd — zie `_sticker_poort`: dezelfde voorwaarde als het antwoordveld.
+
+    ER WORDT NIETS GEKOPIEERD. De acht eigen stickers staan in het pakket en worden al
+    geserveerd; ze per bericht naar `data/kanaalbijlagen/` schrijven zou betekenen dat dezelfde
+    100 kB er bij elke high-five nog een keer bij komt. De bijlage verwijst dus naar
+    `stickers/<naam>`, en `/bijlage` weet dat die uit de statische map komen. Dat is geen
+    uitzondering op de leescheck: die staat vóór het ophalen en verandert niet.
+
+    De NAAM wordt getoetst tegen `STICKERS_PICKER` en niet tegen de schijf, dus een
+    teruggetrokken sticker (`_STICKER_UIT`) kan ook via een handmatige POST niet alsnog."""
+    naam = (c.g("naam") or "").strip()
+    poort, melding = _sticker_poort(c)
+    if poort is None:
+        return c.nxt, melding
+    ik, kanaal = poort
+    if naam not in STICKERS_PICKER:
+        return c.nxt, "✗ unknown sticker"
+    pad = os.path.join(os.path.dirname(__file__), "static", "stickers", naam)
+    label = naam[:-4].replace("-", " ")
+    ok = _sticker_hang(c.st, kanaal, ik, f"🏷 {label}", {
+        "id": uuid.uuid4().hex[:10], "name": naam, "stored": "stickers/" + naam,
+        "size": os.path.getsize(pad) if os.path.exists(pad) else 0,
+        "mime": "image/gif", "soort": "sticker"})
+    return _terug_naar(c, kanaal), ("🏷 sticker geplaatst" if ok else "✗ could not post")
+
+
+def _act_giphy_post(c):
+    """Een gekozen Giphy-sticker plaatsen: server-side ophalen, verkleinen, bewaren.
+
+    # AUTHZ: iedereen-ingelogd — zie `_sticker_poort`.
+
+    ALLEEN EEN ID REIST MEE, nooit een URL. Zou de client het adres meesturen, dan bepaalt de
+    client wat deze server gaat ophalen — elk intern adres, elk bestand achter de firewall.
+    `giphy.haal` zoekt het adres er zelf bij en toetst meteen opnieuw of de eigenaar nog het
+    merkkanaal is; `giphy.download` weigert alles buiten `*.giphy.com` en alles boven de cap.
+
+    DEZELFDE VERKLEINING ALS DE EIGEN RIJ (`stickers.optimaliseer_bytes`). Een Giphy-GIF is
+    vaak enkele megabytes; zonder die stap staat er straks een draad met stickers die tien keer
+    zwaarder zijn dan de acht uit het pakket, en dan is het verschil tussen de twee helften van
+    de kiezer zichtbaar in de laadtijd.
+
+    Fail-soft, met de reden: Giphy uit of onbereikbaar geeft een melding en geen bericht."""
+    from nooch_village import giphy, stickers as sticker_opt
+    poort, melding = _sticker_poort(c)
+    if poort is None:
+        return c.nxt, melding
+    ik, kanaal = poort
+    treffer = giphy.haal(c.g("gif"))
+    if not treffer:
+        return c.nxt, "✗ that sticker is no longer available in the Nooch channel"
+    ruw = giphy.download(treffer["url"])
+    if not ruw:
+        return c.nxt, "✗ could not fetch that sticker"
+    try:
+        klein = sticker_opt.optimaliseer_bytes(ruw)
+    except Exception:                                       # noqa: BLE001 — onleesbare GIF
+        logging.getLogger("cockpit2.giphy").warning("giphy-gif niet te verkleinen", exc_info=True)
+        return c.nxt, "✗ could not process that sticker"
+    bid = uuid.uuid4().hex[:10]
+    naam = (re.sub(r"[^a-z0-9-]+", "-", (treffer["naam"] or "sticker").lower()).strip("-")
+            or "sticker")[:60] + ".gif"
+    veilig_kanaal = kanaal.replace(":", "_").replace("/", "_").replace("|", "_")
+    rel = os.path.join("kanaalbijlagen", veilig_kanaal, bid + "_" + naam)
+    full = os.path.join(c.data_dir, rel)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as fh:
+        fh.write(klein)
+    ok = _sticker_hang(c.st, kanaal, ik, f"🏷 {treffer['naam'] or 'sticker'}", {
+        "id": bid, "name": naam, "stored": rel, "size": len(klein),
+        "mime": "image/gif", "soort": "sticker"})
+    return _terug_naar(c, kanaal), (
+        f"🏷 sticker geplaatst ({len(ruw) // 1024} kB → {len(klein) // 1024} kB)"
+        if ok else "✗ could not post")
 
 
 def _act_kanaal_ontvolg(c):
@@ -4960,6 +5084,8 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "msg_post": _act_msg_post,
+    "sticker_post": _act_sticker_post,
+    "giphy_post": _act_giphy_post,
     "topic_add": _act_topic_add,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "keep_in_wiki": _act_keep_in_wiki,
@@ -5814,7 +5940,18 @@ def make_handler(data_dir: str, csrf_token: str,
                 if not mag_kanaal_lezen(st, _kan, _ik):
                     self._send("<p>Not found</p>", 404); return    # geen 403: bestaan is ook info
                 _b = st.channels.bijlage(_kan, (qs.get("id") or [""])[0])
-                _full = os.path.join(data_dir, _b["stored"]) if _b else None
+                # EEN STICKER UIT DE VASTE RIJ LIGT IN HET PAKKET, niet in data/. Hij wordt niet
+                # per bericht gekopieerd — dezelfde 100 kB bij elke high-five is zonde — dus
+                # verwijst zijn `stored` naar `stickers/<naam>`. Geen pad-join op die string maar
+                # een lidmaatschapstoets op `STICKERS`: dan is er niets te ontsnappen, ook niet
+                # als er ooit een `..` in een opgeslagen naam belandt.
+                _full = None
+                if _b:
+                    _st_naam = str(_b.get("stored") or "")
+                    if _st_naam.startswith("stickers/") and _st_naam[9:] in STICKERS:
+                        _full = os.path.join(os.path.dirname(__file__), "static", _st_naam)
+                    else:
+                        _full = os.path.join(data_dir, _st_naam)
                 if not (_full and os.path.exists(_full)):
                     self._send("<p>File not found</p>", 404); return
                 with open(_full, "rb") as fh:

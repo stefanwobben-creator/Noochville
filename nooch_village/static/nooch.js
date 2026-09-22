@@ -607,6 +607,78 @@
     plan(BASIS);
   }
 
+  // ── Stickers zoeken in het eigen Giphy-kanaal ─────────────────────────────────────────────
+  // ALLEEN DE ONDERSTE HELFT VAN DE KIEZER. De vaste rij is HTML die er al staat, met een
+  // formulier per sticker: die werkt zonder JavaScript en blijft werken als Giphy eruit ligt.
+  // Dit stuk vult alleen het vak eronder.
+  //
+  // ER REIST GEEN URL MEE, alleen het Giphy-id. Wat de server ophaalt hoort de server te
+  // bepalen — zie `giphy.haal` en `giphy.download` voor de andere kant van die regel.
+  function giphyZoek(pop) {
+    if (pop.dataset.nvGiphy) return;
+    pop.dataset.nvGiphy = "1";
+    var veld = pop.querySelector("[data-giphy-q]");
+    var uit = pop.querySelector("[data-giphy-uit]");
+    if (!veld || !uit) return;
+    var kanaal = pop.getAttribute("data-kanaal") || "";
+    var csrf = pop.getAttribute("data-csrf") || "";
+    var timer = null;
+
+    function leeg(bericht) {
+      uit.textContent = "";
+      if (bericht) {
+        var p = document.createElement("p");
+        p.className = "muted";
+        p.textContent = bericht;
+        uit.appendChild(p);
+      }
+    }
+
+    function toon(hits) {
+      leeg(hits.length ? "" : "Nothing in the Nooch channel for that.");
+      hits.forEach(function (h) {
+        // Eén formulier per treffer, precies zoals de vaste rij erboven: dezelfde actie-vorm,
+        // dezelfde knop. Zo is er geen tweede manier om een sticker te plaatsen.
+        var f = document.createElement("form");
+        f.method = "post";
+        f.action = "/action";
+        f.className = "emo-f";
+        f.innerHTML = "<input type='hidden' name='csrf'><input type='hidden' name='kanaal'>"
+          + "<input type='hidden' name='next'>"
+          + "<input type='hidden' name='gif'><button class='emo' type='submit' "
+          + "name='action' value='giphy_post'><img loading='lazy'></button>";
+        f.querySelector("[name=csrf]").value = csrf;
+        f.querySelector("[name=kanaal]").value = kanaal;
+        f.querySelector("[name=next]").value = location.pathname + location.search;
+        f.querySelector("[name=gif]").value = h.id;
+        var img = f.querySelector("img");
+        img.src = h.url;
+        img.alt = h.naam || "sticker";
+        f.querySelector("button").title = h.naam || "sticker";
+        uit.appendChild(f);
+      });
+    }
+
+    veld.addEventListener("input", function () {
+      clearTimeout(timer);
+      var q = veld.value.trim();
+      if (!q) { leeg(""); return; }
+      timer = setTimeout(function () {
+        fetch("/giphy-zoek?q=" + encodeURIComponent(q), { credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function (d) { return d.hits || []; },
+                // FAIL-SOFT, ZICHTBAAR MAAR RUSTIG. Giphy eruit betekent niet dat de kiezer
+                // stuk is: de rij erboven doet het nog. Dus één regel tekst, geen foutmelding.
+                function () { return null; })
+          .then(function (hits) { if (hits === null) leeg("Sticker search is unavailable."); else toon(hits); });
+      }, 250);
+    });
+  }
+
+  function stickers(root) {
+    root.querySelectorAll("[data-giphy]").forEach(giphyZoek);
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -616,6 +688,7 @@
     wikiEdit(root);
     navPaneel(root);
     overlegPoll(root);
+    stickers(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);
