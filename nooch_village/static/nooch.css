@@ -1120,7 +1120,34 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 
    `position:fixed` en GEEN flex op `main`: zo hoeft geen enkele view zijn wikkel te veranderen.
    Alles wat ná de zijbalk in de DOM komt schuift op via de sibling-selector hieronder. */
-.c2-side{position:fixed;left:0;top:0;bottom:0;width:216px;z-index:30;box-sizing:border-box;
+/* ── De horizontale header ───────────────────────────────────────────────────────────────────
+   Logo, zoek en profiel stonden ONDER elkaar bovenin de zijbalk: drie dingen die niets met
+   elkaar te maken hebben, gestapeld in de kolom waar de navigatie hoort. Het zoekveld was
+   daardoor zo breed als die kolom (216px), terwijl het het enige veld in dit dorp is waar je
+   een hele zin in typt.
+   Nu een eigen balk over de volle breedte. Hij is `sticky` en niet `fixed`: zo houdt hij een
+   plek in de flow en hoeft de rest van de pagina geen offset bovenaan te krijgen. */
+.c2-header{position:sticky;top:0;z-index:31;height:56px;box-sizing:border-box;
+  display:flex;align-items:center;gap:18px;padding:0 20px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  /* DE NEGATIEVE MARGES HALEN DE BODY-PADDING WEG. `body` heeft `padding:1.6rem 2rem` en de
+     zijbalk staat `fixed` op `left:0`; zonder dit begint de header 2rem naar binnen en zweeft
+     hij 1.6rem onder de bovenrand — twee stukken van dezelfde chrome die niet op elkaar
+     aansluiten. Deze drie waarden horen bij die ene body-regel; verandert die, dan deze mee. */
+  margin:-1.6rem -2rem 0}
+/* Het zoekveld is het middelpunt: het groeit mee, maar niet eindeloos — voorbij ~520px lees je
+   je eigen zoekterm niet sneller, en de balk valt uit elkaar. */
+.c2-header .c2-search{flex:1 1 auto;max-width:520px}
+/* WAS "Hoi Stefan". De naam verdwijnt niet: hij staat in title en aria-label. */
+.c2-av{flex:none;width:32px;height:32px;display:inline-flex;align-items:center;
+  justify-content:center;border-radius:50%;background:var(--green-tint);
+  border:1px solid var(--ink);color:var(--ink);font-size:12px;font-weight:700;
+  text-decoration:none}
+.c2-av:hover{background:var(--ink);color:var(--surface)}
+.c2-av:empty{display:none}
+/* `top:56px` EN NIET 0: de balk is `fixed` en zou anders onder de sticky header door lopen.
+   Dat getal hoort bij `.c2-header{height:56px}` hierboven; verandert die hoogte, dan deze mee. */
+.c2-side{position:fixed;left:0;top:56px;bottom:0;width:216px;z-index:30;box-sizing:border-box;
   display:flex;flex-direction:column;gap:.85rem;padding:1rem .75rem;overflow-y:auto;
   background:var(--surface);border-right:1px solid var(--border)}
 /* `:not(.c2-paneel)` IS DE HELE BUG, en hij was niet te zien aan één regel.
@@ -1161,7 +1188,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 @media(max-width:760px){
   .c2-side{width:64px;padding:1rem .35rem;align-items:center}
   .c2-side ~ *:not(.c2-paneel){margin-left:80px}
-  .c2-side .c2-lbl,.c2-side .c2-search,.c2-side .c2-greet,.c2-side .c2-subnav-div{display:none}
+  /* `.c2-search` en `.c2-greet` stonden hier ook in: die zaten IN de balk en moesten in de
+     rail verdwijnen. Ze staan er niet meer (de een in de header, de ander vervallen), dus een
+     regel die ze verbergt zou een regel zijn die niets doet. */
+  .c2-side .c2-lbl,.c2-side .c2-subnav-div{display:none}
   .c2-side .c2-mono{display:inline}
   .c2-org{display:none}
 }
@@ -1226,9 +1256,8 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
     border-bottom:1px solid var(--border);max-height:60vh}
   body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:80px}
 }
-.c2-greet{flex:none;color:var(--gray);font-size:13.5px;white-space:nowrap;padding:0 .55rem}
-.c2-greet a{color:inherit;text-decoration:none;border-bottom:1px solid transparent}
-.c2-greet a:hover{color:var(--ink);border-bottom-color:var(--border)}
+/* `.c2-greet` STOND HIER. De begroeting is een avatar geworden (`.c2-av` hierboven); de drie
+   regels die hem aankleedden hebben geen renderer meer. */
 .c2-logo{flex:none;display:inline-flex;align-items:center}
 /* De witte opening in de 'h' zit onder het midden van het logo; ~6px omhoog schuiven zodat die
    opening op de verticale as van de zoekbalk valt (founder 23 jul). */
@@ -1633,9 +1662,26 @@ progress.nu-progress.wide{height:8px}
     left:10px;top:10px;z-index:60;width:40px;height:40px;font-size:18px;line-height:1;
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
     color:var(--ink);cursor:pointer}
+  /* De header krimpt mee: het logo en de 40px-hamburger ernaast passen anders niet naast een
+     zoekveld op een telefoon. */
+  .c2-header{gap:10px;padding:0 10px 0 58px}
+  /* Gelijk aan `.c2-header{height:56px}`. Stond op 52 en dan lag de balk over de onderste vier
+     pixels van de header — te weinig om te zien, genoeg om een klik te stelen. */
+  .c2-side{top:56px}
   body.navjs .c2-side{display:none}
-  body.navjs.navopen .c2-side{display:flex;position:fixed;inset:0;z-index:50;width:auto;
-    flex-direction:column;align-items:stretch;overflow-y:auto;padding-top:3.4rem}
+  /* DE OPENGEKLAPTE BALK BEGINT ONDER DE HEADER, niet op `inset:0`. Met `top:0` lag hij over de
+     sticky header heen: je zag het menu wél, maar het logo, de zoekbalk en je eigen profiel
+     verdwenen eronder — inclusief de hamburger waarmee je het weer dicht zou doen. */
+  body.navjs.navopen .c2-side{display:flex;position:fixed;top:56px;left:0;right:0;bottom:0;
+    z-index:50;width:auto;flex-direction:column;align-items:stretch;overflow-y:auto;
+    padding-top:1rem}
+  /* IN DE OPEN STAND WEER WOORDEN. De rail-regels hierboven verbergen `.c2-lbl` en tonen het
+     monogram; dat klopt voor een balk van 64px, maar de opengeklapte versie is het hele scherm
+     breed — en dan staat er "PR ME WI CI AD OR" onder elkaar. Zichtbaar geworden nu het menu
+     het enige op het scherm is; de rail-versie eronder blijft zoals hij was. */
+  body.navjs.navopen .c2-side .c2-lbl{display:inline}
+  body.navjs.navopen .c2-side .c2-mono{display:none}
+  body.navjs.navopen .c2-side .c2-subnav-div{display:block}
   body.navjs.navopen .c2-org{display:block}
   body.navjs .c2-main,body.navjs .c2-wrap{padding-top:2.6rem}
 }

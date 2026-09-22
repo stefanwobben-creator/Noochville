@@ -32,7 +32,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
-    _SIDE_CIRCLE, _SIDE_OVERLEG,
+    _SIDE_CIRCLE, _SIDE_OVERLEG, _initials,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -5358,19 +5358,27 @@ def make_handler(data_dir: str, csrf_token: str,
                     except Exception:
                         body = body.replace(_SIDE_CIRCLE, "", 1)
                         body = body.replace(_SIDE_OVERLEG, "", 1)
-                # Persoonlijke begroeting in de header: voornaam van de ingelogde persoon, klikbaar
-                # naar de eigen persoonspagina (/person?id=...).
+                # HET PROFIEL IN DE HEADER: de initialen van de ingelogde persoon, met de volle
+                # naam in title/aria-label en dezelfde link naar zijn eigen pagina.
+                #
+                # WAS "Hoi Stefan" in de zijbalk. Een begroeting kost een hele regel breedte voor
+                # informatie die je na de eerste keer niet meer leest; wat je er wél uit haalt —
+                # "ik ben ingelogd, en als wie" — past in een rondje van 32px. De NAAM verdwijnt
+                # niet: hij staat in `title` voor de muis en in `aria-label` voor wie hem niet ziet.
+                #
+                # Voor- ÉN achternaam ("SW"), via dezelfde `_initials` die de avatars elders in
+                # het dorp gebruiken — niet een eigen afkorting naast die van de berichtenlijst.
                 if _st is not None:
                     try:
                         _p = _st.people.by_email(self._session_username())
-                        _vn = ((getattr(_p, "name", "") or "").split() or [""])[0]
+                        _vol = (getattr(_p, "name", "") or "").strip()
                         _pid = getattr(_p, "id", "") or ""
-                        if _vn:
-                            _naam = (f"<a href='/person?id={_e(_pid)}'>{_e(_vn)}</a>"
-                                     if _pid else _e(_vn))
+                        if _vol and _pid:
                             body = body.replace(
-                                "<span class='c2-greet' id='c2-greet'></span>",
-                                f"<span class='c2-greet' id='c2-greet'>Hoi {_naam}</span>", 1)
+                                "<span class='c2-av' id='c2-av'></span>",
+                                f"<a class='c2-av' id='c2-av' href='/person?id={_e(_pid)}' "
+                                f"title='{_e(_vol)}' aria-label='{_e(_vol)} — your profile'>"
+                                f"{_e(_initials(_vol))}</a>", 1)
                     except Exception:
                         pass
                 # De LiveKit-callbar is 11 aug 2026 uit de app-shell gehaald: hij werkte niet

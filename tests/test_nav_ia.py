@@ -11,11 +11,17 @@ import re
 from nooch_village.cockpit2_util import _footer, _nav
 
 
-def test_de_zijbalk_draagt_de_hele_navigatie():
-    """Logo, zoek, begroeting, de nav-items en de plek voor de organisatieboom — alles in één
-    aside. Dat is het punt: drie plekken navigatie liepen uiteen."""
+def test_de_chrome_draagt_de_hele_navigatie():
+    """DRIE PLEKKEN NAVIGATIE LIEPEN UITEEN, en dat is nog steeds waar deze test over gaat: er
+    is ÉÉN functie die de chrome bouwt.
+
+    Wat veranderde op 22 september 2026 is dat die chrome uit twee elementen bestaat in plaats
+    van één: een horizontale header (logo, zoek, profiel) en een zijbalk met alleen navigatie.
+    De begroeting is daarbij een avatar geworden. Beide stukken komen nog steeds uit `_nav()`,
+    dus de bewering blijft — hij telt nu twee containers in plaats van één."""
     h = _nav()
-    assert "c2-side" in h and "c2-logo" in h and "class='c2-search'" in h and "c2-greet" in h
+    assert "c2-header" in h and "c2-logo" in h and "class='c2-search'" in h and "c2-av" in h
+    assert "c2-side" in h and "c2-subnav" in h
     # De boom staat hier als KNOP (paneel), niet meer als meegerenderd blok — zie
     # `test_nav_accordeon.py::test_de_organisatieboom_is_een_paneel_geworden`.
     assert "data-nav-paneel='org'" in h

@@ -105,10 +105,17 @@ def test_de_twee_overleggen_zijn_geen_kanaal_en_geen_paneel():
     h = _nav_ingevuld()
     for href in ("/werkoverleg", "/roloverleg2"):
         assert f"class='c2-overleg' href='{href}?circle=" in h
-        stuk = h.split(href)[1][:160]
-        assert "data-nav-paneel" not in stuk
-    # en ze staan los van de PR/ME/WI/CI/AD-groep, onder een eigen scheiding
-    assert h.index("c2-subnav-div") < h.index("c2-overleg")
+        # OP HET ELEMENT ZELF, niet op de 160 tekens erna. Sinds de overleg-pillen bovenaan
+        # staan (22 september 2026) volgt Projects er direct op, en díe draagt wél een paneel —
+        # dan meet je de buurman in plaats van de knop.
+        el = re.search(rf"<a class='c2-overleg[^>]*href='{re.escape(href)}[^>]*>", h)
+        assert el, href
+        assert "data-nav-paneel" not in el.group(0), el.group(0)
+    # EN ZE STAAN LOS VAN DE PR/ME/WI/CI/AD-GROEP, met een eigen scheiding — alleen staat die
+    # scheiding sinds 22 september ERACHTER in plaats van ervoor: de pillen verhuisden naar
+    # boven, want dat is de snelste ingang naar een overleg dat NU loopt. De bewering is
+    # dezelfde (ze horen niet in dezelfde rij), de volgorde is omgedraaid.
+    assert h.index("c2-overleg") < h.index("c2-subnav-div")
 
 
 # ── 2. Eén paneel tegelijk, en dicht met dezelfde knop ───────────────────────
