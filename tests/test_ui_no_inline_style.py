@@ -26,7 +26,9 @@ _STYLE_WHITELIST = {
                                # eigen <style>-blok en inline styles eruit, `_field`/`.qadd-form` erin
     "views/projects.py": 17,   # -2 (fase 11): de voortgangsbalk werd `<progress class='nu-progress'>`
                                # (geen `style='width:x%'` meer) en de kaart-link kreeg `.pcard-link`
-    "views/strategy.py": 14,
+    "views/strategy.py": 12,   # -2 (22 sept): de geërfde purpose-keten is verwijderd — de enige
+                               # aanroeper gaf `with_purpose_chain=False`, en de tak die `True` kon
+                               # geven (`tab == "strategy"`) is onbereikbaar. Zie views/strategy.py.
     # 8 → 4 (22 sept 2026): de losse "nog niet geopend"-pagina is vervallen, en met de
     # gedeelde schil (`_wo_schil`) verdwenen `margin-top:0`, `margin-top:1rem`, de
     # `max-width` en de uitlegregel met `font-size:.8rem`. Die max-width werd eerst

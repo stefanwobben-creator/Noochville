@@ -597,6 +597,22 @@
 .nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
 /* overview.py */
+/* ══ DE LIJNEN VAN /node (22 september 2026) ═══════════════════════════════════════════════════
+   GETELD OP HET SCHERM, niet geschat: 36× `ul.clean li`, 5× `.accrow` en de streep onder de
+   tabbalk tekenden allemaal #DDD4C0 — `--border`, de warme zandtint van de oude huisstijl. Het
+   font stond hier allang op Archivo en de body op `.nu`; wat er nooit mee was gegaan zijn de
+   lijnen. Op een scherm dat verder zwart-op-#FFFAFA is, zijn 42 zandkleurige haarlijntjes precies
+   wat "oude opmaak" betekent — en op de cirkel-overview zijn ze de dominante vorm, want de
+   DO/DON'T-lijsten van de strategie zijn niets anders dan die 36 regels.
+
+   DE DRIE STAAN BIJ ELKAAR omdat ze hetzelfde doen: één regel van de volgende scheiden. `.rrole`
+   staat op de Roles-tab en niet op Overview, maar twee ervan migreren en de derde laten staan is
+   de volgende persoon laten ontdekken dat /node twee soorten haarlijn heeft. */
+.nu ul.clean li, .nu .accrow, .nu .rrole { border-bottom: 1px solid var(--nu-border-subtle); }
+.nu .c2-tabs { border-bottom: 1px solid var(--nu-border-subtle); }
+/* De radius bleef staan: de bestaande regel zette alleen kleur en font. Negen pixels ronding op
+   het enige icoon van een scherm waar verder niets rond is. */
+.nu .manage-ico { border-radius: 0; }
 .nu .manage-ico, .nu .fperson { color: var(--nu-muted); font-family: var(--nu-font); }
 .nu .tree-c { font-family: var(--nu-font); color: var(--nu-text); }
 .nu .stack-av { border-color: var(--nu-surface); }

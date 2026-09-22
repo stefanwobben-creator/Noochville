@@ -1,9 +1,12 @@
 """Strategie-tab voor operationele cirkels — read-only weergave (structuur C, hybride gestructureerd).
 
 Rendert de strategie-entry (StrategyStore) als leesbare pagina: per sectie een kop, kaart-look
-zoals de andere tabs. Twee dynamische blokken: (1) de geërfde purpose-keten uit de records, en
-(2) twee placeholders (Words That Require Evidence → kennisbank/Lara; Current Focus → projectbord).
-Elke sectie rendert alleen als hij in de entry aanwezig is, zodat een gedeeltelijke entry niet breekt.
+zoals de andere tabs. Eén dynamisch blok: twee placeholders (Words That Require Evidence →
+kennisbank/Lara; Current Focus → projectbord). Elke sectie rendert alleen als hij in de entry
+aanwezig is, zodat een gedeeltelijke entry niet breekt.
+
+De geërfde purpose-keten stond hier ook; die is op 22 september 2026 verwijderd omdat hij
+onbereikbaar was — zie `_strategy_tab_html`.
 
 Edit-UI, live purpose-erving-logica en de strategy_lookup-skill komen in aparte stappen.
 """
@@ -11,8 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e
-from nooch_village.cockpit2_util import _name, _md
-from nooch_village import org
+from nooch_village.cockpit2_util import _md
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -63,21 +65,6 @@ _DONT_LABELS = {"materials": "Materials", "communication": "Communication",
                 "business_model": "Business model", "culture": "Culture"}
 
 
-def _purpose_chain(st: "_Stores", rec) -> str:
-    """Dynamisch blok: de geërfde purpose-keten van root (Mother Earth) naar deze cirkel (Nooch)."""
-    recs = st.records.all()
-    by_id = {r.id: r for r in recs}
-    rows = ""
-    for cid in org.breadcrumb(recs, rec.id):       # root eerst
-        c = by_id.get(cid)
-        if c is None or not org.is_circle(c):
-            continue
-        purpose = getattr(c.definition, "purpose", "") or "(no purpose)"
-        rows += (f"<div style='margin:.4rem 0;padding-left:.7rem;border-left:2px solid var(--border)'>"
-                 f"<b>{_e(_name(c))}</b><div class='muted' style='white-space:pre-wrap'>{_e(purpose)}</div></div>")
-    return _sec("Purpose (inherited chain)", rows)
-
-
 def _tone_of_voice(tov: dict) -> str:
     if not tov:
         return ""
@@ -109,16 +96,25 @@ def _honest_constraints(hc: dict) -> str:
     return _sec("Honest constraints", body)
 
 
-def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> str:
+def _strategy_tab_html(st: "_Stores", rec) -> str:
+    """De strategie-blokken van een cirkel, zoals ze op de Overview-tab staan.
+
+    `with_purpose_chain` IS WEG, en met hem `_purpose_chain` (22 september 2026). De parameter
+    had één aanroeper, en die gaf hem `False`: de Overview-tab toont de purpose er al boven.
+    `True` kon alleen komen van `render_node`'s `elif tab == "strategy"`, en die tak is
+    onbereikbaar — `"strategy"` staat niet in `_CIRCLE_TABS` of `_ROLE_TABS`, dus de regel
+    `if tab not in tabs: tab = "overview"` erboven vangt hem altijd af.
+    `tests/test_cockpit2.py` legt zelfs vast dat de knop uit de tabbalk weg is.
+
+    Gevonden bij het migreren van dit scherm naar de nu-tokens: ik verving een zandkleurige
+    `border-left` door een klasse en ontdekte toen dat niemand die lijn ooit te zien krijgt."""
     strat = st.strategies.get(rec.id)
     if not strat:
         return ("<div class='c2-sec'><h3>Strategy</h3>"
                 "<p class='muted'>No strategy defined for this circle.</p></div>")
 
-    # In de overview-tab staat de Purpose er al boven → chain overslaan (geen dubbeling).
-    out = _purpose_chain(st, rec) if with_purpose_chain else ""
     # Simpele strategie-bullets onder de gewone kop "Strategie" (bv. de Mother-Earth-principes).
-    out += _sec("Strategy", _bullets(strat.get("strategy")))
+    out = _sec("Strategy", _bullets(strat.get("strategy")))
     out += _sec("Core sentence", _text(strat.get("core_sentence")))
     out += _sec("Vision", _text(strat.get("vision")))
     out += _sec("Mission", _text(strat.get("mission")))

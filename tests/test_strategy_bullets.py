@@ -19,7 +19,7 @@ def test_strategie_bullets_onder_kop_strategie(tmp_path):
         "**Recycle Everything:** Close all loops; zero waste.",
         "**Adapt or Exit:** Evolve with changes or fail.",
     ]})
-    html = _strategy_tab_html(st, st.records.get("mother_earth"), with_purpose_chain=False)
+    html = _strategy_tab_html(st, st.records.get("mother_earth"))
     assert "<h3>Strategy</h3>" in html
     assert "<strong>Recycle Everything:</strong> Close all loops" in html   # titel bold, uitleg gewoon
     assert "Adapt or Exit" in html
@@ -31,5 +31,5 @@ def test_strategie_bullets_onder_kop_strategie(tmp_path):
 def test_rijke_strategie_houdt_placeholders(tmp_path):
     st = _st(tmp_path)
     st.strategies.set("mother_earth", {"mission": "een missie-zin"})   # rijk veld → placeholders terug
-    html = _strategy_tab_html(st, st.records.get("mother_earth"), with_purpose_chain=False)
+    html = _strategy_tab_html(st, st.records.get("mother_earth"))
     assert "Words that require evidence" in html and "Current focus" in html
