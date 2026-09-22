@@ -11,10 +11,12 @@ Alles hergebruikt het bestaande artefact-idioom: `.card`, `.ptitle`, `.att-body`
 from __future__ import annotations
 
 import html as _html_mod
+import json as _json
 import re
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _md, _name, opmaak_werkbalk
+from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, opmaak_werkbalk,
+                                         BLOK_SOORTEN, blok_menu)
 from nooch_village import wiki
 
 # Status → chip-icoon. Bewust vijf verschillende tekens: 'gegrond' en 'ongecontroleerd' mogen op
@@ -265,14 +267,19 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
     inhoud = (_body_html(a.body, pags, blokken=True) if a.body
               else "<p class='muted'>This page has no text yet.</p>")
-    lees = f"<div class='card'><div class='att-body wiki-body' id='wiki-body'>{inhoud}</div></div>"
+    # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
+    # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
+    # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
+    soorten = _e(_json.dumps(BLOK_SOORTEN, separators=(",", ":"), sort_keys=True))
+    lees = (f"<div class='card'><div class='att-body wiki-body' id='wiki-body' "
+            f"data-blok-soorten='{soorten}'>{inhoud}</div></div>")
     if not can_edit or not csrf_token:
         return lees
 
     # De verborgen velden worden bij het versturen door `nooch.js` gevuld met wat er in de twee
     # bewerkbare elementen staat. Het formulier staat ONDER de tekst maar is geen tweede kopie:
     # er staat niets in dat je kunt lezen, alleen de opslaan-balk.
-    return (opmaak_werkbalk() + lees
+    return (opmaak_werkbalk() + lees + blok_menu()
             + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden>"
               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
               f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
