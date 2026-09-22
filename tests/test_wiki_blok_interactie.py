@@ -141,6 +141,36 @@ def test_de_pas_bestaat_en_leest_de_tabel_van_het_scherm():
     assert "data-blok-soorten" in kaal
 
 
+def _pas_bron() -> str:
+    """Alleen de body van `NV.blokNormaliseer`. Zelfde reden als bij `_wiki_edit_bron`: elders in
+    het bestand staan ook toewijzingen aan `data-blok`, en die meten niet wat deze toets beweert."""
+    kaal = _zonder_commentaar(JS)
+    m = re.search(r"NV\.blokNormaliseer = function \(body\) \{(.*?)\n  \};", kaal, re.S)
+    assert m, "blokNormaliseer niet gevonden"
+    return m.group(1)
+
+
+def test_de_pas_kijkt_eerst_naar_de_tag_van_het_omhulsel_zelf():
+    """GEMETEN IN FIREFOX 154, 23 september 2026. `formatBlock` HERNOEMT daar het omhulsel op zijn
+    plek — `DIV.wb[data-blok=p]` wordt `BLOCKQUOTE.wb[data-blok=p]` — waar Chrome het VERVANGT door
+    een kale tag. Keek de pas alleen naar de inhoud, dan vond hij in de hernoemde versie alleen de
+    greep en liet `p` staan: een citaat dat zichzelf een alinea noemt.
+
+    Wat de browsercheck (`claude/blok_browsercheck.js`) meet is het gedrag; deze toets bewaakt
+    alleen dat de eigen tag nog vóór de inhoud wordt geraadpleegd, want dat is de regel die
+    weggerefactord kan worden zonder dat iets in deze stack het merkt."""
+    body = _pas_bron()
+    m = re.search(r"if \(node\.classList\.contains\(\"wb\"\)\) \{(.*?)\n      \}", body, re.S)
+    assert m, "de .wb-tak van de pas niet gevonden"
+    tak = m.group(1)
+    assert "soorten[node.tagName.toLowerCase()]" in tak, (
+        "de pas leest de eigen tag van het omhulsel niet meer; in Firefox valt elk blok dan "
+        "terug op 'p'")
+    eigen = tak.index("soorten[node.tagName.toLowerCase()]")
+    inhoud = tak.index("inhoudVan(node)")
+    assert eigen < inhoud, "de inhoud wint van de eigen tag; dan is de Firefox-vorm weer stuk"
+
+
 def _wiki_edit_bron() -> str:
     """Alleen de body van `wikiEdit`. NIET zomaar het hele bestand afzoeken: de eerste versie van
     de test hieronder greep de klikhandler van de MD-PREVIEW-knop, die toevallig dezelfde vorm
