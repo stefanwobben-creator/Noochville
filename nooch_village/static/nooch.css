@@ -273,6 +273,22 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .fentry-attach .fbubble{border-left:3px solid var(--border)}
 .fkicker{display:block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
+/* De genummerde lijst, zelfde inspringing als `.fbul` — het is dezelfde soort lijst met een
+   andere opsommingsvorm, en twee verschillende inspringingen naast elkaar lezen als twee
+   niveaus die er niet zijn. */
+.fol{margin:.2rem 0 .2rem 1.1rem}
+/* EEN CITAAT MOET ER ALS CITAAT UITZIEN. De browser geeft een `<blockquote>` alleen 40px
+   inspringing — geen lijn, geen kleur, geen cursief — en op het scherm was het een alinea die
+   toevallig wat naar rechts stond. Gemeten, niet aangenomen. Een lijn links, zoals dit dorp
+   overal een herkomst aangeeft. */
+blockquote{margin:.4rem 0;padding-left:.7rem;border-left:2px solid var(--border);color:var(--gray)}
+/* De `<hr>` kwam binnen als `border-style:inset` in rgb(128,128,128): de 3D-streep van de
+   browser. Dit is de haarlijn die de rest van het dorp ook tekent. */
+hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
+/* Een afvinkbare regel op een wiki-pagina (brok 2). De ruimte tussen vakje en tekst staat HIER
+   en niet als spatie in de HTML: die zou de weg terug er één bij de zijne laten schrijven, en
+   dan groeit de bron met een spatie per keer opslaan. */
+.wb-taak input{margin-right:.4em;vertical-align:baseline}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
 .emoji-pick{position:relative;display:inline-block;padding:0;margin:0}

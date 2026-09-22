@@ -236,6 +236,11 @@ def _stamp(ts, settings=None) -> str:
     return f"{d.day} {_MONTHS[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
 
 
+#: Blok-herkenning op regelniveau, als constanten zodat de vorm van een genummerde regel en van
+#: een streep op ÉÉN plek staat in plaats van verspreid door de renderlus.
+_NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
+_STREEP_RE = re.compile(r"^-{3,}$")
+
 #: Het omhulsel van één blok in de blokstand. ÉÉN plek, want de renderer schrijft hem en de
 #: editor (brok 3) zoekt hem straks met `closest('.wb')` — twee spellingen is twee gedragingen.
 BLOK_OPEN = "<div class='wb' data-blok='{soort}'>"
@@ -278,26 +283,63 @@ def _md(text: str, blokken: bool = False) -> str:
         return BLOK_OPEN.format(soort=soort) if blokken else ""
 
     dicht = BLOK_DICHT if blokken else ""
-    out, in_ul = [], False
+    out = []
+    lijst = ""                       # "ul", "ol" of "" — welke lijst er open staat
+
+    def sluit_lijst():
+        nonlocal lijst
+        if lijst:
+            out.append(f"</{lijst}>" + dicht)
+            lijst = ""
+
     for ln in s.split("\n"):
-        if ln.strip().startswith("## "):                     # kop (regel-niveau, zoals de lijst)
-            if in_ul:
-                out.append("</ul>" + dicht); in_ul = False
-            out.append(f"{open_('h')}<h4>{ln.strip()[3:]}</h4>{dicht}")
+        kaal = ln.strip()
+        # KOPPEN. `## ` bleef `<h4>` (22 september 2026): 15 bestaande pagina's gebruiken hem, en
+        # een nieuw niveau erbij mag er geen één hertekenen. `#` gaat er dus BOVEN zitten (h3) en
+        # `###` eronder (h5).
+        #
+        # DE VOLGORDE MAAKT HIER NIET UIT, en dat stond er eerst anders ("langste eerst, anders
+        # eet `# ` de andere twee op"). De SPATIE in elk voorvoegsel doet het werk: `"## kop"`
+        # begint niet met `"# "`, want op plek 1 staat een `#` en geen spatie. Die uitleg is
+        # nagerekend met een mutatie die de volgorde omdraaide — en die bleef groen.
+        kop = next(((n, v) for n, v in (("### ", "h5"), ("## ", "h4"), ("# ", "h3"))
+                    if kaal.startswith(n)), None)
+        if kop:
+            sluit_lijst()
+            merk, tag = kop
+            out.append(f"{open_('h')}<{tag}>{kaal[len(merk):]}</{tag}>{dicht}")
             continue
-        if ln.strip().startswith("- "):
-            if not in_ul:
-                out.append(open_("ul") + "<ul class='fbul'>"); in_ul = True
-            out.append(f"<li>{ln.strip()[2:]}</li>")
-        else:
-            if in_ul:
-                out.append("</ul>" + dicht); in_ul = False
-            # In de blokstand IS het omhulsel de regelafbreking, dus geen `<br>` erachter. Een
-            # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
-            # verdwijnt elke witregel van elke pagina zonder dat een bron-test iets merkt.
-            out.append(f"{open_('p')}{ln or '<br>'}{dicht}" if blokken else ln + "<br>")
-    if in_ul:
-        out.append("</ul>" + dicht)
+        # SCHEIDING. Drie of meer streepjes op een eigen regel; in de bron blijft het `---`.
+        if _STREEP_RE.match(kaal):
+            sluit_lijst()
+            out.append(f"{open_('hr')}<hr>{dicht}")
+            continue
+        # CITAAT. Eén regel per citaat — geen samengevoegd blok van opeenvolgende `>`-regels: dan
+        # zou de weg terug moeten raden waar de regelovergangen stonden.
+        # `&gt; ` EN NIET `> `: `_e()` heeft de tekst al ge-escaped vóór deze lus draait (dat is
+        # de XSS-volgorde, zie boven). Wie hier op `>` toetst, toetst op een teken dat er niet
+        # meer staat — en dan doet het citaat het nooit.
+        if kaal.startswith("&gt; "):
+            sluit_lijst()
+            out.append(f"{open_('q')}<blockquote>{kaal[5:]}</blockquote>{dicht}")
+            continue
+        # LIJSTEN, twee soorten. Ze sluiten elkaars blok: `- a` gevolgd door `1. b` zijn twee
+        # lijsten, geen samengeraapte derde.
+        genummerd = _NUMMER_RE.match(kaal)
+        soort = "ul" if kaal.startswith("- ") else ("ol" if genummerd else "")
+        if soort:
+            if lijst != soort:
+                sluit_lijst()
+                out.append(open_(soort) + f"<{soort} class='{'fbul' if soort == 'ul' else 'fol'}'>")
+                lijst = soort
+            out.append(f"<li>{genummerd.group(2) if genummerd else kaal[2:]}</li>")
+            continue
+        sluit_lijst()
+        # In de blokstand IS het omhulsel de regelafbreking, dus geen `<br>` erachter. Een
+        # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
+        # verdwijnt elke witregel van elke pagina zonder dat een bron-test iets merkt.
+        out.append(f"{open_('p')}{ln or '<br>'}{dicht}" if blokken else ln + "<br>")
+    sluit_lijst()
     html = "".join(out)
     if blokken:
         return html
@@ -344,7 +386,11 @@ _BRON_INLINE = {"strong": ("**", "**"), "b": ("**", "**"),
                 "del": ("~~", "~~"), "s": ("~~", "~~"), "strike": ("~~", "~~")}
 
 #: tags die een regel afsluiten. `div` en `p` staan erbij omdat een contenteditable ze zelf maakt.
-_BRON_BLOK = ("h4", "li", "div", "p")
+#: `h3`/`h5`/`blockquote`/`hr` kwamen erbij met het vocabulaire van brok 2 (22 september 2026).
+_BRON_BLOK = ("h3", "h4", "h5", "li", "div", "p", "blockquote", "hr")
+
+#: tag → het voorvoegsel in de bron. Eén tabel, zodat een nieuw kopniveau op één plek bestaat.
+_BRON_KOP = {"h3": "# ", "h4": "## ", "h5": "### "}
 
 
 class _BronParser(_HTMLParser):
@@ -363,6 +409,10 @@ class _BronParser(_HTMLParser):
         #: kwam het laatste regeleinde van een BLOK-grens (`</li>`, `</h4>`, `</p>`) of van een
         #: `<br>`? Dat verschil beslist of het eindregeleinde erbij hoort; zie `_md_naar_bron`.
         self._blok_einde = False
+        #: staan we in een `<ol>`, en bij welk nummer? De teller hoort bij de LIJST en niet bij
+        #: het item: een `<ul>` ertussen moet hem resetten.
+        self._ol = False
+        self._nr = 0
 
     # ── hulpjes ──────────────────────────────────────────────────────────────
     def _schrijf(self, tekst: str) -> None:
@@ -386,10 +436,33 @@ class _BronParser(_HTMLParser):
             self._blok_einde = False          # een <br> IS de tekst, geen scheiding eromheen
         elif tag in _BRON_INLINE:
             self._schrijf(_BRON_INLINE[tag][0])
-        elif tag == "h4":
-            self._nieuwe_regel(); self.uit.append("## ")
+        elif tag in _BRON_KOP:
+            self._nieuwe_regel(); self.uit.append(_BRON_KOP[tag])
+        elif tag == "blockquote":
+            self._nieuwe_regel(); self.uit.append("> ")
+        elif tag == "hr":
+            # Een `<hr>` heeft geen inhoud en dus geen EINDTAG. Hij moet zijn regel daarom zelf
+            # aan beide kanten afsluiten: zonder de tweede aanroep plakt de tekst erna eraan vast
+            # ("---onder"), want in de platte stand staat daar geen `<div>` omheen.
+            self._nieuwe_regel(); self.uit.append("---"); self._nieuwe_regel()
+        elif tag in ("ul", "ol"):
+            # DE TELLER STAAT HIER, niet bij `<li>`. Een genummerde lijst telt vanaf 1 per lijst,
+            # en een `<ul>` ertussen moet die teller resetten — anders loopt de nummering door
+            # over een bolletjeslijst heen.
+            self._nieuwe_regel(); self._ol = (tag == "ol"); self._nr = 0
         elif tag == "li":
-            self._nieuwe_regel(); self.uit.append("- "); self._in_li = True
+            self._nieuwe_regel()
+            if self._ol:
+                self._nr += 1
+                self.uit.append(f"{self._nr}. ")
+            else:
+                self.uit.append("- ")
+        elif tag == "input" and d.get("type") == "checkbox":
+            # DE TAAK IS WIKI-ONLY aan de RENDER-kant (`views/wiki._body_html`), maar de weg terug
+            # moet hem kennen: anders eet de wiki bij elke bewerking zijn eigen vinkjes op. Het
+            # vakje staat ín een `<li>`, dus het voorvoegsel staat er al — hier alleen de haakjes.
+            self.uit.append("[x] " if "checked" in d else "[ ] ")
+            self._blok_einde = False
         elif tag in ("a", "span"):
             # Een wiki-verwijzing draagt zijn ORIGINELE tekst mee (`data-ref`), want op het scherm
             # staat de opgeloste titel en die is niet hetzelfde. Zonder dat attribuut zou
@@ -418,8 +491,10 @@ class _BronParser(_HTMLParser):
             self._ref = self._href = ""
             self._linktekst = []
             self._blok_einde = False
-        elif tag in ("h4", "li", "div", "p"):
+        elif tag in _BRON_BLOK:
             self._nieuwe_regel()
+        elif tag in ("ul", "ol"):
+            self._ol = False
 
     def handle_data(self, data):
         self._schrijf(data)

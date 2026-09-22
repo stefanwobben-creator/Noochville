@@ -596,6 +596,11 @@
   background: var(--nu-surface); color: var(--nu-text); }
 .nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
+/* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
+   zandtint; hier gaan ze mee met de rest van de nu-lijnen. */
+.nu blockquote { border-left-color: var(--nu-border-subtle); color: var(--nu-muted); }
+.nu hr { border-top-color: var(--nu-border-subtle); }
+
 /* overview.py */
 /* ══ DE LIJNEN VAN /node (22 september 2026) ═══════════════════════════════════════════════════
    GETELD OP HET SCHERM, niet geschat: 36× `ul.clean li`, 5× `.accrow` en de streep onder de

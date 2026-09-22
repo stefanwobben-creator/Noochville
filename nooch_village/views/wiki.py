@@ -11,6 +11,7 @@ Alles hergebruikt het bestaande artefact-idioom: `.card`, `.ptitle`, `.att-body`
 from __future__ import annotations
 
 import html as _html_mod
+import re
 
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _md, _name, opmaak_werkbalk
@@ -34,6 +35,11 @@ _SOORT_LABEL = {
 }
 
 
+#: `<li>[ ] ` of `<li>[x] ` aan het begin van een lijstitem. De weg terug (`_md_naar_bron`) kent
+#: het vakje wél — anders eet de wiki bij elke bewerking zijn eigen vinkjes op.
+_TAAK_RE = re.compile(r"<li>\[([ xX])\] ")
+
+
 def _body_html(body: str, pags: list, blokken: bool = False) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
 
@@ -42,8 +48,24 @@ def _body_html(body: str, pags: list, blokken: bool = False) -> str:
 
     `blokken=True` geeft elk blok op het hoogste niveau een eigen `<div class='wb'>`; zie `_md`.
     Ook hier standaard UIT: dezelfde functie rendert de Notes-tab op `/node`, en die heeft de
-    blokken (nog) niet nodig."""
+    blokken (nog) niet nodig.
+
+    DE AFVINKBARE TAAK WORDT HIER GEMAAKT EN NIET IN `_md` (besluit Stefan, 22 september 2026):
+    een dode checkbox in een chatbericht is verwarrender dan hij waard is, en `_md` rendert ook
+    elke reactie en elk kanaalbericht. Dit is dezelfde plek en dezelfde techniek als de
+    `[[verwijzingen]]` hieronder: een substitutie NA `_md`, alleen hier.
+
+    `disabled`, want aanvinken met de muis is brok 3. Zonder dat attribuut is het vakje
+    klikbaar en verandert er bij het opslaan niets — een knop die niets doet.
+
+    GEEN SPATIE TUSSEN HET VAKJE EN DE TEKST, die komt uit `.wb-taak input`. Stond hij in de
+    HTML, dan schreef de weg terug er één bij de zijne en werd `[ ] open` na elke bewerking
+    `[ ]  open` — een spatie erbij per keer opslaan. De ruimte is opmaak, het haakje is inhoud."""
     html = _md(body or "", blokken=blokken)
+    html = _TAAK_RE.sub(
+        lambda m: (f"<li class='wb-taak'><input type='checkbox' disabled"
+                   f"{' checked' if m.group(1).lower() == 'x' else ''}>"),
+        html)
 
     def _sub(m):
         ref = _html_mod.unescape(m.group(1)).strip()
