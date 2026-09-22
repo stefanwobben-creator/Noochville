@@ -165,6 +165,46 @@ def dm_leden(kanaal: str) -> list[str]:
     return doel_van(kanaal).split("|") if soort_van(kanaal) == DM else []
 
 
+def _normaliseer_tekst(tekst) -> str:
+    r"""De tekst van één bericht, klaar om op te slaan: per regel platgeslagen, regelovergangen heel.
+
+    HIER STOND `" ".join(tekst.split())`, OP TWEE PLEKKEN. `str.split()` zonder argument knipt op
+    élke witruimte — spaties, tabs én regeleindes — dus een bericht van drie regels werd één lange
+    alinea. Het renderen was nooit het probleem: `.msg-text` staat op `white-space:pre-wrap` en
+    `_bericht` escapet met `_e()`, dat een `\n` gewoon doorlaat. De tekst was al plat vóór hij
+    werd opgeslagen, en met één druk op Enter te reproduceren.
+
+    DAT HET ER TWEE WAREN IS HET PUNT. Dezelfde regel op twee plekken is precies hoe de
+    goal-kanaal-bug zich vermenigvuldigde (`_eigen_bericht_poort` kopieerde de fout van
+    `_act_msg_post`). Eén helper, twee aanroepers, en een test die een derde kopie verbiedt.
+
+    WAT WÉL WORDT PLATGESLAGEN: spaties en tabs BINNEN een regel. Wie een halve tabel plakt,
+    hoort geen kolommen in een kanaalbericht te krijgen. En `\r\n`/`\r` worden `\n`: één losse
+    `\r` in de opslag is een tekst die overal anders afbreekt dan hij eruitziet.
+
+    De lengtegrens staat er BUITEN: `TEKST_MAX` hoort bij het opslaan, niet bij het normaliseren.
+    """
+    s = str(tekst or "").replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(" ".join(regel.split()) for regel in s.split("\n")).strip()
+
+
+#: Hoe lang de naam van een los kanaal mag zijn.
+NAAM_MAX = 80
+
+
+def _normaliseer_naam(naam) -> str:
+    """De naam van een los kanaal: één regel, geen dubbele spaties, afgekapt op `NAAM_MAX`.
+
+    WEL PLATSLAAN OP REGELEINDES, anders dan bij `_normaliseer_tekst` hierboven: een kanaalnaam
+    IS één regel. Hij staat in een lijst naast een tijd en een teller, en een naam die afbreekt
+    duwt die lijst uit elkaar.
+
+    Hij stond letterlijk twee keer uitgeschreven (`maak_topic` en `hernoem_topic`) — dezelfde
+    vorm van duplicatie als de tekst-platslag die deze beurt werd opgeruimd, en dezelfde als bij
+    de goal-kanaal-bug. Nu op één plek."""
+    return " ".join(str(naam or "").split())[:NAAM_MAX]
+
+
 class ChannelStore(JsonStore):
     """De kanalen die hier wonen: cirkel en DM. Project-kanalen lopen via de ProjectLedger.
 
@@ -188,7 +228,7 @@ class ChannelStore(JsonStore):
     def post(self, kanaal: str, tekst: str, *, author_type: str = "human",
              author_id: str = "", herkomst: dict | None = None) -> dict | None:
         """Eén bericht. None bij een lege tekst — fail-closed, geen leeg bericht in een trail."""
-        tekst = " ".join(str(tekst or "").split())[:TEKST_MAX]
+        tekst = _normaliseer_tekst(tekst)[:TEKST_MAX]
         if not tekst or not kanaal:
             return None
         if soort_van(kanaal) == PROJECT:
@@ -235,7 +275,7 @@ class ChannelStore(JsonStore):
         project-wall al gebruikt — kent het niet, en een merkje dat alleen op cirkel- en
         DM-kanalen verschijnt laat hetzelfde bericht wél of niet als bewerkt lezen afhankelijk
         van welk soort kanaal het toevallig is."""
-        tekst = " ".join(str(tekst or "").split())[:TEKST_MAX]
+        tekst = _normaliseer_tekst(tekst)[:TEKST_MAX]
         if not tekst or self._eigen(kanaal, entry_id, door) is None:
             return False
         if soort_van(kanaal) == PROJECT:
@@ -343,7 +383,7 @@ class ChannelStore(JsonStore):
         IDEMPOTENT OP DE GENORMALISEERDE NAAM. Wie "Batch 4" maakt terwijl "batch-4" al bestaat,
         krijgt het bestaande kanaal. Twee halve gesprekken onder bijna dezelfde naam is precies het
         probleem dat een losse-kanaal-functie hoort op te lossen, niet te veroorzaken."""
-        naam = " ".join(str(naam or "").split())[:80]
+        naam = _normaliseer_naam(naam)
         if not naam:
             return ""
         sleutel = _sleutel(naam)
@@ -361,7 +401,7 @@ class ChannelStore(JsonStore):
         """Alleen de naam verandert; het kanaal-id en dus de hele trail blijven staan.
 
         Dit is waarvóór het losse id bestaat. Zonder deze methode koopt optie A niets."""
-        naam = " ".join(str(naam or "").split())[:80]
+        naam = _normaliseer_naam(naam)
         if not naam or soort_van(kanaal) != TOPIC or kanaal not in (self._data.get("namen") or {}):
             return False
         self._data["namen"][kanaal] = naam
