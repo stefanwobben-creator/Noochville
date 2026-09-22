@@ -31,6 +31,14 @@ def main() -> None:
         demo()
 
 
+    elif mode == "dm_samenvoegen":
+        # Eenmalig: drie DM-kanalen die alle drie dezelfde mens zijn.
+        import os
+        from nooch_village import dm_samenvoegen
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dm_samenvoegen.rapport(ctx.data_dir, apply="--apply" in sys.argv[2:])
+
     elif mode == "voorstel_opruiming":
         # Eenmalig: de projectvoorstellen die vastzaten sinds de Founder Flow verdween.
         import os

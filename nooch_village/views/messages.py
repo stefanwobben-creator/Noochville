@@ -269,10 +269,15 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     onderwerpen = st.channels.topics() + andere_cirkels
     projecten_alles = _projectkanalen_met_gesprek(st)
     projecten = [k for k in projecten_alles if k in gevolgd]
-    dms, rollen = _dm_groepen(st, ik)
+    dms, _rollen = _dm_groepen(st, ik)
 
+    # "ROLES & SYSTEM" STOND HIER ALS GROEP, en is op 22 september 2026 uit de lijst gehaald (eis
+    # Stefan). VERBERGEN, NIET WISSEN: `_dm_groepen` blijft ze afsplitsen — dat is wat ze uit
+    # Direct houdt — en de kanalen, hun berichten en hun bijlagen staan onveranderd in
+    # `channels.json`. Wie een link heeft komt er nog gewoon in; `mag_kanaal_lezen` is
+    # ongewijzigd. Wat verdwijnt is de 31 regels ruis boven je twee echte gesprekken.
     groepen = {"General": alg, "Goals": doelen, "Channels": onderwerpen,
-               "Projects": projecten, "Direct": dms, "Roles & system": rollen}
+               "Projects": projecten, "Direct": dms}
     totaal = {g: len(r) for g, r in groepen.items()}
     totaal["Projects"] = len(projecten_alles)      # "3 of 123" — wat je volgt van wat er is
 
@@ -335,7 +340,7 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
-                    msg: str = "", q: str = "", lijst: bool = False) -> str:
+                    msg: str = "", q: str = "", lijst: bool = False, wie: str = "") -> str:
     """Het Messages-scherm. `lijst=True` is de MOBIELE kanalenlijst (drill-down, niveau 2).
 
     DRILL-DOWN IS EEN CSS-KEUZE, GEEN TWEEDE RENDERING. Beide panelen staan altijd in de DOM; op
@@ -409,6 +414,43 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if q else "")
             + "</div></form>")
 
+    # EEN GESPREK BEGINNEN DAT NOG NIET BESTAAT. Tot nu kon een DM pas gevonden worden nadat er
+    # al een bericht in stond: `kanalen_van` leest `channels.json`, en daar staat niets tot iemand
+    # iets zegt. Wie het eerste bericht wilde sturen had dus geen ingang.
+    #
+    # DEZELFDE BRON ALS DE GLOBALE ZOEK, letterlijk: `search._people`. Een eigen personenlijst hier
+    # zou een tweede antwoord geven op "wie werkt hier" zodra er aan één iets verandert.
+    #
+    # DUS OOK DEZELFDE BEPERKING: die functie matcht op NAAM, niet op e-mailadres. Het veld belooft
+    # daarom ook alleen een naam. Zou ik hier wél op e-mail zoeken, dan geeft dit veld treffers die
+    # de globale zoek niet geeft — en dan is "dezelfde bron" een halve waarheid. Moet e-mail erbij,
+    # dan hoort dat in `_people` en dus op beide plekken tegelijk.
+    nieuw_dm = ""
+    if csrf_token and ik:
+        rijen_p = []
+        if wie.strip():
+            from nooch_village.views.search import _people
+            termen = [t for t in wie.lower().split() if t]
+            for h in _people(st, termen):
+                pid = h.get("id") or ""
+                if not pid or pid == ik:
+                    continue                      # jezelf staat al als "Yourself" in de lijst
+                k = channels.dm_kanaal(ik, pid)
+                rijen_p.append(f"<a class='msg-kanaal' href='/messages?k={_e(k)}'>"
+                               f"<span class='msg-knaam'>{_e(h.get('titel') or pid)}</span></a>")
+            if not rijen_p:
+                rijen_p.append("<p class='muted msg-leeg'>Nobody by that name.</p>")
+        nieuw_dm = (f"<details class='qadd msg-nieuw-dm'{' open' if wie.strip() else ''}>"
+                    f"<summary class='muted'>＋ new conversation</summary>"
+                    f"<form method='get' action='/messages'>"
+                    f"<input type='hidden' name='k' value='{_e(kanaal)}'>"
+                    f"<label class='att-lbl' for='msg-wie'>Who do you want to write to?</label>"
+                    f"<input id='msg-wie' type='search' name='wie' value='{_e(wie)}' "
+                    f"placeholder='Name…'>"
+                    f"<div class='qadd-row'><button class='btn sm' type='submit'>Find</button>"
+                    + (f"<a class='flink' href='/messages?k={_e(kanaal)}'>clear</a>" if wie else "")
+                    + f"</div></form>{''.join(rijen_p)}</details>")
+
     # Een kanaal beginnen. Tot 20 september kon dat niet: een kanaal bestond omdat zijn onderwerp
     # bestond (een project, een cirkel, een persoon). Dit is het eerste kanaal dat een mens zelf
     # maakt — zie `_act_topic_add` voor de poort en voor de herziening die eraan voorafging.
@@ -465,7 +507,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                          f"{toevoeg}{klok}{stip}</a>")
     leeg = ("<p class='muted'>No channel matches that.</p>" if q
             else "<p class='muted'>No channels yet.</p>")
-    nav = f"<nav class='msg-lijst'>{zoek}{nieuw}{''.join(rijen) or leeg}</nav>"
+    nav = f"<nav class='msg-lijst'>{zoek}{nieuw_dm}{nieuw}{''.join(rijen) or leeg}</nav>"
 
     # HET OPENEN IS HET LEZEN. Geen aparte "markeer als gelezen"-knop: dat is een tweede handeling
     # voor iets wat je met je ogen al deed, en hij loopt gegarandeerd achter op de werkelijkheid.
