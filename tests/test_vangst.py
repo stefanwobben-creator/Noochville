@@ -439,7 +439,10 @@ def test_de_header_biedt_geen_tweede_vang_ingang_meer(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     html = render_node(st, CIRCLE, "overview", csrf_token="t", username="guest")
-    assert "Governance meeting" in html and "Tactical meeting" in html
+    # DE TWEE MEETING-KNOPPEN STONDEN HIER als bewijs dat de header nog wél zijn andere acties
+    # had — "Quick capture is weg, de rest niet". Die rij is op 22 september zelf verwijderd
+    # (hij stond dubbel naast de zijbalk), dus dat bewijs is vervallen. Wat de test wil zeggen
+    # blijft overeind zonder: geen tweede vang-ingang in de inhoud, en de route leeft nog.
     assert "Quick capture" not in html
     assert "/vangst" not in html
     # …maar de route zelf leeft nog.

@@ -13,17 +13,23 @@ def _dd(tmp_path):
     return dd
 
 
-def test_meeting_knop_op_cirkel(tmp_path):
+def test_de_meeting_knop_leeft_in_de_navigatie(tmp_path):
+    """DE KNOP IN DE INHOUD IS WEG (22 september 2026). Hij stond er dubbel: `render_node`
+    bouwde zijn eigen rij met dezelfde live-status-check die de zijbalk al doet. De zijbalk-
+    versie blijft, en die is de enige plek waar hij nog vandaan komt.
+
+    Wat deze test nog bewaakt is dus wat er ná die opruiming waar moet zijn: de knop komt uit
+    `overleg_items`, draagt de cirkel in zijn href, en staat op géén enkele node-pagina meer in
+    de hoofdkolom — ook niet op een cirkel."""
+    from nooch_village.cockpit2_util import overleg_items
+    knoppen = overleg_items(C)
+    assert f"/roloverleg2?circle={C}" in knoppen
     dd = _dd(tmp_path)
-    node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
-    assert f"/roloverleg2?circle={C}" in node and "Governance meeting" in node
-    # een rol heeft geen meeting-knop
-    role = cockpit2.render_node(cockpit2._Stores(dd), RID, "overview", csrf_token="t")
-    # ALLEEN IN DE INHOUD KIJKEN. Sinds 21 september staat Roloverleg als vaste knop op de
-    # navigatiebalk, op élke pagina — dat is navigatie en niet de "Governance meeting"-knop waar
-    # deze test over gaat. De hele pagina afzoeken zou nu de balk meetellen en de bewering
-    # onzichtbaar verzwakken.
-    assert "roloverleg2" not in role.split("<div class='c2-main'>")[-1]
+    for nid in (C, RID):
+        inhoud = cockpit2.render_node(cockpit2._Stores(dd), nid, "overview",
+                                      csrf_token="t").split("class='c2-main'")[-1]
+        assert "roloverleg2" not in inhoud, nid
+        assert "Governance meeting" not in inhoud, nid
 
 
 def test_agendapunt_bestaande_rol_en_nieuwe_rol(tmp_path):
@@ -65,15 +71,15 @@ def test_editor_nieuwe_rol(tmp_path):
     assert ch.get("purpose") == "Inzicht uit data" and "Rapporteren van trends" in ch.get("add_accountabilities", [])
 
 
-def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
+def test_layout_toevoegen_boven(tmp_path):
+    """DE GROENE-KNOP-HELFT IS VERVALLEN. Die mat de knop in de hoofdkolom van Overview, en
+    die render is op 22 september verwijderd omdat hij naast de zijbalk-versie stond. De
+    zijbalk toont "lopend" alléén voor het WERKoverleg — een roloverleg heeft geen open/dicht-
+    stand (bewust besluit, zie `overleg_items`), dus er is niets meer om hier te meten.
+
+    Wat blijft is waar deze test verder over gaat: de layout van het roloverleg zelf."""
     dd = _dd(tmp_path)
-    # zonder agenda: knop bestaat maar is niet groen
-    node0 = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
-    assert "Governance meeting" in node0 and "btn ok js-modal" not in node0
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
-    # met een lopend roloverleg: groen
-    node1 = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
-    assert "btn ok js-modal" in node1
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Welke spanning" not in frag                    # spanning-veld weg
     assert frag.find("rov-add") < frag.find("rov-list")    # toevoegen boven de lijst

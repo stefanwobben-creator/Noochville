@@ -915,23 +915,14 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     else:
         content = ""      # onbekende tab (niet in de tab-lijst) → geen inhoud
 
-    # Meetings zijn een CIRKEL-functie (een rol heeft geen governance/tactical meeting).
-    if is_c and csrf_token:
-        rov_url = f"/roloverleg2?circle={_e(node_id)}"
-        from nooch_village.views.roloverleg import _rov_items
-        open_cls = "btn ok" if _rov_items(st, node_id) else "btn"   # groen = lopend roloverleg
-        wo_url = f"/werkoverleg?circle={_e(node_id)}"
-        wo_cls = "btn ok" if st.werk.is_open(node_id) else "btn"    # groen = lopend werkoverleg
-        # GEEN Quick capture-knop hier. Een los punt vangen kan al via de inbox-drawer (het +-je),
-        # en twee ingangen naar dezelfde functie maken geen van beide de vanzelfsprekende. De
-        # /vangst-route blijft gewoon bestaan: de agenda-stap van het werkoverleg leunt erop en
-        # directe links moeten niet breken — hij is alleen niet langer een header-actie.
-        meet = (f"<div class='c2-meet'>"
-                f"<a class='{open_cls} js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
-                f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a>"
-                f"</div>")
-    else:
-        meet = ""
+    # DE TWEE OVERLEG-KNOPPEN STONDEN HIER ÉN IN DE ZIJBALK. Dit blok bouwde zijn eigen
+    # `.c2-meet`-rij met precies dezelfde live-status-check (`_rov_items`, `st.werk.is_open`)
+    # die `overleg_items()` al doet — twee renders van dezelfde knop uit dezelfde bron. Dat
+    # loopt uit de pas zodra er iets aan één van de twee verandert, en dan zie je twee knoppen
+    # die elkaar tegenspreken; de zijbalk kreeg op 21 september de live-uitnodiging en deze
+    # niet, dus dat was al begonnen.
+    # De zijbalk-versie blijft: hij is circle-scoped, kent de open/dicht-stand en staat op elk
+    # scherm op dezelfde plek. Zelfde opruiming als de dubbele organisatieboom hieronder.
     # GEEN RECHTERRAIL MEER (fase 10 punt 3). De organisatieboom stond hier én in de zijbalk
     # links: twee keer dezelfde boom op hetzelfde scherm. De linker blijft, deze gaat weg.
     # Er verdwijnt niets: de volledige rollenlijst staat op de Roles-tab hieronder, en de positie
@@ -939,7 +930,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     # geeft de huidige node-id door aan `_tree_html`, wat de rail hiervoor deed.
     # Breadcrumb was al eerder weg (founder 23 jul), om dezelfde reden: de hiërarchie stond er al.
     main = (f"<div class='c2-main'>"
-            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}{meet}"
+            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"

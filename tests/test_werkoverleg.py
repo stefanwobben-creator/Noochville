@@ -43,12 +43,24 @@ def test_startscherm_secretaris_gate(tmp_path):
     assert "<a class='wo-step" not in frag            # geen enkele stap is een link
 
 
-def test_knop_op_cirkel_en_niet_op_rol(tmp_path):
+def test_de_werkoverleg_knop_leeft_in_de_navigatie(tmp_path):
+    """DE KNOP IN DE INHOUD IS WEG (22 september 2026): hij stond dubbel naast de zijbalk, met
+    een eigen kopie van dezelfde live-status-check. De zijbalk-versie blijft.
+
+    "Een rol heeft geen werkoverleg" is daarmee niet verdwenen maar VERHUISD: `overleg_items`
+    geeft leeg terug zonder cirkel-id, en de zijbalk vult dat id met de cirkel waar je in
+    werkt — niet met de node waar je toevallig staat. Vandaar dat deze test nu meet dat de
+    knoppen uit die ene functie komen, en dat ze op géén node-pagina meer in de hoofdkolom
+    staan: niet op een cirkel, en niet op een rol."""
+    from nooch_village.cockpit2_util import overleg_items
+    assert overleg_items("") == ""
+    assert f"/werkoverleg?circle={C}" in overleg_items(C)
     dd = _dd(tmp_path)
-    node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
-    assert "/werkoverleg?circle=" in node and "Tactical meeting" in node
-    role = cockpit2.render_node(cockpit2._Stores(dd), RID, "overview", csrf_token="t")
-    assert "Tactical meeting" not in role and "/werkoverleg?circle=" not in role
+    for nid in (C, RID):
+        inhoud = cockpit2.render_node(cockpit2._Stores(dd), nid, "overview",
+                                      csrf_token="t").split("class='c2-main'")[-1]
+        assert "Tactical meeting" not in inhoud, nid
+        assert "/werkoverleg?circle=" not in inhoud, nid
 
 
 def test_open_toont_stappen_en_checkin_members(tmp_path):

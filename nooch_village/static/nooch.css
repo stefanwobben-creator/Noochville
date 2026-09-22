@@ -720,7 +720,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    Gedimd en niet klikbaar (het zijn <span>'s, geen links) — zo zie je meteen wat eraan
    komt zonder dat het zich voordoet als navigatie die werkt. */
 .wo-uit{opacity:.45}
-.wo-breed{max-width:1160px}
 /* ÉÉN MAAT MET DE LINKERNAVIGATIE. Dit is ook een verticaal menu in een linkerkolom, en
    het stond op .86rem/400 naast de nav op 14px/600 — net genoeg verschil om als een
    ander soort lijst te lezen. Waarden overgenomen van `.c2-subnav a`; wijkt die ooit,
