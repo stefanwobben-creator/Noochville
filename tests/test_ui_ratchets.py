@@ -122,7 +122,14 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 65   # +1 'nu-' (fase 11, 20 sept 2026): het DESIGN-SYSTEEM zelf, en daarmee het
+_PREFIX_CEILING = 66   # +1 'uk-' (22 sept 2026): het VERWERKEN-scherm, herbouwd naar het
+                       #      prototype. Expliciet besluit van Stefan: "eigen klassen volgens
+                       #      de bestaande naamgeving in dit bestand — niet rov-*/wo-*
+                       #      hergebruiken voor iets nieuws". vangst.py leende tot nu toe van
+                       #      drie andere families (rov-, wo-, rdr-) voor zijn eigen formulier;
+                       #      `uk-` is dat formulier zijn eigen vocabulaire, en het haalt
+                       #      `rov-addgrid`, `wo-staat`, `wo-opslaan` en `mtab` uit dit bestand.
+                       # Daarvóór 65: +1 'nu-' (fase 11, 20 sept 2026): het DESIGN-SYSTEEM zelf, en daarmee het
                        #      tegenovergestelde van een scherm-eigen prefix. `nu-status` en
                        #      `nu-progress` stonden al in nooch-ui.css maar werden nooit door een
                        #      governeerde view gerenderd; met het rol-icoon in de organisatieboom

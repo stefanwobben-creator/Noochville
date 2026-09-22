@@ -267,6 +267,30 @@
 .nu .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
 .nu .wiki-doms details { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
 
+/* ── Verwerken: het hoofdveld draagt de 2px, de rest niet ────────────────────────────────────
+   Zelfde rolverdeling als overal in deze laag: een BESTURINGSELEMENT draagt een onderlijn, een
+   omhulsel een kader. Het uitkomst-tekstvak is de uitzondering die het waard is — dat is het
+   zwaartepunt van het scherm, en een dikke rand zegt dat sneller dan een lijn.
+   De badge-tinten komen uit dezelfde `--uk-*`-tokens als de basislaag; ze hier overtypen zou
+   betekenen dat een badge op een nu-scherm na één wijziging anders kleurt dan daarbuiten. */
+.nu .uk-invoer { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  font-family: var(--nu-font); }
+.nu .uk-sub { background: var(--nu-bg); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+.nu .uk-sub input, .nu .uk-sub select { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; background: var(--nu-surface); font-family: var(--nu-font); }
+.nu .uk-sub input:focus, .nu .uk-sub select:focus { border-bottom-color: var(--nu-accent); }
+.nu .uk-voet { border-top: 1.5px solid var(--nu-border-subtle); }
+.nu .uk-rij { border-top: 1.5px solid var(--nu-border-subtle); }
+.nu .uk-badge { border-radius: 0; font-family: var(--nu-font); font-weight: 800; }
+.nu .uk-badge--actie { background: var(--uk-actie); color: var(--ukt-actie); }
+.nu .uk-badge--project { background: var(--uk-project); color: var(--ukt-project); }
+.nu .uk-badge--governance { background: var(--uk-gov); color: var(--ukt-gov); }
+.nu .uk-badge--info { background: var(--nu-bg); color: var(--nu-muted); }
+.nu .uk-tekst { color: var(--nu-text); font-family: var(--nu-font); }
+.nu .uk-meta { color: var(--nu-muted); font-family: var(--nu-font); }
+.nu .uk-staat { border-radius: 0; background: var(--col-wacht); color: var(--colb-wacht); }
+
 /* De afsluitende actie onder een agendapunt. Zelfde rolverdeling als op de oude laag: de lijn
    erboven scheidt "invullen" van "afsluiten", en de knop draagt zwart in plaats van het groen
    dat "dit is de knop die je nu wil" betekent — dat groen hoort bij Opslaan ernaast. */
@@ -513,7 +537,7 @@
    erbinnen worden gescheiden door een dunne lijn. */
 .nu .wo-ocd .wo-band { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
   border-radius: 0; background: none; }
-.nu .wo-ocd .wo-oc { border: 0; border-radius: 0; background: none; }
+.nu .wo-ocd .wo-oc, .nu .wo-ocd .uk-form { border: 0; border-radius: 0; background: none; }
 /* En de verwerken-kaart zelf geeft zijn kader op zodra hij IN een punt-rij staat: die rij
    is al de kaart van dat punt. `.nu .rdr-row .wo-ocd` is (0,3,0) en wint daarmee van
    `.nu .box-details` (0,2,0) hierboven — zelfde specificiteits-reden als een paar regels

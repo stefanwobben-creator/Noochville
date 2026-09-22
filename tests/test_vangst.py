@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import pytest
 
+import re
+
 from nooch_village import cockpit2
+from nooch_village.web_base import _e
 from nooch_village.views.vangst import render_vangst
 
 CIRCLE = "mother_earth__nooch"
@@ -564,16 +567,33 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     # type in de lijst is 'actie') en zichtbaar zodra je 'project' kiest. Een actie gaat via
     # `route_werk` naar iemands inbox, een governance-punt naar het roloverleg — daar landt een
     # wachtstand nergens, en een keuze die nergens landt is erger dan geen keuze.
+    # DE VORM VERANDERDE OP 22 SEPTEMBER, DE REGEL NIET. Het veld zat in een `.wo-staat`-div
+    # binnen één twee-koloms `.rov-addgrid`; dat raster hield naast de verborgen status een lege
+    # cel bezet en gaf alle zeven velden dezelfde visuele lading. Nu een hoofdgebied (Wat + het
+    # tekstvak) en een stiller `.uk-sub`-blok eronder dat zélf van 2 naar 3 kolommen wisselt.
+    # Wat deze test bewaakt is onveranderd: het veld bestaat, het begint verborgen, en het komt
+    # alleen tevoorschijn bij een project.
     assert "name='staat'" in html
-    assert "<div class='wo-staat' data-staat-voor=" in html
-    assert " hidden>" in html.split("wo-staat")[1][:120]
-    assert "this.value!=='project'" in html
-    # en het twee-koloms raster van de referentie
-    assert "rov-addgrid" in html
+    # OP DE DIV, NIET OP DE HANDLER. `data-staat-voor` komt twee keer voor: in de `onchange`
+    # (de querySelector die hem zoekt) en op het veld zelf. De eerste treffer is de handler,
+    # dus daar knippen zou de verkeerde meten.
+    veld = re.search(r"<div class='uk-subveld' data-staat-voor='[^']*'([^>]*)>", html)
+    assert veld, "het status-veld staat niet in het secundaire blok"
+    assert "hidden" in veld.group(1)
+    # De handler van de WAT-keuze, niet de eerste `onchange` op de pagina: dit is een hele
+    # render en daar staan er meer.
+    wat = re.search(r"<select[^>]*name='otype'[^>]*onchange=\"([^\"]*)\"", html)
+    assert wat and "'project'" in wat.group(1), wat and wat.group(1)
+    assert "uk-sub" in html and "uk-hoofd" in html
 
 
-def test_de_uitkomsten_staan_in_een_tabel_met_kolomkoppen(tmp_path):
-    """Zoals de referentie: WAT · wat precies · ROL · PERSOON · STAAT, met potlood en prullenbak."""
+def test_de_uitkomsten_staan_in_rijen_met_een_badge(tmp_path):
+    """WAS EEN TABEL MET KOLOMKOPPEN (22 september 2026 herbouwd). Zeven kolommen voor gemiddeld
+    twee gevulde cellen las als een spreadsheet; wat je hier doet is scannen. Dezelfde gegevens —
+    soort, wat precies, rol, persoon, herkomst — nu als rij met een badge voor de soort.
+
+    De kolomkoppen zijn daarmee vervallen: een badge en een meta-regel met puntjes dragen hun
+    eigen betekenis, en een kop boven iets wat maar één rij breed is zegt niets."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "Iets", by_id="p1")
@@ -581,11 +601,10 @@ def test_de_uitkomsten_staan_in_een_tabel_met_kolomkoppen(tmp_path):
     _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="actie", rol=naam,
           tekst="Leverancier bellen", persoon="", next="/vangst")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
-    assert "<table class='mtab'>" in html
-    for kop in ("<strong>Wat</strong>", "<strong>Rol</strong>", "<strong>Persoon</strong>",
-                "<strong>Herkomst</strong>"):
-        assert kop in html, kop
-    assert "Leverancier bellen" in html
+    assert "<table class='mtab'>" not in html
+    assert "uk-rij" in html and "uk-badge--actie" in html
+    assert "Actie" in html and "Leverancier bellen" in html
+    assert _e(naam) in html                              # de rol staat er nog
 
 
 def test_de_herkomst_staat_er_ook_zonder_uitkomsten(tmp_path):
@@ -651,7 +670,9 @@ def test_een_oude_staat_blijft_leesbaar(tmp_path):
                                                  "staat": "wachtend"})
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "In afwachting" in html               # de oude waarde staat er nog
-    assert "<strong>Staat</strong>" in html      # met zijn kolom
+    # ... als PIL bij die ene uitkomst, niet meer als kolom over de hele lijst: de staat hoort
+    # bij het record dat hem draagt, en een kolom voor één oud record is ruis bij alle andere.
+    assert "uk-staat" in html
     # `name='staat'` mag weer bestaan — de keuze is op 21 september teruggekomen, nu schrijvend
     # naar het project. Wat deze test bewaakt is onveranderd: een OUDE uitkomst blijft leesbaar,
     # ook als de invoerkant intussen van vorm veranderde.
@@ -668,7 +689,7 @@ def test_zonder_oude_records_verdwijnt_de_staat_kolom(tmp_path):
           tekst="nieuw werk", next="/vangst")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "nieuw werk" in html
-    assert "<strong>Staat</strong>" not in html
+    assert "uk-staat" not in html
 
 
 def test_de_ververste_lijst_houdt_de_terug_url_van_de_aanroeper(tmp_path):
