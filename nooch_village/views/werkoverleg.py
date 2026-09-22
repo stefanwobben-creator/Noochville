@@ -301,7 +301,7 @@ def _wo_header(crec, circle_id: str, minuten: int | None) -> str:
             f"if(x){{x.click();return false;}}}}\">✕ leave meeting</a></div>")
 
 
-def _wo_schil(crec, binnen: str, fragment: bool) -> str:
+def _wo_schil(crec, binnen: str, fragment: bool, breed: bool = False) -> str:
     """De pagina om het overleg heen. Eén plek, want de twee takken (open en nog-niet-open)
     hadden hem allebei zelf geschreven — en daardoor anders.
 
@@ -318,8 +318,13 @@ def _wo_schil(crec, binnen: str, fragment: bool) -> str:
                  # "nog niet geopend"-pagina werd opgeheven: daar stond hij als inline
                  # style en is toen klasse geworden in plaats van weggehaald. Gevolg was een
                  # lege strook rechts die geen ander nu-scherm heeft, en het hardst zichtbaar
-                 # bij de Projects-stap waar vier kolommen naast elkaar juist ruimte willen.
-                 f"<div class='c2-main'>{binnen}</div></div>")
+                 # bij de Projects-stap waar vier kolommen naast elkaar juist ruimte willen —
+                 # die stap gaat sinds 22 september zelfs buiten de app-brede cap, zie `breed`.
+                 f"<div class='c2-main'>{binnen}</div></div>",
+                 # `body.wo-vol` haalt de app-brede `max-width:1180px` eraf. Alleen op body te
+                 # regelen, en daarom alleen hier — zie `_page`. In de FRAGMENT-vorm is er geen
+                 # eigen body, dus dan gebeurt dit niet; de modal houdt zijn `.ovl-box`-cap.
+                 body_cls="wo-vol" if breed else "")
 
 
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
@@ -364,14 +369,16 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     cur = step if step in dict(_WO_STEPS) else "checkin"
     st.werk.mark_visited(circle_id, cur)                 # voortgang: bezochte stappen
     visited = set(st.werk.visited(circle_id))
-    nav = ""
+    nav = nav_kaal = ""
     for i, (k, lbl) in enumerate(_WO_STEPS, 1):
         url = f"{base}&step={k}"
         done = k in visited and k != cur
         num = "✓" if done else str(i)
         cls = "wo-step" + (" on" if k == cur else "") + (" done" if done else "")
-        nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
+        knop = (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
+        nav += knop
+        nav_kaal += knop
         if k == "agenda":
             # De punten genest onder de Agenda-stap. Het `id` is het doelwit van de gedeelde
             # mechaniek: het lijst-fragment draagt deze markup mee, dus na een vangst ververst
@@ -383,8 +390,8 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     # Vangen staat BOVEN het stappenmenu: het hoort bij het overleg, niet bij een stap. Eén
     # instantie, dus hij verhuist niet mee en het veld wordt bij het wisselen van stap niet
     # opnieuw opgebouwd.
-    left = (_wo_vangbar(st, crec, csrf_token, cur)
-            + _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>"))
+    vangbar = _wo_vangbar(st, crec, csrf_token, cur)
+    left = vangbar + _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>")
 
     if cur == "checkin":
         content = _wo_checkin(st, crec, csrf_token)
@@ -425,6 +432,22 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
 
     # LiveKit verhuist naar een dorp-brede call bar (volgende scope); het werkoverleg heeft geen
     # eigen "In de room"-kolom meer. Twee kolommen: links de stap-navigatie, rechts de inhoud.
+    #
+    # BEHALVE OP DE PROJECTS-STAP, en dat is de enige uitzondering. Gemeten op een venster van
+    # 1500px: het raster reserveerde 250px links, de body-cap sneed er 320px af, en wat overbleef
+    # was 618px voor een bord dat er 669 nodig had — alle 36 kolommen op hun `min-width` van
+    # 160px, en FUTURE viel er half af. De andere zes stappen zijn één kolom tekst of één
+    # formulier; die willen die breedte niet en houden hun raster.
+    #
+    # DE LINKERKOLOM VERDWIJNT NIET, hij gaat liggen. Zonder stappenmenu kun je alleen nog
+    # vooruit ("Next →") en nooit terug, en de vangbalk hoort bewust op ELKE stap (zie
+    # `_wo_vangbar`). Wat er níet mee gaat zijn de agenda-substappen: een geneste lijst past niet
+    # in een rij, en die lijst hoort thuis op de stap waar je hem gebruikt.
+    if cur == "projecten":
+        rij = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav wo-nav--rij'>{nav_kaal}</div>")
+        detail = (f"{header}{vangbar}{rij}"
+                  f"<div class='wo-mid'>{content}{step_action}</div>")
+        return _wo_schil(crec, detail, fragment, breed=True)
     detail = (f"{header}<div class='wo-grid'><div class='wo-left'>{left}</div>"
               f"<div class='wo-mid'>{content}{step_action}</div></div>")
     return _wo_schil(crec, detail, fragment)

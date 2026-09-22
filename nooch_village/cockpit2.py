@@ -1084,6 +1084,36 @@ _NU_ROUTES = frozenset({
     "/middelen", "/rolefillers", "/site-audit",
 })
 
+_BODY_RE = re.compile(r'<body(?: class="([^"]*)")?>')
+
+
+def _nu_body(pad: str, body: str) -> str:
+    """Zet `nu` op <body> als deze route in fase 9 is herbouwd, en hang `nooch-ui.css` erachter.
+
+    ÉÉN PLEK, ROUTE-GESTUURD. Het alternatief was een vlag door ~19 render-functies heen duwen;
+    dan staat de scope op negentien plekken en loopt hij na de eerste wijziging uit de pas. Hier
+    is hij een lijst, en die lijst IS de verantwoording: wat er niet in staat doet bewust niet
+    mee (zie claude/fase9_designsysteem_inventarisatie.md §5).
+
+    HIJ VOEGT DE KLASSE TOE, hij vervangt hem niet. Dit stond als
+    `body.replace("<body>", '<body class="nu">')` — een letterlijke vervanging die niets deed
+    zodra een view zélf een body-klasse meegaf (`_page(..., body_cls=…)`, sinds de brede
+    Projects-stap). Het scherm verloor dan stilletjes zijn hele nu-opmaak: geen fout, alleen een
+    ander lettertype.
+
+    Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te zetten."""
+    if pad not in _NU_ROUTES:
+        return body
+    m = _BODY_RE.search(body)
+    if m is None:
+        return body
+    klassen = (m.group(1) or "").split()
+    if "nu" not in klassen:
+        klassen.insert(0, "nu")
+    return (body[:m.start()] + f'<body class="{" ".join(klassen)}">' + body[m.end():]
+            ).replace(_DS_LINK, _DS_LINK + _NU_LINK, 1)
+
+
 _STATIC_TYPES = {
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
@@ -5344,17 +5374,8 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
 
         def _nu_scope(self, body: str) -> str:
-            """Zet `class="nu"` op <body> als deze route in fase 9 is herbouwd.
-
-            ÉÉN PLEK, ROUTE-GESTUURD. Het alternatief was een vlag door ~19 render-functies heen
-            duwen; dan staat de scope op negentien plekken en loopt hij na de eerste wijziging uit
-            de pas. Hier is hij een lijst, en die lijst IS de verantwoording: wat er niet in staat
-            doet bewust niet mee (zie claude/fase9_designsysteem_inventarisatie.md §5)."""
-            pad = (self.path or "/").split("?", 1)[0]
-            if pad not in _NU_ROUTES or "<body>" not in body:
-                return body
-            return body.replace("<body>", '<body class="nu">', 1).replace(
-                _DS_LINK, _DS_LINK + _NU_LINK, 1)
+            """Zie `_nu_body`; hier alleen het pad erbij."""
+            return _nu_body((self.path or "/").split("?", 1)[0], body)
 
         def _send(self, body: str, code: int = 200, chrome: bool = True):
             # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een

@@ -184,11 +184,22 @@ def _status(status: str, label: str = "") -> str:
     return f"<span class='nu-status nu-status--{soort}'>{_e(label or woord)}</span>"
 
 
-def _page(title: str, inner: str) -> str:
+def _page(title: str, inner: str, body_cls: str = "") -> str:
+    """De hele pagina. `body_cls` is voor wat alleen op body-niveau te regelen is.
+
+    ER IS ER PRECIES ÉÉN NODIG, en daarom is dit een parameter en geen nieuw mechanisme:
+    `body{max-width:1180px}` hierboven geldt voor de hele app, en de Projects-stap van het
+    werkoverleg is het enige scherm dat er echt buiten moet (vier kolommen naast elkaar, zie
+    `views/werkoverleg.py`). Een breedte die op body staat, kun je niet van binnenuit
+    overschrijven — elke poging met `100vw` of negatieve marges rekent de scrollbar mis.
+
+    `cockpit2._nu_body` VOEGT ZIJN KLASSE TOE aan wat hier staat en vervangt hem niet; dat is
+    de reden dat die functie sinds deze parameter met een regex werkt."""
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
     # </main> geïnjecteerd en blijft zo buiten de hoofdinhoud.
+    cls = f' class="{_e(body_cls)}"' if body_cls else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body><main>{inner}</main>{_JS_LINK}</body></html>')
+            f'<body{cls}><main>{inner}</main>{_JS_LINK}</body></html>')

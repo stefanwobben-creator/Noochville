@@ -774,6 +774,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kpidata-v{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700}
 /* Werkoverleg: stap-navigatie (hergebruikt rov-grid + rov-foot) */
 .wo-nav{display:flex;flex-direction:column;gap:.2rem}
+/* LIGGEND OP DE PROJECTS-STAP. Daar staat het bord over de volle breedte en is er links geen
+   kolom meer; het menu gaat dan boven het bord liggen in plaats van te verdwijnen. Alleen de
+   richting verandert — `.wo-step` blijft hetzelfde atoom, in beide standen. */
+.wo-nav--rij{flex-direction:row;flex-wrap:wrap;gap:.2rem .4rem}
 /* Vóór het overleg staat het stappenmenu er wel, maar er valt nog niets te bezoeken.
    Gedimd en niet klikbaar (het zijn <span>'s, geen links) — zo zie je meteen wat eraan
    komt zonder dat het zich voordoet als navigatie die werkt. */
@@ -805,6 +809,12 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 @media(min-width:760px){.wo-grid{grid-template-columns:250px minmax(0,1fr)}}
 .wo-left{min-width:0}
 .wo-mid{min-width:0;display:flex;flex-direction:column}
+/* DE APP-BREDE BREEDTE-CAP ERAF, voor één scherm. `body{max-width:1180px}` staat in
+   `web_base._CSS` en geldt overal; op een venster van 1500px kostte dat het projectenbord 320px
+   en viel de vierde kolom er half af. Van binnenuit is die cap niet te overschrijven — vandaar
+   `_page(..., body_cls="wo-vol")`. Wie hem hier weghaalt, haalt de reden weg: zie
+   `render_werkoverleg`. */
+body.wo-vol{max-width:none}
 .wo-next{display:flex;justify-content:flex-end;padding-top:1rem;margin-top:auto}
 .wo-close-wrap{display:flex;flex-direction:column;align-items:center;gap:.4rem;padding-top:1.4rem}
 .wo-close-btn{padding:.7rem 2rem;font-size:1rem}
