@@ -228,11 +228,25 @@ def _paneel_org(st, ik: str, hier: str) -> str:
 # ── de route ─────────────────────────────────────────────────────────────────
 def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
                       hier: str = "") -> str:
-    """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
+    """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina.
+
+    `hier` LEEG BETEKENT NIET "NERGENS". `nooch.js` vult hem alleen als je op een `/node`-pagina
+    staat — een fragment weet niet waar het landt. Vanaf Messages, Wiki of Projects kwam de boom
+    daardoor dicht en ongemarkeerd binnen, terwijl `_tree_html` het openklappen (`org.breadcrumb`)
+    en markeren (`.here`) allang kan. Er ontbrak dus geen machinerie maar een DEFAULT: je eigen
+    cirkel.
+
+    Die default komt uit `_home_node`, dezelfde bron als de twee overleg-knoppen, `/projects` en
+    `/vangst`. Een eigen "welke cirkel is van mij"-regel hier zou een tweede antwoord geven op
+    een vraag die al beantwoord is — precies de fout die `_paneel_circle` maakte voordat hij
+    verviel."""
     titels = {"ci": "Circle", "org": "Organization"}
     if p not in PANELEN:
         return ""
     if p == "org":
+        if not hier:
+            from nooch_village.cockpit2 import _home_node
+            hier = _home_node(st.records.all())
         inhoud = _paneel_org(st, ik, hier)
     else:
         inhoud = _paneel_circle(st, ik)

@@ -400,10 +400,15 @@ def test_de_organisatieboom_is_een_paneel_geworden(tmp_path):
 def test_de_boom_komt_uit_dezelfde_functie_als_hiervoor(tmp_path):
     """DEZELFDE BOOM, NIET EEN TWEEDE. Een eigen boomweergave zou betekenen dat "waar zit deze
     rol" twee antwoorden heeft zodra er aan één iets verandert."""
+    from nooch_village.cockpit2 import _home_node
     from nooch_village.views.overview import _tree_html
     dd, st, ik = _dorp(tmp_path)
     paneel = render_nav_paneel(st, "org", ik)
-    direct = _tree_html(st, "")
+    # ER STOND HIER `_tree_html(st, "")`, en dat meet sinds 23 september de verkeerde boom: zonder
+    # `hier` vult `render_nav_paneel` je eigen cirkel in, zodat de tak openklapt en gemarkeerd is
+    # ook als je niet van een `/node`-pagina komt. Dezelfde functie dus — alleen met het argument
+    # dat het paneel er zelf bij zet.
+    direct = _tree_html(st, _home_node(st.records.all()))
     assert direct and direct in paneel
 
 
