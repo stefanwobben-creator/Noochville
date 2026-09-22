@@ -40,6 +40,13 @@ _CSS = """
  --col-wacht:#FDEAEA;--colb-wacht:#FF6B5B;
  --col-done:#D3EFDD;--colb-done:#cfe8d6;
  --col-toekomst:#f2f1ee;--colb-toekomst:#e5e2db;
+ /* De badge per uitkomst-soort op het verwerken-scherm. Zelfde aanpak als de kolomtinten
+    hierboven: waarde één keer, beide CSS-lagen verwijzen ernaar. Een PROJECT deelt zijn
+    tint met de Active-kolom van het bord — hetzelfde soort ding, dus dezelfde waarde en
+    geen tweede hex die er toevallig op lijkt. */
+ --uk-actie:#D3EFDD;--ukt-actie:#14713C;
+ --uk-project:var(--col-actief);--ukt-project:#2A4FA0;
+ --uk-gov:#F3E8FB;--ukt-gov:#7A2AA0;
  --neon:#2bff6f;   /* call bar: speaking-glow (enige bar-specifieke token) */
  --goal:#6a4fa0;--goal-tint:#ece5f6;   /* doelen: het paars uit docs/MITH_doelen_incockpit.html */
  --font-display:'Bricolage Grotesque',system-ui,sans-serif;

@@ -145,9 +145,12 @@ def test_de_band_gebruikt_hetzelfde_opslagpad(tmp_path):
 def test_de_keuze_staat_er_alleen_bij_een_project(tmp_path):
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
-    rij = re.search(r"<div class='wo-staat'[^>]*>", h)
-    assert rij and " hidden>" in rij.group(0), "de keuze staat open bij een actie-uitkomst"
-    assert "this.value!=='project'" in h
+    # HERBOUWD OP 22 SEPTEMBER: het veld zat in een `.wo-staat`-div in één plat raster, nu in
+    # het secundaire blok (`.uk-subveld`). De regel is dezelfde gebleven — verborgen bij het
+    # laden, zichtbaar bij een project — en dat is wat hier gemeten wordt.
+    rij = re.search(r"<div class='uk-subveld' data-staat-voor='[^']*'([^>]*)>", h)
+    assert rij and "hidden" in rij.group(1), "de keuze staat open bij een actie-uitkomst"
+    assert "'project'" in h
 
 
 def test_de_keuze_is_het_widget_en_de_taal_van_het_bord(tmp_path):
@@ -159,7 +162,7 @@ def test_de_keuze_is_het_widget_en_de_taal_van_het_bord(tmp_path):
     from nooch_village.views.projects import _PROJ_CHIP
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
-    rij = re.search(r"<div class='wo-staat'.*?</select></div>", h, re.S).group(0)
+    rij = re.search(r"<div class='uk-subveld' data-staat-voor=.*?</select></div>", h, re.S).group(0)
     assert "<select class='ctrl'" in rij and "radio" not in rij
     assert f">{_PROJ_CHIP['running'][0]}<" in rij and f">{_PROJ_CHIP['blocked'][0]}<" in rij
     assert "value='running' selected" in rij and "value='blocked'" in rij
@@ -385,16 +388,20 @@ def test_de_uitkomstenlijst_hoort_bij_dezelfde_kaart():
     assert "padding-top" in regels
 
 
-def test_het_formulier_is_een_raster_en_geen_zwevende_knop(tmp_path):
-    """Vinkje en Opslaan stonden in losse flexrijen ONDER het raster: Opslaan zweefde rechts met
-    een gat ernaast, het vinkje lijnde nergens op uit. Nu acht rastercellen — vinkje onder de
-    linkerkolom, Opslaan onder de rechter."""
+def test_het_vinkje_en_opslaan_staan_op_een_rij(tmp_path):
+    """DE OPLOSSING VAN TOEN IS VERVALLEN, DE KLACHT NIET. Vinkje en Opslaan stonden ooit in
+    losse flexrijen onder het raster — Opslaan zweefde rechts met een gat ernaast. Dat werd
+    opgelost door ze als rastercellen 7 en 8 in te voegen, en dát is op 22 september weer
+    weggegaan: acht cellen in één raster gaf elk veld dezelfde visuele lading, en de verborgen
+    status liet er een dode cel achter.
+
+    Nu een eigen voetrij (`.uk-voet`): vinkje links, Opslaan rechts, met `space-between`. Geen
+    raster, dus ook geen cel om leeg te laten — en de klacht van toen (een zwevende knop met
+    een gat ernaast) blijft opgelost, want de rij zet ze zelf tegenover elkaar."""
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
-    grid = h.split("rov-addgrid'>")[1].rsplit("</div></form>", 1)[0]
-    cellen = re.findall(r"<div[^>]*>", grid)
-    assert len(cellen) == 8, f"het raster heeft {len(cellen)} cellen in plaats van 8"
-    assert "qadd-row" not in h, "er staat nog een flexrij buiten het raster"
-    # het vinkje in de linkerkolom (cel 7), Opslaan in de rechter (cel 8)
-    helften = grid.split("<div class='wo-opslaan'>")
-    assert "type='checkbox'" in helften[0] and "Opslaan" in helften[1]
+    voet = h.split("class='uk-voet'")[1].rsplit("</div></form>", 1)[0]
+    assert "type='checkbox'" in voet and "Opslaan" in voet
+    assert voet.index("type='checkbox'") < voet.index("Opslaan")
+    assert "qadd-row" not in h, "er staat nog een losse flexrij in het formulier"
+    assert "<div></div>" not in h, "er staat nog een lege cel in het formulier"

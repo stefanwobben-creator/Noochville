@@ -332,10 +332,19 @@ def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str,
                   f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
                   f"title='verwijderen'>🗑</button></form>")
     slot = " 🔒" if u.get("prive") else ""
-    staat_cel = f"<td>{_e(staat)}</td>" if staat is not None else ""
-    return (f"<tr><td>{_e(soort)}{slot}</td><td>{_e(u.get('tekst') or '')}</td>"
-            f"<td>{_e(naar)}</td><td>{_e(wie)}</td>{staat_cel}"
-            f"<td>{bron}</td><td>{acties}</td></tr>")
+    # DE META-REGEL, met puntjes ertussen en niets wat leeg is. In de tabel had elke rij zeven
+    # cellen, ook als er vier leeg waren; hier staat er alleen wat er ís. De STAAT wordt een
+    # pil in plaats van een cel — hij hoort bij die ene uitkomst en niet bij de hele lijst.
+    delen = [_e(naar) if naar else "", _e(wie) if wie else ""]
+    if staat is not None and staat != "—":
+        delen.append(f"<span class='uk-staat'>{_e(staat)}</span>")
+    delen.append(bron)
+    meta = "<span class='fsep'>·</span>".join(d for d in delen if d)
+    return (f"<div class='uk-rij'>"
+            f"<span class='uk-badge uk-badge--{_e(u.get('type') or 'actie')}'>{_e(soort)}{slot}</span>"
+            f"<div class='uk-body'><div class='uk-tekst'>{_e(u.get('tekst') or '')}</div>"
+            f"<div class='uk-meta'>{meta}</div></div>"
+            f"<div class='uk-acties'>{acties}</div></div>")
 
 
 def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
@@ -358,14 +367,14 @@ def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
         body = ("<p class='muted'>Er zijn (nog) geen uitkomsten vastgelegd. Vul het formulier "
                 "hierboven in — zo vaak als nodig, er mogen er meerdere zijn.</p>")
     else:
+        # VAN TABEL NAAR RIJEN. Zeven kolommen met kopregel voor gemiddeld twee gevulde cellen
+        # las als een spreadsheet; wat je hier doet is scannen — welke soort, wat er staat, bij
+        # wie het hangt. De badge draagt de soort (kleur ÉN woord, zoals overal in dit dorp),
+        # de rest staat eronder in één regel met puntjes.
         toon_staat = any(u.get("staat") for u in rijen)      # alleen voor oude records
-        staat_kop = "<td><strong>Staat</strong></td>" if toon_staat else ""
-        body = ("<table class='mtab'><tr><td><strong>Wat</strong></td>"
-                "<td><strong>Wat precies</strong></td><td><strong>Rol</strong></td>"
-                f"<td><strong>Persoon</strong></td>{staat_kop}"
-                "<td><strong>Herkomst</strong></td><td></td></tr>"
+        body = ("<div class='uk-lijst'>"
                 + "".join(_uitkomst_rij(st, circle, it, u, csrf, nxt, toon_staat) for u in rijen)
-                + "</table>")
+                + "</div>")
     return (f"<div class='c2-sec'><h3>Uitkomsten van het overleg "
             f"<span class='chip'>{len(rijen)}</span></h3>{kop}{body}</div>")
 
@@ -404,18 +413,28 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     # Inline attribuut en geen <script>-blok, om dezelfde reden als de label-wissel hierboven: een
     # script in een fragment draait niet als de modal het via innerHTML invoegt, een
     # attribuut-handler wél.
-    swap += (f"var s=document.querySelector('[data-staat-voor=\\'{iid}\\']');"
-             f"if(s)s.hidden=(this.value!=='project');")
-    rij1 = (f"<div><label class='att-lbl' for='vu-{_e(iid)}'>Wat</label>"
-            f"<select id='vu-{_e(iid)}' name='otype' onchange=\"{swap}\">{opts}</select></div>"
-            f"<div><label class='att-lbl' id='{lbl_id}' for='vut-{_e(iid)}'>{_e(eerste_veld)}</label>"
-            f"<input id='vut-{_e(iid)}' name='tekst' value='{_e(it.get('title') or '')}'></div>")
-    rij2 = (f"<div><label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
-            f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
-            f"placeholder='{_e(INDIVIDUELE_ACTIE)} — of typ een rolnaam'>"
-            f"{_rol_datalist(st, dl)}</div>"
-            f"<div><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
-            f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>")
+    # HET SECUNDAIRE BLOK WISSELT ZELF VAN KOLOMAANTAL. Hiervoor stond er naast de verborgen
+    # status een lege `<div></div>` om het twee-koloms raster kloppend te houden: is de status
+    # verborgen, dan houdt die dode cel nog steeds een hele rasterrij bezet. Nu draagt het blok
+    # zelf een modifier (2 → 3 kolommen) en is er niets te reserveren.
+    sub_id = f"vs-{iid}"
+    swap += (f"var s=document.querySelector('[data-staat-voor=\\'{iid}\\']'),"
+             f"b=document.getElementById('{sub_id}');"
+             f"var pr=(this.value==='project');"
+             f"if(s)s.hidden=!pr;"
+             f"if(b)b.className='uk-sub'+(pr?' uk-sub--status':'');")
+    # ── Hoofdgebied: Wat + het tekstvak ──────────────────────────────────────────────────
+    # DIT IS WAAR DE SECRETARIS TYPT, live, terwijl het gesprek doorloopt. Het stond als
+    # eenregelige `<input>` naast een dropdown, even zwaar als "Rol" en "Persoon" eronder —
+    # terwijl dat de velden zijn die je één keer aanklikt. Een `<textarea>` met echte hoogte
+    # zegt waar het zwaartepunt ligt, en geeft meteen ruimte aan een uitkomst van twee zinnen.
+    hoofd = (f"<div class='uk-hoofd'>"
+             f"<div class='uk-wat'><label class='att-lbl' for='vu-{_e(iid)}'>Wat</label>"
+             f"<select id='vu-{_e(iid)}' name='otype' onchange=\"{swap}\">{opts}</select></div>"
+             f"<div class='uk-veld'>"
+             f"<label class='att-lbl' id='{lbl_id}' for='vut-{_e(iid)}'>{_e(eerste_veld)}</label>"
+             f"<textarea class='uk-invoer' id='vut-{_e(iid)}' name='tekst' rows='3'>"
+             f"{_e(it.get('title') or '')}</textarea></div></div>")
     # VOLGENDE / IN AFWACHTING KOMT TERUG, MAAR ANDERS DAN HIJ WEGGING.
     #
     # Hij heeft hier gezeten en is er op 29 augustus uitgehaald met een goede reden, die hier stond:
@@ -443,24 +462,38 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     # Verborgen bij het laden: het eerste type in de lijst is 'actie'. Zou hij zichtbaar beginnen
     # en bij de eerste keuze wegspringen, dan flikkert het formulier bij het openen.
     verborgen = "" if UITKOMST_SOORTEN[0][0] == "project" else " hidden"
-    # ALLES IN HETZELFDE RASTER, ook de afsluitrij. De status, het vinkje en Opslaan stonden in
-    # losse `.qadd-row`-flexrijen ONDER het raster: die volgen het kolomraster niet, dus Opslaan
-    # zweefde rechts met een gat ernaast en het vinkje lijnde nergens op uit. Nu is het één raster
-    # van vier rijen — vinkje onder de linkerkolom (Wat/Rol), Opslaan onder de rechter
-    # (Te nemen actie/Persoon), precies zoals de velden erboven.
-    rij3 = (f"<div class='wo-staat' data-staat-voor='{_e(iid)}'{verborgen}>"
-            f"<label class='att-lbl' for='vst-{_e(iid)}'>Status</label>"
-            f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
-            f"<div></div>")
-    rij4 = (f"<div><label class='kc-radio' for='vpr-{_e(iid)}'>"
+    # ── Secundair blok: Rol, Persoon, en bij een project Status ──────────────────────────
+    # Dezelfde velden, dezelfde namen — alleen visueel lichter. Ze horen bij de uitkomst maar
+    # zijn niet waar je naar kijkt terwijl je luistert: je kiest ze één keer en klaar.
+    sub = (f"<div class='uk-sub' id='{sub_id}'>"
+           f"<div class='uk-subveld'><label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
+           f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
+           f"placeholder='{_e(INDIVIDUELE_ACTIE)} — of typ een rolnaam'>"
+           f"{_rol_datalist(st, dl)}</div>"
+           f"<div class='uk-subveld'><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
+           f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>"
+           f"<div class='uk-subveld' data-staat-voor='{_e(iid)}'{verborgen}>"
+           f"<label class='att-lbl' for='vst-{_e(iid)}'>Status</label>"
+           f"<select class='ctrl' id='vst-{_e(iid)}' name='staat'>{keuzes}</select></div>"
+           f"</div>")
+    # De afsluitrij is een rij en geen rastercel: het vinkje links, Opslaan rechts. In het raster
+    # hangen betekende een cel reserveren voor elk van de twee, en dat is precies de dode ruimte
+    # die dit herontwerp weghaalt.
+    voet = (f"<div class='uk-voet'>"
+            f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
             f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
-            f"Alleen zichtbaar voor de cirkel</label></div>"
-            f"<div class='wo-opslaan'>"
+            f"Alleen zichtbaar voor de cirkel</label>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
             f"Opslaan</button></div>")
-    return (f"<form method='post' action='/action' class='wo-oc'>"
+    # EIGEN KLASSE, EN NIET MEER `.wo-oc`. Die is een flexRIJ van losse velden met
+    # `flex:1 1 12rem` op elke input — precies het model dat deze herbouw opheft: het legde
+    # hoofdgebied, secundair blok en voetrij naast elkaar, en zijn `.wo-oc textarea`-regel
+    # (0,1,1) won van `.uk-invoer` (0,1,0), dus het grote tekstvak kwam er klein uit. De twee
+    # andere gebruikers van `.wo-oc` (de wall-uitkomst en het bewerk-formulier hieronder) zijn
+    # wél zo'n rij en houden hem.
+    return (f"<form method='post' action='/action' class='uk-form'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}"
-            f"<div class='rov-addgrid'>{rij1}{rij2}{rij3}{rij4}</div></form>")
+            f"{hoofd}{sub}{voet}</form>")
 
 
 def _herkomst_regel(st, it: dict) -> str:

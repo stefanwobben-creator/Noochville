@@ -600,6 +600,64 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-staat-lbl{margin:0}
 /* De afsluitende actie van een punt, los van het formulier erboven. De lijn erboven is
    het hele signaal: wat hieronder staat hoort niet meer bij het invullen. */
+/* ── Verwerken: hoofdgebied, stiller blok, en een scanbare lijst ─────────────────────────────
+   DE KLACHT WAS "alles even groot", en dat klopte: Wat, de uitkomst-tekst, Rol, Persoon, Status,
+   het vinkje en Opslaan stonden alle zeven in hetzelfde twee-koloms raster. Het veld waar de
+   secretaris LIVE in typt was daarmee even zwaar als een dropdown die je één keer aanklikt.
+   Nu twee lagen: het tekstvak is het zwaartepunt, de rest zakt eronder weg. */
+.uk-form{padding:.5rem .6rem}
+.uk-hoofd{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.85rem}
+.uk-wat{max-width:14rem}
+.uk-invoer{width:100%;box-sizing:border-box;min-height:5.5rem;resize:vertical;
+  font:inherit;font-size:1.02rem;line-height:1.45;padding:.65rem .7rem;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+/* HET BLOK WISSELT ZELF VAN KOLOMAANTAL. Hiervoor stond er naast de verborgen status een lege
+   `<div>` om het raster kloppend te houden — een dode cel die een hele rij bezet hield zodra de
+   status onzichtbaar was. Twee kolommen normaal, drie zodra Status verschijnt. */
+.uk-sub{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;padding:.7rem .75rem;
+  margin-bottom:.85rem;background:var(--cream-2);border:1px solid var(--border);
+  border-radius:var(--radius)}
+.uk-sub--status{grid-template-columns:1fr 1fr 1fr}
+@media (max-width: 480px){.uk-sub,.uk-sub--status{grid-template-columns:1fr 1fr}}
+.uk-sub input,.uk-sub select{width:100%;box-sizing:border-box;font:inherit;font-size:.82rem;
+  padding:.32rem .45rem;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface)}
+.uk-voet{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap;
+  padding-top:.75rem;border-top:1px solid var(--border)}
+/* ── De lijst: rijen met een badge, geen tabel ──────────────────────────────────────────────
+   Zeven kolommen met kopregel voor gemiddeld twee gevulde cellen las als een spreadsheet. Wat
+   je hier doet is scannen. De badge draagt de soort in kleur ÉN woord — de kleur alleen zou
+   precies de regel schenden die dit dorp overal aanhoudt. */
+.uk-lijst{display:flex;flex-direction:column}
+.uk-rij{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem 0;
+  border-top:1px solid var(--border)}
+.uk-badge{flex:0 0 auto;margin-top:.1rem;white-space:nowrap;font-size:.66rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.03em;padding:.22rem .5rem;border-radius:var(--radius)}
+.uk-badge--actie{background:var(--uk-actie);color:var(--ukt-actie)}
+.uk-badge--project{background:var(--uk-project);color:var(--ukt-project)}
+.uk-badge--governance{background:var(--uk-gov);color:var(--ukt-gov)}
+.uk-badge--info{background:var(--cream-2);color:var(--gray)}
+.uk-body{flex:1 1 auto;min-width:0}
+.uk-tekst{font-weight:600;font-size:.9rem;line-height:1.35}
+.uk-meta{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.25rem;
+  font-size:.75rem;color:var(--muted)}
+/* HET KRONIEK-ID MAG BREKEN. Het is een aaneengesloten hex-string van twaalf tekens in een
+   `<code>`: op telefoonbreedte duwde hij de hele rij voorbij de rand (gemeten op 390px:
+   scrollWidth 431). Wrappen mag hier — je leest hem niet, je herkent of kopieert hem. */
+.uk-meta .pill{overflow-wrap:anywhere;max-width:100%}
+.uk-staat{font-size:.68rem;font-weight:700;padding:.05rem .45rem;border-radius:var(--radius-pill);
+  background:var(--col-wacht);color:var(--colb-wacht)}
+.uk-acties{flex:0 0 auto;display:flex;gap:.3rem;align-items:flex-start}
+/* HET BEWERK-FORMULIER IN EEN SMALLE RIJ. `.wo-oc` is een flexRIJ met `flex:1 1 12rem`
+   op elk veld; in de uitkomstenlijst op telefoonbreedte is de kolom ~200px, dus een
+   veld van 192px plus een knop liep 41px over de rand (gemeten op 390px). Binnen de
+   acties stapelt hij, verder verandert er aan `.wo-oc` niets — de twee andere
+   gebruikers zijn wél een rij. */
+.uk-acties .wo-oc{flex-direction:column;align-items:stretch}
+.uk-acties .wo-oc input,.uk-acties .wo-oc select,.uk-acties .wo-oc textarea,
+.uk-acties .wo-oc button{flex:0 0 auto;width:100%;box-sizing:border-box}
+.uk-acties .wo-ocd{max-width:min(20rem,60vw)}
+
 .wo-afronden{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
   margin-top:.9rem;padding-top:.7rem;border-top:1px solid var(--border)}
 .wo-aftik{border-color:var(--ink);color:var(--ink);font-weight:700}
