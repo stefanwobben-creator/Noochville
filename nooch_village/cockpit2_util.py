@@ -236,12 +236,28 @@ def _stamp(ts, settings=None) -> str:
     return f"{d.day} {_MONTHS[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
 
 
-def _md(text: str) -> str:
+#: Het omhulsel van één blok in de blokstand. ÉÉN plek, want de renderer schrijft hem en de
+#: editor (brok 3) zoekt hem straks met `closest('.wb')` — twee spellingen is twee gedragingen.
+BLOK_OPEN = "<div class='wb' data-blok='{soort}'>"
+BLOK_DICHT = "</div>"
+
+
+def _md(text: str, blokken: bool = False) -> str:
     """Lichte opmaak voor reacties/notities: HTML-veilig, met **vet**, *cursief*, ~~doorhalen~~,
     ## koppen, [tekst](url)-links (alleen http(s)), regelafbrekingen en '- ' lijstjes. CRLF (uit
     textareas/imports) wordt genormaliseerd zodat er geen losse \\r overblijft. XSS-veilig: de tekst
     is al ge-escaped (`_e`) vóór de opmaak-regexes draaien, en een link zonder http(s)-schema wordt
-    NIET gelinkt (fail-closed, geen javascript:-urls)."""
+    NIET gelinkt (fail-closed, geen javascript:-urls).
+
+    `blokken=True` — DE BLOKSTAND (brok 1 van de Notion-stijl wiki, 22 september 2026). Elk blok
+    op het hoogste niveau krijgt zijn eigen `<div class='wb' data-blok='h|ul|p'>`. Zonder die div
+    bestaat "de derde alinea" niet als DING: er is alleen tekst met `<br>`'s ertussen, en alles
+    wat brok 3 wil (een greep per blok, slepen om te herordenen, een `/`-menu dat er een invoegt)
+    heeft dat ding nodig.
+
+    STANDAARD UIT, en dat is geen voorzichtigheid maar de scope. Deze functie rendert óók elke
+    reactie, elke wall-comment en elk kanaalbericht; een blok-div daar is een wijziging aan drie
+    schermen die niemand vroeg. Alleen `views/wiki._body_html` zet hem aan."""
     import re
     s = _e(text or "").replace("\r\n", "\n").replace("\r", "\n")
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet — vóór cursief, anders eet * de **
@@ -255,24 +271,36 @@ def _md(text: str) -> str:
         return m.group(0)                                    # geen http(s) → laat de tekst staan (geen link)
 
     s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, s)          # [tekst](url)
+    # `open_` en `dicht` zijn LEEG in de platte stand: dan staat er letterlijk dezelfde uitvoer
+    # als vóór de blokstand bestond. Dat is wat `test_zonder_de_vlag_is_er_niets_veranderd`
+    # byte voor byte vastlegt — deze functie rendert ook elke reactie en elk kanaalbericht.
+    def open_(soort):
+        return BLOK_OPEN.format(soort=soort) if blokken else ""
+
+    dicht = BLOK_DICHT if blokken else ""
     out, in_ul = [], False
     for ln in s.split("\n"):
         if ln.strip().startswith("## "):                     # kop (regel-niveau, zoals de lijst)
             if in_ul:
-                out.append("</ul>"); in_ul = False
-            out.append(f"<h4>{ln.strip()[3:]}</h4>")
+                out.append("</ul>" + dicht); in_ul = False
+            out.append(f"{open_('h')}<h4>{ln.strip()[3:]}</h4>{dicht}")
             continue
         if ln.strip().startswith("- "):
             if not in_ul:
-                out.append("<ul class='fbul'>"); in_ul = True
+                out.append(open_("ul") + "<ul class='fbul'>"); in_ul = True
             out.append(f"<li>{ln.strip()[2:]}</li>")
         else:
             if in_ul:
-                out.append("</ul>"); in_ul = False
-            out.append(ln + "<br>")
+                out.append("</ul>" + dicht); in_ul = False
+            # In de blokstand IS het omhulsel de regelafbreking, dus geen `<br>` erachter. Een
+            # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
+            # verdwijnt elke witregel van elke pagina zonder dat een bron-test iets merkt.
+            out.append(f"{open_('p')}{ln or '<br>'}{dicht}" if blokken else ln + "<br>")
     if in_ul:
-        out.append("</ul>")
+        out.append("</ul>" + dicht)
     html = "".join(out)
+    if blokken:
+        return html
     return html[:-4] if html.endswith("<br>") else html
 
 

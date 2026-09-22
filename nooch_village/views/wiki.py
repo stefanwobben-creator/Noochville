@@ -34,12 +34,16 @@ _SOORT_LABEL = {
 }
 
 
-def _body_html(body: str, pags: list) -> str:
+def _body_html(body: str, pags: list, blokken: bool = False) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
 
     De substitutie draait NÁ `_md` (dus over ge-escapete HTML) en alleen hier — `_md` zelf wordt
-    ook voor reacties en projectfeeds gebruikt, en die zijn geen wiki."""
-    html = _md(body or "")
+    ook voor reacties en projectfeeds gebruikt, en die zijn geen wiki.
+
+    `blokken=True` geeft elk blok op het hoogste niveau een eigen `<div class='wb'>`; zie `_md`.
+    Ook hier standaard UIT: dezelfde functie rendert de Notes-tab op `/node`, en die heeft de
+    blokken (nog) niet nodig."""
+    html = _md(body or "", blokken=blokken)
 
     def _sub(m):
         ref = _html_mod.unescape(m.group(1)).strip()
@@ -232,7 +236,12 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek."""
-    inhoud = (_body_html(a.body, pags) if a.body
+    # DE BLOKSTAND STAAT HIER AAN EN NERGENS ANDERS (brok 1, 22 september 2026). Dit is het
+    # scherm waar je bewerkt; de Notes-tab op `/node` toont dezelfde tekst read-only en heeft de
+    # blokken niet nodig. Visueel verandert er niets — een `<div>` op de plek van een `<br>`-regel
+    # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
+    # een element met een soort, zodat brok 3 er een greep aan kan hangen.
+    inhoud = (_body_html(a.body, pags, blokken=True) if a.body
               else "<p class='muted'>This page has no text yet.</p>")
     lees = f"<div class='card'><div class='att-body wiki-body' id='wiki-body'>{inhoud}</div></div>"
     if not can_edit or not csrf_token:
