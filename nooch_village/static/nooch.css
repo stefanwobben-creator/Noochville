@@ -66,13 +66,22 @@ ul.clean li:last-child{border-bottom:none}
 .swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
 .pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
-/* Subtiele status-tint per kolom (bevinding 4): het label blijft de primaire drager, de kleur
-   versterkt alleen. doing=blauw (actief), waiting=amber (wacht, geen vol rood), done=groen,
-   todo=grijs (toekomst). Lichte tinten → leesbaar, ook kleurenblind (label draagt de betekenis). */
-.pcol[data-to='actief']{background:#eef3fb;border-color:#d3e0f4}
-.pcol[data-to='wacht']{background:#fdf3e4;border-color:#efdcbf}
-.pcol[data-to='done']{background:var(--green-tint);border-color:#cfe8d6}
-.pcol[data-to='toekomst']{background:#f2f1ee;border-color:#e5e2db}
+/* Subtiele status-tint per kolom: het label blijft de primaire drager, de kleur versterkt.
+   doing=blauw (actief), waiting=ROOD, done=groen, todo=grijs (toekomst).
+
+   WACHT WAS AMBER, "bewust geen vol rood". Founder-besluit 22 september 2026: dat wordt rood.
+   Een project dat wacht is geblokkeerd, en amber leest als "gaat vanzelf goed komen". Gebruikt
+   `--error-tint`/`--coral`, dezelfde twee die `.cl-check.no` en `.pcard.verzwakt` al dragen —
+   geen nieuwe kleur, wel een andere plek.
+
+   DE WAARDEN STAAN HIER ALS TOKEN en niet als losse hex, want de `.nu`-laag heeft ze óók nodig.
+   Die overschreef ze eerder met één vlakke achtergrond (zie nooch-ui.css), waardoor de
+   kleurcodering op élk nu-scherm wegviel — en dat is overal waar iemand het bord bekijkt. Nu
+   verwijst de nu-laag naar deze vier namen: verandert een tint, dan verandert hij op één plek. */
+.pcol[data-to='actief']{background:var(--col-actief);border-color:var(--colb-actief)}
+.pcol[data-to='wacht']{background:var(--col-wacht);border-color:var(--colb-wacht)}
+.pcol[data-to='done']{background:var(--col-done);border-color:var(--colb-done)}
+.pcol[data-to='toekomst']{background:var(--col-toekomst);border-color:var(--colb-toekomst)}
 .dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
 .star{background:none;border:none;cursor:pointer;padding:0;font-size:1.15rem;line-height:1;color:var(--border);transition:color .12s}
 .star:hover{color:var(--yellow)}
@@ -499,7 +508,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    de enige nieuwe klasse van deze PR, en met reden: de andere lege staten in het systeem zijn losse
    <span class='muted'>-zinnen, die geen ruimte of toon dragen. */
 .cl-empty{color:var(--subtle);font-size:.85rem;line-height:1.5;padding:.6rem .7rem;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);list-style:none}
-.cl-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
+/* DE MARKERING STAAT OP ELKE RIJ, doorzichtig als er niets te melden is. Zonder dit kreeg
+   alleen een rij MÉT status een linkerrand van 3px, en schoof zijn tekst 3px op ten opzichte
+   van de rij erboven — een lijst die per rij een andere linkerkant heeft. De rand stond er
+   al; wat ontbrak was de lege variant. */
+.cl-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;
+  padding:.4rem 0 .4rem .5rem;border-bottom:1px solid var(--border);
+  border-left:3px solid transparent}
 .cl-main{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .cl-desc{font-weight:600}
 .cl-act{flex:0 0 auto;display:flex;align-items:center;gap:.5rem}
@@ -570,14 +585,45 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-ocd .wo-band-edit[open]{padding-bottom:.4rem}
 /* De uitkomstenlijst hoorde erbij maar stond er los onder. Zelfde kaart, eigen sectie. */
 .wo-ocd .c2-sec{margin:.9rem 0 .2rem;padding-top:.7rem;border-top:1px solid var(--border)}
+/* ── En één kader minder eromheen ────────────────────────────────────────────────────────────
+   De ronde hierboven haalde de dozen BINNEN de kaart weg. Wat overbleef is drie kaders in
+   elkaar ERBUITEN: de gereedschapskaart (`.rdr-tool`), daarin de punt-rij (`.rdr-row`, met
+   zijn eigen vulling en stippel-outline als "dit punt staat open"), en daarin nog eens de
+   verwerken-kaart. Drie omhulsels voor één punt.
+   De rij ÍS al de kaart van dat punt — zij draagt de vulling en het signaal. Dus binnen een
+   rij geeft de verwerken-uitklap zijn eigen kader op en houdt alleen de lijn onder zijn
+   samenvatting: velden met witruimte en labels, geen doos in een doos. */
+.rdr-row .wo-ocd{border:0;background:none;box-shadow:none;border-radius:0;
+  margin:.2rem 0 0;padding:0}
+.rdr-row .wo-ocd>summary{border-bottom:1px solid var(--border);padding-bottom:.35rem}
 /* De status-keuze is een gewone rastercel geworden; Opslaan lijnt rechts uit onder zijn kolom. */
 .wo-staat-lbl{margin:0}
+/* De afsluitende actie van een punt, los van het formulier erboven. De lijn erboven is
+   het hele signaal: wat hieronder staat hoort niet meer bij het invullen. */
+.wo-afronden{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
+  margin-top:.9rem;padding-top:.7rem;border-top:1px solid var(--border)}
+.wo-aftik{border-color:var(--ink);color:var(--ink);font-weight:700}
+.wo-aftik:hover{background:var(--ink);color:var(--surface)}
+/* De viering bij het sluiten van een overleg. Bewust een handjevol regels en geen
+   library: zestig snippers die uitwaaieren en verdwijnen. `pointer-events:none` zodat
+   je er gewoon doorheen klikt, en hij verdwijnt volledig bij reduced-motion (zie het
+   blok onderaan) — dan gaat er geen informatie verloren, want er zat geen in. */
+.feest{position:fixed;inset:0;z-index:9999;pointer-events:none;overflow:hidden}
+.feest i{position:absolute;top:-12px;width:8px;height:14px;border-radius:1px;
+  animation:feest-val linear forwards}
+@keyframes feest-val{
+  0%{transform:translate3d(0,0,0) rotate(0);opacity:1}
+  100%{transform:translate3d(var(--dx,0),100vh,0) rotate(var(--dr,360deg));opacity:0}}
 .wo-opslaan{display:flex;align-items:flex-end;justify-content:flex-end}
 /* Rijstatus met TWEE dragers: de tint én de rand-stijl links. Solide = gemist, gestippeld = nog
    te doen, niets = gedaan. Een rand-stijl overleeft zwart-wit en kleurenblindheid waar een tint
    dat niet doet; het woord zelf staat in een `.sr`-span vooraan de rij. */
-.cl-attn{background:var(--error-tint);border-left:3px solid var(--coral)}
-.cl-todo{background:var(--yellow-light);border-left:3px dashed var(--yellow)}
+.cl-attn{background:var(--error-tint);border-left-color:var(--coral)}
+/* GEEL WEG (22 sept 2026). Een te-doen-regel is de NORMALE stand van een checklist — die hoeft
+   niet te schreeuwen; gemist is de uitzondering. Wat blijft is de VORM: gestippeld tegenover
+   solide (gemist) tegenover niets (gedaan), in de gewone randkleur. Dat is de drager die
+   zwart-wit en kleurenblindheid overleeft, en het woord staat sowieso in de `.sr`-span. */
+.cl-todo{border-left-style:dashed;border-left-color:var(--border)}
 .cl-add{display:inline-block}
 .cl-add>summary{list-style:none;cursor:pointer}
 .cl-add>summary::-webkit-details-marker{display:none}
@@ -670,7 +716,16 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .kpidata-v{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700}
 /* Werkoverleg: stap-navigatie (hergebruikt rov-grid + rov-foot) */
 .wo-nav{display:flex;flex-direction:column;gap:.2rem}
-.wo-step{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--gray);padding:.4rem .5rem;border-radius:var(--radius);font-size:.86rem}
+/* Vóór het overleg staat het stappenmenu er wel, maar er valt nog niets te bezoeken.
+   Gedimd en niet klikbaar (het zijn <span>'s, geen links) — zo zie je meteen wat eraan
+   komt zonder dat het zich voordoet als navigatie die werkt. */
+.wo-uit{opacity:.45}
+.wo-breed{max-width:1160px}
+/* ÉÉN MAAT MET DE LINKERNAVIGATIE. Dit is ook een verticaal menu in een linkerkolom, en
+   het stond op .86rem/400 naast de nav op 14px/600 — net genoeg verschil om als een
+   ander soort lijst te lezen. Waarden overgenomen van `.c2-subnav a`; wijkt die ooit,
+   dan hoort deze mee te gaan. */
+.wo-step{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--ink);padding:.42rem .55rem;border-radius:var(--radius);font-size:14px;font-weight:600}
 .wo-step:hover{background:var(--cream-2)}
 .wo-step.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
 .wo-num{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--cream-2);color:var(--gray);font-size:.72rem;font-weight:700;flex:0 0 auto}
@@ -953,6 +1008,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* WIE GEEN BEWEGING WIL, KRIJGT ZE NIET. Dit is geen extraatje maar de voorwaarde om überhaupt te
    mogen bewegen: alles hierboven is versiering op informatie die ook zonder de animatie klopt. */
 @media (prefers-reduced-motion: reduce){
+.feest{display:none}
   .checklist.ck-vers .ck-item,.ck-item.ck-vers,.ck-item .btn.ghost.sm{animation:none}
   .ck-item{transition:none}
   /* Het ademen valt weg, het dimmen blijft: dat laatste is de status zelf en geen versiering. */

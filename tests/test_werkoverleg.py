@@ -30,10 +30,17 @@ def test_store_open_close(tmp_path):
 
 
 def test_startscherm_secretaris_gate(tmp_path):
+    """HET STAPPENMENU STAAT ER NU WEL, en dat is de wijziging van 22 september 2026: de
+    nog-niet-geopende stand is niet langer een eigen pagina maar hetzelfde scherm, uit. De
+    stappen staan er gedimd (`.wo-uit`) en als `<span>` — er valt nog niets te bezoeken, dus
+    er is ook geen link. De oude assert (`"wo-step" not in frag`) meette dat er geen stappen
+    WAREN; wat hij bewaakte is dat je er nog niet heen kunt, en dat is nu de vorm die telt."""
     dd = _dd(tmp_path)
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Tactical meeting" in frag and "Only the secretary" in frag and "wo_open" in frag
-    assert "wo-step" not in frag                      # nog niet gestart -> geen stappen
+    assert "wo-uit" in frag                           # het menu staat er, gedimd
+    assert "step=checkin'" not in frag.split("wo-uit")[1].split("</div>")[0]   # en niet klikbaar
+    assert "<a class='wo-step" not in frag            # geen enkele stap is een link
 
 
 def test_knop_op_cirkel_en_niet_op_rol(tmp_path):
@@ -296,7 +303,11 @@ def test_de_checkout_is_ja_nee_zoals_de_check_in(tmp_path):
                                        fragment=True)
     assert "cl-check ok" in frag and "cl-check no" in frag    # zelfde knoppen als de check-in
     assert "wo-scale" not in frag and "wo-avg" not in frag    # schaal én gemiddelde weg
-    assert "Did this meeting give you what you needed?" in frag
+    # DE VRAAGREGEL IS WEG (22 september 2026, punt 2 van de overleg-feedback): de check-out
+    # had een bedieningshandleiding boven de lijst staan. Wat blijft is de TELLING — die
+    # zegt hetzelfde in minder woorden en verandert mee terwijl je klikt.
+    assert "Did this meeting give you what you needed?" not in frag
+    assert "yes ·" in frag and "no" in frag
     assert "name='ok'" in frag and "name='score'" not in frag
 
 

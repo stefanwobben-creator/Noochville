@@ -27,7 +27,10 @@ _STYLE_WHITELIST = {
     "views/projects.py": 17,   # -2 (fase 11): de voortgangsbalk werd `<progress class='nu-progress'>`
                                # (geen `style='width:x%'` meer) en de kaart-link kreeg `.pcard-link`
     "views/strategy.py": 14,
-    "views/werkoverleg.py": 8,    # -2: de 0-10-schaal is weg (check-out is ja/nee)
+    # 8 → 4 (22 sept 2026): de losse "nog niet geopend"-pagina is vervallen, en met de
+    # gedeelde schil (`_wo_schil`) verdwenen `margin-top:0`, `margin-top:1rem`, de
+    # `max-width` (nu `.wo-breed`) en de uitlegregel met `font-size:.8rem`.
+    "views/werkoverleg.py": 4,    # daarvóór 8; -2 daarvóór: de 0-10-schaal is weg
     "views/metrics.py": 8,
     "views/roloverleg.py": 7,
     "views/checklists.py": 1,   # -4 (fase 11): hetzelfde progress-atoom (twee inline breedtes weg,

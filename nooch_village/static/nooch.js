@@ -815,6 +815,44 @@
     root.querySelectorAll("[data-mention]").forEach(mentionVeld);
   }
 
+  // ── Een kleine viering ────────────────────────────────────────────────────────────────────
+  // Een tactical meeting afsluiten is het enige moment in dit dorp waarop een groep mensen samen
+  // iets AFMAAKT. Dat mag je zien. Verder niets: geen geluid, geen library, en na tweeënhalve
+  // seconde is er geen spoor meer van.
+  //
+  // DRIE DINGEN DIE HET BESCHAAFD HOUDEN:
+  //  * het vlaggetje gaat meteen uit de URL, dus een refresh viert niet opnieuw;
+  //  * `prefers-reduced-motion` slaat hem helemaal over — voor wie beweging vermijdt is dit
+  //    precies het soort ding dat misselijk maakt, en er gaat geen informatie verloren omdat er
+  //    geen in zat;
+  //  * `pointer-events: none` op de laag, zodat je tijdens die twee seconden gewoon doorklikt.
+  function feest(root) {
+    if (root !== document) return;                 // een fragment viert niet mee
+    var p = new URLSearchParams(location.search);
+    if (!p.get("feest")) return;
+    p.delete("feest");
+    var q = p.toString();
+    history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash);
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    var laag = document.createElement("div");
+    laag.className = "feest";
+    laag.setAttribute("aria-hidden", "true");      // versiering, geen inhoud
+    var kleuren = ["#00FF00", "#1F9D55", "#FFCE2E", "#FF6B5B", "#000000"];
+    for (var i = 0; i < 60; i++) {
+      var s = document.createElement("i");
+      s.style.left = (10 + Math.random() * 80) + "%";
+      s.style.background = kleuren[i % kleuren.length];
+      s.style.animationDelay = (Math.random() * 0.25) + "s";
+      s.style.animationDuration = (1.4 + Math.random() * 0.9) + "s";
+      s.style.setProperty("--dx", (Math.random() * 240 - 120) + "px");
+      s.style.setProperty("--dr", (Math.random() * 720 - 360) + "deg");
+      laag.appendChild(s);
+    }
+    document.body.appendChild(laag);
+    setTimeout(function () { laag.remove(); }, 2600);
+  }
+
   NV.wire = function (root) {
     root = root || document;
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
@@ -826,6 +864,7 @@
     overlegPoll(root);
     stickers(root);
     mentions(root);
+    feest(root);
   };
 
   if (document.readyState !== "loading") NV.wire(document);

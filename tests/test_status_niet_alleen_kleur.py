@@ -108,8 +108,16 @@ def test_de_missie_stip_draagt_een_vorm_per_waarde():
 
 def test_de_checklist_rijen_dragen_een_randstijl():
     """Solide = gemist, gestippeld = te doen, niets = gedaan. Drie standen, ook zonder kleur."""
-    per = {sel: body for sel, body, _l in _regels() if sel in (".cl-attn", ".cl-todo")}
-    assert "solid" in per[".cl-attn"] and "dashed" in per[".cl-todo"]
+    per = {sel: body for sel, body, _l in _regels() if sel.startswith(".cl-")}
+    # DE BASIS STAAT OP `.cl-row` (22 sept 2026): een doorzichtige 3px-rand op ÉLKE rij, zodat
+    # de tekst van een rij mét status niet 3px opschuift ten opzichte van de rij erboven. De
+    # twee standen variëren daar alleen nog op — `.cl-attn` erft `solid`, `.cl-todo` zet
+    # `dashed`. Deze test las eerst `solid` letterlijk in `.cl-attn`; dat zou nu een terugkeer
+    # van de dubbele declaratie afdwingen.
+    basis = next(b for s, b, _ in _regels() if s.split(",")[0].strip() == ".cl-row")
+    assert "solid" in basis and "transparent" in basis
+    assert "dashed" in per[".cl-todo"]
+    assert "dashed" not in per[".cl-attn"]          # blijft dus solide
 
 
 def test_de_drie_gevallen_dragen_ook_een_woord():

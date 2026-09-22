@@ -32,6 +32,14 @@ _CSS = """
  --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
  --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
  --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--error-tint:#FDEAEA;
+ /* De vier kolomtinten van het projectbord. HIER, bij de andere tokens, en niet in een
+    tweede :root in nooch.css: de `.nu`-laag verwijst er ook naar, en een token dat op twee
+    plekken gedefinieerd staat is precies het geval waar `reference, don't copy` over gaat.
+    'wacht' is rood sinds 22 sept 2026 (founder-besluit, was amber). */
+ --col-actief:#eef3fb;--colb-actief:#d3e0f4;
+ --col-wacht:#FDEAEA;--colb-wacht:#FF6B5B;
+ --col-done:#D3EFDD;--colb-done:#cfe8d6;
+ --col-toekomst:#f2f1ee;--colb-toekomst:#e5e2db;
  --neon:#2bff6f;   /* call bar: speaking-glow (enige bar-specifieke token) */
  --goal:#6a4fa0;--goal-tint:#ece5f6;   /* doelen: het paars uit docs/MITH_doelen_incockpit.html */
  --font-display:'Bricolage Grotesque',system-ui,sans-serif;
