@@ -1206,6 +1206,25 @@ body.wo-vol{max-width:none}
   color:var(--ink);text-decoration:none;background:none;border:0;font-family:inherit;
   cursor:pointer;text-align:left;width:100%}
 .c2-subnav a:hover,.c2-navbtn:hover{background:var(--surface)}
+/* WAAR JE BENT. Er was géén markering: geen `aria-current`, geen route-vergelijking, alleen
+   `:hover` — en die verdwijnt zodra je de muis wegbeweegt.
+
+   TWEE DRAGERS NAAST DE KLEUR (dezelfde regel als bij de overleg-knoppen): een rand links en
+   een zwaarder label. Kleur alleen is onzichtbaar in zwart-wit en voor wie hem niet ziet.
+
+   DE PADDING WORDT GECORRIGEERD, anders verspringt élk label drie pixels zodra je van pagina
+   wisselt — de rand komt ergens vandaan.
+
+   OP `[aria-current]` ZONDER WAARDE: de server zet `page` (dit ís de pagina), `nooch.js` zet
+   `true` (dit paneel staat open). Twee beloftes, één vorm.
+
+   EN ZONDER `a` IN DE SELECTOR, dus (0,2,0) en niet (0,2,1). Dat is geen stijlkeuze maar een
+   eis: `test_de_live_knop_wint_van_de_nav_regel` bewaakt dat de overleg-knoppen élke nav-regel
+   verslaan, omdat ze op 21 september live kleurloos bleken toen ze dat niet deden. Met `a` erbij
+   stond deze regel gelijk aan `.c2-subnav a.c2-overleg` en besliste de volgorde in het bestand —
+   precies het soort toeval waar die guard voor is. */
+.c2-subnav [aria-current]{border-left:3px solid var(--green);padding-left:calc(.55rem - 3px);
+  font-weight:800;background:var(--green-tint);color:var(--green-dark)}
 .c2-subnav-div{height:1px;background:var(--border);margin:.4rem .55rem}
 /* HET MONOGRAM IS VOOR DE SMALLE BALK, het woord voor de brede — beide staan altijd in de DOM en
    de CSS kiest. Deze regel stond als `.c2-side:not(.c2-side--rail) .c2-mono{display:none}` en ging

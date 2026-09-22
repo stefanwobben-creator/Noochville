@@ -785,6 +785,28 @@
     paneel.dataset.nvWired = "1";
     var open = null;
 
+    // WELKE KNOP "ACTIEF" IS, met twee verschillende beloftes en daarom twee waardes:
+    //
+    //   aria-current="page"  de server zet dit op het item dat bij het HUIDIGE PAD hoort;
+    //   aria-current="true"  dit paneel staat open — het pad verandert daar niet, dus "page"
+    //                        zou beweren dat je ergens bent waar je niet bent.
+    //
+    // De CSS selecteert op `[aria-current]` zonder waarde en ziet dus allebei. Een knop die de
+    // server al als pagina markeerde, houdt die markering: `pagina` onthoudt hem.
+    function markeer(actief) {
+      Array.prototype.forEach.call(knoppen, function (k) {
+        var pagina = k.dataset.navPagina === "1";
+        if (k === actief) k.setAttribute("aria-current", pagina ? "page" : "true");
+        else if (pagina) k.setAttribute("aria-current", "page");
+        else k.removeAttribute("aria-current");
+      });
+    }
+
+    // Onthouden wat de server markeerde, vóór we er zelf aan zitten.
+    Array.prototype.forEach.call(knoppen, function (k) {
+      if (k.getAttribute("aria-current") === "page") k.dataset.navPagina = "1";
+    });
+
     function sluit() {
       open = null;
       paneel.hidden = true;
@@ -792,6 +814,7 @@
       Array.prototype.forEach.call(knoppen, function (k) {
         k.setAttribute("aria-expanded", "false");
       });
+      markeer(null);
     }
 
     function vul(url) {
@@ -820,6 +843,7 @@
         Array.prototype.forEach.call(knoppen, function (k) {
           k.setAttribute("aria-expanded", k === knop ? "true" : "false");
         });
+        markeer(knop);
         paneel.hidden = false;
         document.body.classList.add("navpaneel-open");
         binnen.innerHTML = "<p class='muted c2-pleeg'>…</p>";

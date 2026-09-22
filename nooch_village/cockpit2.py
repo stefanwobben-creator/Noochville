@@ -1084,6 +1084,96 @@ _NU_ROUTES = frozenset({
     "/middelen", "/rolefillers", "/site-audit",
 })
 
+#: Eén `<a>` in de zijbalk-navigatie, met zijn href. Alleen dáár: de header heeft ook links
+#: (het logo, het profiel) en die horen geen huidige-pagina-markering te krijgen.
+#:
+#: DE OVERLEG-KNOPPEN VALLEN ER BUITEN (`class='c2-overleg…'`). Ze staan wél in de subnav, maar
+#: ze zijn "een ander soort ding" (zie `_SIDE_OVERLEG`) en ze dragen al een eigen live-staat met
+#: eigen kleuren. Een tweede markering eroverheen zou die overschrijven — precies de regressie
+#: die `test_de_live_knop_wint_van_de_nav_regel` sinds 21 september bewaakt.
+_NAV_A_RE = re.compile(r"<a class='c2-overleg[^']*' href='[^']*'|<a href='([^']*)'")
+
+
+def _nav_chrome(st, body: str) -> str:
+    """De cirkel-afhankelijke helft van de zijbalk invullen: de Circle-knop en de twee
+    overleg-knoppen.
+
+    `_nav()` heeft geen stores en kan dus niet weten over WELKE cirkel het gaat; deze functie
+    wel. Twee plekken, dezelfde bron (`_home_node`) — en sinds 22 september is dat een derde:
+    `views/navpaneel._paneel_circle` gebruikt hem ook, zodat de knop, het paneel en de
+    overleggen niet ieder hun eigen antwoord geven op "welke cirkel is de mijne".
+
+    Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te tuigen — zelfde
+    reden als bij `_nu_body`."""
+    if st is None or (_SIDE_CIRCLE not in body and _SIDE_OVERLEG not in body):
+        return body
+    try:
+        cid = _home_node(st.records.all())
+        # Zelfde vorm als de vaste items (`_side_item`): monogram voor de ingeklapte rail, woord
+        # voor de volle zijbalk. Zou deze link het woord kaal dragen, dan staat er in de rail
+        # één item uit te steken.
+        from nooch_village.cockpit2_util import _side_item, overleg_items
+        body = body.replace(
+            _SIDE_CIRCLE,
+            _side_item(f"/node?id={_e(cid)}", "Circle", "ci") if cid else "", 1)
+        # `/werkoverleg` en `/roloverleg2` tonen het overleg van EEN CIRKEL en beginnen met
+        # `st.records.get(circle_id)`. Zonder dit id gaven ze "No circle." en "Unknown." — geen
+        # ontbrekende routes maar een ontbrekende parameter, op de enige plek die de cirkel niet
+        # in handen had.
+        return body.replace(
+            _SIDE_OVERLEG, overleg_items(cid, werk_open=st.werk.is_open(cid)), 1)
+    except Exception:                                          # noqa: BLE001
+        return body.replace(_SIDE_CIRCLE, "", 1).replace(_SIDE_OVERLEG, "", 1)
+
+
+def _nav_actief(pad: str, body: str) -> str:
+    """Zet `aria-current='page'` op het nav-item dat bij dit pad hoort.
+
+    WAAROM HIER EN NIET IN `_nav()`: die functie heeft geen request en geen stores — hij weet
+    niet welk pad je bekijkt, en om dezelfde reden vult `_send` de Circle-knop daar ook al in.
+
+    ER WAS HELEMAAL GEEN MARKERING. Geen `aria-current`, geen route-vergelijking in `nooch.js`,
+    en in de CSS alleen `:hover` — die verdwijnt zodra je de muis wegbeweegt. Je zag dus nooit
+    waar je was.
+
+    DE MEEST SPECIFIEKE TREFFER WINT, en dat is geen detail: Circle en Organization wijzen
+    allebei naar `/node`, de een mét een id en de ander zonder. Zonder die regel lichten ze
+    allebei op, of de verkeerde. De uitkomst:
+
+        /node?id=<operationele cirkel>   → Circle        (de query matcht óók)
+        /node?id=<iets anders>           → Organization  (je staat in de boom, niet in jouw cirkel)
+        /node                            → Organization
+
+    Een item ZONDER query is niet kieskeurig over de query van de pagina: `/messages?k=…` is nog
+    steeds Messages.
+
+    Geen treffer is een geldige uitkomst. Op `/vangst` of `/werkoverleg` hoort niets op te
+    lichten — een balk die altijd iets aanwijst, wijst niets aan."""
+    kop, _, staart = body.partition("<nav class='c2-subnav'>")
+    if not staart:
+        return body
+    nav, _, rest = staart.partition("</nav>")
+    huidig_pad, _, huidig_q = (pad or "/").partition("?")
+    huidige = urllib.parse.parse_qs(huidig_q)
+
+    beste, beste_score = None, -1
+    for href in _NAV_A_RE.findall(nav):
+        if not href:                       # een overleg-knop: overgeslagen, zie `_NAV_A_RE`
+            continue
+        h_pad, _, h_q = href.partition("?")
+        if h_pad != huidig_pad:
+            continue
+        params = urllib.parse.parse_qs(h_q)
+        if any(huidige.get(k) != v for k, v in params.items()):
+            continue
+        if len(params) > beste_score:
+            beste, beste_score = href, len(params)
+    if beste is None:
+        return body
+    nav = nav.replace(f"<a href='{beste}'", f"<a href='{beste}' aria-current='page'", 1)
+    return kop + "<nav class='c2-subnav'>" + nav + "</nav>" + rest
+
+
 _BODY_RE = re.compile(r'<body(?: class="([^"]*)")?>')
 
 
@@ -5407,26 +5497,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 # DE CIRKEL-AFHANKELIJKE HELFT VAN DE BALK. `_nav()` heeft geen stores en kan
                 # dus niet weten over WELKE cirkel het gaat; `_send` wel. Twee plekken, dezelfde
                 # bron (`_home_node`): de Circle-knop en de twee overleg-knoppen.
-                if _st is not None and (_SIDE_CIRCLE in body or _SIDE_OVERLEG in body):
-                    try:
-                        _cid = _home_node(_st.records.all())
-                        # Zelfde vorm als de vaste items (`_side_item`): monogram voor de
-                        # ingeklapte rail, woord voor de volle zijbalk. Zou deze link het woord
-                        # kaal dragen, dan staat er in de rail één item uit te steken.
-                        from nooch_village.cockpit2_util import _side_item, overleg_items
-                        body = body.replace(
-                            _SIDE_CIRCLE,
-                            _side_item(f"/node?id={_e(_cid)}", "Circle", "ci") if _cid else "", 1)
-                        # `/werkoverleg` en `/roloverleg2` tonen het overleg van EEN CIRKEL en
-                        # beginnen met `st.records.get(circle_id)`. Zonder dit id gaven ze "No
-                        # circle." en "Unknown." — geen ontbrekende routes maar een ontbrekende
-                        # parameter, op de enige plek die de cirkel niet in handen had.
-                        body = body.replace(
-                            _SIDE_OVERLEG,
-                            overleg_items(_cid, werk_open=_st.werk.is_open(_cid)), 1)
-                    except Exception:
-                        body = body.replace(_SIDE_CIRCLE, "", 1)
-                        body = body.replace(_SIDE_OVERLEG, "", 1)
+                body = _nav_chrome(_st, body)
+                # WELK ITEM IS DE HUIDIGE PAGINA. Pas ná het invullen hierboven: de Circle-knop
+                # bestaat op dit punt pas, en hij is er een van de vijf die kan oplichten.
+                body = _nav_actief((self.path or "/"), body)
                 # HET PROFIEL IN DE HEADER: de initialen van de ingelogde persoon, met de volle
                 # naam in title/aria-label en dezelfde link naar zijn eigen pagina.
                 #
