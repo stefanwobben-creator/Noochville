@@ -19,7 +19,8 @@ import logging
 import urllib.parse
 
 from nooch_village import channels
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp, _ICON_STICKER, _avatar
+from nooch_village.cockpit2_util import (_DS_LINK, _nav, _name, _person_name, _stamp,
+                                         _ICON_STICKER, _avatar, inline_edit, inline_edit_knop)
 from nooch_village.web_base import _e, _page, _banner
 
 #: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
@@ -368,7 +369,9 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     # andere zonder dat iemand het merkt.
     from nooch_village.views.feed import reactie_blok
     rx, picker = reactie_blok(e, csrf_token, {"kanaal": kanaal}) if kanaal else ("", "")
-    voet = f"<div class='msg-reacties'>{rx}{picker}</div>" if (rx or picker) else ""
+    gereedschap = _eigen_gereedschap(e, kanaal, csrf_token) if van_mij else ""
+    voet = (f"<div class='msg-reacties'>{rx}{picker}{gereedschap}</div>"
+            if (rx or picker or gereedschap) else "")
     voet = _bijlagen_html(e, kanaal) + voet
     # De avatarkolom staat er ALTIJD bij een ander, ook leeg bij een vervolgbericht: zo blijft
     # de tekst op dezelfde lijn staan in plaats van bij elk vervolg naar links te springen.
@@ -376,10 +379,70 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
             f"<div class='msg-av'>{'' if vervolg else _avatar(wie, a.get('type') == 'persona')}</div>")
     kop = ("" if vervolg else
            f"<div class='msg-meta'>{_e(wie)} &middot; {_e(_stamp(e.get('at')))}{herk}</div>")
+    # `editor-inline` OP HET BERICHT en niet strakker: `inline_edit` schuift het formulier op de
+    # plek van de tekst, maar de knop die dat aanzet staat in de voet. Zit de grens tussen die
+    # twee in, dan vindt `closest()` hem niet — dat staat zo in `inline_edit` en het is hier
+    # precies dezelfde situatie als op de project-wall.
     cls = ("msg-item" + (" msg-item--ik" if van_mij else "")
-           + (" msg-item--volg" if vervolg else ""))
+           + (" msg-item--volg" if vervolg else "")
+           + (" editor-inline" if gereedschap else ""))
+    tekst = f"<div class='msg-text'>{_e(e.get('text') or '')}</div>"
+    if gereedschap:
+        tekst = _bewerk_veld(e, kanaal, csrf_token)
     return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
-            f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div></div>")
+            f"{tekst}{voet}</div></div>")
+
+
+def _msg_verborgen(e: dict, kanaal: str, csrf_token: str) -> str:
+    """De velden die elke actie op één bericht nodig heeft: wie het vraagt, welk kanaal, welk
+    bericht, en waar je daarna weer uitkomt."""
+    return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
+            f"<input type='hidden' name='item' value='{_e(e.get('id') or '')}'>"
+            f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>")
+
+
+def _bewerk_veld(e: dict, kanaal: str, csrf_token: str) -> str:
+    """De tekst van je eigen bericht, plus het veld dat er bij "Edit" voor in de plaats komt.
+
+    HETZELFDE COMPONENT als de project-wall en /rapport: `inline_edit`. Het veld staat op de
+    plek van de tekst en niet als tweede vak eronder — anders lees je twee versies van dezelfde
+    zin naast elkaar en moet je raden welke de echte is.
+
+    GEEN `md_editor` hier, en dat is het enige verschil met de wall: een kanaalbericht wordt
+    met `_e()` als PLATTE TEKST gerenderd. Een opmaak-toolbar boven een veld waarvan de sterretjes
+    straks letterlijk op het scherm staan, belooft iets dat de renderer niet waarmaakt.
+
+    Het veld hangt in een `.qadd-form` — de bestaande veld-opmaak, inclusief zijn nu-tegenhanger
+    (de `.nu .qadd-form textarea`-regel). Geen nieuwe familie: `msg-bewerk` draagt zelf geen
+    opmaak, hij staat er als haak voor als dit veld ooit zijn eigen breedte nodig heeft."""
+    eid = _e(e.get("id") or "")
+    veld = (f"<div class='qadd-form msg-bewerk'>"
+            f"<label class='sr' for='msg-edit-{eid}'>Edit your message</label>"
+            f"<textarea id='msg-edit-{eid}' name='tekst' rows='2'>"
+            f"{_e(e.get('text') or '')}</textarea></div>")
+    return inline_edit(_e(e.get("text") or ""), veld, sleutel=e.get("id") or "",
+                       opslaan="msg_edit", verborgen=_msg_verborgen(e, kanaal, csrf_token),
+                       toon_cls="msg-text")
+
+
+def _eigen_gereedschap(e: dict, kanaal: str, csrf_token: str) -> str:
+    """Bewerken en verwijderen van je EIGEN bericht, in de voetregel naast de reactie-kiezer.
+
+    DAAR EN NERGENS ANDERS: dat is de regel waar alles wat je met één bericht kunt doen al
+    staat. Een tweede plek (een hoekje, een hover-menu) zou betekenen dat "wat kan ik met dit
+    bericht" twee antwoorden heeft.
+
+    Geen id op het bericht = geen knoppen. Dat is het oude schema; fail-closed, geen knop die
+    straks niets raakt — dezelfde regel als in `reactie_blok`."""
+    if not (csrf_token and kanaal and e.get("id")):
+        return ""
+    wis = (f"<form method='post' action='/action' class='fentry-inline'>"
+           f"{_msg_verborgen(e, kanaal, csrf_token)}"
+           f"<button class='flink' type='submit' name='action' value='msg_remove' "
+           f"onclick=\"return confirm('Remove message?')\">Remove</button></form>")
+    return (f"<span class='fsep'>·</span>{inline_edit_knop()}"
+            f"<span class='fsep'>·</span>{wis}")
 
 
 def _sticker_kiezer(kanaal: str, csrf_token: str) -> str:
@@ -508,22 +571,27 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
     # daarom ook alleen een naam. Zou ik hier wél op e-mail zoeken, dan geeft dit veld treffers die
     # de globale zoek niet geeft — en dan is "dezelfde bron" een halve waarheid. Moet e-mail erbij,
     # dan hoort dat in `_people` en dus op beide plekken tegelijk.
+    #
+    # DE LIJST STOND ACHTER HET ZOEKVELD (22 september 2026). `if wie.strip():` — zonder
+    # zoekterm geen namen, dus wie het blok openklapte zag een leeg vak en moest een naam
+    # rááden die hij juist kwam opzoeken. Zoeken hoort een lijst te FILTEREN, niet te
+    # ontsluiten; bij een dorp van een handvol mensen is kiezen sneller dan typen.
+    # `_people(st, [])` geeft iedereen — `_match` is `all()` over nul termen en dus waar.
     nieuw_dm = ""
     if csrf_token and ik:
         rijen_p = []
-        if wie.strip():
-            from nooch_village.views.search import _people
-            termen = [t for t in wie.lower().split() if t]
-            for h in _people(st, termen):
-                pid = h.get("id") or ""
-                if not pid or pid == ik:
-                    continue                      # jezelf staat al als "Yourself" in de lijst
-                k = channels.dm_kanaal(ik, pid)
-                rijen_p.append(f"<a class='msg-kanaal' href='/messages?k={_e(k)}'>"
-                               f"<span class='msg-knaam'>{_e(h.get('titel') or pid)}</span></a>")
-            if not rijen_p:
-                rijen_p.append("<p class='muted msg-leeg'>Nobody by that name.</p>")
-        nieuw_dm = (f"<details class='qadd msg-nieuw-dm'{' open' if wie.strip() else ''}>"
+        from nooch_village.views.search import _people
+        termen = [t for t in wie.lower().split() if t]
+        for h in _people(st, termen):
+            pid = h.get("id") or ""
+            if not pid or pid == ik:
+                continue                      # jezelf staat al als "Yourself" in de lijst
+            k = channels.dm_kanaal(ik, pid)
+            rijen_p.append(f"<a class='msg-kanaal' href='/messages?k={_e(k)}'>"
+                           f"<span class='msg-knaam'>{_e(h.get('titel') or pid)}</span></a>")
+        if not rijen_p:
+            rijen_p.append("<p class='muted msg-leeg'>Nobody by that name.</p>")
+        nieuw_dm = (f"<details class='qadd msg-nieuw-dm' open>"
                     f"<summary class='muted'>＋ new conversation</summary>"
                     f"<form method='get' action='/messages'>"
                     f"<input type='hidden' name='k' value='{_e(kanaal)}'>"
