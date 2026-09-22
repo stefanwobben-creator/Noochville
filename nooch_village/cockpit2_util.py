@@ -679,6 +679,16 @@ def _psec(icon: str, title: str, body: str) -> str:
             f"<div class='psec-b'>{body}</div></div>")
 
 
+_ICON_STICKER = (
+    # Een sticker: een vierkant met een omgekruld hoekje. Zelfde lijnstijl en maat als
+    # `_ICON_ADD_EMOJI` hieronder, want ze staan naast elkaar in dezelfde balk.
+    "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+    "stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"
+    "<path d='M15.5 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h6l9-9V6a3 3 0 0 0-3-3z'/>"
+    "<path d='M12 21v-5a4 4 0 0 1 4-4h5'/>"
+    "</svg>")
+
+
 _ICON_ADD_EMOJI = (
     "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' "
     "stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"

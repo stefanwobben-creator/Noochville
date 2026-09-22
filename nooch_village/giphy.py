@@ -78,3 +78,58 @@ def zoek(q: str, *, limiet: int = _LIMIET, timeout: float = _TIMEOUT) -> list[di
         return []
     uit = [t for t in (_treffer(r) for r in rijen if isinstance(r, dict)) if t]
     return uit[:limiet]
+
+
+_GIF_ENDPOINT = "https://api.giphy.com/v1/gifs/"
+_MAX_BYTES = 8 * 1024 * 1024      # ruim boven een sticker, ruim onder "iemand stuurt ons een film"
+
+
+def haal(gif_id: str, *, timeout: float = _TIMEOUT) -> dict | None:
+    """De treffer met dit id, opnieuw opgehaald en opnieuw op eigenaar gecontroleerd.
+
+    WAAROM NIET GEWOON DE URL UIT DE BROWSER OVERNEMEN. Dan bepaalt de client welk adres de
+    server gaat ophalen, en dat is een open deur: elk intern adres, elk bestand achter een
+    firewall waar de server wél bij kan. Daarom reist alleen een ID mee en zoekt de server het
+    adres er zelf bij — bij Giphy, en alleen als de eigenaar nog steeds het merkkanaal is.
+
+    De scope wordt hier dus een TWEEDE keer getoetst, op het moment dat het ertoe doet: de
+    zoeklijst kan oud zijn, en tussen kiezen en plaatsen kan een GIF van eigenaar wisselen."""
+    key = sleutel()
+    gid = "".join(c for c in str(gif_id or "") if c.isalnum())     # Giphy-id's zijn alfanumeriek
+    if not (key and gid):
+        return None
+    url = _GIF_ENDPOINT + gid + "?" + urllib.parse.urlencode({"api_key": key})
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NoochVille/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:                                      # noqa: BLE001
+        log.warning("giphy-id %s niet op te halen", gid, exc_info=True)
+        return None
+    rij = data.get("data") if isinstance(data, dict) else None
+    return _treffer(rij) if isinstance(rij, dict) else None
+
+
+def download(url: str, *, timeout: float = _TIMEOUT, cap: int = _MAX_BYTES) -> bytes | None:
+    """De bytes achter een Giphy-URL. None bij twijfel.
+
+    FAIL-CLOSED OP DE HOST. Alleen `*.giphy.com` over https, ook al komt deze URL uit `haal()` en
+    niet uit de browser: een adres dat de server gaat ophalen hoort altijd tegen een lijst te
+    liggen, niet tegen de herkomst van de string. Plus een harde bovengrens op wat we lezen —
+    `Content-Length` vertrouwen we niet, we tellen zelf."""
+    ontleed = urllib.parse.urlsplit(str(url or ""))
+    gastheer = ontleed.hostname or ""
+    if ontleed.scheme != "https" or not (gastheer == "giphy.com"
+                                         or gastheer.endswith(".giphy.com")):
+        log.warning("giphy-download geweigerd: %s", gastheer)
+        return None
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NoochVille/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read(cap + 1)
+    except Exception:                                      # noqa: BLE001
+        log.warning("giphy-download mislukt", exc_info=True)
+        return None
+    if not data or len(data) > cap or data[:6] not in (b"GIF87a", b"GIF89a"):
+        return None                                        # te groot, leeg, of geen GIF
+    return data

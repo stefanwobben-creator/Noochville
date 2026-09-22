@@ -19,7 +19,7 @@ import logging
 import urllib.parse
 
 from nooch_village import channels
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp
+from nooch_village.cockpit2_util import _DS_LINK, _nav, _name, _person_name, _stamp, _ICON_STICKER
 from nooch_village.web_base import _e, _page, _banner
 
 #: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
@@ -305,7 +305,12 @@ def _bijlagen_html(e: dict, kanaal: str) -> str:
         naam = str(b.get("name") or "bestand")
         kb = int(b.get("size") or 0) // 1024
         if str(b.get("mime") or "").startswith("image/"):
-            rijen.append(f"<a class='msg-bijlage msg-bijlage--beeld' href='{_e(url)}' "
+            # EEN STICKER IS GEEN BIJLAGE-MET-EEN-PLAATJE. Hij staat kleiner en zonder kader: een
+            # rand om een doorzichtige sticker tekent een vierkant dat er niet is. Het onderscheid
+            # staat in de META (`soort`) en niet in een gok op het pad, want een Giphy-sticker
+            # woont in dezelfde map als een geüploade foto.
+            extra = " msg-bijlage--sticker" if b.get("soort") == "sticker" else ""
+            rijen.append(f"<a class='msg-bijlage msg-bijlage--beeld{extra}' href='{_e(url)}' "
                          f"target='_blank' rel='noopener'>"
                          f"<img src='{_e(url)}' alt='{_e(naam)}' loading='lazy'></a>")
         else:
@@ -337,6 +342,46 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "") -> str:
     return (f"<div class='msg-item'><div class='msg-meta'>{_e(wie)} &middot; "
             f"{_e(_stamp(e.get('at')))}{herk}</div>"
             f"<div class='msg-text'>{_e(e.get('text') or '')}</div>{voet}</div>")
+
+
+def _sticker_kiezer(kanaal: str, csrf_token: str) -> str:
+    """De stickerkiezer onder het schrijfveld: de vaste rij, en daaronder een zoekveld.
+
+    HETZELFDE POPUP-RECEPT ALS DE REACTIE-KIEZER — `<details class='emoji-pick'>` met een
+    `.emoji-pop` eronder, en de stickers in een `.emo-grid` net als de emoji's. Geen nieuwe
+    familie dus, en dezelfde declaraties die de @-lijst ook al deelt. Eén knop per sticker is
+    één formulier, precies zoals `reactie_blok` het met emoji's doet: zo werkt de vaste rij
+    ZONDER JavaScript.
+
+    Het zoekveld doet dat niet, en dat is het verschil tussen de twee helften: de vaste rij is
+    HTML die er al staat, de Giphy-treffers komen per toetsaanslag van de server. Valt Giphy
+    weg, dan blijft het bovenste deel gewoon werken en vindt het onderste niets — dat is de
+    fail-soft-eis, hier zichtbaar als twee losse helften in plaats van één lijst.
+
+    ER REIST GEEN URL MEE, alleen het Giphy-id. Wat de server ophaalt hoort de server te
+    bepalen; zie `giphy.haal`."""
+    from nooch_village.cockpit2 import STICKERS_PICKER
+    knoppen = "".join(
+        f"<form method='post' action='/action' class='emo-f'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
+        f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"
+        f"<input type='hidden' name='naam' value='{_e(naam)}'>"
+        f"<button class='emo' type='submit' name='action' value='sticker_post' "
+        f"title='{_e(naam[:-4].replace('-', ' '))}'>"
+        f"<img src='/static/stickers/{_e(naam)}' alt='{_e(naam[:-4].replace('-', ' '))}' "
+        f"loading='lazy'></button></form>"
+        for naam in STICKERS_PICKER)
+    return (f"<details class='emoji-pick'>"
+            f"<summary class='emoji-add' title='sticker' aria-label='add sticker'>"
+            f"{_ICON_STICKER}</summary>"
+            f"<div class='emoji-pop emo-st' data-giphy data-kanaal='{_e(kanaal)}' "
+            f"data-csrf='{_e(csrf_token)}'>"
+            f"<div class='emo-grid'>{knoppen}</div>"
+            f"<input class='emo-search' type='search' data-giphy-q "
+            f"placeholder='Search Nooch stickers…' aria-label='Search Nooch stickers'>"
+            f"<div class='emo-grid' data-giphy-uit></div>"
+            f"</div></details>")
 
 
 def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
@@ -559,7 +604,18 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Upload</button>"
             f"<span class='muted'>max 20 MB &middot; image, pdf, txt, csv, docx, xlsx, pptx</span>"
             f"</div></form></details>")
-        schrijf = bijlage_form + (f"<form method='post' action='/action' class='qadd-form'>"
+        # GEREEDSCHAP BOVEN HET VELD, EN BUITEN HET SCHRIJFFORMULIER. Allebei dragen ze hun
+        # eigen <form> (de paperclip post multipart, elke sticker post zijn eigen naam), en een
+        # <form> in een <form> is geen HTML: de browser gooit de binnenste weg en je klikt op
+        # een knop die niets doet. Vandaar één `.qadd-row` ernaast in plaats van erin — geen
+        # nieuwe klasse, dezelfde rij die overal de knoppen naast elkaar zet.
+        gereedschap = (f"<div class='qadd-row'>{bijlage_form}"
+                       f"{_sticker_kiezer(kanaal, csrf_token)}</div>")
+        # ONDER HET VELD, NIET ERBOVEN. De kiezer klapt naar beneden open (`.emoji-pop` hangt
+        # onder zijn knop); staat de rij bovenaan, dan legt hij zich over het tekstvak waar je
+        # net in typte. Onderaan klapt hij open in de lege ruimte eronder — en het is meteen de
+        # plek waar een chatbalk zijn gereedschap heeft.
+        schrijf = (f"<form method='post' action='/action' class='qadd-form'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
                    f"<input type='hidden' name='next' value='/messages?k={_e(kanaal)}'>"
@@ -567,7 +623,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                    f"<textarea id='msg-tekst' name='tekst' rows='2' "
                    f"placeholder='Write a reply, or ask a colleague to weigh in…'></textarea>"
                    f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
-                   f"value='msg_post'>Post</button></div></form>")
+                   f"value='msg_post'>Post</button></div></form>") + gereedschap
     elif kanaal and not ik:
         schrijf = ("<p class='muted'>Log in as a person to write here &mdash; a message needs an "
                    "author.</p>")
