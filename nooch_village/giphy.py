@@ -4,11 +4,15 @@ DE SLEUTEL BLIJFT HIER. Giphy's API-sleutel hoort niet in een browser: alles wat
 lezen, kan iedereen die de pagina opent lezen. Daarom is dit een module achter een route en geen
 `fetch` met een sleutel erin. De cockpit praat met deze module, deze module praat met Giphy.
 
-GESCOPED OP HET MERKKANAAL, TWEE KEER. We vragen scoped (`@Nooch_Earth` in de zoekterm) én we
-controleren het antwoord (`user.username`). Alleen vragen is niet genoeg: de zoek-API mag zelf
-bepalen wat hij relevant vindt, en één los GIF'je van iemand anders in de stickerkiezer van een
-merk is precies wat je niet wil. Fail-closed op de scope dus: staat er geen herkenbare eigenaar
-bij, dan valt de treffer af.
+PUBLIEK GIPHY, NIET ALLEEN HET MERKKANAAL (founder-besluit, 22 september 2026). Dit zocht
+eerst uitsluitend in `@Nooch_Earth` en filterde het antwoord op die eigenaar. Dat kanaal bleek
+op productie precies ÉÉN GIF te bevatten, dus het zoekveld vond voor bijna elke term niets —
+gemeten bij de deploy: "donut" 0, "shoe" 0, het hele kanaal 1. Een zoekveld dat structureel
+niets vindt is geen scope maar een dood veld.
+
+Nu dus gewoon zoeken zoals elke GIF-kiezer. `rating=g` blijft staan: dat is de CONTENTfilter en
+staat los van de vraag uit wélk kanaal iets komt. Wat er verder mee te maken had is bewust NIET
+meeverdwenen — zie `haal` en `download` hieronder.
 
 FAIL-SOFT OP DE VERBINDING. Geen sleutel, geen netwerk, een trage of stukke Giphy: dan komt er
 een lege lijst uit en verder niets. De vaste rij stickers staat los hiervan en blijft werken;
@@ -25,8 +29,6 @@ import urllib.request
 
 log = logging.getLogger("village.giphy")
 
-#: Het merkkanaal. Eén plek; wie dit ergens anders overtypt krijgt vanzelf een tweede waarheid.
-GIPHY_USER = "Nooch_Earth"
 _ENDPOINT = "https://api.giphy.com/v1/gifs/search"
 _TIMEOUT = 4.0        # een stickerkiezer mag geen verzoek 30 seconden vasthouden
 _LIMIET = 12          # meer dan dit past niet in het vak onder de vaste rij
@@ -38,17 +40,17 @@ def sleutel() -> str:
 
 
 def _url(q: str, key: str, limiet: int) -> str:
-    # `@gebruiker` in de zoekterm is Giphy's eigen manier om op een kanaal te scopen. Staat de
-    # gebruiker er twee keer in (iemand typt zelf "@Nooch_Earth"), dan is dat onschadelijk.
-    params = {"api_key": key, "q": f"@{GIPHY_USER} {q}".strip(),
+    # HIER STOND `@Nooch_Earth` VÓÓR DE ZOEKTERM — Giphy's eigen manier om op een kanaal te
+    # scopen. Die prefix zat in de VRAAG, niet alleen in de filtering: laat hem staan en je
+    # zoekt nog steeds binnen dat ene kanaal, wat de filtering ook doet.
+    params = {"api_key": key, "q": (q or "").strip(),
               "limit": str(limiet), "rating": "g", "bundle": "messaging_non_clips"}
     return _ENDPOINT + "?" + urllib.parse.urlencode(params)
 
 
 def _treffer(rij: dict) -> dict | None:
-    """Eén bruikbare treffer, of None. Fail-closed op zowel de eigenaar als het plaatje."""
-    if (rij.get("user") or {}).get("username") != GIPHY_USER:
-        return None
+    """Eén bruikbare treffer, of None. Fail-closed op het PLAATJE — de eigenaarscheck is met de
+    merkscope vervallen (een publieke GIF heeft vaak helemaal geen `user`)."""
     beelden = rij.get("images") or {}
     for soort in ("fixed_height_small", "fixed_width_small", "downsized", "original"):
         url = (beelden.get(soort) or {}).get("url")
@@ -85,15 +87,15 @@ _MAX_BYTES = 8 * 1024 * 1024      # ruim boven een sticker, ruim onder "iemand s
 
 
 def haal(gif_id: str, *, timeout: float = _TIMEOUT) -> dict | None:
-    """De treffer met dit id, opnieuw opgehaald en opnieuw op eigenaar gecontroleerd.
+    """De treffer met dit id, opnieuw opgehaald bij Giphy zelf.
 
-    WAAROM NIET GEWOON DE URL UIT DE BROWSER OVERNEMEN. Dan bepaalt de client welk adres de
-    server gaat ophalen, en dat is een open deur: elk intern adres, elk bestand achter een
-    firewall waar de server wél bij kan. Daarom reist alleen een ID mee en zoekt de server het
-    adres er zelf bij — bij Giphy, en alleen als de eigenaar nog steeds het merkkanaal is.
+    DIT PAD BLIJFT, OOK NU DE MERKSCOPE WEG IS. Het bestond niet om het kanaal te bewaken maar
+    om te voorkomen dat de CLIENT bepaalt welk adres deze server ophaalt: neem je de URL uit de
+    browser over, dan is elk intern adres en elk bestand achter de firewall bereikbaar. Daarom
+    reist alleen een ID mee en zoekt de server het adres er zelf bij.
 
-    De scope wordt hier dus een TWEEDE keer getoetst, op het moment dat het ertoe doet: de
-    zoeklijst kan oud zijn, en tussen kiezen en plaatsen kan een GIF van eigenaar wisselen."""
+    Wat hier wél verviel is de tweede eigenaarscontrole — die hoorde bij de scope, niet bij deze
+    verdediging."""
     key = sleutel()
     gid = "".join(c for c in str(gif_id or "") if c.isalnum())     # Giphy-id's zijn alfanumeriek
     if not (key and gid):

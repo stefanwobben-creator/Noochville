@@ -9,10 +9,10 @@ TWEE DINGEN MOETEN HARD ZIJN, en ze zijn van een andere orde:
      Giphy mag de stickerkiezer niet meenemen — het zoekveld valt stil, de rij blijft staan.
      Daarom is `zoek()` fail-soft en geeft de route 200 met een lege lijst in plaats van 5xx.
 
-EN ÉÉN DING DAT GEEN TEST MAAR EEN GRENS IS: de scope. We vragen scoped (`@Nooch_Earth` in de
-zoekterm) én controleren het antwoord op `user.username`. Alleen vragen is niet genoeg — de
-zoek-API bepaalt zelf wat hij relevant vindt, en één los GIF'je van een vreemde in de
-stickerkiezer van een merk is precies wat je niet wil.
+DE SCOPE WAS EEN GRENS EN IS ER GEEN MEER. Dit zocht eerst alleen in `@Nooch_Earth`; dat kanaal
+bevat op productie één GIF, dus het zoekveld vond structureel niets. Sinds 22 september 2026 is
+het publiek Giphy (founder-besluit) — zie sectie 5. De verdedigingen bij het DOWNLOADEN staan
+daar los van en zijn allemaal blijven staan.
 """
 from __future__ import annotations
 
@@ -125,25 +125,18 @@ def test_de_whitelist_laat_geen_pad_ontsnappen():
         assert "/" not in naam and ".." not in naam and naam.endswith(".gif")
 
 
-# ── 2. De scope: alleen het merkkanaal ──────────────────────────────────────────────────────
-def test_de_vraag_is_gescoped_op_het_merkkanaal():
-    url = giphy._url("donut", "SLEUTEL", 8)
-    assert "%40Nooch_Earth+donut" in url or "%40Nooch_Earth%20donut" in url
-
-
-def test_een_treffer_van_iemand_anders_valt_af():
-    beeld = {"fixed_height_small": {"url": "https://media.giphy.com/x.gif"}}
-    assert giphy._treffer({"id": "1", "user": {"username": giphy.GIPHY_USER},
-                           "images": beeld, "title": "Donut"})["id"] == "1"
-    assert giphy._treffer({"id": "2", "user": {"username": "vreemde"}, "images": beeld}) is None
-    assert giphy._treffer({"id": "3", "images": beeld}) is None          # helemaal geen eigenaar
-
-
+# ── 2. Wat een bruikbare treffer is ─────────────────────────────────────────────────────────
+# DE EIGENAARSCHECK IS WEG (22 september 2026): hij bestond om alleen het merkkanaal door te
+# laten, en dat is precies wat verviel. Zie sectie 5. Wat blijft is de check op het BEELD —
+# die gaat niet over wie het maakte maar over of we er iets mee kunnen.
 def test_een_treffer_zonder_bruikbaar_beeld_valt_af():
-    assert giphy._treffer({"id": "4", "user": {"username": giphy.GIPHY_USER}, "images": {}}) is None
+    assert giphy._treffer({"id": "4", "images": {}}) is None
     # http:// telt niet: een onbeveiligde bron op een https-pagina laadt toch niet.
-    assert giphy._treffer({"id": "5", "user": {"username": giphy.GIPHY_USER},
-                           "images": {"original": {"url": "http://media/x.gif"}}}) is None
+    assert giphy._treffer({"id": "5", "images": {"original": {"url": "http://media/x.gif"}}}) is None
+    # ... en een goede komt er wél door, ongeacht de uploader
+    ok = giphy._treffer({"id": "6", "user": {"username": "wie_dan_ook"}, "title": "Donut",
+                         "images": {"fixed_height_small": {"url": "https://media.giphy.com/x.gif"}}})
+    assert ok["id"] == "6" and ok["naam"] == "Donut"
 
 
 # ── 3. Fail-soft ────────────────────────────────────────────────────────────────────────────
@@ -174,10 +167,9 @@ def test_een_goed_antwoord_komt_er_wel_door(monkeypatch):
     leeg teruggaf."""
     monkeypatch.setenv("GIPHY_API_KEY", "test")
     lichaam = json.dumps({"data": [
-        {"id": "ok", "user": {"username": giphy.GIPHY_USER}, "title": "Walking donut",
+        {"id": "ok", "user": {"username": "wie_dan_ook"}, "title": "Walking donut",
          "images": {"fixed_height_small": {"url": "https://media.giphy.com/d.gif"}}},
-        {"id": "weg", "user": {"username": "vreemde"},
-         "images": {"fixed_height_small": {"url": "https://media.giphy.com/v.gif"}}},
+        {"id": "weg", "user": {"username": "vreemde"}, "images": {}},   # geen bruikbaar beeld
     ]}).encode()
     monkeypatch.setattr(giphy.urllib.request, "urlopen", _nep(lichaam))
     hits = giphy.zoek("donut")
@@ -244,8 +236,7 @@ def test_de_route_geeft_200_met_een_lege_lijst_als_giphy_uit_staat(tmp_path, mon
 def test_de_sleutel_komt_niet_mee_naar_buiten(tmp_path, monkeypatch):
     monkeypatch.setenv("GIPHY_API_KEY", "GEHEIME-SLEUTEL-XYZ")
     lichaam = json.dumps({"data": [
-        {"id": "ok", "user": {"username": giphy.GIPHY_USER},
-         "images": {"fixed_height_small": {"url": "https://media.giphy.com/d.gif"}}}]}).encode()
+        {"id": "ok", "images": {"fixed_height_small": {"url": "https://media.giphy.com/d.gif"}}}]}).encode()
     monkeypatch.setattr(giphy.urllib.request, "urlopen", _nep(lichaam))
     httpd, port, tok = _server(tmp_path)
     try:
@@ -285,3 +276,83 @@ def test_een_bestand_buiten_de_map_wordt_niet_geserveerd(tmp_path):
             assert status == 404, pad
     finally:
         httpd.shutdown()
+
+
+# ── 5. De zoekscope is publiek Giphy geworden (22 september 2026) ───────────────────────────
+# WAS: alleen het merkkanaal `Nooch_Earth`. Dat kanaal bevat op productie precies één GIF, dus
+# het zoekveld vond voor bijna elke term niets — gemeten bij de deploy: "donut" 0, "shoe" 0,
+# het hele kanaal 1. Founder-besluit: verbreden naar heel publiek Giphy, zoals een gewone
+# GIF-kiezer. Wat NIET verandert zijn de downloadverdedigingen; die stonden er niet voor de
+# merkscope maar tegen een adres dat de server gaat ophalen.
+def test_een_term_buiten_het_merkkanaal_levert_nu_wel_iets_op(monkeypatch):
+    """DE TEST DIE HET PROBLEEM VASTLEGT. Giphy geeft hier een treffer van een willekeurige
+    uploader terug — precies het geval dat de oude eigenaarscheck wegfilterde en waardoor er
+    voor "donut" niets te vinden was."""
+    monkeypatch.setenv("GIPHY_API_KEY", "test")
+    lichaam = json.dumps({"data": [
+        {"id": "pub1", "user": {"username": "iemand_anders"}, "title": "Walking donut",
+         "images": {"fixed_height_small": {"url": "https://media.giphy.com/d.gif"}}},
+        {"id": "pub2", "title": "Donut zonder uploader",
+         "images": {"fixed_height_small": {"url": "https://media.giphy.com/e.gif"}}},
+    ]}).encode()
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", _nep(lichaam))
+    hits = giphy.zoek("donut")
+    assert [h["id"] for h in hits] == ["pub1", "pub2"], hits
+
+
+def test_de_zoekterm_gaat_kaal_naar_giphy():
+    """De `@Nooch_Earth`-prefix zat in de VRAAG en niet alleen in de filtering; blijft hij
+    staan, dan zoekt Giphy nog steeds binnen dat kanaal en verandert er niets."""
+    url = giphy._url("donut", "SLEUTEL", 8)
+    assert "Nooch_Earth" not in url
+    assert "q=donut" in url
+
+
+def test_de_contentfilter_blijft_staan():
+    """`rating=g` is de CONTENTfilter en staat los van de kanaalscope. Die verdwijnt niet mee."""
+    assert "rating=g" in giphy._url("donut", "SLEUTEL", 8)
+
+
+def test_haal_blijft_het_adres_zelf_opzoeken(monkeypatch):
+    """HET ID-PAD BLIJFT. Dat bestond niet voor de merkscope maar omdat de client anders bepaalt
+    welk adres deze server ophaalt. Alleen de eigenaarscheck erin verviel."""
+    monkeypatch.setenv("GIPHY_API_KEY", "sleutel")
+    lichaam = json.dumps({"data": {"id": "x1", "user": {"username": "vreemde"}, "title": "Iets",
+                                   "images": {"original": {"url": "https://media.giphy.com/x.gif"}}}}).encode()
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", _nep(lichaam))
+    t = giphy.haal("x1")
+    assert t and t["url"] == "https://media.giphy.com/x.gif"
+
+
+def test_de_downloadverdedigingen_zijn_ongemoeid(monkeypatch):
+    """Vier dingen die niets met de merkscope te maken hebben en dus moesten blijven: alleen
+    https, alleen `*.giphy.com`, een harde bovengrens die we ZELF tellen, en de magic bytes van
+    een GIF. Hier alle vier in één test, zodat een latere opruiming ze niet los kan laten
+    sneuvelen."""
+    geprobeerd = []
+
+    def nep_weigering(req, **k):
+        geprobeerd.append(getattr(req, "full_url", req))
+        raise AssertionError("dit adres had nooit opgehaald mogen worden")
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", nep_weigering)
+    assert giphy.download("http://media.giphy.com/x.gif") is None      # geen https
+    assert giphy.download("https://evil.example/x.gif") is None        # ander domein
+    assert geprobeerd == [], geprobeerd
+
+    class Antwoord:
+        def __init__(self, data):
+            self.data = data
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n=None): return self.data[:n] if n else self.data
+
+    # te groot: we lezen cap+1 en weigeren zodra het er meer zijn dan de cap
+    groot = b"GIF89a" + b"x" * 200
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", lambda *a, **k: Antwoord(groot))
+    assert giphy.download("https://media.giphy.com/x.gif", cap=100) is None
+    # geen GIF, ongeacht de naam
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", lambda *a, **k: Antwoord(b"<html>nope"))
+    assert giphy.download("https://media.giphy.com/x.gif") is None
+    # en een echte GIF komt er wél door
+    monkeypatch.setattr(giphy.urllib.request, "urlopen", lambda *a, **k: Antwoord(b"GIF89a" + b"x" * 20))
+    assert giphy.download("https://media.giphy.com/x.gif") == b"GIF89a" + b"x" * 20

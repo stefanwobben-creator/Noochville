@@ -1,4 +1,4 @@
-"""De stickerkiezer onder het schrijfveld: acht eigen stickers, en zoeken in het merkkanaal.
+"""De stickerkiezer onder het schrijfveld: de eigen stickers, en zoeken in Giphy.
 
 DRIE DINGEN MOETEN HARD ZIJN:
 
@@ -13,8 +13,10 @@ DRIE DINGEN MOETEN HARD ZIJN:
      verkleinen", maar letterlijk dezelfde functie (`stickers.optimaliseer_bytes`), want twee
      paden geven binnen een maand twee formaten.
 
-EN ÉÉN AFSPRAAK: `friday-dance.gif` staat niet in de kiezer (herkomst onbevestigd). Het bestand
-blijft wél geserveerd — een bericht dat hem al draagt hoort niet stuk te gaan.
+DE UITZONDERING VOOR `friday-dance.gif` IS VERVALLEN (22 september 2026). Hij stond één ronde
+buiten de kiezer omdat zijn herkomst onbevestigd was; Stefan heeft bevestigd dat hij van Nooch
+is. De filterlijst is daarmee wég en niet leeg: een lege lijst laat de vraag "wanneer vul ik
+hier iets in?" openstaan, en die heeft geen antwoord meer.
 """
 from __future__ import annotations
 
@@ -47,11 +49,13 @@ def _html(tmp_path):
 
 
 # ── 1. De vaste rij ─────────────────────────────────────────────────────────────────────────
-def test_acht_stickers_in_de_kiezer_en_friday_dance_niet(tmp_path):
+def test_alles_wat_er_ligt_staat_in_de_kiezer(tmp_path):
+    """WAS: acht van de negen, met `friday-dance` eruit. Nu alle negen — en de kiezer telt wat
+    er in de map ligt, zodat een nieuwe sticker er vanzelf bij komt."""
     _dd, _st, _ik, html = _html(tmp_path)
-    assert html.count("value='sticker_post'") == 8
-    assert "friday-dance" not in html
-    assert len(cockpit2.STICKERS_PICKER) == 8 and len(cockpit2.STICKERS) == 9
+    assert cockpit2.STICKERS_PICKER == cockpit2.STICKERS
+    assert html.count("value='sticker_post'") == len(cockpit2.STICKERS)
+    assert "friday-dance" in html
 
 
 def test_elke_sticker_is_een_eigen_formulier_dus_zonder_js(tmp_path):
@@ -125,14 +129,16 @@ def test_een_eigen_sticker_wordt_niet_gekopieerd(tmp_path):
     assert not os.path.exists(os.path.join(dd, "kanaalbijlagen"))
 
 
-def test_een_teruggetrokken_sticker_kan_ook_niet_met_de_hand(tmp_path):
-    """`friday-dance` staat niet in de kiezer, dus een POST erop hoort ook te weigeren — anders
-    is de afspraak alleen een gebrek aan knop."""
+def test_een_naam_die_niet_in_de_kiezer_staat_wordt_geweigerd(tmp_path):
+    """DE POORT BLIJFT, OOK NU ER NIETS MEER IS TERUGGETROKKEN. Een POST hoort niet te kunnen
+    kiezen wat het scherm niet aanbiedt — dat is hier een bestand dat er niet is, en het zou
+    morgen weer een teruggetrokken sticker kunnen zijn."""
     dd, st, ik = _dorp(tmp_path)
-    _nxt, msg = cockpit2.dispatch(dd, "sticker_post",
-                                  {"kanaal": [_kanaal()], "naam": ["friday-dance.gif"]},
-                                  username="sam@nooch.earth")
-    assert msg.startswith("✗")
+    for naam in ("bestaat-niet.gif", "../nooch.css", ""):
+        _nxt, msg = cockpit2.dispatch(dd, "sticker_post",
+                                      {"kanaal": [_kanaal()], "naam": [naam]},
+                                      username="sam@nooch.earth")
+        assert msg.startswith("✗"), naam
     assert cockpit2._Stores(dd).channels.trail(_kanaal()) == []
 
 
@@ -180,7 +186,7 @@ def test_je_blijft_na_het_plaatsen_in_het_gesprek(tmp_path):
 def test_het_formulier_draagt_de_terugweg(tmp_path):
     _dd, _st, _ik, html = _html(tmp_path)
     blok = html.split("class='emoji-pop emo-st'")[1].split("</details>")[0]
-    assert blok.count("name='next'") == 8
+    assert blok.count("name='next'") == len(cockpit2.STICKERS_PICKER)
 
 
 # ── 3. Giphy: alleen een id, en dezelfde verkleining ────────────────────────────────────────

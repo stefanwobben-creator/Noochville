@@ -1107,12 +1107,14 @@ except OSError:                                        # map ontbreekt → geen 
 for _s in STICKERS:
     _STATIC_TYPES["stickers/" + _s] = "image/gif"
 
-#: Wat er ECHT in de kiezer komt. `friday-dance.gif` staat er bewust niet in (Stefan, 22 sept
-#: 2026): de herkomst is onbevestigd — hij lijkt niet uit het eigen Nooch_Earth-kanaal te komen.
-#: Het bestand blijft wél geserveerd, zodat een bericht dat hem al draagt niet stukgaat; hij is
-#: alleen niet meer te KIEZEN. Komt de bevestiging, dan is dit één regel terug.
-_STICKER_UIT = ("friday-dance.gif",)
-STICKERS_PICKER = tuple(s for s in STICKERS if s not in _STICKER_UIT)
+#: Wat er in de kiezer komt: alles wat er ligt.
+#:
+#: HIER STOND EEN UITZONDERING VOOR `friday-dance.gif` — de herkomst was onbevestigd en hij is
+#: één ronde lang niet kiesbaar geweest. Stefan heeft bevestigd dat hij van Nooch is, dus de
+#: uitzondering is weg in plaats van leeggemaakt: een lege filterlijst laat de vraag "wanneer
+#: vul ik hier iets in?" openstaan, en die vraag heeft geen antwoord meer. Wordt er ooit weer
+#: een sticker teruggetrokken, dan is dat een nieuw besluit met een eigen reden.
+STICKERS_PICKER = STICKERS
 
 
 def role_context(st, role_id: str, fmt: str = "json"):
@@ -1448,14 +1450,15 @@ def _act_sticker_post(c):
 
     # AUTHZ: iedereen-ingelogd — zie `_sticker_poort`: dezelfde voorwaarde als het antwoordveld.
 
-    ER WORDT NIETS GEKOPIEERD. De acht eigen stickers staan in het pakket en worden al
-    geserveerd; ze per bericht naar `data/kanaalbijlagen/` schrijven zou betekenen dat dezelfde
-    100 kB er bij elke high-five nog een keer bij komt. De bijlage verwijst dus naar
-    `stickers/<naam>`, en `/bijlage` weet dat die uit de statische map komen. Dat is geen
-    uitzondering op de leescheck: die staat vóór het ophalen en verandert niet.
+    ER WORDT NIETS GEKOPIEERD. De eigen stickers staan in het pakket en worden al geserveerd;
+    ze per bericht naar `data/kanaalbijlagen/` schrijven zou betekenen dat dezelfde 100 kB er
+    bij elke high-five nog een keer bij komt. De bijlage verwijst dus naar `stickers/<naam>`,
+    en `/bijlage` weet dat die uit de statische map komen. Dat is geen uitzondering op de
+    leescheck: die staat vóór het ophalen en verandert niet.
 
-    De NAAM wordt getoetst tegen `STICKERS_PICKER` en niet tegen de schijf, dus een
-    teruggetrokken sticker (`_STICKER_UIT`) kan ook via een handmatige POST niet alsnog."""
+    De NAAM wordt getoetst tegen `STICKERS_PICKER` en niet tegen de schijf. Dat is nu dezelfde
+    verzameling, maar de toets blijft: een POST hoort niet te kunnen kiezen wat het scherm niet
+    aanbiedt, en zou er ooit weer een sticker uit de kiezer gaan, dan werkt deze poort meteen."""
     naam = (c.g("naam") or "").strip()
     poort, melding = _sticker_poort(c)
     if poort is None:
