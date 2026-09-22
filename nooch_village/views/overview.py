@@ -195,9 +195,10 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     is_c = org.is_circle(rec)
     parts = [f"<div class='c2-sec'><h3>Purpose</h3><div>{_e(d.purpose) or '<span class=muted>—</span>'}</div></div>"]
     if is_c:
-        # Strategie geïntegreerd in overview (aparte strategy-tab vervallen). Purpose staat
-        # hierboven al → chain overslaan.
-        parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
+        # Strategie geïntegreerd in overview (aparte strategy-tab vervallen). De
+        # `with_purpose_chain=False` die hier stond is overbodig geworden: de keten zelf is weg,
+        # want de enige plek die hem MET keten aanriep was de onbereikbare `tab == "strategy"`.
+        parts.append(_strategy_tab_html(st, rec))
     doms = d.domains or []
     doms_list = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>") if doms else ""
     # Op de anchor-cirkel stond hier een live NASA-EPIC-aardbol. Weg op 19 september 2026
@@ -864,8 +865,6 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
 
     if tab == "overview":
         content = _overview_html(st, rec, csrf_token)
-    elif tab == "strategy":
-        content = _strategy_tab_html(st, rec)
     elif tab == "roles":
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
