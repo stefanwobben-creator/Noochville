@@ -57,15 +57,13 @@ def test_de_hele_rij_blijft_onder_twee_megabyte():
     assert totaal < 2 * 1024 * 1024, f"{totaal // 1024} kB voor de hele rij"
 
 
-BRON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "claude", "stickers_22sept")
-
-
-def _alfa_minimum(pad: str) -> int:
-    """De doorzichtigste pixel van het eerste frame. 0 = er is écht doorzichtigheid, 255 = dekkend."""
-    with Image.open(pad) as im:
-        im.seek(0)
-        return im.convert("RGBA").getchannel("A").getextrema()[0]
+GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden",
+                      "stickers_referentie.png")
+#: Gemiddeld kleurverschil per pixel (0-255) dat een sticker mag afwijken van zijn bron.
+#: Gekalibreerd op 22 september 2026: de negen goede liggen op 0,05-2,49; de kapotte ronde
+#: (index 0 als 'doorzichtig') gaf 6,9 · 11,9 · 26,6 · 30,2 · 99,1 · 182,2 op zes van de negen.
+#: Alles tussen 2,5 en 6,9 zou dus een nieuw soort afwijking zijn en hoort zich te melden.
+MAX_AFWIJKING = 6.0
 
 
 def test_de_stickers_zijn_nog_animaties():
@@ -75,24 +73,49 @@ def test_de_stickers_zijn_nog_animaties():
             assert max(im.size) <= 240, f"{naam} is {im.size}"
 
 
-def test_doorzichtigheid_blijft_waar_hij_er_was():
-    """De eerste optimalisatieronde haalde de bestandsgrootte wél en het BEELD niet: index 0
-    aanwijzen als 'doorzichtig' maakte van de globe een zwart vlak en van de peace-hand iets
-    cyaans. Een cap op bytes alleen zou dat groen hebben gelaten.
+def test_geen_sticker_ziet_er_anders_uit_dan_zijn_bron():
+    """DE ENIGE TEST DIE DE ECHTE FOUT HAD GEVANGEN.
 
-    GEMETEN OP HET BEELD, NIET OP EEN VLAGGETJE. `info["transparency"]` zegt alleen dat er een
-    index is aangewezen; twee van de negen originelen hebben die vlag terwijl geen enkele pixel
-    doorzichtig is (friday-dance, walking-sneakers), en die vlag laat Pillow dan terecht vallen.
-    Wat telt is of de pixels die doorzichtig wáren dat nog zijn."""
-    gemeten = 0
-    for naam in cockpit2.STICKERS:
-        bron = os.path.join(BRON, naam)
-        if not os.path.exists(bron) or _alfa_minimum(bron) != 0:
-            continue                                   # origineel was dekkend: niets te bewaren
-        gemeten += 1
-        assert _alfa_minimum(os.path.join(STATIC, naam)) == 0, \
-            f"{naam} heeft zijn doorzichtige achtergrond verloren"
-    assert gemeten >= 5, f"maar {gemeten} stickers met doorzichtigheid — zegt deze test nog iets?"
+    De eerste optimalisatieronde haalde de bestandsgrootte wél en het beeld niet: index 0
+    aanwijzen als 'doorzichtig' maakte van de globe een zwart vlak, van de peace-hand iets
+    cyaans en van i-love-nooch onleesbare pap. Elke cap op bytes was daar groen op gebleven.
+
+    EN DE TWEEDE POGING TOETSTE NIETS OP CI. Die vergeleek rechtstreeks met
+    `claude/stickers_22sept/`, en die map staat niet in git: op de runner werd élk bestand
+    overgeslagen. Hij viel om op zijn eigen ondergrens-assert (`gemeten >= 5`) — dat was de
+    enige reden dat het opviel in plaats van stil groen te blijven.
+
+    Vandaar een golden file: `tests/golden/stickers_referentie.png`, 30 kB, geschreven door
+    `scripts/stickers_optimaliseren.py --apply` uit de BRONNEN. Geen hand-getypte lijst, en
+    hij reist mee met de repo."""
+    from PIL import ImageChops
+    assert os.path.exists(GOLDEN), "golden file ontbreekt — draai scripts/stickers_optimaliseren.py --apply"
+    with Image.open(GOLDEN) as ref:
+        ref = ref.convert("RGB")
+        t = ref.height
+        assert ref.width == t * len(cockpit2.STICKERS), (
+            f"referentie heeft {ref.width // t} tegels, er zijn {len(cockpit2.STICKERS)} stickers "
+            "— draai scripts/stickers_optimaliseren.py --apply opnieuw")
+        for i, naam in enumerate(cockpit2.STICKERS):
+            verwacht = ref.crop((i * t, 0, (i + 1) * t, t))
+            nu = _tegel(os.path.join(STATIC, naam), t)
+            hist = ImageChops.difference(verwacht, nu).convert("L").histogram()
+            afw = sum(w * n for w, n in enumerate(hist)) / (t * t)
+            assert afw <= MAX_AFWIJKING, (
+                f"{naam} wijkt {afw:.1f} af van zijn bron (max {MAX_AFWIJKING}) — het bestand is "
+                "misschien klein genoeg, maar het ZIET er anders uit")
+
+
+def _tegel(pad: str, grootte: int):
+    """Zelfde duimnagel als `scripts/stickers_optimaliseren.tegel`. Bewust hier herhaald en niet
+    geïmporteerd: een test die zijn meetlat uit de code haalt die hij toetst, meet niets."""
+    with Image.open(pad) as im:
+        im.seek(0)
+        f = im.convert("RGBA")
+        f.thumbnail((grootte, grootte), Image.LANCZOS)
+    vel = Image.new("RGBA", (grootte, grootte), (255, 255, 255, 255))
+    vel.paste(f, ((grootte - f.width) // 2, (grootte - f.height) // 2), f)
+    return vel.convert("RGB")
 
 
 def test_de_whitelist_laat_geen_pad_ontsnappen():
