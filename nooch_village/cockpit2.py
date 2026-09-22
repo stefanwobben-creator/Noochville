@@ -2986,7 +2986,11 @@ def _act_wo_close(c):
         if _lg:
             observations.record_werk_daily(st.observations, g("circle"), _lg[-1])
         msg = "✓ werkoverleg gesloten"
-        return nxt, msg
+        # EEN VLAGGETJE IN DE URL, GEEN TEKSTVERGELIJKING. De viering draait op de PAGINA waar je
+        # na het sluiten belandt, en die moet weten dat er net iets afgerond is. Matchen op de
+        # melding hierboven zou betekenen dat het feest uitgaat zodra iemand die zin vertaalt.
+        # `nooch.js` haalt de parameter er meteen weer uit, dus een refresh viert niet opnieuw.
+        return (nxt + ("&" if "?" in nxt else "?") + "feest=wo"), msg
 
 
 def _act_wo_presence(c):

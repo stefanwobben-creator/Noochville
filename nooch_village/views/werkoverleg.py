@@ -49,9 +49,9 @@ def _wo_checkin(st: _Stores, crec, csrf: str) -> str:
     if csrf:
         allbtn = (f"<form method='post' action='/action'>{_wo_hid(csrf, crec.id, nxt)}"
                   f"<button class='btn sm' type='submit' name='action' value='wo_present_all'>All present</button></form>")
+    # GEEN BEDIENINGSHANDLEIDING BOVEN DE LIJST. Wie hier staat doet dit elke week; de knopjes
+    # per rij zeggen zelf wat ze doen, en de pijltjes-bediening blijft gewoon werken.
     return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-in</h3>{allbtn}</div>"
-            f"<p class='muted' style='font-size:.8rem'>Who is joining? Click, or use ↑/↓ and then "
-            f"<b>v</b> (present) / <b>x</b> (absent). ✗ = on leave: not present and tasks pause.</p>"
             f"<div class='wo-mems' tabindex='0'>{rows}</div></div>")
 
 
@@ -243,13 +243,15 @@ def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
     # cijfers levert er geen — die vertalen we niet — en dan is "lighter = last time" een uitleg
     # bij iets wat niet op het scherm staat.
     ghost = any(isinstance(v, bool) for v in prev.values())
-    legend = "<span class='muted'>lighter = last time</span>" if ghost else ""
+    legend = "lighter = last time" if ghost else ""
     oud = ("<p class='muted'>An earlier score from this circle is kept as written — old 0-10 "
            "scores are not converted.</p>" if oud_gezien else "")
+    # Zelfde als bij de check-in: de uitleg eruit. `legend` en `oud` blijven — dat zijn geen
+    # instructies maar FEITEN over wat je ziet (een vorige score, een niet-omgerekende schaal),
+    # en zonder die twee regels leest een grijs vinkje als een vinkje van nu.
     return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-out</h3>"
-            f"<span class='muted'>{ja} yes · {nee} no</span></div>"
-            f"<p class='muted'>Did this meeting give you what you needed? "
-            f"<b>✓</b> yes / <b>✗</b> no. {legend}</p>{oud}"
+            f"<span class='muted'>{ja} yes · {nee} no{(' · ' + legend) if legend else ''}</span>"
+            f"</div>{oud}"
             f"<div class='wo-mems' tabindex='0'>{rows}</div></div>")
 
 
@@ -282,6 +284,39 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
             f"all outcomes are processed and the meeting closes.</p></div>")
 
 
+def _wo_header(crec, circle_id: str, minuten: int | None) -> str:
+    """De kop van het overleg: titel, en — alleen als het lóópt — de teller en de verlaat-link.
+
+    `minuten=None` = nog niet geopend. Dan is er geen tijd om te tonen en niets om te verlaten,
+    maar de TITEL hoort er wel te staan: zonder kop is het scherm een losse knop in het niets.
+    Die kop was precies wat de oude 'nog niet geopend'-pagina als enige wél had."""
+    if minuten is None:
+        return f"<div class='wo-head'><h2>Tactical meeting — {_e(_name(crec))}</h2></div>"
+    leave = f"/node?id={circle_id}"
+    return (f"<div class='wo-head'><h2>Tactical meeting — {_e(_name(crec))}</h2>"
+            f"<span class='wo-timer' title='running since start'>⏱ {minuten} min</span>"
+            f"<a class='wo-leave' href='{leave}' "
+            f"title='Leave your view — the meeting continues' "
+            f"onclick=\"var o=this.closest('.ovl');if(o){{var x=o.querySelector('.ovl-x');"
+            f"if(x){{x.click();return false;}}}}\">✕ leave meeting</a></div>")
+
+
+def _wo_schil(crec, binnen: str, fragment: bool) -> str:
+    """De pagina om het overleg heen. Eén plek, want de twee takken (open en nog-niet-open)
+    hadden hem allebei zelf geschreven — en daardoor anders.
+
+    HIER STOND GEEN `_nav()`. Het werkoverleg was het enige volledige scherm zonder linkermenu:
+    je klikte erheen en de navigatie was weg, ook als het overleg gewoon liep. In de modal-vorm
+    (`fragment=True`) klopt dat wél — daar is de pagina eromheen er nog — dus die tak levert
+    alleen de inhoud, precies zoals eerst."""
+    if fragment:
+        return binnen
+    from nooch_village.cockpit2_util import _nav
+    return _page("Tactical meeting",
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
+                 f"<div class='c2-main wo-breed'>{binnen}</div></div>")
+
+
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
                        fragment: bool = False, iid: str = "", kpi: str = "", mw: str = "maand",
                        group: str = "") -> str:
@@ -301,17 +336,25 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
                 f"<input type='hidden' name='next' value='{_e(nextu)}'>")
 
     if not st.werk.is_open(circle_id):
+        # NIET EEN EIGEN SCHERM MAAR HETZELFDE SCHERM, uit. Dit was een losse pagina met een
+        # opsomming van de stappen erop; je zag dus een ANDERE indeling vóór het overleg dan
+        # erin, en de stappen stonden als zin opgeschreven terwijl ze een regel lager als lijst
+        # bestaan. Nu: dezelfde twee kolommen, het stappenmenu gedimd omdat er nog niets te
+        # bezoeken valt, en rechts het check-in-paneel met de startknop als enige inhoud.
         start = ""
         if csrf_token:
             su = f"{base}&step=checkin"
             start = (f"<form method='post' action='/action'>{hid(su)}"
                      f"<button class='btn ok' type='submit' name='action' value='wo_open' "
                      f"data-reopen='{_e(su)}'>Start tactical meeting</button></form>")
-        body = (f"<h2 style='margin-top:0'>Tactical meeting — {_e(_name(crec))}</h2>"
-                f"<p class='muted'>Fixed order: check-in, checklist, metrics, projects, agenda, "
-                f"check-out, close.</p>{sec}<div style='margin-top:1rem'>{start}</div>")
-        return body if fragment else _page(
-            "Tactical meeting", f"{_DS_LINK}<div class='c2-wrap'>{body}</div>")
+        uit = "".join(f"<span class='wo-step'><span class='wo-num'>{i}</span>{_e(lbl)}</span>"
+                      for i, (_k, lbl) in enumerate(_WO_STEPS, 1))
+        left = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav wo-uit'>{uit}</div>")
+        content = (f"<div class='c2-sec'><div class='cl-head'><h3>Check-in</h3></div>"
+                   f"{start}{sec}</div>")
+        return _wo_schil(crec, _wo_header(crec, circle_id, None)
+                         + f"<div class='wo-grid'><div class='wo-left'>{left}</div>"
+                           f"<div class='wo-mid'>{content}</div></div>", fragment)
 
     cur = step if step in dict(_WO_STEPS) else "checkin"
     st.werk.mark_visited(circle_id, cur)                 # voortgang: bezochte stappen
@@ -373,20 +416,10 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         step_action = (f"<div class='wo-next'><a class='btn ok js-modal' href='{_nu}' "
                        f"data-href='{_nu}'>Next →</a></div>")
 
-    # Header: titel + timer (klein rechts) + "verlaat overleg" (sluit je view/room, geen afronden).
-    _leave = f"/node?id={circle_id}"
-    header = (f"<div class='wo-head'><h2>Tactical meeting — {_e(_name(crec))}</h2>"
-              f"<span class='wo-timer' title='running since start'>⏱ {st.werk.duration_min(circle_id)} min</span>"
-              f"<a class='wo-leave' href='{_leave}' "
-              f"title='Leave your view — the meeting continues' "
-              f"onclick=\"var o=this.closest('.ovl');if(o){{var x=o.querySelector('.ovl-x');"
-              f"if(x){{x.click();return false;}}}}\">✕ leave meeting</a></div>")
+    header = _wo_header(crec, circle_id, st.werk.duration_min(circle_id))
 
     # LiveKit verhuist naar een dorp-brede call bar (volgende scope); het werkoverleg heeft geen
     # eigen "In de room"-kolom meer. Twee kolommen: links de stap-navigatie, rechts de inhoud.
     detail = (f"{header}<div class='wo-grid'><div class='wo-left'>{left}</div>"
               f"<div class='wo-mid'>{content}{step_action}</div></div>")
-    if fragment:
-        return detail
-    return _page("Tactical meeting", f"{_DS_LINK}<div class='c2-wrap'>"
-                 f"<div class='c2-main' style='max-width:1160px'>{detail}</div></div>")
+    return _wo_schil(crec, detail, fragment)

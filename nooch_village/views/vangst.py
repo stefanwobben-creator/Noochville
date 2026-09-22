@@ -539,10 +539,20 @@ def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str 
     lijst = _uitkomsten_tabel(st, circle, it, csrf, nxt)
 
     klaar = it.get("status") == "done"
-    vink = (f"<form method='post' action='/action' class='emo-f'>"
+    # TWEE GROENE KNOPPEN ONDER ELKAAR, en geen van beide zei welke je nodig had. "Opslaan" is de
+    # HERHAALBARE actie binnen het formulier (een punt levert vaak drie uitkomsten op, dus die
+    # knop druk je meerdere keren in) en blijft daarom `btn ok`. "Afgetikt" sluit het hele punt
+    # af — één keer, en dan is het klaar. Dat is een andere soort besluit en hoort er ook anders
+    # uit te zien: buiten de formulier-kaart, achter een scheidingslijn, zonder het groen dat
+    # "dit is de knop die je nu wil" betekent.
+    vink = (f"<div class='wo-afronden'>"
+            f"<form method='post' action='/action' class='emo-f'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid, klaar='0' if klaar else '1')}"
-            f"<button class='btn {'' if klaar else 'ok '}sm' type='submit' name='action' "
-            f"value='vangst_klaar'>{'↺ heropen' if klaar else '✓ afgetikt'}</button></form>")
+            f"<button class='btn sm wo-aftik' type='submit' name='action' "
+            f"value='vangst_klaar'>{'↺ heropen' if klaar else '✓ afgetikt'}</button></form>"
+            f"<span class='muted'>"
+            f"{'Dit punt staat op afgehandeld.' if klaar else 'Sluit dit punt af — de uitkomsten hierboven blijven staan.'}"
+            f"</span></div>")
 
     op = " open" if open_iid and open_iid == iid else ""
     # HET UITKOMST-FORMULIER STAAT VOOROP. Daar werkt de secretaris live in; de spanningstekst is

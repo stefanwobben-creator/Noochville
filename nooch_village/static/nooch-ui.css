@@ -82,9 +82,19 @@
 .nu .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
 /* Navigatie in hoofdletters, net als de koppen en de knoppen: de referentie zet SHOP STORE
    MISSION CONTACT in de topbar. Dit is geen aparte smaakkeuze maar dezelfde regel doorgetrokken. */
-.nu .c2-subnav a, .nu .c2-navbtn { border-radius: 0; color: var(--nu-text);
+/* `.wo-step` HOORT HIER, want het is hetzelfde ding: een verticaal menu in een linkerkolom.
+   Op /werkoverleg (een nu-route) stond het stappenmenu op de OUDE look terwijl de navigatie
+   ernaast de nieuwe droeg — kleine letters naast hoofdletters, 400 naast 700. Gelijktrekken in
+   nooch.css alleen sloot dat gat niet: op een nu-scherm wint deze laag. */
+.nu .c2-subnav a, .nu .c2-navbtn, .nu .wo-step { border-radius: 0; color: var(--nu-text);
   text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
-.nu .c2-subnav a:hover, .nu .c2-navbtn:hover { background: var(--nu-text); color: var(--nu-surface); }
+.nu .c2-subnav a:hover, .nu .c2-navbtn:hover, .nu .wo-step:hover {
+  background: var(--nu-text); color: var(--nu-surface); }
+/* De stap waar je STAAT is geen hover: hij blijft staan als je de muis weghaalt. Zelfde
+   markering als de overleg-knoppen hierboven — lichte groene vulling, zwarte tekst. */
+.nu .wo-step.on { background: var(--nu-bg-alt); color: var(--nu-text); }
+.nu .wo-step.done { color: var(--nu-muted); }
+.nu .wo-step.done .wo-num, .nu .wo-step.on .wo-num { background: var(--nu-text); color: var(--nu-neon); }
 .nu .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
 
 /* 21 september · de twee overleg-knoppen, en de live-stand.
@@ -218,14 +228,18 @@
    Waarom een onderlijn en niet "niets": een veld moet vindbaar blijven. Hij ligt op de bodem van
    het veld, dus de ruimte tussen twee velden wordt wit in plaats van een rij randen die elkaar
    raken. Bij focus wordt hij dikker en groen — de plek waar je bent, is de enige die opvalt. */
+/* `input:not([type])` HOORT HIER, en stond er niet. Een `<input>` zonder type IS een tekstveld,
+   maar `input[type=text]` matcht hem niet — het attribuut moet er staan. In de views staan er 47
+   zonder, waaronder het agendaveld van het roloverleg en het vangst-formulier: die kregen dus geen
+   onderlijn en geen groene focus, precies de twee dingen waar dit blok voor bestaat. */
 .nu input[type=text], .nu input[type=search], .nu input[type=email], .nu input[type=number],
-.nu input[type=url], .nu input[type=date], .nu input[type=password],
+.nu input[type=url], .nu input[type=date], .nu input[type=password], .nu input:not([type]),
 .nu textarea, .nu select, .nu .ctrl, .nu .fieldform, .nu .title-edit {
   font-family: var(--nu-font); border: 0; border-bottom: 1.5px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 .nu input[type=text]:focus, .nu input[type=search]:focus, .nu input[type=email]:focus,
 .nu input[type=number]:focus, .nu input[type=url]:focus, .nu input[type=date]:focus,
-.nu input[type=password]:focus, .nu textarea:focus, .nu select:focus {
+.nu input[type=password]:focus, .nu input:not([type]):focus, .nu textarea:focus, .nu select:focus {
   border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
 /* `.fieldform` is een RIJ met een veld en een knop erin; de onderlijn hoort bij het veld, niet om
    de rij heen. Vandaar hier geen lijn — de kinderen dragen hem al. */
@@ -253,22 +267,38 @@
 .nu .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
 .nu .wiki-doms details { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
 
-/* ── Het bord: kolommen dragen een VORM, geen pasteltint ──────────────────────────────────────
-   De vier kolommen hadden elk een eigen achtergrondkleur (blauw/oranje/groen/grijs). Dat is
-   precies de kleur-alleen-status die dit systeem vervangt: in zwart-wit, of voor wie die tinten
-   niet onderscheidt, zijn het vier identieke vakken. Nu één rustige achtergrond voor alle vier,
-   en het onderscheid zit in het merkteken vóór de kop — dezelfde vormen als `.nu-status`. */
-.nu .pcol,
-.nu .pcol[data-to='actief'], .nu .pcol[data-to='wacht'],
-.nu .pcol[data-to='done'], .nu .pcol[data-to='toekomst'] {
-  background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+/* De afsluitende actie onder een agendapunt. Zelfde rolverdeling als op de oude laag: de lijn
+   erboven scheidt "invullen" van "afsluiten", en de knop draagt zwart in plaats van het groen
+   dat "dit is de knop die je nu wil" betekent — dat groen hoort bij Opslaan ernaast. */
+.nu .wo-afronden { border-top: 1.5px solid var(--nu-border-subtle); }
+.nu .wo-aftik { border-color: var(--nu-text); color: var(--nu-text); background: var(--nu-surface); }
+.nu .wo-aftik:hover { background: var(--nu-text); color: var(--nu-surface); }
+
+/* ── Het bord: kolommen dragen een VORM ÉN een tint ───────────────────────────────────────────
+   HIER STOND "geen pasteltint". De vier kolomkleuren waren vervangen door één vlakke
+   achtergrond, omdat kleur alleen geen status mag dragen — en dat blijft waar. Maar het gevolg
+   was dat de kleurcodering op ÉLK nu-scherm wegviel, en dat is overal waar iemand het bord
+   bekijkt: de tinten in nooch.css hadden geen enkele plek meer waar ze te zien waren.
+
+   Founder-besluit 22 september 2026: de tint komt terug. Het merkteken vóór de kop blijft óók
+   staan, dus de regel wordt niet geschonden — de status heeft nu twee dragers in plaats van
+   één, precies zoals `.cl-attn`/`.cl-todo` hierboven.
+
+   DE WAARDEN KOMEN UIT nooch.css (`--col-*`). Ze hier overtypen zou betekenen dat het bord op
+   een nu-scherm na één wijziging andere kleuren heeft dan daarbuiten. */
+.nu .pcol { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+.nu .pcol[data-to='actief']   { background: var(--col-actief); }
+.nu .pcol[data-to='wacht']    { background: var(--col-wacht); }
+.nu .pcol[data-to='done']     { background: var(--col-done); }
+.nu .pcol[data-to='toekomst'] { background: var(--col-toekomst); }
 .nu .pcol-h { display: flex; align-items: center; gap: .45em; color: var(--nu-text);
   font-family: var(--nu-font); }
 .nu .pcol-h::before { content: ""; width: .6em; height: .6em; flex: none;
   border: 1.5px solid var(--nu-text); }
 .nu .pcol[data-to='actief']  .pcol-h::before { background: var(--nu-accent); border-radius: 50%; }
-.nu .pcol[data-to='wacht']   .pcol-h::before { background: var(--nu-text);
-  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }
+.nu .pcol[data-to='wacht']   .pcol-h::before { background: var(--nu-danger);
+  border-color: var(--nu-danger); clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }
 .nu .pcol[data-to='done']    .pcol-h::before { background: var(--nu-text); border-radius: 50%; }
 .nu .pcol[data-to='toekomst'] .pcol-h::before { border-style: dashed; border-radius: 50%; }
 
@@ -470,6 +500,12 @@
 .nu .wo-ocd .wo-band { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
   border-radius: 0; background: none; }
 .nu .wo-ocd .wo-oc { border: 0; border-radius: 0; background: none; }
+/* En de verwerken-kaart zelf geeft zijn kader op zodra hij IN een punt-rij staat: die rij
+   is al de kaart van dat punt. `.nu .rdr-row .wo-ocd` is (0,3,0) en wint daarmee van
+   `.nu .box-details` (0,2,0) hierboven — zelfde specificiteits-reden als een paar regels
+   terug. */
+.nu .rdr-row .wo-ocd { border: 0; background: none; }
+.nu .rdr-row .wo-ocd > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
 .nu .wo-ocd .c2-sec { border-top: 1.5px solid var(--nu-border-subtle); }
 .nu .wo-staat-lbl { color: var(--nu-muted); font-family: var(--nu-font); }
 
@@ -533,11 +569,39 @@
    `.is-del` doet dat al met een dashed rand, dus die draagt vorm. `.is-new` had alleen een groene
    vulling; die krijgt er een rand bij, zodat ook daar de vorm het signaal draagt en niet de tint. */
 
-/* 1 · Invoervelden en omhulsels */
-.nu .rovm-field, .nu .rov-addrow, .nu .rov-editor, .nu .rov-addgrid, .nu .rov-add,
-.nu .cl-check, .nu .wo-leave, .nu .wo-timer, .nu .wo-num, .nu .wo-mem, .nu .rovm-item {
+/* 1 · Omhulsels — en wat er GEEN is
+   DIT BLOK ZETTE ELF KLASSEN OP DEZELFDE VOLLE 2px-RAND, en vijf daarvan zijn helemaal geen
+   omhulsel. De regel erboven (regel ~213) zegt het al: een besturingselement draagt een ONDERLIJN
+   en een kaart draagt een kader. Hier stond een rij velden alsnog in een hok, en dan zie je de
+   onderlijn van het veld binnen de rand van zijn eigen wrapper — twee lijnen om hetzelfde ding.
+
+   ERUIT, en per stuk de reden:
+     .rov-add      een FORMULIERRIJ met een veld en een +-knop. Zelfde geval als `.fieldform`
+                   hierboven, die om precies deze reden al geen lijn krijgt.
+     .rov-addrow   idem.
+     .rov-addgrid  een GRID dat velden naast elkaar zet. Een raster is geen kaart.
+     .rovm-field   een WRAPPER om één veld, met alleen een margin-top. Het veld erin heeft zijn
+                   eigen onderlijn; het kader eromheen verdubbelde hem.
+     .rov-editor   idem: omhulsel om `input[name=value]`.
+     .wo-mem       een LIJSTRIJ (een deelnemer in de check-in). Rijen scheiden zich met een lijn
+                   ertussen, niet met een hok eromheen — zelfde conventie als de kaartlijsten
+                   hierboven (1,5px `--nu-border-subtle`).
+
+   BLIJFT STAAN: `.cl-check`, `.wo-leave`, `.wo-timer`, `.wo-num` zijn zelfstandige knopjes en
+   badges — die zijn wél een omhulsel, al is het een klein. En `.rovm-item` houdt zijn rand omdat
+   die daar BETEKENIS draagt: `.is-new` en `.is-del` markeren wat er in een voorstel verandert met
+   een rand-variant, en zonder basisrand is er niets om te variëren. */
+.nu .cl-check, .nu .wo-leave, .nu .wo-timer, .nu .wo-num, .nu .rovm-item {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .rov-add, .nu .rov-addrow, .nu .rov-addgrid, .nu .rovm-field, .nu .rov-editor {
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--nu-text); font-family: var(--nu-font); }
+/* De rij scheidt zich van de volgende, meer niet. `.sel` mag wél opvallen: dat is waar je met de
+   pijltjes staat, en dat moet je kunnen zien. */
+.nu .wo-mem { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: none; color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+.nu .wo-mem.sel { background: var(--nu-bg-alt); }
 .nu .rov-foot { background: var(--nu-surface); border-top: var(--nu-border); }
 
 /* 2 · Grijstinten → één muted */
