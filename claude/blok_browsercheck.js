@@ -56,6 +56,12 @@
   var kaalNa = [].slice.call(b.children).filter(function (e) { return !e.classList.contains("wb"); }).length;
   zeg("formatBlock → pas herstelt het omhulsel", kaalNa === 0,
       "kaal voor: " + kaalVoor + ", na: " + kaalNa);
+  // DE SOORT ERBIJ, want alleen "er staat geen kale tag meer" is te weinig. Firefox hernoemt het
+  // omhulsel in plaats van het te vervangen, en dan is `kaalNa` allang 0 terwijl er nog `p` staat
+  // waar `h` hoort. Die stille helft kostte 23 september een fout in de pas.
+  var na3 = [].slice.call(b.children).filter(function (e) { return e.textContent.indexOf("proef kop") >= 0; })[0];
+  zeg("formatBlock → en de soort klopt", na3 && na3.dataset.blok === "h",
+      "werd: " + (na3 && na3.dataset.blok));
 
   // 4. insertUnorderedList nest erin — de pas corrigeert data-blok
   var t2 = nieuwBlok("proef lijst");

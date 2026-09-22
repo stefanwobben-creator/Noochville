@@ -466,7 +466,15 @@
       }
       if (node.nodeType !== 1) return;
       if (node.classList.contains("wb")) {
-        node.setAttribute("data-blok", soortVan(inhoudVan(node)));
+        // EIGEN TAG EERST, en dat is geen detail: Firefox HERNOEMT het omhulsel op zijn plek
+        // (`DIV.wb[data-blok=p]` wordt `BLOCKQUOTE.wb[data-blok=p]`) waar Chrome het VERVANGT
+        // door een kale tag die hieronder opnieuw wordt ingepakt. Keek de pas alleen naar de
+        // inhoud, dan vond hij in de hernoemde versie alleen de greep en bleef er `p` staan —
+        // gemeten in Firefox 154 op 23 september 2026. De server maakt van beide vormen
+        // hetzelfde markdown, dus dit raakt niet wat je opslaat; het raakt wel wat de greep
+        // en het scherm van het blok denken.
+        node.setAttribute("data-blok", soorten[node.tagName.toLowerCase()]
+                                       || soortVan(inhoudVan(node)));
         return;
       }
       // Een kale tag (wat `formatBlock` achterlaat): er een omhulsel omheen.
