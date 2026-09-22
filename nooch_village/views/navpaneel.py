@@ -30,7 +30,7 @@ from nooch_village.web_base import _e
 log = logging.getLogger("village.navpaneel")
 
 #: De panelen die bestaan. Alles daarbuiten geeft een lege string (fail-closed, geen gok).
-PANELEN = ("pr", "ci", "org")
+PANELEN = ("ci", "org")
 
 
 def _rij(href: str, tekst: str, *, sub: str = "", tag: str = "") -> str:
@@ -94,6 +94,12 @@ def _paneel_zoek(st, ik: str, q: str) -> str:
 
 
 # ── PR ───────────────────────────────────────────────────────────────────────
+# HET PROJECTS-PANEEL IS OP 23 SEPTEMBER 2026 VERVALLEN (eis Stefan) en de functie blijft staan
+# omdat hij niets kost en de reden hier hoort te staan — zelfde behandeling als `_paneel_messages`
+# hieronder. Het paneel gaf een LIJST terwijl `/projects` het BORD is: je koos een project uit een
+# platte lijst om daarna op een bord te landen dat je meteen had kunnen zien. Het filter dat het
+# paneel wél toevoegde ("mijn projecten") bestaat op het bord zelf als groepering. `pr` staat
+# daarom niet meer in `PANELEN`; de knop is een paginasprong, zoals Messages, Wiki en Admin.
 def _paneel_projects(st, ik: str, welke: str) -> str:
     """Standaard "mijn projecten", zoals het prototype toont.
 
@@ -223,12 +229,10 @@ def _paneel_org(st, ik: str, hier: str) -> str:
 def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
                       hier: str = "") -> str:
     """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
-    titels = {"pr": "Projects", "ci": "Circle", "org": "Organization"}
+    titels = {"ci": "Circle", "org": "Organization"}
     if p not in PANELEN:
         return ""
-    if p == "pr":
-        inhoud = _paneel_projects(st, ik, "alle" if welke == "alle" else "mijn")
-    elif p == "org":
+    if p == "org":
         inhoud = _paneel_org(st, ik, hier)
     else:
         inhoud = _paneel_circle(st, ik)
