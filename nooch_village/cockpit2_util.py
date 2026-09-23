@@ -968,7 +968,7 @@ _SIDE_ITEMS = (
 #: HET OVERLEG VAN EEN CIRKEL en beginnen met `st.records.get(circle_id)`. Zonder `?circle=` is dat
 #: None en kreeg je "No circle." respectievelijk "Unknown." — één gedeelde oorzaak, geen twee
 #: ontbrekende routes. `_nav()` heeft geen stores en kan die cirkel dus niet zelf opzoeken;
-#: `_send` vult hem in, net als bij `_SIDE_CIRCLE` hieronder.
+#: `_send` vult hem in, net als bij `_SIDE_OVERLEG` hieronder.
 _SIDE_OVERLEG = "<!--c2-overleg-->"
 
 
@@ -1000,9 +1000,9 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
         uit.append(f"<a class='{cls}' href='{h}?circle={_e(circle_id)}'>{stip}{tekst}</a>")
     return "".join(uit)
 
-#: `_send` vult deze twee plekken per pagina in (het is per-sessie/per-records-informatie, en
-#: `_nav()` heeft geen stores). Zelfde patroon als de begroeting.
-_SIDE_CIRCLE = "<!--c2-circle-->"
+#: `_send` vult deze plek per pagina in (het is per-sessie/per-records-informatie, en `_nav()`
+#: heeft geen stores). Zelfde patroon als de begroeting. `_SIDE_CIRCLE` stond hier ook, voor de
+#: Circle-knop; die verviel op 23 september 2026 — zie de comment in `_nav()`.
 # `_SIDE_ORG` STOND HIER. De organisatieboom werd met elke pagina meegerenderd in de zijbalk; hij
 # is op 21 september 2026 een nav-paneel geworden (`/nav-paneel?p=org`) en wordt dus opgehaald als
 # je erop klikt. Eén uitklap-mechanisme in de balk in plaats van twee.
@@ -1101,15 +1101,18 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # dat iemand hem weghaalde. Weg op 22 september (eis Stefan).
         + "".join(_side_item(h, l, pn) for h, l, pn in _SIDE_ITEMS)
         + "<div class='c2-subnav-div'></div>"
-        # EÉN Circle-item, niet twee. De eerste versie zette er een statische `/node` naast deze
-        # placeholder — in de rail stonden toen twee knoppen "CI" onder elkaar, allebei anders.
-        # Dit is de cirkel-bewuste: `_send` weet welke cirkel, `_nav` niet.
-        + _SIDE_CIRCLE
+        # HIER STOND CIRCLE (`_SIDE_CIRCLE`, door `_send` per verzoek ingevuld met de eigen
+        # cirkel). Weg op 23 september 2026, en niet als bug maar als concept: een cirkel IS een
+        # rol die rollen bevat, dus wat "mijn cirkel" toonde was altijd een deel van de
+        # organisatieboom — een voorvoegsel, geen tweede perspectief. Sinds Organization zonder
+        # `hier` op je eigen cirkel landt (uitgeklapt én gemarkeerd) toont die knop alles wat
+        # Circle toonde, plus het pad erheen. De vier governancerollen die de boom bewust weglaat
+        # staan op de Roles-tab van die cirkel, onder "Core roles".
         + _side_item("/admin", "Admin")
         # ORGANISATIE ALS GEWOON NAV-ITEM (voorstel Stefan, 21 september 2026). Hij hing als
         # `<details class='c2-orgfly'>` onder de balk: een tweede uitklap-mechanisme naast de
         # panelen, op een plek waar je hem alleen vond door naar beneden te scrollen. Nu dezelfde
-        # knop en dezelfde flyout als Projects, Messages en Circle.
+        # knop en dezelfde flyout als Projects en Messages toen nog hadden.
         + _side_item("/node", "Organization", "org")
         + "</nav>"
         # HIER STOND HET ORG-UITKLAPJE (`c2-orgfly`). Het is een nav-item geworden met een

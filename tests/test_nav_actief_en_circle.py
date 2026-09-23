@@ -49,64 +49,15 @@ def _zonder_commentaar(js: str) -> str:
     return re.sub(r"^\s*//[^\n]*", " ", js, flags=re.M)
 
 
-# ── 1. Het Circle-paneel ────────────────────────────────────────────────────────────────────
-def _paneel(dd) -> str:
-    return render_nav_paneel(cockpit2._Stores(dd), "ci", ik="")
-
-
-def test_het_paneel_toont_de_operationele_cirkel(tmp_path):
-    dd = _dd(tmp_path)
-    from nooch_village import org
-    st = cockpit2._Stores(dd)
-    html = _paneel(dd)
-    rollen = [r for r in org.roles_of(st.records.all(), NOOCH) if not r.archived]
-    assert rollen, "geen rollen onder de operationele cirkel — dan meet deze test niets"
-    for rec in rollen[:5]:
-        assert f"/node?id={rec.id}'" in html, rec.id
-
-
-def test_het_paneel_toont_niet_de_hele_boom(tmp_path):
-    """MUTATIE-CONTROLE op de test hierboven: die zou ook slagen als hij álles toonde — wat hij
-    deed. Een rol die NIET onder de operationele cirkel hangt hoort er niet in."""
-    dd = _dd(tmp_path)
-    from nooch_village import org
-    st = cockpit2._Stores(dd)
-    html = _paneel(dd)
-    elders = [r for r in st.records.all()
-              if not r.archived and r.id != NOOCH
-              and getattr(r, "parent", None) not in (None, "", NOOCH)]
-    assert elders, "geen rollen buiten de operationele cirkel — dan meet deze test niets"
-    # OP DE AFSLUITENDE QUOTE, niet op de kale id. `/node?id=mother_earth__nooch` zit als
-    # SUBSTRING in `/node?id=mother_earth__nooch__brand_visual_designer`, dus zonder die grens
-    # sloeg deze test aan op een rij die er wél hoort te staan.
-    for rec in elders[:8]:
-        assert f"/node?id={rec.id}'" not in html, f"{rec.id} hoort niet in het Circle-paneel"
-
-
-def test_er_staat_maar_een_cirkelkop_boven(tmp_path):
-    """De oude versie zette per cirkel een groepskop. Eén cirkel betekent één kop, of geen."""
-    dd = _dd(tmp_path)
-    assert _paneel(dd).count("c2-pgroep") <= 1
-
-
-def test_het_paneel_gebruikt_dezelfde_bron_als_de_knop():
-    """`reference, don't copy`. De href van de Circle-knop komt uit `_home_node`; het paneel hoort
-    dezelfde vraag niet een tweede keer te beantwoorden."""
-    import inspect
-    from nooch_village.views import navpaneel
-    bron = inspect.getsource(navpaneel._paneel_circle)
-    assert "_home_node" in bron
-
-
-def test_zonder_organisatie_zegt_hij_dat(tmp_path):
-    """Fail-closed: geen cirkel is een melding, geen leeg paneel waarin je blijft zoeken."""
-    import json
-    import os
-    dd = _dd(tmp_path)
-    with open(os.path.join(dd, "governance_records.json"), "w", encoding="utf-8") as fh:
-        json.dump({}, fh)
-    html = render_nav_paneel(cockpit2._Stores(dd), "ci", ik="")
-    assert "No circle" in html or "No roles" in html
+# ── 1. HET CIRCLE-PANEEL BESTAAT NIET MEER ─────────────────────────────────────────────────
+#
+# De vijf toetsen die hier stonden bewaakten dat `_paneel_circle` ÉÉN cirkel toonde in plaats van
+# de hele boom plat. Op 23 september 2026 is het paneel zelf vervallen: een cirkel is een rol die
+# rollen bevat, dus wat hij toonde was altijd een deel van de organisatieboom. De fix van 22
+# september was juist — hij maakte alleen zichtbaar dat het ding erboven overbodig was.
+#
+# Het besluit, de meting en de toetsen die bewaken dat er niets zoekraakte:
+# `tests/test_organisatie_is_de_enige_boom.py`.
 
 
 # ── 2. De huidige-pagina-markering ──────────────────────────────────────────────────────────
@@ -148,17 +99,15 @@ def test_de_terugval_van_organization_leidt_naar_een_dode_pagina(tmp_path):
     assert "c2-subnav" not in html, "als deze pagina wél een balk krijgt, hoort Organization erop"
 
 
-def test_de_eigen_cirkel_markeert_circle_en_niet_organization(tmp_path):
-    """Beide knoppen wijzen naar `/node`; de een met een id, de ander zonder. De meest specifieke
-    treffer wint, anders lichten er twee tegelijk op."""
-    dd = _dd(tmp_path)
-    assert _actief(_nav_van(dd, f"/node?id={NOOCH}")) == ["Circle"]
+def test_elke_node_markeert_organization(tmp_path):
+    """DIT WAREN TWEE TOETSEN: de eigen cirkel markeerde Circle, elke andere node Organization,
+    en de "meest specifieke treffer wint"-regel besliste tussen die twee. Sinds Circle op 23
+    september 2026 verviel is er nog één `/node`-item, en markeert élke node Organization.
 
-
-def test_een_andere_node_markeert_organization(tmp_path):
-    """Je staat ergens in de boom, en dat is wat Organization toont. Circle claimen zou beweren
-    dat je in jóuw cirkel staat terwijl je ergens anders kijkt."""
+    De regel zelf blijft bewaakt door `test_de_meest_specifieke_treffer_wint_ook_als_hij_later_staat`,
+    die hem op een synthetische nav meet en dus niet afhangt van welke items er toevallig zijn."""
     dd = _dd(tmp_path)
+    assert _actief(_nav_van(dd, f"/node?id={NOOCH}")) == ["Organization"]
     assert _actief(_nav_van(dd, "/node?id=mother_earth")) == ["Organization"]
 
 

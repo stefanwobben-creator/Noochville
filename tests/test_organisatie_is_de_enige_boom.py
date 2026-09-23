@@ -29,7 +29,7 @@ import re
 
 from nooch_village import cockpit2
 from nooch_village.cockpit2 import _home_node
-from nooch_village.cockpit2_util import _SIDE_CIRCLE, _nav, overleg_items
+from nooch_village.cockpit2_util import _nav, overleg_items
 from nooch_village.views.navpaneel import PANELEN, render_nav_paneel
 from nooch_village.views.overview import _roles_html, _tree_html
 
@@ -103,3 +103,102 @@ def test_een_boom_zonder_thuiscirkel_valt_niet_om(tmp_path):
     html = render_nav_paneel(st, "org", "")
     assert "Organization" in html
     assert _gemarkeerd(html) == []
+
+
+# ── c. Circle bestaat niet meer ──────────────────────────────────────────────
+def test_circle_is_geen_paneel_en_geen_knop_meer(tmp_path):
+    """Besluit Stefan, 23 september 2026: helemaal weg, ook niet als kale link. Twee klikken naar
+    de eigen cirkel via de gemarkeerde node in de boom is goed genoeg."""
+    dd, st, ik = _dorp(tmp_path)
+    assert "ci" not in PANELEN
+    assert render_nav_paneel(st, "ci", ik) == ""             # fail-closed, geen half scherm
+    h = _nav()
+    assert "data-nav-paneel='ci'" not in h
+    assert ">Circle<" not in h
+
+
+def test_de_placeholder_van_de_circle_knop_is_weg():
+    """`_SIDE_CIRCLE` was de plek die `_send` per verzoek invulde. Blijft hij staan, dan staat er
+    een HTML-comment in elke pagina die nooit meer vervangen wordt.
+
+    OP DE NAAM EN OP DE UITVOER, niet via een import: de eerste versie van deze toets importeerde
+    `_SIDE_CIRCLE` om te bewijzen dat hij weg was, en dat kan per definitie niet."""
+    from nooch_village import cockpit2_util
+    assert not hasattr(cockpit2_util, "_SIDE_CIRCLE")
+    assert "<!--c2-circle-->" not in _nav()
+
+
+def test_de_overleg_knoppen_houden_hun_cirkel(tmp_path):
+    """`_home_node` gaat NIET weg met de knop: hij voedt ook Werkoverleg en Roloverleg. Dit is de
+    toets die zou vallen als "Circle weg" te breed werd opgevat."""
+    dd, st, ik = _dorp(tmp_path)
+    cid = _home_node(st.records.all())
+    knoppen = overleg_items(cid)
+    assert f"/werkoverleg?circle={cid}" in knoppen
+    assert f"/roloverleg2?circle={cid}" in knoppen
+
+
+def test_het_paneel_circle_bestaat_niet_meer():
+    """Niet "staat er nog maar wordt niet aangeroepen": weg. Anders dan bij Messages en Projects
+    is er hier geen reden hem te bewaren — zijn inhoud bestaat elders, en beter."""
+    from nooch_village.views import navpaneel
+    assert not hasattr(navpaneel, "_paneel_circle")
+
+
+# ── Wat er NIET verloren mag gaan ────────────────────────────────────────────
+def test_de_kernrollen_staan_op_de_roles_tab(tmp_path):
+    """DE CORRECTIE DIE DIT BESLUIT MOGELIJK MAAKTE. Het Circle-paneel was de enige NAV-plek met
+    de vier governancerollen, want `_tree_html` laat ze bewust weg. Maar ze zijn niet weg: de
+    Roles-tab van de cirkel toont ze onder "Core roles" — precies waar de comment in de boom naar
+    verwijst. Valt deze toets, dan heeft het weghalen van Circle wél informatie gekost."""
+    dd, st, ik = _dorp(tmp_path)
+    cirkel = st.records.get(_home_node(st.records.all()))
+    tab = _roles_html(st, cirkel, "TOK")
+    kern = [r.id for r in st.records.all()
+            if r.id.endswith(("__facilitator", "__secretary", "__circle_lead", "__circle_rep"))
+            and not r.archived and getattr(r, "parent", None) == cirkel.id]
+    assert kern, "dit dorp heeft geen kernrollen; de toets meet dan niets"
+    for rid in kern:
+        assert f"/node?id={rid}" in tab, f"{rid} staat niet op de Roles-tab"
+    assert "Core roles" in tab
+
+
+def test_de_boom_laat_de_kernrollen_nog_steeds_weg(tmp_path):
+    """Bewust ongewijzigd (besluit: punt a vervalt). Staat dit er ooit anders, dan is dat een
+    keuze en geen ongeluk — deze toets maakt hem zichtbaar."""
+    dd, st, ik = _dorp(tmp_path)
+    cirkel = st.records.get(_home_node(st.records.all()))
+    boom = _tree_html(st, cirkel.id)
+    kern = [r.id for r in st.records.all()
+            if r.id.endswith(("__facilitator", "__secretary", "__circle_lead", "__circle_rep"))
+            and not r.archived and getattr(r, "parent", None) == cirkel.id]
+    assert kern
+    for rid in kern:
+        assert f"/node?id={rid}" not in boom
+
+
+# ── Opruiming die met dit besluit meekomt ────────────────────────────────────
+def test_er_zijn_geen_dode_tree_imports_meer():
+    """`site_audit` en `skills` importeerden `_tree_html` en returnden op de volgende regel zonder
+    hem te gebruiken — restanten van de rechterrail die in fase 10 verdween. Een import die niets
+    doet, leest als "hier staat een boom"."""
+    import pathlib
+    wortel = pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "views"
+    for naam in ("site_audit.py", "skills.py"):
+        bron = (wortel / naam).read_text()
+        assert "_tree_html" not in bron, f"{naam} importeert de boom nog"
+
+
+def test_de_ongebruikte_crumb_berekening_is_weg():
+    """`render_node` rekende een breadcrumb uit die nergens in de uitvoer terechtkwam: het
+    kruimelpad zelf was al weg, de berekening bleef staan.
+
+    OP DE AANROEP, niet op het woord. De eerste versie zocht "crumb" in de bron en viel over een
+    COMMENT die uitlegt dat de breadcrumb weg is — dan toetst hij de uitleg in plaats van de
+    code, een val die in dit project vaker is toegeslagen. `org.breadcrumb` blijft elders gewoon
+    in gebruik (de persoonspagina en `_tree_html`); het gaat om déze aanroeper."""
+    import inspect
+
+    from nooch_village.views import overview
+    bron = inspect.getsource(overview.render_node)
+    assert "org.breadcrumb" not in bron, "render_node rekent nog steeds een kruimelpad uit"

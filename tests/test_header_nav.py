@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 import re
 
-from nooch_village.cockpit2_util import (_nav, _SIDE_CIRCLE, _SIDE_ITEMS,
+from nooch_village.cockpit2_util import (_nav, _SIDE_ITEMS,
                                          _SIDE_OVERLEG, _initials)
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -136,9 +136,10 @@ def test_de_paneelknoppen_houden_hun_hele_contract():
         assert el, paneel
         assert "aria-expanded=" in el.group(0) and "aria-controls='c2-paneel'" in el.group(0)
         assert f"href='{href}'" in el.group(0), paneel
-    # Circle komt niet uit `_nav()`: hij is cirkel-afhankelijk en wordt per verzoek door `_send`
-    # ingevuld. Hier staat dus alleen zijn plaatshouder — dat die blijft is wat telt.
-    assert _SIDE_CIRCLE in html
+    # HIER STOND CIRCLE, als plaatshouder die `_send` per verzoek invulde. Weg op 23 september
+    # 2026: een cirkel is een rol die rollen bevat, dus wat hij toonde was altijd een deel van de
+    # organisatieboom. Wat cirkel-afhankelijk BLIJFT zijn de twee overleg-knoppen.
+    assert _SIDE_OVERLEG in html
     assert "id='c2-paneel'" in html                       # en het doelwit staat er ook
 
 

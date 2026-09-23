@@ -33,12 +33,14 @@ OWNER = "mother_earth__nooch__creator_of_shoes"
 def _nav_ingevuld(cid: str = "mother_earth__nooch") -> str:
     """De balk zoals een PAGINA hem toont, niet zoals `_nav()` hem teruggeeft.
 
-    `_nav()` heeft geen stores en laat twee plekken open als placeholder: de Circle-knop en de
-    twee overleg-knoppen, want die dragen allebei een cirkel-id. `_send` vult ze in. Een test die
-    alleen `_nav()` leest, kijkt dus langs precies het deel dat op 21 september stukging."""
-    from nooch_village.cockpit2_util import _SIDE_CIRCLE, _SIDE_OVERLEG, _side_item, overleg_items
+    `_nav()` heeft geen stores en laat de twee overleg-knoppen open als placeholder, want die
+    dragen een cirkel-id. `_send` vult ze in. Een test die alleen `_nav()` leest, kijkt dus langs
+    precies het deel dat op 21 september stukging.
+
+    DE CIRCLE-KNOP STOND HIER OOK, tot 23 september 2026. Hij is weg als concept: een cirkel is
+    een rol die rollen bevat, dus wat hij toonde was altijd een deel van de organisatieboom."""
+    from nooch_village.cockpit2_util import _SIDE_OVERLEG, overleg_items
     h = _nav()
-    h = h.replace(_SIDE_CIRCLE, _side_item(f"/node?id={cid}", "Circle", "ci"), 1)
     return h.replace(_SIDE_OVERLEG, overleg_items(cid), 1)
 
 
@@ -74,7 +76,7 @@ def test_de_balk_klapt_nooit_om_naar_horizontaal():
 
 def test_de_knoppen_die_een_paneel_openen_en_die_dat_niet_doen():
     h = _nav_ingevuld()
-    for sleutel in ("ci", "org"):
+    for sleutel in ("org",):
         assert f"data-nav-paneel='{sleutel}'" in h, sleutel
     # WI, AD, ME én PR springen gewoon naar hun pagina: daar kies je niets uit een lijst, en een
     # tussenlijst is dan een extra klik zonder winst. Messages kwam er op 21 september bij,
@@ -94,7 +96,7 @@ def test_elke_paneelknop_blijft_zonder_js_een_werkende_link():
     """Zonder deze regel is de balk bij een JS-fout een rij dode elementen. De knop draagt zijn
     href, en `preventDefault` gebeurt pas als het paneel echt opengaat."""
     h = _nav_ingevuld()
-    for sleutel, href in (("ci", "/node?id=mother_earth__nooch"), ("org", "/node")):
+    for sleutel, href in (("org", "/node"),):
         stuk = h.split(f"data-nav-paneel='{sleutel}'")[0][-160:]
         assert f"href='{href}'" in stuk, f"{sleutel} heeft geen val-terug-link"
     assert "e.preventDefault()" in JS
@@ -184,12 +186,10 @@ def test_projects_is_geen_paneel_want_de_pagina_is_al_het_bord(tmp_path):
     assert bord.count("pcard") >= 3, "de drie projecten staan niet als kaart op het bord"
 
 
-def test_het_circle_paneel_meldt_een_rol_zonder_vervuller(tmp_path):
-    """"open — nobody" is informatie. Een lege regel laat het lezen als een weergavefout."""
-    dd, st, ik = _dorp(tmp_path)
-    h = render_nav_paneel(st, "ci", ik)
-    assert "c2-prij" in h and "open — nobody" in h
-    assert "Paneel Tester" in h                    # en wie wél vervult staat erbij
+# HIER STOND `test_het_circle_paneel_meldt_een_rol_zonder_vervuller`. Het Circle-paneel verviel op
+# 23 september 2026; zie `tests/test_organisatie_is_de_enige_boom.py` voor het besluit en voor de
+# toets dat de vier governancerollen niet zijn zoekgeraakt. Wat het paneel deed — "de rollen van
+# één cirkel + wie ze vervult", inclusief "open — nobody" — doet de Roles-tab van die cirkel al.
 
 
 def test_een_onbekend_paneel_geeft_niets(tmp_path):
@@ -299,16 +299,17 @@ def test_de_overleg_links_leveren_een_echt_scherm_op(tmp_path):
             f"{render.__name__} geeft een niet-gevonden-pagina voor circle={cid}")
 
 
-def test_de_balk_draagt_circle_precies_een_keer():
-    """Er stonden er TWEE: een statische `/node` naast de placeholder die `_send` invult. In de
-    rail waren dat twee knoppen "CI" onder elkaar, die naar verschillende plekken gingen."""
-    from nooch_village.cockpit2_util import _SIDE_CIRCLE
+def test_de_balk_draagt_circle_helemaal_niet_meer():
+    """DEZE TOETS HEETTE `..._precies_een_keer`, en bewaakte dat er niet TWEE Circle-knoppen
+    stonden (een statische `/node` naast de placeholder die `_send` invulde — in de rail twee
+    knoppen "CI" onder elkaar naar verschillende plekken). Sinds 23 september 2026 is het
+    antwoord nul: Circle is als concept weg.
+
+    Wat blijft is de eis eronder, en die is niet veranderd: `href='/node'` precies één keer, als
+    val-terug van Organization zonder JS."""
     h = _nav()
-    assert h.count(">Circle<") == 0, "Circle staat hardgecodeerd in de balk"
-    assert h.count(_SIDE_CIRCLE) == 1, "de cirkel-placeholder hoort er precies één keer te staan"
-    # `href='/node'` MAG WEER, maar precies één keer en alleen als val-terug van Organization.
-    # De oorspronkelijke fout was een tweede CIRCLE-knop; dit is een ander item met een ander
-    # paneel, dat zonder JS naar de organisatie navigeert.
+    assert h.count(">Circle<") == 0
+    assert "<!--c2-circle-->" not in h
     assert h.count("href='/node'") == 1
     stuk = h.split("href='/node'")[1][:80]
     assert "data-nav-paneel='org'" in stuk

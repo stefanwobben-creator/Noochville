@@ -191,5 +191,4 @@ def render_skills(st, human_inbox=None) -> str:
     # De organisatieboom stond hier in een eigen rechterrail. Sinds fase 10 punt 3 staat hij nog
     # maar op één plek: de zijbalk links. Zie de toelichting in views/overview.py.
     # tool/skill je navigatie niet kwijt bent (founder 23 jul).
-    from nooch_village.views.overview import _tree_html
     return _page("Skills", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

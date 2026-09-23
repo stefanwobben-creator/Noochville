@@ -32,7 +32,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
-    _SIDE_CIRCLE, _SIDE_OVERLEG, _initials,
+    _SIDE_OVERLEG, _initials,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -1095,35 +1095,28 @@ _NAV_A_RE = re.compile(r"<a class='c2-overleg[^']*' href='[^']*'|<a href='([^']*
 
 
 def _nav_chrome(st, body: str) -> str:
-    """De cirkel-afhankelijke helft van de zijbalk invullen: de Circle-knop en de twee
-    overleg-knoppen.
+    """De cirkel-afhankelijke helft van de zijbalk invullen: de twee overleg-knoppen.
 
     `_nav()` heeft geen stores en kan dus niet weten over WELKE cirkel het gaat; deze functie
-    wel. Twee plekken, dezelfde bron (`_home_node`) — en sinds 22 september is dat een derde:
-    `views/navpaneel._paneel_circle` gebruikt hem ook, zodat de knop, het paneel en de
-    overleggen niet ieder hun eigen antwoord geven op "welke cirkel is de mijne".
+    wel. DE CIRCLE-KNOP HOORDE HIER OOK, tot 23 september 2026. Dat `_home_node` blijft staan is
+    geen restant: hij voedt ook `/projects`, `/vangst` en — hier — de twee overleggen. "Circle
+    weg" mocht dus nooit "`_home_node` weg" gaan betekenen.
 
     Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te tuigen — zelfde
     reden als bij `_nu_body`."""
-    if st is None or (_SIDE_CIRCLE not in body and _SIDE_OVERLEG not in body):
+    if st is None or _SIDE_OVERLEG not in body:
         return body
     try:
         cid = _home_node(st.records.all())
-        # Zelfde vorm als de vaste items (`_side_item`): monogram voor de ingeklapte rail, woord
-        # voor de volle zijbalk. Zou deze link het woord kaal dragen, dan staat er in de rail
-        # één item uit te steken.
-        from nooch_village.cockpit2_util import _side_item, overleg_items
-        body = body.replace(
-            _SIDE_CIRCLE,
-            _side_item(f"/node?id={_e(cid)}", "Circle", "ci") if cid else "", 1)
         # `/werkoverleg` en `/roloverleg2` tonen het overleg van EEN CIRKEL en beginnen met
         # `st.records.get(circle_id)`. Zonder dit id gaven ze "No circle." en "Unknown." — geen
         # ontbrekende routes maar een ontbrekende parameter, op de enige plek die de cirkel niet
         # in handen had.
+        from nooch_village.cockpit2_util import overleg_items
         return body.replace(
             _SIDE_OVERLEG, overleg_items(cid, werk_open=st.werk.is_open(cid)), 1)
     except Exception:                                          # noqa: BLE001
-        return body.replace(_SIDE_CIRCLE, "", 1).replace(_SIDE_OVERLEG, "", 1)
+        return body.replace(_SIDE_OVERLEG, "", 1)
 
 
 def _nav_actief(pad: str, body: str) -> str:

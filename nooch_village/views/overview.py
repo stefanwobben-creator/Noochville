@@ -852,9 +852,9 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     if tab not in tabs:
         tab = "overview"
     recs = st.records.all()
-    crumb = " › ".join(
-        f"<a href='/node?id={_e(i)}'>{_e(_name(st.records.get(i)))}</a>"
-        for i in org.breadcrumb(recs, node_id))
+    # HIER WERD EEN BREADCRUMB BEREKEND die nergens in de uitvoer terechtkwam: het kruimelpad zelf
+    # is weggehaald toen de organisatieboom de positie ging tonen, de berekening bleef staan. Wie
+    # de plek in de organisatie zoekt, ziet hem in de boom — daar is de node gemarkeerd.
     chip = "<span class='chip'>circle</span>" if is_c else "<span class='chip'>role</span>"
     # SLAPEND: zichtbaar, want een slapende rol ziet er verder uit als elke andere. Het record is
     # compleet — purpose, accountabilities, vervuller staan er allemaal nog — en juist daarom moet
