@@ -30,7 +30,7 @@ from nooch_village.web_base import _e
 log = logging.getLogger("village.navpaneel")
 
 #: De panelen die bestaan. Alles daarbuiten geeft een lege string (fail-closed, geen gok).
-PANELEN = ("ci", "org")
+PANELEN = ("org",)
 
 
 def _rij(href: str, tekst: str, *, sub: str = "", tag: str = "") -> str:
@@ -160,49 +160,18 @@ def _paneel_messages(st, ik: str) -> str:
     return "".join(uit) or _leeg("No channels yet.")
 
 
-# ── CI ───────────────────────────────────────────────────────────────────────
-def _paneel_circle(st, ik: str) -> str:
-    """De rollen van JOUW cirkel, met wie ze vervult. Eén cirkel, niet de hele boom.
-
-    HIJ TOONDE ZE ALLEMAAL. De lus liep over `[wortel] + alle niet-gearchiveerde cirkels` en
-    zette van elk de leden onder elkaar — terwijl de docstring hier ("de cirkel waar je in zit")
-    en de href van de knop (`/node?id=<operationele cirkel>`) allebei ÉÉN cirkel beloofden. Wat
-    je kreeg was Organization, plat. Twee nav-items met dezelfde inhoud, en dat is precies wat
-    opviel.
-
-    DEZELFDE BRON ALS DE KNOP, letterlijk `_home_node`. Die vult `_send` al in de href; hem hier
-    opnieuw afleiden zou betekenen dat "welke cirkel is de mijne" op twee plekken wordt
-    beantwoord — het patroon dat in dit dorp al twee keer een bug opleverde (de goal-kanaal-lijst
-    en de platslag-regel).
-
-    `ik` IS NOG STEEDS ONGEBRUIKT, en dat is nu een bewuste stand: er is één operationele cirkel
-    en iedereen kijkt naar dezelfde. Wordt het dorp ooit een boom met meerdere teams, dan is dit
-    de plek waar het persoonlijk wordt — en dan is het een keuze, geen vergeten parameter.
-
-    Een rol zonder vervuller staat er MET die melding bij — "open" is informatie, geen lege
-    regel."""
-    from nooch_village.cockpit2 import _home_node
-    from nooch_village.cockpit2_util import _name
-    recs = st.records.all()
-    cid = _home_node(recs)
-    cirkel = st.records.get(cid) if cid else None
-    if cirkel is None:
-        return _leeg("No circle yet.")
-    leden = [r for r in recs if not r.archived and getattr(r, "parent", None) == cirkel.id]
-    uit = [_groep(_name(cirkel))] if leden else []
-    for rec in leden:
-        namen = []
-        try:
-            for f in st.assign.fillers_of(rec.id, record=rec):
-                if getattr(f, "type", "") == "person":
-                    pers = st.people.get(getattr(f, "id", ""))
-                    if pers is not None:
-                        namen.append(pers.name)
-        except Exception:                                  # noqa: BLE001
-            log.debug("vervullers niet te lezen voor %s", rec.id, exc_info=True)
-        uit.append(_rij(f"/node?id={rec.id}", _name(rec),
-                        sub=", ".join(namen) or "open — nobody"))
-    return "".join(uit) or _leeg("No roles yet.")
+# HET CIRCLE-PANEEL IS OP 23 SEPTEMBER 2026 VERVALLEN, en anders dan bij Messages en Projects
+# blijft de functie NIET staan: zijn inhoud bestaat elders, en beter.
+#
+# Hij toonde "de rollen van één cirkel + wie ze vervult" — precies wat `_roles_html` (de Roles-tab
+# van diezelfde cirkel) al deed, maar dan via `org.roles_of`/`org.subcircles_of` en met Core roles,
+# Roles en Subcircles uit elkaar gehouden. Dit paneel filterde rauw op `parent ==` en zette
+# subcirkels als gewone rijen tussen de rollen. Van twee implementaties van dezelfde vraag is de
+# mindere weg.
+#
+# En als NAVIGATIE voegde hij niets toe: een cirkel is een rol die rollen bevat, dus wat hij toonde
+# was altijd een deel van de organisatieboom. Sinds `render_nav_paneel` zonder `hier` je eigen
+# cirkel invult, opent Organization precies daar — uitgeklapt en gemarkeerd.
 
 
 # ── ORG ──────────────────────────────────────────────────────────────────────
@@ -228,12 +197,21 @@ def _paneel_org(st, ik: str, hier: str) -> str:
 # ── de route ─────────────────────────────────────────────────────────────────
 def render_nav_paneel(st, p: str = "", ik: str = "", q: str = "", welke: str = "mijn",
                       hier: str = "") -> str:
-    """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina."""
-    titels = {"ci": "Circle", "org": "Organization"}
+    """Het fragment voor één paneel. Onbekende sleutel → leeg, geen gok en geen foutpagina.
+
+    `hier` LEEG BETEKENT NIET "NERGENS". `nooch.js` vult hem alleen als je op een `/node`-pagina
+    staat — een fragment weet niet waar het landt. Vanaf Messages, Wiki of Projects kwam de boom
+    daardoor dicht en ongemarkeerd binnen, terwijl `_tree_html` het openklappen (`org.breadcrumb`)
+    en markeren (`.here`) allang kan. Er ontbrak dus geen machinerie maar een DEFAULT: je eigen
+    cirkel.
+
+    Die default komt uit `_home_node`, dezelfde bron als de twee overleg-knoppen, `/projects` en
+    `/vangst`. Een eigen "welke cirkel is van mij"-regel hier zou een tweede antwoord geven op
+    een vraag die al beantwoord is — precies de fout die `_paneel_circle` maakte voordat hij
+    verviel."""
     if p not in PANELEN:
         return ""
-    if p == "org":
-        inhoud = _paneel_org(st, ik, hier)
-    else:
-        inhoud = _paneel_circle(st, ik)
-    return f"<h2 class='c2-pkop'>{_e(titels[p])}</h2>{inhoud}"
+    if not hier:
+        from nooch_village.cockpit2 import _home_node
+        hier = _home_node(st.records.all())
+    return f"<h2 class='c2-pkop'>Organization</h2>{_paneel_org(st, ik, hier)}"

@@ -102,5 +102,4 @@ def render_site_audit(st, doel: str = "live") -> str:
                 f"bepaalt de kleur bovenaan; grijs is niet gemeten en telt niet mee. Een lampje dat van "
                 f"kleur wisselt is het signaal, de stand is het scherm.{dev_noot}</p>"
                 f"{wissel_html}<h2>Lampjes</h2>{kaarten}{_verloop_html(staat.verloop())}</div>")
-    from nooch_village.views.overview import _tree_html
     return _page("Site audit", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
