@@ -814,6 +814,22 @@ def main() -> None:
         if rapport and not apply:
             print("\nDRY-RUN — de uitkomst is niet opgeslagen. Draai opnieuw met --apply.")
 
+    elif mode == "wiki_domein":
+        # De indeling van de wiki: waar landt elke pagina, en wat vraagt nog een mens. Read-only;
+        # pas met --apply worden de handmatige domein-toewijzingen geschreven.
+        from nooch_village import wiki_domein
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        acties = wiki_domein.pas_toe(st, apply=apply)
+        print(wiki_domein.rapport_tekst(wiki_domein.rapport(st), acties))
+        if not apply and any(a[1] == "zou zetten" for a in acties):
+            print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply.")
+
     elif mode == "verwerking":
         # De zelf-verwerking: de rol handelt zijn eigen spanning af. DRY-RUN by default.
         # Dit is tegelijk de statusweergave — read-only, geen wachtrij, geen knoppen.
@@ -1251,6 +1267,6 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | site_audit | doelen_zaad | status_log",
+              "wiki_zaad | wiki_broncheck | wiki_domein | site_audit | doelen_zaad | status_log",
               file=sys.stderr)
         sys.exit(1)

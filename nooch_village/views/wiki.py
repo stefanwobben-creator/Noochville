@@ -17,7 +17,7 @@ import re
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, opmaak_werkbalk,
                                          BLOK_SOORTEN, blok_menu)
-from nooch_village import wiki
+from nooch_village import domeinen, wiki
 
 # Status → chip-icoon. Bewust vijf verschillende tekens: 'gegrond' en 'ongecontroleerd' mogen op
 # het scherm nooit op elkaar lijken, want dat is precies het verschil tussen bewijs en herkomst.
@@ -450,9 +450,19 @@ def _wiki_items(st, soort: str = "all") -> list:
     return sorted(uit, key=lambda a: a.updated_at or a.created_at, reverse=True)
 
 
-def _wiki_domein(a) -> str:
-    """Het domein waaronder dit item hoort. Leeg → de verzamelgroep."""
-    return (getattr(a, "domain", "") or "").strip()
+def _wiki_domein(a, records=None) -> str:
+    """Het BAKJE waaronder dit item hoort, als weergavenaam.
+
+    DIT LAS VROEGER ALLEEN `a.domain`, en dat veld was tot 23 september 2026 alleen voor policies
+    gevuld: 110 van de 121 artefacten vielen daardoor samen in één "No domain yet"-bak. De index
+    groepeerde dus wel, maar op iets dat er bijna nooit was.
+
+    Nu komt het bakje uit `domeinen.bakje_van` — afgeleid bij het lezen, nergens opgeslagen. Een
+    herclassificatie verschuift alle pagina's mee zonder migratie. Zonder records (oude
+    aanroepers) valt hij terug op het kale domein, zodat niets stukgaat dat er al was."""
+    if records is None:
+        return (getattr(a, "domain", "") or "").strip()
+    return domeinen.label(domeinen.bakje_van(a, records)[0])
 
 
 def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
@@ -465,15 +475,20 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
         for k, lbl in _WIKI_SOORTEN)
 
     # Linkerkolom: per domein, ingeklapt behalve de eerste. Native <details>, geen JS.
-    per_domein: dict[str, list] = {}
+    # DE VOLGORDE IS DE WAARDEKETEN, niet het alfabet: de kolom leest van product naar klant en
+    # daarna de ondersteunende functies, met Overig achteraan. Lege bakjes blijven weg — een kopje
+    # waar nooit iets in zit is navigatie-ruis, en op prod zijn dat er vandaag twee.
+    recs = st.records.all()
+    per_bak: dict[str, list] = {}
     for a in items:
-        per_domein.setdefault(_wiki_domein(a) or "No domain yet", []).append(a)
+        per_bak.setdefault(domeinen.bakje_van(a, recs)[0], []).append(a)
     kolom = []
-    for n, (dom, rij) in enumerate(sorted(per_domein.items(), key=lambda kv: (kv[0] == "No domain yet", kv[0]))):
+    for n, (sleutel, label) in enumerate(b for b in domeinen.BAKJES if per_bak.get(b[0])):
+        rij = per_bak[sleutel]
         links = "".join(
             f"<li><a href='/pagina?id={_e(a.id)}'>{_e(a.title or a.id)} "
             f"<span class='pill'>{_e(a.kind)}</span></a></li>" for a in rij)
-        kolom.append(f"<details{' open' if n == 0 else ''}><summary>{_e(dom)} "
+        kolom.append(f"<details{' open' if n == 0 else ''}><summary>{_e(label)} "
                      f"<span class='muted'>{len(rij)}</span></summary><ul class='clean'>{links}</ul></details>")
     nav = f"<nav class='wiki-doms'>{''.join(kolom) or ''}</nav>"
 
@@ -481,8 +496,7 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
         f"<div class='card'><div class='cl-head'>"
         f"<h3><a href='/pagina?id={_e(a.id)}'>{_WIKI_ICOON.get(a.kind, '')} {_e(a.title or a.id)}</a></h3>"
         f"<span class='kc-actions'><span class='pill'>{_e(a.kind)}</span>"
-        + (f"<span class='pill'>{_e(_wiki_domein(a))}</span>" if _wiki_domein(a) else
-           "<span class='pill muted'>no domain</span>")
+        + f"<span class='pill'>{_e(_wiki_domein(a, recs))}</span>"
         + f"</span></div>"
           f"<p class='muted'>Owner: {_e(_name(st.records.get(a.anchor)) if st.records.get(a.anchor) else a.anchor)}"
         + (f" &middot; {_e((a.body or '')[:120])}" if a.body else "") + "</p></div>"
