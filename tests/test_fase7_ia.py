@@ -105,7 +105,13 @@ def test_de_wiki_index_toont_het_hele_dorp(tmp_path):
     st.att.add(OWNER, "note", title="Selco")
     st.att.add(CIRKEL, "policy", title="Stance", domain="Governance")
     html = render_wiki_index(st)
-    assert "Selco" in html and "Stance" in html and "Governance" in html
+    # ER STOND HIER OOK `"Governance" in html`, en dat mat de oude weergave: de kolom toonde de
+    # RUWE domeinnaam. Sinds 23 september toont hij het BAKJE uit `domeinen.BAKJES`, en een
+    # domein dat niet in de classificatietabel staat valt in Overig — precies zoals bedoeld.
+    # Wat deze toets bedoelt is dat de index het hele dorp laat zien, ongeacht wie wat bezit,
+    # en dat meten de twee titels.
+    assert "Selco" in html and "Stance" in html
+    assert "Overig" in html, "een onbekend domein hoort zichtbaar in Overig te landen"
 
 
 # ── 4. Keep-in-wiki ──────────────────────────────────────────────────────────

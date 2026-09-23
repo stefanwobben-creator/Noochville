@@ -259,7 +259,7 @@ class AttachmentStore:
 
     def update(self, aid: str, *, title: str | None = None, body: str | None = None,
                meta: dict | None = None, scope: str | None = None, url: str | None = None,
-               inherit: bool | None = None,
+               inherit: bool | None = None, domain: str | None = None,
                actor_id: str = "", actor_type: str = "",
                governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Werk een attachment bij. Voor artefacten wordt een nieuwe versie-snapshot toegevoegd
@@ -282,6 +282,12 @@ class AttachmentStore:
                 d["url"] = url.strip()[:500]
             if inherit is not None:
                 d["inherit"] = bool(inherit)
+            # HET DOMEIN VERSIONT WEL, anders dan het machine-onderhoud van `set_meta`. Een
+            # domein zegt onder welk governance-domein dit artefact hangt, en `_act_artefact_edit`
+            # logt latere bewerkingen tegen dát domein. Wie het verplaatst verandert dus iets
+            # controleerbaars, en dat hoort in de historie te staan met wie en waarom.
+            if domain is not None:
+                d["domain"] = domain.strip()[:60]
             d["updated_at"] = time.time()
             if d.get("kind") in ARTEFACT_KINDS:
                 versions = d.setdefault("versions", [])
