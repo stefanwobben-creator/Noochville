@@ -200,7 +200,15 @@ class AttachmentStore:
         # subtype geldt alleen legacy voor notes; nieuwe tools hebben een eigen kind.
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
-        domain = (domain or "").strip()[:60] if kind == "policy" else ""
+        # DOMEIN MAG OP ELK ARTEFACT (23 september 2026). Dit stond op `kind == "policy"`, en
+        # daardoor had 110 van de 121 artefacten op prod geen domein en viel de hele wiki in één
+        # "No domain yet"-bak. Stap 1 van `domeinen.bakje_van` leest juist dit veld: het is de
+        # nauwkeurigste bron die er is, want een note die expliciet onder `Decision Making` hangt
+        # hoort daar te landen ook als zijn eigenaar-rol iets anders doet.
+        #
+        # Wat dit NIET verandert: `_mint_id` gebruikt `domain` nog steeds alleen voor policies, dus
+        # een note houdt zijn `{TYPE}-{ROLSLUG}-{NNN}`-vorm. Zie tests/test_domein_op_elk_artefact.
+        domain = (domain or "").strip()[:60]
         body = _binnen_cap((body or "").strip(), kind, waar="AttachmentStore.add")
         with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
