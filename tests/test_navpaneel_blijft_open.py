@@ -87,10 +87,37 @@ def test_de_klik_roept_openen_aan_en_doet_het_niet_zelf():
     assert "paneel.hidden" not in handler, "de klik zet de stand nog zelf"
 
 
-def test_het_herstel_draait_bij_het_laden():
+def test_het_herstel_draait_bij_het_laden_maar_alleen_op_een_node():
+    """ER STOND HIER ALLEEN "er wordt hersteld", en dat was te weinig: het paneel kwam daardoor
+    óók terug op Wiki, Messages, Projects en Admin. Het is de uitklap VAN EEN HOOFDITEM, dus op
+    het scherm van een ander hoofditem hoort hij dicht te zijn (correctie Stefan, 23 sept 2026).
+
+    De poort staat op het PAD en niet op het wissen van de waarde — zie
+    `test_een_uitstapje_wist_de_bewaarde_stand_niet`."""
     bron = _navpaneel_bron()
-    assert re.search(r"if \(bewaard\(\)\) openen\(bewaard\(\)\);", bron), (
-        "er is niets dat het paneel na een paginalaad terugzet")
+    m = re.search(r'if \(location\.pathname === "/node" && bewaard\(\)\) openen\(bewaard\(\)\);',
+                  bron)
+    assert m, "het herstel staat er niet, of niet achter de pad-poort"
+
+
+def test_een_uitstapje_wist_de_bewaarde_stand_niet():
+    """"Ik heb hem dichtgeklikt" en "ik keek even op Wiki" zijn twee verschillende dingen, en
+    alleen het eerste hoort te blijven plakken. Daarom wist alleen `sluit()` de waarde; naar een
+    andere pagina navigeren laat hem staan, zodat het paneel terugkomt zodra je weer op een node
+    bent."""
+    bron = _navpaneel_bron()
+    # `onthoud("")` hoort ALLEEN in sluit() te staan — nergens in een pad-tak.
+    plekken = [m.start() for m in re.finditer(r'onthoud\(""\)', bron)]
+    assert len(plekken) == 2, f"onthoud(\"\") staat op {len(plekken)} plekken, verwacht 2"
+    sluit_i = bron.index("function sluit()")
+    sluit_eind = bron.index("\n    }", sluit_i)
+    openen_i = bron.index("function openen(")
+    openen_eind = bron.index("\n    }", openen_i)
+    for i in plekken:
+        in_sluit = sluit_i < i < sluit_eind
+        # de tweede is de zelfherstellende tak voor een sleutel zonder knop
+        in_openen = openen_i < i < openen_eind
+        assert in_sluit or in_openen, "de stand wordt ergens anders gewist dan bij sluiten"
 
 
 def test_het_herstel_richt_zich_op_de_node_waar_je_landde():
