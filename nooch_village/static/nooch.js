@@ -942,10 +942,24 @@
       }, 220);
     });
 
-    // HET HERSTEL. Stond het paneel open toen je wegklikte, dan staat het er bij de volgende
-    // pagina meteen weer — gevuld voor de node waar je net op landde. Dit is de hele reden dat
-    // `openen` een eigen functie is: hier gebeurt letterlijk hetzelfde als bij een klik.
-    if (bewaard()) openen(bewaard());
+    // HET HERSTEL, EN ALLEEN WAAR HET PANEEL THUISHOORT. Stond het paneel open toen je
+    // wegklikte, dan staat het er op de volgende `/node`-pagina meteen weer — gevuld voor de
+    // node waar je net op landde. Dit is de hele reden dat `openen` een eigen functie is: hier
+    // gebeurt letterlijk hetzelfde als bij een klik.
+    //
+    // DE POORT OP HET PAD is de correctie van 23 september 2026. Zonder hem bleef het paneel op
+    // ELKE pagina staan — ook op Wiki, Messages, Projects en Admin — en dan hoort het niet meer
+    // bij Organization maar bij de hele site. Het is de uitklap VAN EEN HOOFDITEM; op het
+    // scherm van een ander hoofditem heeft hij niets te zoeken.
+    //
+    // De bewaarde waarde blijft bij zo'n uitstapje gewoon staan: `sessionStorage` onthoudt
+    // "stond het paneel open", en de PAGINA beslist of dat hier relevant is. Daarom wissen we
+    // hem niet bij het weg navigeren — dat zou "ik heb hem dichtgeklikt" en "ik keek even
+    // ergens anders" op één hoop gooien, en alleen het eerste hoort te blijven plakken.
+    //
+    // Komt er ooit een tweede paneel bij, dan hoort deze poort PER PANEEL te worden: het pad
+    // waar hij bij hoort is dan niet meer voor iedereen `/node`.
+    if (location.pathname === "/node" && bewaard()) openen(bewaard());
   }
 
   // ── De live-knop: draait er een werkoverleg? (21 september 2026) ──────────────────────────

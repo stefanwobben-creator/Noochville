@@ -74,6 +74,12 @@ def bouw(map_: pathlib.Path, data_dir: str) -> pathlib.Path:
     # het paneel de paginagrens overleeft.
     (map_ / "node").write_text(
         pagina("Node", "Een node-pagina. Staat het paneel er nog?"), encoding="utf-8")
+    # EN EEN PAGINA DIE GEEN NODE IS, want de helft van het gedrag gaat daarover: het paneel hoort
+    # bij Organization, dus op het scherm van een ánder hoofditem hoort hij dicht te zijn. Zonder
+    # deze pagina kon de harness alleen de helft meten die goed ging.
+    (map_ / "wiki").write_text(
+        pagina("Wiki", "Een ander hoofditem. Hier hoort het paneel dicht te zijn."),
+        encoding="utf-8")
     (map_ / "nav-paneel").write_text(render_nav_paneel(st, "org", ""), encoding="utf-8")
 
     koppel = map_ / "static"
@@ -94,7 +100,8 @@ def main(argv=None) -> None:
     bouw(map_, a.data)
     print(f"gebouwd: {map_}")
     print(f"open:    http://127.0.0.1:{a.poort}/")
-    print("meet:    klik Organization, klik een rol, en kijk of het paneel blijft staan")
+    print("meet:    klik Organization → een rol (/node): blijft staan;"
+          " daarna /wiki: dicht")
     handler = functools.partial(_Handler, directory=str(map_))
     with http.server.ThreadingHTTPServer(("127.0.0.1", a.poort), handler) as srv:
         try:
