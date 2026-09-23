@@ -817,12 +817,75 @@
 
     function sluit() {
       open = null;
+      onthoud("");                      // expliciet dicht = ook niet meer herstellen
       paneel.hidden = true;
       document.body.classList.remove("navpaneel-open");
       Array.prototype.forEach.call(knoppen, function (k) {
         k.setAttribute("aria-expanded", "false");
       });
       markeer(null);
+    }
+
+    // HET PANEEL OVERLEEFT NU EEN PAGINALAAD (23 september 2026). Tot vandaag leefde "welk paneel
+    // staat open" alleen in `open` hierboven, en die begint bij elke navigatie opnieuw op null.
+    // Klikken op een rol in de organisatieboom is een gewone link, dus het paneel viel dicht en je
+    // moest voor elke volgende rol opnieuw op Organization klikken — precies het doorbladeren
+    // waar de boom voor bedoeld is.
+    //
+    // `sessionStorage` EN NIET DE SERVER: het is een voorkeur van dit tabblad, geen feit over het
+    // dorp. Hij hoort niet in de records, niet in een sessie op de server en niet in een
+    // querystring die je per ongeluk deelt. Per tab, en weg als het tabblad weg is.
+    //
+    // Lezen en schrijven mogen allebei gooien (privémodus, geblokkeerde opslag). Dan werkt het
+    // paneel gewoon zoals vroeger: open zolang je op de pagina blijft. Nooit een uitzondering die
+    // de rest van de navigatie meesleept.
+    var BEWAARSLEUTEL = "nv-navpaneel";
+
+    function onthoud(sleutel) {
+      try {
+        if (sleutel) sessionStorage.setItem(BEWAARSLEUTEL, sleutel);
+        else sessionStorage.removeItem(BEWAARSLEUTEL);
+      } catch (e) { /* geen opslag: dan is het paneel simpelweg niet blijvend */ }
+    }
+
+    function bewaard() {
+      try { return sessionStorage.getItem(BEWAARSLEUTEL) || ""; } catch (e) { return ""; }
+    }
+
+    function knopVoor(sleutel) {
+      return Array.prototype.filter.call(knoppen, function (k) {
+        return k.getAttribute("data-nav-paneel") === sleutel;
+      })[0] || null;
+    }
+
+    // ÉÉN OPEN-IMPLEMENTATIE, gebruikt door de klik én door het herstel na een paginalaad. Twee
+    // kopieën zouden betekenen dat een herstelde stand net iets anders is dan een geklikte —
+    // en dat merk je pas als er één iets bijkrijgt.
+    function openen(sleutel) {
+      var knop = knopVoor(sleutel);
+      // Een bewaarde sleutel die niet meer bestaat (Circle sinds #576, Projects sinds #575):
+      // niets openen, en het geheugen opruimen zodat het niet elke laad opnieuw probeert.
+      if (!knop) { onthoud(""); return; }
+      open = sleutel;
+      onthoud(sleutel);
+      Array.prototype.forEach.call(knoppen, function (k) {
+        k.setAttribute("aria-expanded", k === knop ? "true" : "false");
+      });
+      markeer(knop);
+      paneel.hidden = false;
+      document.body.classList.add("navpaneel-open");
+      binnen.innerHTML = "<p class='muted c2-pleeg'>…</p>";
+      // De organisatieboom klapt de tak open waar je NU staat. Een fragment weet niet op welke
+      // pagina het landt, dus de client geeft het mee — precies wat de oude zijbalk-injectie
+      // server-side deed toen de boom nog met elke pagina meekwam. Bij een herstel is dat de
+      // node waar je zojuist op klikte, zodat het paneel lijkt te blijven staan terwijl de
+      // markering meeschuift.
+      var hier = "";
+      if (location.pathname === "/node") {
+        hier = new URLSearchParams(location.search).get("id") || "";
+      }
+      return vul("/nav-paneel?p=" + encodeURIComponent(sleutel) +
+                 (hier ? "&hier=" + encodeURIComponent(hier) : ""));
     }
 
     function vul(url) {
@@ -847,23 +910,7 @@
         var sleutel = knop.getAttribute("data-nav-paneel");
         e.preventDefault();
         if (open === sleutel) { sluit(); return; }
-        open = sleutel;
-        Array.prototype.forEach.call(knoppen, function (k) {
-          k.setAttribute("aria-expanded", k === knop ? "true" : "false");
-        });
-        markeer(knop);
-        paneel.hidden = false;
-        document.body.classList.add("navpaneel-open");
-        binnen.innerHTML = "<p class='muted c2-pleeg'>…</p>";
-        // De organisatieboom klapt de tak open waar je NU staat. Een fragment weet niet op welke
-        // pagina het landt, dus de client geeft het mee — precies wat de oude zijbalk-injectie
-        // server-side deed toen de boom nog met elke pagina meekwam.
-        var hier = "";
-        if (location.pathname === "/node") {
-          hier = new URLSearchParams(location.search).get("id") || "";
-        }
-        vul("/nav-paneel?p=" + encodeURIComponent(sleutel) +
-            (hier ? "&hier=" + encodeURIComponent(hier) : ""));
+        openen(sleutel);
       });
     });
 
@@ -894,6 +941,11 @@
         vul("/nav-paneel?p=zoek&q=" + encodeURIComponent(veld.value));
       }, 220);
     });
+
+    // HET HERSTEL. Stond het paneel open toen je wegklikte, dan staat het er bij de volgende
+    // pagina meteen weer — gevuld voor de node waar je net op landde. Dit is de hele reden dat
+    // `openen` een eigen functie is: hier gebeurt letterlijk hetzelfde als bij een klik.
+    if (bewaard()) openen(bewaard());
   }
 
   // ── De live-knop: draait er een werkoverleg? (21 september 2026) ──────────────────────────
