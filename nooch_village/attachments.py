@@ -200,7 +200,15 @@ class AttachmentStore:
         # subtype geldt alleen legacy voor notes; nieuwe tools hebben een eigen kind.
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
-        domain = (domain or "").strip()[:60] if kind == "policy" else ""
+        # DOMEIN MAG OP ELK ARTEFACT (23 september 2026). Dit stond op `kind == "policy"`, en
+        # daardoor had 110 van de 121 artefacten op prod geen domein en viel de hele wiki in één
+        # "No domain yet"-bak. Stap 1 van `domeinen.bakje_van` leest juist dit veld: het is de
+        # nauwkeurigste bron die er is, want een note die expliciet onder `Decision Making` hangt
+        # hoort daar te landen ook als zijn eigenaar-rol iets anders doet.
+        #
+        # Wat dit NIET verandert: `_mint_id` gebruikt `domain` nog steeds alleen voor policies, dus
+        # een note houdt zijn `{TYPE}-{ROLSLUG}-{NNN}`-vorm. Zie tests/test_domein_op_elk_artefact.
+        domain = (domain or "").strip()[:60]
         body = _binnen_cap((body or "").strip(), kind, waar="AttachmentStore.add")
         with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
@@ -251,7 +259,7 @@ class AttachmentStore:
 
     def update(self, aid: str, *, title: str | None = None, body: str | None = None,
                meta: dict | None = None, scope: str | None = None, url: str | None = None,
-               inherit: bool | None = None,
+               inherit: bool | None = None, domain: str | None = None,
                actor_id: str = "", actor_type: str = "",
                governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Werk een attachment bij. Voor artefacten wordt een nieuwe versie-snapshot toegevoegd
@@ -274,6 +282,12 @@ class AttachmentStore:
                 d["url"] = url.strip()[:500]
             if inherit is not None:
                 d["inherit"] = bool(inherit)
+            # HET DOMEIN VERSIONT WEL, anders dan het machine-onderhoud van `set_meta`. Een
+            # domein zegt onder welk governance-domein dit artefact hangt, en `_act_artefact_edit`
+            # logt latere bewerkingen tegen dát domein. Wie het verplaatst verandert dus iets
+            # controleerbaars, en dat hoort in de historie te staan met wie en waarom.
+            if domain is not None:
+                d["domain"] = domain.strip()[:60]
             d["updated_at"] = time.time()
             if d.get("kind") in ARTEFACT_KINDS:
                 versions = d.setdefault("versions", [])
