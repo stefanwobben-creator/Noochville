@@ -5719,9 +5719,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 if not default_id:
                     self._send(_page("Empty", "<p>No organisation loaded yet.</p>")); return
                 rec = st.records.get(default_id)
+                # `goal` MOET hier mee zodra de doel-pillen naar `/projects` wijzen: lieten we
+                # hem weg, dan stuurt een pil netjes naar dit scherm en negeert het scherm het
+                # filter — een knop die niets doet is erger dan een knop die je wegstuurt.
                 self._send(render_projects_screen(
                     st, rec, csrf_token=effective_csrf, username=username,
-                    group=(qs.get("group") or [""])[0]))
+                    group=(qs.get("group") or [""])[0],
+                    goal=(qs.get("goal") or [""])[0]))
                 return
             if path == "/node":
                 nid = (qs.get("id") or [""])[0]

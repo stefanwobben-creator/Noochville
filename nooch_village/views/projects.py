@@ -380,6 +380,17 @@ def _doel_chip(st: _Stores, p: dict) -> str:
     return f"<a class='chip doel' href='/goal?id={_e(d['id'])}' title='{_e(d['titel'])}'>{_e(d['label'])}</a>"
 
 
+def _plus(base: str, q: str) -> str:
+    """`base` + een parameter, met de juiste scheiding.
+
+    Hier stond overal `f"{base}&…"`, en dat werkte zolang de basis toevallig altijd een `?` had
+    (`/node?id=…&tab=projects`). Zodra een scherm zijn eigen, parameterloze URL doorgeeft — en dat
+    is precies wat `/projects` doet — levert die aanname `/projects&group=rol` op: geen filter,
+    maar een pad dat niet bestaat. De scheiding hoort bij de basis, dus hij wordt hier berekend en
+    niet op vier plekken overgetypt."""
+    return base + ("&" if "?" in base else "?") + q
+
+
 def _doel_pills(st: _Stores, base: str, goal: str, nav: str = "") -> str:
     """Doel-filterbalk boven het bord (prototype: `.pill` → `.cl-filter.pill`). Leeg zonder doelen.
     In een modal (werkoverleg) reizen de links als js-modal, zoals de group-by-knoppen."""
@@ -387,7 +398,7 @@ def _doel_pills(st: _Stores, base: str, goal: str, nav: str = "") -> str:
     if not doelen:
         return ""
     def _lnk(v: str, lbl: str) -> str:
-        u = base if not v else f"{base}&goal={urllib.parse.quote(v)}"
+        u = base if not v else _plus(base, f"goal={urllib.parse.quote(v)}")
         cls = "cl-filter pill js-modal" if nav else "cl-filter pill"
         dh = f" data-href='{_e(u)}'" if nav else ""
         return f"<a class='{cls}{' on' if goal == v else ''}' href='{_e(u)}'{dh}>{_e(lbl)}</a>"
@@ -896,8 +907,14 @@ def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True,
-                       username: str | None = None, nav: str = "", goal: str = "") -> str:
+                       username: str | None = None, nav: str = "", goal: str = "",
+                       terug: str = "") -> str:
     """`nav` = het bord draait IN een modal (het werkoverleg); dan is dát de terugkeer-URL.
+
+    `terug` = het bord staat op een EIGEN SCHERM met een eigen URL (`/projects`). Dat is iets
+    anders dan `nav` en daarom een eigen parameter: `nav` zegt óók "de links moeten js-modal
+    worden", en dat hoort hier juist niet — op een gewone pagina navigeer je gewoon. Ze op één
+    hoop gooien zou "Group by → by person" op `/projects` in een overlay openen.
 
     Zonder deze parameter wees alles hier naar `/node?id=…&tab=projects`. De overlay onderschept
     alleen `a.js-modal[data-href]`, dus "Group by → by person" navigeerde de hele pagina weg en het
@@ -907,7 +924,10 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     Zelfde recept als `_metrics_tab_html` (nav → js-modal + data-href, anders een gewone link); geen
     tweede mechaniek, en buiten een modal verandert er niets."""
     allp = st.projects.all()
-    back_base = nav or f"/node?id={rec.id}&tab=projects"
+    # VOLGORDE: een modal wint van een eigen scherm wint van de cirkel-tab. Een bord dat IN een
+    # overleg draait moet naar dat overleg terug, ook als het toevallig door `/projects` wordt
+    # gerenderd — anders klapt het overleg dicht, precies de bug waarvoor `nav` bestaat.
+    back_base = nav or terug or f"/node?id={rec.id}&tab=projects"
     # Het doel-filter (`?goal=`): de kaarten van één doel, met de doelkop erboven. Onbekend doel =
     # geen filter, geen foutmelding.
     goal = goal if goal and st.doelen.get(goal) else ""
@@ -922,7 +942,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         projs = [p for p in mine if p.get("status") not in _OFF_BOARD and (not goal or p.get("doel_id") == goal)]
         drafts = [p for p in mine if p.get("status") == "draft"]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
-        back_rol = f"{back_base}&goal={urllib.parse.quote(goal)}" if goal else back_base
+        back_rol = _plus(back_base, f"goal={urllib.parse.quote(goal)}") if goal else back_base
         board = _projects_board(st, projs, rec.id, csrf_token, back_rol, "persoon", quickadd=add)
         if not board:
             board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
@@ -941,7 +961,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     mine = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
     projs = [p for p in mine if p.get("status") not in _OFF_BOARD and (not goal or p.get("doel_id") == goal)]
     drafts = [p for p in mine if p.get("status") == "draft"]
-    back = f"{back_base}&group={g}" + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
+    back = _plus(back_base, f"group={g}") + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
         board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
@@ -955,7 +975,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                     f"<p class='muted' style='font-size:.8rem'>A subcircle has its own "
                     f"project board.</p><ul class='clean'>{lis}</ul></div>")
     def _vbtn(v: str, lbl: str) -> str:
-        u = f"{back_base}&group={v}" + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
+        u = _plus(back_base, f"group={v}") + (f"&goal={urllib.parse.quote(goal)}" if goal else "")
         cls = "vbtn js-modal" if nav else "vbtn"
         dh = f" data-href='{_e(u)}'" if nav else ""
         return f"<a class='{cls}{' on' if g == v else ''}' href='{_e(u)}'{dh}>{lbl}</a>"
@@ -1741,7 +1761,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
 
 def render_projects_screen(st: _Stores, rec, *, csrf_token: str = "", username: str | None = None,
-                           group: str = "") -> str:
+                           group: str = "", goal: str = "") -> str:
     """Het projectenbord als EIGEN scherm (`/projects`), de landing sinds fase 7.
 
     Het bord stond al op de cirkelpagina als tab, en dat is precies wat het prototype (v15)
@@ -1751,13 +1771,28 @@ def render_projects_screen(st: _Stores, rec, *, csrf_token: str = "", username: 
 
     De tab op de cirkel BLIJFT bestaan: hij is daar de gefilterde weergave van díe cirkel, en op de
     rolpagina van die ene rol. Deze route is de ongefilterde voordeur."""
+    import json
+
     from nooch_village.cockpit2_util import _DS_LINK, _nav
+    from nooch_village.views.overview import _mentionables
     from nooch_village.web_base import _page
 
-    inner = _projects_tab_html(st, rec, csrf_token, group=group, username=username)
+    # `terug="/projects"`: dit scherm heeft een eigen URL, en zonder dit wees alles hier naar
+    # `/node?id=…&tab=projects` — de Group by-knoppen navigeerden je van het bord af, en de `back`
+    # op elke kaart bracht je bij het SLUITEN van de overlay op de cirkelpagina in plaats van
+    # terug op het bord (de overlay zet de huidige history-entry op `back` vóór hij de kaart
+    # pusht). Zie de `terug`-parameter daar; het is nadrukkelijk niet `nav`.
+    inner = _projects_tab_html(st, rec, csrf_token, group=group, username=username,
+                               goal=goal, terug="/projects")
     kop = (f"<div class='c2-sec'><h1>Projects</h1>"
            f"<p class='muted'>Everything on the board for {_e(_name(rec))}. "
            f"Filter per role or person with the grouping above.</p></div>")
+    # DE MODAL-CONTROLLER, en zonder hem is dit scherm stuk. Een ingelogde kaart is bewust een
+    # `<div data-href>` en geen `<a>` — hij moet sleepbaar zijn, en een `<a draggable>` sleept de
+    # link in plaats van de kaart. De klik wordt dus door JS bedraad, en die JS zit hierin.
+    # `/node` en `/person` voegden hem al toe; dit scherm, sinds fase 7 de voordeur, niet — 159
+    # kaarten op prod die nergens op reageerden. Zelfde aanroep als daar, geen tweede variant.
+    modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     return _page("Projects",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>{kop}{inner}"
-                 f"</div></div>")
+                 f"</div></div>{modal}")
