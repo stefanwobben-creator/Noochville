@@ -269,7 +269,7 @@ _EMBED_KAAL_RE = re.compile(r"^(https?://\S+)$")
 #: `[^<]*` EN NIET `.*` voor het label: met een gulzige punt matcht `<a>een</a> <a>twee</a>` als
 #: één link met "een</a> <a …>twee" als tekst, en dan wordt een regel met twee links een embed.
 _EMBED_LINK_RE = re.compile(
-    r"^<a href='(https?://[^']+)' target='_blank' rel='noopener'>([^<]*)</a>$")
+    r"^<a( data-beeld)? href='(https?://[^']+)' target='_blank' rel='noopener'>([^<]*)</a>$")
 
 #: url-kenmerk → (soort, herkomstlabel). DE VOLGORDE IS DE REGEL: een YouTube-link heeft geen
 #: extensie, en een Drive-bestand evenmin, dus de hosts gaan vóór de extensies en Drive gaat
@@ -309,17 +309,21 @@ def _embed_soort(url: str) -> tuple[str, str]:
     return "link", "link"
 
 
-def _embed_html(url: str, label: str) -> str:
+def _embed_html(url: str, label: str, beeld: bool = False) -> str:
     """De kaart. GEEN `<img>`, ook niet bij een afbeelding: inline laden zou elke paginaweergave
     een verzoek naar een derde partij laten doen, en de Drive-links die dit dorp gebruikt renderen
     zonder sessie toch niet. Het prototype toont om dezelfde reden een kaart met de bestandsnaam."""
-    soort, herkomst = _embed_soort(url)
+    # INTENTIE WINT VAN DE URL. `_embed_soort` leidt de soort af uit de url, maar wie
+    # `![foto](…)` schrijft zegt het expliciet — en dat staat nergens anders, want een
+    # Drive-link heeft geen extensie.
+    soort, herkomst = ("afbeelding", "afbeelding") if beeld else _embed_soort(url)
     # `wb-` EN GEEN EIGEN `emb-`-FAMILIE. De embed is een wiki-blok, dus hij hoort in het
     # vocabulaire dat brok 3 daarvoor al neerzette (`wb-greep`, `wb-menu`). Een eigen prefix zou
     # een nieuw privé-stylesheet zijn — precies wat `test_geen_nieuwe_klasse_prefixen` bewaakt.
+    mark = " data-beeld" if beeld else ""
     return (f"<figure class='card wb-emb wb-emb--{soort}'>"
             f"<span class='wb-emb-ico' data-chrome aria-hidden='true'>{_EMBED_ICOON[soort]}</span>"
-            f"<a href='{url}' target='_blank' rel='noopener'>{label}</a>"
+            f"<a{mark} href='{url}' target='_blank' rel='noopener'>{label}</a>"
             f"<span class='wb-emb-bron muted' data-chrome>{herkomst}</span></figure>")
 
 
@@ -366,12 +370,18 @@ def _md(text: str, blokken: bool = False) -> str:
     s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)               # cursief
 
     def _link(m):
-        label, url = m.group(1), m.group(2)                  # label al ge-escaped; url gevalideerd op schema
+        beeld, label, url = m.group(1), m.group(2), m.group(3)
+        # `label` is al ge-escaped; de url is gevalideerd op schema.
         if url.startswith("http://") or url.startswith("https://"):
-            return f"<a href='{url}' target='_blank' rel='noopener'>{label}</a>"
+            # HET UITROEPTEKEN REIST MEE ALS `data-beeld`. Het is INTENTIE, geen url-eigenschap:
+            # een Drive-link naar een foto heeft geen extensie, dus zonder dit zou
+            # `![foto](drive-url)` als een drive-kaart renderen en na één bewerkronde zijn
+            # uitroepteken kwijt zijn. Zelfde mechaniek als `data-taal` en `data-ref`.
+            mark = " data-beeld" if beeld else ""
+            return f"<a{mark} href='{url}' target='_blank' rel='noopener'>{label}</a>"
         return m.group(0)                                    # geen http(s) → laat de tekst staan (geen link)
 
-    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, s)          # [tekst](url)
+    s = re.sub(r"(!?)\[([^\]]+)\]\(([^)]+)\)", _link, s)      # [tekst](url) en ![alt](url)
     # `open_` en `dicht` zijn LEEG in de platte stand: dan staat er letterlijk dezelfde uitvoer
     # als vóór de blokstand bestond. Dat is wat `test_zonder_de_vlag_is_er_niets_veranderd`
     # byte voor byte vastlegt — deze functie rendert ook elke reactie en elk kanaalbericht.
@@ -496,9 +506,11 @@ def _md(text: str, blokken: bool = False) -> str:
         kaal_url = _EMBED_KAAL_RE.match(kaal)
         embed = _EMBED_LINK_RE.match(kaal)
         if kaal_url or embed:
-            url = kaal_url.group(1) if kaal_url else embed.group(1)
-            label = url if kaal_url else embed.group(2)
-            out.append(f"{open_(BLOK_SOORTEN['figure'])}{_embed_html(url, label)}{dicht}")
+            url = kaal_url.group(1) if kaal_url else embed.group(2)
+            label = url if kaal_url else embed.group(3)
+            beeld = bool(embed and embed.group(1))
+            out.append(f"{open_(BLOK_SOORTEN['figure'])}"
+                       f"{_embed_html(url, label, beeld)}{dicht}")
             continue
         # In de blokstand IS het omhulsel de regelafbreking, dus geen `<br>` erachter. Een
         # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
@@ -576,6 +588,8 @@ class _BronParser(_HTMLParser):
         self.uit: list[str] = []
         self._ref = ""            # de oorspronkelijke [[verwijzing]], als die er was
         self._href = ""
+        #: droeg deze link een uitroepteken? Dan is het een afbeelding, en dat moet terug.
+        self._beeld = False
         self._linktekst: list[str] = []
         #: kwam het laatste regeleinde van een BLOK-grens (`</li>`, `</h4>`, `</p>`) of van een
         #: `<br>`? Dat verschil beslist of het eindregeleinde erbij hoort; zie `_md_naar_bron`.
@@ -675,6 +689,7 @@ class _BronParser(_HTMLParser):
             # Een wiki-verwijzing draagt zijn ORIGINELE tekst mee (`data-ref`), want op het scherm
             # staat de opgeloste titel en die is niet hetzelfde. Zonder dat attribuut zou
             # `[[compliance-beleid]]` terugkomen als de titel van de pagina waar hij heen wees.
+            self._beeld = "data-beeld" in d
             self._ref = d.get("data-ref") or ""
             self._href = "" if self._ref else (d.get("href") or "")
             self._linktekst = []
@@ -718,8 +733,9 @@ class _BronParser(_HTMLParser):
             # EERST LOSLATEN, DAN PAS HET DOEL BEPALEN. Zolang `_href`/`_ref` nog staan, wijst
             # `_doel()` naar de linktekst zelf — dan schreef een link ín een tabelcel zichzelf
             # terug in zijn eigen buffer en kwam de cel leeg uit de rondgang.
-            ref, href = self._ref, self._href
+            ref, href, beeld = self._ref, self._href, self._beeld
             self._ref = self._href = ""
+            self._beeld = False
             doel = self._doel()
             if ref:
                 doel.append(f"[[{ref}]]")
@@ -731,10 +747,10 @@ class _BronParser(_HTMLParser):
                 # En ALLEEN binnen een embed: in een zin zou dezelfde regel
                 # `zie [https://x](https://x) hier` veranderen in `zie https://x hier`, en dat is
                 # geen link meer. Dan breekt de rondgang.
-                if self._embed and label == href:
+                if self._embed and label == href and not beeld:
                     doel.append(href)
                 else:
-                    doel.append(f"[{label}]({href})")
+                    doel.append(("!" if beeld else "") + f"[{label}]({href})")
             else:
                 # DEZELFDE POORT ALS `_md`, EEN STAP EERDER. `_md` weigert al een link zonder
                 # http(s)-schema, dus een `javascript:`-url zou toch als platte tekst renderen —
