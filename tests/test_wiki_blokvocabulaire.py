@@ -148,7 +148,10 @@ def test_elk_nieuw_blok_is_ook_een_blok():
     """Ze moeten meedoen met brok 1, anders kan brok 3 er geen greep aan hangen."""
     import re
     html = _body_html("# Kop\n1. een\n> citaat\n---\n- [ ] taak", _PAGS, blokken=True)
-    assert re.findall(r"data-blok='([a-z]+)'", html) == ["h", "ol", "q", "hr", "ul"]
+    # `ul` → `taak` op het laatste blok, sinds 24 september 2026: een lijst met vinkjes is een
+    # eigen bloksoort geworden. De TAG blijft `ul` (een takenlijst ís een lijst); alleen de soort
+    # verschilt, zodat de greep, het menu en de vormgeving het onderscheid zien.
+    assert re.findall(r"data-blok='([a-z]+)'", html) == ["h", "ol", "q", "hr", "taak"]
 
 
 # ── 4. De normalisatie die je moet weten ────────────────────────────────────────────────────

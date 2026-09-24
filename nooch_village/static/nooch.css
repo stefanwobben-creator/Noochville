@@ -312,6 +312,13 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 /* TABEL-BLOK (24 september 2026). Tag-selectors binnen `.wb`, dus geen nieuwe prefix-familie.
    Een tabel is zichtbaar een andere datasoort dan lopende tekst: eigen kopregel-achtergrond en
    een rand per rij. `overflow-x` omdat een brede tabel de kolom niet mag oprekken. */
+/* TAAK-BLOK (24 september 2026). Het vakje is nu bedienbaar, dus het krijgt een aanwijs-cursor;
+   een afgeronde taak wordt gedempt zodat de lijst in één oogopslag leesbaar is. Geen nieuwe
+   klasse: `.wb-taak` bestaat al sinds het vinkje er kwam, en de rest zijn tag-selectors binnen
+   `.wb`. Dit is het visuele onderscheid per datasoort dat het ontwerp vroeg. */
+.wb-taak input{cursor:pointer;margin-right:.45rem;vertical-align:baseline}
+.wb-taak:has(input:checked){color:var(--muted);text-decoration:line-through}
+
 .wb table{border-collapse:collapse;width:100%;font-size:13px;margin:.2rem 0;
   display:block;overflow-x:auto}
 .wb th,.wb td{border-bottom:1px solid var(--border);padding:.35rem .5rem;text-align:left;

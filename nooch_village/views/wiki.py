@@ -70,9 +70,16 @@ def _body_html(body: str, pags: list, blokken: bool = False) -> str:
     `[ ]  open` — een spatie erbij per keer opslaan. De ruimte is opmaak, het haakje is inhoud."""
     html = _md(body or "", blokken=blokken)
     html = _TAAK_RE.sub(
-        lambda m: (f"<li class='wb-taak'><input type='checkbox' disabled"
+        lambda m: (f"<li class='wb-taak'><input type='checkbox'"
                    f"{' checked' if m.group(1).lower() == 'x' else ''}>"),
         html)
+    # HET BLOK KRIJGT ZIJN EIGEN SOORT, hier en niet in `_md`. Dezelfde reden als voor het vakje
+    # zelf: `_md` rendert ook elke reactie en elk kanaalbericht, en daar hoort geen taak-blok. De
+    # TAG blijft `ul` — een takenlijst ís een lijst — maar het blok heet `taak`, zodat de greep,
+    # het menu en de vormgeving het verschil zien.
+    if blokken:
+        html = re.sub(r"<div class='wb' data-blok='ul'>(?=<ul[^>]*>(?:(?!</ul>).)*?wb-taak)",
+                      "<div class='wb' data-blok='taak'>", html, flags=re.S)
 
     def _sub(m):
         ref = _html_mod.unescape(m.group(1)).strip()

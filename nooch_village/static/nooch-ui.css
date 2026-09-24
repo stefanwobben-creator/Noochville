@@ -606,6 +606,10 @@
 /* TABEL-KOP in de nu-laag. De oude laag geeft hem de eyebrow-vingerafdruk (klein, hoofdletters,
    vet); hier de tegenhanger in de nu-tokens, zodat een tabel op een nu-scherm niet terugvalt op
    de crème-maatvoering. Zelfde regel als bij elk ander labeltje. */
+/* TAAK-BLOK in de nu-laag. Een afgeronde taak wordt gedempt; de oude laag doet dat met
+   `--muted`, hier met het nu-token. Zelfde regel als bij de tabelkop hierboven. */
+.nu .wb-taak:has(input:checked){color:var(--nu-muted)}
+
 .nu .wb th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
 .nu .wb td{border-bottom-color:var(--nu-border-subtle)}
 
