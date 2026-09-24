@@ -97,7 +97,40 @@ def _body_html(body: str, pags: list, blokken: bool = False) -> str:
         return (f"<a class='pill' data-ref='{_e(ref)}' "
                 f"href='{_e(wiki.pagina_url(doel.id))}'>{_e(doel.title or doel.id)}</a>")
 
-    return wiki.LINK_RE.sub(_sub, html)
+    html = wiki.LINK_RE.sub(_sub, html)
+    # DE TOOL-KAART. Een blok dat ALLEEN een verwijzing naar een tool bevat wordt een kaart;
+    # midden in een zin blijft het een pil. Zelfde grens als bij de embed, en om dezelfde reden:
+    # anders verandert één woord in een alinea de vorm van de hele pagina.
+    #
+    # GEEN INSLUITING (besluit uit het ontwerp). Een interne tool is een SCHERM; insluiten vraagt
+    # een iframe of een tweede renderpad per tool, en dat contract bestaat voor geen van de vijf
+    # tools op prod.
+    if blokken:
+        html = _TOOLREF_RE.sub(lambda m: _tool_kaart(m, pags), html)
+    return html
+
+
+#: Een blok dat ALLEEN uit één opgeloste verwijzing bestaat.
+_TOOLREF_RE = re.compile(
+    r"<div class='wb' data-blok='p'>"
+    r"(<a class='pill' data-ref='([^']+)' href='([^']+)'>([^<]*)</a>)"
+    r"</div>")
+
+
+def _tool_kaart(m, pags: list) -> str:
+    """Een verwijzing naar een TOOL wordt een kaart; naar iets anders blijft hij zoals hij was."""
+    ref = _html_mod.unescape(m.group(2)).strip()
+    doel = wiki.resolve(ref, pags)
+    if doel is None or getattr(doel, "kind", "") != "tool":
+        return m.group(0)
+    bestemming = (getattr(doel, "url", "") or "").strip()
+    waar = f"tool &middot; {_e(bestemming)}" if bestemming else "tool"
+    return (f"<div class='wb' data-blok='embed'>"
+            f"<figure class='card wb-emb wb-emb--tool'>"
+            f"<span class='wb-emb-ico' data-chrome aria-hidden='true'>&#128295;</span>"
+            f"{m.group(1)}"
+            f"<span class='wb-emb-bron muted' data-chrome>{waar}</span>"
+            f"</figure></div>")
 
 
 def _grond_chip(g: dict) -> str:
@@ -434,7 +467,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     eigenaar = st.records.get(a.anchor)
     can_edit = bool(eigenaar is not None
                     and _can_edit_artefacts(st, eigenaar, csrf_token, username))
-    pags = wiki.paginas(st.att)
+    pags = wiki.verwijsbaar(st.att)
 
     eig_chip = ""
     if eigenaar is not None:

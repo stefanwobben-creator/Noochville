@@ -75,6 +75,23 @@ def paginas(store) -> list:
     return store.by_kind(PAGINA_KIND)
 
 
+def verwijsbaar(store) -> list:
+    """Alles waar een `[[verwijzing]]` naar kan wijzen: note, policy én tool.
+
+    APART VAN `paginas()`, en dat is geen dubbelop. `paginas()` voedt de bron-check, en die loopt
+    over FEITEN — die wonen alleen op notes. Verwijzen doe je naar alles wat een permalink heeft,
+    en sinds #574 hebben alle drie de soorten er een.
+
+    VERBREED OP 24 SEPTEMBER 2026, en dat kon zonder risico: op prod staan NUL `[[verwijzingen]]`
+    in welk artefact dan ook. Er verandert dus niets aan wat er vandaag op een scherm staat; het
+    maakt alleen mogelijk wat sinds #574 al logisch was."""
+    from nooch_village.attachments import ARTEFACT_KINDS
+    uit = []
+    for kind in ARTEFACT_KINDS:
+        uit.extend(store.by_kind(kind))
+    return uit
+
+
 def resolve(ref: str, pags: list):
     """De pagina waar `ref` naar wijst, of None.
 
