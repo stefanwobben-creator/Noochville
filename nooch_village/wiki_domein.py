@@ -40,6 +40,34 @@ TOEWIJZINGEN: dict[str, tuple[str, str]] = {
 }
 
 
+#: artefact-id → (bakje, waarom). HET NOODLUIK, en met opzet kort.
+#:
+#: Een gewone indeling loopt via een DOMEIN: het artefact draagt er een, of zijn rol doet dat.
+#: Dat is de route die je wilt, want een domein is iets dat governance heeft toegewezen en dat
+#: meebeweegt als de classificatie ooit verandert. Deze tabel slaat dat over en wijst rechtstreeks
+#: een bakje aan.
+#:
+#: WANNEER DAT MAG: als er GEEN bestaand domein past. Niet als er geen domein past dat je mooi
+#: vindt — dan hoort er een domein te komen. En omgekeerd, en dat is de eigenlijke regel:
+#:
+#:     EEN DOMEIN MAAK JE ALS DE PRAKTIJK EROM VRAAGT, NIET VOORAF OM EEN INDELING SLUITEND TE
+#:     KRIJGEN.
+#:
+#: Dat is hetzelfde principe als waarom `domeinen.ROL_BAKJE` kort blijft: groeit zo'n tabel, dan
+#: is dat een signaal dat er iets ontbreekt in governance — geen aanleiding om er hier een regel
+#: bij te schrijven. Een domein verzinnen om één pagina op te bergen geeft een governance-record
+#: waar niemand om vroeg, en dat is duurder dan deze ene regel.
+OVERRIDES: dict[str, tuple[str, str]] = {
+    "NOTE-STRATE-002": (
+        "compliance-legal",
+        '"Company information" draagt de registratiegegevens van de B.V. — KvK, btw, RSIN, IBAN, '
+        "bestuurders en de douanecode. Geen van de achttien bestaande domeinen dekt dat, en de "
+        "eigenaar-rol (strategic_lead_founder_steward) bezit alleen `bibliotheek` en "
+        "`onderzoeksmethode`. Besluit Stefan, 24 september 2026: geen nieuw domein verzinnen voor "
+        "één pagina; bewust via deze uitzonderingsroute."),
+}
+
+
 def _artefacten(att) -> list:
     uit = []
     for kind in ARTEFACT_KINDS:
@@ -85,7 +113,35 @@ def pas_toe(st, *, apply: bool = False) -> list[tuple]:
     return uit
 
 
-def rapport_tekst(rap: dict, acties: list[tuple]) -> str:
+def pas_overrides_toe(st, *, apply: bool = False) -> list[tuple]:
+    """Zet de bakje-overrides in `meta`. Idempotent, en hij VOEGT TOE aan de bestaande meta.
+
+    Dat laatste is geen detail: de feiten van een pagina wonen in datzelfde `meta`, en
+    `update(meta=…)` VERVANGT het woordenboek. Zou deze functie een vers `{"domein": …}`
+    doorgeven, dan waren de feiten van die pagina weg — stil, en pas zichtbaar als iemand ze
+    miste."""
+    uit = []
+    for aid, (bakje, reden) in OVERRIDES.items():
+        a = st.att.get(aid)
+        if a is None:
+            uit.append((aid, "ontbreekt", "dit artefact bestaat hier niet", ""))
+            continue
+        if bakje not in dict(domeinen.BAKJES):
+            uit.append((aid, "geweigerd", f"{bakje!r} is geen bestaand bakje", ""))
+            continue
+        huidig = dict(getattr(a, "meta", None) or {})
+        if huidig.get("domein") == bakje:
+            uit.append((aid, "staat al goed", bakje, a.title or ""))
+            continue
+        if apply:
+            huidig["domein"] = bakje
+            st.att.update(aid, meta=huidig, change_note=f"bakje-override: {reden}")
+        uit.append((aid, "gezet" if apply else "zou zetten", bakje, a.title or ""))
+    return uit
+
+
+def rapport_tekst(rap: dict, acties: list[tuple], overrides: list[tuple] | None = None) -> str:
+    overrides = overrides or []
     regels = [f"WIKI-INDELING — {rap['totaal']} artefacten", ""]
     for sleutel, label in domeinen.BAKJES:
         n = len(rap["per_bak"].get(sleutel, []))
@@ -103,4 +159,9 @@ def rapport_tekst(rap: dict, acties: list[tuple]) -> str:
     regels.append("HANDMATIGE TOEWIJZINGEN:")
     for aid, wat, detail, titel in acties:
         regels.append(f"  {wat:<14} {aid:<18} {detail}")
+    if overrides:
+        regels.append("")
+        regels.append("BAKJE-OVERRIDES (geen bestaand domein past):")
+        for aid, wat, detail, titel in overrides:
+            regels.append(f"  {wat:<14} {aid:<18} {detail}")
     return "\n".join(regels)

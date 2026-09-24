@@ -826,8 +826,9 @@ def main() -> None:
         st = _Stores(ctx.data_dir)
         apply = "--apply" in sys.argv
         acties = wiki_domein.pas_toe(st, apply=apply)
-        print(wiki_domein.rapport_tekst(wiki_domein.rapport(st), acties))
-        if not apply and any(a[1] == "zou zetten" for a in acties):
+        overrides = wiki_domein.pas_overrides_toe(st, apply=apply)
+        print(wiki_domein.rapport_tekst(wiki_domein.rapport(st), acties, overrides))
+        if not apply and any(a[1] == "zou zetten" for a in acties + overrides):
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply.")
 
     elif mode == "verwerking":
