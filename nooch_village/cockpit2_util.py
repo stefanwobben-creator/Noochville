@@ -241,6 +241,67 @@ def _stamp(ts, settings=None) -> str:
 _NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
 _STREEP_RE = re.compile(r"^-{3,}$")
 
+#: EEN REGEL DIE ALLEEN EEN LINK IS, is een embed. Twee vormen: een kale url, of de link zoals
+#: `_link` hem hierboven al heeft omgezet — die substitutie draait VÓÓR de regellus, dus op dit
+#: punt staat er geen markdown meer maar een `<a>`.
+_EMBED_KAAL_RE = re.compile(r"^(https?://\S+)$")
+#: `[^<]*` EN NIET `.*` voor het label: met een gulzige punt matcht `<a>een</a> <a>twee</a>` als
+#: één link met "een</a> <a …>twee" als tekst, en dan wordt een regel met twee links een embed.
+_EMBED_LINK_RE = re.compile(
+    r"^<a href='(https?://[^']+)' target='_blank' rel='noopener'>([^<]*)</a>$")
+
+#: url-kenmerk → (soort, herkomstlabel). DE VOLGORDE IS DE REGEL: een YouTube-link heeft geen
+#: extensie, en een Drive-bestand evenmin, dus de hosts gaan vóór de extensies en Drive gaat
+#: daarna — anders wordt `drive.google.com/…/x.pdf` een pdf-kaart terwijl het een Drive-link is.
+_EMBED_HOSTS = (
+    (("youtube.com/watch", "youtu.be/"), "video", "YouTube"),
+    (("vimeo.com/",), "video", "Vimeo"),
+)
+_EMBED_EXT = (
+    ((".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"), "afbeelding", "afbeelding"),
+    ((".mp4", ".webm", ".mov"), "video", "video"),
+    ((".pdf",), "pdf", "PDF"),
+)
+_EMBED_DRIVE = ("docs.google.com", "drive.google.com")
+
+#: Per soort het icoon. Het staat in `data-chrome`, want een decoratief teken dat als TEKST wordt
+#: opgeslagen komt na één bewerkronde letterlijk in de bron te staan — precies wat de greep (⠿)
+#: van brok 3 een keer deed.
+_EMBED_ICOON = {"afbeelding": "&#128247;", "video": "&#9654;", "pdf": "&#128196;",
+                "drive": "&#128193;", "link": "&#128279;"}
+
+
+def _embed_soort(url: str) -> tuple[str, str]:
+    """(soort, herkomstlabel) op basis van de url. AFGELEID BIJ HET RENDEREN en nergens bewaard:
+    wijst een link morgen naar iets anders, dan volgt de kaart. Zelfde regel als
+    `wiki.grond_status` — een vergelijking, geen stempel."""
+    laag = url.lower()
+    for kenmerken, soort, label in _EMBED_HOSTS:
+        if any(k in laag for k in kenmerken):
+            return soort, label
+    pad = laag.split("?")[0].split("#")[0]
+    for staarten, soort, label in _EMBED_EXT:
+        if pad.endswith(staarten):
+            return soort, label
+    if any(h in laag for h in _EMBED_DRIVE):
+        return "drive", "Google Drive"
+    return "link", "link"
+
+
+def _embed_html(url: str, label: str) -> str:
+    """De kaart. GEEN `<img>`, ook niet bij een afbeelding: inline laden zou elke paginaweergave
+    een verzoek naar een derde partij laten doen, en de Drive-links die dit dorp gebruikt renderen
+    zonder sessie toch niet. Het prototype toont om dezelfde reden een kaart met de bestandsnaam."""
+    soort, herkomst = _embed_soort(url)
+    # `wb-` EN GEEN EIGEN `emb-`-FAMILIE. De embed is een wiki-blok, dus hij hoort in het
+    # vocabulaire dat brok 3 daarvoor al neerzette (`wb-greep`, `wb-menu`). Een eigen prefix zou
+    # een nieuw privé-stylesheet zijn — precies wat `test_geen_nieuwe_klasse_prefixen` bewaakt.
+    return (f"<figure class='card wb-emb wb-emb--{soort}'>"
+            f"<span class='wb-emb-ico' data-chrome aria-hidden='true'>{_EMBED_ICOON[soort]}</span>"
+            f"<a href='{url}' target='_blank' rel='noopener'>{label}</a>"
+            f"<span class='wb-emb-bron muted' data-chrome>{herkomst}</span></figure>")
+
+
 #: Het omhulsel van één blok in de blokstand. ÉÉN plek, want de renderer schrijft hem en de
 #: editor (brok 3) zoekt hem met `closest('.wb')` — twee spellingen is twee gedragingen.
 BLOK_OPEN = "<div class='wb' data-blok='{soort}'>"
@@ -256,7 +317,8 @@ BLOK_DICHT = "</div>"
 #: alleen in de browser draaien — waar geen testrunner is. Hoe minder die pas zelf weet, hoe
 #: minder er stil kan afwijken. Wat niet in deze tabel staat is een alinea.
 BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
-                "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr"}
+                "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr",
+                "figure": "embed"}
 
 
 def _md(text: str, blokken: bool = False) -> str:
@@ -349,6 +411,17 @@ def _md(text: str, blokken: bool = False) -> str:
             out.append(f"<li>{genummerd.group(2) if genummerd else kaal[2:]}</li>")
             continue
         sluit_lijst()
+        # EMBED. Een regel die ALLEEN een link is — kaal of als `[tekst](url)`, die laatste staat
+        # hier al als `<a>` omdat `_link` vóór deze lus draait. Een link midden in een zin blijft
+        # een gewone link: van de 1151 regels op prod is er nul die alleen een markdown-link is
+        # en één die alleen een kale url is, dus dit verandert precies één bestaande regel.
+        kaal_url = _EMBED_KAAL_RE.match(kaal)
+        embed = _EMBED_LINK_RE.match(kaal)
+        if kaal_url or embed:
+            url = kaal_url.group(1) if kaal_url else embed.group(1)
+            label = url if kaal_url else embed.group(2)
+            out.append(f"{open_(BLOK_SOORTEN['figure'])}{_embed_html(url, label)}{dicht}")
+            continue
         # In de blokstand IS het omhulsel de regelafbreking, dus geen `<br>` erachter. Een
         # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
         # verdwijnt elke witregel van elke pagina zonder dat een bron-test iets merkt.
@@ -401,7 +474,7 @@ _BRON_INLINE = {"strong": ("**", "**"), "b": ("**", "**"),
 
 #: tags die een regel afsluiten. `div` en `p` staan erbij omdat een contenteditable ze zelf maakt.
 #: `h3`/`h5`/`blockquote`/`hr` kwamen erbij met het vocabulaire van brok 2 (22 september 2026).
-_BRON_BLOK = ("h3", "h4", "h5", "li", "div", "p", "blockquote", "hr")
+_BRON_BLOK = ("h3", "h4", "h5", "li", "div", "p", "blockquote", "hr", "figure")
 
 #: tag → het voorvoegsel in de bron. Eén tabel, zodat een nieuw kopniveau op één plek bestaat.
 _BRON_KOP = {"h3": "# ", "h4": "## ", "h5": "### "}
@@ -429,6 +502,9 @@ class _BronParser(_HTMLParser):
         self._nr = 0
         #: hoe diep zitten we in een `data-chrome`-element? Zie `handle_starttag`.
         self._chrome = 0
+        #: staan we ín een embed-kaart? Alleen daar mag een link waarvan de TEKST gelijk is aan
+        #: zijn url terugkomen als kale url — zie `handle_endtag`.
+        self._embed = False
 
     # ── hulpjes ──────────────────────────────────────────────────────────────
     def _schrijf(self, tekst: str) -> None:
@@ -499,6 +575,9 @@ class _BronParser(_HTMLParser):
             self._ref = d.get("data-ref") or ""
             self._href = "" if self._ref else (d.get("href") or "")
             self._linktekst = []
+        elif tag == "figure":
+            self._embed = True
+            self._nieuwe_regel()
         elif tag in _BRON_BLOK:
             self._nieuwe_regel()
 
@@ -513,7 +592,17 @@ class _BronParser(_HTMLParser):
             if self._ref:
                 self.uit.append(f"[[{self._ref}]]")
             elif self._href.startswith(("http://", "https://")):
-                self.uit.append(f"[{label}]({self._href})")
+                # BINNEN EEN EMBED komt een link waarvan de tekst zijn eigen url is terug als
+                # KALE url. Anders typt iemand `https://x` en staat er na één bewerkronde
+                # `[https://x](https://x)` in de bron — een andere tekst dan hij schreef.
+                #
+                # En ALLEEN binnen een embed: in een zin zou dezelfde regel
+                # `zie [https://x](https://x) hier` veranderen in `zie https://x hier`, en dat is
+                # geen link meer. Dan breekt de rondgang.
+                if self._embed and label == self._href:
+                    self.uit.append(self._href)
+                else:
+                    self.uit.append(f"[{label}]({self._href})")
             else:
                 # DEZELFDE POORT ALS `_md`, EEN STAP EERDER. `_md` weigert al een link zonder
                 # http(s)-schema, dus een `javascript:`-url zou toch als platte tekst renderen —
@@ -523,6 +612,9 @@ class _BronParser(_HTMLParser):
             self._ref = self._href = ""
             self._linktekst = []
             self._blok_einde = False
+        elif tag == "figure":
+            self._embed = False
+            self._nieuwe_regel()
         elif tag in _BRON_BLOK:
             self._nieuwe_regel()
         elif tag in ("ul", "ol"):
