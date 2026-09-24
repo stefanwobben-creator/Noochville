@@ -299,6 +299,16 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb-greep-knop{border:none;background:none;color:var(--subtle);cursor:grab;font-size:.9rem;
   line-height:1;padding:.1rem .2rem}
 .wb-greep-knop:active{cursor:grabbing}
+/* EMBED-KAART (24 september 2026). Een regel die alleen een link is, rendert als kaart. Hij
+   hergebruikt `.card` voor rand en achtergrond; hier staat alleen de indeling, plus een reset van
+   de marge die de browser aan een <figure> geeft. Geen eigen kleur en geen eigen rand — dat is
+   wat `.card` al doet. De klassen zitten in de bestaande `wb-`-familie, want een embed is een
+   wiki-blok. */
+.wb-emb{display:flex;align-items:center;gap:.6rem;margin:0;padding:.55rem .7rem}
+.wb-emb a{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
+.wb-emb-ico{flex:none;font-size:1.1rem;line-height:1}
+.wb-emb-bron{flex:none;font-size:.78rem}
+
 .wb-menu{position:absolute;left:0;top:1.3rem;z-index:5;display:flex;flex-direction:column;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:.15rem;min-width:8rem}
