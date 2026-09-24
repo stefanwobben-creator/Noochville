@@ -500,16 +500,38 @@ def _artefact_versions_html(a) -> str:
             f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-def _domain_field(domains: list) -> str:
-    """Domein-keuze voor een policy-add-form. Eén domein → vaste regel (hidden input, geen dropdown);
-    twee of meer → een select. Bron: de écht via governance toegewezen `definition.domains`."""
+#: Wat er staat als een rol nog geen domein heeft. ÉÉN plek, want het aanmaak- én het
+#: bewerkformulier zeggen het; de staart verschilt omdat "create a policy" niet klopt op een
+#: formulier waar je een bestaand artefact verplaatst.
+def _geen_domein_uitleg(slot: str = "create a policy on that domain here") -> str:
+    return (f"<div class='card muted'>This role has no domain yet &mdash; first assign one "
+            f"via governance, then you can {slot}.</div>")
+
+
+def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain") -> str:
+    """Domein-keuze. Eén domein → vaste regel (hidden input, geen dropdown); twee of meer → een
+    select. Bron: de écht via governance toegewezen `definition.domains`.
+
+    `huidig` selecteert de bestaande waarde voor. Zonder dat zou elke bewerking het artefact
+    terugzetten op het eerste domein in de lijst — een stille verplaatsing bij een wijziging die
+    er niets mee te maken had.
+
+    LET OP: met een LEGE lijst rendert dit een `<select>` zonder opties. Dat is bewust niet hier
+    opgelost maar bij de aanroeper, want die weet of er een aanmaak- of bewerkzin bij hoort; zie
+    `_geen_domein_uitleg`."""
     if len(domains) == 1:
-        d = domains[0]
-        return (f"<label class='att-lbl'>Domain</label>"
-                f"<div class='muted'>{_e(d)}</div>"
+        d = huidig if huidig in domains else domains[0]
+        # GEEN `<label>` BIJ EEN VERBORGEN VELD: een `for` die naar een hidden input wijst is
+        # nergens aanklikbaar en voor een schermlezer een los label. Eén regel tekst zegt hier
+        # hetzelfde, en het scheelt de ratchet een kaal label.
+        return (f"<div class='muted att-lbl'>Domain: {_e(d)}</div>"
                 f"<input type='hidden' name='domain' value='{_e(d)}'>")
-    opts = "".join(f"<option value='{_e(d)}'>{_e(d)}</option>" for d in domains)
-    return f"<label class='att-lbl'>Domain</label><select name='domain'>{opts}</select>"
+    opts = "".join(f"<option value='{_e(d)}'{' selected' if d == huidig else ''}>{_e(d)}</option>"
+                   for d in domains)
+    # Label en veld als paar, met een id die uniek is per formulier: op een rol-tab staan
+    # meerdere bewerkformulieren onder elkaar, en dan mag `f-domain` niet twee keer bestaan.
+    return (f"<label class='att-lbl' for='{_e(fid)}'>Domain</label>"
+            f"<select name='domain' id='{_e(fid)}'>{opts}</select>")
 
 
 def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = None) -> str:
@@ -532,12 +554,24 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
-def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "") -> str:
+def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
+                        domains: list | None = None) -> str:
     # `next_url` parametriseert waar je na opslaan landt (default: de tab van de eigenaar-rol).
     # De pagina-view (/pagina) geeft zijn eigen permalink mee — zelfde formulier, zelfde poort.
     nxt = next_url or f"/node?id={a.anchor}&tab={_tab_for(a.kind)}"
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
+    # HET DOMEIN, VOOR ELKE SOORT en niet alleen voor een policy: sinds 23 september leest
+    # `domeinen.bakje_van` het eigen domein als eerste stap, dus dit is hoe je een artefact
+    # verplaatst. `domains=None` (oude aanroepers, en de inline editor van de wiki-pagina) geeft
+    # geen veld — en dan laat `_act_artefact_edit` het domein staan.
+    if domains is None:
+        dom = ""
+    elif domains:
+        dom = _domain_field(list(domains), getattr(a, "domain", "") or "",
+                            fid=f"f-domain-{a.id}")
+    else:
+        dom = _geen_domein_uitleg("file this artefact under it")
     # INLINE BEWERKEN (fase 10 punt 4). Wat er NIET verandert: één formulier, één submit, één
     # `artefact_edit`-actie, één `update()`-aanroep, één versie-entry met change_note "bewerkt".
     # Wat wél verandert is waar de knop staat. De opslaan-balk is `hidden` tot er echt iets is
@@ -555,7 +589,7 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "") -> str:
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<label class='att-lbl'>Title</label><input name='title' value='{_e(a.title)}'>"
             f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
-            f"{urlf}"
+            f"{urlf}{dom}"
             f"<div class='qadd-row qadd-bar'>"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Save</button>"
             f"<button type='button' class='qadd-x' data-qadd-cancel "
@@ -647,7 +681,11 @@ def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "",
         else:
             # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een
             # .qadd-row náást 'archiveren'); 'archiveren' als losse actie eronder.
-            bewerk = _artefact_edit_form(a, csrf_token)
+            eigenaar = st.records.get(a.anchor) if st is not None else None
+            bewerk = _artefact_edit_form(
+                a, csrf_token,
+                domains=(list(getattr(eigenaar.definition, "domains", None) or [])
+                         if eigenaar is not None else None))
         actions = (f"{bewerk}"
                    f"<div class='qadd-row'>{_artefact_archive_form(a, csrf_token)}</div>")
     extras = _wiki_extras(a, st, pags, csrf_token, can_edit)
@@ -713,8 +751,7 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
             if domains:
                 add = _artefact_add_form(rec, kind, csrf_token, domains)
             else:
-                add = ("<div class='card muted'>This role has no domain yet — first assign one "
-                       "via governance, then you can create a policy on that domain here.</div>")
+                add = _geen_domein_uitleg()
         else:
             add = _artefact_add_form(rec, kind, csrf_token)
     sec_own = f"<div class='c2-sec'><h3>From this role</h3>{own}{add}</div>"

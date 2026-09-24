@@ -263,6 +263,39 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
 # vervanging moest opheffen.
 
+def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
+    """De domein-keuze van deze pagina, in de kopbalk.
+
+    EEN EIGEN FORMULIER, NAAST DE BLOK-EDITOR. De opslaan-balk van `wiki-form` verschijnt pas als
+    je "Edit page" hebt geklikt; een keuzelijst die altijd zichtbaar is maar alleen dán opslaat,
+    is een val — je verandert iets en er gebeurt niets. Dit formuliertje werkt altijd en raakt de
+    editor niet aan.
+
+    GEEN TWEEDE SCHRIJFPAD, want het stuurt DEZELFDE actie (`artefact_edit`) met dezelfde
+    server-side poort. Dat een formulier met alleen een domein daar doorheen kan is geen toeval:
+    `title`, `body` en `url` zijn er allemaal optioneel, en `update()` laat een veld dat `None` is
+    met rust.
+
+    Alleen voor een note: een policy en een tool worden bij de eigenaar-rol bewerkt, mét
+    domein-veld (#585). Twee plekken voor dezelfde keuze is precies wat de leespagina van #574
+    vermijdt."""
+    from nooch_village.views.overview import _domain_field, _geen_domein_uitleg
+
+    if not can_edit or not csrf_token or a.kind != wiki.PAGINA_KIND:
+        return ""
+    rol_domeinen = list(getattr(getattr(eigenaar, "definition", None), "domains", None) or [])
+    if not rol_domeinen:
+        return _geen_domein_uitleg("file this page under it")
+    veld = _domain_field(rol_domeinen, getattr(a, "domain", "") or "", fid=f"f-domain-{a.id}")
+    return (f"<form method='post' action='/action' class='qadd-row'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"{veld}"
+            f"<button class='btn sm' type='submit' name='action' value='artefact_edit'>"
+            f"Move</button></form>")
+
+
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek."""
     # DE BLOKSTAND STAAT HIER AAN EN NERGENS ANDERS (brok 1, 22 september 2026). Dit is het
@@ -408,6 +441,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
            f"<div class='wiki-kopbalk'>"
            f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
            f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           + _domein_form(a, eigenaar, csrf_token, can_edit)
            + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
               if can_edit else "")
            + f"</div>")
