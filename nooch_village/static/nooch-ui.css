@@ -610,8 +610,8 @@
    `--muted`, hier met het nu-token. Zelfde regel als bij de tabelkop hierboven. */
 .nu .wb-taak:has(input:checked){color:var(--nu-muted)}
 
-.nu .wb th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
-.nu .wb td{border-bottom-color:var(--nu-border-subtle)}
+.nu .att-body th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
+.nu .att-body td{border-bottom-color:var(--nu-border-subtle)}
 
 .nu .wb-menu { border: 1.5px solid var(--nu-text); border-radius: 0; box-shadow: none; }
 .nu .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
