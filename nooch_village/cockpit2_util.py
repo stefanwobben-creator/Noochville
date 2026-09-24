@@ -634,10 +634,16 @@ def _md_naar_bron(html: str) -> str:
     parser.feed(html or "")
     parser.close()
     uit = "".join(parser.uit).replace("\r\n", "\n").replace("\r", "\n")
-    # Regeleindes die alleen uit blok-grenzen komen mogen zich niet opstapelen. Drie of meer is
-    # nooit iets anders dan twee.
-    while "\n\n\n" in uit:
-        uit = uit.replace("\n\n\n", "\n\n")
+    # HIER STOND EEN LUS die drie of meer regeleindes terugbracht tot twee, met de aanname "drie
+    # of meer is nooit iets anders dan twee". Die klopt niet: typt de schrijver ÉCHT twee lege
+    # regels, dan is drie regeleindes precies wat hij bedoelde, en at elke bewerkronde er één op.
+    #
+    # Waar hij tegen beschermde is een echt probleem — een browser sluit een alinea met `</p>` én
+    # opent de volgende met `<p>`, twee signalen voor één overgang — maar dat wordt al opgevangen
+    # door `_nieuwe_regel`, die weigert een regeleinde toe te voegen als er al één staat. Deze lus
+    # was dus een tweede verdediging tegen iets dat de eerste al tegenhield, en zij was degene die
+    # inhoud kostte. Weggehaald op 24 september 2026, nadat gemeten was dat de rondgang zonder hem
+    # heel blijft op alle 122 artefacten van prod en de volle suite groen blijft.
     # Aan het BEGIN hetzelfde verhaal als aan het eind: een `<br>` vooraan is de lege regel die
     # de schrijver typte. Hij wordt dus niet weggepoetst — `_md` zet hem straks gewoon terug.
     # HET EINDREGELEINDE IS NIET ALTIJD HETZELFDE DING, en dat is de subtielste regel hier.
