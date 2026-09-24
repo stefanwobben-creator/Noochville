@@ -342,6 +342,11 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 
 .wb-emb{display:flex;align-items:center;gap:.6rem;margin:0;padding:.55rem .7rem}
 .wb-emb a{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
+/* TOOL-KAART. Zelfde vorm als de andere embeds — één rij met icoon, naam en herkomst — maar de
+   naam is een pil omdat het een wiki-verwijzing is en dat overal zo leest. Geen eigen kleur:
+   het icoon en het herkomst-label dragen het onderscheid al. */
+.wb-emb--tool .pill{flex:1;min-width:0;font-weight:600}
+
 .wb-emb-ico{flex:none;font-size:1.1rem;line-height:1}
 .wb-emb-bron{flex:none;font-size:.78rem}
 
