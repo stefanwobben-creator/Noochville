@@ -469,6 +469,12 @@
       // vindt die niet in de soorten-tabel, en maakt er een alinea van — precies het blok dat je
       // aan het bewerken bent verliest dan zijn identiteit.
       if (node.querySelector && node.querySelector("[data-blok-bron]")) return;
+      // EEN TAAK-BLOK IS EEN LIJST MET VINKJES. De pas kent alleen tag→soort, en de tag is hier
+      // `ul`; zonder deze regel zet hij `data-blok` terug op `ul` en is het blok zijn identiteit
+      // kwijt. De soort wordt door de wiki-laag gezet (zie `views/wiki._body_html`), niet door
+      // de soorten-tabel, dus de pas moet hem met rust laten.
+      if (node.dataset && node.dataset.blok === "taak" &&
+          node.querySelector && node.querySelector("input[type=checkbox]")) return;
       if (node.classList.contains("wb")) {
         // EIGEN TAG EERST, en dat is geen detail: Firefox HERNOEMT het omhulsel op zijn plek
         // (`DIV.wb[data-blok=p]` wordt `BLOCKQUOTE.wb[data-blok=p]`) waar Chrome het VERVANGT
@@ -834,6 +840,12 @@
       // browser, niet bedacht.
       body.querySelectorAll("textarea[data-blok-bron]").forEach(function (t) {
         t.textContent = t.value;
+      });
+      // EEN VINKJE LIEGT OP DEZELFDE MANIER. Aanvinken verandert de `checked`-PROPERTY, maar
+      // `innerHTML` schrijft het ATTRIBUUT — dus zonder deze regel verdampt elk vinkje dat je
+      // zet. Precies dezelfde val als de textarea hierboven, en op dezelfde plek opgelost.
+      body.querySelectorAll("input[type=checkbox]").forEach(function (v) {
+        v.toggleAttribute("checked", v.checked);
       });
       document.getElementById("wiki-titel-veld").value = titel.textContent.trim();
       document.getElementById("wiki-body-veld").value = body.innerHTML;
