@@ -238,6 +238,11 @@ def _stamp(ts, settings=None) -> str:
 
 #: Blok-herkenning op regelniveau, als constanten zodat de vorm van een genummerde regel en van
 #: een streep op ÉÉN plek staat in plaats van verspreid door de renderlus.
+#: Het hek van een codeblok, met een optionele taal-tag erachter (`check`, `python`, …). DIE TAG
+#: IS GEEN VERSIERING: `copycheck._FENCE` zoekt letterlijk naar ```check om de verboden-woorden-
+#: lijsten uit vier policies te halen. Raakt hij kwijt, dan stopt de copy-checker stil.
+_HEK_RE = re.compile(r"^```([A-Za-z0-9_+-]*)\s*$")
+
 _NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
 _STREEP_RE = re.compile(r"^-{3,}$")
 
@@ -318,7 +323,7 @@ BLOK_DICHT = "</div>"
 #: minder er stil kan afwijken. Wat niet in deze tabel staat is een alinea.
 BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
                 "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr",
-                "figure": "embed"}
+                "figure": "embed", "pre": "code"}
 
 
 def _md(text: str, blokken: bool = False) -> str:
@@ -366,8 +371,35 @@ def _md(text: str, blokken: bool = False) -> str:
             out.append(f"</{lijst}>" + dicht)
             lijst = ""
 
+    # DE EERSTE MEERREGELIGE CONSTRUCTIE. Deze functie las tot nu toe regel voor regel; een
+    # codeblok loopt over regels heen en heeft dus een toestand nodig. `code_uit` is None zolang
+    # er geen hek open staat, en anders de lijst regels die we verzamelen.
+    code_uit: list[str] | None = None
+    code_taal = ""
+
+    def sluit_code():
+        nonlocal code_uit, code_taal
+        taal = f" data-taal='{code_taal}'" if code_taal else ""
+        out.append(f"{open_(BLOK_SOORTEN['pre'])}<pre{taal}><code>"
+                   f"{chr(10).join(code_uit)}</code></pre>{dicht}")
+        code_uit, code_taal = None, ""
+
     for ln in s.split("\n"):
         kaal = ln.strip()
+        # HET HEK. Openen sluit een eventuele lijst; sluiten schrijft het blok weg. Tussen de
+        # hekken wordt er NIETS geïnterpreteerd — geen koppen, geen lijsten, geen links — en de
+        # regel gaat RAUW mee (`ln`, niet `kaal`), want inspringing is in code betekenis.
+        hek = _HEK_RE.match(kaal)
+        if code_uit is not None:
+            if hek:
+                sluit_code()
+            else:
+                code_uit.append(ln)
+            continue
+        if hek:
+            sluit_lijst()
+            code_uit, code_taal = [], hek.group(1)
+            continue
         # KOPPEN. `## ` bleef `<h4>` (22 september 2026): 15 bestaande pagina's gebruiken hem, en
         # een nieuw niveau erbij mag er geen één hertekenen. `#` gaat er dus BOVEN zitten (h3) en
         # `###` eronder (h5).
@@ -426,6 +458,10 @@ def _md(text: str, blokken: bool = False) -> str:
         # LEGE regel krijgt hem wél: `<div></div>` is nul pixels hoog, en zonder dit
         # verdwijnt elke witregel van elke pagina zonder dat een bron-test iets merkt.
         out.append(f"{open_('p')}{ln or '<br>'}{dicht}" if blokken else ln + "<br>")
+    # FAIL-SOFT bij een hek dat niet gesloten wordt: liever een codeblok tot het eind dan een
+    # halve pagina kwijt.
+    if code_uit is not None:
+        sluit_code()
     sluit_lijst()
     html = "".join(out)
     if blokken:
@@ -575,6 +611,12 @@ class _BronParser(_HTMLParser):
             self._ref = d.get("data-ref") or ""
             self._href = "" if self._ref else (d.get("href") or "")
             self._linktekst = []
+        elif tag == "pre":
+            self._nieuwe_regel()
+            self.uit.append("```" + (d.get("data-taal") or "") + "\n")
+            self._blok_einde = False
+        elif tag == "code":
+            pass                              # het hek staat op de <pre>, niet hierop
         elif tag == "figure":
             self._embed = True
             self._nieuwe_regel()
@@ -612,6 +654,11 @@ class _BronParser(_HTMLParser):
             self._ref = self._href = ""
             self._linktekst = []
             self._blok_einde = False
+        elif tag == "pre":
+            self.uit.append("\n```")
+            self._nieuwe_regel()
+        elif tag == "code":
+            pass
         elif tag == "figure":
             self._embed = False
             self._nieuwe_regel()
@@ -623,6 +670,13 @@ class _BronParser(_HTMLParser):
     def handle_data(self, data):
         if self._chrome:
             return                      # tekst ín chrome is een label, geen inhoud
+        # GEEN UITZONDERING VOOR CODE, en dat is met opzet. Ik had hier eerst een tak die de
+        # tekst binnen een `<pre>` rechtstreeks wegschreef "omdat elk teken daar inhoud is".
+        # Die was overbodig — `_schrijf` doet precies hetzelfde zolang er geen link open staat —
+        # én schadelijk: stond er een `[tekst](url)` ín het codeblok, dan ging het label langs
+        # `_linktekst` heen en sloot `</a>` af met een LEEG label. Uit de rondgang kwam dan
+        # `de docs[](https://…)`. Een mutatie die de hele tak uitschakelde bleef groen; daarmee
+        # was hij aantoonbaar dood, en de eenvoudigste vorm is ook de juiste.
         self._schrijf(data)
 
 
