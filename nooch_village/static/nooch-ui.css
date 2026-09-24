@@ -603,6 +603,12 @@
 .nu .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
 /* De blok-greep (brok 3): geen radius, de lijnen van het huis. */
+/* TABEL-KOP in de nu-laag. De oude laag geeft hem de eyebrow-vingerafdruk (klein, hoofdletters,
+   vet); hier de tegenhanger in de nu-tokens, zodat een tabel op een nu-scherm niet terugvalt op
+   de crème-maatvoering. Zelfde regel als bij elk ander labeltje. */
+.nu .wb th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
+.nu .wb td{border-bottom-color:var(--nu-border-subtle)}
+
 .nu .wb-menu { border: 1.5px solid var(--nu-text); border-radius: 0; box-shadow: none; }
 .nu .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
 .nu .wb-menu-item:hover { background: var(--nu-bg-alt); }

@@ -80,7 +80,10 @@ def test_de_verwijzing_komt_terug_als_wat_er_stond_niet_als_de_titel():
     ("<img src=x onerror=alert(1)>", ""),
     ("<span style='color:red'>rood</span>", "rood"),
     ("<font face='Arial'>geplakt uit Word</font>", "geplakt uit Word"),
-    ("<table><tr><td>cel</td></tr></table>", "cel"),
+    # `<table>` STOND HIER, als voorbeeld van "onbekende tag wordt tekst". Sinds 24 september
+    # 2026 kent de parser hem wél: pipe-rijen zijn een tabel-blok geworden, en dan hoort een
+    # `<table>` terug te komen als `| cel |` en niet als kale tekst. Zie tests/test_wiki_tabel.py.
+    ("<marquee>ouderwets</marquee>", "ouderwets"),
     ("<h1>een kop die _md niet kent</h1>", "een kop die _md niet kent"),
 ])
 def test_wat_niet_in_de_whitelist_staat_wordt_tekst(html, verwacht):
