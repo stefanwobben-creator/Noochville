@@ -241,6 +241,22 @@ def _stamp(ts, settings=None) -> str:
 #: Het hek van een codeblok, met een optionele taal-tag erachter (`check`, `python`, …). DIE TAG
 #: IS GEEN VERSIERING: `copycheck._FENCE` zoekt letterlijk naar ```check om de verboden-woorden-
 #: lijsten uit vier policies te halen. Raakt hij kwijt, dan stopt de copy-checker stil.
+#: Een tabelrij en de scheidingsrij eronder. GEEN TABEL ZONDER SCHEIDINGSRIJ: één regel die
+#: toevallig met een pipe begint is een zin, geen tabel, en mag de weergave niet omgooien.
+_PIPE_RE = re.compile(r"^\|.*")
+_SCHEIDING_RE = re.compile(r"^\|[\s:|-]+\|?\s*$")
+
+
+def _cellen(regel: str) -> list[str]:
+    """De cellen van een pipe-rij, zonder de buitenste lege stukken."""
+    deel = regel.strip().split("|")
+    if deel and not deel[0].strip():
+        deel = deel[1:]
+    if deel and not deel[-1].strip():
+        deel = deel[:-1]
+    return [d.strip() for d in deel]
+
+
 _HEK_RE = re.compile(r"^```([A-Za-z0-9_+-]*)\s*$")
 
 _NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
@@ -323,7 +339,8 @@ BLOK_DICHT = "</div>"
 #: minder er stil kan afwijken. Wat niet in deze tabel staat is een alinea.
 BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
                 "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr",
-                "figure": "embed", "pre": "code"}
+                "figure": "embed", "pre": "code",
+                "table": "tabel"}
 
 
 def _md(text: str, blokken: bool = False) -> str:
@@ -376,6 +393,24 @@ def _md(text: str, blokken: bool = False) -> str:
     # er geen hek open staat, en anders de lijst regels die we verzamelen.
     code_uit: list[str] | None = None
     code_taal = ""
+    tabel_uit: list[str] | None = None
+
+    def sluit_tabel():
+        """Een verzamelde reeks pipe-regels wegschrijven. Zonder scheidingsrij op plek 2 is het
+        geen tabel maar gewone tekst — dan gaan de regels alsnog als alinea's naar buiten, zodat
+        er nooit inhoud verdwijnt."""
+        nonlocal tabel_uit
+        rijen, tabel_uit = tabel_uit, None
+        if len(rijen) < 2 or not _SCHEIDING_RE.match(rijen[1].strip()):
+            for r in rijen:
+                out.append(f"{open_('p')}{r or '<br>'}{dicht}" if blokken else r + "<br>")
+            return
+        kop = _cellen(rijen[0])
+        lijf = [_cellen(r) for r in rijen[2:]]
+        thead = "<tr>" + "".join(f"<th>{c}</th>" for c in kop) + "</tr>"
+        tbody = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in rij) + "</tr>" for rij in lijf)
+        out.append(f"{open_(BLOK_SOORTEN['table'])}<table><thead>{thead}</thead>"
+                   f"<tbody>{tbody}</tbody></table>{dicht}")
 
     def sluit_code():
         nonlocal code_uit, code_taal
@@ -389,6 +424,17 @@ def _md(text: str, blokken: bool = False) -> str:
         # HET HEK. Openen sluit een eventuele lijst; sluiten schrijft het blok weg. Tussen de
         # hekken wordt er NIETS geïnterpreteerd — geen koppen, geen lijsten, geen links — en de
         # regel gaat RAUW mee (`ln`, niet `kaal`), want inspringing is in code betekenis.
+        # TABEL. Een reeks pipe-regels wordt samen één blok; alles wat geen pipe-regel is sluit
+        # de reeks. Het codeblok gaat vóór: binnen een hek betekent een pipe niets.
+        if code_uit is None:
+            if _PIPE_RE.match(kaal):
+                if tabel_uit is None:
+                    sluit_lijst()
+                    tabel_uit = []
+                tabel_uit.append(kaal)
+                continue
+            if tabel_uit is not None:
+                sluit_tabel()
         hek = _HEK_RE.match(kaal)
         if code_uit is not None:
             if hek:
@@ -462,6 +508,8 @@ def _md(text: str, blokken: bool = False) -> str:
     # halve pagina kwijt.
     if code_uit is not None:
         sluit_code()
+    if tabel_uit is not None:
+        sluit_tabel()
     sluit_lijst()
     html = "".join(out)
     if blokken:
@@ -538,13 +586,32 @@ class _BronParser(_HTMLParser):
         self._nr = 0
         #: hoe diep zitten we in een `data-chrome`-element? Zie `handle_starttag`.
         self._chrome = 0
+        #: de cel die nu open staat, en de rij die we aan het vullen zijn. Tekst binnen een
+        #: tabel gaat NIET rechtstreeks naar `uit`: hij hoort bij een cel, en pas als de rij
+        #: dicht is weten we hoe de pipe-regel eruitziet.
+        #: staat er een ruw bewerkvlak open? Dan is elke tekst markdown en gaat hij letterlijk
+        #: door — geen blok-grenzen, geen samenvoeging.
+        self._bron = False
+        self._cel: list[str] | None = None
+        self._rij: list[str] = []
+        self._kop_gehad = False
         #: staan we ín een embed-kaart? Alleen daar mag een link waarvan de TEKST gelijk is aan
         #: zijn url terugkomen als kale url — zie `handle_endtag`.
         self._embed = False
 
     # ── hulpjes ──────────────────────────────────────────────────────────────
+    def _doel(self) -> list:
+        """Waar de volgende tekst heen gaat. ÉÉN PLEK, want er zijn er nu drie: een open link
+        vangt zijn eigen label, een open tabelcel vangt haar inhoud, en anders is het de uitvoer.
+        Stond die keuze op twee plekken, dan viel een link ín een tabelcel tussen wal en schip."""
+        if self._href or self._ref:
+            return self._linktekst
+        if self._cel is not None:
+            return self._cel
+        return self.uit
+
     def _schrijf(self, tekst: str) -> None:
-        (self._linktekst if self._href or self._ref else self.uit).append(tekst)
+        self._doel().append(tekst)
         if tekst:
             self._blok_einde = False
 
@@ -611,6 +678,23 @@ class _BronParser(_HTMLParser):
             self._ref = d.get("data-ref") or ""
             self._href = "" if self._ref else (d.get("href") or "")
             self._linktekst = []
+        elif tag == "textarea" and "data-blok-bron" in d:
+            # HET BEWERKVLAK VAN EEN TABEL OF CODEBLOK. `contenteditable` en `execCommand` kunnen
+            # die twee niet fatsoenlijk aan — een Enter in een cel maakt iets anders dan een
+            # nieuwe rij — dus je bewerkt daar de RUWE bron. Wat erin staat IS markdown en gaat
+            # dus letterlijk door, zonder blok-logica.
+            #
+            # Zo blijft de omzetting op één plek: de browser levert tekst, de server maakt er een
+            # blok van. Er komt geen tweede renderer in JS.
+            self._nieuwe_regel()
+            self._bron = True
+        elif tag == "table":
+            self._nieuwe_regel()
+            self._kop_gehad = False
+        elif tag in ("thead", "tbody", "tr"):
+            self._rij = [] if tag == "tr" else self._rij
+        elif tag in ("th", "td"):
+            self._cel = []
         elif tag == "pre":
             self._nieuwe_regel()
             self.uit.append("```" + (d.get("data-taal") or "") + "\n")
@@ -631,9 +715,15 @@ class _BronParser(_HTMLParser):
             self._schrijf(_BRON_INLINE[tag][1])
         elif tag in ("a", "span"):
             label = "".join(self._linktekst)
-            if self._ref:
-                self.uit.append(f"[[{self._ref}]]")
-            elif self._href.startswith(("http://", "https://")):
+            # EERST LOSLATEN, DAN PAS HET DOEL BEPALEN. Zolang `_href`/`_ref` nog staan, wijst
+            # `_doel()` naar de linktekst zelf — dan schreef een link ín een tabelcel zichzelf
+            # terug in zijn eigen buffer en kwam de cel leeg uit de rondgang.
+            ref, href = self._ref, self._href
+            self._ref = self._href = ""
+            doel = self._doel()
+            if ref:
+                doel.append(f"[[{ref}]]")
+            elif href.startswith(("http://", "https://")):
                 # BINNEN EEN EMBED komt een link waarvan de tekst zijn eigen url is terug als
                 # KALE url. Anders typt iemand `https://x` en staat er na één bewerkronde
                 # `[https://x](https://x)` in de bron — een andere tekst dan hij schreef.
@@ -641,19 +731,37 @@ class _BronParser(_HTMLParser):
                 # En ALLEEN binnen een embed: in een zin zou dezelfde regel
                 # `zie [https://x](https://x) hier` veranderen in `zie https://x hier`, en dat is
                 # geen link meer. Dan breekt de rondgang.
-                if self._embed and label == self._href:
-                    self.uit.append(self._href)
+                if self._embed and label == href:
+                    doel.append(href)
                 else:
-                    self.uit.append(f"[{label}]({self._href})")
+                    doel.append(f"[{label}]({href})")
             else:
                 # DEZELFDE POORT ALS `_md`, EEN STAP EERDER. `_md` weigert al een link zonder
                 # http(s)-schema, dus een `javascript:`-url zou toch als platte tekst renderen —
                 # maar hij zou dan wél in de OPSLAG staan, klaar voor de dag waarop iemand een
                 # tweede renderer schrijft die minder streng is. Hier houdt alleen de tekst over.
-                self.uit.append(label)
-            self._ref = self._href = ""
+                doel.append(label)
             self._linktekst = []
             self._blok_einde = False
+        elif tag == "textarea" and self._bron:
+            self._bron = False
+            self._nieuwe_regel()
+        elif tag in ("th", "td"):
+            self._rij.append("".join(self._cel or []).strip())
+            self._cel = None
+        elif tag == "tr":
+            self.uit.append("| " + " | ".join(self._rij) + " |")
+            self._nieuwe_regel()
+            if not self._kop_gehad:
+                # DE SCHEIDINGSRIJ WORDT OPNIEUW OPGEBOUWD, met precies zoveel kolommen als de
+                # kop. Op prod staat er een tabel met drie kolommen en een scheidingsrij van twee;
+                # dat parseert toevallig, maar het is geen bron die je letterlijk wilt bewaren.
+                self.uit.append("|" + "---|" * len(self._rij))
+                self._nieuwe_regel()
+                self._kop_gehad = True
+            self._rij = []
+        elif tag == "table":
+            self._nieuwe_regel()
         elif tag == "pre":
             self.uit.append("\n```")
             self._nieuwe_regel()
@@ -670,6 +778,11 @@ class _BronParser(_HTMLParser):
     def handle_data(self, data):
         if self._chrome:
             return                      # tekst ín chrome is een label, geen inhoud
+        # GEEN EIGEN TAK VOOR HET BEWERKVLAK. Ik had er een ("ruwe markdown gaat letterlijk"),
+        # maar `_schrijf` doet precies hetzelfde zolang er geen link of tabelcel open staat — en
+        # binnen een <textarea> staat dat allebei niet. Een mutatie die de tak uitschakelde bleef
+        # groen; dan is hij dood, en dood is weg. Wat het bewerkvlak WEL nodig heeft zijn de
+        # regeleindes eromheen, en die staan bij de start- en eindtag.
         # GEEN UITZONDERING VOOR CODE, en dat is met opzet. Ik had hier eerst een tak die de
         # tekst binnen een `<pre>` rechtstreeks wegschreef "omdat elk teken daar inhoud is".
         # Die was overbodig — `_schrijf` doet precies hetzelfde zolang er geen link open staat —

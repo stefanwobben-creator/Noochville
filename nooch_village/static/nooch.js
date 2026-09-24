@@ -465,6 +465,10 @@
         return;
       }
       if (node.nodeType !== 1) return;
+      // EEN OPEN BEWERKVLAK BLIJFT WAT HET IS. Zonder dit ziet de pas alleen een <textarea>,
+      // vindt die niet in de soorten-tabel, en maakt er een alinea van — precies het blok dat je
+      // aan het bewerken bent verliest dan zijn identiteit.
+      if (node.querySelector && node.querySelector("[data-blok-bron]")) return;
       if (node.classList.contains("wb")) {
         // EIGEN TAG EERST, en dat is geen detail: Firefox HERNOEMT het omhulsel op zijn plek
         // (`DIV.wb[data-blok=p]` wordt `BLOCKQUOTE.wb[data-blok=p]`) waar Chrome het VERVANGT
@@ -532,7 +536,15 @@
     var menu = document.createElement("span");
     menu.className = "wb-menu";
     menu.hidden = true;
-    GREEP_ACTIES.forEach(function (paar) {
+    var acties = GREEP_ACTIES.slice();
+    // EEN TABEL EN EEN CODEBLOK BEWERK JE ALS TEKST. `contenteditable` en `execCommand` kunnen
+    // die twee niet fatsoenlijk aan: een Enter in een cel maakt iets anders dan een nieuwe rij,
+    // en een blokcommando op een <pre> haalt de regelovergangen eruit. Daarom een eigen ingang,
+    // en alleen bij die twee soorten — bij een alinea zou hij verwarrend zijn.
+    if (blok.dataset.blok === "tabel" || blok.dataset.blok === "code") {
+      acties.unshift(["bron", "✎ bewerk als tekst"]);
+    }
+    acties.forEach(function (paar) {
       var b = document.createElement("button");
       b.type = "button";
       b.className = "wb-menu-item";
@@ -567,8 +579,57 @@
       body.insertBefore(blok.nextElementSibling, blok);
     } else if (actie === "verwijder") {
       blok.remove();
+    } else if (actie === "bron") {
+      naarBron(blok);
+      return;                       // de pas zou het bewerkvlak meteen weer inpakken
     }
     NV.blokNormaliseer(body);
+  }
+
+  // DOM → RUWE MARKDOWN, en alleen voor deze twee soorten. Dit is de ENIGE plek waar de browser
+  // iets van het markdown-formaat weet, en dat is bewust zo klein gehouden: een tabel is
+  // pipe-gescheiden en een codeblok staat tussen hekken. De weg terug — van tekst naar een blok —
+  // doet de SERVER bij het opslaan, zoals overal. Er komt geen tweede renderer in JS.
+  function blokBron(blok) {
+    // OP DE BLOKSOORT, NIET OP DE TAG. `data-blok` is wat de server zegt dat dit blok is; welke
+    // tag daarbij hoort staat in `BLOK_SOORTEN` en hoort hier niet nóg een keer te staan — dat
+    // is precies wat `test_javascript_draagt_geen_eigen_soorten_lijst` bewaakt.
+    var inhoud = blok.firstElementChild;
+    while (inhoud && inhoud.hasAttribute && inhoud.hasAttribute("data-chrome")) {
+      inhoud = inhoud.nextElementSibling;
+    }
+    if (!inhoud) return "";
+    if (blok.dataset.blok === "tabel") {
+      var uit = [];
+      Array.prototype.forEach.call(inhoud.querySelectorAll("tr"), function (tr, i) {
+        var cellen = Array.prototype.map.call(tr.children, function (c) {
+          return (c.textContent || "").trim();
+        });
+        uit.push("| " + cellen.join(" | ") + " |");
+        if (i === 0) uit.push("|" + Array(cellen.length + 1).join("---|"));
+      });
+      return uit.join("\n");
+    }
+    if (blok.dataset.blok === "code") {
+      var taal = inhoud.getAttribute("data-taal") || "";
+      return "```" + taal + "\n" + (inhoud.textContent || "") + "\n```";
+    }
+    return "";
+  }
+
+  function naarBron(blok) {
+    var bron = blokBron(blok);
+    if (!bron) return;
+    Array.prototype.forEach.call(blok.children, function (k) {
+      if (!k.hasAttribute || !k.hasAttribute("data-chrome")) k.remove();
+    });
+    var veld = document.createElement("textarea");
+    veld.className = "wb-bron";
+    veld.setAttribute("data-blok-bron", "");
+    veld.value = bron;
+    veld.rows = bron.split("\n").length + 1;
+    blok.appendChild(veld);
+    veld.focus();
   }
 
   // De grepen aan- of uitzetten. Ze bestaan alleen tijdens het bewerken: een greep op een pagina
@@ -767,6 +828,13 @@
       // waar chrome in de opgeslagen tekst kan lekken.
       body.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
       body.querySelectorAll("[data-blok-id]").forEach(function (b) { b.removeAttribute("data-blok-id"); });
+      // EEN TEXTAREA LIEGT IN innerHTML. Hij geeft daar zijn OORSPRONKELIJKE inhoud terug, niet
+      // wat de gebruiker erin typte — dus zonder deze regel wordt elke bewerking van een tabel of
+      // codeblok stil weggegooid en staat er na het opslaan weer de oude tekst. Gemeten in de
+      // browser, niet bedacht.
+      body.querySelectorAll("textarea[data-blok-bron]").forEach(function (t) {
+        t.textContent = t.value;
+      });
       document.getElementById("wiki-titel-veld").value = titel.textContent.trim();
       document.getElementById("wiki-body-veld").value = body.innerHTML;
     });
