@@ -481,10 +481,14 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
            f"<div class='wiki-kopbalk'>"
            f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
            f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           # TWEE ZONES. De herkomst-regel hierboven is de linkerkant; alles wat je kúnt doen
+           # staat rechts bij elkaar. Hiervóór waren dit drie losse flex-kinderen en zweefde de
+           # domein-keuze ergens in het midden.
+           + f"<div class='wiki-kopacties'>"
            + _domein_form(a, eigenaar, csrf_token, can_edit)
            + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
               if can_edit else "")
-           + f"</div>")
+           + f"</div></div>")
 
     body = _wiki_editor(a, pags, csrf_token, can_edit)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
