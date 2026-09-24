@@ -641,7 +641,15 @@
   // De grepen aan- of uitzetten. Ze bestaan alleen tijdens het bewerken: een greep op een pagina
   // die je alleen leest, belooft iets dat niet kan.
   function grepen(body, aan) {
-    body.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
+    // ALLEEN DE EIGEN GREPEN, niet alle chrome. Dit stond op `[data-chrome]` en haalde daarmee
+    // ook het icoon en het herkomst-label van een embed-kaart weg: zodra je "Edit page" klikte,
+    // stond die kaart er kaal bij. Geen dataverlies — de server rendert ze bij het herladen weer
+    // — maar wel een kaart die er tijdens het bewerken anders uitziet dan erna. Gezien in de
+    // browser, niet in een toets.
+    //
+    // De verdediging die chrome BUITEN DE OPSLAG houdt blijft wél op `[data-chrome]` staan: die
+    // zit in de submit-handler, en daar hoort hij ook.
+    body.querySelectorAll(".wb-greep").forEach(function (g) { g.remove(); });
     if (!aan) return;
     body.querySelectorAll(":scope > .wb").forEach(function (blok, i) {
       blok.setAttribute("data-blok-id", "b" + i);

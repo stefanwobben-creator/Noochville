@@ -316,6 +316,10 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    een afgeronde taak wordt gedempt zodat de lijst in één oogopslag leesbaar is. Geen nieuwe
    klasse: `.wb-taak` bestaat al sinds het vinkje er kwam, en de rest zijn tag-selectors binnen
    `.wb`. Dit is het visuele onderscheid per datasoort dat het ontwerp vroeg. */
+/* HET VINKJE IS DE OPSOMMINGSTEKEN. Een bolletje ERNAAST is dubbelop: twee markeringen
+   voor één regel, en de lezer moet raden welke telt. De lijst schuift daarmee ook naar
+   links, want de inspringing was er voor het bolletje. */
+.wb[data-blok='taak'] ul{list-style:none;margin-left:0;padding-left:0}
 .wb-taak input{cursor:pointer;margin-right:.45rem;vertical-align:baseline}
 .wb-taak:has(input:checked){color:var(--muted);text-decoration:line-through}
 
@@ -1860,6 +1864,11 @@ progress.nu-progress.wide{height:8px}
 .wiki-kopbalk{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;
   flex-wrap:wrap}
 .wiki-kopbalk>p{margin:0;flex:1 1 20rem}
+/* TWEE ZONES: herkomst links, acties rechts. Hiervóór stonden de eigenaar-regel, het
+   domein-formulier en de bewerkknop als drie losse flex-kinderen in een `space-between`,
+   waardoor het domein ergens in het midden zweefde. Dit is dezelfde indeling als elke
+   andere kopbalk in het dorp. */
+.wiki-kopacties{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 /* ── De wiki-pagina in bewerkstand (21 september 2026) ───────────────────────────────────────
    ATOOM. Eén toestandsklasse, `wiki-aan`, en verder niets nieuws: de tekst houdt exact de vorm die
    hij als LEESTEKST had. Dat is het hele punt van inline bewerken — zou het invoerveld er anders
@@ -1867,7 +1876,12 @@ progress.nu-progress.wide{height:8px}
    Wat er bij komt is één zichtbaar signaal dat je nu in de tekst staat (een accentlijn links) en
    een cursor die dat bevestigt. Geen kader: een kader is de container-taal, en dit is een veld —
    zie de regel die daar in fase 12 voor is vastgelegd. */
-.wiki-aan{outline:none;cursor:text;box-shadow:-3px 0 0 0 var(--green)}
+.wiki-aan{outline:none;cursor:text;box-shadow:-3px 0 0 0 var(--muted)}
+/* DE LIJN WAS FELGROEN, en dat is in dit dorp de kleur van ACTIE: opslaan, een live
+   overleg, een goedgekeurde stand. "Je staat nu in de tekst" is geen actie maar een
+   plaatsbepaling, en die hoort niet even luid te spreken. De lijn blijft — hij is de
+   enige zichtbare drager naast de cursor — maar in `--muted`. Geen kader: dat is
+   container-taal en dit is een veld (fase 12). */
 /* TIJDENS HET BEWERKEN EEN GOOT VOOR DE GREEP. Hij stond op .55rem en dan ligt de greep op de
    rand van de kaart, half over het bewerk-kader heen — gemeten: greep op x=265, kaartrand op
    x=264. Dit is de ruimte waar hij in past (1,5rem offset + de knop zelf). */
