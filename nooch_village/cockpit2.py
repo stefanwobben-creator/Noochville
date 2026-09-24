@@ -1373,12 +1373,32 @@ def _act_artefact_edit(c):
         te_lang = _body_te_lang(nieuw_body, cur.kind) if nieuw_body is not None else ""
         if te_lang:
             return nxt, te_lang
+        # HET DOMEIN, MET DEZELFDE POORT ALS BIJ AANMAKEN (24 september 2026). `domain` bepaalt
+        # waar latere bewerkingen tegen gelogd worden (`gref` hieronder), dus een vrij tekstveld
+        # zou de audittrail naar een domein kunnen laten wijzen dat governance nooit toewees.
+        #
+        # AFWEZIG IS IETS ANDERS DAN LEEG. Deze actie bedient twee formulieren: dat van de rol-tab
+        # (stuurt `domain` mee) en de inline editor van de wiki-pagina (kent het veld niet). Zou
+        # een ontbrekend veld als leeg gelden, dan wiste elke note-bewerking stil zijn eigen
+        # indeling. Expliciet leeg mag wél: zo zet je een artefact terug op de afleiding via
+        # zijn rol.
+        nieuw_domein = None
+        if "domain" in form:
+            gekozen = g("domain").strip()
+            if gekozen:
+                eigenaar = st.records.get(cur.anchor)
+                eigen_domeinen = list(getattr(getattr(eigenaar, "definition", None),
+                                              "domains", None) or []) if eigenaar else []
+                if gekozen not in eigen_domeinen:
+                    return nxt, "✗ pick a domain this role actually owns"
+            nieuw_domein = gekozen
         gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
         actor_id = _web_actor_id(username, st)
         upd = st.att.update(cur.id,
                             title=(g("title") if "title" in form else None),
                             body=nieuw_body,
                             url=(g("url") if "url" in form else None),
+                            domain=nieuw_domein,
                             actor_id=actor_id, actor_type="person",
                             governance_ref=gref, change_note="bewerkt")
         artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,

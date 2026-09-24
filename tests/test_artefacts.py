@@ -490,10 +490,14 @@ def test_ui_policy_1_domein_vaste_regel_2_domeinen_select(tmp_path):
     _wis_domeinen(st, OWNER)                                 # anders is "1 domein" er stilletjes 2
     _give_role_domain(st, OWNER, "Merkstem")
     one = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "<input type='hidden' name='domain'" in one and "<select name='domain'>" not in one
+    # OP `name='domain'` EN NIET OP DE HELE OPENINGSTAG: de select draagt sinds 24 september een
+    # `id`, zodat zijn label er met `for=` naar kan wijzen (de labels-zonder-for-ratchet). De
+    # bedoeling van deze toets — één domein is een vaste regel, twee is een keuze — verandert
+    # daar niet door.
+    assert "<input type='hidden' name='domain'" in one and "<select name='domain'" not in one
     _give_role_domain(st, OWNER, "Toon")                    # nu 2 domeinen → select
     two = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "<select name='domain'>" in two and "Toon" in two
+    assert "<select name='domain'" in two and "Toon" in two
 
 
 def test_route_policy_domein_server_side_gevalideerd(tmp_path):

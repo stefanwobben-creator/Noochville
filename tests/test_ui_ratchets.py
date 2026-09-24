@@ -40,7 +40,9 @@ _LABEL_WHITELIST = {
     "views/checklists.py": 4,
     "views/feed.py": 4,
     "views/metrics.py": 11,
-    "views/overview.py": 9,
+    "views/overview.py": 8,  # 9 → 8 op 24 sept: `_domain_field` koppelt label en select nu
+                             #   via for=/id, en het verborgen veld
+                             #   draagt geen los label meer.
     "views/projects.py": 2,    # -6: het losse toevoegformulier is weg (één form = de wizard); het
                                # composer-label "Conversation" is weg (stond dubbel met de sectiekop);
                                # het einddocument-editorlabel verhuisde mee naar /rapport; en het
