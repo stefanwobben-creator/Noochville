@@ -48,13 +48,15 @@ def _zonder_commentaar(js: str) -> str:
 def test_de_soorten_tabel_dekt_elk_blok_dat_de_renderer_maakt():
     """Elke `data-blok` die `_md` schrijft moet in de tabel staan, en andersom moet elke tag in
     de tabel een blok opleveren dat de weg terug kent."""
-    # `figure: embed` KWAM ERBIJ op 24 september 2026: een regel die alleen een link is rendert
+    # `pre: code` KWAM ERBIJ op 24 september 2026: een ```-hek wordt één codeblok in plaats van
+    # losse alinea's. Zonder deze regel verliest het zijn greep bij een blokcommando.
+    # `figure: embed` kwam eerder op 24 september 2026: een regel die alleen een link is rendert
     # als embed-kaart, en die kaart is een `<figure>`. Zonder deze regel in de tabel verliest een
     # embed zijn greep zodra iemand er een blokcommando op loslaat — de normaliseerpas in
     # `nooch.js` heeft geen eigen lijst en leest precies deze tabel.
     assert BLOK_SOORTEN == {"h3": "h", "h4": "h", "h5": "h",
                             "ul": "ul", "ol": "ol", "blockquote": "q", "hr": "hr",
-                            "figure": "embed"}
+                            "figure": "embed", "pre": "code"}
 
 
 @pytest.mark.parametrize("bron,tag", [

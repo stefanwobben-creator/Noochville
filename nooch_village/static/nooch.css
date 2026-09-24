@@ -304,6 +304,16 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    de marge die de browser aan een <figure> geeft. Geen eigen kleur en geen eigen rand — dat is
    wat `.card` al doet. De klassen zitten in de bestaande `wb-`-familie, want een embed is een
    wiki-blok. */
+/* CODEBLOK (24 september 2026). Geen nieuwe klasse: de `<pre>` staat al in een `.wb`, en een
+   tag-selector binnen die scope is genoeg — dat scheelt een prefix-familie. De vormgeving leent
+   van `.einddoc-body pre`, dat hetzelfde probleem al oploste (monospace, niet afkappen, scrollen
+   als het niet past). Eigen achtergrond en rand zodat code zichtbaar een ándere datasoort is dan
+   de tekst eromheen; dat is het visuele onderscheid waar het ontwerp om vroeg. */
+.wb pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;
+  background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:.55rem .7rem;margin:.2rem 0;overflow-x:auto;white-space:pre}
+.wb pre code{font:inherit;background:none;padding:0}
+
 .wb-emb{display:flex;align-items:center;gap:.6rem;margin:0;padding:.55rem .7rem}
 .wb-emb a{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
 .wb-emb-ico{flex:none;font-size:1.1rem;line-height:1}
