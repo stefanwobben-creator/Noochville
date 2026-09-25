@@ -362,7 +362,7 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
 # vervanging moest opheffen.
 
-def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
+def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> str:
     """De domein-keuze van deze pagina, in de kopbalk.
 
     EEN EIGEN FORMULIER, NAAST DE BLOK-EDITOR. De opslaan-balk van `wiki-form` verschijnt pas als
@@ -386,13 +386,48 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
     if not rol_domeinen:
         return _geen_domein_uitleg("file this page under it")
     veld = _domain_field(rol_domeinen, getattr(a, "domain", "") or "", fid=f"f-domain-{a.id}")
-    return (f"<form method='post' action='/action' class='qadd-row'>"
+    # WAT DIT VELD DOET, EN WAAROM HET ER IS. Het stond er als kale "DOMAIN"-dropdown, en dan is
+    # het een keuze zonder gevolg-in-zicht. Gemeten op de 122 artefacten van prod voordat besloten
+    # werd hem te houden: 10 pagina's verschuiven van BAKJE als het veld verdwijnt, 11 policy-ID's
+    # zijn uit de domeinslug gemunt (en een ID is een permalink), en 33 changelog-regels loggen
+    # tegen `domain:<x>`. Hij is dus dragend — en dat hoort op het scherm te staan, niet in een
+    # commit-bericht.
+    #
+    # HET BAKJE ERBIJ, want dat is wat je op de index ZIET. Het domein is de sleutel
+    # (`bibliotheek`), het bakje de plek (`Overig`); zonder die vertaling moet je
+    # `domeinen.DOMEIN_BAKJE` uit je hoofd kennen om een keuze te kunnen maken.
+    # DE RECORDS MOETEN MEE. `bakje_van` heeft vijf stappen, en drie daarvan (het domein van de
+    # eigenaar-rol, de rol zelf, de omvattende cirkel) hebben de recordboom nodig. Met een lege
+    # lijst zegt de hint "Overig" voor elke pagina zonder eigen domein, terwijl de index hem onder
+    # zijn rol-domein toont. Gemeten: een note zonder eigen domein onder een rol met `Materials`
+    # landt mét records in het bakje van dát domein en zonder records in Overig. Een hint die
+    # liegt is erger dan geen hint.
+    #
+    # (De bakje-sleutel staat hier bewust NIET uitgeschreven: `test_er_staat_geen_tweede_
+    # bakjeslijst_in_de_views` verbiedt hem in dit bestand, en die botheid is het punt — een
+    # tweede lijst begint met één voorbeeld in een comment.)
+    from nooch_village import domeinen as _dom
+    bakje, _waarom = _dom.bakje_van(a, list(records or []))
+    # DE UITLEG ONDER DE RIJ EN NIET ALS LABEL, en dat is een correctie op mijn eerste versie —
+    # gezien op de screenshot, niet in een toets. Ik had de zin in een `.att-lbl` gezet, en die
+    # klasse is `text-transform:uppercase`: een hele zin in kapitalen schreeuwt. Erger nog, het
+    # veld heeft zijn ÉÍGEN label ("Domain", gekoppeld met `for`), dus het woord stond er twee
+    # keer naast elkaar — precies de dubbeling die deze PR moest weghalen.
+    #
+    # Nu: het veld houdt zijn eigen label, en de uitleg staat eronder als gewone zin. Geen nieuwe
+    # klasse; `.muted` en `.wiki-hint` bestaan allebei al.
+    tip = "Moves this page to another part of the wiki. Does not change its text."
+    uitleg = (f"<div class='muted wiki-hint'>Where this page sits in the wiki structure "
+              f"&mdash; now: {_e(_dom.label(bakje))}</div>")
+    return (f"<div>"
+            f"<form method='post' action='/action' class='qadd-row' title='{_e(tip)}'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
             f"{veld}"
-            f"<button class='btn sm' type='submit' name='action' value='artefact_edit'>"
-            f"Move</button></form>")
+            f"<button class='btn sm' type='submit' name='action' value='artefact_edit' "
+            f"title='{_e(tip)}'>Move page</button></form>"
+            f"{uitleg}</div>")
 
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
@@ -529,23 +564,29 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
                     and _can_edit_artefacts(st, eigenaar, csrf_token, username))
     pags = wiki.verwijsbaar(st.att)
 
-    eig_chip = ""
-    if eigenaar is not None:
-        eig_chip = (f" <a class='chip' href='/node?id={_e(a.anchor)}&tab=notes'>"
-                    f"{_e(_name(eigenaar))}</a>")
+    # DE EIGENAAR IS ÉÉN ZIN (25 september 2026). Hiervóór stond de rol als los tagje naast de
+    # titel, terwijl de zin eronder "this role" zei zonder hem te noemen: twee fragmenten van één
+    # ding, en geen van beide compleet. De naam staat nu IN de zin en blijft aanklikbaar.
+    eig = (f"<a href='/node?id={_e(a.anchor)}&tab=notes'>{_e(_name(eigenaar))}</a>"
+           if eigenaar is not None else "this role")
     # De titel is een eigen element omdat hij BEWERKBAAR wordt, op zijn plek in de kop. Het losse
     # TITLE-veld onder aan de pagina is daarmee vervallen.
     titel = f"<span id='wiki-titel' class='wiki-titel'>{_e(a.title or a.id)}</span>"
+    # HET ID UIT DE KOP. Het is een interne sleutel, geen onderwerp, en het stond vóór de titel —
+    # het eerste wat je las was techniek. Hij VERDWIJNT NIET: het ID wordt in gesprekken en
+    # documenten als verwijzing gebruikt (in het ontwerpdocument zelf ook). Hij gaat mee in de
+    # herkomst-regel, klein. In PR 2 verhuist hij naar de metadata-sectie.
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
-           f"<h1>📄 <code class='pill'>{_e(a.id)}</code> {titel}{eig_chip}</h1>"
+           f"<h1>📄 {titel}</h1>"
            f"<div class='wiki-kopbalk'>"
-           f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
-           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           f"<p class='muted'>Owned by {eig} — everyone reads, the role curates. "
+           f"Last edited: {_dt(getattr(a, 'updated_at', 0))} "
+           f"<code class='pill'>{_e(a.id)}</code></p>"
            # TWEE ZONES. De herkomst-regel hierboven is de linkerkant; alles wat je kúnt doen
            # staat rechts bij elkaar. Hiervóór waren dit drie losse flex-kinderen en zweefde de
            # domein-keuze ergens in het midden.
            + f"<div class='wiki-kopacties'>"
-           + _domein_form(a, eigenaar, csrf_token, can_edit)
+           + _domein_form(a, eigenaar, csrf_token, can_edit, st.records.all())
            + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
               if can_edit else "")
            + f"</div></div>")
