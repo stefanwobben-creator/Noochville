@@ -1131,7 +1131,13 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                # DE PUNTHAKEN ZIJN VERPLICHT. `formatBlock` met "h4" doet in Chrome en Safari
                # niets — geen fout, geen effect; alleen met "<h4>" maakt hij een kop. Dat is de
                # tweede helft van dezelfde bug als bij `strike`: een aanname over de browser.
-               ("formatBlock", "<h4>", "H", "Heading"))
+               ("formatBlock", "<h4>", "H", "Heading"),
+               # INLINE CODE HEEFT GEEN `execCommand`. De browser kent er geen commando voor, dus
+               # dit is het enige item in deze werkbalk met een EIGEN naam: `nooch.js` vangt hem
+               # af vóór de execCommand-regel. De naam begint met `nv` om precies dat verschil
+               # zichtbaar te maken — een lezer die `bold` ziet weet dat de browser het doet, en
+               # bij `nvCode` dat wij het doen.
+               ("nvCode", "", "&lt;/&gt;", "Inline code"))
 
 
 #: HET /-MENU: welk bloktype je kunt invoegen, hoe het heet, en met welk commando. De vierde
