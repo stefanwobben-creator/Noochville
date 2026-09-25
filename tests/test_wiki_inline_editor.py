@@ -208,11 +208,20 @@ _ECHTE_UITKOMSTEN = {
     "strikeThrough": ("<strike>x</strike>", "<s>x</s>", "<del>x</del>"),
     "insertUnorderedList": ("<ul><li>x</li></ul>", '<ul class="fbul"><li>x</li></ul>'),
     "formatBlock": ("<h4>x</h4>",),
+    # INLINE CODE MAKEN WÍJ ZELF (25 september 2026). Er is geen `execCommand` voor, dus
+    # `inlineCode()` in `nooch.js` plakt de selectie terug met `insertHTML`. Gemeten in Chrome op
+    # de harness: `<code>gewone</code>`, met precies één `<code>` en zonder omhulsel eromheen.
+    #
+    # WAT DE METING ERBIJ LIET ZIEN: Chrome vervangt de spaties NAAST de invoeging door `&nbsp;`
+    # (`Een&nbsp;<code>gewone</code>&nbsp;alinea`). De rondgang overleeft dat, maar er zou een
+    # onzichtbaar ander teken in de opgeslagen markdown belanden dan de schrijver typte. Daarom
+    # haalt `ontharde()` die randtekens weg; de vorm hieronder is wat er ná die stap staat.
+    "nvCode": ("<code>x</code>",),
 }
 
 #: Wat er in de bron hoort te staan als de knop gewerkt heeft. `x` alleen = de opmaak is weg.
 _VERWACHT = {"bold": "**x**", "italic": "*x*", "strikeThrough": "~~x~~",
-             "insertUnorderedList": "- x", "formatBlock": "## x"}
+             "insertUnorderedList": "- x", "formatBlock": "## x", "nvCode": "`x`"}
 
 
 def test_de_werkbalk_gebruikt_alleen_tags_die_de_omzetter_kent():

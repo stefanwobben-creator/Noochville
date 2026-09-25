@@ -649,6 +649,61 @@
     body.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  /* De selectie in een `<code>` zetten. Er is geen `execCommand` voor inline code, dus dit is de
+   * enige knop in de werkbalk die zelf iets maakt.
+   *
+   * `insertHTML` EN NIET `surroundContents`: die laatste gooit een fout zodra de selectie een
+   * elementgrens kruist (half vet, half gewoon), en dat is precies het soort selectie dat iemand
+   * per ongeluk maakt. `insertHTML` laat de browser het opruimen.
+   *
+   * DE TEKST WORDT GE-ESCAPED. Wat je selecteert is TEKST; zou er `<b>` in staan en we plakken
+   * hem rauw terug, dan maakt de browser er opmaak van die de schrijver nooit typte.
+   *
+   * NIET BINNEN EEN CODEBLOK. Daar is elk teken al letterlijk, en een `<code>` ín een
+   * `<pre><code>` is precies de vorm die de weg terug bewust negeert — dan zou de inhoud
+   * verdwijnen. Zelfde grens als in `_md`, een laag hoger.
+   *
+   * DE CONTROLE STAAT OP `<code>` EN NIET OP `<pre>`, en dat is geen slordigheid. `nooch.js` mag
+   * geen bloktags bij naam noemen (`test_javascript_draagt_geen_eigen_soorten_lijst`: de tabel
+   * tag→soort hoort alleen uit `data-blok-soorten` te komen), en `pre` staat in die tabel. Het is
+   * bovendien overbodig: `_md` rendert een codeblok altijd als `<pre><code>`, dus elke selectie
+   * erbinnen zit óók in een `<code>`. En dat is precies de schade die we willen voorkomen — een
+   * `<code>` in een `<code>`.
+   */
+  function inlineCode() {
+    var sel = getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var r = sel.getRangeAt(0);
+    var start = r.startContainer;
+    var el = start.nodeType === 1 ? start : start.parentNode;
+    if (el && el.closest && (el.closest("code") || el.closest("[data-blok-bron]"))) return;
+    var tekst = r.toString();
+    if (!tekst) return;                       // niets geselecteerd: geen lege code-chip maken
+    var veilig = tekst.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    document.execCommand("insertHTML", false, "<code>" + veilig + "</code>");
+    ontharde(el.closest(".wb") || el);
+  }
+
+  /* DE HARDE SPATIE DIE CHROME ERBIJ ZET. Gemeten: selecteer "gewone" in "Een gewone alinea" en
+   * `insertHTML` levert `Een&nbsp;<code>gewone</code>&nbsp;alinea` — de browser vervangt de
+   * spaties naast de invoeging door U+00A0. De rondgang overleeft dat (gecontroleerd), maar in de
+   * opgeslagen markdown staat dan een ONZICHTBAAR ander teken dan de schrijver typte, en dat is
+   * precies het soort stille vervuiling dat hier al twee keer is opgeruimd (de `\r`-pagina's, de
+   * spatie die bij elke bewerkronde aangroeide in het taak-blok).
+   *
+   * ALLEEN DE RANDTEKENS. Een harde spatie midden in een zin kan iemand bewust hebben geplakt;
+   * die blijft staan. Wat hier weggaat is het eerste of laatste teken van een tekstknooppunt dat
+   * aan de invoeging grenst — precies waar de browser ze neerzet. */
+  function ontharde(blok) {
+    if (!blok) return;
+    var w = document.createTreeWalker(blok, NodeFilter.SHOW_TEXT, null);
+    var n;
+    while ((n = w.nextNode())) {
+      if (n.parentNode && n.parentNode.closest("[data-chrome]")) continue;
+      n.textContent = n.textContent.replace(/^\u00a0/, " ").replace(/\u00a0$/, " ");
+    }
+  }
+
   function blokActie(blok, actie) {
     var body = blok.parentNode;
     if (actie === "omhoog" && blok.previousElementSibling) {
@@ -912,7 +967,14 @@
       knop.addEventListener("mousedown", function (e) { e.preventDefault(); });  // focus blijft staan
       knop.addEventListener("click", function () {
         try { document.execCommand("styleWithCSS", false, false); } catch (e) { /* oud */ }
-        document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || null);
+        // INLINE CODE IS HET ENIGE ITEM ZONDER BROWSER-COMMANDO. Hier staat dus één `if` en geen
+        // tweede mechaniek: `inlineCode()` doet zijn werk en daarna loopt alles hetzelfde door
+        // (normaliseren, focus terug).
+        if (knop.dataset.wikiCmd === "nvCode") {
+          inlineCode();
+        } else {
+          document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || null);
+        }
         // Elk van deze commando's laat het blokmodel scheef achter; zie `NV.blokNormaliseer`.
         NV.blokNormaliseer(body);
         body.focus();
