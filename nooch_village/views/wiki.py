@@ -153,10 +153,14 @@ def _afgeleid_blok(naam: str, secties: dict[str, str] | None) -> str:
     `contenteditable='false'` maakt er een ondeelbaar ding van. Zonder dat zet de browser de
     caret tussen de kaartjes en typt de lezer in iets dat bij het opslaan verdampt.
 
-    GEEN EIGEN CSS-KLASSE. De sectie brengt zijn eigen vorm mee (`.c2-sec`, `.card`), en het
-    omhulsel is hetzelfde `.wb` als elk ander blok — inclusief de greep, zodat je hem kunt
-    verplaatsen. Een `wb-afgeleid` zou een klasse zijn zonder gemeten aanleiding, en dat is precies
-    wat de huisstijl-regel verbiedt.
+    GEEN EIGEN CSS-KLASSE OP HET OMHULSEL. Dat is hetzelfde `.wb` als elk ander blok — inclusief
+    de greep, zodat je hem kunt verplaatsen. Een `wb-afgeleid` zou een klasse zijn zonder gemeten
+    aanleiding, en dat is precies wat de huisstijl-regel verbiedt.
+
+    DE SECTIE BRENGT ZIJN EIGEN VORM MEE, en die is sinds 26 september `.wiki-inline`: geen rand,
+    geen achtergrondvlak en geen sectie-marge, want tussen twee alinea's maakt elk van die drie het
+    "blok, witruimte, blok"-gevoel dat deze stap juist wegneemt. Het onderscheid — dit is een Feit
+    en geen alinea — is een dunne accentlijn per rij.
 
     ZONDER SECTIE EEN LABEL, GEEN ACCOLADES. De Notes-tab van `/node` heeft geen `st` om feiten
     mee op te halen; rauwe `{{facts}}` op het scherm is dan het slechtste van twee werelden."""
@@ -164,7 +168,8 @@ def _afgeleid_blok(naam: str, secties: dict[str, str] | None) -> str:
         return f"<div class='wb' data-blok='p'>{{{{{_e(naam)}}}}}</div>"
     inhoud = (secties or {}).get(naam)
     if not inhoud:
-        inhoud = (f"<div class='card muted'>{_e(wiki.AFGELEID[naam])}</div>")
+        inhoud = (f"<div class='wiki-inline'><div class='muted'>"
+                  f"{_e(wiki.AFGELEID[naam])}</div></div>")
     return (f"<div class='wb' data-blok='{_e(naam)}' "
             f"data-blok-bron='{{{{{_e(naam)}}}}}' contenteditable='false'>{inhoud}</div>")
 
@@ -217,7 +222,11 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
                f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
                f"<button class='dellink' type='submit' name='action' value='pagina_feit_del' "
                f"onclick=\"return confirm('Remove this fact?')\">remove</button></form>")
-    return (f"<div class='card'><div class='ptitle'>{_e(feit.get('tekst') or '')}</div>"
+    # GEEN `.card` (26 september 2026). Zodra een Feit tussen twee alinea's kan staan — en dat
+    # kan het sinds `{{facts}}` in het blokmenu staat — botst een kaart met de tekst eromheen:
+    # rand, achtergrond en eigen padding heeft een alinea alle drie niet. Het onderscheid blijft,
+    # maar als een dunne accentlijn (`.wiki-inline`), niet als een losstaande doos.
+    return (f"<div><div class='ptitle'>{_e(feit.get('tekst') or '')}</div>"
             f"<div>{_grond_chip(g)}</div>{citaat}{weg}</div>")
 
 
@@ -248,10 +257,10 @@ def _feit_form(aid: str, csrf_token: str) -> str:
 def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
     rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit)
                     for i, f in enumerate(wiki.feiten(a)))
-    rijen = rijen or ("<div class='card muted'>No facts yet. A fact carries its own grounding: "
+    rijen = rijen or ("<div class='muted'>No facts yet. A fact carries its own grounding: "
                       "a chronicle record, a certificate, a policy or a cited source.</div>")
     add = _feit_form(a.id, csrf_token) if can_edit else ""
-    return f"<div class='c2-sec'><h3>Facts</h3>{rijen}{add}</div>"
+    return f"<div class='wiki-inline'><h3>Facts</h3>{rijen}{add}</div>"
 
 
 #: Een pagina die naar de coach wijst, krijgt het logboek eronder. Waarom aan de INHOUD opgehangen
@@ -291,9 +300,9 @@ def _besluiten_sectie(a, st, persoon: str = "") -> str:
 def _backlink_sectie(a, pags: list) -> str:
     binnen = wiki.backlinks(a, pags)
     kaarten = "".join(
-        f"<a class='card' href='{_e(wiki.pagina_url(b.id))}'>"
+        f"<a href='{_e(wiki.pagina_url(b.id))}'>"
         f"<b>{_e(b.title or b.id)}</b><div class='muted'>{_e(b.id)}</div></a>" for b in binnen)
-    kaarten = kaarten or "<div class='card muted'>No page links here yet.</div>"
+    kaarten = kaarten or "<div class='muted'>No page links here yet.</div>"
     ontbreekt = wiki.ontbrekende_links(a, pags)
     wens = ""
     if ontbreekt:
@@ -301,7 +310,7 @@ def _backlink_sectie(a, pags: list) -> str:
         # automatisch aangemaakt — een pagina krijgt een eigenaar-rol, en dat is een besluit.
         wens = ("<p class='muted'>Wanted pages (referenced here, not written yet): "
                 + ", ".join(f"<span class='chip muted'>{_e(r)}</span>" for r in ontbreekt) + "</p>")
-    return f"<div class='c2-sec'><h3>Links here</h3>{kaarten}{wens}</div>"
+    return f"<div class='wiki-inline'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
 def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str = "") -> str:
@@ -449,7 +458,11 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     hist = _artefact_versions_html(a)
     if hist:
         rij("History", hist)
-    return f"<div class='card'><div class='dcol'>{''.join(rijen)}</div></div>"
+    # `.wiki-meta` EN NIET `.card` (26 september 2026). Het blok staat sinds deze stap ONDER de
+    # inhoud in plaats van boven, en daar is het een voet: een scheidingslijn met de administratie
+    # eronder. Een kaart onderaan leest als nog een inhoudsblok, en dat is precies wat het niet is.
+    # De rijen blijven hetzelfde `.dcol`-raster met `.dk`/`.dv`.
+    return f"<div class='wiki-meta'><div class='dcol'>{''.join(rijen)}</div></div>"
 
 
 def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> str:
@@ -603,8 +616,10 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     lees = (f"<div class='card'><div class='att-body'>"
             f"{_md(a.body) if a.body else _GEEN_TEKST}</div></div>")
 
+    # DE METADATA STAAT ONDERAAN, net als op de note-pagina (26 september 2026). Drie renderers
+    # met drie volgordes is precies hoe ze uit elkaar lopen.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab=tab)
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{url_regel}{lees}</div>")
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{meta}</div>")
     return _page(f"{a.title or a.id} — {a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
@@ -646,9 +661,10 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # vóór de titel — het eerste wat je las was techniek. Hij VERDWIJNT NIET: het ID wordt als
     # verwijzing gebruikt (in het ontwerpdocument zelf ook) en staat in `_meta_blok`.
     # DE KOP DRAAGT NOG ÉÉN DING: de hoofdactie. Alles wat metadata is — eigenaar, domein, ID,
-    # laatst bewerkt, historie — staat in `_meta_blok` eronder, in één raster. Hiervóór stond de
-    # herkomst-zin hier én de eigenaar in het blok: twee plekken voor hetzelfde, en dat is precies
-    # wat deze PR opruimt.
+    # laatst bewerkt, historie — staat in `_meta_blok`, in één raster, en sinds 26 september
+    # ONDERAAN de pagina in plaats van hier direct onder de titel. Hiervóór stond de herkomst-zin
+    # hier én de eigenaar in het blok: twee plekken voor hetzelfde, en dat is precies wat deze PR
+    # opruimt.
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
            f"<h1>📄 {titel}</h1>"
            f"<div class='wiki-kopbalk'>"
@@ -685,10 +701,20 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # wijziging die niemand vroeg, op een scherm dat verder niets van deze stap hoort te merken.
     # DE HISTORIE ZIT IN HET METADATA-BLOK, niet meer los onder de tekst: het is metadata over de
     # pagina, en dat hoort bij de rest ervan.
+    #
+    # EN HET BLOK STAAT ONDERAAN (26 september 2026). Het stond direct onder de titel, en daarmee
+    # kreeg de administratie — eigenaar, domein, ID, laatst bewerkt, historie — de plek van de
+    # inhoud: boven de vouw las je vijf regels techniek voor je bij de eerste zin was. Boven blijft
+    # nu alleen de titel en de hoofdactie; alles wat OVER de pagina gaat staat eronder, na de
+    # inhoud en na de twee afgeleide secties.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab="notes")
+    # HET UPLOADFORMULIER BLIJFT BIJ DE TEKST (#603), en de metadata gaat eromheen naar onderen.
+    # Een bijlage landt als blok aan het EIND van de body; het formulier hoort dus direct onder de
+    # tekst waar hij in terechtkomt, niet onder de administratie.
     bijlage = _bijlage_form(a, csrf_token, can_edit)
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{body}{bijlage}{voorstel}"
-            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>")
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{bijlage}{voorstel}"
+            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
+            f"{meta}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 

@@ -66,6 +66,12 @@ sessie opent hiermee.
 - Elke nieuwe `dispatch`-tak krijgt een `# AUTHZ: <keuze> — <waarom>`-label uit
   de vier vaste opties. Volledige regel + helpers in CLAUDE.md ("Autorisatie —
   elke nieuwe dispatch-tak"). Geen tak zonder bewuste autorisatiekeuze.
+- **Definitie van klaar voor UI-wijzigingen (25 sept 2026):** een PR die UI raakt is pas
+  klaar met groene tests EN een screenshot van het resultaat op de echte pagina in het
+  rapport. Reden: functionaliteit klopte herhaaldelijk terwijl de visuele afwerking
+  (ontbrekende hover-states, een rommelige paginakop) pas achteraf door Stefan werd
+  opgemerkt. Zie `claude/ontwerp_paginakop_en_bijlagen_25sept.md` voor het geval dat dit
+  aan het licht bracht.
 
 ## Open aandachtspunten
 - LLM-advies-stappen lezen je strategie/beleid nog niet: ze gaven al

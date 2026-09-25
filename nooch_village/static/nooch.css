@@ -35,7 +35,7 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 /* Wachtindicator: draaiende 🌍 + tekst over de (nog zwarte) bol, verdwijnt zodra het frame geladen is. */
 @media (prefers-reduced-motion:reduce){.epic-globe{animation:none}}
 .c2-sec{margin:1.1rem 0}
-.c2-sec h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
+.c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}
 ul.clean li{padding:.22rem 0;border-bottom:1px solid var(--border)}
 ul.clean li:last-child{border-bottom:none}
@@ -1919,6 +1919,41 @@ progress.nu-progress.wide{height:8px}
    wordt anders een kolom van vijftien regels. */
 .admin-row-form{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:.5rem}
 .admin-row-form .att-lbl{flex:0 0 100%}
+/* ── Een afgeleid blok tussen de tekst (26 september 2026) ──────────────────────────
+   Feiten en Backlinks stonden in een `.c2-sec` met `.card`-rijen erin, en dat kon — ze stonden
+   altijd onderaan, onder een streep witruimte, waar een kaart precies goed leest. Sinds
+   `{{facts}}` in het blokmenu staat kunnen ze TUSSEN twee alinea's staan, en daar botsen alle drie
+   de eigenschappen van een kaart met de tekst eromheen: een alinea heeft geen rand, geen eigen
+   achtergrondvlak en geen extra marge. Het resultaat was "blok, witruimte, blok" in plaats van
+   één doorlopend document — precies het gevoel dat deze stap wegneemt.
+
+   HET ONDERSCHEID BLIJFT, ALS LIJN EN NIET ALS DOOS. Een Feit is geen alinea, en dat mag je zien;
+   een dunne lijn aan de linkerkant zegt dat zonder een vlak te openen. Zelfde taal als de
+   invoegstreep bij het slepen: een lijn aan één kant in plaats van een omlijning rondom.
+
+   `margin:0` OP HET OMHULSEL, en dat is niet nalatigheid. De verticale ritmiek van deze tekst komt
+   van de LEGE REGELS ertussen: `_md(blokken=True)` maakt van elke blanco regel een eigen
+   `.wb`-blok met een `<br>`. Een marge op de sectie erbovenop is dus dubbele witruimte — wat
+   `.c2-sec` hier deed.
+
+   GEEN NIEUWE FAMILIE: `wiki-` bestaat al (de index, de kopbalk, de bewerkstand). */
+.wiki-inline{margin:0}
+.wiki-inline>div,.wiki-inline>a{display:block;border-left:2px solid var(--border);
+  padding:.1rem 0 .1rem .6rem;margin:.25rem 0}
+.wiki-inline>a{color:inherit;text-decoration:none}
+.wiki-inline>a:hover{border-left-color:var(--green)}
+.wiki-inline>p{margin:.35rem 0 0}
+/* Het toevoegformulier is chrome en krijgt dús geen accentlijn — maar wel dezelfde inspringing,
+   anders staat "+ Add fact" vier pixels links van de feiten waar hij bij hoort. */
+.wiki-inline>details{margin:.35rem 0 0;padding-left:.6rem}
+/* ── De metadata-voet (26 september 2026) ──────────────────────────────────────
+   Het `.dcol`-raster met eigenaar, domein, ID, laatst bewerkt en historie stond in een `.card`
+   direct onder de titel. Nu staat het onder de inhoud, en daar is het geen inhoudsblok meer maar
+   een voet: een scheidingslijn met de administratie eronder, gedempt. Een kaart op die plek leest
+   als nog een stuk pagina. Geen nieuwe familie — `wiki-` bestaat al. */
+.wiki-meta{margin:1.6rem 0 0;padding-top:.8rem;border-top:1px solid var(--border);
+  font-size:.92em}
+
 /* De kopbalk van een wiki-pagina: de herkomstregel links, de bewerkknop rechts. Die knop zat als
    klein grijs tekstlinkje ónder de hele inhoud (21 september 2026) — vindbaar als je wist dat hij
    er was, en anders niet. */

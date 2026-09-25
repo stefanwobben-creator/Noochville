@@ -304,25 +304,38 @@ def test_het_menu_kent_alleen_blokken_die_de_renderer_ook_maakt():
 #: afgeleid uit de naam van het commando. `formatBlock` vervangt het omhulsel, de twee
 #: lijst-commando's nesten erín, en `insertHorizontalRule` levert er een `id="null"` bij omdat
 #: `null` als argument wordt doorgegeven.
+#:
+#: OP HET LABEL EN NIET OP DE TAG (26 september 2026). De tag-kolom is niet uniek: "Tekst",
+#: "Feiten" en "Backlinks" staan alle drie op `p`, want er béstaat geen HTML-tag voor een afgeleid
+#: blok — de tag zegt alleen wat de browser na het commando overhoudt. Op de tag sleutelen gaf
+#: hier stil de uitkomst van "Tekst" voor alle drie.
 _UITKOMST = {
-    "p": ("<p>regel</p>", "regel"),
-    "h3": ("<h3>regel</h3>", "# regel"),
-    "h4": ("<h4>regel</h4>", "## regel"),
-    "h5": ("<h5>regel</h5>", "### regel"),
-    "ul": ("<div class='wb' data-blok='p'><ul><li>regel</li></ul></div>", "- regel"),
-    "ol": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>", "1. regel"),
-    "blockquote": ("<blockquote>regel</blockquote>", "> regel"),
-    "hr": ("<div class='wb' data-blok='p'><hr id=\"null\"></div>", "---"),
+    "Tekst": ("<p>regel</p>", "regel"),
+    "Kop 1": ("<h3>regel</h3>", "# regel"),
+    "Kop 2": ("<h4>regel</h4>", "## regel"),
+    "Kop 3": ("<h5>regel</h5>", "### regel"),
+    "Lijst": ("<div class='wb' data-blok='p'><ul><li>regel</li></ul></div>", "- regel"),
+    "Genummerde lijst": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>",
+                         "1. regel"),
+    "Citaat": ("<blockquote>regel</blockquote>", "> regel"),
+    "Scheiding": ("<div class='wb' data-blok='p'><hr id=\"null\"></div>", "---"),
     # TABEL EN CODEBLOK LOPEN NIET LANGS `execCommand` (25 september 2026). Die twee kan de
     # browser niet maken: een `formatBlock` op een `<pre>` haalt de regelovergangen eruit en een
     # tabel kent hij als commando niet eens. Ze openen daarom het BRON-BEWERKVLAK met het
     # markdown-sjabloon van de server erin — dezelfde `<textarea data-blok-bron>` die de
     # greep-actie "bewerk als tekst" al gebruikte. Wat de weg terug dus leest is die textarea,
     # niet een omhulsel dat de browser bouwde.
-    "table": ("<div class='wb' data-blok='p'><textarea data-blok-bron>| A | B |\n|---|---|\n"
+    "Tabel": ("<div class='wb' data-blok='p'><textarea data-blok-bron>| A | B |\n|---|---|\n"
               "| | |</textarea></div>", "| A | B |\n|---|---|\n| | |"),
-    "pre": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
-            "</textarea></div>", "```\ncode\n```"),
+    "Codeblok": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
+                 "</textarea></div>", "```\ncode\n```"),
+    # FEITEN EN BACKLINKS lopen langs hetzelfde bron-pad als tabel en codeblok, met de markering
+    # als sjabloon. Dat de weg terug één regel `{{facts}}` oplevert is het hele punt: de INHOUD
+    # (feiten uit `meta`, backlinks uit andere pagina's) hoort nooit in de opslag te komen.
+    "Feiten": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{facts}}"
+               "</textarea></div>", "{{facts}}"),
+    "Backlinks": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{backlinks}}"
+                  "</textarea></div>", "{{backlinks}}"),
 }
 
 
@@ -335,7 +348,7 @@ def test_elk_menu_item_levert_iets_op_dat_de_weg_terug_leest():
     test mat waar de code stond in plaats van wat hij doet."""
     from nooch_village.cockpit2_util import BLOK_MENU, _md_naar_bron
     for tag, label, cmd, arg in BLOK_MENU:
-        html, verwacht = _UITKOMST[tag]
+        html, verwacht = _UITKOMST[label]
         assert _md_naar_bron(html) == verwacht, f"{label} ({tag}) komt niet terug als bron"
         # Bij een `bron`-item is het sjabloon van de server WAT ER IN DAT VELD KOMT. Staan die
         # twee niet gelijk, dan toetst de regel hierboven een uitkomst die nooit ontstaat.

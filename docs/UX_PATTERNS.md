@@ -31,6 +31,12 @@ Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.pill` (kle
 `.att-lbl` (formulier-label), `.qadd-form`/`.editor` (toevoeg-/bewerk-formulieren), `.flash` (banner),
 `.cl-bar` (rij van `.cl-filter`'s). Zie `web_base.py`/`cockpit2_util.py` voor de volledige set.
 
+**Een kaart hoort niet ín lopende tekst.** `.card` brengt rand, achtergrond en eigen marge mee, en
+alle drie botsen met een alinea. Een blok dat TUSSEN de tekst kan staan — een Feit, de backlinks —
+gebruikt daarom `.wiki-inline`: geen kader, dezelfde ritmiek als een alinea, en het onderscheid als
+een dunne accentlijn links. `.wiki-meta` is de tegenhanger onderaan een pagina: een scheidingslijn
+met de administratie eronder, ook geen kaart. (26 september 2026.)
+
 ## 1. Destructief scheiden van frequent (Fitts + Gestalt similarity + error prevention)
 - Een verwijder-/wis-actie staat NOOIT pal naast een veelgebruikte actie, en draagt nooit een
   glyph die op een naburige actie lijkt (geen ✗ "geen check" naast ✕ "verwijderen").

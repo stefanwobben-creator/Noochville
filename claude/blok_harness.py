@@ -32,8 +32,10 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from nooch_village import wiki                            # noqa: E402
 from nooch_village.cockpit2_util import _DS_LINK          # noqa: E402
-from nooch_village.views.wiki import _wiki_editor         # noqa: E402
+from nooch_village.views.wiki import (_backlink_sectie,   # noqa: E402
+                                      _bijlage_form, _feiten_sectie, _meta_blok, _wiki_editor)
 from nooch_village.web_base import _page                  # noqa: E402
 
 WORTEL = pathlib.Path(__file__).resolve().parents[1]
@@ -46,6 +48,10 @@ class _NepPagina:
     title = "Browsercheck blokmodel"
     anchor = "mother_earth__nooch"
     updated_at = 0
+    kind = wiki.PAGINA_KIND
+    # ECHT GEMENGDE INHOUD (26 september 2026): tekst → feit → tekst → backlink → tekst. Dat is de
+    # vorm waar de pagina één doorlopend document moet zijn; met alles onderaan zie je niet of een
+    # afgeleid blok tussen twee alinea's leest als deel van de pagina of als een losse doos.
     body = (
         "### Een kop\n\n"
         "Een gewone alinea met wat tekst erin.\n\n"
@@ -57,20 +63,31 @@ class _NepPagina:
         # juist die vorm brak: een `<input>` heeft geen eindtag, dus de chrome-teller in
         # `_md_naar_bron` liep op en at de rest van de alinea op.
         "{{facts}}\n\n"
-        "De laatste alinea.\n"
+        "Een alinea NÁ het feit, want dat is de overgang die moet kloppen.\n\n"
+        "{{backlinks}}\n\n"
+        "De laatste alinea, met een [[Andere pagina]] die nog niet bestaat.\n"
     )
+    #: De feiten waar `_feiten_sectie` uit leest — één zonder grond en één met een bron, zodat beide
+    #: grond-chips te zien zijn.
+    meta = {"feiten": [wiki.maak_feit("Een schoen weegt 300 gram"),
+                       wiki.maak_feit("Hennep bindt CO2 tijdens de groei",
+                                      soort="bron", url="https://example.org/hennep")]}
 
 
-#: Wat de echte pagina uit `meta["feiten"]` haalt, hier met de hand — inclusief het verborgen
-#: veld en de knop, want dat is de vorm die stuk was.
+class _NepStores:
+    """Genoeg van de stores om de twee secties te renderen: ze vragen alleen naar grond."""
+
+    evidence = None
+    att = None
+
+
+#: DE ECHTE RENDERERS, geen nagebouwde HTML. Hier stond een met de hand geschreven `.c2-sec` met
+#: `.card`-rijen erin, en dat is precies de val die deze codebase `reference, don't copy` noemt:
+#: toen de secties op 26 september hun kader verloren, bleef de harness het oude kader tonen — de
+#: pagina waarmee je de vormgeving controleert, liep dan achter op de vormgeving.
 _SECTIES = {
-    "facts": ("<div class='c2-sec'><h3>Facts</h3>"
-              "<div class='card'><div class='ptitle'>Een feit met grond</div>"
-              "<span class='chip'>&#9679; chronicle</span></div>"
-              "<details class='qadd'><summary>+ Add fact</summary>"
-              "<form method='post' action='/action' class='qadd-form'>"
-              "<input type='hidden' name='csrf' value='harness-token'>"
-              "<button class='btn ok' type='submit'>Add</button></form></details></div>"),
+    "facts": _feiten_sectie(_NepPagina, _NepStores, "harness-token", True),
+    "backlinks": _backlink_sectie(_NepPagina, []),
 }
 
 
@@ -82,6 +99,12 @@ def bouw(map_: pathlib.Path) -> pathlib.Path:
              f"<h1>&#128196; <span id='wiki-titel' class='wiki-titel'>{_NepPagina.title}</span></h1>"
              f"<div class='wiki-kopbalk'>{start}</div>"
              f"{_wiki_editor(_NepPagina, [], 'harness-token', True, _SECTIES)}"
+             # DE VOLGORDE VAN DE ECHTE PAGINA (26 september 2026): tekst, dan het
+             # uploadformulier van #603 (een bijlage landt aan het eind van de body, dus de knop
+             # hoort bij de tekst), dan pas de metadata-voet. Zonder die twee mist de harness
+             # precies wat je op het scherm wilt zien.
+             f"{_bijlage_form(_NepPagina, 'harness-token', True)}"
+             f"{_meta_blok(_NepPagina, None, 'harness-token', False, [])}"
              f"</div></div>")
     (map_ / "index.html").write_text(_page("Browsercheck", inner), encoding="utf-8")
 

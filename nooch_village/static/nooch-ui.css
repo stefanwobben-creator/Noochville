@@ -459,7 +459,7 @@
    bestaande namen wijzen ernaar binnen `.nu`. Zelfde regel als `reference, don't copy`, nu op een
    stijl in plaats van op een getal. Buiten `.nu` blijft alles zoals het was. */
 .nu .nu-eyebrow,
-.nu .c2-sec h3, .nu .tree h3, .nu .pcol-h, .nu .fkicker, .nu .rovm-kind,
+.nu .c2-sec h3, .nu .wiki-inline h3, .nu .tree h3, .nu .pcol-h, .nu .fkicker, .nu .rovm-kind,
 .nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
 .nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
 .nu .gs-group, .nu .gs-kind {
@@ -469,7 +469,7 @@
 /* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom
    zwart. Een grijze kop naast een zwart merkteken leest als twee verschillende dingen. */
 .nu .nu-eyebrow,
-.nu .c2-sec h3, .nu .tree h3, .nu .fkicker, .nu .rovm-kind,
+.nu .c2-sec h3, .nu .wiki-inline h3, .nu .tree h3, .nu .fkicker, .nu .rovm-kind,
 .nu .sec-kop, .nu .menu-h, .nu .dk, .nu .att-lbl, .nu .cl-group h4,
 .nu .psec-h, .nu .pchip-k, .nu .rail-kop, .nu .wz-k, .nu .wz-clab,
 .nu .gs-group, .nu .gs-kind {
@@ -661,6 +661,15 @@
 .nu .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
 .nu .wb-menu-item:hover { background: var(--nu-bg-alt); }
 .nu .wb-greep-knop { color: var(--nu-muted); }
+
+/* HET AFGELEIDE BLOK EN DE METADATA-VOET (26 september 2026). De basislaag tekent de accentlijn
+   en de voetstreep op `--border`, de warme zandtint die in deze huisstijl niet bestaat;
+   `--nu-border-subtle` is hier de lijnkleur, `--nu-accent` de hover. Zelfde soort regel als bij
+   `.nu blockquote` hieronder: de vorm blijft, alleen de lijn gaat mee met de huisstijl. */
+.nu .wiki-inline>div,.nu .wiki-inline>a{border-left-color:var(--nu-border-subtle)}
+.nu .wiki-inline>a{color:var(--nu-text)}
+.nu .wiki-inline>a:hover{border-left-color:var(--nu-accent)}
+.nu .wiki-meta{border-top-color:var(--nu-border-subtle)}
 
 /* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
    zandtint; hier gaan ze mee met de rest van de nu-lijnen. */

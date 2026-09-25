@@ -50,18 +50,25 @@ def test_de_note_pagina_toont_een_domein_keuze(tmp_path):
     assert "value='Materials' selected" in html
 
 
-def test_het_veld_staat_in_de_kopbalk_en_niet_in_de_blok_editor(tmp_path):
-    """Boven de bewerkbare tekst, in de balk die er al staat — en nadrukkelijk NIET binnen
-    `#wiki-body`, want alles daarbinnen gaat bij het opslaan mee als `body_html`."""
+def test_het_veld_staat_buiten_de_bewerkbare_tekst(tmp_path):
+    """NIET BINNEN `#wiki-body`, want alles daarbinnen gaat bij het opslaan mee als `body_html`.
+
+    DE EIS WAS OOK "BOVEN DE TEKST", en dat is hij niet meer. Het veld verhuisde met #602 naar het
+    metadata-blok, en dat blok staat sinds 26 september ONDER de inhoud — de administratie kreeg
+    daarvóór de plek van het onderwerp. Wat overblijft is de eis die er altijd de echte was: het
+    veld mag niet in het bewerkbare vlak zitten. Boven of onder is een ontwerpkeuze; erbinnen is
+    dataverlies.
+
+    OP HET ELEMENT EN NIET OP DE REST VAN DE PAGINA. "Alles ná `id='wiki-body'`" was hetzelfde
+    meetpunt zolang er niets meer onder stond; nu telt dat het metadata-blok mee, en dan meet de
+    toets precies het tegenovergestelde van wat hij bedoelt. Het sjabloon van het blokmenu staat
+    direct achter het bewerkvlak en is dus de grens."""
     dd, st, rol = _dorp(tmp_path)
     a = st.att.add(rol, "note", title="Een pagina", body="tekst", domain="Materials")
     html = _pagina(st, a)
-    kopbalk = html.split("wiki-kopbalk")[1].split("</div>")[0] if "wiki-kopbalk" in html else ""
     assert "name='domain'" in html
-    assert html.index("name='domain'") < html.index("id='wiki-body'"), \
-        "het veld staat onder de bewerkbare tekst"
-    body = html.split("id='wiki-body'")[1]
-    assert "name='domain'" not in body, "het veld zit ín de bewerkbare tekst"
+    binnen = html.split("id='wiki-body'")[1].split("id='wb-menu-sjabloon'")[0]
+    assert "name='domain'" not in binnen, "het veld zit ín de bewerkbare tekst"
 
 
 def test_het_is_een_eigen_formulier_naast_de_blok_editor(tmp_path):
@@ -72,8 +79,12 @@ def test_het_is_een_eigen_formulier_naast_de_blok_editor(tmp_path):
     a = st.att.add(rol, "note", title="Een pagina", body="tekst", domain="Materials")
     html = _pagina(st, a)
     assert html.count("value='artefact_edit'") == 2
-    voor_editor = html.split("id='wiki-form'")[0]
-    assert "name='domain'" in voor_editor
+    # OP DE TWEE FORMULIEREN, niet op hun volgorde. Dit was "het domein staat vóór `wiki-form`",
+    # en dat mat de plek in plaats van de scheiding: sinds het metadata-blok onderaan staat
+    # (26 september) staat het domein er ná, en is het nog precies zo'n eigen formulier.
+    in_editor = html.split("id='wiki-form'")[1].split("</form>")[0]
+    assert "name='domain'" not in in_editor, \
+        "het domeinveld zit ín wiki-form — dan is het alleen in bewerkmodus op te slaan"
 
 
 def test_wie_niet_mag_bewerken_krijgt_geen_keuze(tmp_path):

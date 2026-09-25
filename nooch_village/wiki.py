@@ -127,6 +127,16 @@ AFGELEID: dict[str, str] = {"facts": "Facts", "backlinks": "Links here"}
 MARKER_RE = re.compile(r"^\{\{([a-z]+)\}\}$", re.M)
 
 
+def marker(naam: str) -> str:
+    """De BRONREGEL van een afgeleid blok: `facts` → `{{facts}}`.
+
+    Hij staat hier omdat `MARKER_RE` hier staat. Het blokmenu (`cockpit2_util.BLOK_MENU`) voegt
+    deze regel in en de renderer leest hem terug; schreven die twee de accolades zelf, dan was de
+    vorm van de markering op drie plekken vastgelegd en herkende de renderer na één wijziging
+    niet meer wat het menu invoegt."""
+    return "{{%s}}" % naam
+
+
 def markers(body: str) -> set[str]:
     """De afgeleide blokken die deze pagina zelf plaatst.
 
