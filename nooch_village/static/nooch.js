@@ -550,6 +550,27 @@
     g.className = "wb-greep";
     g.setAttribute("data-chrome", "");
     g.contentEditable = "false";
+    /* DE PLUS: de ontdekbare helft (25 september 2026). Het `/`-menu werkte al, maar alleen als
+     * je wist dat het bestond — er was geen knop, geen hint en geen plek waar het zich
+     * aankondigde. Hij hangt in dezelfde goot als de greep en verschijnt op dezelfde hover.
+     *
+     * HIJ DOET LETTERLIJK WAT TYPEN DOET. Hierboven in `blokMenuKies` staat een gemeten
+     * waarschuwing: een leeg blok met een samengevallen selectie heeft geen inhoud om
+     * `formatBlock` op te werken, dus dan verandert het bloktype niet. Een plus die een écht leeg
+     * blok invoegt loopt recht in dat gat. Daarom: een blok met een `/` erin, en dan het
+     * bestaande menu laten opengaan. Eén pad, dat al bewezen is. */
+    var plus = document.createElement("button");
+    plus.type = "button";
+    plus.className = "wb-plus";
+    plus.setAttribute("aria-label", "Add a block below");
+    plus.setAttribute("title", "Add a block below");
+    plus.textContent = "+";
+    plus.addEventListener("click", function (e) {
+      e.preventDefault();
+      nieuwBlokOnder(blok);
+    });
+    g.appendChild(plus);
+
     var knop = document.createElement("button");
     knop.type = "button";
     knop.className = "wb-greep-knop";
@@ -597,6 +618,35 @@
       blokActie(blok, b.getAttribute("data-wb-actie"));
     });
     return g;
+  }
+
+  /* Een nieuw blok onder dit blok, met het menu er meteen bij open.
+   *
+   * DE `input`-GEBEURTENIS IS GEEN TRUC MAAR DE HELE BEDOELING. Het menu hangt aan één plek
+   * (`blokMenu`, die luistert op `input` en opengaat bij een blok dat precies "/" bevat). Zou de
+   * plus zijn eigen menu openen, dan waren er twee plekken die beslissen wanneer dat menu
+   * verschijnt — en die lopen na één wijziging uiteen. Hier zetten we de caret in het nieuwe blok
+   * en laten we dat ene mechanisme zijn werk doen. */
+  function nieuwBlokOnder(blok) {
+    var body = blok.parentNode;
+    var nieuw = document.createElement("div");
+    nieuw.className = "wb";
+    nieuw.setAttribute("data-blok", "p");
+    nieuw.textContent = "/";
+    body.insertBefore(nieuw, blok.nextSibling);
+    grepen(body, true);
+    // De caret ACHTER de streep, zodat het blok "/" bevat en het menu hem herkent.
+    var tekst = streepNode(nieuw);
+    if (tekst) {
+      var r = document.createRange();
+      r.setStart(tekst, tekst.length);
+      r.collapse(true);
+      var sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    body.focus();
+    body.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function blokActie(blok, actie) {
@@ -648,14 +698,26 @@
   function naarBron(blok) {
     var bron = blokBron(blok);
     if (!bron) return;
+    bronVeld(blok, bron);
+  }
+
+  /* HET BRON-BEWERKVLAK, los van waar de tekst vandaan komt. Bij "bewerk als tekst" is dat de
+   * bestaande inhoud van het blok; bij een NIEUWE tabel of codeblok uit het menu is het een
+   * sjabloon dat de server meestuurde. Eén functie, want het is één ding: een blok waarvan je de
+   * ruwe markdown bewerkt omdat `contenteditable` er niet mee overweg kan. */
+  function bronVeld(blok, tekst) {
     Array.prototype.forEach.call(blok.children, function (k) {
       if (!k.hasAttribute || !k.hasAttribute("data-chrome")) k.remove();
+    });
+    // Ook de kale tekstknooppunten weg (de `/` van het menu staat er als los knooppunt in).
+    Array.prototype.slice.call(blok.childNodes).forEach(function (k) {
+      if (k.nodeType === 3) k.remove();
     });
     var veld = document.createElement("textarea");
     veld.className = "wb-bron";
     veld.setAttribute("data-blok-bron", "");
-    veld.value = bron;
-    veld.rows = bron.split("\n").length + 1;
+    veld.value = tekst;
+    veld.rows = tekst.split("\n").length + 1;
     blok.appendChild(veld);
     veld.focus();
   }
@@ -729,6 +791,15 @@
     // niet. Het commando krijgt dus de streep als inhoud, en daarna halen we hem weg.
     var n = streepNode(blok);
     if (!n) return;
+    // TABEL EN CODEBLOK LOPEN NIET LANGS `execCommand`. Ze krijgen hun markdown-sjabloon van de
+    // server mee en openen meteen het bron-bewerkvlak; de server maakt er bij het opslaan het
+    // echte blok van. Zo blijft er één renderer, en kent dit bestand nog steeds geen bloktypes.
+    if (knop.dataset.wikiCmd === "bron") {
+      bronVeld(blok, knop.dataset.wikiArg || "");
+      NV.blokNormaliseer(body);
+      grepen(body, true);
+      return;
+    }
     var r = document.createRange();
     r.selectNodeContents(n);
     var s = getSelection();

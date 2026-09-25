@@ -172,14 +172,17 @@ def test_touch_blijft_het_menu_houden():
 def test_de_greep_zegt_dat_je_hem_kunt_slepen():
     """Waarom de melding "geen drag-and-drop" ontstond: klikken opent een menu, dus het icoontje
     leest als een menuknop. De `cursor:grab` is er wel, maar die zie je pas als je er al bent."""
-    greep = JS.split("function greepVoor")[1][:900]
-    assert "title" in greep, "de greep draagt geen uitleg"
+    # TOT HET EIND VAN DE FUNCTIE, niet de eerste 900 tekens: de plus-knop uit de volgende stap
+    # kwam ervóór te staan en duwde de `title` het venster uit. Dezelfde val als bij de
+    # route-toets van het projectenbord — een venster op tekens is geen venster op een functie.
+    greep = JS.split("function greepVoor")[1].split("\n  function ")[0]
+    assert 'knop.setAttribute("title"' in greep, "de greep draagt geen uitleg"
 
 
 def test_de_greep_praat_engels():
     """De UI is sinds i18n-fase 1 Engels; hier stond nog `aria-label='blok verplaatsen of
     wijzigen'`. Meegenomen omdat ik toch in deze functie zat."""
-    greep = JS.split("function greepVoor")[1][:900]
+    greep = JS.split("function greepVoor")[1].split("\n  function ")[0]
     assert "blok verplaatsen of wijzigen" not in greep
 
 

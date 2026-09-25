@@ -316,10 +316,16 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wiki-body.wiki-aan .wb{margin-left:-1.9rem;padding-left:1.9rem;border-radius:var(--radius);
   transition:background .12s}
 .wiki-body.wiki-aan .wb:hover{background:var(--cream-2)}
-.wiki-body.wiki-aan .wb-greep{left:.4rem}
+.wiki-body.wiki-aan .wb-greep{left:.2rem;display:flex;align-items:flex-start}
 .wb-greep-knop{border:none;background:none;color:var(--subtle);cursor:grab;font-size:.9rem;
   line-height:1;padding:.1rem .2rem}
 .wb-greep-knop:active{cursor:grabbing}
+/* DE PLUS (25 september 2026). Zelfde goot en dezelfde hover als de greep; samen zijn het twee
+   knopjes naast elkaar in de linkermarge, zoals in elke editor die dit doet. Geen eigen kleur en
+   geen nieuwe familie — `wb-` bestaat al, en de knop erft zijn maat van de greep ernaast. */
+.wb-plus{border:none;background:none;color:var(--subtle);cursor:pointer;font-size:.95rem;
+  line-height:1;padding:.1rem .15rem}
+.wb-plus:hover{color:var(--ink)}
 /* ── Slepen wordt zichtbaar (25 september 2026) ──────────────────────────────────────────────
    DE JS ZETTE DEZE KLASSEN AL, EN ER WAS GEEN VORMGEVING. Zelfde soort gat als bij `.pcol.over`
    in fase 11 punt 3: een klasse die jarenlang niets schilderde. Voor een wiki-blok betekende dat:
@@ -400,7 +406,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb-menu-item{border:none;background:none;font:inherit;font-size:.82rem;text-align:left;
   padding:.3rem .5rem;cursor:pointer;color:var(--ink);white-space:nowrap}
 .wb-menu-item:hover{background:var(--cream-2)}
-@media(hover:none){.wb-greep{opacity:1}}
+/* Op touch is er geen hover, dus staan de greep én de plus er altijd — anders is een blok
+   toevoegen op een telefoon onmogelijk (ontwerpdocument: niet per ongeluk uitsluiten). */
+@media(hover:none){.wb-greep,.wb-plus{opacity:1}}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
 .emoji-pick{position:relative;display:inline-block;padding:0;margin:0}

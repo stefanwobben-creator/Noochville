@@ -171,6 +171,41 @@
         nieuweGreep ? (nieuweGreep.getAttribute("title") || "(geen)") : "(geen greep)");
   }
 
+  // 9. EEN BLOK TOEVOEGEN ZONDER MARKDOWN TE KENNEN
+  //
+  // De plus doet letterlijk wat typen doet (een blok met een "/" en dan het bestaande menu), dus
+  // dit meet meteen of dat ene pad nog heel is. Tabel en codeblok lopen NIET langs `execCommand`:
+  // die krijgen hun markdown-sjabloon van de server en openen het bron-bewerkvlak.
+  var blokkenVoor = b.querySelectorAll(":scope > .wb").length;
+  var gastheer = b.querySelector(":scope > .wb");
+  var plusKnop = gastheer && gastheer.querySelector(".wb-plus");
+  zeg("de plus staat in de goot", !!plusKnop);
+  if (plusKnop) {
+    plusKnop.click();
+    zeg("de plus voegt een blok toe",
+        b.querySelectorAll(":scope > .wb").length === blokkenVoor + 1);
+    var opn = [].slice.call(b.querySelectorAll(".wb-menu")).filter(function (m) {
+      return !m.hidden && !m.id;
+    });
+    zeg("het menu gaat vanzelf open", opn.length === 1, opn.length + " open");
+    if (opn.length === 1) {
+      var items = [].slice.call(opn[0].querySelectorAll("[data-wiki-cmd]"));
+      var namen = items.map(function (i) { return i.textContent; });
+      zeg("het menu dekt ook tabel en code",
+          namen.indexOf("Tabel") > -1 && namen.indexOf("Codeblok") > -1, namen.join("/"));
+      var tabel = items.filter(function (i) { return i.textContent === "Tabel"; })[0];
+      if (tabel) {
+        tabel.click();
+        var veld = b.querySelector("textarea[data-blok-bron]");
+        zeg("tabel opent het bron-bewerkvlak", !!veld);
+        zeg("met het sjabloon van de server erin",
+            !!veld && veld.value.indexOf("|") === 0, veld ? veld.value.split("\n")[0] : "");
+        zeg("de schuine streep is opgeruimd",
+            !!veld && veld.value.indexOf("/") === -1);
+      }
+    }
+  }
+
   // OOK OP `window`, niet alleen in de console. `console.table` is prima voor een mens, maar
   // onleesbaar voor wie de check geautomatiseerd draait — en dan is de uitslag alleen te zien
   // door er met je ogen bij te zitten. Dat is precies hoe "geen drag-and-drop" kon ontstaan.

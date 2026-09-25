@@ -313,6 +313,16 @@ _UITKOMST = {
     "ol": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>", "1. regel"),
     "blockquote": ("<blockquote>regel</blockquote>", "> regel"),
     "hr": ("<div class='wb' data-blok='p'><hr id=\"null\"></div>", "---"),
+    # TABEL EN CODEBLOK LOPEN NIET LANGS `execCommand` (25 september 2026). Die twee kan de
+    # browser niet maken: een `formatBlock` op een `<pre>` haalt de regelovergangen eruit en een
+    # tabel kent hij als commando niet eens. Ze openen daarom het BRON-BEWERKVLAK met het
+    # markdown-sjabloon van de server erin — dezelfde `<textarea data-blok-bron>` die de
+    # greep-actie "bewerk als tekst" al gebruikte. Wat de weg terug dus leest is die textarea,
+    # niet een omhulsel dat de browser bouwde.
+    "table": ("<div class='wb' data-blok='p'><textarea data-blok-bron>| A | B |\n|---|---|\n"
+              "| | |</textarea></div>", "| A | B |\n|---|---|\n| | |"),
+    "pre": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
+            "</textarea></div>", "```\ncode\n```"),
 }
 
 
@@ -324,9 +334,13 @@ def test_elk_menu_item_levert_iets_op_dat_de_weg_terug_leest():
     en `ol` af terwijl die prima teruggelezen worden — de parser doet ze in een eigen tak. Die
     test mat waar de code stond in plaats van wat hij doet."""
     from nooch_village.cockpit2_util import BLOK_MENU, _md_naar_bron
-    for tag, label, _cmd, _arg in BLOK_MENU:
+    for tag, label, cmd, arg in BLOK_MENU:
         html, verwacht = _UITKOMST[tag]
         assert _md_naar_bron(html) == verwacht, f"{label} ({tag}) komt niet terug als bron"
+        # Bij een `bron`-item is het sjabloon van de server WAT ER IN DAT VELD KOMT. Staan die
+        # twee niet gelijk, dan toetst de regel hierboven een uitkomst die nooit ontstaat.
+        if cmd == "bron":
+            assert verwacht == arg, f"{label}: sjabloon {arg!r} ≠ getoetste uitkomst {verwacht!r}"
 
 
 def test_het_sjabloon_staat_in_de_editor(tmp_path):
@@ -385,9 +399,17 @@ def test_de_streep_verdwijnt_maar_pas_na_het_commando():
     m = re.search(r"function blokMenuKies\(.*?\n  \}", kaal, re.S)
     assert m, "blokMenuKies niet gevonden"
     bron = m.group(0)
-    assert bron.index("execCommand(knop") < bron.index("streep.remove()"), \
+    # VANAF HET COMMANDO MEten (25 september 2026). Sinds tabel en codeblok erbij zijn, begint
+    # deze functie met een eigen tak die het bron-bewerkvlak opent en daarna `return`t — mét een
+    # eigen `blokNormaliseer`. Die stond vóór alles wat hier gemeten wordt, en dan meet je de
+    # volgorde van een ANDERE tak. Een knip op "de eerste return" werkte ook niet: `if (!n)
+    # return;` staat daar al bovenaan. Wat deze toets bedoelt is de volgorde binnen het
+    # `execCommand`-pad, dus dat is waar de meting begint.
+    assert "execCommand(knop" in bron, "het commando-pad bestaat niet meer"
+    na_cmd = bron[bron.index("execCommand(knop"):]
+    assert "streep.remove()" in na_cmd, \
         "de streep wordt weggehaald vóór het commando — dan doet het commando niets"
-    assert bron.index("streep.remove()") < bron.index("blokNormaliseer"), \
+    assert na_cmd.index("streep.remove()") < na_cmd.index("blokNormaliseer"), \
         "de streep moet weg zijn voordat het blokmodel wordt bijgewerkt"
     assert bron.count("streepNode(") == 2, \
         ("het knooppunt wordt hergebruikt in plaats van opnieuw gezocht; `formatBlock` bouwt het "
