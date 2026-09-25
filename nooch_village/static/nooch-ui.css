@@ -255,6 +255,32 @@
 .nu input[type=number]:focus, .nu input[type=url]:focus, .nu input[type=date]:focus,
 .nu input[type=password]:focus, .nu input:not([type]):focus, .nu textarea:focus, .nu select:focus {
   border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
+/* DE EIGEN CHEVRON (25 september 2026). Een `<select>` hield de NATIVE pijl van het besturings-
+   systeem: een grijs driehoekje in een doosje, met een eigen vorm per platform. Naast een veld
+   dat verder alleen een onderlijn heeft is dat het enige stukje vreemde chrome op het scherm —
+   precies wat een dropdown hier "een kale HTML-control" deed lijken.
+
+   `appearance:none` HAALT MEER WEG DAN DE PIJL: op Safari en oudere Chrome verdwijnt daarmee ook
+   de doos eromheen, en dat is juist de bedoeling — de onderlijn hierboven is de veldstijl van
+   deze huisstijl. De twee voorvoegsels staan erbij omdat Safari de kale variant pas sinds 15.4
+   kent en dit dorp geen buildstap heeft die ze toevoegt.
+
+   `:not([multiple])` IS GEEN SPECIFICITEITSTRUC MAAR EEN BETEKENIS: een meerkeuzelijst klapt niet
+   uit en heeft dus geen chevron. Dat hij daarmee ook zwaarder weegt dan `.fieldform select` in
+   nooch.css is meegenomen — die zet een `padding`-shorthand, en nooch.css laadt ná dit bestand.
+
+   DE KLEUR STAAT HIER HARD, en dat is de ene plek waar `reference, don't copy` niet kan: een
+   `var()` werkt niet binnen een `url()`-data-URI. `%23000` spiegelt `--nu-text`, en
+   `test_de_chevron_heeft_de_kleur_van_de_tekst` bewaakt dat ze gelijk blijven. */
+.nu select:not([multiple]) {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right .35rem center;
+  padding-right: 1.4rem; }
+/* Bij focus volgt de chevron de lijn: één signaal, niet twee kleuren tegelijk. */
+.nu select:not([multiple]):focus {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2300A551' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>"); }
 /* `.fieldform` is een RIJ met een veld en een knop erin; de onderlijn hoort bij het veld, niet om
    de rij heen. Vandaar hier geen lijn — de kinderen dragen hem al. */
 .nu .fieldform { border-bottom: 0; }
