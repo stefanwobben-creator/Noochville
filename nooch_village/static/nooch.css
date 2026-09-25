@@ -304,12 +304,15 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    de marge die de browser aan een <figure> geeft. Geen eigen kleur en geen eigen rand — dat is
    wat `.card` al doet. De klassen zitten in de bestaande `wb-`-familie, want een embed is een
    wiki-blok. */
-/* CODEBLOK (24 september 2026). Geen nieuwe klasse: de `<pre>` staat al in een `.wb`, en een
-   tag-selector binnen die scope is genoeg — dat scheelt een prefix-familie. De vormgeving leent
+/* CODEBLOK (24 september 2026). Geen nieuwe klasse: de `<pre>` staat al in een `.att-body`, en een
+   tag-selector binnen die scope is genoeg. `.att-body` EN NIET `.wb`: een policy of tool
+   rendert sinds #574 op een LEESPAGINA, zonder blok-wrappers — en juist DESIGNSYSTEM-001,
+   de enige pagina met tabellen én een codeblok, is een policy. Gemeten op prod: dat
+   codeblok stond er volledig ongestileerd bij — dat scheelt een prefix-familie. De vormgeving leent
    van `.einddoc-body pre`, dat hetzelfde probleem al oploste (monospace, niet afkappen, scrollen
    als het niet past). Eigen achtergrond en rand zodat code zichtbaar een ándere datasoort is dan
    de tekst eromheen; dat is het visuele onderscheid waar het ontwerp om vroeg. */
-/* TABEL-BLOK (24 september 2026). Tag-selectors binnen `.wb`, dus geen nieuwe prefix-familie.
+/* TABEL-BLOK (24 september 2026). Tag-selectors binnen `.att-body`, dus geen nieuwe prefix-familie.
    Een tabel is zichtbaar een andere datasoort dan lopende tekst: eigen kopregel-achtergrond en
    een rand per rij. `overflow-x` omdat een brede tabel de kolom niet mag oprekken. */
 /* TAAK-BLOK (24 september 2026). Het vakje is nu bedienbaar, dus het krijgt een aanwijs-cursor;
@@ -323,13 +326,13 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb-taak input{cursor:pointer;margin-right:.45rem;vertical-align:baseline}
 .wb-taak:has(input:checked){color:var(--muted);text-decoration:line-through}
 
-.wb table{border-collapse:collapse;width:100%;font-size:13px;margin:.2rem 0;
+.att-body table{border-collapse:collapse;width:100%;font-size:13px;margin:.2rem 0;
   display:block;overflow-x:auto}
-.wb th,.wb td{border-bottom:1px solid var(--border);padding:.35rem .5rem;text-align:left;
+.att-body th,.att-body td{border-bottom:1px solid var(--border);padding:.35rem .5rem;text-align:left;
   vertical-align:top}
-.wb th{background:var(--cream-2);font-weight:700;font-size:.78rem;text-transform:uppercase;
+.att-body th{background:var(--cream-2);font-weight:700;font-size:.78rem;text-transform:uppercase;
   letter-spacing:.03em;color:var(--gray)}
-.wb tr:last-child td{border-bottom:none}
+.att-body tr:last-child td{border-bottom:none}
 
 /* HET BEWERKVLAK voor een tabel of codeblok. `contenteditable` en `execCommand` kunnen die twee
    niet fatsoenlijk aan — een Enter in een cel maakt iets anders dan een nieuwe rij. Hier bewerk
@@ -339,10 +342,10 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
   line-height:1.45;border:1px solid var(--green);border-radius:var(--radius);
   background:var(--surface);padding:.5rem .6rem;resize:vertical;min-height:4rem}
 
-.wb pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;
+.att-body pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;
   background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);
   padding:.55rem .7rem;margin:.2rem 0;overflow-x:auto;white-space:pre}
-.wb pre code{font:inherit;background:none;padding:0}
+.att-body pre code{font:inherit;background:none;padding:0}
 
 .wb-emb{display:flex;align-items:center;gap:.6rem;margin:0;padding:.55rem .7rem}
 .wb-emb a{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}

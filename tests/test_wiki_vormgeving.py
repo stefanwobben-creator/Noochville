@@ -87,14 +87,17 @@ def test_de_actie_zone_staat_rechts():
 def test_elke_datasoort_heeft_een_eigen_vorm():
     """Niet kleur bovenop vorm — dat zou een tweede systeem zijn. Elk bloktype heeft zijn eigen
     vormgeving, en die zijn hier alle vier aanwezig."""
-    for selector in (".wb pre", ".wb table", ".wb-taak input", ".wb-emb"):
+    # `.att-body` EN NIET `.wb`: een policy of tool rendert sinds #574 op een leespagina zonder
+    # blok-wrappers, en juist daar staan de tabellen en het codeblok. Zie
+    # tests/test_wiki_leespagina_stijl.py.
+    for selector in (".att-body pre", ".att-body table", ".wb-taak input", ".wb-emb"):
         assert re.search(re.escape(selector) + r"\{", CSS), f"{selector} heeft geen eigen vorm"
 
 
 def test_de_soorten_leunen_op_vorm_en_niet_op_kleur_alleen():
     """Elk van de vier onderscheidt zich met iets structureels (rand, achtergrond, layout), niet
     met alleen een tekstkleur — dezelfde regel als "twee dragers" bij de statusvormen."""
-    for selector in (".wb pre", ".wb table", ".wb-emb"):
+    for selector in (".att-body pre", ".att-body table", ".wb-emb"):
         body = _regel(selector)
         assert any(k in body for k in ("border", "background", "display:flex")), selector
 
