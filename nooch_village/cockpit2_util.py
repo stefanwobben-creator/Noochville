@@ -6,6 +6,7 @@ import re
 import time as _time
 from html.parser import HTMLParser as _HTMLParser
 
+from nooch_village import wiki as _wiki
 from nooch_village.web_base import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
@@ -1165,6 +1166,12 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                ("nvCode", "", "&lt;/&gt;", "Inline code"))
 
 
+#: Het menu-label van een afgeleid blok. `wiki.AFGELEID` draagt het Engelse KOPJE dat boven de
+#: sectie op het scherm staat ("Links here"); in dit menu staat waar je het BLOK bij noemt, in de
+#: taal van de andere negen knoppen. Ontbreekt een naam hier, dan valt hij terug op het kopje —
+#: een nieuwe markering krijgt zo altijd een knop, nooit stilzwijgend geen.
+_AFGELEID_LABEL = {"facts": "Feiten", "backlinks": "Backlinks"}
+
 #: HET /-MENU: welk bloktype je kunt invoegen, hoe het heet, en met welk commando. De vierde
 #: kolom is het argument voor `execCommand`.
 #:
@@ -1193,6 +1200,23 @@ BLOK_MENU = (
     # tabel: dan zou het vocabulaire op een derde plek wonen, en op de enige zonder toets.
     ("table", "Tabel", "bron", "| A | B |\n|---|---|\n| | |"),
     ("pre", "Codeblok", "bron", "```\ncode\n```"),
+) + tuple(
+    # FEITEN EN BACKLINKS HOREN ER OOK IN (26 september 2026). De markering `{{facts}}` bestaat
+    # sinds #595 en de renderer maakt er een volwaardig blok van — met greep, met sleepstand —
+    # maar hij was alleen te plaatsen door de syntax te typen. Dat is precies wat dit menu moest
+    # wegnemen: voor wie het menu gebruikt bestond die plaatsbaarheid dus niet.
+    #
+    # `p` ALS TAG, en dat is geen slordigheid: er IS geen HTML-tag voor een afgeleid blok. De
+    # server maakt er bij het opslaan een `<div data-blok='facts'>` van, net zoals bij een tabel
+    # het `bron`-pad de `<table>` maakt. De tag-kolom zegt alleen wat de BROWSER na het commando
+    # overhoudt, en dat is hier de terugval — hetzelfde als bij `table` en `pre`.
+    #
+    # DE LIJST KOMT UIT `wiki.AFGELEID` en niet uit een tweede opsomming hier: die tabel bepaalt
+    # wat de renderer herkent, en een knop voor een markering die hij niet kent is een knop die
+    # bij het opslaan platte tekst oplevert. Alleen het LABEL staat hier, want dit menu is
+    # Nederlands ("Tekst", "Codeblok") terwijl `AFGELEID` de Engelse schermkopjes draagt.
+    ("p", _AFGELEID_LABEL.get(naam, engels), "bron", _wiki.marker(naam))
+    for naam, engels in _wiki.AFGELEID.items()
 )
 
 

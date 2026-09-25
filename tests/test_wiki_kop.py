@@ -31,6 +31,8 @@ daarom is het label de uitkomst en niet de verwijdering.
 """
 from __future__ import annotations
 
+import re
+
 from nooch_village import cockpit2
 from nooch_village.views.wiki import render_pagina
 
@@ -152,6 +154,20 @@ def test_wie_niet_mag_bewerken_krijgt_geen_keuze_maar_wel_de_uitleg(tmp_path):
 
 
 # ── 4. Move zegt wat hij verplaatst ──────────────────────────────────────────
+def _move_knop(html: str) -> str:
+    """De openingstag van de Move-knop, gevonden via ZIJN FORMULIER.
+
+    NIET VIA "DE EERSTE `artefact_edit`-KNOP OP DE PAGINA". Dat was het, en het klopte zolang het
+    metadata-blok boven de editor stond; toen het op 26 september naar onderaan verhuisde vond
+    dezelfde regex de Save-knop van de editor — die stuurt dezelfde actie. Drie toetsen sloegen
+    daardoor aan op een knop die ze niet bedoelden. `.fieldform` is het formulier dat alleen het
+    domein verzet, en dat verhuist met zijn onderwerp mee."""
+    form = html.split("class='fieldform'")[1].split("</form>")[0]
+    m = re.search(r"<button[^>]*value='artefact_edit'[^>]*>[^<]*</button>", form)
+    assert m, "de Move-knop staat niet in zijn eigen formulier"
+    return m.group(0)
+
+
 def test_de_move_knop_zegt_wat_er_verplaatst_wordt(tmp_path):
     """"Move" alleen leest als "verplaats deze tekst". Het gaat om de plek van de PAGINA in de
     structuur van de wiki."""
@@ -160,10 +176,7 @@ def test_de_move_knop_zegt_wat_er_verplaatst_wordt(tmp_path):
     # `rstrip("</button>")` om de tag weg te halen, en `rstrip` strípt KARAKTERS en geen
     # substring — "Move" eindigt op een "e" die niet in die set zit, dus er ging niets af en de
     # toets slaagde op de oude knop.
-    import re as _re
-    m = _re.search(r"value='artefact_edit'[^>]*>([^<]*)</button>", html)
-    assert m, "de Move-knop is niet te vinden"
-    tekst = m.group(1).strip()
+    tekst = _move_knop(html).split(">", 1)[1].split("<")[0].strip()
     assert "Move" in tekst
     assert tekst != "Move", "de knop zegt nog steeds alleen 'Move'"
 
@@ -174,11 +187,10 @@ def test_de_move_knop_draagt_een_tooltip(tmp_path):
     OP DE KNOP ZELF. De eerste versie keek of er ergens in het formulier een `title=` stond — en
     die staat er ook op het `<form>`, zodat de hele rij hem toont. Een mutatie die hem van de KNOP
     haalde bleef daardoor groen, terwijl de knop juist het ding is waar je op mikt."""
-    import re as _re
     html, _a, _ = _pagina(tmp_path)
-    m = _re.search(r"<button[^>]*value='artefact_edit'[^>]*>", html)
-    assert m and "title=" in m.group(0), f"de knop draagt geen tooltip: {m.group(0) if m else None}"
-    assert "wiki" in m.group(0).lower(), "de tooltip zegt niet dat het om de wiki-structuur gaat"
+    knop = _move_knop(html)
+    assert "title=" in knop, f"de knop draagt geen tooltip: {knop}"
+    assert "wiki" in knop.lower(), "de tooltip zegt niet dat het om de wiki-structuur gaat"
 
 
 # ── 5. Wat niet mag veranderen ───────────────────────────────────────────────
@@ -294,8 +306,7 @@ def test_verplaatsen_is_secundair_en_bewerken_primair(tmp_path):
     hoofdactie is. `ghost` is de variant die de app daar al voor heeft."""
     import re as _re
     html, _a, _ = _pagina(tmp_path)
-    move = _re.search(r"<button[^>]*value='artefact_edit'[^>]*>", html)
-    assert move and "ghost" in move.group(0), "de Move-knop is even zwaar als de hoofdactie"
+    assert "ghost" in _move_knop(html), "de Move-knop is even zwaar als de hoofdactie"
     edit = _re.search(r"<button[^>]*data-wiki-start[^>]*>", html)
     assert edit and "ghost" not in edit.group(0), "de hoofdactie is verzwakt"
 

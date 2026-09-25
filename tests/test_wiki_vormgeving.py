@@ -72,10 +72,13 @@ def test_de_kopbalk_heeft_twee_zones(tmp_path):
 
     balk = html.split("wiki-kopbalk'>")[1].split("</div></div>")[0]
     assert "wiki-kopacties" in balk, "er is geen actie-zone"
-    # het domein-formulier en de bewerkknop staan SAMEN in die zone
+    # DE ZONE DRAAGT DE HOOFDACTIE. Hier stond ook dat het domein-formulier er in zat, en dat
+    # klopte niet meer sinds #602 het veld naar het metadata-blok verplaatste — de toets slaagde
+    # alleen nog omdat dat blok toevallig direct achter de kop stond en binnen de 900 tekens viel.
+    # Met het blok onderaan (26 september) valt die toevalligheid weg. Wat de zone bewijst is dat
+    # de acties bij elkaar staan, en dat is er precies één: bewerken.
     acties = html.split("wiki-kopacties'>")[1]
-    assert "name='domain'" in acties.split("</form>")[0] or "name='domain'" in acties[:900]
-    assert "data-wiki-start" in acties[:1200]
+    assert "data-wiki-start" in acties.split("</div>")[0]
 
 
 def test_de_actie_zone_staat_rechts():
