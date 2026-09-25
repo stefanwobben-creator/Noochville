@@ -320,6 +320,22 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb-greep-knop{border:none;background:none;color:var(--subtle);cursor:grab;font-size:.9rem;
   line-height:1;padding:.1rem .2rem}
 .wb-greep-knop:active{cursor:grabbing}
+/* ── Slepen wordt zichtbaar (25 september 2026) ──────────────────────────────────────────────
+   DE JS ZETTE DEZE KLASSEN AL, EN ER WAS GEEN VORMGEVING. Zelfde soort gat als bij `.pcol.over`
+   in fase 11 punt 3: een klasse die jarenlang niets schilderde. Voor een wiki-blok betekende dat:
+   je sleept, er zweeft een gekanteld spookje mee, en verder zie je niets — geen doel, geen
+   richting, en de plek waar het blok vandaan komt ziet er onveranderd uit. Slepen wérkte dus wel,
+   maar het voelde niet zo, en zo belandde "geen drag-and-drop" in een ontwerpdocument.
+
+   VÓÓR OF NÁ IS EEN EIGEN SIGNAAL. Een omlijning om het doelblok zegt niet aan welke kant je
+   landt, en juist dat beslist `onDrop` op de muispositie. Een lijn aan de kant waar je terechtkomt
+   zegt het wel — dezelfde taal als de invoegstreep in elke editor die dit doet.
+
+   Geen nieuwe familie: `wb-` en `pdrag-` bestaan allebei al. */
+.wb.over-boven,.wb.over-onder{background:var(--cream-2)}
+.wb.over-boven{box-shadow:inset 0 2px 0 0 var(--green)}
+.wb.over-onder{box-shadow:inset 0 -2px 0 0 var(--green)}
+.wb.pdrag-bron{opacity:.35}
 /* EMBED-KAART (24 september 2026). Een regel die alleen een link is, rendert als kaart. Hij
    hergebruikt `.card` voor rand en achtergrond; hier staat alleen de indeling, plus een reset van
    de marge die de browser aan een <figure> geeft. Geen eigen kleur en geen eigen rand — dat is
