@@ -1153,6 +1153,15 @@ BLOK_MENU = (
     ("ol", "Genummerde lijst", "insertOrderedList", ""),
     ("blockquote", "Citaat", "formatBlock", "<blockquote>"),
     ("hr", "Scheiding", "insertHorizontalRule", ""),
+    # TABEL EN CODE KUNNEN NIET VIA `execCommand`. Een `formatBlock` op een `<pre>` haalt de
+    # regelovergangen eruit en een tabel kent de browser als commando niet eens. Die twee krijgen
+    # daarom hun MARKDOWN-SJABLOON mee (vierde kolom) en openen het bron-bewerkvlak dat voor deze
+    # twee soorten al bestaat — hetzelfde `bron`-pad als de greep-actie "bewerk als tekst".
+    #
+    # HET SJABLOON STAAT HIER en niet in `nooch.js`, om dezelfde reden als de rest van deze
+    # tabel: dan zou het vocabulaire op een derde plek wonen, en op de enige zonder toets.
+    ("table", "Tabel", "bron", "| A | B |\n|---|---|\n| | |"),
+    ("pre", "Codeblok", "bron", "```\ncode\n```"),
 )
 
 
