@@ -613,6 +613,11 @@
 .nu .att-body th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
 .nu .att-body td{border-bottom-color:var(--nu-border-subtle)}
 
+/* HET OPLICHTENDE BLOK (25 september 2026). De oude laag gebruikt `--cream-2`, een warme
+   crèmetint die in deze huisstijl niet bestaat; `--nu-bg-alt` is hier de zachte vlakvulling.
+   Vierkante hoeken, zoals overal in deze laag. */
+.nu .wiki-body.wiki-aan .wb{border-radius:0}
+.nu .wiki-body.wiki-aan .wb:hover{background:var(--nu-bg-alt)}
 .nu .wb-menu { border: 1.5px solid var(--nu-text); border-radius: 0; box-shadow: none; }
 .nu .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
 .nu .wb-menu-item:hover { background: var(--nu-bg-alt); }

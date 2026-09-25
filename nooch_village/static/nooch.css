@@ -296,6 +296,27 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb{position:relative}
 .wb-greep{position:absolute;left:-1.5rem;top:.1rem;opacity:0;transition:opacity .12s;user-select:none}
 .wb:hover>.wb-greep,.wb-greep:focus-within{opacity:1}
+/* ── Het blok licht op onder de muis (25 september 2026) ─────────────────────────────────────
+   Hiervoor verscheen alleen de greep. Je zag dus wel DAT er iets te pakken viel, maar niet WAT je
+   beetpakte — en bij een lijst of een tabel is dat precies de vraag.
+
+   ALLEEN IN BEWERKSTAND (besluit Stefan, 25 september 2026). De greep bestaat ook alleen dan:
+   `grepen(body, aan)` hangt hem erin bij het aanzetten en haalt hem er weer uit. Een oplichtend
+   blok in leesstand belooft een handeling die er niet is.
+
+   DE GOOT VERHUIST VAN DE BODY NAAR HET BLOK, en dat is het enige stuk dat verder gaat dan een
+   kleurregel. De greep hangt op `left:-1.5rem`, buiten de doos van `.wb`, in de padding van de
+   body. Een achtergrond op `.wb` dekt hem dan niet: je krijgt een oplichtend blok met een los
+   icoontje ernaast in het wit. Negatieve marge plus evenveel padding lost dat op zonder dat er
+   iets verschuift — de doos groeit naar links, de tekst blijft staan waar hij stond. De body
+   HOUDT zijn eigen padding, anders verspringt de hele pagina zodra je op bewerken klikt.
+
+   Geen nieuwe kleur en geen nieuwe klasse-familie: `--cream-2` is de zachte achtergrond die het
+   dorp al heeft, `--radius` de bestaande hoek, en `wb-` bestaat al. */
+.wiki-body.wiki-aan .wb{margin-left:-1.9rem;padding-left:1.9rem;border-radius:var(--radius);
+  transition:background .12s}
+.wiki-body.wiki-aan .wb:hover{background:var(--cream-2)}
+.wiki-body.wiki-aan .wb-greep{left:.4rem}
 .wb-greep-knop{border:none;background:none;color:var(--subtle);cursor:grab;font-size:.9rem;
   line-height:1;padding:.1rem .2rem}
 .wb-greep-knop:active{cursor:grabbing}
