@@ -122,6 +122,59 @@
         b.querySelector("[data-blok='facts']") === afg, "soort: " + afg.dataset.blok);
   }
 
+  // 8. SLEPEN — het gebaar zelf, met eigen pointer-events
+  //
+  // WAAROM DIT ER NIET STOND EN HET WEL MOEST. In het ontwerpdocument van 25 september staat dat
+  // er "geen drag-and-drop" is. Slepen werkt al sinds brok 3, ook op prod — maar niets liet dat
+  // zien, en geen enkele check probeerde het. De sleep-actie van de browser-extensie stuurt
+  // alleen `pointermove`, geen `pointerdown`/`pointerup`, dus daarmee is het gebaar niet uit te
+  // voeren. Deze check stuurt ze zelf.
+  function pev(t, x, y, doel) {
+    (doel || document).dispatchEvent(new PointerEvent(t, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      button: 0, buttons: t === "pointerup" ? 0 : 1, pointerType: "mouse", pointerId: 1
+    }));
+  }
+  var rij = function () {
+    return [].slice.call(b.querySelectorAll(":scope > .wb"))
+             .map(function (x) { return x.dataset.blok; }).join(",");
+  };
+  var volgordeVoor = rij();
+  var eerste = b.querySelector(":scope > .wb");
+  var greep = eerste && eerste.querySelector(".wb-greep-knop");
+  var doelBlok = [].slice.call(b.querySelectorAll(":scope > .wb"))[3];
+  if (!greep || !doelBlok) {
+    zeg("slepen: opstelling", false, "geen greep of te weinig blokken");
+  } else {
+    var gr = greep.getBoundingClientRect(), dr = doelBlok.getBoundingClientRect();
+    pev("pointerdown", gr.left + 5, gr.top + 5, greep);
+    pev("pointermove", gr.left + 40, gr.top + 40);
+    zeg("slepen: het spookje verschijnt", document.querySelectorAll(".pdrag-ghost").length === 1);
+    zeg("slepen: de bron vervaagt", eerste.classList.contains("pdrag-bron"));
+    // bovenhelft van het doel -> ervóór; onderhelft -> erná. Allebei moeten ze te zien zijn.
+    pev("pointermove", dr.left + 150, dr.top + 3);
+    zeg("slepen: boven het doel toont 'ervoor'", doelBlok.classList.contains("over-boven"),
+        "klassen: " + doelBlok.className);
+    pev("pointermove", dr.left + 150, dr.bottom - 3);
+    zeg("slepen: onder het doel toont 'erna'", doelBlok.classList.contains("over-onder"),
+        "klassen: " + doelBlok.className);
+    pev("pointerup", dr.left + 150, dr.bottom - 3);
+    zeg("slepen: het blok is verplaatst", rij() !== volgordeVoor, volgordeVoor + " -> " + rij());
+    zeg("slepen: het spookje is opgeruimd", document.querySelectorAll(".pdrag-ghost").length === 0);
+    var rest = [].slice.call(b.querySelectorAll(".over,.over-boven,.over-onder,.pdrag-bron"));
+    zeg("slepen: geen sleep-klassen achtergebleven", rest.length === 0,
+        rest.length ? rest[0].className : "");
+    // De greep hoort te vertellen dat je hem kunt slepen — daar ging het mis.
+    var nieuweGreep = b.querySelector(".wb-greep-knop");
+    zeg("de greep zegt dat je hem kunt slepen",
+        !!(nieuweGreep && (nieuweGreep.getAttribute("title") || "").toLowerCase().indexOf("drag") > -1),
+        nieuweGreep ? (nieuweGreep.getAttribute("title") || "(geen)") : "(geen greep)");
+  }
+
+  // OOK OP `window`, niet alleen in de console. `console.table` is prima voor een mens, maar
+  // onleesbaar voor wie de check geautomatiseerd draait — en dan is de uitslag alleen te zien
+  // door er met je ogen bij te zitten. Dat is precies hoe "geen drag-and-drop" kon ontstaan.
+  window.__blokcheck = uit;
   console.table(uit);
   console.log(uit.every(function (r) { return r.uitslag === "✓"; })
     ? "ALLES GOED in " + navigator.userAgent.split(") ")[0].split("(")[1]

@@ -303,7 +303,7 @@
     var pid = kaart.getAttribute(opties.id);
     var vak = kaart.getBoundingClientRect();
     var dx = e0.clientX - vak.left, dy = e0.clientY - vak.top;
-    var ghost = null, kolom = null, bezig = false;
+    var ghost = null, kolom = null, bezig = false, laatsteKant = "";
 
     function beweeg(e) {
       if (!bezig) {
@@ -322,10 +322,20 @@
       ghost.style.transform = "translate3d(" + (e.clientX - dx) + "px," + (e.clientY - dy) +
                               "px,0) scale(1.04) rotate(-2deg)";
       var onder = vakOnder(e.clientX, e.clientY, root, opties.doel);
-      if (onder !== kolom) {
-        if (kolom) kolom.classList.remove("over");
+      // MET `opties.helft` TELT OOK DE KANT. Een kaart valt in een KOLOM en daar is geen boven of
+      // onder; een blok valt VÓÓR of NÁ een ander blok, en `onDrop` beslist dat op de muispositie.
+      // Zonder dit zag je tijdens het slepen wel je doel maar niet aan welke kant je landt — en
+      // dat is precies de helft van de vraag.
+      var kant = "";
+      if (opties.helft && onder) {
+        var vk = onder.getBoundingClientRect();
+        kant = e.clientY < vk.top + vk.height / 2 ? "over-boven" : "over-onder";
+      }
+      if (onder !== kolom || kant !== laatsteKant) {
+        if (kolom) kolom.classList.remove("over", "over-boven", "over-onder");
         kolom = onder;
-        if (kolom) kolom.classList.add("over");
+        laatsteKant = kant;
+        if (kolom) kolom.classList.add(kant || "over");
       }
     }
 
@@ -337,7 +347,7 @@
       if (ghost) ghost.remove();
       kaart.classList.remove("pdrag-bron");
       var naar = kolom && kolom.getAttribute(opties.naar);
-      if (kolom) kolom.classList.remove("over");
+      if (kolom) kolom.classList.remove("over", "over-boven", "over-onder");
       // De vlag pas ná deze beurt terug: anders opent de klik die bij het loslaten hoort
       // alsnog de kaart.
       setTimeout(function () { window.__pdrag = false; }, 60);
@@ -543,7 +553,12 @@
     var knop = document.createElement("button");
     knop.type = "button";
     knop.className = "wb-greep-knop";
-    knop.setAttribute("aria-label", "blok verplaatsen of wijzigen");
+    // WAAROM HIER EEN TOOLTIP STAAT. Klikken opent een menu, dus het icoontje leest als een
+    // menuknop — en zo belandde "geen drag-and-drop" in een ontwerpdocument terwijl slepen al
+    // werkte. De `cursor:grab` is er wel, maar die zie je pas als je er al bent.
+    // Engels, zoals de rest van de UI sinds i18n-fase 1.
+    knop.setAttribute("aria-label", "Drag to move this block, or click for options");
+    knop.setAttribute("title", "Drag to move \u00b7 click for options");
     knop.textContent = "⠿";
     g.appendChild(knop);
     var menu = document.createElement("span");
@@ -666,6 +681,10 @@
       kaart: ".wb[data-blok-id]", id: "data-blok-id",
       greep: ".wb-greep-knop",
       doel: ".wb[data-blok-id]", naar: "data-blok-id",
+      // TOON DE KANT TIJDENS HET SLEPEN. `onDrop` hieronder rekent vóór/ná uit op de
+      // muispositie; zonder deze stand gebeurde dat pas bij het loslaten en zag je tot dat
+      // moment niet waar je terechtkwam.
+      helft: true,
       onDrop: function (id, naar, e) {
         var bron = body.querySelector(".wb[data-blok-id='" + id + "']");
         var doel = body.querySelector(".wb[data-blok-id='" + naar + "']");
