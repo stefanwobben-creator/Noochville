@@ -567,8 +567,21 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
+/* DE VERSIE-UITKLAPPER IS BIJZAAK (25 september 2026). `details>summary` is globaal vet en in
+   het display-lettertype — prima voor een sectiekop, maar deze summary draagt al `.muted` en
+   spreekt zichzelf dus tegen. Dat viel op toen hij in het metadata-raster van de wiki-pagina
+   belandde: "3 versions" schreeuwde harder dan de waarden erboven. Geen nieuwe klasse; de
+   bestaande `.c2-hist` krijgt het gewicht dat bij `.muted` hoort. */
+.c2-hist>summary{font-family:inherit;font-weight:500;font-size:.85rem}
 .fieldform{display:flex;gap:.4rem;align-items:center}
-.fieldform select{flex:1 1 auto;min-width:0}
+/* DE SELECT OP DEZELFDE VOET ALS DE KNOP ERNAAST (25 september 2026). Gemeten in de browser op
+   de wiki-paginakop: de select was 18px hoog met het BROWSER-font (13.3px) en padding 0, terwijl
+   de knop ernaast 30px was. Dat verschil is precies wat "een kale HTML-control" doet lijken —
+   niet de kleur, maar de voet. De `.nu`-laag geeft een select wel een onderlijn en een
+   lettertype, maar nooit maten; die stonden alleen in de meer specifieke `.pside`-variant
+   hieronder. Hier gepromoveerd naar de gedeelde klasse, zodat de twee plekken niet uit elkaar
+   lopen. Geen nieuwe klasse. */
+.fieldform select{flex:1 1 auto;min-width:0;font:inherit;padding:.3rem .45rem;box-sizing:border-box}
 .pside .fieldform{flex-wrap:wrap}
 .pside .fieldform select{flex:1 1 auto;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
 /* Effort-rij (.eff): getal + uren/dagen-toggle + opslaan op één rij — de select niet full-width. */

@@ -544,7 +544,10 @@ def test_ui_versiehistorie_uitklapper(tmp_path):
     a = st.att.add(OWNER, "policy", title="P", body="v1")
     st.att.update(a.id, body="v2", change_note="verscherpt")
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "historie (2)" in html and "verscherpt" in html
+    # "2 versions" EN NIET "historie (2)": die regel was Nederlands in een UI die sinds
+    # i18n-fase 1 Engels is, en viel op toen hij in het Engelse metadata-raster van de
+    # wiki-pagina belandde (25 september 2026).
+    assert "2 versions" in html and "verscherpt" in html
 
 
 # (De seen-marker/c2-unseen-feature is verwijderd — bewuste feature-verwijdering; zie artefact_seen-cleanup.)
