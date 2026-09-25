@@ -259,6 +259,23 @@ def _cellen(regel: str) -> list[str]:
 
 _HEK_RE = re.compile(r"^```([A-Za-z0-9_+-]*)\s*$")
 
+#: De INHOUD van een codeblok, plus zijn twee hekken eromheen als losse groepen. Het openingshek
+#: is met opzet exact dezelfde vorm als `_HEK_RE` hierboven: zou hij losser zijn, dan beschermde
+#: hij regels die de regellus daarna NIET als codeblok ziet, en dan lopen de twee uit elkaar.
+#: `\Z` als alternatief voor het sluithek, want `_md` sluit een openstaand hek zelf aan het eind
+#: (fail-soft) — zonder dat alternatief was precies het laatste blok van een pagina onbeschermd.
+_CODEBLOK_RE = re.compile(r"(?ms)^(```[A-Za-z0-9_+-]*[ \t]*\n)(.*?)(^```[ \t]*$|\Z)")
+
+#: `` `code` `` op één regel. DRIE DINGEN ZITTEN IN DEZE REGEX:
+#:   - `[^`\n]+` — minstens één teken, en niet over een regelovergang heen. Een paar dat een
+#:     regelgrens oversteekt is bijna altijd een ongeluk, en het resultaat zou een halve alinea
+#:     in een codevorm zijn.
+#:   - de twee lookarounds houden een DUBBELE backtick eruit: ``a ``b`` c`` zou anders matchen op
+#:     de binnenste twee en losse backticks laten staan. Nu blijft het gewoon tekst.
+#:   - hij draait NA `_CODEBLOK_RE`, dus een hekregel staat er nog wél. Die matcht niet: na de
+#:     eerste backtick staat er een tweede, en `[^`\n]+` eist daar een gewoon teken.
+_INLINE_CODE_RE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+
 _NUMMER_RE = re.compile(r"^(\d+)\. (.*)$")
 _STREEP_RE = re.compile(r"^-{3,}$")
 
@@ -364,7 +381,45 @@ def _md(text: str, blokken: bool = False) -> str:
     reactie, elke wall-comment en elk kanaalbericht; een blok-div daar is een wijziging aan drie
     schermen die niemand vroeg. Alleen `views/wiki._body_html` zet hem aan."""
     import re
-    s = _e(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    # HET NULTEKEN IS DE PLAATSHOUDER HIERONDER, dus het mag niet uit de tekst zelf komen. Het
+    # rendert nergens, dus weghalen kost niets en het sluit de enige manier af waarop iemand de
+    # bescherming zou kunnen omzeilen.
+    s = _e((text or "").replace("\x00", "")).replace("\r\n", "\n").replace("\r", "\n")
+
+    # ── DE INHOUD VAN EEN CODEBLOK GAAT EERST OPZIJ ──────────────────────────────────────────
+    # Deze functie draait de inline-regexes over de HELE string en pas daarna de regellus die
+    # hekken (```) herkent. Daardoor werd `**niet vet**` ín een codeblok gewoon vet — zichtbaar
+    # fout, al bleef de rondgang heel omdat `_BRON_INLINE` er weer `**` van maakt.
+    #
+    # Met de backtick erbij is diezelfde volgorde niet meer alleen lelijk: een `` ` `` in een
+    # codeblok zou een `<code>` BINNEN `<pre><code>` worden, en de weg terug negeert een `<code>`
+    # in een `<pre>` bewust — dan verdwijnt de inhoud. Eén mechanisme lost allebei op, en het is
+    # hetzelfde dat `_md_rijk` hieronder al gebruikt.
+    bewaard: list[str] = []
+
+    def _opzij(m):
+        # DE REGELOVERGANG VÓÓR HET SLUITHEK BLIJFT BUITEN DE PLAATSHOUDER. Hij zit in groep 2
+        # (het sluithek moet aan het begin van een regel staan, dus de `\n` hoort bij de inhoud),
+        # maar als hij mee opzij gaat komt het sluithek op dezelfde regel als de plaatshouder te
+        # staan. De regellus herkent hem dan niet meer als hek, het blok sluit nooit, en de
+        # fail-soft aan het eind stopt de ``` ín het codeblok. Gemeten, niet beredeneerd.
+        inhoud = m.group(2)
+        staart = "\n" if inhoud.endswith("\n") else ""
+        bewaard.append(inhoud[:-1] if staart else inhoud)
+        return f"{m.group(1)}\x00{len(bewaard) - 1}\x00{staart}{m.group(3)}"
+
+    s = _CODEBLOK_RE.sub(_opzij, s)
+
+    # ── INLINE CODE VÓÓR DE REST ────────────────────────────────────────────────────────────
+    # Wat tussen backticks staat is letterlijk, dus het mag niet langs de vet-/cursief-regexes.
+    # Zelfde plaatshouder-truc, één stap kleiner: hier bewaren we de inhoud en zetten we het
+    # `<code>`-omhulsel er meteen omheen.
+    def _inline_code(m):
+        bewaard.append(m.group(1))
+        return f"<code>\x00{len(bewaard) - 1}\x00</code>"
+
+    s = _INLINE_CODE_RE.sub(_inline_code, s)
+
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet — vóór cursief, anders eet * de **
     s = re.sub(r"~~(.+?)~~", r"<del>\1</del>", s)             # doorhalen
     s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)               # cursief
@@ -524,6 +579,10 @@ def _md(text: str, blokken: bool = False) -> str:
         sluit_tabel()
     sluit_lijst()
     html = "".join(out)
+    # DE PLAATSHOUDERS TERUG, als allerlaatste. Wat hier terugkomt is al ge-escaped (dat gebeurde
+    # vóór het opzijzetten), dus er gaat geen tekst alsnog ongezien naar buiten.
+    if bewaard:
+        html = re.sub(r"\x00(\d+)\x00", lambda m: bewaard[int(m.group(1))], html)
     if blokken:
         return html
     return html[:-4] if html.endswith("<br>") else html
@@ -609,6 +668,11 @@ class _BronParser(_HTMLParser):
         self._nr = 0
         #: hoe diep zitten we in een `data-chrome`-element? Zie `handle_starttag`.
         self._chrome = 0
+        # HOE DIEP WE IN EEN `<pre>` ZITTEN. Een `<code>` betekent twee verschillende dingen: in
+        # een `<pre>` is hij het binnenwerk van een codeblok (het hek staat op de `<pre>`), daar
+        # buiten is hij inline code met backticks eromheen. Zonder deze teller krijgt elk codeblok
+        # er backticks bij.
+        self._pre = 0
         #: de cel die nu open staat, en de rij die we aan het vullen zijn. Tekst binnen een
         #: tabel gaat NIET rechtstreeks naar `uit`: hij hoort bij een cel, en pas als de rij
         #: dicht is weten we hoe de pipe-regel eruitziet.
@@ -736,10 +800,14 @@ class _BronParser(_HTMLParser):
             self._cel = []
         elif tag == "pre":
             self._nieuwe_regel()
+            self._pre += 1
             self.uit.append("```" + (d.get("data-taal") or "") + "\n")
             self._blok_einde = False
         elif tag == "code":
-            pass                              # het hek staat op de <pre>, niet hierop
+            # Binnen een `<pre>` staat het hek al op de `<pre>` — daar doet hij niets. Daarbuiten
+            # is dit inline code en horen de backticks erbij.
+            if not self._pre:
+                self._schrijf("`")
         elif tag == "figure":
             self._embed = True
             self._nieuwe_regel()
@@ -750,7 +818,12 @@ class _BronParser(_HTMLParser):
         if self._chrome:
             self._chrome -= 1
             return
-        if tag in _BRON_INLINE:
+        if tag == "code":
+            # ALLEEN BUITEN EEN `<pre>`. Het sluithek van een codeblok staat op de `</pre>`
+            # hieronder; hier zou het een tweede zijn.
+            if not self._pre:
+                self._schrijf("`")
+        elif tag in _BRON_INLINE:
             self._schrijf(_BRON_INLINE[tag][1])
         elif tag in ("a", "span"):
             label = "".join(self._linktekst)
@@ -803,10 +876,9 @@ class _BronParser(_HTMLParser):
         elif tag == "table":
             self._nieuwe_regel()
         elif tag == "pre":
+            self._pre = max(0, self._pre - 1)
             self.uit.append("\n```")
             self._nieuwe_regel()
-        elif tag == "code":
-            pass
         elif tag == "figure":
             self._embed = False
             self._nieuwe_regel()
