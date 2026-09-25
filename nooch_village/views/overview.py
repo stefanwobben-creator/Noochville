@@ -496,8 +496,11 @@ def _artefact_versions_html(a) -> str:
         gref = f" · gov:{_e(v['governance_ref'])}" if v.get("governance_ref") else ""
         rows += (f"<li><span class='muted'>v{v.get('version_nr')} · {_dt(v.get('ts'))} · "
                  f"{_e(v.get('actor_id') or '—')} · {_e(v.get('change_note') or '')}{gref}</span></li>")
+    # "historie" WAS NEDERLANDS in een UI die sinds i18n-fase 1 Engels is. Meegenomen omdat deze
+    # regel nu ook in het metadata-raster van de wiki-pagina landt, waar hij tussen Engelse
+    # sleutels staat.
     return (f"<details class='c2-hist'><summary class='muted'>"
-            f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
+            f"{len(vs)} versions</summary><ul class='clean'>{rows}</ul></details>")
 
 
 #: Wat er staat als een rol nog geen domein heeft. ÉÉN plek, want het aanmaak- én het
@@ -508,7 +511,8 @@ def _geen_domein_uitleg(slot: str = "create a policy on that domain here") -> st
             f"via governance, then you can {slot}.</div>")
 
 
-def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain") -> str:
+def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain",
+                  toon_label: bool = True) -> str:
     """Domein-keuze. Eén domein → vaste regel (hidden input, geen dropdown); twee of meer → een
     select. Bron: de écht via governance toegewezen `definition.domains`.
 
@@ -524,12 +528,19 @@ def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain") -> str
         # GEEN `<label>` BIJ EEN VERBORGEN VELD: een `for` die naar een hidden input wijst is
         # nergens aanklikbaar en voor een schermlezer een los label. Eén regel tekst zegt hier
         # hetzelfde, en het scheelt de ratchet een kaal label.
-        return (f"<div class='muted att-lbl'>Domain: {_e(d)}</div>"
-                f"<input type='hidden' name='domain' value='{_e(d)}'>")
+        lbl = f"<div class='muted att-lbl'>Domain: {_e(d)}</div>" if toon_label else ""
+        return (f"{lbl}<input type='hidden' name='domain' value='{_e(d)}'>")
     opts = "".join(f"<option value='{_e(d)}'{' selected' if d == huidig else ''}>{_e(d)}</option>"
                    for d in domains)
     # Label en veld als paar, met een id die uniek is per formulier: op een rol-tab staan
     # meerdere bewerkformulieren onder elkaar, en dan mag `f-domain` niet twee keer bestaan.
+    # `toon_label=False` VOOR WIE HET WOORD AL ZEGT. In het metadata-raster van de wiki-pagina
+    # staat "Domain" al als rastersleutel; het eigen label ernaast maakte er "DOMAIN … DOMAIN"
+    # van. Gezien op de screenshot, twee keer op één dag — en dat is precies waarom die screenshot
+    # sinds 25 september bij "klaar" hoort. Het veld houdt dan een `aria-label`, want een veld
+    # zonder toegankelijke naam is voor een schermlezer een naamloze keuzelijst.
+    if not toon_label:
+        return (f"<select name='domain' id='{_e(fid)}' aria-label='Domain'>{opts}</select>")
     return (f"<label class='att-lbl' for='{_e(fid)}'>Domain</label>"
             f"<select name='domain' id='{_e(fid)}'>{opts}</select>")
 

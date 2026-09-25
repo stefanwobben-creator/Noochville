@@ -362,7 +362,69 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
 # vervanging moest opheffen.
 
-def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
+def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
+               *, tab: str = "notes") -> str:
+    """Alle paginametadata als ÉÉN element, in het vocabulaire dat de app al heeft.
+
+    WAT HIER WERD OPGELOST. De metadata stond als losse controls om de titel heen: het ID in de
+    kop, de eigenaar als los tagje, en daarnaast een kale `<select>` met een knop ernaast. Gemeten
+    in de browser, en dat verklaart waarom het rommelig oogde:
+
+        select      onderlijn, hoogte 18px, 13.3px browser-font, padding 0
+        Move page   volle rand, hoogte 30px, 12.8px, kapitalen
+        Edit page   volle rand, hoogte 30px, 12.8px, kapitalen  ← identiek aan Move
+
+    Drie dingen mis: de select stond niet op dezelfde voet als de knoppen, hij hield het
+    browser-font, en de twee knoppen waren visueel even zwaar terwijl de één een structuurwijziging
+    is en de ander de hoofdactie van de pagina.
+
+    GEEN NIEUW VOCABULAIRE — dit is de hele opdracht. Wat de app al heeft:
+
+        `.dcol` + `.dk`/`.dv`   sleutel-waarde-raster, in gebruik op de projectkaart
+        `.fieldform`            een RIJ met een veld en een knop erin, mét eigen `.nu`-regel
+        `.btn ghost`            de secundaire knop-variant, met een zachte rand
+        `.card`                 het content-blok
+
+    DE UITLEG ZIT ÍN DE CEL van zijn veld, niet eronder los. Daarmee groepeert het raster hem
+    vanzelf onder de dropdown: één kolom, één onderwerp. Zelfde vorm bij de eigenaar, waar de
+    governance-zin onder de rolnaam hangt.
+    """
+    from nooch_village.views.overview import _artefact_versions_html, _dt
+
+    rijen = []
+
+    def rij(sleutel: str, waarde: str, hint: str = "") -> None:
+        h = f"<div class='muted wiki-hint'>{hint}</div>" if hint else ""
+        rijen.append(f"<span class='dk'>{_e(sleutel)}</span>"
+                     f"<span class='dv'>{waarde}{h}</span>")
+
+    if eigenaar is not None:
+        rij("Owner",
+            f"<a href='/node?id={_e(a.anchor)}&tab={_e(tab)}'>{_e(_name(eigenaar))}</a>",
+            "Everyone reads, this role curates.")
+    # HET BAKJE ERBIJ, want dat is wat je op de index ZIET. Het domein is de sleutel
+    # (`bibliotheek`), het bakje de plek; zonder die vertaling moet je de classificatietabel uit
+    # je hoofd kennen om een keuze te kunnen maken. De records moeten mee: drie van de vijf
+    # stappen van `bakje_van` hebben de recordboom nodig, en zonder valt elke pagina zonder eigen
+    # domein terug op Overig — een hint die liegt is erger dan geen hint.
+    from nooch_village import domeinen as _dom
+    bakje, _waarom = _dom.bakje_van(a, list(records or []))
+    waar = f"Where this page sits in the wiki structure &mdash; now: {_e(_dom.label(bakje))}"
+    dom = _domein_form(a, eigenaar, csrf_token, can_edit, records)
+    if dom:
+        rij("Domain", dom, waar)
+    else:
+        # Zonder bewerkrecht geen keuze, maar wél te lezen waar de pagina hangt.
+        rij("Domain", _e(getattr(a, "domain", "") or "—"), waar)
+    rij("Id", f"<code class='pill'>{_e(a.id)}</code>")
+    rij("Last edited", _e(_dt(getattr(a, "updated_at", 0))))
+    hist = _artefact_versions_html(a)
+    if hist:
+        rij("History", hist)
+    return f"<div class='card'><div class='dcol'>{''.join(rijen)}</div></div>"
+
+
+def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> str:
     """De domein-keuze van deze pagina, in de kopbalk.
 
     EEN EIGEN FORMULIER, NAAST DE BLOK-EDITOR. De opslaan-balk van `wiki-form` verschijnt pas als
@@ -385,14 +447,32 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
     rol_domeinen = list(getattr(getattr(eigenaar, "definition", None), "domains", None) or [])
     if not rol_domeinen:
         return _geen_domein_uitleg("file this page under it")
-    veld = _domain_field(rol_domeinen, getattr(a, "domain", "") or "", fid=f"f-domain-{a.id}")
-    return (f"<form method='post' action='/action' class='qadd-row'>"
+    veld = _domain_field(rol_domeinen, getattr(a, "domain", "") or "",
+                         fid=f"f-domain-{a.id}", toon_label=False)
+    # WAT DIT VELD DOET staat in de uitleg-regel die `_meta_blok` eronder zet, ín dezelfde
+    # rastercel. Waarom het veld überhaupt blijft: gemeten op de 122 artefacten van prod
+    # verschuiven 10 pagina's van bakje als het verdwijnt, zijn 11 policy-ID's uit de domeinslug
+    # gemunt (en een ID is een permalink), en loggen 33 changelog-regels tegen `domain:<x>`.
+    tip = "Moves this page to another part of the wiki. Does not change its text."
+    # `.fieldform` EN NIET `.qadd-row`: dat is de klasse die de app al heeft voor "een veld en een
+    # knop op één rij", inclusief een eigen `.nu`-regel die de onderlijn bij het VELD laat en niet
+    # om de rij heen legt. `.qadd-row` is de knoppenbalk van een toevoegformulier; die stond hier
+    # omdat er ooit alleen een knop stond.
+    #
+    # `ghost` OP DE KNOP. Gemeten stonden Move page en Edit page er identiek bij: zelfde rand,
+    # zelfde hoogte, zelfde kapitalen. Twee even zware knoppen naast elkaar betekent dat geen van
+    # beide de hoofdactie is. Verplaatsen is een structuurwijziging en secundair; `ghost` is de
+    # variant die de app daar al voor heeft.
+    #
+    # DE UITLEG STAAT HIER NIET MEER. Hij zit in de cel van `_meta_blok`, onder het veld, zodat
+    # het raster hem groepeert in plaats van dat hij los onder de rij hangt.
+    return (f"<form method='post' action='/action' class='fieldform' title='{_e(tip)}'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
             f"{veld}"
-            f"<button class='btn sm' type='submit' name='action' value='artefact_edit'>"
-            f"Move</button></form>")
+            f"<button class='btn ghost sm' type='submit' name='action' value='artefact_edit' "
+            f"title='{_e(tip)}'>Move page</button></form>")
 
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
@@ -473,12 +553,14 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     dom_chip = (f" <span class='chip muted'>{_e(a.domain)}</span>"
                 if a.kind == "policy" and getattr(a, "domain", "") else "")
 
+    # DEZELFDE VORM ALS DE NOTE-PAGINA (PR 2). Hiervóór droeg deze kop zijn eigen variant: het ID
+    # vóór de titel, twee losse chips ernaast en een eigen herkomst-zin. Drie renderers met drie
+    # koppen is precies hoe ze uit elkaar lopen; het metadata-blok is nu gedeeld.
     kop = (f"<div class='c2-bar'><a href='{thuis}'>← {_e(tab)}</a></div>"
-           f"<h1>{_KIND_ICON.get(a.kind, '')} <code class='pill'>{_e(a.id)}</code> "
-           f"{_e(a.title or a.id)}{dom_chip}{eig_chip}</h1>"
+           f"<h1>{_KIND_ICON.get(a.kind, '')} {_e(a.title or a.id)}</h1>"
            f"<div class='wiki-kopbalk'>"
-           f"<p class='muted'>Edited on the owning role, not here &mdash; one place per artefact. "
-           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
+           f"<p class='muted'>Edited on the owning role, not here &mdash; one place per "
+           f"artefact.</p>"
            + (f"<a class='btn sm' href='{thuis}'>&#9998; Edit on the role</a>"
               if can_edit else "")
            + f"</div>")
@@ -493,8 +575,8 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     lees = (f"<div class='card'><div class='att-body'>"
             f"{_md(a.body) if a.body else _GEEN_TEKST}</div></div>")
 
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}"
-            f"{_artefact_versions_html(a)}</div>")
+    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab=tab)
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{url_regel}{lees}</div>")
     return _page(f"{a.title or a.id} — {a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
@@ -529,23 +611,25 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
                     and _can_edit_artefacts(st, eigenaar, csrf_token, username))
     pags = wiki.verwijsbaar(st.att)
 
-    eig_chip = ""
-    if eigenaar is not None:
-        eig_chip = (f" <a class='chip' href='/node?id={_e(a.anchor)}&tab=notes'>"
-                    f"{_e(_name(eigenaar))}</a>")
     # De titel is een eigen element omdat hij BEWERKBAAR wordt, op zijn plek in de kop. Het losse
     # TITLE-veld onder aan de pagina is daarmee vervallen.
     titel = f"<span id='wiki-titel' class='wiki-titel'>{_e(a.title or a.id)}</span>"
+    # HET ID STAAT NIET MEER IN DE KOP. Het is een interne sleutel, geen onderwerp, en het stond
+    # vóór de titel — het eerste wat je las was techniek. Hij VERDWIJNT NIET: het ID wordt als
+    # verwijzing gebruikt (in het ontwerpdocument zelf ook) en staat in `_meta_blok`.
+    # DE KOP DRAAGT NOG ÉÉN DING: de hoofdactie. Alles wat metadata is — eigenaar, domein, ID,
+    # laatst bewerkt, historie — staat in `_meta_blok` eronder, in één raster. Hiervóór stond de
+    # herkomst-zin hier én de eigenaar in het blok: twee plekken voor hetzelfde, en dat is precies
+    # wat deze PR opruimt.
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
-           f"<h1>📄 <code class='pill'>{_e(a.id)}</code> {titel}{eig_chip}</h1>"
+           f"<h1>📄 {titel}</h1>"
            f"<div class='wiki-kopbalk'>"
-           f"<p class='muted'>Owned by this role — everyone reads, the role curates. "
-           f"Last edited: {_dt(getattr(a, 'updated_at', 0))}</p>"
-           # TWEE ZONES. De herkomst-regel hierboven is de linkerkant; alles wat je kúnt doen
-           # staat rechts bij elkaar. Hiervóór waren dit drie losse flex-kinderen en zweefde de
-           # domein-keuze ergens in het midden.
+           # ÉÉN ACTIE IN DE KOP, en dat is de hoofdactie. Het domein-formulier stond hier ook —
+           # en na het invoegen van `_meta_blok` stond het er TWEE KEER, want het blok rendert het
+           # ook. Gevonden door `test_het_is_een_eigen_formulier_naast_de_blok_editor`, die telt
+           # hoeveel `artefact_edit`-formulieren er op de pagina staan: dat werden er drie.
+           # De keuze hoort bij de metadata, de knop hoort bij de pagina.
            + f"<div class='wiki-kopacties'>"
-           + _domein_form(a, eigenaar, csrf_token, can_edit)
            + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
               if can_edit else "")
            + f"</div></div>")
@@ -571,7 +655,10 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # DE VOLGORDE BLIJFT ZOALS HIJ WAS: feiten, besluiten, backlinks. Ze in één klap achteraan
     # plakken scheelt twee regels en verschuift "Decisions logged" naar boven de feiten — een
     # wijziging die niemand vroeg, op een scherm dat verder niets van deze stap hoort te merken.
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{voorstel}{hist}"
+    # DE HISTORIE ZIT IN HET METADATA-BLOK, niet meer los onder de tekst: het is metadata over de
+    # pagina, en dat hoort bij de rest ervan.
+    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab="notes")
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{body}{voorstel}"
             f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
