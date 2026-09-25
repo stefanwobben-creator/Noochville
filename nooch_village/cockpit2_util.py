@@ -572,6 +572,15 @@ _BRON_INLINE = {"strong": ("**", "**"), "b": ("**", "**"),
 #: `h3`/`h5`/`blockquote`/`hr` kwamen erbij met het vocabulaire van brok 2 (22 september 2026).
 _BRON_BLOK = ("h3", "h4", "h5", "li", "div", "p", "blockquote", "hr", "figure")
 
+#: Tags zonder eindtag. De chrome-teller hieronder mag hier niet op oplopen: er komt geen
+#: `handle_endtag` die hem weer omlaag haalt, en dan blijft alles NA de void-tag stil verdwijnen
+#: tot de volgende willekeurige eindtag. Gemeten met een `<input type='hidden'>` in een
+#: chrome-span: "Zichtbaar" achter die input kwam niet meer uit de rondgang. Dat viel tot nu toe
+#: niet op omdat elke chrome die er stond alleen tekst bevatte — het feiten-blok draagt
+#: formulieren, en die bestaan uit niets anders.
+_VOID = frozenset(("area", "base", "br", "col", "embed", "hr", "img", "input",
+                   "link", "meta", "param", "source", "track", "wbr"))
+
 #: tag → het voorvoegsel in de bron. Eén tabel, zodat een nieuw kopniveau op één plek bestaat.
 _BRON_KOP = {"h3": "# ", "h4": "## ", "h5": "### "}
 
@@ -650,8 +659,23 @@ class _BronParser(_HTMLParser):
         # DIT IS HET VANGNET, NIET DE EERSTE VERDEDIGING: de editor haalt zijn grepen er zelf uit
         # vóór het versturen. Maar één gemiste strip is anders een vervuilde pagina, en dat is
         # het soort fout dat je pas een week later in een diff terugziet.
-        if self._chrome or "data-chrome" in d:
+        # EEN AFGELEID BLOK DRAAGT ZIJN BRON IN EEN ATTRIBUUT. Wat er tussen de tags staat is
+        # uitvoer — feiten uit `meta`, backlinks uit andere pagina's — en dat hoort nooit in de
+        # opslag terecht te komen. De BRON is één regel tekst (`{{facts}}`), en die staat hier.
+        #
+        # Dit moet VÓÓR de chrome-check staan: de rest van het blok is chrome, maar dan moet het
+        # attribuut al gelezen zijn. De `<textarea>` verderop is de andere kant van dezelfde munt
+        # — daar is de INHOUD de bron, hier het attribuut.
+        if not self._chrome and tag != "textarea" and "data-blok-bron" in d:
+            self._nieuwe_regel()
+            self.uit.append(d["data-blok-bron"] or "")
+            self._nieuwe_regel()
             self._chrome += 1
+            return
+        if self._chrome or "data-chrome" in d:
+            # Een void-tag krijgt geen eindtag en mag de teller dus niet verhogen; zie `_VOID`.
+            if tag not in _VOID:
+                self._chrome += 1
             return
         if tag == "br":
             self.uit.append("\n")

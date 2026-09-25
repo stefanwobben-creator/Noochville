@@ -108,6 +108,36 @@ def resolve(ref: str, pags: list):
     return treffers[0] if len(treffers) == 1 else None
 
 
+#: De afgeleide blokken: markering → het label op het scherm. Hun INHOUD woont ergens anders —
+#: feiten in `meta["feiten"]`, backlinks in de bodies van andere pagina's — en dat is precies
+#: waarom ze een markering krijgen in plaats van markdown. Zou de tekst zelf de feiten dragen, dan
+#: waren er twee waarheden en veroudert de tweede zonder dat iets zich meldt.
+#:
+#: DE LIJST IS KORT MET OPZET, om dezelfde reden als `domeinen.ROL_BAKJE`: elke markering erbij is
+#: een stuk pagina dat de schrijver niet meer zelf in handen heeft. Een projectbord en KPI's zijn
+#: hier bewust buiten gehouden (ontwerpbesluit 21 september 2026).
+#: Het label is LETTERLIJK het kopje dat de sectie al droeg ("Links here"), niet een
+#: nettere variant: twee namen voor hetzelfde ding is precies wat deze codebase
+#: elders al een keer heeft moeten opruimen.
+AFGELEID: dict[str, str] = {"facts": "Facts", "backlinks": "Links here"}
+
+#: Alleen een regel die NIETS ANDERS is dan de markering telt. Dezelfde grens als bij de embed en
+#: de tool-kaart, en om dezelfde reden: anders verandert één woord in een alinea de vorm van de
+#: hele pagina.
+MARKER_RE = re.compile(r"^\{\{([a-z]+)\}\}$", re.M)
+
+
+def markers(body: str) -> set[str]:
+    """De afgeleide blokken die deze pagina zelf plaatst.
+
+    `render_pagina` heeft dit nodig om te weten wat er ONDERAAN nog bij moet: een sectie die de
+    schrijver in zijn tekst heeft gezet, hoort er niet nog een tweede keer onder te hangen.
+
+    Leest de BRON en niet het scherm — op het scherm staat de uitkomst, en daar is de markering
+    juist uit verdwenen."""
+    return {m.group(1) for m in MARKER_RE.finditer(body or "") if m.group(1) in AFGELEID}
+
+
 def verwijzingen(body: str) -> list[str]:
     """De ruwe `[[…]]`-verwijzingen in een body, in tekstvolgorde (met duplicaten)."""
     return [m.group(1).strip() for m in LINK_RE.finditer(body or "")]

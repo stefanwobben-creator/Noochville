@@ -469,6 +469,13 @@
       // vindt die niet in de soorten-tabel, en maakt er een alinea van — precies het blok dat je
       // aan het bewerken bent verliest dan zijn identiteit.
       if (node.querySelector && node.querySelector("[data-blok-bron]")) return;
+      // EN OP HET BLOK ZELF. Het afgeleide blok (feiten, backlinks) draagt zijn bron in een
+      // attribuut op het OMHULSEL en niet in een veld erbínnen, dus de regel hierboven — die
+      // alleen naar afstammelingen kijkt — liep er langs. Zonder deze regel zet de pas
+      // `data-blok` terug op `p`, want de tag is een `div`: het blok is dan zijn soort kwijt en
+      // de greep, het menu en de vormgeving zien een gewone alinea. Gemeten in Chrome op
+      // 24 september 2026 — de servertoetsen zagen dit niet, want zij draaien geen pas.
+      if (node.hasAttribute && node.hasAttribute("data-blok-bron")) return;
       // EEN TAAK-BLOK IS EEN LIJST MET VINKJES. De pas kent alleen tag→soort, en de tag is hier
       // `ul`; zonder deze regel zet hij `data-blok` terug op `ul` en is het blok zijn identiteit
       // kwijt. De soort wordt door de wiki-laag gezet (zie `views/wiki._body_html`), niet door

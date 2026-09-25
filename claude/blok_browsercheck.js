@@ -39,7 +39,15 @@
   // 1. de tabel komt van de server
   var soorten = {};
   try { soorten = JSON.parse(b.getAttribute("data-blok-soorten") || "{}"); } catch (e) {}
-  zeg("soorten-tabel aanwezig", Object.keys(soorten).length === 7, Object.keys(soorten).join(","));
+  // HIER STOND `=== 7`, en dat was een getal dat de sprint drie keer heeft ingehaald: met het
+  // codeblok, de tabel en de embed erbij zijn het er tien, en deze check stond dus al op ✗ FOUT
+  // voordat iemand er iets aan deed. Precies de "reference, don't copy"-val — een tweede kopie
+  // van een feit dat elders woont. Wat deze check WIL weten is of de tabel van de server komt en
+  // of de soorten erin zitten die hij hierna gebruikt.
+  var nodig = ["h4", "ul", "blockquote"];
+  var mist = nodig.filter(function (t) { return !soorten[t]; });
+  zeg("soorten-tabel aanwezig", Object.keys(soorten).length > 0 && mist.length === 0,
+      Object.keys(soorten).length + " soorten" + (mist.length ? ", mist: " + mist : ""));
 
   // 2. elk blok heeft een greep, en die telt niet mee als tekst
   var blok0 = b.querySelector(":scope > .wb");
@@ -96,6 +104,23 @@
   var kloon = b.cloneNode(true);
   kloon.querySelectorAll("[data-chrome]").forEach(function (g) { g.remove(); });
   zeg("geen chrome in de opgeslagen HTML", kloon.innerHTML.indexOf("wb-greep") < 0);
+
+  // 7. het afgeleide blok (feiten/backlinks): het TOONT, het bewaart niet
+  var afg = b.querySelector("[data-blok='facts']");
+  zeg("afgeleid blok staat er", !!afg);
+  if (afg) {
+    // De browser mag de caret hier niet in zetten: wat erin staat is uitvoer die bij elk lezen
+    // opnieuw wordt berekend, dus typen erin verdampt bij het opslaan.
+    zeg("afgeleid blok is niet bewerkbaar", afg.isContentEditable === false);
+    zeg("afgeleid blok draagt zijn bron", afg.getAttribute("data-blok-bron") === "{{facts}}");
+    zeg("afgeleid blok heeft een greep", !!afg.querySelector(".wb-greep"));
+    // DE VORM DIE STUK WAS: een formulier met een verborgen veld. `<input>` heeft geen eindtag.
+    zeg("het formulier staat er ook echt", !!afg.querySelector("input[type='hidden']"));
+    // En de pas mag hem niet omdopen tot alinea, zoals hij met een kale <h4> wél doet.
+    NV.blokNormaliseer(b);
+    zeg("de pas laat het afgeleide blok met rust",
+        b.querySelector("[data-blok='facts']") === afg, "soort: " + afg.dataset.blok);
+  }
 
   console.table(uit);
   console.log(uit.every(function (r) { return r.uitslag === "✓"; })
