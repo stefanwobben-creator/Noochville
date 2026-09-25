@@ -613,8 +613,16 @@
 .nu .att-body th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
 .nu .att-body td{border-bottom-color:var(--nu-border-subtle)}
 
+/* HET OPLICHTENDE BLOK (25 september 2026). De oude laag gebruikt `--cream-2`, een warme
+   crèmetint die in deze huisstijl niet bestaat; `--nu-bg-alt` is hier de zachte vlakvulling.
+   Vierkante hoeken, zoals overal in deze laag. */
+.nu .wiki-body.wiki-aan .wb{border-radius:0}
+.nu .wiki-body.wiki-aan .wb:hover{background:var(--nu-bg-alt)}
 /* DE SLEEP-TOESTANDEN (25 september 2026). `--cream-2` en `--green` bestaan in deze huisstijl
-   niet; `--nu-bg-alt` is de zachte vlakvulling en `--nu-accent` de accentkleur. */
+   niet; `--nu-bg-alt` is de zachte vlakvulling en `--nu-accent` de accentkleur.
+   NA DE HOVER-REGEL HIERBOVEN, en dat is geen willekeur: tijdens het slepen hover je ook. De
+   achtergrond is in beide gevallen `--nu-bg-alt`, dus dat botst niet; wat telt is dat de
+   richtingsstreep van het slepen erbij komt en niet eronder verdwijnt. */
 .nu .wb.over-boven,.nu .wb.over-onder{background:var(--nu-bg-alt)}
 .nu .wb.over-boven{box-shadow:inset 0 2px 0 0 var(--nu-accent)}
 .nu .wb.over-onder{box-shadow:inset 0 -2px 0 0 var(--nu-accent)}
