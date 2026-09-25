@@ -362,6 +362,34 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
 # vervanging moest opheffen.
 
+def _bijlage_form(a, csrf_token: str, can_edit: bool) -> str:
+    """Een bestand aan deze pagina hangen.
+
+    HETZELFDE FORMULIER ALS IN MESSAGES, en met opzet: dezelfde `accept` uit dezelfde allowlist,
+    dezelfde limiet-regel eronder, dezelfde `.qadd`-uitklapper. Een tweede vorm voor dezelfde
+    handeling is precies hoe twee schermen uit elkaar gaan lopen.
+
+    WAT ER GEBEURT is geen mysterie en staat er ook: de upload zet een regel onderaan de tekst.
+    Er is geen bijlagelijst — de body is de enige bron van waarheid, dus wat je uploadt zie je
+    terug als blok in de pagina, en weghalen doe je door die regel te verwijderen."""
+    from nooch_village import channels
+    if not can_edit or not csrf_token:
+        return ""
+    return (f"<details class='qadd'><summary>&#128206; Add a file</summary>"
+            f"<form method='post' action='/action' class='qadd-form' "
+            f"enctype='multipart/form-data'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"<input type='hidden' name='action' value='wiki_bijlage'>"
+            f"<label class='att-lbl' for='wiki-file-{_e(a.id)}'>File</label>"
+            f"<input id='wiki-file-{_e(a.id)}' type='file' name='file' required "
+            f"accept='{_e(','.join(sorted(channels.BIJLAGE_TYPES)))}'>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Upload</button>"
+            f"<span class='muted'>max 20 MB &middot; lands as a block at the end of the page"
+            f"</span></div></form></details>")
+
+
 def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
                *, tab: str = "notes") -> str:
     """Alle paginametadata als ÉÉN element, in het vocabulaire dat de app al heeft.
@@ -658,7 +686,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # DE HISTORIE ZIT IN HET METADATA-BLOK, niet meer los onder de tekst: het is metadata over de
     # pagina, en dat hoort bij de rest ervan.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab="notes")
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{body}{voorstel}"
+    bijlage = _bijlage_form(a, csrf_token, can_edit)
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{meta}{body}{bijlage}{voorstel}"
             f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

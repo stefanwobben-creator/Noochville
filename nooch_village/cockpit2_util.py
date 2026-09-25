@@ -282,11 +282,19 @@ _STREEP_RE = re.compile(r"^-{3,}$")
 #: EEN REGEL DIE ALLEEN EEN LINK IS, is een embed. Twee vormen: een kale url, of de link zoals
 #: `_link` hem hierboven al heeft omgezet — die substitutie draait VÓÓR de regellus, dus op dit
 #: punt staat er geen markdown meer maar een `<a>`.
-_EMBED_KAAL_RE = re.compile(r"^(https?://\S+)$")
+#: Het voorvoegsel van een bestand dat op ONZE server staat. Eén plek, want `_md`, de weg terug
+#: en de embed-regex moeten het over hetzelfde hebben — zou dat uiteenlopen, dan rendert een
+#: bijlage wel en komt hij niet terug uit de rondgang (of andersom).
+EIGEN_BESTAND = "/wiki-bestand/"
+
+#: Een kale url op een eigen regel. `/…` hoort erbij sinds eigen uploads bestaan; `//…` niet
+#: (protocol-relatief, zie `_link`).
+_EMBED_KAAL_RE = re.compile(r"^(https?://\S+|/wiki-bestand/\S+)$")
 #: `[^<]*` EN NIET `.*` voor het label: met een gulzige punt matcht `<a>een</a> <a>twee</a>` als
 #: één link met "een</a> <a …>twee" als tekst, en dan wordt een regel met twee links een embed.
 _EMBED_LINK_RE = re.compile(
-    r"^<a( data-beeld)? href='(https?://[^']+)' target='_blank' rel='noopener'>([^<]*)</a>$")
+    r"^<a( data-beeld)? href='(https?://[^']+|/wiki-bestand/[^']+)' target='_blank' "
+    r"rel='noopener'>([^<]*)</a>$")
 
 #: url-kenmerk → (soort, herkomstlabel). DE VOLGORDE IS DE REGEL: een YouTube-link heeft geen
 #: extensie, en een Drive-bestand evenmin, dus de hosts gaan vóór de extensies en Drive gaat
@@ -427,7 +435,19 @@ def _md(text: str, blokken: bool = False) -> str:
     def _link(m):
         beeld, label, url = m.group(1), m.group(2), m.group(3)
         # `label` is al ge-escaped; de url is gevalideerd op schema.
-        if url.startswith("http://") or url.startswith("https://"):
+        # EIGEN BESTANDEN ZIJN ROOT-RELATIEF (26 september 2026). Een upload op een wiki-pagina
+        # wordt `/wiki-bestand/<pagina>/<naam>`; de host hoort niet in de inhoud te staan. Zonder
+        # deze tak weigert de renderer hem, want hij eist een http(s)-schema.
+        #
+        # ALLEEN DIT VOORVOEGSEL, en niet "elk pad dat met een slash begint". Dat laatste was mijn
+        # eerste versie, en twee bestaande toetsen wezen hem terecht af: `_md` weigert een intern
+        # pad BEWUST (`test_link_niet_http_geen_link_failclosed`, `test_een_link_zonder_http_
+        # wordt_geen_embed`). Gemeten op prod: nul pagina's hebben vandaag een relatieve
+        # markdown-link, dus de brede variant had niets opgelost en wel een fail-closed-houding
+        # opgegeven voor alles wat morgen getypt wordt. Dit is het kleinste gat dat de eis dekt.
+        #
+        # `//evil.nl/…` valt er vanzelf buiten: dat begint niet met `/wiki-bestand/`.
+        if url.startswith(EIGEN_BESTAND) or url.startswith(("http://", "https://")):
             # HET UITROEPTEKEN REIST MEE ALS `data-beeld`. Het is INTENTIE, geen url-eigenschap:
             # een Drive-link naar een foto heeft geen extensie, dus zonder dit zou
             # `![foto](drive-url)` als een drive-kaart renderen en na één bewerkronde zijn
@@ -836,7 +856,7 @@ class _BronParser(_HTMLParser):
             doel = self._doel()
             if ref:
                 doel.append(f"[[{ref}]]")
-            elif href.startswith(("http://", "https://")):
+            elif href.startswith(("http://", "https://")) or href.startswith(EIGEN_BESTAND):
                 # BINNEN EEN EMBED komt een link waarvan de tekst zijn eigen url is terug als
                 # KALE url. Anders typt iemand `https://x` en staat er na één bewerkronde
                 # `[https://x](https://x)` in de bron — een andere tekst dan hij schreef.
@@ -849,8 +869,13 @@ class _BronParser(_HTMLParser):
                 else:
                     doel.append(("!" if beeld else "") + f"[{label}]({href})")
             else:
-                # DEZELFDE POORT ALS `_md`, EEN STAP EERDER. `_md` weigert al een link zonder
-                # http(s)-schema, dus een `javascript:`-url zou toch als platte tekst renderen —
+                # DEZELFDE POORT ALS `_md`, EEN STAP EERDER — en dus ook hetzelfde ene
+                # voorvoegsel voor eigen bestanden (`EIGEN_BESTAND`). Zonder die
+                # tak hierboven at de weg terug elke geüploade bijlage op: de kaart rendert, en
+                # bij de eerste bewerkronde staat er alleen nog de bestandsnaam als platte tekst.
+                #
+                # `_md` weigert een link zonder http(s)-schema, dus een `javascript:`-url zou
+                # toch als platte tekst renderen —
                 # maar hij zou dan wél in de OPSLAG staan, klaar voor de dag waarop iemand een
                 # tweede renderer schrijft die minder streng is. Hier houdt alleen de tekst over.
                 doel.append(label)

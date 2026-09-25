@@ -6151,6 +6151,43 @@ def make_handler(data_dir: str, csrf_token: str,
                     _mt, _inline = _t
                 self._send_bijlage(_data, _mt, _b.get("name", "bestand"), inline=_inline)
                 return
+            if path.startswith("/wiki-bestand/"):
+                # DE POORT STAAT ER METEEN OP, en dat is de les van `/file`: die route stuurde
+                # jarenlang projectbestanden zonder één leescheck en op prod lagen er 48 open.
+                #
+                # WAT DE POORT HIER IS. Lezen van een wiki-pagina is "ingelogd = mag" — dat is de
+                # vastgelegde keuze in CLAUDE.md zolang alles achter login zit, en dit bestand
+                # hangt aan die pagina. Strenger maken zou betekenen dat de bijlage minder
+                # leesbaar is dan de tekst die ernaar verwijst; dat is geen poort maar een gat op
+                # een andere plek. De SESSIE-check hierboven heeft dat al afgedwongen — komt die
+                # ooit te vervallen, dan is dit de plek waar een eigen regel hoort.
+                if username is None:
+                    self._send("<p>Not found</p>", 404); return       # bestaan is ook informatie
+                # TWEE SEGMENTEN, ALLEBEI ONTDAAN VAN HUN PAD. `basename` is de enige veilige
+                # samenvoeging: `..%2F..%2Fetc%2Fpasswd` wordt daarmee `passwd` in plaats van een
+                # uitstapje uit de map.
+                _delen = [d for d in path[len("/wiki-bestand/"):].split("/") if d]
+                if len(_delen) != 2:
+                    self._send("<p>File not found</p>", 404); return
+                _aid = os.path.basename(urllib.parse.unquote(_delen[0]))
+                _naam = os.path.basename(urllib.parse.unquote(_delen[1]))
+                # HET BESTAND MOET BIJ DEZE PAGINA HOREN. Eén map per artefact, dus dat is een
+                # vergelijking en geen tweede administratie — precies zoals de body de enige bron
+                # van waarheid blijft.
+                if st.att.get(_aid) is None:
+                    self._send("<p>File not found</p>", 404); return
+                _soort = channels.bijlage_type(_naam)
+                if _soort is None:
+                    # Van de lijst af (die kan krimpen): dan niet alsnog serveren.
+                    self._send("<p>File not found</p>", 404); return
+                _full = os.path.join(data_dir, "attachments", "wiki", _aid, _naam)
+                if not os.path.exists(_full):
+                    self._send("<p>File not found</p>", 404); return
+                with open(_full, "rb") as fh:
+                    _data = fh.read()
+                _mt, _inline = _soort
+                self._send_bijlage(_data, _mt, _naam, inline=_inline)
+                return
             if path == "/file":
                 # DE POORT DIE HIER NIET STOND. Deze route zocht het project op, pakte de bijlage
                 # en stuurde de bytes — zonder één leescheck. Elke ingelogde gebruiker kon zo elk
@@ -6525,6 +6562,45 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") == "wiki_bijlage":
+                    # AUTHZ: rolvervuller of Circle Lead — `_artefact_gate`, dezelfde poort als
+                    # het bewerken van de tekst. Dat is geen keuze maar een gevolg: deze upload
+                    # SCHRIJFT een regel in de body, dus hij ís de tekst bewerken. Een ruimere
+                    # poort zou betekenen dat wie niet mag schrijven toch de pagina kan wijzigen.
+                    _st = _Stores(data_dir)
+                    _aid = fields.get("aid", "")
+                    _a = _st.att.get(_aid)
+                    if _a is None:
+                        self._send("Page not found", 404); return
+                    _fout = _artefact_gate(_a.anchor, username, _st)
+                    if _fout:
+                        self._send(_fout, 403); return
+                    # DEZELFDE CONTROLE, DEZELFDE LIMIET, DEZELFDE LIJST als de andere twee
+                    # uploads. Een eigen variant zou na één wijziging ruimer of strenger zijn dan
+                    # de rest zonder dat iemand dat besloot.
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:
+                        self._send(err[0], err[1]); return
+                    fname, blob = files["file"]
+                    safe = _wiki_bijlage_naam(fname)
+                    if channels.bijlage_type(safe) is None:
+                        self._send("Dit bestandstype kan niet worden bijgevoegd", 415); return
+                    opgeslagen = uuid.uuid4().hex[:8] + "_" + safe
+                    rel = os.path.join("attachments", "wiki", _aid, opgeslagen)
+                    full = os.path.join(data_dir, rel)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "wb") as fh:
+                        fh.write(blob)
+                    # DE REGEL AAN HET EIND VAN DE BODY. Eén lege regel ertussen, zodat het een
+                    # eigen blok wordt en niet aan de laatste alinea plakt.
+                    regel = _wiki_bijlage_regel(_aid, opgeslagen, os.path.basename(fname or safe))
+                    oud = (_a.body or "").rstrip("\n")
+                    _st.att.update(_aid, body=(oud + "\n\n" + regel) if oud else regel,
+                                   actor_id=_web_actor_id(username, _st), actor_type="person",
+                                   governance_ref=(f"domain:{_a.domain}" if getattr(_a, "domain", "")
+                                                   else f"role:{_a.anchor}"),
+                                   change_note=f"bijlage toegevoegd: {safe}")
+                    self._redirect(fields.get("next", "/"), "📎 bijlage toegevoegd"); return
                 if fields.get("action") == "kanaal_bijlage":
                     # AUTHZ: iedereen-ingelogd die in dit kanaal mag SCHRIJVEN. Dat is dezelfde
                     # voorwaarde als het antwoordveld (`kan_antwoorden`), en bewust geen tweede
@@ -6648,6 +6724,31 @@ def _match_ladder() -> str:
 # `staging` zijn in #516 verwijderd, dus er is niets meer om naartoe te posten. Zie de tak in
 # do_POST voor waarom ze niet gewoon vervallen zijn.
 _KB_UPLOAD_WEG = ("kb_intake_pdf", "kb_atoom_ref_pdf", "kb_bron_add")
+
+
+#: Tekens die een markdown-link breken. Een bestandsnaam met een `)` erin sluit de link vroeg af
+#: en de rest van de regel blijft als tekst staan; met een `]` gaat het label stuk. We MUNTEN de
+#: opgeslagen naam zelf, dus we kunnen hem gewoon veilig maken in plaats van te hopen.
+_BIJLAGE_ONVEILIG = str.maketrans({c: "_" for c in "()[]<>\"'`|\\ "})
+
+
+def _wiki_bijlage_naam(rauw: str) -> str:
+    """De naam waaronder een upload op schijf komt: alleen tekens die een url en een
+    markdown-link heel laten."""
+    kaal = os.path.basename(rauw or "bestand").translate(_BIJLAGE_ONVEILIG)[:120]
+    return kaal or "bestand"
+
+
+def _wiki_bijlage_regel(aid: str, opgeslagen: str, label: str) -> str:
+    """De markdown-regel die in de BODY komt. Dat is de hele administratie: er is geen tweede
+    store en geen bijlagelijst, want de body is de enige bron van waarheid (eis uit het
+    ontwerpdocument van 25 september).
+
+    HET PAD EN GEEN QUERY. `_embed_soort` knipt een `?` eraf vóór hij naar de extensie kijkt, dus
+    met `?f=x.pdf` was de soort "link" geweest en had die functie aangepast moeten worden. Zo
+    werkt het embed-blok uit de bloklaag-sprint ongewijzigd."""
+    toon = (label or opgeslagen).replace("[", "(").replace("]", ")")
+    return f"[{toon}](/wiki-bestand/{aid}/{opgeslagen})"
 
 
 def _upload_max_bytes() -> int:
