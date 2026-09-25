@@ -44,3 +44,32 @@ die je tussen de content kunt plaatsen. "De inhoud is leidend, nu is type inform
 - Volgorde: eerst het blokmenu (klein, precies, laag risico), dan de metadata-verplaatsing (raakt
   `render_pagina`/`_meta_blok`, net vorige ronde gebouwd — dus voorzichtig met dubbel renderen).
 - Screenshot van het resultaat hoort bij het rapport, zoals altijd.
+
+## Aanvulling: het is niet alleen volgorde, het is ook uitstraling (25 sept, zelfde dag)
+
+Stefans reactie op het bovenstaande: "het is niet alleen omdraaien, het is ook de layout — je hebt
+een blok, een witruimte, weer een blok, en dan voelt het niet als een pagina."
+
+Geverifieerd waar dat vandaan komt: `_feiten_sectie` en `_backlink_sectie` (`views/wiki.py:248-304`)
+renderen hun inhoud als `<div class='card muted'>...</div>` — een element met rand, achtergrond en
+eigen padding (`.card` in `nooch.css:61`, onder `.nu` een 2px zwarte rand). De sectie zelf staat in
+een `.c2-sec` met `margin:1.1rem 0`. Gewone tekst (alinea's, koppen uit het blokmenu) heeft geen
+van beide — geen rand, geen eigen achtergrondvlak, geen vaste marge. Het verschil zelf is het
+probleem: zodra een Feit of een Backlink tussen de tekst komt te staan (waar #595 dat al mogelijk
+maakt), botst een gerande witte doos met vlakke, doorlopende tekst — en dat blijft zo, ongeacht
+waar op de pagina het staat.
+
+**Wat dit voor de bouw betekent:** een blok dat inline in de leesstroom staat (een Feit, een
+Backlink, straks een tabel-achtige structuur) hoort dezelfde ritmiek te hebben als een alinea —
+geen `.card`-rand, geen eigen achtergrondkleur, geen extra marge bovenop wat elk ander blok al
+krijgt. Onderscheid mag er zijn (een Feit is herkenbaar als Feit), maar via typografie of een dunne
+accentlijn, niet via een losstaand kader. Dit raakt dus niet alleen de metadata-verplaatsing uit
+het stuk hierboven, maar ook hoe Facts en Backlinks er zelf uitzien zodra ze een blok worden in het
+menu (punt 1 hierboven) — anders verplaats je het "blok, witruimte, blok"-gevoel alleen maar.
+
+Wat "klaar" hier extra betekent, boven op de drie punten hierboven:
+- Facts en Backlinks krijgen, wanneer ze als blok in de leesstroom staan, geen `.card`-omranding —
+  ze delen de marge/ritmiek van de omliggende alinea's.
+- Eén keer geverifieerd op een pagina met echt gemengde inhoud (tekst → feit → tekst → backlink),
+  niet alleen op de huidige "alles onderaan"-indeling: leest dat als één pagina, of blijft het
+  zichtbaar in stukken geknipt?
