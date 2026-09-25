@@ -55,3 +55,11 @@ materiaal_memo.json.lock
 *.tgz
 *.tar
 backups/
+
+# WERKMATERIAAL IN claude/, GEEN CODE. In die map staan twee dingen door elkaar: de
+# browser-harnessen (die horen in de repo, want ze meten de echte view-code) en losse
+# werkbestanden die er tijdens een sessie belanden. Op 25 september 2026 gingen de negen
+# sticker-GIF's hieronder mee in een commit over feiten en backlinks — 10,7 MB binair in een PR
+# waar ze niets mee te maken hadden, door een `git add -A … claude` in plaats van per bestand.
+# De regel eronder is de tweede verdediging; de eerste is: noem je bestanden bij naam.
+claude/stickers_22sept/

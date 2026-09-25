@@ -47,7 +47,8 @@ _GEEN_TEKST = "<p class='muted'>This page has no text yet.</p>"
 _TAAK_RE = re.compile(r"<li>\[([ xX])\] ")
 
 
-def _body_html(body: str, pags: list, blokken: bool = False) -> str:
+def _body_html(body: str, pags: list, blokken: bool = False,
+               secties: dict[str, str] | None = None) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
 
     De substitutie draait NÁ `_md` (dus over ge-escapete HTML) en alleen hier — `_md` zelf wordt
@@ -107,7 +108,65 @@ def _body_html(body: str, pags: list, blokken: bool = False) -> str:
     # tools op prod.
     if blokken:
         html = _TOOLREF_RE.sub(lambda m: _tool_kaart(m, pags), html)
+        # HET AFGELEIDE BLOK, als laatste. Feiten en backlinks wonen niet in de body: een
+        # markering wijst alleen de PLEK aan, de inhoud komt van de aanroeper. Alleen in de
+        # blokstand, want buiten die stand bestaan er geen blokken om dit aan op te hangen — en
+        # een sectie tussen twee `<br>`'s is geen blok maar een ongeluk.
+        html = _MARKER_BLOK_RE.sub(lambda m: _afgeleid_blok(m.group(1), secties), html)
+    else:
+        # BUITEN DE BLOKSTAND GEEN SECTIE MAAR EEN LABEL. De Notes-tab van `/node` rendert plat:
+        # daar bestaan geen blokken, en een `.c2-sec` met een eigen kopje tussen twee `<br>`'s is
+        # geen blok maar een ongeluk. Wat er WEL moet gebeuren is de accolades wegwerken — rauwe
+        # `{{facts}}` op het scherm is het slechtste van twee werelden.
+        html = _MARKER_PLAT_RE.sub(_afgeleid_label, html)
     return html
+
+
+#: Een markering die alleen op zijn regel staat, in de platte stand: aan het begin of na een
+#: `<br>`, en aan het eind of vóór een `<br>`. Dezelfde grens als hierboven — middenin een zin
+#: blijft het tekst.
+_MARKER_PLAT_RE = re.compile(r"(?<=<br>)\{\{([a-z]+)\}\}(?=<br>|$)|^\{\{([a-z]+)\}\}(?=<br>|$)")
+
+
+def _afgeleid_label(m) -> str:
+    naam = m.group(1) or m.group(2)
+    if naam not in wiki.AFGELEID:
+        return m.group(0)
+    return f"<span class='chip muted'>{_e(wiki.AFGELEID[naam])}</span>"
+
+
+#: Een blok dat ALLEEN uit een markering bestaat. Zelfde vorm als `_TOOLREF_RE` hierboven.
+_MARKER_BLOK_RE = re.compile(
+    r"<div class='wb' data-blok='p'>\{\{([a-z]+)\}\}</div>")
+
+
+def _afgeleid_blok(naam: str, secties: dict[str, str] | None) -> str:
+    """De markering wordt het blok; de inhoud komt van buiten.
+
+    DRIE DINGEN ZITTEN HIER IN ELKAAR:
+
+    `data-blok-bron` draagt de BRON. Alles binnen dit blok is uitvoer die bij elk lezen opnieuw
+    wordt berekend; kwam dat terug in de opslag, dan stonden de feiten na één bewerkronde als
+    platte tekst in de pagina — twee waarheden, en de tweede veroudert stil. `_md_naar_bron`
+    leest het attribuut en slaat de rest over.
+
+    `contenteditable='false'` maakt er een ondeelbaar ding van. Zonder dat zet de browser de
+    caret tussen de kaartjes en typt de lezer in iets dat bij het opslaan verdampt.
+
+    GEEN EIGEN CSS-KLASSE. De sectie brengt zijn eigen vorm mee (`.c2-sec`, `.card`), en het
+    omhulsel is hetzelfde `.wb` als elk ander blok — inclusief de greep, zodat je hem kunt
+    verplaatsen. Een `wb-afgeleid` zou een klasse zijn zonder gemeten aanleiding, en dat is precies
+    wat de huisstijl-regel verbiedt.
+
+    ZONDER SECTIE EEN LABEL, GEEN ACCOLADES. De Notes-tab van `/node` heeft geen `st` om feiten
+    mee op te halen; rauwe `{{facts}}` op het scherm is dan het slechtste van twee werelden."""
+    if naam not in wiki.AFGELEID:
+        return f"<div class='wb' data-blok='p'>{{{{{_e(naam)}}}}}</div>"
+    inhoud = (secties or {}).get(naam)
+    if not inhoud:
+        inhoud = (f"<div class='card muted'>{_e(wiki.AFGELEID[naam])}</div>")
+    return (f"<div class='wb' data-blok='{_e(naam)}' "
+            f"data-blok-bron='{{{{{_e(naam)}}}}}' contenteditable='false'>{inhoud}</div>")
 
 
 #: Een blok dat ALLEEN uit één opgeloste verwijzing bestaat.
@@ -336,14 +395,15 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool) -> str:
             f"Move</button></form>")
 
 
-def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool) -> str:
+def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
+                 secties: dict[str, str] | None = None) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek."""
     # DE BLOKSTAND STAAT HIER AAN EN NERGENS ANDERS (brok 1, 22 september 2026). Dit is het
     # scherm waar je bewerkt; de Notes-tab op `/node` toont dezelfde tekst read-only en heeft de
     # blokken niet nodig. Visueel verandert er niets — een `<div>` op de plek van een `<br>`-regel
     # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
-    inhoud = _body_html(a.body, pags, blokken=True) if a.body else _GEEN_TEKST
+    inhoud = _body_html(a.body, pags, blokken=True, secties=secties) if a.body else _GEEN_TEKST
     # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
     # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
@@ -490,16 +550,29 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
               if can_edit else "")
            + f"</div></div>")
 
-    body = _wiki_editor(a, pags, csrf_token, can_edit)
+    # DE TWEE AFGELEIDE SECTIES. Ze worden altijd gerenderd, maar landen op één van twee
+    # plekken: in de tekst als de schrijver er een markering neerzette, anders eronder zoals ze
+    # altijd stonden. Nooit allebei — twee keer dezelfde feiten op één scherm is precies de
+    # verwarring die deze stap opruimt.
+    secties = {"facts": _feiten_sectie(a, st, csrf_token, can_edit),
+               "backlinks": _backlink_sectie(a, pags)}
+    geplaatst = wiki.markers(a.body)
+
+    def _onder(k: str) -> str:
+        """Leeg zodra de schrijver de sectie zelf in zijn tekst heeft gezet."""
+        return "" if k in geplaatst else secties[k]
+
+    body = _wiki_editor(a, pags, csrf_token, can_edit, secties)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
     # schrijf-sessie (publieke view), dan ook geen voorstelknop.
     voorstel = "" if can_edit else (_voorstel_form(st, a, csrf_token) if csrf_token else "")
     hist = _artefact_versions_html(a)
 
+    # DE VOLGORDE BLIJFT ZOALS HIJ WAS: feiten, besluiten, backlinks. Ze in één klap achteraan
+    # plakken scheelt twee regels en verschuift "Decisions logged" naar boven de feiten — een
+    # wijziging die niemand vroeg, op een scherm dat verder niets van deze stap hoort te merken.
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{voorstel}{hist}"
-            f"{_feiten_sectie(a, st, csrf_token, can_edit)}"
-            f"{_besluiten_sectie(a, st, persoon)}"
-            f"{_backlink_sectie(a, pags)}</div>")
+            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 

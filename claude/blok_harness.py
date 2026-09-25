@@ -53,8 +53,25 @@ class _NepPagina:
         "> een citaat\n\n"
         "1. genummerd\n2. nog een\n\n"
         "---\n\n"
+        # HET AFGELEIDE BLOK. Staat hier omdat het het enige blok is dat FORMULIEREN draagt, en
+        # juist die vorm brak: een `<input>` heeft geen eindtag, dus de chrome-teller in
+        # `_md_naar_bron` liep op en at de rest van de alinea op.
+        "{{facts}}\n\n"
         "De laatste alinea.\n"
     )
+
+
+#: Wat de echte pagina uit `meta["feiten"]` haalt, hier met de hand — inclusief het verborgen
+#: veld en de knop, want dat is de vorm die stuk was.
+_SECTIES = {
+    "facts": ("<div class='c2-sec'><h3>Facts</h3>"
+              "<div class='card'><div class='ptitle'>Een feit met grond</div>"
+              "<span class='chip'>&#9679; chronicle</span></div>"
+              "<details class='qadd'><summary>+ Add fact</summary>"
+              "<form method='post' action='/action' class='qadd-form'>"
+              "<input type='hidden' name='csrf' value='harness-token'>"
+              "<button class='btn ok' type='submit'>Add</button></form></details></div>"),
+}
 
 
 def bouw(map_: pathlib.Path) -> pathlib.Path:
@@ -64,7 +81,7 @@ def bouw(map_: pathlib.Path) -> pathlib.Path:
     inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'>"
              f"<h1>&#128196; <span id='wiki-titel' class='wiki-titel'>{_NepPagina.title}</span></h1>"
              f"<div class='wiki-kopbalk'>{start}</div>"
-             f"{_wiki_editor(_NepPagina, [], 'harness-token', True)}"
+             f"{_wiki_editor(_NepPagina, [], 'harness-token', True, _SECTIES)}"
              f"</div></div>")
     (map_ / "index.html").write_text(_page("Browsercheck", inner), encoding="utf-8")
 
