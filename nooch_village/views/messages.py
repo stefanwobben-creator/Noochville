@@ -16,6 +16,7 @@ enige nieuwe familie is `msg-`, voor de tweekoloms-indeling (kanalenlijst links,
 from __future__ import annotations
 
 import logging
+import re
 import urllib.parse
 
 from nooch_village import channels
@@ -353,6 +354,100 @@ def _bijlagen_html(e: dict, kanaal: str) -> str:
 #: Zoveel seconden tussen twee berichten van dezelfde persoon tellen nog als één blok.
 #: Vijf minuten: lang genoeg voor iemand die zijn zin in drieën typt, kort genoeg dat een
 #: reactie van een uur later zijn eigen kop en tijd terugkrijgt.
+#: ── Een link in een bericht wordt vanzelf klikbaar (26 september 2026) ──────────────────
+#:
+#: HIER EN NIET IN `_md`. Die functie rendert ook de wiki, de reacties en de projectfeed, en daar
+#: bestaat `[tekst](url)` al als bewuste syntax. In een chatbericht typt niemand markdown — je
+#: plakt een adres — en daar hoort het gewoon te werken.
+#:
+#: EEN CURATED TLD-LIJST EN GEEN `[a-z]{2,}`. Dat laatste is de voor de hand liggende regex en hij
+#: is fout: dan worden `bestand.txt`, `index.html`, `script.js`, `versie.1` en het Nederlandse
+#: `o.a.` allemaal links. Fail-closed is hier hetzelfde principe als bij `_md`, dat een url zonder
+#: http(s)-schema bewust NIET linkt: een adres dat we niet zeker herkennen, blijft tekst.
+#:
+#: LANGSTE EERST. Regex-alternatie pakt de eerste die past, dus met `(co|com)` matcht `x.com` als
+#: `x.co` plus een losse `m`. Op lengte sorteren houdt dat heel; de `(?![a-z0-9-])` erachter is de
+#: tweede verdediging.
+_TLDS = (
+    "com", "nl", "be", "org", "net", "earth", "io", "eu", "de", "fr", "uk", "dev", "app",
+    "ai", "info", "shop", "store", "tech", "design", "studio", "agency", "blog", "xyz", "nu",
+)
+_TLD_ALT = "|".join(sorted(_TLDS, key=len, reverse=True))
+
+#: Drie vormen, in deze volgorde: met schema, met `www.`, en een kaal domein.
+#:
+#: `(?<![\w@.:/-])` HOUDT DRIE DINGEN BUITEN DE DEUR. Een e-mailadres (`stefan@nooch.earth` mag
+#: geen link naar nooch.earth worden), het midden van een woord, en de rest van een url die al
+#: gematcht is. De `:` en `/` zitten erbij zodat `https://x.nl` niet óók nog als kaal domein
+#: `x.nl` wordt herkend op een tweede positie.
+#:
+#: `[^\s<]` EN NIET `\S`: na `_e()` staat er geen `<` meer in de tekst, maar mocht er ooit iets
+#: langs de escaper glippen dan stopt de url in elk geval bij een tag-begin.
+_LINKIFY_RE = re.compile(
+    r"(?<![\w@.:/-])("
+    r"https?://[^\s<]+"
+    r"|www\.[^\s<]+"
+    r"|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:" + _TLD_ALT + r")(?![a-z0-9-])(?:[/?#][^\s<]*)?"
+    r")",
+    re.I,
+)
+
+#: Wat er NIET bij de url hoort als hij aan het eind van een zin staat. De HTML-entiteiten staan
+#: er ook in: na `_e()` is een afsluitend aanhalingsteken `&#x27;` en een dubbele `&quot;`, en die
+#: zou `[^\s<]+` anders mee de url in trekken.
+_STAART = (".", ",", ";", ":", "!", "?", "…", "]", "}", "&quot;", "&#x27;", "&amp;", "&gt;")
+
+
+def _knip_staart(url: str) -> str:
+    """Leestekens aan het eind horen bij de ZIN, niet bij het adres.
+
+    "kijk op nooch.earth." linkt naar `nooch.earth`, niet naar `nooch.earth.` — dat laatste is een
+    adres dat niet bestaat.
+
+    DE HAAKJESTELLING IS GEEN OVERDRIJVING. Een url als
+    `https://nl.wikipedia.org/wiki/Schoen_(kleding)` eindigt echt op een `)`, en die blind
+    afknippen breekt hem. Alleen wegknippen wat niet zélf geopend is.
+
+    ENTITEITEN VÓÓR LOSSE TEKENS, want `&#x27;` eindigt op een `;`: knip je dat teken eerst weg,
+    dan houd je een kapotte entiteit over."""
+    vorig = None
+    while url and url != vorig:
+        vorig = url
+        for staart in _STAART:
+            if url.endswith(staart):
+                url = url[: -len(staart)]
+                break
+        else:
+            if url.endswith(")") and url.count(")") > url.count("("):
+                url = url[:-1]
+    return url
+
+
+def linkify(veilige_tekst: str) -> str:
+    """Maak adressen in AL GE-ESCAPETE tekst klikbaar.
+
+    DE VOLGORDE IS DE VEILIGHEID, en het is dezelfde als in `_md`: eerst escapen, dan pas linken.
+    Andersom zou een bericht met `<script>` erin door deze functie heen gaan en daarna pas
+    ontsmet worden — of erger, niet meer. Deze functie escapet zelf niets; ze krijgt uitvoer van
+    `_e()` en voegt er tags aan toe.
+
+    Een `&` in een querystring staat er op dit punt al als `&amp;`, en dat hoort zo: in een
+    `href`-attribuut is dat de correcte schrijfwijze van één ampersand.
+
+    Zonder schema wordt het `https://` en niet het kale adres: zet je `www.nooch.earth` in een
+    `href`, dan leest de browser dat als een RELATIEF pad en land je op
+    `village.nooch.earth/messages/www.nooch.earth`."""
+    def vervang(m):
+        ruw = _knip_staart(m.group(1))
+        if not ruw:
+            return m.group(1)
+        adres = ruw if ruw.lower().startswith(("http://", "https://")) else "https://" + ruw
+        staart = m.group(1)[len(ruw):]
+        return (f"<a href='{adres}' target='_blank' rel='noopener'>{ruw}</a>{staart}")
+
+    return _LINKIFY_RE.sub(vervang, veilige_tekst)
+
+
 _GROEP_S = 300
 
 
@@ -415,7 +510,10 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     cls = ("msg-item" + (" msg-item--ik" if van_mij else "")
            + (" msg-item--volg" if vervolg else "")
            + (" editor-inline" if gereedschap else ""))
-    tekst = f"<div class='msg-text'>{_e(e.get('text') or '')}</div>"
+    # ESCAPEN, DAN PAS LINKEN — in die volgorde, zie `linkify`. Het bericht blijft kale tekst
+    # zonder markdown; alleen een adres wordt aanklikbaar, want dat is wat iemand in een chat
+    # plakt zonder erbij na te denken.
+    tekst = f"<div class='msg-text'>{linkify(_e(e.get('text') or ''))}</div>"
     if gereedschap:
         tekst = _bewerk_veld(e, kanaal, csrf_token)
     return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
@@ -450,7 +548,13 @@ def _bewerk_veld(e: dict, kanaal: str, csrf_token: str) -> str:
             f"<label class='sr' for='msg-edit-{eid}'>Edit your message</label>"
             f"<textarea id='msg-edit-{eid}' name='tekst' rows='2'>"
             f"{_e(e.get('text') or '')}</textarea></div>")
-    return inline_edit(_e(e.get("text") or ""), veld, sleutel=e.get("id") or "",
+    # ÓÓK HIER LINKIFYEN. Dit is de tweede weergave van precies dezelfde tekst: bij je EIGEN
+    # bericht wordt `tekst` vervangen door dit bewerkveld, en `getoond` is wat je ziet zolang je
+    # niet bewerkt. Zou het hier ontbreken, dan is een link in andermans bericht wel klikbaar en
+    # in je eigen niet — hetzelfde bericht, twee gedragingen.
+    #
+    # DE TEXTAREA HIERBOVEN BLIJFT KAAL: daar bewerk je de BRON, en daar hoort een `<a>` niet in.
+    return inline_edit(linkify(_e(e.get("text") or "")), veld, sleutel=e.get("id") or "",
                        opslaan="msg_edit", verborgen=_msg_verborgen(e, kanaal, csrf_token),
                        toon_cls="msg-text")
 
