@@ -541,9 +541,16 @@ def _md(text: str, blokken: bool = False) -> str:
     dicht = BLOK_DICHT if blokken else ""
     out = []
     lijst = ""                       # "ul", "ol" of "" — welke lijst er open staat
+    teller = 0                       # het nummer van het huidige item, voor `<ol start=…>`
 
     def sluit_lijst():
         nonlocal lijst
+        # IN DE BLOKSTAND IS ER GEEN LIJST OM TE SLUITEN: elk item is zijn eigen blok en sluit
+        # zichzelf. Wat `lijst` daar bijhoudt is alleen of de VORIGE regel dezelfde lijstsoort
+        # was, voor de doorlopende nummering.
+        if lijst and blokken:
+            lijst = ""
+            return
         if lijst:
             out.append(f"</{lijst}>" + dicht)
             lijst = ""
@@ -641,12 +648,34 @@ def _md(text: str, blokken: bool = False) -> str:
         genummerd = _NUMMER_RE.match(kaal)
         soort = "ul" if kaal.startswith("- ") else ("ol" if genummerd else "")
         if soort:
+            tekst = genummerd.group(2) if genummerd else kaal[2:]
+            if blokken:
+                # ÉÉN BOLLETJE IS ÉÉN BLOK (26 september 2026). Een reeks `- `-regels werd één `<ul>`
+                # in één `.wb`: op prod leverde dat acht pagina's op met blokken van drie tot zeven
+                # regels onder één greep — je kon zo'n lijst alleen als geheel verplaatsen of
+                # weggooien, nooit één regel eruit. Dat botst met het model waar deze editor op
+                # mikt, waar elk bolletje zijn eigen blok is.
+                #
+                # `start` HOUDT DE NUMMERING HEEL. Los van elkaar begint elke `<ol>` weer bij 1;
+                # met het nummer erbij loopt hij door én leest de weg terug hem terug (zie
+                # `_BronParser.handle_starttag`).
+                teller = teller + 1 if lijst == soort else 1
+                lijst = soort
+                begin = f" start='{teller}'" if soort == "ol" else ""
+                out.append(f"{open_(BLOK_SOORTEN[soort])}"
+                           f"<{soort} class='{'fbul' if soort == 'ul' else 'fol'}'{begin}>"
+                           f"<li>{tekst}</li></{soort}>{dicht}")
+                continue
+            # DE PLATTE STAND BLIJFT ÉÉN LIJST. Die rendert reacties, kanaalberichten en de
+            # leespagina van een policy; daar bestaan geen blokken en is een lijst gewoon een
+            # lijst. `test_zonder_de_vlag_is_er_niets_veranderd` legt die uitvoer byte voor byte
+            # vast, en terecht: dit is een wijziging aan de EDITOR, niet aan de opmaak.
             if lijst != soort:
                 sluit_lijst()
                 out.append(open_(BLOK_SOORTEN[soort])
                            + f"<{soort} class='{'fbul' if soort == 'ul' else 'fol'}'>")
                 lijst = soort
-            out.append(f"<li>{genummerd.group(2) if genummerd else kaal[2:]}</li>")
+            out.append(f"<li>{tekst}</li>")
             continue
         sluit_lijst()
         # EMBED. Een regel die ALLEEN een link is — kaal of als `[tekst](url)`, die laatste staat
@@ -854,7 +883,18 @@ class _BronParser(_HTMLParser):
             # DE TELLER STAAT HIER, niet bij `<li>`. Een genummerde lijst telt vanaf 1 per lijst,
             # en een `<ul>` ertussen moet die teller resetten — anders loopt de nummering door
             # over een bolletjeslijst heen.
-            self._nieuwe_regel(); self._ol = (tag == "ol"); self._nr = 0
+            #
+            # `start` WORDT GELEZEN (26 september 2026). Sinds elk lijstitem zijn eigen blok is,
+            # is elke `<ol>` één item lang en zou hij zonder dit attribuut op "1." blijven staan:
+            # een genummerde lijst van zeven regels werd dan zeven keer "1.". Het nummer staat op
+            # het scherm én in de bron, en dit is de plek waar die twee elkaar raken.
+            self._nieuwe_regel(); self._ol = (tag == "ol")
+            self._nr = 0
+            if self._ol:
+                try:
+                    self._nr = max(0, int(str(d.get("start") or "1")) - 1)
+                except ValueError:           # een onzinnige `start` telt gewoon vanaf 1
+                    self._nr = 0
         elif tag == "li":
             self._nieuwe_regel()
             if self._ol:

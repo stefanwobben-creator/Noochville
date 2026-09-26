@@ -513,6 +513,46 @@
       wrap.setAttribute("data-blok", soort);
     });
 
+    /* \u00c9\u00c9N BOLLETJE IS \u00c9\u00c9N BLOK, ook na typen (26 september 2026).
+     *
+     * De server levert elk lijstitem als eigen `.wb`, maar de BROWSER doet dat niet: druk je Enter
+     * in een bolletje, dan zet hij er een tweede `<li>` bij in dezelfde `<ul>`. Zonder deze pas
+     * groeit een lijst dus vanzelf weer terug naar \u00e9\u00e9n blok met \u00e9\u00e9n greep \u2014 precies het euvel dat
+     * hierboven is weggehaald.
+     *
+     * DE EERSTE `<li>` BLIJFT IN ZIJN EIGEN BLOK ZITTEN en de rest krijgt een kopie van het
+     * omhulsel. Zo blijft de greep die er al hing bij het item waar hij bij hoorde.
+     */
+    body.querySelectorAll(":scope > .wb").forEach(function (blok) {
+      // VIA HET ITEM EN NIET VIA DE LIJST-TAG. Dit bestand noemt geen bloktypes bij naam —
+      // `test_javascript_draagt_geen_eigen_soorten_lijst` verbiedt dat, en terecht: een tweede
+      // lijst van soorten loopt uiteen zodra er één bijkomt. Een `<li>` is geen bloksoort maar
+      // het onderdeel waar dit over gaat, en zijn ouder is per definitie de lijst.
+      var eerste = blok.querySelector("li");
+      if (!eerste) return;
+      var lijst = eerste.parentNode;
+      if (!lijst || lijst.parentNode !== blok) return;   // genest lijstje: met rust laten
+      var items = lijst.children;
+      if (items.length < 2) return;
+      var volgende = blok.nextSibling;
+      // DE NUMMERING LOOPT DOOR terwijl je typt. Zonder dit begint elke losse `<ol>` weer bij 1
+      // en staat er "1. 1. 1." op het scherm tot je opslaat; de server rekent hem daarna opnieuw
+      // uit, maar wat je ziet moet ook kloppen.
+      var begin = parseInt(lijst.getAttribute("start") || "1", 10) || 1;
+      Array.prototype.slice.call(items, 1).forEach(function (li, i) {
+        var wrap = blok.cloneNode(false);            // zelfde klassen en soort, geen inhoud
+        wrap.removeAttribute("data-blok-id");        // `grepen()` nummert zo meteen opnieuw
+        var nieuweLijst = lijst.cloneNode(false);    // zelfde tag en klasse, zonder items
+        // `start` ONVOORWAARDELIJK, want dit bestand weet niet welke lijstsoort dit is en hoort
+        // dat ook niet te weten. Een bolletjeslijst negeert het attribuut — de browser doet er
+        // niets mee en de weg terug leest het alleen bij een genummerde lijst.
+        nieuweLijst.setAttribute("start", begin + i + 1);
+        nieuweLijst.appendChild(li);
+        wrap.appendChild(nieuweLijst);
+        body.insertBefore(wrap, volgende);
+      });
+    });
+
     // EEN BLOK IN EEN BLOK IS GEEN BLOK MEER: `closest('.wb')` zou dan het verkeerde ding pakken.
     // Dit gebeurt als de browser bij het slepen of plakken een bestaand blok in een ander schuift.
     body.querySelectorAll(".wb .wb").forEach(function (diep) {

@@ -182,8 +182,13 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="blok_harness")
     ap.add_argument("--poort", type=int, default=8799)
     ap.add_argument("--map", default=None, help="waar de pagina komt (default: een tijdelijke map)")
+    ap.add_argument("--bron", default=None, help="markdown-bestand als body (bv. een echte pagina)")
     a = ap.parse_args(argv)
 
+    # EEN ECHTE PAGINA ALS BRON, voor het naspelen van een bug op productie-inhoud. Zonder dit
+    # moet je de tekst in dit bestand plakken, en dan meet je iets wat er net niet is.
+    if a.bron:
+        _NepPagina.body = pathlib.Path(a.bron).read_text(encoding="utf-8")
     map_ = pathlib.Path(a.map) if a.map else pathlib.Path(tempfile.mkdtemp(prefix="blokharness-"))
     pad = bouw(map_)
     print(f"gebouwd: {pad}")

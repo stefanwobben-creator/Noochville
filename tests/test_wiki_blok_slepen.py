@@ -79,10 +79,19 @@ def test_de_rondgang_blijft_heel_na_een_verplaatsing():
     assert _md(_md_naar_bron(eerste), blokken=True) == eerste
 
 
-def test_een_lijst_blijft_een_lijst_na_verplaatsen():
+def test_een_lijstitem_verplaatst_alleen_en_blijft_een_lijstitem():
+    """DE TOETS HEETTE "een lijst blijft een lijst na verplaatsen" en sleepte de hele lijst in
+    één keer. Sinds 26 september is elk bolletje zijn eigen blok, dus je verplaatst er één — en
+    dat is precies wat die wijziging mogelijk moest maken.
+
+    WAT BLIJFT: het item is na de verplaatsing nog steeds een lijstitem, en niet stilzwijgend een
+    alinea geworden. Dát was waar deze toets over ging."""
     html = _md(BRON, blokken=True)
-    lijst = next(i for i, b in enumerate(_blokken(html)) if "<ul" in b)
-    assert _md_naar_bron(_verplaats(html, lijst, 0)).startswith("- een\n- twee")
+    items = [i for i, b in enumerate(_blokken(html)) if "<li>" in b]
+    assert len(items) == 2, "de lijst is niet per punt gesplitst"
+    terug = _md_naar_bron(_verplaats(html, items[1], 0))
+    assert terug.startswith("- twee"), terug
+    assert "- een" in terug, "het andere item is verdwenen"
 
 
 def test_een_tabel_en_een_codeblok_overleven_een_verplaatsing():

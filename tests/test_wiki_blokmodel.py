@@ -80,15 +80,40 @@ def test_elke_regel_wordt_een_eigen_blok():
 
 def test_een_kop_en_een_lijst_zijn_eigen_blokken():
     html = _body_html("## Kop\n- een\n- twee\nslot", _PAGS, blokken=True)
-    assert _blokken(html) == ["h", "ul", "p"]
+    assert _blokken(html) == ["h", "ul", "ul", "p"]
 
 
-def test_een_lijst_is_een_blok_en_niet_een_blok_per_punt():
-    """Een lijst sleep je als geheel; de punten erbinnen zijn geen losse blokken. Dat is
-    dezelfde keuze die `_md` al maakte door ze in één `<ul>` te zetten."""
+def test_een_lijst_is_een_blok_per_punt():
+    """DEZE TOETS STOND ANDERSOM, en die keuze is op 26 september teruggedraaid.
+
+    Hij heette "een lijst is een blok en niet een blok per punt", met als reden: "een lijst sleep
+    je als geheel". Wat dat in de praktijk betekende, gemeten op prod: acht pagina's met blokken
+    van drie tot zeven regels onder één greep — op NOTE-STRATE-003 vielen 43 bronregels samen in
+    12 blokken. Je kon zo'n lijst alleen als geheel verplaatsen of weggooien, nooit één regel
+    eruit tillen of tot kop maken.
+
+    Dat botst met het model waar deze editor op mikt, waar elk bolletje zijn eigen blok is met
+    zijn eigen greep. De lijst als geheel verplaatsen kan nog steeds — dan sleep je de items één
+    voor één — maar één regel eruit kan nu ook."""
     html = _body_html("- een\n- twee\n- drie", _PAGS, blokken=True)
-    assert _blokken(html) == ["ul"]
+    assert _blokken(html) == ["ul", "ul", "ul"]
     assert html.count("<li>") == 3
+
+
+def test_de_nummering_loopt_door_over_de_losse_blokken():
+    """Los van elkaar begint elke `<ol>` weer bij 1; zonder `start` werd een genummerde lijst van
+    zeven regels zeven keer "1.". Het staat op het scherm én het is wat de weg terug terugleest."""
+    html = _body_html("1. een\n2. twee\n3. drie", _PAGS, blokken=True)
+    assert _blokken(html) == ["ol", "ol", "ol"]
+    assert html.count("start='1'") == 1 and "start='3'" in html
+
+
+def test_de_platte_stand_houdt_de_lijst_bij_elkaar():
+    """DIT IS EEN WIJZIGING AAN DE EDITOR, niet aan de opmaak. Reacties, kanaalberichten en de
+    leespagina van een policy renderen zonder blokken; daar is een lijst gewoon een lijst."""
+    from nooch_village.cockpit2_util import _md
+    plat = _md("- een\n- twee\n- drie")
+    assert plat.count("<ul") == 1 and plat.count("<li>") == 3
 
 
 def test_de_blokken_staan_op_het_hoogste_niveau_en_niet_in_elkaar():
