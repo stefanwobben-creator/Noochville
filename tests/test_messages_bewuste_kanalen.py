@@ -6,8 +6,9 @@ dat zichtbaar ("25 of 159 · search for the rest") zonder het op te lossen: je s
 langs namen die je niet zocht, alleen minder lang.
 
     General    het kanaal van de wortelcirkel — het hele dorp, altijd zichtbaar
-    Goals      één per open doel; dezelfde taxonomie die het bord al gebruikt
     Channels   losse kanalen die een mens aanmaakt
+               (hier stond ook "Goals: één per open doel"; die koppeling is op 26 september 2026
+               opgeheven — zie `tests/test_messages_kanaal_verwijderen.py`)
     Projects   ALLEEN wat jij volgt; leeg tot je iets toevoegt
     Direct     ongewijzigd
 
@@ -145,15 +146,22 @@ def test_een_niet_gevolgde_treffer_is_als_zodanig_herkenbaar(tmp_path):
 
 
 # ── 4. De vaste lagen ────────────────────────────────────────────────────────
-def test_general_en_de_doelen_staan_er_zonder_dat_iemand_ze_aanmaakt(tmp_path):
+def test_general_staat_er_zonder_dat_iemand_hem_aanmaakt(tmp_path):
+    """HIER STONDEN DE DOELEN BIJ: twee open doelen → twee kanalen, zonder dat iemand ze aanmaakte.
+    Die koppeling is op 26 september 2026 opgeheven (besluit Stefan) — een gesprek ontstaat doordat
+    iemand het begint, niet doordat er elders een doel wordt aangemaakt. Dat er GEEN doel-kanaal
+    meer verschijnt is nu de regel, en die wordt getoetst in
+    `tests/test_messages_kanaal_verwijderen.py`.
+
+    De helft die blijft: General is er altijd, zonder dat iemand hem aanmaakt."""
     dd, st, ik, pids = _dorp(tmp_path)
     for titel, label in (("De nieuwe website live", "Website"), ("Rapport MITH", "MITH")):
         st.doelen.add(titel, label=label)
     groepen, _t, _g = _kanalen(cockpit2._Stores(dd), ik, "")
     assert groepen["General"] == [channels.circle_kanaal("mother_earth")]
-    assert len(groepen["Goals"]) == 2
     html = render_messages(cockpit2._Stores(dd), ik=ik, csrf_token="t")
-    assert "General" in _namen(html) and "Website" in _namen(html) and "MITH" in _namen(html)
+    assert "General" in _namen(html)
+    assert "Website" not in _namen(html) and "MITH" not in _namen(html)
 
 
 def test_de_wortelcirkel_heet_general_en_niet_mother_earth(tmp_path):
@@ -165,14 +173,18 @@ def test_de_wortelcirkel_heet_general_en_niet_mother_earth(tmp_path):
     assert _label(st, channels.circle_kanaal("mother_earth__nooch"), ik) == "Nooch"
 
 
-def test_een_gesloten_doel_valt_uit_de_lijst_maar_niet_uit_de_data(tmp_path):
+def test_een_doelkanaal_valt_uit_de_lijst_maar_niet_uit_de_data(tmp_path):
+    """DIT GING OVER EEN GESLOTEN DOEL; sinds 26 september 2026 geldt het voor allemaal, open en
+    gesloten. Wat onveranderd blijft is de helft die ertoe doet: uit de lijst is niet uit de data.
+    Verbergen, niet wissen — dezelfde discipline als bij de rolgroep en de tweede cirkel."""
     dd, st, ik, pids = _dorp(tmp_path)
     d = st.doelen.add("Klaar project", label="Klaar")
     k = channels.goal_kanaal(d["id"])
     st.channels.post(k, "iets gezegds", author_id=ik)
-    st.doelen.update(d["id"], status="behaald")
-    groepen, _t, _g = _kanalen(cockpit2._Stores(dd), ik, "")
-    assert k not in groepen["Goals"]
+    for status in ("open", "behaald"):
+        st.doelen.update(d["id"], status=status)
+        groepen, _t, _g = _kanalen(cockpit2._Stores(dd), ik, "")
+        assert k not in [kan for rij in groepen.values() for kan in rij], status
     assert len(cockpit2._Stores(dd).channels.trail(k)) == 1
 
 

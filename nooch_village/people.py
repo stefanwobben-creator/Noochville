@@ -188,6 +188,29 @@ class PeopleStore:
         self._save()
         return True
 
+    def ontvolg_allen(self, kanaal: str) -> int:
+        """Haal dit kanaal uit ELKE lijst, en geef terug bij hoeveel mensen dat iets deed.
+
+        HOORT BIJ HET VERWIJDEREN VAN EEN KANAAL, niet bij het verlaten ervan — daarvoor is
+        `ontvolg`. Zonder deze opruiming blijft er in `people.json` een verwijzing staan naar iets
+        dat niet meer bestaat. Zichtbaar is dat niet (de lijst in Messages bouwt op wat er écht
+        staat), en juist daarom vervuilt het stil: `gevolgd()` blijft groeien met namen van
+        gesprekken die niemand meer kan openen.
+
+        ÉÉN SAVE, niet per mens. Dit draait over alle mensen tegelijk; per persoon opslaan is
+        dezelfde schrijfactie een paar dozijn keer."""
+        if not kanaal:
+            return 0
+        n = 0
+        for rij in self._items.values():
+            gv = rij.get("gevolgd")
+            if isinstance(gv, dict) and kanaal in gv:
+                del gv[kanaal]
+                n += 1
+        if n:
+            self._save()
+        return n
+
     def set_password(self, pid: str, password_hash: str, invited_at: float | None = None,
                      must_change: bool = True) -> None:
         """Admin-weg: zet een (temp-)wachtwoord. Standaard `must_change=True` → de gebruiker moet het bij

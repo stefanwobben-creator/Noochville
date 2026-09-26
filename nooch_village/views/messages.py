@@ -174,15 +174,17 @@ def _wortelkanaal(st) -> str:
     return channels.circle_kanaal(wortel.id) if wortel is not None else ""
 
 
-def _doelkanalen(st) -> list[str]:
-    """Eén kanaal per OPEN doel, in de volgorde die Projects ook aanhoudt.
-
-    Deze staan er altijd, zonder dat iemand ze aanmaakt: de doel-taxonomie bestaat al als
-    eersteklas begrip (`data/doelen.json`, de filterbalk boven het bord), dus een kanaal per doel
-    is geen nieuw concept maar dezelfde indeling op een tweede plek. Een gesloten doel valt vanzelf
-    uit de lijst; zijn gesprek blijft bestaan en is via zoeken terug te vinden."""
-    return [channels.goal_kanaal(d["id"]) for d in st.doelen.all()
-            if d.get("status") == "open"]
+# `_doelkanalen()` STOND HIER, en is op 26 september 2026 vervallen (besluit Stefan). Hij maakte
+# vanzelf één kanaal per open doel: "de doel-taxonomie bestaat al, dus een kanaal per doel is
+# dezelfde indeling op een tweede plek". Dat tweede is precies wat eraf moest — een gesprek
+# ontstaat doordat iemand het begint, niet doordat er elders een doel wordt aangemaakt.
+#
+# DOELEN ZELF BLIJVEN ONGEWIJZIGD: het model, `/goals`, `/goal`, de voortgang, het kritieke pad en
+# `doel_id` op een project. Alleen dit koppelpunt naar Messages is weg.
+#
+# DE SOORT `goal:` BLIJFT BESTAAN in `channels.py` en in `_label`/`mag_kanaal_lezen`. Op prod
+# staan drie van die kanalen met zes berichten erin; hem hier uitknippen zou die op slag
+# onleesbaar maken in plaats van ze te laten uitdoven. Ze verschijnen alleen nergens meer.
 
 
 def _projectkanalen_met_gesprek(st) -> list[str]:
@@ -274,7 +276,6 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     vult:
 
         General    het kanaal van de wortelcirkel — het hele dorp, altijd zichtbaar
-        Goals      één per open doel; dezelfde taxonomie die het bord al gebruikt
         Channels   losse kanalen die een mens aanmaakt (+ new channel)
         Projects   ALLEEN wat jij volgt; leeg tot je iets toevoegt
         Direct     ongewijzigd
@@ -292,7 +293,6 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     gevolgd = set(st.people.gevolgd(ik)) if ik else set()
 
     alg = [k for k in (_wortelkanaal(st),) if k]
-    doelen = _doelkanalen(st)
     # Losse kanalen: ALLE, ook lege. Een kanaal dat je net hebt aangemaakt en niet ziet staan,
     # lijkt mislukt. Plus de cirkelkanalen die niet General zijn én waar iets in staat.
     wortel = _wortelkanaal(st)
@@ -307,7 +307,7 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     # Direct houdt — en de kanalen, hun berichten en hun bijlagen staan onveranderd in
     # `channels.json`. Wie een link heeft komt er nog gewoon in; `mag_kanaal_lezen` is
     # ongewijzigd. Wat verdwijnt is de 31 regels ruis boven je twee echte gesprekken.
-    groepen = {"General": alg, "Goals": doelen, "Channels": onderwerpen,
+    groepen = {"General": alg, "Channels": onderwerpen,
                "Projects": projecten, "Direct": dms}
     totaal = {g: len(r) for g, r in groepen.items()}
     totaal["Projects"] = len(projecten_alles)      # "3 of 123" — wat je volgt van wat er is
@@ -645,7 +645,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         # "Meest recent actief" lost dat niet op: dat kan net zo goed weer een DM zijn. Ongevraagd
         # in andermans privégesprek landen is het probleem, niet welk gesprek precies. General is
         # in dit hele traject de voordeur van het dorp — dan hoort de landing dat ook te zijn.
-        volgorde = [k for g in ("General", "Goals", "Channels", "Projects", "Direct")
+        volgorde = [k for g in ("General", "Channels", "Projects", "Direct")
                     for k in alles[g]]
         kanaal = volgorde[0] if volgorde else ""
 
@@ -850,15 +850,40 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
                 f"<input type='hidden' name='next' value='/messages'>"
                 f"<button class='flink' type='submit' name='action' value='kanaal_ontvolg'>"
                 f"remove from list</button></form>")
+    # EEN KANAAL OPHEFFEN, en alleen wie dat mag ziet de knop. De poort staat in `cockpit2.py` bij
+    # `mag_kanaal_verwijderen` — hier hergebruikt en niet nagebouwd, want twee kopieën van dezelfde
+    # vraag lopen uiteen (`reference, don't copy`; #610 liet zien wat dat kost: de server werd daar
+    # ruimer en de knop niet, en dat viel pas live op).
+    #
+    # HET AANTAL BERICHTEN STAAT IN DE VRAAG. "Delete channel?" verzwijgt wat je meeneemt; een
+    # kanaal met 30 berichten weggooien hoort er anders uit te zien dan een leeg kanaal.
+    # `naam_van` = BESTAAT HIJ NOG. Dat is een andere vraag dan de poort en hoort dus niet in
+    # `mag_kanaal_verwijderen`: open je een net verwijderd kanaal opnieuw via zijn URL, dan is de
+    # soort nog steeds `topic:` en zou de knop terugkomen op iets dat er niet meer is. Gemeten in
+    # de browser, niet bedacht.
+    if (ik and csrf_token and kanaal and channels.soort_van(kanaal) == channels.TOPIC
+            and st.channels.naam_van(kanaal)):
+        from nooch_village.cockpit2 import mag_kanaal_verwijderen
+        if mag_kanaal_verwijderen(st, kanaal, ik):
+            n = len(st.channels.trail(kanaal))
+            mee = (f" and its {n} message" + ("s" if n != 1 else "")) if n else ""
+            kop += (f"<form method='post' action='/action' class='msg-uit'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='kanaal' value='{_e(kanaal)}'>"
+                    f"<input type='hidden' name='next' value='/messages'>"
+                    f"<button class='dellink' type='submit' name='action' "
+                    f"value='kanaal_verwijder' onclick=\"return confirm("
+                    f"'Delete this channel{_e(mee)} permanently? This cannot be undone.')\">"
+                    f"delete channel</button></form>")
     # NIVEAU 3 → NIVEAU 2. Op desktop staat de lijst er gewoon naast, dus daar is deze link ruis;
     # `.msg-terug` toont hem alleen op telefoonbreedte. Een gewone link, geen knop: hij navigeert.
     qs_t = f"&q={_e(q)}" if q else ""
     terug = (f"<a class='msg-terug flink' href='/messages?list=1&amp;k={_e(kanaal)}{qs_t}'>"
              f"&larr; All channels</a>")
     main = (f"<div class='c2-main'><h1>Messages</h1>"
-            f"<p class='muted'>One channel type, five flavours: the village, a goal, a topic of "
-            f"your own, a project you added, or a person. Projects only show up once you open or "
-            f"search for them.</p>"
+            f"<p class='muted'>One channel type, four flavours: the village, a topic of your own, "
+            f"a project you added, or a person. Projects only show up once you open or search "
+            f"for them.</p>"
             f"{_banner(msg)}"
             f"<div class='msg-layout' data-mob='{'lijst' if lijst else 'draad'}'>{nav}"
             f"<section class='msg-draad'>{terug}<h2 class='msg-kop'>{kop}</h2>"

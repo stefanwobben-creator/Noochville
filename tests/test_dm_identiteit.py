@@ -174,7 +174,9 @@ def test_de_rolgroep_staat_niet_meer_in_de_lijst(tmp_path):
     st2 = cockpit2._Stores(dd)
     groepen, _t, _g = _kanalen(st2, ik.id, "")
     assert "Roles & system" not in groepen
-    assert list(groepen) == ["General", "Goals", "Channels", "Projects", "Direct"]
+    # "Goals" stond hier tot 26 september 2026; de automatische koppeling doel → kanaal is
+    # opgeheven, zie `tests/test_messages_kanaal_verwijderen.py`.
+    assert list(groepen) == ["General", "Channels", "Projects", "Direct"]
     assert "Roles" not in render_messages(st2, ik=ik.id, csrf_token="t")
 
 
