@@ -221,11 +221,14 @@ def test_route_feit_add_zonder_tekst_doet_niets(tmp_path):
     assert wiki.feiten(cockpit2._Stores(dd).att.get(a.id)) == []
 
 
-def test_route_feit_niet_vervuller_krijgt_403(tmp_path):
+def test_route_feit_op_andermans_domein_krijgt_403(tmp_path):
+    """SINDS 26 SEPTEMBER OP HET DOMEIN en niet op de rol: een pagina zónder domein mag elke
+    herkende persoon aanvullen. Wat gesloten blijft is een pagina in het domein van een ander —
+    `Materials` hoort bij `creator_of_shoes`, en Bob vervult die rol niet."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
-    st.people.add("Bob", "bob@nooch.earth")                  # bestaat, vervult OWNER niet
-    a = st.att.add(OWNER, "note", title="p")
+    st.people.add("Bob", "bob@nooch.earth")                  # bestaat, houdt Materials niet
+    a = st.att.add(OWNER, "note", title="p", domain="Materials")
     with pytest.raises(cockpit2.Forbidden):
         cockpit2.dispatch(dd, "pagina_feit_add",
                           {"aid": [a.id], "tekst": ["sluipweg"], "next": ["/"]},

@@ -48,6 +48,81 @@ def requires_governance_ref(owner_role_id: str, records) -> bool:
     return rec is not None and not getattr(rec, "parent", None)
 
 
+def alle_domeinen(records) -> list[str]:
+    """Elk domein dat governance vandaag aan een WAKKERE, niet-gearchiveerde rol heeft toegewezen.
+
+    ÉÉN BRON VOOR TWEE DINGEN: de keuzelijst op het scherm, én de controle op de server. Zou de
+    server een andere lijst hanteren dan het formulier aanbiedt, dan is er een keuze die je kunt
+    maken en die daarna wordt geweigerd — of, erger, andersom.
+
+    Een SLAPENDE rol telt niet mee, om dezelfde reden als bij `_role_options`: een domein bij een
+    rol die stilstaat is een bureau waar niemand zit. Ontdubbeld en op alfabet, want twee rollen
+    kunnen hetzelfde domein houden (een governance-fout, maar hij komt voor)."""
+    uit = set()
+    for r in records.all():
+        if getattr(r, "archived", False) or getattr(r, "slaapt", False):
+            continue
+        for d in (getattr(getattr(r, "definition", None), "domains", None) or []):
+            naam = str(d).strip()
+            if naam:
+                uit.add(naam)
+    return sorted(uit, key=str.lower)
+
+
+def mag_schrijven_op_domein(st, domein: str, actor_id: str, *, circle_id: str = "") -> bool:
+    """Mag deze persoon schrijven op DIT DOMEIN? Één regel, twee gebruikers.
+
+    HET BEWERKRECHT HANGT AAN HET DOMEIN EN NIET MEER AAN DE ROL (26 september 2026). Een pagina
+    hoorde bij een rol, en alleen wie die rol vervulde mocht eraan schrijven — ook als de pagina
+    over niets in het bijzonder ging. Dat maakte het dorp nodeloos gesloten: je moest een mandaat
+    hebben om een aantekening te maken.
+
+    Wat je wél beschermt is een DOMEIN. Dat is een verklaring ("deze rol bezit dit onderwerp"),
+    en wie daarin schrijft raakt iets wat een ander in beheer heeft.
+
+        geen domein        → elke herkende persoon mag schrijven
+        domein met één     → de vervuller van die rol, of de Circle Lead
+        eigenaar-rol
+        configuratiefout   → open, zoals `domein_eigenaar` zelf ook terugvalt
+
+    EEN CONFIGURATIEFOUT SLUIT NIEMAND BUITEN. `domein_eigenaar` geeft een lege rol terug als het
+    domein niet bestaat, niemand het houdt, of twee rollen het allebei houden. Dat zijn fouten in
+    de governance-administratie en die horen daar opgelost te worden — niet doordat een pagina
+    stilzwijgend op slot gaat en niemand meer weet waarom.
+
+    GEMETEN WAT DAT VANDAAG BETEKENT (prod, 26 september, 13 actieve artefacten): 5 komen open te
+    staan en 8 blijven gegated. Eén van die 5 is een POLICY op een domein dat nul houders heeft —
+    fail-open maakt die dus voor iedereen bewerkbaar. Dat is de prijs van "een governance-fout
+    sluit niemand buiten", en hij hoort zichtbaar te zijn.
+
+    `circle_id` IS DE CIRKEL WAARVAN DE LEAD ER SOWIESO BIJ MAG. De aanroeper weet welke dat is —
+    die van de eigenaar-rol van het artefact — en hier is die niet af te leiden, want het domein
+    kan bij een rol in een andere cirkel horen.
+
+    Verwijderen loopt hier NIET langs: `_act_artefact_delete` blijft Circle-Lead-only, ongeacht
+    domein. Weggooien is onomkeerbaar en dat is een andere vraag dan schrijven."""
+    from nooch_village import triage_rol
+
+    if not actor_id:
+        return False
+    d = (domein or "").strip()
+    if not d:
+        return True
+    houder = (triage_rol.domein_eigenaar(st, d) or {}).get("rol") or ""
+    if not houder:
+        return True                                   # configuratiefout — zie de docstring
+    if any(f.type == "person" and f.id == actor_id
+           for f in st.assign.fillers_of(houder, st.records.get(houder))):
+        return True
+    if not circle_id:
+        circle_id = circle_of(houder, st.records) or ""
+    if not circle_id:
+        return False
+    lead = f"{circle_id}__circle_lead"
+    return any(f.type == "person" and f.id == actor_id
+               for f in st.assign.fillers_of(lead, st.records.get(lead)))
+
+
 def can_write_artefact(actor_type: str, actor_id: str, owner_role_id: str,
                        records, assignments) -> bool:
     """Mag deze actor artefacten van `owner_role_id` aanmaken/bewerken/archiveren?

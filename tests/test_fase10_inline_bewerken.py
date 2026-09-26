@@ -65,12 +65,34 @@ def test_de_rechtencheck_staat_nog_voor_de_mutatie(dorp):
     assert blok.index("_artefact_gate(") < blok.index("st.att.update(")
 
 
-def test_wie_de_rol_niet_vervult_mag_niet_bewerken(dorp):
+def test_wie_het_domein_niet_houdt_mag_niet_bewerken(dorp):
+    """DE POORT HANGT SINDS 26 SEPTEMBER AAN HET DOMEIN, niet meer aan de eigenaar-rol.
+
+    Deze toets heette "wie de rol niet vervult mag niet bewerken" en dat is niet langer waar: een
+    pagina zonder domein mag elke herkende persoon bewerken — dat is de hele verruiming. Wat hij
+    nu bewaakt is de helft die wél gesloten blijft, en dat is de enige die iets beschermt: een
+    pagina die in het domein van een ANDER staat.
+
+    `Materials` is het domein van `creator_of_shoes` (de `OWNER` hierboven) in de bootstrap, dus
+    de buitenstaander is noch houder, noch Circle Lead."""
     st, _mens, a, dd = dorp
+    st.att.update(a.id, domain="Materials")
     buiten = st.people.add("Buitenstaander", "buiten@test.nl")
     with pytest.raises(cockpit2.Forbidden):
         cockpit2.ACTIONS["artefact_edit"](_ctx(st, dd, {"aid": a.id, "body": "x"}, buiten.email))
     assert st.att.get(a.id).body == "Eerste tekst."
+
+
+def test_zonder_domein_mag_diezelfde_buitenstaander_wel(dorp):
+    """DE ANDERE HELFT, en zonder deze toets legt de suite de verruiming nergens vast. Een pagina
+    die over niets in het bijzonder gaat, hoort geen mandaat te vereisen om iets aan toe te
+    voegen."""
+    st, _mens, a, dd = dorp
+    assert not (getattr(a, "domain", "") or ""), "de opstelling klopt niet"
+    buiten = st.people.add("Buitenstaander", "buiten@test.nl")
+    cockpit2.ACTIONS["artefact_edit"](_ctx(st, dd, {"aid": a.id, "body": "van buiten"},
+                                           buiten.email))
+    assert st.att.get(a.id).body == "van buiten"
 
 
 def test_het_formulier_heeft_nog_precies_een_submit(dorp):

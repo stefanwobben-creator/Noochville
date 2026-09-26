@@ -151,8 +151,14 @@ def test_het_oude_markdown_pad_werkt_onveranderd(tmp_path):
 
 
 def test_de_poort_geldt_ook_voor_de_nieuwe_ingang(tmp_path):
-    """`body_html` is een nieuwe INGANG, geen nieuwe deur om de autorisatie heen."""
+    """`body_html` is een nieuwe INGANG, geen nieuwe deur om de autorisatie heen.
+
+    MET EEN DOMEIN sinds 26 september, want de poort hangt daar nu aan. Zonder domein mag elke
+    herkende persoon bewerken — dan meet deze toets de verruiming in plaats van de ingang, en
+    slaagt hij om de verkeerde reden. `Materials` hoort bij `creator_of_shoes`, en de opstelling
+    hier geeft `b@t.nl` die rol niet."""
     dd, st, a, mens = _dorp(tmp_path, can_edit=False)
+    st.att.update(a.id, domain="Materials")
     try:
         cockpit2.dispatch(dd, "artefact_edit", {
             "csrf": ["TOK"], "aid": [a.id], "body_html": ["<p>stiekem</p>"],
