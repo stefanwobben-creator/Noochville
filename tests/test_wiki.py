@@ -302,12 +302,15 @@ def test_pagina_linkt_bestaande_pagina_en_markeert_onbekende(tmp_path):
     assert "Wanted pages" in html
 
 
-def test_pagina_editknop_alleen_voor_vervuller(tmp_path):
+def test_pagina_editknop_alleen_voor_de_domeinhouder(tmp_path):
+    """SINDS 26 SEPTEMBER OP HET DOMEIN. Zonder domein ziet ook Bob de editor — dat is de
+    verruiming en die staat elders vast. Hier gaat het om wie de knop kríjgt als de pagina wél in
+    een domein staat; `Materials` hoort bij `creator_of_shoes`, en Bob vervult die rol niet."""
     st = _stores(tmp_path)
     st.people.add("Alice", "alice@nooch.earth")
     st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
     st.people.add("Bob", "bob@nooch.earth")
-    a = st.att.add(OWNER, "note", title="HyphaLite")
+    a = st.att.add(OWNER, "note", title="HyphaLite", domain="Materials")
     st2 = cockpit2._Stores(st.dd)
 
     # MET ÉÉN FEIT, want sinds 26 september verschijnt een LEGE feiten-sectie niet meer vanzelf

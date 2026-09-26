@@ -29,7 +29,12 @@ def _mens(st, naam, email, rol):
 
 
 def _pagina(st):
-    return st.att.add(OWNER, "note", title="Hennepvezel", body="wat wij weten over hennep")
+    # MET EEN DOMEIN sinds 26 september. Het bewerkrecht hangt aan het DOMEIN en niet meer aan de
+    # rol: een pagina zónder domein mag elke herkende persoon bewerken, en dan krijgt een
+    # "niet-eigenaar" geen voorstelpad maar gewoon de editor — dan meet dit bestand de verruiming
+    # in plaats van zijn eigen onderwerp. `Materials` hoort bij `creator_of_shoes` (de OWNER).
+    return st.att.add(OWNER, "note", title="Hennepvezel", body="wat wij weten over hennep",
+                      domain="Materials")
 
 
 # ── de permalink ────────────────────────────────────────────────────────────

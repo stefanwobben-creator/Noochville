@@ -1381,7 +1381,16 @@ def _act_artefact_add(c):
             return nxt, te_lang
         gref = f"domain:{domain}" if domain else f"role:{owner}"
         actor_id = _web_actor_id(username, st)
-        a = st.att.add(owner, kind, title=g("title"), body=g("body"),
+        # DE SECTIE-OVERRIDE, als het formulier er een meestuurt. Zonder domein valt `bakje_van`
+        # terug op de rol en de cirkel; een individuele actie heeft die allebei niet, en dan zou de
+        # pagina in "Overig" belanden zonder dat iemand dat koos.
+        _meta = None
+        if g("sectie").strip():
+            from nooch_village import domeinen as _dom
+            if g("sectie").strip() not in dict(_dom.BAKJES):
+                return nxt, "✗ unknown section"
+            _meta = {"domein": g("sectie").strip()}
+        a = st.att.add(owner, kind, title=g("title"), body=g("body"), meta=_meta,
                        url=g("url"), domain=domain, inherit=True,   # policies gelden altijd voor iedereen
                        actor_id=actor_id, actor_type="person",
                        governance_ref=gref, change_note="aangemaakt")
@@ -1523,6 +1532,42 @@ def _na_verwijderen_artefact(nxt: str, a) -> str:
     if nxt and a.id not in nxt:
         return nxt
     return f"/node?id={a.anchor}&tab=notes"
+
+
+def _act_pagina_sectie(c):
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als het verzetten van het domein, en
+    # dat is geen keuze maar een noodzaak: de sectie-override WINT van het domein (stap 0 in
+    # `bakje_van` staat vóór stap 1). Een ruimere poort hier zou betekenen dat wie het domein niet
+    # mag verzetten, de pagina alsnog ergens anders in de navigatie kan hangen.
+    from nooch_village import domeinen, wiki
+    from nooch_village.views.wiki import _mag_domein_wijzigen
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    if not _mag_domein_wijzigen(cur, st, username):
+        raise Forbidden("No access — only the role that owns this domain may move this page")
+
+    keuze = g("sectie").strip()
+    # LEEG = DE OVERRIDE WEGHALEN, niet "zet hem op niets". Dan leidt `bakje_van` de sectie weer af
+    # uit het domein, en dat is de stand waar de meeste pagina's in horen te blijven.
+    if keuze and keuze not in dict(domeinen.BAKJES):
+        return nxt, "✗ unknown section"
+    meta = dict(getattr(cur, "meta", None) or {})
+    if keuze:
+        meta["domein"] = keuze
+    else:
+        meta.pop("domein", None)
+    gref = f"domain:{cur.domain}" if getattr(cur, "domain", "") else f"role:{cur.anchor}"
+    st.att.update(cur.id, meta=meta, actor_id=_web_actor_id(username, st), actor_type="person",
+                  governance_ref=gref,
+                  change_note=(f"sectie: {domeinen.label(keuze)}" if keuze
+                               else "sectie: weer afgeleid"))
+    return nxt, (f"🗂 section: {domeinen.label(keuze)}" if keuze
+                 else "🗂 section derived again")
 
 
 def _act_pagina_feit_add(c):
@@ -5370,6 +5415,7 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "artefact_delete": _act_artefact_delete,
+    "pagina_sectie": _act_pagina_sectie,
     "msg_post": _act_msg_post,
     "msg_edit": _act_msg_edit,
     "msg_remove": _act_msg_remove,
