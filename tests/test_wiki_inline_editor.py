@@ -263,13 +263,29 @@ def test_doorhalen_overleeft_het_opslaan(tmp_path):
         assert "<del>x</del>" in _md(bron), "en op het scherm komt hij niet terug"
 
 
-def test_de_kopknop_geeft_zijn_argument_in_punthaken_door():
+def test_formatblock_geeft_zijn_argument_in_punthaken_door():
     """`formatBlock` met "h4" doet in Chrome en Safari niets: geen fout, geen effect. Alleen met
     "<h4>" maakt hij een kop. Bij de klik-doorloop had de H-knop inderdaad geen zichtbaar effect.
 
     Dit is dezelfde soort fout als bij `strike`: een aanname over de browser-API die nergens werd
-    getoetst omdat hij in geen enkele Python-assertie voorkwam."""
-    from nooch_village.cockpit2_util import _OPMAAK_KNOPPEN
-    arg = next(a for cmd, a, _l, _t in _OPMAAK_KNOPPEN if cmd == "formatBlock")
-    assert arg == "<h4>", "zonder punthaken maakt formatBlock geen kop"
-    assert "&lt;h4&gt;" in JS_WERKBALK, "het attribuut hoort het argument te dragen"
+    getoetst omdat hij in geen enkele Python-assertie voorkwam.
+
+    DE TOETS IS MEEVERHUISD MET ZIJN ONDERWERP (26 september 2026). Hij las `_OPMAAK_KNOPPEN`,
+    maar daar staat sinds deze stap geen `formatBlock` meer in: koppen horen exclusief in het
+    blokmenu, want twee wegen naar dezelfde handeling lopen uiteen. De val is er niet minder om —
+    `BLOK_MENU` heeft drie `formatBlock`-items — dus toetst hij ze daar, en alle drie."""
+    from nooch_village.cockpit2_util import BLOK_MENU, _OPMAAK_KNOPPEN
+    assert not [c for c, *_ in _OPMAAK_KNOPPEN if c == "formatBlock"], \
+        "formatBlock staat weer in de opmaak-werkbalk én in het blokmenu"
+    args = [a for _t, _l, cmd, a in BLOK_MENU if cmd == "formatBlock"]
+    assert len(args) >= 3, "het blokmenu kent geen koppen meer"
+    from nooch_village.cockpit2_util import blok_menu
+    sjabloon = blok_menu()
+    for arg in args:
+        assert arg.startswith("<") and arg.endswith(">"), \
+            f"zonder punthaken maakt formatBlock geen kop: {arg!r}"
+        # EN HET ARGUMENT MOET DE BROWSER OOK BEREIKEN. Het reist als attribuut mee in het
+        # sjabloon; klopt de tabel wel maar het sjabloon niet, dan doet de knop alsnog niets.
+        veilig = arg.replace("<", "&lt;").replace(">", "&gt;")
+        assert f"data-wiki-arg='{veilig}'" in sjabloon, \
+            f"het sjabloon draagt {arg!r} niet"

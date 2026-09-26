@@ -74,7 +74,13 @@ class _NepPagina:
         "En nog een alinea erachteraan, zodat het echt lopende tekst is.\n\n"
         "{{backlinks}}\n\n"
         "[De leveranciersbrief](/wiki-bestand/NOTE-HARNESS-001/brief.pdf)\n\n"
-        "De laatste alinea, met een [[Andere pagina]] die nog niet bestaat.\n"
+        "De laatste alinea, met een [[Andere pagina]] die nog niet bestaat.\n\n"
+        # EEN LÁNGE STAART (26 september 2026), want het zwevende opmaak-balkje moet op een pagina
+        # getoetst worden die écht scrolt: een selectie bovenin en een selectie onderin geven
+        # tegenovergestelde posities, en juist bij de tweede kon hij half buiten beeld hangen.
+        + "\n\n".join(f"Alinea {n} van de lange staart, om de pagina te laten scrollen."
+                       for n in range(1, 31))
+        + "\n"
     )
     #: DRIE FEITEN, zoals het ontwerpdocument vraagt — en met verschillende grond, zodat de
     #: grond-chips alle drie te zien zijn in plaats van drie keer dezelfde.

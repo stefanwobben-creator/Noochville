@@ -2028,8 +2028,24 @@ progress.nu-progress.wide{height:8px}
    x=264. Dit is de ruimte waar hij in past (1,5rem offset + de knop zelf). */
 .wiki-body.wiki-aan{padding-left:1.9rem}
 h1 .wiki-titel.wiki-aan{padding-left:.4rem}
-/* MOLECUUL. De werkbalk hoort bij de tekst eronder, niet bij de kop erboven: hij zweeft mee in
-   beeld zodat je hem ook halverwege een lange pagina nog hebt. */
-.wiki-tb{position:sticky;top:0;z-index:5;border-radius:var(--radius) var(--radius) 0 0}
+/* MOLECUUL. Hij hoorde bij de tekst eronder en stond `sticky` bovenaan, "zodat je hem ook
+   halverwege een lange pagina nog hebt". Dat werkte maar half: ver genoeg naar beneden scrolde hij
+   alsnog weg, en toen bewerken de stand werd (26 september) stond hij bovendien op elke pagina
+   permanent in beeld terwijl je alleen aan het lezen was.
+
+   HIJ ZWEEFT NU BIJ DE SELECTIE. Dat lost het wegscrollen structureel op — er is geen vaste balk
+   meer om weg te scrollen — en hij is er alleen als er iets op te maken valt.
+
+   `position:fixed` EN GEEN `absolute`: `nooch.js` meet de selectie met `getBoundingClientRect()`,
+   en dat zijn venstercoördinaten. Met `absolute` zou je die eerst moeten omrekenen naar de
+   dichtstbijzijnde gepositioneerde voorouder — een rekensom die stilzwijgend meeverandert zodra
+   iemand ergens een `position:relative` toevoegt.
+
+   DE ONDERRAND EN DE VIERKANTE ONDERHOEKEN GAAN ERAF. Die kwamen van `.editor-tb`, waar de balk
+   bóvenop een tekstvak plakt; een zwevend balkje heeft vier hoeken en niets om tegenaan te
+   zitten. Een schaduw maakt dat hij boven de tekst hangt in plaats van erin. */
+.wiki-tb{position:fixed;z-index:30;border-bottom:none;border-radius:var(--radius);
+  border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.wiki-tb[hidden]{display:none}
 .wiki-form{margin-top:.5rem}
 .wiki-hint{font-size:.78rem;align-self:center}
