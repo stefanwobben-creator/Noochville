@@ -145,19 +145,27 @@ def _pagina_html(tmp_path, can_edit=True):
                          username="b@t.nl" if can_edit else "")
 
 
-def test_de_bewerkknop_staat_bovenaan_en_is_zichtbaar(tmp_path):
-    """Ongewijzigd van strekking; alleen het haakje heet anders. `data-qadd-opener` opende het
-    formulier onder de pagina, `data-wiki-start` zet de tekst zelf in bewerkstand."""
+def test_bewerken_hoeft_niet_meer_gevonden_te_worden(tmp_path):
+    """DE VRAAG VAN DIT BESTAND WAS "IS DE BEWERKKNOP VINDBAAR?" — en die is op 26 september
+    vervallen, niet beantwoord.
+
+    De geschiedenis erachter staat in de docstring die hier stond: eerst opende een klein grijs
+    tekstlinkje ónder de inhoud een formulier, toen werd het een knop bóven de tekst. Sinds
+    bewerken de stand is voor wie mag bewerken, is er niets meer te vinden: je opent de pagina en
+    typt, zoals in een tekstverwerker. Een knop die niet bestaat, kan ook niet onvindbaar zijn.
+
+    Wat blijft te bewaken is het gevolg: het bewerkvlak staat er meteen, en het staat er alleen
+    voor wie mag."""
     html = _pagina_html(tmp_path)
-    assert "data-wiki-start" in html, "er hoort een expliciete bewerkknop te staan"
-    assert "Edit page" in html
-    # BOVENAAN: vóór de inhoud, niet eronder. Dat was precies het probleem.
-    assert html.index("data-wiki-start") < html.index("att-body"), "de knop staat onder de tekst"
-    assert "btn" in html.split("data-wiki-start")[0][-120:], "de knop draagt het knop-atoom"
+    assert "data-wiki-start" not in html, "de Edit page-knop is terug"
+    assert "contenteditable" in html or "wiki-form" in html, "er is geen bewerkvlak"
+    assert html.index("wiki-form") > html.index("att-body"), \
+        "de opslaan-balk hoort onder de tekst te staan, niet ervoor"
 
 
-def test_wie_niet_mag_bewerken_krijgt_geen_knop(tmp_path):
-    """Een knop die een poort daarna weigert, belooft iets wat niet kan."""
+def test_wie_niet_mag_bewerken_krijgt_geen_bewerkvlak(tmp_path):
+    """Een poort die pas ná de belofte weigert, is geen poort. Zonder bewerkrecht rendert de
+    server geen formulier — en zonder dat formulier zet `nooch.js` niets aan."""
     html = _pagina_html(tmp_path, can_edit=False)
     assert "data-wiki-start" not in html
     assert "contenteditable" not in html and "wiki-form" not in html
@@ -180,10 +188,13 @@ def test_er_is_maar_een_plek_waar_de_tekst_staat(tmp_path):
     assert "wiki-form" in html and "body_html" in html     # wat ervoor in de plaats kwam
 
 
-def test_de_opener_is_bedraad_in_het_gedeelde_bestand():
+def test_de_editor_is_bedraad_in_het_gedeelde_bestand():
     """In `nooch.js` en niet als inline script: de pagina wordt ook als fragment geladen, en een
-    script uit innerHTML draait nooit (de les van de checklist-microinteractie, één dag eerder)."""
+    script uit innerHTML draait nooit (de les van de checklist-microinteractie, één dag eerder).
+
+    HET HAAKJE HEET ANDERS sinds de openknop verviel: `#wiki-form` is nu én de aanhechting én de
+    poort."""
     import pathlib
     js = (pathlib.Path(__file__).resolve().parents[1]
           / "nooch_village" / "static" / "nooch.js").read_text()
-    assert "data-wiki-start" in js and "contentEditable" in js
+    assert "#wiki-form" in js and "contentEditable" in js

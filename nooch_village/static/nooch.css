@@ -1972,6 +1972,21 @@ progress.nu-progress.wide{height:8px}
 .wiki-meta{margin:1.6rem 0 0;padding-top:.8rem;border-top:1px solid var(--border);
   font-size:.92em}
 
+/* ── De pagina als één doorlopend document (26 september 2026) ─────────────────────
+   De tekst zat in een `.card` en de titel stond er bóven, buiten die kaart. Op het scherm gaf dat
+   een kop met een los omrand vlak eronder — twee dingen die toevallig onder elkaar staan — en de
+   titel stond bovendien op een andere linkerrand dan de tekst, want de kaartpadding zat ertussen.
+   Titel, tekst en de afgeleide secties delen nu één omhulsel, dus één rand en één vlak.
+
+   DE PADDING IS DE GOOT, niet decoratie. De blok-greep hangt op `left:-1.5rem`, buiten de doos van
+   `.wb`; zonder ruimte links valt hij van de pagina af. Dit is dezelfde ruimte die de kaart gaf,
+   nu zonder de rand eromheen.
+
+   GEEN NIEUWE FAMILIE: `wiki-` bestaat al. */
+.wiki-doc{padding:.2rem 0 0 1.9rem}
+.wiki-doc>h1{margin:.1rem 0 .6rem}
+.wiki-doc .c2-bar{margin-left:-1.9rem}
+
 /* De kopbalk van een wiki-pagina: de herkomstregel links, de bewerkknop rechts. Die knop zat als
    klein grijs tekstlinkje ónder de hele inhoud (21 september 2026) — vindbaar als je wist dat hij
    er was, en anders niet. */
@@ -1990,7 +2005,19 @@ progress.nu-progress.wide{height:8px}
    Wat er bij komt is één zichtbaar signaal dat je nu in de tekst staat (een accentlijn links) en
    een cursor die dat bevestigt. Geen kader: een kader is de container-taal, en dit is een veld —
    zie de regel die daar in fase 12 voor is vastgelegd. */
-.wiki-aan{outline:none;cursor:text;box-shadow:-3px 0 0 0 var(--muted)}
+.wiki-aan{outline:none;cursor:text}
+/* DE LIJN VOLGT DE CURSOR, NIET DE STAND (26 september 2026). Hij stond op `.wiki-aan` zelf, en
+   dat klopte zolang bewerken een MODUS was die je aanzette: dan betekende de lijn "je bent nu aan
+   het bewerken". Sinds bewerken de stand is voor wie mag bewerken, is die mededeling altijd waar
+   en zegt hij dus niets meer — wat overblijft is een streep die over de volle hoogte van elke
+   pagina staat, precies het losse vlak dat deze ronde juist wegneemt.
+
+   `:focus-within` geeft hem zijn oorspronkelijke betekenis terug, letterlijk: "je staat nu in de
+   tekst". Alleen is dat nu een plaatsbepaling die klopt, want de caret staat er ook echt.
+
+   `box-shadow` EN GEEN `border-left`: een schaduw neemt geen ruimte in, dus de tekst verspringt
+   geen pixel op het moment dat je erin klikt. */
+.wiki-aan:focus-within{box-shadow:-3px 0 0 0 var(--muted)}
 /* DE LIJN WAS FELGROEN, en dat is in dit dorp de kleur van ACTIE: opslaan, een live
    overleg, een goedgekeurde stand. "Je staat nu in de tekst" is geen actie maar een
    plaatsbepaling, en die hoort niet even luid te spreken. De lijn blijft — hij is de

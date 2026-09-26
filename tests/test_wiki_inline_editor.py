@@ -182,7 +182,10 @@ def test_de_notes_tab_bewerkt_de_note_niet_meer_zelf(tmp_path):
 def test_de_editor_is_bedraad_in_het_gedeelde_bestand():
     """In `nooch.js`, niet als inline `<script>`: een script uit `innerHTML` draait niet, en die
     les is één dag oud (de checklist-microinteractie die stil faalde in de modal)."""
-    assert "data-wiki-start" in JS and "wikiEdit(root)" in JS
+    # OP `#wiki-form` EN NIET MEER OP `data-wiki-start`: die knop bestaat sinds 26 september niet
+    # meer, want bewerken is de stand voor wie mag bewerken. Het formulier is nu het haakje én de
+    # poort — zonder bewerkrecht rendert de server het niet, en dan zet de browser niets aan.
+    assert '#wiki-form' in JS and "wikiEdit(root)" in JS
 
 
 def test_plakken_gaat_als_platte_tekst():

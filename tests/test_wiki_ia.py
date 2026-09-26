@@ -116,17 +116,27 @@ def test_de_metadata_staat_na_de_inhoud(tmp_path):
 
 
 def test_de_metadata_staat_na_feiten_en_backlinks(tmp_path):
-    """"Na de content, na Feiten en Links-here" — dus echt als laatste."""
-    html, _a = _pagina(tmp_path, body="Alleen tekst, geen markeringen.")
+    """"Na de content, na Feiten en Links-here" — dus echt als laatste.
+
+    OP EEN PAGINA DIE DIE SECTIES OOK ECHT HEEFT. Deze toets gebruikte een body zonder
+    markeringen en leunde erop dat de twee secties dán onderaan verschijnen. Sinds 26 september
+    doen ze dat alleen nog als ze iéts te melden hebben — een kopje "Facts" met "No facts yet"
+    eronder is meubilair, geen informatie. De opstelling van dit bestand geeft de pagina één feit,
+    dus de feiten-sectie staat er; voor de backlinks zorgt een verwijzing naar een pagina die nog
+    niet bestaat (die zet de verlanglijst erin)."""
+    html, _a = _pagina(tmp_path, body="Alleen tekst, met een [[Andere pagina]] erin.")
     assert html.index(">Facts</h3>") < html.index("class='dcol'")
     assert html.index(">Links here</h3>") < html.index("class='dcol'")
 
 
-def test_boven_de_vouw_staat_alleen_titel_en_bewerken(tmp_path):
+def test_boven_de_vouw_staat_alleen_de_titel(tmp_path):
+    """Hij heette "titel en bewerken", en dat tweede is vervallen: de "Edit page"-knop bestaat
+    sinds 26 september niet meer, want bewerken is de stand geworden. Wat de toets bewaakt is
+    ongewijzigd — boven de tekst staat het onderwerp en geen administratie."""
     html, a = _pagina(tmp_path)
     kop = html[:html.index("id='wiki-body'")]
-    assert "wiki-titel" in kop and "data-wiki-start" in kop
-    for weg in ("class='dcol'", ">Last edited<", a.id):
+    assert "wiki-titel" in kop
+    for weg in ("class='dcol'", ">Last edited<", a.id, "data-wiki-start"):
         assert weg not in kop, f"{weg} staat nog boven de tekst"
 
 

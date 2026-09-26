@@ -13,9 +13,13 @@
 (function () {
   var b = document.querySelector("#wiki-body");
   if (!b) return console.log("✗ geen #wiki-body — open een /pagina met bewerkrechten");
-  var start = document.querySelector("[data-wiki-start]");
-  if (!start) return console.log("✗ geen bewerkknop — je mag deze pagina niet bewerken");
-  if (b.contentEditable !== "true") start.click();
+  // BEWERKEN IS DE STAND (26 september 2026). Hier stond een klik op `[data-wiki-start]`; die
+  // knop bestaat niet meer, want wie mag bewerken krijgt een bewerkbare pagina zodra hij hem
+  // opent. Is het vlak niet bewerkbaar, dan heb je geen rechten — dezelfde uitkomst als
+  // voorheen "geen bewerkknop", alleen gelezen waar het nu staat.
+  if (b.contentEditable !== "true") {
+    return console.log("✗ het bewerkvlak staat niet aan — je mag deze pagina niet bewerken");
+  }
 
   var uit = [];
   function zeg(naam, ok, detail) { uit.push({ toets: naam, uitslag: ok ? "✓" : "✗ FOUT", detail: detail || "" }); }

@@ -127,10 +127,13 @@ def _proef_png(breedte: int = 560, hoogte: int = 240) -> bytes:
 def bouw(map_: pathlib.Path) -> pathlib.Path:
     """Schrijft de pagina plus de twee dingen die hij ophaalt (static, de check zelf)."""
     map_.mkdir(parents=True, exist_ok=True)
-    start = ("<button type='button' class='btn sm' data-wiki-start>&#9998; Edit page</button>")
-    inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'>"
+    # GEEN "EDIT PAGE"-KNOP MEER (26 september 2026). De echte pagina heeft hem ook niet: wie mag
+    # bewerken krijgt een bewerkbare pagina zodra hij hem opent. Stond hij hier nog, dan zou de
+    # harness een toestand tonen die op prod niet bestaat — en dat is precies waarvoor hij niet is.
+    #
+    # `.wiki-doc` OMSLUIT TITEL ÉN TEKST, net als in `render_pagina`: één linkerrand, één vlak.
+    inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'><div class='wiki-doc'>"
              f"<h1>&#128196; <span id='wiki-titel' class='wiki-titel'>{_NepPagina.title}</span></h1>"
-             f"<div class='wiki-kopbalk'>{start}</div>"
              f"{_wiki_editor(_NepPagina, [], 'harness-token', True, _SECTIES)}"
              # DE VOLGORDE VAN DE ECHTE PAGINA: tekst, dan de metadata-voet. Het losse
              # uploadformulier van #603 stond hier ook; dat is op 26 september vervallen omdat
@@ -138,7 +141,7 @@ def bouw(map_: pathlib.Path) -> pathlib.Path:
              # `can_edit=True`, want anders mist de voet juist de twee knoppen die deze ronde
              # toevoegde (Archive en Delete) — die staan achter het bewerkrecht.
              f"{_meta_blok(_NepPagina, None, 'harness-token', True, [])}"
-             f"</div></div>")
+             f"</div></div></div>")
     (map_ / "index.html").write_text(_page("Browsercheck", inner), encoding="utf-8")
 
     # EEN ECHT BESTAND ACHTER DE AFBEELDING. Zonder dit toont de harness een gebroken `<img>` en

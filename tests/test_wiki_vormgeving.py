@@ -39,11 +39,17 @@ def test_de_bewerkrand_is_niet_meer_de_actiekleur():
     assert "var(--green)" not in body, "de bewerkrand is nog steeds de actiekleur"
 
 
-def test_de_bewerkrand_bestaat_nog_wel():
+def test_de_bewerkrand_volgt_de_cursor():
     """Hij is de enige zichtbare drager naast de cursor; weghalen zou betekenen dat je niet meer
-    ziet dát je in de tekst staat."""
-    body = _regel(".wiki-aan")
-    assert "box-shadow" in body and "cursor:text" in body
+    ziet dát je in de tekst staat.
+
+    HIJ STOND OP DE STAND, NU OP DE FOCUS (26 september 2026). "Je bent nu aan het bewerken" was
+    een zinnige mededeling zolang bewerken een MODUS was die je aanzette. Sinds het de stand is
+    voor wie mag bewerken, is die mededeling altijd waar en zegt hij niets meer — wat overbleef
+    was een streep over de volle hoogte van elke pagina. `:focus-within` geeft hem zijn
+    oorspronkelijke betekenis letterlijk terug: je staat nu in de tekst, want de caret staat er."""
+    assert "cursor:text" in _regel(".wiki-aan")
+    assert "box-shadow" in _regel(".wiki-aan:focus-within")
 
 
 def test_er_komt_geen_kader_omheen():
@@ -70,15 +76,16 @@ def test_de_kopbalk_heeft_twee_zones(tmp_path):
     from nooch_village.views.wiki import render_pagina
     html = render_pagina(st, a.id, csrf_token="TOK", username="b@t.nl")
 
-    balk = html.split("wiki-kopbalk'>")[1].split("</div></div>")[0]
-    assert "wiki-kopacties" in balk, "er is geen actie-zone"
-    # DE ZONE DRAAGT DE HOOFDACTIE. Hier stond ook dat het domein-formulier er in zat, en dat
-    # klopte niet meer sinds #602 het veld naar het metadata-blok verplaatste — de toets slaagde
-    # alleen nog omdat dat blok toevallig direct achter de kop stond en binnen de 900 tekens viel.
-    # Met het blok onderaan (26 september) valt die toevalligheid weg. Wat de zone bewijst is dat
-    # de acties bij elkaar staan, en dat is er precies één: bewerken.
-    acties = html.split("wiki-kopacties'>")[1]
-    assert "data-wiki-start" in acties.split("</div>")[0]
+    # DE KOPBALK VAN DE NOTE-PAGINA BESTAAT NIET MEER (26 september 2026). Hij droeg nog één ding
+    # — de "Edit page"-knop — en die is vervallen omdat bewerken de stand werd. Twee zones voor
+    # nul acties is een lege doos.
+    #
+    # WAT ERVOOR IN DE PLAATS KOMT is de eis die deze toets eigenlijk bewaakte: boven de tekst
+    # staat de titel, en verder niets dat om aandacht vraagt.
+    assert "wiki-kopbalk" not in html, "de note-pagina heeft weer een kopbalk"
+    kop = html.split("id='wiki-body'")[0]
+    assert "wiki-titel" in kop
+    assert "class='btn" not in kop, "er zweeft weer een knop boven de tekst"
 
 
 def test_de_actie_zone_staat_rechts():

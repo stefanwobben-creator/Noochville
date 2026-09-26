@@ -279,8 +279,13 @@ def test_pagina_toont_body_feit_grond_en_backlink(tmp_path):
                          doel.id, csrf_token="tok", username="guest")
     assert "HyphaLite" in html and "Een mycelium-materiaal." in html
     assert "Vegan gecertificeerd" in html and "PETA" in html and "valid until" in html
-    assert "Vamp" in html                                   # backlink-kaart
-    assert "class='card'" in html and "ptitle" in html      # bestaand kaart-idioom
+    assert "Vamp" in html                                   # backlink
+    # GEEN `.card` MEER OP DEZE PAGINA. Die assertie bewaakte "gebruik het bestaande
+    # kaart-idioom", en dat idioom is hier in twee stappen weggehaald: #604 haalde de rand om de
+    # feiten en backlinks weg (een blok tussen de tekst is geen doos), en op 26 september ging de
+    # kaart om de tekst zelf eruit (titel en tekst zijn één document). `.ptitle` is wat overbleef
+    # en draagt nog steeds de feit-regel — dát is waar deze toets over gaat.
+    assert "ptitle" in html
 
 
 def test_pagina_linkt_bestaande_pagina_en_markeert_onbekende(tmp_path):
@@ -302,6 +307,10 @@ def test_pagina_editknop_alleen_voor_vervuller(tmp_path):
     a = st.att.add(OWNER, "note", title="HyphaLite")
     st2 = cockpit2._Stores(st.dd)
 
+    # MET ÉÉN FEIT, want sinds 26 september verschijnt een LEGE feiten-sectie niet meer vanzelf
+    # — en het "+ Add fact"-formulier zit in die sectie. De vraag hier is wie hem mag zien, niet
+    # wanneer hij bestaat; zonder feit meet deze toets stil het leeg-gedrag.
+    st2.att.update(a.id, meta={"feiten": [wiki.maak_feit("Een schoen weegt 300 gram")]})
     filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
     assert "artefact_edit" in filler and "pagina_feit_add" in filler
 
