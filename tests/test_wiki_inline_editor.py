@@ -220,11 +220,22 @@ _ECHTE_UITKOMSTEN = {
     # onzichtbaar ander teken in de opgeslagen markdown belanden dan de schrijver typte. Daarom
     # haalt `ontharde()` die randtekens weg; de vorm hieronder is wat er ná die stap staat.
     "nvCode": ("<code>x</code>",),
+    # LINK MAKEN WIJ OOK ZELF (26 september 2026). `createLink` bestaat wél, maar hij heeft een
+    # adres nodig en de browser levert daar niets voor; `nooch.js` maakt eerst de `<a>` en vult
+    # het adres daarna via de link-kaart in. Wat er dan staat is een gewone link, en die moet de
+    # weg terug als markdown-link teruglezen — anders is hij na één bewerkronde platte tekst.
+    #
+    # DRIE VORMEN, want ze komen alle drie voor: zoals `_md` hem rendert (met target en rel), en
+    # zoals `createLink` hem in Chrome en Firefox achterlaat (alleen href).
+    "nvLink": ("<a href='https://x.nl' target='_blank' rel='noopener'>x</a>",
+               '<a href="https://x.nl">x</a>',
+               "<a href='https://x.nl'>x</a>"),
 }
 
 #: Wat er in de bron hoort te staan als de knop gewerkt heeft. `x` alleen = de opmaak is weg.
 _VERWACHT = {"bold": "**x**", "italic": "*x*", "strikeThrough": "~~x~~",
-             "insertUnorderedList": "- x", "formatBlock": "## x", "nvCode": "`x`"}
+             "insertUnorderedList": "- x", "formatBlock": "## x", "nvCode": "`x`",
+             "nvLink": "[x](https://x.nl)"}
 
 
 def test_de_werkbalk_gebruikt_alleen_tags_die_de_omzetter_kent():

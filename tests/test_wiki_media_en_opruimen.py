@@ -14,6 +14,7 @@ import inspect
 import pathlib
 import re
 
+from conftest import js_zonder_uitleg
 from nooch_village import channels, cockpit2, wiki
 from nooch_village.cockpit2_util import (BLOK_MENU, _accept, _is_beeldbestand, _md,
                                          _md_naar_bron, blok_menu)
@@ -187,7 +188,7 @@ def test_de_server_rendert_en_de_browser_zet_neer():
     tak = inspect.getsource(cockpit2).split('fields.get("action") == "wiki_bijlage"')[1].split(
         'fields.get("action") == "kanaal_bijlage"')[0]
     assert '"html": _md(' in tak, "de server stuurt geen gerenderde HTML mee"
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     hulp = kaal.split("function uploadInBlok")[1].split("\n  function ")[0]
     for verboden in ("![", ".png", ".jpg", "<img"):
         assert verboden not in hulp, f"de browser weet opeens van {verboden!r}"
@@ -223,7 +224,7 @@ def test_slepen_bestaat_al_en_hergebruikt_het_gedeelde_mechanisme():
     tweede sleepmechanisme naast komt — precies waar de code-comment boven `NV.sleep` voor
     waarschuwt: "een tweede implementatie zou betekenen dat de ene na een wijziging anders sleept
     dan de andere"."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     haak = kaal.split("function grepen(")[1].split("\n  function ")[0]
     assert "NV.sleep(body" in haak, "de wiki roept het gedeelde sleepmechanisme niet aan"
     assert "helft: true" in haak, "vóór/ná wordt niet getoond tijdens het slepen"
@@ -235,7 +236,7 @@ def test_slepen_bestaat_al_en_hergebruikt_het_gedeelde_mechanisme():
 def test_het_menu_blijft_naast_het_slepen_bestaan():
     """Sleep is muis/pen. Het ↑/↓/✕-menu is de weg voor toetsenbord en touch en gaat dus niet weg
     — dezelfde toegankelijkheidsregel die al in de code staat."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     for actie in ("omhoog", "omlaag", "verwijder"):
         assert actie in kaal
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import pathlib
 import re
 
+from conftest import js_zonder_uitleg
 from nooch_village import cockpit2, triage_rol, wiki
 from nooch_village.cockpit2_util import BLOK_HINT, BLOK_MENU, _md, blok_menu
 from nooch_village.views.wiki import _domein_form, _mag_domein_wijzigen, render_pagina
@@ -81,7 +82,7 @@ def test_geen_ander_menu_item_draagt_hem():
 def test_de_browser_bedenkt_de_uitleg_niet():
     """DE TEKST KOMT VAN DE SERVER, zoals het sjabloon ernaast. Dit bestand bedenkt geen uitleg,
     net zomin als het bloktypes bedenkt — dezelfde regel die op drie plekken in `nooch.js` staat."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     veld = kaal.split("function bronVeld(")[1].split("\n  function ")[0]
     assert "dataset.wikiHint" in kaal, "de hint wordt nergens uit het sjabloon gelezen"
     for verboden in ("kolomnamen", "|---|---|"):
@@ -91,14 +92,14 @@ def test_de_browser_bedenkt_de_uitleg_niet():
 def test_de_uitleg_is_chrome_en_geen_tekst():
     """Zonder `data-chrome` belandt hij bij het opslaan in de bron, en dan staat de uitleg
     voortaan ín de tabel. Dezelfde verdediging als bij de greep en het bijschrift."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     veld = kaal.split("function bronVeld(")[1].split("\n  function ")[0]
     assert 'setAttribute("data-chrome"' in veld
 
 
 def test_de_uitleg_hergebruikt_een_bestaande_klasse():
     """Geen nieuwe klasse zonder gemeten aanleiding — `.wiki-hint` en `.muted` bestaan allebei."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     veld = kaal.split("function bronVeld(")[1].split("\n  function ")[0]
     assert 'className = "muted wiki-hint"' in veld
     assert ".wiki-hint{" in CSS
@@ -139,7 +140,7 @@ def test_de_hint_overleeft_de_rondgang():
 def test_de_browser_kiest_niet_zelf_welk_blok_uitleg_krijgt():
     """`test_javascript_draagt_geen_eigen_soorten_lijst` verbiedt een bloktypelijst in JS, en die
     regel geldt hier net zo goed: `naarBron` leest een attribuut en vergelijkt geen soort."""
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     naar = kaal.split("function naarBron(")[1].split("\n  function ")[0]
     assert "dataset.wikiHint" in naar
     for verboden in ('"tabel"', "'tabel'", '"table"'):

@@ -1,6 +1,7 @@
 """Gedeelde fixtures voor de NoochVillage test-suite."""
 from __future__ import annotations
 import os
+import re
 import pytest
 from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
@@ -99,3 +100,21 @@ def records_with_root(records):
     )
     records.put(root)
     return records
+
+
+# ── JS lezen zonder de uitleg (26 september 2026) ────────────────────────────
+#: Vijf toetsbestanden lazen `nooch.js` met hun eigen kopie van deze regex, en die kopie had een
+#: fout die ze alle vijf deelden: `//` werd overal als commentaar gelezen, óók in `"https://"` en
+#: aan het eind van een regex-literal (`/^https?:\/\//i`). Wat er dan overbleef was afgeknot, en
+#: een assertie op zo'n stuk meet iets anders dan er staat — één toets sloeg daardoor rood uit op
+#: code die wél klopte, en de andere vier hadden om dezelfde reden groen kunnen blijven op code
+#: die niet klopte.
+#:
+#: DE UITZONDERING IS ÉÉN LOOKBEHIND: een `//` dat volgt op `:` (een url) of op `\` of `/` (het
+#: einde van een regex) is geen commentaar. Geen JS-parser, wel genoeg voor dit bestand.
+_JS_UITLEG = re.compile(r"(?<![:\\/])//[^\n]*|/\*.*?\*/", re.S)
+
+
+def js_zonder_uitleg(bron: str) -> str:
+    """`nooch.js` zonder commentaar, zodat een assertie de CODE meet en niet de uitleg erboven."""
+    return _JS_UITLEG.sub("", bron)

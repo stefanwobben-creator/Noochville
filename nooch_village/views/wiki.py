@@ -15,7 +15,8 @@ import json as _json
 import re
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, opmaak_werkbalk,
+from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, link_kaart,
+                                         opmaak_werkbalk,
                                          BLOK_SOORTEN, blok_menu)
 from nooch_village import domeinen, wiki
 
@@ -622,7 +623,9 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # De verborgen velden worden bij het versturen door `nooch.js` gevuld met wat er in de twee
     # bewerkbare elementen staat. Het formulier staat ONDER de tekst maar is geen tweede kopie:
     # er staat niets in dat je kunt lezen, alleen de opslaan-balk.
-    return (opmaak_werkbalk() + lees + blok_menu()
+    # DE LINK-KAART STAAT NAAST HET BEWERKVLAK, niet erin — zoals de werkbalk en het
+    # blokmenu. Alles binnen `#wiki-body` gaat bij het opslaan mee als `body_html`.
+    return (opmaak_werkbalk() + lees + blok_menu() + link_kaart()
             + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden>"
               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
               f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
