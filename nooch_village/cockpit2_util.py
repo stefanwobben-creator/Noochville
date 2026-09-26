@@ -1198,18 +1198,21 @@ def md_editor(name: str, value: str = "", rows: int = 6,
 # in wat de knop aanstuurt — `md_editor` schrijft tekens in een textarea (`wrapSel`), deze roept
 # `document.execCommand` aan op een `contenteditable`. Dezelfde vorm, andere motor.
 
-#: De werkbalk-knoppen: (commando, argument, label, titel). `formatBlock` maakt een kop, de rest
-#: is een inline-opmaak die `_md` kent. Geen link-knop — `_md` ondersteunt `[tekst](url)` wel,
-#: maar een linkdialoog is een scherm op zich en hoort bij een eigen scope.
+#: De werkbalk-knoppen: (commando, argument, label, titel). Geen link-knop — `_md` ondersteunt
+#: `[tekst](url)` wel, maar een linkdialoog is een scherm op zich en hoort bij een eigen scope.
+#:
+#: ALLEEN WAT ÉCHT INLINE IS (26 september 2026). Hier stonden ook een bullet-lijst
+#: (`insertUnorderedList`) en een kop (`formatBlock <h4>`), en dat waren twee handelingen met twee
+#: ingangen: het blokmenu heeft Lijst, Genummerde lijst en Kop 1/2/3 al. Twee wegen naar dezelfde
+#: uitkomst lopen uiteen zodra er aan één van de twee iets verandert — dezelfde reden waarom het
+#: losse uploadformulier verviel toen Afbeelding in het blokmenu kwam.
+#:
+#: DE SCHEIDING GING MEE. Vier knoppen die allemaal hetzelfde doen (een stukje tekst opmaken)
+#: hebben niets te scheiden; het streepje zat er juist om inline van blok te scheiden, en die
+#: tweedeling staat nu in twee verschillende menu's.
 _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                ("italic", "", "<i>I</i>", "Italic"),
                ("strikeThrough", "", "<s>S</s>", "Strikethrough"),
-               ("", "", "", ""),                       # scheiding
-               ("insertUnorderedList", "", "&bull;", "List"),
-               # DE PUNTHAKEN ZIJN VERPLICHT. `formatBlock` met "h4" doet in Chrome en Safari
-               # niets — geen fout, geen effect; alleen met "<h4>" maakt hij een kop. Dat is de
-               # tweede helft van dezelfde bug als bij `strike`: een aanname over de browser.
-               ("formatBlock", "<h4>", "H", "Heading"),
                # INLINE CODE HEEFT GEEN `execCommand`. De browser kent er geen commando voor, dus
                # dit is het enige item in deze werkbalk met een EIGEN naam: `nooch.js` vangt hem
                # af vóór de execCommand-regel. De naam begint met `nv` om precies dat verschil
@@ -1317,7 +1320,17 @@ def blok_menu() -> str:
 
 def opmaak_werkbalk() -> str:
     """Zelfde atomen als de bestaande markdown-werkbalk (`.editor-tb`, `.tb-b`, `.tb-sep`), zodat
-    er geen tweede knoppentaal ontstaat voor dezelfde handeling."""
+    er geen tweede knoppentaal ontstaat voor dezelfde handeling.
+
+    HIJ ZWEEFT SINDS 26 SEPTEMBER. Hiervoor stond hij als vaste balk bovenaan het bewerkvlak,
+    `position:sticky` — en toen bewerken de stand werd, stond die balk dus op elke pagina, altijd.
+    Op een lange pagina scrolde hij bovendien weg zodra je ver genoeg naar beneden was.
+
+    Nu verschijnt hij bij een TEKSTSELECTIE, vlak erboven. Dat lost het wegscrollen structureel
+    op: er is geen vaste balk meer om weg te scrollen. Hij komt waar je selectie is.
+
+    DE SERVER RENDERT HEM NOG STEEDS HIER, en dat blijft de regel: de knoppentaal woont op één
+    plek. `nooch.js` toont en positioneert hem alleen."""
     knoppen = []
     for cmd, arg, label, titel in _OPMAAK_KNOPPEN:
         if not cmd:

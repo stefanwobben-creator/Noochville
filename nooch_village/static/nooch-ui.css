@@ -662,6 +662,12 @@
 .nu .wb-menu-item:hover { background: var(--nu-bg-alt); }
 .nu .wb-greep-knop { color: var(--nu-muted); }
 
+/* HET ZWEVENDE OPMAAK-BALKJE (26 september 2026). De basislaag geeft hem een zachte rand en een
+   schaduw; deze huisstijl kent geen zachte randen en geen schaduwen — zelfde regel als bij
+   `.nu .wb-menu`, dat hetzelfde soort zwevend ding is en er precies zo uitziet. */
+.nu .wiki-tb{border:1.5px solid var(--nu-text);border-radius:0;box-shadow:none;
+  background:var(--nu-surface)}
+
 /* DE AFBEELDING (26 september 2026). Het voorstel uit het prototype: in deze huisstijl krijgt een
    afbeelding een harde rand, zoals elk ander vlak hier, en vierkante hoeken. Buiten `.nu` blijft
    hij randloos — zelfde soort onderscheid als bij de rest van dit systeem. */

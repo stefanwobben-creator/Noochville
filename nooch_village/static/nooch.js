@@ -1026,9 +1026,85 @@
       body.classList.toggle("wiki-aan", aan);
       titel.classList.toggle("wiki-aan", aan);
       grepen(body, aan);
-      if (tb) tb.hidden = !aan;
+      // DE WERKBALK VOLGT DE SELECTIE, NIET DE STAND (26 september 2026). Hier stond
+      // `tb.hidden = !aan`, en dat klopte toen bewerken een modus was. Als stand betekende het:
+      // een vaste balk op elke pagina, altijd — die bovendien wegscrolde zodra je ver genoeg naar
+      // beneden was. Zie `balkBijSelectie` hieronder.
+      if (tb && !aan) tb.hidden = true;
       bezig = aan;
     }
+
+    /* DE OPMAAK-BALK ZWEEFT BIJ JE SELECTIE (26 september 2026).
+     *
+     * Hiervoor was het een vaste balk boven het bewerkvlak (`position:sticky`). Twee problemen,
+     * en het tweede kwam er pas bij toen bewerken de stand werd: op een lange pagina scrolde hij
+     * weg zodra je ver genoeg naar beneden was, en sindsdien stond hij bovendien op élke pagina
+     * permanent in beeld terwijl je alleen aan het lezen was.
+     *
+     * Een balkje dat bij je selectie verschijnt, lost dat STRUCTUREEL op: er is geen vaste balk
+     * meer om weg te scrollen. Hij komt waar je hem nodig hebt en gaat weer weg.
+     *
+     * ALLEEN BIJ EEN ECHTE SELECTIE. Een samengevallen selectie is een gewone cursor, en daar valt
+     * niets op te maken — een balkje dat dan verschijnt, springt bij elke klik in beeld.
+     *
+     * BINNEN DIT BEWERKVLAK. Er kan meer dan één bewerkbaar ding op een scherm staan (de titel
+     * heeft ook `contenteditable`); een selectie daarbuiten gaat deze balk niet aan.
+     */
+    function balkWeg() {
+      if (tb && !tb.hidden) tb.hidden = true;
+    }
+
+    function balkBijSelectie() {
+      if (!tb || !bezig) return;
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return balkWeg();
+      var r = sel.getRangeAt(0);
+      // `commonAncestorContainer` KAN EEN TEKSTKNOOPPUNT ZIJN, en die heeft geen `closest`.
+      var knoop = r.commonAncestorContainer;
+      if (knoop.nodeType === 3) knoop = knoop.parentNode;
+      if (!knoop || !body.contains(knoop)) return balkWeg();
+      var vak = r.getBoundingClientRect();
+      // EEN SELECTIE MET BREEDTE NUL KOMT ECHT VOOR: direct na een `execCommand` is de range
+      // heropgebouwd en meet hij even niets. Dan is er niets om boven te hangen.
+      if (!vak.width && !vak.height) return balkWeg();
+
+      tb.hidden = false;                      // eerst tonen, dan meten: verborgen heeft hij geen maat
+      var eigen = tb.getBoundingClientRect();
+      var marge = 8;
+      // BOVEN DE SELECTIE, EN ANDERS ERONDER. Bij een selectie bovenin het scherm past er niets
+      // boven; dan zou de balk half buiten beeld hangen. Onder de selectie is de enige plek die
+      // dan overblijft, en dat is precies wat elke editor daar doet.
+      var top = vak.top - eigen.height - marge;
+      if (top < marge) top = vak.bottom + marge;
+      // EN BINNEN HET VENSTER HOUDEN. Een selectie helemaal onderaan zou de balk eronder duwen;
+      // een selectie ver naar rechts zou hem over de rand schuiven.
+      var max = window.innerHeight - eigen.height - marge;
+      if (top > max) top = Math.max(marge, max);
+      var links = vak.left;
+      var rechts = window.innerWidth - eigen.width - marge;
+      if (links > rechts) links = rechts;
+      if (links < marge) links = marge;
+      tb.style.top = Math.round(top) + "px";
+      tb.style.left = Math.round(links) + "px";
+    }
+
+    // OP `selectionchange` VAN HET DOCUMENT, want een selectie is geen gebeurtenis van één
+    // element: hij ontstaat met de muis, met shift+pijltjes, met dubbelklik en met ctrl+A, en
+    // alleen dit ene event vangt ze allemaal.
+    document.addEventListener("selectionchange", balkBijSelectie);
+    // MEEBEWEGEN BIJ SCROLLEN. De positie is in venstercoördinaten, dus zonder dit blijft de balk
+    // staan waar hij stond terwijl de tekst eronder wegschuift. `balkBijSelectie` rekent hem
+    // opnieuw uit en verbergt hem als de selectie het beeld uit is.
+    window.addEventListener("scroll", balkBijSelectie, true);
+    window.addEventListener("resize", balkBijSelectie);
+    // FOCUS WEG UIT HET VELD = BALK WEG. `focusout` en niet `blur`, want de balk zelf zit buiten
+    // het bewerkvlak; een klik op een knop verplaatst de focus en mag hem niet meteen sluiten.
+    // De knoppen houden de focus tegen met `mousedown`/`preventDefault` (zie hieronder), dus wie
+    // hier belandt, klikte ergens anders.
+    body.addEventListener("focusout", function (e) {
+      if (tb && tb.contains(e.relatedTarget)) return;
+      balkWeg();
+    });
 
     /* DE OPSLAAN-BALK KOMT PAS ALS ER IETS TE BEWAREN IS.
      *
