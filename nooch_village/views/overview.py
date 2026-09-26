@@ -520,9 +520,17 @@ def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain",
     terugzetten op het eerste domein in de lijst — een stille verplaatsing bij een wijziging die
     er niets mee te maken had.
 
-    LET OP: met een LEGE lijst rendert dit een `<select>` zonder opties. Dat is bewust niet hier
-    opgelost maar bij de aanroeper, want die weet of er een aanmaak- of bewerkzin bij hoort; zie
-    `_geen_domein_uitleg`."""
+    EEN LEGE KEUZE HOORT ERBIJ: "geen domein" is een geldige toestand, en zonder die optie viel
+    een artefact zonder domein op de eerste uit de lijst zodra iemand iets anders opsloeg.
+
+    WAT HIER NIET IS OPGELOST: bij precies één domein rendert dit nog steeds een verborgen veld
+    met die ene waarde erin, dus daar is "geen domein" nog altijd onbereikbaar. Dat is een eigen
+    beslissing met een eigen toets ("één domein is geen keuze",
+    `test_een_rol_met_een_domein_krijgt_geen_keuzelijst`), en die draai je niet als bijvangst om.
+
+    LET OP: met een LEGE lijst rendert dit een `<select>` met alleen de lege optie. Dat is bewust
+    niet hier opgelost maar bij de aanroeper, want die weet of er een aanmaak- of bewerkzin bij
+    hoort; zie `_geen_domein_uitleg`."""
     if len(domains) == 1:
         d = huidig if huidig in domains else domains[0]
         # GEEN `<label>` BIJ EEN VERBORGEN VELD: een `for` die naar een hidden input wijst is
@@ -530,8 +538,22 @@ def _domain_field(domains: list, huidig: str = "", fid: str = "f-domain",
         # hetzelfde, en het scheelt de ratchet een kaal label.
         lbl = f"<div class='muted att-lbl'>Domain: {_e(d)}</div>" if toon_label else ""
         return (f"{lbl}<input type='hidden' name='domain' value='{_e(d)}'>")
-    opts = "".join(f"<option value='{_e(d)}'{' selected' if d == huidig else ''}>{_e(d)}</option>"
-                   for d in domains)
+    # GEEN DOMEIN IS EEN GELDIGE KEUZE (26 september 2026). Zonder deze optie viel een artefact
+    # zonder domein stilzwijgend op de EERSTE uit de lijst: de browser selecteert `option[0]` als
+    # er niets `selected` is, dus de eerstvolgende keer opslaan verplaatste het artefact naar een
+    # domein dat niemand koos. Precies dezelfde stille verplaatsing als waar `huidig` voor bestaat,
+    # alleen aan de lege kant.
+    #
+    # DE SERVER KON DIT AL AAN: `_act_artefact_edit` onderscheidt AFWEZIG van LEEG en schrijft een
+    # expliciet lege keuze door ("zo zet je een artefact terug op de afleiding via zijn rol").
+    # Wat ontbrak was de knop om dat te zeggen.
+    # "NONE" EN NIET "NO DOMAIN": het woord Domain staat al als label én als rastersleutel in de
+    # wiki-voet, en `test_het_woord_domein_staat_er_maar_een_keer` bewaakt precies dat het er
+    # één keer staat — die toets kwam uit een screenshot waarop "DOMAIN … DOMAIN" stond.
+    opts = (f"<option value=''{' selected' if not huidig else ''}>"
+            f"&mdash; none &mdash;</option>")
+    opts += "".join(f"<option value='{_e(d)}'{' selected' if d == huidig else ''}>{_e(d)}</option>"
+                    for d in domains)
     # Label en veld als paar, met een id die uniek is per formulier: op een rol-tab staan
     # meerdere bewerkformulieren onder elkaar, en dan mag `f-domain` niet twee keer bestaan.
     # `toon_label=False` VOOR WIE HET WOORD AL ZEGT. In het metadata-raster van de wiki-pagina

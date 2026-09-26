@@ -552,8 +552,16 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
     # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
     soorten = _e(_json.dumps(BLOK_SOORTEN, separators=(",", ":"), sort_keys=True))
-    lees = (f"<div class='card'><div class='att-body wiki-body' id='wiki-body' "
-            f"data-blok-soorten='{soorten}'>{inhoud}</div></div>")
+    # GEEN `.card` MEER OM DE TEKST (26 september 2026). De kaart tekende een rand met een eigen
+    # vlak om de BODY, terwijl de titel erbuiten stond — en daarmee las een pagina als een kop met
+    # een los kader eronder in plaats van als één document. Gemeten stond de titel bovendien op een
+    # andere linkerrand dan de tekst (de kaartpadding zat ertussen).
+    #
+    # DE GOOT BLIJFT WEL. `.wiki-doc` in `render_pagina` draagt de inspringing die de kaart had,
+    # zodat de blok-greep (`left:-1.5rem`, buiten de doos van `.wb`) nog ergens in past. Zonder
+    # die ruimte hangt hij over de rand van de pagina.
+    lees = (f"<div class='att-body wiki-body' id='wiki-body' "
+            f"data-blok-soorten='{soorten}'>{inhoud}</div>")
     if not can_edit or not csrf_token:
         return lees
 
@@ -689,17 +697,18 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # hier én de eigenaar in het blok: twee plekken voor hetzelfde, en dat is precies wat deze PR
     # opruimt.
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
-           f"<h1>📄 {titel}</h1>"
-           f"<div class='wiki-kopbalk'>"
-           # ÉÉN ACTIE IN DE KOP, en dat is de hoofdactie. Het domein-formulier stond hier ook —
-           # en na het invoegen van `_meta_blok` stond het er TWEE KEER, want het blok rendert het
-           # ook. Gevonden door `test_het_is_een_eigen_formulier_naast_de_blok_editor`, die telt
-           # hoeveel `artefact_edit`-formulieren er op de pagina staan: dat werden er drie.
-           # De keuze hoort bij de metadata, de knop hoort bij de pagina.
-           + f"<div class='wiki-kopacties'>"
-           + (f"<button type='button' class='btn sm' data-wiki-start>✎ Edit page</button>"
-              if can_edit else "")
-           + f"</div></div>")
+           f"<h1>📄 {titel}</h1>")
+    # GEEN "EDIT PAGE"-KNOP MEER (26 september 2026). Wie de pagina mag bewerken, bewerkt hem —
+    # zoals een tekstverwerker: je klikt in de tekst en typt. De knop was de laatste rest van het
+    # model "lezen is de stand, bewerken is een modus", en met hem verdwijnt ook de kopbalk die
+    # alleen hém nog droeg.
+    #
+    # WAT NIET VERANDERT: zonder bewerkrecht blijft de pagina read-only. Dat is geen aparte tak
+    # hier maar een gevolg — `_wiki_editor` rendert dan geen `#wiki-form`, en `nooch.js` zet zonder
+    # dat formulier niets aan. De poort staat dus nog steeds op één plek.
+    #
+    # OPSLAAN BLIJFT EXPLICIET. Er is geen autosave; de opslaan-balk komt tevoorschijn zodra er
+    # iets verandert. Zie `wikiEdit` in `nooch.js`.
 
     # DE TWEE AFGELEIDE SECTIES. Ze worden altijd gerenderd, maar landen op één van twee
     # plekken: in de tekst als de schrijver er een markering neerzette, anders eronder zoals ze
@@ -708,10 +717,28 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     secties = {"facts": _feiten_sectie(a, st, csrf_token, can_edit),
                "backlinks": _backlink_sectie(a, pags)}
     geplaatst = wiki.markers(a.body)
+    #: Heeft deze sectie IETS te melden? Dat is een vraag over de inhoud, niet over het scherm,
+    #: dus hij wordt hier één keer beantwoord en niet uit de HTML teruggelezen.
+    gevuld = {"facts": bool(wiki.feiten(a)),
+              "backlinks": bool(wiki.backlinks(a, pags) or wiki.ontbrekende_links(a, pags))}
 
     def _onder(k: str) -> str:
-        """Leeg zodra de schrijver de sectie zelf in zijn tekst heeft gezet."""
-        return "" if k in geplaatst else secties[k]
+        """Wat er ONDERAAN de pagina bij komt — en dat is in twee gevallen niets.
+
+        ZELF GEPLAATST: staat de markering in de tekst, dan landt de sectie dáár. Hem hier nog
+        eens tonen zou dezelfde feiten twee keer op één scherm zetten.
+
+        LEEG: een kopje "Facts" met "No facts yet" eronder is geen informatie maar meubilair. Op
+        de 92 pagina's van prod heeft er vandaag nul een feit, dus dit stond op elke pagina — twee
+        lege secties onder elke tekst, ongeacht of iemand ze ooit ging gebruiken.
+
+        EN DIE TWEE MOGEN NIET SAMENVALLEN. Heeft de schrijver de sectie zélf via het blokmenu
+        neergezet, dan blijft hij staan ook als hij nog leeg is: dat is bewuste plaatsing en dus
+        een lege plek die op gevuld wacht, geen restant. Vandaar dat de leeg-regel alleen geldt
+        voor de sectie die hier automatisch bij komt."""
+        if k in geplaatst:
+            return ""
+        return secties[k] if gevuld[k] else ""
 
     body = _wiki_editor(a, pags, csrf_token, can_edit, secties)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
@@ -736,9 +763,13 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # blokmenu staan is dat de tweede weg naar dezelfde handeling — precies het risico dat de
     # code-comment bij dat formulier zélf al benoemde. Erger nog: het werd ingediend midden in een
     # bewerksessie, dus de server schreef in de OPGESLAGEN body en gooide je onbewaarde tekst weg.
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{voorstel}"
+    # ÉÉN DOORLOPEND DOCUMENT (26 september 2026). Titel, tekst en de afgeleide secties zitten in
+    # hetzelfde omhulsel en delen dus één linkerrand en één vlak; de metadata-voet valt er met zijn
+    # scheidingslijn vanzelf onder. Hiervoor stond de titel los bóven een omrande kaart, en dan
+    # leest een pagina als twee dingen die toevallig onder elkaar staan.
+    main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_banner(msg)}{body}{voorstel}"
             f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
-            f"{meta}</div>")
+            f"{meta}</div></div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 

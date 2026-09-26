@@ -989,14 +989,28 @@
     });
   }
 
+  /* BEWERKEN IS DE STAND, NIET EEN MODUS (26 september 2026).
+   *
+   * Hiervoor stond een pagina read-only tot je op "Edit page" klikte. Dat is niet hoe een
+   * tekstverwerker werkt: daar open je een document en typ je erin. De knop is weg; wie mag
+   * bewerken krijgt een bewerkbare pagina zodra hij hem opent.
+   *
+   * DE POORT VERSCHUIFT NIET. Er is hier geen `can_edit`-tak: `_wiki_editor` rendert zonder
+   * bewerkrecht géén `#wiki-form`, en zonder dat formulier valt deze functie meteen terug. De
+   * server beslist dus nog steeds wie mag, op precies één plek.
+   *
+   * OPSLAAN BLIJFT EXPLICIET \u2014 geen autosave per toetsaanslag. De opslaan-balk verschijnt pas als
+   * er echt iets veranderd is; zie `gewijzigd()`.
+   */
   function wikiEdit(root) {
-    var start = root.querySelector("[data-wiki-start]");
     var body = root.querySelector("#wiki-body");
     var titel = root.querySelector("#wiki-titel");
     var form = root.querySelector("#wiki-form");
     var tb = root.querySelector("#wiki-tb");
-    if (!start || !body || !titel || !form || start.dataset.nvWired) return;
-    start.dataset.nvWired = "1";
+    // OP DE BODY GEHAAKT en niet meer op de startknop, want die bestaat niet meer. `#wiki-form`
+    // is de poort: geen formulier = geen bewerkrecht = niets aanzetten.
+    if (!body || !titel || !form || body.dataset.nvWired) return;
+    body.dataset.nvWired = "1";
 
     var origineel = { body: body.innerHTML, titel: titel.textContent };
     var bezig = false;
@@ -1013,22 +1027,48 @@
       titel.classList.toggle("wiki-aan", aan);
       grepen(body, aan);
       if (tb) tb.hidden = !aan;
-      form.hidden = !aan;
       bezig = aan;
     }
 
-    start.addEventListener("click", function () {
-      if (bezig) return;
-      origineel = { body: body.innerHTML, titel: titel.textContent };
-      editeerbaar(true);
-      body.focus();
+    /* DE OPSLAAN-BALK KOMT PAS ALS ER IETS TE BEWAREN IS.
+     *
+     * Altijd tonen zou onder elke pagina een balk met "Save" en een uitlegzin zetten, ook als je
+     * alleen aan het lezen bent. Pas tonen bij een wijziging houdt de pagina rustig én laat
+     * opslaan een expliciete handeling — er wordt niets vanzelf bewaard.
+     *
+     * EEN MutationObserver EN GEEN LIJST AANROEPPUNTEN. Er zijn minstens acht plekken die het
+     * document veranderen (typen, plakken, de werkbalk, het blokmenu, een upload, slepen,
+     * omhoog/omlaag, verwijderen) en één vergeten aanroep betekent: iemand bewerkt, ziet geen
+     * knop, en verliest zijn werk. De waarnemer hangt aan de boom zelf en kan er dus geen missen.
+     *
+     * HIJ START NÁ `editeerbaar(true)`, want het aanzetten hangt zelf de grepen en de plus in de
+     * blokken — dat zijn chrome-mutaties, geen bewerkingen.
+     */
+    function gewijzigd() {
+      if (form.hidden) form.hidden = false;
+    }
+
+    editeerbaar(true);
+    form.hidden = true;
+    var waarnemer = new MutationObserver(gewijzigd);
+    waarnemer.observe(body, {
+      childList: true, subtree: true, characterData: true, attributes: true
     });
+    titel.addEventListener("input", gewijzigd);
 
     var annuleer = form.querySelector("[data-wiki-cancel]");
     if (annuleer) annuleer.addEventListener("click", function () {
       body.innerHTML = origineel.body;
       titel.textContent = origineel.titel;
-      editeerbaar(false);
+      // TERUG NAAR DE BEGINSTAND, NIET NAAR READ-ONLY. Annuleren gooit je wijzigingen weg; het
+      // ontneemt je niet het recht om te bewerken, want dat is sinds deze stap de stand.
+      grepen(body, true);
+      // HET HERSTEL IS ZELF EEN MUTATIE, en de waarnemer draait ASYNCHROON. Gemeten in Firefox:
+      // `form.hidden = true` liep eerst, daarna kwam de callback van het terugzetten langs en
+      // stond de balk weer open — annuleren leek dan niets te doen. `takeRecords()` leegt de
+      // wachtrij van wat er zélf net is teruggezet; alles wat daarna gebeurt telt gewoon weer.
+      waarnemer.takeRecords();
+      form.hidden = true;
     });
 
     // De werkbalk. `styleWithCSS=false` is de hele reden dat dit zonder library kan: mét CSS

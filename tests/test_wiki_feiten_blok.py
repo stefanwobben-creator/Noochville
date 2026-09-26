@@ -48,6 +48,15 @@ def _dorp(tmp_path, can_edit=True):
     return dd, st, rol
 
 
+#: SINDS 26 SEPTEMBER VERSCHIJNT EEN LEGE SECTIE NIET MEER ONDERAAN. Deze toetsen gaan over WAAR
+#: een sectie landt, niet over of hij bestaat — dus krijgen ze een pagina die écht iets te melden
+#: heeft. Anders meten ze stil het nieuwe leeg-gedrag in plaats van hun eigen onderwerp.
+def _met_inhoud(st, rol, body: str):
+    a = st.att.add(rol, "note", title="Een pagina", body=body + "\n\nZie [[Nog niet geschreven]].")
+    st.att.update(a.id, meta={"feiten": [wiki.maak_feit("Schoenen wegen 300 gram")]})
+    return st.att.get(a.id)
+
+
 def _pagina(st, a, can_edit=True):
     return render_pagina(st, a.id, csrf_token="TOK",
                          username="b@t.nl" if can_edit else "")
@@ -175,7 +184,7 @@ def test_een_void_tag_in_chrome_slikt_niets_meer_in():
 def test_zonder_markering_staan_de_secties_waar_ze_stonden(tmp_path):
     """DE VAL-TERUG-VORM, en die telt het zwaarst: 122 pagina's op prod hebben geen markering."""
     dd, st, rol = _dorp(tmp_path)
-    a = st.att.add(rol, "note", title="Een pagina", body="Gewone tekst.")
+    a = _met_inhoud(st, rol, "Gewone tekst.")
     html = _pagina(st, a)
     assert html.count(">Facts</h3>") == 1
     assert html.count(">Links here</h3>") == 1
@@ -195,7 +204,7 @@ def test_met_markering_staat_de_sectie_in_de_tekst_en_niet_meer_eronder(tmp_path
 
 def test_de_backlink_markering_werkt_hetzelfde(tmp_path):
     dd, st, rol = _dorp(tmp_path)
-    a = st.att.add(rol, "note", title="Een pagina", body="Tekst.\n\n{{backlinks}}")
+    a = _met_inhoud(st, rol, "Tekst.\n\n{{backlinks}}")
     html = _pagina(st, a)
     assert html.count(">Links here</h3>") == 1
     assert "data-blok='backlinks'" in html
@@ -267,8 +276,7 @@ def test_de_volgorde_onderaan_blijft_zoals_hij_was(tmp_path):
     regels en verschuift "Decisions logged" naar boven de feiten — een wijziging die niemand
     vroeg, op een scherm dat verder niets van deze stap hoort te merken."""
     dd, st, rol = _dorp(tmp_path)
-    a = st.att.add(rol, "note", title="Een pagina",
-                   body="Kijk op /decision-coach voor de sessies.")
+    a = _met_inhoud(st, rol, "Kijk op /decision-coach voor de sessies.")
     html = _pagina(st, a)
     assert (html.index(">Facts</h3>") < html.index(">Decisions logged</h3>")
             < html.index(">Links here</h3>"))

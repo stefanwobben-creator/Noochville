@@ -131,10 +131,11 @@ def test_het_domein_veld_bestaat_nog(tmp_path):
 def test_het_domein_zegt_waar_het_over_gaat(tmp_path):
     """Een kale "DOMAIN" zegt niets. Wat het doet: bepalen waar de pagina in de wiki-structuur
     valt."""
+    # IN DE VOET, want daar staat het veld sinds #602 — en de kopbalk die deze toets las, bestaat
+    # sinds 26 september niet meer (de "Edit page"-knop was het laatste wat erin stond).
     html, _a, _ = _pagina(tmp_path)
-    balk = html.split("wiki-kopacties")[1]
-    assert "wiki structure" in balk.lower() or "structure" in balk.lower(), \
-        "het domein legt niet uit wat het doet"
+    voet = html.split("class='wiki-meta'")[1]
+    assert "wiki structure" in voet.lower(), "het domein legt niet uit wat het doet"
 
 
 def test_het_domein_toont_waar_de_pagina_nu_valt(tmp_path):
@@ -194,9 +195,24 @@ def test_de_move_knop_draagt_een_tooltip(tmp_path):
 
 
 # ── 5. Wat niet mag veranderen ───────────────────────────────────────────────
-def test_de_bewerkknop_blijft(tmp_path):
+def test_er_is_geen_bewerkknop_meer_maar_wel_een_bewerkvlak(tmp_path):
+    """DE KNOP IS WEG (26 september 2026), en dat is de hele wijziging: wie mag bewerken, bewerkt
+    — zoals in een tekstverwerker. Deze toets heette "de bewerkknop blijft" en bewaakte precies
+    het tegenovergestelde; hij meet nu waar het recht écht aan hangt.
+
+    HET BEWERKVLAK IS DE POORT. `nooch.js` zet niets aan zonder `#wiki-form`, en dat formulier
+    rendert alleen met bewerkrecht. Verdwijnt die koppeling, dan is de pagina voor iedereen
+    bewerkbaar of voor niemand — daarom staat hij hier vast."""
     html, _a, _ = _pagina(tmp_path)
-    assert "data-wiki-start" in html
+    assert "data-wiki-start" not in html, "de Edit page-knop staat er nog"
+    assert "id='wiki-form'" in html, "er is geen bewerkvlak voor wie wel mag"
+
+
+def test_zonder_bewerkrecht_blijft_de_pagina_leesbaar(tmp_path):
+    """De andere kant van dezelfde poort: geen formulier, dus zet de browser niets aan."""
+    dd, st, a, _rec = _dorp(tmp_path)
+    html = render_pagina(st, a.id, csrf_token="", username=None)
+    assert "id='wiki-form'" not in html and "contenteditable" not in html
 
 
 def test_de_blokstand_blijft_aan(tmp_path):
@@ -300,15 +316,14 @@ def test_de_uitleg_zit_in_de_cel_van_zijn_veld(tmp_path):
     assert "Where this page sits" in hele_cel, "de uitleg staat buiten de cel van zijn veld"
 
 
-def test_verplaatsen_is_secundair_en_bewerken_primair(tmp_path):
-    """Gemeten stonden Move page en Edit page er identiek bij: zelfde rand, zelfde hoogte,
-    zelfde kapitalen. Twee even zware knoppen naast elkaar betekent dat geen van beide de
-    hoofdactie is. `ghost` is de variant die de app daar al voor heeft."""
-    import re as _re
+def test_verplaatsen_blijft_de_lichte_variant(tmp_path):
+    """Gemeten stonden Move page en Edit page er ooit identiek bij; Move werd daarom `ghost`.
+
+    DE VERGELIJKING IS VERVALLEN, de keuze niet. "Edit page" bestaat sinds 26 september niet meer
+    — bewerken is de stand — dus er valt niets meer náást te leggen. Wat blijft: verplaatsen is een
+    structuurwijziging in een voet vol administratie, en die hoort geen volle knop te zijn."""
     html, _a, _ = _pagina(tmp_path)
-    assert "ghost" in _move_knop(html), "de Move-knop is even zwaar als de hoofdactie"
-    edit = _re.search(r"<button[^>]*data-wiki-start[^>]*>", html)
-    assert edit and "ghost" not in edit.group(0), "de hoofdactie is verzwakt"
+    assert "ghost" in _move_knop(html), "de Move-knop is zwaarder geworden dan hij was"
 
 
 def test_het_veld_en_de_knop_staan_op_een_rij(tmp_path):
