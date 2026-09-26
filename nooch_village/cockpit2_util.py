@@ -1303,6 +1303,20 @@ BLOK_MENU = (
 )
 
 
+#: Uitleg bij een bloktype dat je als RUWE MARKDOWN bewerkt. Alleen de tabel heeft er een, en dat
+#: is geen willekeur: bij een codeblok is "typ hier je code" geen informatie, maar bij een tabel
+#: staat er een `|---|---|`-regel in het sjabloon die er precies zo moet blijven staan — haal je
+#: hem weg, dan is het geen tabel meer maar drie regels tekst met streepjes.
+#:
+#: HIER EN NIET IN `nooch.js`, om dezelfde reden als de rest van deze tabel: het vocabulaire woont
+#: op één plek, en de browser kopieert alleen wat de server meestuurt. Op TAG en niet op label,
+#: want een label is een naam die iemand vertaalt.
+BLOK_HINT = {
+    "table": ("Eerste regel = kolomnamen, tweede regel = |---|---| "
+              "(laat die exact zo staan), daarna je gegevens."),
+}
+
+
 def blok_menu() -> str:
     """Het sjabloon voor het /-menu. Verborgen; `nooch.js` kloont hem naar het blok waar je typt.
 
@@ -1312,6 +1326,9 @@ def blok_menu() -> str:
     knoppen = "".join(
         f"<button type='button' class='wb-menu-item' data-wiki-cmd='{_e(cmd)}'"
         + (f" data-wiki-arg='{_e(arg)}'" if arg else "")
+        # DE HINT REIST MEE ALS ATTRIBUUT, zoals het sjabloon en de soorten-tabel. `nooch.js` zet
+        # hem neer bij het bewerkvlak; hij bedenkt hem niet.
+        + (f" data-wiki-hint='{_e(BLOK_HINT[_tag])}'" if _tag in BLOK_HINT else "")
         + f">{_e(label)}</button>"
         for _tag, label, cmd, arg in BLOK_MENU)
     return (f"<div id='wb-menu-sjabloon' class='wb-menu' data-chrome hidden>"

@@ -760,7 +760,7 @@
    * bestaande inhoud van het blok; bij een NIEUWE tabel of codeblok uit het menu is het een
    * sjabloon dat de server meestuurde. Eén functie, want het is één ding: een blok waarvan je de
    * ruwe markdown bewerkt omdat `contenteditable` er niet mee overweg kan. */
-  function bronVeld(blok, tekst) {
+  function bronVeld(blok, tekst, hint) {
     Array.prototype.forEach.call(blok.children, function (k) {
       if (!k.hasAttribute || !k.hasAttribute("data-chrome")) k.remove();
     });
@@ -774,6 +774,23 @@
     veld.value = tekst;
     veld.rows = tekst.split("\n").length + 1;
     blok.appendChild(veld);
+    // DE UITLEG BIJ HET SJABLOON (26 september 2026). Een leeg tekstvak met `| A | B |` erin zegt
+    // niet dat de `|---|---|`-regel er precies zo moet blijven staan — haal je hem weg, dan is het
+    // geen tabel meer maar drie regels tekst met streepjes.
+    //
+    // `data-chrome`, want hij hoort bij het SCHERM en niet bij de tekst: zonder dat zou hij bij
+    // het opslaan in de bron belanden, en dan staat de uitleg voortaan in de tabel. Dezelfde
+    // verdediging als bij de greep en het bijschrift van een afbeelding.
+    //
+    // DE TEKST KOMT VAN DE SERVER (`BLOK_HINT`), zoals het sjabloon ernaast. Dit bestand bedenkt
+    // geen uitleg, net zomin als het bloktypes bedenkt.
+    if (hint) {
+      var uitleg = document.createElement("div");
+      uitleg.className = "muted wiki-hint";
+      uitleg.setAttribute("data-chrome", "");
+      uitleg.textContent = hint;
+      blok.appendChild(uitleg);
+    }
     veld.focus();
   }
 
@@ -915,7 +932,7 @@
     // server mee en openen meteen het bron-bewerkvlak; de server maakt er bij het opslaan het
     // echte blok van. Zo blijft er één renderer, en kent dit bestand nog steeds geen bloktypes.
     if (knop.dataset.wikiCmd === "bron") {
-      bronVeld(blok, knop.dataset.wikiArg || "");
+      bronVeld(blok, knop.dataset.wikiArg || "", knop.dataset.wikiHint || "");
       NV.blokNormaliseer(body);
       grepen(body, true);
       return;
