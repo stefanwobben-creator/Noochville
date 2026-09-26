@@ -277,6 +277,19 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    andere opsommingsvorm, en twee verschillende inspringingen naast elkaar lezen als twee
    niveaus die er niet zijn. */
 .fol{margin:.2rem 0 .2rem 1.1rem}
+/* ── Opeenvolgende lijstitems sluiten aan (26 september 2026) ────────────────────────
+   Sinds elk bolletje zijn eigen blok is, staat er tussen twee items een ondermarge én een
+   bovenmarge — en die tellen op, want ze zitten in aparte `<div>`s en kunnen dus niet
+   samenvallen. Gemeten: een lijst die eerst aaneengesloten was, viel uit elkaar in losse regels
+   met dubbele witruimte ertussen.
+
+   OP DE OVERGANG EN NIET OP DE LIJST ZELF: de marge vóór het eerste item en ná het laatste blijft
+   staan, want daar grenst de lijst aan gewone tekst. Alleen tussen twee items van dezelfde soort
+   gaat hij eraf. */
+.wb[data-blok='ul'] + .wb[data-blok='ul'] .fbul{margin-top:0}
+.wb[data-blok='ul']:has(+ .wb[data-blok='ul']) .fbul{margin-bottom:0}
+.wb[data-blok='ol'] + .wb[data-blok='ol'] .fol{margin-top:0}
+.wb[data-blok='ol']:has(+ .wb[data-blok='ol']) .fol{margin-bottom:0}
 /* EEN CITAAT MOET ER ALS CITAAT UITZIEN. De browser geeft een `<blockquote>` alleen 40px
    inspringing — geen lijn, geen kleur, geen cursief — en op het scherm was het een alinea die
    toevallig wat naar rechts stond. Gemeten, niet aangenomen. Een lijn links, zoals dit dorp
