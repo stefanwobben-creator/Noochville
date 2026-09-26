@@ -316,9 +316,11 @@ _BESTAND_REGEL = "[brief.pdf](/wiki-bestand/NOTE-1/ef56gh78_brief.pdf)"
 #: hier stil de uitkomst van "Tekst" voor alle drie.
 _UITKOMST = {
     "Tekst": ("<p>regel</p>", "regel"),
-    "Kop 1": ("<h3>regel</h3>", "# regel"),
-    "Kop 2": ("<h4>regel</h4>", "## regel"),
-    "Kop 3": ("<h5>regel</h5>", "### regel"),
+    # DE LABELS HEETTEN "Kop 1/2/3" en zijn op 26 september "H2/H3/H4" geworden. Alleen de NAAM:
+    # de tags (h3/h4/h5) en de markdown eronder (`#`/`##`/`###`) staan er nog precies zo.
+    "H2": ("<h3>regel</h3>", "# regel"),
+    "H3": ("<h4>regel</h4>", "## regel"),
+    "H4": ("<h5>regel</h5>", "### regel"),
     "Lijst": ("<div class='wb' data-blok='p'><ul><li>regel</li></ul></div>", "- regel"),
     "Genummerde lijst": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>",
                          "1. regel"),
@@ -442,7 +444,15 @@ def test_de_streep_verdwijnt_maar_pas_na_het_commando():
         "de streep wordt weggehaald vóór het commando — dan doet het commando niets"
     assert na_cmd.index("streep.remove()") < na_cmd.index("blokNormaliseer"), \
         "de streep moet weg zijn voordat het blokmodel wordt bijgewerkt"
-    assert bron.count("streepNode(") == 2, \
+    # OPNIEUW ZOEKEN NÁ HET COMMANDO, en dat is wat deze regel bewaakt: `formatBlock` bouwt het
+    # element opnieuw op, dus de oude referentie is dan losgekoppeld en `streep.remove()` zou een
+    # knooppunt weghalen dat nergens meer in de pagina hangt.
+    #
+    # DIT TELDE TWEE AANROEPEN in deze ene functie. Sinds 26 september zoekt `kiesInhoud()` de
+    # eerste op — die moet namelijk ook met een bestaand blok overweg kunnen, waar helemaal geen
+    # streep in staat. Wat telt is niet het aantal maar de PLEK: er wordt opnieuw gezocht nadat
+    # het commando heeft gedraaid.
+    assert "streepNode(" in na_cmd, \
         ("het knooppunt wordt hergebruikt in plaats van opnieuw gezocht; `formatBlock` bouwt het "
          "element opnieuw op en dan is de oude referentie losgekoppeld")
     assert "blokNormaliseer" in bron, "na het commando klopt het blokmodel niet meer"

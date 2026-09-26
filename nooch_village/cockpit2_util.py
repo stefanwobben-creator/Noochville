@@ -1307,9 +1307,16 @@ _AFGELEID_LABEL = {"facts": "Feiten", "backlinks": "Backlinks"}
 #: `_BRON_BLOK` (of is `p`, de terugval), en een test bewaakt dat.
 BLOK_MENU = (
     ("p", "Tekst", "formatBlock", "<p>"),
-    ("h3", "Kop 1", "formatBlock", "<h3>"),
-    ("h4", "Kop 2", "formatBlock", "<h4>"),
-    ("h5", "Kop 3", "formatBlock", "<h5>"),
+    # DE LABELS HEETTEN "Kop 1/2/3" (26 september 2026). Dat telde de koppen van deze pagina, niet
+    # die van het document: h3/h4/h5 zijn wat de tekst hier gebruikt, want de paginatitel is de h1
+    # en `_md` begint bij h3. Wie "Kop 1" kiest krijgt dus geen h1 — en dat is precies het soort
+    # naam dat je pas doorhebt als je het HTML-resultaat bekijkt.
+    #
+    # ALLEEN HET LABEL VERANDERT. De tag en het `execCommand`-argument blijven h3/h4/h5, dus de
+    # markdown-opslag (`# / ## / ###`) is niet geraakt. Wat je kiest heet nu waar het op uitkomt.
+    ("h3", "H2", "formatBlock", "<h3>"),
+    ("h4", "H3", "formatBlock", "<h4>"),
+    ("h5", "H4", "formatBlock", "<h5>"),
     ("ul", "Lijst", "insertUnorderedList", ""),
     ("ol", "Genummerde lijst", "insertOrderedList", ""),
     ("blockquote", "Citaat", "formatBlock", "<blockquote>"),
@@ -1367,7 +1374,11 @@ def blok_menu() -> str:
         + (f" data-wiki-hint='{_e(BLOK_HINT[_tag])}'" if _tag in BLOK_HINT else "")
         + f">{_e(label)}</button>"
         for _tag, label, cmd, arg in BLOK_MENU)
-    return (f"<div id='wb-menu-sjabloon' class='wb-menu' data-chrome hidden>"
+    # `wb-menu-zwevend` NAAST `wb-menu` (26 september 2026). De greep-acties (omhoog/omlaag/
+    # verwijderen) gebruiken dezelfde `.wb-menu`-vorm maar hangen absoluut onder hun greep; dit
+    # menu wordt door `zweefBij` in VENSTERcoördinaten gezet en moet daarvoor `fixed` staan.
+    # Twee gedragingen, dus twee klassen — en de vorm blijft één regel CSS.
+    return (f"<div id='wb-menu-sjabloon' class='wb-menu wb-menu-zwevend' data-chrome hidden>"
             f"{knoppen}</div>")
 
 
