@@ -372,7 +372,7 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # vervanging moest opheffen.
 
 def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
-               *, tab: str = "notes") -> str:
+               *, tab: str = "notes", st=None, username: str | None = None) -> str:
     """Alle paginametadata als ÉÉN element, in het vocabulaire dat de app al heeft.
 
     WAT HIER WERD OPGELOST. De metadata stond als losse controls om de titel heen: het ID in de
@@ -419,7 +419,10 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     from nooch_village import domeinen as _dom
     bakje, _waarom = _dom.bakje_van(a, list(records or []))
     waar = f"Where this page sits in the wiki structure &mdash; now: {_e(_dom.label(bakje))}"
-    dom = _domein_form(a, eigenaar, csrf_token, can_edit, records)
+    # `st` EN `username` REIZEN MEE, want wie het domein mag verzetten hangt sinds
+    # 26 september af van wie het domein HOUDT — en dat staat in de records, niet in `a`.
+    dom = _domein_form(a, eigenaar, csrf_token, can_edit, records,
+                       st=st, username=username)
     if dom:
         rij("Domain", dom, waar)
     else:
@@ -488,7 +491,56 @@ def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes") -
             f"Deleting removes it and its uploaded files for good.</div></span>")
 
 
-def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> str:
+def _domein_chip(a) -> str:
+    """Het domein als vast label, voor wie het niet mag verzetten.
+
+    LEZEN BLIJFT VRIJ, cureren niet — dezelfde domein-eigenaarschapsregel als voor de Library en
+    het certificaten-register. Wie hier komt ziet dus wáár de pagina hangt, alleen zonder de
+    keuzelijst en zonder de knop ernaast: een knop die de server daarna weigert, belooft iets wat
+    niet kan."""
+    return f"<span class='chip muted'>{_e(getattr(a, 'domain', '') or '—')}</span>"
+
+
+def _mag_domein_wijzigen(a, st, username: str | None) -> bool:
+    """Wie mag deze pagina naar een ander domein verplaatsen?
+
+    ZOLANG ER GEEN DOMEIN IS, mag iedereen met bewerkrecht hem indelen. Dat is het huidige gedrag
+    en het hoort zo: een ongeplaatste pagina heeft nog geen eigenaar die er iets over te zeggen
+    heeft, en de drempel om hem überhaupt in te delen moet laag blijven.
+
+    ZODRA HIJ ER ÉÉN HEEFT, is het verplaatsen een ingreep in andermans domein: de rol die dat
+    domein houdt verliest er iets uit. Dan mag alleen die rolvervuller het nog, plus de Circle Lead
+    van de cirkel waar de eigenaar-rol in zit — dezelfde figuur die bij `artefact_delete` de
+    zwaarste knop bedient.
+
+    EEN CONFIGURATIEFOUT SLUIT NIEMAND BUITEN. `domein_eigenaar` geeft een lege rol terug in drie
+    gevallen: het domein bestaat niet als verklaring, niemand houdt het, of twee rollen houden het
+    allebei. Dat zijn alle drie fouten in de governance-administratie, en die horen daar opgelost
+    te worden — niet doordat een pagina hier stilzwijgend op slot gaat en niemand meer weet
+    waarom. Terugval op het huidige gedrag, precies zoals `domein_eigenaar` zelf ook terugvalt.
+
+    GEEN SESSIE, GEEN OORDEEL: zonder `st` of `username` valt hij terug, want dan kan hij de vraag
+    niet stellen. De echte poort staat op de server (`_act_artefact_edit` toetst al of het gekozen
+    domein bij de rol hoort); dit bepaalt alleen wat je te zien krijgt."""
+    from nooch_village import triage_rol
+    from nooch_village.cockpit2 import is_circle_lead, is_role_filler, resolve_circle_id
+
+    domein = (getattr(a, "domain", "") or "").strip()
+    if not domein or st is None or not username or username == "guest":
+        return True
+    houder = (triage_rol.domein_eigenaar(st, domein) or {}).get("rol") or ""
+    if not houder:
+        return True                       # configuratiefout — zie de docstring
+    actor = st.people.by_email(username)
+    if actor is None:
+        return True                       # onbekende gebruiker: `can_edit` heeft al geoordeeld
+    if is_role_filler(actor.id, houder, st.assign):
+        return True
+    return bool(is_circle_lead(actor.id, resolve_circle_id(a.anchor, st.records), st.assign))
+
+
+def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
+                 *, st=None, username: str | None = None) -> str:
     """De domein-keuze van deze pagina, in de kopbalk.
 
     EEN EIGEN FORMULIER, NAAST DE BLOK-EDITOR. De opslaan-balk van `wiki-form` verschijnt pas als
@@ -508,6 +560,8 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> 
 
     if not can_edit or not csrf_token or a.kind != wiki.PAGINA_KIND:
         return ""
+    if not _mag_domein_wijzigen(a, st, username):
+        return _domein_chip(a)
     rol_domeinen = list(getattr(getattr(eigenaar, "definition", None), "domains", None) or [])
     if not rol_domeinen:
         return _geen_domein_uitleg("file this page under it")
@@ -649,7 +703,8 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
 
     # DE METADATA STAAT ONDERAAN, net als op de note-pagina (26 september 2026). Drie renderers
     # met drie volgordes is precies hoe ze uit elkaar lopen.
-    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab=tab)
+    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(),
+                      tab=tab, st=st, username=username)
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{meta}</div>")
     return _page(f"{a.title or a.id} — {a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
@@ -757,7 +812,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # inhoud: boven de vouw las je vijf regels techniek voor je bij de eerste zin was. Boven blijft
     # nu alleen de titel en de hoofdactie; alles wat OVER de pagina gaat staat eronder, na de
     # inhoud en na de twee afgeleide secties.
-    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab="notes")
+    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(),
+                      tab="notes", st=st, username=username)
     # HET LOSSE UPLOADFORMULIER IS WEG (26 september 2026). Het stond hier als `<details>` onder
     # de tekst en plakte zijn regel altijd ACHTER de body. Sinds "Afbeelding" en "Bestand" in het
     # blokmenu staan is dat de tweede weg naar dezelfde handeling — precies het risico dat de

@@ -668,10 +668,16 @@
 .nu .wiki-tb{border:1.5px solid var(--nu-text);border-radius:0;box-shadow:none;
   background:var(--nu-surface)}
 
-/* DE AFBEELDING (26 september 2026). Het voorstel uit het prototype: in deze huisstijl krijgt een
-   afbeelding een harde rand, zoals elk ander vlak hier, en vierkante hoeken. Buiten `.nu` blijft
-   hij randloos — zelfde soort onderscheid als bij de rest van dit systeem. */
-.nu .wb-img img{border:var(--nu-border);border-radius:0}
+/* DE AFBEELDING (26 september 2026). Hier stond `border:var(--nu-border)` — het voorstel uit het
+   prototype, "een harde rand zoals elk ander vlak hier". Live gezien klopte dat niet: een
+   afbeelding ÍS het vlak, en een rand eromheen maakt er een ingelijst plaatje van in plaats van
+   een stuk pagina. Zelfde gedachte als bij `.wiki-inline` en de metadata-voet, waar het kader er
+   om dezelfde reden af ging. De vierkante hoeken blijven — die zijn wél de huisstijl.
+
+   DE RAND VAN DE BALK HIERBOVEN BLIJFT WÉL. Dat is geen tegenspraak: een werkbalk is chrome die
+   boven de pagina zweeft en een rand nodig heeft om zich van de tekst te onderscheiden; een
+   afbeelding is de pagina. */
+.nu .wb-img img{border-radius:0}
 
 /* HET AFGELEIDE BLOK EN DE METADATA-VOET (26 september 2026). De basislaag tekent de accentlijn
    en de voetstreep op `--border`, de warme zandtint die in deze huisstijl niet bestaat;

@@ -413,6 +413,27 @@ BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
                 "table": "tabel"}
 
 
+#: Uitleg bij een bloktype dat je als RUWE MARKDOWN bewerkt. Alleen de tabel heeft er een, en dat
+#: is geen willekeur: bij een codeblok is "typ hier je code" geen informatie, maar bij een tabel
+#: staat er een `|---|---|`-regel in het sjabloon die er precies zo moet blijven staan — haal je
+#: hem weg, dan is het geen tabel meer maar drie regels tekst met streepjes.
+#:
+#: HIER EN NIET IN `nooch.js`, om dezelfde reden als de rest van deze tabel: het vocabulaire woont
+#: op één plek, en de browser kopieert alleen wat de server meestuurt. Op TAG en niet op label,
+#: want een label is een naam die iemand vertaalt.
+BLOK_HINT = {
+    "table": ("Eerste regel = kolomnamen, tweede regel = |---|---| "
+              "(laat die exact zo staan), daarna je gegevens."),
+}
+
+#: Dezelfde hints, maar op de BLOKSOORT in plaats van op de tag — dat is wat `data-blok` draagt,
+#: en dus waar `_md` bij het renderen naar kijkt. AFGELEID uit `BLOK_SOORTEN` en niet apart
+#: opgeschreven: een tweede vertaling tag→soort zou na één wijziging uit de pas lopen met de
+#: eerste, en dan krijgt één van de twee routes stil geen uitleg meer.
+_BLOK_HINT_PER_SOORT = {BLOK_SOORTEN[tag]: tekst
+                        for tag, tekst in BLOK_HINT.items() if tag in BLOK_SOORTEN}
+
+
 def _md(text: str, blokken: bool = False) -> str:
     """Lichte opmaak voor reacties/notities: HTML-veilig, met **vet**, *cursief*, ~~doorhalen~~,
     ## koppen, [tekst](url)-links (alleen http(s)), regelafbrekingen en '- ' lijstjes. CRLF (uit
@@ -502,7 +523,20 @@ def _md(text: str, blokken: bool = False) -> str:
     # als vóór de blokstand bestond. Dat is wat `test_zonder_de_vlag_is_er_niets_veranderd`
     # byte voor byte vastlegt — deze functie rendert ook elke reactie en elk kanaalbericht.
     def open_(soort):
-        return BLOK_OPEN.format(soort=soort) if blokken else ""
+        # DE HINT HANGT AAN HET BLOK (26 september 2026), en niet alleen aan de menu-knop.
+        # Hiervoor kreeg je de uitleg bij een NIEUWE tabel uit het blokmenu, maar niet als je een
+        # bestaande openmaakte met "✎ bewerk als tekst" — dezelfde `|---|---|`-regel, dezelfde
+        # val, geen uitleg. Nu draagt elk tabel-blok hem zelf, dus `naarBron()` hoeft alleen door
+        # te geven wat er al staat.
+        #
+        # OP DE SOORT EN NIET OP DE TAG, want dat is wat `data-blok` draagt — en dit is de plek
+        # waar `data-blok` gezet wordt. `_BLOK_HINT_PER_SOORT` leidt de sleutel af uit
+        # `BLOK_SOORTEN`, zodat er geen tweede vertaling tag→soort ontstaat.
+        if not blokken:
+            return ""
+        hint = _BLOK_HINT_PER_SOORT.get(soort)
+        extra = f" data-wiki-hint='{_e(hint)}'" if hint else ""
+        return BLOK_OPEN.format(soort=soort)[:-1] + extra + ">"
 
     dicht = BLOK_DICHT if blokken else ""
     out = []
@@ -1312,6 +1346,9 @@ def blok_menu() -> str:
     knoppen = "".join(
         f"<button type='button' class='wb-menu-item' data-wiki-cmd='{_e(cmd)}'"
         + (f" data-wiki-arg='{_e(arg)}'" if arg else "")
+        # DE HINT REIST MEE ALS ATTRIBUUT, zoals het sjabloon en de soorten-tabel. `nooch.js` zet
+        # hem neer bij het bewerkvlak; hij bedenkt hem niet.
+        + (f" data-wiki-hint='{_e(BLOK_HINT[_tag])}'" if _tag in BLOK_HINT else "")
         + f">{_e(label)}</button>"
         for _tag, label, cmd, arg in BLOK_MENU)
     return (f"<div id='wb-menu-sjabloon' class='wb-menu' data-chrome hidden>"

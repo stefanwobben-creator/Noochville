@@ -63,6 +63,11 @@ class _NepPagina:
         "- eerste punt\n- tweede punt\n\n"
         "> een citaat\n\n"
         "1. genummerd\n2. nog een\n\n"
+        # EEN BESTAANDE TABEL (26 september 2026). De harness maakte er wel één via het blokmenu,
+        # maar er stond er nooit al eentje — en juist die route ("✎ bewerk als tekst" op de greep)
+        # kreeg geen uitleg bij het `|---|---|`-sjabloon. Zonder een tabel in de body is dat niet
+        # te meten.
+        "| Materiaal | Herkomst |\n|---|---|\n| Hennep | NL |\n\n"
         "---\n\n"
         "Een pagina begint met gewone tekst.\n\n"
         # HET AFGELEIDE BLOK. Staat hier omdat het het enige blok is dat FORMULIEREN draagt, en
