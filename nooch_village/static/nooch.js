@@ -839,6 +839,71 @@
     return null;
   }
 
+  /* EEN BESTAND OP DE PLEK VAN DE `+` (26 september 2026).
+   *
+   * Hiervoor stond er één uploadformulier onderaan de pagina en plakte de server de regel
+   * ACHTER de body. Twee dingen klopten daar niet. Je kon een afbeelding niet tussen twee
+   * alinea's krijgen zonder hem daarna te verslepen — en erger: het formulier werd ingediend
+   * terwijl je middenin een bewerksessie zat, dus de server schreef in de OPGESLAGEN body en
+   * stuurde je door, waarmee alles wat je sinds "Edit page" had getypt verdween.
+   *
+   * DE SERVER RENDERT, DE BROWSER ZET NEER. `d.html` is de uitkomst van dezelfde `_md` die de
+   * pagina tekent, één blok groot. Dit bestand leert dus NIET wat een afbeeldingsextensie is of
+   * hoe een `![...]` eruitziet — precies de regel die hier al drie keer staat: er komt geen
+   * tweede renderer in JS.
+   *
+   * HET BESTAND IS AL OPGESLAGEN als dit terugkomt. Slaat de schrijver zijn bewerking niet op,
+   * dan blijft er een ongebruikt bestand achter. Dat is schijfruimte; andersom (de regel wel, het
+   * bestand niet) zou een kapotte afbeelding op de pagina zijn.
+   */
+  function uploadInBlok(blok, body, accept) {
+    var form = document.querySelector("#wiki-form");
+    if (!form) return;
+    function veld(naam) {
+      var el = form.querySelector("[name=" + naam + "]");
+      return el ? el.value || "" : "";
+    }
+    // FAIL-SOFT, ZICHTBAAR MAAR RUSTIG — zelfde lijn als de stickerzoeker. `data-chrome` zodat
+    // een melding nooit als tekst in de pagina belandt; de opslag-pas haalt hem eruit.
+    function zeg(tekst) {
+      blok.innerHTML = "<span class='muted' data-chrome>" + tekst + "</span>";
+    }
+    var kiezer = document.createElement("input");
+    kiezer.type = "file";
+    kiezer.accept = accept;
+    kiezer.hidden = true;
+    document.body.appendChild(kiezer);
+    kiezer.addEventListener("change", function () {
+      var bestand = kiezer.files && kiezer.files[0];
+      kiezer.remove();
+      if (!bestand) { zeg("No file chosen."); return; }
+      var fd = new FormData();
+      fd.append("csrf", veld("csrf"));
+      fd.append("aid", veld("aid"));
+      fd.append("action", "wiki_bijlage");
+      fd.append("mode", "blok");
+      fd.append("file", bestand);
+      zeg("Uploading…");
+      fetch("/action", { method: "POST", body: fd, credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) {
+          var houder = document.createElement("div");
+          houder.innerHTML = d.html || "";
+          var nieuw = houder.firstElementChild;
+          if (!nieuw || !blok.parentNode) { zeg("Upload failed."); return; }
+          blok.parentNode.replaceChild(nieuw, blok);
+          NV.blokNormaliseer(body);
+          grepen(body, true);
+        })
+        .catch(function (status) {
+          zeg("Upload failed (" + status + "). The file was not added.");
+        });
+    });
+    // OOK ALS DE KIEZER WORDT WEGGEKLIKT blijft het lege blok staan — dat is precies wat je
+    // overhoudt als je in een leeg blok een `/` typt en niets kiest, dus geen eigen opruiming.
+    kiezer.click();
+  }
+
   function blokMenuKies(blok, knop, body) {
     // DE STREEP BLIJFT STAAN TÓT NA HET COMMANDO, en dat is niet de volgorde die je zou kiezen.
     // Gemeten: eerst leegmaken en dán `formatBlock` doet NIETS — een leeg blok met een
@@ -853,6 +918,12 @@
       bronVeld(blok, knop.dataset.wikiArg || "");
       NV.blokNormaliseer(body);
       grepen(body, true);
+      return;
+    }
+    // AFBEELDING EN BESTAND OPENEN EEN BESTANDSKIEZER. De derde soort menu-item, naast "de
+    // browser maakt het blok" (execCommand) en "de server levert een sjabloon" (bron).
+    if (knop.dataset.wikiCmd === "upload") {
+      uploadInBlok(blok, body, knop.dataset.wikiArg || "");
       return;
     }
     var r = document.createRange();

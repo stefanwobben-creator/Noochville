@@ -396,6 +396,24 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    naam is een pil omdat het een wiki-verwijzing is en dat overal zo leest. Geen eigen kleur:
    het icoon en het herkomst-label dragen het onderscheid al. */
 .wb-emb--tool .pill{flex:1;min-width:0;font-weight:600}
+/* ── De afbeelding als blok (26 september 2026) ──────────────────────────────────
+   Een geuploade foto rendert sinds deze stap als echte `<img>` in plaats van een kaart met de
+   bestandsnaam erop. Geen `.card` eromheen — dezelfde regel als `.wiki-inline` uit #604: wat tussen
+   de tekst kan staan, krijgt geen rand en geen eigen achtergrondvlak.
+
+   `align-items:flex-start` IS ER NIET VOOR DE UITLIJNING. Een flex-kolom rekt zijn kinderen
+   standaard over de volle breedte (`stretch`), en dat betekent voor een afbeelding OPBLAZEN:
+   gemeten in Firefox stond een foto van 560px echt op 981px, dus zichtbaar wazig. `max-width`
+   beschermt alleen tegen te groot, niet tegen te klein-opgerekt.
+
+   `max-width:100%` EN `height:auto` ZIJN DE REST VAN DE LAYOUT. Een upload is zo groot als de camera hem
+   maakte; zonder deze twee rekt één foto van 4000px de hele kolom op en gaat de pagina horizontaal
+   scrollen. `display:block` haalt de regelafstand-spatie onder een inline afbeelding weg.
+
+   Geen nieuwe familie: `wb-` is het blok-vocabulaire, dat bestaat al. */
+.wb-img{margin:.25rem 0;display:flex;flex-direction:column;align-items:flex-start;gap:.25rem}
+.wb-img img{display:block;max-width:100%;height:auto;border-radius:var(--radius)}
+.wb-img figcaption{font-size:.85em}
 
 .wb-emb-ico{flex:none;font-size:1.1rem;line-height:1}
 .wb-emb-bron{flex:none;font-size:.78rem}

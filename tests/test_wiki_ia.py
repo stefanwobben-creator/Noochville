@@ -138,16 +138,23 @@ def test_de_leespagina_volgt_dezelfde_volgorde(tmp_path):
     assert html.index("class='att-body'") < html.index("class='dcol'")
 
 
-def test_het_uploadformulier_blijft_bij_de_tekst(tmp_path):
-    """DE NAAD MET #603, want die PR en deze raken allebei de volgorde van één f-string.
+def test_uploaden_kan_nog_maar_op_een_manier(tmp_path):
+    """DE NAAD MET #603 — en die naad is VERSCHOVEN, dus deze toets ook.
 
-    Een bijlage landt als blok aan het EIND van de body. Het formulier hoort dus onder de tekst
-    waar hij in terechtkomt, en niet onder de administratie — dan staat de knop los van zijn
-    uitkomst. Bij het rebasen is dit precies de regel die je per ongeluk anders oplost."""
+    Toen ik hem schreef (26 september) stond er een los `<details>`-uploadformulier onder de tekst,
+    en de vraag was of het bóven de metadata bleef staan. Datzelfde formulier is nu weg: uploaden
+    loopt via het blokmenu, zodat het bestand op de `+`-positie landt in plaats van altijd
+    onderaan. Wat overblijft is de regel die er altijd de echte was — één weg naar één handeling,
+    want twee formulieren voor dezelfde upload lopen uit elkaar.
+
+    WAAROM HET OUDE FORMULIER ÉCHT WEG MOEST, en niet alleen "voor de netheid": het werd ingediend
+    midden in een bewerksessie. De server schreef dan in de OPGESLAGEN body en stuurde je door —
+    alles wat je sinds "Edit page" had getypt was weg."""
     html, _a = _pagina(tmp_path)
-    assert "value='wiki_bijlage'" in html, "het uploadformulier staat er niet"
-    assert html.index("id='wiki-body'") < html.index("value='wiki_bijlage'") \
-        < html.index("class='dcol'"), "het uploadformulier staat niet tussen tekst en metadata"
+    assert "value='wiki_bijlage'" not in html, \
+        "het losse uploadformulier staat er nog; dat is de tweede weg"
+    assert html.count("data-wiki-cmd='upload'") == 2, \
+        "Afbeelding en Bestand horen als blokmenu-items op de pagina te staan"
 
 
 def test_de_metadata_staat_er_maar_een_keer(tmp_path):

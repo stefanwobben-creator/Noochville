@@ -300,6 +300,11 @@ def test_het_menu_kent_alleen_blokken_die_de_renderer_ook_maakt():
         assert tag == "p" or tag in BLOK_SOORTEN, f"{tag} is geen blok dat de renderer kent"
 
 
+#: De regel die de server teruggeeft na een upload. `_wiki_bijlage_regel` munt hem; hier staat
+#: alleen een voorbeeld-uitkomst met een naam die die functie zou opleveren.
+_BEELD_REGEL = "![schoen.png](/wiki-bestand/NOTE-1/ab12cd34_schoen.png)"
+_BESTAND_REGEL = "[brief.pdf](/wiki-bestand/NOTE-1/ef56gh78_brief.pdf)"
+
 #: Wat `execCommand` van elk menu-item MAAKT, gemeten in Chrome op een echte `.wb`-div — niet
 #: afgeleid uit de naam van het commando. `formatBlock` vervangt het omhulsel, de twee
 #: lijst-commando's nesten erín, en `insertHorizontalRule` levert er een `id="null"` bij omdat
@@ -336,6 +341,13 @@ _UITKOMST = {
                "</textarea></div>", "{{facts}}"),
     "Backlinks": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{backlinks}}"
                   "</textarea></div>", "{{backlinks}}"),
+    # AFBEELDING EN BESTAND (26 september 2026) lopen langs een DERDE weg: ze openen een
+    # bestandskiezer, uploaden, en de server stuurt het gerenderde blok terug. Wat hier staat is
+    # dus wat de SERVER oplevert — vandaar dat de uitkomst hieronder wordt berekend en niet
+    # overgeschreven: een kopie zou na één wijziging aan `_md` stil iets anders toetsen dan wat er
+    # werkelijk in de pagina belandt.
+    "Afbeelding": (_md(_BEELD_REGEL, blokken=True), _BEELD_REGEL),
+    "Bestand": (_md(_BESTAND_REGEL, blokken=True), _BESTAND_REGEL),
 }
 
 
@@ -354,6 +366,12 @@ def test_elk_menu_item_levert_iets_op_dat_de_weg_terug_leest():
         # twee niet gelijk, dan toetst de regel hierboven een uitkomst die nooit ontstaat.
         if cmd == "bron":
             assert verwacht == arg, f"{label}: sjabloon {arg!r} ≠ getoetste uitkomst {verwacht!r}"
+        # Bij een `upload`-item is het argument de ACCEPT-lijst, geen sjabloon — de regel komt pas
+        # van de server. Wat hier telt is dat de kiezer iets aanbiedt dat de server ook accepteert.
+        if cmd == "upload":
+            from nooch_village import channels
+            assert arg and set(arg.split(",")) <= set(channels.BIJLAGE_TYPES), \
+                f"{label}: de bestandskiezer biedt iets aan dat de server weigert"
 
 
 def test_het_sjabloon_staat_in_de_editor(tmp_path):

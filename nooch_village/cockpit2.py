@@ -17,6 +17,7 @@ import logging
 import mimetypes
 import os
 import re
+import shutil
 import time
 import secrets
 import urllib.parse
@@ -35,6 +36,7 @@ from nooch_village.cockpit2_util import (
     _SIDE_OVERLEG, _initials,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
+    _is_beeldbestand,
 )
 from nooch_village.views.feed import (
     _feed_norm, _feed_who, _mentionables, _mentions_in,
@@ -1425,6 +1427,51 @@ def _act_artefact_archive(c):
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"🗄️ {arch.kind} gearchiveerd ({arch.id})"
         return nxt, msg
+
+
+def _act_artefact_delete(c):
+        nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+        # AUTHZ: Circle Lead — permanent verwijderen is de zwaarste knop die een artefact heeft, en
+        # dat is dezelfde afweging als bij `proj_delete`: archiveren mag de rolvervuller
+        # (`artefact_archive`), definitief weggooien alleen de Circle Lead van de cirkel waar de
+        # eigenaar-rol in zit. Een pagina kan bewijs dragen waar iemand anders naar verwijst.
+        cur = st.att.get(g("aid"))
+        if cur is None:
+            return nxt, "✗ artefact not found"
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = resolve_circle_id(cur.anchor, st.records)
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            raise Forbidden("No access — only the Circle Lead may delete permanently")
+        if actor is None and username != "guest":
+            raise Forbidden("No access — user not recognised")
+        gref = f"domain:{cur.domain}" if getattr(cur, "domain", "") else f"role:{cur.anchor}"
+        # DE HISTORIE EERST, DE RIJ DAARNA. `log_change` leest het artefact, dus hij moet draaien
+        # zolang het er nog is — anders staat er in het changelog niets over wat er verdween, en
+        # dat is precies het moment waarop je het het hardst nodig hebt.
+        artefacts.log_change(data_dir, action="delete", artefact=cur, records=st.records,
+                             actor_id=_web_actor_id(username, st), actor_type="person",
+                             governance_ref=gref)
+        st.att.remove(cur.id)
+        # CASCADE: de geuploade bestanden van deze pagina. Ze staan onder `attachments/wiki/<aid>/`
+        # en worden door niets anders gedeeld — de body is de enige verwijzing, en die gaat hier
+        # weg. Zelfde gedachte als de sidecar-cascade bij `proj_delete`: laten staan betekent
+        # schijfruimte die niemand ooit nog terugvindt.
+        _map = os.path.join(data_dir, "attachments", "wiki", cur.id)
+        if os.path.isdir(_map):
+            shutil.rmtree(_map, ignore_errors=True)
+        return _na_verwijderen_artefact(nxt, cur), f"🗑 {cur.kind} verwijderd ({cur.id})"
+
+
+def _na_verwijderen_artefact(nxt: str, a) -> str:
+    """Waar ga je heen als de pagina waar je stond zojuist is weggegooid?
+
+    ZELFDE PROBLEEM ALS BIJ `proj_delete`, zelfde oplossing: de `next` die het formulier meestuurt
+    wijst naar de pagina zélf, en die bestaat straks niet meer — dan land je op "Page not found".
+    De terugweg is de eigenaar-rol; die staat in het artefact, dus er hoeft niets geraden te
+    worden."""
+    if nxt and a.id not in nxt:
+        return nxt
+    return f"/node?id={a.anchor}&tab=notes"
 
 
 def _act_pagina_feit_add(c):
@@ -5267,6 +5314,7 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "artefact_delete": _act_artefact_delete,
     "msg_post": _act_msg_post,
     "msg_edit": _act_msg_edit,
     "msg_remove": _act_msg_remove,
@@ -6591,9 +6639,33 @@ def make_handler(data_dir: str, csrf_token: str,
                     os.makedirs(os.path.dirname(full), exist_ok=True)
                     with open(full, "wb") as fh:
                         fh.write(blob)
+                    regel = _wiki_bijlage_regel(_aid, opgeslagen, os.path.basename(fname or safe))
+                    # DE BLOK-STAND (26 september 2026): de regel gaat TERUG naar de client in
+                    # plaats van de body in, zodat het blokmenu hem op de `+`-positie kan zetten.
+                    #
+                    # WAAROM NIET SERVER-SIDE OP EEN `positie`-VELD, wat het ontwerpdocument als
+                    # alternatief noemt: dit formulier wordt ingediend terwijl je MIDDEN IN een
+                    # bewerksessie zit. De server kent alleen de OPGESLAGEN body; schrijft hij
+                    # daarin en stuurt hij je door, dan is alles wat je sinds "Edit page" hebt
+                    # getypt weg. Dat gebeurt vandaag ook al bij het oude formulier onderaan —
+                    # zie `_bijlage_form`, dat hiermee vervalt.
+                    #
+                    # Het bestand is op dit punt AL opgeslagen. Slaat de schrijver zijn bewerking
+                    # niet op, dan blijft er een ongebruikt bestand achter: dat is schijfruimte,
+                    # geen dataverlies, en het omgekeerde (de regel wel, het bestand niet) zou een
+                    # kapotte afbeelding op de pagina zijn.
+                    if fields.get("mode") == "blok":
+                        # DE SERVER RENDERT, OOK HIER. `html` is de uitkomst van dezelfde `_md`
+                        # die de pagina tekent; de browser zet hem alleen neer. Dat is geen
+                        # tweede renderer in JS — de regel die dit bestand en `nooch.js` op drie
+                        # plekken vastleggen — maar dezelfde renderer, één blok groot. Zou de client
+                        # zelf een `<img>` bouwen, dan wist de browser opeens wat een
+                        # afbeeldingsextensie is, en dat is precies het vocabulaire dat hier niet
+                        # hoort te wonen.
+                        self._send_json({"bron": regel, "html": _md(regel, blokken=True)})
+                        return
                     # DE REGEL AAN HET EIND VAN DE BODY. Eén lege regel ertussen, zodat het een
                     # eigen blok wordt en niet aan de laatste alinea plakt.
-                    regel = _wiki_bijlage_regel(_aid, opgeslagen, os.path.basename(fname or safe))
                     oud = (_a.body or "").rstrip("\n")
                     _st.att.update(_aid, body=(oud + "\n\n" + regel) if oud else regel,
                                    actor_id=_web_actor_id(username, _st), actor_type="person",
@@ -6746,9 +6818,16 @@ def _wiki_bijlage_regel(aid: str, opgeslagen: str, label: str) -> str:
 
     HET PAD EN GEEN QUERY. `_embed_soort` knipt een `?` eraf vóór hij naar de extensie kijkt, dus
     met `?f=x.pdf` was de soort "link" geweest en had die functie aangepast moeten worden. Zo
-    werkt het embed-blok uit de bloklaag-sprint ongewijzigd."""
+    werkt het embed-blok uit de bloklaag-sprint ongewijzigd.
+
+    HET UITROEPTEKEN BIJ EEN AFBEELDING (26 september 2026). Zonder dat is een geuploade foto
+    `[naam](url)` en rendert hij als kaart met de bestandsnaam — precies de klacht. `![naam](url)`
+    zegt "dit is beeld", en `_embed_html` maakt er dan een echte `<img>` van. De vraag of het een
+    afbeelding IS, stelt één functie (`_is_beeldbestand`), zodat de upload en de renderer het
+    nooit oneens kunnen zijn."""
     toon = (label or opgeslagen).replace("[", "(").replace("]", ")")
-    return f"[{toon}](/wiki-bestand/{aid}/{opgeslagen})"
+    url = f"/wiki-bestand/{aid}/{opgeslagen}"
+    return f"{'!' if _is_beeldbestand(url) else ''}[{toon}]({url})"
 
 
 def _upload_max_bytes() -> int:

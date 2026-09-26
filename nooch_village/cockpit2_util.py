@@ -335,10 +335,50 @@ def _embed_soort(url: str) -> tuple[str, str]:
     return "link", "link"
 
 
+#: De extensies waarbij een `![…]`-regel een ECHTE `<img>` wordt in plaats van een kaart. Ze komen
+#: uit `_EMBED_EXT` en niet uit een tweede opsomming: die tabel bepaalt al wat "afbeelding" is, en
+#: twee lijsten lopen uiteen zodra er één extensie bijkomt.
+_BEELD_EXT = next(staarten for staarten, soort, _ in _EMBED_EXT if soort == "afbeelding")
+
+
+def _is_beeldbestand(url: str) -> bool:
+    """Eindigt deze url op een afbeeldingsextensie? Query en anker eraf, zoals `_embed_soort`."""
+    return url.lower().split("?")[0].split("#")[0].endswith(_BEELD_EXT)
+
+
 def _embed_html(url: str, label: str, beeld: bool = False) -> str:
-    """De kaart. GEEN `<img>`, ook niet bij een afbeelding: inline laden zou elke paginaweergave
-    een verzoek naar een derde partij laten doen, en de Drive-links die dit dorp gebruikt renderen
-    zonder sessie toch niet. Het prototype toont om dezelfde reden een kaart met de bestandsnaam."""
+    """Een regel die alleen media is: een `<img>` als het aantoonbaar een afbeelding is, anders
+    een kaart met de bestandsnaam.
+
+    HIER STOND "GEEN `<img>`, OOK NIET BIJ EEN AFBEELDING", met als reden dat inline laden elke
+    paginaweergave een verzoek naar een DERDE PARTIJ laat doen en dat de Drive-links van dit dorp
+    zonder sessie toch niet renderen. Die redenering klopt nog steeds — voor een externe url. Sinds
+    #603 bestaan er eigen uploads (`/wiki-bestand/…`), en daar geldt geen van beide: dezelfde
+    herkomst, geen derde partij, en hij rendert wel degelijk. Een geuploade foto als kale
+    bestandsnaam tonen is dan geen voorzichtigheid meer maar een gat.
+
+    DE POORT IS DUS INTENTIE ÉN VORM: `![…]` (de schrijver zegt "dit is beeld") én een
+    afbeelingsextensie (de url maakt het waar). Een Drive-link met `![…]` heeft geen extensie en
+    blijft dus een kaart — precies het geval waar de oude opmerking voor waarschuwde.
+
+    EN ALLEEN VOOR EEN EIGEN BESTAND. Het ontwerpdocument schreef "`data-beeld` én een
+    afbeeldingsextensie", zonder die derde voorwaarde — maar dat had stilzwijgend ook
+    `![x](https://ergens/x.png)` een `<img>` gemaakt, en daarmee de beslissing omgedraaid die
+    `test_er_wordt_geen_img_geladen` sinds de bloklaag-sprint bewaakt (één verzoek naar een vreemde
+    host per paginaweergave). Die beslissing noemt het document niet, dus is hij hier niet
+    teruggedraaid: de aanleiding was een geUPLOADE foto, en die staat op onze eigen server.
+
+    Wil je externe afbeeldingen er later toch bij, dan is dat deze ene voorwaarde — plus een
+    bewuste keuze over die verzoeken, en het bijwerken van die toets."""
+    if beeld and url.startswith(EIGEN_BESTAND) and _is_beeldbestand(url):
+        # GEEN `.card`. Zelfde regel als `.wiki-inline` uit #604: een blok dat tussen de tekst kan
+        # staan, krijgt geen rand en geen eigen achtergrondvlak — een alinea heeft die ook niet.
+        #
+        # HET BIJSCHRIFT IS CHROME. Het toont de alt-tekst, en die staat al in het `alt`-attribuut;
+        # zonder `data-chrome` zou hij bij de weg terug éóók als losse tekst in de bron belanden en
+        # na één bewerkronde onder de afbeelding verdubbelen.
+        return (f"<figure class='wb-img'><img src='{url}' alt='{label}' loading='lazy'>"
+                f"<figcaption class='muted' data-chrome>{label}</figcaption></figure>")
     # INTENTIE WINT VAN DE URL. `_embed_soort` leidt de soort af uit de url, maar wie
     # `![foto](…)` schrijft zegt het expliciet — en dat staat nergens anders, want een
     # Drive-link heeft geen extensie.
@@ -788,6 +828,18 @@ class _BronParser(_HTMLParser):
                 self.uit.append(f"{self._nr}. ")
             else:
                 self.uit.append("- ")
+        elif tag == "img":
+            # DE WEG TERUG VAN EEN ECHTE AFBEELDING. Zonder deze tak is een `<img>` een tag die de
+            # parser niet kent, en de fail-closed-regel maakt er dan zijn eigen TEKST van: na één
+            # bewerkronde staat er letterlijk niets meer waar de foto stond. Dezelfde klasse fout
+            # als de bijlage die #603 moest repareren.
+            #
+            # DEZELFDE POORT ALS `_md`, want dit is dezelfde poort een stap eerder: een `src` die
+            # geen eigen bestand en geen http(s) is, zou hier de opslag in glippen terwijl de
+            # renderer hem nooit had geproduceerd.
+            _src = d.get("src") or ""
+            if _src.startswith(EIGEN_BESTAND) or _src.startswith(("http://", "https://")):
+                self._schrijf(f"![{d.get('alt') or ''}]({_src})")
         elif tag == "input" and d.get("type") == "checkbox":
             # DE TAAK IS WIKI-ONLY aan de RENDER-kant (`views/wiki._body_html`), maar de weg terug
             # moet hem kennen: anders eet de wiki bij elke bewerking zijn eigen vinkjes op. Het
@@ -1166,6 +1218,24 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                ("nvCode", "", "&lt;/&gt;", "Inline code"))
 
 
+def _accept(alleen_beeld: bool = False) -> str:
+    """De `accept`-waarde voor de bestandskiezer, UIT DE BESTAANDE ALLOWLIST.
+
+    GEEN TWEEDE LIJST. `channels.BIJLAGE_TYPES` bepaalt wat de server accepteert; zou hier een
+    eigen opsomming staan, dan biedt het menu morgen een type aan dat de server weigert (of
+    andersom) zonder dat iemand dat besloot. Dezelfde regel als bij `BLOK_SOORTEN` en `AFGELEID`.
+
+    DE DOORSNEDE BIJ "ALLEEN BEELD", en die is smaller dan je zou raden: `_BEELD_EXT` kent `.svg`,
+    de uploadlijst niet — een SVG is een document dat script kan dragen en staat er bewust niet op.
+    Precies daarom is dit een doorsnede en geen kopie van één van de twee.
+    """
+    from nooch_village import channels as _ch
+    ext = sorted(_ch.BIJLAGE_TYPES)
+    if alleen_beeld:
+        ext = [e for e in ext if e in _BEELD_EXT]
+    return ",".join(ext)
+
+
 #: Het menu-label van een afgeleid blok. `wiki.AFGELEID` draagt het Engelse KOPJE dat boven de
 #: sectie op het scherm staat ("Links here"); in dit menu staat waar je het BLOK bij noemt, in de
 #: taal van de andere negen knoppen. Ontbreekt een naam hier, dan valt hij terug op het kopje —
@@ -1217,6 +1287,16 @@ BLOK_MENU = (
     # Nederlands ("Tekst", "Codeblok") terwijl `AFGELEID` de Engelse schermkopjes draagt.
     ("p", _AFGELEID_LABEL.get(naam, engels), "bron", _wiki.marker(naam))
     for naam, engels in _wiki.AFGELEID.items()
+) + (
+    # AFBEELDING EN BESTAND (26 september 2026). Ze openen een bestandskiezer in plaats van een
+    # `execCommand`: de derde soort menu-item, naast "de browser maakt het blok" (formatBlock) en
+    # "de server levert een sjabloon" (bron). De upload-aanroep is dezelfde `wiki_bijlage`-actie
+    # als het formulier dat hiermee vervalt — geen tweede uploadpad.
+    #
+    # `p` ALS TAG, om dezelfde reden als bij Feiten en Backlinks: er is geen tag die de BROWSER
+    # hier achterlaat. Wat er komt te staan, rendert de server.
+    ("p", "Afbeelding", "upload", _accept(alleen_beeld=True)),
+    ("p", "Bestand", "upload", _accept()),
 )
 
 
