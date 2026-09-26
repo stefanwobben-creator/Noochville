@@ -753,7 +753,16 @@
   function naarBron(blok) {
     var bron = blokBron(blok);
     if (!bron) return;
-    bronVeld(blok, bron);
+    // DEZELFDE UITLEG ALS BIJ EEN NIEUWE TABEL (26 september 2026). Hij kwam alleen mee op de
+    // menu-route, dus wie een BESTAANDE tabel openmaakte kreeg dezelfde `|---|---|`-val zonder
+    // waarschuwing. De server hangt hem sinds deze stap aan het blok zelf (`_md`), dus hier hoeft
+    // alleen doorgegeven te worden wat er al staat.
+    //
+    // DIT BESTAND WEET NOG STEEDS NIET WELK BLOKTYPE UITLEG VERDIENT — het leest een attribuut,
+    // net als bij de soorten-tabel. Zou hier `=== "tabel"` staan, dan woonde het vocabulaire op
+    // een tweede plek; dat is precies wat `test_javascript_draagt_geen_eigen_soorten_lijst`
+    // verbiedt.
+    bronVeld(blok, bron, blok.dataset.wikiHint || "");
   }
 
   /* HET BRON-BEWERKVLAK, los van waar de tekst vandaan komt. Bij "bewerk als tekst" is dat de

@@ -12,7 +12,7 @@ import pathlib
 import re
 
 from nooch_village import cockpit2, triage_rol, wiki
-from nooch_village.cockpit2_util import BLOK_HINT, BLOK_MENU, blok_menu
+from nooch_village.cockpit2_util import BLOK_HINT, BLOK_MENU, _md, blok_menu
 from nooch_village.views.wiki import _domein_form, _mag_domein_wijzigen, render_pagina
 
 CSS = (pathlib.Path(__file__).resolve().parents[1]
@@ -102,6 +102,48 @@ def test_de_uitleg_hergebruikt_een_bestaande_klasse():
     veld = kaal.split("function bronVeld(")[1].split("\n  function ")[0]
     assert 'className = "muted wiki-hint"' in veld
     assert ".wiki-hint{" in CSS
+
+
+def test_een_bestaande_tabel_draagt_de_hint_zelf():
+    """DE TWEEDE ROUTE (26 september 2026). Hij kwam alleen mee als attribuut op de MENU-knop, dus
+    wie een bestaande tabel openmaakte met "✎ bewerk als tekst" kreeg dezelfde `|---|---|`-val
+    zonder waarschuwing. De server hangt hem nu aan het blok zelf, precies waar `data-blok` al
+    gezet wordt."""
+    html = _md("| A | B |\n|---|---|\n| 1 | 2 |", blokken=True)
+    assert "data-blok='tabel'" in html
+    assert f"data-wiki-hint='{BLOK_HINT['table']}'" in html
+
+
+def test_alleen_de_tabel_krijgt_hem_op_het_blok():
+    """Een alinea, een kop of een lijst heeft niets uit te leggen. Stond de hint op elk blok, dan
+    droeg elke pagina hem tientallen keren mee zonder dat iemand hem ooit ziet."""
+    for bron in ("gewone tekst", "### een kop", "- een punt", "```\ncode\n```"):
+        assert "data-wiki-hint" not in _md(bron, blokken=True), f"{bron!r} kreeg uitleg"
+
+
+def test_de_hint_op_het_blok_komt_uit_dezelfde_tabel():
+    """ÉÉN BRON VOOR TWEE ROUTES. Een tweede vertaling tag→soort zou na één wijziging uit de pas
+    lopen met de eerste, en dan krijgt één van de twee routes stil geen uitleg meer."""
+    from nooch_village.cockpit2_util import BLOK_SOORTEN, _BLOK_HINT_PER_SOORT
+    assert _BLOK_HINT_PER_SOORT == {BLOK_SOORTEN[t]: v for t, v in BLOK_HINT.items()}
+
+
+def test_de_hint_overleeft_de_rondgang():
+    """Hij is CHROME op het omhulsel, geen tekst. Kwam hij terug in de bron, dan stond de uitleg
+    na één bewerkronde in de tabel — en daarna nog een keer, en nog een keer."""
+    from nooch_village.cockpit2_util import _md_naar_bron
+    bron = "| A | B |\n|---|---|\n| 1 | 2 |"
+    assert _md_naar_bron(_md(bron, blokken=True)) == bron
+
+
+def test_de_browser_kiest_niet_zelf_welk_blok_uitleg_krijgt():
+    """`test_javascript_draagt_geen_eigen_soorten_lijst` verbiedt een bloktypelijst in JS, en die
+    regel geldt hier net zo goed: `naarBron` leest een attribuut en vergelijkt geen soort."""
+    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    naar = kaal.split("function naarBron(")[1].split("\n  function ")[0]
+    assert "dataset.wikiHint" in naar
+    for verboden in ('"tabel"', "'tabel'", '"table"'):
+        assert verboden not in naar, f"de browser kent opeens een bloktype ({verboden})"
 
 
 # ── 3. Wie mag het domein verzetten ──────────────────────────────────────────
