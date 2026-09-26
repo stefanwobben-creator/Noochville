@@ -540,6 +540,11 @@
    * onder dezelfde greep — één affordance, niet drie knopjes naast elkaar.
    */
   var GREEP_ACTIES = [
+    // WIJZIG TYPE STAAT BOVENAAN, want het is de enige die de INHOUD raakt; de drie eronder
+    // verplaatsen of verwijderen alleen. Hij ontbrak: een blok dat er al stond kon je verplaatsen
+    // en weggooien, maar niet omzetten — je moest de tekst knippen, het blok verwijderen, een
+    // nieuw blok maken en plakken.
+    ["type", "⇄ wijzig type"],
     ["omhoog", "↑ omhoog"],
     ["omlaag", "↓ omlaag"],
     ["verwijder", "✕ verwijderen"]
@@ -715,6 +720,11 @@
     } else if (actie === "bron") {
       naarBron(blok);
       return;                       // de pas zou het bewerkvlak meteen weer inpakken
+    } else if (actie === "type") {
+      // HETZELFDE MENU ALS DE SCHUINE STREEP, op een blok dat al inhoud heeft. Dezelfde tabel van
+      // de server, dezelfde uitvoerpaden; alleen het blok waarop hij werkt is niet leeg.
+      blokMenuOpen(blok, body);
+      return;                       // het menu doet de rest; normaliseren komt daarna
     }
     NV.blokNormaliseer(body);
   }
@@ -930,12 +940,31 @@
     kiezer.click();
   }
 
+  /* DE INHOUD WAAROP HET COMMANDO WERKT.
+   *
+   * Bij de `/`-weg is dat het tekstknooppunt met de streep erin; bij "wijzig type" op een
+   * bestaand blok is het de inhoud die er al staat. `execCommand` werkt op de SELECTIE, dus
+   * zonder iets te selecteren gebeurt er niets — gemeten bij de streep, en bij een bestaand blok
+   * geldt hetzelfde.
+   *
+   * DE CHROME BLIJFT ERBUITEN. De greep en zijn menu hangen ín het blok; zou je die meeselecteren,
+   * dan maakt `formatBlock` er een kop van mét het greep-icoon erin.
+   */
+  function kiesInhoud(blok) {
+    var streep = streepNode(blok);
+    if (streep) return { knoop: streep, streep: true };
+    var k = blok.firstElementChild;
+    while (k && k.hasAttribute && k.hasAttribute("data-chrome")) k = k.nextElementSibling;
+    return { knoop: k || blok, streep: false };
+  }
+
   function blokMenuKies(blok, knop, body) {
     // DE STREEP BLIJFT STAAN TÓT NA HET COMMANDO, en dat is niet de volgorde die je zou kiezen.
     // Gemeten: eerst leegmaken en dán `formatBlock` doet NIETS — een leeg blok met een
     // samengevallen selectie heeft geen inhoud om op te werken, dus het bloktype veranderde
     // niet. Het commando krijgt dus de streep als inhoud, en daarna halen we hem weg.
-    var n = streepNode(blok);
+    var doelwit = kiesInhoud(blok);
+    var n = doelwit.knoop;
     if (!n) return;
     // TABEL EN CODEBLOK LOPEN NIET LANGS `execCommand`. Ze krijgen hun markdown-sjabloon van de
     // server mee en openen meteen het bron-bewerkvlak; de server maakt er bij het opslaan het
@@ -981,37 +1010,62 @@
     return (k.textContent || "").trim();
   }
 
-  function blokMenu(body) {
-    var sjabloon = document.getElementById("wb-menu-sjabloon");
-    if (!sjabloon) return;
-    var open = null;
+  /* HET BLOKTYPE-MENU, \u00c9\u00c9N KEER \u2014 voor de schuine streep \u00e9n voor de greep (26 september 2026).
+   *
+   * Hij hing in `blokMenu`, waar alleen de `/`-weg bij kon. De greep kreeg daardoor geen "wijzig
+   * type": een blok dat er al stond kon je verplaatsen en verwijderen, maar niet omzetten \u2014 je
+   * moest de tekst knippen, het blok weggooien, een nieuw blok maken en plakken.
+   *
+   * \u00c9\u00c9N MENU TEGELIJK, en daarom staat `openMenu` hier en niet in een closure per aanroeper.
+   * Twee open menu's laten je raden bij welk blok je bezig bent.
+   */
+  var openMenu = null;
 
-    function sluit() {
-      if (open) { open.remove(); open = null; }
-    }
+  function sluitBlokMenu() {
+    if (openMenu) { openMenu.remove(); openMenu = null; }
+  }
+
+  function blokMenuOpen(blok, body) {
+    var sjabloon = document.getElementById("wb-menu-sjabloon");
+    if (!sjabloon || !blok) return;
+    sluitBlokMenu();
+    var menu = sjabloon.cloneNode(true);
+    menu.removeAttribute("id");
+    menu.hidden = false;
+    menu.addEventListener("click", function (e) {
+      var knop = e.target.closest("[data-wiki-cmd]");
+      if (!knop) return;
+      e.preventDefault();
+      var doel = blok;
+      sluitBlokMenu();
+      blokMenuKies(doel, knop, body);
+    });
+    blok.appendChild(menu);
+    openMenu = menu;
+    // ZWEVEN IN PLAATS VAN HANGEN (26 september 2026). Hiervoor zette `appendChild` hem waar het
+    // blok toevallig stond, met `position:absolute` eronder: op een lange pagina viel het menu
+    // daarmee onder de vouw, en dan kies je uit een lijst die je niet ziet.
+    //
+    // `zweefBij` IS DEZELFDE POSITIONEERDER als die van de opmaakbalk en de link-kaart: eerst
+    // erboven, anders eronder, altijd binnen het scherm. Een derde implementatie zou betekenen
+    // dat het ene ding na een wijziging anders zweeft dan het andere.
+    zweefBij(menu, blok.getBoundingClientRect());
+  }
+
+  function blokMenu(body) {
+    if (!document.getElementById("wb-menu-sjabloon")) return;
 
     body.addEventListener("input", function () {
       var blok = getSelection().anchorNode;
       blok = blok && (blok.nodeType === 1 ? blok : blok.parentNode);
       blok = blok && blok.closest ? blok.closest(".wb") : null;
-      sluit();
+      sluitBlokMenu();
       if (!blok || blokTekst(blok) !== "/") return;
-      open = sjabloon.cloneNode(true);
-      open.removeAttribute("id");
-      open.hidden = false;
-      open.addEventListener("click", function (e) {
-        var knop = e.target.closest("[data-wiki-cmd]");
-        if (!knop) return;
-        e.preventDefault();
-        var doel = blok;
-        sluit();
-        blokMenuKies(doel, knop, body);
-      });
-      blok.appendChild(open);
+      blokMenuOpen(blok, body);
     });
 
     body.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") sluit();
+      if (e.key === "Escape") sluitBlokMenu();
     });
   }
 

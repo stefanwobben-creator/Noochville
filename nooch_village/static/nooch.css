@@ -421,6 +421,11 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .wb-menu{position:absolute;left:0;top:1.3rem;z-index:5;display:flex;flex-direction:column;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:.15rem;min-width:8rem}
+/* HET BLOKTYPE-MENU ZWEEFT (26 september 2026). Hij hing absoluut onder zijn blok en viel op een
+   lange pagina onder de vouw — dan kies je uit een lijst die je niet ziet. `zweefBij` in
+   `nooch.js` rekent met VENSTERcoördinaten, en dat werkt alleen met `fixed`. De greep-acties
+   (omhoog/omlaag/verwijderen) delen de vorm maar niet dit gedrag: die horen wél bij hun greep. */
+.wb-menu-zwevend{position:fixed;left:auto;top:auto;z-index:30}
 .wb-menu-item{border:none;background:none;font:inherit;font-size:.82rem;text-align:left;
   padding:.3rem .5rem;cursor:pointer;color:var(--ink);white-space:nowrap}
 .wb-menu-item:hover{background:var(--cream-2)}
