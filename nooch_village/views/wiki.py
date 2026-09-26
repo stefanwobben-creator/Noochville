@@ -371,34 +371,6 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # geen `<noscript>`-textarea als vangnet: twee bewerkpaden naast elkaar is precies wat deze
 # vervanging moest opheffen.
 
-def _bijlage_form(a, csrf_token: str, can_edit: bool) -> str:
-    """Een bestand aan deze pagina hangen.
-
-    HETZELFDE FORMULIER ALS IN MESSAGES, en met opzet: dezelfde `accept` uit dezelfde allowlist,
-    dezelfde limiet-regel eronder, dezelfde `.qadd`-uitklapper. Een tweede vorm voor dezelfde
-    handeling is precies hoe twee schermen uit elkaar gaan lopen.
-
-    WAT ER GEBEURT is geen mysterie en staat er ook: de upload zet een regel onderaan de tekst.
-    Er is geen bijlagelijst — de body is de enige bron van waarheid, dus wat je uploadt zie je
-    terug als blok in de pagina, en weghalen doe je door die regel te verwijderen."""
-    from nooch_village import channels
-    if not can_edit or not csrf_token:
-        return ""
-    return (f"<details class='qadd'><summary>&#128206; Add a file</summary>"
-            f"<form method='post' action='/action' class='qadd-form' "
-            f"enctype='multipart/form-data'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
-            f"<input type='hidden' name='action' value='wiki_bijlage'>"
-            f"<label class='att-lbl' for='wiki-file-{_e(a.id)}'>File</label>"
-            f"<input id='wiki-file-{_e(a.id)}' type='file' name='file' required "
-            f"accept='{_e(','.join(sorted(channels.BIJLAGE_TYPES)))}'>"
-            f"<div class='qadd-row'><button class='btn ok sm' type='submit'>Upload</button>"
-            f"<span class='muted'>max 20 MB &middot; lands as a block at the end of the page"
-            f"</span></div></form></details>")
-
-
 def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
                *, tab: str = "notes") -> str:
     """Alle paginametadata als ÉÉN element, in het vocabulaire dat de app al heeft.
@@ -458,11 +430,62 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     hist = _artefact_versions_html(a)
     if hist:
         rij("History", hist)
+    # ARCHIVE EN DELETE, IN DE VOET. Ze horen bij de administratie van de pagina en niet bij de
+    # inhoud, dus hier en niet in de kop — waar sinds #604 alleen de titel en de hoofdactie staan.
+    rijen.append(_opruim_knoppen(a, csrf_token, can_edit, tab=tab))
     # `.wiki-meta` EN NIET `.card` (26 september 2026). Het blok staat sinds deze stap ONDER de
     # inhoud in plaats van boven, en daar is het een voet: een scheidingslijn met de administratie
     # eronder. Een kaart onderaan leest als nog een inhoudsblok, en dat is precies wat het niet is.
     # De rijen blijven hetzelfde `.dcol`-raster met `.dk`/`.dv`.
     return f"<div class='wiki-meta'><div class='dcol'>{''.join(rijen)}</div></div>"
+
+
+def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes") -> str:
+    """Archiveren en definitief verwijderen, als rij in het metadata-raster.
+
+    ARCHIVE IS GEEN NIEUWE ACTIE. `artefact_archive` bestaat al sinds het artefact-model en werkt
+    op elk soort artefact — een pagina is een note, dus hij kon dit altijd al; er was alleen nooit
+    een knop. Een eigen `wiki_archive` zou een tweede weg naar dezelfde handeling zijn, precies
+    wat het losse uploadformulier hierboven fout deed.
+
+    DELETE IS DAT WÉL, want die bestond nergens voor artefacten. Hij heeft daarom een ZWAARDERE
+    poort dan archiveren: archiveren mag de rolvervuller, weggooien alleen de Circle Lead —
+    dezelfde verdeling als bij projecten, en om dezelfde reden: een pagina kan bewijs dragen waar
+    iemand anders naar verwijst.
+
+    GEEN KNOPPEN ZONDER RECHT. Wie niet mag bewerken, krijgt ze niet te zien; de server weigert
+    ze daarna alsnog, maar een knop tonen die straks 403 geeft is een belofte die je niet nakomt.
+
+    `.dellink` EN DE CONFIRM-TEKST komen letterlijk van `proj_delete` — dezelfde handeling hoort
+    er hetzelfde uit te zien en hetzelfde te vragen.
+
+    `.btn sm` EN NIET `.btn ghost sm` VOOR ARCHIVE, hoewel het ontwerpdocument "twee ghost-knoppen"
+    zegt. Gemeten in Firefox: `ghost` tekent in deze app een 1px TRANSPARANTE rand — zichtbaar pas
+    bij hover. Naast een `.dellink` levert dat twee dingen op die allebei als kale tekst lezen, en
+    dan is er geen knop meer te zien in die cel. Ghost werkt als er een zwaardere knop náást staat
+    (zo gebruikt #602 hem voor "Move page", náást "Edit page"); hier staat die er niet. De
+    projectkaart, die het document als patroon aanwijst, gebruikt op deze plek ook `.btn sm`."""
+    if not can_edit or not csrf_token:
+        return ""
+    verborgen = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+                 f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_e(tab)}'>")
+    if getattr(a, "status", "active") == "archived":
+        # AL GEARCHIVEERD: dan is archiveren geen keuze meer. Wat overblijft is weggooien.
+        knoppen = (f"<span class='chip muted'>archived</span>"
+                   f"<button class='dellink' type='submit' name='action' value='artefact_delete' "
+                   f"onclick=\"return confirm('Delete permanently? This cannot be undone.')\">"
+                   f"delete</button>")
+    else:
+        knoppen = (f"<button class='btn sm' type='submit' name='action' "
+                   f"value='artefact_archive'>Archive</button>"
+                   f"<button class='dellink' type='submit' name='action' value='artefact_delete' "
+                   f"onclick=\"return confirm('Delete permanently? Archiving keeps the page.')\">"
+                   f"Delete</button>")
+    return (f"<span class='dk'>Clean up</span><span class='dv'>"
+            f"<form method='post' action='/action' class='qadd-row'>{verborgen}{knoppen}</form>"
+            f"<div class='muted wiki-hint'>Archiving hides the page and keeps its history. "
+            f"Deleting removes it and its uploaded files for good.</div></span>")
 
 
 def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None) -> str:
@@ -708,11 +731,12 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # nu alleen de titel en de hoofdactie; alles wat OVER de pagina gaat staat eronder, na de
     # inhoud en na de twee afgeleide secties.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(), tab="notes")
-    # HET UPLOADFORMULIER BLIJFT BIJ DE TEKST (#603), en de metadata gaat eromheen naar onderen.
-    # Een bijlage landt als blok aan het EIND van de body; het formulier hoort dus direct onder de
-    # tekst waar hij in terechtkomt, niet onder de administratie.
-    bijlage = _bijlage_form(a, csrf_token, can_edit)
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{bijlage}{voorstel}"
+    # HET LOSSE UPLOADFORMULIER IS WEG (26 september 2026). Het stond hier als `<details>` onder
+    # de tekst en plakte zijn regel altijd ACHTER de body. Sinds "Afbeelding" en "Bestand" in het
+    # blokmenu staan is dat de tweede weg naar dezelfde handeling — precies het risico dat de
+    # code-comment bij dat formulier zélf al benoemde. Erger nog: het werd ingediend midden in een
+    # bewerksessie, dus de server schreef in de OPGESLAGEN body en gooide je onbewaarde tekst weg.
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{voorstel}"
             f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
             f"{meta}</div>")
     return _page(f"{a.title or a.id} — page",

@@ -662,6 +662,11 @@
 .nu .wb-menu-item:hover { background: var(--nu-bg-alt); }
 .nu .wb-greep-knop { color: var(--nu-muted); }
 
+/* DE AFBEELDING (26 september 2026). Het voorstel uit het prototype: in deze huisstijl krijgt een
+   afbeelding een harde rand, zoals elk ander vlak hier, en vierkante hoeken. Buiten `.nu` blijft
+   hij randloos — zelfde soort onderscheid als bij de rest van dit systeem. */
+.nu .wb-img img{border:var(--nu-border);border-radius:0}
+
 /* HET AFGELEIDE BLOK EN DE METADATA-VOET (26 september 2026). De basislaag tekent de accentlijn
    en de voetstreep op `--border`, de warme zandtint die in deze huisstijl niet bestaat;
    `--nu-border-subtle` is hier de lijnkleur, `--nu-accent` de hover. Zelfde soort regel als bij
