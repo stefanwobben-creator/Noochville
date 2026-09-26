@@ -201,8 +201,12 @@ def test_de_knop_vraagt_eerst_van_wie_en_dan_waar(tmp_path):
     """Twee stappen, in de volgorde waarin je ze beantwoordt."""
     dd, st, wie = _dorp(tmp_path)
     html = _nieuwe_pagina_form(st, "T", "buiten@t.nl")
-    assert html.index("1. Whose is this?") < html.index("2. Where in the navigation?")
-    assert "name='owner'" in html and "name='domain'" in html
+    # DRIE STAPPEN SINDS DE SECTIE-KEUZE ERBIJ KWAM: van wie, welk domein, waar in de navigatie.
+    # Die laatste twee zijn niet hetzelfde — met een domein volgt de sectie vanzelf, en bij een
+    # individuele actie is er geen domein om hem uit af te leiden.
+    assert (html.index("1. Whose is this?") < html.index("2. Which domain?")
+            < html.index("3. Where in the navigation?"))
+    assert "name='owner'" in html and "name='domain'" in html and "name='sectie'" in html
 
 
 def test_stap_1_biedt_individuele_actie_aan(tmp_path):

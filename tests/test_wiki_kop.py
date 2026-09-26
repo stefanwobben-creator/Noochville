@@ -128,14 +128,18 @@ def test_het_domein_veld_bestaat_nog(tmp_path):
     assert "name='domain'" in html
 
 
-def test_het_domein_zegt_waar_het_over_gaat(tmp_path):
-    """Een kale "DOMAIN" zegt niets. Wat het doet: bepalen waar de pagina in de wiki-structuur
-    valt."""
-    # IN DE VOET, want daar staat het veld sinds #602 — en de kopbalk die deze toets las, bestaat
-    # sinds 26 september niet meer (de "Edit page"-knop was het laatste wat erin stond).
+def test_domein_en_sectie_leggen_allebei_uit_wat_ze_doen(tmp_path):
+    """Een kale "DOMAIN" zegt niets. Dat gold al, en sinds 26 september staat er een tweede veld
+    naast dat er verdacht veel op lijkt — dus moet het verschil er ook staan.
+
+    HET WAREN TWEE NAMEN VOOR ÉÉN ZIN. De uitleg zei "where this page sits in the wiki structure"
+    en hing onder het DOMEIN; sinds er een aparte sectie-keuze is, beschrijft die zin dat tweede
+    veld. Ze zeggen nu elk hun eigen ding: het domein gaat over eigenaarschap, de sectie over waar
+    je de pagina in de navigatie terugvindt."""
     html, _a, _ = _pagina(tmp_path)
     voet = html.split("class='wiki-meta'")[1]
-    assert "wiki structure" in voet.lower(), "het domein legt niet uit wat het doet"
+    assert "governance topic" in voet.lower(), "het domein legt niet uit wat het doet"
+    assert "wiki navigation" in voet.lower(), "de sectie legt niet uit wat hij doet"
 
 
 def test_het_domein_toont_waar_de_pagina_nu_valt(tmp_path):
@@ -256,7 +260,7 @@ def test_de_uitleg_schreeuwt_niet(tmp_path):
     """`.att-lbl` is `text-transform:uppercase` — prima voor een kort veldlabel, fout voor een
     zin. De uitleg gebruikt de hint-klasse, die dat niet doet."""
     html, _a, _ = _pagina(tmp_path)
-    zin = "Where this page sits in the wiki structure"
+    zin = "Where it appears in the wiki navigation"
     assert zin in html
     regel = html[html.index(zin) - 120:html.index(zin)]
     assert "att-lbl" not in regel, "de uitleg staat in een klasse die alles in kapitalen zet"
@@ -313,7 +317,7 @@ def test_de_uitleg_zit_in_de_cel_van_zijn_veld(tmp_path):
     cel = html.split("<span class='dk'>Domain</span>")[1].split("</span>")
     hele_cel = html.split("<span class='dk'>Domain</span>")[1].split("<span class='dk'>")[0]
     assert "name='domain'" in hele_cel, "het veld staat niet in deze cel"
-    assert "Where this page sits" in hele_cel, "de uitleg staat buiten de cel van zijn veld"
+    assert "governance topic" in hele_cel, "de uitleg staat buiten de cel van zijn veld"
 
 
 def test_verplaatsen_blijft_de_lichte_variant(tmp_path):

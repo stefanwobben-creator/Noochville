@@ -419,7 +419,9 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     # domein terug op Overig — een hint die liegt is erger dan geen hint.
     from nooch_village import domeinen as _dom
     bakje, _waarom = _dom.bakje_van(a, list(records or []))
-    waar = f"Where this page sits in the wiki structure &mdash; now: {_e(_dom.label(bakje))}"
+    # HET WOORD "DOMAIN" STAAT AL ALS RASTERSLEUTEL, en `test_het_woord_domein_staat_er_maar_een_keer`
+    # bewaakt dat het er één keer staat — die toets kwam uit een screenshot met "DOMAIN … DOMAIN".
+    waar = "The governance topic this page belongs to, owned by a role."
     # `st` EN `username` REIZEN MEE, want wie het domein mag verzetten hangt sinds
     # 26 september af van wie het domein HOUDT — en dat staat in de records, niet in `a`.
     dom = _domein_form(a, eigenaar, csrf_token, can_edit, records,
@@ -429,6 +431,18 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     else:
         # Zonder bewerkrecht geen keuze, maar wél te lezen waar de pagina hangt.
         rij("Domain", _e(getattr(a, "domain", "") or "—"), waar)
+    # DE SECTIE IS EEN EIGEN RIJ, en dat is de hele wijziging van deze stap. Hij stond nergens:
+    # `bakje_van` leidde hem af, `meta["domein"]` kon hem overschrijven, maar er was geen knop —
+    # het schrijfpad ontbrak. Op prod hebben 3 van de 121 pagina's zo'n override; die zijn met de
+    # hand in de data gezet.
+    # DE REDEN IN HET ENGELS EN NIET DIE VAN `bakje_van`. Die zin is Nederlands ("eigen domein
+    # 'Materials'") en deze UI is sinds i18n-fase 1 Engels; wat je hier moet weten is of de sectie
+    # is AFGELEID of met de hand gezet, want alleen dat tweede blijft staan als governance iets
+    # herindeelt.
+    _gezet = bool((getattr(a, "meta", None) or {}).get("domein"))
+    rij("Section", _sectie_form(a, bakje, csrf_token, can_edit, st=st, username=username),
+        f"Where it appears in the wiki navigation. Now: {_e(_dom.label(bakje))} "
+        f"({'set here' if _gezet else 'derived'}).")
     rij("Id", f"<code class='pill'>{_e(a.id)}</code>")
     rij("Last edited", _e(_dt(getattr(a, "updated_at", 0))))
     hist = _artefact_versions_html(a)
@@ -529,6 +543,92 @@ def _mag_domein_wijzigen(a, st, username: str | None) -> bool:
     return artefacts.mag_schrijven_op_domein(
         st, getattr(a, "domain", "") or "", actor.id,
         circle_id=resolve_circle_id(a.anchor, st.records) or "")
+
+
+def _mag_pagina_bewerken(a, st, csrf_token: str, username: str | None) -> bool:
+    """Mag deze kijker de pagina bewerken? DEZELFDE VRAAG ALS DE SERVER STELT.
+
+    HIER STOND `eigenaar is not None and _can_edit_artefacts(...)`, en dat was de rol-regel van
+    vóór #610. Toen de poort op de server naar het DOMEIN verhuisde, bleef dit staan — met twee
+    gevolgen die je pas ziet als je ze naast elkaar zet:
+
+      1. De verruiming was ONZICHTBAAR. Wie geen rolvervuller was mocht van de server een
+         domeinloze pagina bewerken, maar kreeg een read-only scherm. Het recht bestond en was
+         niet te gebruiken.
+      2. Een INDIVIDUELE ACTIE was helemaal niet te bewerken. `records.get("ii:…")` geeft None,
+         dus de eerste helft van die `and` was altijd False: je kon zo'n pagina aanmaken en er
+         daarna nooit meer iets in schrijven.
+
+    Nu stelt het scherm dezelfde vraag als `_artefact_gate`. Twee antwoorden op één vraag is
+    precies waar deze codebase `mag_schrijven_op_domein` voor op één plek heeft gezet."""
+    from nooch_village import artefacts
+    from nooch_village.cockpit2 import resolve_circle_id
+
+    if not csrf_token:
+        return False
+    if username == "guest":
+        return True
+    actor = st.people.by_email(username) if username else None
+    if actor is None:
+        return False
+    return artefacts.mag_schrijven_op_domein(
+        st, getattr(a, "domain", "") or "", actor.id,
+        circle_id=resolve_circle_id(a.anchor, st.records) or "")
+
+
+def _sectie_opties(huidig: str = "") -> str:
+    """De elf vaste bakjes, plus de lege keuze die de override weghaalt.
+
+    LEEG IS "LEID HEM AF", niet "geen sectie". Dat is de stand waar de meeste pagina's in horen te
+    blijven: `bakje_van` kijkt dan naar het domein van de rol, en die verschuift netjes mee als
+    governance iets herindeelt. Een override is een correctie, geen standaard."""
+    from nooch_village import domeinen as _dom
+    # "AUTOMATICALLY" EN NIET "FROM THE DOMAIN": `bakje_van` kijkt bij een lege override naar het
+    # domein van het artefact, dan naar dat van de rol, dan naar de rol zelf, dan naar de cirkel.
+    # "Uit het domein" zou dus drie van de vier gevallen verkeerd beschrijven — en het woord
+    # "domain" staat al als rastersleutel één rij hoger.
+    uit = [f"<option value=''{'' if huidig else ' selected'}>"
+           f"&mdash; derive automatically &mdash;</option>"]
+    uit += [f"<option value='{_e(k)}'{' selected' if k == huidig else ''}>{_e(lbl)}</option>"
+            for k, lbl in _dom.BAKJES]
+    return "".join(uit)
+
+
+def _sectie_form(a, bakje: str, csrf_token: str, can_edit: bool, *,
+                 st=None, username: str | None = None) -> str:
+    """Waar deze pagina in de navigatie verschijnt — los van het governance-domein.
+
+    TWEE VERSCHILLENDE VRAGEN, en daarom twee velden. "Move page" verzet het DOMEIN: dat is een
+    governance-feit over wie dit onderwerp bezit. Deze keuze verzet alleen waar de pagina in de
+    LINKERKOLOM staat. Meestal volgt die het domein vanzelf — `bakje_van` leidt hem af — en dan
+    hoef je hier niets te doen.
+
+    WAAROM HIJ ER MOEST KOMEN: bij een pagina zonder roldomein valt die afleiding stil. Een
+    individuele actie (`ii:<cirkel>`) heeft geen rol en dus geen domein, en een rol met twee
+    domeinen in verschillende bakjes levert bewust "Overig — dit vraagt een override" op. In
+    allebei die gevallen bestond de override al als mechanisme (stap 0 van `bakje_van`) maar was er
+    geen manier om hem te zetten.
+
+    OP ELKE PAGINA, NIET ALLEEN DAAR. Hij verschijnt overal als correctie-optie: het mechanisme is
+    hetzelfde, en een veld dat soms wel en soms niet bestaat is moeilijker uit te leggen dan een
+    veld dat altijd staat en meestal "afleiden" zegt.
+
+    DEZELFDE POORT ALS HET DOMEIN, en dat is geen keuze maar een noodzaak: de override WÍNT van
+    het domein. Zou hij ruimer staan, dan kan wie het domein niet mag verzetten de pagina alsnog
+    ergens anders ophangen."""
+    from nooch_village import domeinen as _dom
+
+    if not can_edit or not csrf_token or not _mag_domein_wijzigen(a, st, username):
+        return f"<span class='chip muted'>{_e(_dom.label(bakje))}</span>"
+    huidig = str((getattr(a, "meta", None) or {}).get("domein") or "")
+    tip = "Only changes where this page appears in the navigation. Not its text, not its domain."
+    return (f"<form method='post' action='/action' class='fieldform' title='{_e(tip)}'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"<select name='sectie' aria-label='Section'>{_sectie_opties(huidig)}</select>"
+            f"<button class='btn ghost sm' type='submit' name='action' value='pagina_sectie' "
+            f"title='{_e(tip)}'>Set section</button></form>")
 
 
 def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
@@ -730,8 +830,10 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
         return _artefact_pagina(st, a, csrf_token, username, msg)
 
     eigenaar = st.records.get(a.anchor)
-    can_edit = bool(eigenaar is not None
-                    and _can_edit_artefacts(st, eigenaar, csrf_token, username))
+    # OP HET DOMEIN, net als de server — zie `_mag_pagina_bewerken`. `eigenaar` blijft nodig voor
+    # de weergave (de naam in de voet), maar hij is geen poort meer: een individuele actie heeft
+    # geen record en was daardoor onbewerkbaar.
+    can_edit = _mag_pagina_bewerken(a, st, csrf_token, username)
     pags = wiki.verwijsbaar(st.att)
 
     # De titel is een eigen element omdat hij BEWERKBAAR wordt, op zijn plek in de kop. Het losse
@@ -924,9 +1026,21 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
             f"<input type='hidden' name='next' value='/wiki'>"
             f"<label class='att-lbl' for='np-owner'>1. Whose is this?</label>"
             f"<select id='np-owner' name='owner' required>{_role_options(st)}</select>"
-            f"<label class='att-lbl' for='np-domain'>2. Where in the navigation?</label>"
+            f"<label class='att-lbl' for='np-domain'>2. Which domain?</label>"
             f"<select id='np-domain' name='domain'>"
             f"<option value=''>&mdash; no domain yet &mdash;</option>{opties}</select>{uitleg}"
+            # DE SECTIE ERNAAST, EN NIET IN PLAATS VAN (26 september 2026). Bij een gewone rol
+            # volgt de sectie vanzelf uit het domein en hoef je hier niets te kiezen. Bij een
+            # INDIVIDUELE ACTIE (`ii:<cirkel>`) is er geen rol en dus geen domein om uit af te
+            # leiden — dan is dit het enige veld dat de pagina ergens laat landen.
+            #
+            # BEIDE ALTIJD TONEN, want welke van de twee je nodig hebt hangt af van de keuze in
+            # stap 1, en die staat in hetzelfde formulier. Verbergen zou JavaScript vragen om een
+            # veld te tonen dat de server al kent; de uitlegzin doet hetzelfde werk.
+            f"<label class='att-lbl' for='np-sectie'>3. Where in the navigation?</label>"
+            f"<select id='np-sectie' name='sectie'>{_sectie_opties()}</select>"
+            f"<div class='muted wiki-hint'>With a domain this follows by itself. Pick one for an "
+            f"individual action, which has no role to derive it from.</div>"
             f"<label class='att-lbl' for='np-kind'>Kind</label>"
             f"<select id='np-kind' name='kind'>{soorten}</select>"
             f"{_field('Title', 'title', required=True, fid='np-title')}"

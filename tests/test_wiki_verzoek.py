@@ -127,7 +127,9 @@ def test_pagina_toont_voorstelknop_aan_niet_eigenaar_en_editknop_aan_eigenaar(tm
     st = cockpit2._Stores(_dd(tmp_path))
     _persoon(st, "Alice", "alice@nooch.earth", OWNER)
     _persoon(st, "Bob", "bob@nooch.earth")
-    a = st.att.add(OWNER, "note", title="HyphaLite", body="tekst")
+    # MET EEN DOMEIN, anders mág Bob gewoon bewerken en is er geen voorstelpad te tonen — zie
+    # de domein-gate van 26 september. Het voorstelpad zelf is ongewijzigd.
+    a = st.att.add(OWNER, "note", title="HyphaLite", body="tekst", domain="Materials")
     st2 = cockpit2._Stores(st.dd)
 
     bezoeker = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
