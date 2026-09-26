@@ -1022,18 +1022,40 @@ _COPY_STACK_ZAAD = {
 }
 
 
-def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
-    """Poort voor artefact-schrijfacties (add/edit/archive). Regel: rolvervuller van de eigenaar-rol
-    OF Circle Lead van de omvattende cirkel — via `can_write_artefact`, dus identiek voor mens en
-    (op de AI-weg) persona. Foutmelding bij weigering, anders None. "guest" (auth uit) mag alles."""
+def _artefact_gate(owner_role_id: str, username: str | None, st,
+                   *, domein: str = "") -> str | None:
+    """Poort voor artefact-schrijfacties (add/edit/archive).
+
+    DE REGEL HANGT AAN HET DOMEIN, NIET MEER AAN DE ROL (26 september 2026). Hij was:
+    rolvervuller van de eigenaar-rol óf Circle Lead. Dat betekende dat je een mandaat moest hebben
+    om een aantekening te maken — ook bij een pagina die over niets in het bijzonder ging. Wat je
+    wél wilt beschermen is een DOMEIN, want dat is iets wat een ander in beheer heeft.
+
+    De regel zelf staat in `artefacts.mag_schrijven_op_domein`, want `_domein_form` in de wiki
+    stelt dezelfde vraag over hetzelfde domein. Twee kopieën zouden na één wijziging uiteenlopen,
+    en dan geeft het scherm een ander antwoord dan de server.
+
+    `domein` KOMT VAN DE AANROEPER, want die weet welk artefact het is (of, bij aanmaken, welk
+    domein gekozen wordt). Zonder domein is dit "elke herkende persoon mag" — en dat is de hele
+    verruiming.
+
+    `owner_role_id` BLIJFT, voor de cirkel: de Circle Lead van de cirkel waar het artefact hangt
+    mag er sowieso bij, ook als het domein bij een rol in een andere cirkel hoort.
+
+    VERWIJDEREN LOOPT HIER NIET LANGS. `_act_artefact_delete` blijft Circle-Lead-only, ongeacht
+    domein — weggooien is onomkeerbaar en dat is een andere vraag dan schrijven.
+
+    "guest" (auth uit) mag alles, zoals overal in de cockpit."""
     if username == "guest":
         return None
     actor = st.people.by_email(username)
     if actor is None:
         return "No access — user not recognised"
-    if can_write_artefact("person", actor.id, owner_role_id, st.records, st.assign):
+    cirkel = resolve_circle_id(owner_role_id, st.records) or ""
+    if artefacts.mag_schrijven_op_domein(st, domein, actor.id, circle_id=cirkel):
         return None
-    return "No access — only the role filler or Circle Lead may manage artefacts"
+    return ("No access — this page sits in a domain another role owns; "
+            "only that role or the Circle Lead may change it")
 
 
 def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
@@ -1310,15 +1332,17 @@ def _body_te_lang(body: str, kind: str) -> str:
 def _act_artefact_add(c):
         nxt, st, g, form, username, action, data_dir = c.nxt, c.st, c.g, c.form, c.username, c.action, c.data_dir
         msg = ""
-        # AUTHZ: rolvervuller of Circle Lead — alleen de vervuller van de eigenaar-rol (of de Circle
-        # Lead van de omvattende cirkel) mag artefacten binnen dat domein aanmaken; mens én AI gelijk.
+        # AUTHZ: domeineigenaar of Circle Lead — sinds 26 september hangt dit aan het DOMEIN en
+        # niet meer aan de eigenaar-rol. Zonder domein mag elke herkende persoon aanmaken; op een
+        # domein dat een rol in beheer heeft alleen die rolvervuller of de Circle Lead.
         owner = g("owner")
-        _deny = _artefact_gate(owner, username, st)          # check vóór de mutatie
-        if _deny:
-            raise Forbidden(_deny)                            # → HTTP 403, geen 303-redirect
         kind = g("kind")
         if kind not in ARTEFACT_KINDS:
             return nxt, "✗ onbekende artefact-soort"
+        # HET DOMEIN EERST, DAN DE POORT (26 september 2026). De poort hangt sinds deze stap aan
+        # het DOMEIN, en dat wordt hier pas gekozen — hij stond ervóór en zou dus altijd de
+        # "geen domein"-tak nemen, oftewel: iedereen mag alles aanmaken. De stappen hieronder
+        # muteren niets; ze lezen het formulier en wijzen een ongeldige keuze af.
         domain = ""
         if kind == "policy":
             # Een policy kan alleen op een domein dat de rol ÉCHT via governance bezit. Het gekozen
@@ -1334,6 +1358,24 @@ def _act_artefact_add(c):
             if chosen not in owner_domains:
                 return nxt, "✗ pick a domain this role actually owns"
             domain = chosen
+        elif "domain" in form:
+            # EEN NOTE OF TOOL MAG NU OOK EEN DOMEIN KRIJGEN (26 september 2026), want de
+            # wiki-eerst-flow vraagt "waar in de navigatie?" en dat is precies deze keuze. Tot nu
+            # toe kreeg alleen een policy er een; een note kwam altijd domeinloos ter wereld.
+            #
+            # GETOETST TEGEN DEZELFDE LIJST DIE HET FORMULIER AANBIEDT, en niet tegen de domeinen
+            # van de eigenaar-rol: die heeft een individuele actie helemaal niet, en het hele punt
+            # van deze stap is dat het domein bepaalt waar de pagina hangt — niet de rol.
+            gekozen = g("domain").strip()
+            if gekozen:
+                if gekozen not in artefacts.alle_domeinen(st.records):
+                    return nxt, "✗ pick a domain that governance actually assigned"
+                domain = gekozen
+        # DE POORT, MET HET GEKOZEN DOMEIN. Aanmaken op een domein dat een ander in beheer heeft
+        # mag alleen die rol of de Circle Lead; zonder domein mag elke herkende persoon het.
+        _deny = _artefact_gate(owner, username, st, domein=domain)
+        if _deny:
+            raise Forbidden(_deny)                            # → HTTP 403, geen 303-redirect
         te_lang = _body_te_lang(g("body"), kind)
         if te_lang:
             return nxt, te_lang
@@ -1348,17 +1390,25 @@ def _act_artefact_add(c):
         artefacts.log_change(data_dir, action="add", artefact=a, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"➕ {kind} added ({a.id})"
+        # DIRECT NAAR DE NIEUWE PAGINA (26 september 2026). De wiki-eerst-flow maakt een LEGE
+        # pagina; je terugsturen naar de index betekent dat je hem daar moet opzoeken om te
+        # beginnen met schrijven. Een vlag en geen url, want welk id het wordt weet alleen deze
+        # actie — het formulier kan dat niet vooraf invullen.
+        if g("naar_pagina"):
+            from nooch_village import wiki as _wiki
+            return _wiki.pagina_url(a.id), msg
         return nxt, msg
 
 
 def _act_artefact_edit(c):
         nxt, st, g, form, username, action, data_dir = c.nxt, c.st, c.g, c.form, c.username, c.action, c.data_dir
         msg = ""
-        # AUTHZ: rolvervuller of Circle Lead — bewerken mag alleen wie de eigenaar-rol vervult.
+        # AUTHZ: domeineigenaar of Circle Lead — op het domein van het artefact, niet op zijn rol.
         cur = st.att.get(g("aid"))
         if cur is None:
             return nxt, "✗ artefact not found"
-        _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
+        _deny = _artefact_gate(cur.anchor, username, st,
+                               domein=getattr(cur, "domain", ""))   # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
         # TWEE INGANGEN, ÉÉN OPSLAG. De wiki-editor laat je in de tekst zelf typen en stuurt dus
@@ -1412,11 +1462,12 @@ def _act_artefact_edit(c):
 def _act_artefact_archive(c):
         nxt, st, g, username, action, data_dir = c.nxt, c.st, c.g, c.username, c.action, c.data_dir
         msg = ""
-        # AUTHZ: rolvervuller of Circle Lead — archiveren (nooit hard delete) mag alleen de vervuller.
+        # AUTHZ: domeineigenaar of Circle Lead — archiveren (nooit hard delete) volgt het domein.
         cur = st.att.get(g("aid"))
         if cur is None:
             return nxt, "✗ artefact not found"
-        _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
+        _deny = _artefact_gate(cur.anchor, username, st,
+                               domein=getattr(cur, "domain", ""))   # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
         gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
@@ -1475,14 +1526,15 @@ def _na_verwijderen_artefact(nxt: str, a) -> str:
 
 
 def _act_pagina_feit_add(c):
-    # AUTHZ: rolvervuller of Circle Lead — een feit is inhoud van de pagina, en een pagina is een
-    # note binnen het domein van de eigenaar-rol. Zelfde poort als artefact_edit, geen tweede regel.
+    # AUTHZ: domeineigenaar of Circle Lead — een feit is inhoud van de pagina, dus dezelfde poort
+    # als artefact_edit. Geen tweede regel, en sinds 26 september op het domein in plaats van de rol.
     from nooch_village import wiki
     nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
     cur = st.att.get(g("aid"))
     if cur is None or cur.kind != wiki.PAGINA_KIND:
         return nxt, "✗ page not found"
-    _deny = _artefact_gate(cur.anchor, username, st)          # check vóór de mutatie
+    _deny = _artefact_gate(cur.anchor, username, st,
+                           domein=getattr(cur, "domain", ""))      # check vóór de mutatie
     if _deny:
         raise Forbidden(_deny)
     feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=g("ref"),
@@ -1801,7 +1853,7 @@ def _act_topic_add(c):
 def _act_keep_in_wiki(c):
     """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
 
-    # AUTHZ: rolvervuller of Circle Lead van de PAGINA — dezelfde poort als `pagina_feit_add`.
+    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — dezelfde poort als `pagina_feit_add`.
     # Bewust niet losser: een feit is inhoud van die pagina, en wie hem mag schrijven is een
     # bestaande regel. Dat betekent wel dat je een feit niet zomaar op andermans pagina kunt
     # zetten; komt dat in de weg te zitten, dan is dat een governance-vraag en geen UI-vraag.
@@ -1824,7 +1876,8 @@ def _act_keep_in_wiki(c):
     tekst = " ".join(str(entry.get("text") or "").split())
     if not tekst:
         return nxt, "✗ nothing to keep — the message has no text"
-    _deny = _artefact_gate(pagina.anchor, username, st)        # check vóór de mutatie
+    _deny = _artefact_gate(pagina.anchor, username, st,
+                           domein=getattr(pagina, "domain", ""))    # check vóór de mutatie
     if _deny:
         raise Forbidden(_deny)
 
@@ -1847,14 +1900,14 @@ def _act_keep_in_wiki(c):
 
 
 def _act_pagina_feit_del(c):
-    # AUTHZ: rolvervuller of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
+    # AUTHZ: domeineigenaar of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
     # achter, zodat de historie laat zien dát er een feit weg is (nooit een stille verdwijning).
     from nooch_village import wiki
     nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
     cur = st.att.get(g("aid"))
     if cur is None or cur.kind != wiki.PAGINA_KIND:
         return nxt, "✗ page not found"
-    _deny = _artefact_gate(cur.anchor, username, st)
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
     if _deny:
         raise Forbidden(_deny)
     huidig = list(wiki.feiten(cur))
@@ -4022,7 +4075,9 @@ def _act_wall_outcome(c):
             pj.reopen(pid_link)
 
         elif otype == "note":
-            # AUTHZ: rolvervuller of Circle Lead — een note is een artefact bij de rol (_artefact_gate)
+            # AUTHZ: domeineigenaar of Circle Lead — dit MAAKT een note en die krijgt hier geen
+            # domein, dus hij valt in de "geen domein"-tak: elke herkende persoon mag hem
+            # neerleggen. Dat is de verruiming van 26 september, niet een vergeten argument.
             note_role = g("note_role")
             if not note_role:
                 return nxt, "✗ pick a role for the note"
@@ -5756,9 +5811,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een
-                # node). Schrijven gebeurt niet hier maar op de eigenaar-rol, achter zijn poort.
+                # node). SCHRIJVEN KAN HIER SINDS 26 SEPTEMBER WEL: "+ New page" maakt een pagina
+                # aan, en die loopt langs `artefact_add` met dezelfde domein-poort als elders. De
+                # gebruikersnaam reist mee zodat het formulier alleen de domeinen aanbiedt waar
+                # deze persoon ook echt op mag schrijven.
                 self._send(render_wiki_index(st, csrf_token=effective_csrf,
-                                             soort=(qs.get("kind") or ["all"])[0]))
+                                             soort=(qs.get("kind") or ["all"])[0],
+                                             username=username))
                 return
             if path == "/projects":
                 # AUTHZ: iedereen-ingelogd — lezen van het bord is vrij; de mutaties eronder gaan
@@ -6611,7 +6670,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
                 if fields.get("action") == "wiki_bijlage":
-                    # AUTHZ: rolvervuller of Circle Lead — `_artefact_gate`, dezelfde poort als
+                    # AUTHZ: domeineigenaar of Circle Lead — `_artefact_gate`, dezelfde poort als
                     # het bewerken van de tekst. Dat is geen keuze maar een gevolg: deze upload
                     # SCHRIJFT een regel in de body, dus hij ís de tekst bewerken. Een ruimere
                     # poort zou betekenen dat wie niet mag schrijven toch de pagina kan wijzigen.
@@ -6620,7 +6679,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     _a = _st.att.get(_aid)
                     if _a is None:
                         self._send("Page not found", 404); return
-                    _fout = _artefact_gate(_a.anchor, username, _st)
+                    _fout = _artefact_gate(_a.anchor, username, _st,
+                                           domein=getattr(_a, "domain", ""))
                     if _fout:
                         self._send(_fout, 403); return
                     # DEZELFDE CONTROLE, DEZELFDE LIMIET, DEZELFDE LIJST als de andere twee

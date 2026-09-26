@@ -134,11 +134,24 @@ def test_artefact_poort_laat_compliance_en_circle_lead_door(dorp):
 
 
 def test_artefact_poort_weigert_een_derde_ingelogde(dorp):
-    """Dit is de prijs van het anker, en hij staat hier zodat niemand hem later ontdekt."""
+    """Dit is de prijs van het anker, en hij staat hier zodat niemand hem later ontdekt.
+
+    MET HET DOMEIN ERBIJ sinds 26 september: de poort hangt niet meer aan de eigenaar-rol maar aan
+    het domein van het artefact. `claim-verification` hoort bij compliance, dus de derde komt er
+    niet in — precies zoals voorheen, alleen via een andere weg."""
     st, _ = dorp
     _comp, _lead, derde = _drie_mensen(st)
-    deny = cockpit2._artefact_gate(wcp.EIGENAAR, derde.email, st)
-    assert deny is not None and "role filler or Circle Lead" in deny
+    deny = cockpit2._artefact_gate(wcp.EIGENAAR, derde.email, st, domein="claim-verification")
+    assert deny is not None and "another role owns" in deny
+
+
+def test_zonder_domein_komt_diezelfde_derde_er_wel_in(dorp):
+    """De verruiming, op dezelfde opstelling. Een pagina zonder domein hoort geen mandaat te
+    vereisen; wat de beleidspagina beschermt is haar DÓMEIN, niet de rol die haar toevallig
+    bezit."""
+    st, _ = dorp
+    _comp, _lead, derde = _drie_mensen(st)
+    assert cockpit2._artefact_gate(wcp.EIGENAAR, derde.email, st) is None
 
 
 def test_fase5_is_niet_teruggedraaid_diezelfde_derde_mag_claims_cureren(dorp):

@@ -505,39 +505,30 @@ def _domein_chip(a) -> str:
 def _mag_domein_wijzigen(a, st, username: str | None) -> bool:
     """Wie mag deze pagina naar een ander domein verplaatsen?
 
-    ZOLANG ER GEEN DOMEIN IS, mag iedereen met bewerkrecht hem indelen. Dat is het huidige gedrag
-    en het hoort zo: een ongeplaatste pagina heeft nog geen eigenaar die er iets over te zeggen
-    heeft, en de drempel om hem überhaupt in te delen moet laag blijven.
+    DE REGEL ZELF STAAT IN `artefacts.mag_schrijven_op_domein`, sinds 26 september, want de
+    server stelt bij elke schrijfactie dezelfde vraag over hetzelfde domein (`_artefact_gate`).
+    Hier stond een tweede uitwerking van diezelfde regel; twee kopieën lopen na één wijziging
+    uiteen, en dan geeft het scherm een ander antwoord dan de server — een veld dat je mag
+    bedienen tot je erop drukt, of andersom.
 
-    ZODRA HIJ ER ÉÉN HEEFT, is het verplaatsen een ingreep in andermans domein: de rol die dat
-    domein houdt verliest er iets uit. Dan mag alleen die rolvervuller het nog, plus de Circle Lead
-    van de cirkel waar de eigenaar-rol in zit — dezelfde figuur die bij `artefact_delete` de
-    zwaarste knop bedient.
+    WAT HIER BLIJFT is de UI-terugval. Zonder `st`, zonder gebruiker, of bij een naam die het dorp
+    niet kent, kan deze functie de vraag niet stellen; dan toont hij het veld en laat hij het
+    oordeel aan de server. Dit bepaalt alleen wat je te zien krijgt — `_act_artefact_edit` toetst
+    daarna alsnog.
 
-    EEN CONFIGURATIEFOUT SLUIT NIEMAND BUITEN. `domein_eigenaar` geeft een lege rol terug in drie
-    gevallen: het domein bestaat niet als verklaring, niemand houdt het, of twee rollen houden het
-    allebei. Dat zijn alle drie fouten in de governance-administratie, en die horen daar opgelost
-    te worden — niet doordat een pagina hier stilzwijgend op slot gaat en niemand meer weet
-    waarom. Terugval op het huidige gedrag, precies zoals `domein_eigenaar` zelf ook terugvalt.
+    DE CIRKEL IS DIE VAN DE PAGINA. De Circle Lead van de cirkel waar de eigenaar-rol in hangt mag
+    er sowieso bij, ook als het domein bij een rol in een andere cirkel hoort."""
+    from nooch_village import artefacts
+    from nooch_village.cockpit2 import resolve_circle_id
 
-    GEEN SESSIE, GEEN OORDEEL: zonder `st` of `username` valt hij terug, want dan kan hij de vraag
-    niet stellen. De echte poort staat op de server (`_act_artefact_edit` toetst al of het gekozen
-    domein bij de rol hoort); dit bepaalt alleen wat je te zien krijgt."""
-    from nooch_village import triage_rol
-    from nooch_village.cockpit2 import is_circle_lead, is_role_filler, resolve_circle_id
-
-    domein = (getattr(a, "domain", "") or "").strip()
-    if not domein or st is None or not username or username == "guest":
+    if st is None or not username or username == "guest":
         return True
-    houder = (triage_rol.domein_eigenaar(st, domein) or {}).get("rol") or ""
-    if not houder:
-        return True                       # configuratiefout — zie de docstring
     actor = st.people.by_email(username)
     if actor is None:
         return True                       # onbekende gebruiker: `can_edit` heeft al geoordeeld
-    if is_role_filler(actor.id, houder, st.assign):
-        return True
-    return bool(is_circle_lead(actor.id, resolve_circle_id(a.anchor, st.records), st.assign))
+    return artefacts.mag_schrijven_op_domein(
+        st, getattr(a, "domain", "") or "", actor.id,
+        circle_id=resolve_circle_id(a.anchor, st.records) or "")
 
 
 def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
@@ -872,7 +863,82 @@ def _wiki_domein(a, records=None) -> str:
     return domeinen.label(domeinen.bakje_van(a, records)[0])
 
 
-def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
+#: De soorten die je vanuit de wiki zelf kunt starten.
+#:
+#: GEEN POLICY, EN DAT IS EEN KEUZE. Een policy is geen pagina die je schrijft maar een REGEL op
+#: een domein dat een rol via governance bezit: `_act_artefact_add` eist dat het gekozen domein in
+#: `definition.domains` van de eigenaar-rol staat, en weigert anders. Hier zou dat op twee manieren
+#: misgaan. Een individuele actie (`ii:<cirkel>`) heeft helemaal geen rol en dus geen domeinen, dus
+#: die combinatie kan niet bestaan. En bij een gewone rol zou de domeinlijst van stáp 2 (alle
+#: domeinen van het dorp) botsen met de lijst waar de server op toetst (alleen die van de rol) —
+#: dan bied je een keuze aan die daarna wordt geweigerd.
+#:
+#: Een policy heeft al een plek waar dat wél klopt: de Wiki-tab van de rol die het domein houdt.
+_NIEUW_SOORTEN = (("note", "Page"), ("tool", "Tool"))
+
+
+def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
+    """"+ New page", vanuit de wiki zelf.
+
+    WAAROM DIT HIER HOORT. Een pagina starten kon alleen via de cockpit van een rol, achter de
+    poort van díé rol. Je moest dus eerst weten bij wie iets hoorde vóór je het kon opschrijven —
+    precies andersom als hoe schrijven gaat.
+
+    TWEE STAPPEN IN ÉÉN FORMULIER, en niet twee pagina's. De vragen zijn "van wie is dit?" en
+    "waar in de navigatie?"; die staan hier als twee genummerde stappen onder elkaar. Twee
+    round-trips zouden een half aangemaakte pagina of een sessie-state nodig hebben, en dat is
+    machinerie voor een formulier met drie velden.
+
+    DE DOMEINLIJST IS GEFILTERD OP WAT JE MÁG. Een domein dat een ander in beheer heeft, aanbieden
+    en daarna weigeren is een knop die niet doet wat hij belooft; de zin eronder zegt waarom er
+    minder staat dan je misschien verwacht."""
+    from nooch_village import artefacts
+    from nooch_village.views.wizard import _role_options
+
+    if not csrf_token:
+        return ""
+    actor = st.people.by_email(username) if username and username != "guest" else None
+    # "guest" (auth uit) mag alles, zoals overal in de cockpit; een onbekende naam mag niets.
+    if actor is None and username != "guest":
+        return ""
+    aid = actor.id if actor is not None else ""
+
+    alle = artefacts.alle_domeinen(st.records)
+    mag = [d for d in alle
+           if username == "guest" or artefacts.mag_schrijven_op_domein(st, d, aid)]
+    opties = "".join(f"<option value='{_e(d)}'>{_e(d)}</option>" for d in mag)
+    weg = len(alle) - len(mag)
+    # AFGEVALLEN DOMEINEN KRIJGEN EEN REDEN. Stilzwijgend een kortere lijst tonen laat je zoeken
+    # naar iets dat er hoort te zijn.
+    uitleg = (f"<div class='muted wiki-hint'>{weg} domain(s) are not listed: another role owns "
+              f"them, and only that role or its Circle Lead can file a page there.</div>"
+              if weg else "")
+    soorten = "".join(f"<option value='{_e(k)}'>{_e(lbl)}</option>" for k, lbl in _NIEUW_SOORTEN)
+    return (f"<details class='qadd'><summary>+ New page</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='action' value='artefact_add'>"
+            # NAAR DE NIEUWE PAGINA, en de actie weet pas bíí het aanmaken welk id dat wordt —
+            # vandaar een vlag in plaats van een url die hier al vastligt.
+            f"<input type='hidden' name='naar_pagina' value='1'>"
+            f"<input type='hidden' name='next' value='/wiki'>"
+            f"<label class='att-lbl' for='np-owner'>1. Whose is this?</label>"
+            f"<select id='np-owner' name='owner' required>{_role_options(st)}</select>"
+            f"<label class='att-lbl' for='np-domain'>2. Where in the navigation?</label>"
+            f"<select id='np-domain' name='domain'>"
+            f"<option value=''>&mdash; no domain yet &mdash;</option>{opties}</select>{uitleg}"
+            f"<label class='att-lbl' for='np-kind'>Kind</label>"
+            f"<select id='np-kind' name='kind'>{soorten}</select>"
+            f"{_field('Title', 'title', required=True, fid='np-title')}"
+            f"{_field('Link (for a tool)', 'url', kind='url', fid='np-url')}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok' type='submit'>Create</button>"
+            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"aria-label='cancel'>✕</button></div></form></details>")
+
+
+def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
+                      username: str | None = None) -> str:
     """Alles wat het dorp heeft opgeschreven, op één scherm."""
     soort = soort if soort in {k for k, _ in _WIKI_SOORTEN} else "all"
     items = _wiki_items(st, soort)
@@ -914,7 +980,9 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all") -> str:
 
     main = (f"<div class='c2-main'><h1>Wiki</h1>"
             f"<p class='muted'>All policies, notes and tools from across the village &middot; "
-            f"by domain where known. Edit an item where it lives: on its owning role or circle.</p>"
+            f"by domain where known. A page is editable by anyone unless it sits in a domain "
+            f"another role owns.</p>"
+            f"{_nieuwe_pagina_form(st, csrf_token, username)}"
             f"<div class='cl-filters'>{chips}</div>"
             f"<div class='c2-wiki'>{nav}<section>{kaarten}</section></div></div>")
     return _page("Wiki", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
