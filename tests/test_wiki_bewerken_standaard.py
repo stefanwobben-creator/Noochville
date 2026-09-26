@@ -13,6 +13,7 @@ from __future__ import annotations
 import pathlib
 import re
 
+from conftest import js_zonder_uitleg
 from nooch_village import cockpit2, wiki
 from nooch_village.views.overview import _domain_field
 from nooch_village.views.wiki import render_pagina
@@ -126,7 +127,7 @@ def test_de_server_schrijft_een_lege_keuze_ook_echt_weg():
 
 # ── 3. Bewerken is de stand ──────────────────────────────────────────────────
 def _wikiedit() -> str:
-    kaal = re.sub(r"//[^\n]*|/\*.*?\*/", "", JS, flags=re.S)
+    kaal = js_zonder_uitleg(JS)
     return kaal.split("function wikiEdit(")[1].split("\n  function ")[0]
 
 

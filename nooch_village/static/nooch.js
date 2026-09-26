@@ -1015,6 +1015,36 @@
     });
   }
 
+  /* ZWEVEN BIJ EEN PLEK OP HET SCHERM — ÉÉN implementatie voor twee dingen (26 september 2026).
+   *
+   * De opmaak-werkbalk hangt bij je selectie, de link-kaart bij de link waar je op klikt. Dat is
+   * hetzelfde probleem: zet dit element vlak bij dat vak, en laat het niet half buiten beeld
+   * hangen. Een tweede implementatie zou betekenen dat de ene na een wijziging anders zweeft dan
+   * de andere — precies de reden die boven `NV.sleep` staat voor hétzelfde soort hergebruik.
+   *
+   * EERST TONEN, DAN METEN. Een verborgen element heeft geen maat, dus andersom rekent hij met
+   * hoogte 0 en landt het kaartje pal op de tekst.
+   */
+  function zweefBij(el, vak) {
+    el.hidden = false;
+    var eigen = el.getBoundingClientRect();
+    var marge = 8;
+    // ERBOVEN, EN ANDERS ERONDER. Bovenin het scherm past er niets boven; dan zou het half buiten
+    // beeld hangen. Eronder is de enige plek die dan overblijft, en dat is wat elke editor doet.
+    var top = vak.top - eigen.height - marge;
+    if (top < marge) top = vak.bottom + marge;
+    // EN BINNEN HET VENSTER HOUDEN. Iets helemaal onderaan zou het eronder duwen; iets ver naar
+    // rechts zou het over de rand schuiven.
+    var max = window.innerHeight - eigen.height - marge;
+    if (top > max) top = Math.max(marge, max);
+    var links = vak.left;
+    var rechts = window.innerWidth - eigen.width - marge;
+    if (links > rechts) links = rechts;
+    if (links < marge) links = marge;
+    el.style.top = Math.round(top) + "px";
+    el.style.left = Math.round(links) + "px";
+  }
+
   /* BEWERKEN IS DE STAND, NIET EEN MODUS (26 september 2026).
    *
    * Hiervoor stond een pagina read-only tot je op "Edit page" klikte. Dat is niet hoe een
@@ -1033,6 +1063,7 @@
     var titel = root.querySelector("#wiki-titel");
     var form = root.querySelector("#wiki-form");
     var tb = root.querySelector("#wiki-tb");
+    var kaart = root.querySelector("#wiki-linkkaart");
     // OP DE BODY GEHAAKT en niet meer op de startknop, want die bestaat niet meer. `#wiki-form`
     // is de poort: geen formulier = geen bewerkrecht = niets aanzetten.
     if (!body || !titel || !form || body.dataset.nvWired) return;
@@ -1060,6 +1091,140 @@
       bezig = aan;
     }
 
+    /* DE LINK-KAART — het Docs/Notion-gedrag bij een klik op een link (26 september 2026).
+     *
+     * IN EEN BEWERKBAAR VELD BRENGT EEN KLIK OP EEN LINK JE NERGENS HEEN: `contenteditable` vangt
+     * hem af en zet de cursor erin. Je ziet dus een link, je klikt erop, en er gebeurt niets —
+     * en het adres zelf zie je nergens, want dat zit in het `href`-attribuut.
+     *
+     * HET KAARTJE TOONT HET ADRES en de drie dingen die je ermee kunt. `Open` omdat de klik dat
+     * niet meer doet, `Edit` omdat een adres wijzigen anders betekent: weghalen en opnieuw maken,
+     * en `Remove` omdat je een link zonder dat nooit meer kwijtraakt.
+     *
+     * CMD/CTRL-KLIK EN DE MIDDELSTE KNOP NAVIGEREN DIRECT, zoals overal elders op het web. Wie
+     * die gewoonte heeft, hoort er niet op een kaartje te stuiten.
+     */
+    var huidigeLink = null;
+
+    function kaartWeg() {
+      if (!kaart || kaart.hidden) return;
+      kaart.hidden = true;
+      huidigeLink = null;
+      toonAdresveld(false);
+    }
+
+    function toonAdresveld(aan) {
+      if (!kaart) return;
+      var tekst = kaart.querySelector(".wiki-linkurl");
+      var veld = kaart.querySelector(".wiki-linkveld");
+      if (tekst) tekst.hidden = aan;
+      if (veld) veld.hidden = !aan;
+    }
+
+    /* EEN ADRES ZONDER SCHEMA IS GEEN LINK VOOR DE SERVER. `_md` en de weg terug eisen allebei
+     * `http(s)://` of ons eigen bestandspad; wie "nooch.earth" typt krijgt van de browser een
+     * RELATIEVE href, en die valt er bij het opslaan stil uit — de tekst blijft staan, de link
+     * verdwijnt. Vandaar dat hier een schema bij komt in plaats van dat het later misgaat. */
+    function heelAdres(ruw) {
+      var a = (ruw || "").trim();
+      if (!a) return "";
+      if (/^https?:\/\//i.test(a) || a.indexOf("/wiki-bestand/") === 0) return a;
+      if (/^[a-z][a-z0-9+.-]*:/i.test(a)) return "";      // javascript:, data:, mailto: → fail closed
+      return "https://" + a;
+    }
+
+    function linkVan(knoop) {
+      if (!knoop) return null;
+      var el = knoop.nodeType === 3 ? knoop.parentNode : knoop;
+      if (!el || !el.closest) return null;
+      var a = el.closest("a");
+      return a && body.contains(a) ? a : null;
+    }
+
+    function toonKaart(a, bewerken) {
+      if (!kaart || !a) return;
+      huidigeLink = a;
+      var tekst = kaart.querySelector(".wiki-linkurl");
+      var veld = kaart.querySelector(".wiki-linkveld");
+      var adres = a.getAttribute("href") || "";
+      if (tekst) { tekst.textContent = adres || "(no address yet)"; tekst.href = adres || "#"; }
+      if (veld) veld.value = adres;
+      toonAdresveld(!!bewerken);
+      zweefBij(kaart, a.getBoundingClientRect());
+      if (bewerken && veld) veld.focus();
+    }
+
+    function bewaarAdres() {
+      var veld = kaart && kaart.querySelector(".wiki-linkveld");
+      if (!veld || !huidigeLink) return;
+      var adres = heelAdres(veld.value);
+      if (!adres) { kaartWeg(); return; }
+      huidigeLink.setAttribute("href", adres);
+      huidigeLink.setAttribute("target", "_blank");
+      huidigeLink.setAttribute("rel", "noopener");
+      toonKaart(huidigeLink, false);
+      NV.blokNormaliseer(body);
+      grepen(body, true);
+    }
+
+    function haalLinkWeg() {
+      if (!huidigeLink) return;
+      // DE SELECTIE EERST OP DE LINK, want `unlink` werkt op wat er geselecteerd is. Zonder dit
+      // haalt hij de link weg waar de cursor toevallig stond — of geen enkele.
+      var r = document.createRange();
+      r.selectNodeContents(huidigeLink);
+      var sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      document.execCommand("unlink");
+      kaartWeg();
+      NV.blokNormaliseer(body);
+      grepen(body, true);
+    }
+
+    if (kaart) {
+      kaart.addEventListener("mousedown", function (e) { e.preventDefault(); });  // focus blijft
+      kaart.addEventListener("click", function (e) {
+        var knop = e.target.closest("[data-link-actie]");
+        if (!knop || !huidigeLink) return;
+        var actie = knop.dataset.linkActie;
+        if (actie === "open") {
+          var adres = huidigeLink.getAttribute("href");
+          if (adres) window.open(adres, "_blank", "noopener");
+          kaartWeg();
+        } else if (actie === "edit") {
+          toonKaart(huidigeLink, true);
+        } else if (actie === "remove") {
+          haalLinkWeg();
+        }
+      });
+      var veld = kaart.querySelector(".wiki-linkveld");
+      if (veld) {
+        veld.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") { e.preventDefault(); bewaarAdres(); }
+          else if (e.key === "Escape") { e.preventDefault(); kaartWeg(); }
+        });
+        veld.addEventListener("blur", bewaarAdres);
+      }
+    }
+
+    // EEN KLIK OP EEN LINK. `mousedown` voor de middelste knop (die geeft geen `click`), `click`
+    // voor de rest — anders mist de middelste-knop-gewoonte hier precies.
+    body.addEventListener("click", function (e) {
+      var a = linkVan(e.target);
+      if (!a) { if (!kaart || !kaart.contains(e.target)) kaartWeg(); return; }
+      if (e.metaKey || e.ctrlKey) return;      // direct navigeren, zoals overal elders
+      e.preventDefault();
+      toonKaart(a, false);
+    });
+    body.addEventListener("auxclick", function (e) {
+      if (e.button !== 1) return;              // alleen de middelste knop
+      var a = linkVan(e.target);
+      if (!a) return;
+      var adres = a.getAttribute("href");
+      if (adres) window.open(adres, "_blank", "noopener");
+    });
+
     /* DE OPMAAK-BALK ZWEEFT BIJ JE SELECTIE (26 september 2026).
      *
      * Hiervoor was het een vaste balk boven het bewerkvlak (`position:sticky`). Twee problemen,
@@ -1080,6 +1245,17 @@
       if (tb && !tb.hidden) tb.hidden = true;
     }
 
+    // DE KAART SCHUIFT MEE, of verdwijnt als de link het beeld uit is. Zelfde reden als bij de
+    // balk: de positie staat in venstercoördinaten.
+    function kaartBijScroll() {
+      if (!kaart || kaart.hidden || !huidigeLink || !body.contains(huidigeLink)) return kaartWeg();
+      var vak = huidigeLink.getBoundingClientRect();
+      if (vak.bottom < 0 || vak.top > window.innerHeight) return kaartWeg();
+      zweefBij(kaart, vak);
+    }
+    window.addEventListener("scroll", kaartBijScroll, true);
+    window.addEventListener("resize", kaartBijScroll);
+
     function balkBijSelectie() {
       if (!tb || !bezig) return;
       var sel = window.getSelection();
@@ -1094,24 +1270,7 @@
       // heropgebouwd en meet hij even niets. Dan is er niets om boven te hangen.
       if (!vak.width && !vak.height) return balkWeg();
 
-      tb.hidden = false;                      // eerst tonen, dan meten: verborgen heeft hij geen maat
-      var eigen = tb.getBoundingClientRect();
-      var marge = 8;
-      // BOVEN DE SELECTIE, EN ANDERS ERONDER. Bij een selectie bovenin het scherm past er niets
-      // boven; dan zou de balk half buiten beeld hangen. Onder de selectie is de enige plek die
-      // dan overblijft, en dat is precies wat elke editor daar doet.
-      var top = vak.top - eigen.height - marge;
-      if (top < marge) top = vak.bottom + marge;
-      // EN BINNEN HET VENSTER HOUDEN. Een selectie helemaal onderaan zou de balk eronder duwen;
-      // een selectie ver naar rechts zou hem over de rand schuiven.
-      var max = window.innerHeight - eigen.height - marge;
-      if (top > max) top = Math.max(marge, max);
-      var links = vak.left;
-      var rechts = window.innerWidth - eigen.width - marge;
-      if (links > rechts) links = rechts;
-      if (links < marge) links = marge;
-      tb.style.top = Math.round(top) + "px";
-      tb.style.left = Math.round(links) + "px";
+      zweefBij(tb, vak);
     }
 
     // OP `selectionchange` VAN HET DOCUMENT, want een selectie is geen gebeurtenis van één
@@ -1130,6 +1289,9 @@
     body.addEventListener("focusout", function (e) {
       if (tb && tb.contains(e.relatedTarget)) return;
       balkWeg();
+      // DE KAART BLIJFT ALS JE ER NAARTOE KLIKT, anders sluit hij op het moment dat je hem
+      // gebruikt — dezelfde uitzondering als bij de werkbalk hierboven.
+      if (!kaart || !kaart.contains(e.relatedTarget)) kaartWeg();
     });
 
     /* DE OPSLAAN-BALK KOMT PAS ALS ER IETS TE BEWAREN IS.
@@ -1185,6 +1347,27 @@
         // (normaliseren, focus terug).
         if (knop.dataset.wikiCmd === "nvCode") {
           inlineCode();
+        } else if (knop.dataset.wikiCmd === "nvLink") {
+          // STAAT DE SELECTIE AL IN EEN LINK, dan is dit "laat me dit adres zien en bewerken" —
+          // precies wat de kaart doet. Anders is het een NIEUWE link, en dan bestaat er nog geen
+          // `<a>` om een kaartje aan op te hangen: eerst er een maken met een leeg adres, dan de
+          // kaart in bewerkstand. Zo is er één plek waar een adres wordt ingevuld.
+          var sel = getSelection();
+          var bestaand = sel && sel.rangeCount ? linkVan(sel.getRangeAt(0).commonAncestorContainer)
+                                               : null;
+          if (bestaand) {
+            toonKaart(bestaand, true);
+          } else if (sel && !sel.isCollapsed && sel.toString().trim()) {
+            // `createLink` HEEFT EEN HREF NODIG, ook al vullen we hem zo meteen pas echt in: met
+            // een lege waarde maakt de browser geen `<a>` en is er niets om aan te wijzen.
+            document.execCommand("createLink", false, "#");
+            var nieuweLink = sel.rangeCount
+              ? linkVan(sel.getRangeAt(0).commonAncestorContainer) : null;
+            if (nieuweLink) {
+              nieuweLink.setAttribute("href", "");
+              toonKaart(nieuweLink, true);
+            }
+          }
         } else {
           document.execCommand(knop.dataset.wikiCmd, false, knop.dataset.wikiArg || null);
         }
@@ -1197,6 +1380,29 @@
     // Plakken gaat als PLATTE TEKST. Wie een stuk uit Word of een website plakt, brengt anders
     // een halve stylesheet mee; de server gooit die toch weg, en dan zie je pas na het opslaan
     // dat je opmaak verdwenen is. Zo zie je meteen wat je krijgt.
+    /* ENTER LEVERT METEEN EEN VOLWAARDIG BLOK (26 september 2026).
+     *
+     * De browser splitst zelf netjes, maar wat hij achterlaat is een KALE tag: geen `.wb`, geen
+     * `data-blok`, dus geen greep en niet sleepbaar. Dat bleef zo tot er toevallig iets anders
+     * normaliseerde — een werkbalkknop, een blokmenu-keuze — en tot die tijd was de regel die je
+     * net had aangemaakt het enige stuk pagina waar de hele bloklaag niet voor gold.
+     *
+     * NÁ DE SPLITSING, NIET ERVOOR. Op `keydown` bestaat de nieuwe regel nog niet; de pas zou dan
+     * het blok normaliseren dat er al stond. Vandaar `setTimeout(0)`: de browser doet zijn ding,
+     * daarna ruimen wij op.
+     *
+     * GEEN NIEUW MECHANISME: `blokNormaliseer` + `grepen` is exact het paar dat elke andere
+     * DOM-wijziging hier al afsluit (de werkbalk, het blokmenu, slepen, een upload).
+     */
+    body.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || e.shiftKey) return;   // shift+Enter is een regelafbreking, geen blok
+      if (e.target.closest && e.target.closest("[data-blok-bron]")) return;  // in een bron-veld
+      setTimeout(function () {
+        NV.blokNormaliseer(body);
+        grepen(body, true);
+      }, 0);
+    });
+
     body.addEventListener("paste", function (e) {
       if (!bezig) return;
       e.preventDefault();

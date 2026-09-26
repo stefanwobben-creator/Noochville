@@ -14,6 +14,7 @@ from __future__ import annotations
 import pathlib
 import re
 
+from conftest import js_zonder_uitleg
 from nooch_village.cockpit2_util import BLOK_MENU, _OPMAAK_KNOPPEN, blok_menu, opmaak_werkbalk
 
 CSS = (pathlib.Path(__file__).resolve().parents[1]
@@ -24,17 +25,18 @@ JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
 
-def _kaal(js: str) -> str:
-    return re.sub(r"//[^\n]*|/\*.*?\*/", "", js, flags=re.S)
 
 
 def _wikiedit() -> str:
-    return _kaal(JS).split("function wikiEdit(")[1].split("\n  function ")[0]
+    return js_zonder_uitleg(JS).split("function wikiEdit(")[1].split("\n  function ")[0]
 
 
 # ── 1. De werkbalk draagt alleen nog wat écht inline is ──────────────────────
-def test_alleen_de_vier_inline_commandos():
-    assert [c for c, *_ in _OPMAAK_KNOPPEN] == ["bold", "italic", "strikeThrough", "nvCode"]
+def test_alleen_inline_commandos():
+    """Vier werden er vijf op 26 september: `nvLink` kwam erbij. Wat de toets bewaakt verandert
+    niet — alles hier is INLINE opmaak, en blok-handelingen horen exclusief in het blokmenu."""
+    assert [c for c, *_ in _OPMAAK_KNOPPEN] == ["bold", "italic", "strikeThrough",
+                                                "nvCode", "nvLink"]
 
 
 def test_lijst_en_kop_staan_nog_maar_op_een_plek():
@@ -51,7 +53,7 @@ def test_lijst_en_kop_staan_nog_maar_op_een_plek():
 
 
 def test_de_scheiding_is_mee_verdwenen():
-    """Vier knoppen die allemaal hetzelfde doen hebben niets te scheiden; het streepje zat er om
+    """Knoppen die allemaal hetzelfde doen hebben niets te scheiden; het streepje zat er om
     inline van blok te scheiden, en die tweedeling staat nu in twee verschillende menu's."""
     assert "tb-sep" not in opmaak_werkbalk()
 
@@ -61,7 +63,7 @@ def test_de_knoppen_zelf_zijn_niet_veranderd():
     doen. Zelfde atomen, zelfde haakjes, zelfde uitzondering voor inline code."""
     html = opmaak_werkbalk()
     assert "class='editor-tb wiki-tb'" in html and "id='wiki-tb'" in html
-    assert html.count("class='tb-b'") == 4
+    assert html.count("class='tb-b'") == len([c for c, *_ in _OPMAAK_KNOPPEN if c])
     assert "data-wiki-cmd='nvCode'" in html
 
 
@@ -131,30 +133,43 @@ def test_hij_beweegt_mee_bij_scrollen():
 
 
 # ── 3. Hij staat nooit half buiten beeld ─────────────────────────────────────
+#: DE POSITIONERING WOONT SINDS 26 SEPTEMBER IN ÉÉN FUNCTIE, omdat de link-kaart hetzelfde
+#: probleem heeft: zet dit element vlak bij dat vak, en laat het niet half buiten beeld hangen.
+#: Deze toetsen lezen daarom `zweefBij` en niet meer `balkBijSelectie` — en de laatste toets
+#: hieronder bewaakt dat het bij één implementatie blijft.
+def _zweef() -> str:
+    return js_zonder_uitleg(JS).split("function zweefBij(")[1].split("\n  function ")[0]
+
+
 def test_hij_wordt_boven_de_selectie_gezet():
-    haak = _wikiedit()
-    assert "getBoundingClientRect()" in haak
-    assert "vak.top - eigen.height" in haak, "hij hangt niet boven de selectie"
+    assert "getBoundingClientRect()" in _wikiedit()
+    assert "vak.top - eigen.height" in _zweef(), "hij hangt niet boven de selectie"
 
 
 def test_bij_een_selectie_bovenin_gaat_hij_eronder():
     """DE EIS: "nooit half buiten beeld". Bovenin het scherm past er niets boven de selectie."""
-    haak = _wikiedit()
-    assert "vak.bottom" in haak, "er is geen terugval onder de selectie"
+    assert "vak.bottom" in _zweef(), "er is geen terugval onder de selectie"
 
 
 def test_hij_blijft_binnen_het_venster():
     """Een selectie onderaan zou hem eronder duwen, een selectie ver rechts over de rand."""
-    haak = _wikiedit()
-    assert "window.innerHeight" in haak and "window.innerWidth" in haak
+    z = _zweef()
+    assert "window.innerHeight" in z and "window.innerWidth" in z
 
 
 def test_eerst_tonen_dan_meten():
     """Een verborgen element heeft geen maat: `getBoundingClientRect()` geeft nul. Zou de meting
     vóór het tonen staan, dan rekent hij met hoogte 0 en landt hij pal op de selectie."""
-    haak = _wikiedit()
-    positie = haak.split("function balkBijSelectie()")[1].split("\n    }")[0]
-    assert positie.index("tb.hidden = false") < positie.index("tb.getBoundingClientRect()")
+    z = _zweef()
+    assert z.index("el.hidden = false") < z.index("el.getBoundingClientRect()")
+
+
+def test_er_is_maar_een_zweefmechanisme():
+    """Twee implementaties zouden betekenen dat de ene na een wijziging anders zweeft dan de
+    andere — precies de reden die boven `NV.sleep` staat voor hétzelfde soort hergebruik."""
+    kaal = js_zonder_uitleg(JS)
+    assert kaal.count("function zweefBij(") == 1
+    assert kaal.count("zweefBij(") >= 3, "de kaart gebruikt de gedeelde positionering niet"
 
 
 # ── 4. De vormgeving ─────────────────────────────────────────────────────────

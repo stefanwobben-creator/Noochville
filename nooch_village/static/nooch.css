@@ -2047,5 +2047,19 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 .wiki-tb{position:fixed;z-index:30;border-bottom:none;border-radius:var(--radius);
   border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .wiki-tb[hidden]{display:none}
+/* ── De link-kaart (26 september 2026) ────────────────────────────────────────────────────────
+   Hetzelfde soort zwevend ding als de werkbalk hierboven, dus dezelfde vorm: hij léént
+   `.editor-tb .wiki-tb` en voegt alleen toe wat de werkbalk niet heeft — een adres om te lezen en
+   een veld om het te wijzigen.
+
+   HET ADRES MAG NIET ONBEPERKT REKKEN. Een link naar een lange url zou de kaart breder maken dan
+   het venster; `max-width` plus afkappen houdt hem hanteerbaar, en de volle url staat in de
+   `title` van het element. */
+.wiki-linkkaart{gap:.35rem;max-width:min(34rem,92vw)}
+.wiki-linkurl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:.82rem}
+.wiki-linkveld{flex:1 1 12rem;min-width:0;font:inherit;font-size:.82rem;padding:.15rem .3rem;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.wiki-linkveld[hidden],.wiki-linkurl[hidden]{display:none}
 .wiki-form{margin-top:.5rem}
 .wiki-hint{font-size:.78rem;align-self:center}

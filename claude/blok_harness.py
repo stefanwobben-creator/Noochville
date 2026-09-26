@@ -70,6 +70,10 @@ class _NepPagina:
         "| Materiaal | Herkomst |\n|---|---|\n| Hennep | NL |\n\n"
         "---\n\n"
         "Een pagina begint met gewone tekst.\n\n"
+        # EEN LINK MIDDEN IN EEN ZIN (26 september 2026). De link-kaart verschijnt bij een KLIK op
+        # een link, en zonder link in de body is dat niet te meten. Midden in een zin en niet op
+        # een eigen regel, want een regel die alleen een link is wordt een embed-kaart.
+        "Een zin met een [link naar Nooch](https://nooch.earth) er middenin.\n\n"
         # HET AFGELEIDE BLOK. Staat hier omdat het het enige blok is dat FORMULIEREN draagt, en
         # juist die vorm brak: een `<input>` heeft geen eindtag, dus de chrome-teller in
         # `_md_naar_bron` liep op en at de rest van de alinea op.

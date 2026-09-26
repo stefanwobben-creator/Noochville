@@ -667,6 +667,8 @@
    `.nu .wb-menu`, dat hetzelfde soort zwevend ding is en er precies zo uitziet. */
 .nu .wiki-tb{border:1.5px solid var(--nu-text);border-radius:0;box-shadow:none;
   background:var(--nu-surface)}
+/* Het adresveld van de link-kaart volgt dezelfde lijn: harde rand, vierkante hoeken. */
+.nu .wiki-linkveld{border:1px solid var(--nu-text);border-radius:0;background:var(--nu-surface)}
 
 /* DE AFBEELDING (26 september 2026). Hier stond `border:var(--nu-border)` — het voorstel uit het
    prototype, "een harde rand zoals elk ander vlak hier". Live gezien klopte dat niet: een

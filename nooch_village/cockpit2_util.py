@@ -1252,7 +1252,23 @@ _OPMAAK_KNOPPEN = (("bold", "", "<b>B</b>", "Bold"),
                # af vóór de execCommand-regel. De naam begint met `nv` om precies dat verschil
                # zichtbaar te maken — een lezer die `bold` ziet weet dat de browser het doet, en
                # bij `nvCode` dat wij het doen.
-               ("nvCode", "", "&lt;/&gt;", "Inline code"))
+               ("nvCode", "", "&lt;/&gt;", "Inline code"),
+               # LINK HEEFT NET ZO MIN EEN BRUIKBAAR `execCommand` ALS INLINE CODE. `createLink`
+               # bestaat wél, maar hij heeft een URL nódig en die moet ergens vandaan komen; de
+               # browser levert daar niets voor. `nooch.js` opent daarom de link-kaart en roept
+               # `createLink` pas aan als er een adres is. Zelfde `nv`-voorvoegsel, en om dezelfde
+               # reden: een lezer die `bold` ziet weet dat de browser het doet, bij `nv` wij.
+               ("nvLink", "", "&#128279;", "Link"))
+
+
+#: De knoppen op de LINK-KAART — het kaartje dat verschijnt als je op een link klikt, of als je de
+#: link-knop gebruikt op tekst die al een link is.
+#:
+#: DRIE ACTIES EN GEEN VIERDE. "Open" omdat een klik in een bewerkbaar veld je nergens heen
+#: brengt (de cursor gaat erin), "Edit" omdat een adres wijzigen anders betekent: weghalen en
+#: opnieuw maken, en "Remove" omdat je een link zonder dat nóóit meer kwijtraakt — de tekst blijft
+#: eruitzien als tekst en blijft toch een link.
+_LINK_ACTIES = (("open", "Open"), ("edit", "Edit"), ("remove", "Remove"))
 
 
 def _accept(alleen_beeld: bool = False) -> str:
@@ -1377,6 +1393,30 @@ def opmaak_werkbalk() -> str:
         knoppen.append(f"<button type='button' class='tb-b' data-wiki-cmd='{_e(cmd)}'{extra} "
                        f"title='{_e(titel)}'>{label}</button>")
     return f"<div class='editor-tb wiki-tb' id='wiki-tb' hidden>{''.join(knoppen)}</div>"
+
+
+def link_kaart() -> str:
+    """Het kaartje bij een link: het adres, en wat je ermee kunt.
+
+    EEN SJABLOON VAN DE SERVER, net als het blokmenu en de opmaak-werkbalk. `nooch.js` vult het
+    adres in en zet hem op zijn plek; de knoppen en hun namen staan hier. Zou de browser ze zelf
+    bouwen, dan woonde dit vocabulaire op een tweede plek — en op de enige zonder toets.
+
+    DEZELFDE ATOMEN ALS DE ZWEVENDE WERKBALK (`.editor-tb`, `.tb-b`): het is hetzelfde soort ding
+    — een klein vlak dat boven de tekst hangt en weer verdwijnt — dus het hoort er hetzelfde uit
+    te zien. Alleen het adres-veld is nieuw, want dat heeft de werkbalk niet.
+
+    `data-chrome` OMDAT HIJ IN HET BEWERKBARE VELD KAN BELANDEN. Hij staat ernaast, maar een
+    plakactie of een niet-opgeruimde kloon zou hem erin kunnen zetten, en dan hoort hij nog steeds
+    geen tekst te worden. Dezelfde twee verdedigingen als bij de greep."""
+    knoppen = "".join(
+        f"<button type='button' class='tb-b' data-link-actie='{_e(a)}'>{_e(label)}</button>"
+        for a, label in _LINK_ACTIES)
+    return (f"<div id='wiki-linkkaart' class='editor-tb wiki-tb wiki-linkkaart' data-chrome hidden>"
+            f"<a class='wiki-linkurl' target='_blank' rel='noopener'></a>"
+            f"<input type='url' class='wiki-linkveld' placeholder='https://…' "
+            f"aria-label='Link address' hidden>"
+            f"{knoppen}</div>")
 
 
 def _ic(path: str) -> str:
