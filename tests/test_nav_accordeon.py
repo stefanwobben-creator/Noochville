@@ -224,7 +224,7 @@ def test_het_zoekveld_is_de_enige_ingang(tmp_path):
 
 def test_de_zoekmachine_zelf_is_onaangeroerd(tmp_path):
     """DE TWEE GATEN DIE BIJ DE KNOP WERDEN GEDICHT ZITTEN IN DE ZOEKMACHINE, niet in het paneel:
-    de groep `Channels` (kanalen op naam) en de goal- en topic-trails in `Messages`. Die zijn met
+    de groep `Channels` (kanalen op naam) en de losse kanaal-trails in `Messages`. Die zijn met
     de knop niet meegegaan — ze werken via het veld, want dat gaat naar dezelfde `_zoek`."""
     from nooch_village.views.search import _GROEPEN, render_search_fragment
     dd, st, ik = _dorp(tmp_path)
@@ -236,12 +236,17 @@ def test_de_zoekmachine_zelf_is_onaangeroerd(tmp_path):
 def test_zoeken_vindt_een_kanaal_op_zijn_naam(tmp_path):
     """HET GAT DAT DICHTGING. `_gesprekken` zocht in de TEKST van berichten: zoek je op "Website",
     dan vond je berichten waarin dat woord viel, maar niet het Website-kanaal zelf — en dat is
-    meestal precies wat je zocht. Doel- en losse kanalen vielen er helemaal buiten."""
+    meestal precies wat je zocht. Losse kanalen vielen er helemaal buiten.
+
+    DIT LIEP VIA EEN DOEL-KANAAL, want de fixture heeft een doel "Website". Die kandidaten zijn op
+    26 september 2026 vervallen samen met de doel-groep in Messages; wat hier getoetst wordt is de
+    naam-match zelf, en die is onveranderd — nu op het soort kanaal dat een mens écht aanmaakt."""
     from nooch_village.views.search import _zoek
     dd, st, ik = _dorp(tmp_path)
-    res = dict(_zoek(st, ["website"])[0])
+    st.channels.maak_topic("Website", door=ik)
+    res = dict(_zoek(cockpit2._Stores(dd), ["website"])[0])
     assert [h["titel"] for h in res["Channels"]] == ["Website"]
-    assert res["Channels"][0]["url"].startswith("/messages?k=goal:")
+    assert res["Channels"][0]["url"].startswith("/messages?k=topic:")
 
 
 def test_een_dm_blijft_buiten_de_zoek(tmp_path):

@@ -408,6 +408,41 @@ class ChannelStore(JsonStore):
         self._save()
         return True
 
+    def verwijder_kanaal(self, kanaal: str) -> bool:
+        """Gooi een LOS kanaal weg: de naam, de trail en de maker in één keer. Onomkeerbaar.
+
+        ALLEEN `topic:`, en dat is geen bescheidenheid maar het enige soort waar deze vraag over
+        gáát. De andere vier zijn AFGELEID van iets anders dat blijft bestaan:
+
+            project:  IS `project["log"]` via de ledger — dit zou het projectgesprek zelf wissen,
+                      en de projectpagina toont diezelfde trail.
+            circle:   hoort bij een cirkel uit de records; weg is hij morgen terug.
+            goal:     idem, bij een doel. (Sinds 26 september toont Messages ze niet meer; de
+                      drie die op prod staan blijven leesbaar via een link. Zie `views/messages.py`.)
+            dm:       de helft van de berichten is van de ander. Dat is niet van jou om weg te
+                      gooien, en "uit je lijst halen" bestaat al (`people.ontvolg`).
+
+        Een los kanaal heeft die onderlaag niet: een mens verzon hem, en dan hoort een mens hem
+        ook op te kunnen heffen. Fail-closed op alles wat geen topic is, en op een kanaal dat er
+        niet staat — een verwijdering die "gelukt" zegt zonder iets te doen is erger dan een fout.
+
+        DE BIJLAGE-BESTANDEN BLIJVEN OP SCHIJF STAAN en worden onbereikbaar, precies zoals bij
+        `verwijder` van één bericht. Opruimen van wezen is dezelfde eigen klus, niet twee keer
+        half gedaan.
+
+        WIE DIT MAG staat hier niet: dat is een poort en die hoort in `cockpit2.py`, net als bij
+        elke andere actie. Deze methode voert uit."""
+        if soort_van(kanaal) != TOPIC:
+            return False
+        namen = self._data.get("namen") or {}
+        if kanaal not in namen:
+            return False
+        namen.pop(kanaal, None)
+        (self._data.get("kanalen") or {}).pop(kanaal, None)
+        (self._data.get("makers") or {}).pop(kanaal, None)
+        self._save()
+        return True
+
     def plaats_notificatie(self, kanaal: str, n: dict) -> dict | None:
         """Eén NotifStore-rij als bericht in een kanaal. Alleen voor de migratie.
 
@@ -479,6 +514,14 @@ class ChannelStore(JsonStore):
 
     def naam_van(self, kanaal: str) -> str:
         return str((self._data.get("namen") or {}).get(kanaal) or "")
+
+    def maker_van(self, kanaal: str) -> str:
+        """Wie dit losse kanaal aanmaakte, of "" als dat niet vastligt.
+
+        LEEG IS EEN ECHT ANTWOORD en geen fout: `maak_topic` legt de maker pas vast sinds er een
+        herkende mens voor nodig is. Een kanaal zonder maker hoort daarom NIET op "dan mag
+        iedereen" uit te komen — de poort in `cockpit2.py` laat er alleen de anchor-lead bij."""
+        return str((self._data.get("makers") or {}).get(kanaal) or "")
 
     def laatste(self, kanaal: str) -> dict | None:
         rij = self.trail(kanaal, limit=1)

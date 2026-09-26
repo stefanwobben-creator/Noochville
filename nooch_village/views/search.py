@@ -277,7 +277,9 @@ def _kanalen(st, termen):
     kandidaten = []
     if wortel is not None:
         kandidaten.append(_c.circle_kanaal(wortel.id))
-    kandidaten += [_c.goal_kanaal(d["id"]) for d in st.doelen.all() if d.get("status") == "open"]
+    # DE DOELKANALEN STONDEN HIER, en zijn op 26 september 2026 vervallen samen met hun tegenhanger
+    # in `views/messages.py`: een gesprek ontstaat doordat iemand het begint, niet doordat er
+    # elders een doel wordt aangemaakt. Zoeken hoort niet aan te bieden wat de lijst niet toont.
     kandidaten += st.channels.topics()
     kandidaten += [k for k in st.channels.bestaande(_c.CIRCLE)
                    if wortel is None or k != _c.circle_kanaal(wortel.id)]

@@ -1895,6 +1895,70 @@ def _act_topic_add(c):
     return f"/messages?k={urllib.parse.quote(kanaal)}", f"💬 channel “{naam}” is open"
 
 
+def mag_kanaal_verwijderen(st, kanaal: str, ik: str) -> bool:
+    """Mag deze mens dit losse kanaal OPHEFFEN? De maker, of de anchor-lead.
+
+    DE POORT LEEFT HIER EN NIET IN DE VIEW, zodat het scherm en de actie dezelfde vraag stellen.
+    Bij de domein-poort van #610 gingen die twee uit elkaar — de server werd ruimer, de knop niet —
+    en dat is precies het soort verschil dat pas live opvalt.
+
+    WAAROM MAKER-OF-ANCHOR-LEAD, en niet iets anders (de keuze is gevraagd, dus hier de afweging):
+
+      * `topic_add` is `iedereen-ingelogd`: elke herkende mens mag een kanaal beginnen. Zou
+        verwijderen op hetzelfde niveau staan, dan kan iedereen andermans gesprek weggooien — en
+        verwijderen is onomkeerbaar waar aanmaken dat niet is. Aanmaken en opheffen horen niet
+        symmetrisch te zijn.
+      * DE MAKER, omdat een los kanaal het enige soort is dat een mens zelf verzon. Hij heeft hem
+        neergezet; hem terugnemen hoort daarbij. `maak_topic` legt de maker sinds het begin vast.
+      * DE ANCHOR-LEAD als tweede sleutel, en niet "een Circle Lead". Een topic hángt nergens
+        onder: hij heeft geen cirkel, dus "de" Circle Lead bestaat niet en "één van de Circle
+        Leads" zou betekenen dat de lead van een willekeurige andere cirkel meebeslist over een
+        kanaal dat hem niet aangaat. CLAUDE.md noemt voor org-brede mutaties precies één niveau:
+        anchor-lead. Zonder die tweede sleutel is een kanaal van een vertrokken mens
+        onverwijderbaar.
+
+    GEEN MAKER → ALLEEN DE ANCHOR-LEAD. Fail-closed: een leeg `makers`-veld is onbekend, geen
+    vrijbrief. Guest (auth uit) mag alles, zoals overal.
+
+    ALLEEN `topic:`. De andere vier soorten zijn afgeleid van iets dat blijft bestaan; de reden
+    per soort staat bij `ChannelStore.verwijder_kanaal`, en die weigert ze ook zelf."""
+    if channels.soort_van(kanaal) != channels.TOPIC:
+        return False
+    if ik == "guest":
+        return True
+    if not ik:
+        return False
+    if st.channels.maker_van(kanaal) == ik:
+        return True
+    return is_circle_lead(ik, "mother_earth", st.assign)
+
+
+def _act_kanaal_verwijder(c):
+    """Hef een los kanaal op: naam, trail en maker weg, en uit ieders lijst.
+
+    # AUTHZ: Circle Lead — de maker van het kanaal of de anchor-lead (de Circle Lead van de
+    # wortelcirkel). Dit is ONOMKEERBAAR en raakt andermans berichten, dus het staat bewust een
+    # niveau boven `topic_add` (iedereen-ingelogd). De volledige afweging staat bij
+    # `mag_kanaal_verwijderen` hierboven; de poort zelf leeft daar, zodat de knop en de actie
+    # dezelfde vraag stellen.
+
+    HET AANTAL BERICHTEN GAAT IN DE BEVESTIGING mee terug. Niet als waarschuwing achteraf maar
+    omdat het scherm het ook in de `confirm()` zet: wie een kanaal opheft hoort te weten hoeveel
+    gesprek hij meeneemt."""
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    ik = _web_actor_id(username, st) or ("guest" if username == "guest" else "")
+    kanaal = g("kanaal") or ""
+    if not mag_kanaal_verwijderen(st, kanaal, ik):
+        return nxt, "✗ only the person who created this channel, or the anchor lead, can delete it"
+    naam = st.channels.naam_van(kanaal) or kanaal
+    aantal = len(st.channels.trail(kanaal))
+    if not st.channels.verwijder_kanaal(kanaal):
+        return nxt, "✗ that channel no longer exists"
+    st.people.ontvolg_allen(kanaal)
+    erbij = f" and {aantal} message{'s' if aantal != 1 else ''}" if aantal else ""
+    return "/messages", f"🗑 channel “{naam}” deleted{erbij}"
+
+
 def _act_keep_in_wiki(c):
     """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
 
@@ -5423,6 +5487,7 @@ ACTIONS = {
     "giphy_post": _act_giphy_post,
     "topic_add": _act_topic_add,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
+    "kanaal_verwijder": _act_kanaal_verwijder,
     "keep_in_wiki": _act_keep_in_wiki,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
