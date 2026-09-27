@@ -478,10 +478,10 @@ def _slaap_blok(rec) -> str:
     zien hóe. Een status zonder de weg terug leest als een verwijdering."""
     if not getattr(rec, "slaapt", False):
         return ""
-    reden = str(getattr(rec, "slaap_reden", "") or "geen reden vastgelegd")
-    return (f"<div class='card muted'><strong>💤 Deze rol slaapt.</strong> Hij staat volledig in het "
-            f"register — purpose, accountabilities en historie zijn ongewijzigd — maar hij draait "
-            f"niet, oordeelt niet en krijgt geen nieuw werk toegewezen.<br>"
+    reden = str(getattr(rec, "slaap_reden", "") or "no reason on record")
+    return (f"<div class='card muted'><strong>💤 This role is asleep.</strong> It is still fully in "
+            f"the register — purpose, accountabilities and history unchanged — but it does not run, "
+            f"does not judge, and is given no new work.<br>"
             f"<span class='muted'>{_e(reden)}</span><br>"
             f"Weer wakker: <code>village afslanken wek {_e(getattr(rec, 'id', ''))}</code></div>")
 
@@ -961,7 +961,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     # compleet — purpose, accountabilities, vervuller staan er allemaal nog — en juist daarom moet
     # er iets zeggen dat hij niet draait, anders lees je een rol die er is als een rol die werkt.
     if getattr(rec, "slaapt", False):
-        reden = str(getattr(rec, "slaap_reden", "") or "geen reden vastgelegd")
+        reden = str(getattr(rec, "slaap_reden", "") or "no reason on record")
         chip += (f" <span class='chip muted' title='{_e(reden)}'>💤 slaapt</span>")
 
     if tab == "overview":

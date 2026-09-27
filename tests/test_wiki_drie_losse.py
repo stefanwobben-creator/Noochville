@@ -52,7 +52,7 @@ def test_de_basislaag_was_al_randloos():
 # ── 2. Uitleg bij het tabel-sjabloon ─────────────────────────────────────────
 def test_de_tabel_heeft_een_hint():
     assert "table" in BLOK_HINT
-    for woord in ("kolomnamen", "|---|---|", "exact"):
+    for woord in ("column names", "|---|---|", "exact"):
         assert woord in BLOK_HINT["table"], f"de hint zegt niets over {woord!r}"
 
 
@@ -71,7 +71,7 @@ def test_de_hint_hangt_aan_een_bloktype_dat_bestaat():
 def test_de_hint_reist_mee_in_het_sjabloon():
     knop = next(s for s in blok_menu().split("<button") if ">Tabel</button>" in s)
     assert "data-wiki-hint='" in knop
-    assert "kolomnamen" in knop
+    assert "column names" in knop
 
 
 def test_geen_ander_menu_item_draagt_hem():
@@ -85,7 +85,7 @@ def test_de_browser_bedenkt_de_uitleg_niet():
     kaal = js_zonder_uitleg(JS)
     veld = kaal.split("function bronVeld(")[1].split("\n  function ")[0]
     assert "dataset.wikiHint" in kaal, "de hint wordt nergens uit het sjabloon gelezen"
-    for verboden in ("kolomnamen", "|---|---|"):
+    for verboden in ("column names", "|---|---|"):
         assert verboden not in veld, f"de uitleg staat letterlijk in JS ({verboden!r})"
 
 

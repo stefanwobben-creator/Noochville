@@ -197,7 +197,7 @@ def test_scherm_leeg_en_gevuld(tmp_path):
     assert "chip green" in html and "chip amber" in html and "chip coral" in html
     assert "Changed since the previous run" in html and "Snelheid (mobiel)" in html
     assert "LCP-element: Nooch 269 in het gras" in html
-    assert "Verloop" in html
+    assert "History" in html
     assert "eigenaar: <code>Website Developer</code>" in html or "eigenaar: <code>" in html
     assert "style=" not in html, "geen inline styles (designsysteem)"
 

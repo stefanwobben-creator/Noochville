@@ -208,7 +208,7 @@ def test_punt_van_de_agenda_blijft_zichtbaar_in_de_vangst(tmp_path):
 def test_geen_cirkel_geen_vangst(tmp_path):
     dd = _dd(tmp_path)
     html = render_vangst(cockpit2._Stores(dd), ROL, csrf_token="t")
-    assert "Vangen hoort bij een cirkel" in html
+    assert "Capturing belongs to a circle" in html
 
 
 def test_de_flow_stuurt_de_actienaam_mee(tmp_path):
@@ -308,7 +308,7 @@ def test_een_dubbelzinnige_rolnaam_levert_geen_gok_op(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     rid, reden = rol_uit_naam(st, "bestaat echt niet")
-    assert rid == "" and "geen rol gevonden" in reden
+    assert rid == "" and "no role found" in reden
     _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE,
                       iid=(st.werk.backlog_add(CIRCLE, "x", by_id="p1") or {}).get("id"),
                       otype="project", rol="bestaat echt niet", tekst="x", next="/vangst")
@@ -515,11 +515,11 @@ def test_een_kaal_agendapunt_toont_geen_groot_spanningsvak(tmp_path):
     # 21 september is het een BAND bovenaan het verwerk-formulier. De bewering eronder is
     # onveranderd en is waar het deze test om ging: een kaal punt krijgt géén groot invulvak dat
     # om tekst vraagt — de band TOONT, hij vraagt niets.
-    assert "nog geen spanning opgeschreven" in html
+    assert "no tension written down yet" in html
     assert "wo-band" in html
     assert "beschrijf hier wat er speelt" not in html        # het oude, dwingende blok is weg
     # en het uitkomst-formulier staat vóór de uitkomstenlijst
-    assert html.index("name='otype'") < html.index("Uitkomsten van het overleg")
+    assert html.index("name='otype'") < html.index("Outcomes of the meeting")
 
 
 def test_een_vooraf_ingevoerde_spanning_staat_er_gewoon(tmp_path):
@@ -553,11 +553,11 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "Iets", by_id="p1")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
-    for veld in (">Wat</label>", ">Rol</label>", ">Persoon</label>"):
+    for veld in (">Wat</label>", ">Role</label>", ">Person</label>"):
         assert veld in html, veld
     assert "— Kies persoon —" in html and "Elk cirkellid" in html
     assert "Individuele actie" in html          # eerste rol-optie, rol is niet verplicht
-    assert "Alleen zichtbaar voor de cirkel" in html
+    assert "Only visible to this circle" in html
     # DE STAAT-KEUZE IS TERUG (besluit Stefan, 21 september 2026), maar anders dan hij wegging.
     # Hij is op 29 augustus weggehaald omdat hij een eigen veld op de uitkomst was naast de
     # wachtstatus op het project — twee plekken die hetzelfde bijhouden. Nu schrijft hij naar
@@ -603,7 +603,7 @@ def test_de_uitkomsten_staan_in_rijen_met_een_badge(tmp_path):
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "<table class='mtab'>" not in html
     assert "uk-rij" in html and "uk-badge--actie" in html
-    assert "Actie" in html and "Leverancier bellen" in html
+    assert "Action" in html and "Leverancier bellen" in html
     assert _e(naam) in html                              # de rol staat er nog
 
 
@@ -616,7 +616,7 @@ def test_de_herkomst_staat_er_ook_zonder_uitkomsten(tmp_path):
     it = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "gevoeld vanuit" in html
-    assert "Er zijn (nog) geen uitkomsten vastgelegd" in html
+    assert "No outcomes recorded yet" in html
 
 
 def test_de_leeftijd_is_fijn_aan_de_korte_kant(tmp_path):

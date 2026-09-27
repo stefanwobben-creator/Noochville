@@ -13,8 +13,10 @@ from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _age
 from nooch_village import site_audit
 
-_CHIP = {"groen": ("chip green", "groen"), "oranje": ("chip amber", "oranje"),
-         "rood": ("chip coral", "rood"), "grijs": ("chip muted", "niet gemeten")}
+# DE SLEUTELS BLIJVEN NEDERLANDS: dat zijn opgeslagen waarden uit `site_audit`, geen tekst. Wat
+# de lezer ziet is het tweede lid, en dat is Engels.
+_CHIP = {"groen": ("chip green", "green"), "oranje": ("chip amber", "amber"),
+         "rood": ("chip coral", "red"), "grijs": ("chip muted", "not measured")}
 
 _ROL_LABEL = {"mother_earth__nooch__website_developer": "Website Developer"}
 
@@ -26,7 +28,7 @@ def _chip(kleur: str, tekst: str = "") -> str:
 
 def _eigenaar(st, rol_id: str) -> str:
     if not rol_id:
-        return "geen eigenaar"
+        return "no owner"
     try:
         rec = st.records.get(rol_id)
         naam = (getattr(getattr(rec, "definition", None), "name", "") or "") if rec is not None else ""
@@ -57,7 +59,7 @@ def _verloop_html(runs: list[dict]) -> str:
     for r in reversed(runs):
         chips = " ".join(_chip(l["kleur"], l["naam"].split(" ")[0]) for l in r.get("lampjes") or [])
         rijen += (f"<div class='c2-sec'><span class='muted'>{_e(r.get('datum') or '')}</span> {chips}</div>")
-    return f"<h2>Verloop</h2><p class='muted'>De laatste {len(runs)} runs, nieuwste bovenaan.</p>{rijen}"
+    return (f"<h2>History</h2><p class='muted'>The last {len(runs)} runs, newest first.</p>{rijen}")
 
 
 _DOEL_LABEL = {"live": "Live", "dev": "Dev (preview)"}
@@ -77,11 +79,11 @@ def render_site_audit(st, doel: str = "live") -> str:
     laatste = staat.laatste()
     cmd = "python -m nooch_village.village site_audit" + (" --dev" if doel == "dev" else "")
     if laatste is None:
-        uitleg = ("dan staan hier de lampjes van het preview-thema (<code>mobiel_audit_dev_url</code> in "
-                  "<code>config/settings.ini</code>): een eigen reeks, los van live, want een dev-run naast een "
-                  "live-run zou een valse wissel zijn." if doel == "dev" else
-                  "dan staan hier de lampjes van de shop: bereikbaar, snelheid, toegankelijkheid, best "
-                  "practices, SEO en claims.")
+        uitleg = ("then the lights of the preview theme show up here (<code>mobiel_audit_dev_url</code> "
+                  "in <code>config/settings.ini</code>): a series of its own, separate from live — a dev "
+                  "run next to a live run would read as a false swing." if doel == "dev" else
+                  "then the lights of the shop show up here: reachable, speed, accessibility, best "
+                  "practices, SEO and claims.")
         main = (f"<div class='c2-main'><h1>Site audit {_doel_seg(doel)}</h1>"
                 f"<p class='muted'>No run yet. Run <code>{_e(cmd)}</code> on the server; {uitleg}</p></div>")
     else:
@@ -94,12 +96,12 @@ def render_site_audit(st, doel: str = "live") -> str:
         kaarten = "".join(_lamp_card(st, l) for l in laatste.get("lampjes") or [])
         wanneer = _age(float(laatste.get("ts") or 0)) if laatste.get("ts") else "?"
         dev_noot = (" Dit is het preview-thema, mét Shopify's preview-balk; vergelijk dev met live nooit op "
-                    "één run, de labscore schommelt tientallen punten." if doel == "dev" else "")
+                    "one run; the lab score swings by tens of points." if doel == "dev" else "")
         main = (f"<div class='c2-main'><h1>Site audit "
                 f"{_chip(laatste.get('totaal') or 'grijs')} {_doel_seg(doel)}</h1>"
-                f"<p class='muted'>{_e(laatste.get('url') or '')} · laatste run {_e(wanneer)} "
-                f"({_e(laatste.get('datum') or '')}, {laatste.get('duur_s', '?')} s). Het slechtste lampje "
-                f"bepaalt de kleur bovenaan; grijs is niet gemeten en telt niet mee. Een lampje dat van "
-                f"kleur wisselt is het signaal, de stand is het scherm.{dev_noot}</p>"
+                f"<p class='muted'>{_e(laatste.get('url') or '')} · last run {_e(wanneer)} "
+                f"({_e(laatste.get('datum') or '')}, {laatste.get('duur_s', '?')} s). The worst light sets "
+                f"the colour at the top; grey is not measured and does not count. A light that CHANGES "
+                f"colour is the signal — the standing is just the screen.{dev_noot}</p>"
                 f"{wissel_html}<h2>Lampjes</h2>{kaarten}{_verloop_html(staat.verloop())}</div>")
     return _page("Site audit", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

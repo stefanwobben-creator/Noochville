@@ -43,7 +43,7 @@ def _dorp(tmp_path):
 # ── 1. De live-knop ──────────────────────────────────────────────────────────
 def test_de_knop_verandert_pas_als_er_echt_een_overleg_draait():
     dicht = overleg_items(CIRCLE)
-    assert "Werk&shy;overleg" in dicht and "Join meeting" not in dicht
+    assert "Tactical&shy;meeting" in dicht and "Join meeting" not in dicht
     open_ = overleg_items(CIRCLE, werk_open=True)
     assert "Join meeting" in open_ and "c2-overleg--live" in open_
 
@@ -119,7 +119,7 @@ def test_een_lege_band_zegt_wat_er_te_doen_is(tmp_path):
     """Leeg is een eigen toestand, geen leeg vlak — dat leest als een weergavefout."""
     dd, st, mens = _dorp(tmp_path)
     h = _spanning_titel(st, CIRCLE, {"id": "p1", "title": "t"}, "TOK", "/x")
-    assert "nog geen spanning opgeschreven" in h
+    assert "no tension written down yet" in h
     assert "wo-band" in h
 
 
@@ -401,7 +401,7 @@ def test_het_vinkje_en_opslaan_staan_op_een_rij(tmp_path):
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
     voet = h.split("class='uk-voet'")[1].rsplit("</div></form>", 1)[0]
-    assert "type='checkbox'" in voet and "Opslaan" in voet
-    assert voet.index("type='checkbox'") < voet.index("Opslaan")
+    assert "type='checkbox'" in voet and "Save" in voet
+    assert voet.index("type='checkbox'") < voet.index("Save")
     assert "qadd-row" not in h, "er staat nog een losse flexrij in het formulier"
     assert "<div></div>" not in h, "er staat nog een lege cel in het formulier"

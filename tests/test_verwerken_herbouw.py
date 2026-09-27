@@ -162,7 +162,7 @@ def test_elke_soort_heeft_zijn_eigen_badge(tmp_path):
     html = vangst._uitkomsten_tabel(st, C, it, "t", "/vangst")
     for soort in ("actie", "project", "governance"):
         assert f"uk-badge--{soort}" in html, soort
-    for label in ("Actie", "Project", "Punt voor roloverleg"):
+    for label in ("Action", "Project", "For the governance meeting"):
         assert label in html, label
 
 

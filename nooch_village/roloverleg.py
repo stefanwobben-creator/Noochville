@@ -281,10 +281,15 @@ def secretary_check(item: dict, records) -> list[dict]:
     for a in new_accs:
         first = (a.strip().split(" ", 1)[0] if a.strip() else "").lower()
         if not first.endswith("en"):
-            # BEWUST NL: deze check toetst de Nederlandse -en-werkwoordsvorm van de
-            # accountability-formulering; de melding benoemt die regel dus in het Nederlands.
+            # DE REGEL IS NEDERLANDS, DE MELDING NIET MEER (27 september 2026). Deze check toetst
+            # de Nederlandse -en-werkwoordsvorm waarin accountabilities hier geschreven worden
+            # ("Bewaken van …", "Opstellen van …"), en daarom stond de melding ook in het
+            # Nederlands. Maar de rest van het scherm is Engels, dus dit las als een storing.
+            # Een Engelse zin KÁN een Nederlandse vormeis benoemen — met het voorbeeld erbij is
+            # hij zelfs duidelijker dan hij was.
             issues.append({"level": "let op",
-                           "msg": f"accountability begint niet met de -en-vorm: '{a[:50]}'"})
+                           "msg": f"accountability should start with a Dutch -en verb form "
+                                  f"(e.g. 'Bewaken van \u2026'): '{a[:50]}'"})
     return issues
 
 

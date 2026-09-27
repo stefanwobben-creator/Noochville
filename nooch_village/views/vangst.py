@@ -127,8 +127,8 @@ def rol_uit_naam(st, naam: str) -> tuple:
     if len(deel) == 1:
         return deel[0], ""
     if len(deel) > 1:
-        return "", f"“{naam}” past op {len(deel)} rollen — wees specifieker"
-    return "", f"geen rol gevonden voor “{naam}”"
+        return "", f"“{naam}” matches {len(deel)} roles — be more specific"
+    return "", f"no role found for “{naam}”"
 
 
 def _rol_datalist(st, dl_id: str) -> str:
@@ -197,8 +197,8 @@ def _vang_form(circle: str, csrf: str, nxt: str, sub: str = "") -> str:
             f"data-qa-action='vangst_add' data-qa-target='#vang-lijst'>"
             f"{_hid(csrf, circle, nxt)}"
             f"<input id='vang-input' name='punt' data-qa-input "
-            f"placeholder='punt in één regel (optioneel @rol) — Enter' "
-            f"autocomplete='off' autofocus aria-label='punt' maxlength='140'>"
+            f"placeholder='one line (optionally @role) — Enter' "
+            f"autocomplete='off' autofocus aria-label='item' maxlength='140'>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_add'>+</button>"
             f"</form>")
 
@@ -211,9 +211,9 @@ def _vang_form(circle: str, csrf: str, nxt: str, sub: str = "") -> str:
 # Het derde veld is het label van het tekstveld: dat verandert mee met het type, want "project"
 # vragen en "te nemen actie" vragen zijn niet dezelfde vraag.
 UITKOMST_SOORTEN = (
-    ("actie", "Actie", "Te nemen actie"),
+    ("actie", "Action", "Action to take"),
     ("project", "Project", "Project"),
-    ("governance", "Punt voor roloverleg", "Punt voor het roloverleg"),
+    ("governance", "For the governance meeting", "Item for the governance meeting"),
 )
 
 # LEES-ONLY, net als VOLGENDE/WACHTEND hieronder: 'info' is als KEUZE verdwenen, maar oude
@@ -322,15 +322,15 @@ def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str,
                   f"<form method='post' action='/action' class='wo-oc'>"
                   f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
                   f"{_field('Tekst', 'tekst', value=u.get('tekst') or '', fid=f'ue-{uid}')}"
-                  f"<label class='att-lbl' for='up-{_e(uid)}'>Persoon</label>"
+                  f"<label class='att-lbl' for='up-{_e(uid)}'>Person</label>"
                   f"<select id='up-{_e(uid)}' name='persoon'>"
                   f"{_persoon_opties(st, circle, u.get('persoon') or '')}</select>"
                   f"<button class='btn sm' type='submit' name='action' value='vangst_uitkomst_edit'>"
-                  f"Opslaan</button></form></details>"
+                  f"Save</button></form></details>"
                   f"<form method='post' action='/action' class='emo-f'>"
                   f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
                   f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
-                  f"title='verwijderen'>🗑</button></form>")
+                  f"title='remove'>🗑</button></form>")
     slot = " 🔒" if u.get("prive") else ""
     # DE META-REGEL, met puntjes ertussen en niets wat leeg is. In de tabel had elke rij zeven
     # cellen, ook als er vier leeg waren; hier staat er alleen wat er ís. De STAAT wordt een
@@ -364,8 +364,8 @@ def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
             delen.insert(0, _leeftijd(oudste))
     kop = f"<div class='rdr-meta'>{' · '.join(delen)}</div>" if delen else ""
     if not rijen:
-        body = ("<p class='muted'>Er zijn (nog) geen uitkomsten vastgelegd. Vul het formulier "
-                "hierboven in — zo vaak als nodig, er mogen er meerdere zijn.</p>")
+        body = ("<p class='muted'>No outcomes recorded yet. Fill in the form above — as often as "
+                "you need; there may be several.</p>")
     else:
         # VAN TABEL NAAR RIJEN. Zeven kolommen met kopregel voor gemiddeld twee gevulde cellen
         # las als een spreadsheet; wat je hier doet is scannen — welke soort, wat er staat, bij
@@ -375,7 +375,7 @@ def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
         body = ("<div class='uk-lijst'>"
                 + "".join(_uitkomst_rij(st, circle, it, u, csrf, nxt, toon_staat) for u in rijen)
                 + "</div>")
-    return (f"<div class='c2-sec'><h3>Uitkomsten van het overleg "
+    return (f"<div class='c2-sec'><h3>Outcomes of the meeting "
             f"<span class='chip'>{len(rijen)}</span></h3>{kop}{body}</div>")
 
 
@@ -466,11 +466,11 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     # Dezelfde velden, dezelfde namen — alleen visueel lichter. Ze horen bij de uitkomst maar
     # zijn niet waar je naar kijkt terwijl je luistert: je kiest ze één keer en klaar.
     sub = (f"<div class='uk-sub' id='{sub_id}'>"
-           f"<div class='uk-subveld'><label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
+           f"<div class='uk-subveld'><label class='att-lbl' for='vw-{_e(iid)}'>Role</label>"
            f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
-           f"placeholder='{_e(INDIVIDUELE_ACTIE)} — of typ een rolnaam'>"
+           f"placeholder='{_e(INDIVIDUELE_ACTIE)} — or type a role name'>"
            f"{_rol_datalist(st, dl)}</div>"
-           f"<div class='uk-subveld'><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
+           f"<div class='uk-subveld'><label class='att-lbl' for='vp-{_e(iid)}'>Person</label>"
            f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>"
            f"<div class='uk-subveld' data-staat-voor='{_e(iid)}'{verborgen}>"
            f"<label class='att-lbl' for='vst-{_e(iid)}'>Status</label>"
@@ -482,9 +482,9 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     voet = (f"<div class='uk-voet'>"
             f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
             f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
-            f"Alleen zichtbaar voor de cirkel</label>"
+            f"Only visible to this circle</label>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
-            f"Opslaan</button></div>")
+            f"Save</button></div>")
     # EIGEN KLASSE, EN NIET MEER `.wo-oc`. Die is een flexRIJ van losse velden met
     # `flex:1 1 12rem` op elke input — precies het model dat deze herbouw opheft: het legde
     # hoofdgebied, secundair blok en voetrij naast elkaar, en zijn `.wo-oc textarea`-regel
@@ -536,14 +536,14 @@ def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
 
     kort = " ".join(tekst.split())
     body = (f"<span class='wo-band-tekst'>{_e(kort)}</span>" if kort
-            else "<span class='wo-band-tekst muted'>nog geen spanning opgeschreven</span>")
+            else "<span class='wo-band-tekst muted'>no tension written down yet</span>")
     veld = _field("Spanning", "tekst", kind="textarea", value=tekst, fid=f"vs-{iid}",
-                  placeholder="optioneel — meestal vul je dit vooraf in, niet tijdens het overleg",
+                  placeholder="optional — usually filled in beforehand, not during the meeting",
                   attrs=f'onchange="{sub}"')
     # De potloodknop opent hetzelfde `vangst_tekst`-formulier als hiervoor; één opslagpad, één
     # actie. Alleen de ingang is verplaatst en zichtbaar gemaakt.
     bewerk = (f"<details class='wo-band-edit'>"
-              f"<summary title='spanning bewerken' aria-label='spanning bewerken'>&#9998;</summary>"
+              f"<summary title='edit tension' aria-label='edit tension'>&#9998;</summary>"
               f"<form method='post' action='/action' class='wo-oc'>"
               f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}{veld}"
               f"<input type='hidden' name='action' value='vangst_tekst'></form></details>")
@@ -582,9 +582,9 @@ def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str 
             f"<form method='post' action='/action' class='emo-f'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid, klaar='0' if klaar else '1')}"
             f"<button class='btn sm wo-aftik' type='submit' name='action' "
-            f"value='vangst_klaar'>{'↺ heropen' if klaar else '✓ afgetikt'}</button></form>"
+            f"value='vangst_klaar'>{'↺ reopen' if klaar else '✓ done'}</button></form>"
             f"<span class='muted'>"
-            f"{'Dit punt staat op afgehandeld.' if klaar else 'Sluit dit punt af — de uitkomsten hierboven blijven staan.'}"
+            f"{'This item is marked done.' if klaar else 'Close this item — the outcomes above stay.'}"
             f"</span></div>")
 
     op = " open" if open_iid and open_iid == iid else ""
@@ -673,8 +673,8 @@ def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = ""
     else:
         rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid) for p in punten)
     return (tellers(punten) + rijen) if rijen else (
-        tellers(punten) + "<div class='card muted'>Nog niets gevangen. Typ hierboven een regel en "
-        "druk op Enter — dat is de hele handeling.</div>")
+        tellers(punten) + "<div class='card muted'>Nothing captured yet. Type a line above and "
+        "press Enter — that is the whole thing.</div>")
 
 
 def tellers(punten: list) -> str:
@@ -695,9 +695,9 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     crec = st.records.get(circle)
     if crec is None or not org.is_circle(crec):
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-                "<h1>Vangen</h1><p class='muted'>Vangen hoort bij een cirkel. Open het "
-                "werkoverleg van een cirkel, of gebruik het +-je in je inbox voor een los "
-                "punt.</p></div>")
+                "<h1>Capture</h1><p class='muted'>Capturing belongs to a circle. Open a "
+                "circle's tactical meeting, or use the + in your inbox for a loose "
+                "item.</p></div>")
         return _page("Vangen", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     punten = st.werk.punten(circle)
@@ -707,10 +707,10 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(circle)}'>← {_e(_name(crec))}</a>"
            f" <span class='fsep'>·</span> "
            f"<a href='/werkoverleg?circle={_e(circle)}'>tactical meeting</a></div>"
-           f"<h1>Vangen <span class='chip' id='vang-n'>{open_n}</span></h1>"
-           f"<p class='muted'>Eerst vangen, later sorteren. Typ een regel en druk Enter — meer "
-           f"gebeurt er niet. Wát het oplevert en voor welke rol bepaal je pas bij "
-           f"<em>verwerken</em>, en dan mogen het er meerdere zijn.</p>")
+           f"<h1>Capture <span class='chip' id='vang-n'>{open_n}</span></h1>"
+           f"<p class='muted'>Capture first, sort later. Type a line and press Enter — that is "
+           f"all that happens. WHAT it turns into, and for which role, you decide at "
+           f"<em>process</em> — and then there may be several.</p>")
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}"
             f"<div class='c2-sec'>{vang}</div>"
             f"<div class='rdr-tool' id='vang-lijst'>{rijen}</div></div>")

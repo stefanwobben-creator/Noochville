@@ -190,9 +190,9 @@ def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
     # stond hij een tweede keer, met alle rijen onder elkaar. Wie meekeek in een scherm-deling zag
     # daardoor een lijst waar hij door moest scrollen in plaats van het punt dat behandeld wordt.
     lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt, enkel=True)
-    return (f"<div class='c2-sec'><p class='muted'>Eén punt per keer; kies links een ander punt. "
-            f"Klik <em>verwerken</em> om er uitkomsten onder te leggen; er mogen er meerdere zijn, "
-            f"elk naar een andere rol.</p>"
+    return (f"<div class='c2-sec'><p class='muted'>One item at a time; pick another on the left. "
+            f"Click <em>process</em> to record outcomes under it — there may be several, each going "
+            f"to a different role.</p>"
             f"</div><div class='rdr-tool' id='vang-lijst'>{lijst}</div>")
 
 

@@ -118,7 +118,7 @@ def test_secretaris_inline_en_consent(tmp_path):
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Snel reageren op tickets"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "sec-issue" in frag and "-en-vorm" in frag            # feedback bij de accountability
+    assert "sec-issue" in frag and "-en verb form" in frag       # feedback bij de accountability
     assert "rov2_consent" in frag                                # consent kan (alleen advies)
 
 
