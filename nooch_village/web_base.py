@@ -53,6 +53,12 @@ _CSS = """
  --font-body:'DM Sans',system-ui,sans-serif;
  --radius:9px;--radius-pill:999px;
  --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
+ /* DE BREEDTE VAN EEN FORMULIERKOLOM. Drie klassen hadden dit apart uitgevonden — `.kc-form`
+    (34rem), `.c2-smal` (34rem) en `.cl-addform` (30rem) — en die 30 was geen keuze: alle drie
+    de getallen kwamen in één commit binnen (167eb29, de CSS-extractie), er stond geen reden bij
+    en niets in de layout eromheen dwong hem af. Eén maat dus, één naam. Verandert de leesbare
+    regellengte ooit, dan is dat hier één regel. */
+ --w-smal-form:34rem;
 }
 *{box-sizing:border-box}
 /* Toetsenbord-zichtbaarheid: één focusregel voor de hele app. :focus-visible i.p.v. :focus,
