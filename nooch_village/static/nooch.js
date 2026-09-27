@@ -1734,6 +1734,50 @@
   //  * bij een fout het interval VERDUBBELEN in plaats van doorrammen (een server die het even
   //    niet trekt, trekt het al helemaal niet met vijf clients die blijven kloppen);
   //  * de server stuurt HTML terug, geen JSON: zo bepaalt één plek hoe een live-knop eruitziet.
+  // ── Een element dat zichzelf ververst ──────────────────────────────────────
+  //
+  // `<div data-poll="/pad" data-poll-ms="5000">` haalt dat pad op en vervangt zijn eigen inhoud
+  // met wat de server teruggeeft. Server-gerenderde HTML, geen JSON — zodat er één plek is die
+  // bepaalt hoe een toestand eruitziet, precies zoals de overleg-poller hieronder al doet.
+  //
+  // WAAROM GENERIEK EN NIET NOG EEN EIGEN POLLER. De scanknop op de handboek-pagina is de tweede
+  // plek die "kijk of het al klaar is" nodig heeft. Een tweede hand-geschreven poller betekent een
+  // tweede plek waar `document.hidden`, de backoff en de vergelijk-voor-vervangen stap goed moeten
+  // staan. De overleg-poller blijft voorlopig zoals hij is (ratchet-principe: wie hem toch
+  // aanraakt, neemt hem mee).
+  //
+  // DEZELFDE DRIE MANIEREN: niets vragen met een verborgen tabblad, bij een fout het interval
+  // verdubbelen, en niets vervangen als er niets veranderd is (anders verliest een knop die je
+  // aanwijst zijn hover en leest een schermlezer hem elke ronde opnieuw voor).
+  function pollers(root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-poll]"), function (el) {
+      if (el.dataset.nvPoll) return;
+      el.dataset.nvPoll = "1";
+      var url = el.getAttribute("data-poll");
+      var basis = parseInt(el.getAttribute("data-poll-ms") || "10000", 10) || 10000;
+      var wacht = basis, timer = null;
+
+      function plan(ms) { clearTimeout(timer); timer = setTimeout(vraag, ms); }
+
+      function vraag() {
+        if (document.hidden) { plan(basis); return; }
+        fetch(url, { credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+          .then(function (html) {
+            wacht = basis;
+            if (html && html !== el.innerHTML) el.innerHTML = html;
+          })
+          .catch(function () { wacht = Math.min(wacht * 2, 5 * 60 * 1000); })
+          .then(function () { plan(wacht); });
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) plan(200);
+      });
+      plan(basis);
+    });
+  }
+
   function overlegPoll(root) {
     var houder = root.querySelector(".c2-subnav");
     if (!houder || houder.dataset.nvPoll) return;
@@ -2070,6 +2114,7 @@
     wikiEdit(root);
     navPaneel(root);
     overlegPoll(root);
+    pollers(root);
     stickers(root);
     mentions(root);
     feest(root);

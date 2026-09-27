@@ -740,9 +740,16 @@ def main() -> None:
         try:
             print(f"🔎 site audit [{doel}] op {url or site_audit._url(ctx, doel)} … (de Lighthouse-run duurt 20-60 s)",
                   flush=True)
-            snapshot, wissels = site_audit.run_en_bewaar(st, ctx, build_skill_registry(), url=url, doel=doel)
+            snapshot, wissels = site_audit.run_en_bewaar(st, ctx, build_skill_registry(),
+                                                         url=url, doel=doel, door="cli")
         except site_audit.GeenDevUrl as exc:
             print(f"⚠ {exc}")
+            sys.exit(1)
+        except site_audit.ScanDraaitAl as exc:
+            # De knop op de handboek-pagina en (straks) de weekklok delen dit slot. Afbreken en niet
+            # wachten: een tweede run schrijft een snapshot in dezelfde reeks, en dan staat er een
+            # "wissel" tussen twee metingen van dezelfde minuut.
+            print(f"⏳ {exc}")
             sys.exit(1)
         for l in snapshot["lampjes"]:
             print(f"  {l['kleur']:>6}  {l['naam']:<22} {l['waarde']:<8} {l['uitleg'][:110]}")

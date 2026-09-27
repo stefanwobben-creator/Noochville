@@ -10,6 +10,8 @@ Alles hergebruikt het bestaande artefact-idioom: `.card`, `.ptitle`, `.att-body`
 """
 from __future__ import annotations
 
+import urllib.parse
+
 import html as _html_mod
 import json as _json
 import re
@@ -269,6 +271,49 @@ def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
 #: is precies het soort literal dat deze codebase vandaag twee keer uit de code heeft gehaald. Wat
 #: blijft is de verwijzing zelf — wie de coach noemt, laat zien wat eruit kwam.
 _COACH_URL = "/decision-coach"
+
+
+#: Een pagina die naar de site audit wijst, krijgt de scanknop. Zelfde koppeling als bij de
+#: decision coach hierboven, en om dezelfde reden: geen titel en geen artefact-id in de code, maar
+#: de VERWIJZING zelf. Wie de audit noemt, mag hem aftrappen — en wie de regel uit zijn pagina
+#: haalt, haalt de knop weg. Dat is het scherm dat zichzelf uitlegt in plaats van een literal die
+#: je alleen in de code terugvindt.
+_AUDIT_URL = "/site-audit"
+
+
+def _scan_sectie(a, st, csrf_token: str, username: str | None) -> str:
+    """De scanknop onder een pagina die naar de site audit verwijst.
+
+    WAAROM HIJ HIER STAAT EN NIET OP `/site-audit` ZELF (besluit Stefan, 28 september 2026): dat
+    scherm toont de uitslag en blijft alleen-lezen. Het Website Handboek is de plek waar je bent
+    als je aan de site werkt, en daar hoort "meet 'm even" bij.
+
+    DE POORT WORDT TWEE KEER GESTELD, hier en in `_act_site_audit_run` — het scherm en de server,
+    dezelfde functie. Een knop tonen die de server daarna weigert is precies wat deze codebase op
+    vier andere plekken al heeft opgeruimd.
+
+    HET PANEEL KOMT UIT `views/site_audit`, niet uit deze module: hoe "er loopt een scan" eruitziet
+    hoort bij de audit, en de pollende route (`/scan-status`) rendert hetzelfde fragment. Twee
+    renderers voor één toestand lopen uiteen zodra er één verandert."""
+    from nooch_village.cockpit2 import _role_gate
+    from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE
+    from nooch_village.views.site_audit import scan_paneel
+
+    if _AUDIT_URL not in (a.body or ""):
+        return ""
+    data_dir = getattr(st, "dd", "") or ""
+    if not data_dir:
+        return ""
+    mag = csrf_token and _role_gate(WEBSITE_DEVELOPER_ROLE, username, st) is None
+    terug = wiki.pagina_url(a.id)
+    # `data-poll` = de generieke poller in `nooch.js`: hij haalt dit fragment op en vervangt het
+    # element, zolang het tabblad zichtbaar is. Zonder hem blijft "scanning…" staan tot de lezer
+    # zelf ververst — en dan is de knop wél veilig, maar de terugkoppeling nutteloos.
+    return (f"<div class='c2-sec'><h3>Site audit</h3>"
+            f"<div data-poll='/scan-status?next={_e(urllib.parse.quote(terug))}' "
+            f"data-poll-ms='5000'>"
+            f"{scan_paneel(data_dir, csrf_token if mag else '', mag=bool(mag), terug=terug)}"
+            f"</div></div>")
 
 
 def _besluiten_sectie(a, st, persoon: str = "") -> str:
@@ -941,7 +986,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # scheidingslijn vanzelf onder. Hiervoor stond de titel los bóven een omrande kaart, en dan
     # leest een pagina als twee dingen die toevallig onder elkaar staan.
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_banner(msg)}{body}{voorstel}"
-            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
+            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}"
+            f"{_scan_sectie(a, st, csrf_token, username)}{_onder('backlinks')}"
             f"{meta}</div></div>")
     return _page(f"{a.title or a.id} — page",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
