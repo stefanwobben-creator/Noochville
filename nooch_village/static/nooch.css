@@ -200,6 +200,25 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    maar een textarea maakt van Enter een nieuwe regel — en voor /acties IS Enter het hele gebaar.
    Dit is een uitbreiding van de bestaande klasse, geen nieuwe (CLAUDE.md: "kom je iets tekort,
    breid de klasse uit"). */
+/* ── Mijn acties: een smalle kolom, want het zijn korte regels ───────────────────────────────
+   EEN VARIANT BINNEN DE BESTAANDE `c2-`-FAMILIE, geen wijziging aan `.c2-main`/`.c2-wrap` zelf: die dragen de rest van de
+   site, waar volle breedte wél klopt (het bord, een tabel, de organisatieboom). Een lijst met
+   éénregelige acties over 1100px laat het oog na elke regel helemaal terugspringen. */
+.c2-smal{max-width:34rem;margin-inline:auto}
+/* De kopregel tussen open en afgevinkt. Geen `<details>` meer: afgevinkt blijft gewoon staan,
+   doorgestreept — op papier zie je je doorgestreepte regels ook nog. */
+.ck-klaar-kop{display:flex;align-items:center;gap:.5rem;margin:.7rem 0 .2rem;
+  padding-top:.5rem;border-top:1px solid var(--border)}
+.ck-klaar-kop .muted{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+.ck-klaar-kop form{margin-left:auto}
+/* TIKBAAR, NIET ALLEEN HOVERBAAR. `.ck-item .dellink` staat dorpsbreed op `opacity:0` tot je er
+   met de muis overheen gaat — en op een telefoon bestaat hover niet, dus daar is de knop
+   onbereikbaar. Binnen dit scherm staat hij er altijd, gedempt; hover en focus maken hem vol.
+   Alleen hier overschreven: de projectchecklist houdt zijn eigen gedrag. */
+.c2-smal .ck-item .dellink{opacity:.45}
+.c2-smal .ck-item:hover .dellink,.c2-smal .ck-item:focus-within .dellink{opacity:1}
+@media (hover:none){.c2-smal .ck-item .dellink{opacity:.7}}
+
 .qadd-form input[type=text],.qadd-form input:not([type]){flex:1 1 auto;min-width:0;padding:.45rem .55rem;
   border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
   box-shadow:var(--shadow);font:inherit;font-size:.9rem}

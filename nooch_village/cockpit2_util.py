@@ -1644,6 +1644,11 @@ _SIDE_ITEMS = (
     # niet een lijst die ervoor openklapt.
     ("/acties",   "My actions", ""),
     ("/wiki",     "Wiki",     ""),
+    # TOOLS IS EEN EIGEN INGANG (27 september 2026) en geen derde plek: het gereedschap is
+    # WEGgehaald uit de wiki-tab per cirkel en staat nu op precies één plek. Een tool is al een
+    # eigen soort in de data (`kind="tool"`, met een `url`) — niet iets om te lezen maar om te
+    # gebruiken, en dat hoort niet achter hetzelfde filter als een note.
+    ("/tools",    "Tools",    ""),
 )
 
 #: Werkoverleg en Roloverleg zijn GEEN kanalen (correctie Stefan, 21 september 2026). Het zijn twee

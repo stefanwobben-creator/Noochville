@@ -452,6 +452,17 @@ def _tab_for(kind: str) -> str:
     return _KIND_TAB.get(kind, "notes")
 
 
+def _terug_url(anchor: str, kind: str) -> str:
+    """Waar je uitkomt na een bewerking op een artefact.
+
+    EEN TOOL HEEFT GEEN TAB MEER om naar terug te keren (27 september 2026): hij woont op
+    `/tools`. Zonder deze splitsing landde je na het opslaan op een wiki-tab waar je tool niet
+    meer staat — en dat leest als "mijn wijziging is weg"."""
+    if kind == "tool":
+        return "/tools"
+    return f"/node?id={anchor}&tab={_tab_for(kind)}"
+
+
 def _dt(ts) -> str:
     try:
         from nooch_village.cockpit2_util import lokaal
@@ -576,7 +587,7 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
-            f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab={_tab_for(kind)}'>"
+            f"<input type='hidden' name='next' value='{_e(_terug_url(rec.id, kind))}'>"
             f"<label class='att-lbl'>Title</label><input name='title' required>"
             f"{dom}"
             f"<label class='att-lbl'>Body</label>{md_editor('body')}"
@@ -591,7 +602,7 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
                         domains: list | None = None) -> str:
     # `next_url` parametriseert waar je na opslaan landt (default: de tab van de eigenaar-rol).
     # De pagina-view (/pagina) geeft zijn eigen permalink mee — zelfde formulier, zelfde poort.
-    nxt = next_url or f"/node?id={a.anchor}&tab={_tab_for(a.kind)}"
+    nxt = next_url or _terug_url(a.anchor, a.kind)
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
     # HET DOMEIN, VOOR ELKE SOORT en niet alleen voor een policy: sinds 23 september leest
@@ -633,7 +644,7 @@ def _artefact_archive_form(a, csrf_token: str) -> str:
     return (f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-            f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
+            f"<input type='hidden' name='next' value='{_e(_terug_url(a.anchor, a.kind))}'>"
             f"<button class='dellink' type='submit' name='action' value='artefact_archive' "
             f"onclick=\"return confirm('Archive {_e(a.title or a.id)}?')\">archive</button></form>")
 
@@ -934,7 +945,10 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         chip += (f" <span class='chip muted' title='{_e(reden)}'>💤 slaapt</span>")
 
     if tab == "overview":
-        content = _overview_html(st, rec, csrf_token)
+        # `_ritme_html` STOND ONDER HET TOOL-FILTER en hoort hier: het is geen gereedschap maar
+        # rol-context — wat draait er vanzelf op deze rol, wanneer draaide het laatst. Leeg voor
+        # een rol zonder ritme, dus dit voegt nergens ruis toe.
+        content = _overview_html(st, rec, csrf_token) + _ritme_html(st, rec)
     elif tab == "roles":
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
@@ -945,15 +959,22 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         # weten waar iets ooit is neergezet vóór je het kunt vinden. Nu: één oppervlak met een
         # filter, precies zoals het prototype het toont — en zonder migratie, want `kind` bestond al.
         #
-        # De tool-specifieke blokken (rol-tools, ritme, radar) horen bij `kind="tool"` en staan
-        # daarom onder het tool-filter; bij "all" staan ze eronder, niet ertussen.
+        # TOOLS STAAN HIER NIET MEER (27 september 2026, besluit Stefan). Ze hebben hun eigen
+        # ingang gekregen (`/tools`, zie `views/tools.py`), en de voorwaarde daarbij was dat ze
+        # hier dan ook écht weggaan: blijven ze staan, dan zijn er twee plekken in plaats van
+        # één — precies wat dit scherm moest oplossen. Een tool is ook een ander soort ding dan
+        # een note of een policy: die lees je, een tool gebruik je (hij is het enige soort met
+        # een `url`).
+        #
+        # `kind=tool` IN DE URL BLIJFT WERKEN en toont dan de volle lijst. Een bestaande link mag
+        # niet stil op niets uitkomen; de tool zelf vind je via `/tools`.
         soort = (kind_flt or "all").lower()
-        if soort not in ("all", "policy", "note", "tool"):
+        if soort not in ("all", "policy", "note"):
             soort = "all"
         chips = "".join(
             f"<a class='cl-filter{' on' if soort == k else ''}' "
             f"href='/node?id={_e(node_id)}&tab=wiki&kind={k}'>{_e(lbl)}</a>"
-            for k, lbl in (("all", "All"), ("policy", "Policy"), ("note", "Note"), ("tool", "Tool")))
+            for k, lbl in (("all", "All"), ("policy", "Policy"), ("note", "Note")))
         delen = [f"<div class='cl-filters'>{chips}</div>"]
         if soort in ("all", "policy"):
             delen.append(_artefact_tab_html(st, rec, "policy", csrf_token, username,
@@ -963,10 +984,12 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             delen.append(_artefact_tab_html(st, rec, "note", csrf_token, username, titel="Notes",
                                             leeg="No notes on this role/circle yet.",
                                             van_rapport=van_rapport))
-        if soort in ("all", "tool"):
-            delen.append(_role_tools_html(rec) + _ritme_html(st, rec)
-                         + _artefact_tab_html(st, rec, "tool", csrf_token, username, titel="Tools",
-                                              leeg="No tools on this role/circle yet."))
+        # HIER STONDEN DE TOOLS. De rol-tools en de tool-artefacten zijn naar `/tools` verhuisd;
+        # `_ritme_html` ging mee naar de overview-tab, want dat is geen gereedschap maar
+        # rol-context ("wat draait hier vanzelf") en het stond alleen onder dit filter omdat het
+        # er toevallig bij was gezet.
+        delen.append(f"<p class='muted'>Tools live on their own page now &mdash; "
+                     f"<a href='/tools'>open Tools</a>.</p>")
         content = "".join(delen)
     elif tab == "metrics":
         # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als

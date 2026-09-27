@@ -19,6 +19,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/` | `(inline)` | `cockpit2.py` |
 | `/index.html` | `(inline)` | `cockpit2.py` |
 | `/messages` | `render_messages` | `nooch_village/views/messages.py` |
+| `/tools` | `render_tools` | `nooch_village/views/tools.py` |
 | `/acties` | `render_acties` | `nooch_village/views/acties.py` |
 | `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
 | `/projects` | `render_projects_screen` | `nooch_village/views/projects.py` |
@@ -327,4 +328,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_46 routes · 151 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_47 routes · 151 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

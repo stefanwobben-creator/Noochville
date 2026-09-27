@@ -1,0 +1,279 @@
+"""Drie verfijningen na de eerste ronde (27 september 2026, feedback Stefan).
+
+1. AFGEVINKT VERDWIJNT NIET MEER. Een afgevinkte actie zakte naar een dichtgeklapt
+   `<details>`-blokje ("X done"). De gedachte was "af is af"; de uitwerking was dat de regel
+   VOELDE alsof hij verdween — je moest klikken om te zien dat hij er nog stond. Op papier streep
+   je een regel door en hij blijft staan, en dat je hem nog ziet is precies wat "gedaan"
+   bevredigend maakt.
+
+2. HET SCHERM IS TE BREED. `/acties` gebruikte de volle contentkolom van de rest van de site.
+   Voor een lijst met éénregelige acties springt het oog na elke regel helemaal terug. Een
+   breedte-variant voor dit scherm — zonder `.c2-main`/`.c2-wrap` zelf aan te raken.
+
+3. TOOLS KRIJGEN EEN EIGEN INGANG, en dat is GEEN derde plek: ze gaan WEG uit de wiki-tab per
+   cirkel en komen op precies één plek. De voorwaarde was expliciet: echt weghalen, niet laten
+   staan naast het nieuwe overzicht.
+
+4. DE PROJECTKEUZE WAS ONBRUIKBAAR. `_projectopties` toonde alles wat je mocht lezen — honderden
+   rijen op prod. Nu: wat loopt, onder je eigen rollen. Plus een tikbare verwijder-knop, want
+   `.ck-item .dellink` is dorpsbreed hover-only en op een telefoon bestaat hover niet.
+"""
+from __future__ import annotations
+
+import inspect
+import pathlib
+import re
+
+from nooch_village import cockpit2
+from nooch_village.views.acties import _projectopties, render_acties
+from nooch_village.views.overview import render_node
+from nooch_village.views.tools import render_tools
+
+CSS = (pathlib.Path(__file__).resolve().parents[1]
+       / "nooch_village" / "static" / "nooch.css").read_text()
+ROL = "mother_earth__nooch__compliance"
+ANDERE_ROL = "mother_earth__nooch__creator_of_shoes"
+
+
+def _dorp(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    for rol in (ROL, ANDERE_ROL):
+        for f in list(st.assign.fillers_of(rol, st.records.get(rol))):
+            st.assign.unassign(rol, f.type, f.id)
+    a = st.people.add("Aap Een", "aap@test.nl")
+    st.assign.assign(ROL, "person", a.id)
+    return dd, st, a
+
+
+# ══ 1. Afgevinkt blijft staan ════════════════════════════════════════════════
+def test_een_afgevinkte_actie_staat_er_gewoon(tmp_path):
+    """DE KERN VAN DE TERUGDRAAI. Geen klik nodig om te zien dat hij er nog is."""
+    dd, st, a = _dorp(tmp_path)
+    st.acties.add(a.id, "Open regel")
+    it = st.acties.add(a.id, "Klare regel"); st.acties.zet(it["id"], a.id, done=True)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    assert "Klare regel" in h
+    # HET OUDE BLOKJE WAS `<details class='card'>`. De `<details>` die er nóg staat is de
+    # koppel-uitklapper op een open regel — een ander ding, en die hoort er juist te zijn.
+    assert "<details class='card'" not in h, "hij zit nog achter een inklapbaar blokje"
+    assert "done</summary>" not in h
+
+
+def test_hij_staat_onder_de_open_regels(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    st.acties.add(a.id, "Open regel")
+    it = st.acties.add(a.id, "Klare regel"); st.acties.zet(it["id"], a.id, done=True)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    assert h.index("Open regel") < h.index("Klare regel")
+
+
+def test_en_hij_is_doorgestreept(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    it = st.acties.add(a.id, "Klare regel"); st.acties.zet(it["id"], a.id, done=True)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    assert "ck-done" in h and ".ck-done{text-decoration:line-through" in CSS
+
+
+def test_de_scheiding_blijft_wel(tmp_path):
+    """Zonder streep lopen open en klaar in elkaar over en is de lijst één grijze massa."""
+    dd, st, a = _dorp(tmp_path)
+    it = st.acties.add(a.id, "Klare regel"); st.acties.zet(it["id"], a.id, done=True)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    assert "ck-klaar-kop" in h and "1 done" in h and "clear finished" in h
+    assert "border-top" in re.search(r"\.ck-klaar-kop\{([^}]*)\}", CSS).group(1)
+
+
+def test_zonder_afgevinkte_geen_kopregel(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    st.acties.add(a.id, "Open regel")
+    assert "ck-klaar-kop" not in render_acties(st, ik=a.id, csrf_token="t")
+
+
+# ══ 2. De smalle kolom ═══════════════════════════════════════════════════════
+def test_het_scherm_heeft_een_eigen_breedte(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    assert "c2-main c2-smal" in h
+    m = re.search(r"\.c2-smal\{([^}]*)\}", CSS)
+    assert m and "max-width" in m.group(1) and "margin-inline:auto" in m.group(1)
+
+
+def test_de_gedeelde_klassen_zijn_niet_aangeraakt():
+    """"zonder de bestaande klassen voor de rest van de site aan te raken". `.c2-main` en
+    `.c2-wrap` dragen elk ander scherm; een breedte daar raakt het bord en de organisatieboom."""
+    for klasse in (".c2-main", ".c2-wrap"):
+        m = re.search(rf"(?:^|[}};])\s*{re.escape(klasse)}\{{([^}}]*)\}}", CSS, re.M)
+        assert m, klasse
+        assert "34rem" not in m.group(1)
+
+
+def test_er_komt_geen_nieuwe_klasse_familie_bij():
+    """`test_ui_ratchets` bevriest het aantal prefix-families. Een breedte-variant van de
+    contentkolom hóórt bij `c2-`; een kopregel tussen checklist-items bij `ck-`."""
+    assert not re.search(r"\.act-[a-z]", CSS), "er is toch een eigen act-familie"
+
+
+def test_verwijderen_kan_ook_zonder_muis():
+    """`.ck-item .dellink` staat dorpsbreed op `opacity:0` tot je hovert, en op een telefoon
+    bestaat hover niet — dan is de knop onbereikbaar. Binnen dit scherm is hij altijd zichtbaar."""
+    m = re.search(r"\.c2-smal \.ck-item \.dellink\{([^}]*)\}", CSS)
+    assert m and "opacity:.45" in m.group(1)
+    assert ".c2-smal .ck-item:focus-within .dellink" in CSS
+    assert "@media (hover:none){.c2-smal .ck-item .dellink" in CSS
+
+
+def test_de_projectchecklist_houdt_zijn_eigen_gedrag():
+    """De override is gescoped; buiten /acties verandert er niets."""
+    assert ".ck-item .dellink{margin-left:auto;opacity:0}" in CSS
+
+
+# ══ 3. De projectkeuze is klein en relevant ══════════════════════════════════
+def _opties(html: str) -> list[str]:
+    return re.findall(r"<option value='[^']*'[^>]*>([^<]+)</option>", html)
+
+
+def test_alleen_lopende_projecten_onder_je_eigen_rollen(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    mijn = st.projects.create(ROL, "Van mijn rol mycelium", "human", status="running")
+    st.projects.create(ANDERE_ROL, "Van een andere rol", "human", status="running")
+    st.projects.create(ROL, "Nog niet begonnen", "human", status="future")
+    namen = _opties(_projectopties(st, a.id, ""))
+    assert "Van mijn rol mycelium" in namen
+    assert "Van een andere rol" not in namen, "andermans rol staat erbij"
+    assert "Nog niet begonnen" not in namen, "een toekomstig project staat erbij"
+    assert mijn
+
+
+def test_een_geblokkeerd_project_telt_wel(tmp_path):
+    """`blocked` betekent "loopt, maar staat stil" — daar hoort juist een volgende stap bij."""
+    dd, st, a = _dorp(tmp_path)
+    pid = st.projects.create(ROL, "Staat stil mycelium", "human", status="running")
+    st.projects.block(pid, ROL)
+    assert "Staat stil mycelium" in _opties(_projectopties(st, a.id, ""))
+
+
+def test_een_gearchiveerd_project_niet(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    pid = st.projects.create(ROL, "Opgeruimd mycelium", "human", status="running")
+    st.projects.archive(pid)
+    assert "Opgeruimd mycelium" not in _opties(_projectopties(st, a.id, ""))
+
+
+def test_de_bestaande_koppeling_staat_er_altijd_bij(tmp_path):
+    """Anders wist een select die je opent om te ONTkoppelen stilzwijgend de koppeling die er
+    stond — de browser stuurt immers de geselecteerde optie mee."""
+    dd, st, a = _dorp(tmp_path)
+    pid = st.projects.create(ANDERE_ROL, "Niet van mijn rol", "human", status="running")
+    html = _projectopties(st, a.id, pid)
+    assert "Niet van mijn rol" in _opties(html)
+    assert "selected" in html
+
+
+def test_de_zichtbaarheid_blijft_de_buitengrens(tmp_path):
+    """Filter 3 werkt op eigenaarschap; de leesregel blijft er als vangnet omheen."""
+    bron = inspect.getsource(_projectopties)
+    assert "mag_project_lezen" in bron
+
+
+def test_de_lijst_is_echt_korter_geworden(tmp_path):
+    """GEMETEN, niet aangenomen: 20 projecten in het dorp, waarvan 2 van jou en lopend."""
+    dd, st, a = _dorp(tmp_path)
+    for i in range(18):
+        st.projects.create(ANDERE_ROL, f"Andermans {i}", "human", status="running")
+    for i in range(2):
+        st.projects.create(ROL, f"Van mij {i}", "human", status="running")
+    namen = _opties(_projectopties(st, a.id, ""))
+    assert len(namen) == 3, namen        # 2 eigen + "no project…"
+
+
+# ══ 4. Tools op één plek ═════════════════════════════════════════════════════
+def test_de_tools_pagina_toont_het_hele_dorp(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    h = render_tools(st, csrf_token="t", username="aap@test.nl")
+    assert "Decision coach" in h and "Copy prompt generator" in h
+
+
+def test_ze_staan_niet_meer_in_de_wiki_tab(tmp_path):
+    """DE VOORWAARDE: echt weghalen, niet laten staan naast het nieuwe overzicht."""
+    dd, st, a = _dorp(tmp_path)
+    for kind in ("", "tool", "all"):
+        q = f"&kind={kind}" if kind else ""
+        h = render_node(st, "mother_earth", "wiki", csrf_token="t", username="aap@test.nl",
+                        kind_flt=kind)
+        assert "Decision coach" not in h, f"kind={kind!r}: de tool staat er nog"
+        assert ">Tool</a>" not in h, f"kind={kind!r}: het Tool-filter staat er nog"
+        assert q is not None
+
+
+def test_de_wiki_tab_wijst_de_weg(tmp_path):
+    """Een tool die stil verdwijnt laat niemand merken dat hij ergens anders staat."""
+    dd, st, a = _dorp(tmp_path)
+    h = render_node(st, "mother_earth", "wiki", csrf_token="t", username="aap@test.nl")
+    assert "/tools" in h
+
+
+def test_notes_en_policies_blijven_waar_ze_waren(tmp_path):
+    """Alleen tools verhuizen. Een note en een policy zijn er om te LEZEN en horen bij hun rol."""
+    dd, st, a = _dorp(tmp_path)
+    h = render_node(st, "mother_earth", "wiki", csrf_token="t", username="aap@test.nl")
+    assert ">Policy</a>" in h and ">Note</a>" in h
+
+
+def test_het_ritme_blok_is_niet_zoekgeraakt(tmp_path):
+    """Het stond onder het tool-filter maar is geen gereedschap; het hoort bij de rol-context."""
+    from nooch_village.views import overview
+    from conftest import py_zonder_uitleg
+    bron = inspect.getsource(overview.render_node)
+    assert "_ritme_html(st, rec)" in bron
+    # ZONDER COMMENTAAR, anders toetst dit de uitleg die juist vértelt dat hij verhuisd is.
+    wiki_deel = py_zonder_uitleg(bron.split('elif tab == "wiki"')[1])
+    assert "_ritme_html" not in wiki_deel, "het ritme hangt nog aan de wiki-tab"
+
+
+def test_de_view_kopieert_de_tool_tabellen_niet():
+    """Zou `/tools` zijn eigen lijst houden, dan is een tool die elders wordt toegevoegd hier
+    onzichtbaar — precies het twee-plekken-probleem dat dit scherm oplost."""
+    from nooch_village.views import tools
+    bron = inspect.getsource(tools)
+    assert "_ROLE_TOOLS" in bron and "_DOMAIN_TOOLS" in bron
+    assert "linkbuilding" not in bron.lower(), "er staat een gekopieerde tool-lijst in"
+
+
+def test_tools_staat_in_de_zijbalk():
+    from nooch_village.cockpit2_util import _SIDE_ITEMS
+    paden = {h: (l, p) for h, l, p in _SIDE_ITEMS}
+    assert paden["/tools"] == ("Tools", ""), "het is een paneel geworden"
+
+
+def test_bewerken_stuurt_je_terug_naar_tools():
+    """Een tool heeft geen tab meer om naar terug te keren; zonder dit land je na het opslaan op
+    een wiki-tab waar hij niet meer staat, en dat leest als "mijn wijziging is weg"."""
+    from nooch_village.views.overview import _terug_url
+    assert _terug_url("mother_earth", "tool") == "/tools"
+    assert _terug_url("mother_earth", "note").startswith("/node?id=mother_earth")
+
+
+def test_de_eigenaar_blijft_zichtbaar(tmp_path):
+    """Wie hem mag bewerken hangt aan de eigenaar, en dat weten is de helft van "mag ik hier iets
+    aan veranderen"."""
+    dd, st, a = _dorp(tmp_path)
+    h = render_tools(st, csrf_token="t", username="aap@test.nl")
+    assert "/node?id=mother_earth&tab=wiki" in h
+
+
+def test_alleen_wie_mag_krijgt_de_bewerk_link(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    zonder = render_tools(st, csrf_token="t", username="aap@test.nl")
+    assert "edit on the role" not in zonder
+    baas = st.people.add("Anchor Lead", "anchor@test.nl")
+    st.assign.assign("mother_earth__circle_lead", "person", baas.id)
+    met = render_tools(cockpit2._Stores(dd), csrf_token="t", username="anchor@test.nl")
+    assert "edit on the role" in met
+
+
+def test_de_titel_is_de_link_want_een_tool_open_je(tmp_path):
+    dd, st, a = _dorp(tmp_path)
+    h = render_tools(st, csrf_token="t", username="aap@test.nl")
+    assert "/decision-coach" in h and "/copy-prompt" in h

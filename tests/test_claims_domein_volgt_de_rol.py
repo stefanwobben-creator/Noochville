@@ -103,7 +103,10 @@ def test_onbekend_of_leeg_domein_geeft_niets(tmp_path):
 def test_tools_kaart_volgt_het_domein(tmp_path):
     st = _stores(tmp_path)
     _geef_domein(st, ANDERE)
-    page = cockpit2.render_node(st, ANDERE, "tools", csrf_token="t")
+    # DE SCHERM-TOOLS STAAN OP `/tools` (27 september 2026), niet meer op een tab per rol. De
+    # domein-regel die deze toets bewaakt is onveranderd: wie het domein houdt, krijgt de kaart.
+    from nooch_village.views.tools import render_tools
+    page = render_tools(st, csrf_token="t", username="guest")
     assert "Claims checker" in page and "/claims" in page
     assert "Claim pages" in page
     assert f"/node?id={ANDERE}&amp;tab=notes" in page      # wijst naar de eigen wiki-pagina's
@@ -118,7 +121,8 @@ def test_rol_zonder_claims_domein_krijgt_geen_claims_tools(tmp_path):
 def test_id_gesleutelde_tools_blijven_werken(tmp_path):
     """De domein-laag komt naast de id-laag, niet ervoor in de plaats."""
     st = _stores(tmp_path)
-    page = cockpit2.render_node(st, ROL, "tools", csrf_token="t")
+    from nooch_village.views.tools import render_tools
+    page = render_tools(st, csrf_token="t", username="guest")
     assert "Site audit" in page
 
 

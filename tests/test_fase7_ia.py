@@ -78,24 +78,34 @@ def test_drie_tabs_zijn_er_een_geworden():
 
 
 def test_de_wiki_tab_filtert_op_soort(tmp_path):
+    """TOOLS ZIJN HIER WEG (27 september 2026): ze hebben een eigen ingang (`/tools`) en de
+    voorwaarde was dat ze dan ook écht uit de wiki-tab verdwijnen — anders zijn het twee plekken.
+    Wat deze toets bewaakt is het FILTEREN zelf, en dat is onveranderd; alleen op de twee soorten
+    die hier nog wonen."""
     dd, st = _stores(tmp_path)
     st.att.add(OWNER, "note", title="Selco", body="leverancier")
-    st.att.add(OWNER, "tool", title="Copy checker", url="https://x")
+    st.att.add(OWNER, "policy", title="Beleidje", body="mits")
     alles = cockpit2.render_node(st, OWNER, "wiki", csrf_token="t", username="guest")
-    assert "Selco" in alles and "Copy checker" in alles
+    assert "Selco" in alles and "Beleidje" in alles
     alleen_note = cockpit2.render_node(st, OWNER, "wiki", csrf_token="t", username="guest",
                                        kind_flt="note")
-    assert "Selco" in alleen_note and "Copy checker" not in alleen_note
+    assert "Selco" in alleen_note and "Beleidje" not in alleen_note
 
 
 def test_oude_links_blijven_werken_en_filteren_voor(tmp_path):
-    """Een bookmark op ?tab=tools hoort niet op een lege pagina uit te komen. Hij landt op Wiki,
-    met tools al voorgefilterd — preciezer dan alleen doorsturen."""
+    """Een bookmark op ?tab=tools hoort niet op een lege pagina uit te komen.
+
+    HIJ LANDDE OP WIKI MET TOOLS VOORGEFILTERD; sinds 27 september staan tools op `/tools`. De
+    belofte blijft dezelfde — geen lege pagina — maar nu met een verwijzing naar waar ze wél
+    staan, want een tool die stil verdwijnt laat niemand merken dat hij verhuisd is."""
     dd, st = _stores(tmp_path)
     st.att.add(OWNER, "note", title="Selco")
     st.att.add(OWNER, "tool", title="Copy checker", url="https://x")
     html = cockpit2.render_node(st, OWNER, "tools", csrf_token="t", username="guest")
-    assert "Copy checker" in html and "Selco" not in html
+    assert "Copy checker" not in html, "de tool staat nog op de rol"
+    assert "/tools" in html, "er staat geen verwijzing naar waar hij nu woont"
+    from nooch_village.views.tools import render_tools
+    assert "Copy checker" in render_tools(st, csrf_token="t", username="guest")
 
 
 def test_de_wiki_index_toont_het_hele_dorp(tmp_path):
