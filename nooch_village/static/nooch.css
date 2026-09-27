@@ -247,6 +247,41 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 /* De lege-lijst-tekst stond tegen de rand aan nu de kaart zelf geen padding meer heeft. */
 .c2-smal .card > .muted{padding:.9rem .8rem;margin:0}
 
+/* ── "+ link to a project": subtiel onder de tekst, zoals in het prototype ──────────────────
+   NAAST HET PROTOTYPE GELEGD (Mijn Acties), element voor element. Zelfde PLAATS (meta-regel
+   onder de tekst) en zelfde STATEN (geen project → linkje · open → keuzelijst · gekoppeld →
+   labeltje met ×). Drie dingen weken af, en alle drie maakten hem prominenter dan bedoeld:
+
+     1. `<summary>` tekent een driehoekje (▸). Het prototype heeft geen marker.
+     2. `.flink` kleurt `--gray` (#4A4A4A) — de op één na donkerste tekstkleur. Het prototype
+        gebruikt de FAINTSTE (#a19c88); `--muted` (#9A9483) is hier de tegenhanger.
+     3. de onderstreping liep in currentColor (dus donker) en zonder afstand. In het prototype
+        is hij `--border`-kleurig met 2px offset: aanwezig, niet luid.
+
+   WAT BEWUST NIET IS OVERGENOMEN: "of als hover-knop". Hover bestaat niet op een telefoon, en
+   `.ck-item .dellink` liet al zien wat dat kost — daar was de knop onbereikbaar. Hij staat er
+   dus altijd, maar zo zacht dat hij niet in de weg zit. */
+/* DE WIKKEL IS GEEN KAART. `web_base._CSS` geeft ELKE `<details>` een rand, een achtergrond,
+   een schaduw, marge en padding — hij is daar bedoeld als uitklapbaar blok. Hier is hij een
+   linkje van vier woorden, en dan is een kader eromheen precies het tegenovergestelde van
+   "subtiel". Gemist bij de eerste ronde: ik mat toen alleen de TYPOGRAFIE van de `<summary>` en
+   keek niet naar de doos eromheen. Zichtbaar geworden toen `/acties` het designsysteem kreeg
+   (#627) — maar hij stond er daarvóór net zo goed. */
+.c2-smal .ck-meta{background:none;border:0;border-radius:0;box-shadow:none;margin:0;padding:0}
+.c2-smal .ck-meta[open]{padding-bottom:0}
+/* GEEN `.flink` MEER OP DIT ELEMENT. Het designsysteem maakt daar onder `.nu` een KNOP van
+   (`.nu .addlink, .nu .vswitch a, .nu .flink { border:1.5px solid …; background:… }`), en dan
+   staat er een omrande knop over de volle breedte waar een linkje van vier woorden hoorde. Dat
+   is geen bug in het designsysteem: `.flink` Ís daar een knop. Dit element is er alleen nooit
+   één geweest — het is het label van een uitklapper. Het draagt de klasse dus niet meer en
+   brengt zijn eigen (subtiele) uiterlijk mee. */
+.c2-smal .ck-meta > summary{list-style:none;color:var(--muted);font-weight:600;padding:0;
+  font-family:inherit;font-size:.78rem;cursor:pointer;background:none;border:0;
+  text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
+.c2-smal .ck-meta > summary::-webkit-details-marker{display:none}
+.c2-smal .ck-meta > summary:hover,.c2-smal .ck-meta > summary:focus-visible{
+  color:var(--green-dark);text-decoration-color:var(--green-dark)}
+
 .qadd-form input[type=text],.qadd-form input:not([type]){flex:1 1 auto;min-width:0;padding:.45rem .55rem;
   border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
   box-shadow:var(--shadow);font:inherit;font-size:.9rem}

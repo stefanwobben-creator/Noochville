@@ -50,8 +50,16 @@ def test_geen_enkele_regel_valt_buiten_de_nu_scope():
 
 
 def test_de_oude_stylesheet_is_niet_aangeraakt():
-    """De klassensets blijven gescheiden: nooch.css kent het nieuwe systeem niet."""
-    assert "--nu-" not in _EXTRA_CSS and ".nu " not in _EXTRA_CSS
+    """De klassensets blijven gescheiden: nooch.css GEBRUIKT het nieuwe systeem niet.
+
+    OP DE REGELS, NIET OP DE TEKST (27 september 2026). Deze toets las het hele bestand, dus ook
+    het commentaar — en verbood daarmee het UITLEGGEN van een botsing tussen de twee systemen.
+    Precies die uitleg is het waard om te bewaren: `.nu .flink` maakt van een link een knop, en
+    wie dat niet weet zet de klasse over een half jaar gewoon terug. Commentaar mag het noemen,
+    een regel mag het niet gebruiken."""
+    import re
+    css = re.sub(r"/\*.*?\*/", "", _EXTRA_CSS, flags=re.S)
+    assert "--nu-" not in css and ".nu " not in css
 
 
 # ── 2. de scope is één lijst ─────────────────────────────────────────────────

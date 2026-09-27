@@ -364,3 +364,106 @@ def test_het_blijft_zonder_javascript(tmp_path):
     vol = render_acties(st2, ik=b2.id, csrf_token="t")
     kern = vol[vol.index("<div class='card'"):]
     assert "data-qadd" not in kern and "addEventListener" not in kern
+
+
+# ══ 6. "+ link to a project" naast het prototype ═════════════════════════════
+#
+# ELEMENT VOOR ELEMENT VERGELEKEN met het Mijn Acties-prototype. Zelfde PLAATS (de meta-regel
+# onder de tekst) en zelfde STATEN (geen project → linkje · open → keuzelijst · gekoppeld →
+# labeltje met ×). Drie dingen weken af, en alle drie maakten hem prominenter dan bedoeld:
+#
+#   1. `<summary>` tekent een driehoekje (▸); het prototype heeft geen marker.
+#   2. `.flink` kleurt `--gray` (#4A4A4A), de op één na donkerste tekstkleur. Het prototype
+#      gebruikt de faintste (#a19c88) — `--muted` (#9A9483) is hier de tegenhanger.
+#   3. de onderstreping liep in currentColor en zonder afstand; in het prototype is hij
+#      `--border`-kleurig met 2px offset.
+def test_het_koppellinkje_heeft_geen_driehoekje():
+    body = _blok(".c2-smal .ck-meta > summary")
+    assert "list-style:none" in body
+    assert ".c2-smal .ck-meta > summary::-webkit-details-marker{display:none}" in CSS
+
+
+def test_het_is_de_faintste_tekstkleur():
+    """`--gray` is de kleur van gewone tekst; dit linkje hoort zachter te zijn dan wat het
+    begeleidt, niet even hard."""
+    body = _blok(".c2-smal .ck-meta > summary")
+    assert "color:var(--muted)" in body
+    assert "var(--gray)" not in body
+
+
+def test_de_onderstreping_is_aanwezig_maar_niet_luid():
+    body = _blok(".c2-smal .ck-meta > summary")
+    assert "text-decoration-color:var(--border)" in body
+    assert "text-underline-offset:2px" in body
+
+
+def test_hover_en_focus_maken_hem_vol():
+    """Het prototype kleurt bij hover naar accent. Focus erbij, want met Tab moet hij ook
+    oplichten — anders is de toetsenbordweg onzichtbaar."""
+    assert ".c2-smal .ck-meta > summary:hover,.c2-smal .ck-meta > summary:focus-visible" in CSS
+
+
+def test_het_blijft_zichtbaar_zonder_muis():
+    """"of als hover-knop" is BEWUST NIET overgenomen: hover bestaat niet op een telefoon, en
+    `.ck-item .dellink` liet al zien wat dat kost — daar was de knop onbereikbaar."""
+    body = _blok(".c2-smal .ck-meta > summary")
+    assert "opacity:0" not in body and "display:none" not in body
+
+
+def test_de_drie_staten_staan_er_nog(tmp_path):
+    """De vergelijking ging over de VORM, niet over het gedrag: geen project → linkje, open →
+    keuzelijst, gekoppeld → labeltje met ×."""
+    dd, st, a = _dorp(tmp_path)
+    pid = st.projects.create(ROL, "Batch 4 mycelium", "human", status="running")
+    los = st.acties.add(a.id, "Zonder project")
+    vast = st.acties.add(a.id, "Met project")
+    st.acties.koppel(vast["id"], a.id, pid)
+    h = render_acties(cockpit2._Stores(dd), ik=a.id, csrf_token="t")
+    assert "+ link to a project" in h                      # staat 1
+    assert "<select" in h                                  # staat 2 (achter de uitklapper)
+    assert "cl-filter pill" in h and "actie_koppel" in h    # staat 3: labeltje + ontkoppelen
+    assert los and vast
+
+
+# ══ 7. Het koppel-linkje onder het designsysteem ═════════════════════════════
+#
+# HERMETEN NADAT /acties `.nu` KREEG (#627). Twee dingen die er zonder designsysteem niet
+# uitsprongen, deden dat daarmee wél — en allebei stonden ze er al vóór #627:
+#
+#   1. `web_base._CSS` geeft ELKE `<details>` een rand, achtergrond, schaduw, marge en padding.
+#      Hier is de `<details>` een linkje van vier woorden, geen uitklapbaar blok.
+#   2. het designsysteem maakt van `.flink` een KNOP
+#      (`.nu .addlink, .nu .vswitch a, .nu .flink { border:1.5px solid …; background:… }`),
+#      en de summary droeg die klasse. Resultaat: een omrande knop over de volle breedte.
+#
+# Dat laatste is geen fout in het designsysteem — `.flink` ÍS daar een knop. Dit element is er
+# alleen nooit één geweest.
+def test_de_uitklapper_is_geen_kaart():
+    body = _blok(".c2-smal .ck-meta")
+    for eig in ("background:none", "border:0", "box-shadow:none", "margin:0", "padding:0"):
+        assert eig in body, eig
+
+
+def test_de_summary_claimt_geen_knop_klasse():
+    """`.flink` is onder `.nu` een omrande knop. Dit is een label, geen knop."""
+    from nooch_village.views.acties import _meta
+    import inspect
+    bron = inspect.getsource(_meta)
+    assert "<summary class='flink'>" not in bron
+    assert "<summary>+ link to a project</summary>" in bron
+
+
+def test_en_brengt_zijn_eigen_uiterlijk_mee():
+    """Zonder `.flink` moet de regel zelf leveren wat die klasse gaf: grootte en cursor — plus
+    expliciet geén rand of achtergrond, zodat een toekomstige generieke regel hem niet alsnog
+    in een doos zet."""
+    body = _blok(".c2-smal .ck-meta > summary")
+    for eig in ("font-size:.78rem", "cursor:pointer", "background:none", "border:0"):
+        assert eig in body, eig
+
+
+def test_acties_draagt_het_designsysteem():
+    """De aanleiding: `/acties` stond niet in `_NU_ROUTES` en zag er daarom anders uit dan
+    Messages. Deze toets hoort hier omdat de opmaak hierboven ERVAN UITGAAT dat `.nu` meedoet."""
+    from nooch_village.cockpit2 import _NU_ROUTES
+    assert "/acties" in _NU_ROUTES and "/messages" in _NU_ROUTES

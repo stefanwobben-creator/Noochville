@@ -1685,10 +1685,14 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
     uit = []
     # DE LABELS VOLGEN DE PAGINATITELS (27 september 2026). Ze stonden in het Nederlands terwijl
     # de schermen erachter al "Tactical meeting" en "Governance meeting" heten — dus niet alleen
-    # inconsistent met de rest van de interface, maar ook met de pagina waar ze heen wijzen. De
-    # `&shy;` blijft: het zijn lange woorden in een smalle balk.
-    for h, label in (("/werkoverleg", "Tactical&shy;meeting"),
-                     ("/roloverleg2", "Governance&shy;meeting")):
+    # inconsistent met de rest van de interface, maar ook met de pagina waar ze heen wijzen.
+    #
+    # DE `&shy;` IS WEG, en dat is een correctie op diezelfde wijziging. Een zachte afbreking
+    # hoort in één lang woord ("Werk­overleg"), waar hij alleen zichtbaar wordt als de regel
+    # niet past. "Tactical meeting" zijn TWEE woorden: zonder afbreekpunt plakte de balk ze aan
+    # elkaar tot "TACTICALMEETING". Een gewone spatie laat de browser zelf afbreken waar het moet.
+    for h, label in (("/werkoverleg", "Tactical meeting"),
+                     ("/roloverleg2", "Governance meeting")):
         live = werk_open and h == "/werkoverleg"
         cls = "c2-overleg" + (" c2-overleg--live" if live else "")
         stip = "<span class='c2-live' aria-hidden='true'></span>" if live else ""
