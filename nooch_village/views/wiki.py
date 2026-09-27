@@ -807,8 +807,17 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     bewerken = ""
     if can_edit:
         hier = wiki.pagina_url(a.id)
-        bewerken = (f"<div class='card'>"
-                    f"{_artefact_edit_form(a, csrf_token, next_url=hier, domains=(list(getattr(eigenaar.definition, 'domains', None) or []) if eigenaar is not None else None))}"
+        # `ingeklapt=False` — HIER STAAT ÉÉN ARTEFACT, GEEN LIJST.
+        #
+        # De `<details>`-inklapping van `_artefact_edit_form` bestaat voor de ROLPAGINA, waar
+        # twintig artefacten onder elkaar staan en je geen twintig openstaande tekstvakken wilt.
+        # Op deze pagina staat niets anders, dus de inklapping leverde alleen een klein
+        # "edit"-linkje op dat je eerst moest vinden — en dat las als "deze pagina is niet
+        # bewerkbaar" terwijl het formulier er gewoon stond.
+        velden = (list(getattr(eigenaar.definition, "domains", None) or [])
+                  if eigenaar is not None else None)
+        bewerken = (f"<div class='card'><p class='att-lbl'>Edit</p>"
+                    f"{_artefact_edit_form(a, csrf_token, next_url=hier, domains=velden, ingeklapt=False)}"
                     f"<div class='qadd-row'>"
                     f"{_artefact_archive_form(a, csrf_token, next_url=hier)}</div></div>")
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{bewerken}{meta}</div>")
