@@ -1256,6 +1256,10 @@ body.wo-vol{max-width:none}
 .ck-item:hover{background:var(--cream-2)}
 .ck-box{width:18px;height:18px;border:1.5px solid var(--subtle);border-radius:4px;background:var(--surface);cursor:pointer;font-size:.72rem;line-height:1;color:#fff;flex:0 0 auto}
 .ck-box.on{background:var(--green);border-color:var(--green)}
+/* Een bolletje dat geen knop is: de regel van iemand anders is te lezen, niet af te vinken.
+   Uitbreiding van dezelfde klasse (geen nieuwe familie). De handcursor klopt niet, en een vakje
+   dat er even stellig uitstaat als dat van jou nodigt uit om te klikken — vandaar ook de doffing. */
+span.ck-box{cursor:default;opacity:.5}
 .ck-item .dellink{margin-left:auto;opacity:0}
 .ck-item:hover .dellink{opacity:1}
 .ck-done{text-decoration:line-through;color:var(--muted)}

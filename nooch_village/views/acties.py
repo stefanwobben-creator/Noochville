@@ -71,28 +71,24 @@ def _eigenaarnaam(st, owner: str) -> str:
 _LOPEND = ("running", "blocked")
 
 
-def _projectopties(st, ik: str, huidig: str) -> str:
-    """De projecten waaruit deze mens kiest: wat LOOPT, onder zijn EIGEN rollen.
+def _mijn_projecten(st, ik: str) -> list[dict]:
+    """DE DEFINITIE VAN "MIJN PROJECTEN", op één plek (28 september 2026).
 
-    HIER STOND "alles wat je mag lezen" (27 september 2026, teruggedraaid). Dat was technisch de
-    goede grens — hij spiegelde de zichtbaarheidsregel — maar als keuzelijst onbruikbaar: op prod
-    staan honderden projecten, en de kans dat het jouwe erbij staat verdwijnt in het scrollen. Een
-    keuzelijst hoort te helpen kiezen, niet te bewijzen dat je mag.
+    Wat LOOPT, onder je EIGEN rollen, en wat je mag lezen. Hij stond in `_projectopties`; sinds het
+    blok "From your projects" dezelfde vraag stelt, staat hij hier — twee formuleringen van
+    "eigenaarschap" lopen na één wijziging uiteen, en dan toont de lijst acties van een project dat
+    niet in de keuzelijst staat (of andersom).
 
     DRIE FILTERS, van breed naar smal:
 
-      1. leesbaar        — de zichtbaarheidsregel blijft de buitengrens (zie hieronder);
+      1. leesbaar        — de zichtbaarheidsregel blijft de buitengrens;
       2. lopend          — `running` of `blocked`; niet future, niet afgerond, niet gearchiveerd;
       3. onder jouw rol  — eigenaar is een rol die JÍJ vervult, de cirkel eromheen, of je eigen
                            Individueel Initiatief.
 
     DE BUITENGRENS BLIJFT DE ZICHTBAARHEID, en dat is geen dubbeling maar een vangnet: filter 3
-    werkt op eigenaarschap, en een priévé project van een rol die je vervult zou je anders nooit
-    kunnen kiezen — terwijl je hem wél mag zien. Kon je koppelen aan iets wat je niet mag lezen,
-    dan zou je je eigen actie uit je eigen lijst laten verdwijnen.
-
-    HET HUIDIGE PROJECT STAAT ER ALTIJD BIJ, ook als het inmiddels buiten de filters valt. Anders
-    wist een select die je opent om te ontkoppelen stilzwijgend de koppeling die er stond."""
+    werkt op eigenaarschap, en een privé project van een rol die je vervult zou je anders nooit
+    kunnen kiezen — terwijl je hem wél mag zien."""
     from nooch_village.views.messages import mag_project_lezen
     from nooch_village.cockpit2 import _II_PREFIX, resolve_circle_id
 
@@ -100,16 +96,40 @@ def _projectopties(st, ik: str, huidig: str) -> str:
     mijn_cirkels = {c for c in (resolve_circle_id(r, st.records) for r in mijn_rollen) if c}
     van_mij = mijn_rollen | mijn_cirkels | {f"{_II_PREFIX}{c}" for c in mijn_cirkels}
 
+    uit = []
+    for p in st.projects.all():
+        pid = p.get("id") or ""
+        if not pid or p.get("archived"):
+            continue
+        if p.get("status") not in _LOPEND or (p.get("owner") or "") not in van_mij:
+            continue
+        if not mag_project_lezen(st, pid, ik):
+            continue
+        uit.append(p)
+    return uit
+
+
+def _projectopties(st, ik: str, huidig: str) -> str:
+    """De projecten waaruit deze mens kiest: `_mijn_projecten`, plus wat er al gekoppeld is.
+
+    HIER STOND "alles wat je mag lezen" (27 september 2026, teruggedraaid). Dat was technisch de
+    goede grens — hij spiegelde de zichtbaarheidsregel — maar als keuzelijst onbruikbaar: op prod
+    staan honderden projecten, en de kans dat het jouwe erbij staat verdwijnt in het scrollen. Een
+    keuzelijst hoort te helpen kiezen, niet te bewijzen dat je mag.
+
+    HET HUIDIGE PROJECT STAAT ER ALTIJD BIJ, ook als het inmiddels buiten de filters valt. Anders
+    wist een select die je opent om te ontkoppelen stilzwijgend de koppeling die er stond. Dat is
+    de enige uitzondering op `_mijn_projecten`, en daarom de enige regel die hier nog filtert."""
+    from nooch_village.views.messages import mag_project_lezen
+
+    mijn = {p.get("id") for p in _mijn_projecten(st, ik)}
+
     per_eigenaar: dict[str, list[tuple[str, str]]] = {}
     for p in st.projects.all():
         pid = p.get("id") or ""
         if not pid or p.get("archived"):
             continue
-        eigen_keuze = pid == huidig
-        if not eigen_keuze:
-            if p.get("status") not in _LOPEND or (p.get("owner") or "") not in van_mij:
-                continue
-        if not mag_project_lezen(st, pid, ik):
+        if pid not in mijn and (pid != huidig or not mag_project_lezen(st, pid, ik)):
             continue
         sc = p.get("scope")
         per_eigenaar.setdefault(str(p.get("owner") or ""), []).append(
@@ -201,6 +221,64 @@ def _regel(st, it: dict, ik: str, csrf_token: str) -> str:
             f"{_meta(st, it, ik, csrf_token)}</span>{weg}</div>")
 
 
+def _van_mijn_projecten(st, ik: str) -> list[tuple[dict, dict]]:
+    """De acties van ÁNDEREN op de projecten die van jou zijn, als (actie, project).
+
+    DE OMGEKEERDE KOPPELING BESTOND AL: `ActieStore.bij_project` geeft alle acties aan een project,
+    van wie dan ook — tot nu toe alleen gebruikt door de vastgelopen-route. Wat ontbrak was de vraag
+    "en welke projecten zijn van mij", en die staat sinds deze stap in `_mijn_projecten`.
+
+    DRIE FILTERS, en de eerste is de reden dat dit een eigen blok is en geen extra regels in je
+    lijst:
+
+      1. NIET VAN JOU — een actie die van jou ÉN van je project is, staat al bovenaan. Twee keer
+         dezelfde regel op één scherm laat je zoeken naar het verschil dat er niet is.
+      2. ZICHTBAAR — `zichtbaar_voor` stelt dezelfde vraag als elke andere plek. Hij leent het
+         leesrecht van het project, dus een privé project waar je niet in mag levert hier niets op,
+         ook al staat het project op jouw naam in de records.
+      3. AFGEVINKT VALT WEG. Wat jij afvinkt blijft staan (dat is de beloning van doorstrepen); wat
+         een ánder afvinkt is geen nieuws maar geschiedenis, en het zou dit blok laten volstromen
+         met regels waar jij niets meer mee kunt.
+
+    De volgorde is per project, en daarbinnen nieuwste eerst — dezelfde volgorde als je eigen
+    lijst, want het is dezelfde soort lijst."""
+    from nooch_village.acties import zichtbaar_voor
+
+    uit: list[tuple[dict, dict]] = []
+    for pr in _mijn_projecten(st, ik):
+        pid = str(pr.get("id") or "")
+        for a in st.acties.bij_project(pid):
+            if a.get("person") == ik or a.get("done"):
+                continue
+            if not zichtbaar_voor(st, a, ik):
+                continue
+            uit.append((a, pr))
+    uit.sort(key=lambda t: (_projectnaam(st, str(t[1].get("id") or "")).lower(),
+                            -float(t[0].get("at") or 0)))
+    return uit
+
+
+def _regel_van_ander(st, it: dict, pr: dict) -> str:
+    """Eén actie van iemand anders: hetzelfde molecuul, maar zonder knoppen.
+
+    GEEN VINKJE EN GEEN VERWIJDERKNOP, en dat is geen vormgeving maar de poort: `ActieStore.zet`,
+    `koppel` en `verwijder` eisen alle drie dat je de EIGENAAR bent. Een vakje dat je kunt
+    aanklikken en waar de server daarna "nothing changed" op zegt, belooft iets wat niet kan —
+    dezelfde regel als bij de feiten-knop op een policy en de knoppen in `_opruim_knoppen`.
+
+    HET BOLLETJE BLIJFT WEL STAAN, als `<span>`. Zonder hem springt de tekst naar links en leest
+    het blok als een andere soort lijst dan die erboven, terwijl het dezelfde soort regel is."""
+    wie = st.people.get(str(it.get("person") or ""))
+    naam = getattr(wie, "name", "") or "someone"
+    pid = str(pr.get("id") or "")
+    return (f"<div class='ck-item'><span class='ck-box'></span><span class='ck-txt'>"
+            f"{_e(it.get('tekst') or '')}"
+            f"<span class='ck-meta'>"
+            f"<a class='cl-filter pill' href='/project?id={_e(pid)}'>"
+            f"{_e(_projectnaam(st, pid))}</a>"
+            f"<span class='muted'>{_e(naam)}</span></span></span></div>")
+
+
 def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     """De pagina. Zonder herkende mens geen lijst — een actie hoort bij iemand."""
     from nooch_village.views.overview import _banner
@@ -258,9 +336,26 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     # BINNEN DE BESTAANDE `c2-`-FAMILIE en niet als eigen `act-*`-prefix: `test_ui_ratchets`
     # bevriest het aantal klasse-families, en een breedte-variant van de contentkolom hóórt bij
     # de layout-familie. Hetzelfde geldt voor `.ck-klaar-kop`, dat tussen checklist-items staat.
+    # VAN JE EIGEN PROJECTEN, in een EIGEN blok en niet tussen je eigen regels (28 september 2026).
+    #
+    # WAAROM GESCHEIDEN. Je eigen lijst is een schrift: alles erin is van jou en je kunt er alles
+    # mee. Dit zijn de volgende stappen die ánderen hebben opgeschreven op werk waar jij de eigenaar
+    # van bent — lezen, niet bijwerken. Door elkaar zou elke regel de vraag oproepen "is deze van
+    # mij?", en dat is precies de vraag die een actielijst niet hoort te stellen.
+    #
+    # LEEG IS ECHT LEEG: geen kopje met niets eronder. Een kop "From your projects" boven een lege
+    # ruimte is meubilair, en op de meeste dagen zou dat de stand zijn.
+    van_projecten = _van_mijn_projecten(st, ik)
+    elders = ""
+    if van_projecten:
+        elders = (f"<div class='card'>"
+                  f"<div class='ck-klaar-kop'><span class='muted'>From your projects &middot; "
+                  f"{len(van_projecten)}</span></div>"
+                  f"{''.join(_regel_van_ander(st, a, pr) for a, pr in van_projecten)}</div>")
+
     main = (f"<div class='c2-main c2-smal'><h1 class='ptitle'>My actions</h1>"
             f"<p class='muted'>Jot it down like on paper. Link it to a project only if you want "
             f"to &mdash; then the people on that project see it too.</p>"
             f"{_banner(msg)}"
-            f"<div class='card'>{toevoegen}{lijst}{klaar}</div></div>")
+            f"<div class='card'>{toevoegen}{lijst}{klaar}</div>{elders}</div>")
     return _page("My actions", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
