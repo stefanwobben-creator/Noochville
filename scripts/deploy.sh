@@ -75,6 +75,54 @@ diepte_ok(){
   return 1
 }
 
+# CONSISTENTIE. De health-check doet één request en kijkt naar de status: dat zegt dat er íéts
+# luistert, niet dat het de zojuist uitgerolde code is. Op 27 september meldde de deploy "live op
+# <commit>" terwijl een scherm er nog oud uitzag — en er was geen enkele manier om dat vóór het
+# rapport te zien. Deze check doet er twee dingen aan:
+#
+#   1. TWAALF OPEENVOLGENDE REQUESTS, en de uitgeleverde inhoud moet twaalf keer identiek zijn.
+#      Wisselt hij, dan serveren er meerdere processen verschillende code (of er staat iets
+#      te cachen dat niet zou moeten) — precies de hypothese die je anders handmatig moet
+#      uitsluiten.
+#   2. WAT HET PROCES IN HET GEHEUGEN HEEFT versus WAT ER OP SCHIJF LIGT. `/version` geeft de
+#      commit uit `.git` en de inhoud-hash van de stylesheet zoals het DRAAIENDE proces die bij
+#      import berekende. Wijkt één van beide af van de checkout, dan draait er oude code en is
+#      de deploy niet geslaagd, hoe groen de status ook is.
+#
+# `/version` antwoordt alleen zonder `X-Forwarded-For`, dus alleen vanaf de machine zelf.
+consistentie_ok(){
+  local url="http://127.0.0.1:8766/version" body eerste n=12 i
+  eerste="$(curl -s --max-time 5 "$url")" || eerste=""
+  if [ -z "$eerste" ]; then
+    fout "consistentie-check: /version gaf niets terug"; return 1
+  fi
+  for i in $(seq 2 "$n"); do
+    body="$(curl -s --max-time 5 "$url")" || body=""
+    if [ "$body" != "$eerste" ]; then
+      fout "consistentie-check: request $i wijkt af van request 1 — er serveren meerdere versies"
+      printf '  1: %s\n  %d: %s\n' "$eerste" "$i" "$body"
+      return 1
+    fi
+  done
+
+  local live_commit disk_commit live_ds disk_ds
+  live_commit="$(printf '%s' "$eerste" | sed -n 's/.*"commit": *"\([^"]*\)".*/\1/p')"
+  live_ds="$(printf '%s' "$eerste" | sed -n 's/.*"ds": *"\([^"]*\)".*/\1/p')"
+  disk_commit="$(git_nooch rev-parse HEAD)"
+  disk_ds="$(md5sum "$REPO/nooch_village/static/nooch.css" | cut -c1-10)"
+
+  if [ "$live_commit" != "$disk_commit" ]; then
+    fout "consistentie-check: het proces draait $live_commit, op schijf staat $disk_commit"
+    return 1
+  fi
+  if [ "$live_ds" != "$disk_ds" ]; then
+    fout "consistentie-check: stylesheet in het geheugen ($live_ds) ≠ op schijf ($disk_ds)"
+    return 1
+  fi
+  log "consistentie-check OK ($n identieke requests; commit én stylesheet gelijk aan de checkout)"
+  return 0
+}
+
 # EIGENDOM IN data/. De klasse fout waar de diepte-check het symptoom van vangt: een script dat als
 # root draaide laat een bestand achter dat de service niet meer kan lezen. Dat is deze zomer al
 # gebeurd (radar.json, kennisbank_intake.json) en op 20 september opnieuw (people.json, door een
@@ -121,6 +169,7 @@ alles_gezond(){
   eigendom_ok || return 1
   health_ok || return 1
   diepte_ok || return 1
+  consistentie_ok || return 1
   for svc in "${SERVICES[@]}"; do
     [ "$svc" = "$WEB_SERVICE" ] && continue
     daemon_ok "$svc" || return 1
