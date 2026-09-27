@@ -53,10 +53,15 @@ def _founder_id(dd):
 
 
 def _dm_aan(st, persoon_id):
-    """De DM-teksten die deze persoon kreeg. Het SPOOR van een melding is sinds B2 een bericht in
-    een kanaal in plaats van een rij in een wachtrij; de redenering eromheen is ongewijzigd."""
-    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+    """Wat deze persoon aan WERK kreeg, over beide oppervlakken heen.
+
+    Het spoor van een melding is twee keer verhuisd: wachtrij → DM (B2, 20 sept 2026) → een
+    persoonlijke actie voor één concrete mens (27 sept 2026, `acties.py`). De redenering eromheen
+    is elke keer ongewijzigd gebleven, dus deze helper leest allebei."""
+    uit = [str(a.get("tekst") or "") for a in st.acties.voor(persoon_id)]
+    uit += [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
             for e in st.channels.trail(k)]
+    return uit
 
 def _vastgelopen(dd, *, reden=MENS, stap="Laat de samples testen in een erkend lab") -> str:
     st = cockpit2._Stores(dd)

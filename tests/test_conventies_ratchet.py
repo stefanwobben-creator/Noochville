@@ -33,6 +33,11 @@ STORES = {
     "nom_kroniek", "nominations", "noochie", "observations", "people",
     "channels", "personas", "project_docs", "projects", "radar", "records", "sources",
     "strategies", "werk",
+    # `acties` (27 september 2026): persoonlijke acties. BEWUST EEN NIEUWE STORE, en de
+    # bestaande mechaniek is eerst nagelopen — een project eist een rol- of cirkel-eigenaar plus
+    # een trigger-type, en een DM heeft sinds 20 september geen velden meer en dus geen status.
+    # Tussen die twee zat niets dat één regel tekst met een vinkje kon dragen.
+    "acties",
 }
 
 

@@ -61,6 +61,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
+from nooch_village.acties import ActieStore
 from nooch_village.channels import ChannelStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
@@ -151,6 +152,7 @@ class _Stores:
         # De gespreklaag (fase 8): cirkel- en DM-kanalen wonen hier, project-kanalen
         # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
         self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
+        self.acties = ActieStore(os.path.join(dd, "acties.json"))   # persoonlijke acties
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
@@ -1957,6 +1959,97 @@ def _act_kanaal_verwijder(c):
     st.people.ontvolg_allen(kanaal)
     erbij = f" and {aantal} message{'s' if aantal != 1 else ''}" if aantal else ""
     return "/messages", f"🗑 channel “{naam}” deleted{erbij}"
+
+
+def _actie_poort(c):
+    """(ik, fout) — de gedeelde voordeur van alles op /acties.
+
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf en
+    # raakt niemand anders. Er is geen mandaat voor nodig: dat is de hele reden dat dit ding
+    # bestaat naast een project, dat wél een rol- of cirkel-eigenaar eist.
+    #
+    # DE SCHERPERE POORT ZIT EEN LAAG DIEPER: `ActieStore.zet/koppel/verwijder` vergelijken
+    # `person` met de eigenaar van het item, dus wie het formulier naspeelt met andermans id
+    # loopt daar stuk en niet op de afwezigheid van een knop — zelfde opzet als
+    # `ChannelStore._eigen`.
+    """
+    ik = _web_actor_id(c.username, c.st)
+    if not ik:
+        return "", "✗ log in as a person — an action belongs to someone"
+    return ik, ""
+
+
+def _act_actie_add(c):
+    """Eén regel erbij. Dit is het hele scherm: typen, Enter, klaar."""
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf;
+    # de eigenaar-check zit in `_actie_poort` en in `ActieStore` (zie daar).
+    ik, fout = _actie_poort(c)
+    if fout:
+        return "/acties", fout
+    it = c.st.acties.add(ik, c.g("tekst"), herkomst=c.g("herkomst"))
+    return "/acties", ("✓ added" if it else "✗ write something first")
+
+
+def _act_actie_zet(c):
+    """Af- of weer aanvinken."""
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf;
+    # de eigenaar-check zit in `_actie_poort` en in `ActieStore` (zie daar).
+    ik, fout = _actie_poort(c)
+    if fout:
+        return "/acties", fout
+    klaar = c.g("done") == "1"
+    if not c.st.acties.zet(c.g("aid"), ik, done=klaar):
+        return "/acties", "✗ nothing changed — you can only tick off your own actions"
+    return "/acties", ("✓ ticked off" if klaar else "↺ reopened")
+
+
+def _act_actie_koppel(c):
+    """Hang een actie aan een project, of haal hem er weer af.
+
+    DE ZICHTBAARHEID VERANDERT HIER, en daarom controleert deze tak of je het project zelf mag
+    lezen. Zonder die check kun je je eigen actie aan een project hangen dat je niet ziet, en
+    dan is hij uit je lijst verdwenen naar een plek waar je niet kunt kijken."""
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf;
+    # de eigenaar-check zit in `_actie_poort` en in `ActieStore` (zie daar).
+    ik, fout = _actie_poort(c)
+    if fout:
+        return "/acties", fout
+    pid = (c.g("project") or "").strip()
+    if pid:
+        from nooch_village.views.messages import mag_project_lezen
+        if not mag_project_lezen(c.st, pid, ik):
+            return "/acties", "✗ unknown project"
+    if not c.st.acties.koppel(c.g("aid"), ik, pid):
+        return "/acties", "✗ nothing changed"
+    if not pid:
+        return "/acties", "✓ unlinked — back to just yours"
+    from nooch_village.views.acties import _projectnaam
+    return "/acties", f"🔗 linked to {_projectnaam(c.st, pid)}"
+
+
+def _act_actie_weg(c):
+    """Eén actie weg, ook een open."""
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf;
+    # de eigenaar-check zit in `_actie_poort` en in `ActieStore` (zie daar).
+    ik, fout = _actie_poort(c)
+    if fout:
+        return "/acties", fout
+    if not c.st.acties.verwijder(c.g("aid"), ik):
+        return "/acties", "✗ nothing removed — you can only remove your own actions"
+    return "/acties", "🗑 removed"
+
+
+def _act_actie_wis(c):
+    """De afgevinkte acties weg. Echt weg — zie `ActieStore.wis_afgerond`."""
+    # AUTHZ: iedereen-ingelogd — een persoonlijke actielijst is van de ingelogde mens zelf;
+    # de eigenaar-check zit in `_actie_poort` en in `ActieStore` (zie daar).
+    ik, fout = _actie_poort(c)
+    if fout:
+        return "/acties", fout
+    n = c.st.acties.wis_afgerond(ik)
+    if not n:
+        return "/acties", "✗ nothing finished to clear"
+    return "/acties", f"🗑 {n} finished action{'s' if n != 1 else ''} cleared"
 
 
 def _act_keep_in_wiki(c):
@@ -4054,6 +4147,29 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     # `materiaal_memo`. Wat er NU dood in ligt (`classificeer`, `noteer_uitkomst`, de
     # acceptatie-meting) staat op de sweep-lijst; dat kost niets zolang het wacht, dit wel.
     if best["soort"] == "inbox":
+        # EEN CONCRETE MENS KRIJGT EEN ACTIE, GEEN KALE DM (27 september 2026, besluit Stefan).
+        #
+        # DE TAK ZELF VERANDERT, en er komt er geen bij. Dat was de keuze: `bestemming()` rekent de
+        # vraag "is de ontvanger één concrete mens?" al helemaal uit — een rol met meerdere
+        # vervullers blijft `doel_type="role"`, een AI-rol en een rol zonder vervuller komen hier
+        # helemaal niet langs (die worden een project of klimmen naar de Circle Lead). Diezelfde
+        # vraag hierboven nog eens stellen zou een tweede formulering zijn van wat `bestemming` nu
+        # juist één keer vastlegt; zijn eigen docstring waarschuwt daarvoor met zoveel woorden.
+        # `doel_type == "person"` is dus geen nieuwe regel maar het lezen van de uitkomst.
+        #
+        # WAAROM NIET ÁLLEBEI. Een DM ernaast zou de melding zijn die dit juist moest vervangen:
+        # hij draagt geen status, dus je hebt een tweede plek waar hetzelfde werk staat en maar
+        # één ervan kun je afvinken. Wat de zichtbaarheid overneemt is de teller in de zijbalk.
+        #
+        # EEN ROL MET MEERDERE VERVULLERS HOUDT DE DM. Een actie is van één mens; hem in vier
+        # persoonlijke lijsten leggen maakt van één stuk werk vier stukken werk.
+        if doel_type == "person":
+            it = st.acties.add(doel_id, tekst, project=bron_project or "",
+                               herkomst=(door or "werkoverleg"))
+            if it is not None:
+                return "inbox", "als actie bij " + (_person_name(st, doel_id) or doel_id)
+            # Fail-soft naar de oude weg: een actie die niet weggeschreven kon worden mag geen
+            # werk laten verdampen. Liever een DM zonder status dan niets.
         # Ook hier stond het `MENS_GETYPT`-merk; zie de toelichting bij `_act_proj_feed`.
         # OOK DIT IS EEN GEWONE DM (B2). `roloverleg.py` houdt toewijzing én afronding al zélf bij,
         # los van welke wachtrij dan ook — de DM is puur de melding erbovenop. Er viel hier dus
@@ -5486,6 +5602,11 @@ ACTIONS = {
     "sticker_post": _act_sticker_post,
     "giphy_post": _act_giphy_post,
     "topic_add": _act_topic_add,
+    "actie_add": _act_actie_add,
+    "actie_zet": _act_actie_zet,
+    "actie_koppel": _act_actie_koppel,
+    "actie_weg": _act_actie_weg,
+    "actie_wis": _act_actie_wis,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
     "keep_in_wiki": _act_keep_in_wiki,
@@ -5919,6 +6040,15 @@ def make_handler(data_dir: str, csrf_token: str,
                                            msg=(qs.get("msg") or [""])[0],
                                            q=(qs.get("q") or [""])[0],
                                            lijst=bool((qs.get("list") or [""])[0])))
+                return
+            if path == "/acties":
+                # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
+                # herkende persoon is er niets te tonen (`render_acties` zegt dat zelf). Er is geen
+                # mandaat voor nodig: dat is de hele reden dat een actie naast een project bestaat.
+                from nooch_village.views.acties import render_acties
+                self._send(render_acties(st, ik=_web_actor_id(username, st),
+                                         csrf_token=effective_csrf,
+                                         msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/wiki":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij (zelfde scope als de Wiki-tab op een

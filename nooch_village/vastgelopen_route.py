@@ -65,9 +65,17 @@ def al_geland(st, pid: str, item_text: str) -> bool:
     kern = (item_text or "").strip()[:60]
     if not kern:
         return True                                   # niets te vragen → niets te doen
-    # HET SPOOR IS SINDS B2 EEN DM (20 september 2026). De redenering verandert niet: we kijken of
-    # er al een BERICHT over deze stap bij dit project ligt, en niet naar een vlaggetje ernaast.
-    # Alleen de plek waar het spoor staat is verhuisd van `NotifStore` naar de kanalen.
+    # HET SPOOR IS TWEE KEER VERHUISD, en de redenering is elke keer dezelfde gebleven: ligt er al
+    # iets over DEZE stap bij DIT project? Alleen de plek verschoof — `NotifStore` → een DM in de
+    # kanalen (B2, 20 september 2026) → een persoonlijke actie voor één concrete mens
+    # (27 september 2026, zie `acties.py`).
+    #
+    # ALLEBEI KIJKEN, EN NIET ALLEEN DE NIEUWSTE. De meldingen van vóór de verhuizing staan nog als
+    # DM; zou deze functie die overslaan, dan meldt de eerstvolgende pas alles opnieuw wat ooit al
+    # gemeld is. Dat is precies de "135 vastgelopen-notificaties"-veeg uit CLAUDE.md, nog een keer.
+    for a in st.acties.bij_project(pid):
+        if kern in str(a.get("tekst") or ""):
+            return True
     from nooch_village import channels
     for kanaal in st.channels.bestaande():
         if channels.soort_van(kanaal) != channels.DM:

@@ -1618,6 +1618,10 @@ _SIDE_ITEMS = (
     # bij het item hierboven. Wat overblijft is Circle, en dat is precies het item waarvan nu de
     # vraag ligt of het als concept nog bestaansrecht heeft.)
     ("/messages", "Messages", ""),
+    # MIJN ACTIES IS EEN GEWOON ZIJBALK-ITEM en geen nieuwe hoofdcategorie (eis Stefan): hij staat
+    # naast Messages en Wiki, want het is hetzelfde soort ding — een scherm waar je naartoe gaat,
+    # niet een lijst die ervoor openklapt.
+    ("/acties",   "My actions", ""),
     ("/wiki",     "Wiki",     ""),
 )
 

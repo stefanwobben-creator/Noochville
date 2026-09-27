@@ -8,10 +8,18 @@ RID = "mother_earth__nooch__website_developer"
 
 
 def _dm_aan(st, persoon_id):
-    """De DM-teksten die deze persoon kreeg. Sinds B2 (20 sept 2026) landt werk als DM bij de mens
-    in plaats van als item in een wachtrij; de routering — wie het krijgt — is ongewijzigd."""
-    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+    """De WERK-teksten die deze persoon kreeg, over beide oppervlakken heen.
+
+    SINDS 27 SEPTEMBER 2026 LANDT WERK VOOR ÉÉN CONCRETE MENS ALS ACTIE (`acties.py`) in plaats
+    van als kale DM: een DM heeft sinds B2 geen velden en dus geen status, dus zo'n actie had geen
+    klaar-knop. Een rol met MEERDERE vervullers houdt de DM — een actie is van één mens.
+
+    Deze helper leest allebei, want wat deze tests bewaken is de ROUTERING: wie krijgt het, en
+    precies één keer. Dat is onveranderd; alleen het oppervlak waarop het landt verschoof."""
+    uit = [str(a.get("tekst") or "") for a in st.acties.voor(persoon_id)]
+    uit += [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
             for e in st.channels.trail(k)]
+    return uit
 
 def _dd(tmp_path):
     dd = str(tmp_path / "poc")
