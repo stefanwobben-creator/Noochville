@@ -1540,6 +1540,27 @@ def _person_name(st, pid: str) -> str:
     return p.name if p else (pid or "")
 
 
+def _rol_naam(st, rid: str) -> str:
+    """Rol-id → leesbaar label. Bestaat de rol niet, dan het id zelf.
+
+    DE TEGENHANGER VAN `_person_name` HIERBOVEN, en met dezelfde terugval: liever het kale id dan
+    niets. "Someone" boven een bericht zegt minder dan 'claims-checker' — dat laatste is tenminste
+    waar en herkenbaar.
+
+    ONDERSCHEIDEN TEGEN DE HELE ORGANISATIE, niet tegen zichzelf. `_rol_labels` telt botsingen
+    BINNEN de lijst die je hem geeft (regel 1 in zijn eigen uitleg), dus één kandidaat botst
+    nooit en zou kaal "Circle Lead" opleveren — terwijl er op prod drie van zijn. Alle records
+    meegeven is hier dus geen verspilling maar de hele reden dat hij het goede antwoord geeft.
+
+    Geen tweede naam-mechanisme: dit is `_rol_labels` met één opzoeking erop."""
+    if not rid:
+        return ""
+    rec = st.records.get(rid)
+    if rec is None:
+        return rid
+    return _rol_labels(st.records.all()).get(rid) or _name(rec)
+
+
 _IC_CHECK = _ic("<polyline points='9 11 12 14 20 6'/><path d='M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9'/>")
 _IC_INFO = _ic("<circle cx='12' cy='12' r='9'/><line x1='12' y1='11' x2='12' y2='16'/><line x1='12' y1='8' x2='12' y2='8'/>")
 _IC_CHAT = _ic("<path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/>")

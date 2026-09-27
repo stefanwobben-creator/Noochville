@@ -1682,6 +1682,60 @@ def _act_msg_post(c):
     return nxt, "💬 posted" + (f" · {gemeld} mentioned" if gemeld else "")
 
 
+def wis_namens(st, ik: str):
+    """"Mag `ik` handelen namens auteur `rid`?" — als callable, want `channels.py` weet niets van
+    `assignments` en hoort dat ook niet te gaan weten.
+
+    ÉÉN FUNCTIE VOOR TWEE PADEN: het scherm (via `mag_bericht_verwijderen`) en de store (via
+    `verwijder(..., rol_check=...)`). Ze stonden hiervoor allebei hun eigen lambda te bouwen — twee
+    kopieën van dezelfde regel, en precies wat #615 en #610 al eens kostten.
+
+    TWEE TREDEN, in deze volgorde:
+
+    1. **Bekleedt hij de rol?** `is_role_filler`, dezelfde helper waar `_role_gate` op draait.
+       Op prod dekt dit 52 van de 374 rol-berichten.
+    2. **Is er helemaal geen rol?** Dan is er niemand om aan te koppelen, en mag de ANCHOR-LEAD
+       opruimen — dezelfde terugval die `mag_kanaal_verwijderen` al kiest als er geen bekende
+       eigenaar is. `signaal.stuur` zet `by` ongefilterd als `author_id`, en `by` is vrije tekst:
+       op prod staan er 134 berichten onder labels als 'claims-checker' (46), 'zelf' (20) en
+       'dialoog' (13), plus 11 onder een PERSON-id dat als rol-id is weggeschreven. Zonder deze
+       trede is dat werk dat niemand kan opruimen — hetzelfde probleem dat de rol-tak zelf oploste.
+
+    WAT HIER BEWUST NIET ONDER VALT: een rol die WEL bestaat maar niemand vervult (188 op prod).
+    Daar ís een eigenaar-bij-regel — CLAUDE.md, "Onbemande rol als signaal": de accountabilities
+    vallen toe aan de founder. Dat is een goed argument om ze eróók onder te laten vallen, maar het
+    is een bredere regel dan gevraagd en verwijderen is onomkeerbaar. Die keuze is aan de mens.
+
+    De vraag "bestaat deze rol" is `st.records.get(rid) is None` — geen naamheuristiek, geen lijst
+    met bekende labels: het register is de waarheid."""
+    def check(rid: str) -> bool:
+        if not rid:
+            return False
+        if is_role_filler(ik, rid, st.assign):
+            return True
+        if st.records.get(rid) is None:
+            return is_circle_lead(ik, "mother_earth", st.assign)
+        return False
+    return check
+
+
+def mag_bericht_verwijderen(st, entry: dict, ik: str) -> bool:
+    """Mag deze mens dit bericht weghalen? ÉÉN VRAAG voor het scherm én de actie.
+
+    Precies hetzelfde patroon als `mag_kanaal_verwijderen`: de view importeert deze functie in
+    plaats van de regel na te bouwen, zodat de knop en de POST niet uit elkaar kunnen lopen.
+
+    De regel zelf staat in `channels.mag_wissen` — daar, want de diepe poort (`_eigen`) stelt
+    hem ook en die zit in de store. Hier komt alleen de helft bij die de store niet kan weten:
+    wie er namens welke auteur mag handelen. Zie `wis_namens`.
+
+    ALLEEN VOOR WISSEN. Bewerken blijft mens-eigen: `bewerk` geeft geen `rol_check` mee. Een rol
+    mag je het zwijgen opleggen, je mag haar geen andere woorden in de mond leggen."""
+    if not ik:
+        return False
+    return channels.mag_wissen(entry, ik, wis_namens(st, ik))
+
+
 def _eigen_bericht_poort(c):
     """(ik, kanaal, item, fout) — de gedeelde voordeur van bewerken en wissen. `fout` is "" als
     alles klopt; is hij gevuld, dan zijn de andere drie leeg."""
@@ -1714,15 +1768,21 @@ def _act_msg_edit(c):
 def _act_msg_remove(c):
     """Je eigen bericht in een kanaal weghalen.
 
-    # AUTHZ: iedereen-ingelogd — zie `_act_msg_edit`: ingelogd mag posten en dus ook zijn EIGEN
-    # bericht terugnemen. Wiens bericht het is beslist `ChannelStore._eigen`, niet dit scherm.
+    # AUTHZ: rolvervuller of de auteur zelf — ingelogd mag posten en dus ook zijn EIGEN bericht
+    # terugnemen; sinds 26 september 2026 óók een bericht van een ROL die hij bekleedt, want
+    # anders is er niemand die de meldingen op die rol kan opruimen. Wie wat mag beslist
+    # `ChannelStore._eigen` via `channels.mag_wissen`, niet dit scherm.
     """
     ik, kanaal, item, fout = _eigen_bericht_poort(c)
     if fout:
         return _terug_naar(c, kanaal), fout
-    if c.st.channels.verwijder(kanaal, item, door=ik):
+    st = c.st
+    if st.channels.verwijder(kanaal, item, door=ik, rol_check=wis_namens(st, ik)):
         return _terug_naar(c, kanaal), "🗑 message removed"
-    return _terug_naar(c, kanaal), "✗ nothing removed — you can only remove your own message"
+    return _terug_naar(c, kanaal), (
+        "✗ nothing removed — you can only remove your own message, or one from a role you fill")
+
+
 
 
 def _terug_naar(c, kanaal: str) -> str:
