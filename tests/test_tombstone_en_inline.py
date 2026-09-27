@@ -236,11 +236,19 @@ def test_een_tool_ook_en_met_zijn_url_veld(tmp_path):
 
 
 def test_zonder_bewerkrecht_geen_formulier(tmp_path):
-    """`can_edit` bepaalt zoals nu al of het formulier verschijnt."""
+    """`can_edit` bepaalt of het formulier verschijnt — en die vraag stelt de pagina sinds
+    28 september net zo als de server: op het DOMEIN.
+
+    DE TOETS DROEG EEN POLICY ZONDER DOMEIN, en die meet het tegenovergestelde van wat hij
+    beweert: `_artefact_gate` laat een ongeplaatst artefact door voor íeder ingelogd mens —
+    uitgevoerd, niet geredeneerd ("✏️ policy updated" voor `buiten@test.nl`). Het scherm was
+    alleen smaller dan de server, precies de onzichtbare verruiming die `_mag_pagina_bewerken`
+    op de note-pagina al oploste. Met een domein erop bijt de poort wél."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
-    a = st.att.add(ROL, "policy", title="Testbeleid", body="x")
+    a = st.att.add(ROL, "policy", title="Testbeleid", body="x", domain="claim-verification")
     h = render_pagina(st, a.id, csrf_token="t", username="buiten@test.nl")
     assert "value='artefact_edit'" not in h and "value='artefact_archive'" not in h
+    assert "id='wiki-form'" not in h, "de opslaan-balk hoort er ook niet te staan"
 
 
 def test_je_blijft_staan_waar_je_typte(tmp_path):
@@ -269,13 +277,19 @@ def test_maar_wijst_wel_de_weg(tmp_path):
     assert "Edit on its page" in h and f"/pagina?id={a.id}" in h
 
 
-def test_het_blijft_het_eenvoudige_formulier(tmp_path):
-    """"Dit hoeft geen rich-text-editor te worden zoals bij notes." De blok-editor, de feiten en
-    de `[[link]]`-oplossing horen bij een note; die staan hier niet."""
+def test_het_is_dezelfde_editor_geworden(tmp_path):
+    """OMGEDRAAID OP 28 SEPTEMBER 2026. Hier stond "dit hoeft geen rich-text-editor te worden
+    zoals bij notes" — het citaat uit de opdracht van #620, en dat klopte voor die stap: het
+    bewerken moest éérst van de rol naar de permalink.
+
+    Wat overbleef was een leespagina met een tweede kopie van de tekst eronder. Nu bewerkt elke
+    soort zichzelf in de tekst. Het ENIGE dat op soort poort is `{{facts}}`, want `pagina_feit_add`
+    weigert een policy — zie `test_geen_formulier_dat_de_actie_daarna_weigert`."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     a = st.att.add(ROL, "policy", title="Testbeleid", body="x")
     h = render_pagina(st, a.id, csrf_token="t", username="anchor@test.nl")
-    assert "data-blok" not in h and "pagina_feit_add" not in h
+    assert "data-blok" in h, "de policy krijgt nu juist wél de blok-editor"
+    assert "pagina_feit_add" not in h, "de feiten van een note horen hier niet"
 
 
 def test_een_note_verandert_niet(tmp_path):

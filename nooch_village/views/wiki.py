@@ -373,7 +373,8 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
 # vervanging moest opheffen.
 
 def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
-               *, tab: str = "notes", st=None, username: str | None = None) -> str:
+               *, tab: str = "notes", st=None, username: str | None = None,
+               terug: str = "") -> str:
     """Alle paginametadata als ÉÉN element, in het vocabulaire dat de app al heeft.
 
     WAT HIER WERD OPGELOST. De metadata stond als losse controls om de titel heen: het ID in de
@@ -408,6 +409,12 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
         rijen.append(f"<span class='dk'>{_e(sleutel)}</span>"
                      f"<span class='dv'>{waarde}{h}</span>")
 
+    # HET ADRES EERST, en alleen bij een tool. Bij die soort is de link niet een eigenschap van de
+    # pagina maar waar de pagina over gáát; hem onder Owner en Section zetten maakt van het
+    # belangrijkste veld het laatste.
+    _url = _url_form(a, csrf_token, can_edit)
+    if _url:
+        rij("Link", _url, "Where this tool lives.")
     if eigenaar is not None:
         rij("Owner",
             f"<a href='/node?id={_e(a.anchor)}&tab={_e(tab)}'>{_e(_name(eigenaar))}</a>",
@@ -450,7 +457,7 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
         rij("History", hist)
     # ARCHIVE EN DELETE, IN DE VOET. Ze horen bij de administratie van de pagina en niet bij de
     # inhoud, dus hier en niet in de kop — waar sinds #604 alleen de titel en de hoofdactie staan.
-    rijen.append(_opruim_knoppen(a, csrf_token, can_edit, tab=tab))
+    rijen.append(_opruim_knoppen(a, csrf_token, can_edit, tab=tab, terug=terug))
     # `.wiki-meta` EN NIET `.card` (26 september 2026). Het blok staat sinds deze stap ONDER de
     # inhoud in plaats van boven, en daar is het een voet: een scheidingslijn met de administratie
     # eronder. Een kaart onderaan leest als nog een inhoudsblok, en dat is precies wat het niet is.
@@ -458,7 +465,8 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     return f"<div class='wiki-meta'><div class='dcol'>{''.join(rijen)}</div></div>"
 
 
-def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes") -> str:
+def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes",
+                    terug: str = "") -> str:
     """Archiveren en definitief verwijderen, als rij in het metadata-raster.
 
     ARCHIVE IS GEEN NIEUWE ACTIE. `artefact_archive` bestaat al sinds het artefact-model en werkt
@@ -487,7 +495,8 @@ def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes") -
         return ""
     verborgen = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                  f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-                 f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_e(tab)}'>")
+                 f"<input type='hidden' name='next' "
+                 f"value='{_e(terug or f'/node?id={a.anchor}&tab={tab}')}'>")
     if getattr(a, "status", "active") == "archived":
         # AL GEARCHIVEERD: dan is archiveren geen keuze meer. Wat overblijft is weggooien.
         knoppen = (f"<span class='chip muted'>archived</span>"
@@ -504,6 +513,41 @@ def _opruim_knoppen(a, csrf_token: str, can_edit: bool, *, tab: str = "notes") -
             f"<form method='post' action='/action' class='qadd-row'>{verborgen}{knoppen}</form>"
             f"<div class='muted wiki-hint'>Archiving hides the page and keeps its history. "
             f"Deleting removes it and its uploaded files for good.</div></span>")
+
+
+def _url_form(a, csrf_token: str, can_edit: bool) -> str:
+    """Het adres van een tool — het veld waar die soort om draait, als rij in het metadata-raster.
+
+    WAAROM HIJ EEN EIGEN PLEK KRIJGT. Een note heeft titel en tekst en verder niets; een tool heeft
+    daarnaast een `url` en een policy een `domain`. Sinds de drie soorten dezelfde pagina delen,
+    zouden die twee velden nergens meer te bewerken zijn — de inline editor kent alleen de titel en
+    de body. Ze horen dan ook niet los onder de tekst te hangen, maar in het raster waar de rest
+    van de eigenschappen van deze pagina al staat (Owner, Domain, Section, Id).
+
+    DEZELFDE ACTIE, GEEN TWEEDE SCHRIJFPAD: `artefact_edit`, met dezelfde poort. Dat een formulier
+    met alleen een url daar doorheen kan is geen toeval — `title`, `body` en `domain` zijn er
+    allemaal optioneel, en `update()` laat een veld dat `None` is met rust. Exact de redenering
+    die `_domein_form` hierboven al voor het domein maakt.
+
+    ZONDER BEWERKRECHT BLIJFT HET ADRES STAAN, als link. Het is het nuttigste wat er op een
+    toolpagina staat; een lezer die hem niet mag wijzigen wil hem nog steeds kunnen openen."""
+    if a.kind != "tool":
+        return ""
+    url = getattr(a, "url", "") or ""
+    leesbaar = (f"<a href='{_e(url)}' target='_blank' rel='noopener'>{_e(url)}</a>"
+                if url else "<span class='muted'>&mdash;</span>")
+    if not can_edit or not csrf_token:
+        return leesbaar
+    tip = "Where this tool lives. Opens in a new tab."
+    return (f"{leesbaar}"
+            f"<form method='post' action='/action' class='fieldform' title='{_e(tip)}'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"<input type='url' name='url' value='{_e(url)}' placeholder='https://&hellip;' "
+            f"aria-label='Link'>"
+            f"<button class='btn ghost sm' type='submit' name='action' value='artefact_edit'>"
+            f"Set link</button></form>")
 
 
 def _domein_chip(a) -> str:
@@ -615,10 +659,18 @@ def _sectie_form(a, bakje: str, csrf_token: str, can_edit: bool, *,
 
     DEZELFDE POORT ALS HET DOMEIN, en dat is geen keuze maar een noodzaak: de override WÍNT van
     het domein. Zou hij ruimer staan, dan kan wie het domein niet mag verzetten de pagina alsnog
-    ergens anders ophangen."""
+    ergens anders ophangen.
+
+    ALLEEN OP EEN NOTE, en dat is een CORRECTIE (28 september 2026). Deze knop stond al op de
+    policy- en toolpagina, maar `_act_pagina_sectie` poort op `kind != PAGINA_KIND` en antwoordt
+    daar met "✗ page not found" — gemeten, niet geredeneerd. Een knop die de server weigert hoort
+    er niet te staan; de waarde blijft wél leesbaar, want wáár een pagina in de navigatie hangt is
+    voor een policy net zo goed informatie. De andere kant (de actie verruimen naar alle soorten)
+    is een verandering aan een dispatch-tak en dus een eigen besluit."""
     from nooch_village import domeinen as _dom
 
-    if not can_edit or not csrf_token or not _mag_domein_wijzigen(a, st, username):
+    if (not can_edit or not csrf_token or a.kind != wiki.PAGINA_KIND
+            or not _mag_domein_wijzigen(a, st, username)):
         return f"<span class='chip muted'>{_e(_dom.label(bakje))}</span>"
     huidig = str((getattr(a, "meta", None) or {}).get("domein") or "")
     tip = "Only changes where this page appears in the navigation. Not its text, not its domain."
@@ -645,20 +697,36 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     `title`, `body` en `url` zijn er allemaal optioneel, en `update()` laat een veld dat `None` is
     met rust.
 
-    Alleen voor een note: een policy en een tool worden bij de eigenaar-rol bewerkt, mét
-    domein-veld (#585). Twee plekken voor dezelfde keuze is precies wat de leespagina van #574
-    vermijdt."""
+    VOOR ELKE SOORT, sinds 28 september 2026. Hier stond "alleen voor een note: een policy en een
+    tool worden bij de eigenaar-rol bewerkt" — een rest van vóór #620, toen het bewerken naar de
+    permalink verhuisde. Het domein is bovendien niet note-eigen: `domeinen.bakje_van` leest het
+    eigen domein als EERSTE stap, voor alle drie de soorten, en `_artefact_edit_form` bood het veld
+    daarom al aan elke soort aan. Deze poort was dus de enige plek die er nog anders over dacht."""
     from nooch_village.views.overview import _domain_field, _geen_domein_uitleg
 
-    if not can_edit or not csrf_token or a.kind != wiki.PAGINA_KIND:
+    if not can_edit or not csrf_token:
         return ""
     if not _mag_domein_wijzigen(a, st, username):
         return _domein_chip(a)
     rol_domeinen = list(getattr(getattr(eigenaar, "definition", None), "domains", None) or [])
+    huidig = getattr(a, "domain", "") or ""
+    # TOONT DE CONTROL DE HUIDIGE WAARDE ZELF? Een keuzelijst met twee of meer opties doet dat —
+    # de waarde staat `selected`. De twee andere uitkomsten van `_domain_field` niet: bij één
+    # domein rendert hij een VERBORGEN veld (met `toon_label=False` dus letterlijk niets zichtbaar),
+    # en bij een domein dat de rol niet houdt staat er geen passende optie in de lijst.
+    #
+    # DAT LAATSTE IS ECHT EN NIET THEORETISCH: governance kan een domein naar een andere rol
+    # verplaatsen terwijl het artefact blijft staan. De waarde verdween dan van het scherm — op de
+    # policypagina was dat meteen zichtbaar, want daar ís het domein waar de soort om draait.
+    # De chip ervoor zorgt dat er nooit een lege cel staat waar een waarde hoort.
+    # LEEG TELT ALS "TOONT ZELF": in een keuzelijst staat `— none —` dan `selected`, dus de stand
+    # is af te lezen. Zonder die helft stond er een chip met een streepje naast een lijst die
+    # hetzelfde al zei.
+    toont_zelf = len(rol_domeinen) > 1 and (not huidig or huidig in rol_domeinen)
+    voorop = "" if toont_zelf else _domein_chip(a)
     if not rol_domeinen:
-        return _geen_domein_uitleg("file this page under it")
-    veld = _domain_field(rol_domeinen, getattr(a, "domain", "") or "",
-                         fid=f"f-domain-{a.id}", toon_label=False)
+        return voorop + _geen_domein_uitleg("file this page under it")
+    veld = _domain_field(rol_domeinen, huidig, fid=f"f-domain-{a.id}", toon_label=False)
     # WAT DIT VELD DOET staat in de uitleg-regel die `_meta_blok` eronder zet, ín dezelfde
     # rastercel. Waarom het veld überhaupt blijft: gemeten op de 122 artefacten van prod
     # verschuiven 10 pagina's van bakje als het verdwijnt, zijn 11 policy-ID's uit de domeinslug
@@ -676,7 +744,7 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     #
     # DE UITLEG STAAT HIER NIET MEER. Hij zit in de cel van `_meta_blok`, onder het veld, zodat
     # het raster hem groepeert in plaats van dat hij los onder de rij hangt.
-    return (f"<form method='post' action='/action' class='fieldform' title='{_e(tip)}'>"
+    return (f"{voorop}<form method='post' action='/action' class='fieldform' title='{_e(tip)}'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
@@ -686,8 +754,13 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
 
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
-                 secties: dict[str, str] | None = None) -> str:
-    """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek."""
+                 secties: dict[str, str] | None = None, *, feiten: bool = True) -> str:
+    """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek.
+
+    `feiten=False` HAALT DE FEITEN-KNOP UIT HET /-MENU, en dat is de enige aanpassing die een
+    policy of tool nodig heeft om deze editor te kunnen gebruiken. Feiten wonen in `meta["feiten"]`
+    van een NOTE; `pagina_feit_add` poort erop en antwoordt op elke andere soort met "✗ page not
+    found". Zie `render_pagina` voor wat er verder wél voor alle drie de soorten geldt."""
     # DE BLOKSTAND STAAT HIER AAN EN NERGENS ANDERS (brok 1, 22 september 2026). Dit is het
     # scherm waar je bewerkt; de Notes-tab op `/node` toont dezelfde tekst read-only en heeft de
     # blokken niet nodig. Visueel verandert er niets — een `<div>` op de plek van een `<br>`-regel
@@ -716,7 +789,10 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # er staat niets in dat je kunt lezen, alleen de opslaan-balk.
     # DE LINK-KAART STAAT NAAST HET BEWERKVLAK, niet erin — zoals de werkbalk en het
     # blokmenu. Alles binnen `#wiki-body` gaat bij het opslaan mee als `body_html`.
-    return (opmaak_werkbalk() + lees + blok_menu() + link_kaart()
+    # `zonder=("facts",)` bij een policy of tool — zie de docstring. De werkbalk en de link-kaart
+    # gaan wél mee: die maken gewone `<a href>`-links, en die werken in elke soort.
+    return (opmaak_werkbalk() + lees + blok_menu(zonder=() if feiten else ("facts",))
+            + link_kaart()
             + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden>"
               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
               f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
@@ -731,114 +807,39 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
               f"</span></div></form>")
 
 
-def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> str:
-    """De permalink van een policy of tool: een LEESPAGINA, geen tweede editor.
-
-    WAAROM DIT EEN EIGEN PAGINA IS en niet de note-pagina met een ruimere `if`. Gemeten over de
-    14 artefacten die op prod een dode link hadden: een policy heeft altijd een `domain` en nooit
-    een url, een tool altijd een url en nooit een domein, en allebei hebben ze nul feiten en nul
-    `[[links]]`. Drie dingen van de note-pagina passen hier dus niet:
-
-      1. FEITEN leven in `meta["feiten"]`, en `artefacts._feiten_van` geeft voor een niet-note
-         bewust een lege lijst. Een feiten-formulier hier zou feiten opleveren die de
-         context-laag nooit leest.
-      2. `[[LINKS]]` lossen op tegen `wiki.paginas`, en dat zijn notes. Een verwijzing vanuit een
-         policy komt nergens op uit — `_artefact_body_html` zegt dat al.
-      3. HET RIJKE BEWERKEN — de inline editor met blokken, feiten en `[[links]]` — hoort bij een
-         note en niet hier. Punt 3 faalt bovendien STIL als je het negeert: `pagina_feit_add`,
-         `pagina_feit_del` en `pagina_voorstel` zijn wél op soort gepoort en antwoorden met
-         "✗ page not found". Een pagina die die formulieren toont, belooft iets wat de actie
-         daarna weigert.
-
-    HIER STOND "BEWERKEN GEBEURT BIJ DE EIGENAAR-ROL" (teruggedraaid 27 september 2026). Dat was
-    de uitzondering op de regel die één regel verderop stond: één bewerkpad per artefact. Een note
-    wordt sinds 21 september júist op zijn permalink bewerkt, en een tool of policy werd dat op de
-    rol — twee plekken, en dus twee plekken die uiteen kunnen lopen. Dat een tool ANDERE VELDEN
-    heeft dan een note (een url, geen lopende tekst) pleit voor een ander FORMULIER, niet voor een
-    andere PLEK.
-
-    Dus: het eenvoudige formulier (titel, domein of url, body) en de archiveerknop staan nu hier,
-    en de rol-pagina wijst hierheen. Geen rich-text-editor — dat blijft aan de note.
-
-    Wat deze pagina dus doet: tonen wat er staat, met het veld erbij waar de soort om draait (het
-    domein van een policy, de url van een tool), het formulier voor wie mag, en de versiehistorie."""
-    from nooch_village.views.overview import (_KIND_ICON, _artefact_archive_form,
-                                              _artefact_edit_form, _artefact_versions_html,
-                                              _can_edit_artefacts, _dt, _tab_for)
-
-    eigenaar = st.records.get(a.anchor)
-    can_edit = bool(eigenaar is not None
-                    and _can_edit_artefacts(st, eigenaar, csrf_token, username))
-    tab = _tab_for(a.kind)
-    thuis = f"/node?id={_e(a.anchor)}&tab={_e(tab)}"
-
-    eig_chip = (f" <a class='chip' href='{thuis}'>{_e(_name(eigenaar))}</a>"
-                if eigenaar is not None else "")
-    # Het domein hoort bij een policy zoals de url bij een tool: het is niet een extraatje maar
-    # waar het ding aan hangt. Zelfde chip als op de kaart (`_artefact_head`), geen eigen variant.
-    dom_chip = (f" <span class='chip muted'>{_e(a.domain)}</span>"
-                if a.kind == "policy" and getattr(a, "domain", "") else "")
-
-    # DEZELFDE VORM ALS DE NOTE-PAGINA (PR 2). Hiervóór droeg deze kop zijn eigen variant: het ID
-    # vóór de titel, twee losse chips ernaast en een eigen herkomst-zin. Drie renderers met drie
-    # koppen is precies hoe ze uit elkaar lopen; het metadata-blok is nu gedeeld.
-    kop = (f"<div class='c2-bar'><a href='{thuis}'>← {_e(tab)}</a></div>"
-           f"<h1>{_KIND_ICON.get(a.kind, '')} {_e(a.title or a.id)}</h1>"
-           f"<div class='wiki-kopbalk'>"
-           f"<p class='muted'>Owned by{eig_chip or ' &mdash;'}{dom_chip}</p></div>")
-
-    # De url is het punt van een tool: zonder hem is de pagina minder waard dan de kaart waar hij
-    # vandaan komt. Zelfde vorm als daar.
-    url_regel = (f"<div class='card'><div class='muted'>"
-                 f"<a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
-                 f"</div></div>" if a.kind == "tool" and getattr(a, "url", "") else "")
-
-    # Kale markdown, geen `[[link]]`-oplossing: dit soort kent dat idioom niet (zie 2 hierboven).
-    lees = (f"<div class='card'><div class='att-body'>"
-            f"{_md(a.body) if a.body else _GEEN_TEKST}</div></div>")
-
-    # DE METADATA STAAT ONDERAAN, net als op de note-pagina (26 september 2026). Drie renderers
-    # met drie volgordes is precies hoe ze uit elkaar lopen.
-    meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(),
-                      tab=tab, st=st, username=username)
-    # HET BEWERKEN, op precies één plek (27 september 2026). Hetzelfde eenvoudige formulier dat
-    # op de rol-pagina stond; `next_url` is deze pagina, zodat je blijft staan waar je typte.
-    # `can_edit` beslist of het er is — dezelfde poort als voorheen, alleen nu hier.
-    bewerken = ""
-    if can_edit:
-        hier = wiki.pagina_url(a.id)
-        # `ingeklapt=False` — HIER STAAT ÉÉN ARTEFACT, GEEN LIJST.
-        #
-        # De `<details>`-inklapping van `_artefact_edit_form` bestaat voor de ROLPAGINA, waar
-        # twintig artefacten onder elkaar staan en je geen twintig openstaande tekstvakken wilt.
-        # Op deze pagina staat niets anders, dus de inklapping leverde alleen een klein
-        # "edit"-linkje op dat je eerst moest vinden — en dat las als "deze pagina is niet
-        # bewerkbaar" terwijl het formulier er gewoon stond.
-        velden = (list(getattr(eigenaar.definition, "domains", None) or [])
-                  if eigenaar is not None else None)
-        bewerken = (f"<div class='card'><p class='att-lbl'>Edit</p>"
-                    f"{_artefact_edit_form(a, csrf_token, next_url=hier, domains=velden, ingeklapt=False)}"
-                    f"<div class='qadd-row'>"
-                    f"{_artefact_archive_form(a, csrf_token, next_url=hier)}</div></div>")
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{bewerken}{meta}</div>")
-    return _page(f"{a.title or a.id} — {a.kind}",
-                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
-
-
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
                   msg: str = "", persoon: str = "") -> str:
-    """De permalink van een artefact. Een note krijgt de wiki-pagina (feiten, backlinks, de
-    inline editor); een policy of tool de leespagina hierboven. Onbekend id of een soort die het
-    dorp niet kent → nette melding, geen lege pagina.
+    """De permalink van een artefact — één pagina voor alle drie de soorten. Onbekend id of een
+    soort die het dorp niet kent → nette melding, geen lege pagina.
+
+    ÉÉN RENDERER SINDS 28 SEPTEMBER 2026. Hiervóór kreeg een note deze pagina en gingen een policy
+    en een tool naar `_artefact_pagina`: een leespagina met een los formulier eronder. Dat was de
+    laatste plek waar "bewerken" nog een aparte modus was — je las de tekst bovenin en typte hem
+    hieronder over, in een tweede kopie van dezelfde inhoud.
+
+    WAT DE TWEE SOORTEN ANDERS HOUDT, en dat is precies drie dingen:
+
+      1. FEITEN ZIJN NOTE-EIGEN. `artefacts._feiten_van` geeft voor een andere soort bewust een
+         lege lijst, en `pagina_feit_add` poort erop: die antwoordt met "✗ page not found". Een
+         policy krijgt daarom geen feiten-sectie, en `blok_menu(zonder=("facts",))` haalt ook de
+         knop uit het /-menu. Een knop die de server weigert belooft iets wat niet kan.
+      2. EEN VOORSTEL IS NOTE-EIGEN, om dezelfde reden: `pagina_voorstel` poort op de soort.
+      3. DE EIGEN VELDEN. Een tool heeft een url, een policy een domein; die staan in het
+         metadata-raster (`_url_form`, `_domein_form`), waar de rest van de eigenschappen al staat.
+
+    WAT WÉL VOOR ALLE DRIE GELDT, en dat was de verrassing bij het nameten: `[[verwijzingen]]` en
+    BACKLINKS werken voor elke soort. `wiki.verwijsbaar` neemt note, policy én tool mee sinds
+    24 september ("verwijzen doe je naar alles wat een permalink heeft"), dus een note die naar een
+    policy linkt levert op die policy een echte backlink op — nagemeten, niet aangenomen. De oude
+    docstring hier beweerde het tegenovergestelde ("`[[links]]` lossen op tegen `wiki.paginas`");
+    dat klopte vóór die verbreding en is blijven staan.
 
     DE POORT IS `ARTEFACT_KINDS`, en met opzet niet een lijstje hier. Dat is dezelfde lijst waar
     `_WIKI_SOORTEN` zijn chips uit haalt, en juist het uiteenlopen van die twee was de bug: de
     index linkte policies en tools naar een pagina die alleen notes doorliet, goed voor 28 dode
-    links naar 14 artefacten op prod. Komt er ooit een vierde soort bij, dan krijgt die hier
-    automatisch een pagina in plaats van opnieuw een dode link."""
+    links naar 14 artefacten op prod."""
     from nooch_village.attachments import ARTEFACT_KINDS
-    from nooch_village.views.overview import (_artefact_versions_html,
-                                              _can_edit_artefacts, _dt)
+    from nooch_village.views.overview import _KIND_ICON, _tab_for, _terug_url
 
     a = st.att.get(aid)
     if a is None or a.kind not in ARTEFACT_KINDS:
@@ -847,15 +848,23 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
                 "A page is a note, policy or tool; open the role that owns it and use its "
                 "Notes, Policies or Tools tab.</p></div>")
         return _page("Page not found", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
-    if a.kind != wiki.PAGINA_KIND:
-        return _artefact_pagina(st, a, csrf_token, username, msg)
 
+    is_note = a.kind == wiki.PAGINA_KIND
     eigenaar = st.records.get(a.anchor)
     # OP HET DOMEIN, net als de server — zie `_mag_pagina_bewerken`. `eigenaar` blijft nodig voor
     # de weergave (de naam in de voet), maar hij is geen poort meer: een individuele actie heeft
     # geen record en was daardoor onbewerkbaar.
+    #
+    # EN NU VOOR ALLE DRIE DE SOORTEN. De policy/toolpagina vroeg `_can_edit_artefacts` (de
+    # rol-regel van vóór #610) terwijl `_act_artefact_edit` allang op het DOMEIN poort. Twee
+    # antwoorden op één vraag; dit is het antwoord van de server.
     can_edit = _mag_pagina_bewerken(a, st, csrf_token, username)
     pags = wiki.verwijsbaar(st.att)
+    tab = _tab_for(a.kind)
+    # `_terug_url` EN NIET `/node?...&tab=<soort>`: een tool heeft sinds #619 geen wiki-tab meer,
+    # hij woont op `/tools`. Die functie weet dat al; een eigen samenstelling hier zou de tweede
+    # plek zijn die het moet onthouden.
+    terug = _terug_url(a.anchor, a.kind)
 
     # De titel is een eigen element omdat hij BEWERKBAAR wordt, op zijn plek in de kop. Het losse
     # TITLE-veld onder aan de pagina is daarmee vervallen.
@@ -865,29 +874,31 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # verwijzing gebruikt (in het ontwerpdocument zelf ook) en staat in `_meta_blok`.
     # DE KOP DRAAGT NOG ÉÉN DING: de hoofdactie. Alles wat metadata is — eigenaar, domein, ID,
     # laatst bewerkt, historie — staat in `_meta_blok`, in één raster, en sinds 26 september
-    # ONDERAAN de pagina in plaats van hier direct onder de titel. Hiervóór stond de herkomst-zin
-    # hier én de eigenaar in het blok: twee plekken voor hetzelfde, en dat is precies wat deze PR
-    # opruimt.
-    kop = (f"<div class='c2-bar'><a href='/node?id={_e(a.anchor)}&tab=notes'>← notes</a></div>"
-           f"<h1>📄 {titel}</h1>")
-    # GEEN "EDIT PAGE"-KNOP MEER (26 september 2026). Wie de pagina mag bewerken, bewerkt hem —
-    # zoals een tekstverwerker: je klikt in de tekst en typt. De knop was de laatste rest van het
-    # model "lezen is de stand, bewerken is een modus", en met hem verdwijnt ook de kopbalk die
-    # alleen hém nog droeg.
+    # ONDERAAN de pagina in plaats van hier direct onder de titel.
+    # HET ICOON VOLGT DE SOORT (`_KIND_ICON`), zodat een policy niet als note leest. Dezelfde
+    # tabel als op de kaart en in de index; geen tweede opsomming hier.
+    kop = (f"<div class='c2-bar'><a href='{_e(terug)}'>← {_e(tab)}</a></div>"
+           f"<h1>{_KIND_ICON.get(a.kind, '📄')} {titel}</h1>")
+    # GEEN "EDIT PAGE"-KNOP (26 september 2026). Wie de pagina mag bewerken, bewerkt hem — zoals
+    # een tekstverwerker: je klikt in de tekst en typt.
     #
     # WAT NIET VERANDERT: zonder bewerkrecht blijft de pagina read-only. Dat is geen aparte tak
     # hier maar een gevolg — `_wiki_editor` rendert dan geen `#wiki-form`, en `nooch.js` zet zonder
-    # dat formulier niets aan. De poort staat dus nog steeds op één plek.
+    # dat formulier niets aan. De poort staat dus op één plek.
     #
     # OPSLAAN BLIJFT EXPLICIET. Er is geen autosave; de opslaan-balk komt tevoorschijn zodra er
     # iets verandert. Zie `wikiEdit` in `nooch.js`.
 
-    # DE TWEE AFGELEIDE SECTIES. Ze worden altijd gerenderd, maar landen op één van twee
-    # plekken: in de tekst als de schrijver er een markering neerzette, anders eronder zoals ze
-    # altijd stonden. Nooit allebei — twee keer dezelfde feiten op één scherm is precies de
-    # verwarring die deze stap opruimt.
-    secties = {"facts": _feiten_sectie(a, st, csrf_token, can_edit),
-               "backlinks": _backlink_sectie(a, pags)}
+    # DE AFGELEIDE SECTIES. Ze worden altijd gerenderd, maar landen op één van twee plekken: in de
+    # tekst als de schrijver er een markering neerzette, anders eronder zoals ze altijd stonden.
+    # Nooit allebei — twee keer dezelfde feiten op één scherm is precies de verwarring die deze
+    # stap opruimt.
+    #
+    # FEITEN ALLEEN OP EEN NOTE (zie de docstring): de sleutel ontbreekt dan gewoon, en `_onder`
+    # en `_afgeleid_blok` kunnen daar allebei tegen.
+    secties = {"backlinks": _backlink_sectie(a, pags)}
+    if is_note:
+        secties["facts"] = _feiten_sectie(a, st, csrf_token, can_edit)
     geplaatst = wiki.markers(a.body)
     #: Heeft deze sectie IETS te melden? Dat is een vraag over de inhoud, niet over het scherm,
     #: dus hij wordt hier één keer beantwoord en niet uit de HTML teruggelezen.
@@ -895,7 +906,9 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
               "backlinks": bool(wiki.backlinks(a, pags) or wiki.ontbrekende_links(a, pags))}
 
     def _onder(k: str) -> str:
-        """Wat er ONDERAAN de pagina bij komt — en dat is in twee gevallen niets.
+        """Wat er ONDERAAN de pagina bij komt — en dat is in drie gevallen niets.
+
+        NIET VAN DEZE SOORT: een policy heeft geen feiten, dus ook geen lege feiten-sectie.
 
         ZELF GEPLAATST: staat de markering in de tekst, dan landt de sectie dáár. Hem hier nog
         eens tonen zou dezelfde feiten twee keer op één scherm zetten.
@@ -908,42 +921,30 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
         neergezet, dan blijft hij staan ook als hij nog leeg is: dat is bewuste plaatsing en dus
         een lege plek die op gevuld wacht, geen restant. Vandaar dat de leeg-regel alleen geldt
         voor de sectie die hier automatisch bij komt."""
-        if k in geplaatst:
+        if k not in secties or k in geplaatst:
             return ""
         return secties[k] if gevuld[k] else ""
 
-    body = _wiki_editor(a, pags, csrf_token, can_edit, secties)
+    body = _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
-    # schrijf-sessie (publieke view), dan ook geen voorstelknop.
-    voorstel = "" if can_edit else (_voorstel_form(st, a, csrf_token) if csrf_token else "")
-    hist = _artefact_versions_html(a)
+    # schrijf-sessie (publieke view), dan ook geen voorstelknop. En alleen op een note, want
+    # `pagina_voorstel` poort op de soort — zie de docstring hierboven.
+    voorstel = ("" if can_edit or not is_note
+                else (_voorstel_form(st, a, csrf_token) if csrf_token else ""))
 
-    # DE VOLGORDE BLIJFT ZOALS HIJ WAS: feiten, besluiten, backlinks. Ze in één klap achteraan
-    # plakken scheelt twee regels en verschuift "Decisions logged" naar boven de feiten — een
-    # wijziging die niemand vroeg, op een scherm dat verder niets van deze stap hoort te merken.
-    # DE HISTORIE ZIT IN HET METADATA-BLOK, niet meer los onder de tekst: het is metadata over de
-    # pagina, en dat hoort bij de rest ervan.
-    #
-    # EN HET BLOK STAAT ONDERAAN (26 september 2026). Het stond direct onder de titel, en daarmee
-    # kreeg de administratie — eigenaar, domein, ID, laatst bewerkt, historie — de plek van de
-    # inhoud: boven de vouw las je vijf regels techniek voor je bij de eerste zin was. Boven blijft
-    # nu alleen de titel en de hoofdactie; alles wat OVER de pagina gaat staat eronder, na de
-    # inhoud en na de twee afgeleide secties.
+    # DE VOLGORDE BLIJFT ZOALS HIJ WAS: feiten, besluiten, backlinks. De historie zit in het
+    # metadata-blok, niet los onder de tekst: het is metadata over de pagina, en dat hoort bij de
+    # rest ervan. En het blok staat ONDERAAN (26 september 2026) — boven blijft alleen de titel en
+    # de inhoud; alles wat OVER de pagina gaat staat eronder.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(),
-                      tab="notes", st=st, username=username)
-    # HET LOSSE UPLOADFORMULIER IS WEG (26 september 2026). Het stond hier als `<details>` onder
-    # de tekst en plakte zijn regel altijd ACHTER de body. Sinds "Afbeelding" en "Bestand" in het
-    # blokmenu staan is dat de tweede weg naar dezelfde handeling — precies het risico dat de
-    # code-comment bij dat formulier zélf al benoemde. Erger nog: het werd ingediend midden in een
-    # bewerksessie, dus de server schreef in de OPGESLAGEN body en gooide je onbewaarde tekst weg.
+                      tab=tab, st=st, username=username, terug=terug)
     # ÉÉN DOORLOPEND DOCUMENT (26 september 2026). Titel, tekst en de afgeleide secties zitten in
     # hetzelfde omhulsel en delen dus één linkerrand en één vlak; de metadata-voet valt er met zijn
-    # scheidingslijn vanzelf onder. Hiervoor stond de titel los bóven een omrande kaart, en dan
-    # leest een pagina als twee dingen die toevallig onder elkaar staan.
+    # scheidingslijn vanzelf onder.
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_banner(msg)}{body}{voorstel}"
             f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
             f"{meta}</div></div>")
-    return _page(f"{a.title or a.id} — page",
+    return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
 

@@ -121,18 +121,36 @@ def test_een_policy_pagina_krijgt_het_veld_niet(tmp_path):
     assert "value='artefact_edit'" in html, "het bewerkformulier hoort er juist wél"
 
 
-def test_de_functie_weigert_zelf_ook_een_niet_note(tmp_path):
-    """De guard in `_domein_form` is vandaag onbereikbaar via `render_pagina` (zie hierboven),
-    maar hij is er voor de dag dat iemand hem ergens anders aanroept. Zonder deze toets staat er
-    een verdediging die niemand ooit meet."""
+def test_de_functie_geeft_elke_soort_een_veld(tmp_path):
+    """OMGEDRAAID OP 28 SEPTEMBER 2026. Hier stond een guard die een policy en een tool weigerde,
+    met als reden "die worden bij de eigenaar-rol bewerkt". Dat was al niet meer waar sinds het
+    bewerken op 27 september naar de permalink verhuisde, en sinds alle drie de soorten dezelfde
+    editor delen is het domein voor alle drie de enige plek waar het te wijzigen valt.
+
+    HET DOMEIN IS SOWIESO NIET NOTE-EIGEN: `domeinen.bakje_van` leest het eigen domein als EERSTE
+    stap, voor elke soort, en `_artefact_edit_form` bood het veld daarom al aan elke soort aan.
+    Deze guard was de enige plek die er anders over dacht."""
     from nooch_village.views.wiki import _domein_form
     dd, st, rol = _dorp(tmp_path)
     eigenaar = st.records.get(rol)
-    for kind, extra in (("policy", {}), ("tool", {"url": "/x"})):
+    for kind, extra in (("policy", {}), ("tool", {"url": "/x"}), ("note", {})):
         a = st.att.add(rol, kind, title="X", domain="Materials", **extra)
-        assert _domein_form(a, eigenaar, "TOK", True) == "", f"{kind} kreeg toch een veld"
-    note = st.att.add(rol, "note", title="X", domain="Materials")
-    assert "name='domain'" in _domein_form(note, eigenaar, "TOK", True)
+        assert "name='domain'" in _domein_form(a, eigenaar, "TOK", True), kind
+
+
+def test_de_huidige_waarde_raakt_nooit_van_het_scherm(tmp_path):
+    """WAT DE VERRUIMING ZICHTBAAR MAAKTE. `_domain_field` toont de waarde alleen als hij in de
+    keuzelijst van de rol staat; bij één domein rendert hij een VERBORGEN veld, en een domein dat
+    de rol niet (meer) houdt staat er niet tussen. Op een note viel dat niet op, op een policy wel:
+    daar ís het domein waar de soort om draait, en de cel was leeg.
+
+    Governance kan een domein naar een andere rol verplaatsen terwijl het artefact blijft staan —
+    dus dit is geen theoretisch geval."""
+    from nooch_village.views.wiki import _domein_form
+    dd, st, rol = _dorp(tmp_path)
+    eigenaar = st.records.get(rol)
+    vreemd = st.att.add(rol, "policy", title="X", domain="Money")   # niet van deze rol
+    assert "Money" in _domein_form(vreemd, eigenaar, "TOK", True)
 
 
 # ── 2. Opslaan loopt door dezelfde poort ─────────────────────────────────────

@@ -23,11 +23,15 @@ Drie dingen die de note-pagina doet, kan een policy of tool dus niet:
      niet-note bewust een lege lijst terug. Een feiten-formulier op een policy zou feiten
      opleveren die de context-laag nooit leest — zichtbaar op het scherm, onzichtbaar waar het
      telt.
-  2. **`[[links]]` en backlinks.** `wiki.paginas` is notes-only, dus een verwijzing vanuit een
-     policy zou nergens op uitkomen. (`_artefact_body_html` zegt dit al met zoveel woorden.)
-  3. **Bewerken.** Een note wordt op zijn permalink bewerkt, een policy en tool op het formulier
-     bij de eigenaar-rol. Dat staat zo in `_artefact_own_card`, mét de reden: twee bewerkpaden
-     voor hetzelfde object lopen uiteen zodra er aan één van de twee iets verandert.
+  2. ~~**`[[links]]` en backlinks.**~~ INGETROKKEN OP 28 SEPTEMBER 2026. Hier stond "`wiki.paginas`
+     is notes-only, dus een verwijzing vanuit een policy komt nergens op uit". Dat klopte tot
+     24 september, toen `wiki.verwijsbaar` note, policy én tool ging omvatten ("verwijzen doe je
+     naar alles wat een permalink heeft") — en `render_pagina` gebruikt díe lijst. Verwijzingen en
+     backlinks werken dus voor elke soort; `test_een_policy_heeft_echte_backlinks` voert het uit.
+  3. ~~**Bewerken.**~~ INGETROKKEN. Eerst verhuisde het bewerken naar de permalink (27 september),
+     daarna kreeg elke soort dezelfde inline editor (28 september). Wat overblijft is dat een
+     policy een `domain` heeft en een tool een `url`; die krijgen een eigen rij in het
+     metadata-raster in plaats van een eigen formulier.
 
 Punt 3 is de gevaarlijkste, want hij faalt STIL: `_act_artefact_edit` is niet op soort gepoort en
 zou een policy gewoon opslaan, maar `pagina_feit_add`, `pagina_feit_del` en `pagina_voorstel` zijn
@@ -140,21 +144,25 @@ def test_geen_formulier_dat_de_actie_daarna_weigert(tmp_path):
                 f"de {soort}-pagina toont {actie}, maar die actie weigert een {soort}")
 
 
-def test_de_policy_pagina_is_geen_tweede_bewerkpad(tmp_path):
-    """OMGEDRAAID OP 27 SEPTEMBER 2026, en de regel eronder is niet veranderd maar juist
-    doorgetrokken: één bewerkpad per artefact. Het formulier stond op de eigenaar-rol én een note
-    werd op zijn permalink bewerkt — dat waren twee verschillende plekken voor twee soorten van
-    hetzelfde ding. Nu bewerkt elk artefact zichzelf op zijn eigen pagina.
+def test_de_policy_pagina_bewerkt_op_dezelfde_manier_als_een_note(tmp_path):
+    """DE TWEEDE HELFT VAN DEZELFDE OPRUIMING (28 september 2026).
 
-    WAT HIER NOG STEEDS NIET HOORT: de RIJKE editor. Een policy heeft geen blokken, geen feiten en
-    geen `[[links]]`; die formulieren zijn op soort gepoort en zouden hier "page not found"
-    antwoorden."""
+    Op 27 september verhuisde het bewerken van de eigenaar-rol naar de permalink: één bewerkpad
+    per artefact. Wat er toen nog stond was een EENVOUDIG formulier onder de tekst — je las de
+    policy bovenin en typte hem eronder over, in een tweede kopie van dezelfde inhoud. Dat is
+    precies het model "lezen is de stand, bewerken is een modus" dat de note-pagina op 26 september
+    al achter zich liet.
+
+    Nu is er één editor voor alle drie de soorten. WAT ER NIET BIJ KOMT staat in de toets hierboven
+    (`test_geen_formulier_dat_de_actie_daarna_weigert`): feiten en voorstellen zijn op soort
+    gepoort en horen hier dus niet."""
     dd, st, art, mens = _dorp(tmp_path)
     html = _pagina(st, art["policy"], can_edit=True)
-    assert "id='wiki-body'" not in html, "de inline editor hoort hier niet"
-    assert "value='artefact_edit'" in html, "het eenvoudige formulier hoort hier juist wél"
+    assert "id='wiki-body'" in html, "de inline editor hoort hier nu juist wél"
+    assert "id='wiki-form'" in html, "zonder opslaan-balk is de tekst niet te bewaren"
+    assert "value='artefact_edit'" in html
     assert "pagina_feit_add" not in html, "de feiten van een note horen hier niet"
-    assert "tab=policies" in html, "er staat geen weg naar de plek waar je hem wél bewerkt"
+    assert "tab=policies" in html, "er staat geen weg terug naar de tab van de eigenaar"
 
 
 def test_de_tool_pagina_wijst_naar_zijn_eigen_tab(tmp_path):
@@ -191,12 +199,51 @@ def test_de_note_pagina_houdt_zijn_editor(tmp_path):
     assert "data-blok-soorten" in html, "het blokmodel hoort alleen op de note-pagina"
 
 
-def test_het_blokmodel_blijft_bij_de_note(tmp_path):
-    """Een policy kent het blok-idioom niet (geen greep, geen /-menu): hij wordt hier niet
-    bewerkt, dus er is niets om te grijpen."""
+def test_het_blokmodel_geldt_nu_voor_elke_soort(tmp_path):
+    """Het blok-idioom hoort bij de EDITOR, niet bij de soort. Nu alle drie de soorten dezelfde
+    editor gebruiken, heeft een policy dus ook een greep en een /-menu."""
     dd, st, art, mens = _dorp(tmp_path)
-    assert "data-blok-soorten" not in _pagina(st, art["policy"])
-    assert "data-blok-soorten" not in _pagina(st, art["tool"])
+    for soort in ("note", "policy", "tool"):
+        assert "data-blok-soorten" in _pagina(st, art[soort]), soort
+
+
+def test_alleen_de_note_krijgt_de_feiten_knop_in_het_menu(tmp_path):
+    """HET ENIGE MENU-ITEM DAT WÉL OP SOORT POORT. `{{facts}}` levert bij een policy een blok op
+    dat nooit gevuld kan worden: `artefacts._feiten_van` geeft voor een niet-note een lege lijst en
+    `pagina_feit_add` antwoordt met "✗ page not found". De knop staat er daarom niet.
+
+    BACKLINKS BLIJVEN WÉL, en dat is nagemeten en niet aangenomen: `wiki.verwijsbaar` neemt sinds
+    24 september note, policy én tool mee, dus een verwijzing NAAR een policy levert daar een echte
+    backlink op. Zie `test_een_policy_heeft_echte_backlinks`."""
+    dd, st, art, mens = _dorp(tmp_path)
+    note, pol = _pagina(st, art["note"]), _pagina(st, art["policy"])
+    assert ">Feiten<" in note and ">Backlinks<" in note
+    assert ">Feiten<" not in pol, "de feiten-knop hoort niet in het menu van een policy"
+    assert ">Backlinks<" in pol, "backlinks werken wél voor een policy"
+
+
+def test_een_policy_heeft_echte_backlinks(tmp_path):
+    """DE PREMISSE DIE NIET MEER KLOPTE. In de kop van dit bestand stond "`wiki.paginas` is
+    notes-only, dus een verwijzing vanuit een policy zou nergens op uitkomen". Dat was waar tot
+    24 september, toen `wiki.verwijsbaar` alle drie de soorten ging omvatten — en `render_pagina`
+    gebruikt díe lijst. Hier uitgevoerd in plaats van geredeneerd."""
+    dd, st, art, mens = _dorp(tmp_path)
+    rol = st.records.all()[0].id
+    st.att.add(rol, "note", title="Verwijzer", body="Zie [[Geld]] voor de regels.")
+    html = _pagina(st, art["policy"])
+    assert "Verwijzer" in html, "de note die naar deze policy linkt staat er niet bij"
+
+
+def test_de_tool_pagina_laat_zijn_url_bewerken(tmp_path):
+    """Een tool heeft een url en een note niet. Nu de inline editor alleen titel en tekst kent,
+    zou dat veld nergens meer te wijzigen zijn — het krijgt daarom een eigen rij in het
+    metadata-raster, net als het domein."""
+    dd, st, art, mens = _dorp(tmp_path)
+    kan = _pagina(st, art["tool"], can_edit=True)
+    assert "name='url'" in kan and "value='https://example.org/boek'" in kan
+    niet = _pagina(st, art["tool"], can_edit=False)
+    assert "name='url'" not in niet, "een invoerveld voor wie niet mag bewerken"
+    assert "https://example.org/boek" in niet, "het adres blijft wel gewoon te openen"
 
 
 # ── 5. Wat er nog steeds niet bestaat ────────────────────────────────────────

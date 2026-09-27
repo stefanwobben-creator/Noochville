@@ -140,12 +140,14 @@ def test_boven_de_vouw_staat_alleen_de_titel(tmp_path):
         assert weg not in kop, f"{weg} staat nog boven de tekst"
 
 
-def test_de_leespagina_volgt_dezelfde_volgorde(tmp_path):
-    """Drie renderers met drie volgordes is precies hoe ze uit elkaar lopen."""
+def test_een_policy_volgt_dezelfde_volgorde(tmp_path):
+    """Drie renderers met drie volgordes is precies hoe ze uit elkaar lopen — en sinds
+    28 september is het er één, dus deze toets bewaakt nu dat die ene het voor élke soort goed
+    doet: eerst de inhoud, dan de administratie."""
     dd, st, _a = _dorp(tmp_path)
     p = st.att.add(st.records.all()[0].id, "policy", title="Beleid", body="tekst")
     html = render_pagina(st, p.id, csrf_token="TOK", username="b@t.nl")
-    assert html.index("class='att-body'") < html.index("class='dcol'")
+    assert html.index("att-body") < html.index("class='dcol'")
 
 
 def test_uploaden_kan_nog_maar_op_een_manier(tmp_path):

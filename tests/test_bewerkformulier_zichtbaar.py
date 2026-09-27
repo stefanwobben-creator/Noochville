@@ -64,12 +64,18 @@ def test_een_tool_ook(tmp_path):
     assert "value='artefact_edit'" in h and "name='url'" in h
 
 
-def test_er_staat_een_kopje_boven(tmp_path):
-    """Zonder de summary is er niets dat zegt wat dit blok is. Bestaande klasse (`att-lbl`), geen
-    nieuwe."""
+def test_er_is_geen_tweede_kopie_van_de_tekst_meer(tmp_path):
+    """DE VOLGENDE STAP IN DEZELFDE OPRUIMING (28 september 2026).
+
+    Hier stond dat het formulier een kopje "Edit" hoort te hebben, want zonder de `<summary>` zei
+    niets meer wat dat blok was. Dat blok is er niet meer: een policy wordt nu in de tekst zelf
+    bewerkt, zoals een note. Een kopje boven een tweede kopie van dezelfde tekst is precies wat
+    er niet meer hoeft."""
     dd, st, baas, buiten = _dorp(tmp_path)
     a = st.att.add(ROL, "policy", title="Testbeleid", body="x")
-    assert "<p class='att-lbl'>Edit</p>" in _pagina(st, a)
+    h = _pagina(st, a)
+    assert "<p class='att-lbl'>Edit</p>" not in h
+    assert "id='wiki-body'" in h and "id='wiki-form'" in h
 
 
 def test_de_versiehistorie_blijft_wel_ingeklapt(tmp_path):
@@ -82,20 +88,28 @@ def test_de_versiehistorie_blijft_wel_ingeklapt(tmp_path):
 
 
 def test_zonder_bewerkrecht_geen_formulier(tmp_path):
-    """De po\xf3rt is niet geraakt — alleen de verpakking."""
+    """De po\xf3rt is niet geraakt — alleen de verpakking.
+
+    MET EEN DOMEIN EROP, sinds 28 september. Een policy ZONDER domein mag ieder ingelogd mens
+    bewerken — dat is geen verruiming van deze stap maar wat `_artefact_gate` altijd al deed
+    (uitgevoerd: "policy updated" voor `buiten@test.nl`). Het scherm vroeg het alleen nog op de
+    oude manier. Deze toets moet dus een pagina pakken waar de poort écht bijt."""
     dd, st, baas, buiten = _dorp(tmp_path)
-    a = st.att.add(ROL, "policy", title="Testbeleid", body="x")
+    a = st.att.add(ROL, "policy", title="Testbeleid", body="x", domain="claim-verification")
     h = render_pagina(st, a.id, csrf_token="t", username="buiten@test.nl")
     assert "value='artefact_edit'" not in h and DETAILS not in h
+    assert "id='wiki-form'" not in h, "de opslaan-balk hoort er ook niet te staan"
 
 
 def test_een_note_is_niet_geraakt(tmp_path):
-    """"notes hebben al hun eigen inline-editor zonder details-wrapper en blijven ongemoeid.\""""
+    """"notes hebben al hun eigen inline-editor zonder details-wrapper en blijven ongemoeid." En
+    dat is de richting waarin dit is opgelost: niet de note kreeg het policy-kopje, de policy
+    kreeg de editor van de note."""
     dd, st, baas, buiten = _dorp(tmp_path)
     a = st.att.add(ROL, "note", title="Een note", body="tekst")
     h = _pagina(st, a)
     assert "data-blok" in h, "de blok-editor van de note is weg"
-    assert "<p class='att-lbl'>Edit</p>" not in h, "de note kreeg het policy-kopje"
+    assert "<p class='att-lbl'>Edit</p>" not in h
 
 
 # ══ 2. De inklapping blijft bestaan voor een lijst ═══════════════════════════
@@ -135,16 +149,20 @@ def test_de_annuleerknop_overleeft_het_ontbreken_van_de_details():
     assert 'closest("details")' in stuk and "if (det)" in stuk
 
 
-def test_er_is_maar_een_aanroeper_in_productie():
-    """PREMISSE-CORRECTIE, vastgelegd zodat hij niet opnieuw verrast: na #620 roept alleen de
-    permalink dit formulier nog aan. De default bestaat voor wat er nog kan komen, niet voor iets
-    wat er nu staat."""
+def test_er_is_geen_aanroeper_meer_in_productie():
+    """DE PREMISSE-CORRECTIE, bijgewerkt — en dit is een STAND, geen wens.
+
+    Na #620 riep alleen de permalink dit formulier nog aan. Sinds 28 september bewerkt die pagina
+    inline, dus er is er nu GEEN. De functie staat er nog, met zijn `ingeklapt`-parameter en zijn
+    domein-veld; hem weghalen is een eigen besluit (en zou de laatste bewerkweg zonder JavaScript
+    weghalen). Wat deze toets doet is dat zichtbaar houden: zolang hij nul aanroepers heeft, meet
+    elke toets eronder iets wat geen scherm meer bereikt."""
     from nooch_village.views import overview, wiki
-    aanroepen = [m for m in (inspect.getsource(overview), inspect.getsource(wiki))
-                 if "_artefact_edit_form(" in m]
-    assert "_artefact_edit_form(" not in inspect.getsource(overview._artefact_own_card)
-    assert "ingeklapt=False" in inspect.getsource(wiki._artefact_pagina)
-    assert aanroepen
+    bron = inspect.getsource(overview) + inspect.getsource(wiki)
+    aanroepen = [r for r in bron.splitlines()
+                 if "_artefact_edit_form(" in r and not r.lstrip().startswith(("def ", "#"))
+                 and "`" not in r]
+    assert not aanroepen, f"er is weer een aanroeper: {aanroepen}"
 
 
 def test_de_rolpagina_wijst_nog_steeds_door(tmp_path):
