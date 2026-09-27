@@ -4,7 +4,7 @@ import re
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _name, _psec, _IC_CHECK
+from nooch_village.cockpit2_util import _AUTOSAVE, _DS_LINK, _name, _psec, _IC_CHECK
 from nooch_village import acc_ids, skill_labels, skill_links, skills_catalog
 
 if TYPE_CHECKING:
@@ -264,7 +264,7 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
                 f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
     keep = f"data-reopen='{_e(back)}'"
-    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+    sub = _AUTOSAVE
 
     def _iss_html(lst):
         return "".join(f"<div class='sec-issue {('blok' if i['level'] == 'blok' else 'let')}'>📋 {_e(i['msg'])}</div>"

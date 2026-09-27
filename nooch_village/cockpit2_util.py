@@ -1596,6 +1596,24 @@ _NU_LINK = (f'<link rel="stylesheet" href="/static/nooch-ui.css?v={_NU_VERSION}"
             'family=Archivo:wght@400;500;600;700&display=swap">')
 
 
+# ── Auto-opslaan: het gedrag van een keuzelijst ────────────────────────────────
+# Kiezen IS het opslaan. Een select met een aparte knop ernaast vraagt twee handelingen voor één
+# beslissing, en de tweede is te vergeten: je kiest, je ziet de nieuwe waarde staan, en je loopt weg
+# zonder dat er iets is opgeslagen. Dat is geen vergissing van de gebruiker maar van het formulier.
+#
+# In de modal vangt `wire()` de submit → fetch → fragment-re-render + toast; op een volle pagina is
+# het een reload. `requestSubmit()` vuurt een echt submit-event (zodat `wire` het ziet);
+# `.submit()` is de fallback voor browsers zonder `requestSubmit`.
+#
+# WAAROM HIER EN NIET IN `views/projects.py`, waar hij stond. Hij hoort bij het formulier-vocabulaire
+# naast `_field()` en `_DS_LINK`, niet bij één scherm — en `views/acties.py` had hem nodig. Er is
+# geen import-cirkel die dat verhindert (gemeten), maar een view die een andere view importeert om
+# één string te lenen trekt er acht modules bij naar binnen en maakt van `projects.py` stilzwijgend
+# een bibliotheek. Eén definitie op een gedeelde plek is wat de regel "reference, don't copy" hier
+# vraagt; twee losse definities van dit snippet is precies wat er anders gebeurt.
+_AUTOSAVE = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+
+
 # ── De zijbalk: ÉÉN gedeelde navigatie (fase 7, 19 september 2026) ─────────────
 # Hiervóór was de navigatie over drie plekken verdeeld: een topbar met logo+zoek, een footer met
 # drie links (Goals · Metrics · People) en een organisatieboom in de RECHTERrail die `_send` op elke
