@@ -106,7 +106,7 @@ from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
                                        reground_seed as _reground_seed,
                                        migrate_definitions as _migrate_definitions)
-from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
+from nooch_village.cockpit2_util import _BUILD, _DS_VERSION, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
 from nooch_village.doelen import DoelStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -1116,6 +1116,12 @@ _NU_ROUTES = frozenset({
     # uit afhankelijk van de URL. Dat was een gat in deze lijst, geen besluit. `/site-audit` is in
     # fase 7 aangeraakt (taalresten) maar viel toen buiten de fase-9-scope.
     "/middelen", "/rolefillers", "/site-audit",
+    # `/acties` (#618) en `/tools` (#619) zijn NÁ fase 9 gebouwd en stonden hier nooit in. Gevolg:
+    # ze kregen `nooch-ui.css` niet, terwijl `/messages` ernaast dat wél kreeg — precies het beeld
+    # "Messages ziet er goed uit, /acties ziet er oud uit". Geen cache, geen halve deploy: een
+    # handmatig bijgehouden lijst waar een nieuwe route niet vanzelf in komt. Zie de ratchet in
+    # `tests/test_nu_routes.py`, die dit gat sluit.
+    "/acties", "/tools",
 })
 
 #: Eén `<a>` in de zijbalk-navigatie, met zijn href. Alleen dáár: de header heeft ook links
@@ -1202,6 +1208,24 @@ def _nav_actief(pad: str, body: str) -> str:
 
 
 _BODY_RE = re.compile(r'<body(?: class="([^"]*)")?>')
+
+
+def _git_head() -> str:
+    """De commit die op SCHIJF staat, gelezen uit `.git` — geen subprocess per request.
+
+    Hij hoort bij `/version`, en dat eindpunt vergelijkt twee dingen die uit elkaar kúnnen lopen:
+    wat het PROCES in het geheugen heeft (`_DS_VERSION`, berekend bij import) en wat er op schijf
+    ligt. Zijn ze gelijk, dan draait de uitgerolde code echt."""
+    basis = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    try:
+        with open(os.path.join(basis, ".git", "HEAD"), encoding="utf-8") as f:
+            kop = f.read().strip()
+        if kop.startswith("ref: "):
+            with open(os.path.join(basis, ".git", kop[5:]), encoding="utf-8") as f:
+                return f.read().strip()
+        return kop
+    except OSError:
+        return ""
 
 
 def _nu_body(pad: str, body: str) -> str:
@@ -5854,7 +5878,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 # Niets is publiek: een uitgelogde bezoeker gaat overal naar /login. /login en /logout worden in
 # do_GET vóór de auth-check afgehandeld en blijven dus bereikbaar. Er is geen asset/health-route die
 # publiek moet blijven (/file staat al achter de auth-check).
-_PUBLIC_GET: set[str] = set()
+#: GETs die zónder sessie mogen. Hij was leeg: alles zit achter login, en dat blijft zo.
+#:
+#: `/version` is de enige uitzondering, en hij is géén publieke pagina: de handler weigert hem
+#: zodra er een `X-Forwarded-For` op staat, en nginx zet die op alles wat van buiten komt. Hij is
+#: dus alleen bereikbaar vánaf de machine zelf — voor `deploy.sh`, die móét kunnen vragen welke
+#: code er draait vóórdat hij "geslaagd" meldt. Achter de login zetten zou betekenen dat het
+#: deploy-script een sessie moet aanmaken, en dan controleert het zichzelf met een inbraak.
+_PUBLIC_GET: set[str] = {"/version"}
 
 
 
@@ -6119,6 +6150,26 @@ def make_handler(data_dir: str, csrf_token: str,
                                            msg=(qs.get("msg") or [""])[0],
                                            q=(qs.get("q") or [""])[0],
                                            lijst=bool((qs.get("list") or [""])[0])))
+                return
+            if path == "/version":
+                # AUTHZ: alleen van de machine zelf — dit is een DIAGNOSE-eindpunt voor
+                # `deploy.sh`, geen pagina. nginx zet `X-Forwarded-For` op alles wat van buiten
+                # komt; staat die header er, dan is dit verzoek geproxied en antwoorden we niet.
+                # Zo is hij bereikbaar voor het deploy-script op de box en onzichtbaar vanaf het
+                # internet, zónder een tweede plek (nginx) die dat moet afdwingen.
+                #
+                # WAAROM DIT BESTAAT. De deploy meldde "live op <commit>" op grond van één
+                # health-check: één request, status < 500. Dat zegt dat er íéts luistert — niet
+                # dat het de zojuist uitgerolde code is. Wat het proces in het geheugen heeft
+                # staat hier, en het deploy-script vergelijkt dat met wat er op schijf ligt.
+                if self.headers.get("X-Forwarded-For"):
+                    self.send_error(404)
+                    return
+                import json as _json
+                self._send_bytes(
+                    _json.dumps({"commit": _git_head(), "ds": _DS_VERSION,
+                                 "pid": os.getpid()}).encode("utf-8"),
+                    "application/json; charset=utf-8")
                 return
             if path == "/tools":
                 # AUTHZ: iedereen-ingelogd — lezen is vrij, dezelfde scope als de wiki-tab waar
