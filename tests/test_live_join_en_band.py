@@ -43,7 +43,7 @@ def _dorp(tmp_path):
 # ── 1. De live-knop ──────────────────────────────────────────────────────────
 def test_de_knop_verandert_pas_als_er_echt_een_overleg_draait():
     dicht = overleg_items(CIRCLE)
-    assert "Tactical&shy;meeting" in dicht and "Join meeting" not in dicht
+    assert "Tactical meeting" in dicht and "Join meeting" not in dicht
     open_ = overleg_items(CIRCLE, werk_open=True)
     assert "Join meeting" in open_ and "c2-overleg--live" in open_
 

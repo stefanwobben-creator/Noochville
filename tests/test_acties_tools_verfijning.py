@@ -423,3 +423,47 @@ def test_de_drie_staten_staan_er_nog(tmp_path):
     assert "<select" in h                                  # staat 2 (achter de uitklapper)
     assert "cl-filter pill" in h and "actie_koppel" in h    # staat 3: labeltje + ontkoppelen
     assert los and vast
+
+
+# ══ 7. Het koppel-linkje onder het designsysteem ═════════════════════════════
+#
+# HERMETEN NADAT /acties `.nu` KREEG (#627). Twee dingen die er zonder designsysteem niet
+# uitsprongen, deden dat daarmee wél — en allebei stonden ze er al vóór #627:
+#
+#   1. `web_base._CSS` geeft ELKE `<details>` een rand, achtergrond, schaduw, marge en padding.
+#      Hier is de `<details>` een linkje van vier woorden, geen uitklapbaar blok.
+#   2. het designsysteem maakt van `.flink` een KNOP
+#      (`.nu .addlink, .nu .vswitch a, .nu .flink { border:1.5px solid …; background:… }`),
+#      en de summary droeg die klasse. Resultaat: een omrande knop over de volle breedte.
+#
+# Dat laatste is geen fout in het designsysteem — `.flink` ÍS daar een knop. Dit element is er
+# alleen nooit één geweest.
+def test_de_uitklapper_is_geen_kaart():
+    body = _blok(".c2-smal .ck-meta")
+    for eig in ("background:none", "border:0", "box-shadow:none", "margin:0", "padding:0"):
+        assert eig in body, eig
+
+
+def test_de_summary_claimt_geen_knop_klasse():
+    """`.flink` is onder `.nu` een omrande knop. Dit is een label, geen knop."""
+    from nooch_village.views.acties import _meta
+    import inspect
+    bron = inspect.getsource(_meta)
+    assert "<summary class='flink'>" not in bron
+    assert "<summary>+ link to a project</summary>" in bron
+
+
+def test_en_brengt_zijn_eigen_uiterlijk_mee():
+    """Zonder `.flink` moet de regel zelf leveren wat die klasse gaf: grootte en cursor — plus
+    expliciet geén rand of achtergrond, zodat een toekomstige generieke regel hem niet alsnog
+    in een doos zet."""
+    body = _blok(".c2-smal .ck-meta > summary")
+    for eig in ("font-size:.78rem", "cursor:pointer", "background:none", "border:0"):
+        assert eig in body, eig
+
+
+def test_acties_draagt_het_designsysteem():
+    """De aanleiding: `/acties` stond niet in `_NU_ROUTES` en zag er daarom anders uit dan
+    Messages. Deze toets hoort hier omdat de opmaak hierboven ERVAN UITGAAT dat `.nu` meedoet."""
+    from nooch_village.cockpit2 import _NU_ROUTES
+    assert "/acties" in _NU_ROUTES and "/messages" in _NU_ROUTES

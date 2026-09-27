@@ -163,7 +163,7 @@ def _meta(st, it: dict, ik: str, csrf_token: str) -> str:
     # `<details>` EN GEEN JAVASCRIPT: dichtgeklapt is dit één grijs linkje, open een select. De
     # browser doet het openklappen zelf, en daarmee werkt het ook als er iets met een script
     # misgaat — zelfde keuze als bij de wiki-secties.
-    return (f"<details class='ck-meta'><summary class='flink'>+ link to a project</summary>"
+    return (f"<details class='ck-meta'><summary>+ link to a project</summary>"
             f"<form method='post' action='/action' class='ck-doorgeef'>"
             f"{_verborgen(csrf_token, it['id'])}"
             f"<label class='sr' for='pj-{_e(it['id'])}'>Project</label>"

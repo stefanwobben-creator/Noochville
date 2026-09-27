@@ -261,7 +261,22 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    WAT BEWUST NIET IS OVERGENOMEN: "of als hover-knop". Hover bestaat niet op een telefoon, en
    `.ck-item .dellink` liet al zien wat dat kost — daar was de knop onbereikbaar. Hij staat er
    dus altijd, maar zo zacht dat hij niet in de weg zit. */
-.c2-smal .ck-meta > summary{list-style:none;color:var(--muted);font-weight:600;
+/* DE WIKKEL IS GEEN KAART. `web_base._CSS` geeft ELKE `<details>` een rand, een achtergrond,
+   een schaduw, marge en padding — hij is daar bedoeld als uitklapbaar blok. Hier is hij een
+   linkje van vier woorden, en dan is een kader eromheen precies het tegenovergestelde van
+   "subtiel". Gemist bij de eerste ronde: ik mat toen alleen de TYPOGRAFIE van de `<summary>` en
+   keek niet naar de doos eromheen. Zichtbaar geworden toen `/acties` het designsysteem kreeg
+   (#627) — maar hij stond er daarvóór net zo goed. */
+.c2-smal .ck-meta{background:none;border:0;border-radius:0;box-shadow:none;margin:0;padding:0}
+.c2-smal .ck-meta[open]{padding-bottom:0}
+/* GEEN `.flink` MEER OP DIT ELEMENT. Het designsysteem maakt daar onder `.nu` een KNOP van
+   (`.nu .addlink, .nu .vswitch a, .nu .flink { border:1.5px solid …; background:… }`), en dan
+   staat er een omrande knop over de volle breedte waar een linkje van vier woorden hoorde. Dat
+   is geen bug in het designsysteem: `.flink` Ís daar een knop. Dit element is er alleen nooit
+   één geweest — het is het label van een uitklapper. Het draagt de klasse dus niet meer en
+   brengt zijn eigen (subtiele) uiterlijk mee. */
+.c2-smal .ck-meta > summary{list-style:none;color:var(--muted);font-weight:600;padding:0;
+  font-family:inherit;font-size:.78rem;cursor:pointer;background:none;border:0;
   text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px}
 .c2-smal .ck-meta > summary::-webkit-details-marker{display:none}
 .c2-smal .ck-meta > summary:hover,.c2-smal .ck-meta > summary:focus-visible{
