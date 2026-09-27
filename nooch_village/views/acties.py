@@ -47,6 +47,24 @@ def _projectnaam(st, pid: str) -> str:
     return (sc if isinstance(sc, str) and sc.strip() else "") or pid
 
 
+def _eigenaarnaam(st, owner: str) -> str:
+    """De leesbare naam van een project-eigenaar, voor de kop boven een groep.
+
+    DRIE VORMEN, want dat zijn de drie die een eigenaar kan hebben: een rol, een cirkel, of een
+    Individueel Initiatief (`ii:<cirkel>`). Die laatste heeft geen eigen record — hij hoort bij
+    de cirkel uit zijn prefix, en zo heet hij ook op het bord.
+
+    Valt terug op het kale id: een groep zonder kop is erger dan een lelijke kop, want dan weet je
+    niet waar de projecten eronder vandaan komen."""
+    from nooch_village.cockpit2 import _II_PREFIX
+    if owner.startswith(_II_PREFIX):
+        cirkel = st.records.get(owner[len(_II_PREFIX):])
+        naam = _name(cirkel) if cirkel is not None else ""
+        return f"{naam or owner} — eigen initiatief" if naam else owner
+    rec = st.records.get(owner)
+    return (_name(rec) if rec is not None else "") or owner or "—"
+
+
 #: De projectstatussen die "hier wordt aan gewerkt" betekenen. Een actie hang je aan iets dat
 #: loopt; aan een toekomstig of afgerond project hoort geen volgende stap.
 _LOPEND = ("running", "blocked")
@@ -81,7 +99,7 @@ def _projectopties(st, ik: str, huidig: str) -> str:
     mijn_cirkels = {c for c in (resolve_circle_id(r, st.records) for r in mijn_rollen) if c}
     van_mij = mijn_rollen | mijn_cirkels | {f"{_II_PREFIX}{c}" for c in mijn_cirkels}
 
-    rij = []
+    per_eigenaar: dict[str, list[tuple[str, str]]] = {}
     for p in st.projects.all():
         pid = p.get("id") or ""
         if not pid or p.get("archived"):
@@ -93,12 +111,27 @@ def _projectopties(st, ik: str, huidig: str) -> str:
         if not mag_project_lezen(st, pid, ik):
             continue
         sc = p.get("scope")
-        rij.append((pid, (sc if isinstance(sc, str) else "") or pid))
-    rij.sort(key=lambda x: x[1].lower())
+        per_eigenaar.setdefault(str(p.get("owner") or ""), []).append(
+            (pid, (sc if isinstance(sc, str) else "") or pid))
+
+    # GEGROEPEERD PER EIGENAAR, met `<optgroup>` — native HTML, geen JavaScript.
+    #
+    # WAAROM DIT NODIG IS, gemeten op prod: van Stefans 46 keuzes hangen er 35 aan één rol
+    # (Strategic Lead & Founder Steward). De filter klópt — 46 van 168 — maar een platte lijst van
+    # 46 waarvan 35 uit dezelfde hoek komen leest als "alles". Een kop per rol maakt van één brij
+    # vier stapels, en dan zie je meteen in welke je moet zijn.
+    #
+    # GEEN JAVASCRIPT, en dat is geen toevalligheid maar de architectuur van dit scherm: typen +
+    # Enter werkt hier omdat de browser het zelf doet. Een zoek-dropdown zou daar het eerste
+    # script introduceren; `<optgroup>` kost er nul.
     opties = "<option value=''>no project&hellip;</option>"
-    for pid, naam in rij:
-        aan = " selected" if pid == huidig else ""
-        opties += f"<option value='{_e(pid)}'{aan}>{_e(naam[:70])}</option>"
+    for eigenaar in sorted(per_eigenaar, key=lambda o: _eigenaarnaam(st, o).lower()):
+        rij = sorted(per_eigenaar[eigenaar], key=lambda x: x[1].lower())
+        opties += f"<optgroup label='{_e(_eigenaarnaam(st, eigenaar))}'>"
+        for pid, naam in rij:
+            aan = " selected" if pid == huidig else ""
+            opties += f"<option value='{_e(pid)}'{aan}>{_e(naam[:70])}</option>"
+        opties += "</optgroup>"
     return opties
 
 
