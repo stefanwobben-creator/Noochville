@@ -280,8 +280,11 @@ def test_de_view_bouwt_de_poort_niet_na(tmp_path):
 
 def test_de_poort_hergebruikt_de_bestaande_mens_rol_koppeling():
     """"Zoek zelf uit hoe de bestaande koppeling mens ↔ rol al ergens wordt vastgesteld en
-    hergebruik dat." Dat is `is_role_filler`, waar `_role_gate` ook op draait."""
-    bron = inspect.getsource(cockpit2.mag_bericht_verwijderen)
+    hergebruik dat." Dat is `is_role_filler`, waar `_role_gate` ook op draait.
+
+    De regel is verhuisd van `mag_bericht_verwijderen` naar `wis_namens`, toen de tweede trede
+    (de anchor-lead-terugval) erbij kwam — zie `tests/test_vrij_label_en_afzender.py`."""
+    bron = inspect.getsource(cockpit2.wis_namens)
     assert "is_role_filler(" in bron
     assert "fillers_of(" not in bron, "er wordt een tweede mechanisme naast gebouwd"
 

@@ -20,7 +20,7 @@ import re
 import urllib.parse
 
 from nooch_village import channels
-from nooch_village.cockpit2_util import (_DS_LINK, _nav, _name, _person_name, _stamp,
+from nooch_village.cockpit2_util import (_DS_LINK, _nav, _name, _person_name, _rol_naam, _stamp,
                                          _ICON_STICKER, _avatar, inline_edit, inline_edit_knop)
 from nooch_village.web_base import _e, _page, _banner
 
@@ -461,6 +461,30 @@ def _zelfde_spreker(e: dict, vorige: dict | None) -> bool:
     return abs(float(e.get("at") or 0) - float(vorige.get("at") or 0)) <= _GROEP_S
 
 
+def _afzender(st, a: dict) -> str:
+    """De naam boven een bericht, voor elk auteurstype.
+
+    HIER STOND "Someone" VOOR ALLES WAT GEEN MENS IS, en dat viel pas op toen rol-berichten
+    opruimbaar werden (#616): vier berichten van vier verschillende afzenders lazen in de kop
+    allemaal identiek, dus je kon niet zien WÉLKE rol iets zei — laat staan of het er één was die
+    jij bekleedt.
+
+    Drie takken, en alle drie leveren iets WAARS:
+
+      * mens → zijn naam (`_person_name`, ongewijzigd)
+      * bestaande rol → het rol-label (`_rol_naam`, met de cirkel erachter waar het botst)
+      * een vrij label zonder rol erachter → het label zelf: 'claims-checker', 'zelf', 'dialoog'.
+        `signaal.stuur` zet `by` ongefilterd als `author_id` en `by` is vrije tekst; er is dus
+        altijd iéts, en dat is beter dan "Someone".
+
+    "Someone" blijft over voor het enige geval waarin er echt niets is: een bericht zonder
+    auteur-id. Dat is geen naam maar het eerlijke antwoord op een ontbrekend veld."""
+    wie = str(a.get("id") or "")
+    if a.get("type") in ("human", "person"):
+        return _person_name(st, wie) or "Someone"
+    return _rol_naam(st, wie) or "Someone"
+
+
 def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
              vorige: dict | None = None) -> str:
     """Eén bericht in de draad.
@@ -476,7 +500,7 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
         elkaar typt hoort geen drie keer zijn eigen naam te zien staan.
     """
     a = e.get("author") or {}
-    wie = (_person_name(st, a.get("id")) if a.get("type") in ("human", "person") else "") or "Someone"
+    wie = _afzender(st, a)
     van_mij = bool(ik) and a.get("type") in ("human", "person") and a.get("id") == ik
     vervolg = _zelfde_spreker(e, vorige)
     herk = ""
