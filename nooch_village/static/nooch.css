@@ -135,7 +135,7 @@ ul.clean li:last-child{border-bottom:none}
 .bullet-h b{font-size:1.1rem}
 .bullet{display:block}
 .bullet-bm{font-size:.72rem}
-.kc-form{display:flex;flex-direction:column;gap:14px;max-width:34rem}
+.kc-form{display:flex;flex-direction:column;gap:14px;max-width:var(--w-smal-form)}
 .kc-step{border:0.5px solid var(--border);border-radius:12px;padding:.7rem .9rem;background:var(--surface)}
 .kc-h{display:flex;align-items:center;gap:8px;margin-bottom:.5rem}
 .kc-n{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:999px;background:var(--green-tint);color:var(--green-dark);font-size:.8rem;font-weight:700}
@@ -204,7 +204,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    EEN VARIANT BINNEN DE BESTAANDE `c2-`-FAMILIE, geen wijziging aan `.c2-main`/`.c2-wrap` zelf: die dragen de rest van de
    site, waar volle breedte wél klopt (het bord, een tabel, de organisatieboom). Een lijst met
    éénregelige acties over 1100px laat het oog na elke regel helemaal terugspringen. */
-.c2-smal{max-width:34rem;margin-inline:auto}
+.c2-smal{max-width:var(--w-smal-form);margin-inline:auto}
 /* De kopregel tussen open en afgevinkt. Geen `<details>` meer: afgevinkt blijft gewoon staan,
    doorgestreept — op papier zie je je doorgestreepte regels ook nog. */
 .ck-klaar-kop{display:flex;align-items:center;gap:.5rem;margin:.7rem 0 .2rem;
@@ -924,7 +924,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .cl-add{display:inline-block}
 .cl-add>summary{list-style:none;cursor:pointer}
 .cl-add>summary::-webkit-details-marker{display:none}
-.cl-addform{margin-top:.6rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem;background:var(--surface);max-width:30rem}
+.cl-addform{margin-top:.6rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem;background:var(--surface);max-width:var(--w-smal-form)}
 .cl-addform input[name=description],.cl-addform select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-bottom:.2rem}
 .cl-gate{display:flex;gap:.4rem;align-items:flex-start;font-size:.8rem;color:var(--gray);margin:.5rem 0 .7rem}
 /* Metrics */
