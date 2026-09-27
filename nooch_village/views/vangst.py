@@ -29,7 +29,8 @@ from urllib.parse import quote as _q
 import time
 
 from nooch_village import org
-from nooch_village.cockpit2_util import _DS_LINK, _name, _nav, _rol_labels, _stamp
+from nooch_village.cockpit2_util import (_AUTOSAVE, _DS_LINK, _name, _nav, _rol_labels,
+                                        _stamp)
 from nooch_village.web_base import _banner, _e, _field, _page
 
 # De drie routes die een gevangen punt uit kan. Alle drie bestaan al; hier wordt er niets nieuws
@@ -531,7 +532,7 @@ def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
 
     Geen GlassFrog-kleuren (besluit Stefan): crème, zwarte rand, de bestaande `wo-`-familie."""
     iid = it["id"]
-    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+    sub = _AUTOSAVE
     tekst = (it.get("note") or {}).get("spanning") or ""
 
     kort = " ".join(tekst.split())

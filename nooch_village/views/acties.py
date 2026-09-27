@@ -6,7 +6,8 @@ als in een papieren schrift. Elke keuze hieronder volgt daaruit:
   * het invoerveld staat BOVENAAN en is het enige verplichte veld. Eén `<input>` in een formulier
     verstuurt bij Enter uit zichzelf — geen JavaScript, geen knop die je moet zoeken;
   * koppelen aan een project zit achter een `<details>`. Dichtgeklapt is het één grijs linkje van
-    vier woorden; opengeklapt een select. Zo staat de mogelijkheid er wel, maar niet in de weg;
+    vier woorden; opengeklapt een select die bij het kiezen zelf opslaat. Zo staat de mogelijkheid
+    er wel, maar niet in de weg, en kost ze één handeling in plaats van twee;
   * afgevinkte acties zakken naar een ingeklapt blokje onderaan, met één knop om ze te wissen.
 
 GEEN NIEUWE CSS, GEEN INLINE STYLES (harde regel uit CLAUDE.md). Alles hergebruikt bestaande
@@ -30,7 +31,7 @@ from __future__ import annotations
 import urllib.parse
 
 from nooch_village import acties as _A
-from nooch_village.cockpit2_util import _DS_LINK, _nav, _name
+from nooch_village.cockpit2_util import _AUTOSAVE, _DS_LINK, _nav, _name
 from nooch_village.web_base import _e, _page
 
 
@@ -114,16 +115,17 @@ def _projectopties(st, ik: str, huidig: str) -> str:
         per_eigenaar.setdefault(str(p.get("owner") or ""), []).append(
             (pid, (sc if isinstance(sc, str) else "") or pid))
 
-    # GEGROEPEERD PER EIGENAAR, met `<optgroup>` — native HTML, geen JavaScript.
+    # GEGROEPEERD PER EIGENAAR, met `<optgroup>`: native HTML, geen widget.
     #
     # WAAROM DIT NODIG IS, gemeten op prod: van Stefans 46 keuzes hangen er 35 aan één rol
     # (Strategic Lead & Founder Steward). De filter klópt — 46 van 168 — maar een platte lijst van
     # 46 waarvan 35 uit dezelfde hoek komen leest als "alles". Een kop per rol maakt van één brij
     # vier stapels, en dan zie je meteen in welke je moet zijn.
     #
-    # GEEN JAVASCRIPT, en dat is geen toevalligheid maar de architectuur van dit scherm: typen +
-    # Enter werkt hier omdat de browser het zelf doet. Een zoek-dropdown zou daar het eerste
-    # script introduceren; `<optgroup>` kost er nul.
+    # HIER STOND "GEEN JAVASCRIPT" (27 september 2026). Dat klopte niet: dit cockpit gebruikt
+    # `_AUTOSAVE` op negen keuzelijsten, en sinds deze scope ook op de select hieronder. De regel is
+    # niet "geen script" maar "geen EIGEN script": een `<optgroup>` kost nul regels omdat de browser
+    # groeperen al kan, en een zoek-dropdown zou een nieuwe widget zijn die je moet onderhouden.
     opties = "<option value=''>no project&hellip;</option>"
     for eigenaar in sorted(per_eigenaar, key=lambda o: _eigenaarnaam(st, o).lower()):
         rij = sorted(per_eigenaar[eigenaar], key=lambda x: x[1].lower())
@@ -160,16 +162,22 @@ def _meta(st, it: dict, ik: str, csrf_token: str) -> str:
                 f"{_e(_projectnaam(st, pid))}</a>{af}</span>")
     if it.get("done"):
         return ""
-    # `<details>` EN GEEN JAVASCRIPT: dichtgeklapt is dit één grijs linkje, open een select. De
-    # browser doet het openklappen zelf, en daarmee werkt het ook als er iets met een script
-    # misgaat — zelfde keuze als bij de wiki-secties.
+    # `<details>`: dichtgeklapt is dit één grijs linkje, open een select. Het openklappen doet de
+    # browser zelf — zelfde keuze als bij de wiki-secties.
+    #
+    # KIEZEN IS KOPPELEN, geen knop erna. Hier stond een `Link`-knop naast de select, en dat is één
+    # handeling te veel voor één beslissing: je kiest het project, je ziet het in de lijst staan, en
+    # de koppeling is er niet. `_AUTOSAVE` is het bestaande antwoord daarop en staat al op negen
+    # andere keuzelijsten in dit cockpit (impact, effort, eigenaar, trekker, doel, afhankelijkheid).
+    # De actie verhuist daarmee naar een verborgen veld, want zonder knop is er niets meer dat de
+    # naam kan dragen.
     return (f"<details class='ck-meta'><summary>+ link to a project</summary>"
             f"<form method='post' action='/action' class='ck-doorgeef'>"
             f"{_verborgen(csrf_token, it['id'])}"
+            f"<input type='hidden' name='action' value='actie_koppel'>"
             f"<label class='sr' for='pj-{_e(it['id'])}'>Project</label>"
-            f"<select id='pj-{_e(it['id'])}' name='project'>"
+            f"<select id='pj-{_e(it['id'])}' name='project' onchange='{_AUTOSAVE}'>"
             f"{_projectopties(st, ik, str(it.get('project') or ''))}</select>"
-            f"<button class='btn sm' type='submit' name='action' value='actie_koppel'>Link</button>"
             f"</form></details>")
 
 

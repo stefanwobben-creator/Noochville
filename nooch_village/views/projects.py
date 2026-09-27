@@ -11,7 +11,7 @@ from nooch_village.projects import heeft_seed_vorm
 from nooch_village import projects as _PJ                 # tijdlijn (scope 48)
 from nooch_village import doelen as _D
 from nooch_village.cockpit2_util import (
-    _DS_LINK,
+    _AUTOSAVE, _DS_LINK,
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
@@ -171,10 +171,9 @@ def _effort_hours(eff) -> int | None:
     return None
 
 
-# Auto-opslaan: onchange/onblur submit het form (zelfde patroon als de zichtbaarheid-checkbox). In de
-# modal vangt wire() de submit → fetch → reopen (fragment-re-render) + toast; op de volle pagina reload.
-# requestSubmit() vuurt een submit-event (zodat wire 'm ziet); .submit() is de no-requestSubmit-fallback.
-_AUTOSAVE = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+# Auto-opslaan (onchange/onblur submit het form) woont sinds 27 september 2026 in
+# `cockpit2_util`: `views/acties.py` had hetzelfde nodig, en een tweede definitie van dit snippet is
+# een tweede plek waar hij kan verschuiven. Zie de uitleg daar.
 
 
 def _impact_select(p, field: str, kind: str, opts, rw: bool, hid) -> str:
@@ -1515,7 +1514,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"<form method='post' action='/action'>{hid()}"
                     f"<input type='hidden' name='action' value='proj_setdue'>"
                     f"<input type='date' name='due' value='{_e(due)}' "
-                    f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+                    f"onchange='{_AUTOSAVE}'>"
                     f"</form>{due_rm}</div></details>{due_badge}")
     else:
         due_head = (f"<span class='chip {'coral' if over else 'outline'}'>{_IC_CLOCK}{_e(due_lbl)}</span>{due_badge}"
