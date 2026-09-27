@@ -1682,6 +1682,25 @@ def _act_msg_post(c):
     return nxt, "💬 posted" + (f" · {gemeld} mentioned" if gemeld else "")
 
 
+def mag_bericht_verwijderen(st, entry: dict, ik: str) -> bool:
+    """Mag deze mens dit bericht weghalen? ÉÉN VRAAG voor het scherm én de actie.
+
+    Precies hetzelfde patroon als `mag_kanaal_verwijderen`: de view importeert deze functie in
+    plaats van de regel na te bouwen, zodat de knop en de POST niet uit elkaar kunnen lopen.
+
+    De regel zelf staat in `channels.mag_wissen` — daar, want de diepe poort (`_eigen`) stelt
+    hem ook en die zit in de store. Hier komt alleen de helft bij die de store niet kan weten:
+    WELKE ROLLEN DEZE MENS BEKLEEDT. Dat is `is_role_filler`, dezelfde helper waar `_role_gate`
+    op draait — geen tweede mens-↔-rol-mechanisme naast het bestaande.
+
+    ALLEEN VOOR WISSEN. Bewerken blijft mens-eigen: `bewerk` geeft geen `rol_check` mee. Een rol
+    mag je het zwijgen opleggen, je mag haar geen andere woorden in de mond leggen."""
+    if not ik:
+        return False
+    return channels.mag_wissen(entry, ik,
+                               lambda rid: is_role_filler(ik, rid, st.assign))
+
+
 def _eigen_bericht_poort(c):
     """(ik, kanaal, item, fout) — de gedeelde voordeur van bewerken en wissen. `fout` is "" als
     alles klopt; is hij gevuld, dan zijn de andere drie leeg."""
@@ -1714,15 +1733,20 @@ def _act_msg_edit(c):
 def _act_msg_remove(c):
     """Je eigen bericht in een kanaal weghalen.
 
-    # AUTHZ: iedereen-ingelogd — zie `_act_msg_edit`: ingelogd mag posten en dus ook zijn EIGEN
-    # bericht terugnemen. Wiens bericht het is beslist `ChannelStore._eigen`, niet dit scherm.
+    # AUTHZ: rolvervuller of de auteur zelf — ingelogd mag posten en dus ook zijn EIGEN bericht
+    # terugnemen; sinds 26 september 2026 óók een bericht van een ROL die hij bekleedt, want
+    # anders is er niemand die de meldingen op die rol kan opruimen. Wie wat mag beslist
+    # `ChannelStore._eigen` via `channels.mag_wissen`, niet dit scherm.
     """
     ik, kanaal, item, fout = _eigen_bericht_poort(c)
     if fout:
         return _terug_naar(c, kanaal), fout
-    if c.st.channels.verwijder(kanaal, item, door=ik):
+    st = c.st
+    if st.channels.verwijder(kanaal, item, door=ik,
+                             rol_check=lambda rid: is_role_filler(ik, rid, st.assign)):
         return _terug_naar(c, kanaal), "🗑 message removed"
-    return _terug_naar(c, kanaal), "✗ nothing removed — you can only remove your own message"
+    return _terug_naar(c, kanaal), (
+        "✗ nothing removed — you can only remove your own message, or one from a role you fill")
 
 
 def _terug_naar(c, kanaal: str) -> str:

@@ -493,7 +493,15 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     # andere zonder dat iemand het merkt.
     from nooch_village.views.feed import reactie_blok
     rx, picker = reactie_blok(e, csrf_token, {"kanaal": kanaal}) if kanaal else ("", "")
-    gereedschap = _eigen_gereedschap(e, kanaal, csrf_token) if van_mij else ""
+    # MAG IK DIT WEGHALEN ≠ IS DIT VAN MIJ. `van_mij` is de VORMVRAAG (rechts, met een tint,
+    # zonder avatar) en blijft mens-eigen. Sinds 26 september 2026 mag je ook een bericht van een
+    # ROL die je bekleedt weghalen — maar dat blijft andermans naam boven de tekst, dus het staat
+    # links als elk ander bericht. De poort komt uit `cockpit2`, dezelfde functie die de actie
+    # gebruikt; hem hier nabouwen is precies wat #610 leerde niet te doen.
+    from nooch_village.cockpit2 import mag_bericht_verwijderen
+    mag_wissen = bool(ik) and mag_bericht_verwijderen(st, e, ik)
+    gereedschap = (_eigen_gereedschap(e, kanaal, csrf_token, bewerken=van_mij)
+                   if mag_wissen else "")
     voet = (f"<div class='msg-reacties'>{rx}{picker}{gereedschap}</div>"
             if (rx or picker or gereedschap) else "")
     voet = _bijlagen_html(e, kanaal) + voet
@@ -507,14 +515,18 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     # plek van de tekst, maar de knop die dat aanzet staat in de voet. Zit de grens tussen die
     # twee in, dan vindt `closest()` hem niet — dat staat zo in `inline_edit` en het is hier
     # precies dezelfde situatie als op de project-wall.
+    # `editor-inline` HOORT BIJ HET BEWERKVELD, niet bij de voetregel. Bij een rol-bericht staat
+    # er wel gereedschap (Remove) maar géén inline editor; de klasse dan toch zetten laat
+    # `inline_edit` een veld zoeken dat er niet is.
+    bewerkbaar = van_mij and bool(gereedschap)
     cls = ("msg-item" + (" msg-item--ik" if van_mij else "")
            + (" msg-item--volg" if vervolg else "")
-           + (" editor-inline" if gereedschap else ""))
+           + (" editor-inline" if bewerkbaar else ""))
     # ESCAPEN, DAN PAS LINKEN — in die volgorde, zie `linkify`. Het bericht blijft kale tekst
     # zonder markdown; alleen een adres wordt aanklikbaar, want dat is wat iemand in een chat
     # plakt zonder erbij na te denken.
     tekst = f"<div class='msg-text'>{linkify(_e(e.get('text') or ''))}</div>"
-    if gereedschap:
+    if bewerkbaar:
         tekst = _bewerk_veld(e, kanaal, csrf_token)
     return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
             f"{tekst}{voet}</div></div>")
@@ -559,12 +571,17 @@ def _bewerk_veld(e: dict, kanaal: str, csrf_token: str) -> str:
                        toon_cls="msg-text")
 
 
-def _eigen_gereedschap(e: dict, kanaal: str, csrf_token: str) -> str:
-    """Bewerken en verwijderen van je EIGEN bericht, in de voetregel naast de reactie-kiezer.
+def _eigen_gereedschap(e: dict, kanaal: str, csrf_token: str, *, bewerken: bool = True) -> str:
+    """Wat je met één bericht kunt, in de voetregel naast de reactie-kiezer.
 
     DAAR EN NERGENS ANDERS: dat is de regel waar alles wat je met één bericht kunt doen al
     staat. Een tweede plek (een hoekje, een hover-menu) zou betekenen dat "wat kan ik met dit
     bericht" twee antwoorden heeft.
+
+    `bewerken=False` LAAT EDIT WEG en houdt Remove. Dat is de stand bij een bericht van een rol
+    die je bekleedt: opruimen mag, herschrijven niet — anders staat er tekst onder de naam van
+    een rol die de rol niet schreef. Zou Edit er toch staan, dan is hij bovendien dood: `bewerk`
+    krijgt geen `rol_check` en weigert.
 
     Geen id op het bericht = geen knoppen. Dat is het oude schema; fail-closed, geen knop die
     straks niets raakt — dezelfde regel als in `reactie_blok`."""
@@ -574,8 +591,8 @@ def _eigen_gereedschap(e: dict, kanaal: str, csrf_token: str) -> str:
            f"{_msg_verborgen(e, kanaal, csrf_token)}"
            f"<button class='flink' type='submit' name='action' value='msg_remove' "
            f"onclick=\"return confirm('Remove message?')\">Remove</button></form>")
-    return (f"<span class='fsep'>·</span>{inline_edit_knop()}"
-            f"<span class='fsep'>·</span>{wis}")
+    voor = (f"<span class='fsep'>·</span>{inline_edit_knop()}" if bewerken else "")
+    return f"{voor}<span class='fsep'>·</span>{wis}"
 
 
 def _sticker_kiezer(kanaal: str, csrf_token: str) -> str:

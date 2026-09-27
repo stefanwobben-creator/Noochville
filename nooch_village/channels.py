@@ -205,6 +205,43 @@ def _normaliseer_naam(naam) -> str:
     return " ".join(str(naam or "").split())[:NAAM_MAX]
 
 
+def mag_wissen(entry: dict, door: str, rol_check=None) -> bool:
+    """Mag `door` dit bericht weghalen? ÉÉN PREDIKAAT, en daarom staat hij hier los.
+
+    Hij wordt op twee plekken gesteld die niet uit elkaar mogen lopen: de diepe poort
+    (`_eigen`, waar geen scherm tussenuit kan vallen) en het scherm, dat de knop alleen rendert
+    als het antwoord ja is. Twee kopieën van deze vraag is precies hoe de goal-kanaal-bug zich
+    vermenigvuldigde — zie `_normaliseer_tekst` hierboven voor hetzelfde verhaal.
+
+    TWEE SOORTEN AUTEUR:
+
+      * `human`/`person` → alleen jijzelf. Ongewijzigd sinds het begin.
+      * `role` → de mens die DIE ROL BEKLEEDT, en verder niemand. Dat is nieuw (26 september
+        2026, besluit Stefan) en het draait een eerdere regel om: "een bericht van een rol is van
+        niemand, ook niet van de mens die de rol vervult". Dat klopte als eigendomsvraag maar niet
+        als opruimvraag — de capaciteit-waarschuwingen die via `signaal.stuur` bij een rol landen
+        waren daardoor voor NIEMAND weg te halen, ook niet voor degene die ze moest lezen.
+
+    `rol_check` is de vraag "bekleedt deze mens rol X", als callable en niet als store: deze
+    module weet niets van `assignments` en hoort dat ook niet te gaan weten. Zonder `rol_check`
+    valt de rol-tak weg, en dat is de stand voor BEWERKEN: een rol-bericht mag je weghalen, niet
+    herschrijven — anders staat er tekst onder de naam van een rol die de rol niet schreef.
+
+    Fail-closed op alles: lege `door`, onbekend auteurstype, een `rol_check` die opblaast."""
+    a = entry.get("author") or {}
+    soort, wie = a.get("type"), str(a.get("id") or "")
+    if not door:
+        return False
+    if soort in ("human", "person"):
+        return wie == door
+    if soort == "role" and rol_check is not None and wie:
+        try:
+            return bool(rol_check(wie))
+        except Exception:                                     # noqa: BLE001
+            return False
+    return False
+
+
 class ChannelStore(JsonStore):
     """De kanalen die hier wonen: cirkel en DM. Project-kanalen lopen via de ProjectLedger.
 
@@ -245,25 +282,25 @@ class ChannelStore(JsonStore):
         self._save()
         return entry
 
-    def _eigen(self, kanaal: str, entry_id: str, door: str) -> dict | None:
-        """De entry met dit id, maar ALLEEN als `door` hem zelf schreef. Anders None.
+    def _eigen(self, kanaal: str, entry_id: str, door: str, rol_check=None) -> dict | None:
+        """De entry met dit id, maar ALLEEN als `door` hem mag aanraken. Anders None.
 
         DIT IS DE POORT, en hij staat hier en niet in het scherm. Een knop die niet gerenderd
         wordt houdt geen POST tegen; wie het formulier naspeelt met het id van een ander moet
         op deze regel stuklopen en niet op de afwezigheid van een knop.
 
-        Een bericht van een ROL is van niemand, ook niet van de mens die de rol vervult: de
-        auteur-typen `human`/`person` zijn de enige twee die een mens aanwijzen. Fail-closed —
-        onbekend kanaal, onbekend id of een lege `door` geeft None."""
+        HIER STOND "een bericht van een ROL is van niemand, ook niet van de mens die de rol
+        vervult". Dat is op 26 september 2026 omgedraaid, maar alleen voor WISSEN: `verwijder`
+        geeft een `rol_check` mee, `bewerk` niet. De vraag zelf staat in `mag_wissen` hierboven,
+        één keer, want het scherm stelt hem ook.
+
+        Fail-closed — onbekend kanaal, onbekend id of een lege `door` geeft None."""
         if not (kanaal and entry_id and door):
             return None
         for e in self.trail(kanaal, limit=TRAIL_MAX):
             if e.get("id") != entry_id:
                 continue
-            a = e.get("author") or {}
-            if a.get("type") in ("human", "person") and a.get("id") == door:
-                return e
-            return None
+            return e if mag_wissen(e, door, rol_check) else None
         return None
 
     def bewerk(self, kanaal: str, entry_id: str, tekst: str, *, door: str) -> bool:
@@ -289,8 +326,9 @@ class ChannelStore(JsonStore):
                 return True
         return False
 
-    def verwijder(self, kanaal: str, entry_id: str, *, door: str) -> bool:
-        """Haal je EIGEN bericht weg. Echt weg, geen "message deleted"-plaatshouder.
+    def verwijder(self, kanaal: str, entry_id: str, *, door: str, rol_check=None) -> bool:
+        """Haal je EIGEN bericht weg, of dat van een rol die je bekleedt. Echt weg, geen
+        "message deleted"-plaatshouder.
 
         WAAROM HARD EN NIET ZACHT: een projectkanaal IS `project["log"]`, en daar bestaat
         `feed_remove` al — de project-wall verwijdert zo sinds fase 5. Een zachte verwijdering
@@ -299,7 +337,7 @@ class ChannelStore(JsonStore):
 
         De bijlage-bestanden op schijf blijven staan en worden onbereikbaar: `bijlage()` zoekt
         ze via de entry op, en die is er niet meer. Opruimen van wezen is een eigen klus."""
-        if self._eigen(kanaal, entry_id, door) is None:
+        if self._eigen(kanaal, entry_id, door, rol_check) is None:
             return False
         if soort_van(kanaal) == PROJECT:
             if self._ledger is None:
