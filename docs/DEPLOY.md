@@ -22,6 +22,9 @@ ssh root@138.201.154.162 'bash /opt/noochville/scripts/deploy.sh'
 
 `scripts/deploy.sh` doet, veilig en idempotent:
 
+- hij **gaat eerst verder vanaf een kopie** van zichzelf in `/tmp` (`▸ verder vanaf een kopie: …`).
+  Dit script ligt in de repo die het uitrolt, en bash leest een script incrementeel — een wijziging
+  aan `deploy.sh` tijdens zijn eigen pull zou de lopende run anders halverwege laten verspringen;
 - git-acties draaien als **nooch** (niet root) → bestandsrechten blijven goed, geen PermissionError-crash;
 - alleen **fast-forward naar origin/main** (gedivergeerd of vuil → stop, geen stille merge);
 - `requirements.txt` gewijzigd? → dependencies bijwerken in de venv;
