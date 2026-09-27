@@ -47,22 +47,56 @@ def _projectnaam(st, pid: str) -> str:
     return (sc if isinstance(sc, str) and sc.strip() else "") or pid
 
 
-def _projectopties(st, ik: str, huidig: str) -> str:
-    """De projecten waaruit deze mens mag kiezen: alles wat hij mag lezen.
+#: De projectstatussen die "hier wordt aan gewerkt" betekenen. Een actie hang je aan iets dat
+#: loopt; aan een toekomstig of afgerond project hoort geen volgende stap.
+_LOPEND = ("running", "blocked")
 
-    DEZELFDE REGEL ALS DE ZICHTBAARHEID, en met opzet: kon je koppelen aan een project dat je niet
-    mag zien, dan zou je je eigen actie uit je lijst kunnen laten verdwijnen."""
+
+def _projectopties(st, ik: str, huidig: str) -> str:
+    """De projecten waaruit deze mens kiest: wat LOOPT, onder zijn EIGEN rollen.
+
+    HIER STOND "alles wat je mag lezen" (27 september 2026, teruggedraaid). Dat was technisch de
+    goede grens — hij spiegelde de zichtbaarheidsregel — maar als keuzelijst onbruikbaar: op prod
+    staan honderden projecten, en de kans dat het jouwe erbij staat verdwijnt in het scrollen. Een
+    keuzelijst hoort te helpen kiezen, niet te bewijzen dat je mag.
+
+    DRIE FILTERS, van breed naar smal:
+
+      1. leesbaar        — de zichtbaarheidsregel blijft de buitengrens (zie hieronder);
+      2. lopend          — `running` of `blocked`; niet future, niet afgerond, niet gearchiveerd;
+      3. onder jouw rol  — eigenaar is een rol die JÍJ vervult, de cirkel eromheen, of je eigen
+                           Individueel Initiatief.
+
+    DE BUITENGRENS BLIJFT DE ZICHTBAARHEID, en dat is geen dubbeling maar een vangnet: filter 3
+    werkt op eigenaarschap, en een priévé project van een rol die je vervult zou je anders nooit
+    kunnen kiezen — terwijl je hem wél mag zien. Kon je koppelen aan iets wat je niet mag lezen,
+    dan zou je je eigen actie uit je eigen lijst laten verdwijnen.
+
+    HET HUIDIGE PROJECT STAAT ER ALTIJD BIJ, ook als het inmiddels buiten de filters valt. Anders
+    wist een select die je opent om te ontkoppelen stilzwijgend de koppeling die er stond."""
     from nooch_village.views.messages import mag_project_lezen
+    from nooch_village.cockpit2 import _II_PREFIX, resolve_circle_id
+
+    mijn_rollen = set(st.assign.roles_of("person", ik)) if ik else set()
+    mijn_cirkels = {c for c in (resolve_circle_id(r, st.records) for r in mijn_rollen) if c}
+    van_mij = mijn_rollen | mijn_cirkels | {f"{_II_PREFIX}{c}" for c in mijn_cirkels}
+
     rij = []
     for p in st.projects.all():
         pid = p.get("id") or ""
-        if p.get("archived") or not pid or not mag_project_lezen(st, pid, ik):
+        if not pid or p.get("archived"):
+            continue
+        eigen_keuze = pid == huidig
+        if not eigen_keuze:
+            if p.get("status") not in _LOPEND or (p.get("owner") or "") not in van_mij:
+                continue
+        if not mag_project_lezen(st, pid, ik):
             continue
         sc = p.get("scope")
         rij.append((pid, (sc if isinstance(sc, str) else "") or pid))
     rij.sort(key=lambda x: x[1].lower())
     opties = "<option value=''>no project&hellip;</option>"
-    for pid, naam in rij[:300]:
+    for pid, naam in rij:
         aan = " selected" if pid == huidig else ""
         opties += f"<option value='{_e(pid)}'{aan}>{_e(naam[:70])}</option>"
     return opties
@@ -100,7 +134,8 @@ def _meta(st, it: dict, ik: str, csrf_token: str) -> str:
             f"<form method='post' action='/action' class='ck-doorgeef'>"
             f"{_verborgen(csrf_token, it['id'])}"
             f"<label class='sr' for='pj-{_e(it['id'])}'>Project</label>"
-            f"<select id='pj-{_e(it['id'])}' name='project'>{_projectopties(st, ik, '')}</select>"
+            f"<select id='pj-{_e(it['id'])}' name='project'>"
+            f"{_projectopties(st, ik, str(it.get('project') or ''))}</select>"
             f"<button class='btn sm' type='submit' name='action' value='actie_koppel'>Link</button>"
             f"</form></details>")
 
@@ -152,6 +187,16 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     lijst = ("".join(_regel(st, a, ik, csrf_token) for a in open_rij) if open_rij
              else "<p class='muted'>Nothing open. Quiet.</p>")
 
+    # AFGEVINKT BLIJFT GEWOON STAAN, doorgestreept, direct onder de open regels.
+    #
+    # HIER ZAT EEN `<details>`-BLOKJE, dichtgeklapt (besluit teruggedraaid, 27 september 2026).
+    # De gedachte was "af is af, ruim het op"; de uitwerking was dat een afgevinkte actie
+    # VÓÓLDE alsof hij verdween — je moest een blokje openklikken om te zien dat hij er nog
+    # stond. Op papier streep je een regel door en hij blijft staan; dat je hem nog ziet is
+    # precies wat "gedaan" bevredigend maakt.
+    #
+    # DE SCHEIDING BLIJFT WEL: een kopregel met de teller en de wis-knop. Zonder streep lopen
+    # open en klaar in elkaar over, en dan is de lijst één grijze massa.
     klaar = ""
     if klaar_rij:
         wis = (f"<form method='post' action='/action' class='fentry-inline'>"
@@ -160,13 +205,21 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
                f"onclick=\"return confirm('Clear {len(klaar_rij)} finished action"
                f"{'s' if len(klaar_rij) != 1 else ''}? This cannot be undone.')\">"
                f"clear finished</button></form>")
-        klaar = (f"<details class='card'><summary class='muted'>{len(klaar_rij)} done</summary>"
-                 f"{wis}"
-                 f"{''.join(_regel(st, a, ik, csrf_token) for a in klaar_rij)}</details>")
+        klaar = (f"<div class='ck-klaar-kop'><span class='muted'>{len(klaar_rij)} done</span>"
+                 f"{wis}</div>"
+                 f"{''.join(_regel(st, a, ik, csrf_token) for a in klaar_rij)}")
 
-    main = (f"<div class='c2-main'><h1 class='ptitle'>My actions</h1>"
+    # `c2-smal` — EEN BREEDTE-VARIANT VOOR DIT SCHERM, en met opzet geen wijziging aan `.c2-main`
+    # of `.c2-wrap` zelf: die dragen de rest van de site, waar volle breedte wél klopt (het bord,
+    # een tabel, de organisatieboom). Een lijst met éénregelige acties leest slecht over 1100px —
+    # het oog moet na elke regel helemaal terug. Smal en gecentreerd, zoals het prototype.
+    #
+    # BINNEN DE BESTAANDE `c2-`-FAMILIE en niet als eigen `act-*`-prefix: `test_ui_ratchets`
+    # bevriest het aantal klasse-families, en een breedte-variant van de contentkolom hóórt bij
+    # de layout-familie. Hetzelfde geldt voor `.ck-klaar-kop`, dat tussen checklist-items staat.
+    main = (f"<div class='c2-main c2-smal'><h1 class='ptitle'>My actions</h1>"
             f"<p class='muted'>Jot it down like on paper. Link it to a project only if you want "
             f"to &mdash; then the people on that project see it too.</p>"
             f"{_banner(msg)}"
-            f"<div class='card'>{toevoegen}{lijst}</div>{klaar}</div>")
+            f"<div class='card'>{toevoegen}{lijst}{klaar}</div></div>")
     return _page("My actions", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

@@ -118,3 +118,16 @@ _JS_UITLEG = re.compile(r"(?<![:\\/])//[^\n]*|/\*.*?\*/", re.S)
 def js_zonder_uitleg(bron: str) -> str:
     """`nooch.js` zonder commentaar, zodat een assertie de CODE meet en niet de uitleg erboven."""
     return _JS_UITLEG.sub("", bron)
+
+
+def py_zonder_uitleg(bron: str) -> str:
+    """Python-broncode zonder `#`-commentaar. Nodig zodra een toets een NAAM verbiedt in een stuk
+    code: de uitleg erboven noemt die naam juist vaak, om te vertellen waar hij heen is. Zelfde
+    reden als `js_zonder_uitleg` hierboven — een toets op de vorm van code hoort de code te lezen,
+    niet het verhaal eromheen.
+
+    Ruw maar voldoende: een `#` binnen een string blijft staan als commentaar-start. Dat is hier
+    veilig, want deze helper wordt gebruikt om AFWEZIGHEID te toetsen, en te veel wegstrepen kan
+    zo'n toets alleen strenger maken, nooit losser."""
+    import re as _re
+    return "\n".join(_re.sub(r"#.*$", "", regel) for regel in bron.splitlines())

@@ -27,6 +27,7 @@ from nooch_village.views.copy_prompt import zorg_voor_tool as cp_tool
 from nooch_village.views.decision_coach import TOOL_ROL, TOOL_TITEL as DC_TITEL
 from nooch_village.views.decision_coach import zorg_voor_tool as dc_tool
 from nooch_village.views.overview import render_node
+from nooch_village.views.tools import render_tools
 
 ANCHOR = "mother_earth"
 SUBROL = "mother_earth__nooch__community_and_email"
@@ -92,21 +93,23 @@ def test_er_komt_niets_meer_op_de_oude_rol(tmp_path):
 
 
 # ══ 2. De UI rendert een cirkel-anchor ═══════════════════════════════════════
-def test_de_kaarten_staan_op_de_cirkelpagina(tmp_path):
-    """GEMETEN VOOR HET BOUWEN, niet aangenomen: `wiki` staat in `_CIRCLE_TABS`, het tool-filter
-    werkt op een cirkel en de lege tekst zegt zelf al "role/circle"."""
+def test_de_kaarten_staan_op_de_tools_pagina(tmp_path):
+    """HIER STOND "op de cirkelpagina", en dat klopte tot 27 september 2026: tools zaten in de
+    wiki-tab van hun eigenaar. Ze hebben nu een eigen ingang (`/tools`) en zijn daar weggehaald —
+    het punt van DEZE toets, dat ze bereikbaar en zichtbaar zijn, is onveranderd."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
-    h = render_node(st, ANCHOR, "tools", csrf_token="t", username="anchor@test.nl")
+    h = render_tools(st, csrf_token="t", username="anchor@test.nl")
     assert DC_TITEL in h and CP_TITEL in h
     assert "/decision-coach" in h and "/copy-prompt" in h
-    assert "No tools on this role/circle yet." not in h
 
 
 def test_ze_zijn_daar_ook_te_bewerken(tmp_path):
+    """Bewerken gebeurt op de rol, zoals bij elk artefact; `/tools` wijst de weg erheen en toont
+    die weg alleen aan wie er mag schrijven."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
-    h = render_node(st, ANCHOR, "tools", csrf_token="t", username="anchor@test.nl")
-    assert h.count("artefact_edit") >= 2
-    assert "artefact_add" in h
+    h = render_tools(st, csrf_token="t", username="anchor@test.nl")
+    assert h.count("edit on the role") >= 2
+    assert "edit on the role" not in render_tools(st, csrf_token="t", username="buiten@test.nl")
 
 
 def test_de_copy_prompt_pagina_slikt_een_cirkel(tmp_path):

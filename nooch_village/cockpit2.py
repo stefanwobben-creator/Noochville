@@ -6109,6 +6109,14 @@ def make_handler(data_dir: str, csrf_token: str,
                                            q=(qs.get("q") or [""])[0],
                                            lijst=bool((qs.get("list") or [""])[0])))
                 return
+            if path == "/tools":
+                # AUTHZ: iedereen-ingelogd — lezen is vrij, dezelfde scope als de wiki-tab waar
+                # deze tools vandaan komen. BEWERKEN verandert niet: dat loopt per artefact langs
+                # `can_write_artefact`, en de knop verschijnt alleen voor wie dat mag.
+                from nooch_village.views.tools import render_tools
+                self._send(render_tools(st, csrf_token=effective_csrf, username=username,
+                                        msg=(qs.get("msg") or [""])[0]))
+                return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
                 # herkende persoon is er niets te tonen (`render_acties` zegt dat zelf). Er is geen

@@ -519,7 +519,10 @@ def test_route_policy_domein_server_side_gevalideerd(tmp_path):
 def test_ui_tools_tab_toont_url_en_icon(tmp_path):
     st = _stores(tmp_path)
     st.att.add(OWNER, "tool", title="Serpstat", url="https://serpstat.com")
-    html = cockpit2.render_node(st, OWNER, "tools", csrf_token="tok", username="guest")
+    # HET TOOLS-OPPERVLAK IS `/tools` GEWORDEN (27 september 2026), niet meer een tab op de rol.
+    # Wat deze toets bewaakt is onveranderd: een tool toont zijn url en zijn icoon.
+    from nooch_village.views.tools import render_tools
+    html = render_tools(st, csrf_token="tok", username="guest")
     assert "Tools" in html and "https://serpstat.com" in html and "🛠" in html
     # De tab zit in de tabbar — sinds fase 7 als Wiki, want policies/notes/tools zijn daar één
     # oppervlak geworden. `tab=tools` blijft als LINK werken (render_node vertaalt hem naar
