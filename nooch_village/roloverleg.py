@@ -14,6 +14,7 @@ Opslag: data/roloverleg_agenda.json (gitignored).
 """
 from __future__ import annotations
 import os, re, time, uuid
+from nooch_village.governance_review import _ing_start
 from nooch_village.util import atomic_write_json, read_json
 
 
@@ -251,7 +252,10 @@ _EXEMPT_PROPOSERS = {"founder", "facilitator", "secretary"}   # Circle Lead / pr
 
 def secretary_check(item: dict, records) -> list[dict]:
     """Good-governance-check door de Secretaris: deterministische poort (G0-G4) + de
-    -en-formuleercheck. Geeft een lijst issues [{level: 'blok'|'let op', msg}]; leeg = in orde."""
+    -ing-formuleercheck. Geeft een lijst issues [{level: 'blok'|'let op', msg}]; leeg = in orde.
+
+    DE FORMULEERCHECK WAS NEDERLANDS (-en) tot 27 september 2026 en deelt sindsdien één
+    implementatie met `governance_review._ing_start`."""
     from nooch_village.governance import Gate
     issues: list[dict] = []
     passed, gate, reason = Gate().check(_proposal_from_item(item), records, None)
@@ -279,17 +283,20 @@ def secretary_check(item: dict, records) -> list[dict]:
                                    "msg": f"the role already has a similar accountability: '{ex[:60]}'"})
                     break
     for a in new_accs:
-        first = (a.strip().split(" ", 1)[0] if a.strip() else "").lower()
-        if not first.endswith("en"):
-            # DE REGEL IS NEDERLANDS, DE MELDING NIET MEER (27 september 2026). Deze check toetst
-            # de Nederlandse -en-werkwoordsvorm waarin accountabilities hier geschreven worden
-            # ("Bewaken van …", "Opstellen van …"), en daarom stond de melding ook in het
-            # Nederlands. Maar de rest van het scherm is Engels, dus dit las als een storing.
-            # Een Engelse zin KÁN een Nederlandse vormeis benoemen — met het voorbeeld erbij is
-            # hij zelfs duidelijker dan hij was.
+        # DE REGEL IS ENGELS GEWORDEN (27 september 2026). Hij toetste de Nederlandse
+        # -en-werkwoordsvorm ("Bewaken van …") in een verder Engelse interface; eerst is alleen
+        # de MELDING vertaald, maar dan beschrijft een Engelse zin een Nederlandse vormeis —
+        # half werk. Het is nu de Engelse gerund: "Guarding …", "Monitoring …".
+        #
+        # ÉÉN IMPLEMENTATIE, GEDEELD MET `governance_review`. Die had al een `_ing_start` die
+        # precies dit doet (en ook een leidend "- " of "* " verdraagt). Hier een eigen variant
+        # schrijven zou betekenen dat twee modules dezelfde vormeis kennen en na één wijziging
+        # verschillend oordelen — dezelfde fout als twee kopieën van één regel elders in dit dorp.
+        # Geen cirkel-import: `governance_review` importeert alleen `re`.
+        if not _ing_start(a):
             issues.append({"level": "let op",
-                           "msg": f"accountability should start with a Dutch -en verb form "
-                                  f"(e.g. 'Bewaken van \u2026'): '{a[:50]}'"})
+                           "msg": f"accountability should start with an -ing verb form "
+                                  f"(e.g. 'Guarding …'): '{a[:50]}'"})
     return issues
 
 

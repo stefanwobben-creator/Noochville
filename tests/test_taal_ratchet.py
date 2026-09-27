@@ -147,15 +147,19 @@ def test_de_zijbalk_noemt_de_overleggen_in_het_engels():
 
 
 def test_de_accountability_melding_is_engels():
-    """De REGEL blijft Nederlands (hij toetst de -en-werkwoordsvorm), de MELDING niet meer. Een
-    Engelse zin kán een Nederlandse vormeis benoemen — met het voorbeeld erbij is hij zelfs
-    duidelijker dan hij was."""
+    """EERST DE MELDING, TOEN DE REGEL. In deze ronde is alleen de melding vertaald, met de
+    Nederlandse -en-vormeis er nog onder — en dat was half werk: een Engelse zin die een
+    Nederlandse vormeis beschrijft. De regel zélf is daarna Engels geworden (de gerund), en deelt
+    nu één implementatie met `governance_review._ing_start`.
+
+    Wat deze toets bewaakt is onveranderd: er staat hier geen Nederlands meer.
+    `tests/test_accountability_vorm.py` toetst de regel zelf."""
     import inspect
 
     from nooch_village import roloverleg
     bron = inspect.getsource(roloverleg)
     assert "accountability begint niet met de -en-vorm" not in bron
-    assert "should start with a Dutch -en verb form" in bron
+    assert "should start with an -ing verb form" in bron
 
 
 # ══ De scanner zelf ══════════════════════════════════════════════════════════

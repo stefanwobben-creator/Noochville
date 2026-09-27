@@ -52,10 +52,10 @@ def test_editor_prefil_en_change_diff(tmp_path):
     assert "rov-editor" in frag and "Name" in frag and "Building new features" in frag
     # naam wijzigen -> rename in change; accountability toevoegen -> add_accountabilities
     cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["name"], "value": ["Web Developer"], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring performance"], "next": ["/"]}, username="guest")
     ch = cockpit2._Stores(dd).agenda.get(iid)["change"]
     assert ch.get("rename") == "Web Developer"
-    assert "Bewaken van performance" in ch.get("add_accountabilities", [])
+    assert "Monitoring performance" in ch.get("add_accountabilities", [])
     # bestaande accountability verwijderen -> remove_accountabilities
     cockpit2.dispatch(dd, "rov2_acc_remove", {"iid": [iid], "idx": ["0"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.get(iid)["change"].get("remove_accountabilities")
@@ -90,12 +90,12 @@ def test_sluiten_voert_consented_door(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring performance"], "next": ["/"]}, username="guest")
     cockpit2._Stores(dd).agenda.set_status(iid, "consented")
     cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/node?id=" + C]}, username="guest")
     # doorgevoerd in de records + van de agenda af
     rec = cockpit2._Stores(dd).records.get(RID)
-    assert "Bewaken van performance" in rec.definition.accountabilities
+    assert "Monitoring performance" in rec.definition.accountabilities
     assert cockpit2._Stores(dd).agenda.all() == []
 
 
@@ -116,9 +116,11 @@ def test_secretaris_inline_en_consent(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Snel reageren op tickets"], "next": ["/"]}, username="guest")
+    # BEWUST EEN VORM DIE NIET VOLDOET: geen gerund, dus de secretaris-check hoort te piepen.
+    # ("Respond …" in plaats van "Responding …".)
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Respond to tickets quickly"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "sec-issue" in frag and "-en verb form" in frag       # feedback bij de accountability
+    assert "sec-issue" in frag and "-ing verb form" in frag      # feedback bij de accountability
     assert "rov2_consent" in frag                                # consent kan (alleen advies)
 
 
@@ -183,7 +185,7 @@ def test_secretaris_gate_en_bevestiging_bij_sluiten(tmp_path):
     assert "no adopted proposals" in frag                 # 0 consented -> melding
     # met een aangenomen voorstel telt de bevestiging mee
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring something"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "1 adopted proposal(s) will be written" in f2
@@ -198,7 +200,7 @@ def test_diff_weergave_verwijderd_en_nieuw(tmp_path):
     # bestaande accountability verwijderen -> doorgestreept (is-del), niet weg
     cockpit2.dispatch(dd, "rov2_acc_remove", {"iid": [iid], "text": [bestaand], "next": ["/"]}, username="guest")
     # nieuwe accountability toevoegen -> als 'nieuw' gemarkeerd (is-new)
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring performance"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     assert "is-del" in frag and "<s>" in frag and "restore" in frag    # verwijderd = doorgestreept + herstel
     assert "is-new" in frag and "chip green'>new" in frag             # toegevoegd = nieuw
@@ -231,7 +233,7 @@ def test_groep_consent_en_verwijderen(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     gid = cockpit2._Stores(dd).agenda.group_of(iid)
-    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring something"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "rov2_add_to_group", {"circle": [C], "group": [gid], "naam": ["Data Analist"], "next": ["/"]}, username="guest")
     new_iid = [m["id"] for m in cockpit2._Stores(dd).agenda.members_of_group(gid) if m["id"] != iid][0]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [new_iid], "text": ["Rapporteren van trends"], "next": ["/"]}, username="guest")
