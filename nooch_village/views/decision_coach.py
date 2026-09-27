@@ -326,8 +326,14 @@ def zorg_voor_tool(records, store, rol_id: str = TOOL_ROL) -> str:
     # "idempotent" alleen waar zolang niemand de kaart opruimt: wie hem archiveert krijgt bij de
     # volgende start een tweede exemplaar naast het eerste, met een opgehoogd id.
     for a in store.list(rol_id, "tool", include_archived=True):
-        if (a.title or "").strip().lower() == TOOL_TITEL.lower():
+        if artefacts.norm_titel(a.title) == artefacts.norm_titel(TOOL_TITEL):
             return a.id                                   # bestaat al (actief of gearchiveerd)
+    # MET OPZET WEGGEGOOID BLIJFT WEG (27 september 2026). De regel hierboven dekt archiveren;
+    # een HARD verwijderd artefact laat geen rij achter, dus zonder dit zaait elke deploy hem
+    # opnieuw — vier keer op één dag, gemeten. Zie `artefacts.is_gewist`. Alleen deze zaai-weg
+    # wordt gestopt: een mens mag de tool gewoon opnieuw aanmaken.
+    if artefacts.is_gewist_bij(store, rol_id, TOOL_TITEL):
+        return ""
     art = store.add(rol_id, "tool", title=TOOL_TITEL, body=TOOL_BODY, url="/decision-coach",
                     inherit=False,                        # dorpsbreed bruikbaar, rol-eigen bezit
                     actor_id="system", actor_type="persona",

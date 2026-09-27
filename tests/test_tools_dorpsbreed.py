@@ -104,12 +104,27 @@ def test_de_kaarten_staan_op_de_tools_pagina(tmp_path):
 
 
 def test_ze_zijn_daar_ook_te_bewerken(tmp_path):
-    """Bewerken gebeurt op de rol, zoals bij elk artefact; `/tools` wijst de weg erheen en toont
-    die weg alleen aan wie er mag schrijven."""
+    """TWEE WIJZIGINGEN KRUISTEN ELKAAR HIER, en de uitkomst is de combinatie.
+
+    #619 haalde tools uit de wiki-tab en gaf ze een eigen ingang (`/tools`); die wees voor het
+    bewerken door naar de ROL. Deze PR verplaatste het bewerken naar de LEESPAGINA van het
+    artefact zelf — één bewerkpad per artefact. Samen: `/tools` wijst door naar de leespagina,
+    want daar staat het formulier. Doorverwijzen naar de rol zou wijzen naar een plek waar niets
+    meer te bewerken valt.
+
+    De poort blijft dezelfde: alleen wie mag schrijven ziet de weg erheen."""
+    from nooch_village.views.wiki import pagina_url, render_pagina
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     h = render_tools(st, csrf_token="t", username="anchor@test.nl")
-    assert h.count("edit on the role") >= 2
-    assert "edit on the role" not in render_tools(st, csrf_token="t", username="buiten@test.nl")
+    tools = st.att.list(ANCHOR, "tool")
+    assert len(tools) >= 2
+    for t in tools:
+        assert pagina_url(t.id) in h, t.id
+    assert "edit on the role" not in h, "hij wijst nog naar de rol"
+    assert render_tools(st, csrf_token="t", username="buiten@test.nl").count("Edit") == 0
+    # En daar staat het formulier ook echt.
+    assert "value='artefact_edit'" in render_pagina(st, tools[0].id, csrf_token="t",
+                                                    username="anchor@test.nl")
 
 
 def test_de_copy_prompt_pagina_slikt_een_cirkel(tmp_path):
@@ -269,8 +284,64 @@ def test_een_lege_actor_mag_nog_steeds_niets(tmp_path):
 
 
 def test_verwijderen_is_niet_meeverruimd():
-    """"`_act_artefact_delete` blijft Circle-Lead-only, ongeacht domein. Niet aanraken." — die
-    instructie uit #610 staat nog, en weggooien is een andere vraag dan schrijven."""
+    """VERWIJDEREN VOLGT DE SCHRIJFREGEL NIET, en dat blijft zo. De domein-poort
+    (`mag_schrijven_op_domein`) en de schrijf-poort (`can_write_artefact`) horen hier niet: wie op
+    een artefact mag schrijven mag het daarom nog niet weggooien.
+
+    ÉÉN TREDE IS ERBIJ GEKOMEN (27 september 2026, besluit Stefan): de anchor-lead mag overal
+    permanent verwijderen, net zoals hij overal al mag archiveren. Dat is een tweede Circle
+    Lead-check, geen andere soort regel — en verder verandert er niets, wat deze toets hieronder
+    per rol nagaat."""
     bron = inspect.getsource(cockpit2._act_artefact_delete)
-    assert "mag_schrijven_op_domein" not in bron
-    assert "can_write_artefact" not in bron
+    # OP DE AANROEP EN NIET OP DE NAAM. De uitleg boven de tak NOEMT die twee poorten juist — om
+    # te zeggen dat de anchor-terugval dezelfde is — en een verbod op de kale naam zou dus de
+    # documentatie verbieden in plaats van de code. Met een haakje erachter is het een aanroep.
+    assert "mag_schrijven_op_domein(" not in bron
+    assert "can_write_artefact(" not in bron
+    # Precies twee lead-checks: de eigen cirkel en de anchor. Een derde zou een nieuwe regel zijn.
+    assert bron.count("is_circle_lead(") == 2
+    assert "artefacts.ANCHOR_CIRCLE" in bron, "de wortelcirkel staat hier als kale string"
+
+
+def _wis(st, dd, aid, username):
+    velden = {"aid": aid, "next": "/wiki"}
+    c = cockpit2._Ctx(st=st, g=lambda k, d="": velden.get(k, d), nxt="/wiki",
+                      form=velden, username=username, action="artefact_delete", data_dir=dd)
+    try:
+        return cockpit2.ACTIONS["artefact_delete"](c)[1]
+    except cockpit2.Forbidden as e:
+        return f"✗ {e}"
+
+
+def test_de_anchor_lead_mag_overal_verwijderen(tmp_path):
+    """DE NIEUWE TREDE. Het artefact hangt aan een rol twee cirkels verderop, waar hij geen
+    Circle Lead van is."""
+    dd, st, baas, sub, buiten = _dorp(tmp_path)
+    a = st.att.add(SUBROL, "note", title="Weg hiermee", body="x")
+    assert _wis(st, dd, a.id, baas.email).startswith("🗑")
+    assert cockpit2._Stores(dd).att.get(a.id) is None
+
+
+def test_de_eigen_circle_lead_ook_nog_steeds(tmp_path):
+    dd, st, baas, sub, buiten = _dorp(tmp_path)
+    a = st.att.add(SUBROL, "note", title="Van de subcirkel", body="x")
+    assert _wis(st, dd, a.id, sub.email).startswith("🗑")
+
+
+def test_de_rolvervuller_nog_steeds_niet(tmp_path):
+    """"De rolvervuller zelf blijft uitgesloten van hard verwijderen, dat verandert niet."
+    Archiveren mag hij wél — dat is een andere actie en een omkeerbare."""
+    dd, st, baas, sub, buiten = _dorp(tmp_path)
+    vervuller = st.people.add("Rolvervuller", "rol@test.nl")
+    st.assign.assign(SUBROL, "person", vervuller.id)
+    a = st.att.add(SUBROL, "note", title="Van mijn eigen rol", body="x")
+    assert _mag(st, vervuller.id, SUBROL) is True, "hij mag er wél op schrijven"
+    assert _wis(st, dd, a.id, vervuller.email).startswith("✗")
+    assert cockpit2._Stores(dd).att.get(a.id) is not None
+
+
+def test_een_willekeurige_mens_al_helemaal_niet(tmp_path):
+    dd, st, baas, sub, buiten = _dorp(tmp_path)
+    a = st.att.add(SUBROL, "note", title="Niet van jou", body="x")
+    assert _wis(st, dd, a.id, buiten.email).startswith("✗")
+    assert cockpit2._Stores(dd).att.get(a.id) is not None

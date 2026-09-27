@@ -439,7 +439,10 @@ def test_ui_vervuller_ziet_editknop_niet_vervuller_niet(tmp_path):
     st.att.add(OWNER, "policy", title="Merkstem-regel", domain="Merkstem")
 
     filler = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="alice@nooch.earth")
-    assert "artefact_add" in filler and "artefact_edit" in filler   # add- + edit-formulier zichtbaar
+    # AANMAKEN GEBEURT OP DE ROL, BEWERKEN OP DE PAGINA ZELF (27 september 2026): een policy heeft
+    # sinds vandaag één bewerkpad, net als een note sinds 21 september. Wat deze toets bewaakt —
+    # de vervuller ziet het gereedschap, een buitenstaander niet — is onveranderd.
+    assert "artefact_add" in filler and "Edit on its page" in filler
     assert "Merkstem-regel" in filler
 
     outsider = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="bob@nooch.earth")

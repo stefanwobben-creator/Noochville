@@ -141,13 +141,19 @@ def test_geen_formulier_dat_de_actie_daarna_weigert(tmp_path):
 
 
 def test_de_policy_pagina_is_geen_tweede_bewerkpad(tmp_path):
-    """`_artefact_own_card` legt vast dat een tool of policy zijn formulier bij de EIGENAAR-ROL
-    houdt, omdat twee bewerkpaden voor hetzelfde object uiteen gaan lopen. Deze pagina leest;
-    hij wijst naar waar bewerkt wordt."""
+    """OMGEDRAAID OP 27 SEPTEMBER 2026, en de regel eronder is niet veranderd maar juist
+    doorgetrokken: één bewerkpad per artefact. Het formulier stond op de eigenaar-rol én een note
+    werd op zijn permalink bewerkt — dat waren twee verschillende plekken voor twee soorten van
+    hetzelfde ding. Nu bewerkt elk artefact zichzelf op zijn eigen pagina.
+
+    WAT HIER NOG STEEDS NIET HOORT: de RIJKE editor. Een policy heeft geen blokken, geen feiten en
+    geen `[[links]]`; die formulieren zijn op soort gepoort en zouden hier "page not found"
+    antwoorden."""
     dd, st, art, mens = _dorp(tmp_path)
     html = _pagina(st, art["policy"], can_edit=True)
     assert "id='wiki-body'" not in html, "de inline editor hoort hier niet"
-    assert "value='artefact_edit'" not in html, "dat is het tweede bewerkpad"
+    assert "value='artefact_edit'" in html, "het eenvoudige formulier hoort hier juist wél"
+    assert "pagina_feit_add" not in html, "de feiten van een note horen hier niet"
     assert "tab=policies" in html, "er staat geen weg naar de plek waar je hem wél bewerkt"
 
 

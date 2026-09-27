@@ -106,16 +106,19 @@ def test_een_rol_zonder_domein_krijgt_uitleg(tmp_path):
 
 
 def test_een_policy_pagina_krijgt_het_veld_niet(tmp_path):
-    """Die wordt bij de eigenaar-rol bewerkt, mét domein-veld (#585). Twee plekken voor dezelfde
-    keuze is precies wat de leespagina van #574 vermijdt.
+    """`_domein_form` — het LOSSE domein-formulier van een wiki-pagina — hoort niet op een policy.
 
-    LET OP WAT HIER BEWIJST WAT. Deze toets slaagt doordat `render_pagina` een policy sinds #574
-    naar `_artefact_pagina` stuurt — een andere renderer, die `_domein_form` nooit aanroept. Niet
-    door de soort-guard in die functie; die meet de toets hieronder. Een mutatie op de guard liet
-    déze toets groen, en dat is precies het verschil."""
+    HET DOMEIN-VELD ZELF STAAT ER SINDS 27 SEPTEMBER WÉL, want het eenvoudige bewerkformulier is
+    van de rol naar deze pagina verhuisd en dát formulier heeft altijd al een domein-keuze gehad
+    (#585). Dat is geen tweede plek maar de enige: op de rol staat hij niet meer.
+
+    De toets kijkt daarom naar `_domein_form` en niet naar de kale string `name='domain'` — anders
+    meet hij de buurman, precies zoals bij `test_een_rol_zonder_domein_krijgt_uitleg` hierboven."""
     dd, st, rol = _dorp(tmp_path)
     a = st.att.add(rol, "policy", title="Beleid", body="tekst", domain="Materials")
-    assert "name='domain'" not in _pagina(st, a)
+    html = _pagina(st, a)
+    assert "value='pagina_domein'" not in html, "het losse domein-formulier hoort hier niet"
+    assert "value='artefact_edit'" in html, "het bewerkformulier hoort er juist wél"
 
 
 def test_de_functie_weigert_zelf_ook_een_niet_note(tmp_path):
