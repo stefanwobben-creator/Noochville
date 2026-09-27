@@ -422,8 +422,8 @@ BLOK_SOORTEN = {"h3": "h", "h4": "h", "h5": "h",
 #: op één plek, en de browser kopieert alleen wat de server meestuurt. Op TAG en niet op label,
 #: want een label is een naam die iemand vertaalt.
 BLOK_HINT = {
-    "table": ("Eerste regel = kolomnamen, tweede regel = |---|---| "
-              "(laat die exact zo staan), daarna je gegevens."),
+    "table": ("First line = column names, second line = |---|---| "
+              "(leave that exactly as it is), then your data."),
 }
 
 #: Dezelfde hints, maar op de BLOKSOORT in plaats van op de tag — dat is wat `data-blok` draagt,
@@ -1683,8 +1683,12 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
     if not circle_id:
         return ""
     uit = []
-    for h, label in (("/werkoverleg", "Werk&shy;overleg"),
-                     ("/roloverleg2", "Rol&shy;overleg")):
+    # DE LABELS VOLGEN DE PAGINATITELS (27 september 2026). Ze stonden in het Nederlands terwijl
+    # de schermen erachter al "Tactical meeting" en "Governance meeting" heten — dus niet alleen
+    # inconsistent met de rest van de interface, maar ook met de pagina waar ze heen wijzen. De
+    # `&shy;` blijft: het zijn lange woorden in een smalle balk.
+    for h, label in (("/werkoverleg", "Tactical&shy;meeting"),
+                     ("/roloverleg2", "Governance&shy;meeting")):
         live = werk_open and h == "/werkoverleg"
         cls = "c2-overleg" + (" c2-overleg--live" if live else "")
         stip = "<span class='c2-live' aria-hidden='true'></span>" if live else ""

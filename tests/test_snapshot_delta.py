@@ -69,7 +69,7 @@ def test_render_snapshot_tegel_toont_delta_stand_optioneel(tmp_path):
     st.observations.record_daily("s", "semanticscholar_papers_day", 1080, bron="semanticscholar", datum="2026-07-06", ts=now)
     h = _render_tile(st, rec, {"id": "t1", "source": "semanticscholar", "measure": "papers", "form": "getal"},
                      cutoff=None, csrf="")
-    assert "/maand" in h and "gemeten over 30 dagen" in h      # genormaliseerde delta + interval (monthly snapshot)
+    assert "/maand" in h and "measured over 30 days" in h      # genormaliseerde delta + interval (monthly snapshot)
     assert "absolute stand" in h and "1080" in h               # stand blijft beschikbaar (uitklap), niet default
 
 

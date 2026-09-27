@@ -46,7 +46,7 @@ def test_meetings_staan_niet_meer_in_de_inhoud(tmp_path):
         assert "Tactical meeting" not in inhoud and "Governance meeting" not in inhoud, nid
     from nooch_village.cockpit2_util import overleg_items
     assert overleg_items("") == ""                      # geen cirkel, geen knoppen
-    assert "Werk" in overleg_items("mother_earth__nooch")
+    assert "Tactical" in overleg_items("mother_earth__nooch")
 
 
 def test_root_overview(tmp_path):

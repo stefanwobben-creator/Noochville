@@ -8,7 +8,7 @@ import nooch_village.roloverleg as rov
 def _item():
     return {"id": "k1", "kind": "amend_role", "role_id": "scout", "title": "Scout uitbreiden",
             "by": "founder", "status": "open", "reason": "blijft liggen",
-            "change": {"add_accountabilities": ["Bewaken van sociale kanalen"]},
+            "change": {"add_accountabilities": ["Monitoring social channels"]},
             "kladblok": [{"who": "jij", "text": "klopt deze formulering?"},
                          {"who": "ai", "text": "Begin met een werkwoord op -en."}]}
 

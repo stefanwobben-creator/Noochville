@@ -158,7 +158,7 @@ def test_agenda_stap_deelt_de_vang_en_verwerk_van_vangst(tmp_path):
                                        fragment=True, iid=iid)
     assert "Punten behandelen" in frag
     assert "vang-form" in frag and "vang-lijst" in frag       # de gedeelde vangkant
-    assert "Uitkomsten van het overleg" in frag              # de gedeelde verwerkkant
+    assert "Outcomes of the meeting" in frag              # de gedeelde verwerkkant
     assert "Checkout hapert" in frag
     # De oude triage is weg: geen 'Process tension'-paneel en geen wo_ag_*-actie meer.
     assert "wo_ag_" not in frag

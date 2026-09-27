@@ -1041,8 +1041,8 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
     try:
         from nooch_village import llm
         prompt = (
-            "Een indicator-definitie wijzigt. Blijven eerder gemeten waarden vergelijkbaar onder de "
-            "nieuwe definitie (zodat we ze in dezelfde reeks mogen houden), of niet?\n"
+            "An indicator definition is changing. Do earlier measurements stay comparable under "
+            "the new definition (so we may keep them in the same series), or not?\n"
             f"OUD: {old.get('definition','')} | eenheid {old.get('unit','')} | meettype {old.get('meettype','')}\n"
             f"NIEUW: {new.get('definition', old.get('definition',''))} | eenheid {new.get('unit', old.get('unit',''))} "
             f"| meettype {new.get('meettype', old.get('meettype',''))}\n"
@@ -1184,12 +1184,12 @@ def _snapshot_body(st: _Stores, tile: dict, frequency: str):
     stand = points[-1][1] if points else None
     plabel = _PERIOD_LABEL.get(frequency, "periode")
     if delta is None:
-        body = "<div class='kpi-val'><span class='muted'>nog te weinig metingen</span></div>"
+        body = "<div class='kpi-val'><span class='muted'>not enough measurements yet</span></div>"
     else:
         sign = "+" if delta >= 0 else "−"
         body = (f"<div class='kpi-val'>{sign}{_num(abs(round(delta)))}"
                 f" <span class='muted'>/{_e(plabel)}</span></div>"
-                f"<div class='muted'>gemeten over {interval} dagen · stand nu: {_num(stand)}</div>")
+                f"<div class='muted'>measured over {interval} days · now: {_num(stand)}</div>")
     data = ""
     if points:
         dt = _data_table({"kind": "series", "points": points}, bron=bron)

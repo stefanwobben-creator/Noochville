@@ -20,9 +20,9 @@ def _records(tmp_path):
 
 def test_agenda_add_dedup_en_status(tmp_path):
     a = Agenda(str(tmp_path / "ag.json"))
-    iid = a.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van sociale media"]},
+    iid = a.add("scout", "amend_role", {"add_accountabilities": ["Monitoring social media"]},
                 "meer bereik", by="founder", title="Social media")
-    iid2 = a.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van sociale media"]},
+    iid2 = a.add("scout", "amend_role", {"add_accountabilities": ["Monitoring social media"]},
                  "x", title="Social media")
     assert iid2 == iid                                       # dedup
     assert len(a.open()) == 1
@@ -61,7 +61,7 @@ def test_secretary_check_dubbel_in_dezelfde_rol(tmp_path):
 def test_apply_consented_adopt_en_objected_blijft(tmp_path):
     recs = _records(tmp_path)
     a = Agenda(str(tmp_path / "ag.json"))
-    ok_id = a.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van sociale kanalen"]},
+    ok_id = a.add("scout", "amend_role", {"add_accountabilities": ["Monitoring social channels"]},
                   "bereik", title="Social")
     bad_id = a.add("librarian", "amend_role", {"add_accountabilities": ["Volgen van de markt"]},
                    "botst", title="Dubbel")              # botst met scout → Gate blokkeert
@@ -70,7 +70,7 @@ def test_apply_consented_adopt_en_objected_blijft(tmp_path):
     res = apply_consented(a, recs)
     by_status = {r["status"] for r in res}
     assert "adopted" in by_status and "escalated" in by_status
-    assert "Bewaken van sociale kanalen" in recs.get("scout").definition.accountabilities
+    assert "Monitoring social channels" in recs.get("scout").definition.accountabilities
     assert a.get(ok_id) is None                              # geadopteerd → van de agenda
     assert a.get(bad_id)["status"] == "objected"            # geblokkeerd → blijft staan
 
@@ -127,7 +127,7 @@ def test_auto_stollen_na_3x(tmp_path):
     from nooch_village.projects import ProjectLedger
     from nooch_village.roloverleg import Agenda, formalize_ripe_experiments
     led = ProjectLedger(str(tmp_path / "projects.json"))
-    pid = led.create("scout", "Bewaken van sociale kanalen", "human", origin="experiment")
+    pid = led.create("scout", "Monitoring social channels", "human", origin="experiment")
     ag = Agenda(str(tmp_path / "ag.json"))
     led.record_progress(pid, "ronde 1"); led.record_progress(pid, "ronde 2")
     assert formalize_ripe_experiments(led, ag) == 0          # nog maar 2x → niet rijp
@@ -136,7 +136,7 @@ def test_auto_stollen_na_3x(tmp_path):
     assert formalize_ripe_experiments(led, ag) == 1          # 3x → stolt
     it = ag.open()[0]
     assert it["role_id"] == "scout" and it["kind"] == "amend_role"
-    assert it["change"]["add_accountabilities"] == ["Bewaken van sociale kanalen"]
+    assert it["change"]["add_accountabilities"] == ["Monitoring social channels"]
     assert led.get(pid)["formalized"] is True
     assert formalize_ripe_experiments(led, ag) == 0          # dedup: niet nog eens
 
