@@ -23,7 +23,6 @@ import inspect
 
 from nooch_village import artefacts, cockpit2
 from nooch_village.views.copy_prompt import TOOL_TITEL as CP_TITEL
-from nooch_village.views.copy_prompt import zorg_voor_tool as cp_tool
 from nooch_village.views.decision_coach import TOOL_ROL, TOOL_TITEL as DC_TITEL
 from nooch_village.views.decision_coach import zorg_voor_tool as dc_tool
 from nooch_village.views.overview import render_node
@@ -51,10 +50,14 @@ def _mag(st, pid, owner):
 
 
 # ══ 1. De tool-anchor is een cirkel ══════════════════════════════════════════
-def test_beide_tools_wijzen_naar_dezelfde_constante():
-    """DE HELE POINTE VAN DE REGEL. Stonden ze los, dan is een derde tool weer een besluit."""
+def test_de_tool_wijst_naar_de_gedeelde_constante():
+    """DE HELE POINTE VAN DE REGEL. Stond hij los, dan is een derde tool weer een besluit.
+
+    HIER STONDEN ER TWEE (28 september 2026). De copy-prompt-generator had ook een zaai-lijst
+    (`_COPY_PROMPT_ROLLEN`); die is vervallen omdat er al een vaste schermknop voor bestaat — zie
+    `test_tool_anchor.py`. Wat blijft is de constante, en dat is precies wat deze toets bewaakt."""
     assert TOOL_ROL == artefacts.TOOL_ANCHOR
-    assert cockpit2._COPY_PROMPT_ROLLEN == (artefacts.TOOL_ANCHOR,)
+    assert not hasattr(cockpit2, "_COPY_PROMPT_ROLLEN"), "de zaai-lijst is terug"
 
 
 def test_de_constante_is_de_wortelcirkel():
@@ -80,11 +83,14 @@ def test_geen_van_beide_bestanden_noemt_nog_een_rol_id():
     assert "artefacts.TOOL_ANCHOR" in kop
 
 
-def test_de_bootstrap_zet_ze_op_de_cirkel(tmp_path):
+def test_de_bootstrap_zet_hem_op_de_cirkel(tmp_path):
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     op_anchor = {(a.title or "").lower() for a in st.att.list(ANCHOR, "tool")}
     assert DC_TITEL.lower() in op_anchor
-    assert CP_TITEL.lower() in op_anchor
+    # DE COPY-PROMPT-GENERATOR STAAT HIER NIET MEER, en dat is geen regressie maar de opruiming
+    # van 28 september: als ARTEFACT was hij een tweede kaart naast de schermknop die hetzelfde
+    # doet. Dat hij nog wél op `/tools` staat, toetst `test_de_kaarten_staan_op_de_tools_pagina`.
+    assert CP_TITEL.lower() not in op_anchor
 
 
 def test_er_komt_niets_meer_op_de_oude_rol(tmp_path):
@@ -118,7 +124,7 @@ def test_ze_zijn_daar_ook_te_bewerken(tmp_path):
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     h = render_tools(st, csrf_token="t", username="anchor@test.nl")
     tools = st.att.list(ANCHOR, "tool")
-    assert len(tools) >= 2
+    assert len(tools) >= 1
     for t in tools:
         assert pagina_url(t.id) in h, t.id
     assert "edit on the role" not in h, "hij wijst nog naar de rol"
@@ -205,18 +211,15 @@ def test_archiveren_levert_geen_tweede_kaart_op(tmp_path):
     """HET DEFECT. `list()` laat archief standaard weg, dus na opruimen kwam er bij de volgende
     start een tweede naast met een opgehoogd id."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
-    for zorg in (dc_tool, cp_tool):
-        eerste = zorg(st.records, st.att, ANCHOR)
-        st.att.archive(eerste, actor_id=baas.id, actor_type="person")
-        assert zorg(st.records, st.att, ANCHOR) == eerste, zorg.__module__
-    assert len(st.att.list(ANCHOR, "tool", include_archived=True)) == 2
+    eerste = dc_tool(st.records, st.att, ANCHOR)
+    st.att.archive(eerste, actor_id=baas.id, actor_type="person")
+    assert dc_tool(st.records, st.att, ANCHOR) == eerste
+    assert len(st.att.list(ANCHOR, "tool", include_archived=True)) == 1
 
 
-def test_beide_zoekers_kijken_in_het_archief():
-    from nooch_village.views import copy_prompt, decision_coach
-    for mod in (copy_prompt, decision_coach):
-        bron = inspect.getsource(mod.zorg_voor_tool)
-        assert "include_archived=True" in bron, mod.__name__
+def test_de_zoeker_kijkt_in_het_archief():
+    from nooch_village.views import decision_coach
+    assert "include_archived=True" in inspect.getsource(decision_coach.zorg_voor_tool)
 
 
 def test_een_ontbrekende_anchor_geeft_geen_exceptie(tmp_path):
@@ -224,7 +227,6 @@ def test_een_ontbrekende_anchor_geeft_geen_exceptie(tmp_path):
     houden. Die belofte stond er al."""
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     assert dc_tool(st.records, st.att, "bestaat-niet") == ""
-    assert cp_tool(st.records, st.att, "bestaat-niet") == ""
 
 
 # ══ 5. Scherm én server, want het zijn er twee ═══════════════════════════════

@@ -49,6 +49,40 @@ ANCHOR_CIRCLE = "mother_earth"
 TOOL_ANCHOR = ANCHOR_CIRCLE
 
 
+def verhuis_tools_naar_anchor(store, data_dir: str = "", records=None) -> list[tuple[str, str]]:
+    """Elk tool-artefact hangt aan `TOOL_ANCHOR`. Idempotent; geeft terug wat er verhuisde.
+
+    DE REGEL STOND ALLEEN IN DE ZAAI-WEG (28 september 2026). `TOOL_ANCHOR` bepaalde waar een
+    ZAAD-tool landde, maar bestaande artefacten van vóór die regel bleven hangen waar ze stonden —
+    op prod drie stuks, waarvan één (het Website Handboek) met echte, door een mens geschreven
+    inhoud. Een regel die alleen voor nieuwe gevallen geldt is geen regel maar een gewoonte.
+
+    WAAROM VERHUIZEN EN NIET WEGGOOIEN. De inhoud is van de rol die hem schreef en blijft
+    ongewijzigd; alleen het bezit verschuift naar de cirkel, precies zoals `TOOL_ANCHOR` uitlegt:
+    een tool is dorpsbreed, en hem onder één rol hangen maakt de vervuller van die rol tot
+    poortwachter van iets dat voor iedereen open staat.
+
+    HET ID BLIJFT, dus elke permalink en elke verwijzing blijft werken (zie `verplaats`).
+
+    Fail-soft per artefact: een store die één verhuizing weigert houdt de rest niet tegen. Draait
+    bij elke start mee met de andere migraties, en doet vanaf de tweede keer niets."""
+    verhuisd: list[tuple[str, str]] = []
+    for a in store.by_kind("tool", include_archived=True):
+        oud = getattr(a, "anchor", "") or ""
+        if oud == TOOL_ANCHOR:
+            continue
+        nieuw = store.verplaats(a.id, TOOL_ANCHOR, actor_id="system", actor_type="persona",
+                                change_note=f"tools horen bij de cirkel: verhuisd van {oud}")
+        if nieuw is None:
+            continue
+        verhuisd.append((a.id, oud))
+        if data_dir and records is not None:
+            log_change(data_dir, action="edit", artefact=nieuw, records=records,
+                       actor_id="system", actor_type="persona",
+                       governance_ref=f"role:{TOOL_ANCHOR}")
+    return verhuisd
+
+
 def circle_of(owner_role_id: str, records) -> str | None:
     """De omvattende cirkel van een eigenaar: een cirkel → zichzelf; een rol → zijn ouder.
     Spiegelt `resolve_circle_id` maar zonder de "ii:"-prefix (een artefact-eigenaar is altijd
