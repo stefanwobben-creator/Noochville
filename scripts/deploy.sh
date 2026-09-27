@@ -181,7 +181,34 @@ alles_gezond(){
 [ "$(id -u)" -eq 0 ] || { fout "draai dit als root (ssh root@...)"; exit 1; }
 [ -d "$REPO/.git" ] || { fout "geen git-repo op $REPO"; exit 1; }
 
-# ── 1. Vuile working tree? Niet clobberen. ──────────────────────────────────────────────────────
+# ── 1. Uit de vuurlinie: verder draaien vanaf een kopie ─────────────────────────────────────────
+#
+# WAT ER MISGING (27 september 2026). Dit script ligt IN de repo die het zelf uitrolt, en bash leest
+# een script INCREMENTEEL: hij onthoudt een positie in het bestand en haalt de volgende opdracht op
+# als hij eraan toe is. Wijzigt `git merge` het script terwijl het draait, dan leest de lopende run
+# vanaf die positie verder in de NIEUWE bytes. Bij een wijziging van vijftig regels bovenin schuift
+# alles op en voert bash willekeurige stukken uit — of niets meer. De deploy van die dag is daarom
+# met de hand omzeild: de nieuwe versie naar /tmp gekopieerd en die gedraaid.
+#
+# DE WISSEL. Vóór de pull kopieert het script zichzelf naar een pad BUITEN de repo en gaat daar
+# verder (`exec`, dus geen tweede proces en dezelfde exit-code). Wat git daarna met het origineel
+# doet raakt de lopende run niet meer. `NOOCH_DEPLOY_KOPIE` voorkomt dat de kopie dat opnieuw doet;
+# zonder die vlag is dit een oneindige lus.
+#
+# WAAROM DE KOPIE BLIJFT STAAN. Hem aan het eind weggooien is precies dezelfde fout: een bestand
+# weghalen dat op dat moment wordt uitgevoerd. Het is een vast pad, dus de volgende deploy
+# overschrijft hem — er blijft nooit meer dan één liggen.
+KOPIE="${NOOCH_DEPLOY_KOPIE_PAD:-/tmp/noochville-deploy-actief.sh}"
+if [ -z "${NOOCH_DEPLOY_KOPIE:-}" ] && [ "$(readlink -f "${BASH_SOURCE[0]}")" != "$(readlink -f "$KOPIE" 2>/dev/null || echo "$KOPIE")" ]; then
+  cp -f "${BASH_SOURCE[0]}" "$KOPIE"
+  chmod 700 "$KOPIE"
+  log "verder vanaf een kopie: $KOPIE (het origineel wordt zo door de pull overschreven)"
+  export NOOCH_DEPLOY_KOPIE="$KOPIE"
+  exec bash "$KOPIE" "$@"
+fi
+log "draait vanaf de kopie — een wijziging aan deploy.sh tijdens de pull raakt deze run niet"
+
+# ── 2. Vuile working tree? Niet clobberen. ──────────────────────────────────────────────────────
 # --untracked-files=no: alleen TRACKED wijzigingen blokkeren (bv. onbewaarde curatie in
 # config/claims_database.json — die willen we juist beschermen). Untracked runtime-ruis (.cache/ en
 # wat er in de toekomst bijkomt) mag een deploy nooit tegenhouden; robuuster dan elk mapje los ignoren.
@@ -190,7 +217,7 @@ if [ -n "$(git_nooch status --porcelain --untracked-files=no)" ]; then
   git_nooch status --short --untracked-files=no; exit 1
 fi
 
-# ── 2. Op main + verse origin ophalen ───────────────────────────────────────────────────────────
+# ── 3. Op main + verse origin ophalen ───────────────────────────────────────────────────────────
 BRANCH="$(git_nooch rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" = "main" ] || { fout "server staat op '$BRANCH', niet op main — deploy gestopt"; exit 1; }
 log "origin ophalen…"
@@ -211,7 +238,7 @@ if ! git_nooch merge-base --is-ancestor "$OUD" "$NIEUW"; then
   fout "server en origin/main zijn gedivergeerd — handmatig uitzoeken, deploy gestopt"; exit 1
 fi
 
-# ── 3. Uitrollen (als nooch, dus rechten blijven goed) ──────────────────────────────────────────
+# ── 4. Uitrollen (als nooch, dus rechten blijven goed) ──────────────────────────────────────────
 log "uitrollen: ${OUD:0:9} → ${NIEUW:0:9}"
 git_nooch merge --ff-only origin/main
 
@@ -224,7 +251,7 @@ fi
 log "services herstarten…"
 restart
 
-# ── 4. Health-check (web ÉN daemon); faalt hij, automatisch terugrollen ─────────────────────────
+# ── 5. Health-check (web ÉN daemon); faalt hij, automatisch terugrollen ─────────────────────────
 if alles_gezond; then
   echo "$NIEUW" > "$REPO/.last_deploy" 2>/dev/null || true
   log "✅ live op ${NIEUW:0:9}"
