@@ -451,9 +451,11 @@ def zorg_voor_tool(records, store, rol_id: str) -> str:
     Geeft het artefact-id terug, of "" als de rol niet bestaat of de schrijf faalt."""
     if records.get(rol_id) is None:
         return ""
-    for a in store.list(rol_id, "tool"):
+    # OOK GEARCHIVEERDE TEGENKOMSTEN TELLEN MEE — zie dezelfde regel in `decision_coach`: zonder
+    # archief is "idempotent" alleen waar zolang niemand de kaart opruimt.
+    for a in store.list(rol_id, "tool", include_archived=True):
         if (a.title or "").strip().lower() == TOOL_TITEL.lower():
-            return a.id                                   # bestaat al
+            return a.id                                   # bestaat al (actief of gearchiveerd)
     art = store.add(rol_id, "tool", title=TOOL_TITEL, body=TOOL_BODY,
                     url=f"/copy-prompt?rol={urllib.parse.quote(rol_id)}",
                     inherit=False,                        # rol-eigen capaciteit, niet erfelijk

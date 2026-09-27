@@ -31,6 +31,24 @@ def _name(rec) -> str:
     return (getattr(d, "name", "") or "").strip() or getattr(rec, "id", "")
 
 
+#: De wortelcirkel. Hij stond op drie plekken in `cockpit2.py` als kale string ("mother_earth",
+#: in `_anchor_gate`, `mag_kanaal_verwijderen` en `wis_namens`); dit is de eerste plek waar hij
+#: een naam krijgt. Nieuwe code verwijst hierheen — `reference, don't copy`. De drie bestaande
+#: plekken blijven staan tot iemand er toch aan werkt (het ratchet-principe uit CLAUDE.md).
+ANCHOR_CIRCLE = "mother_earth"
+
+#: WAAR EEN TOOL-ARTEFACT STANDAARD HANGT, en waarom dat een cirkel is en geen rol.
+#:
+#: Een tool is dorpsbreed bruikbaar: de copy-prompt-generator en de decision coach staan open voor
+#: iedereen. Hem onder de rol hángen die hem "het meest" gebruikt maakt van die rol een poortwachter
+#: die niemand bedoeld heeft — en het bepaalt wie hem mag bewerken, want `can_write_artefact`
+#: kijkt naar de eigenaar-rol. Op de anchor-cirkel is dat voor iedereen gelijk.
+#:
+#: DIT IS EEN ALGEMENE REGEL, GEEN OORDEEL PER TOOL (besluit Stefan, 27 september 2026). Een derde
+#: tool volgt hem zonder dat iemand opnieuw hoeft te beslissen: hij leest deze constante.
+TOOL_ANCHOR = ANCHOR_CIRCLE
+
+
 def circle_of(owner_role_id: str, records) -> str | None:
     """De omvattende cirkel van een eigenaar: een cirkel → zichzelf; een rol → zijn ouder.
     Spiegelt `resolve_circle_id` maar zonder de "ii:"-prefix (een artefact-eigenaar is altijd
@@ -81,7 +99,7 @@ def mag_schrijven_op_domein(st, domein: str, actor_id: str, *, circle_id: str = 
     en wie daarin schrijft raakt iets wat een ander in beheer heeft.
 
         geen domein        → elke herkende persoon mag schrijven
-        domein met één     → de vervuller van die rol, of de Circle Lead
+        domein met één     → de vervuller van die rol, of de Circle Lead, of de ANCHOR-LEAD
         eigenaar-rol
         configuratiefout   → open, zoals `domein_eigenaar` zelf ook terugvalt
 
@@ -116,20 +134,39 @@ def mag_schrijven_op_domein(st, domein: str, actor_id: str, *, circle_id: str = 
         return True
     if not circle_id:
         circle_id = circle_of(houder, st.records) or ""
-    if not circle_id:
-        return False
-    lead = f"{circle_id}__circle_lead"
-    return any(f.type == "person" and f.id == actor_id
-               for f in st.assign.fillers_of(lead, st.records.get(lead)))
+    if circle_id and _is_lead("person", actor_id, circle_id, st.records, st.assign):
+        return True
+    # DE ANCHOR-LEAD MAG ALTIJD — dezelfde derde trede als in `can_write_artefact`, en om dezelfde
+    # reden. Deze functie is de SERVER-poort (`_artefact_gate`) waar `can_write_artefact` het
+    # SCHERM is; alleen de ene verruimen laat de knop verschijnen op iets wat de server daarna
+    # weigert. Dat verschil kostte #610 al een ronde, en het is precies andersom even stuk.
+    return _is_lead("person", actor_id, ANCHOR_CIRCLE, st.records, st.assign)
 
 
 def can_write_artefact(actor_type: str, actor_id: str, owner_role_id: str,
                        records, assignments) -> bool:
     """Mag deze actor artefacten van `owner_role_id` aanmaken/bewerken/archiveren?
 
-    Regel (identiek voor person en persona): actor is huidige filler van de eigenaar-rol, OF
-    filler van de Circle Lead-rol van de omvattende cirkel. Geërfde artefacten zijn nooit
-    schrijfbaar — daar is `owner_role_id` niet de eigen rol, dus valt de check vanzelf weg.
+    Regel (identiek voor person en persona) — DRIE treden, elk voldoende:
+
+      1. actor is huidige filler van de eigenaar-rol;
+      2. actor is filler van de Circle Lead-rol van de OMVATTENDE cirkel;
+      3. actor is de ANCHOR-LEAD — Circle Lead van de wortelcirkel — en dan op elk artefact,
+         ongeacht in welke cirkel de eigenaar-rol zit.
+
+    DE DERDE IS NIEUW (27 september 2026, besluit Stefan) en is GEEN nieuw governance-begrip: het
+    is dezelfde terugval die `mag_kanaal_verwijderen` en `wis_namens` al gebruiken — wie de hele
+    organisatie leidt, kan overal opruimen. Zonder deze trede liep opruimwerk in de wiki telkens
+    vast op een artefact van een rol twee cirkels verderop, terwijl de anchor-lead die rol wel
+    mag opheffen. Dat is niet consistent: mogen dat een rol bestaat, maar niet dat zijn notitie
+    bijgewerkt wordt.
+
+    TREDE 2 DEKT DE ANCHOR NIET VANZELF. Voor een artefact op `mother_earth` zelf geeft
+    `circle_of` de anchor terug en valt het samen; voor een rol in een SUBcirkel is de Circle Lead
+    van die subcirkel iemand anders. Dat verschil is precies het gat.
+
+    Geërfde artefacten zijn nooit schrijfbaar — daar is `owner_role_id` niet de eigen rol, dus
+    valt de check vanzelf weg.
     """
     if actor_type not in ("person", "persona") or not actor_id or not owner_role_id:
         return False
@@ -140,12 +177,17 @@ def can_write_artefact(actor_type: str, actor_id: str, owner_role_id: str,
            for f in assignments.fillers_of(owner_role_id, rec)):
         return True
     circle_id = circle_of(owner_role_id, records)
-    if circle_id:
-        lead_role = f"{circle_id}__circle_lead"
-        if any(f.type == actor_type and f.id == actor_id
-               for f in assignments.fillers_of(lead_role, records.get(lead_role))):
-            return True
-    return False
+    if circle_id and _is_lead(actor_type, actor_id, circle_id, records, assignments):
+        return True
+    return _is_lead(actor_type, actor_id, ANCHOR_CIRCLE, records, assignments)
+
+
+def _is_lead(actor_type: str, actor_id: str, circle_id: str, records, assignments) -> bool:
+    """Vervult deze actor de Circle Lead-rol van `circle_id`? Stond twee keer uitgeschreven zodra
+    de anchor-trede erbij kwam; één vorm, twee aanroepers."""
+    lead_role = f"{circle_id}__circle_lead"
+    return any(f.type == actor_type and f.id == actor_id
+               for f in assignments.fillers_of(lead_role, records.get(lead_role)))
 
 
 def erfketen(anchor: str, inherit: bool, records) -> list[str]:

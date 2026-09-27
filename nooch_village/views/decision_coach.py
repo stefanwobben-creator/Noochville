@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime as _dt
 
+from nooch_village import artefacts
 from nooch_village import decision_coach as dc
 from nooch_village import decision_sheets as ds
 from nooch_village.cockpit2_util import _DS_LINK, _nav
@@ -292,10 +293,18 @@ _KOPIEER_JS = """<script>(function(){
 
 # ── De tool als artefact op de rol ───────────────────────────────────────────────────────────
 
-#: De rol die dit gereedschap draagt. De Decision Coach is dorpsbreed bruikbaar, maar een tool die
-#: alleen als URL bestaat, bestaat niet: je moet weten dát hij er is. Hij hangt daarom onder de rol
-#: die het besluit-domein houdt — zelfde bezit-model als de copy-prompt-generator.
-TOOL_ROL = "mother_earth__nooch__strategic_lead_founder_steward"
+#: WAAR DIT GEREEDSCHAP HANGT. Een tool die alleen als URL bestaat, bestaat niet: je moet weten
+#: dát hij er is. Hij hing daarom onder de rol die het besluit-domein houdt.
+#:
+#: SINDS 27 SEPTEMBER 2026 IS DAT DE ANCHOR-CIRKEL, en niet meer een rol. De Decision Coach stónd
+#: al open voor iedereen ("Open to every member" — zie TOOL_BODY hieronder), maar het bezit zei
+#: iets anders: `can_write_artefact` kijkt naar de eigenaar-rol, dus de vervuller van één rol was
+#: stilzwijgend de enige die de kaart kon bijwerken. Een dorpsbreed gereedschap hoort bij de
+#: cirkel.
+#:
+#: DE CONSTANTE STAAT IN `artefacts.py` en niet hier, want de copy-prompt-generator had dezelfde
+#: regel op zijn eigen plek staan. Eén bron: een derde tool volgt hem zonder nieuw besluit.
+TOOL_ROL = artefacts.TOOL_ANCHOR
 TOOL_TITEL = "Decision coach"
 TOOL_BODY = (
     "Turns a decision you face into a coaching prompt for your own chat, and takes the decision "
@@ -313,9 +322,12 @@ def zorg_voor_tool(records, store, rol_id: str = TOOL_ROL) -> str:
     rol is een governance-feit en geen reden om de cockpit op te houden."""
     if records.get(rol_id) is None:
         return ""
-    for a in store.list(rol_id, "tool"):
+    # OOK GEARCHIVEERDE TEGENKOMSTEN TELLEN MEE. `list()` laat archief standaard weg, en dan is
+    # "idempotent" alleen waar zolang niemand de kaart opruimt: wie hem archiveert krijgt bij de
+    # volgende start een tweede exemplaar naast het eerste, met een opgehoogd id.
+    for a in store.list(rol_id, "tool", include_archived=True):
         if (a.title or "").strip().lower() == TOOL_TITEL.lower():
-            return a.id                                   # bestaat al
+            return a.id                                   # bestaat al (actief of gearchiveerd)
     art = store.add(rol_id, "tool", title=TOOL_TITEL, body=TOOL_BODY, url="/decision-coach",
                     inherit=False,                        # dorpsbreed bruikbaar, rol-eigen bezit
                     actor_id="system", actor_type="persona",

@@ -1005,12 +1005,20 @@ def _web_actor_id(username: str | None, st) -> str:
     return actor.id if actor else ""
 
 
-# De rollen die de copy-prompt-generator als gereedschap krijgen. Data, geen if-boom: een rol
-# erbij is één regel. Bewust een lijst en niet "elke rol met policies" — het is een SCHRIJF-tool,
-# en een rol die toevallig policies heeft is daarmee nog geen copywriter.
-# De copywriter-rol stond hier tot 18 sept 2026 en is opgeheven zonder opvolger; een gereedschap
-# aanbieden op een gearchiveerde rol levert een kaart op die niemand ooit ziet.
-_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",)
+# WAAR DE COPY-PROMPT-GENERATOR ALS GEREEDSCHAP VERSCHIJNT.
+#
+# HIER STOND EEN ROL-LIJST ("elke rol die hem gebruikt", tot 27 september 2026 één rol:
+# community_and_email). Dat was een oordeel per tool, en het had een bijwerking die niemand koos:
+# `can_write_artefact` kijkt naar de EIGENAAR-rol, dus de vervuller van die ene rol was stilzwijgend
+# de enige die de kaart kon bijwerken — terwijl de generator zelf voor iedereen open staat.
+#
+# Nu de algemene regel (besluit Stefan): een tool-artefact hoort bij een CIRKEL. De constante staat
+# in `artefacts.py`, gedeeld met de decision coach, zodat een derde tool hem volgt zonder dat
+# iemand opnieuw hoeft te beslissen.
+#
+# HET BLIJFT EEN TUPLE, want de generator is ge-URL-parameteriseerd op een rol (`?rol=<id>`): de
+# kaart hangt bij de cirkel, maar een extra anchor toevoegen is nog steeds één regel.
+_COPY_PROMPT_ROLLEN = (artefacts.TOOL_ANCHOR,)
 
 # Welke bronnen een schrijvende rol bij oprichting bewust meekrijgt. Rol-ids in code zijn hier
 # onvermijdelijk: een inclusie IS een besluit, en een besluit dat je afleidt uit een regel is geen
