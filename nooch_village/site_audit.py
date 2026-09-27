@@ -436,10 +436,14 @@ def _draai_met_slot(st, ctx, registry, *, url: str, doel: str,
 #: EN HET IS OMKEERBAAR DOOR EEN MENS: haal de regel uit de pagina en de knop is weg. Dat is meer
 #: dan een vlag in de data zou geven, want daar is geen scherm voor.
 HANDBOEK_TITEL = "WEBSITE HANDBOEK"
+#: GEEN MARKDOWN-LINK, en dat is gemeten en niet gegokt: `_md` weigert een INTERN pad bewust
+#: (`test_link_niet_http_geen_link_failclosed`), dus `[Site audit](/site-audit)` zou als rauwe
+#: haakjes op het scherm staan. Het pad in gewone tekst leest goed én draagt de koppeling; de
+#: klikbare link naar het scherm staat in het paneel zelf, dat geen markdown is.
 _KNOP_REGEL = ("\n\n## Site audit\n\n"
                "The lights for reachability, speed, accessibility, SEO and claims of the live shop "
-               "live on [Site audit](/site-audit). The **Run scan** button at the bottom of this "
-               "page starts a fresh measurement (20-60 seconds).\n")
+               "are on the Site audit screen (/site-audit). The **Run scan** button at the bottom "
+               "of this page starts a fresh measurement; it takes 20-60 seconds.\n")
 
 
 def zorg_voor_knop_verwijzing(store, *, titel: str = HANDBOEK_TITEL) -> str:
