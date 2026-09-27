@@ -284,3 +284,83 @@ def test_de_titel_is_de_link_want_een_tool_open_je(tmp_path):
     dd, st, a = _dorp(tmp_path)
     h = render_tools(st, csrf_token="t", username="aap@test.nl")
     assert "/decision-coach" in h and "/copy-prompt" in h
+
+
+# ══ 5. De vormgeving van het paneel ══════════════════════════════════════════
+#
+# Het scherm hing als losse onderdelen onder elkaar: een invoerveld, dan regels, zonder dat iets ze
+# bij elkaar hield. Het prototype is één afgebakend paneel met een duidelijke naad tussen "hier
+# schrijf je" en "hier staat het". Alles binnen `c2-` en `ck-` — geen nieuwe klasse-familie.
+def _blok(selector: str) -> str:
+    m = re.search(rf"(?:^|[}};])\s*{re.escape(selector)}\{{([^}}]*)\}}", CSS, re.M)
+    assert m, f"{selector} bestaat niet"
+    return m.group(1)
+
+
+def test_het_paneel_is_afgebakend():
+    """Eén kaart met een schaduw eromheen, en geen eigen padding meer: de onderdelen erin dragen
+    hun eigen lucht, zodat de banden van rand tot rand lopen."""
+    body = _blok(".c2-smal > .card")
+    assert "padding:0" in body and "box-shadow" in body and "overflow:hidden" in body
+
+
+def test_de_invoerrij_is_een_vlak_met_een_naad():
+    body = _blok(".c2-smal .qadd-form")
+    assert "background:var(--cream-2)" in body
+    assert "border-bottom" in body, "geen scheiding tussen schrijven en lezen"
+    assert "padding" in body
+
+
+def test_het_veld_heeft_geen_kader_in_een_kader():
+    """Het vlak eromheen ÍS de rand; twee kaders lezen als twee dingen."""
+    body = _blok(".c2-smal .qadd-form input[type=text],.c2-smal .qadd-form input:not([type])")
+    assert "border-color:transparent" in body and "box-shadow:none" in body
+
+
+def test_de_regels_hebben_lucht_en_een_scheiding():
+    body = _blok(".c2-smal .ck-item")
+    assert "padding" in body and "border-bottom" in body
+    assert "border-bottom:none" in _blok(".c2-smal .ck-item:last-child")
+
+
+def test_de_klaar_kop_is_een_band_in_het_paneel():
+    body = _blok(".c2-smal .ck-klaar-kop")
+    assert "margin:0" in body and "background:var(--cream-2)" in body
+
+
+def test_de_gedeelde_klassen_blijven_ongemoeid():
+    """`.card` draagt elk ander scherm; alleen de variant BINNEN `.c2-smal` verandert."""
+    kaart = _blok(".card")
+    assert "padding:.5rem .7rem" in kaart, "de gedeelde kaart is aangepast"
+    assert "overflow:hidden" not in kaart
+    qadd = _blok(".qadd-form")
+    assert "cream-2" not in qadd, "de gedeelde invoerrij is aangepast"
+
+
+def test_er_komt_nog_steeds_geen_familie_bij():
+    assert not re.search(r"\.act-[a-z]", CSS)
+    for sel in (".c2-smal > .card", ".c2-smal .qadd-form", ".c2-smal .ck-item",
+                ".c2-smal .ck-klaar-kop"):
+        assert sel in CSS, sel
+
+
+def test_het_blijft_zonder_javascript(tmp_path):
+    """BEWUSTE KEUZE, en die verandert niet: typen + Enter werkt omdat één tekstveld in een
+    formulier uit zichzelf verstuurt."""
+    dd, st, a = _dorp(tmp_path)
+    h = render_acties(st, ik=a.id, csrf_token="t")
+    # OP HET FORMULIER, niet op de pagina: de gedeelde schil (nav, zoekbalk) draagt overal
+    # JavaScript, en dat meten zegt niets over dit scherm. De claim is dat het INVOERGEBAAR geen
+    # script nodig heeft — één tekstveld in een formulier verstuurt bij Enter uit zichzelf.
+    form = h.split("value='actie_add'")[0].rsplit("<form", 1)[1]
+    assert form.count("<input") - form.count("type='hidden'") == 1
+    assert "onclick" not in form and "data-" not in form
+    # En het afvinken en koppelen evenmin: allemaal gewone formulieren, geen enkel `data-`-haakje
+    # waar een script zich aan vastmaakt. (De gedeelde schil bindt zijn éigen listeners — die
+    # meten zou de nav toetsen, niet dit scherm.)
+    dd2, st2, b2 = _dorp(pathlib.Path(dd).parent / "tweede")
+    it = st2.acties.add(b2.id, "Iets")
+    st2.acties.zet(it["id"], b2.id, done=True)
+    vol = render_acties(st2, ik=b2.id, csrf_token="t")
+    kern = vol[vol.index("<div class='card'"):]
+    assert "data-qadd" not in kern and "addEventListener" not in kern

@@ -219,6 +219,34 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .c2-smal .ck-item:hover .dellink,.c2-smal .ck-item:focus-within .dellink{opacity:1}
 @media (hover:none){.c2-smal .ck-item .dellink{opacity:.7}}
 
+/* ── Het paneel van /acties ─────────────────────────────────────────────────────────────────
+   Het scherm hing als losse onderdelen onder elkaar: een invoerveld, dan regels, zonder dat
+   iets ze bij elkaar hield. Het prototype is één afgebakend paneel met een duidelijke naad
+   tussen "hier schrijf je" en "hier staat het". Dat is wat deze regels doen — geen nieuwe
+   familie, alles binnen `c2-` en `ck-`.
+
+   LET OP: `.card` IS NIET AANGEPAST. Die draagt elk ander scherm; hier alleen de variant
+   binnen `.c2-smal`, zodat een kaart elders precies blijft wat hij was. */
+.c2-smal > .card{padding:0;overflow:hidden;box-shadow:var(--shadow)}
+/* De invoerrij als ÉÉN vlak, niet als een tekstveld met een knop ernaast. Eigen achtergrond en
+   een lijn eronder: dat is de naad tussen schrijven en lezen. */
+.c2-smal .qadd-form{background:var(--cream-2);border-bottom:1px solid var(--border);
+  padding:.65rem .8rem;margin:0}
+/* Binnen die rij hoeft het veld geen eigen rand meer — het vlak eromheen IS de rand. Een kader
+   in een kader leest als twee dingen. */
+.c2-smal .qadd-form input[type=text],.c2-smal .qadd-form input:not([type]){
+  border-color:transparent;background:var(--surface);box-shadow:none;padding:.5rem .6rem}
+.c2-smal .qadd-form input:focus{border-color:var(--green);outline:none}
+/* De regels krijgen de lucht die het prototype ze geeft, en een scheidingslijn per regel in
+   plaats van niets — zodat twee acties onder elkaar niet aan elkaar plakken. */
+.c2-smal .ck-item{padding:.6rem .8rem;border-bottom:1px solid var(--border)}
+.c2-smal .ck-item:last-child{border-bottom:none}
+/* De klaar-kop zat met een eigen marge los in de kaart; binnen het paneel hoort hij als band. */
+.c2-smal .ck-klaar-kop{margin:0;padding:.5rem .8rem;background:var(--cream-2);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+/* De lege-lijst-tekst stond tegen de rand aan nu de kaart zelf geen padding meer heeft. */
+.c2-smal .card > .muted{padding:.9rem .8rem;margin:0}
+
 .qadd-form input[type=text],.qadd-form input:not([type]){flex:1 1 auto;min-width:0;padding:.45rem .55rem;
   border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
   box-shadow:var(--shadow);font:inherit;font-size:.9rem}
