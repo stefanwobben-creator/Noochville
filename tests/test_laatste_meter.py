@@ -41,10 +41,15 @@ def st(tmp_path):
 
 
 def _dm_aan(st, persoon_id):
-    """De DM-teksten die deze persoon kreeg. Sinds B2 (20 sept 2026) landt werk als DM bij de mens
-    in plaats van als item in een wachtrij; de routering — wie het krijgt — is ongewijzigd."""
-    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+    """Wat deze persoon aan WERK kreeg, over beide oppervlakken heen.
+
+    Het spoor van een melding is twee keer verhuisd: wachtrij → DM (B2, 20 sept 2026) → een
+    persoonlijke actie voor één concrete mens (27 sept 2026, `acties.py`). De redenering eromheen
+    is elke keer ongewijzigd gebleven, dus deze helper leest allebei."""
+    uit = [str(a.get("tekst") or "") for a in st.acties.voor(persoon_id)]
+    uit += [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
             for e in st.channels.trail(k)]
+    return uit
 
 def _project(st, *, owner="harry_hemp", opdrachtgever="") -> dict:
     pid = st.projects.create(owner, "PHA-aanbodlandschap", "human", opdrachtgever=opdrachtgever)
@@ -149,10 +154,12 @@ def test_het_bron_project_reist_mee_zodat_de_lus_terugloopt(st, tmp_path, monkey
                  waarom="x", item_text="iets")
     st2 = cockpit2._Stores(str(tmp_path))
     mens = st2.people.get(signaal.terugval(st2))
-    # Het bron-project reist mee als `herkomst` op het bericht — het enige veld dat B2 bewaarde,
-    # juist omdat de lezer anders niet kan zien wát er stilstaat.
-    entries = [e for k in st2.channels.kanalen_van(mens.id) for e in st2.channels.trail(k)]
-    assert entries and (entries[-1].get("herkomst") or {}).get("project") == p["id"]
+    # HET BRON-PROJECT REIST NOG STEEDS MEE, maar als de KOPPELING van de actie in plaats van als
+    # `herkomst` op een bericht (27 september 2026). Dat is meer dan een andere plek: een gekoppelde
+    # actie is óók zichtbaar voor wie het project mag zien, waar de DM-herkomst alleen tekst-context
+    # was. De lezer kan nog steeds zien wát er stilstaat.
+    acties = st2.acties.voor(mens.id)
+    assert acties and acties[0].get("project") == p["id"]
 
 
 # ── Fail-open: dit pad mag nooit werk laten verdampen ───────────────────────

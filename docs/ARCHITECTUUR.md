@@ -19,6 +19,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/` | `(inline)` | `cockpit2.py` |
 | `/index.html` | `(inline)` | `cockpit2.py` |
 | `/messages` | `render_messages` | `nooch_village/views/messages.py` |
+| `/acties` | `render_acties` | `nooch_village/views/acties.py` |
 | `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
 | `/projects` | `render_projects_screen` | `nooch_village/views/projects.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
@@ -89,6 +90,11 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `sticker_post` | `_act_sticker_post` |
 | `giphy_post` | `_act_giphy_post` |
 | `topic_add` | `_act_topic_add` |
+| `actie_add` | `_act_actie_add` |
+| `actie_zet` | `_act_actie_zet` |
+| `actie_koppel` | `_act_actie_koppel` |
+| `actie_weg` | `_act_actie_weg` |
+| `actie_wis` | `_act_actie_wis` |
 | `kanaal_ontvolg` | `_act_kanaal_ontvolg` |
 | `kanaal_verwijder` | `_act_kanaal_verwijder` |
 | `keep_in_wiki` | `_act_keep_in_wiki` |
@@ -230,6 +236,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `deliverables` | `DeliverableStore` | `deliverables.json` |
 | `ai` | `AITaskStore` | `ai_tasks.json` |
 | `channels` | `ChannelStore` | `channels.json` |
+| `acties` | `ActieStore` | `acties.json` |
 | `agenda` | `Agenda` | `roloverleg_agenda.json` |
 | `noochie` | `NoochieStore` | `noochie.json` |
 | `checklists` | `ChecklistStore` | `checklists.json` |
@@ -320,4 +327,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_45 routes · 146 dispatch-acties · 27 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_46 routes · 151 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

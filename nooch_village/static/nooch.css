@@ -196,6 +196,13 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .qadd-form{display:flex;flex-direction:column;gap:.4rem;margin-top:.1rem}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
 .qadd-row{display:flex;align-items:center;gap:.4rem}
+/* Een éénregelig invoerveld in dezelfde rij. `.qadd-form textarea` hierboven kreeg `width:100%`,
+   maar een textarea maakt van Enter een nieuwe regel — en voor /acties IS Enter het hele gebaar.
+   Dit is een uitbreiding van de bestaande klasse, geen nieuwe (CLAUDE.md: "kom je iets tekort,
+   breid de klasse uit"). */
+.qadd-form input[type=text],.qadd-form input:not([type]){flex:1 1 auto;min-width:0;padding:.45rem .55rem;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);
+  box-shadow:var(--shadow);font:inherit;font-size:.9rem}
 .qadd-x{background:none;border:none;font-size:1rem;color:var(--gray);cursor:pointer;padding:.1rem .3rem}
 /* '+ project' krijgt dezelfde subtiele knop-vormgeving als de meeting-knoppen */
 .addlink{display:inline-block;font-family:var(--font-body);font-weight:600;font-size:12px;

@@ -50,11 +50,18 @@ def _persoon(dd):
 # ── 1. gedrag ───────────────────────────────────────────────────────────────
 
 def _dm_aan(st, persoon_id):
-    """De DM-teksten die deze persoon kreeg. `route_werk` levert sinds B2 (20 sept 2026) een DM bij
-    de mens in plaats van een item in een wachtrij — de ROUTERING (wie krijgt het, en precies één
-    keer) is ongewijzigd, en dat is wat deze tests bewaken."""
-    return [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
+    """De WERK-teksten die deze persoon kreeg, over beide oppervlakken heen.
+
+    SINDS 27 SEPTEMBER 2026 LANDT WERK VOOR ÉÉN CONCRETE MENS ALS ACTIE (`acties.py`) in plaats
+    van als kale DM: een DM heeft sinds B2 geen velden en dus geen status, dus zo'n actie had geen
+    klaar-knop. Een rol met MEERDERE vervullers houdt de DM — een actie is van één mens.
+
+    Deze helper leest allebei, want wat deze tests bewaken is de ROUTERING: wie krijgt het, en
+    precies één keer. Dat is onveranderd; alleen het oppervlak waarop het landt verschoof."""
+    uit = [str(a.get("tekst") or "") for a in st.acties.voor(persoon_id)]
+    uit += [e.get("text") or "" for k in st.channels.kanalen_van(persoon_id)
             for e in st.channels.trail(k)]
+    return uit
 
 def test_een_actie_landt_bij_de_persoon_en_nergens_anders(tmp_path):
     dd = _dd(tmp_path)
