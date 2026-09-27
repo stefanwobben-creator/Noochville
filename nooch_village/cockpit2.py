@@ -5882,8 +5882,13 @@ def make_handler(data_dir: str, csrf_token: str,
             return sessions.get_username(token) if token else None
 
         def _redirect_to(self, location: str, cookie: str | None = None) -> None:
+            # OOK EEN REDIRECT IS NIET TE BEWAREN. Elke schrijfactie eindigt hier (303 terug naar
+            # de pagina), en een gecachte redirect stuurt je morgen naar het adres van gisteren —
+            # inclusief de `?msg=`-melding van een handeling die je niet net deed. Zelfde reden
+            # als bij `_send`: dit zijn documenten, geen assets.
             self.send_response(303)
             self.send_header("Location", location)
+            self.send_header("Cache-Control", "no-store")
             if cookie:
                 self.send_header("Set-Cookie", cookie)
             self.end_headers()
@@ -5962,6 +5967,20 @@ def make_handler(data_dir: str, csrf_token: str,
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            # `no-store` OP ELKE HTML-PAGINA. Hier stond helemaal geen cache-header: geen
+            # `Cache-Control`, geen `ETag`, geen `Last-Modified`. Een browser mag dan HEURISTISCH
+            # cachen, en bij terug/vooruit (bfcache) krijg je gegarandeerd de oude pagina terug.
+            #
+            # WAT DAT KOSTTE, en waarom het erger is dan "een oude versie zien": het CSS-token
+            # `--w-smal-form` staat in de INLINE `<style>` van de HTML, terwijl de klasse die hem
+            # gebruikt in de gecachte `nooch.css` zit. Oude HTML plus nieuwe CSS betekent dat
+            # `max-width:var(--w-smal-form)` naar niets verwijst — en dan gooit CSS de héle
+            # declaratie weg en staat de kolom weer op volle breedte. Het ziet eruit als "mijn
+            # wijziging is niet gedeployed" terwijl de server allang het nieuwe serveert.
+            #
+            # DE STATICS BLIJVEN CACHEBAAR, en dat mag ook: die dragen een inhoud-hash in hun URL
+            # (`_DS_LINK`), dus nieuwe inhoud = nieuwe URL = verse download. Zie `_send_bytes`.
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(b)))
             self.end_headers()
             self._schrijf(b)
