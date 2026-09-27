@@ -599,7 +599,7 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
 
 
 def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
-                        domains: list | None = None) -> str:
+                        domains: list | None = None, ingeklapt: bool = True) -> str:
     # `next_url` parametriseert waar je na opslaan landt (default: de tab van de eigenaar-rol).
     # De pagina-view (/pagina) geeft zijn eigen permalink mee — zelfde formulier, zelfde poort.
     nxt = next_url or _terug_url(a.anchor, a.kind)
@@ -618,15 +618,28 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
         dom = _geen_domein_uitleg("file this artefact under it")
     # INLINE BEWERKEN (fase 10 punt 4). Wat er NIET verandert: één formulier, één submit, één
     # `artefact_edit`-actie, één `update()`-aanroep, één versie-entry met change_note "bewerkt".
-    # Wat wél verandert is waar de knop staat. De opslaan-balk is `hidden` tot er echt iets is
-    # getypt (`data-qadd-dirty`), en de tekst op de pagina opent het formulier bij een klik
-    # (`data-qadd-open`, zie nooch.js). De `<details>` blijft als drager staan en niet uit
-    # nostalgie: zonder JS is de "edit"-summary de enige manier om er nog in te komen, en op een
-    # lijst met twintig artefacten wil je geen twintig openstaande tekstvakken.
+    # De opslaan-balk is `hidden` tot er echt iets is getypt (`data-qadd-dirty`), en de tekst op
+    # de pagina opent het formulier bij een klik (`data-qadd-open`, zie nooch.js).
     #
     # Eén save-actie en dus ÉÉN change_note, bewust: per veld opslaan zou drie versie-entries
     # geven voor wat de schrijver als één wijziging ervaart (besluit Stefan, 20 september 2026).
-    return (f"<details class='qadd' data-qadd-inline><summary class='muted'>edit</summary>"
+    #
+    # `ingeklapt` — DE <details> IS EEN LIJST-OPLOSSING, GEEN PAGINA-OPLOSSING.
+    #
+    # Hij staat er omdat de ROLPAGINA een lijst artefacten toont, en op een lijst met twintig
+    # stuks wil je geen twintig openstaande tekstvakken. Op de PERMALINK van één artefact gaat
+    # die rechtvaardiging niet op: daar is niets anders op het scherm, en dan is de inklapping
+    # alleen nog een klein "edit"-linkje dat je eerst moet vinden. Gemeten gevolg: de pagina
+    # leest als "niet bewerkbaar" terwijl het formulier er gewoon staat — precies de melding die
+    # deze parameter oplost.
+    #
+    # Zonder de `<details>` blijft alles werken: `data-qadd-dirty` hangt aan het FORMULIER, en
+    # de annuleerknop doet `f.closest("details")` met een `if (det)` eromheen (zie nooch.js), dus
+    # hij reset het formulier en klapt niets dicht.
+    kop = ("<details class='qadd' data-qadd-inline><summary class='muted'>edit</summary>"
+           if ingeklapt else "<div class='qadd'>")
+    staart = "</details>" if ingeklapt else "</div>"
+    return (f"{kop}"
             f"<form method='post' action='/action' class='qadd-form' data-qadd-dirty>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
@@ -637,7 +650,7 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
             f"<div class='qadd-row qadd-bar'>"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Save</button>"
             f"<button type='button' class='qadd-x' data-qadd-cancel "
-            f"aria-label='cancel'>✕</button></div></form></details>")
+            f"aria-label='cancel'>✕</button></div></form>{staart}")
 
 
 def _artefact_archive_form(a, csrf_token: str, *, next_url: str = "") -> str:
