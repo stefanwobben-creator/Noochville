@@ -278,9 +278,24 @@ def test_de_keuzelijst_regel_bij_een_domein_blijft_ongemoeid(tmp_path):
     assert "<select" not in _domain_field(["materials"], huidig="")
 
 
-def test_een_policy_of_tool_krijgt_hier_nog_steeds_niets(tmp_path):
-    """De poort die er al stond, blijft vóór de nieuwe staan: alleen een note wordt hier bewerkt."""
+def test_de_soort_beslist_niet_meer_maar_het_domein_wel(tmp_path):
+    """OMGEDRAAID OP 28 SEPTEMBER 2026: de soort-poort in `_domein_form` is vervallen toen alle
+    drie de soorten dezelfde pagina kregen. De POORT DIE ERTOE DOET blijft staan — en dat is de
+    hele stelling van deze toets: bij gelijk domein geeft een policy hetzelfde antwoord als een
+    note, en het verschil dat overblijft komt van het domein."""
     dd, st, a, wie = _dorp(tmp_path)
-    p = st.att.add(a.anchor, "policy", title="Beleid", body="x", domain="materials")
-    assert _domein_form(p, st.records.get(a.anchor), "TOK", True, st.records.all(),
-                        st=st, username="h@t.nl") == ""
+
+    def veld(x, wie):
+        return _domein_form(x, st.records.get(a.anchor), "TOK", True, st.records.all(),
+                            st=st, username=wie)
+
+    # HETZELFDE DOMEIN, ANDERE SOORT — dat is de vergelijking. Een policy met een ánder domein
+    # ernaast leggen meet de domeinpoort en niet de soort, en dan slaagt de toets om de verkeerde
+    # reden (gevonden bij het schrijven ervan).
+    for domein in ("", "proefdomein"):
+        pol = st.att.add(a.anchor, "policy", title=f"Beleid {domein}", body="x", domain=domein)
+        note = st.att.add(a.anchor, "note", title=f"Note {domein}", body="x", domain=domein)
+        for wie in ("s@t.nl", "h@t.nl"):
+            assert ("name='domain'" in veld(note, wie)) == ("name='domain'" in veld(pol, wie)), (
+                f"{domein or 'geen domein'} / {wie}")
+    assert "name='domain'" in veld(a, "s@t.nl"), "de schrijver mag het domein juist wél zetten"

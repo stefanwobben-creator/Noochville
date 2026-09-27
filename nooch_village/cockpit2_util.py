@@ -1400,12 +1400,23 @@ BLOK_MENU = (
 )
 
 
-def blok_menu() -> str:
+def blok_menu(*, zonder: tuple = ()) -> str:
     """Het sjabloon voor het /-menu. Verborgen; `nooch.js` kloont hem naar het blok waar je typt.
 
     `data-chrome` hoewel hij BUITEN het bewerkbare veld staat: als hij er ooit in belandt (een
     kloon die niet wordt opgeruimd, een plakactie) hoort hij nog steeds geen tekst te worden.
-    Dezelfde twee verdedigingen als bij de greep."""
+    Dezelfde twee verdedigingen als bij de greep.
+
+    `zonder` LAAT AFGELEIDE BLOKKEN WEG, op naam uit `wiki.AFGELEID` (27 september 2026). Een
+    policy en een tool krijgen sinds deze stap dezelfde editor als een note, maar `{{facts}}` hoort
+    daar niet bij: feiten leven in `meta["feiten"]` van een NOTE, en `pagina_feit_add` antwoordt op
+    elke andere soort met "✗ page not found". Een knop die de server daarna weigert belooft iets
+    wat niet kan — dezelfde regel als bij de knoppen in `_opruim_knoppen`.
+
+    OP DE MARKERING EN NIET OP EEN TWEEDE LIJSTJE: de weg te laten items worden herkend aan
+    `wiki.marker(naam)`, precies de waarde waarmee ze hierboven zijn opgebouwd. Een naam die niet
+    bestaat laat het menu dus ongemoeid in plaats van stilzwijgend iets anders weg te halen."""
+    weg = {_wiki.marker(n) for n in zonder}
     knoppen = "".join(
         f"<button type='button' class='wb-menu-item' data-wiki-cmd='{_e(cmd)}'"
         + (f" data-wiki-arg='{_e(arg)}'" if arg else "")
@@ -1413,7 +1424,7 @@ def blok_menu() -> str:
         # hem neer bij het bewerkvlak; hij bedenkt hem niet.
         + (f" data-wiki-hint='{_e(BLOK_HINT[_tag])}'" if _tag in BLOK_HINT else "")
         + f">{_e(label)}</button>"
-        for _tag, label, cmd, arg in BLOK_MENU)
+        for _tag, label, cmd, arg in BLOK_MENU if arg not in weg)
     # `wb-menu-zwevend` NAAST `wb-menu` (26 september 2026). De greep-acties (omhoog/omlaag/
     # verwijderen) gebruiken dezelfde `.wb-menu`-vorm maar hangen absoluut onder hun greep; dit
     # menu wordt door `zweefBij` in VENSTERcoördinaten gezet en moet daarvoor `fixed` staan.
