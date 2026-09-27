@@ -17,8 +17,8 @@ TWEE SOORTEN GEREEDSCHAP, en ze staan hier naast elkaar omdat ze voor de gebruik
   2. SCHERM-TOOLS uit `_ROLE_TOOLS`/`_DOMAIN_TOOLS` in `views/overview.py`: vaste links die bij een
      rol of een domein horen. Die zijn code, geen data — ze staan hier alleen gegroepeerd.
 
-De tabellen worden GE\xcfMPORTEERD en niet gekopieerd: \xe9\xe9n plek waar staat welk scherm bij welke rol
-hoort, precies zoals `TOOL_ANCHOR` \xe9\xe9n plek is voor waar een tool-artefact hangt.
+De tabellen worden GEÏMPORTEERD en niet gekopieerd: één plek waar staat welk scherm bij welke rol
+hoort, precies zoals `TOOL_ANCHOR` één plek is voor waar een tool-artefact hangt.
 """
 from __future__ import annotations
 
@@ -33,13 +33,18 @@ def _eigenaar(st, anchor: str) -> str:
 
 
 def _kaart(st, a, mag_bewerken: bool) -> str:
-    """E\xe9n tool-artefact. De TITEL IS DE LINK als er een url is — een tool open je, je leest hem
-    niet. Zonder url blijft het een kaart met tekst; dat is geen fout maar een tool die nog geen
-    scherm heeft."""
+    """Eén tool-artefact. DE TITEL IS ALTIJD EEN LINK: met een url naar het SCHERM — een tool open
+    je, je leest hem niet — en zonder url naar zijn eigen pagina.
+
+    DAT LAATSTE WAS EEN GAT. Een tool zonder url was hier een doodlopende kaart: geen link naar
+    het scherm (dat er niet is) en geen weg naar zijn pagina. Wie mocht schrijven kwam er nog via
+    de bewerk-link; wie alleen las, nergens. Sinds de leespagina de beschrijving, de
+    versiehistorie én het formulier draagt, is er altijd iéts om heen te gaan."""
+    from nooch_village.wiki import pagina_url
     url = (getattr(a, "url", "") or "").strip()
     titel = _e(a.title or a.id)
     kop = (f"<a href='{_e(url)}'><b>\U0001f6e0 {titel}</b></a>" if url
-           else f"<b>\U0001f6e0 {titel}</b>")
+           else f"<a href='{_e(pagina_url(a.id))}'><b>\U0001f6e0 {titel}</b></a>")
     body = (a.body or "").strip()
     # DE EIGENAAR BLIJFT ZICHTBAAR, ook nu de tool niet meer onder zijn rol staat. Wie hem mag
     # bewerken hangt eraan, en dat weten is de helft van "mag ik hier iets aan veranderen".
@@ -47,10 +52,14 @@ def _kaart(st, a, mag_bewerken: bool) -> str:
            f"{_e(_eigenaar(st, a.anchor))}</a>")
     bewerk = ""
     if mag_bewerken:
-        # NAAR DE ROL OM TE BEWERKEN, net als vanaf de wiki-permalink. Een tool is geen
-        # wiki-pagina: hij heeft een url en een beschrijving, geen lopende tekst om in te typen.
-        bewerk = (f" <a class='flink' href='/node?id={_e(a.anchor)}&tab=wiki&kind=tool'>"
-                  f"edit on the role</a>")
+        # NAAR DE LEESPAGINA VAN DE TOOL ZELF, en niet meer naar de rol.
+        #
+        # HIER STOND "edit on the role", en dat klopte toen dit scherm werd gebouwd: het
+        # formulier stónd op de rol-pagina. Sindsdien is het naar de leespagina van het artefact
+        # verhuisd — één bewerkpad per artefact, dezelfde regel die een note sinds 21 september
+        # al volgt. Doorverwijzen naar de rol zou nu wijzen naar een plek waar niets meer te
+        # bewerken valt, en dat is erger dan geen link: je klikt en vindt niets.
+        bewerk = f" <a class='flink' href='{_e(pagina_url(a.id))}'>Edit</a>"
     return (f"<div class='card'>{kop} {bij}{bewerk}"
             f"{f'<div class=muted>{_e(body)}</div>' if body else ''}</div>")
 
@@ -74,7 +83,7 @@ def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str
 
     # ── 2. de scherm-tools per rol en per domein ─────────────────────────────
     #
-    # GE\xcfMPORTEERD, NIET GEKOPIEERD. Zou deze view zijn eigen lijst houden, dan is een tool die
+    # GEÏMPORTEERD, NIET GEKOPIEERD. Zou deze view zijn eigen lijst houden, dan is een tool die
     # elders wordt toegevoegd hier onzichtbaar — en precies dat "twee plekken"-probleem lost dit
     # scherm juist op.
     per_rol: list[tuple[str, str]] = []

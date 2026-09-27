@@ -744,20 +744,26 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
          context-laag nooit leest.
       2. `[[LINKS]]` lossen op tegen `wiki.paginas`, en dat zijn notes. Een verwijzing vanuit een
          policy komt nergens op uit — `_artefact_body_html` zegt dat al.
-      3. BEWERKEN gebeurt bij de eigenaar-rol, op het formulier dat daar staat. Een note is het
-         tegenovergestelde geval (die wordt júist op zijn permalink bewerkt), en `_artefact_own_card`
-         legt uit waarom je die twee niet allebei mag hebben: twee bewerkpaden voor hetzelfde
-         object lopen uiteen zodra er aan één van de twee iets verandert.
+      3. HET RIJKE BEWERKEN — de inline editor met blokken, feiten en `[[links]]` — hoort bij een
+         note en niet hier. Punt 3 faalt bovendien STIL als je het negeert: `pagina_feit_add`,
+         `pagina_feit_del` en `pagina_voorstel` zijn wél op soort gepoort en antwoorden met
+         "✗ page not found". Een pagina die die formulieren toont, belooft iets wat de actie
+         daarna weigert.
 
-    Punt 3 faalt bovendien STIL als je het negeert. `_act_artefact_edit` is niet op soort gepoort
-    en zou een policy gewoon opslaan, maar `pagina_feit_add`, `pagina_feit_del` en
-    `pagina_voorstel` zijn dat wél: die antwoorden met "✗ page not found". Een pagina die die
-    formulieren toont, belooft iets wat de actie daarna weigert.
+    HIER STOND "BEWERKEN GEBEURT BIJ DE EIGENAAR-ROL" (teruggedraaid 27 september 2026). Dat was
+    de uitzondering op de regel die één regel verderop stond: één bewerkpad per artefact. Een note
+    wordt sinds 21 september júist op zijn permalink bewerkt, en een tool of policy werd dat op de
+    rol — twee plekken, en dus twee plekken die uiteen kunnen lopen. Dat een tool ANDERE VELDEN
+    heeft dan een note (een url, geen lopende tekst) pleit voor een ander FORMULIER, niet voor een
+    andere PLEK.
 
-    Wat deze pagina dus wél doet: tonen wat er staat, met het veld erbij waar de soort om draait
-    (het domein van een policy, de url van een tool), plus de versiehistorie en de weg naar de
-    plek waar hij bewerkt wordt."""
-    from nooch_village.views.overview import (_KIND_ICON, _artefact_versions_html,
+    Dus: het eenvoudige formulier (titel, domein of url, body) en de archiveerknop staan nu hier,
+    en de rol-pagina wijst hierheen. Geen rich-text-editor — dat blijft aan de note.
+
+    Wat deze pagina dus doet: tonen wat er staat, met het veld erbij waar de soort om draait (het
+    domein van een policy, de url van een tool), het formulier voor wie mag, en de versiehistorie."""
+    from nooch_village.views.overview import (_KIND_ICON, _artefact_archive_form,
+                                              _artefact_edit_form, _artefact_versions_html,
                                               _can_edit_artefacts, _dt, _tab_for)
 
     eigenaar = st.records.get(a.anchor)
@@ -779,11 +785,7 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     kop = (f"<div class='c2-bar'><a href='{thuis}'>← {_e(tab)}</a></div>"
            f"<h1>{_KIND_ICON.get(a.kind, '')} {_e(a.title or a.id)}</h1>"
            f"<div class='wiki-kopbalk'>"
-           f"<p class='muted'>Edited on the owning role, not here &mdash; one place per "
-           f"artefact.</p>"
-           + (f"<a class='btn sm' href='{thuis}'>&#9998; Edit on the role</a>"
-              if can_edit else "")
-           + f"</div>")
+           f"<p class='muted'>Owned by{eig_chip or ' &mdash;'}{dom_chip}</p></div>")
 
     # De url is het punt van een tool: zonder hem is de pagina minder waard dan de kaart waar hij
     # vandaan komt. Zelfde vorm als daar.
@@ -799,7 +801,17 @@ def _artefact_pagina(st, a, csrf_token: str, username: str | None, msg: str) -> 
     # met drie volgordes is precies hoe ze uit elkaar lopen.
     meta = _meta_blok(a, eigenaar, csrf_token, can_edit, st.records.all(),
                       tab=tab, st=st, username=username)
-    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{meta}</div>")
+    # HET BEWERKEN, op precies één plek (27 september 2026). Hetzelfde eenvoudige formulier dat
+    # op de rol-pagina stond; `next_url` is deze pagina, zodat je blijft staan waar je typte.
+    # `can_edit` beslist of het er is — dezelfde poort als voorheen, alleen nu hier.
+    bewerken = ""
+    if can_edit:
+        hier = wiki.pagina_url(a.id)
+        bewerken = (f"<div class='card'>"
+                    f"{_artefact_edit_form(a, csrf_token, next_url=hier, domains=(list(getattr(eigenaar.definition, 'domains', None) or []) if eigenaar is not None else None))}"
+                    f"<div class='qadd-row'>"
+                    f"{_artefact_archive_form(a, csrf_token, next_url=hier)}</div></div>")
+    main = (f"<div class='c2-main'>{kop}{_banner(msg)}{url_regel}{lees}{bewerken}{meta}</div>")
     return _page(f"{a.title or a.id} — {a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 

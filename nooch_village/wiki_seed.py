@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 
+from nooch_village import artefacts
 from nooch_village import cert_register, wiki
 
 BRON_STUKLIJST = "stuklijst van de Nooch-schoen (founder-input)"
@@ -213,9 +214,21 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
 # ── zaaien ──────────────────────────────────────────────────────────────────
 
 def _bestaat(store, eigenaar: str, titel: str) -> bool:
-    doel = " ".join((titel or "").split()).lower()
-    return any(" ".join((a.title or "").split()).lower() == doel
-               for a in store.list(eigenaar, wiki.PAGINA_KIND, include_archived=True))
+    """Staat deze pagina er al, óf is hij er met opzet niet meer?
+
+    TWEE VRAGEN, één antwoord, en de tweede is nieuw (27 september 2026). De archief-check dekte
+    archiveren; een HARD verwijderd artefact laat geen rij achter, dus zag deze functie een lege
+    plek en zaaide `zaai()` gewoon opnieuw. `is_gewist_bij` leest het changelog: was de laatste
+    actie op (eigenaar, titel) een verwijdering, dan hoort hier niets terug te groeien.
+
+    ALLEEN DE SEEDER WORDT TEGENGEHOUDEN. Een mens die via `artefact_add` bewust een pagina met
+    die titel maakt, komt hier niet langs — en zijn `add` maakt de plek daarna vanzelf weer
+    levend, want `is_gewist` kijkt naar de LÁÁTSTE actie."""
+    doel = artefacts.norm_titel(titel)
+    if any(artefacts.norm_titel(a.title) == doel
+           for a in store.list(eigenaar, wiki.PAGINA_KIND, include_archived=True)):
+        return True
+    return artefacts.is_gewist_bij(store, eigenaar, titel)
 
 
 def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,

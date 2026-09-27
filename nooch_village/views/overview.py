@@ -640,11 +640,23 @@ def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "",
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
-def _artefact_archive_form(a, csrf_token: str) -> str:
+def _artefact_archive_form(a, csrf_token: str, *, next_url: str = "") -> str:
+    """Waar land je na archiveren? TWEE ANTWOORDEN, in deze volgorde — en ze komen uit twee
+    wijzigingen die elkaar hier raken:
+
+      1. `next_url`, als de aanroeper hem meegeeft. Dat doet de permalink, zodat je blijft staan
+         waar je typte in plaats van weggestuurd te worden (deze PR).
+      2. anders `_terug_url`, die weet dat een TOOL geen tab op de rol meer heeft maar op `/tools`
+         woont (#619). De kale `/node?id=…&tab=…` die hier stond stuurde een gearchiveerde tool
+         naar een tab waar hij niet meer staat.
+
+    Zelfde vorm als `_artefact_edit_form` hierboven, en met opzet: twee formulieren op dezelfde
+    kaart die na dezelfde handeling ergens anders uitkomen, leest als een bug."""
+    nxt = next_url or _terug_url(a.anchor, a.kind)
     return (f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-            f"<input type='hidden' name='next' value='{_e(_terug_url(a.anchor, a.kind))}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<button class='dellink' type='submit' name='action' value='artefact_archive' "
             f"onclick=\"return confirm('Archive {_e(a.title or a.id)}?')\">archive</button></form>")
 
@@ -712,26 +724,21 @@ def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "",
     body = _artefact_body_html(a, st=st, pags=pags)
     actions = anders
     if can_edit:
-        # EEN NOTE WORDT HIER NIET MEER BEWERKT (21 september 2026). Een note IS een wiki-pagina,
-        # en die heeft sinds vandaag een inline editor op zijn eigen permalink: je klikt in de
-        # tekst en typt daar. Het oude formulier hier laten staan zou een TWEEDE bewerkpad zijn
-        # voor precies hetzelfde object — twee plekken die uiteen gaan lopen zodra er aan één van
-        # de twee iets verandert. Dus: hier de weg ernaartoe, daar het bewerken.
-        # Een tool of policy is geen wiki-pagina (een tool heeft een URL-veld) en houdt zijn
-        # formulier onveranderd.
-        if a.kind == wiki.PAGINA_KIND:
-            bewerk = (f"<div class='qadd-row'><a class='btn sm' "
-                      f"href='{_e(wiki.pagina_url(a.id))}'>✎ Edit on its page</a></div>")
-        else:
-            # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een
-            # .qadd-row náást 'archiveren'); 'archiveren' als losse actie eronder.
-            eigenaar = st.records.get(a.anchor) if st is not None else None
-            bewerk = _artefact_edit_form(
-                a, csrf_token,
-                domains=(list(getattr(eigenaar.definition, "domains", None) or [])
-                         if eigenaar is not None else None))
-        actions = (f"{bewerk}"
-                   f"<div class='qadd-row'>{_artefact_archive_form(a, csrf_token)}</div>")
+        # HIER WORDT NIETS MEER BEWERKT — voor geen enkele soort.
+        #
+        # Een NOTE verhuisde op 21 september 2026 al: die IS een wiki-pagina en heeft een inline
+        # editor op zijn eigen permalink. Een TOOL en een POLICY volgden op 27 september, om
+        # precies dezelfde reden: één bewerkpad per artefact. Twee plekken die hetzelfde object
+        # bewerken lopen uiteen zodra er aan één van de twee iets verandert — en dan bewerk je op
+        # de ene plek iets anders dan je op de andere leest.
+        #
+        # Dat een tool geen wiki-pagina ÍS (hij heeft een url in plaats van lopende tekst) was het
+        # argument om hem hier te houden. Maar dat pleit voor een ANDER FORMULIER, niet voor een
+        # tweede PLEK: op de permalink staat nu hetzelfde eenvoudige formulier dat hier stond.
+        #
+        # Dus: hier de weg ernaartoe, daar het bewerken én het archiveren.
+        actions = (f"<div class='qadd-row'><a class='btn sm' "
+                   f"href='{_e(wiki.pagina_url(a.id))}'>✎ Edit on its page</a></div>")
     extras = _wiki_extras(a, st, pags, csrf_token, can_edit)
     return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"
             f"{_artefact_versions_html(a)}{actions}{extras}</div>")

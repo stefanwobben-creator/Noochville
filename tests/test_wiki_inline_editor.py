@@ -179,9 +179,14 @@ def test_de_notes_tab_bewerkt_de_note_niet_meer_zelf(tmp_path):
     assert "data-qadd-inline" not in kaart and "name='body'" not in kaart
     assert wiki.pagina_url(a.id) in kaart and "Edit on its page" in kaart
 
+    # EEN TOOL VOLGT SINDS 27 SEPTEMBER 2026 DEZELFDE WEG. Hij hield zijn formulier hier omdat hij
+    # geen wiki-pagina Ís (hij heeft een url in plaats van lopende tekst) — maar dat pleit voor
+    # een ander FORMULIER, niet voor een tweede PLEK. Op zijn permalink staat nu hetzelfde
+    # eenvoudige formulier dat hier stond.
     tool = st.att.add(st.records.all()[0].id, "tool", title="Een tool", url="https://x.nl")
     kaart_tool = _artefact_own_card(tool, "TOK", True)
-    assert "data-qadd-inline" in kaart_tool, "een tool houdt zijn eigen formulier"
+    assert "data-qadd-inline" not in kaart_tool, "een tool bewerkt hier nog steeds"
+    assert "Edit on its page" in kaart_tool
 
 
 # ── De bedrading ─────────────────────────────────────────────────────────────

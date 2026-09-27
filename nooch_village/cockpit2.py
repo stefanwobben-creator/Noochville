@@ -1505,13 +1505,24 @@ def _act_artefact_delete(c):
         # dat is dezelfde afweging als bij `proj_delete`: archiveren mag de rolvervuller
         # (`artefact_archive`), definitief weggooien alleen de Circle Lead van de cirkel waar de
         # eigenaar-rol in zit. Een pagina kan bewijs dragen waar iemand anders naar verwijst.
+        #
+        # TWEEDE TREDE SINDS 27 SEPTEMBER 2026: de ANCHOR-LEAD mag het overal. Dezelfde terugval
+        # die `can_write_artefact` en `mag_schrijven_op_domein` al hebben, en om dezelfde reden —
+        # hij mag op elk artefact al schrijven en archiveren, dus "wel opruimen maar niet
+        # weggooien" is geen grens maar een gat waar hij tegenaan loopt.
+        #
+        # WAT NIET VERANDERT: de ROLVERVULLER blijft uitgesloten van hard verwijderen. Archiveren
+        # mag hij (`artefact_archive`); weggooien is onomkeerbaar en blijft een lead-beslissing.
         cur = st.att.get(g("aid"))
         if cur is None:
             return nxt, "✗ artefact not found"
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = resolve_circle_id(cur.anchor, st.records)
-        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            raise Forbidden("No access — only the Circle Lead may delete permanently")
+        if actor is not None and not (
+                is_circle_lead(actor.id, circle_id, st.assign)
+                or is_circle_lead(actor.id, artefacts.ANCHOR_CIRCLE, st.assign)):
+            raise Forbidden("No access — only the Circle Lead or the anchor lead "
+                            "may delete permanently")
         if actor is None and username != "guest":
             raise Forbidden("No access — user not recognised")
         gref = f"domain:{cur.domain}" if getattr(cur, "domain", "") else f"role:{cur.anchor}"

@@ -191,7 +191,7 @@ class ActieStore(JsonStore):
 
 
 def zichtbaar_voor(st, actie: dict, ik: str) -> bool:
-    """Mag deze mens deze actie zien? \xc9\xc9N regel, gesteld door het scherm \xe9n door elke actie.
+    """Mag deze mens deze actie zien? ÉÉN regel, gesteld door het scherm én door elke actie.
 
     Twee takken, en de tweede leent hij:
 
@@ -199,8 +199,8 @@ def zichtbaar_voor(st, actie: dict, ik: str) -> bool:
         wel project   → het leesrecht van dat project
 
     DE PROJECTREGEL WORDT AANGEROEPEN, NIET NAGESCHREVEN. `mag_project_lezen` kent de
-    priv\xe9-vlag en de cirkel-lidmaatschapscheck; die hier nog eens uitschrijven levert een tweede
-    formulering op die na \xe9\xe9n wijziging anders antwoordt — en dan toont het ene scherm iets wat
+    privé-vlag en de cirkel-lidmaatschapscheck; die hier nog eens uitschrijven levert een tweede
+    formulering op die na één wijziging anders antwoordt — en dan toont het ene scherm iets wat
     het andere verbergt.
 
     Fail-closed: geen actie, geen mens, of een gekoppeld project dat niet (meer) bestaat → alleen

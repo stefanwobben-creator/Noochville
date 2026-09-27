@@ -200,6 +200,72 @@ def erfketen(anchor: str, inherit: bool, records) -> list[str]:
     return chain
 
 
+def norm_titel(titel) -> str:
+    """De titel zoals een zaai-routine hem vergelijkt: één regel, kleine letters, geen dubbele
+    spaties. Stond drie keer uitgeschreven (`wiki_seed._bestaat` en de twee `zorg_voor_tool`'s);
+    nu één vorm, want een tombstone die net anders normaliseert dan de bestaat-check is geen
+    tombstone."""
+    return " ".join(str(titel or "").split()).lower()
+
+
+def is_gewist(data_dir: str, anchor: str, titel: str) -> bool:
+    """Is deze plek — (eigenaar, titel) — met opzet leeggemaakt? Dan hoort er niets terug te groeien.
+
+    HET GAT DAT DIT DICHT. Elke zaai-routine controleert of het artefact er al staat, `archief
+    meegerekend`. Dat dekt archiveren, maar een HARD verwijderd artefact (`AttachmentStore.remove`)
+    laat helemaal geen rij achter — dus de eerstvolgende zaai-run ziet een lege plek en zaait
+    opnieuw. Stefan verwijderde TOOL-STRATE-001 vier keer op één dag; hij kwam vier keer terug.
+
+    GEGROND OP HET CHANGELOG, niet op een nieuwe store. `log_change` schrijft de verwijdering al
+    weg vóór de rij verdwijnt (zie `_act_artefact_delete`), dus het spoor is er — het droeg alleen
+    de titel niet. Een aparte tombstone-store zou hetzelfde feit op een tweede plek zetten, en dat
+    is precies wat `reference, don't copy` verbiedt.
+
+    DE LAATSTE ACTIE TELT, niet of er ooit een delete was. Maakt een mens daarna bewust opnieuw
+    een artefact met die titel, dan staat er een `add` ná de `delete` en is de plek weer levend.
+    Zo heft de tombstone zichzelf op zonder dat iemand hem hoeft te \"wissen\" — en zo blijft de
+    harde eis overeind dat dit alleen de SEEDER tegenhoudt en nooit de mens.
+
+    REGELS ZONDER TITEL TELLEN NIET MEE. Het veld bestaat pas sinds 27 september 2026; alles wat
+    daarvóór is verwijderd draagt hem niet en is langs deze weg niet te herkennen. Dat is bewust
+    fail-OPEN: liever een seeder die één keer te vaak zaait dan een tombstone die op een lege
+    vergelijking dichtslaat en een tool voorgoed onvindbaar maakt.
+
+    Fail-soft op het bestand: geen changelog, een stukke regel of een leesfout → niets gewist."""
+    doel = norm_titel(titel)
+    if not (anchor and doel):
+        return False
+    path = os.path.join(data_dir or ".", "artefact_changelog.jsonl")
+    laatste = ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for regel in f:
+                regel = regel.strip()
+                if not regel:
+                    continue
+                try:
+                    rij = json.loads(regel)
+                except ValueError:
+                    continue
+                if rij.get("anchor") != anchor or norm_titel(rij.get("title")) != doel:
+                    continue
+                laatste = str(rij.get("action") or "")
+    except OSError:
+        return False
+    return laatste == "delete"
+
+
+def is_gewist_bij(store, anchor: str, titel: str) -> bool:
+    """`is_gewist`, maar met de datamap afgeleid uit de STORE. Zaai-routines krijgen geen
+    `data_dir` mee — ze krijgen een `AttachmentStore`, en die weet waar hij staat
+    (`<data_dir>/attachments.json`). Zo hoeft geen enkele seeder-signatuur te veranderen.
+
+    Fail-soft: een store zonder pad levert "niet gewist" op, en dan gedraagt de seeder zich als
+    voorheen."""
+    pad = getattr(store, "path", "") or ""
+    return bool(pad) and is_gewist(os.path.dirname(pad), anchor, titel)
+
+
 def log_change(data_dir: str, *, action: str, artefact, records,
                actor_id: str = "", actor_type: str = "", governance_ref: str = "") -> dict:
     """Append-only changelog van artefact-mutaties (`data/artefact_changelog.jsonl`).
@@ -215,6 +281,10 @@ def log_change(data_dir: str, *, action: str, artefact, records,
         "ts": time.time(),
         "action": action,
         "artefact_id": getattr(artefact, "id", ""),
+        # DE TITEL, sinds 27 september 2026. Een zaai-routine kent het ID niet dat een artefact
+        # ooit had — hij kent alleen de plek en de naam. Zonder dit veld is een verwijdering dus
+        # niet terug te vinden vanuit de seeder, en zaait hij gewoon opnieuw. Zie `is_gewist`.
+        "title": getattr(artefact, "title", "") or "",
         "anchor": getattr(artefact, "anchor", ""),
         "kind": getattr(artefact, "kind", ""),
         "inherit": bool(getattr(artefact, "inherit", False)),

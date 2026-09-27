@@ -264,13 +264,20 @@ def test_de_eigenaar_blijft_zichtbaar(tmp_path):
 
 
 def test_alleen_wie_mag_krijgt_de_bewerk_link(tmp_path):
+    """DE LINK WIJST NAAR DE LEESPAGINA, niet meer naar de rol: het bewerkformulier is daarheen
+    verhuisd (één bewerkpad per artefact). De poórt is onveranderd — alleen wie mag schrijven
+    ziet de weg erheen."""
+    from nooch_village.wiki import pagina_url
     dd, st, a = _dorp(tmp_path)
+    tool = st.att.list("mother_earth", "tool")[0]
     zonder = render_tools(st, csrf_token="t", username="aap@test.nl")
-    assert "edit on the role" not in zonder
+    assert f">Edit</a>" not in zonder
     baas = st.people.add("Anchor Lead", "anchor@test.nl")
     st.assign.assign("mother_earth__circle_lead", "person", baas.id)
     met = render_tools(cockpit2._Stores(dd), csrf_token="t", username="anchor@test.nl")
-    assert "edit on the role" in met
+    assert f">Edit</a>" in met
+    assert pagina_url(tool.id) in met, "de link wijst niet naar de leespagina"
+    assert "edit on the role" not in met, "hij wijst nog naar de rol"
 
 
 def test_de_titel_is_de_link_want_een_tool_open_je(tmp_path):
