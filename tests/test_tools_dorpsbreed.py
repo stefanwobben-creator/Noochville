@@ -113,7 +113,8 @@ def test_ze_zijn_daar_ook_te_bewerken(tmp_path):
     meer te bewerken valt.
 
     De poort blijft dezelfde: alleen wie mag schrijven ziet de weg erheen."""
-    from nooch_village.views.wiki import pagina_url, render_pagina
+    from nooch_village.views.wiki import render_pagina
+    from nooch_village.wiki import pagina_url
     dd, st, baas, sub, buiten = _dorp(tmp_path)
     h = render_tools(st, csrf_token="t", username="anchor@test.nl")
     tools = st.att.list(ANCHOR, "tool")
@@ -121,7 +122,9 @@ def test_ze_zijn_daar_ook_te_bewerken(tmp_path):
     for t in tools:
         assert pagina_url(t.id) in h, t.id
     assert "edit on the role" not in h, "hij wijst nog naar de rol"
-    assert render_tools(st, csrf_token="t", username="buiten@test.nl").count("Edit") == 0
+    # OP DE LINK ZELF en niet op het woord: "Edit" komt elders op de pagina ook voor, en dan meet
+    # deze toets de buurman in plaats van de bewerk-weg.
+    assert ">Edit</a>" not in render_tools(st, csrf_token="t", username="buiten@test.nl")
     # En daar staat het formulier ook echt.
     assert "value='artefact_edit'" in render_pagina(st, tools[0].id, csrf_token="t",
                                                     username="anchor@test.nl")

@@ -172,8 +172,12 @@ def test_wie_niet_mag_bewerken_krijgt_de_weg_erheen_niet(tmp_path):
     assert "Money" in html, "de inhoud blijft gewoon leesbaar"
     # ER STOND HIER `"✎" not in html`, en dat mat niets: de knop schrijft de entity `&#9998;`,
     # nooit het letterlijke teken. Een mutatie die de knop ALTIJD toonde bleef daardoor groen.
-    # Nu op de belofte zelf, in de tekst die iemand leest.
-    assert "Edit on the role" not in html, "een bewerkknop voor wie niet mag bewerken"
+    #
+    # DAARNA STOND ER `"Edit on the role" not in html`, en sinds het bewerken NAAR deze pagina
+    # verhuisde mat óók dat niets meer: die zin bestaat hier niet eens meer, dus de toets was
+    # altijd groen. Nu op het formulier zelf — het ding dat er niet hoort te staan.
+    assert "value='artefact_edit'" not in html, "een bewerkformulier voor wie niet mag bewerken"
+    assert "value='artefact_archive'" not in html, "een archiveerknop voor wie niet mag bewerken"
 
 
 # ── 4. De note-pagina verandert niet ─────────────────────────────────────────
