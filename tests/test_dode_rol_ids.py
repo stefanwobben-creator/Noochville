@@ -71,10 +71,17 @@ def test_copywriter_staat_nergens_meer_als_bestemming():
     assert dood not in claims_board.ROL_IDS.values()
     assert "copywriter" not in claims_board.ROL_IDS
     assert "copywriter + compliance" not in claims_board.ROL_IDS
-    assert dood not in cockpit2._COPY_PROMPT_ROLLEN
+    # `_COPY_PROMPT_ROLLEN` bestond hier tot 28 september 2026; die zaai-lijst is vervallen met
+    # het tool-artefact zelf. Wat de toets bedoelt blijft staan, op de lijst die er nog is.
+    assert not hasattr(cockpit2, "_COPY_PROMPT_ROLLEN")
     assert dood not in cockpit2._COPY_STACK_ZAAD
     for bronnen in cockpit2._COPY_STACK_ZAAD.values():
         assert dood not in bronnen
+    # DE LEVENDE COPYWRITER IS EEN ÁNDER RECORD, en die mag er juist wél in staan: op prod bestaat
+    # naast de gearchiveerde `…__noochville__copywriter` ook `mother_earth__nooch__copywriter` (v2,
+    # niet gearchiveerd). Dat onderscheid is precies wat deze toets moet bewaken — hem "copywriter"
+    # laten matchen op naam zou de levende rol mee doodverklaren.
+    assert "mother_earth__nooch__copywriter" in cockpit2._COPY_STACK_ZAAD
 
 
 def test_compliance_parent_wijst_niet_naar_de_ontbonden_cirkel():

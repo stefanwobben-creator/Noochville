@@ -73,11 +73,16 @@ def test_een_verwijderde_plek_wordt_niet_terugzaaid(tmp_path):
     artefacts.log_change(dd, action="delete", artefact=st.att.get(aid), records=st.records)
     st.att.remove(aid)
     assert dc_tool(st.records, st.att, ANCHOR) == ""
-    # ALLEEN DEZE TITEL, niet de hele anchor: de zaad-dataset zet er meer dan één tool neer, en
-    # die horen juist ongemoeid te blijven.
+    # ALLEEN DEZE TITEL, niet de hele anchor: een andere tool hoort ongemoeid te blijven.
+    #
+    # DIE BUURMAN WORDT HIER ZELF NEERGEZET (28 september 2026). Hij kwam uit de zaad-dataset, maar
+    # die zet er sinds het opruimen van de copy-prompt-kaart nog maar één neer — en dan stond deze
+    # toets op een lege lijst te bewijzen dat er niets was meegesneuveld.
+    st.att.add(ANCHOR, "tool", title="Een andere tool", url="/ergens",
+               actor_id="system", actor_type="persona")
     titels = [a.title for a in st.att.list(ANCHOR, "tool", include_archived=True)]
     assert DC_TITEL not in titels, titels
-    assert titels, "de andere tools zijn meegesneuveld"
+    assert "Een andere tool" in titels, "de andere tools zijn meegesneuveld"
 
 
 def test_archiveren_blijft_werken_zoals_het_deed(tmp_path):
@@ -159,8 +164,12 @@ def test_een_kapot_changelog_blokkeert_niets(tmp_path):
 def test_alle_zaai_routines_raadplegen_hem():
     """"Roep die helper aan in elke zaai-routine." Drie plekken hadden dit patroon."""
     from nooch_village import wiki_seed
-    from nooch_village.views import copy_prompt, decision_coach
-    for fn in (wiki_seed._bestaat, copy_prompt.zorg_voor_tool, decision_coach.zorg_voor_tool):
+    from nooch_village.views import decision_coach
+    # `copy_prompt.zorg_voor_tool` stond hier tot 28 september 2026; die zaai-routine bestaat niet
+    # meer (het artefact was een dubbel van de schermknop). Wat overblijft zijn de twee die nog
+    # zaaien — en de regel geldt voor élke zaai-routine, dus deze lijst hoort mee te krimpen en te
+    # groeien met wat er werkelijk zaait.
+    for fn in (wiki_seed._bestaat, decision_coach.zorg_voor_tool):
         assert "is_gewist_bij" in inspect.getsource(fn), fn.__qualname__
 
 

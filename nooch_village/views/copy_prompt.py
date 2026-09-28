@@ -441,30 +441,50 @@ TOOL_BODY = (
 )
 
 
-def zorg_voor_tool(records, store, rol_id: str) -> str:
-    """Zet de copy-prompt-generator als tool-artefact op deze rol. Idempotent.
+def ruim_tool_op(store, data_dir: str = "", records=None) -> list[str]:
+    """Haal de copy-prompt-generator als tool-ARTEFACT weg. Idempotent; geeft de ids terug.
 
-    Een tool die alleen als losse pagina bestaat, hangt nergens aan: je moet weten dat hij er is.
-    Als artefact op de rol volgt hij het bezit-model dat er al staat — wie de rol bekijkt ziet zijn
-    gereedschap — en is hij gescoped op precies de policy-stack waarmee hij werkt.
+    HIER STOND `zorg_voor_tool`, DIE HEM JUIST AANMAAKTE (omgedraaid 28 september 2026).
 
-    Geeft het artefact-id terug, of "" als de rol niet bestaat of de schrijf faalt."""
-    if records.get(rol_id) is None:
-        return ""
-    # OOK GEARCHIVEERDE TEGENKOMSTEN TELLEN MEE — zie dezelfde regel in `decision_coach`: zonder
-    # archief is "idempotent" alleen waar zolang niemand de kaart opruimt.
-    for a in store.list(rol_id, "tool", include_archived=True):
-        if artefacts.norm_titel(a.title) == artefacts.norm_titel(TOOL_TITEL):
-            return a.id                                   # bestaat al (actief of gearchiveerd)
-    # MET OPZET WEGGEGOOID BLIJFT WEG (27 september 2026). De regel hierboven dekt archiveren;
-    # een HARD verwijderd artefact laat geen rij achter, dus zonder dit zaait elke deploy hem
-    # opnieuw — vier keer op één dag, gemeten. Zie `artefacts.is_gewist`. Alleen deze zaai-weg
-    # wordt gestopt: een mens mag de tool gewoon opnieuw aanmaken.
-    if artefacts.is_gewist_bij(store, rol_id, TOOL_TITEL):
-        return ""
-    art = store.add(rol_id, "tool", title=TOOL_TITEL, body=TOOL_BODY,
-                    url=f"/copy-prompt?rol={urllib.parse.quote(rol_id)}",
-                    inherit=False,                        # rol-eigen capaciteit, niet erfelijk
-                    actor_id="system", actor_type="persona",
-                    change_note="copy-prompt-generator ontsloten op de rol die hem gebruikt")
-    return getattr(art, "id", "") or ""
+    Waarom hij weg moet: er is al een vaste schermknop "Copy prompt generator" op de Nooch-cirkel
+    (`_ROLE_TOOLS`), en die doet hetzelfde — hij opent `/copy-prompt`, waar de rolkiezer je vraagt
+    als wie je schrijft. Het artefact voegde daar alleen een tweede kaart met dezelfde naam aan toe.
+    Eén gereedschap, niet twee.
+
+    Op prod stonden er dríé: `TOOL-COPYWR-001` (14 augustus), `TOOL-COMMUN-001` (26 september) en
+    `TOOL-MOTHER-001` (27 september) — drie generaties van de zaailijst, identieke body, nooit door
+    een mens aangeraakt. Dat is precies de les uit CLAUDE.md: een fix hoort zijn eigen uitstoot in
+    te trekken, niet te wachten tot iemand de stapel herkent.
+
+    DE GUARD IS HET HELE VERSCHIL tussen opruimen en wissen. Er gaat er alleen één weg als hij
+    aantoonbaar ONAANGERAAKTE ZAAI-UITVOER is:
+
+      * kind `tool` en exact deze titel,
+      * en GEEN ENKELE versie-entry van iemand anders dan `system`.
+
+    Dat laatste is met opzet "geen enkele" en niet "precies één": een machinale verhuizing of
+    migratie schrijft ook een entry, en een guard die op het AANTAL telt gaat daar stuk op — hij
+    zou de opruiming blokkeren met een spoor dat het dorp zelf had achtergelaten.
+
+    Heeft iemand er ooit iets aan veranderd, dan blijft hij staan en is het een mensbeslissing.
+    Zelfde vorm als `notif_opruiming`: van vóór de fix, en alleen als de bewering nú niet meer
+    klopt.
+
+    De verwijdering schrijft een changelog-regel, en dus een grafsteen (`is_gewist`) — mocht er ooit
+    weer een zaai-weg ontstaan, dan blijft hij weg."""
+    from nooch_village import artefacts
+
+    weg: list[str] = []
+    for a in list(store.by_kind("tool", include_archived=True)):
+        if artefacts.norm_titel(a.title) != artefacts.norm_titel(TOOL_TITEL):
+            continue
+        versies = list(getattr(a, "versions", None) or [])
+        if not versies or any(str(v.get("actor_id") or "") != "system" for v in versies):
+            continue                                  # door een mens aangeraakt: niet van ons
+        if data_dir and records is not None:
+            artefacts.log_change(data_dir, action="delete", artefact=a, records=records,
+                                 actor_id="system", actor_type="persona",
+                                 governance_ref=f"role:{a.anchor}")
+        if store.remove(a.id):
+            weg.append(a.id)
+    return weg

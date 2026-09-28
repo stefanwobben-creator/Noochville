@@ -318,33 +318,83 @@ def test_de_craft_regels_staan_niet_in_de_code():
     assert "Never \"biodegradable\"" not in src            # dat is de policy-regel
 
 
-# ── De tool hangt aan de rol, niet in het luchtledige ──────────────────────
+# ── De tool is een schermknop, geen artefact ────────────────────────────────
+#
+# OMGEDRAAID OP 28 SEPTEMBER 2026. Hier stonden drie toetsen op `zorg_voor_tool`, die de generator
+# als tool-ARTEFACT op een rol zette. Er bestond al een vaste schermknop "Copy prompt generator" op
+# de Nooch-cirkel (`_ROLE_TOOLS`) die naar `/copy-prompt` gaat — dus het artefact was een tweede
+# kaart met dezelfde naam en dezelfde bestemming. Op prod stonden er drie, uit drie generaties van
+# de zaailijst. `ruim_tool_op` haalt ze weg; de knop blijft.
 
-def test_de_tool_wordt_als_artefact_op_de_rol_gezet(tmp_path):
-    """Een tool die alleen als losse pagina bestaat hangt nergens aan: je moet wéten dat hij er is.
-    Als artefact volgt hij het bezit-model dat er al staat — wie de rol bekijkt ziet zijn
-    gereedschap — en is hij gescoped op precies de policy-stack waarmee hij werkt."""
+def _store(tmp_path):
     from nooch_village.attachments import AttachmentStore
-    store = AttachmentStore(str(tmp_path / "att.json"))
-    aid = cp.zorg_voor_tool(RECS, store, ROL)
-    assert aid
-    tools = store.list(ROL, "tool")
-    assert len(tools) == 1
-    t = tools[0]
-    assert t.title == cp.TOOL_TITEL
-    assert t.url == f"/copy-prompt?rol={ROL}"
-    assert t.inherit is False                            # rol-eigen capaciteit, niet erfelijk
+    return AttachmentStore(str(tmp_path / "att.json"))
 
 
-def test_de_tool_wordt_niet_dubbel_aangemaakt(tmp_path):
-    from nooch_village.attachments import AttachmentStore
-    store = AttachmentStore(str(tmp_path / "att.json"))
-    eerste = cp.zorg_voor_tool(RECS, store, ROL)
-    tweede = cp.zorg_voor_tool(RECS, store, ROL)
-    assert eerste == tweede and len(store.list(ROL, "tool")) == 1
+def _zaai(store, anchor="mother_earth"):
+    """Zoals de oude zaai-routine hem neerzette: door `system`, één versie."""
+    return store.add(anchor, "tool", title=cp.TOOL_TITEL, body=cp.TOOL_BODY,
+                     url=f"/copy-prompt?rol={anchor}", inherit=False,
+                     actor_id="system", actor_type="persona",
+                     change_note="copy-prompt-generator ontsloten op de rol die hem gebruikt")
 
 
-def test_een_onbekende_rol_krijgt_geen_tool(tmp_path):
-    from nooch_village.attachments import AttachmentStore
-    store = AttachmentStore(str(tmp_path / "att.json"))
-    assert cp.zorg_voor_tool(RECS, store, "bestaat-niet") == ""
+def test_de_zaai_uitvoer_wordt_opgeruimd(tmp_path):
+    """DE KERN: wat de zaailijst maakte, haalt de opruiming weg."""
+    store = _store(tmp_path)
+    a = _zaai(store)
+    assert cp.ruim_tool_op(store) == [a.id]
+    assert store.get(a.id) is None
+
+
+def test_hij_pakt_ze_op_elke_anchor(tmp_path):
+    """Op prod stonden ze op twee rollen én op de cirkel — drie generaties van dezelfde lijst."""
+    store = _store(tmp_path)
+    ids = [_zaai(store, a).id for a in ("mother_earth", "rol_een", "rol_twee")]
+    assert sorted(cp.ruim_tool_op(store)) == sorted(ids)
+    assert store.by_kind("tool", include_archived=True) == []
+
+
+def test_hij_is_idempotent(tmp_path):
+    store = _store(tmp_path)
+    _zaai(store)
+    assert cp.ruim_tool_op(store)
+    assert cp.ruim_tool_op(store) == []
+
+
+def test_een_aangeraakte_kaart_blijft_staan(tmp_path):
+    """DE GUARD, en het hele verschil tussen opruimen en wissen. Heeft iemand er ooit iets aan
+    veranderd, dan is het geen zaai-uitvoer meer maar werk — en dan is weghalen een mensbeslissing."""
+    store = _store(tmp_path)
+    a = _zaai(store)
+    store.update(a.id, body="ik heb hier iets aan toegevoegd",
+                 actor_id="een-mens", actor_type="person")
+    assert cp.ruim_tool_op(store) == []
+    assert store.get(a.id) is not None
+
+
+def test_een_machinale_versie_erbij_blokkeert_hem_niet(tmp_path):
+    """De verhuizing naar de anchor-cirkel schrijft óók een versie-entry. Telde de guard op het
+    AANTAL versies, dan blokkeerde het dorp zijn eigen opruiming met zijn eigen spoor."""
+    store = _store(tmp_path)
+    a = _zaai(store, "rol_een")
+    store.verplaats(a.id, "mother_earth", actor_id="system", actor_type="persona")
+    assert cp.ruim_tool_op(store) == [a.id]
+
+
+def test_een_andere_tool_blijft_met_rust(tmp_path):
+    """Op de titel en niet op de soort: de decision coach staat op dezelfde anchor."""
+    store = _store(tmp_path)
+    _zaai(store)
+    coach = store.add("mother_earth", "tool", title="Decision coach", url="/decision-coach",
+                      actor_id="system", actor_type="persona")
+    cp.ruim_tool_op(store)
+    assert [a.id for a in store.by_kind("tool")] == [coach.id]
+
+
+def test_de_schermknop_is_wat_er_overblijft():
+    """WAAROM HET WEG MAG. Niet "het is dubbel" als bewering, maar de knop aanwijzen die het werk
+    doet — en die staat op de cirkel, met dezelfde naam en dezelfde bestemming."""
+    from nooch_village.views.overview import _ROLE_TOOLS
+    labels = {l: h for l, _d, h in _ROLE_TOOLS["mother_earth__nooch"]}
+    assert labels.get(cp.TOOL_TITEL) == "/copy-prompt"

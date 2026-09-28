@@ -221,18 +221,29 @@ def _bootstrap(dd: str) -> None:
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
-    # De copy-prompt-generator hoort als gereedschap bij de rol die hem gebruikt, niet als losse
-    # pagina die nergens aan hangt. Idempotent; fail-soft — een tool mag de cockpit nooit ophouden.
+    # De copy-prompt-generator IS al een vaste schermknop op de Nooch-cirkel (`_ROLE_TOOLS`), dus
+    # het artefact ernaast was een tweede kaart met dezelfde naam. Hier stond de zaai-aanroep die
+    # hem maakte; nu ruimt hij zijn eigen uitstoot op. Idempotent; fail-soft — een tool mag de
+    # cockpit nooit ophouden.
+    #
+    # OPRUIMEN VÓÓR VERHUIZEN, en dat is geen smaak: verhuizen schrijft een versie-entry, en de
+    # guard van `ruim_tool_op` leest juist de versiehistorie om te zien of een mens eraan zat.
+    # Andersom zou de opruiming zichzelf blokkeren met haar eigen spoor.
     try:
-        from nooch_village.views.copy_prompt import zorg_voor_tool
-        for _rid in _COPY_PROMPT_ROLLEN:
-            zorg_voor_tool(st.records, st.att, _rid)
+        from nooch_village.views.copy_prompt import ruim_tool_op
+        ruim_tool_op(st.att, dd, st.records)
         for _rid, _bronnen in _COPY_STACK_ZAAD.items():
             if st.records.get(_rid) is not None:
                 st.copy_stack.zaad(_rid, [b for b in _bronnen if st.records.get(b) is not None],
                                    door="system (zaad)")
     except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("copy-prompt-tool niet gekoppeld: %s", _e)
+        logging.getLogger("village.cockpit").warning("copy-prompt-tool niet opgeruimd: %s", _e)
+    # ELK TOOL-ARTEFACT HANGT AAN DE CIRKEL (28 september 2026). De regel stond alleen in de
+    # zaai-weg; bestaande artefacten van vóór die regel bleven hangen waar ze stonden. Idempotent.
+    try:
+        artefacts.verhuis_tools_naar_anchor(st.att, dd, st.records)
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("tool-verhuizing overgeslagen: %s", _e)
     # Zelfde reden, andere tool: de Decision Coach hangt onder de rol die het besluit-domein houdt,
     # zodat hij vindbaar is voor wie die rol opent. Idempotent; fail-soft.
     try:
@@ -1018,9 +1029,10 @@ def _web_actor_id(username: str | None, st) -> str:
 # in `artefacts.py`, gedeeld met de decision coach, zodat een derde tool hem volgt zonder dat
 # iemand opnieuw hoeft te beslissen.
 #
-# HET BLIJFT EEN TUPLE, want de generator is ge-URL-parameteriseerd op een rol (`?rol=<id>`): de
-# kaart hangt bij de cirkel, maar een extra anchor toevoegen is nog steeds één regel.
-_COPY_PROMPT_ROLLEN = (artefacts.TOOL_ANCHOR,)
+# EN OP 28 SEPTEMBER 2026 VERVIEL DE KAART HELEMAAL. De schermknop op de Nooch-cirkel
+# (`_ROLE_TOOLS`) opent `/copy-prompt`, waar de rolkiezer vraagt als wie je schrijft — het artefact
+# ernaast was een tweede kaart met dezelfde naam en dezelfde bestemming. De zaailijst die hier stond
+# is daarmee weg; `copy_prompt.ruim_tool_op` haalt de drie die er op prod van over waren op.
 
 # Welke bronnen een schrijvende rol bij oprichting bewust meekrijgt. Rol-ids in code zijn hier
 # onvermijdelijk: een inclusie IS een besluit, en een besluit dat je afleidt uit een regel is geen
@@ -1028,6 +1040,24 @@ _COPY_PROMPT_ROLLEN = (artefacts.TOOL_ANCHOR,)
 _COPY_STACK_ZAAD = {
     "mother_earth__nooch__community_and_email": (
         "mother_earth__nooch__brand_visual_designer",
+    ),
+    # DE COPYWRITER STOND NIET IN DE ROLKIEZER (28 september 2026). `_rolkiezer` slaat een rol over
+    # die geen eigen policies én geen inclusie heeft, en de copywriter heeft er nul van allebei —
+    # dus de enige weg naar "schrijf als copywriter" was de url van het tool-artefact dat hier net
+    # is opgeruimd. Zonder deze regel zou het opruimen een rol stil onbereikbaar maken.
+    #
+    # COMMUNITY & EMAIL ALS BRON, en niet een cirkel: een inclusie leent de EIGEN curatie van een
+    # rol uit (`_own_policies`), en dat is precies waar de copy-policies wonen — drie stuks. Wat er
+    # uit de cirkels boven hem komt erft hij sowieso al via `erfketen`; die hier nog eens insluiten
+    # zou dezelfde regels twee keer in de prompt zetten.
+    #
+    # HET LEVENDE ID, EN DAT IS NIET HET VOOR DE HAND LIGGENDE. Op prod bestaan er TWEE
+    # copywriter-records: `…__noochville__copywriter` (gearchiveerd, in de eveneens gearchiveerde
+    # Noochville-cirkel, persona "Wendy Words") en `mother_earth__nooch__copywriter` (levend, v2).
+    # De eerste is de dode bestemming die `test_dode_rol_ids` bewaakt, en `_rolkiezer` slaat een
+    # gearchiveerde rol sowieso over — een inclusie daarop had niets gedaan.
+    "mother_earth__nooch__copywriter": (
+        "mother_earth__nooch__community_and_email",
     ),
 }
 
@@ -1373,6 +1403,19 @@ def _act_artefact_add(c):
         kind = g("kind")
         if kind not in ARTEFACT_KINDS:
             return nxt, "✗ onbekende artefact-soort"
+        # EEN TOOL HANGT ALTIJD AAN DE CIRKEL, en dat wordt HIER afgedwongen en niet alleen in de
+        # zaai-weg (28 september 2026). Deze tak nam de `owner` kritiekloos uit het formulier over:
+        # alleen een policy werd tegen de eigen rol gevalideerd, dus een tool kon op elke rol landen
+        # zolang je maar een id meestuurde. De regel stond in `TOOL_ANCHOR` uitgelegd en werd door
+        # de twee zaai-wegen gevolgd — maar een regel die de schrijfweg niet afdwingt is een
+        # gewoonte, en precies daar kwamen de drie dubbele copy-prompt-kaarten vandaan.
+        #
+        # OVERSCHRIJVEN EN NIET WEIGEREN: het formulier op `/tools` stuurt de anchor al goed mee, en
+        # wie hem met de hand anders zet bedoelt geen foutmelding maar een tool. De poort hieronder
+        # draait daarna op de ANCHOR-cirkel, dus dit verruimt niets — het verplaatst alleen waar de
+        # vraag over gaat.
+        if kind == "tool":
+            owner = artefacts.TOOL_ANCHOR
         # HET DOMEIN EERST, DAN DE POORT (26 september 2026). De poort hangt sinds deze stap aan
         # het DOMEIN, en dat wordt hier pas gekozen — hij stond ervóór en zou dus altijd de
         # "geen domein"-tak nemen, oftewel: iedereen mag alles aanmaken. De stappen hieronder

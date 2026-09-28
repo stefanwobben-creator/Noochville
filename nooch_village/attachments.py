@@ -332,6 +332,38 @@ class AttachmentStore:
             self._save()
             return Attachment(**d)
 
+    def verplaats(self, aid: str, anchor: str, *, actor_id: str = "", actor_type: str = "",
+                  governance_ref: str = "", change_note: str = "") -> Attachment | None:
+        """Hang dit artefact aan een andere eigenaar. Legt een versie-entry vast.
+
+        WAAROM DIT GEEN `update(anchor=...)` IS. Die functie bewerkt de INHOUD van een artefact;
+        de eigenaar is iets anders — hij bepaalt wie mag schrijven (`can_write_artefact`), waar het
+        op het scherm verschijnt en waartegen latere wijzigingen gelogd worden. Dat door een
+        optioneel veld in dezelfde aanroep laten lopen betekent dat elke bewerking er per ongeluk
+        een kan meesturen.
+
+        HET ID VERHUIST NIET MEE, en dat is bewust: een id is een permalink. `TOOL-WEBSIT-001` blijft
+        zo heten ook als hij aan de anchor-cirkel komt te hangen — anders breekt elke verwijzing
+        ernaar, inclusief die in de Kroniek en in wiki-bodies."""
+        if not anchor:
+            return None
+        with file_lock(self.path):
+            self._items = read_json(self.path, {})
+            d = self._items.get(aid)
+            if d is None or d.get("anchor") == anchor:
+                return Attachment(**d) if d else None
+            oud = d.get("anchor") or ""
+            d["anchor"] = anchor
+            d["updated_at"] = time.time()
+            if d.get("kind") in ARTEFACT_KINDS:
+                versions = d.setdefault("versions", [])
+                nr = (versions[-1]["version_nr"] + 1) if versions else 1
+                versions.append(_version(nr, actor_id, actor_type, d.get("body", ""),
+                                         change_note or f"verhuisd van {oud} naar {anchor}",
+                                         governance_ref))
+            self._save()
+            return Attachment(**d)
+
     def remove(self, aid: str) -> bool:
         """Hard verwijderen — alléén voor migratie/curatie. Voor artefacten gebruik `archive`."""
         with file_lock(self.path):
