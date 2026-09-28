@@ -321,12 +321,224 @@ def verschil(vorige: dict | None, nu: dict) -> list[dict]:
     return uit
 
 
-def run_en_bewaar(st, ctx, registry, *, url: str = "", doel: str = "live") -> tuple[dict, list[dict]]:
-    """De CLI- en (later) klok-ingang: draai, vergelijk met de vorige run van HETZELFDE doel, bewaar."""
-    staat = SiteAuditStaat(pad_voor(getattr(st, "dd", "") or getattr(ctx, "data_dir", "data"), doel))
+class ScanDraaitAl(RuntimeError):
+    """Er loopt al een scan. Niets gedaan, niets bewaard, en wél gezegd sinds wanneer."""
+
+
+#: Na hoeveel tijd een slot als achtergebleven geldt. Een run duurt 20-60 seconden (Lighthouse);
+#: een kwartier is ruim genoeg om een trage run niet af te kappen en kort genoeg om een proces dat
+#: halverwege sneuvelde niet tot de volgende deploy in de weg te laten liggen. Zonder deze grens is
+#: één harde crash genoeg om de knop voorgoed dood te leggen.
+SLOT_VERVALT_S = 15 * 60
+
+
+def slot_pad(data_dir: str, doel: str = "live") -> str:
+    return os.path.join(data_dir, f"site_audit_{doel}.lock")
+
+
+def slot_staat(data_dir: str, doel: str = "live") -> dict | None:
+    """Wie draait er, sinds wanneer? None = vrij. Een vervallen slot leest als vrij."""
+    try:
+        with open(slot_pad(data_dir, doel), encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    if time.time() - float(d.get("sinds") or 0) > SLOT_VERVALT_S:
+        return None
+    return d
+
+
+def _neem_slot(data_dir: str, doel: str, door: str) -> bool:
+    """Atomair pakken: `O_CREAT | O_EXCL` slaagt bij precies één van twee gelijktijdige pogingen.
+
+    GEEN "bestaat het al?"-CHECK GEVOLGD DOOR SCHRIJVEN, want dat is precies de race die dit moet
+    afvangen: twee kliks binnen een milliseconde zien allebei niets en starten allebei."""
+    pad = slot_pad(data_dir, doel)
+    if slot_staat(data_dir, doel) is None:
+        try:
+            os.remove(pad)                       # vervallen slot van een gesneuvelde run
+        except OSError:
+            pass
+    try:
+        fd = os.open(pad, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        return False
+    except OSError:
+        return True                              # geen schrijfrechten: liever draaien dan blokkeren
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump({"sinds": time.time(), "door": door}, fh)
+    return True
+
+
+def _geef_slot(data_dir: str, doel: str) -> None:
+    try:
+        os.remove(slot_pad(data_dir, doel))
+    except OSError:
+        pass
+
+
+def run_en_bewaar(st, ctx, registry, *, url: str = "", doel: str = "live",
+                  door: str = "") -> tuple[dict, list[dict]]:
+    """De ingang voor CLI, klok én knop: draai, vergelijk met de vorige run van HETZELFDE doel, bewaar.
+
+    HET SLOT ZIT HIER EN NIET BIJ DE AANROEPER (28 september 2026). Sinds de knop op de
+    handboek-pagina bestaat er een derde ingang, en een slot per ingang beschermt alleen tegen
+    zichzelf: een klik tijdens een CLI-run zou dan gewoon een tweede scan starten. Eén poort voor
+    alle drie, dus ook de klok van scope 47 krijgt hem gratis.
+
+    TWEE SCANS TEGELIJK IS NIET "DUBBEL WERK" MAAR VUILE DATA: allebei schrijven ze een snapshot in
+    dezelfde append-only reeks, en `verschil()` vergelijkt met de LAATSTE — twee runs op hetzelfde
+    moment leveren dus een "wissel" op tussen twee metingen van dezelfde minuut."""
+    data_dir = getattr(st, "dd", "") or getattr(ctx, "data_dir", "data")
+    if not _neem_slot(data_dir, doel, door or "onbekend"):
+        bezet = slot_staat(data_dir, doel) or {}
+        raise ScanDraaitAl(f"er loopt al een scan [{doel}], gestart door "
+                           f"{bezet.get('door') or 'onbekend'}")
+    try:
+        return _draai_met_slot(st, ctx, registry, url=url, doel=doel, data_dir=data_dir)
+    finally:
+        # ALTIJD TERUGGEVEN, ook als `draai` ontploft: een netwerkfout hoort de knop niet een kwartier
+        # dood te leggen. De vervaltijd hierboven is het vangnet voor een proces dat er zelf niet
+        # meer is om dit uit te voeren.
+        _geef_slot(data_dir, doel)
+
+
+def _draai_met_slot(st, ctx, registry, *, url: str, doel: str,
+                    data_dir: str) -> tuple[dict, list[dict]]:
+    """De run zelf, zonder slot-beheer — zodat de twee ingangen hetzelfde doen.
+
+    Aparte functie omdat de knop het slot in de VERZOEK-thread pakt (anders zou een dubbelklik twee
+    threads starten die pas binnenin ontdekken dat ze te laat zijn) en het pas in de WERK-thread
+    weer loslaat."""
+    staat = SiteAuditStaat(pad_voor(data_dir, doel))
     vorige = staat.laatste()
     snapshot = draai(st, ctx, registry, url=url, doel=doel)
     wissels = verschil(vorige, snapshot)
     snapshot["wissels"] = wissels
     staat.noteer(snapshot)
+    _wis_fout(data_dir, doel)
     return snapshot, wissels
+
+
+#: De pagina die de scanknop draagt, en het regeltje dat hem daar zet.
+#:
+#: WAAROM DIT EEN EENMALIGE DATA-WIJZIGING IS EN GEEN `if titel == …` IN DE VIEW. De knop verschijnt
+#: op elke pagina die naar `/site-audit` VERWIJST — dat is dezelfde koppeling als bij de decision
+#: coach, en om dezelfde reden: geen titel en geen artefact-id in de rendercode, want een titel is
+#: een naam die iemand herschrijft. Maar dan moet die verwijzing er wel staan, en in het Website
+#: Handboek stond hij niet.
+#:
+#: DE TITEL MAG HIER WÉL STAAN, want dit is een BESLUIT en geen regel: "de scanknop hoort in het
+#: handboek" is precies zo'n keuze als de inclusies in `_COPY_STACK_ZAAD` ("een besluit dat je
+#: afleidt uit een regel is geen besluit meer"). Hij staat één keer, in een zaai-functie, en niet in
+#: de weg van de rendercode.
+#:
+#: EN HET IS OMKEERBAAR DOOR EEN MENS: haal de regel uit de pagina en de knop is weg. Dat is meer
+#: dan een vlag in de data zou geven, want daar is geen scherm voor.
+HANDBOEK_TITEL = "WEBSITE HANDBOEK"
+#: GEEN MARKDOWN-LINK, en dat is gemeten en niet gegokt: `_md` weigert een INTERN pad bewust
+#: (`test_link_niet_http_geen_link_failclosed`), dus `[Site audit](/site-audit)` zou als rauwe
+#: haakjes op het scherm staan. Het pad in gewone tekst leest goed én draagt de koppeling; de
+#: klikbare link naar het scherm staat in het paneel zelf, dat geen markdown is.
+_KNOP_REGEL = ("\n\n## Site audit\n\n"
+               "The lights for reachability, speed, accessibility, SEO and claims of the live shop "
+               "are on the Site audit screen (/site-audit). The **Run scan** button at the bottom "
+               "of this page starts a fresh measurement; it takes 20-60 seconds.\n")
+
+
+def zorg_voor_knop_verwijzing(store, *, titel: str = HANDBOEK_TITEL) -> str:
+    """Zet één verwijzing naar de site audit in het handboek, zodat het de scanknop draagt.
+
+    Idempotent, en met drie guards die hem klein houden: alleen een TOOL met precies deze titel,
+    alleen als de verwijzing er nog niet staat, en alleen als er al tekst in staat — een lege
+    pagina vullen is geen koppeling leggen maar schrijven, en dat is niet aan het dorp.
+
+    Geeft het id terug als er iets is geschreven, anders "".
+    """
+    from nooch_village import artefacts
+
+    for a in store.by_kind("tool", include_archived=True):
+        if artefacts.norm_titel(a.title) != artefacts.norm_titel(titel):
+            continue
+        body = a.body or ""
+        if "/site-audit" in body or not body.strip():
+            return ""
+        store.update(a.id, body=body.rstrip() + _KNOP_REGEL, actor_id="system",
+                     actor_type="persona",
+                     change_note="scanknop gekoppeld: verwijzing naar /site-audit toegevoegd")
+        log.info("site audit: verwijzing toegevoegd aan %s (%s)", a.id, a.title)
+        return a.id
+    return ""
+
+
+# ── De knop-ingang: pakken in de ene thread, draaien in de andere ────────────
+#
+# WAAROM NIET GEWOON SYNCHROON IN DE POST-HANDLER. `draai` doet echte netwerkchecks (een GET op de
+# shop, een Lighthouse-run via PageSpeed) en duurt 20 tot 60 seconden. Een POST die zo lang open
+# blijft staan geeft een pagina die hangt zonder te zeggen waarom, houdt een thread van de
+# `ThreadingHTTPServer` bezet, en loopt tegen elke proxy-timeout aan die ertussen zit.
+
+def _fout_pad(data_dir: str, doel: str) -> str:
+    return os.path.join(data_dir, f"site_audit_{doel}.fout.json")
+
+
+def laatste_fout(data_dir: str, doel: str = "live") -> dict | None:
+    """De laatste mislukte poging, of None. Wordt gewist zodra er weer een run slaagt.
+
+    WAAROM DIT BESTAAT: een scan die in de achtergrond sneuvelt is anders volkomen stil — het slot
+    valt weg, de tijdstempel van de laatste run beweegt niet, en het scherm ziet er precies zo uit
+    als vóór de klik. "Er is niets gebeurd" en "het is misgegaan" horen niet hetzelfde te lezen."""
+    try:
+        with open(_fout_pad(data_dir, doel), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+
+
+def _noteer_fout(data_dir: str, doel: str, fout: str) -> None:
+    try:
+        with open(_fout_pad(data_dir, doel), "w", encoding="utf-8") as fh:
+            json.dump({"ts": time.time(), "fout": fout[:400]}, fh)
+    except OSError:
+        log.warning("site audit: fout niet te noteren", exc_info=True)
+
+
+def _wis_fout(data_dir: str, doel: str) -> None:
+    try:
+        os.remove(_fout_pad(data_dir, doel))
+    except OSError:
+        pass
+
+
+def start_achtergrond(data_dir: str, *, doel: str = "live", door: str = "",
+                      url: str = "") -> bool:
+    """Pak het slot in DEZE thread, draai de scan in een andere. False = er liep er al een.
+
+    HET SLOT VÓÓR DE THREAD, en dat is de hele reden dat deze functie bestaat: zou de werk-thread
+    hem pakken, dan starten twee kliks twee threads die allebei pas binnenin ontdekken dat ze te
+    laat zijn — de tweede sterft dan stil, en de klikker krijgt twee keer "gestart" te zien.
+
+    De stores worden IN de thread gebouwd, niet meegegeven: `_Stores` leest bestanden en die
+    toestand hoort bij de thread die hem gebruikt, niet bij het verzoek dat hem startte."""
+    import threading
+
+    if not _neem_slot(data_dir, doel, door or "knop"):
+        return False
+
+    def _werk() -> None:
+        try:
+            from nooch_village.cockpit2 import _Stores, _context_of
+            from nooch_village.registry_factory import shared_registry
+            st = _Stores(data_dir)
+            ctx = _context_of(data_dir)
+            _draai_met_slot(st, ctx, shared_registry(), url=url, doel=doel, data_dir=data_dir)
+        except Exception as exc:                          # noqa: BLE001
+            # LOGGEN ÉN NOTEREN. Een achtergrondthread heeft geen scherm om op te vallen; zonder
+            # dit tweede spoor is een mislukte scan niet van "nog niet geklikt" te onderscheiden.
+            log.warning("site audit [%s] mislukt: %s", doel, exc, exc_info=True)
+            _noteer_fout(data_dir, doel, f"{type(exc).__name__}: {exc}")
+        finally:
+            _geef_slot(data_dir, doel)
+
+    threading.Thread(target=_werk, name=f"site-audit-{doel}", daemon=True).start()
+    return True

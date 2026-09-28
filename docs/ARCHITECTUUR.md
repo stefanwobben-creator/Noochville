@@ -13,6 +13,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 |---|---|---|
 | `/login` | `(inline)` | `cockpit2.py` |
 | `/logout` | `(inline)` | `cockpit2.py` |
+| `/scan-status` | `(inline)` | `cockpit2.py` |
 | `/overleg-status` | `(inline)` | `cockpit2.py` |
 | `/wachtwoord` | `(inline)` | `cockpit2.py` |
 | `/context` | `(inline)` | `cockpit2.py` |
@@ -97,6 +98,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `actie_koppel` | `_act_actie_koppel` |
 | `actie_weg` | `_act_actie_weg` |
 | `actie_wis` | `_act_actie_wis` |
+| `site_audit_run` | `_act_site_audit_run` |
 | `kanaal_ontvolg` | `_act_kanaal_ontvolg` |
 | `kanaal_verwijder` | `_act_kanaal_verwijder` |
 | `keep_in_wiki` | `_act_keep_in_wiki` |
@@ -329,4 +331,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_48 routes · 151 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_49 routes · 152 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

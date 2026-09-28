@@ -4,6 +4,11 @@ Vormgeving: hetzelfde patroon als `views/skills.py` en `views/bronnen.py` (één
 met `.cl-head` + `h3`, de kleur als bestaande chip-variant in `.kc-actions`, uitleg in `.muted`,
 bevindingen in een `<details class='box-details'>`). Geen nieuwe CSS-klassen, geen inline styles.
 Dit scherm leest alleen: de run gebeurt via `village site_audit` (en later via de weekklok).
+
+EN SINDS 28 SEPTEMBER OOK VIA EEN KNOP, maar niet hier. `scan_paneel` hieronder rendert die knop
+voor de pagina die de audit noemt (het Website Handboek); dit scherm blijft de uitslag tonen en
+niets aftrappen. Besluit Stefan, en het is een BEWUSTE doorbreking van "de run draait nooit in het
+cockpit" — met een slot eromheen, omdat er nu drie ingangen zijn die elkaar kunnen kruisen.
 """
 from __future__ import annotations
 
@@ -71,6 +76,54 @@ def _doel_seg(doel: str) -> str:
     links = "".join(f"<a class='{'on' if d == doel else ''}' href='/site-audit{'' if d == 'live' else '?doel=dev'}'>"
                     f"{_e(_DOEL_LABEL[d])}</a>" for d in site_audit.DOELEN)
     return f"<span class='seg'>{links}</span>"
+
+
+def scan_paneel(data_dir: str, csrf_token: str = "", *, mag: bool = False,
+                terug: str = "", doel: str = "live") -> str:
+    """De stand van de scan plus de knop — als fragment, zodat de pagina hem kan verversen.
+
+    DRIE TOESTANDEN, en ze lezen alle drie anders:
+
+      * DRAAIT — sinds wanneer en door wie. Geen knop, want er is niets te starten.
+      * MISLUKT — de vorige poging sneuvelde; dat hoort niet hetzelfde te lezen als "er is nog
+        niets gebeurd". Zie `site_audit.laatste_fout`.
+      * VRIJ — wanneer de laatste run was, en de knop.
+
+    HIJ RENDERT ZIJN EIGEN OMHULSEL met `id`, want `nooch.js` vervangt precies dit element. Zonder
+    vaste id zou de poller moeten raden waar hij het moet neerzetten.
+
+    GEEN NIEUWE KLASSEN: `.card`, `.qadd-row`, `.btn ok sm`, `.chip`, `.muted` bestaan allemaal al.
+    """
+    bezet = site_audit.slot_staat(data_dir, doel)
+    laatste = site_audit.SiteAuditStaat(site_audit.pad_voor(data_dir, doel)).laatste()
+    fout = site_audit.laatste_fout(data_dir, doel)
+
+    wanneer = (f"Last scan {_e(_age(laatste.get('ts')))} &middot; "
+               f"{_e(str(laatste.get('totaal') or ''))}" if laatste
+               else "No scan yet")
+    if bezet:
+        # `aria-live` op het omhulsel: de poller vervangt de inhoud, en wie het voorgelezen krijgt
+        # hoort dán dat de scan klaar is in plaats van het te moeten navragen.
+        binnen = (f"<span class='chip amber'>scanning&hellip;</span> "
+                  f"<span class='muted'>started {_e(_age(bezet.get('sinds')))} by "
+                  f"{_e(str(bezet.get('door') or 'someone'))} &middot; a Lighthouse run takes "
+                  f"20-60 seconds</span>")
+    else:
+        knop = ""
+        if mag and csrf_token:
+            knop = (f"<form method='post' action='/action' class='fentry-inline'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='next' value='{_e(terug)}'>"
+                    f"<input type='hidden' name='action' value='site_audit_run'>"
+                    f"<button class='btn ok sm' type='submit'>Run scan</button></form>")
+        binnen = f"<span class='muted'>{wanneer}</span>{knop}"
+    melding = (f"<div class='muted'>&#9888; the last attempt failed "
+               f"({_e(_age(fout.get('ts')))}): {_e(str(fout.get('fout') or ''))}</div>"
+               if fout and not bezet else "")
+    return (f"<div class='card' id='scan-paneel' aria-live='polite'>"
+            f"<div class='qadd-row'>{binnen}</div>"
+            f"<div class='muted'>Checks the live shop: reachable, Lighthouse (mobile), claims. "
+            f"The result lands on <a href='/site-audit'>Site audit</a>.</div>{melding}</div>")
 
 
 def render_site_audit(st, doel: str = "live") -> str:

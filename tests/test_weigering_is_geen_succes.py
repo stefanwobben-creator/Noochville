@@ -43,7 +43,10 @@ def test_een_geslaagde_actie_is_geen_weigering():
 #: De tekens waarmee een GESLAAGDE actie begint. Deze lijst staat hier en niet in `cockpit2`,
 #: want hij bestaat alleen om de test hieronder een onafhankelijk oordeel te geven: een teken dat
 #: niet in `_WEIGERING_TEKENS` staat en niet hier, is een teken dat NIEMAND heeft ingedeeld.
-_SUCCES_TEKENS = frozenset("✓🔗🗑📥➕📄▶🧩✨↩○↻📦🤖🏷🎯💬")   # 🎯 = doelen (scope 46): gekoppeld/aangemaakt
+_SUCCES_TEKENS = frozenset("✓🔗🗑📥➕📄▶🧩✨↩○↻📦🤖🏷🎯💬🔎")  # 🎯 = doelen (scope 46): gekoppeld/aangemaakt
+#      🔎 = de site-audit-scan is GESTART (28 sept 2026). Een start is een geslaagde actie, ook al
+#      is de uitslag er nog niet; het NEE van diezelfde knop ("er loopt er al een") draagt ⏳ en
+#      staat in `_WEIGERING_TEKENS`.
 #                                                      💬 = een bericht is geplaatst (msg_post).
 #      Stond er niet in omdat "💬 posted" tot 22 sept 2026 in een ternary zat en `_meldingen`
 #      alleen een kale return-string ziet. Geen nieuw soort melding dus, wel nieuw zichtbaar —

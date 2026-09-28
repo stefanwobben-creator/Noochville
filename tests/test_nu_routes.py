@@ -35,6 +35,7 @@ BUITEN = {
     "/metric_export": "download (csv)",
     "/nav-paneel": "fragment",
     "/overleg-status": "fragment",
+    "/scan-status": "fragment",
     "/context": "platte tekst voor een model",
     "/version": "diagnose-eindpunt voor deploy.sh (JSON, alleen vanaf de machine zelf)",
     # Eigen, bewust losse vormgeving: deze pagina's staan buiten de ingelogde schil.
@@ -81,10 +82,20 @@ def test_de_uitzonderingen_bestaan_nog():
     assert not verdwenen, f"staat in BUITEN maar bestaat niet meer: {sorted(verdwenen)}"
 
 
-def test_de_lijst_mag_alleen_korter():
-    """Monotone daling, zoals de inline-style-ratchet. Deze telling is de bovengrens; wie een
-    fase-9-scherm herbouwt verlaagt hem."""
-    assert len(BUITEN) <= 27, f"{len(BUITEN)} uitzonderingen — de lijst is gegroeid"
+def test_de_schuld_mag_alleen_korter():
+    """Monotone daling, zoals de inline-style-ratchet. Wie een fase-9-scherm herbouwt, verlaagt hem.
+
+    OP DE SCHULD EN NIET OP DE HELE LIJST (28 september 2026). Deze telling stond op `len(BUITEN)`,
+    en daarmee mat hij twee verschillende dingen tegelijk: de ACHTERSTAND (schermen die nooit
+    herbouwd zijn) en de STRUCTURELE uitzonderingen (een fragment, een download, de loginpagina).
+    Een nieuwe fragment-route — `/scan-status` was de eerste — maakte de toets dan rood zonder dat
+    er iets aan schuld bij was gekomen, en de enige uitweg was het plafond ophogen. Dan meet een
+    ratchet zijn eigen plafond.
+
+    De structurele uitzonderingen worden gedekt door `test_elke_route_heeft_een_keuze` (elke route
+    moet erin staan óf in `_NU_ROUTES`) en door `test_de_uitzonderingen_bestaan_nog`."""
+    schuld = [r for r, reden in BUITEN.items() if reden == "fase-9-schuld"]
+    assert len(schuld) <= 14, f"{len(schuld)} fase-9-schermen — de schuld is gegroeid: {schuld}"
 
 
 # ══ De twee die het misten ═══════════════════════════════════════════════════

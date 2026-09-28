@@ -251,6 +251,14 @@ def _bootstrap(dd: str) -> None:
         _dc_tool(st.records, st.att)
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("decision-coach-tool niet gekoppeld: %s", _e)
+    # De scanknop hangt aan een VERWIJZING in de pagina (zie `views/wiki._scan_sectie`), dus het
+    # handboek moet er één hebben. Eenmalig, idempotent, en door een mens ongedaan te maken door de
+    # regel uit de pagina te halen. Fail-soft.
+    try:
+        from nooch_village import site_audit as _sa
+        _sa.zorg_voor_knop_verwijzing(st.att)
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("scanknop-verwijzing overgeslagen: %s", _e)
     # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
     # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
     # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
@@ -1543,6 +1551,36 @@ def _act_artefact_edit(c):
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"✏️ {upd.kind} updated ({upd.id})"
         return nxt, msg
+
+
+def _act_site_audit_run(c):
+    """Trap de site-audit-scan af vanaf de handboek-pagina.
+
+    DIT DOORBREEKT EEN BESTAAND ONTWERP, bewust en met één knop (besluit Stefan, 28 september 2026).
+    `site_audit` en zijn view waren expliciet alleen-lezen: "de run zelf draait nooit in het
+    cockpit", en de scan liep alleen via `village site_audit`. Wat die regel beschermde was niet het
+    lezen maar de DUUR en de GELIJKTIJDIGHEID — een run doet echte netwerkchecks en duurt 20 tot 60
+    seconden. Allebei worden ze hier geadresseerd in plaats van weggeredeneerd:
+
+      * het slot zit in `site_audit` zelf, dus CLI, knop en de weekklok van scope 47 delen er één;
+      * de run draait in een achtergrondthread, dus de POST blokkeert niets.
+
+    GEEN NIEUWE SCANLOGICA: `start_achtergrond` gebruikt dezelfde `_draai_met_slot` als
+    `run_en_bewaar`, en dus dezelfde checks, drempels en append-only reeks."""
+    # AUTHZ: rolvervuller of Circle Lead — de site audit is het gereedschap van de Website
+    # Developer (`_ROLE_TOOLS[WEBSITE_DEVELOPER_ROLE]`), en een scan is operationeel werk binnen
+    # die rol. Niet ruimer: de run kost een externe API-aanroep (PageSpeed) en schrijft een
+    # snapshot in een reeks waar anderen conclusies uit lezen.
+    from nooch_village import site_audit
+    deny = _role_gate(WEBSITE_DEVELOPER_ROLE, c.username, c.st)
+    if deny:
+        raise Forbidden(deny)
+    actor = c.st.people.by_email(c.username) if c.username and c.username != "guest" else None
+    wie = getattr(actor, "name", "") or "the cockpit"
+    if site_audit.start_achtergrond(c.data_dir, door=wie):
+        return c.nxt, "🔎 scan started — a Lighthouse run takes 20-60 seconds"
+    bezet = site_audit.slot_staat(c.data_dir) or {}
+    return c.nxt, f"⏳ a scan is already running (started by {bezet.get('door') or 'someone'})"
 
 
 def _act_artefact_archive(c):
@@ -5753,6 +5791,7 @@ ACTIONS = {
     "actie_koppel": _act_actie_koppel,
     "actie_weg": _act_actie_weg,
     "actie_wis": _act_actie_wis,
+    "site_audit_run": _act_site_audit_run,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
     "keep_in_wiki": _act_keep_in_wiki,
@@ -5880,7 +5919,9 @@ ACTIONS = {
 
 #: De vormen waarin een dispatch-tak NEE zegt. Geteld in cockpit2 op 3 sep 2026: ✗ (119×),
 #: ⛔ (17×), "No access…"/"Not …" (41×). Eén lijst, want de client mag hier nooit zelf naar raden.
-_WEIGERING_TEKENS = ("✗", "⛔", "⚠")
+#: ⏳ erbij op 28 september 2026: "er loopt al een scan". Dat is een NEE — er is niets gestart en
+#: niets bewaard — en het hoort dus niet als succes op het scherm te komen.
+_WEIGERING_TEKENS = ("✗", "⛔", "⚠", "⏳")
 _WEIGERING_WOORDEN = ("no access", "not linked", "no accountability", "not logged in",
                       "csrf token invalid")
 
@@ -6145,6 +6186,20 @@ def make_handler(data_dir: str, csrf_token: str,
             # Publieke views krijgen geen CSRF-token → geen schrijfknoppen
             effective_csrf = csrf_token if username else ""
 
+            if path == "/scan-status":
+                # DE STAND VAN DE SITE-AUDIT-SCAN, voor het paneel op de handboek-pagina. Zelfde
+                # vorm als `/overleg-status` hierboven: server-gerenderd HTML en geen JSON, zodat
+                # er geen tweede plek is die bepaalt hoe "er loopt een scan" eruitziet.
+                #
+                # `_Stores` IS HIER WÉL NODIG, anders dan bij de overleg-poller: de knop hangt aan
+                # een poort (`_role_gate`) en die leest rollen en toewijzingen. De poller draait
+                # dan ook een stuk rustiger — een scan duurt tientallen seconden, geen 20.
+                from nooch_village.views.site_audit import scan_paneel
+                _st = _Stores(data_dir)
+                _mag = _role_gate(WEBSITE_DEVELOPER_ROLE, username, _st) is None
+                self._send(scan_paneel(data_dir, csrf_token if username else "", mag=_mag,
+                                       terug=(qs.get("next") or ["/"])[0]), chrome=False)
+                return
             if path == "/overleg-status":
                 # DE LIVE-STATUS VAN HET WERKOVERLEG, voor de knop in de balk.
                 #
