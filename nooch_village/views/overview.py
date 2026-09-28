@@ -836,7 +836,16 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
 # ziet dezelfde laag door zijn eigen bril, dus niet vier losse cijferbronnen.
 _ROLE_TOOLS = {
     "mother_earth__nooch__marketing_lead": [
-        ("Linkbuilding", "Pitch or ignore linkbuilding targets", "/linkbuilding"),
+        # Lege href = uitgeschakelde kaart, zelfde patroon als "Oracle" hieronder. Het
+        # linkbuilding-scherm is in #516 met de rest van de opruiming verwijderd, maar deze kaart
+        # bleef ernaar linken — goed voor een kale 404 op de rol-tools van Marketing Lead.
+        #
+        # DE SKILL IS ER NOG WÉL, en dat is precies waarom de kaart blijft staan in plaats van te
+        # verdwijnen: `linkbuilding_targets` staat gewoon in de registry (`registry_factory`) en
+        # draait; wat weg is, is het SCHERM waarop je doelwitten kon bekijken en pitchen of
+        # negeren. Weghalen zou het vermogen stil laten verdwijnen.
+        ("Linkbuilding", "The screen was removed on 20 September 2026 — the linkbuilding_targets "
+                         "skill still runs, only the screen to pitch or ignore targets is gone", ""),
         ("Keywords — volume & direction", "What you make content for", "/keywords?lens=marketing")],
     # De convergentie-check is automatisch (nieuwe woorden dragen 28 dagen een ster op de
     # woordenschat) en signalen zijn ontsloten via de Kennisbank — dus hier alleen nog het
