@@ -251,14 +251,6 @@ def _bootstrap(dd: str) -> None:
         _dc_tool(st.records, st.att)
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("decision-coach-tool niet gekoppeld: %s", _e)
-    # De scanknop hangt aan een VERWIJZING in de pagina (zie `views/wiki._scan_sectie`), dus het
-    # handboek moet er één hebben. Eenmalig, idempotent, en door een mens ongedaan te maken door de
-    # regel uit de pagina te halen. Fail-soft.
-    try:
-        from nooch_village import site_audit as _sa
-        _sa.zorg_voor_knop_verwijzing(st.att)
-    except Exception as _e:                              # noqa: BLE001
-        logging.getLogger("village.cockpit").warning("scanknop-verwijzing overgeslagen: %s", _e)
     # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
     # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
     # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
@@ -1577,9 +1569,12 @@ def _act_site_audit_run(c):
         raise Forbidden(deny)
     actor = c.st.people.by_email(c.username) if c.username and c.username != "guest" else None
     wie = getattr(actor, "name", "") or "the cockpit"
-    if site_audit.start_achtergrond(c.data_dir, door=wie):
-        return c.nxt, "🔎 scan started — a Lighthouse run takes 20-60 seconds"
-    bezet = site_audit.slot_staat(c.data_dir) or {}
+    # HET DOEL KOMT VAN HET SCHERM, maar wordt hier getoetst: een onbekende waarde zou een reeks
+    # aanmaken die nergens getoond wordt. Fail-closed op de bestaande lijst.
+    doel = c.g("doel") if c.g("doel") in site_audit.DOELEN else "live"
+    if site_audit.start_achtergrond(c.data_dir, doel=doel, door=wie):
+        return c.nxt, f"🔎 scan started [{doel}] — a Lighthouse run takes 20-60 seconds"
+    bezet = site_audit.slot_staat(c.data_dir, doel) or {}
     return c.nxt, f"⏳ a scan is already running (started by {bezet.get('door') or 'someone'})"
 
 
@@ -6197,8 +6192,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 from nooch_village.views.site_audit import scan_paneel
                 _st = _Stores(data_dir)
                 _mag = _role_gate(WEBSITE_DEVELOPER_ROLE, username, _st) is None
+                from nooch_village.site_audit import DOELEN as _DOELEN
+                _doel = (qs.get("doel") or ["live"])[0]
                 self._send(scan_paneel(data_dir, csrf_token if username else "", mag=_mag,
-                                       terug=(qs.get("next") or ["/"])[0]), chrome=False)
+                                       terug=(qs.get("next") or ["/site-audit"])[0],
+                                       doel=_doel if _doel in _DOELEN else "live"), chrome=False)
                 return
             if path == "/overleg-status":
                 # DE LIVE-STATUS VAN HET WERKOVERLEG, voor de knop in de balk.
@@ -6511,7 +6509,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # De lampjes van de shop (bereikbaar, Lighthouse, claims) uit de laatste run van
                 # `village site_audit`. Puur leeswerk; de run zelf draait nooit in het cockpit.
                 # `?doel=dev` toont de reeks van het preview-thema (`village site_audit --dev`).
-                self._send(render_site_audit(st, doel=(qs.get("doel") or ["live"])[0]))
+                self._send(render_site_audit(st, doel=(qs.get("doel") or ["live"])[0],
+                                             csrf_token=effective_csrf, username=username))
                 return
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).

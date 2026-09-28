@@ -186,30 +186,6 @@ def test_wie_de_rol_niet_vervult_mag_niet_scannen(tmp_path):
 
 
 # ══ 3. Het paneel ════════════════════════════════════════════════════════════
-def test_de_pagina_die_de_audit_noemt_krijgt_de_knop(tmp_path):
-    """DE KOPPELING IS DE VERWIJZING, niet een titel of een artefact-id — zelfde idioom als de
-    decision coach. Haal je de regel uit de pagina, dan is de knop weg."""
-    dd, st, baas, buiten = _dorp(tmp_path)
-    a = _pagina(st)
-    h = render_pagina(st, a.id, "TOK", "stefan@test.nl")
-    assert "id='scan-paneel'" in h and "value='site_audit_run'" in h
-
-
-def test_een_pagina_zonder_die_verwijzing_krijgt_niets(tmp_path):
-    dd, st, baas, buiten = _dorp(tmp_path)
-    a = _pagina(st, body="Gewone tekst zonder verwijzing.")
-    assert "scan-paneel" not in render_pagina(st, a.id, "TOK", "stefan@test.nl")
-
-
-def test_wie_niet_mag_ziet_de_stand_maar_niet_de_knop(tmp_path):
-    """Lezen is vrij; starten niet. Een knop tonen die de server daarna weigert is precies wat deze
-    codebase elders al heeft opgeruimd."""
-    dd, st, baas, buiten = _dorp(tmp_path)
-    a = _pagina(st)
-    h = render_pagina(st, a.id, "TOK", "buiten@test.nl")
-    assert "id='scan-paneel'" in h and "value='site_audit_run'" not in h
-
-
 def test_het_paneel_zegt_dat_er_een_scan_loopt(tmp_path):
     """"laat zien dat hij loopt in plaats van de pagina te laten hangen zonder feedback"."""
     dd, st, baas, buiten = _dorp(tmp_path)
@@ -241,9 +217,9 @@ def test_een_geslaagde_run_wist_de_foutmelding(tmp_path):
 def test_het_paneel_ververst_zichzelf(tmp_path):
     """Zonder poller blijft "scanning…" staan tot de lezer zelf ververst — dan is de knop wél
     veilig maar de terugkoppeling nutteloos."""
+    from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    a = _pagina(st)
-    h = render_pagina(st, a.id, "TOK", "stefan@test.nl")
+    h = render_site_audit(st, csrf_token="TOK", username="stefan@test.nl")
     assert "data-poll='/scan-status" in h and "data-poll-ms=" in h
 
 
@@ -267,47 +243,103 @@ def test_de_route_rendert_hetzelfde_fragment():
     assert "scan_paneel(" in bron and '"/scan-status"' in bron
 
 
-# ══ 4. Het scherm /site-audit blijft zoals het was ════════════════════════════
-def test_het_auditscherm_trapt_nog_steeds_niets_af(tmp_path):
-    """"dat scherm blijft zoals het is." De knop hoort op de handboek-pagina."""
+# ══ 4. De lampjes blijven de lampjes ═════════════════════════════════════════
+def test_het_scherm_blijft_vooral_de_uitslag_tonen(tmp_path):
+    """De knop is een toevoeging, geen verbouwing: de lampjes, de wissels en het verloop staan er
+    nog precies zo, en de lege stand legt nog steeds uit wat er komt te staan."""
     from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    h = render_site_audit(st)
-    assert "site_audit_run" not in h and "Run scan" not in h
+    h = render_site_audit(st, csrf_token="TOK", username="stefan@test.nl")
+    assert "No run yet" in h and "village site_audit" in h
 
 
-# ══ 5. De verwijzing in het handboek ═════════════════════════════════════════
-def test_het_handboek_krijgt_de_verwijzing_eenmalig(tmp_path):
-    """De koppeling moet ÍN de pagina staan, anders draagt hij de knop niet. Eén regel, één keer."""
+# ══ 5. Het paneel staat op het auditscherm zelf ══════════════════════════════
+#
+# HIER STOND DE KOPPELING VIA EEN WIKI-PAGINA (ingetrokken 28 september 2026, dezelfde dag dat hij
+# gebouwd werd). De knop hing aan een pagina die naar `/site-audit` verwees — het Website Handboek —
+# zodat er geen titel of artefact-id in de rendercode hoefde te staan. Diezelfde dag is die pagina
+# verwijderd, en toen bleek de indirectie precies zo sterk als haar aanknopingspunt: geen pagina,
+# geen knop, en een zaai-functie die zocht naar een titel die niet meer bestond.
+#
+# DE LES, en hij is algemener dan dit geval: een koppeling die op DATA rust erft de levensduur van
+# die data. Het scherm dat de uitslag toont, bestaat zolang de functie bestaat.
+
+def test_het_auditscherm_draagt_de_knop(tmp_path):
+    from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    a = st.att.add(ROL, "tool", title=site_audit.HANDBOEK_TITEL, body="Bestaande tekst.",
-                   url="https://docs.google.com/x", actor_id="iemand", actor_type="person")
-    assert site_audit.zorg_voor_knop_verwijzing(st.att) == a.id
-    na = st.att.get(a.id)
-    assert na.body.startswith("Bestaande tekst."), "de bestaande tekst is aangetast"
-    assert "/site-audit" in na.body
-    assert site_audit.zorg_voor_knop_verwijzing(st.att) == "", "hij schrijft er nog een bij"
+    h = render_site_audit(st, csrf_token="TOK", username="stefan@test.nl")
+    assert "id='scan-paneel'" in h and "value='site_audit_run'" in h
+    assert "data-poll='/scan-status" in h
 
 
-def test_hij_schrijft_niet_in_een_lege_pagina(tmp_path):
-    """Een lege pagina vullen is geen koppeling leggen maar schrijven, en dat is niet aan het dorp."""
+def test_wie_de_rol_niet_vervult_ziet_daar_de_stand_maar_niet_de_knop(tmp_path):
+    from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    st.att.add(ROL, "tool", title=site_audit.HANDBOEK_TITEL, body="", url="https://x")
-    assert site_audit.zorg_voor_knop_verwijzing(st.att) == ""
+    h = render_site_audit(st, csrf_token="TOK", username="buiten@test.nl")
+    assert "id='scan-paneel'" in h and "value='site_audit_run'" not in h
 
 
-def test_hij_raakt_geen_andere_pagina_aan(tmp_path):
+def test_zonder_schrijfsessie_geen_knop(tmp_path):
+    """Publieke view (geen csrf) = geen schrijfknoppen, zoals overal."""
+    from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    a = st.att.add(ROL, "tool", title="Iets anders", body="Tekst.", url="https://x")
-    site_audit.zorg_voor_knop_verwijzing(st.att)
-    assert st.att.get(a.id).body == "Tekst."
+    assert "value='site_audit_run'" not in render_site_audit(st)
 
 
-def test_de_wijziging_staat_in_de_historie(tmp_path):
-    """Een machinale bewerking van andermans tekst hoort terug te vinden te zijn, met de reden."""
+def test_de_knop_meet_het_doel_dat_het_scherm_toont(tmp_path):
+    """Op de dev-tab hoort hij de DEV-reeks te meten. Zonder dit veld scant hij live terwijl het
+    scherm iets anders zegt — en omdat elke reeks zijn eigen slot heeft, zouden er dan ook nog twee
+    runs naast elkaar kunnen lopen."""
+    from nooch_village.views.site_audit import render_site_audit
     dd, st, baas, buiten = _dorp(tmp_path)
-    a = st.att.add(ROL, "tool", title=site_audit.HANDBOEK_TITEL, body="Tekst.", url="https://x")
-    site_audit.zorg_voor_knop_verwijzing(st.att)
-    laatste = st.att.get(a.id).versions[-1]
-    assert laatste["actor_id"] == "system"
-    assert "scanknop" in (laatste.get("change_note") or "")
+    h = render_site_audit(st, doel="dev", csrf_token="TOK", username="stefan@test.nl")
+    assert "name='doel' value='dev'" in h
+    assert "doel=dev" in h, "de poller vraagt de verkeerde reeks op"
+
+
+def test_de_actie_volgt_dat_doel(tmp_path, monkeypatch):
+    dd, st, baas, buiten = _dorp(tmp_path)
+    gezien = {}
+    monkeypatch.setattr(site_audit, "start_achtergrond",
+                        lambda d, **kw: gezien.update(kw) or True)
+    velden = {"csrf": "T", "next": "/site-audit", "doel": "dev"}
+    ctx = cockpit2._Ctx(st=st, g=lambda k, d="": velden.get(k, d), nxt="/site-audit",
+                        form=velden, username="stefan@test.nl", action="site_audit_run",
+                        data_dir=dd)
+    _pad, melding = cockpit2.ACTIONS["site_audit_run"](ctx)
+    assert gezien.get("doel") == "dev" and "[dev]" in melding
+
+
+def test_een_verzonnen_doel_valt_terug_op_live(tmp_path, monkeypatch):
+    """Fail-closed: een onbekende waarde zou een reeks aanmaken die nergens getoond wordt."""
+    dd, st, baas, buiten = _dorp(tmp_path)
+    gezien = {}
+    monkeypatch.setattr(site_audit, "start_achtergrond",
+                        lambda d, **kw: gezien.update(kw) or True)
+    velden = {"csrf": "T", "next": "/site-audit", "doel": "../../etc"}
+    ctx = cockpit2._Ctx(st=st, g=lambda k, d="": velden.get(k, d), nxt="/site-audit",
+                        form=velden, username="stefan@test.nl", action="site_audit_run",
+                        data_dir=dd)
+    cockpit2.ACTIONS["site_audit_run"](ctx)
+    assert gezien.get("doel") == "live"
+
+
+def test_er_hangt_niets_meer_aan_een_pagina():
+    """De indirectie is WEG en niet alleen ongebruikt: een zaai-functie die naar een verdwenen
+    titel zoekt is dode code die bij elke start draait."""
+    import inspect
+
+    from nooch_village.views import wiki as wiki_view
+    for naam in ("zorg_voor_knop_verwijzing", "HANDBOEK_TITEL", "_KNOP_REGEL"):
+        assert not hasattr(site_audit, naam), f"{naam} bestaat nog"
+    assert not hasattr(wiki_view, "_scan_sectie")
+    assert "scan_paneel" not in inspect.getsource(wiki_view)
+    assert "zorg_voor_knop_verwijzing" not in inspect.getsource(cockpit2._bootstrap)
+
+
+def test_een_wiki_pagina_die_de_audit_noemt_krijgt_niets(tmp_path):
+    """De tegenproef: het mechanisme is weg, niet uitgeschakeld."""
+    from nooch_village.views.wiki import render_pagina
+    dd, st, baas, buiten = _dorp(tmp_path)
+    a = st.att.add(ROL, "note", title="Iets", body="Zie /site-audit.")
+    assert "scan-paneel" not in render_pagina(st, a.id, "TOK", "stefan@test.nl")
