@@ -23,7 +23,7 @@ from nooch_village.views.wiki import render_pagina
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
@@ -225,7 +225,7 @@ def test_de_kaart_leent_de_vorm_van_de_werkbalk():
 def test_een_lang_adres_rekt_de_kaart_niet_uit():
     m = re.search(r"(?:^|[};])\s*\.wiki-linkurl\{([^}]*)\}", CSS, re.M)
     assert m and "text-overflow:ellipsis" in m.group(1)
-    assert ".nu .wiki-linkveld" in NU, "de huisstijl kent het adresveld niet"
+    assert ":root .wiki-linkveld" in NU, "de huisstijl kent het adresveld niet"
 
 
 # ── 3. Enter levert meteen een volwaardig blok ───────────────────────────────

@@ -38,7 +38,7 @@ from nooch_village.cockpit2_util import _md, _md_naar_bron
 WORTEL = pathlib.Path(__file__).resolve().parents[1]
 JS = (WORTEL / "nooch_village" / "static" / "nooch.js").read_text()
 CSS = (WORTEL / "nooch_village" / "static" / "nooch.css").read_text()
-NU = (WORTEL / "nooch_village" / "static" / "nooch-ui.css").read_text()
+NU = (WORTEL / "nooch_village" / "static" / "nooch.css").read_text()
 CHECK = (WORTEL / "claude" / "blok_browsercheck.js").read_text()
 
 BRON = "### Een kop\n\nEerste alinea.\n\n- een\n- twee\n\nLaatste alinea."
@@ -146,8 +146,8 @@ def test_de_nu_laag_kent_de_sleep_toestanden():
     # een kale substring-check ook, want de twee delen de achtergrondregel en die bevat allebei de
     # namen. Dezelfde val als in de toets hierboven, twee keer op één dag.
     for kant in ("over-boven", "over-onder"):
-        assert re.search(rf"(?:^|[}};])\s*\.nu \.wb\.{kant}\{{[^}}]*box-shadow", NU, re.M), \
-            f".nu .wb.{kant} heeft geen eigen richtingsregel"
+        assert re.search(rf"(?:^|[}};])\s*:root \.wb\.{kant}\{{[^}}]*box-shadow", NU, re.M), \
+            f":root .wb.{kant} heeft geen eigen richtingsregel"
 
 
 # ── 3. De gedeelde sleep-machinerie ──────────────────────────────────────────

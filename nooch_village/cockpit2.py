@@ -32,7 +32,7 @@ from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
-    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _NU_LINK, _DS_LINK,
+    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _DS_LINK,
     _SIDE_OVERLEG, _initials,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
@@ -1143,34 +1143,6 @@ def _tab_suffix(tab: str | None) -> str:
 
 
 
-# Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
-# ── Nooch UI v1: welke routes meedoen (fase 9) ────────────────────────────────
-# De negentien schermen die in fase 7 en 8 zijn herbouwd of aangeraakt. Wat hier NIET staat doet
-# bewust niet mee — /claims en /metrics2 zijn geparkeerd voor een eventuele tiende fase, de rest is
-# in fase 1-8 nooit qua UI aangeraakt. De volledige lijst met redenen staat in
-# claude/fase9_designsysteem_inventarisatie.md §5.
-_NU_ROUTES = frozenset({
-    "/", "/index.html", "/projects", "/messages", "/wiki", "/pagina",
-    "/node", "/person", "/project", "/project/nieuw", "/admin", "/search",
-    "/goals", "/goal", "/werkoverleg", "/roloverleg2", "/vangst",
-    # Fase 10, groep B. `/middelen` en `/rolefillers` draaien op DEZELFDE `overview.py` als
-    # `/node`, `/person` en `/admin`, die er al in stonden — dezelfde rendercode zag er dus anders
-    # uit afhankelijk van de URL. Dat was een gat in deze lijst, geen besluit. `/site-audit` is in
-    # fase 7 aangeraakt (taalresten) maar viel toen buiten de fase-9-scope.
-    "/middelen", "/rolefillers", "/site-audit",
-    # `/acties` (#618) en `/tools` (#619) zijn NÁ fase 9 gebouwd en stonden hier nooit in. Gevolg:
-    # ze kregen `nooch-ui.css` niet, terwijl `/messages` ernaast dat wél kreeg — precies het beeld
-    # "Messages ziet er goed uit, /acties ziet er oud uit". Geen cache, geen halve deploy: een
-    # handmatig bijgehouden lijst waar een nieuwe route niet vanzelf in komt. Zie de ratchet in
-    # `tests/test_nu_routes.py`, die dit gat sluit.
-    "/acties", "/tools",
-    # `/decision-coach` stond als fase-9-schuld in `tests/test_nu_routes.py::BUITEN` (28 september
-    # 2026). Hij draait op dezelfde schil als de rest — `_DS_LINK`, `_nav()`, `.c2-wrap` — dus het
-    # verschil was alleen dat hij niet in deze lijst stond: zijn eigen scherm zag er ouder uit dan
-    # de tool-kaart die ernaartoe linkt. De dertien andere schuld-schermen blijven staan; die zijn
-    # een eigen klus (besluit Stefan).
-    "/decision-coach",
-})
 
 #: Eén `<a>` in de zijbalk-navigatie, met zijn href. Alleen dáár: de header heeft ook links
 #: (het logo, het profiel) en die horen geen huidige-pagina-markering te krijgen.
@@ -1190,8 +1162,7 @@ def _nav_chrome(st, body: str) -> str:
     geen restant: hij voedt ook `/projects`, `/vangst` en — hier — de twee overleggen. "Circle
     weg" mocht dus nooit "`_home_node` weg" gaan betekenen.
 
-    Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te tuigen — zelfde
-    reden als bij `_nu_body`."""
+    Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te tuigen."""
     if st is None or _SIDE_OVERLEG not in body:
         return body
     try:
@@ -1276,38 +1247,10 @@ def _git_head() -> str:
         return ""
 
 
-def _nu_body(pad: str, body: str) -> str:
-    """Zet `nu` op <body> als deze route in fase 9 is herbouwd, en hang `nooch-ui.css` erachter.
-
-    ÉÉN PLEK, ROUTE-GESTUURD. Het alternatief was een vlag door ~19 render-functies heen duwen;
-    dan staat de scope op negentien plekken en loopt hij na de eerste wijziging uit de pas. Hier
-    is hij een lijst, en die lijst IS de verantwoording: wat er niet in staat doet bewust niet
-    mee (zie claude/fase9_designsysteem_inventarisatie.md §5).
-
-    HIJ VOEGT DE KLASSE TOE, hij vervangt hem niet. Dit stond als
-    `body.replace("<body>", '<body class="nu">')` — een letterlijke vervanging die niets deed
-    zodra een view zélf een body-klasse meegaf (`_page(..., body_cls=…)`, sinds de brede
-    Projects-stap). Het scherm verloor dan stilletjes zijn hele nu-opmaak: geen fout, alleen een
-    ander lettertype.
-
-    Buiten de handler getild zodat hij te testen is zonder een HTTP-server op te zetten."""
-    if pad not in _NU_ROUTES:
-        return body
-    m = _BODY_RE.search(body)
-    if m is None:
-        return body
-    klassen = (m.group(1) or "").split()
-    if "nu" not in klassen:
-        klassen.insert(0, "nu")
-    return (body[:m.start()] + f'<body class="{" ".join(klassen)}">' + body[m.end():]
-            ).replace(_DS_LINK, _DS_LINK + _NU_LINK, 1)
-
-
 _STATIC_TYPES = {
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
-    "nooch-ui.css": "text/css; charset=utf-8",
     # De gedeelde fragment-mechaniek. URL draagt ?v=<inhoud-hash> (web_base._JS_LINK).
     "nooch.js": "application/javascript; charset=utf-8",
     "nooch-logo.svg": "image/svg+xml; charset=utf-8",
@@ -6028,10 +5971,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Set-Cookie", cookie)
             self.end_headers()
 
-        def _nu_scope(self, body: str) -> str:
-            """Zie `_nu_body`; hier alleen het pad erbij."""
-            return _nu_body((self.path or "/").split("?", 1)[0], body)
-
         def _send(self, body: str, code: int = 200, chrome: bool = True):
             # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een
             # sessie en alleen op volledige HTML-pagina's (met </body>). chrome=False voor de inbox-routes
@@ -6098,7 +6037,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 body = body.replace(
                     "</body>",
                     _footer() + "</body>", 1)
-            body = self._nu_scope(body)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")

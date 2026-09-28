@@ -30,7 +30,7 @@ from nooch_village.views.wiki import render_pagina
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 
 #: Een pagina met ECHT GEMENGDE inhoud, want dat is de eis: tekst → feit → tekst → backlink.
 GEMENGD = ("Eerste alinea over het onderwerp.\n\n"
@@ -205,7 +205,7 @@ def test_het_onderscheid_blijft_maar_via_een_lijn(tmp_path):
 def test_de_nu_laag_kent_het_inline_blok():
     """Les uit #598: een nieuwe zichtbare klasse zonder tegenhanger laat de huisstijl-ratchet
     vallen, en terecht."""
-    assert ".nu .wiki-inline" in NU
+    assert ":root .wiki-inline" in NU
 
 
 def test_de_sectie_heeft_niet_zijn_eigen_marge(tmp_path):

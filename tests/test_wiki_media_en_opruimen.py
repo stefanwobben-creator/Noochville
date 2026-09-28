@@ -23,7 +23,7 @@ from nooch_village.views.wiki import render_pagina
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
@@ -136,7 +136,7 @@ def test_de_afbeelding_heeft_geen_kader_maar_wel_een_maat():
     assert houder and "align-items:flex-start" in houder.group(1), \
         "de flex-kolom blaast de afbeelding op tot de kolombreedte"
     assert "border:" not in regel.group(1), "de basislaag hoort geen rand te tekenen"
-    assert ".nu .wb-img img" in NU, "de huisstijl-laag kent het blok niet"
+    assert ":root .wb-img img" in NU, "de huisstijl-laag kent het blok niet"
 
 
 # ── 2. Uploaden via het blokmenu, op de +-positie ────────────────────────────

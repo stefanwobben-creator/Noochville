@@ -28,10 +28,11 @@ overal het kader weg" wordt, sloopt de rolverdeling van de andere kant.
 from __future__ import annotations
 
 import pathlib
+
+from conftest import basis_css, designsysteem_css
 import re
 
-NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+NU = designsysteem_css()
 _ONTCOM = re.sub(r"/\*.*?\*/", "", NU, flags=re.S)
 
 #: De klassen die per rol GEEN container-lijn mogen dragen. Een nieuwe knop of chip hoort hier bij
@@ -62,7 +63,7 @@ def _body(patroon: str) -> str:
     """De declaraties van de eerste regel waarvan de SELECTOR op dit patroon matcht.
 
     Het patroon matcht op de GENORMALISEERDE selector (zonder accolades), dus een patroon met
-    begin- en eindanker betekent precies die ene regel: de kale knop en niet `.nu .btn:hover`."""
+    begin- en eindanker betekent precies die ene regel: de kale knop en niet `:root .btn:hover`."""
     for sel, body in _regels():
         if re.search(patroon, sel):
             return body
@@ -85,19 +86,19 @@ def _randkleur(body: str) -> str:
 def test_de_container_draagt_de_zwaarste_lijn():
     """Als dit omvalt is de hele rolverdeling zinloos: er is dan geen lijn meer om je aan te meten.
 
-    `.nu .card` STOND HIER IN DE SELECTOR, en is er op 21 september 2026 uit (opdracht Stefan, met
+    `:root .card` STOND HIER IN DE SELECTOR, en is er op 21 september 2026 uit (opdracht Stefan, met
     metingen). Reden: een kaart is geen container maar een ITEM. Op /projects staan er 159 van, en
     als er 159 containers op één scherm staan is er geen hiërarchie meer maar een raster van
     hokjes — juist waar de lijndikte-regel het hardst nodig is, viel hij plat. De zwaarste lijn
     blijft voor blokken op PAGINANIVEAU: `.box`, `.kpi`, een tabel, de zijbalk, de modal."""
-    body = _body(r"\.nu \.box, \.nu \.kpi")
+    body = _body(r":root \.box, :root \.kpi")
     assert CONTAINER_TOKEN in body
     assert "border-radius: 0" in body and "box-shadow: none" in body   # scherp en plat blijft
 
 
 def test_de_zwaarste_lijn_is_twee_pixels():
     """Het token zelf, zodat de vergelijkingen hieronder ergens tegenaan kunnen meten."""
-    tokenblok = re.search(r"\.nu\s*\{(.*?)\n\}", _ONTCOM, re.S).group(1)
+    tokenblok = re.search(r":root\s*\{(.*?)\n\}", _ONTCOM, re.S).group(1)
     assert re.search(r"--nu-border:\s*2px solid", tokenblok)
 
 
@@ -106,7 +107,7 @@ def test_de_zwaarste_lijn_is_twee_pixels():
 def test_de_secundaire_knop_is_dunner_dan_een_container():
     """DE KERN VAN DE KLACHT. `.btn` trok met 2px exact dezelfde lijn als een kaart, dus een knop
     naast een kaart las als nóg een vlak."""
-    assert _breedte(_body(r"^\.nu \.btn$")) < 2.0
+    assert _breedte(_body(r"^:root \.btn$")) < 2.0
 
 
 def test_de_primaire_knop_heeft_geen_zichtbare_rand():
@@ -114,14 +115,14 @@ def test_de_primaire_knop_heeft_geen_zichtbare_rand():
 
     `transparent` en niet weggelaten: de rand telt mee in de hoogte, dus weghalen zou de knop
     kleiner maken dan zijn buren."""
-    body = _body(r"^\.nu \.btn\.ok$")
+    body = _body(r"^:root \.btn\.ok$")
     assert "var(--nu-neon)" in body                      # de vulling blijft
     assert _randkleur(body) == "transparent"
 
 
 def test_een_etiket_is_geen_doosje():
     """101 voorkomens in 22 bestanden: één etiket met een kader valt niet op, honderd wel."""
-    body = _body(r"\.nu \.pill, \.nu \.chip")
+    body = _body(r":root \.pill, :root \.chip")
     assert _randkleur(body) == "transparent"
     assert "var(--nu-bg-alt)" in body                    # een lichte tint draagt het vlak
 
@@ -129,7 +130,7 @@ def test_een_etiket_is_geen_doosje():
 def test_ook_de_chip_varianten_dragen_geen_zwarte_lijn():
     """`.amber` en `.outline` zetten hun eigen rand; zonder deze regel staat er naast een kaderloos
     etiket alsnog een zwart doosje."""
-    for patroon in (r"^\.nu \.amber$", r"^\.nu \.outline$"):
+    for patroon in (r"^:root \.amber$", r"^:root \.outline$"):
         body = _body(patroon)
         assert "var(--nu-text)" not in _randkleur(body), f"{patroon} draagt nog een zwarte lijn"
 
@@ -137,8 +138,8 @@ def test_ook_de_chip_varianten_dragen_geen_zwarte_lijn():
 def test_filters_hebben_in_rust_geen_lijn_maar_actief_wel_vulling():
     """Een rij van zes filters las als zes doosjes. Het onderscheid hoort te zitten waar het iets
     zegt: welke staat er AAN."""
-    assert _randkleur(_body(r"^\.nu \.cl-filter$")) == "transparent"
-    aan = _body(r"^\.nu \.cl-filter\.on$")
+    assert _randkleur(_body(r"^:root \.cl-filter$")) == "transparent"
+    aan = _body(r"^:root \.cl-filter\.on$")
     assert "background: var(--nu-text)" in aan
 
 
@@ -146,8 +147,8 @@ def test_de_status_verliest_zijn_kader_maar_niet_zijn_vorm():
     """DE TOEGANKELIJKHEIDSREGEL BLIJFT. Vorm plus woord dragen de betekenis; de rand was de derde
     drager en juist die maakte van elke status een doosje. Gaat de VORM ooit mee in zo'n opruiming,
     dan zegt een gekleurd vlakje niets meer in zwart-wit."""
-    assert _randkleur(_body(r"^\.nu \.nu-status$")) == "transparent"
-    assert re.search(r"\.nu \.nu-status::before\s*\{[^}]*content", _ONTCOM)
+    assert _randkleur(_body(r"^:root \.nu-status$")) == "transparent"
+    assert re.search(r":root \.nu-status::before\s*\{[^}]*content", _ONTCOM)
     for mod in ("ok", "open", "wait", "off"):
         assert re.search(rf"\.nu-status--{mod}::before", _ONTCOM), f"de vorm van --{mod} is weg"
 
@@ -156,12 +157,12 @@ def test_open_en_fout_houden_hun_lijn_om_een_reden():
     """Twee uitzonderingen, allebei betekenis in plaats van decoratie: gestippeld = nog niet
     ingevuld, rood = alarm. Een stippellijn zonder lijn bestaat niet, en rood is de enige status
     waar de kleur iets zegt dat de vorm niet kan overnemen."""
-    assert "dashed" in _body(r"^\.nu \.nu-status--open$")
-    assert "var(--nu-danger)" in _body(r"^\.nu \.nu-status--off$")
+    assert "dashed" in _body(r"^:root \.nu-status--open$")
+    assert "var(--nu-danger)" in _body(r"^:root \.nu-status--off$")
 
 
 def test_de_actieve_tab_is_dunner_dan_een_container():
-    assert _breedte(_body(r"^\.nu \.c2-tabs a\.on$")) < 2.0
+    assert _breedte(_body(r"^:root \.c2-tabs a\.on$")) < 2.0
 
 
 # ── de ratchet ───────────────────────────────────────────────────────────────────────────────
@@ -201,7 +202,7 @@ def test_het_voortgangs_atoom_is_informatie_geen_container():
     """Een balkje krijgt geen kader; de baan laat al zien hoe lang hij is. Dit atoom is op
     20 september bewust mét lijn gebouwd omdat dat toen het systeem was — hij hoorde bij dit
     besluit en niet ervóór."""
-    body = _body(r"^\.nu progress\.nu-progress$")
+    body = _body(r"^:root progress\.nu-progress$")
     assert re.search(r"border:\s*0", body)
     assert "var(--nu-border-subtle)" in body          # de baan, subtiel en niet zwart
 
@@ -222,7 +223,7 @@ def test_een_veld_draagt_een_onderlijn_geen_kader():
     moest opheffen, nu in veldvorm. Een veld krijgt nu de lijn waar je TYPT en nergens anders."""
     regels = {sel: body for sel, body in _regels()}
     veldregel = next((b for s, b in regels.items()
-                      if s.startswith(".nu input[type=text]") and "border-bottom" in b), None)
+                      if s.startswith(":root input[type=text]") and "border-bottom" in b), None)
     assert veldregel, "de gedeelde veldregel bestaat niet"
     assert "border: 0" in veldregel
     assert "border-bottom: 1.5px solid var(--nu-text)" in veldregel
@@ -265,4 +266,4 @@ def test_omhulsels_houden_hun_kader():
 def test_de_rij_om_een_veld_draagt_geen_eigen_lijn():
     """`.fieldform` is een rij met een veld en een knop erin. Een lijn om de rij én onder het veld
     is twee lijnen voor één ding — en dat is hoe de muur van hokjes ontstond."""
-    assert "border-bottom: 0" in _body(r"^\.nu \.fieldform$")
+    assert "border-bottom: 0" in _body(r"^:root \.fieldform$")

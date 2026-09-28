@@ -120,7 +120,7 @@ def test_de_nu_laag_heeft_een_eigen_hover():
     een warme crèmetint die in de nieuwe huisstijl niet bestaat, dus de tegenhanger gebruikt
     `--nu-bg-alt` en vierkante hoeken, zoals de rest van die laag."""
     nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
-    assert ".nu .wiki-body.wiki-aan .wb:hover" in nu
-    assert "--nu-bg-alt" in nu.split(".nu .wiki-body.wiki-aan .wb:hover")[1][:80]
-    assert "cream" not in nu.split(".nu .wiki-body.wiki-aan .wb:hover")[1][:80]
+          / "nooch_village" / "static" / "nooch.css").read_text()
+    assert ":root .wiki-body.wiki-aan .wb:hover" in nu
+    assert "--nu-bg-alt" in nu.split(":root .wiki-body.wiki-aan .wb:hover")[1][:80]
+    assert "cream" not in nu.split(":root .wiki-body.wiki-aan .wb:hover")[1][:80]

@@ -23,7 +23,7 @@ import pathlib
 import re
 
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 
 
 def _regel(selector: str) -> str:
@@ -39,28 +39,28 @@ def _token(naam: str) -> str:
 
 
 def test_de_native_pijl_is_weg():
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     assert "appearance: none" in inhoud
 
 
 def test_de_voorvoegsels_staan_erbij():
     """Safari kent de kale `appearance` pas sinds 15.4, en dit dorp heeft geen buildstap die ze
     toevoegt."""
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     assert "-webkit-appearance: none" in inhoud
     assert "-moz-appearance: none" in inhoud
 
 
 def test_er_komt_een_eigen_chevron_voor_terug():
     """Zonder vervanging is er geen enkel teken dat het veld uitklapt."""
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     assert "background-image" in inhoud and "data:image/svg+xml" in inhoud
     assert "<svg" in inhoud and "<path" in inhoud
 
 
 def test_de_chevron_komt_uit_geen_enkele_library():
     """Eis van Stefan, en de regel van dit project: geen extra afhankelijkheid voor een pijltje."""
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     assert "http://www.w3.org/2000/svg" in inhoud, "de SVG hoort inline te staan"
     assert ".woff" not in inhoud and "font" not in inhoud.lower(), "dit is een icoonfont, geen SVG"
 
@@ -68,7 +68,7 @@ def test_de_chevron_komt_uit_geen_enkele_library():
 def test_de_chevron_heeft_de_kleur_van_de_tekst():
     """DE ENE PLEK WAAR `reference, don't copy` NIET KAN: `var()` werkt niet binnen een `url()`.
     Deze toets is de vervanging — hij houdt de hardgecodeerde kleur gelijk aan het token."""
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     m = re.search(r"stroke='%23([0-9A-Fa-f]{3,6})'", inhoud)
     assert m, "de chevron heeft geen streekkleur"
     tekst = _token("nu-text").lstrip("#")
@@ -80,7 +80,7 @@ def test_de_chevron_heeft_de_kleur_van_de_tekst():
 def test_bij_focus_volgt_de_chevron_de_lijn():
     """De onderlijn wordt bij focus groen; zou de chevron zwart blijven, dan staan er twee kleuren
     voor één toestand."""
-    inhoud = _regel(".nu select:not([multiple]):focus")
+    inhoud = _regel(":root select:not([multiple]):focus")
     m = re.search(r"stroke='%23([0-9A-Fa-f]{6})'", inhoud)
     assert m, "de focus-chevron heeft geen streekkleur"
     assert m.group(1).lower() == _token("nu-accent").lstrip("#"), \
@@ -89,7 +89,7 @@ def test_bij_focus_volgt_de_chevron_de_lijn():
 
 def test_er_is_ruimte_voor_de_chevron():
     """Zonder `padding-right` loopt een lange optie eronder door."""
-    inhoud = _regel(".nu select:not([multiple])")
+    inhoud = _regel(":root select:not([multiple])")
     assert "padding-right" in inhoud
     assert "background-repeat: no-repeat" in inhoud, "de chevron herhaalt zich over het veld"
 
@@ -97,7 +97,7 @@ def test_er_is_ruimte_voor_de_chevron():
 def test_de_onderlijn_blijft_de_veldstijl():
     """`appearance:none` mag de huisstijl niet slopen: de gedeelde veldregel hoort de select nog
     steeds te raken."""
-    gedeeld = re.search(r"\.nu textarea, \.nu select, [^{]*\{([^}]*)\}", NU)
+    gedeeld = re.search(r":root textarea, :root select, [^{]*\{([^}]*)\}", NU)
     assert gedeeld and "border-bottom: 1.5px solid var(--nu-text)" in gedeeld.group(1)
 
 

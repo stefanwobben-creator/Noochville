@@ -54,5 +54,5 @@ def test_de_policypagina_krijgt_de_stijl(tmp_path):
 
 def test_de_nu_tegenhanger_volgt_dezelfde_scope():
     nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
-    assert ".nu .att-body th" in nu, "de nu-laag hangt nog aan .wb"
+          / "nooch_village" / "static" / "nooch.css").read_text()
+    assert ":root .att-body th" in nu, "de nu-laag hangt nog aan .wb"

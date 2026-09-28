@@ -433,7 +433,7 @@ def test_de_drie_staten_staan_er_nog(tmp_path):
 #   1. `web_base._CSS` geeft ELKE `<details>` een rand, achtergrond, schaduw, marge en padding.
 #      Hier is de `<details>` een linkje van vier woorden, geen uitklapbaar blok.
 #   2. het designsysteem maakt van `.flink` een KNOP
-#      (`.nu .addlink, .nu .vswitch a, .nu .flink { border:1.5px solid …; background:… }`),
+#      (`:root .addlink, :root .vswitch a, :root .flink { border:1.5px solid …; background:… }`),
 #      en de summary droeg die klasse. Resultaat: een omrande knop over de volle breedte.
 #
 # Dat laatste is geen fout in het designsysteem — `.flink` ÍS daar een knop. Dit element is er
@@ -462,8 +462,20 @@ def test_en_brengt_zijn_eigen_uiterlijk_mee():
         assert eig in body, eig
 
 
-def test_acties_draagt_het_designsysteem():
+def test_acties_draagt_het_designsysteem(tmp_path):
     """De aanleiding: `/acties` stond niet in `_NU_ROUTES` en zag er daarom anders uit dan
-    Messages. Deze toets hoort hier omdat de opmaak hierboven ERVAN UITGAAT dat `.nu` meedoet."""
-    from nooch_village.cockpit2 import _NU_ROUTES
-    assert "/acties" in _NU_ROUTES and "/messages" in _NU_ROUTES
+    Messages. Deze toets hoort hier omdat de opmaak hierboven ERVAN UITGAAT dat het designsysteem
+    meedoet.
+
+    DE LIJST BESTAAT NIET MEER (28 september 2026): er is één stylesheet en elke pagina krijgt hem.
+    De vraag blijft dezelfde — draagt dit scherm het systeem? — maar hij wordt nu aan de PAGINA
+    gesteld in plaats van aan een lijst met routes."""
+    from nooch_village import cockpit2
+    from nooch_village.views.acties import render_acties
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    mens = st.people.add("Aap", "aap@test.nl")
+    html = render_acties(st, mens.id, "TOK")
+    assert "/static/nooch.css" in html
+    assert "nooch-ui" not in html, "er is weer een tweede stylesheet"

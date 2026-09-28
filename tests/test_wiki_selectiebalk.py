@@ -20,7 +20,7 @@ from nooch_village.cockpit2_util import BLOK_MENU, _OPMAAK_KNOPPEN, blok_menu, o
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
@@ -207,7 +207,7 @@ def test_hij_ziet_eruit_als_iets_dat_zweeft():
 def test_de_huisstijl_kent_hem_ook():
     """Les uit #598: een nieuwe zichtbare vorm zonder `.nu`-tegenhanger laat de huisstijl-ratchet
     vallen, en terecht — deze laag kent geen zachte randen en geen schaduwen."""
-    assert ".nu .wiki-tb" in NU
+    assert ":root .wiki-tb" in NU
 
 
 def test_het_sjabloon_van_het_blokmenu_is_niet_geraakt():

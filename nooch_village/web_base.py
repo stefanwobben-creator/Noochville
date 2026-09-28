@@ -24,6 +24,11 @@ _FONTS = (
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
     'family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap">'
+    # ARCHIVO HOORT HIER SINDS 28 SEPTEMBER 2026. Hij kwam mee met de `.nu`-stylesheet-link, en die
+    # bestaat niet meer — het designsysteem zit nu in nooch.css en geldt voor elke pagina. Zonder
+    # deze regel valt `--nu-font` terug op de systeem-sans en ziet ELK scherm er anders uit.
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    'family=Archivo:wght@400;500;600;700&display=swap">'
 )
 
 _CSS = """
@@ -206,8 +211,9 @@ def _page(title: str, inner: str, body_cls: str = "") -> str:
     `views/werkoverleg.py`). Een breedte die op body staat, kun je niet van binnenuit
     overschrijven — elke poging met `100vw` of negatieve marges rekent de scrollbar mis.
 
-    `cockpit2._nu_body` VOEGT ZIJN KLASSE TOE aan wat hier staat en vervangt hem niet; dat is
-    de reden dat die functie sinds deze parameter met een regex werkt."""
+    HIER STOND EEN TWEEDE LEZER: `cockpit2._nu_body` voegde er zijn eigen klasse aan toe. Dat
+    mechanisme is op 28 september 2026 opgeheven — het designsysteem zit in nooch.css en geldt voor
+    elke pagina, dus er is niets meer dat deze klasse hoeft aan te vullen."""
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
     # </main> geïnjecteerd en blijft zo buiten de hoofdinhoud.
