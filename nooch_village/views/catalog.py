@@ -194,7 +194,7 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
     status_ui = _status_section(st)
     activate_ui = _activate_section(st, csrf_token) if csrf_token else ""
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>Metrics catalogue <span class='chip'>Librarian</span></h1>{_banner(msg)}"
+            f"<h1 class='ptitle'>Metrics catalogue <span class='chip'>Librarian</span></h1>{_banner(msg)}"
             f"<p class='muted'>One source for indicator definitions: roles pick from here. Amending a "
             f"definition never versions in place, but as a clarification, back-cast or series break.</p>"
             f"{koppel_ui}{status_ui}{activate_ui}"

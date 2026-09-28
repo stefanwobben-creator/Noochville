@@ -96,7 +96,7 @@ def render_bronnen(st, base_dir: str, csrf_token: str = "") -> str:
     items = _bron_sources(st, ctx)
     aan = sum(1 for i in items if i["active"])
     rows = "".join(_bron_row(i, csrf_token) for i in items) or "<p class='muted'>No sources found.</p>"
-    main = (f"<div class='c2-main'><h1>Connect sources</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Connect sources</h1>"
             f"<p class='muted'>{aan} of {len(items)} sources are on. Put the keys in "
             f"<code>.env</code> or <code>config/settings.ini</code> on the server; once they are there you "
             f"see ‘connected’ here and you can switch the source on. A source only fetches data at the next "

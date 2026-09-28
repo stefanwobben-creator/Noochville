@@ -69,7 +69,14 @@ _CSS = """
 [hidden]{display:none!important}
 body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);
  background:var(--cream);margin:0;padding:1.6rem 2rem;max-width:1180px}
-h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0}
+/* GEEN `font-weight` MEER OP h1 (28 september 2026). Hij stond hier op 800 terwijl `.ptitle` in
+   nooch.css 600 zegt, en een klasse wint van een element-selector — dus een titel WOOG 600 op de
+   negen schermen die de klasse droegen en 800 op de rest. Twee stylesheets die hetzelfde element
+   iets anders vertellen, en het verschil zag je alleen door twee schermen naast elkaar te leggen.
+   Nu draagt elke paginatitel `.ptitle` (toets: test_ptitle_op_elke_titel.py) en staat het gewicht
+   op één plek. Familie, grootte en marge blijven hier: dat zijn basis-atomen, en die horen in dit
+   blok volgens CLAUDE.md. */
+h1{font-family:var(--font-display);font-size:1.5rem;margin:0}
 h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transform:uppercase;
  letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
 a{color:var(--green-dark)}

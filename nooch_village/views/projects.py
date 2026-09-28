@@ -1783,7 +1783,7 @@ def render_projects_screen(st: _Stores, rec, *, csrf_token: str = "", username: 
     # pusht). Zie de `terug`-parameter daar; het is nadrukkelijk niet `nav`.
     inner = _projects_tab_html(st, rec, csrf_token, group=group, username=username,
                                goal=goal, terug="/projects")
-    kop = (f"<div class='c2-sec'><h1>Projects</h1>"
+    kop = (f"<div class='c2-sec'><h1 class='ptitle'>Projects</h1>"
            f"<p class='muted'>Everything on the board for {_e(_name(rec))}. "
            f"Filter per role or person with the grouping above.</p></div>")
     # DE MODAL-CONTROLLER, en zonder hem is dit scherm stuk. Een ingelogde kaart is bewust een

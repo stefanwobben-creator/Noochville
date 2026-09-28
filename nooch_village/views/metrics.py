@@ -1996,7 +1996,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
             + step4_inner
             + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Pick an indicator first</button></form>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← back</a></div>"
-            f"<h1>Create KPI <span class='chip'>focus</span></h1>{_banner(msg)}"
+            f"<h1 class='ptitle'>Create KPI <span class='chip'>focus</span></h1>{_banner(msg)}"
             f"<p class='muted'>A KPI is only the definition of what you measure. Period and display you "
             f"choose on the dashboard.</p>"
             f"<div class='c2-sec'>{form}</div></div>")

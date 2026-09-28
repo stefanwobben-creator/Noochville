@@ -63,14 +63,14 @@ def _pagina(tmp_path, **kw):
 def test_het_id_staat_niet_meer_in_de_kop(tmp_path):
     """DE EIS. Een interne sleutel hoort niet de eerste plek te krijgen."""
     html, a, _ = _pagina(tmp_path)
-    h1 = html.split("<h1>")[1].split("</h1>")[0]
+    h1 = re.split(r"<h1[^>]*>", html)[1].split("</h1>")[0]
     assert a.id not in h1, f"het ID staat nog in de kop: {h1}"
 
 
 def test_de_titel_staat_er_wel_en_blijft_bewerkbaar(tmp_path):
     """Hij is het enige inhoudelijke element in de kop — en sinds #567 ook het invoerveld."""
     html, a, _ = _pagina(tmp_path)
-    h1 = html.split("<h1>")[1].split("</h1>")[0]
+    h1 = re.split(r"<h1[^>]*>", html)[1].split("</h1>")[0]
     assert "Company Information" in h1
     assert "id='wiki-titel'" in h1, "de titel is niet meer het bewerkbare element"
 
@@ -116,7 +116,7 @@ def test_de_rol_blijft_aanklikbaar(tmp_path):
 def test_de_rol_staat_niet_meer_los_naast_de_titel(tmp_path):
     """Anders staat hij er twee keer, en dat is het probleem verdubbeld."""
     html, _a, rec = _pagina(tmp_path)
-    h1 = html.split("<h1>")[1].split("</h1>")[0]
+    h1 = re.split(r"<h1[^>]*>", html)[1].split("</h1>")[0]
     assert rec.definition.name not in h1
 
 
@@ -358,6 +358,6 @@ def test_de_leespagina_krijgt_dezelfde_kop(tmp_path):
     p = st.att.add(rec.id, "policy", title="Beleid", body="tekst", domain="bibliotheek")
     html = render_pagina(st, p.id, csrf_token="TOK", username="b@t.nl")
     assert "class='dcol'" in html
-    h1 = html.split("<h1>")[1].split("</h1>")[0]
+    h1 = re.split(r"<h1[^>]*>", html)[1].split("</h1>")[0]
     assert p.id not in h1, "het ID staat nog in de kop van de leespagina"
     assert p.id in html

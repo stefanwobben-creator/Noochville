@@ -340,7 +340,7 @@ def render_metrics2(st, rec, csrf_token: str = "", win: str = "7d",
         return _page("Metrics", inner)
     body = _metrics2_body(st, rec, csrf_token, win, compare, van, tot,
                           base=f"/metrics2?node={_e(rec.id)}")
-    main = (f"<div class='c2-main'><h1>Metrics — {_e(_name(rec))}</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Metrics — {_e(_name(rec))}</h1>"
             f"<p class='muted'>Scan the catalogue and star what you want to follow. "
             f"You do not need to know what is interesting; the overview is there.</p>{body}</div>")
     inner = (f"{_DS_LINK}{_nav()}"

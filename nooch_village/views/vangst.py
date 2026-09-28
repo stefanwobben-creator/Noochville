@@ -696,7 +696,7 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     crec = st.records.get(circle)
     if crec is None or not org.is_circle(crec):
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-                "<h1>Capture</h1><p class='muted'>Capturing belongs to a circle. Open a "
+                "<h1 class='ptitle'>Capture</h1><p class='muted'>Capturing belongs to a circle. Open a "
                 "circle's tactical meeting, or use the + in your inbox for a loose "
                 "item.</p></div>")
         return _page("Vangen", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
@@ -708,7 +708,7 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(circle)}'>← {_e(_name(crec))}</a>"
            f" <span class='fsep'>·</span> "
            f"<a href='/werkoverleg?circle={_e(circle)}'>tactical meeting</a></div>"
-           f"<h1>Capture <span class='chip' id='vang-n'>{open_n}</span></h1>"
+           f"<h1 class='ptitle'>Capture <span class='chip' id='vang-n'>{open_n}</span></h1>"
            f"<p class='muted'>Capture first, sort later. Type a line and press Enter — that is "
            f"all that happens. WHAT it turns into, and for which role, you decide at "
            f"<em>process</em> — and then there may be several.</p>")

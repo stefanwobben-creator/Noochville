@@ -38,7 +38,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
     p = st.projects.get(pid)
     if p is None:
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-                "<h1>Report not found</h1><p class='muted'>This project no longer exists.</p></div>")
+                "<h1 class='ptitle'>Report not found</h1><p class='muted'>This project no longer exists.</p></div>")
         return _page("Report not found", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     store = getattr(st, "project_docs", None)
@@ -53,7 +53,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
     # Dezelfde functie als op de kaart — één definitie van "welk model schreef dit".
     from nooch_village.views.projects import _herkomst_chip
     kop = (f"<div class='c2-bar'><a href='{_e(_terug(pid, back))}'>← project</a></div>"
-           f"<h1>📄 {_e(titel)}{rol_chip} {_herkomst_chip(st, pid)}</h1>")
+           f"<h1 class='ptitle'>📄 {_e(titel)}{rol_chip} {_herkomst_chip(st, pid)}</h1>")
 
     # HET WACHTENDE CONCEPT, BOVEN HET DOCUMENT. Niet eroverheen: zolang niemand bevestigd heeft,
     # is dit een afleiding en niet de waarheid. De provenance staat erbij omdat een mens die een

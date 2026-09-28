@@ -242,7 +242,7 @@ def render_keyword_lens(st, lens: str = "trends", csrf_token: str = "",
     # nomineren kan vanuit elke rol-lens (niet vanaf de Kroniek zelf)
     nom = _nominate_form(csrf_token, nxt) if (csrf_token and lens != "kroniek") else ""
 
-    main = (f"<div class='c2-main'><h1>Keywords <span class='chip'>{_e(_label.lower())}</span></h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Keywords <span class='chip'>{_e(_label.lower())}</span></h1>"
             f"<p class='muted'>One keyword data layer ({len(rows)} terms), five lenses. "
             f"This lens: {_e(_desc)}.</p>{_switcher(lens)}{nom}{body}</div>")
     inner = (f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

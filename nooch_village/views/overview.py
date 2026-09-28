@@ -417,7 +417,7 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
               f"</form></details>")
 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>People <span class='chip'>admin</span></h1>"
+            f"<h1 class='ptitle'>People <span class='chip'>admin</span></h1>"
             f"<p class='muted'>Add, edit, reset a password or remove people. "
             f"This page requires login.</p>{_banner(msg)}{toevoegen}"
             f"<div class='c2-sec'><h3>People ({len(people)})</h3>"
@@ -1042,7 +1042,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     # geeft de huidige node-id door aan `_tree_html`, wat de rail hiervoor deed.
     # Breadcrumb was al eerder weg (founder 23 jul), om dezelfde reden: de hiërarchie stond er al.
     main = (f"<div class='c2-main'>"
-            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}"
+            f"<h1 class='ptitle'>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
@@ -1177,7 +1177,7 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
         content = ("<div class='c2-sec'><p class='muted'>Read-only aggregation lens over the roles "
                    "this person fills. This tab follows in a separate task.</p></div>")
 
-    main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>{avatar} {_e(name)} {chip}</h1>"
             f"<div class='muted'>{_e(subtitle)}</div>"
             f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
     # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.

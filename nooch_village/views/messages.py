@@ -921,7 +921,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
     qs_t = f"&q={_e(q)}" if q else ""
     terug = (f"<a class='msg-terug flink' href='/messages?list=1&amp;k={_e(kanaal)}{qs_t}'>"
              f"&larr; All channels</a>")
-    main = (f"<div class='c2-main'><h1>Messages</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Messages</h1>"
             f"<p class='muted'>One channel type, four flavours: the village, a topic of your own, "
             f"a project you added, or a person. Projects only show up once you open or search "
             f"for them.</p>"

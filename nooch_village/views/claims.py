@@ -543,7 +543,7 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     except claims_db.ClaimsDbError as e:
         # Fail-closed: zonder database geen toets. Liever een zichtbare fout dan een stille 0.
         inner = (f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
-                 f"<h1>Claims checker</h1>"
+                 f"<h1 class='ptitle'>Claims checker</h1>"
                  f"<div class='card'><b>The claims database could not be loaded</b>"
                  f"<p class='muted'>{_e(str(e))} — the checker deliberately does nothing without a database.</p>"
                  f"</div></div></div>")
@@ -576,7 +576,7 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
 
     versie = (db.get("meta") or {}).get("versie", "?")
     kader = " · ".join((db.get("meta") or {}).get("regelgeving", {}).values())
-    main = (f"<div class='c2-main'><h1>Claims checker</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Claims checker</h1>"
             f"<p class='muted'>EU EmpCo 2024/825 + ACM guidance · database v{_e(versie)} · "
             f"owner: compliance · not legal advice</p>"
             f"{_banner(msg)}{conflict}{_tabbalk(tab)}{body}"

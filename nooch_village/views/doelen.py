@@ -87,7 +87,7 @@ def render_goals(st, csrf_token: str = "", username: str | None = None, msg: str
               + f"{kaarten}{nieuw}")
     if inner_only:
         return binnen
-    main = f"<div class='c2-main'><h1>Goals</h1>{binnen}</div>"
+    main = f"<div class='c2-main'><h1 class='ptitle'>Goals</h1>{binnen}</div>"
     return _page("Goals", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
 
@@ -176,7 +176,7 @@ def render_goal(st, doel_id: str, csrf_token: str = "", username: str | None = N
                   f"</form></details>")
 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/goals'>← goals</a></div>"
-            f"<h1>Goal</h1>" + (f"<p class='muted'>{_e(msg)}</p>" if msg else "")
+            f"<h1 class='ptitle'>Goal</h1>" + (f"<p class='muted'>{_e(msg)}</p>" if msg else "")
             + f"{kop}<h2>Critical path</h2>{pad}<h2>Projects</h2>{bord}{lijst}{koppel}{bewerk}</div>")
     return _page(f"Goal · {d['titel']}", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
