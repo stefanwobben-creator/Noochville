@@ -3611,15 +3611,22 @@ def _act_rov2_end(c):
             return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         done = _rov_apply(st)
-        # Sluiten = de vergadering écht afronden: haal de resterende (onbehandelde) agendapunten van
-        # DEZE cirkel van de agenda, zodat de "Governance meeting"-knop niet groen blijft hangen door
-        # open punten. Niet-geconsenteerde voorstellen vervallen; opnieuw indienen kan altijd.
-        cleared = _rov_items(st, circle_id)
-        for it in cleared:
-            st.agenda.remove(it["id"])
+        # SLUITEN GOOIT NIETS WEG (28 september 2026). Hier stond dat de resterende punten van de
+        # agenda werden GEHAALD, "zodat de Governance meeting-knop niet groen blijft hangen door
+        # open punten". Die knop bestaat niet: `overleg_items` geeft het roloverleg een gewone link
+        # en alleen het WERKoverleg een live-staat ("Roloverleg heeft geen open/dicht-staat" staat er
+        # met zoveel woorden). De rechtvaardiging beschreef dus een schermeffect dat er niet is —
+        # en het gevolg was wél echt: wie een domein toevoegde en daarna op "Close meeting" drukte,
+        # zag zijn voorstel verdwijnen zonder spoor. Precies de melding van deze bug.
+        #
+        # WAT ER NU GEBEURT: aangenomen voorstellen zijn door `_rov_apply` geschreven en van de
+        # agenda af; al het andere blijft staan. `Agenda.open()` haalt open én objected terug, dus
+        # het volgende overleg begint waar dit ophield. Dat is ook wat `apply_consented` al beloofde
+        # ("blijft staan als schadelijk met reden") — die belofte werd hier stilzwijgend gebroken.
+        rest = [it for it in _rov_items(st, circle_id) if it.get("status") != "consented"]
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd"
-        if cleared:
-            msg += f", {len(cleared)} onbehandeld punt van de agenda gehaald"
+        if rest:
+            msg += f", {len(rest)} punt(en) blijven op de agenda staan"
         return nxt, msg
 
 

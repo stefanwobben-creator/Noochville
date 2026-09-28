@@ -182,7 +182,11 @@ def test_secretaris_gate_en_bevestiging_bij_sluiten(tmp_path):
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Only the secretary opens and closes" in frag        # secretaris-gate (notitie)
     assert "data-confirm=" in frag and "rov2_end" in frag        # bevestiging bij sluiten
-    assert "no adopted proposals" in frag                 # 0 consented -> melding
+    # DE ZIN IS PRECIEZER GEWORDEN (28 september 2026): hij zei alleen wat er NIET geschreven
+    # werd, terwijl sluiten toen ook alle onbehandelde punten van de agenda haalde. Nu blijven die
+    # staan, en staat dat er ook bij.
+    assert "nothing will be written" in frag              # 0 consented -> melding
+    assert "stay on the agenda" in frag                   # en wat er met de rest gebeurt
     # met een aangenomen voorstel telt de bevestiging mee
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Monitoring something"], "next": ["/"]}, username="guest")

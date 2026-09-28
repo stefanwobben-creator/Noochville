@@ -89,7 +89,19 @@ def _rov_add_item(st: _Stores, circle: str, naam_raw: str, group: str | None = N
 
 def _rov_hard(st: _Stores, item: dict):
     """Mens-regel voor consent: een rol heeft een naam én minstens één accountability nodig
-    (purpose is optioneel). Geeft een lijst blokkades terug (leeg = consent kan)."""
+    (purpose is optioneel). Geeft een lijst blokkades terug (leeg = consent kan).
+
+    DE ACCOUNTABILITY-EIS GELDT ALLEEN ALS DIT VOORSTEL ER IETS MEE DOET (28 september 2026).
+
+    Hij keek naar de STAND van de rol, niet naar de WIJZIGING. Een rol die vandaag nul
+    accountabilities heeft — dat komt voor, en governance is juist de weg om dat te repareren —
+    kon daardoor helemaal niet meer geamendeerd worden: een voorstel om er een DOMEIN aan te
+    hangen werd geblokkeerd met "A role needs at least one accountability", een zin die over iets
+    anders gaat dan wat je voorstelt. Gemeten door het scherm te bedienen, niet geredeneerd.
+
+    De eis blijft staan waar hij hoort: bij een NIEUWE rol (die hoort niet leeg geboren te worden)
+    en bij een voorstel dat de laatste accountability weghaalt. Een voorstel dat de situatie niet
+    verslechtert, wordt niet tegengehouden door de situatie zelf."""
     if item.get("kind") == "remove_role":
         return []   # verwijderen mag (ook met verweesd werk; dat is advies, geen blok)
     d = _rov_draft(st, item)
@@ -97,7 +109,10 @@ def _rov_hard(st: _Stores, item: dict):
     if not (d.get("name") or "").strip():
         out.append("Give the role a name.")
     if not [a for a in d.get("accs", []) if a.strip()]:
-        out.append("A role needs at least one accountability.")
+        ch = item.get("change") or {}
+        raakt_accs = bool(ch.get("add_accountabilities") or ch.get("remove_accountabilities"))
+        if item.get("kind") == "add_role" or raakt_accs:
+            out.append("A role needs at least one accountability.")
     return out
 
 
@@ -181,6 +196,11 @@ def _rov_apply(st: _Stores):
     done = []
     for item in [i for i in st.agenda.all() if i["status"] == "consented"]:
         if _rov_hard(st, item):
+            # NIET STIL OVERSLAAN. Hij stond op `consented` en werd hier genegeerd; daarna haalde
+            # het sluiten hem van de agenda. Twee stappen verder was er dan geen voorstel meer en
+            # geen reden. `objected` is de bestaande toestand voor "behandeld, niet aangenomen" —
+            # `Agenda.open()` geeft hem het volgende overleg gewoon terug.
+            st.agenda.set_status(item["id"], "objected")
             continue
         naam = (_rov_draft(st, item).get("name") or "").strip()
         sec._adopt(_proposal_from_item(item))
@@ -530,14 +550,26 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
         right = "<p class='muted'>No open agenda items left. Add one, or close the meeting.</p>"
 
     n_consent = sum(1 for it in items_all if it.get("status") == "consented")
-    confirm = (f"Close the meeting? {n_consent} adopted proposal(s) will be written to the "
-               f"records. This cannot be undone." if n_consent
-               else "Close the meeting? There are no adopted proposals to write through.")
+    # WAT ER MET DE REST GEBEURT, staat er nu bij. De tekst zei alleen wat er WEL werd geschreven,
+    # terwijl sluiten tot 28 september alle onbehandelde punten van de agenda haalde — het deel dat
+    # je niet verwachtte, was het deel dat niet genoemd werd. Nu blijven ze staan, en ook dát hoort
+    # op de knop die je indrukt.
+    n_rest = sum(1 for it in items_all if it.get("status") != "consented")
+    rest_zin = (f" {n_rest} unfinished item(s) stay on the agenda for next time." if n_rest else "")
+    confirm = ((f"Close the meeting? {n_consent} adopted proposal(s) will be written to the "
+                f"records. This cannot be undone." if n_consent
+                else "Close the meeting? Nothing has been adopted, so nothing will be written.")
+               + rest_zin)
     foot = (f"<div class='rov-foot'><form method='post' action='/action' data-confirm='{_e(confirm)}'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(circle_id)}'>"
-            f"<button class='btn ok' type='submit' name='action' value='rov2_end'>"
+            # `ghost` EN NIET `ok` (28 september 2026). Twee even zware groene knoppen betekent dat
+            # geen van beide de hoofdactie is — dezelfde meting als bij "Move page" naast "Edit
+            # page". Hier was het gevolg erger dan lelijk: "Adopt proposal" staat bij het voorstel,
+            # "Close meeting" in de vaste voet, en die laatste was daardoor de opvallendste groene
+            # knop op het scherm. Aannemen is de hoofdactie; sluiten is het einde van de zitting.
+            f"<button class='btn ghost' type='submit' name='action' value='rov2_end'>"
             f"Close meeting</button></form></div>")
     sec_note = ("<p class='wo-sec muted' style='margin:.2rem 0 .6rem'>Only the secretary opens and "
                 "closes this meeting.</p>")
