@@ -17,6 +17,8 @@ from __future__ import annotations
 import pathlib
 import re
 
+from conftest import basis_css, designsysteem_css
+
 from nooch_village import cockpit2
 from nooch_village.cockpit2_util import overleg_items
 from nooch_village.views.vangst import _spanning_titel, _uitkomst_formulier
@@ -270,11 +272,11 @@ def test_de_live_knop_wint_van_de_nav_regel():
 
 
 def test_ook_in_de_nu_laag_wint_hij():
-    """`.nu .c2-subnav a` zet óók `color`. Een regel op `.nu .c2-overleg` zou daar gelijk mee
+    """`:root .c2-subnav a` zet óók `color`. Een regel op `:root .c2-overleg` zou daar gelijk mee
     staan en dan beslist de bronvolgorde — dezelfde val, één laag hoger."""
     nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
-    nav = [s for s in _regels(nu, ".nu .c2-subnav a", zet="color")
+          / "nooch_village" / "static" / "nooch.css").read_text()
+    nav = [s for s in _regels(nu, ":root .c2-subnav a", zet="color")
            if "hover" not in s and ".c2-overleg" not in s]
     assert nav
     hoogste = max(_spec(s) for r in nav for s in r.split(","))
@@ -290,8 +292,8 @@ def test_het_stipje_staat_nooit_op_zijn_eigen_kleur():
     """Wit op wit of neon op neon is geen stip. De knop-achtergrond en de stip-vulling moeten uit
     verschillende tokens komen — in beide lagen."""
     nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
-    for css, stip_naald in ((CSS, ".c2-live"), (nu, ".nu .c2-live")):
+          / "nooch_village" / "static" / "nooch.css").read_text()
+    for css, stip_naald in ((CSS, ".c2-live"), (nu, ":root .c2-live")):
         live_naald = ".c2-overleg--live"
         zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
         regels = [(sel.strip(), body) for sel, body in
@@ -370,9 +372,11 @@ def test_er_staat_geen_doos_in_een_doos_in_een_doos():
     """DRIE KADERS IN ELKAAR. De verwerken-balk had er een, de spanningsband erin nóg een, en het
     formulier daarin een derde. Box in box in box leest als vier losse dingen in plaats van één
     spanning die je behandelt. Eén buitenkaart, en lijnen erbinnen."""
-    nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
-    for css, klassen in ((CSS, (".wo-band",)), (nu, (".wo-band", ".wo-oc"))):
+    # DE TWEE HELFTEN APART. Ze stonden tot 28 september 2026 in twee bestanden; sinds ze in
+    # nooch.css zijn samengevoegd moet de toets zeggen welke helft hij bedoelt, want ze zeggen hier
+    # allebei iets over dezelfde klassen — dat is juist de vraag.
+    for css, klassen in ((basis_css(), (".wo-band",)),
+                         (designsysteem_css(), (".wo-band", ".wo-oc"))):
         for klasse in klassen:
             regels = _binnen_kaart(css, klasse)
             assert regels, f"{klasse} wordt binnen de kaart niet aangestuurd"

@@ -345,9 +345,9 @@ def test_geen_enkele_css_variabele_is_ongedefinieerd():
     waren doorzichtig. Geen foutmelding, want een ontbrekende variabele is geldige CSS."""
     from nooch_village.web_base import _CSS
     nu = (pathlib.Path(__file__).resolve().parents[1]
-          / "nooch_village" / "static" / "nooch-ui.css").read_text()
+          / "nooch_village" / "static" / "nooch.css").read_text()
     bekend = set(re.findall(r"(--[a-z0-9-]+)\s*:", _CSS + nu))
-    for naam, css in (("nooch.css", CSS), ("nooch-ui.css", nu)):
+    for naam, css in (("nooch.css", CSS), ("nooch.css", nu)):
         gebruikt = set(re.findall(r"var\((--[a-z0-9-]+)\)", css))
         assert not (gebruikt - bekend), f"{naam} gebruikt ongedefinieerd: {gebruikt - bekend}"
 

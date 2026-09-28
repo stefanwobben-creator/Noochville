@@ -26,7 +26,7 @@ from nooch_village.views import vangst
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
-NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 WEB = open(os.path.join(BASIS, "nooch_village", "web_base.py"), encoding="utf-8").read()
 
 C = "mother_earth__nooch"
@@ -184,7 +184,7 @@ def test_de_badgekleuren_komen_uit_tokens():
         assert f"var(--uk-{soort})" in regel and f"var(--ukt-{soort})" in regel, (soort, regel)
         assert not re.search(r"#[0-9a-fA-F]{3,6}", regel), (soort, regel)
     # ... en de nu-laag doet het óók, net als bij de kanban-fix
-    assert any(k.startswith(".nu .uk-badge") for k in per_nu), "nu-laag dekt de badges niet"
+    assert any(k.startswith(":root .uk-badge") for k in per_nu), "nu-laag dekt de badges niet"
 
 
 def test_het_project_deelt_zijn_tint_met_de_kanban_kolom():

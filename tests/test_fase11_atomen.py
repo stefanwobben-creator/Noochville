@@ -29,7 +29,7 @@ from nooch_village import cockpit2
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 CSS = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
-NU = (REPO / "nooch_village" / "static" / "nooch-ui.css").read_text()
+NU = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
 VIEWS = REPO / "nooch_village" / "views"
 
 ROL = "mother_earth__nooch__creator_of_shoes"
@@ -48,7 +48,7 @@ def test_het_voortgangs_atoom_bestaat_in_beide_lagen():
     """De basis (buiten `.nu`) én de systeemtaal (binnen `.nu`). Alleen de tweede zou betekenen dat
     het balkje verdwijnt op elk scherm dat nog niet meedoet — en de zijbalk staat op álle schermen."""
     assert "progress.nu-progress{" in CSS.replace(" ", "")
-    assert re.search(r"\.nu\s+progress\.nu-progress\s*\{", NU)
+    assert re.search(r":root\s+progress\.nu-progress\s*\{", NU)
 
 
 def test_het_rol_icoon_hergebruikt_de_bestaande_statusvormen():

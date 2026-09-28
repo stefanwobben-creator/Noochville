@@ -82,7 +82,7 @@ def _tree_html(st: _Stores, current_id: str) -> str:
 
         HET WOORD STAAT ERBIJ, in een `.sr`-span. Een vorm alleen is geen status: in zwart-wit,
         of voor wie die tinten niet onderscheidt, zijn twee cirkeltjes twee cirkeltjes. Dat is de
-        regel uit de kop van nooch-ui.css, en hij geldt ook als de vorm klein is.
+        regel uit de kop van het designsysteem-blok in nooch.css, en hij geldt ook als de vorm klein is.
 
         Fail-soft: een onleesbare assignments-store maakt van de boom geen foutpagina. Geen
         uitspraak is dan beter dan de bewering "vacant" — dat is precies de bewering die op

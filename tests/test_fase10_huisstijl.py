@@ -15,17 +15,19 @@ Twee soorten bewaking:
 from __future__ import annotations
 
 import pathlib
+
+from conftest import basis_css, designsysteem_css
 import re
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-NU = (REPO / "nooch_village" / "static" / "nooch-ui.css").read_text()
-OUD = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
+NU = designsysteem_css()
+OUD = basis_css()
 
 _ONTCOM = lambda t: re.sub(r"/\*.*?\*/", "", t, flags=re.S)
 
 
 def _tokens(css: str) -> dict[str, str]:
-    blok = re.search(r"\.nu\s*\{(.*?)\n\}", _ONTCOM(css), re.S)
+    blok = re.search(r":root\s*\{(.*?)\n\}", _ONTCOM(css), re.S)
     assert blok, "het .nu-tokenblok is niet te vinden"
     return dict(re.findall(r"(--nu-[a-z-]+)\s*:\s*([^;]+);", blok.group(1)))
 
@@ -56,7 +58,7 @@ def test_att_en_qadd_worden_aangestuurd():
     """De twee families die in zes views terugkomen. Zie §3 groep A van de inventarisatie."""
     for klasse in ("att-lbl", "att-body", "att-name", "att-ic", "att-sep", "att-pop",
                    "qadd", "qadd-form", "qadd-x"):
-        assert re.search(rf"\.nu[^{{]*\.{re.escape(klasse)}\b", NU), f".{klasse} mist een nu-regel"
+        assert re.search(rf":root[^{{]*\.{re.escape(klasse)}\b", NU), f".{klasse} mist een nu-regel"
 
 
 def test_elke_oude_look_op_att_en_qadd_is_overschreven():
@@ -69,21 +71,21 @@ def test_elke_oude_look_op_att_en_qadd_is_overschreven():
         for k in re.findall(r"\.((?:att|qadd)[a-z-]*)", sel):
             schuldig.add(k)
     for k in sorted(schuldig):
-        assert re.search(rf"\.nu[^{{]*\.{re.escape(k)}\b", NU), \
+        assert re.search(rf":root[^{{]*\.{re.escape(k)}\b", NU), \
             f".{k} zet in nooch.css nog rand/radius/schaduw en wordt niet overschreven"
 
 
 def test_de_qadd_schaduw_is_expliciet_uitgezet():
     """`.qadd-form textarea` was het enige invoerveld met een `box-shadow`. Een schaduw is in deze
     huisstijl geen stijlkeuze maar een fout — de referentie heeft er nul."""
-    assert re.search(r"\.nu \.qadd-form textarea\s*\{[^}]*box-shadow:\s*none", NU, re.S)
+    assert re.search(r":root \.qadd-form textarea\s*\{[^}]*box-shadow:\s*none", NU, re.S)
     assert "var(--shadow)" in OUD          # hij staat er nog, voor de geparkeerde schermen
 
 
 def test_geen_enkele_nieuwe_regel_valt_buiten_de_nu_scope():
     """Eén regel zonder `.nu` ervoor raakt élk scherm, ook de 27 geparkeerde."""
     regels = [r.split("{")[0].strip() for r in _ONTCOM(NU).split("}") if "{" in r]
-    buiten = [r for r in regels if r and not r.startswith(".nu") and not r.startswith("@")]
+    buiten = [r for r in regels if r and not r.startswith(":root") and not r.startswith("@")]
     assert not buiten, f"regels buiten de scope: {buiten}"
 
 
@@ -91,12 +93,12 @@ def test_geen_enkele_nieuwe_regel_valt_buiten_de_nu_scope():
 
 def test_koppen_staan_in_hoofdletters():
     """NINE PLANTS, ONE SHOE · GROW A PAIR · QUESTIONS PEOPLE ACTUALLY ASKED. Er staat geen enkele
-    kop in onderkast op de productpagina. `.nu h2, .nu h3` zette hier eerst `text-transform: none`."""
-    for sel in (r"\.nu h1", r"\.nu h2, \.nu h3"):
+    kop in onderkast op de productpagina. `:root h2, :root h3` zette hier eerst `text-transform: none`."""
+    for sel in (r":root h1", r":root h2, :root h3"):
         blok = re.search(rf"{sel}\s*\{{([^}}]*)\}}", NU, re.S)
         assert blok, sel
         assert "text-transform: uppercase" in blok.group(1), sel
-    # HIER STOND `"text-transform: none" not in …`: nergens in de laag vóór `.nu .pill` mocht
+    # HIER STOND `"text-transform: none" not in …`: nergens in de laag vóór `:root .pill` mocht
     # iets in onderkast staan. Dat klopte toen alles om moest; sinds de rebalans van 21 september
     # 2026 is onderkast juist het RUSTIGE register waar secundair werk in leest (gemeten: 48% van
     # de tekst stond in hoofdletters). De bewering die overblijft is de bewering die deze test
@@ -105,7 +107,7 @@ def test_koppen_staan_in_hoofdletters():
 
 def test_knoptekst_staat_in_hoofdletters():
     """ORDER NOW · BECOME FOUNDING MEMBER · ALL REVIEWS · READ THE LETTERS."""
-    blok = re.search(r"\.nu \.btn \{([^}]*)\}", NU, re.S)
+    blok = re.search(r":root \.btn \{([^}]*)\}", NU, re.S)
     assert blok and "text-transform: uppercase" in blok.group(1)
 
 
@@ -142,7 +144,7 @@ def test_elke_eyebrow_in_de_oude_css_wordt_aangestuurd():
         if sel.strip() in BUITEN:
             continue
         kern = sel.strip().split()[-1].lstrip(".")
-        if not re.search(rf"\.nu[^{{]*[\s.]{re.escape(kern)}\b", NU):
+        if not re.search(rf":root[^{{]*[\s.]{re.escape(kern)}\b", NU):
             gemist.append(sel.strip())
     assert not gemist, f"eyebrow-achtige selectors zonder nu-regel: {gemist}"
 
@@ -152,7 +154,7 @@ def test_de_eyebrow_is_een_definitie_en_geen_twaalfde_naam():
     probleem dat deze stap oplost gewoon verplaatst."""
     assert NU.count("text-transform: uppercase; letter-spacing: .06em") == 1
     vorm = re.search(r"([^{}]*\.nu-eyebrow[^{}]*)\{[^}]*letter-spacing: \.06em", NU, re.S)
-    assert vorm and len(re.findall(r"\.nu ", vorm.group(1))) >= 10
+    assert vorm and len(re.findall(r":root ", vorm.group(1))) >= 10
 
 
 def test_link_knoppen_zijn_secundair_en_dus_niet_in_hoofdletters():
@@ -165,7 +167,7 @@ def test_link_knoppen_zijn_secundair_en_dus_niet_in_hoofdletters():
     knop, is er geen verschil meer tussen "waar ben ik" en "wat kan ik hier nog meer".
 
     Wat blijft: ze dragen hun rand en hun `.nu`-font, dus ze lezen nog steeds als knop."""
-    blok = re.search(r"\.nu \.addlink, \.nu \.vswitch a, \.nu \.flink \{([^}]*)\}", NU, re.S)
+    blok = re.search(r":root \.addlink, :root \.vswitch a, :root \.flink \{([^}]*)\}", NU, re.S)
     assert blok
     assert "text-transform: none" in blok.group(1)
     assert "font-weight: 500" in blok.group(1)
@@ -186,7 +188,7 @@ def test_green_dark_ratchet():
         if "var(--green-dark)" not in body:
             continue
         kern = sel.strip().split(",")[0].strip().split()[-1].lstrip(".").split(":")[0]
-        if kern and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(kern)}\b", NU):
+        if kern and not re.search(rf":root[^{{]*[\s.]{re.escape(kern)}\b", NU):
             zonder.append(sel.strip()[:40])
     assert len(zonder) <= _PLAFOND, (
         f"{len(zonder)} selectors met --green-dark zonder nu-tegenhanger (plafond {_PLAFOND}). "
@@ -214,7 +216,7 @@ _DEKKING_PLAFOND = {
     # telt deze ratchet waar de string GETYPT is, niet waar hij landt. De schuld
     # verhuist dus van bestand, hij groeit niet op het scherm.
     #
-    # Terug naar omlaag gaat via de `.nu`-laag: zodra `.nu .emoji-pop` c.s. een
+    # Terug naar omlaag gaat via de `.nu`-laag: zodra `:root .emoji-pop` c.s. een
     # tegenhanger krijgen, telt geen van de vijf nog mee en kan dit plafond in één keer
     # naar 1. Dat is een besluit over hoe de kiezer eruitziet op élk scherm, en hoort
     # dus niet in een stickerkiezer-PR.
@@ -242,6 +244,17 @@ def _oude_look_klassen() -> set[str]:
     return uit
 
 
+#: Klassen die NOOIT een designsysteem-regel hoeven, omdat ze niet zichtbaar zijn. `.sr` is de
+#: screenreader-only utility (absoluut gepositioneerd, weggeknipt); hij zet `border:0` en valt
+#: daardoor onder `_VISUEEL`, maar er is geen enkel beeld om te dekken.
+#:
+#: HIJ TELDE VROEGER OOK NIET MEE, maar om een andere en foute reden: de zoektocht naar een
+#: tegenhanger (`\.nu[^{]*[\s.]sr\b`) matchte een stuk COMMENTAAR in nooch-ui.css waar `.sr`
+#: toevallig in genoemd werd. Toen de twee stylesheets werden samengevoegd viel die schijnmatch weg
+#: en leek de schuld gestegen. De uitkomst is hetzelfde, de reden klopt nu wel.
+_NIET_ZICHTBAAR = {"sr"}
+
+
 def _open_uses(bestand: str, oude: set[str]) -> int:
     t = (VIEWS / bestand).read_text()
     n = 0
@@ -249,7 +262,9 @@ def _open_uses(bestand: str, oude: set[str]) -> int:
         for k in m.group(1).split():
             if not re.fullmatch(r"[a-z0-9_-]+", k) or k.startswith("js-"):
                 continue
-            if k in oude and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU):
+            if k in _NIET_ZICHTBAAR:
+                continue
+            if k in oude and not re.search(rf":root[^{{]*[\s.]{re.escape(k)}\b", NU):
                 n += 1
     return n
 
@@ -291,37 +306,28 @@ def test_kleuren_zonder_merkdekking_worden_binnen_nu_geneutraliseerd():
     }
     gemist = [k for k in sorted(oude_klassen) if k in gebruikt
               and k not in _NOG_TE_DOEN
-              and not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)]
+              and not re.search(rf":root[^{{]*[\s.]{re.escape(k)}\b", NU)]
     assert not gemist, f"niet-merkkleuren nog levend op een nu-scherm: {gemist}"
     nog = {k for k in _NOG_TE_DOEN
-           if not re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)}
+           if not re.search(rf":root[^{{]*[\s.]{re.escape(k)}\b", NU)}
     assert nog == _NOG_TE_DOEN, f"al afgehandeld, haal ze uit _NOG_TE_DOEN: {_NOG_TE_DOEN - nog}"
 
 
-def test_routes_van_dezelfde_view_zitten_allemaal_in_de_nu_scope():
-    """Groep B. `/middelen` en `/rolefillers` draaiden op dezelfde `overview.py` als `/node`,
-    `/person` en `/admin` — maar stonden niet in `_NU_ROUTES`. Dezelfde rendercode zag er dus
-    anders uit afhankelijk van de URL.
+def test_geen_enkele_route_kiest_nog_zijn_eigen_stijl():
+    """VERVANGT `test_routes_van_dezelfde_view_zitten_allemaal_in_de_nu_scope` (28 september 2026).
 
-    Structureel geschreven: lees route→view uit de vindkaart, en eis dat een view die ÉÉN route in
-    de scope heeft, ze allemaal in de scope heeft. Zo valt een volgende splitsing ook op."""
-    from nooch_village.cockpit2 import _NU_ROUTES
+    Die toets bewaakte dat een view die ÉÉN route in `_NU_ROUTES` had, ze allemaal in de scope had —
+    de klasse fout waarbij `/middelen` en `/rolefillers` op dezelfde `overview.py` draaiden als
+    `/node` maar er anders uitzagen. Die hele lijst is opgeheven: er is één stylesheet en elke
+    pagina krijgt hem.
 
-    kaart = (REPO / "docs" / "ARCHITECTUUR.md").read_text()
-    per_view: dict[str, set[str]] = {}
-    for m in re.finditer(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", kaart, re.M):
-        per_view.setdefault(m.group(3), set()).add(m.group(1))
-
-    # `cockpit2.py` is geen view maar de dispatcher: hij "rendert" ook /login, /logout en /file.
-    # Dat die niet in de scope zitten is juist het besluit, geen gat.
-    per_view.pop("cockpit2.py", None)
-
-    gespleten = {v: sorted(r - set(_NU_ROUTES))
-                 for v, r in per_view.items()
-                 if r & set(_NU_ROUTES) and r - set(_NU_ROUTES)}
-    assert not gespleten, f"view met routes binnen én buiten de nu-scope: {gespleten}"
-
-
+    Wat overblijft is de belofte eronder, en die is nu sterker: er is geen mechanisme meer dat per
+    route iets anders kan doen. Deze toets houdt dat vast."""
+    from nooch_village import cockpit2
+    for verdwenen in ("_NU_ROUTES", "_nu_body", "_NU_LINK"):
+        assert not hasattr(cockpit2, verdwenen), f"{verdwenen} is terug"
+    bron = (REPO / "nooch_village" / "cockpit2.py").read_text()
+    assert "nooch-ui" not in bron and 'class="nu"' not in bron
 # ── Punt 3: het dubbele Organization-paneel ──────────────────────────────────────────────────
 
 def test_geen_enkele_view_rendert_nog_een_eigen_organisatieboom():

@@ -135,23 +135,21 @@ def test_een_gewone_pagina_houdt_een_kale_body(tmp_path):
     assert "<body><main>" in _page("Titel", "<p>x</p>")
 
 
-def test_de_nu_laag_overleeft_een_body_klasse(tmp_path):
-    """`_nu_body` verving letterlijk `<body>`. Staat er een klasse in, dan matchte die regel
-    niet meer en verloor het hele scherm zijn nu-opmaak — en dat zie je aan het font, niet aan
-    een fout."""
+def test_de_body_klasse_van_de_view_blijft_staan(tmp_path):
+    """HIER STONDEN TWEE TOETSEN OP `_nu_body` (opgeheven 28 september 2026). Die functie zette
+    `class="nu"` op de body en hing een tweede stylesheet achter de eerste; ze bewaakten dat hij
+    een BESTAANDE klasse niet overschreef, en dat hij niet élke route raakte.
+
+    Allebei die zorgen zijn verdwenen met het mechanisme: er is één stylesheet, elke pagina krijgt
+    hem, en niemand schrijft meer in de body-tag. Wat blijft is de klasse die de VIEW zelf zet —
+    `wo-vol` voor de brede projectenstap — en dat die er nog staat is precies wat deze toets
+    overhoudt."""
     dd = _dd(tmp_path)
     _open(dd)
-    html = cockpit2._nu_body("/werkoverleg", _stap(dd, "projecten"))
-    assert "nooch-ui.css" in html
+    html = _stap(dd, "projecten")
+    assert "/static/nooch.css" in html
     m = re.search(r"<body class=\"([^\"]*)\">", html)
-    assert m, "geen body-klasse gevonden"
-    assert set(m.group(1).split()) == {"nu", "wo-vol"}
-
-
-def test_een_route_buiten_de_nu_lijst_krijgt_de_klasse_niet():
-    """MUTATIE-CONTROLE op de regel hierboven: hij mag niet ELKE pagina nu maken."""
-    kaal = "<body class=\"wo-vol\"><main>x</main></body>"
-    assert cockpit2._nu_body("/claims", kaal) == kaal
+    assert m and set(m.group(1).split()) == {"wo-vol"}
 
 
 def test_de_fragmentvorm_krijgt_geen_body(tmp_path):

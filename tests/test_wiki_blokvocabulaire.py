@@ -201,7 +201,7 @@ import re as _re
 _CSS = open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
                           "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 _NU = open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                         "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+                         "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 
 
 def _regel(css: str, selector: str) -> str:
@@ -216,14 +216,14 @@ def test_een_citaat_draagt_een_lijn():
     body = _regel(_CSS, "blockquote")
     assert "border-left" in body, "een citaat zonder lijn leest als een gewone alinea"
     assert "var(--border)" in body
-    assert "var(--nu-border-subtle)" in _regel(_NU, ".nu blockquote")
+    assert "var(--nu-border-subtle)" in _regel(_NU, ":root blockquote")
 
 
 def test_een_scheiding_is_de_haarlijn_van_het_huis():
     body = _regel(_CSS, "hr")
     assert "border:none" in body.replace(" ", ""), "de 3D-streep van de browser staat nog aan"
     assert "var(--border)" in body
-    assert "var(--nu-border-subtle)" in _regel(_NU, ".nu hr")
+    assert "var(--nu-border-subtle)" in _regel(_NU, ":root hr")
 
 
 # ── 7. Twee gaten die de mutatiecontrole aanwees ────────────────────────────────────────────

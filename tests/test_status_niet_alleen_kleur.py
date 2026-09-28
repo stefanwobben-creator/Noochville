@@ -22,11 +22,13 @@ houdt zijn lijn, want rood is de enige plek waar de kleur zelf semantisch draagt
 from __future__ import annotations
 
 import pathlib
+
+from conftest import basis_css, designsysteem_css
 import re
 
 _STATIC = pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "static"
 CSS = (_STATIC / "nooch.css").read_text()
-NU = (_STATIC / "nooch-ui.css").read_text()
+NU = designsysteem_css()
 _ONTCOM = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), CSS, flags=re.S)
 
 #: De tinten die in dit systeem een STATUS dragen (de meetmethode van de fase-12-audit).
@@ -60,7 +62,7 @@ def _heeft_nu_tegenhanger(sel: str) -> bool:
     """Stuurt `nooch-ui.css` deze klasse aan? Dan is de tint daar al vervangen door de systeemtaal
     en valt hij buiten deze telling — precies de afbakening die de fase-12-audit hanteerde
     (64 selectors in het basis-stylesheet, waarvan 33 zonder tegenhanger)."""
-    return any(re.search(rf"\.nu[^{{]*[\s.]{re.escape(k)}\b", NU)
+    return any(re.search(rf":root[^{{]*[\s.]{re.escape(k)}\b", NU)
                for k in re.findall(r"\.([a-z0-9_-]+)", sel))
 
 

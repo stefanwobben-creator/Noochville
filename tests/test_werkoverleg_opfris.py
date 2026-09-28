@@ -25,7 +25,7 @@ from nooch_village import cockpit2
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
-NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 JS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.js"), encoding="utf-8").read()
 WEB = open(os.path.join(BASIS, "nooch_village", "web_base.py"), encoding="utf-8").read()
 WO = open(os.path.join(BASIS, "nooch_village", "views", "werkoverleg.py"), encoding="utf-8").read()
@@ -52,18 +52,18 @@ def _body_van(css: str, selector: str) -> str:
 def test_een_rij_en_een_veldwrapper_krijgen_geen_kaartrand():
     """De vijf die eruit moesten: twee formulierrijen, een raster en twee veld-wrappers, plus
     de deelnemersrij. Wat blijft zijn de knopjes en badges — die zijn wél een omhulsel."""
-    for sel in (".nu .rov-add", ".nu .rov-addrow", ".nu .rov-addgrid",
-                ".nu .rovm-field", ".nu .rov-editor", ".nu .wo-mem"):
+    for sel in (":root .rov-add", ":root .rov-addrow", ":root .rov-addgrid",
+                ":root .rovm-field", ":root .rov-editor", ":root .wo-mem"):
         body = _body_van(NU, sel)
         assert "var(--nu-border)" not in body, f"{sel} draagt nog het volle kader"
     # ... en de tegenhanger: wie er wél in hoort, staat er nog in.
-    blok = _body_van(NU, ".nu .cl-check")
+    blok = _body_van(NU, ":root .cl-check")
     assert "var(--nu-border)" in blok
-    assert ".nu .rovm-item" in NU               # houdt zijn rand: is-new/is-del variëren erop
+    assert ":root .rovm-item" in NU               # houdt zijn rand: is-new/is-del variëren erop
 
 
 def test_de_deelnemersrij_scheidt_met_een_lijn():
-    body = _body_van(NU, ".nu .wo-mem")
+    body = _body_van(NU, ":root .wo-mem")
     assert "border-bottom" in body and "--nu-border-subtle" in body
     assert "border: 0" in body
 
@@ -84,8 +84,8 @@ def test_een_input_zonder_type_krijgt_de_onderlijn_en_de_groene_focus():
 
     onderlijn = _selectors(lambda b: "border-bottom: 1.5px solid var(--nu-text)" in b)
     focus = _selectors(lambda b: "border-bottom-color: var(--nu-accent)" in b)
-    assert ".nu input:not([type])" in onderlijn, "geen onderlijn voor een input zonder type"
-    assert ".nu input:not([type]):focus" in focus, "geen groene focus voor een input zonder type"
+    assert ":root input:not([type])" in onderlijn, "geen onderlijn voor een input zonder type"
+    assert ":root input:not([type]):focus" in focus, "geen groene focus voor een input zonder type"
     # En het veld waar het om begon draagt inderdaad geen type.
     vangst = open(os.path.join(BASIS, "nooch_village", "views", "vangst.py"), encoding="utf-8").read()
     rij = vangst.split("class='rov-add'")[1][:400]
@@ -148,10 +148,10 @@ def test_het_stappenmenu_doet_mee_in_de_nu_laag():
     daar wint deze laag. Stond `.wo-step` er niet in, dan bleef het menu kleine letters houden
     naast een navigatie in hoofdletters."""
     for sel, body in _regels(NU):
-        if ".nu .wo-step" in sel and "text-transform" in body:
-            assert ".nu .c2-subnav a" in sel, "wo-step hoort in DEZELFDE regel als de navigatie"
+        if ":root .wo-step" in sel and "text-transform" in body:
+            assert ":root .c2-subnav a" in sel, "wo-step hoort in DEZELFDE regel als de navigatie"
             return
-    raise AssertionError(".nu .wo-step krijgt geen navigatie-behandeling")
+    raise AssertionError(":root .wo-step krijgt geen navigatie-behandeling")
 
 
 # ── 4. De checklist zonder geel ─────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ def test_de_kolomtinten_staan_op_precies_een_plek():
     namen — verandert een tint, dan verandert hij op één plek."""
     assert "--col-wacht:" in WEB, "de tokens horen bij de andere tokens in web_base"
     assert "--col-wacht:" not in CSS and "--col-wacht:" not in NU
-    for laag, naam in ((CSS, "nooch.css"), (NU, "nooch-ui.css")):
+    for laag, naam in ((CSS, "nooch.css"), (NU, "nooch.css")):
         assert "var(--col-wacht)" in laag, f"{naam} verwijst niet naar de tint"
 
 

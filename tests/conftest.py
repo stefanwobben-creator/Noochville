@@ -131,3 +131,32 @@ def py_zonder_uitleg(bron: str) -> str:
     zo'n toets alleen strenger maken, nooit losser."""
     import re as _re
     return "\n".join(_re.sub(r"#.*$", "", regel) for regel in bron.splitlines())
+
+
+#: De grens tussen de twee helften van `static/nooch.css`, sinds ze op 28 september 2026 zijn
+#: samengevoegd. Alles ná deze regel is het designsysteem (voorheen `nooch-ui.css`).
+DS_MARKERING = "/* ═══ Nooch UI v1 — samengevoegd"
+
+
+def _css_pad():
+    import pathlib as _pl
+    return _pl.Path(__file__).resolve().parents[1] / "nooch_village" / "static" / "nooch.css"
+
+
+def designsysteem_css() -> str:
+    """Alleen de designsysteem-helft van nooch.css.
+
+    WAAROM DIT BESTAAT. Een reeks toetsen meet eigenschappen van HET DESIGNSYSTEEM — "geen ronde
+    hoeken", "koppen in hoofdletters", "elke regel draagt zijn scope". Die vragen gaan over de
+    NIEUWE laag, niet over de oudere componentlaag eronder, die precies het tegenovergestelde doet
+    (ronde hoeken, kleine kapitalen). Zolang de twee in aparte bestanden stonden viel dat samen met
+    "het bestand"; nu is het een sectie, en dan moet de toets zeggen welke helft hij bedoelt."""
+    tekst = _css_pad().read_text(encoding="utf-8")
+    assert DS_MARKERING in tekst, "de designsysteem-helft is niet te vinden in nooch.css"
+    return tekst[tekst.index(DS_MARKERING):]
+
+
+def basis_css() -> str:
+    """De componentlaag: alles VÓÓR de designsysteem-helft."""
+    tekst = _css_pad().read_text(encoding="utf-8")
+    return tekst[:tekst.index(DS_MARKERING)]

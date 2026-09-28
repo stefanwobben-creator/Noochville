@@ -2174,3 +2174,889 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 .wiki-linkveld[hidden],.wiki-linkurl[hidden]{display:none}
 .wiki-form{margin-top:.5rem}
 .wiki-hint{font-size:.78rem;align-self:center}
+
+
+/* ═══ Nooch UI v1 — samengevoegd in dit bestand op 28 september 2026 ═══════════════════════════
+   Het visuele systeem (prototype v15): 2px zwarte randen, scherpe hoeken, één neongroen accent, en
+   status altijd als VORM plus woord — nooit kleur alleen.
+
+   HIER STOND EEN EIGEN BESTAND (`static/nooch-ui.css`), MET ALLES ONDER `.nu`. Die scoping had twee
+   redenen, en allebei zijn ze vervallen:
+
+   1. EEN TWEEDE GLOBALE `:root` ZOU VIER TOKENNAMEN OVERSCHRIJVEN (--border, --muted, --neon,
+      --surface). `--border` was de dodelijke: oud een KLEUR, nieuw een shorthand, en hij staat
+      147x als `border:1px solid var(--border)`. Dat gevaar is er niet: élke token hieronder draagt
+      een `--nu-`-naam, dus de oude set wordt niet aangeraakt.
+   2. NIET ELK SCHERM DEED MEE. Een handmatig bijgehouden lijst (`_NU_ROUTES`) bepaalde wie
+      `class="nu"` kreeg. Die lijst is opgeheven: elke pagina krijgt nu dezelfde stijl, zonder
+      per-route keuze.
+
+   WAAROM `:root ` EN NIET NIETS. Bij kaal ont-scopen zakt elke selector hier een klasse in
+   specificiteit, en dan winnen 61 oudere, specifiekere regels uit de helft hierboven alsnog van de
+   bedoelde stijl — gemeten, bijvoorbeeld `.wiki-doc .c2-bar` van `.c2-bar`. `:root ` weegt precies
+   zo zwaar als `.nu ` deed en matcht overal, dus de cascade blijft exact zoals hij op de
+   `.nu`-schermen al was; alleen geldt hij nu overal.
+
+   EN DIT BLOK STAAT ACHTERAAN, wat de andere helft van dezelfde regel is: bij gelijke
+   specificiteit wint wat later staat. Waar beide helften iets over dezelfde selector zeggen (258
+   gevallen, geteld) wint dus deze. */
+
+/* De tokens staan op :root; de drie eigenschappen die `.nu` op de BODY zette staan op
+   `:root body`. Dat onderscheid is niet cosmetisch: `body{background:…}` in web_base._CSS zou
+   van een kale :root-regel winnen (een eigen regel verslaat overerving), en dan is de
+   achtergrond terug bij af. `:root body` (0,1,1) verslaat `body` (0,0,1) — precies zoals
+   `.nu` op de body dat deed. */
+:root {
+  --nu-neon: #00FF00;
+  --nu-accent: #00A551;
+  --nu-accent-text: #1F9D55;
+  --nu-bg-alt: #E2FFE3;
+  --nu-bg: #FFFAFA;
+  --nu-surface: #FFFFFF;
+  --nu-text: #000000;
+  --nu-muted: #58595B;
+  --nu-border-subtle: #E6E7E8;
+  --nu-danger: #EE4036;
+  --nu-border: 2px solid var(--nu-text);
+  --nu-sp-1: .4rem;
+  --nu-sp-2: .7rem;
+  --nu-sp-3: 1.1rem;
+  --nu-sp-4: 1.8rem;
+  --nu-font: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+:root body {
+  background: var(--nu-bg);
+  color: var(--nu-text);
+  font-family: var(--nu-font);
+}
+
+
+/* ── Typografie ────────────────────────────────────────────────────────────────────────────── */
+:root h1 { font-family: var(--nu-font); font-weight: 700; font-size: clamp(1.5rem,1.4vw + 1rem,2rem);
+  line-height: 1.15; color: var(--nu-text); text-transform: uppercase; letter-spacing: -.005em; }
+:root h2, :root h3 { font-family: var(--nu-font); font-weight: 700; color: var(--nu-text);
+  text-transform: uppercase; letter-spacing: .01em; }
+:root a { color: var(--nu-accent-text); }
+:root .muted { color: var(--nu-muted); }
+
+/* ── Vlakken: 2px rand, geen radius, geen schaduw ─────────────────────────────────────────── */
+/* ══ REBALANS (21 september 2026) ══════════════════════════════════════════════════════════════
+   GEMETEN OP /projects, niet op indruk: 89% van de tekst bold, 48% hoofdletters, 337 gerande
+   elementen waarvan 159 kaarten met een volle 2px zwarte rand en 6,4-8px padding ertegenaan.
+
+   De lijndikte-hiërarchie uit fase 12 (2px container, 1,5px knop) BESTOND al — maar bij 159
+   bijna-identieke kaarten op één bord is bijna alles een container, dus juist waar de hiërarchie
+   het hardst nodig is valt hij plat. Hetzelfde met gewicht: als alles vet is, is niets nadruk.
+
+   DRIE GERICHTE WIJZIGINGEN, GEEN REDESIGN:
+     1. listitem-kaarten → `--nu-border-subtle` (1,5px #E6E7E8). 2px zwart blijft voor
+        PAGE-LEVEL containers (zijbalk, bord-omlijsting) en voor een kaart die ACTIEF is
+        (hover, geselecteerd, gesleept) — daar is de zware lijn weer betekenisvol.
+     2. kaarttitels, metadata, hints en secundaire knoppen → gewicht 400-500, geen hoofdletters.
+        Bold + uppercase blijft voor topnav, sectielabels en primaire CTA's.
+     3. kaart-padding van 6,4-8px naar 14-16px.
+
+   NIET AANGERAAKT (merkvragen, apart te bespreken): `border-radius: 0`, `box-shadow: none`,
+   `--nu-bg` en het kleurgebruik op canvasniveau. */
+
+/* 1 · De kaart is geen container. `.box`, `.kpi` en `table` houden hun 2px: dat zijn blokken op
+   paginaniveau, geen items in een lijst. */
+:root .card, :root .pkaart, :root .kcard, :root .attcard, :root .gs-hit {
+  border: 1.5px solid var(--nu-border-subtle); }
+/* ACTIEF IS WEER ZWAAR. Hover, gesleept en de bron waar je vandaan komt: daar zegt de dikke lijn
+   iets, en dat kan pas nu de rest hem niet meer draagt. */
+:root .pkaart:hover, :root .pcard:hover, :root .pdrag-ghost, :root .pcard.pdrag-bron {
+  border-width: 2px; }
+
+:root .box, :root .kpi, :root table {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
+:root .c2-side { border-right: var(--nu-border); background: var(--nu-surface); }
+/* De header draagt dezelfde 2px zwarte lijn als de balk ernaast: het is één omhulsel om het
+   scherm, alleen in twee stukken. De avatar is een cirkel met diezelfde rand — de enige ronde
+   vorm in dit systeem, en dat mag: een gezicht is geen kaart. */
+:root .c2-header { background: var(--nu-surface); border-bottom: var(--nu-border); }
+:root .c2-header .c2-search input { border-color: var(--nu-text); border-radius: 0; }
+:root .c2-av { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-text);
+  color: var(--nu-text); font-family: var(--nu-font); }
+:root .c2-av:hover { background: var(--nu-text); color: var(--nu-surface); }
+/* Navigatie in hoofdletters, net als de koppen en de knoppen: de referentie zet SHOP STORE
+   MISSION CONTACT in de topbar. Dit is geen aparte smaakkeuze maar dezelfde regel doorgetrokken. */
+/* `.wo-step` HOORT HIER, want het is hetzelfde ding: een verticaal menu in een linkerkolom.
+   Op /werkoverleg (een nu-route) stond het stappenmenu op de OUDE look terwijl de navigatie
+   ernaast de nieuwe droeg — kleine letters naast hoofdletters, 400 naast 700. Gelijktrekken in
+   nooch.css alleen sloot dat gat niet: op een nu-scherm wint deze laag. */
+:root .c2-subnav a, :root .c2-navbtn, :root .wo-step { border-radius: 0; color: var(--nu-text);
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+:root .c2-subnav a:hover, :root .c2-navbtn:hover, :root .wo-step:hover {
+  background: var(--nu-text); color: var(--nu-surface); }
+/* De actieve nav-knop in de nu-laag: zelfde twee dragers, de tinten van het huis.
+   `text-transform` staat erbij omdat `test_navigatie_en_tabbladen_staan_in_hoofdletters` dat van
+   ÉLKE regel op een navigerend element eist — de waarde verandert hier niets, de belofte wel:
+   een nav-regel die de huisstijl niet uitspreekt, is een plek waar hij stil kan wegvallen. */
+:root .c2-subnav [aria-current] { border-left-color: var(--nu-text);
+  background: var(--nu-bg-alt); color: var(--nu-text); text-transform: uppercase; }
+/* De stap waar je STAAT is geen hover: hij blijft staan als je de muis weghaalt. Zelfde
+   markering als de overleg-knoppen hierboven — lichte groene vulling, zwarte tekst. */
+:root .wo-step.on { background: var(--nu-bg-alt); color: var(--nu-text); }
+:root .wo-step.done { color: var(--nu-muted); }
+:root .wo-step.done .wo-num, :root .wo-step.on .wo-num { background: var(--nu-text); color: var(--nu-neon); }
+:root .c2-navct { background: var(--nu-neon); color: var(--nu-text); border-radius: 0; }
+
+/* 21 september · de twee overleg-knoppen, en de live-stand.
+   DRIE KLASSEN DIEP OM EEN REDEN: `.nu .c2-subnav a` hierboven is (0,2,1) en zet `color`. Een
+   regel op `.nu .c2-overleg` zou daar gelijk mee staan en dan beslist de bronvolgorde — precies
+   de val waar de basis-laag al in trapte. `.nu .c2-subnav a.c2-overleg` is (0,3,1) en wint.
+   GROEN BESTAAT HIER NIET: fase 9 haalde groen als vulling weg. De live-stand krijgt daarom de
+   bestaande actief-behandeling uit deze laag — zwart vlak, neon tekst, zoals `.msg-kanaal.on` —
+   en het stipje wordt neon in plaats van wit. Dezelfde betekenis, de taal van dit palet. */
+:root .c2-subnav a.c2-overleg { background: var(--nu-bg-alt); color: var(--nu-text);
+  border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  text-transform: uppercase; }
+:root .c2-subnav a.c2-overleg:hover { background: var(--nu-text); color: var(--nu-surface); }
+/* `text-transform` staat er ook hier, en dat is geen herhaling om de guard tevreden te stellen:
+   deze regel is specifieker dan de basis erboven, dus wie hier ooit `text-transform: none` zet
+   zou de hoofdletters stil uitzetten. De guard eist hem per blok om precies die reden. */
+:root .c2-subnav a.c2-overleg--live { background: var(--nu-text); color: var(--nu-neon);
+  border-color: var(--nu-text); text-transform: uppercase; }
+:root .c2-live { background: var(--nu-neon); }
+
+/* ── Knoppen: zwart-op-wit, hover inverteert ────────────────────────────────────────────────
+   FASE 12 — ÉÉN LIJNDIKTE PER ROL. Deze knop droeg `--nu-border` (2px): exact de lijn van een
+   container. Een knop naast een kaart las daardoor als nóg een vlak, en dat was Stefans klacht
+   ("alles oogt als hetzelfde kader") in één regel CSS. Nu 1,5px, zodat de 2px van een container
+   de zwaarste lijn op het scherm blijft. Hiërarchie ontstaat niet door een kader wég te halen
+   maar door te kiezen wie de dikste lijn krijgt. */
+:root .btn {
+  font-family: var(--nu-font); font-weight: 700; font-size: .9rem;
+  border: 1.5px solid var(--nu-text);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
+  padding: .5em 1em; min-height: 38px; box-shadow: none;
+  text-transform: uppercase; letter-spacing: .04em; }
+:root .btn:hover { background: var(--nu-text); color: var(--nu-surface); }
+/* DE VULLING ÍS HET SIGNAAL. De hoofdactie droeg een neon vlak én een zwarte rand: twee signalen
+   voor één betekenis, en samen eten ze het onderscheid op. `transparent` en niet `border: 0`,
+   want de rand telt mee in de hoogte — weghalen zou de knop 3px korter maken dan zijn buren. */
+:root .btn.ok { background: var(--nu-neon); border-color: transparent; color: var(--nu-text); }
+:root .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
+/* 3 · Lucht in de kaart. Gemeten: 6,4-8px padding tegen een 2px rand — een dichtgeknepen vlak.
+   Nu 14,4 x 15,2px. Dit staat in de `.nu`-laag en niet in `nooch.css`, want de oude laag (met
+   z'n crème en radius) draait nog op o.a. de inlogpagina en is hier niet in scope. */
+:root .card, :root .pcol .card, :root .pkaart, :root .kcard, :root .attcard, :root .gs-hit {
+  padding: .9rem .95rem; }
+
+/* 2b · De kaart zelf leest weer als tekst. `.ptitle` stond op 600 en de metadata eronder in
+   hoofdletters; een lijst van 159 kaarten werd daarmee 159 keer een kop. */
+:root .ptitle, :root .pcard-head .ptitle { font-weight: 500; text-transform: none; letter-spacing: 0; }
+:root .pmeta, :root .pcard-hint, :root .pkaart-crumb { font-weight: 400; text-transform: none; }
+
+/* 2 · Secundair is secundair. Een ghost-knop die even vet en even hard in hoofdletters staat als
+   de primaire, is geen tweede niveau maar een tweede eerste niveau. */
+:root .btn.ghost { border-color: var(--nu-border-subtle); color: var(--nu-muted); font-weight: 500;
+  text-transform: none; letter-spacing: 0; background: none; }
+:root .btn.ghost:hover { background: var(--nu-text); color: var(--nu-surface);
+  border-color: var(--nu-text); }
+:root .btn.sm { padding: .3em .8em; min-height: 30px; font-size: .8rem; }
+:root .btn:disabled, :root .btn.ok:disabled { opacity: .4; background: var(--nu-surface);
+  color: var(--nu-muted); border-color: var(--nu-border-subtle); }
+
+/* ── Pill / chip / badge: in het prototype één vorm ─────────────────────────────────────────
+   FASE 12 — EEN ETIKET IS GEEN CONTAINER. Dit atoom stond 101 keer in 22 bestanden mét een zwarte
+   rand: één etiket met een kader valt niet op, honderd wel. In de referentiebeelden is een eyebrow
+   kleine hoofdletter-tekst en nooit een doosje.
+
+   Opmerkelijk: de BASIS-`.chip` in nooch.css was altijd al een tintvulling zonder rand. De zwarte
+   rand kwam er in fase 9 bij. Dit is dus deels een terugkeer naar wat er stond, in de `--nu-*`-
+   tinten. `transparent` en niet `border: 0`, zodat de hoogte gelijk blijft aan de varianten die
+   hun lijn wél houden (`.outline`). */
+:root .pill, :root .chip, :root .badge {
+  display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
+  border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
+  padding: .15em .6em; font-size: .72rem;
+  /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
+     en kostte het scherm zijn rustpunt. `.nu-status` houdt zijn gewicht wél: daar IS de chip het
+     signaal, en die leunt bovendien op vorm plus woord. */
+  font-weight: 500; text-transform: none; letter-spacing: .01em; }
+:root .pill.muted, :root .chip.muted, :root .badge.ro {
+  border-color: var(--nu-border-subtle); color: var(--nu-muted);
+  text-transform: none; letter-spacing: 0; font-weight: 600; }
+
+/* ── STATUS: vorm + woord, nooit kleur alleen ─────────────────────────────────────────────────
+   Het hele punt van dit systeem. Een gekleurd vlakje zegt niets tegen wie kleur niet (goed) ziet,
+   en niets in zwart-wit. De vorm draagt de betekenis, de kleur versterkt hem, en het WOORD staat
+   er altijd bij. */
+/* FASE 12 — het KADER vervalt, de VORM en het WOORD blijven. Die twee zijn de dragers (zie de kop
+   van dit bestand); de rand was de derde en die maakte van elke status een doosje. */
+:root .nu-status {
+  display: inline-flex; align-items: center; gap: .45em; font-size: .78rem; font-weight: 700;
+  padding: .2em .6em; border: 1.5px solid transparent; background: var(--nu-bg-alt); }
+:root .nu-status::before { content: ""; width: .55em; height: .55em; flex: none; }
+:root .nu-status--ok { background: var(--nu-bg-alt); color: var(--nu-accent-text); }
+:root .nu-status--ok::before { background: var(--nu-accent); border-radius: 50%; }   /* rond, gevuld */
+/* Open/vacant houdt zijn gestippelde lijn — niet als kader maar als BETEKENIS: gestippeld is in
+   dit systeem "nog niet ingevuld". Daarom subtiel grijs en niet zwart. */
+:root .nu-status--open { color: var(--nu-muted); background: var(--nu-surface);
+  border: 1.5px dashed var(--nu-border-subtle); }
+:root .nu-status--open::before { border: 1px solid var(--nu-muted); border-radius: 50%; }  /* rond, leeg */
+:root .nu-status--wait::before { background: var(--nu-text);
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }                              /* half vierkant */
+/* Rood houdt zijn lijn. Dit is geen container-kader maar een alarm, en het is de enige status
+   waar de kleur zelf iets zegt dat de vorm niet kan overnemen. */
+:root .nu-status--off { color: var(--nu-danger); background: var(--nu-surface);
+  border-color: var(--nu-danger); }
+:root .nu-status--off::before { background: var(--nu-danger);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); }                                  /* driehoek */
+
+/* ── Tabs, filters, invoer ────────────────────────────────────────────────────────────────── */
+:root .c2-tabs a { border-radius: 0; font-weight: 700; color: var(--nu-muted);
+  text-transform: uppercase; letter-spacing: .05em; }
+/* De tab-vorm (lijn met een open onderkant) blijft; alleen de dikte gaat mee met de knoppen,
+   zodat een container de zwaarste lijn houdt. */
+:root .c2-tabs a.on { border: 1.5px solid var(--nu-text); border-bottom-color: var(--nu-surface);
+  background: var(--nu-surface); color: var(--nu-text); }
+/* FASE 12 — EEN RIJ FILTERS IS GEEN RIJ DOOSJES. In rust geen lijn; actief blijft gevuld, want
+   dáár is het onderscheid dat je moet zien. Zelfde keuze als bij de kanaalrij, die dit al deed. */
+:root .cl-filter { border: 1.5px solid transparent; border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-weight: 500; }
+:root .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
+/* ── FASE 12, TWEEDE HERZIENING: een VELD is geen container (21 september 2026) ──────────────
+   De regel "een invoerveld is een container en houdt zijn 2px-kader" klopte op een scherm met
+   één veld en viel om op een scherm met twaalf. De projectkaart-modal telde er tien in één blik:
+   titel, pakket-label, omschrijving, checklist, elk hand-off-knopje, en elk los veld in de
+   Details-kolom (status, assignee, mission impact, business, effort, role). Precies de muur van
+   hokjes die fase 12 moest opheffen — nu in veldvorm.
+
+   DE HERZIENING, en hij geldt dorpsbreed en niet per scherm: een besturingselement draagt een
+   ONDERLIJN, geen kader. De lijn staat waar je typt, en nergens anders. Wat NIET verandert: een
+   kaart, een tabel, een popover of de modal zelf houdt zijn 2px — die zijn wél een omhulsel, en
+   dát onderscheid is de hele rolverdeling.
+
+   Waarom een onderlijn en niet "niets": een veld moet vindbaar blijven. Hij ligt op de bodem van
+   het veld, dus de ruimte tussen twee velden wordt wit in plaats van een rij randen die elkaar
+   raken. Bij focus wordt hij dikker en groen — de plek waar je bent, is de enige die opvalt. */
+/* `input:not([type])` HOORT HIER, en stond er niet. Een `<input>` zonder type IS een tekstveld,
+   maar `input[type=text]` matcht hem niet — het attribuut moet er staan. In de views staan er 47
+   zonder, waaronder het agendaveld van het roloverleg en het vangst-formulier: die kregen dus geen
+   onderlijn en geen groene focus, precies de twee dingen waar dit blok voor bestaat. */
+:root input[type=text], :root input[type=search], :root input[type=email], :root input[type=number],
+:root input[type=url], :root input[type=date], :root input[type=password], :root input:not([type]),
+:root textarea, :root select, :root .ctrl, :root .fieldform, :root .title-edit {
+  font-family: var(--nu-font); border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
+:root input[type=text]:focus, :root input[type=search]:focus, :root input[type=email]:focus,
+:root input[type=number]:focus, :root input[type=url]:focus, :root input[type=date]:focus,
+:root input[type=password]:focus, :root input:not([type]):focus, :root textarea:focus, :root select:focus {
+  border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
+/* DE EIGEN CHEVRON (25 september 2026). Een `<select>` hield de NATIVE pijl van het besturings-
+   systeem: een grijs driehoekje in een doosje, met een eigen vorm per platform. Naast een veld
+   dat verder alleen een onderlijn heeft is dat het enige stukje vreemde chrome op het scherm —
+   precies wat een dropdown hier "een kale HTML-control" deed lijken.
+
+   `appearance:none` HAALT MEER WEG DAN DE PIJL: op Safari en oudere Chrome verdwijnt daarmee ook
+   de doos eromheen, en dat is juist de bedoeling — de onderlijn hierboven is de veldstijl van
+   deze huisstijl. De twee voorvoegsels staan erbij omdat Safari de kale variant pas sinds 15.4
+   kent en dit dorp geen buildstap heeft die ze toevoegt.
+
+   `:not([multiple])` IS GEEN SPECIFICITEITSTRUC MAAR EEN BETEKENIS: een meerkeuzelijst klapt niet
+   uit en heeft dus geen chevron. Dat hij daarmee ook zwaarder weegt dan `.fieldform select` in
+   nooch.css is meegenomen — die zet een `padding`-shorthand, en nooch.css laadt ná dit bestand.
+
+   DE KLEUR STAAT HIER HARD, en dat is de ene plek waar `reference, don't copy` niet kan: een
+   `var()` werkt niet binnen een `url()`-data-URI. `%23000` spiegelt `--nu-text`, en
+   `test_de_chevron_heeft_de_kleur_van_de_tekst` bewaakt dat ze gelijk blijven. */
+:root select:not([multiple]) {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right .35rem center;
+  padding-right: 1.4rem; }
+/* Bij focus volgt de chevron de lijn: één signaal, niet twee kleuren tegelijk. */
+:root select:not([multiple]):focus {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2300A551' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>"); }
+/* `.fieldform` is een RIJ met een veld en een knop erin; de onderlijn hoort bij het veld, niet om
+   de rij heen. Vandaar hier geen lijn — de kinderen dragen hem al. */
+:root .fieldform { border-bottom: 0; }
+:root .c2-search input { border-color: var(--nu-text); }
+:root :focus-visible { outline: 3px solid var(--nu-neon); outline-offset: -1px; }
+
+/* ── Het bord en de gesprek-trail ─────────────────────────────────────────────────────────── */
+:root .pkaart, :root .kcard, :root .msg-item, :root .fentry {
+  border-radius: 0; box-shadow: none; }
+:root .pkaart, :root .kcard { background: var(--nu-surface); }
+:root .msg-kanaal { border-radius: 0; }
+:root .msg-kanaal.on { background: var(--nu-text); color: var(--nu-neon); }
+
+/* Ongelezen: een MODIFIER op de bestaande kanaalrij, geen nieuwe component (fase 11, 3a).
+   Drie dragers, want kleur alleen is hier geen optie: het gewicht (vet), de telling (een getal,
+   leesbaar in zwart-wit en door een schermlezer) en pas daarna de tint. Zelfde regel als de
+   bordkolommen hieronder — wie de tint niet ziet, ziet nog steeds dat er iets nieuw is. */
+:root .msg-kanaal--nieuw { font-weight: 700; }
+:root .msg-nieuw {
+  float: right; min-width: 1.15rem; padding: 0 .3rem; margin-left: .4rem;
+  font-size: 11px; font-weight: 700; line-height: 1.15rem; text-align: center;
+  background: var(--nu-text); color: var(--nu-neon); }
+/* In het OPEN kanaal draait het contrast om, anders valt het plaatje weg tegen de actieve rij. */
+:root .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
+:root .wiki-doms details { border: var(--nu-border); border-radius: 0; background: var(--nu-surface); }
+
+/* ── Verwerken: het hoofdveld draagt de 2px, de rest niet ────────────────────────────────────
+   Zelfde rolverdeling als overal in deze laag: een BESTURINGSELEMENT draagt een onderlijn, een
+   omhulsel een kader. Het uitkomst-tekstvak is de uitzondering die het waard is — dat is het
+   zwaartepunt van het scherm, en een dikke rand zegt dat sneller dan een lijn.
+   De badge-tinten komen uit dezelfde `--uk-*`-tokens als de basislaag; ze hier overtypen zou
+   betekenen dat een badge op een nu-scherm na één wijziging anders kleurt dan daarbuiten. */
+:root .uk-invoer { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  font-family: var(--nu-font); }
+:root .uk-sub { background: var(--nu-bg); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+:root .uk-sub input, :root .uk-sub select { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; background: var(--nu-surface); font-family: var(--nu-font); }
+:root .uk-sub input:focus, :root .uk-sub select:focus { border-bottom-color: var(--nu-accent); }
+:root .uk-voet { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .uk-rij { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .uk-badge { border-radius: 0; font-family: var(--nu-font); font-weight: 800; }
+:root .uk-badge--actie { background: var(--uk-actie); color: var(--ukt-actie); }
+:root .uk-badge--project { background: var(--uk-project); color: var(--ukt-project); }
+:root .uk-badge--governance { background: var(--uk-gov); color: var(--ukt-gov); }
+:root .uk-badge--info { background: var(--nu-bg); color: var(--nu-muted); }
+:root .uk-tekst { color: var(--nu-text); font-family: var(--nu-font); }
+:root .uk-meta { color: var(--nu-muted); font-family: var(--nu-font); }
+:root .uk-staat { border-radius: 0; background: var(--col-wacht); color: var(--colb-wacht); }
+
+/* De afsluitende actie onder een agendapunt. Zelfde rolverdeling als op de oude laag: de lijn
+   erboven scheidt "invullen" van "afsluiten", en de knop draagt zwart in plaats van het groen
+   dat "dit is de knop die je nu wil" betekent — dat groen hoort bij Opslaan ernaast. */
+:root .wo-afronden { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .wo-aftik { border-color: var(--nu-text); color: var(--nu-text); background: var(--nu-surface); }
+:root .wo-aftik:hover { background: var(--nu-text); color: var(--nu-surface); }
+
+/* ── Het bord: kolommen dragen een VORM ÉN een tint ───────────────────────────────────────────
+   HIER STOND "geen pasteltint". De vier kolomkleuren waren vervangen door één vlakke
+   achtergrond, omdat kleur alleen geen status mag dragen — en dat blijft waar. Maar het gevolg
+   was dat de kleurcodering op ÉLK nu-scherm wegviel, en dat is overal waar iemand het bord
+   bekijkt: de tinten in nooch.css hadden geen enkele plek meer waar ze te zien waren.
+
+   Founder-besluit 22 september 2026: de tint komt terug. Het merkteken vóór de kop blijft óók
+   staan, dus de regel wordt niet geschonden — de status heeft nu twee dragers in plaats van
+   één, precies zoals `.cl-attn`/`.cl-todo` hierboven.
+
+   DE WAARDEN KOMEN UIT nooch.css (`--col-*`). Ze hier overtypen zou betekenen dat het bord op
+   een nu-scherm na één wijziging andere kleuren heeft dan daarbuiten. */
+:root .pcol { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+:root .pcol[data-to='actief']   { background: var(--col-actief); }
+:root .pcol[data-to='wacht']    { background: var(--col-wacht); }
+:root .pcol[data-to='done']     { background: var(--col-done); }
+:root .pcol[data-to='toekomst'] { background: var(--col-toekomst); }
+:root .pcol-h { display: flex; align-items: center; gap: .45em; color: var(--nu-text);
+  font-family: var(--nu-font); }
+:root .pcol-h::before { content: ""; width: .6em; height: .6em; flex: none;
+  border: 1.5px solid var(--nu-text); }
+:root .pcol[data-to='actief']  .pcol-h::before { background: var(--nu-accent); border-radius: 50%; }
+:root .pcol[data-to='wacht']   .pcol-h::before { background: var(--nu-danger);
+  border-color: var(--nu-danger); clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }
+:root .pcol[data-to='done']    .pcol-h::before { background: var(--nu-text); border-radius: 50%; }
+:root .pcol[data-to='toekomst'] .pcol-h::before { border-style: dashed; border-radius: 50%; }
+
+/* ── De footer staat naast de zijbalk, niet eronder ──────────────────────────────────────────
+   `_send` injecteert hem vóór </body>, dus buiten de `.c2-wrap` die de zijbalk-offset draagt. */
+:root .c2-foot { margin-left: 232px; border-top: 1.5px solid var(--nu-border-subtle);
+  color: var(--nu-muted); }
+@media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
+
+/* ── Groeperings- en filterknoppen in de bordkop ─────────────────────────────────────────── */
+:root .pcol .card { border: 1.5px solid var(--nu-border-subtle); }
+:root .c2-sec > h1 + p.muted { max-width: 720px; }
+
+/* ── De resterende knop-achtigen: alles vierkant, zwart-op-wit ───────────────────────────────
+   `.addlink` en `.vswitch a` zijn links die als knop worden gelezen. Ze droegen nog de oude
+   pill-vorm met groene vulling — één scherm met twee knopvormen leest als twee systemen. */
+:root .addlink, :root .vswitch a, :root .flink {
+  /* Secundaire links. Ze stonden in hoofdletters én vet, net als de topnav — dan is er geen
+     verschil meer tussen "waar ben ik" en "wat kan ik hier nog meer". */
+  text-transform: none; letter-spacing: 0;
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); font-weight: 500; padding: .3em .8em; }
+:root .addlink:hover, :root .vswitch a:hover, :root .flink:hover {
+  background: var(--nu-text); color: var(--nu-surface); text-decoration: none; }
+:root .vswitch a.on { background: var(--nu-neon); color: var(--nu-text); }
+
+/* ── De organisatieboom in de zijbalk ──────────────────────────────────────────────────────── */
+:root .tree { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; box-shadow: none;
+  background: var(--nu-surface); }
+:root .tree h3 { color: var(--nu-muted); font-family: var(--nu-font); }
+:root .tree .here { background: var(--nu-neon); border-radius: 0; }
+:root .tree a { color: var(--nu-text); }
+
+/* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
+:root .cl-head h3 a { color: var(--nu-text); }
+/* DE SCHEIDINGSLIJN PER BERICHT IS WEG (22 sept 2026). Hij droeg "hier begint een nieuw
+   bericht"; dat doen nu de avatar, de kop en de tint van je eigen bubbel. Een lijn onder élke
+   regel is dan ruis in iets wat je van boven naar beneden leest.
+   Wat je van JEZELF schrijft draagt `--nu-bg-alt`: dezelfde lichte groene vulling die dit
+   systeem al gebruikt voor "dit is de actieve/eigen stand" (`.nu .wo-step.on`, de
+   overleg-knoppen). Geen nieuwe kleur, geen tweede conventie. */
+:root .msg-item { border-bottom: 0; }
+:root .msg-item--ik .msg-body { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; }
+:root .msg-balk { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .msg-balk .msg-bijlage-add > .qadd-form { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); box-shadow: none; }
+:root .msg-balk .msg-bijlage-add > summary { color: var(--nu-muted); }
+:root .msg-balk .msg-bijlage-add[open] > summary,
+:root .msg-balk .msg-bijlage-add > summary:hover { color: var(--nu-accent-text); }
+
+/* ── `att-*` en `qadd-*`: de twee families die overal terugkomen ───────────────────────────────
+   Deze twee zitten in zes van de elf herbouwde views (node/person/admin, wiki/pagina, vangst,
+   doelen, messages, projects) en waren samen goed voor ~40 klasse-gebruiken die de oude look
+   bleven dragen: 9px radius, crème rand, en op het qadd-tekstvak zelfs een schaduw. Eén blok
+   hier raakt ze allemaal — dat is de goedkoopste winst van groep A.
+   Specificiteit bewust `.nu .x y` (0,2,1) en niet `.nu y`: `.qadd-form textarea` is zelf (0,1,1)
+   en zou bij gelijke specificiteit op bronvolgorde gaan berusten. Dat is geen afspraak, dat is
+   toeval dat blijft werken tot iemand de link-volgorde omzet. */
+:root .att-lbl { color: var(--nu-muted); font-family: var(--nu-font); letter-spacing: .06em; }
+:root .att-body { color: var(--nu-text); }
+:root .att-name { color: var(--nu-text); }
+:root .att-ic { color: var(--nu-text); }
+:root .att-sep { background: var(--nu-text); height: 1.5px; }
+/* `.attcard` stond niet in mijn eerste telling: die scande de views die ik al had
+   bekeken, en deze kaart leeft alleen in `projects.py`. De structurele test vond hem wel.
+   Zonder deze regel zat er een crème kaart met ronde hoeken óm zwart-gestylde inhoud. */
+:root .attcard { background: var(--nu-surface);
+  border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+:root .att-pop { border-radius: 0; }
+:root .att-pop input[type=text], :root .att-pop input[name=url], :root .att-pop input[name=title] {
+  border: 0; border-bottom: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+:root .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
+  font-weight: 500; }
+:root .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
+:root .qadd-form textarea { border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0; box-shadow: none;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+:root .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
+
+/* ── De eyebrow: één definitie voor wat er al elf keer stond ──────────────────────────────────
+   De referentie zet boven elke kop een klein hoofdletter-labeltje: THE PROOF, THE PRICE, THE PACT,
+   THE PEOPLE, WHAT'S IN IT. Dat component leek te ontbreken — maar het bestond al, elf keer, onder
+   elf namen: `.c2-sec h3`, `.tree h3`, `.pcol-h`, `.fkicker`, `.rovm-kind`, `.sec-kop`, `.menu-h`,
+   `.dk`, `.att-lbl`, `.cl-group h4`, `.chip.coral-solid` — en de structurele test vond er nog
+   vijf op de negentien schermen: `.psec-h`, `.pchip-k`, `.rail-kop`, `.wz-k`, `.wz-clab`.
+   Zestien namen dus, allemaal ~.7rem, uppercase, letter-spacing .04em, gewicht 700 — hetzelfde
+   ding, zestien keer apart opgeschreven.
+
+   Een TWAALFDE naam toevoegen zou dat erger maken. Dus: `.nu-eyebrow` is de definitie, en de elf
+   bestaande namen wijzen ernaar binnen `.nu`. Zelfde regel als `reference, don't copy`, nu op een
+   stijl in plaats van op een getal. Buiten `.nu` blijft alles zoals het was. */
+:root .nu-eyebrow,
+:root .c2-sec h3, :root .wiki-inline h3, :root .tree h3, :root .pcol-h, :root .fkicker, :root .rovm-kind,
+:root .sec-kop, :root .menu-h, :root .dk, :root .att-lbl, :root .cl-group h4,
+:root .psec-h, :root .pchip-k, :root .rail-kop, :root .wz-k, :root .wz-clab,
+:root .gs-group, :root .gs-kind {
+  font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; }
+
+/* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom
+   zwart. Een grijze kop naast een zwart merkteken leest als twee verschillende dingen. */
+:root .nu-eyebrow,
+:root .c2-sec h3, :root .wiki-inline h3, :root .tree h3, :root .fkicker, :root .rovm-kind,
+:root .sec-kop, :root .menu-h, :root .dk, :root .att-lbl, :root .cl-group h4,
+:root .psec-h, :root .pchip-k, :root .rail-kop, :root .wz-k, :root .wz-clab,
+:root .gs-group, :root .gs-kind {
+  color: var(--nu-muted); }
+:root .pcol-h { color: var(--nu-text); }
+
+/* ── De groepskop op het bord ─────────────────────────────────────────────────────────────────
+   `.swim-h` ("Creator of Shoes (4)") stond op `--green-dark` (#14713C) — de kleur die in geen van
+   beide referentiebeelden voorkomt. Het is bovendien een `div`, dus de kopregel `.nu h2, :root h3`
+   liep er langs. Alleen de browser liet dat zien; in de bron is het een kop als elke andere. */
+:root .swim-h { color: var(--nu-text); font-family: var(--nu-font); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .02em; }
+
+/* ══ GROEP A · projects.py (/projects, /project) ═══════════════════════════════════════════════
+   51 klassen droegen hier nog de oude look. Ze zijn niet op naam aangepakt maar per PATROON — wat
+   ze delen is een 1px crème rand met 9px radius, grijstinten uit een ander palet, of een
+   accentkleur die in geen van beide referentiebeelden voorkomt.
+
+   Over die accentkleuren, gemeten in plaats van aangenomen (elke pixel geteld):
+     --coral   #FF6B5B    0 px in de e-mail, 1 px op de productpagina   → geen merkkleur
+     --goal    #6A4FA0    0 px                5 px                      → geen merkkleur
+     ai-paars  #7A5BD1    0 px                0 px                      → geen merkkleur
+     --yellow  #FFCE2E   18 px              662 px                      → WEL aanwezig (de sterren)
+   Paars en koraal worden hier dus neutraal; geel blijft, want dat staat er echt.
+   Rood blijft als `--nu-danger` bestaan: een foutkleur is functioneel nodig, ook al staat hij niet
+   op een productfoto. Dat is een keuze, geen meting — daarom staat hij hier benoemd. */
+
+/* 1 · Omhulsels: 1px crème rand + 9px radius → 2px zwart, vierkant.
+   `.ctrl`, `.fieldform` en `.title-edit` stonden hier óók in, en dat was de fout die de
+   veldregel hieronder repareert: dat zijn BESTURINGSELEMENTEN, geen omhulsels. */
+:root .fbubble, :root .box-details, :root .datepop,
+:root .vzblock, :root .ovl-box, :root .pkaart-rail {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+:root .pkaart-rail { border-left: var(--nu-border); border-top: none;
+  border-right: none; border-bottom: none; }
+
+/* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
+:root .railsplit, :root .menu-sep, :root .einddoc-split { background: var(--nu-text); height: 1.5px; }
+
+/* 3 · Grijstinten uit het oude palet → één muted */
+:root .pf, :root .fstamp, :root .rail-l, :root .psec-bij, :root .pkaart-crumb, :root .vz-t,
+:root .mk, :root .einddoc-sigsep, :root .pbadge, :root .pstatus {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+:root .rail-v, :root .ptitle-ro, :root .einddoc-sig { color: var(--nu-text);
+  font-family: var(--nu-font); }
+
+/* 4 · Groen dat niet in de beelden staat (#14713C / --green-tint) */
+:root .menuitem { color: var(--nu-text); background: none; font-weight: 500; }
+:root .menuitem.on { background: var(--nu-bg-alt); }
+:root .pchip-v { color: var(--nu-text); font-weight: 400; }
+
+/* 5 · Accentkleuren zonder merkdekking → neutraal, betekenis blijft in het WOORD staan */
+:root .doel { background: var(--nu-surface); border-color: var(--nu-text); }
+:root .pbar { background: var(--nu-text); }
+:root .av.ai, :root .ai { background: var(--nu-text); color: var(--nu-surface); }
+:root .av { background: var(--nu-text); color: var(--nu-surface); font-family: var(--nu-font); }
+:root .dellink, :root .vz-h { color: var(--nu-danger); font-family: var(--nu-font); }
+:root .chip.coral-solid { background: var(--nu-danger); color: var(--nu-surface);
+  border-color: var(--nu-danger); }
+/* De twee chip-varianten zetten hun eigen rand en moeten dus mee met de regel hierboven, anders
+   staat er naast een kaderloos etiket alsnog een zwart doosje. Het ONDERSCHEID blijft, maar het
+   zit nu in de tekst en niet in een lijn: groen = informatie, zwart = let op. */
+:root .amber { background: var(--nu-bg-alt); color: var(--nu-text); border-color: transparent; }
+:root .outline { background: none; border: 1.5px solid var(--nu-border-subtle);
+  color: var(--nu-muted); }
+
+/* 6 · De overlay zelf */
+:root .ovl { background: rgba(0,0,0,.55); }
+:root .ovl-x { color: var(--nu-text); font-family: var(--nu-font); }
+:root .psec-head { color: var(--nu-muted); font-family: var(--nu-font); }
+:root .clabel { border-radius: 0; }
+
+/* 7 · De staart: nog een pil-radius, twee omhulsels en een losse coral */
+:root .einddoc-seggroup { border: var(--nu-border); border-radius: 0; }
+:root .einddoc-seg { background: var(--nu-surface); color: var(--nu-text);
+  font-family: var(--nu-font); border-radius: 0; }
+:root .einddoc-kern { color: var(--nu-text); }
+:root .eff, :root .cardmenu-b { border: var(--nu-border); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
+:root .danger { color: var(--nu-danger); }
+:root .car { color: var(--nu-muted); }
+
+/* ══ Wat er van de inbox-lade overblijft: de regels die hij DEELDE ════════════════════════════
+   Hier stond GROEP A · inbox.py — 37 klassen voor de uitschuiflade en zijn verwerk-lezer. Die
+   lade heeft nooit bestaan: `_nav()` riep `ibxToggle()` aan, een functie die nergens gedefinieerd
+   is, en `render_inbox_chrome` uit de docstring ernaast bestaat ook niet. De knop deed dus niets
+   en de stylesheet kleedde een scherm aan dat nergens gerenderd werd (21 september 2026).
+   Wat hieronder staat zijn de regels waarin een `ibx-`-selector MEELIFTTE op een levende: het
+   werkoverleg (`wo-`), de radar-lezer (`rdr-`) en de scheider. Die houden hun vorm; alleen de
+   dode helft van de selectorlijst is eruit. */
+:root .wo-oc,:root .rdr-tool,:root .rdr-kader,:root .rdr-vier{
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; color: var(--nu-text); }
+:root .wo-ocd { background: var(--nu-bg); }
+/* 21 september · de spanningsband is een CONTAINER en houdt dus zijn lijn — hij draagt het punt
+   dat je nu behandelt. 2px zwart, geen radius; de tint eronder vervalt (fase 9: vorm boven tint). */
+:root .wo-band { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); }
+:root .wo-band-edit > summary { color: var(--nu-muted); font-family: var(--nu-font); }
+/* 21 september · binnen de kaart geen tweede en derde kader.
+   DRIE KLASSEN DIEP OM DEZELFDE REDEN ALS BIJ DE LIVE-KNOP: `.nu .wo-band` en `.nu .wo-oc` zijn
+   allebei (0,2,0) en zetten `border`. Een regel op `.nu .wo-ocd` zou daar niet overheen komen;
+   `.nu .wo-ocd .wo-band` is (0,3,0) en wint. De buitenkaart houdt zijn 2px lijn, de blokken
+   erbinnen worden gescheiden door een dunne lijn. */
+:root .wo-ocd .wo-band { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; background: none; }
+:root .wo-ocd .wo-oc, :root .wo-ocd .uk-form { border: 0; border-radius: 0; background: none; }
+/* En de verwerken-kaart zelf geeft zijn kader op zodra hij IN een punt-rij staat: die rij
+   is al de kaart van dat punt. `.nu .rdr-row .wo-ocd` is (0,3,0) en wint daarmee van
+   `.nu .box-details` (0,2,0) hierboven — zelfde specificiteits-reden als een paar regels
+   terug. */
+:root .rdr-row .wo-ocd { border: 0; background: none; }
+:root .rdr-row .wo-ocd > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
+:root .wo-ocd .c2-sec { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .wo-staat-lbl { color: var(--nu-muted); font-family: var(--nu-font); }
+
+:root .fsep{
+  color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* 3 · Groen als vulling → rustig, met de vorm als drager
+       `.rdr-row` houdt zijn dashed outline: dát is het signaal, niet de tint erachter. */
+:root .rdr-row { background: var(--nu-bg-alt); outline-color: var(--nu-text); }
+:root .einddoc-body { color: var(--nu-text); }
+:root .done { color: var(--nu-muted); }
+:root .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* ══ GROEP A · de staart: wizard.py, search.py, overview.py ═══════════════════════════════════
+   `wizard.py` (/project/nieuw) is de aanleiding van deze hele groep: de route stond al in
+   `_NU_ROUTES`, maar de wizard rendert met een eigen `wz-*`-familie en `nooch-ui.css` stuurde daar
+   geen enkele klasse van aan. Route in de lijst ≠ herstyled. Drie van de elf klassen hier dragen
+   een 999px-pil en één een box-shadow — allebei dingen die in de referentie nul keer voorkomen. */
+
+/* wizard.py */
+:root .wz-hint, :root .wz-who, :root .wz-x, :root .wz-rm {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+/* DEZE VIER STONDEN IN ÉÉN REGEL, en dat was precies het probleem: twee knoppen en twee etiketten
+   met dezelfde container-lijn. De rolverdeling splitst ze (fase 12). */
+:root .wz-btn, :root .wz-add {
+  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+:root .wz-chip, :root .wz-badge {
+  border: 1.5px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
+  color: var(--nu-accent-text); font-family: var(--nu-font); box-shadow: none; }
+:root .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
+:root .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  box-shadow: none; }
+:root .wz-itxt { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font); }
+:root .big { color: var(--nu-muted); }
+
+/* search.py — `gs-group` en `gs-kind` zijn eyebrows onder een andere naam en staan daarom in de
+   gedeelde eyebrow-definitie hierboven, niet in een eigen blok. */
+:root .gs-empty, :root .gs-snip, :root .gs-more, :root .gs-didyoumean {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+:root .gs-hit { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); }
+:root .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
+
+/* De blok-greep (brok 3): geen radius, de lijnen van het huis. */
+/* TABEL-KOP in de nu-laag. De oude laag geeft hem de eyebrow-vingerafdruk (klein, hoofdletters,
+   vet); hier de tegenhanger in de nu-tokens, zodat een tabel op een nu-scherm niet terugvalt op
+   de crème-maatvoering. Zelfde regel als bij elk ander labeltje. */
+/* TAAK-BLOK in de nu-laag. Een afgeronde taak wordt gedempt; de oude laag doet dat met
+   `--muted`, hier met het nu-token. Zelfde regel als bij de tabelkop hierboven. */
+:root .wb-taak:has(input:checked){color:var(--nu-muted)}
+
+:root .att-body th{background:var(--nu-bg-alt);color:var(--nu-text);border-bottom-color:var(--nu-border-subtle)}
+:root .att-body td{border-bottom-color:var(--nu-border-subtle)}
+
+/* HET OPLICHTENDE BLOK (25 september 2026). De oude laag gebruikt `--cream-2`, een warme
+   crèmetint die in deze huisstijl niet bestaat; `--nu-bg-alt` is hier de zachte vlakvulling.
+   Vierkante hoeken, zoals overal in deze laag. */
+:root .wiki-body.wiki-aan .wb{border-radius:0}
+:root .wiki-body.wiki-aan .wb:hover{background:var(--nu-bg-alt)}
+/* DE SLEEP-TOESTANDEN (25 september 2026). `--cream-2` en `--green` bestaan in deze huisstijl
+   niet; `--nu-bg-alt` is de zachte vlakvulling en `--nu-accent` de accentkleur.
+   NA DE HOVER-REGEL HIERBOVEN, en dat is geen willekeur: tijdens het slepen hover je ook. De
+   achtergrond is in beide gevallen `--nu-bg-alt`, dus dat botst niet; wat telt is dat de
+   richtingsstreep van het slepen erbij komt en niet eronder verdwijnt. */
+:root .wb.over-boven,:root .wb.over-onder{background:var(--nu-bg-alt)}
+:root .wb.over-boven{box-shadow:inset 0 2px 0 0 var(--nu-accent)}
+:root .wb.over-onder{box-shadow:inset 0 -2px 0 0 var(--nu-accent)}
+/* DE VERSIE-UITKLAPPER (25 september 2026). Zelfde gedachte als in de oude laag: hij draagt
+   `.muted`, dus hij hoort niet vet te zijn. Hier ook in het eigen lettertype van de huisstijl. */
+:root .c2-hist>summary{font-family:var(--nu-font);font-weight:500;color:var(--nu-muted)}
+:root .wb-plus{color:var(--nu-muted)}
+:root .wb-plus:hover{color:var(--nu-text)}
+:root .wb-menu { border: 1.5px solid var(--nu-text); border-radius: 0; box-shadow: none; }
+:root .wb-menu-item { color: var(--nu-text); font-family: var(--nu-font); }
+:root .wb-menu-item:hover { background: var(--nu-bg-alt); }
+:root .wb-greep-knop { color: var(--nu-muted); }
+
+/* HET ZWEVENDE OPMAAK-BALKJE (26 september 2026). De basislaag geeft hem een zachte rand en een
+   schaduw; deze huisstijl kent geen zachte randen en geen schaduwen — zelfde regel als bij
+   `.nu .wb-menu`, dat hetzelfde soort zwevend ding is en er precies zo uitziet. */
+:root .wiki-tb{border:1.5px solid var(--nu-text);border-radius:0;box-shadow:none;
+  background:var(--nu-surface)}
+/* Het adresveld van de link-kaart volgt dezelfde lijn: harde rand, vierkante hoeken. */
+:root .wiki-linkveld{border:1px solid var(--nu-text);border-radius:0;background:var(--nu-surface)}
+
+/* DE AFBEELDING (26 september 2026). Hier stond `border:var(--nu-border)` — het voorstel uit het
+   prototype, "een harde rand zoals elk ander vlak hier". Live gezien klopte dat niet: een
+   afbeelding ÍS het vlak, en een rand eromheen maakt er een ingelijst plaatje van in plaats van
+   een stuk pagina. Zelfde gedachte als bij `.wiki-inline` en de metadata-voet, waar het kader er
+   om dezelfde reden af ging. De vierkante hoeken blijven — die zijn wél de huisstijl.
+
+   DE RAND VAN DE BALK HIERBOVEN BLIJFT WÉL. Dat is geen tegenspraak: een werkbalk is chrome die
+   boven de pagina zweeft en een rand nodig heeft om zich van de tekst te onderscheiden; een
+   afbeelding is de pagina. */
+:root .wb-img img{border-radius:0}
+
+/* HET AFGELEIDE BLOK EN DE METADATA-VOET (26 september 2026). De basislaag tekent de accentlijn
+   en de voetstreep op `--border`, de warme zandtint die in deze huisstijl niet bestaat;
+   `--nu-border-subtle` is hier de lijnkleur, `--nu-accent` de hover. Zelfde soort regel als bij
+   `.nu blockquote` hieronder: de vorm blijft, alleen de lijn gaat mee met de huisstijl. */
+:root .wiki-inline>div,:root .wiki-inline>a{border-left-color:var(--nu-border-subtle)}
+:root .wiki-inline>a{color:var(--nu-text)}
+:root .wiki-inline>a:hover{border-left-color:var(--nu-accent)}
+:root .wiki-meta{border-top-color:var(--nu-border-subtle)}
+
+/* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
+   zandtint; hier gaan ze mee met de rest van de nu-lijnen. */
+:root blockquote { border-left-color: var(--nu-border-subtle); color: var(--nu-muted); }
+:root hr { border-top-color: var(--nu-border-subtle); }
+
+/* overview.py */
+/* ══ DE LIJNEN VAN /node (22 september 2026) ═══════════════════════════════════════════════════
+   GETELD OP HET SCHERM, niet geschat: 36× `ul.clean li`, 5× `.accrow` en de streep onder de
+   tabbalk tekenden allemaal #DDD4C0 — `--border`, de warme zandtint van de oude huisstijl. Het
+   font stond hier allang op Archivo en de body op `.nu`; wat er nooit mee was gegaan zijn de
+   lijnen. Op een scherm dat verder zwart-op-#FFFAFA is, zijn 42 zandkleurige haarlijntjes precies
+   wat "oude opmaak" betekent — en op de cirkel-overview zijn ze de dominante vorm, want de
+   DO/DON'T-lijsten van de strategie zijn niets anders dan die 36 regels.
+
+   DE DRIE STAAN BIJ ELKAAR omdat ze hetzelfde doen: één regel van de volgende scheiden. `.rrole`
+   staat op de Roles-tab en niet op Overview, maar twee ervan migreren en de derde laten staan is
+   de volgende persoon laten ontdekken dat /node twee soorten haarlijn heeft. */
+:root ul.clean li, :root .accrow, :root .rrole { border-bottom: 1px solid var(--nu-border-subtle); }
+:root .c2-tabs { border-bottom: 1px solid var(--nu-border-subtle); }
+/* De radius bleef staan: de bestaande regel zette alleen kleur en font. Negen pixels ronding op
+   het enige icoon van een scherm waar verder niets rond is. */
+:root .manage-ico { border-radius: 0; }
+:root .manage-ico, :root .fperson { color: var(--nu-muted); font-family: var(--nu-font); }
+:root .tree-c { font-family: var(--nu-font); color: var(--nu-text); }
+:root .stack-av { border-color: var(--nu-surface); }
+:root .av.green, :root .green { background: var(--nu-text); color: var(--nu-surface); }
+
+/* groep B · `/site-audit` — de laatste pil buiten de negentien schermen */
+:root .seg { border: var(--nu-border); border-radius: 0; }
+
+/* ══ GROEP C · roloverleg.py en werkoverleg.py ═════════════════════════════════════════════════
+   Deze twee stonden al in `_NU_ROUTES` maar zijn in fase 7/8 nooit herbouwd: ze kregen de
+   body-klasse op grond van de fase-9-brief ("de governance- en tactical-meeting-modals krijgen
+   dezelfde visuele stijl"), niet op grond van een herbouw. Daarom lag hier meer werk dan bij de
+   rest van groep A.
+
+   Eén ding blijft bewust staan: `.is-new` en `.is-del` markeren wat er in een voorstel VERANDERT.
+   `.is-del` doet dat al met een dashed rand, dus die draagt vorm. `.is-new` had alleen een groene
+   vulling; die krijgt er een rand bij, zodat ook daar de vorm het signaal draagt en niet de tint. */
+
+/* 1 · Omhulsels — en wat er GEEN is
+   DIT BLOK ZETTE ELF KLASSEN OP DEZELFDE VOLLE 2px-RAND, en vijf daarvan zijn helemaal geen
+   omhulsel. De regel erboven (regel ~213) zegt het al: een besturingselement draagt een ONDERLIJN
+   en een kaart draagt een kader. Hier stond een rij velden alsnog in een hok, en dan zie je de
+   onderlijn van het veld binnen de rand van zijn eigen wrapper — twee lijnen om hetzelfde ding.
+
+   ERUIT, en per stuk de reden:
+     .rov-add      een FORMULIERRIJ met een veld en een +-knop. Zelfde geval als `.fieldform`
+                   hierboven, die om precies deze reden al geen lijn krijgt.
+     .rov-addrow   idem.
+     .rov-addgrid  een GRID dat velden naast elkaar zet. Een raster is geen kaart.
+     .rovm-field   een WRAPPER om één veld, met alleen een margin-top. Het veld erin heeft zijn
+                   eigen onderlijn; het kader eromheen verdubbelde hem.
+     .rov-editor   idem: omhulsel om `input[name=value]`.
+     .wo-mem       een LIJSTRIJ (een deelnemer in de check-in). Rijen scheiden zich met een lijn
+                   ertussen, niet met een hok eromheen — zelfde conventie als de kaartlijsten
+                   hierboven (1,5px `--nu-border-subtle`).
+
+   BLIJFT STAAN: `.cl-check`, `.wo-leave`, `.wo-timer`, `.wo-num` zijn zelfstandige knopjes en
+   badges — die zijn wél een omhulsel, al is het een klein. En `.rovm-item` houdt zijn rand omdat
+   die daar BETEKENIS draagt: `.is-new` en `.is-del` markeren wat er in een voorstel verandert met
+   een rand-variant, en zonder basisrand is er niets om te variëren. */
+:root .cl-check, :root .wo-leave, :root .wo-timer, :root .wo-num, :root .rovm-item {
+  border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
+  color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+:root .rov-add, :root .rov-addrow, :root .rov-addgrid, :root .rovm-field, :root .rov-editor {
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--nu-text); font-family: var(--nu-font); }
+/* De rij scheidt zich van de volgende, meer niet. `.sel` mag wél opvallen: dat is waar je met de
+   pijltjes staat, en dat moet je kunnen zien. */
+:root .wo-mem { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: none; color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
+:root .wo-mem.sel { background: var(--nu-bg-alt); }
+:root .rov-foot { background: var(--nu-surface); border-top: var(--nu-border); }
+
+/* 2 · Grijstinten → één muted */
+:root .rovm-iv, :root .is-soon, :root .rovm-was, :root .rovm-close, :root .rov-title,
+:root .rov-more, :root .rov-link, :root .let, :root .wo-mem-n {
+  color: var(--nu-muted); font-family: var(--nu-font); }
+:root .let { background: var(--nu-bg); }
+
+/* 3 · Wat verandert: vorm, niet alleen tint */
+:root .is-new { background: var(--nu-bg-alt); border: var(--nu-border); }
+:root .is-del { background: var(--nu-bg); border-color: var(--nu-text); }
+:root .sec-issue { border-radius: 0; border: 1.5px solid var(--nu-text);
+  background: var(--nu-surface); color: var(--nu-text); }
+
+/* 4 · Fout en verwijderen blijven rood */
+:root .rov-delrole { color: var(--nu-danger); }
+:root .blok { background: var(--nu-surface); color: var(--nu-danger);
+  border: 1.5px solid var(--nu-danger); }
+
+/* 5 · Het laatste groen dat niet in de beelden staat */
+:root .kpidata-v { color: var(--nu-text); }
+
+/* punt 1a · het zoekveld boven de kanalenlijst */
+:root .msg-zoek input[type=search] { border: 0; border-bottom: 1.5px solid var(--nu-text);
+  border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+:root .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* 21 september · "staat nog niet in jouw lijst", in de nu-taal.
+   De GESTIPPELDE rand blijft — dat is de tweede drager naast het woord "add", en vorm overleeft
+   zwart-wit waar een tint dat niet doet. Wat weggaat is het doosje óm dat woord: een klein etiket
+   is informatie, geen container, en die regel ligt in fase 12 vast. */
+:root .msg-kanaal--vreemd { border: 1.5px dashed var(--nu-border-subtle); border-radius: 0; }
+:root .msg-add { border: 0; border-radius: 0; background: none; color: var(--nu-muted);
+  font-family: var(--nu-font); }
+:root .msg-kanaal--vreemd:hover .msg-add { color: var(--nu-text); }
+:root .msg-uit { color: var(--nu-muted); font-family: var(--nu-font); }
+
+/* punt 4 · de opslaan-balk van het inline formulier */
+:root .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }
+
+/* ── Fase 11, laag 1: de atomen in dit systeem ───────────────────────────────────────────────
+   De basisvormen staan in nooch.css (die ook geldt op schermen die niet meedoen); hier krijgen ze
+   de taal van dit systeem: scherpe hoeken, zwarte lijn, groen als vulling. */
+
+/* 2a — het voortgangs-atoom. Vierkant, en de VULLING draagt de betekenis.
+   FASE 12: de zwarte lijn om de baan is eraf. Een balkje is INFORMATIE, en informatie krijgt in
+   deze rolverdeling geen kader — de baan zelf (subtiel grijs) laat al zien hoe lang hij is. Dit
+   atoom is op 20 september bewust mét lijn gebouwd omdat dat toen het systeem was; hij hoorde bij
+   dit besluit en niet ervóór. */
+:root progress.nu-progress { height: 8px; border: 0; border-radius: 0;
+  background: var(--nu-border-subtle); }
+:root progress.nu-progress::-webkit-progress-bar { background: var(--nu-border-subtle);
+  border-radius: 0; }
+:root progress.nu-progress::-webkit-progress-value { background: var(--nu-accent); border-radius: 0; }
+:root progress.nu-progress::-moz-progress-bar { background: var(--nu-accent); border-radius: 0; }
+
+/* 1a — het rol-icoon: exact de twee vormen die `.nu-status--ok` en `--open` hierboven al dragen,
+   zonder kader en zonder woord ernaast (het woord staat in de `.sr`-span). Geen nieuwe vorm en
+   geen nieuwe kleur — dezelfde taal als het bord en de checklist. */
+:root .nu-status--icoon { border: 0; padding: 0; background: none; gap: 0; margin-right: .4em; }
+:root .nu-status--icoon.nu-status--ok::before { background: var(--nu-accent); }
+:root .nu-status--icoon.nu-status--open::before { border: 1px solid var(--nu-muted);
+  background: none; }
+
+/* 1b/3b — de moleculen: alleen wat de rij bij elkaar houdt. */
+:root .pchips { gap: .3rem; }
+:root .msg-tijd { color: var(--nu-muted); }
+/* 22 september · bijlagen onder een bericht. De rij is een ITEM in een lijst, dus de dunne lijn
+   (zie de rebalans van gisteren); het voorbeeld van een afbeelding krijgt er een omdat hij anders
+   op een witte achtergrond geen rand heeft om tegen te staan. */
+:root .msg-bijlage { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+  background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
+:root .msg-bijlage:hover { border-color: var(--nu-text); }
+:root .msg-bijlage--beeld { border: 0; background: none; }
+:root .msg-bijlage--beeld img { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+:root .msg-bijlage-naam { font-family: var(--nu-font); }
+:root .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
+:root .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
+:root .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
+  background: var(--nu-surface); }
+
+/* De kaart op het bord in dit systeem. `.pcard` was tot nu toe onzichtbaar voor de dekkings-
+   ratchet doordat de view hem alleen als `pcard{verz}` (mét placeholder) rendeerde; sinds de
+   voorkant-herindeling (fase 11, 1b) staat hij er kaal. Daarmee komt ook zijn oude taal boven:
+   een groene hover-gloed met schaduw, en `--coral` voor een verzwakte kaart. Hier krijgt hij de
+   taal van dit systeem: geen schaduw, de lijn draagt de nadruk, en rood is `--nu-danger`. */
+:root .pcard { transition: none; }
+:root .pcard:hover { border-color: var(--nu-accent); box-shadow: none;
+  outline: 1.5px solid var(--nu-accent); outline-offset: -3px; }
+:root .pcard.verzwakt { border-color: var(--nu-danger); }
+:root .pcard-link { color: var(--nu-text); }
+:root .pmeta { color: var(--nu-muted); }
+
+/* ── Fase 11, laag 3: het sleeppatroon in dit systeem ────────────────────────────────────────
+   De vormen komen uit nooch.css; hier krijgen ze de taal van dit systeem. De doelkolom gebruikt
+   de twee tokens die het bord al draagt, zodat "hier kan hij heen" dezelfde groen is als elders. */
+:root .pcol.over, :root .pcol[data-to].over {
+  background: var(--nu-bg-alt); border-color: var(--nu-accent); }
+:root .pcard:hover { border-color: var(--nu-accent); }
+:root .pcard-hint { color: var(--nu-accent-text); }
+/* De opgetilde kaart: scherp, zwart omlijnd, en de schaduw doet hier het werk dat een radius
+   elders zou doen — hij zegt "dit zweeft", niet "dit is zacht". */
+:root .pdrag-ghost { border: var(--nu-border); background: var(--nu-surface);
+  box-shadow: 8px 8px 0 rgba(0,0,0,.18); }
+:root progress.nu-progress::-webkit-progress-value { transition: width .35s ease; }

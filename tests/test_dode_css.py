@@ -106,11 +106,11 @@ def test_de_css_is_nog_geldig():
 # ── De inbox-lade (21 september 2026) ────────────────────────────────────────────────────────
 #
 # Het gevaarlijkste deel van die opruiming was niet het weghalen maar het KNIPPEN: zeventien van
-# de regels deelden hun selectorlijst met een levende klasse (`.nu .ibx-row, .nu .wo-oc, .nu
+# de regels deelden hun selectorlijst met een levende klasse (`:root .ibx-row, :root .wo-oc, .nu
 # .rdr-tool, …`). Wie zo'n regel in zijn geheel weggooit, haalt de vorm weg bij het werkoverleg en
 # de radar-lezer — en dat merk je pas op een screenshot.
 
-NU_CSS = (REPO / "nooch_village" / "static" / "nooch-ui.css").read_text()
+NU_CSS = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
 
 #: De levende klassen die in de gedeelde selectorlijsten van de lade meeliftten.
 MEELIFTERS = ("wo-oc", "rdr-tool", "rdr-kader", "rdr-vier", "fsep", "ck-item")
@@ -119,7 +119,7 @@ MEELIFTERS = ("wo-oc", "rdr-tool", "rdr-kader", "rdr-vier", "fsep", "ck-item")
 def test_de_lade_is_uit_beide_stylesheets_weg():
     """Geen enkele `ibx-`-selector meer, in geen van beide bestanden. (De prose mag hem noemen —
     dat is de uitleg waaróm hij weg is, en die hoort te blijven staan.)"""
-    for naam, css in (("nooch.css", CSS), ("nooch-ui.css", NU_CSS)):
+    for naam, css in (("nooch.css", CSS), ("nooch.css", NU_CSS)):
         zonder = re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
         rest = re.findall(r"[^{}]*\.ibx-[a-z-]*[^{}]*\{", zonder)
         assert not rest, f"{naam} draagt nog {len(rest)} ibx-selector(s): {rest[:2]}"

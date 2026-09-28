@@ -23,11 +23,13 @@ scherm. Twee ervan migreren en de derde laten staan, is de volgende persoon late
 from __future__ import annotations
 
 import os
+
+from conftest import basis_css, designsysteem_css
 import re
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUD = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
-NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+OUD = basis_css()
+NU = designsysteem_css()
 STRAT = open(os.path.join(BASIS, "nooch_village", "views", "strategy.py"), encoding="utf-8").read()
 OVERVIEW = open(os.path.join(BASIS, "nooch_village", "views", "overview.py"), encoding="utf-8").read()
 
@@ -65,7 +67,7 @@ _SCHEIDERS = ("ul.clean li", ".accrow", ".rrole")
 def test_elke_scheidingslijn_op_dit_scherm_staat_op_de_nu_tint():
     nu = _regels(NU)
     for sel in _SCHEIDERS:
-        regel = nu.get(f".nu {sel}", "")
+        regel = nu.get(f":root {sel}", "")
         assert "var(--nu-border-subtle)" in regel, \
             f"{sel} tekent op /node nog een zandlijn en wordt niet overschreven"
 
@@ -80,15 +82,15 @@ def test_de_basislaag_tekent_ze_nog_wel_in_zand():
 
 
 def test_de_streep_onder_de_tabbalk_gaat_mee():
-    """`.nu .c2-tabs a` bestond al (de tabs zelf), de CONTAINER niet — en die tekent de lijn
+    """`:root .c2-tabs a` bestond al (de tabs zelf), de CONTAINER niet — en die tekent de lijn
     waar de hele balk op staat."""
-    assert "var(--nu-border-subtle)" in _regels(NU).get(".nu .c2-tabs", "")
+    assert "var(--nu-border-subtle)" in _regels(NU).get(":root .c2-tabs", "")
 
 
 def test_het_beheer_icoon_heeft_geen_ronde_hoek_meer():
-    """`.nu .manage-ico` zette wel de kleur maar niet de radius; de 9px bleef staan op een
+    """`:root .manage-ico` zette wel de kleur maar niet de radius; de 9px bleef staan op een
     scherm waar verder niets rond is."""
-    assert re.search(r"\.nu \.manage-ico[^{]*\{[^}]*border-radius:\s*0", _ONT(NU))
+    assert re.search(r":root \.manage-ico[^{]*\{[^}]*border-radius:\s*0", _ONT(NU))
     assert "border-radius:var(--radius)" in _ONT(OUD).replace(" ", "").replace("\n", ""), \
         "de basisregel zet geen radius meer — dan overschrijft de nu-regel niets"
 
@@ -126,5 +128,5 @@ def test_alles_wat_erbij_komt_blijft_binnen_de_nu_scope():
     """Eén regel zonder `.nu` ervoor raakt élk scherm, ook de geparkeerde. Dit staat al in
     `test_fase10_huisstijl`; hier als herhaling omdat deze PR vijf regels toevoegt."""
     regels = [r.split("{")[0].strip() for r in _ONT(NU).split("}") if "{" in r]
-    buiten = [r for r in regels if r and not r.startswith(".nu") and not r.startswith("@")]
+    buiten = [r for r in regels if r and not r.startswith(":root") and not r.startswith("@")]
     assert not buiten, f"regels buiten de scope: {buiten}"

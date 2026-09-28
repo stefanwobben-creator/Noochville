@@ -23,7 +23,7 @@ import re
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 CSS = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
-NU = (REPO / "nooch_village" / "static" / "nooch-ui.css").read_text()
+NU = (REPO / "nooch_village" / "static" / "nooch.css").read_text()
 JS = (REPO / "nooch_village" / "static" / "nooch.js").read_text()
 VIEW = (REPO / "nooch_village" / "views" / "projects.py").read_text()
 
@@ -58,7 +58,7 @@ def test_de_doelkolom_licht_op_met_twee_dragers():
     Twee dragers, niet één — dezelfde regel als bij de statusindicatoren."""
     basis = _body(CSS, ".pcol.over,.pcol[data-to].over")
     assert "background" in basis and "border-color" in basis
-    nu = _body(NU, ".nu .pcol.over, .nu .pcol[data-to].over")
+    nu = _body(NU, ":root .pcol.over, :root .pcol[data-to].over")
     assert "var(--nu-bg-alt)" in nu and "var(--nu-accent)" in nu     # de tokens van het systeem
     assert "transition" in _body(CSS, ".pcol")                       # hij schuift, springt niet
 

@@ -19,7 +19,7 @@ from nooch_village.views.wiki import _domein_form, _mag_domein_wijzigen, render_
 CSS = (pathlib.Path(__file__).resolve().parents[1]
        / "nooch_village" / "static" / "nooch.css").read_text()
 NU = (pathlib.Path(__file__).resolve().parents[1]
-      / "nooch_village" / "static" / "nooch-ui.css").read_text()
+      / "nooch_village" / "static" / "nooch.css").read_text()
 JS = (pathlib.Path(__file__).resolve().parents[1]
       / "nooch_village" / "static" / "nooch.js").read_text()
 
@@ -35,13 +35,13 @@ def test_de_huisstijl_lijst_een_afbeelding_niet_in():
     """Een afbeelding ÍS het vlak; een rand eromheen maakt er een ingelijst plaatje van in plaats
     van een stuk pagina. Zelfde gedachte als bij `.wiki-inline` en de metadata-voet, waar het
     kader er om dezelfde reden af ging."""
-    body = _regel(NU, ".nu .wb-img img")
+    body = _regel(NU, ":root .wb-img img")
     assert "border:" not in body, "de afbeelding staat weer in een kader"
 
 
 def test_de_vierkante_hoeken_blijven():
     """Die zijn wél de huisstijl — deze laag kent geen ronde hoeken."""
-    assert "border-radius:0" in _regel(NU, ".nu .wb-img img")
+    assert "border-radius:0" in _regel(NU, ":root .wb-img img")
 
 
 def test_de_basislaag_was_al_randloos():

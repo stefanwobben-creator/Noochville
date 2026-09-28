@@ -28,7 +28,7 @@ from nooch_village.views.messages import _bericht, _zelfde_spreker, render_messa
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
-NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 JS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.js"), encoding="utf-8").read()
 
 
@@ -242,7 +242,7 @@ def test_de_eigen_bubbel_gebruikt_een_bestaand_token():
     basis = re.search(r"\.msg-item--ik \.msg-body\{([^}]*)\}", CSS.replace("\n  ", "")).group(1)
     assert "var(--green-tint)" in basis, basis
     nu = [b for s, b in re.findall(r"([^{}]+)\{([^{}]*)\}", NU)
-          if ".nu .msg-item--ik .msg-body" in s]
+          if ":root .msg-item--ik .msg-body" in s]
     assert nu and "var(--nu-bg-alt)" in nu[0], nu
     # geen losse hexkleur erbij verzonnen
     assert not re.search(r"\.msg-(item|body|balk)[^{}]*\{[^}]*#[0-9a-fA-F]{3,6}", CSS)

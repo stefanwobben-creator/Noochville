@@ -28,7 +28,7 @@ from nooch_village.cockpit2_util import (_nav, _SIDE_ITEMS,
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
-NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch-ui.css"), encoding="utf-8").read()
+NU = open(os.path.join(BASIS, "nooch_village", "static", "nooch.css"), encoding="utf-8").read()
 
 
 def _regels(css: str, met_media: bool = False):
@@ -169,7 +169,7 @@ def test_de_header_is_sticky_en_draagt_de_zwarte_onderrand():
     assert "height:56px" in kop.replace(" ", "")
     # De 2px zwarte lijn zit in het TOKEN `--nu-border` (= 2px solid var(--nu-text)); die naam
     # is de bron, de kleur erachter niet iets om hier over te typen.
-    nu = _regels(NU).get(".nu .c2-header", "")
+    nu = _regels(NU).get(":root .c2-header", "")
     assert "border-bottom: var(--nu-border)" in nu, nu
 
 
