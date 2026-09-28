@@ -62,6 +62,7 @@ from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_C
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.acties import ActieStore
+from nooch_village.linkbuilding import LinkTargetQueue
 from nooch_village.channels import ChannelStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
@@ -153,6 +154,9 @@ class _Stores:
         # lopen via de ledger. Zie channels.py voor waarom dat twee plekken zijn.
         self.channels = ChannelStore(os.path.join(dd, "channels.json"), ledger=self.projects)
         self.acties = ActieStore(os.path.join(dd, "acties.json"))   # persoonlijke acties
+        # Linkbuilding-doelwitten: de gidsen die de skill vond, met het menselijke besluit erbij.
+        # Een nieuwe zoekopdracht werkt de meting bij en laat het besluit staan — zie `LinkTargetQueue`.
+        self.linktargets = LinkTargetQueue(os.path.join(dd, "link_targets.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
@@ -1504,6 +1508,49 @@ def _act_artefact_edit(c):
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"✏️ {upd.kind} updated ({upd.id})"
         return nxt, msg
+
+
+def _act_linkbuilding_zoek(c):
+    """Start de zoektocht naar linkbuilding-doelwitten.
+
+    ZELFDE VORM ALS DE SITE-AUDIT (#634), en om dezelfde twee redenen: de skill doet echte
+    netwerkcalls (SerpAPI plus acht pagina's lezen, tientallen seconden) en twee zoekopdrachten
+    tegelijk schrijven door elkaar in dezelfde lijst. Het slot zit in `linkbuilding.start_achtergrond`
+    en wordt in DEZE thread genomen, zodat een dubbelklik hier al strandt en niet pas binnenin."""
+    # AUTHZ: rolvervuller of Circle Lead — linkbuilding is het gereedschap van de Marketing Lead
+    # (`_ROLE_TOOLS`), en zoeken is operationeel werk binnen die rol. Niet ruimer: de zoekopdracht
+    # kost een externe API-aanroep (SerpAPI, credits).
+    from nooch_village import linkbuilding as lb
+    from nooch_village.views.linkbuilding import MARKETING_LEAD
+    deny = _role_gate(MARKETING_LEAD, c.username, c.st)
+    if deny:
+        raise Forbidden(deny)
+    ctx = _context_of(c.data_dir)
+    if not lb.sleutel_aanwezig(ctx):
+        # NETTE MELDING, GEEN KALE FOUT. De skill weigert zelf ook (required_env), maar dan als
+        # achtergrondfout die niemand ziet staan.
+        return c.nxt, "⛔ no SerpAPI key configured (SERPAPI_API_KEY) — searching is off"
+    actor = c.st.people.by_email(c.username) if c.username and c.username != "guest" else None
+    wie = getattr(actor, "name", "") or "the cockpit"
+    if lb.start_achtergrond(c.data_dir, ctx, shared_registry(), topic=c.g("topic"), door=wie):
+        return c.nxt, "🔎 searching for targets — reading guide pages takes 20-60 seconds"
+    bezet = lb.slot(c.data_dir).staat() or {}
+    return c.nxt, f"⏳ a search is already running (started by {bezet.get('door') or 'someone'})"
+
+
+def _act_linkbuilding_besluit(c):
+    """Pitchen of negeren. Het oordeel is van een mens; de skill rangschikt alleen."""
+    # AUTHZ: rolvervuller of Circle Lead — zelfde rol en zelfde reden als het zoeken hierboven.
+    # Een besluit hier bepaalt wat er met een doelwit gebeurt; dat is werk binnen de rol.
+    from nooch_village.views.linkbuilding import MARKETING_LEAD
+    deny = _role_gate(MARKETING_LEAD, c.username, c.st)
+    if deny:
+        raise Forbidden(deny)
+    actor = c.st.people.by_email(c.username) if c.username and c.username != "guest" else None
+    wie = getattr(actor, "name", "") or "the cockpit"
+    if c.st.linktargets.beslis(c.g("link"), c.g("besluit"), wie):
+        return c.nxt, ("📣 marked to pitch" if c.g("besluit") == "pursue" else "🙈 ignored")
+    return c.nxt, "✗ unknown target or decision"
 
 
 def _act_site_audit_run(c):
@@ -5755,6 +5802,8 @@ ACTIONS = {
     "actie_weg": _act_actie_weg,
     "actie_wis": _act_actie_wis,
     "site_audit_run": _act_site_audit_run,
+    "linkbuilding_zoek": _act_linkbuilding_zoek,
+    "linkbuilding_besluit": _act_linkbuilding_besluit,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
     "keep_in_wiki": _act_keep_in_wiki,
@@ -6144,6 +6193,17 @@ def make_handler(data_dir: str, csrf_token: str,
             # Publieke views krijgen geen CSRF-token → geen schrijfknoppen
             effective_csrf = csrf_token if username else ""
 
+            if path == "/linkbuilding-status":
+                # DE STAND VAN DE LINKBUILDING-ZOEKTOCHT plus de lijst doelwitten. Zelfde vorm als
+                # `/scan-status` hieronder: server-gerenderd HTML, zodat er geen tweede plek is die
+                # bepaalt hoe "er loopt een zoekopdracht" eruitziet.
+                from nooch_village.views.linkbuilding import MARKETING_LEAD, paneel
+                _st = _Stores(data_dir)
+                _mag = _role_gate(MARKETING_LEAD, username, _st) is None
+                self._send(paneel(_st, _context_of(data_dir), data_dir,
+                                  csrf_token if (username and _mag) else "", mag=_mag),
+                           chrome=False)
+                return
             if path == "/scan-status":
                 # DE STAND VAN DE SITE-AUDIT-SCAN, voor het paneel op de handboek-pagina. Zelfde
                 # vorm als `/overleg-status` hierboven: server-gerenderd HTML en geen JSON, zodat
@@ -6467,6 +6527,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 # AUTHZ: iedereen-ingelogd — zie /goals.
                 self._send(render_goal(st, (qs.get("id") or [""])[0], csrf_token=effective_csrf,
                                        username=username, msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/linkbuilding":
+                # OPNIEUW GEBOUWD OP 28 SEPTEMBER 2026. Het oude scherm verdween in #516; de kaart
+                # in `_ROLE_TOOLS` wees daarna acht dagen naar een 404. Dit is geen restore maar
+                # het patroon van `/site-audit`: knop → achtergrondthread → pollend paneel.
+                from nooch_village.views.linkbuilding import render_linkbuilding
+                self._send(render_linkbuilding(st, _context_of(data_dir), data_dir,
+                                               csrf_token=effective_csrf, username=username,
+                                               msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/site-audit":
                 # De lampjes van de shop (bereikbaar, Lighthouse, claims) uit de laatste run van

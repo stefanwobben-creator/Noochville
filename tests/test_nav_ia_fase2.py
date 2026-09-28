@@ -57,13 +57,12 @@ def test_een_uitgeschakelde_kaart_zegt_waarom():
 
 def test_role_tools_kaarten_per_eigenaar_rol():
     marketing = _role_tools_html(_rec("mother_earth__nooch__marketing_lead"))
-    # DE KAART BLIJFT, DE LINK NIET (28 september 2026). `/linkbuilding` is met de rest van de
-    # opruiming in #516 verwijderd (20 september), maar deze kaart wees er nog naar — een kale 404
-    # op de tools van Marketing Lead. Nu een lege href met de reden erin, zoals "Oracle" al deed.
-    # De kaart weghalen zou het vermogen stil laten verdwijnen: de skill draait nog.
+    # EN DE LINK IS TERUG (28 september 2026, later die dag). Hij wees sinds #516 naar een
+    # verwijderd scherm en stond daarom even als uitgeschakelde kaart; het scherm is nu opnieuw
+    # gebouwd op het patroon van `/site-audit`. Dat de route ook ECHT bestaat bewaakt de ratchet
+    # hieronder — deze toets kijkt alleen of de kaart er staat en waarheen hij wijst.
     assert "Linkbuilding" in marketing and "tile-grid" in marketing
-    assert "/linkbuilding" not in marketing, "de dode link is terug"
-    assert "removed on 20 September 2026" in marketing
+    assert "/linkbuilding" in marketing
     assert "/keywords?lens=marketing" in marketing
     lara = _role_tools_html(_rec("librarian"))
     assert "Library" in lara and "/woordenschat" in lara

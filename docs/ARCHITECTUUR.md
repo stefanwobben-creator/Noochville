@@ -13,6 +13,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 |---|---|---|
 | `/login` | `(inline)` | `cockpit2.py` |
 | `/logout` | `(inline)` | `cockpit2.py` |
+| `/linkbuilding-status` | `(inline)` | `cockpit2.py` |
 | `/scan-status` | `(inline)` | `cockpit2.py` |
 | `/overleg-status` | `(inline)` | `cockpit2.py` |
 | `/wachtwoord` | `(inline)` | `cockpit2.py` |
@@ -41,6 +42,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/skills` | `render_skills` | `nooch_village/views/skills.py` |
 | `/goals` | `render_goals` | `nooch_village/views/doelen.py` |
 | `/goal` | `render_goal` | `nooch_village/views/doelen.py` |
+| `/linkbuilding` | `render_linkbuilding` | `nooch_village/views/linkbuilding.py` |
 | `/site-audit` | `render_site_audit` | `nooch_village/views/site_audit.py` |
 | `/bronnen` | `render_bronnen` | `nooch_village/views/bronnen.py` |
 | `/woordenschat` | `render_woordenschat` | `nooch_village/views/woordenschat.py` |
@@ -99,6 +101,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `actie_weg` | `_act_actie_weg` |
 | `actie_wis` | `_act_actie_wis` |
 | `site_audit_run` | `_act_site_audit_run` |
+| `linkbuilding_zoek` | `_act_linkbuilding_zoek` |
+| `linkbuilding_besluit` | `_act_linkbuilding_besluit` |
 | `kanaal_ontvolg` | `_act_kanaal_ontvolg` |
 | `kanaal_verwijder` | `_act_kanaal_verwijder` |
 | `keep_in_wiki` | `_act_keep_in_wiki` |
@@ -241,6 +245,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `ai` | `AITaskStore` | `ai_tasks.json` |
 | `channels` | `ChannelStore` | `channels.json` |
 | `acties` | `ActieStore` | `acties.json` |
+| `linktargets` | `LinkTargetQueue` | `link_targets.json` |
 | `agenda` | `Agenda` | `roloverleg_agenda.json` |
 | `noochie` | `NoochieStore` | `noochie.json` |
 | `checklists` | `ChecklistStore` | `checklists.json` |
@@ -331,4 +336,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_49 routes · 152 dispatch-acties · 28 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_51 routes · 154 dispatch-acties · 29 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

@@ -194,6 +194,64 @@ def refuse(code: str, reason: str, **ctx) -> bool:
     return False
 
 
+class Werkslot:
+    """Eén langlopende klus tegelijk, over processen heen.
+
+    WAAR HIJ VANDAAN KOMT. De site-audit had dit al: een scan duurt tientallen seconden en er zijn
+    drie ingangen (CLI, knop, klok). Twee tegelijk is niet dubbel werk maar vuile data — allebei
+    schrijven ze in dezelfde append-only reeks. Toen `/linkbuilding` dezelfde vorm kreeg (ook een
+    trage externe zoekopdracht, ook een knop) stond de keuze tussen deze twintig regels kopiëren of
+    ze delen. Dit is de gedeelde vorm; `site_audit` en `linkbuilding` gebruiken allebei dít slot.
+
+    ATOMAIR VIA `O_CREAT | O_EXCL`, en niet "bestaat het al?" gevolgd door schrijven: dat laatste is
+    precies de race die dit moet afvangen — twee kliks binnen een milliseconde zien allebei niets.
+
+    MET EEN VERVALTIJD, want een proces dat halverwege sneuvelt geeft zijn slot niet terug. Zonder
+    die grens is één crash genoeg om de knop tot de volgende deploy dood te leggen."""
+
+    #: Een trage klus mag lang duren; een kwartier is ruim boven de langste gemeten run (Lighthouse
+    #: 20-60 s, een linkbuilding-zoekopdracht met acht pagina's ~30 s) en kort genoeg om een
+    #: achtergebleven slot niet de hele dag te laten liggen.
+    VERVALT_S = 15 * 60
+
+    def __init__(self, pad: str, *, vervalt_s: int | None = None):
+        self.pad = pad
+        self.vervalt_s = self.VERVALT_S if vervalt_s is None else vervalt_s
+
+    def staat(self) -> dict | None:
+        """Wie draait er, sinds wanneer? None = vrij. Een vervallen slot leest als vrij."""
+        try:
+            with open(self.pad, encoding="utf-8") as fh:
+                d = json.load(fh)
+        except (FileNotFoundError, ValueError, OSError):
+            return None
+        if time.time() - float(d.get("sinds") or 0) > self.vervalt_s:
+            return None
+        return d
+
+    def pak(self, door: str = "") -> bool:
+        if self.staat() is None:
+            try:
+                os.remove(self.pad)                  # vervallen slot van een gesneuvelde run
+            except OSError:
+                pass
+        try:
+            fd = os.open(self.pad, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            return False
+        except OSError:
+            return True                              # geen schrijfrechten: liever draaien dan blokkeren
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"sinds": time.time(), "door": door or "onbekend"}, fh)
+        return True
+
+    def geef(self) -> None:
+        try:
+            os.remove(self.pad)
+        except OSError:
+            pass
+
+
 class JsonStore:
     """Concurrency-veilige basis voor een JSON-store. Bezit `self.path`, levert `_load()` (verse read
     van schijf) en `_save()` — de ENIGE `atomic_write_json`-route. Niemand schrijft zelf naar het

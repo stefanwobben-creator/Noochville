@@ -37,6 +37,8 @@ import logging
 import os
 import time
 
+from nooch_village.util import Werkslot
+
 log = logging.getLogger("village.site_audit")
 
 #: Twee doelen, twee reeksen. `live` is de shop zoals klanten hem krijgen (de wekelijkse reeks en de
@@ -325,56 +327,33 @@ class ScanDraaitAl(RuntimeError):
     """Er loopt al een scan. Niets gedaan, niets bewaard, en wél gezegd sinds wanneer."""
 
 
-#: Na hoeveel tijd een slot als achtergebleven geldt. Een run duurt 20-60 seconden (Lighthouse);
-#: een kwartier is ruim genoeg om een trage run niet af te kappen en kort genoeg om een proces dat
-#: halverwege sneuvelde niet tot de volgende deploy in de weg te laten liggen. Zonder deze grens is
-#: één harde crash genoeg om de knop voorgoed dood te leggen.
-SLOT_VERVALT_S = 15 * 60
+#: HET SLOT IS GEDEELD (28 september 2026). Hier stonden `_neem_slot`/`_geef_slot`/`slot_staat` als
+#: eigen implementatie; `/linkbuilding` kreeg dezelfde vorm (ook een trage externe klus, ook een
+#: knop) en dan zijn het twee kopieën van dezelfde twintig regels. De vorm woont nu in
+#: `util.Werkslot`; hieronder staan alleen nog de namen waarmee deze module hem aanspreekt, zodat
+#: de aanroepers en hun toetsen ongemoeid blijven.
+SLOT_VERVALT_S = Werkslot.VERVALT_S
 
 
 def slot_pad(data_dir: str, doel: str = "live") -> str:
     return os.path.join(data_dir, f"site_audit_{doel}.lock")
 
 
+def _slot(data_dir: str, doel: str) -> Werkslot:
+    return Werkslot(slot_pad(data_dir, doel))
+
+
 def slot_staat(data_dir: str, doel: str = "live") -> dict | None:
     """Wie draait er, sinds wanneer? None = vrij. Een vervallen slot leest als vrij."""
-    try:
-        with open(slot_pad(data_dir, doel), encoding="utf-8") as fh:
-            d = json.load(fh)
-    except (FileNotFoundError, ValueError, OSError):
-        return None
-    if time.time() - float(d.get("sinds") or 0) > SLOT_VERVALT_S:
-        return None
-    return d
+    return _slot(data_dir, doel).staat()
 
 
 def _neem_slot(data_dir: str, doel: str, door: str) -> bool:
-    """Atomair pakken: `O_CREAT | O_EXCL` slaagt bij precies één van twee gelijktijdige pogingen.
-
-    GEEN "bestaat het al?"-CHECK GEVOLGD DOOR SCHRIJVEN, want dat is precies de race die dit moet
-    afvangen: twee kliks binnen een milliseconde zien allebei niets en starten allebei."""
-    pad = slot_pad(data_dir, doel)
-    if slot_staat(data_dir, doel) is None:
-        try:
-            os.remove(pad)                       # vervallen slot van een gesneuvelde run
-        except OSError:
-            pass
-    try:
-        fd = os.open(pad, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-    except FileExistsError:
-        return False
-    except OSError:
-        return True                              # geen schrijfrechten: liever draaien dan blokkeren
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump({"sinds": time.time(), "door": door}, fh)
-    return True
+    return _slot(data_dir, doel).pak(door)
 
 
 def _geef_slot(data_dir: str, doel: str) -> None:
-    try:
-        os.remove(slot_pad(data_dir, doel))
-    except OSError:
-        pass
+    _slot(data_dir, doel).geef()
 
 
 def run_en_bewaar(st, ctx, registry, *, url: str = "", doel: str = "live",
