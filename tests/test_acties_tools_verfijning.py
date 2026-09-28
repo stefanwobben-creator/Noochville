@@ -280,6 +280,56 @@ def test_alleen_wie_mag_krijgt_de_bewerk_link(tmp_path):
     assert "edit on the role" not in met, "hij wijst nog naar de rol"
 
 
+def _namen_op_volgorde(html: str) -> list[str]:
+    """De zichtbare naam van elke kaart, in de volgorde waarin hij op het scherm staat.
+
+    Beide soorten kaart zetten dezelfde 🛠 voor de naam — die van een artefact (`_kaart`) en die
+    van een ingebouwd scherm (`_tool_kaart`). Dat is precies wat een platte lijst mogelijk maakt:
+    de kaarten zijn niet aan hun soort te herkennen, en hoeven dat ook niet te zijn."""
+    blok = html.split("tile-grid")[1]
+    return re.findall(r"\U0001f6e0 ([^<]+)", blok)
+
+
+def test_de_tools_staan_in_een_platte_alfabetische_lijst(tmp_path):
+    """DE INDELING WAS DIE VAN DE MAKER (29 september 2026). Twee blokken — "Tools" voor de
+    artefacten, "Screens per role" voor de ingebouwde schermen, die laatste nog eens per rol
+    ondergroepeerd — vroegen van de lezer dat hij wist hoe een stuk gereedschap ooit gebouwd is
+    vóór hij wist waar hij moest kijken. Eén lijst op naam vraagt dat niet.
+
+    DE GROEPERING PER ROL BLIJFT BESTAAN waar de rol wél het onderwerp is: op de Tools-tab van die
+    rol (`_role_tools_html`). Die tabel is dezelfde; alleen dit overzicht groepeert niet meer."""
+    dd, st, a = _dorp(tmp_path)
+    st.att.add("mother_earth", "tool", title="Aardige eerste tool", url="/ergens")
+    st.att.add("mother_earth", "tool", title="Zzz laatste tool", url="/elders")
+    h = render_tools(cockpit2._Stores(dd), csrf_token="t", username="aap@test.nl")
+
+    namen = _namen_op_volgorde(h)
+    assert namen == sorted(namen, key=str.lower), f"niet alfabetisch: {namen}"
+    # DOOR ELKAAR, niet achter elkaar: een artefact staat vóór een scherm en een ander erachter.
+    assert namen[0].startswith("Aardige") and namen[-1].startswith("Zzz")
+    assert "Site audit" in namen and "Decision coach" in namen
+
+    # GEEN GROEPERING MEER: geen blokkop, en geen rolnaam als kopje.
+    assert "Screens per role" not in h
+    assert "<h3>" not in h, "er staat nog een kopje per rol"
+    assert h.count("tile-grid") == 1, "er is meer dan één lijst"
+    # De paginatekst en het formulier blijven staan, in die volgorde.
+    assert h.index("Everything in the village") < h.index("tile-grid") < h.index("+ New tool")
+
+
+def test_hetzelfde_scherm_staat_er_maar_een_keer(tmp_path):
+    """Twee rollen met hetzelfde domein gaven twee kaarten onder twee kopjes — leesbaar. Naast
+    elkaar in één lijst is dat ruis: zelfde naam, zelfde bestemming."""
+    from nooch_village import claims_db
+    dd, st, a = _dorp(tmp_path)
+    for rol in (ROL, ANDERE_ROL):
+        rec = st.records.get(rol)
+        rec.definition.domains = [claims_db.DOMEIN]
+        st.records.put(rec)
+    h = render_tools(cockpit2._Stores(dd), csrf_token="t", username="aap@test.nl")
+    assert _namen_op_volgorde(h).count("Claims checker") == 1
+
+
 def test_de_titel_is_de_link_want_een_tool_open_je(tmp_path):
     dd, st, a = _dorp(tmp_path)
     h = render_tools(st, csrf_token="t", username="aap@test.nl")

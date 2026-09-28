@@ -57,9 +57,29 @@ def test_er_staat_een_aanmaakformulier_op_tools(tmp_path):
 
 def test_ook_als_er_nog_geen_enkele_tool_is(tmp_path):
     """DE STAND WAARIN JE HEM HET HARDST NODIG HEBT. Hing hij alleen onder een gevulde lijst, dan
-    ontbreekt hij precies wanneer er nog niets is om aan toe te voegen."""
+    ontbreekt hij precies wanneer er nog niets is om aan toe te voegen.
+
+    DE LEGE ZIN IS SINDS 29 SEPTEMBER EEN ANDERE STAND. Toen het scherm twee blokken had, was "geen
+    tool-artefacten" ook "leeg blok". Nu staan de artefacten en de ingebouwde schermen in één lijst,
+    en die schermen zijn CODE — ze kunnen niet op raken. Zonder artefacten zie je dus geen lege
+    pagina maar de schermen, en dat is juist het punt van één lijst. Deze toets meet daarom allebei:
+    het formulier staat er zonder artefacten, en de zin verschijnt alleen als de lijst écht leeg is
+    (de tabellen leeg gemonkeypatcht — in productie is die stand er niet)."""
     dd, st = _dorp(tmp_path)
     _leeg(st)
+    h = render_tools(cockpit2._Stores(dd), csrf_token="TOK", username="aap@test.nl")
+    assert "+ New tool" in h
+    assert "No tools in the village yet" not in h, "de schermen zijn er nog, dus leeg is het niet"
+    assert "Site audit" in h
+
+
+def test_de_lege_zin_bestaat_nog_voor_de_stand_die_hem_verdient(tmp_path, monkeypatch):
+    """Een fallback die je niet kunt bereiken, is een fallback die stilletjes kapot gaat."""
+    from nooch_village.views import overview
+    dd, st = _dorp(tmp_path)
+    _leeg(st)
+    monkeypatch.setattr(overview, "_ROLE_TOOLS", {})
+    monkeypatch.setattr(overview, "_DOMAIN_TOOLS", {})
     h = render_tools(cockpit2._Stores(dd), csrf_token="TOK", username="aap@test.nl")
     assert "No tools in the village yet" in h and "+ New tool" in h
 
