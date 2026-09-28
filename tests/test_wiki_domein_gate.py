@@ -226,7 +226,11 @@ def test_policy_wordt_hier_niet_aangeboden(tmp_path):
     dd, st, wie = _dorp(tmp_path)
     html = _nieuwe_pagina_form(st, "T", "buiten@t.nl")
     assert "value='policy'" not in html
-    assert "value='note'" in html and "value='tool'" in html
+    # EN EEN TOOL OOK NIET MEER (28 september 2026): die maak je op `/tools` zelf. Wat overblijft
+    # is één soort, en dan is een keuzelijst geen keuze — `_soort_veld` rendert hem als verborgen
+    # veld, zoals `_domain_field` dat bij één domein al deed.
+    assert "value='tool'" not in html
+    assert "name='kind' value='note'" in html
 
 
 def test_stap_2_toont_alleen_domeinen_waar_je_op_mag(tmp_path):

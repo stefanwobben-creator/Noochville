@@ -28,7 +28,15 @@ def _dorp(tmp_path):
 
 
 def _koppen(html: str) -> list[str]:
-    return [m.strip() for m in re.findall(r"<summary>([^<]+)<span class='muted'>", html)]
+    """De bakje-koppen uit de linkerkolom, ONT-ESCAPED.
+
+    `&amp;` (28 september 2026): de labels staan als HTML in de pagina, dus "Tech & platform" komt
+    er als "Tech &amp; platform" uit en matchte nooit op `domeinen.BAKJES`. Dat viel niet op zolang
+    er een derde bakje zonder ampersand meedeed — de zaad-tools leverden dat toevallig — en kwam
+    boven toen die tools uit de index verdwenen. De toets mat dus minder dan hij dacht."""
+    import html as _html
+    return [_html.unescape(m.strip())
+            for m in re.findall(r"<summary>([^<]+)<span class='muted'>", html)]
 
 
 # ── Brok 4: het rapport en de toewijzingen ───────────────────────────────────
