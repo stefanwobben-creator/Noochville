@@ -5,14 +5,21 @@ met `.cl-head` + `h3`, de kleur als bestaande chip-variant in `.kc-actions`, uit
 bevindingen in een `<details class='box-details'>`). Geen nieuwe CSS-klassen, geen inline styles.
 Dit scherm leest alleen: de run gebeurt via `village site_audit` (en later via de weekklok).
 
-EN SINDS 28 SEPTEMBER OOK VIA EEN KNOP, maar niet hier. `scan_paneel` hieronder rendert die knop
-voor de pagina die de audit noemt (het Website Handboek); dit scherm blijft de uitslag tonen en
-niets aftrappen. Besluit Stefan, en het is een BEWUSTE doorbreking van "de run draait nooit in het
-cockpit" — met een slot eromheen, omdat er nu drie ingangen zijn die elkaar kunnen kruisen.
+EN SINDS 28 SEPTEMBER OOK VIA EEN KNOP, en die staat sindsdien HIER.
+
+Eerst hing hij aan de pagina die de audit noemde (het Website Handboek), zodat er geen titel of
+artefact-id in de rendercode hoefde te staan. Diezelfde dag is die pagina verwijderd, en toen bleek
+de indirectie precies zo sterk als haar aanknopingspunt: geen pagina, geen knop, en een zaai-functie
+die naar een titel zocht die niet meer bestond. Het scherm dat de uitslag toont is de plek waar je
+tóch al staat als je hem wilt verversen — dat had het eerste antwoord moeten zijn.
+
+Het blijft een BEWUSTE doorbreking van "de run draait nooit in het cockpit", met het slot eromheen,
+omdat er drie ingangen zijn die elkaar kunnen kruisen (CLI, knop, en de klok van scope 47).
 """
 from __future__ import annotations
 
 import time
+import urllib.parse
 
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _age
@@ -114,6 +121,11 @@ def scan_paneel(data_dir: str, csrf_token: str = "", *, mag: bool = False,
             knop = (f"<form method='post' action='/action' class='fentry-inline'>"
                     f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                     f"<input type='hidden' name='next' value='{_e(terug)}'>"
+                    # HET DOEL REIST MEE. Op de dev-tab hoort de knop de DEV-reeks te meten; zonder
+                    # dit veld zou hij live scannen terwijl het scherm iets anders zegt — en
+                    # allebei de reeksen hebben hun eigen slot, dus dat zou ook nog eens twee runs
+                    # naast elkaar toestaan.
+                    f"<input type='hidden' name='doel' value='{_e(doel)}'>"
                     f"<input type='hidden' name='action' value='site_audit_run'>"
                     f"<button class='btn ok sm' type='submit'>Run scan</button></form>")
         binnen = f"<span class='muted'>{wanneer}</span>{knop}"
@@ -126,11 +138,31 @@ def scan_paneel(data_dir: str, csrf_token: str = "", *, mag: bool = False,
             f"The result lands on <a href='/site-audit'>Site audit</a>.</div>{melding}</div>")
 
 
-def render_site_audit(st, doel: str = "live") -> str:
+def render_site_audit(st, doel: str = "live", *, csrf_token: str = "",
+                      username: str | None = None) -> str:
+    """De lampjes, en de knop die er nieuwe ophaalt.
+
+    DE POORT WORDT TWEE KEER GESTELD, hier en in `_act_site_audit_run` — met dezelfde functie op
+    dezelfde rol. Een knop tonen die de server daarna weigert is wat deze codebase op vijf andere
+    plekken al heeft opgeruimd.
+
+    LEZEN BLIJFT VRIJ: wie de rol niet vervult ziet de stand van de scan gewoon, alleen zonder de
+    knop erbij."""
+    from nooch_village.cockpit2 import _role_gate
+    from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE
+
     doel = doel if doel in site_audit.DOELEN else "live"
     staat = site_audit.SiteAuditStaat(site_audit.pad_voor(st.dd, doel))
     laatste = staat.laatste()
     cmd = "python -m nooch_village.village site_audit" + (" --dev" if doel == "dev" else "")
+    hier = "/site-audit" + ("?doel=dev" if doel == "dev" else "")
+    mag = bool(csrf_token) and _role_gate(WEBSITE_DEVELOPER_ROLE, username, st) is None
+    # `data-poll` = de generieke poller uit `nooch.js`. Zonder hem blijft "scanning…" staan tot de
+    # lezer zelf ververst, en dan is de knop wél veilig maar de terugkoppeling nutteloos.
+    paneel = (f"<div data-poll='/scan-status?doel={_e(doel)}&amp;"
+              f"next={_e(urllib.parse.quote(hier))}' data-poll-ms='5000'>"
+              f"{scan_paneel(st.dd, csrf_token if mag else '', mag=mag, terug=hier, doel=doel)}"
+              f"</div>")
     if laatste is None:
         uitleg = ("then the lights of the preview theme show up here (<code>mobiel_audit_dev_url</code> "
                   "in <code>config/settings.ini</code>): a series of its own, separate from live — a dev "
@@ -138,7 +170,8 @@ def render_site_audit(st, doel: str = "live") -> str:
                   "then the lights of the shop show up here: reachable, speed, accessibility, best "
                   "practices, SEO and claims.")
         main = (f"<div class='c2-main'><h1>Site audit {_doel_seg(doel)}</h1>"
-                f"<p class='muted'>No run yet. Run <code>{_e(cmd)}</code> on the server; {uitleg}</p></div>")
+                f"<p class='muted'>No run yet &mdash; press <b>Run scan</b> below, or run "
+                f"<code>{_e(cmd)}</code> on the server; {uitleg}</p>{paneel}</div>")
     else:
         wissels = laatste.get("wissels") or []
         wissel_html = ""
@@ -156,5 +189,6 @@ def render_site_audit(st, doel: str = "live") -> str:
                 f"({_e(laatste.get('datum') or '')}, {laatste.get('duur_s', '?')} s). The worst light sets "
                 f"the colour at the top; grey is not measured and does not count. A light that CHANGES "
                 f"colour is the signal — the standing is just the screen.{dev_noot}</p>"
-                f"{wissel_html}<h2>Lampjes</h2>{kaarten}{_verloop_html(staat.verloop())}</div>")
+                f"{paneel}{wissel_html}<h2>Lampjes</h2>{kaarten}"
+                f"{_verloop_html(staat.verloop())}</div>")
     return _page("Site audit", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

@@ -420,57 +420,6 @@ def _draai_met_slot(st, ctx, registry, *, url: str, doel: str,
     return snapshot, wissels
 
 
-#: De pagina die de scanknop draagt, en het regeltje dat hem daar zet.
-#:
-#: WAAROM DIT EEN EENMALIGE DATA-WIJZIGING IS EN GEEN `if titel == …` IN DE VIEW. De knop verschijnt
-#: op elke pagina die naar `/site-audit` VERWIJST — dat is dezelfde koppeling als bij de decision
-#: coach, en om dezelfde reden: geen titel en geen artefact-id in de rendercode, want een titel is
-#: een naam die iemand herschrijft. Maar dan moet die verwijzing er wel staan, en in het Website
-#: Handboek stond hij niet.
-#:
-#: DE TITEL MAG HIER WÉL STAAN, want dit is een BESLUIT en geen regel: "de scanknop hoort in het
-#: handboek" is precies zo'n keuze als de inclusies in `_COPY_STACK_ZAAD` ("een besluit dat je
-#: afleidt uit een regel is geen besluit meer"). Hij staat één keer, in een zaai-functie, en niet in
-#: de weg van de rendercode.
-#:
-#: EN HET IS OMKEERBAAR DOOR EEN MENS: haal de regel uit de pagina en de knop is weg. Dat is meer
-#: dan een vlag in de data zou geven, want daar is geen scherm voor.
-HANDBOEK_TITEL = "WEBSITE HANDBOEK"
-#: GEEN MARKDOWN-LINK, en dat is gemeten en niet gegokt: `_md` weigert een INTERN pad bewust
-#: (`test_link_niet_http_geen_link_failclosed`), dus `[Site audit](/site-audit)` zou als rauwe
-#: haakjes op het scherm staan. Het pad in gewone tekst leest goed én draagt de koppeling; de
-#: klikbare link naar het scherm staat in het paneel zelf, dat geen markdown is.
-_KNOP_REGEL = ("\n\n## Site audit\n\n"
-               "The lights for reachability, speed, accessibility, SEO and claims of the live shop "
-               "are on the Site audit screen (/site-audit). The **Run scan** button at the bottom "
-               "of this page starts a fresh measurement; it takes 20-60 seconds.\n")
-
-
-def zorg_voor_knop_verwijzing(store, *, titel: str = HANDBOEK_TITEL) -> str:
-    """Zet één verwijzing naar de site audit in het handboek, zodat het de scanknop draagt.
-
-    Idempotent, en met drie guards die hem klein houden: alleen een TOOL met precies deze titel,
-    alleen als de verwijzing er nog niet staat, en alleen als er al tekst in staat — een lege
-    pagina vullen is geen koppeling leggen maar schrijven, en dat is niet aan het dorp.
-
-    Geeft het id terug als er iets is geschreven, anders "".
-    """
-    from nooch_village import artefacts
-
-    for a in store.by_kind("tool", include_archived=True):
-        if artefacts.norm_titel(a.title) != artefacts.norm_titel(titel):
-            continue
-        body = a.body or ""
-        if "/site-audit" in body or not body.strip():
-            return ""
-        store.update(a.id, body=body.rstrip() + _KNOP_REGEL, actor_id="system",
-                     actor_type="persona",
-                     change_note="scanknop gekoppeld: verwijzing naar /site-audit toegevoegd")
-        log.info("site audit: verwijzing toegevoegd aan %s (%s)", a.id, a.title)
-        return a.id
-    return ""
-
-
 # ── De knop-ingang: pakken in de ene thread, draaien in de andere ────────────
 #
 # WAAROM NIET GEWOON SYNCHROON IN DE POST-HANDLER. `draai` doet echte netwerkchecks (een GET op de
