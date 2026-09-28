@@ -456,7 +456,7 @@ def render_search(st, q: str = "") -> str:
     q = (q or "").strip()
     termen = [t for t in q.lower().split() if t]
     if not termen:
-        main = ("<div class='c2-main'><h1>Search</h1>"
+        main = ("<div class='c2-main'><h1 class='ptitle'>Search</h1>"
                 "<p class='muted'>Type in the search bar above to search people, roles, "
                 "accountabilities, projects and the knowledge base in one go.</p></div>")
         return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
@@ -472,7 +472,7 @@ def render_search(st, q: str = "") -> str:
         blokken.append("<p class='muted'>Nothing found. Try another word.</p>")
     sug = _suggestie_html(_suggestie(st, q, totaal)) + _fouten_html(fouten)
 
-    main = (f"<div class='c2-main'><h1>Search for “{_e(q)}”</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Search for “{_e(q)}”</h1>"
             f"<p class='muted'>{totaal} hit(s) in people, roles, accountabilities, projects "
             f"and the knowledge base.</p>"
             f"{sug}{''.join(blokken)}</div>")

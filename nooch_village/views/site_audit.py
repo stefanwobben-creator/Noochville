@@ -169,7 +169,7 @@ def render_site_audit(st, doel: str = "live", *, csrf_token: str = "",
                   "run next to a live run would read as a false swing." if doel == "dev" else
                   "then the lights of the shop show up here: reachable, speed, accessibility, best "
                   "practices, SEO and claims.")
-        main = (f"<div class='c2-main'><h1>Site audit {_doel_seg(doel)}</h1>"
+        main = (f"<div class='c2-main'><h1 class='ptitle'>Site audit {_doel_seg(doel)}</h1>"
                 f"<p class='muted'>No run yet &mdash; press <b>Run scan</b> below, or run "
                 f"<code>{_e(cmd)}</code> on the server; {uitleg}</p>{paneel}</div>")
     else:
@@ -183,7 +183,7 @@ def render_site_audit(st, doel: str = "live", *, csrf_token: str = "",
         wanneer = _age(float(laatste.get("ts") or 0)) if laatste.get("ts") else "?"
         dev_noot = (" Dit is het preview-thema, mét Shopify's preview-balk; vergelijk dev met live nooit op "
                     "one run; the lab score swings by tens of points." if doel == "dev" else "")
-        main = (f"<div class='c2-main'><h1>Site audit "
+        main = (f"<div class='c2-main'><h1 class='ptitle'>Site audit "
                 f"{_chip(laatste.get('totaal') or 'grijs')} {_doel_seg(doel)}</h1>"
                 f"<p class='muted'>{_e(laatste.get('url') or '')} · last run {_e(wanneer)} "
                 f"({_e(laatste.get('datum') or '')}, {laatste.get('duur_s', '?')} s). The worst light sets "

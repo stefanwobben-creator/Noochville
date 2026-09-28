@@ -846,7 +846,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     a = st.att.get(aid)
     if a is None or a.kind not in ARTEFACT_KINDS:
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-                "<h1>Page not found</h1><p class='muted'>There is no page with this id. "
+                "<h1 class='ptitle'>Page not found</h1><p class='muted'>There is no page with this id. "
                 "A page is a note, policy or tool; open the role that owns it and use its "
                 "Notes, Policies or Tools tab.</p></div>")
         return _page("Page not found", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
@@ -880,7 +880,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # HET ICOON VOLGT DE SOORT (`_KIND_ICON`), zodat een policy niet als note leest. Dezelfde
     # tabel als op de kaart en in de index; geen tweede opsomming hier.
     kop = (f"<div class='c2-bar'><a href='{_e(terug)}'>← {_e(tab)}</a></div>"
-           f"<h1>{_KIND_ICON.get(a.kind, '📄')} {titel}</h1>")
+           f"<h1 class='ptitle'>{_KIND_ICON.get(a.kind, '📄')} {titel}</h1>")
     # GEEN "EDIT PAGE"-KNOP (26 september 2026). Wie de pagina mag bewerken, bewerkt hem — zoals
     # een tekstverwerker: je klikt in de tekst en typt.
     #
@@ -1116,7 +1116,7 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
         kaarten = ("<p class='muted'>Nothing written down yet. A policy, note or tool starts on the "
                    "role or circle that owns it &mdash; open its Wiki tab.</p>")
 
-    main = (f"<div class='c2-main'><h1>Wiki</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Wiki</h1>"
             f"<p class='muted'>All policies, notes and tools from across the village &middot; "
             f"by domain where known. A page is editable by anyone unless it sits in a domain "
             f"another role owns.</p>"

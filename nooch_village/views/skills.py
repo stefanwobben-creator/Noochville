@@ -172,7 +172,7 @@ def render_skills(st, human_inbox=None) -> str:
     # De twee getallen die de catalogus van een bezettingslijst onderscheiden.
     gedraaid = sum(1 for r in uit if (r.get("draai") or {}).get("totaal"))
     opgeleverd = sum(1 for r in uit if (r.get("draai") or {}).get("laatste_opbrengst"))
-    main = (f"<div class='c2-main'><h1>Skills — what can the village already do?</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Skills — what can the village already do?</h1>"
             f"<p class='muted'>A skill is a shared village resource: one implementation, one "
             f"key, one limiter, however many roles wield it. It hangs on a commitment "
             f"(accountability), not on a role. A means that <b>decides</b> inside a domain "

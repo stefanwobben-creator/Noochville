@@ -228,7 +228,7 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
                   + _sectie("Escalated (awaiting your verdict)", esc)
                   + _sectie("Paused (avoid)", avoid)
                   + _sectie_inklap("No-follow list", forb))
-    main = (f"<div class='c2-main'><h1>Library &amp; opportunities</h1>{_banner(msg)}"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Library &amp; opportunities</h1>{_banner(msg)}"
             f"<p class='muted'>The approved words of the Library, ranked by opportunity so that "
             f"the most promising word is on top. Roles deliver the enrichment; Library curates. "
             f"The Trend column is the GSC impressions series of the last {_SPARK_DAGEN} days.</p>"
