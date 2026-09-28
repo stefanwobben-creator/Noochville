@@ -1164,6 +1164,12 @@ _NU_ROUTES = frozenset({
     # handmatig bijgehouden lijst waar een nieuwe route niet vanzelf in komt. Zie de ratchet in
     # `tests/test_nu_routes.py`, die dit gat sluit.
     "/acties", "/tools",
+    # `/decision-coach` stond als fase-9-schuld in `tests/test_nu_routes.py::BUITEN` (28 september
+    # 2026). Hij draait op dezelfde schil als de rest — `_DS_LINK`, `_nav()`, `.c2-wrap` — dus het
+    # verschil was alleen dat hij niet in deze lijst stond: zijn eigen scherm zag er ouder uit dan
+    # de tool-kaart die ernaartoe linkt. De dertien andere schuld-schermen blijven staan; die zijn
+    # een eigen klus (besluit Stefan).
+    "/decision-coach",
 })
 
 #: Eén `<a>` in de zijbalk-navigatie, met zijn href. Alleen dáár: de header heeft ook links

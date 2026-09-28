@@ -80,7 +80,10 @@ def test_de_geparkeerde_schermen_staan_er_bewust_niet_in():
     WAS in fase 7 aangeraakt (taalresten) en viel dus ten onrechte buiten de scope. Bewust hier
     weggehaald en niet stilzwijgend — dat is precies het soort wijziging dat een jaar later
     onverklaarbaar is."""
-    for pad in ("/claims", "/metrics2", "/catalog", "/skills", "/copy-check", "/decision-coach",
+    # `/decision-coach` stond hier tot 28 september 2026: hij is uit de fase-9-schuld gehaald en
+    # doet nu mee. Bewust hier weggehaald en niet stilzwijgend — dat is precies het soort
+    # wijziging dat een jaar later onverklaarbaar is.
+    for pad in ("/claims", "/metrics2", "/catalog", "/skills", "/copy-check",
                 "/keywords", "/rapport", "/login"):
         assert pad not in _NU_ROUTES, pad
 

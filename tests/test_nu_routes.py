@@ -49,7 +49,6 @@ BUITEN = {
     "/claims": "fase-9-schuld",
     "/copy-check": "fase-9-schuld",
     "/copy-prompt": "fase-9-schuld",
-    "/decision-coach": "fase-9-schuld",
     "/keywords": "fase-9-schuld",
     "/kpi_new": "fase-9-schuld",
     "/long-term-trends": "fase-9-schuld",
@@ -95,7 +94,22 @@ def test_de_schuld_mag_alleen_korter():
     De structurele uitzonderingen worden gedekt door `test_elke_route_heeft_een_keuze` (elke route
     moet erin staan óf in `_NU_ROUTES`) en door `test_de_uitzonderingen_bestaan_nog`."""
     schuld = [r for r, reden in BUITEN.items() if reden == "fase-9-schuld"]
-    assert len(schuld) <= 14, f"{len(schuld)} fase-9-schermen — de schuld is gegroeid: {schuld}"
+    assert len(schuld) <= 13, f"{len(schuld)} fase-9-schermen — de schuld is gegroeid: {schuld}"
+
+
+def test_een_route_staat_nooit_in_allebei_de_lijsten():
+    """"óf in `_NU_ROUTES`, óf in `BUITEN`" — en niet in allebei. Een route die in beide staat
+    leest als een besluit terwijl er twee tegenstrijdige staan; bij het verplaatsen van
+    `/decision-coach` bleek dat geen enkele toets dat opmerkte."""
+    dubbel = sorted(set(_NU_ROUTES) & set(BUITEN))
+    assert not dubbel, f"staat in _NU_ROUTES én in BUITEN: {dubbel}"
+
+
+def test_de_coach_is_uit_de_schuld_gehaald():
+    """Hij stond als fase-9-schuld geparkeerd terwijl hij op dezelfde schil draait als de rest
+    (`_DS_LINK`, `_nav()`, `.c2-wrap`). De teller ging van 14 naar 13; de andere dertien zijn een
+    eigen klus (besluit Stefan)."""
+    assert "/decision-coach" in _NU_ROUTES and "/decision-coach" not in BUITEN
 
 
 # ══ De twee die het misten ═══════════════════════════════════════════════════
