@@ -2,6 +2,7 @@
 zijn sinds fase 3 lenzen op één datalaag; de kaarten wijzen naar /keywords?lens=… (getest hier)."""
 from __future__ import annotations
 
+import pathlib
 import types
 
 from nooch_village import claims_db
@@ -16,9 +17,53 @@ def _rec_met_domein(rid, domein=claims_db.DOMEIN):
     return types.SimpleNamespace(id=rid, definition=types.SimpleNamespace(domains=[domein]))
 
 
+def test_geen_enkele_rol_tool_wijst_naar_een_verdwenen_scherm():
+    """DE KLASSE FOUT, en niet alleen dit geval. Een tool-kaart is een LINK in code; verdwijnt het
+    scherm eronder, dan merkt niemand dat tot iemand erop klikt. `/linkbuilding` stond zo negen
+    dagen dood op de tools van Marketing Lead, en "Oracle" was hetzelfde geval — daar is het toen
+    per kaart opgelost.
+
+    Deze toets doet het structureel: elke interne href in `_ROLE_TOOLS`/`_DOMAIN_TOOLS` moet een
+    route zijn die `cockpit2` daadwerkelijk kent. Een kaart zonder href (bewust uitgeschakeld, met
+    de reden in de tekst) telt niet mee — dat is juist de oplossing."""
+    import re
+
+    from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS
+    bron = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "cockpit2.py").read_text()
+    routes = set(re.findall(r'path == "(/[a-z0-9_-]*)"', bron))
+    routes |= {"/node", "/"}                       # via andere vergelijkingen afgehandeld
+
+    dood = []
+    for rijen in list(_ROLE_TOOLS.values()) + list(_DOMAIN_TOOLS.values()):
+        for label, _uitleg, href in rijen:
+            if not href or not href.startswith("/"):
+                continue
+            pad = href.replace("&amp;", "&").split("?")[0]
+            if pad not in routes:
+                dood.append(f"{label} → {href}")
+    assert not dood, f"tool-kaart naar een route die niet bestaat: {dood}"
+
+
+def test_een_uitgeschakelde_kaart_zegt_waarom():
+    """Een lege href zonder uitleg is een kaart die niets doet en niets zegt. Wie hem uitschakelt,
+    schrijft erbij wat er weg is — dat is het patroon dat "Oracle" al volgde."""
+    from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS
+    for rijen in list(_ROLE_TOOLS.values()) + list(_DOMAIN_TOOLS.values()):
+        for label, uitleg, href in rijen:
+            if href:
+                continue
+            assert "removed" in uitleg.lower(), f"{label} is uitgeschakeld zonder reden: {uitleg!r}"
+
+
 def test_role_tools_kaarten_per_eigenaar_rol():
     marketing = _role_tools_html(_rec("mother_earth__nooch__marketing_lead"))
-    assert "Linkbuilding" in marketing and "/linkbuilding" in marketing and "tile-grid" in marketing
+    # DE KAART BLIJFT, DE LINK NIET (28 september 2026). `/linkbuilding` is met de rest van de
+    # opruiming in #516 verwijderd (20 september), maar deze kaart wees er nog naar — een kale 404
+    # op de tools van Marketing Lead. Nu een lege href met de reden erin, zoals "Oracle" al deed.
+    # De kaart weghalen zou het vermogen stil laten verdwijnen: de skill draait nog.
+    assert "Linkbuilding" in marketing and "tile-grid" in marketing
+    assert "/linkbuilding" not in marketing, "de dode link is terug"
+    assert "removed on 20 September 2026" in marketing
     assert "/keywords?lens=marketing" in marketing
     lara = _role_tools_html(_rec("librarian"))
     assert "Library" in lara and "/woordenschat" in lara
