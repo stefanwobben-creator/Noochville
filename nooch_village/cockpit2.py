@@ -982,6 +982,19 @@ def is_circle_member(person_id: str, circle_id: str, records, assignments) -> bo
                for r in records.all())
 
 
+def mag_rolwerk(actor_id: str, target: str, st) -> bool:
+    """De REGEL achter `_role_gate`, op een persoon-id in plaats van een e-mailadres.
+
+    Waarom hij apart staat (28 september 2026): een SCHERM weet wie er kijkt als persoon-id (de
+    actielijst krijgt `ik`), terwijl de dispatch met een e-mailadres werkt. Zonder deze splitsing
+    schrijft het scherm de regel een tweede keer uit — en dan toont het een knop die de server
+    daarna weigert, of andersom. Eén formulering, twee ingangen; dezelfde vorm als
+    `artefacts.mag_schrijven_op_domein`."""
+    return bool(actor_id) and (
+        is_role_filler(actor_id, target, st.assign)
+        or is_circle_lead(actor_id, resolve_circle_id(target, st.records), st.assign))
+
+
 def _role_gate(target: str, username: str | None, st) -> str | None:
     """Poort voor operationele takken. `target` = de eigenaar/node van het object
     (rol-id, cirkel-id of "ii:<circle>"). Geeft een foutmelding terug bij weigering,
@@ -992,8 +1005,7 @@ def _role_gate(target: str, username: str | None, st) -> str | None:
     actor = st.people.by_email(username)
     if actor is None:
         return "No access — user not recognised"
-    if (is_role_filler(actor.id, target, st.assign)
-            or is_circle_lead(actor.id, resolve_circle_id(target, st.records), st.assign)):
+    if mag_rolwerk(actor.id, target, st):
         return None
     return "No access — only the role filler or Circle Lead may do this"
 
