@@ -1749,6 +1749,30 @@
   // DEZELFDE DRIE MANIEREN: niets vragen met een verborgen tabblad, bij een fout het interval
   // verdubbelen, en niets vervangen als er niets veranderd is (anders verliest een knop die je
   // aanwijst zijn hover en leest een schermlezer hem elke ronde opnieuw voor).
+  // Staat er iemand IN DIT FRAGMENT te typen? Dan is dit niet het moment om het te vervangen.
+  //
+  // WAAROM WACHTEN EN NIET HERSTELLEN (zoals `NV.swap` doet met bewaarFocus/herstelFocus). Een swap
+  // gebeurt op een moment dat de gebruiker zelf koos: hij klikte, en de pagina antwoordt. Een
+  // poller tikt op een klok waar niemand om vroeg. Het DOM opnieuw opbouwen onder een cursor die
+  // midden in een woord staat is dan geen herstel maar een onderbreking — en `herstelFocus` kan
+  // wel de waarde terugzetten, niet een lopende samenstelling (accenten, IME) of de scrollpositie.
+  // Wachten kost hooguit één tik: zodra het veld de focus loslaat, vervangt de volgende ronde alsnog.
+  //
+  // SPECIFIEK EEN TEKSTVELD, niet "er is iets gefocust". Na een klik op een knop in het fragment is
+  // die knop het actieve element; zou dat ook blokkeren, dan zou het paneel juist na een actie
+  // blijven staan — het tegenovergestelde van wat dit moet doen.
+  function typtIemandHierIn(el) {
+    var a = document.activeElement;
+    if (!a || !el || a === el || !el.contains(a)) return false;
+    var tag = (a.tagName || "").toUpperCase();
+    if (tag === "TEXTAREA") return true;
+    if (tag !== "INPUT") return !!a.isContentEditable;
+    // Een knop is ook een INPUT (submit/button/checkbox/radio) — alleen velden waar tekst in gaat.
+    var soort = (a.getAttribute("type") || "text").toLowerCase();
+    return ["button", "submit", "reset", "checkbox", "radio", "file", "image", "hidden", "range",
+            "color"].indexOf(soort) === -1;
+  }
+
   function pollers(root) {
     Array.prototype.forEach.call(root.querySelectorAll("[data-poll]"), function (el) {
       if (el.dataset.nvPoll) return;
@@ -1765,6 +1789,7 @@
           .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
           .then(function (html) {
             wacht = basis;
+            if (typtIemandHierIn(el)) return;          // tikken zit niet in de weg: de ronde erna
             if (html && html !== el.innerHTML) el.innerHTML = html;
           })
           .catch(function () { wacht = Math.min(wacht * 2, 5 * 60 * 1000); })

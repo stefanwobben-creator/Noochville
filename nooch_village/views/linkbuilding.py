@@ -28,6 +28,12 @@ _PRIO_UITLEG = {
     "laag": "Nooch is already listed here",
     "onbekend": "the page could not be read",
 }
+#: WAT DE LEZER ZIET, naast wat de data ZEGT. De prioriteit is een sleutel uit de skill
+#: (`lb.PRIORITEITEN`) en die is Nederlands; het scherm is Engels. Tot 28 september stond de sleutel
+#: zelf in de chip — een interne enum die per ongeluk interface werd. De taal-ratchet vangt dit niet
+#: en dat is terecht: hij slaat losse woorden zonder spatie bewust over, want dat zijn normaal
+#: sleutels. Precies daarom hoort de vertaling hier, op de plek waar een sleutel tekst wordt.
+_PRIO_LABEL = {"hoog": "high", "midden": "medium", "laag": "low", "onbekend": "unknown"}
 _BESLUIT_LABEL = {"pursue": "to pitch", "ignore": "ignored"}
 
 #: De rol die dit gereedschap draagt. Hij staat als sleutel in `_ROLE_TOOLS`; hier één keer als
@@ -40,7 +46,8 @@ def _rij(t: dict, csrf_token: str, mag: bool) -> str:
     link = str(t.get("link") or "")
     prio = t.get("priority") or "onbekend"
     chip = (f"<span class='{_PRIO_CHIP.get(prio, 'chip muted')}' "
-            f"title='{_e(_PRIO_UITLEG.get(prio, ''))}'>{_e(prio)}</span>")
+            f"title='{_e(_PRIO_UITLEG.get(prio, ''))}'>"
+            f"{_e(_PRIO_LABEL.get(prio, prio))}</span>")
     noemt = (f"<span class='muted'> &middot; mentions {_e(', '.join(t.get('mentions') or []))}</span>"
              if t.get("mentions") else "")
     snippet = (f"<div class='muted'>{_e(str(t.get('snippet') or '')[:220])}</div>"
