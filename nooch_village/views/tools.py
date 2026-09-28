@@ -10,12 +10,19 @@ enige artefact-soort met een `url`: een note en een policy zijn er om te LEZEN, 
 GEBRUIKEN. Die twee horen niet door hetzelfde filter — je zoekt een tool niet op "bij welke rol
 stond hij ook alweer", je zoekt hem omdat je hem nodig hebt.
 
-TWEE SOORTEN GEREEDSCHAP, en ze staan hier naast elkaar omdat ze voor de gebruiker hetzelfde zijn:
+TWEE SOORTEN GEREEDSCHAP, en ze staan hier DOOR ELKAAR omdat ze voor de gebruiker hetzelfde zijn:
 
   1. TOOL-ARTEFACTEN uit de AttachmentStore (`by_kind("tool")`, dorpsbreed). Die kun je bewerken
      als je op hun eigenaar mag schrijven.
   2. SCHERM-TOOLS uit `_ROLE_TOOLS`/`_DOMAIN_TOOLS` in `views/overview.py`: vaste links die bij een
-     rol of een domein horen. Die zijn code, geen data — ze staan hier alleen gegroepeerd.
+     rol of een domein horen. Die zijn code, geen data.
+
+ÉÉN ALFABETISCHE LIJST, GEEN GROEPEN (29 september 2026). Tot dan stonden ze in twee blokken, en de
+schermen nog eens onderverdeeld per rol. Dat is de indeling van de maker — waar komt dit ding
+vandaan, bij wie hoort het — en niet die van de gebruiker: die weet bij "ik wil de site scannen"
+niet of dat ooit als artefact of als scherm gebouwd is, en hoefde dat ook nooit te weten. Wie de
+vraag WÉL per rol stelt, kijkt op de Tools-tab van die rol (`_role_tools_html`); die groepering
+blijft daar, want daar is de rol het onderwerp.
 
 De tabellen worden GEÏMPORTEERD en niet gekopieerd: één plek waar staat welk scherm bij welke rol
 hoort, precies zoals `TOOL_ANCHOR` één plek is voor waar een tool-artefact hangt.
@@ -116,46 +123,53 @@ def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str
     actor = st.people.by_email(username) if username and username != "guest" else None
     actor_id = getattr(actor, "id", "")
 
-    # ── 1. de tool-artefacten, dorpsbreed ────────────────────────────────────
-    rij = sorted(st.att.by_kind("tool"), key=lambda a: (a.title or "").lower())
-    kaarten = "".join(
-        _kaart(st, a, bool(actor_id) and artefacts.can_write_artefact(
-            "person", actor_id, a.anchor, st.records, st.assign))
-        for a in rij)
-    # HET FORMULIER STAAT ER OOK BIJ NUL TOOLS. Zou hij alleen onder een gevulde lijst hangen, dan
-    # is de enige stand waarin je hem écht nodig hebt precies de stand waarin hij ontbreekt.
-    nieuw = _nieuwe_tool_form(st, csrf_token, username)
-    artefact_blok = (f"<div class='c2-sec'><h2>Tools</h2>{kaarten}{nieuw}</div>" if kaarten else
-                     f"<div class='c2-sec'><h2>Tools</h2>"
-                     f"<p class='muted'>No tools in the village yet.</p>{nieuw}</div>")
-
-    # ── 2. de scherm-tools per rol en per domein ─────────────────────────────
+    # ── één lijst, en dat is het hele punt ───────────────────────────────────
     #
-    # GEÏMPORTEERD, NIET GEKOPIEERD. Zou deze view zijn eigen lijst houden, dan is een tool die
-    # elders wordt toegevoegd hier onzichtbaar — en precies dat "twee plekken"-probleem lost dit
-    # scherm juist op.
-    per_rol: list[tuple[str, str]] = []
-    for rec in sorted(st.records.all(), key=lambda r: (_name(r) or r.id).lower()):
+    # TOT 29 SEPTEMBER STONDEN ZE IN TWEE BLOKKEN: "Tools" (artefacten) en "Screens per role" (de
+    # ingebouwde schermen, met een kopje per rol). Dat is de indeling van de MAKER — waar komt dit
+    # ding vandaan, bij wie hoort het — en niet die van de gebruiker: die zoekt een tool omdat hij
+    # hem nodig heeft, en weet meestal niet of het gereedschap ooit als artefact of als scherm is
+    # gebouwd. Wie wél wil zien wat bij een rol hoort, kijkt op de Tools-tab van die rol
+    # (`_role_tools_html`) — daar is de rol de vraag, hier niet.
+    #
+    # DE TABELLEN WORDEN GEÏMPORTEERD EN NIET GEKOPIEERD, onveranderd: één plek waar staat welk
+    # scherm bij welke rol hoort.
+    regels: list[tuple[str, str]] = []                  # (sorteernaam, html)
+
+    for a in st.att.by_kind("tool"):
+        regels.append(((a.title or a.id or "").lower(),
+                       _kaart(st, a, bool(actor_id) and artefacts.can_write_artefact(
+                           "person", actor_id, a.anchor, st.records, st.assign))))
+
+    # DE SCHERM-TOOLS HANGEN AAN EEN RECORD, ook nu de rol niet meer op het scherm staat: een
+    # domein-tool vult zijn eigen rol-id in (`{rol}`), en een gearchiveerde rol hoort hier niet.
+    gezien: set[tuple[str, str]] = set()
+    for rec in st.records.all():
         if getattr(rec, "archived", False):
             continue
         tools = list(_ROLE_TOOLS.get(rec.id, []))
         for d in (getattr(getattr(rec, "definition", None), "domains", None) or []):
             for label, desc, href in _DOMAIN_TOOLS.get(" ".join(str(d).split()).lower(), []):
                 tools.append((label, desc, href.replace("{rol}", _e(rec.id))))
-        if tools:
-            per_rol.append((_name(rec) or rec.id,
-                            "".join(_tool_kaart(l, d2, h) for l, d2, h in tools)))
-    scherm_blok = ""
-    if per_rol:
-        blokken = "".join(f"<div class='c2-sec'><h3>{_e(naam)}</h3>"
-                          f"<div class='tile-grid'>{kaarten2}</div></div>"
-                          for naam, kaarten2 in per_rol)
-        scherm_blok = (f"<div class='c2-sec'><h2>Screens per role</h2>"
-                       f"<p class='muted'>Built-in screens that belong to a role or a domain.</p>"
-                       f"{blokken}</div>")
+        for label, desc, href in tools:
+            # ZONDER DE ROL-KOPPEN IS EEN DUBBELE KAART EEN DUBBELE KAART. Twee rollen met hetzelfde
+            # domein leverden eerst twee kaarten onder twee kopjes — leesbaar. Naast elkaar in één
+            # lijst is dat ruis, en de tweede voegt niets toe: zelfde naam, zelfde bestemming.
+            if (label, href) in gezien:
+                continue
+            gezien.add((label, href))
+            regels.append((label.lower(), _tool_kaart(label, desc, href)))
+
+    regels.sort(key=lambda r: r[0])
+    lijst = ("".join(h for _n, h in regels) if regels else
+             "<p class='muted'>No tools in the village yet.</p>")
+    # HET FORMULIER STAAT ER OOK BIJ NUL TOOLS. Zou hij alleen onder een gevulde lijst hangen, dan
+    # is de enige stand waarin je hem écht nodig hebt precies de stand waarin hij ontbreekt.
+    blok = (f"<div class='c2-sec'><div class='tile-grid'>{lijst}</div>"
+            f"{_nieuwe_tool_form(st, csrf_token, username)}</div>")
 
     main = (f"<div class='c2-main'><h1 class='ptitle'>Tools</h1>"
             f"<p class='muted'>Everything in the village you can <em>use</em>, on one page. "
             f"A tool is not something to read &mdash; it is something to open.</p>"
-            f"{_banner(msg)}{artefact_blok}{scherm_blok}</div>")
+            f"{_banner(msg)}{blok}</div>")
     return _page("Tools", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
