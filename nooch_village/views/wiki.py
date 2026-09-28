@@ -961,8 +961,21 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
 # note of tool heeft er geen, en die staan onder "No domain yet" — precies zoals het prototype het
 # toont. Wie een item mag wijzigen verandert niet: dat blijft de eigenaar-rol, via zijn eigen tab.
 
-_WIKI_SOORTEN = (("all", "All"), ("policy", "Policy"), ("note", "Note"), ("tool", "Tool"))
-_WIKI_ICOON = {"policy": "&#128193;", "note": "&#128196;", "tool": "&#128295;"}
+#: WAT DE WIKI TOONT — en sinds 28 september 2026 is dat NIET meer alles wat een artefact is.
+#:
+#: Een tool hoort hier niet. `/tools` bestaat sinds #619 juist om gereedschap uit de wiki-tab per
+#: cirkel te halen ("van twee plekken naar één"), maar de dorpsbrede index bleef hem tonen — dus
+#: stond hij alsnog op twee plekken, nu allebei dorpsbreed. Een wiki is om te LEZEN; een tool is om
+#: te OPENEN, en dat onderscheid is precies waarom `/tools` een eigen scherm kreeg.
+#:
+#: DE "ALL"-TELLING VOLGT VANZELF: `_wiki_items` leidt hem af uit `_WIKI_SOORTEN[1:]`, dus er is
+#: geen tweede plek die bijgewerkt moet worden. En `/wiki?kind=tool` valt terug op "all" — de
+#: validatie in `render_wiki_index` toetst tegen dezelfde lijst.
+#:
+#: DE PERMALINK BLIJFT: `/pagina?id=<tool-id>` werkt gewoon, want `/tools` linkt ernaartoe. Hij
+#: hoeft alleen niet meer via deze index vindbaar te zijn.
+_WIKI_SOORTEN = (("all", "All"), ("policy", "Policy"), ("note", "Note"))
+_WIKI_ICOON = {"policy": "&#128193;", "note": "&#128196;"}
 
 
 def _wiki_items(st, soort: str = "all") -> list:
@@ -1000,7 +1013,26 @@ def _wiki_domein(a, records=None) -> str:
 #: dan bied je een keuze aan die daarna wordt geweigerd.
 #:
 #: Een policy heeft al een plek waar dat wél klopt: de Wiki-tab van de rol die het domein houdt.
-_NIEUW_SOORTEN = (("note", "Page"), ("tool", "Tool"))
+#: Wat je vanaf de wiki kunt STARTEN. Een tool stond hier tot 28 september 2026 bij; die maak je
+#: nu op `/tools` zelf (`views/tools._nieuwe_tool_form`) — daar hoort hij, en daar hoef je ook geen
+#: eigenaar en geen wiki-sectie te kiezen die voor een tool niets betekenen.
+#:
+#: HET BLIJFT EEN LIJST, met één ingang: komt er ooit een vierde soort bij die wél een pagina is,
+#: dan staat hij hier en verschijnt het keuzeveld vanzelf weer (zie `_soort_veld`).
+_NIEUW_SOORTEN = (("note", "Page"),)
+
+
+def _soort_veld() -> str:
+    """De soort-keuze, of een verborgen veld als er niets te kiezen valt.
+
+    ÉÉN OPTIE IS GEEN KEUZE — dezelfde regel als bij `_domain_field`, dat bij precies één domein
+    ook een `<input type=hidden>` rendert in plaats van een dropdown met één regel. Een keuzelijst
+    die maar één antwoord kent, vraagt iets van de lezer zonder hem iets te laten beslissen."""
+    if len(_NIEUW_SOORTEN) == 1:
+        return f"<input type='hidden' name='kind' value='{_e(_NIEUW_SOORTEN[0][0])}'>"
+    opties = "".join(f"<option value='{_e(k)}'>{_e(lbl)}</option>" for k, lbl in _NIEUW_SOORTEN)
+    return (f"<label class='att-lbl' for='np-kind'>Kind</label>"
+            f"<select id='np-kind' name='kind'>{opties}</select>")
 
 
 def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
@@ -1039,7 +1071,6 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
     uitleg = (f"<div class='muted wiki-hint'>{weg} domain(s) are not listed: another role owns "
               f"them, and only that role or its Circle Lead can file a page there.</div>"
               if weg else "")
-    soorten = "".join(f"<option value='{_e(k)}'>{_e(lbl)}</option>" for k, lbl in _NIEUW_SOORTEN)
     return (f"<details class='qadd'><summary>+ New page</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -1065,10 +1096,8 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
             f"<select id='np-sectie' name='sectie'>{_sectie_opties()}</select>"
             f"<div class='muted wiki-hint'>With a domain this follows by itself. Pick one for an "
             f"individual action, which has no role to derive it from.</div>"
-            f"<label class='att-lbl' for='np-kind'>Kind</label>"
-            f"<select id='np-kind' name='kind'>{soorten}</select>"
+            f"{_soort_veld()}"
             f"{_field('Title', 'title', required=True, fid='np-title')}"
-            f"{_field('Link (for a tool)', 'url', kind='url', fid='np-url')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit'>Create</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
@@ -1113,13 +1142,14 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
         + (f" &middot; {_e((a.body or '')[:120])}" if a.body else "") + "</p></div>"
         for a in items)
     if not kaarten:
-        kaarten = ("<p class='muted'>Nothing written down yet. A policy, note or tool starts on the "
-                   "role or circle that owns it &mdash; open its Wiki tab.</p>")
+        kaarten = ("<p class='muted'>Nothing written down yet. A policy or note starts on the "
+                   "role or circle that owns it &mdash; open its Wiki tab. Tools live on "
+                   "<a href='/tools'>Tools</a>.</p>")
 
     main = (f"<div class='c2-main'><h1 class='ptitle'>Wiki</h1>"
-            f"<p class='muted'>All policies, notes and tools from across the village &middot; "
+            f"<p class='muted'>All policies and notes from across the village &middot; "
             f"by domain where known. A page is editable by anyone unless it sits in a domain "
-            f"another role owns.</p>"
+            f"another role owns. Tools live on <a href='/tools'>Tools</a>.</p>"
             f"{_nieuwe_pagina_form(st, csrf_token, username)}"
             f"<div class='cl-filters'>{chips}</div>"
             f"<div class='c2-wiki'>{nav}<section>{kaarten}</section></div></div>")

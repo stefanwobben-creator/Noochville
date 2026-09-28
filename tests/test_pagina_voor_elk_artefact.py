@@ -81,23 +81,51 @@ def test_elke_link_in_de_index_levert_een_pagina_op(tmp_path):
     ids = sorted(set(_PAGINA_LINK.findall(index)))
 
     # ER STOND HIER `len(ids) == 3`, en dat mat de verkeerde kant: `_bootstrap` zaait zelf al
-    # twee tools (TOOL-COMMUN-001, TOOL-STRATE-001), dus het getal ging over het zaad en niet
-    # over de link-keten. Wat de toets bedoelt is dat elke SOORT vertegenwoordigd is — anders
-    # kan hij groen blijven terwijl de index een soort niet meer toont.
-    assert {art[k].id for k in ("note", "policy", "tool")} <= set(ids), (
-        f"niet elke soort staat in de index: {ids}")
+    # tools, dus het getal ging over het zaad en niet over de link-keten. Wat de toets bedoelt is
+    # dat elke soort die de index TOONT er ook echt in staat.
+    #
+    # EN DAT IS SINDS 28 SEPTEMBER 2026 NIET MEER "TOOL". Gereedschap staat op `/tools`; de wiki
+    # toont wat je LEEST. De keten-eis verandert daar niet door — hij verhuist mee, zie
+    # `test_de_toolpagina_blijft_bereikbaar` hieronder.
+    assert {art[k].id for k in ("note", "policy")} <= set(ids), (
+        f"niet elke getoonde soort staat in de index: {ids}")
+    assert art["tool"].id not in ids, "de index toont nog steeds gereedschap"
 
     dood = [i for i in ids if "Page not found" in render_pagina(st, i, csrf_token="TOK",
                                                                username="b@t.nl")]
     assert not dood, f"dode links in de wiki-index: {dood}"
 
 
-def test_de_index_en_de_pagina_putten_uit_dezelfde_lijst():
-    """Twee lijsten die "welke soorten bestaan" zeggen, lopen uiteen — dat is precies hoe dit
-    gat ontstond. De chips van de index moeten exact `ARTEFACT_KINDS` zijn."""
+def test_de_toolpagina_blijft_bereikbaar(tmp_path):
+    """DE HELFT DIE NIET MAG VERDWIJNEN. Een tool is uit de wiki-INDEX weg, niet van het web: zijn
+    permalink werkt gewoon, en `/tools` linkt ernaartoe. Zou dat wegvallen, dan is "hij hoeft niet
+    meer via de wiki vindbaar te zijn" stilzwijgend "hij is nergens meer te openen" geworden."""
+    from nooch_village.views.tools import render_tools
+    dd, st, art, mens = _dorp(tmp_path)
+    aid = art["tool"].id
+    assert "Page not found" not in render_pagina(st, aid, csrf_token="TOK", username="b@t.nl")
+    tools = render_tools(st, csrf_token="TOK", username="b@t.nl")
+    assert art["tool"].title in tools
+    # Met een url linkt de kaart naar het scherm; zonder url naar de permalink. Deze heeft er een.
+    assert art["tool"].url in tools
+
+
+def test_de_index_toont_een_bewuste_deelverzameling():
+    """OMGEDRAAID OP 28 SEPTEMBER 2026, en het verschil is de moeite waard.
+
+    Hier stond dat de chips van de index EXACT `ARTEFACT_KINDS` moeten zijn — geschreven toen het
+    uiteenlopen van die twee lijsten de bug was (28 dode links). Wat toen ontbrak was een derde
+    mogelijkheid: een soort die WEL een pagina heeft maar NIET in deze index thuishoort. Een tool is
+    dat geval, en `/tools` is zijn plek.
+
+    Wat de toets nu bewaakt is daarom niet gelijkheid maar de RICHTING: de index mag alleen
+    soorten tonen die ook echt een pagina hebben. Andersom (een soort zonder index-chip) is een
+    keuze; dit is de fout."""
     uit_index = {k for k, _ in _WIKI_SOORTEN[1:]}
-    assert uit_index == set(ARTEFACT_KINDS), (
-        f"de index toont {uit_index}, de artefact-soorten zijn {set(ARTEFACT_KINDS)}")
+    assert uit_index <= set(ARTEFACT_KINDS), (
+        f"de index toont {uit_index - set(ARTEFACT_KINDS)}, en dat zijn geen artefact-soorten")
+    assert "tool" not in uit_index, "gereedschap staat op /tools, niet in de wiki"
+    assert uit_index == {"note", "policy"}
 
 
 # ── 2. Wat een policy-pagina wél toont ───────────────────────────────────────

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from nooch_village import artefacts
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _name
-from nooch_village.web_base import _e, _page
+from nooch_village.web_base import _e, _field, _page
 
 
 def _eigenaar(st, anchor: str) -> str:
@@ -64,6 +64,51 @@ def _kaart(st, a, mag_bewerken: bool) -> str:
             f"{f'<div class=muted>{_e(body)}</div>' if body else ''}</div>")
 
 
+def _nieuwe_tool_form(st, csrf_token: str, username: str | None) -> str:
+    """"+ New tool", vanuit dit scherm zelf.
+
+    WAAROM HIJ HIER MOEST KOMEN. Aanmaken kon alleen via "+ New page" op `/wiki`, en dat is de
+    ingang die met deze stap verdwijnt — een tool is geen pagina om te lezen. Zonder dit formulier
+    zou er nergens meer een tool bij kunnen; daarom staat hij er eerst, en gaat de wiki-kant pas
+    daarna weg.
+
+    DRIE VELDEN, EN GEEN EIGENAAR. Dat laatste is geen vereenvoudiging maar een gevolg: sinds #632
+    dwingt `_act_artefact_add` zelf af dat een tool aan `artefacts.TOOL_ANCHOR` hangt. Een
+    eigenaar-keuze hier zou een vraag zijn waarvan het antwoord genegeerd wordt — en dan staat de
+    regel op twee plekken.
+
+    GEEN DOMEIN- EN SECTIEVELD, en dat is precies waarom "+ New page" ze wél heeft: die twee
+    bepalen waar een PAGINA in de wiki-navigatie landt. Een tool staat niet in die navigatie; hij
+    staat hier.
+
+    ZELFDE VORM ALS "+ New page" (`views/wiki._nieuwe_pagina_form`): een `<details class='qadd'>`
+    met een `.qadd-form` erin, velden via `_field()` zodat label en veld een paar zijn, en dezelfde
+    knoppenrij. Geen tweede formuliertaal voor dezelfde handeling."""
+    if not csrf_token:
+        return ""
+    actor = st.people.by_email(username) if username and username != "guest" else None
+    # "guest" (auth uit) mag alles, zoals overal in de cockpit; een onbekende naam mag niets. Dit
+    # spiegelt de serverpoort: `_artefact_gate` laat op een artefact zonder domein elke herkende
+    # persoon door, en weigert een naam die het dorp niet kent.
+    if actor is None and username != "guest":
+        return ""
+    return (f"<details class='qadd'><summary>+ New tool</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='action' value='artefact_add'>"
+            f"<input type='hidden' name='kind' value='tool'>"
+            f"<input type='hidden' name='next' value='/tools'>"
+            f"{_field('Title', 'title', required=True, fid='nt-title')}"
+            f"{_field('Link', 'url', kind='url', fid='nt-url', placeholder='https://… or /a-screen')}"
+            f"{_field('What it does', 'body', kind='textarea', fid='nt-body')}"
+            f"<div class='muted wiki-hint'>Every tool belongs to the village as a whole, so there "
+            f"is no owner to pick. Without a link the tool gets its own page.</div>"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok' type='submit'>Create</button>"
+            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"aria-label='cancel'>&#10005;</button></div></form></details>")
+
+
 def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str = "") -> str:
     """Alle tools van het dorp. Lezen is vrij; bewerken blijft bij de eigenaar van het artefact."""
     from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS, _banner, _tool_kaart
@@ -77,9 +122,12 @@ def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str
         _kaart(st, a, bool(actor_id) and artefacts.can_write_artefact(
             "person", actor_id, a.anchor, st.records, st.assign))
         for a in rij)
-    artefact_blok = (f"<div class='c2-sec'><h2>Tools</h2>{kaarten}</div>" if kaarten else
-                     "<div class='c2-sec'><h2>Tools</h2>"
-                     "<p class='muted'>No tools in the village yet.</p></div>")
+    # HET FORMULIER STAAT ER OOK BIJ NUL TOOLS. Zou hij alleen onder een gevulde lijst hangen, dan
+    # is de enige stand waarin je hem écht nodig hebt precies de stand waarin hij ontbreekt.
+    nieuw = _nieuwe_tool_form(st, csrf_token, username)
+    artefact_blok = (f"<div class='c2-sec'><h2>Tools</h2>{kaarten}{nieuw}</div>" if kaarten else
+                     f"<div class='c2-sec'><h2>Tools</h2>"
+                     f"<p class='muted'>No tools in the village yet.</p>{nieuw}</div>")
 
     # ── 2. de scherm-tools per rol en per domein ─────────────────────────────
     #
