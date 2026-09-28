@@ -38,6 +38,11 @@ STORES = {
     # een trigger-type, en een DM heeft sinds 20 september geen velden meer en dus geen status.
     # Tussen die twee zat niets dat één regel tekst met een vinkje kon dragen.
     "acties",
+    # `linktargets` (28 september 2026): linkbuilding-doelwitten met hun besluit (pitchen/negeren).
+    # BEWUST EEN NIEUWE STORE, en de bestaande mechaniek is eerst nagelopen — de oude `LinkTargets`
+    # verdween met het scherm in #516 en wordt niet teruggehaald; `nominations` draagt woorden, geen
+    # URL's; en een project/actie heeft geen plek voor de prioriteit die de skill meet.
+    "linktargets",
 }
 
 
