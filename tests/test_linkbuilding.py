@@ -292,13 +292,17 @@ def test_de_poort_is_dezelfde_vraag_als_de_server_stelt():
 
 # ══ 6. Het scherm ════════════════════════════════════════════════════════════
 def test_elke_rij_toont_zijn_prioriteit_met_een_woord(tmp_path):
-    """Kleur is nooit de enige drager — dezelfde regel als bij de statusvormen."""
+    """Kleur is nooit de enige drager — dezelfde regel als bij de statusvormen.
+
+    HET WOORD IS ENGELS, de sleutel eronder Nederlands. Deze toets stond tot 28 september op
+    `>hoog<` en legde daarmee de bug vast in plaats van het gedrag; zie
+    `test_de_chip_toont_engels_en_de_data_blijft_nederlands`."""
     dd, st = _dorp(tmp_path)
     st.linktargets.zet_vondsten([_target("https://a.nl", priority="hoog"),
                                  _target("https://b.nl", priority="laag")], "q")
     h = render_linkbuilding(cockpit2._Stores(dd), _ctx(), dd, csrf_token="TOK",
                             username="aap@test.nl")
-    assert ">hoog<" in h and ">laag<" in h
+    assert ">high<" in h and ">low<" in h
     assert h.count(">Pitch<") == 2 and h.count(">Ignore<") == 2
 
 
@@ -334,3 +338,28 @@ def test_het_is_geen_restore_van_het_oude_scherm():
     bron = inspect.getsource(view) + inspect.getsource(lb)
     assert "start_achtergrond" in bron and "Werkslot" in bron
     assert "data-poll" in bron
+
+
+# ══ 8. Het label dat de lezer ziet ═══════════════════════════════════════════
+def test_de_chip_toont_engels_en_de_data_blijft_nederlands(tmp_path):
+    """DE PRIORITEIT IS EEN SLEUTEL, en sleutels in dit dorp zijn Nederlands; het scherm is Engels.
+    Tot 28 september ging de sleutel zelf de chip in, dus stond er "hoog" tussen verder Engelse
+    tekst. De taal-ratchet vangt dat niet en dat is terecht — hij slaat losse woorden zonder spatie
+    over, want dat zijn normaal precies dit: sleutels die nooit een mens bereiken."""
+    from nooch_village.views.linkbuilding import _PRIO_LABEL, paneel
+    dd, st = _dorp(tmp_path)
+    st.linktargets.zet_vondsten(
+        [{"title": "A", "link": "https://a.test/1", "priority": "hoog", "source": "a.test"},
+         {"title": "B", "link": "https://b.test/2", "priority": "midden", "source": "b.test"},
+         {"title": "C", "link": "https://c.test/3", "priority": "laag", "source": "c.test"},
+         {"title": "D", "link": "https://d.test/4", "priority": "onbekend", "source": "d.test"}],
+        "q")
+    h = paneel(st, _ctx(), dd, "TOK", mag=True)
+    for engels in ("high", "medium", "low", "unknown"):
+        assert f">{engels}</span>" in h, f"{engels} staat niet als chip-tekst op het scherm"
+    for sleutel in lb.PRIORITEITEN:
+        assert f">{sleutel}</span>" not in h, f"de ruwe sleutel {sleutel!r} is zichtbare tekst"
+    # EN DE DATA IS ONGEMOEID: de opslag houdt de sleutel, want daar hangt de sortering aan.
+    assert [t["priority"] for t in st.linktargets.alle()] == ["hoog", "midden", "laag", "onbekend"]
+    assert set(_PRIO_LABEL) == set(lb.PRIORITEITEN), (
+        "elke prioriteit heeft een Engels label nodig — anders lekt de sleutel alsnog naar het scherm")
