@@ -31,6 +31,7 @@ from __future__ import annotations
 import urllib.parse
 
 from nooch_village import acties as _A
+from nooch_village import projects as _P
 from nooch_village.cockpit2_util import _AUTOSAVE, _DS_LINK, _nav, _name
 from nooch_village.web_base import _e, _page
 
@@ -68,7 +69,11 @@ def _eigenaarnaam(st, owner: str) -> str:
 
 #: De projectstatussen die "hier wordt aan gewerkt" betekenen. Een actie hang je aan iets dat
 #: loopt; aan een toekomstig of afgerond project hoort geen volgende stap.
-_LOPEND = ("running", "blocked")
+#:
+#: UIT `projects.OP_HET_BORD` EN NIET OPNIEUW UITGESCHREVEN (28 september 2026). Hier stond
+#: `("running", "blocked")` als eigen tupel naast precies dezelfde waarde in `projects.py` — twee
+#: plekken die "wat staat er op het bord" zeggen, en die lopen uiteen zodra er een status bijkomt.
+_LOPEND = _P.OP_HET_BORD
 
 
 def _mijn_projecten(st, ik: str) -> list[dict]:
@@ -279,6 +284,97 @@ def _regel_van_ander(st, it: dict, pr: dict) -> str:
             f"<span class='muted'>{_e(naam)}</span></span></span></div>")
 
 
+def _mijn_checklist_items(st, ik: str) -> list[tuple[dict, dict, dict]]:
+    """Open MENS-items op projecten die van jou zijn, als (item, checklist, project).
+
+    WAT ER ONTBRAK. Een checklist-item zonder skill is een volgende stap die alleen een mens kan
+    zetten — op de projectpagina staat er letterlijk "no skill · needs a human" bij. Maar het stond
+    alleen daar: je moest weten welk project je moest openen. Dat is precies wat een actielijst
+    oplost, en het is dezelfde soort regel als de rest van dit scherm.
+
+    NIET UIT DE `ActieStore` maar uit de projecten (`ProjectLedger.checklists`): dit zijn geen
+    briefjes die je zelf opschreef, het is werk dat al in een plan staat. Ze worden dan ook niet
+    door dit scherm gewijzigd — afvinken loopt via `check_toggle`, dezelfde actie als op de
+    projectpagina.
+
+    WELKE PROJECTEN VAN JOU ZIJN, twee kanten die allebei tellen:
+
+      * je bent TREKKER (`person` in de opslag) — dan is het werk aan jou toegewezen, ongeacht
+        welke rol de eigenaar is;
+      * de EIGENAAR-rol is er een die jij vervult — dat is `_mijn_projecten`, dezelfde definitie
+        als de keuzelijst en het blok "From your projects" hierboven gebruiken.
+
+    ALLEBEI OP HET BORD (`projects.OP_HET_BORD`). Een item op een toekomstig of afgerond project is
+    geen volgende stap, en dat is dezelfde regel als waarom je er geen actie aan kunt koppelen.
+
+    EN ALTIJD LEESBAAR: `mag_project_lezen` blijft de buitengrens, ook voor de trekker-kant — een
+    privé project van een cirkel waar je niet in zit hoort hier niet op te duiken."""
+    from nooch_village.views.messages import mag_project_lezen
+
+    projecten = {str(p.get("id") or ""): p for p in _mijn_projecten(st, ik)}
+    for p in st.projects.all():
+        pid = str(p.get("id") or "")
+        if not pid or pid in projecten or p.get("archived"):
+            continue
+        # DE TREKKER HEET `person` IN DE OPSLAG. "Trekker" is het woord op het scherm; het veld
+        # heet `person` (en `agent` voor een AI-trekker — die krijgt geen mens-items).
+        if str(p.get("person") or "") != ik or p.get("status") not in _LOPEND:
+            continue
+        if mag_project_lezen(st, pid, ik):
+            projecten[pid] = p
+
+    uit: list[tuple[dict, dict, dict]] = []
+    for pid, p in projecten.items():
+        for cl in (p.get("checklists") or []):
+            for it in (cl.get("items") or []):
+                # GEEN SKILL = EEN MENS. `skipped` telt niet mee (bewust overgeslagen), `done`
+                # evenmin. Dat is dezelfde lezing als `_cl_item_state` op de projectpagina; die
+                # functie geeft een WEERGAVE-state terug en niet een ja/nee, dus hier staat de
+                # vraag zelf — niet zijn antwoord overgeschreven.
+                if it.get("done") or it.get("skipped") or it.get("skill"):
+                    continue
+                if not str(it.get("text") or "").strip():
+                    continue
+                uit.append((it, cl, p))
+    uit.sort(key=lambda t: (_projectnaam(st, str(t[2].get("id") or "")).lower(),
+                            str(t[0].get("text") or "").lower()))
+    return uit
+
+
+def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str) -> str:
+    """Eén checklist-item: hetzelfde molecuul als een actie, met het project erbij.
+
+    AFVINKEN MAG ALLEEN WIE HET OOK OP DE PROJECTPAGINA MAG. `check_toggle` poort op
+    `_role_gate(project.owner)` — rolvervuller of Circle Lead — en die vraag wordt hier met
+    `mag_rolwerk` gesteld, dezelfde functie met een persoon-id in plaats van een e-mailadres. Een
+    kortere weg zou een vakje opleveren dat de server daarna weigert; dat is precies wat deze
+    codebase elders al vijf keer heeft opgeruimd.
+
+    JE KUNT TREKKER ZIJN ZONDER DE ROL TE VERVULLEN — dan staat het item er wel (het is jouw werk)
+    maar zonder vakje, en blijft de projectpagina de plek waar de eigenaar-rol het afvinkt."""
+    from nooch_village.cockpit2 import mag_rolwerk
+
+    pid = str(p.get("id") or "")
+    mag = bool(csrf_token) and mag_rolwerk(ik, str(p.get("owner") or ""), st)
+    if mag:
+        bol = (f"<form method='post' action='/action' class='fentry-inline'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+               f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+               f"<input type='hidden' name='clid' value='{_e(str(cl.get('id') or ''))}'>"
+               f"<input type='hidden' name='item' value='{_e(str(it.get('id') or ''))}'>"
+               f"<input type='hidden' name='next' value='/acties'>"
+               f"<button class='ck-box' type='submit' name='action' value='check_toggle' "
+               f"aria-label='Tick off'></button></form>")
+    else:
+        bol = "<span class='ck-box'></span>"
+    return (f"<div class='ck-item'>{bol}<span class='ck-txt'>"
+            f"{_e(str(it.get('text') or ''))}"
+            f"<span class='ck-meta'>"
+            f"<a class='cl-filter pill' href='/project?id={_e(pid)}'>"
+            f"{_e(_projectnaam(st, pid))}</a>"
+            f"<span class='muted'>needs a human</span></span></span></div>")
+
+
 def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     """De pagina. Zonder herkende mens geen lijst — een actie hoort bij iemand."""
     from nooch_village.views.overview import _banner
@@ -353,9 +449,21 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
                   f"{len(van_projecten)}</span></div>"
                   f"{''.join(_regel_van_ander(st, a, pr) for a, pr in van_projecten)}</div>")
 
+    # UIT DE PROJECTPLANNEN, in een derde blok. Zelfde regel als hierboven: leeg is echt leeg, want
+    # een kopje boven een lege ruimte is meubilair. En zelfde volgorde-gedachte: je eigen briefjes
+    # eerst, dan wat anderen op jouw projecten schreven, dan wat er in de plannen op een mens wacht.
+    stappen = _mijn_checklist_items(st, ik)
+    uit_plannen = ""
+    if stappen:
+        uit_plannen = (f"<div class='card'>"
+                       f"<div class='ck-klaar-kop'><span class='muted'>From project checklists "
+                       f"&middot; {len(stappen)}</span></div>"
+                       f"{''.join(_checklist_regel(st, it, cl, p, ik, csrf_token) for it, cl, p in stappen)}"
+                       f"</div>")
+
     main = (f"<div class='c2-main c2-smal'><h1 class='ptitle'>My actions</h1>"
             f"<p class='muted'>Jot it down like on paper. Link it to a project only if you want "
             f"to &mdash; then the people on that project see it too.</p>"
             f"{_banner(msg)}"
-            f"<div class='card'>{toevoegen}{lijst}{klaar}</div>{elders}</div>")
+            f"<div class='card'>{toevoegen}{lijst}{klaar}</div>{elders}{uit_plannen}</div>")
     return _page("My actions", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
