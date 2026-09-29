@@ -412,7 +412,9 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
             # De veld-ids dragen de artefact-id: op de Notes-tab staan meerdere pagina's onder
             # elkaar, en twee velden met dezelfde id laten elk gekoppeld label naar de eerste wijzen.
             f"{_field('Why', 'waarom', fid=f'vst-waarom-{a.id}', required=True, placeholder='one line: what is wrong now')}"
-            f"{_field('Proposed text', 'voorstel', kind='textarea', value=(prefill or a.body), fid=f'vst-body-{a.id}')}"
+            # `data-wikilink`: ook hier helpt de `[[`-typhulp, want dit veld wordt straks de
+            # tekst van de pagina en draagt dus dezelfde verwijzingen.
+            f"{_field('Proposed text', 'voorstel', kind='textarea', value=(prefill or a.body), fid=f'vst-body-{a.id}', attrs='data-wikilink')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_voorstel'>Send</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "

@@ -146,6 +146,50 @@ function start(html) {
           omg.el.innerHTML === "<p>vers</p>");
   }
 
+  console.log("5. een sleep beschermt het blok net zo goed als typen");
+  {
+    // EEN SLEEP ZIT IN GEEN ENKEL VELD, dus `typtIemandHierIn` ziet hem niet. Het bord onder je
+    // handen vervangen haalt de kaart die je vasthebt uit de DOM; `__pdrag` staat daarom aan van
+    // de eerste beweging tot vlak na het loslaten.
+    const omg = start("<p>oud</p>");
+    global.window.__pdrag = true;
+    await omg.tik();
+    check("tijdens het slepen blijft het bord staan", omg.el.innerHTML === "<p>oud</p>");
+    global.window.__pdrag = false;
+    await omg.tik();
+    check("na het loslaten ververst hij alsnog", omg.el.innerHTML === "<p>vers</p>");
+  }
+
+  console.log("6. een tabelcel houdt zijn link bij 'bewerk als tekst'");
+  {
+    // De bug: `textContent` knipt de HTML eruit, dus een link werd het kale woord. Gemeten op de
+    // functie die de cel omzet — dat is waar het misging.
+    const omg = start("<p>x</p>");
+    const cel = {
+      childNodes: [
+        { nodeType: 3, data: "zie " },
+        { nodeType: 1, nodeName: "A", textContent: "de gids",
+          getAttribute: (k) => (k === "href" ? "https://gids.nl/a" : null) },
+        { nodeType: 3, data: " hier" },
+      ],
+    };
+    const bron = global.window.NV.__celBron(cel);
+    check("de link staat er als markdown", bron === "zie [de gids](https://gids.nl/a) hier");
+    const plat = global.window.NV.__celBron({ childNodes: [{ nodeType: 3, data: "  gewoon  tekst " }] });
+    check("gewone tekst blijft gewoon tekst", plat === "gewoon tekst");
+  }
+
+  console.log("7. het [[-woord wordt herkend waar de cursor staat");
+  {
+    const omg = start("<p>x</p>");
+    const t = global.window.NV.wikiToken;
+    check("midden in een woord", t("zie ook [[Outsole") === "Outsole");
+    check("net geopend, nog leeg", t("zie ook [[") === "");
+    check("een gesloten link telt niet meer", t("[[Outsole]] en toen") === null);
+    check("zonder haken niets", t("gewoon een zin") === null);
+    check("één haakje is niet genoeg", t("[Outsole") === null);
+  }
+
   console.log(fouten ? `\n${fouten} toets(en) FOUT` : "\nalles groen");
   process.exit(fouten ? 1 : 0);
 })();

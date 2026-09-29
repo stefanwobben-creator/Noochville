@@ -773,6 +773,26 @@
   // iets van het markdown-formaat weet, en dat is bewust zo klein gehouden: een tabel is
   // pipe-gescheiden en een codeblok staat tussen hekken. De weg terug — van tekst naar een blok —
   // doet de SERVER bij het opslaan, zoals overal. Er komt geen tweede renderer in JS.
+  // Eén tabelcel terug naar markdown. `textContent` knipt HTML eruit, en dat was de bug: een
+  // link die je via de werkbalk in een cel zette, werd bij "✎ bewerk als tekst" het zichtbare
+  // woord zonder adres — en die verdwijning zag je pas terug toen je had opgeslagen.
+  //
+  // ALLEEN LINKS, en dat is geen half werk maar de grens van wat hier bestaat: vet en cursief in
+  // een tabelcel worden door de server-kant (`_md`) ook niet ondersteund, dus er valt niets
+  // anders te bewaren. De vorm `[tekst](url)` is dezelfde die de server overal verwacht.
+  function celBron(c) {
+    var uit = "";
+    Array.prototype.forEach.call(c.childNodes, function (n) {
+      if (n.nodeType === 3) { uit += n.data; return; }
+      if (n.nodeName === "A" && n.getAttribute("href")) {
+        uit += "[" + (n.textContent || "").trim() + "](" + n.getAttribute("href") + ")";
+        return;
+      }
+      uit += n.textContent || "";
+    });
+    return uit.replace(/\s+/g, " ").trim();
+  }
+
   function blokBron(blok) {
     // OP DE BLOKSOORT, NIET OP DE TAG. `data-blok` is wat de server zegt dat dit blok is; welke
     // tag daarbij hoort staat in `BLOK_SOORTEN` en hoort hier niet nóg een keer te staan — dat
@@ -785,9 +805,7 @@
     if (blok.dataset.blok === "tabel") {
       var uit = [];
       Array.prototype.forEach.call(inhoud.querySelectorAll("tr"), function (tr, i) {
-        var cellen = Array.prototype.map.call(tr.children, function (c) {
-          return (c.textContent || "").trim();
-        });
+        var cellen = Array.prototype.map.call(tr.children, celBron);
         uit.push("| " + cellen.join(" | ") + " |");
         if (i === 0) uit.push("|" + Array(cellen.length + 1).join("---|"));
       });
@@ -1826,6 +1844,11 @@
           .then(function (html) {
             wacht = basis;
             if (typtIemandHierIn(el)) return;          // tikken zit niet in de weg: de ronde erna
+            // …en slepen ook niet. Een HTML5-vrije sleep (zie `NV.bord`) zit in geen enkel veld,
+            // dus `typtIemandHierIn` ziet hem niet: het bord onder je handen vervangen zou de
+            // kaart die je vasthebt uit de DOM halen. `__pdrag` staat aan van de eerste beweging
+            // tot 60ms na het loslaten, en is precies daarvoor al gezet.
+            if (window.__pdrag) return;
             if (html && html !== el.innerHTML) el.innerHTML = html;
           })
           .catch(function () { wacht = Math.min(wacht * 2, 5 * 60 * 1000); })
@@ -2084,8 +2107,163 @@
     window.addEventListener("resize", plaats);
   }
 
+  // ── `[[` — dezelfde typhulp, andere vraag ─────────────────────────────────────────────────
+  //
+  // OM TE LINKEN MOET JE DE EXACTE TITEL KENNEN. `wiki.resolve` matcht op een genormaliseerde
+  // titel of op het note-id, en verder niets: geen gok, geen bijna-match. Wie de titel niet
+  // precies weet, typt een link die niet oplost — en dat zie je pas ná het opslaan.
+  //
+  // WAAROM EEN EIGEN FUNCTIE EN NIET `mentionVeld` MET EEN PARAMETER. Die werkt op `value` en
+  // `selectionStart`, en het wiki-bewerkveld is een `contenteditable`: daar bestaat allebei niet.
+  // Wat ze wél delen is de VORM van de lijst (`.mention-pop`/`.mention-it`) en het toetsenbord —
+  // dat is opmaak en gewoonte, en dat hoort één keer te bestaan; de manier waarop je tekst leest
+  // en terugschrijft verschilt fundamenteel per veldsoort.
+  //
+  // PUUR TYPHULP: de keuze wordt platte tekst (`[[Exacte Titel]]`). `wiki.resolve`, de backlinks
+  // en de rest van de link-mechaniek blijven precies zoals ze waren.
+  function wikiLinkVeld(el) {
+    if (el.dataset.nvWikilink) return;
+    el.dataset.nvWikilink = "1";
+    var rijk = el.isContentEditable;
+    var pop = null, hits = [], idx = -1, timer = null, teller = 0;
+
+    // Het `[[`-woord waar de cursor NU in staat, met de plek waar het begint. Bij een
+    // contenteditable is dat een positie IN EEN TEKSTKNOOP; bij een veld in `value`.
+    function token() {
+      if (!rijk) {
+        var tot = el.value.slice(0, el.selectionStart);
+        var m = /\[\[([^\[\]\n]{0,60})$/.exec(tot);
+        return m ? { term: m[1], start: tot.length - m[1].length - 2 } : null;
+      }
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return null;
+      var r = sel.getRangeAt(0);
+      if (!r.collapsed || r.startContainer.nodeType !== 3) return null;
+      var t2 = r.startContainer.data.slice(0, r.startOffset);
+      var m2 = /\[\[([^\[\]\n]{0,60})$/.exec(t2);
+      return m2 ? { term: m2[1], knoop: r.startContainer,
+                    start: r.startOffset - m2[1].length - 2, eind: r.startOffset } : null;
+    }
+
+    function sluit() { if (pop) { pop.remove(); pop = null; } hits = []; idx = -1; }
+
+    function kies(i) {
+      var t = token();
+      if (i < 0 || i >= hits.length || !t) return;
+      var tekst = "[[" + hits[i].label + "]]";
+      if (!rijk) {
+        var caret = el.selectionStart;
+        var voor = el.value.slice(0, t.start) + tekst;
+        el.value = voor + el.value.slice(caret);
+        el.focus();
+        el.selectionStart = el.selectionEnd = voor.length;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        var d = t.knoop.data;
+        t.knoop.data = d.slice(0, t.start) + tekst + d.slice(t.eind);
+        var r2 = document.createRange();
+        r2.setStart(t.knoop, t.start + tekst.length);
+        r2.collapse(true);
+        var sel2 = window.getSelection();
+        sel2.removeAllRanges();
+        sel2.addRange(r2);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      sluit();
+    }
+
+    function toon(lijst) {
+      sluit();
+      if (!lijst.length) return;
+      hits = lijst;
+      pop = document.createElement("div");
+      pop.className = "mention-pop";
+      pop.setAttribute("role", "listbox");
+      lijst.forEach(function (h, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "mention-it";
+        b.id = "nv-wl-" + (++teller);
+        b.setAttribute("role", "option");
+        var k = document.createElement("span");
+        k.className = "gs-kind gs-" + (h.kind || "note");
+        k.textContent = h.kind || "page";
+        b.appendChild(k);
+        b.appendChild(document.createTextNode(h.titel || h.label));
+        b.addEventListener("mousedown", function (ev) { ev.preventDefault(); kies(i); });
+        pop.appendChild(b);
+      });
+      document.body.appendChild(pop);
+      idx = 0; merk(); plaats();
+    }
+
+    function merk() {
+      if (!pop) return;
+      Array.prototype.forEach.call(pop.children, function (b, i) {
+        b.setAttribute("aria-selected", i === idx ? "true" : "false");
+      });
+      if (idx >= 0) pop.children[idx].scrollIntoView({ block: "nearest" });
+    }
+
+    // BIJ DE CURSOR, niet onder het veld: het wiki-bewerkveld is de hele pagina hoog, en een
+    // lijst onder de onderrand daarvan staat buiten beeld.
+    function plaats() {
+      if (!pop) return;
+      var r = el.getBoundingClientRect();
+      var sel = window.getSelection();
+      if (rijk && sel && sel.rangeCount) {
+        var rr = sel.getRangeAt(0).getClientRects()[0];
+        if (rr) r = rr;
+      }
+      pop.style.left = (r.left + window.pageXOffset) + "px";
+      pop.style.top = (r.bottom + window.pageYOffset + 4) + "px";
+    }
+
+    function vraag() {
+      var t = token();
+      if (!t) { sluit(); return; }
+      fetch("/pagina-search?q=" + encodeURIComponent(t.term), { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) {
+          var nu = token();
+          return (nu && nu.term === t.term) ? (d.hits || []) : null;
+        }, function () { sluit(); return null; })   // stil: typhulp die faalt hoort niet te schreeuwen
+        .then(function (lijst) { if (lijst) toon(lijst); });
+    }
+
+    el.addEventListener("input", function () {
+      clearTimeout(timer);
+      if (!token()) { sluit(); return; }
+      timer = setTimeout(vraag, 120);
+    });
+    el.addEventListener("keydown", function (ev) {
+      if (!pop) return;
+      if (ev.key === "ArrowDown") { ev.preventDefault(); idx = (idx + 1) % hits.length; merk(); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); idx = (idx - 1 + hits.length) % hits.length; merk(); }
+      else if (ev.key === "Enter" || ev.key === "Tab") { ev.preventDefault(); kies(idx); }
+      else if (ev.key === "Escape") { ev.preventDefault(); sluit(); }
+    });
+    el.addEventListener("blur", function () { setTimeout(sluit, 150); });
+    window.addEventListener("resize", plaats);
+  }
+
+  //: Het `[[`-woord uit een stuk tekst, als losse functie zodat een toets hem kan draaien zonder
+  //: browser. De twee takken in `token()` lezen hun tekst verschillend, maar knippen hem hetzelfde.
+  //: Alleen voor de toetsen: de cel-omzetting is een pure functie en hoort zonder browser te
+  //: kunnen draaien. Hij verandert niets aan wat de pagina doet.
+  NV.__celBron = celBron;
+
+  NV.wikiToken = function (tot) {
+    var m = /\[\[([^\[\]\n]{0,60})$/.exec(tot || "");
+    return m ? m[1] : null;
+  };
+
   function mentions(root) {
     root.querySelectorAll("[data-mention]").forEach(mentionVeld);
+    // HET WIKI-BEWERKVELD EN ELK VELD DAT ZICH MELDT. `#wiki-body` is contenteditable en draagt
+    // geen `data-mention`; een `[data-wikilink]`-textarea (het voorstelformulier) gaat door
+    // dezelfde functie.
+    root.querySelectorAll("#wiki-body, [data-wikilink]").forEach(wikiLinkVeld);
   }
 
   // ── Een kleine viering ────────────────────────────────────────────────────────────────────

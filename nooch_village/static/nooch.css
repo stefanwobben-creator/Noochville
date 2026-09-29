@@ -1066,7 +1066,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* LIGGEND OP DE PROJECTS-STAP. Daar staat het bord over de volle breedte en is er links geen
    kolom meer; het menu gaat dan boven het bord liggen in plaats van te verdwijnen. Alleen de
    richting verandert — `.wo-step` blijft hetzelfde atoom, in beide standen. */
-.wo-nav--rij{flex-direction:row;flex-wrap:wrap;gap:.2rem .4rem}
 /* Vóór het overleg staat het stappenmenu er wel, maar er valt nog niets te bezoeken.
    Gedimd en niet klikbaar (het zijn <span>'s, geen links) — zo zie je meteen wat eraan
    komt zonder dat het zich voordoet als navigatie die werkt. */
@@ -1104,6 +1103,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    `_page(..., body_cls="wo-vol")`. Wie hem hier weghaalt, haalt de reden weg: zie
    `render_werkoverleg`. */
 body.wo-vol{max-width:none}
+/* FOCUS-MODUS: zolang een werkoverleg LOOPT gaat de dorps-navigatie weg (29 september 2026). Niet
+   omdat het rustiger staat, maar om ruimte: de zijbalk reserveert 216px + 16px marge, en precies
+   dat tekort liet de Projects-stap zijn stappenmenu plat leggen. Met deze klasse past het bord én
+   blijft het menu staan. De weg terug staat in het scherm zelf ("← back to the village"), want met
+   de navigatie weg is dit anders een doodlopende straat voor wie het overleg niet mag sluiten. */
+body.wo-focus .c2-side{display:none}
+body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .wo-next{display:flex;justify-content:flex-end;padding-top:1rem;margin-top:auto}
 .wo-close-wrap{display:flex;flex-direction:column;align-items:center;gap:.4rem;padding-top:1.4rem}
 .wo-close-btn{padding:.7rem 2rem;font-size:1rem}
