@@ -311,8 +311,10 @@ def _bezorg_bij_de_founder(data_dir: str, tekst: str, omgeving=None) -> list[str
     de founder-rol vervult is een governance-feit; een model kiest hier niets."""
     from nooch_village import signaal
     from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    return signaal.stuur_op_pad(data_dir, "role", FOUNDER_ROLE_ID, tekst,
-                                by=AFZENDER, omgeving=omgeving)
+    # Zelfde reden als bij de weekmemo: de afzender ("noochie") heeft geen Person-record, dus
+    # zonder volgen staat dit gesprek in een groep die niemand ziet.
+    return signaal.stuur_en_volg(data_dir, "role", FOUNDER_ROLE_ID, tekst,
+                                 by=AFZENDER, omgeving=omgeving)
 
 
 def _staat(data_dir: str):
