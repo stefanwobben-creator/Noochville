@@ -161,3 +161,120 @@ def test_een_onbekende_unit_is_geen_stilte(monkeypatch):
     Dat verschil wás de bug. `_ECHTE` is de functie zoals hij vóór de fixture-stub bestond."""
     monkeypatch.setattr(pw, "_unit_bestaat", lambda unit: False)
     assert _ECHTE("bestaat-niet") is None
+
+
+# ── De wekelijkse uitgangen ─────────────────────────────────────────────────────────────────
+#
+# HET GAT DAT DEZE CHECK VEROORZAAKTE. De bewaker hierboven kijkt of de dagelijkse TIK afging,
+# niet naar wat er ÍN die tik gebeurde. Een gezonde tik met een stilzwijgend overgeslagen weekmemo
+# ziet er voor hem identiek uit aan een gezonde week — en zo had Stefan na twee weken nog nooit een
+# weekmemo gezien: nul berichten in zijn DM-kanaal, ooit.
+#
+# WAT DIT NIET DOET: elke lege week een "niets te melden" sturen. Dat is de ruis die de send-gate
+# in `weekmemo.ronde` juist vermijdt, en die gate blijft zoals hij is. Alleen ECHTE stilte alarmeert.
+import os as _os
+import time as _time
+
+
+def _leg_vast(dd, bestand, dagen_geleden):
+    """Doe alsof een wekelijkse uitgang zoveel dagen geleden zijn ronde vastlegde."""
+    with open(_os.path.join(dd, bestand), "w", encoding="utf-8") as f:
+        json.dump({"laatste_periode": "2026-W39",
+                   "laatste_at": _time.time() - dagen_geleden * 86400,
+                   "laatste_aantal": 0}, f)
+
+
+def _namen():
+    return [naam for naam, _b in pw._weekuitgangen()]
+
+
+def test_de_twee_wekelijkse_uitgangen_worden_allebei_bewaakt():
+    from nooch_village import noochie_memo, weekmemo
+    bestanden = dict(pw._weekuitgangen())
+    assert bestanden["weekmemo"] == weekmemo.STATE
+    assert bestanden["noochie-memo"] == noochie_memo.STATE
+
+
+def test_twee_stille_uitgangen_geven_twee_eigen_regels(tmp_path):
+    """PER UITGANG APART. "Er is iets stil" is geen melding waar je iets mee kunt; uit het alarm
+    moet blijken WELKE van de twee is vastgelopen."""
+    dd = str(tmp_path)
+    for _naam, bestand in pw._weekuitgangen():
+        _leg_vast(dd, bestand, 30)
+    uit = pw.controleer_week(dd)
+    assert uit["ok"] is False and len(uit["redenen"]) == 2
+    for naam in _namen():
+        assert any(r.startswith(naam + ":") for r in uit["redenen"]), naam
+
+
+def test_een_stille_uitgang_verraadt_de_andere_niet(tmp_path):
+    """De helft die loopt hoort niet in het alarm te staan — anders zoek je in de verkeerde."""
+    dd = str(tmp_path)
+    namen = dict(pw._weekuitgangen())
+    _leg_vast(dd, namen["weekmemo"], 30)
+    _leg_vast(dd, namen["noochie-memo"], 2)
+    uit = pw.controleer_week(dd)
+    assert uit["ok"] is False and len(uit["redenen"]) == 1
+    assert uit["redenen"][0].startswith("weekmemo:")
+    assert "noochie-memo" not in uit["redenen"][0]
+
+
+def test_een_recente_lege_ronde_is_geen_stilte(tmp_path):
+    """DE KERN VAN DEZE CHECK. Een week zonder nieuwe signalen levert geen bericht op en is tóch
+    een geslaagde ronde: hij LEGDE iets vast. Zou dat alarmeren, dan is het alarm de wekelijkse
+    ruis geworden die we juist niet wilden."""
+    dd = str(tmp_path)
+    for _naam, bestand in pw._weekuitgangen():
+        _leg_vast(dd, bestand, 3)                       # 3 dagen geleden, aantal 0
+    uit = pw.controleer_week(dd)
+    assert uit["ok"] is True and uit["redenen"] == []
+
+
+def test_nog_nooit_gedraaid_is_ook_stilte(tmp_path):
+    """Precies het geval dat dit veroorzaakte: gewired, nooit iets vastgelegd, en niets in het dorp
+    dat het zei."""
+    uit = pw.controleer_week(str(tmp_path))
+    assert uit["ok"] is False and len(uit["redenen"]) == 2
+    assert all("nog nooit" in r for r in uit["redenen"]), uit["redenen"]
+
+
+def test_de_drempel_ligt_ruimer_dan_de_cyclus(tmp_path):
+    """Een week die een dag uitloopt is geen storing. Een bewaker die daarop afgaat, leert men
+    negeren — en dan mist hij de keer dat het wél mis is."""
+    dd = str(tmp_path)
+    assert pw.STILTE_DAGEN > 7
+    for _naam, bestand in pw._weekuitgangen():
+        _leg_vast(dd, bestand, 8)
+    assert pw.controleer_week(dd)["ok"] is True
+    for _naam, bestand in pw._weekuitgangen():
+        _leg_vast(dd, bestand, pw.STILTE_DAGEN + 1)
+    assert pw.controleer_week(dd)["ok"] is False
+
+
+def test_de_dagelijkse_check_blijft_over_de_dagbel_gaan(tmp_path):
+    """TWEE KLOKKEN, TWEE UITSLAGEN. Zou de stilte in `controleer` zitten, dan komt een stille
+    weekmemo elke ochtend langs als PULS-alarm — met een tekst die over de dagbel gaat."""
+    dd = str(tmp_path)
+    (tmp_path / "timekeeper_last_day.json").write_text(
+        json.dumps({"last_day": datetime.now().date().isoformat()}), encoding="utf-8")
+    uit = pw.controleer(dd, {})                          # géén memo-bestanden in deze map
+    assert uit["ok"] is True, uit["redenen"]
+    assert "stiltes" not in uit
+
+
+def test_het_stiltealarm_landt_bij_de_founder_met_een_eigen_kop(tmp_path):
+    dd = str(tmp_path)
+    uit = pw.controleer_week(dd)
+    pw.alarm(dd, uit, kop="🤫 STILTE-ALARM")
+    regels = open(_os.path.join(dd, pw.ALARM_LOG), encoding="utf-8").read()
+    assert "STILTE-ALARM" in regels and "weekmemo" in regels and "noochie-memo" in regels
+    assert "PULS-ALARM" not in regels
+
+
+def test_de_cli_alarmeert_op_allebei():
+    import pathlib
+    cli = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "cli.py").read_text()
+    blok = cli.split('elif mode == "puls_wacht":')[1].split("elif mode ==")[0]
+    assert "controleer_week" in blok
+    assert 'kop="🤫 STILTE-ALARM"' in blok
+    assert blok.count("alarm(ctx.data_dir") == 2, "de twee alarmen delen één melding"
