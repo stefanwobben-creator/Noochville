@@ -183,6 +183,21 @@ def ontbrekende_links(pagina, pags: list) -> list[str]:
 
 # ── Feiten met grond ────────────────────────────────────────────────────────
 
+#: Waar een VOORGESTELDE synthese-alinea wacht tot een mens hem opslaat of weggooit. In de `meta`
+#: van de pagina zelf, naast de feiten — geen tweede store voor tekst die alleen van deze pagina
+#: is, en dus ook geen tweede plek die kan achterblijven als de pagina verdwijnt.
+#:
+#: HIJ IS GEEN INHOUD. Een pagina met een wachtend voorstel heeft die tekst NIET: hij staat in het
+#: bewerkveld en nergens anders, tot iemand op Save drukt. `body` blijft tot dat moment de waarheid.
+SYNTHESE_SLEUTEL = "synthese_concept"
+
+
+def synthese_concept(a) -> dict:
+    """Het wachtende synthese-voorstel van deze pagina, of {}."""
+    c = (getattr(a, "meta", None) or {}).get(SYNTHESE_SLEUTEL)
+    return c if isinstance(c, dict) and str(c.get("tekst") or "").strip() else {}
+
+
 def feiten(a) -> list[dict]:
     """De feiten van een pagina. Ze leven in `meta["feiten"]` van dezelfde note — geen tweede
     opslag, en ze reizen dus vanzelf mee in versies, erven en /context."""

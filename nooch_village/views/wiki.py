@@ -15,6 +15,7 @@ import urllib.parse
 import html as _html_mod
 import json as _json
 import re
+from dataclasses import replace as _replace
 
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, link_kaart,
@@ -257,13 +258,81 @@ def _feit_form(aid: str, csrf_token: str) -> str:
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
+def bijna_gelijke_paginas(st) -> list[list[str]]:
+    """Groepjes pagina-titels die bijna hetzelfde heten — zodat je ze ziet vóórdat je kiest.
+
+    HET PROBLEEM IS EEN KEUZELIJST, geen zoekopdracht. "Keep in wiki" en "Keep as a fact" tonen een
+    `<select>` met alle pagina's; staan er twee bijna gelijk in ("Ecovative" en "Ecovative BV"),
+    dan kies je er één zonder te weten dat de ander bestaat, en groeit de kennis uit elkaar over
+    twee pagina's die over hetzelfde gaan.
+
+    DEZELFDE MATCHING ALS DE ZOEKFUNCTIE, niet een eigen gelijkenis-maat: `search._match` vraagt of
+    elk woord van A aan het begin van een woord in B staat. Is dat allebei op, dan zijn de titels
+    voor de zoekfunctie inwisselbaar — precies de situatie waarin een mens ze ook verwart.
+
+    WAT HIJ NIET DOET: pagina's samenvoegen, of kiezen welke de goede is. Dat is een besluit over
+    eigenaarschap (`wiki.py`: "een pagina krijgt een eigenaar, en dat is een besluit")."""
+    from nooch_village.views.search import _match, _woorden
+
+    titels = [(a.title or a.id) for a in st.att.by_kind(wiki.PAGINA_KIND)]
+    titels = [t for t in titels if _woorden(t)]
+    groepen: list[list[str]] = []
+    gezien: set[int] = set()
+    for i, links in enumerate(titels):
+        if i in gezien:
+            continue
+        groep = [links]
+        for j in range(i + 1, len(titels)):
+            rechts = titels[j]
+            if j in gezien:
+                continue
+            # BEIDE KANTEN OP, want prefix-matching is eenrichtingsverkeer: de woorden van
+            # "Ecovative" zitten in "Ecovative BV", maar niet andersom. Eén kant zou elke korte
+            # titel laten lijken op elke langere die ermee begint.
+            if _match(rechts, _woorden(links)) or _match(links, _woorden(rechts)):
+                groep.append(rechts)
+                gezien.add(j)
+        if len(groep) > 1:
+            gezien.add(i)
+            groepen.append(groep)
+    return groepen
+
+
+def dubbele_namen_hint(st) -> str:
+    """De waarschuwing onder een pagina-keuzelijst. Leeg als er niets te verwarren valt."""
+    groepen = bijna_gelijke_paginas(st)
+    if not groepen:
+        return ""
+    regels = " &middot; ".join(_e(" / ".join(g)) for g in groepen[:4])
+    return (f"<p class='muted'>&#9888; These pages have nearly the same name: {regels}. "
+            f"Check you are picking the right one.</p>")
+
+
+def _synthese_knop(a, csrf_token: str) -> str:
+    """"Draft conclusion from facts" — de enige plek op deze pagina waar een model schrijft.
+
+    ALLEEN MET FEITEN, want dat is waar hij uit put; zonder feiten zou het een knop zijn die het
+    model vraagt iets te verzinnen. En alleen voor wie de pagina mag bewerken: het voorstel landt
+    in het bewerkveld, en wie niet mag opslaan heeft er niets aan."""
+    if not csrf_token or not wiki.feiten(a):
+        return ""
+    return (f"<form method='post' action='/action' class='fentry-inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"<button class='btn sm' type='submit' name='action' value='pagina_synthese' "
+            f"title='Proposes a paragraph from all the facts above. Nothing is saved until you "
+            f"press Save.'>Draft conclusion from facts</button></form>")
+
+
 def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
     rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit)
                     for i, f in enumerate(wiki.feiten(a)))
     rijen = rijen or ("<div class='muted'>No facts yet. A fact carries its own grounding: "
                       "a chronicle record, a certificate, a policy or a cited source.</div>")
     add = _feit_form(a.id, csrf_token) if can_edit else ""
-    return f"<div class='wiki-inline'><h3>Facts</h3>{rijen}{add}</div>"
+    synth = _synthese_knop(a, csrf_token) if can_edit else ""
+    return f"<div class='wiki-inline'><h3>Facts</h3>{rijen}{add}{synth}</div>"
 
 
 #: Een pagina die naar de coach wijst, krijgt het logboek eronder. Waarom aan de INHOUD opgehangen
@@ -927,7 +996,25 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
             return ""
         return secties[k] if gevuld[k] else ""
 
-    body = _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note)
+    # HET WACHTENDE SYNTHESE-VOORSTEL, IN HET BEWERKVELD ZELF. Niet ernaast en niet eronder: het
+    # is tekst-in-wording voor deze pagina, en de plek waar je hem aanpast is de plek waar je alle
+    # tekst aanpast. Hij staat er ALS TEKST maar is niet opgeslagen — `a.body` is ongemoeid, en pas
+    # Save maakt er inhoud van (zie `wiki.SYNTHESE_SLEUTEL`).
+    voorstel_blok = ""
+    _syn = wiki.synthese_concept(a) if can_edit else {}
+    if _syn:
+        a = _replace(a, body=((a.body or "").rstrip() + "\n\n" + _syn["tekst"]).strip())
+        voorstel_blok = (
+            f"<div class='card'><span class='chip amber'>draft conclusion</span> "
+            f"<span class='muted'>Written from the facts on this page and added at the bottom of "
+            f"the text below. Nothing is saved until you press Save.</span>"
+            f"<form method='post' action='/action' class='fentry-inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(aid)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
+            f"<button class='flink' type='submit' name='action' value='pagina_synthese_verwerp'>"
+            f"Discard</button></form></div>")
+    body = voorstel_blok + _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
     # schrijf-sessie (publieke view), dan ook geen voorstelknop. En alleen op een note, want
     # `pagina_voorstel` poort op de soort — zie de docstring hierboven.

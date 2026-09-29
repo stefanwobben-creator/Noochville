@@ -832,7 +832,13 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
                 f"<button class='btn' type='submit' name='action' value='proj_unarchive'>restore</button>"
                 f"<button type='submit' name='action' value='proj_delete' class='dellink' "
                 f"onclick=\"return confirm('Delete permanently?')\">delete</button></form>")
-        rows += f"<li class='muted'>{_e(str(scope or '—'))}{ctrl}</li>"
+        # DE WEG TERUG NAAR WAT HET OPLEVERDE. Een archiefregel was alleen een naam met twee
+        # knoppen: het rapport van dat project was vanaf hier niet te bereiken, terwijl juist een
+        # gearchiveerd project alleen nog als rapport bestaat. `/rapport` geeft zelf een nette
+        # melding als er geen document is, dus de link mag onvoorwaardelijk.
+        lees = (f" <a class='flink' href='/rapport?pid={_e(p['id'])}"
+                f"&back={urllib.parse.quote(back, safe='')}'>report</a>")
+        rows += f"<li class='muted'>{_e(str(scope or '—'))}{lees}{ctrl}</li>"
     return (f"<details class='box-details' style='margin-top:.6rem'><summary>🗄 Archived ({len(archived)})</summary>"
             f"<ul class='clean'>{rows}</ul></details>")
 
