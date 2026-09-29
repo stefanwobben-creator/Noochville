@@ -436,8 +436,11 @@ def _bezorg_bij_de_founder(data_dir: str, tekst: str, omgeving=None) -> list[str
     rol' kiest: dat was de oude uitgang."""
     from nooch_village import signaal
     from nooch_village.human_inbox import FOUNDER_ROLE_ID
-    return signaal.stuur_op_pad(data_dir, "role", FOUNDER_ROLE_ID, tekst,
-                                by=AFZENDER, omgeving=omgeving)
+    # `stuur_en_volg` EN NIET `stuur_op_pad`: de afzender ("village") heeft geen Person-record, dus
+    # dit kanaal landt in de rol/systeem-groep die niet meer getoond wordt. Volgen zet hem in
+    # "Direct". Zie `signaal.stuur_en_volg` voor het gemeten geval.
+    return signaal.stuur_en_volg(data_dir, "role", FOUNDER_ROLE_ID, tekst,
+                                 by=AFZENDER, omgeving=omgeving)
 
 
 def ronde(data_dir: str, *, omgeving=None, periode: str = "", nu: float | None = None,

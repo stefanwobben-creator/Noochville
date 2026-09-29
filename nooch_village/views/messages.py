@@ -247,7 +247,22 @@ def _dm_groepen(st, ik: str) -> tuple[list, list]:
         if leden and len(set(leden)) == 1:
             uit_direct.append(k)
             continue
-        (uit_direct if all(_is_mens(st, x) for x in leden) else uit_rollen).append(k)
+        # EEN GEVOLGD KANAAL IS ALTIJD EEN GESPREK (30 september 2026), ook als de tegenpartij
+        # geen mens is.
+        #
+        # HET GEVAL DAT DIT VEROORZAAKTE: de weekmemo landt in een DM met afzender `village`, die
+        # geen Person-record heeft. `_is_mens` zei dus nee, het kanaal ging naar `uit_rollen`, en
+        # die groep is sinds 22 september bewust niet meer zichtbaar. Gevolg: drie verstuurde
+        # memo's die alleen te vinden waren door de kanaal-URL met de hand te bouwen — de pijplijn
+        # werkte feilloos en niemand kon het zien.
+        #
+        # NIET DE ROL-GROEP WEER AANZETTEN, want dan staan alle 37 systeemafzenders er weer bij.
+        # Volgen is de bestaande manier waarop dit dorp zegt "dit hoort in mijn lijst" (projecten
+        # doen het al zo), en de bezorgfuncties van de twee memo's zetten die vlag nu zelf.
+        if st.people.volgt(ik, k) or all(_is_mens(st, x) for x in leden):
+            uit_direct.append(k)
+        else:
+            uit_rollen.append(k)
     uit_direct.sort(key=lambda k: -_laatst(st, k))
     if not ik:
         return uit_direct, uit_rollen

@@ -165,6 +165,46 @@ def stores_van(omgeving, data_dir: str):
     return mini
 
 
+def stuur_en_volg(data_dir: str, doel_type: str, doel_id: str, tekst: str, *,
+                  by: str = "village", omgeving=None) -> list[str]:
+    """`stuur_op_pad`, en daarna volgt de ONTVANGER dat kanaal. Geeft dezelfde kanalen terug.
+
+    WAAROM DIT NODIG IS, en waarom het niet voor elke melding geldt. Een DM van een AFZENDER
+    ZONDER PERSON-RECORD (`village`, `noochie`) komt in `views/messages._dm_groepen` niet in
+    "Direct" terecht — die splitst op `_is_mens`, en de rol/systeem-groep is sinds 22 september
+    bewust niet meer zichtbaar. Gemeten op productie: drie verstuurde weekmemo's die alleen te
+    vinden waren door de kanaal-URL met de hand te bouwen. De pijplijn werkte; niemand kon het zien.
+
+    VOLGEN IS DE BESTAANDE MANIER waarop dit dorp zegt "dit hoort in mijn lijst" — projecten doen
+    het al zo (`_kanalen`), en de lijst promoveert een gevolgd kanaal nu ongeacht de afzender.
+
+    ALLEEN VOOR WIE HEM AANROEPT, en dat zijn de twee wekelijkse memo's aan de founder. De rest van
+    de meldingen blijft `stuur_op_pad` gebruiken en gedraagt zich ongewijzigd: zou élke rol-DM zich
+    in je lijst zetten, dan staan de 37 systeemafzenders er morgen weer allemaal bij.
+
+    FAIL-SOFT OP DE VOLG-HELFT. Een mislukte volg-schrijving mag een geslaagde bezorging niet
+    ongedaan maken: het bericht staat er dan, alleen nog niet in de lijst."""
+    import logging
+
+    from nooch_village import channels as _ch
+    try:
+        st = stores_van(omgeving, data_dir) if omgeving is not None else _MiniStores(data_dir)
+        kanalen = stuur(st, doel_type, doel_id, tekst, by=by)
+    except Exception:                                         # noqa: BLE001
+        logging.getLogger("village.signaal").exception(
+            "signalering faalde: %s/%s vanaf %s", doel_type, doel_id, data_dir)
+        return []
+    for kanaal in kanalen:
+        for lid in _ch.dm_leden(kanaal):
+            try:
+                if st.people.get(lid) is not None:
+                    st.people.volg(lid, kanaal)
+            except Exception:                                 # noqa: BLE001
+                logging.getLogger("village.signaal").warning(
+                    "kon %s niet laten volgen op %s", lid, kanaal, exc_info=True)
+    return kanalen
+
+
 def stuur_op_pad(data_dir: str, doel_type: str, doel_id: str, tekst: str, *,
                  by: str = "village", herkomst: dict | None = None, omgeving=None) -> list[str]:
     """`stuur`, maar vanaf een datamap in plaats van een `_Stores`. Voor de daemon-kant.

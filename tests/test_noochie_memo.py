@@ -323,3 +323,85 @@ def test_het_ritmebestand_staat_los_van_de_weekmemo():
     from nooch_village import weekmemo
     assert noochie_memo.STATE != weekmemo.STATE
     assert noochie_memo.STATE == "noochie_memo_staat.json"
+
+
+# ══ 6. Hij is ook echt te VINDEN ═════════════════════════════════════════════
+#
+# HET GEVAL, GEMETEN OP PRODUCTIE (30 september 2026): drie weekmemo's stonden er, in een DM met
+# afzender `village`. Dat kanaal stond niet in de zijbalk onder "Direct" en kwam niet boven in de
+# zoekbalk — alleen met een handgebouwde URL kwam je erin. `_dm_groepen` splitst op `_is_mens`, en
+# een afzender zonder Person-record valt in de rol/systeem-groep die sinds 22 september bewust niet
+# meer getoond wordt. De pijplijn werkte feilloos; niemand kon het zien.
+#
+# DE FIX GAAT NIET OVER DE GROEP MAAR OVER DE LIJST: wie een kanaal VOLGT, ziet het onder Direct —
+# hetzelfde mechanisme dat projecten al gebruiken. De twee memo's zetten die vlag bij de eerste
+# bezorging.
+def _ontvanger(st):
+    """WIE DE MEMO ECHT KRIJGT, uit de governance en niet uit de fixture. Het zaad-dorp vult de
+    founder-rol al; een tweede vervuller erbij zetten verandert niet wie `ontvangers` kiest, en
+    een toets die dat aanneemt meet zijn eigen aanname."""
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    from nooch_village import signaal
+    wie, _ = signaal.ontvangers(st, "role", FOUNDER_ROLE_ID)
+    assert wie, "de founder-rol heeft geen mens — dan is er niets te bezorgen"
+    return wie[0]
+
+
+def test_de_ontvanger_volgt_het_kanaal_na_de_eerste_memo(tmp_path):
+    dd, st, ik = _dorp(tmp_path)
+    _vul(st)
+    wie = _ontvanger(cockpit2._Stores(dd))
+    reason_fn, _ = _nep()
+    uit = noochie_memo.ronde(dd, reason_fn=reason_fn)
+    assert uit["kanalen"], uit["reden"]
+    st = cockpit2._Stores(dd)
+    for kanaal in uit["kanalen"]:
+        assert st.people.volgt(wie, kanaal), f"{kanaal} staat niet in zijn lijst"
+
+
+def test_en_dan_staat_hij_onder_Direct(tmp_path):
+    """DE ANDERE HELFT VAN DEZELFDE FIX. Volgen zonder dat de lijst ernaar kijkt verandert niets."""
+    from nooch_village.views.messages import _dm_groepen
+    dd, st, ik = _dorp(tmp_path)
+    _vul(st)
+    wie = _ontvanger(cockpit2._Stores(dd))
+    reason_fn, _ = _nep()
+    uit = noochie_memo.ronde(dd, reason_fn=reason_fn)
+    st = cockpit2._Stores(dd)
+    direct, rollen = _dm_groepen(st, wie)
+    for kanaal in uit["kanalen"]:
+        assert kanaal in direct, f"{kanaal} staat nog in de onzichtbare groep"
+        assert kanaal not in rollen
+
+
+def test_zonder_de_fix_zou_hij_onzichtbaar_zijn(tmp_path):
+    """DE MUTATIE, ALS TOETS. Haal het volgen weg en hetzelfde kanaal valt terug in de groep die
+    niemand ziet — dat is precies wat er op productie gebeurde."""
+    from nooch_village.views.messages import _dm_groepen
+    dd, st, ik = _dorp(tmp_path)
+    _vul(st)
+    wie = _ontvanger(cockpit2._Stores(dd))
+    reason_fn, _ = _nep()
+    uit = noochie_memo.ronde(dd, reason_fn=reason_fn)
+    st = cockpit2._Stores(dd)
+    for kanaal in uit["kanalen"]:
+        st.people.ontvolg(wie, kanaal)
+    direct, rollen = _dm_groepen(cockpit2._Stores(dd), wie)
+    for kanaal in uit["kanalen"]:
+        assert kanaal in rollen and kanaal not in direct
+
+
+def test_een_ander_rolkanaal_blijft_wel_onzichtbaar(tmp_path):
+    """DE GRENS. Zou élke rol-DM zich in je lijst zetten, dan staan de 37 systeemafzenders er
+    morgen weer allemaal bij — precies wat het verbergen van die groep oploste."""
+    from nooch_village import signaal
+    from nooch_village.views.messages import _dm_groepen
+    dd, st, ik = _dorp(tmp_path)
+    # Een gewone melding, via de ONGEWIJZIGDE weg (`stuur_op_pad`, niet `stuur_en_volg`).
+    kanalen = signaal.stuur_op_pad(dd, "person", ik.id, "Een losse melding", by="claims-checker")
+    assert kanalen
+    st = cockpit2._Stores(dd)
+    direct, rollen = _dm_groepen(st, ik.id)
+    for kanaal in kanalen:
+        assert kanaal in rollen and kanaal not in direct
+        assert not st.people.volgt(ik.id, kanaal)
