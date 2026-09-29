@@ -35,8 +35,14 @@ def _feed_norm(entry: dict):
 
 
 def _feed_who(st, atype: str, aid: str):
-    """(avatar-html, naam) voor een feed-auteur."""
-    if atype == "person":
+    """(avatar-html, naam) voor een feed-auteur.
+
+    "HUMAN" HOORT HIER, en dat was tot 29 september 2026 niet zo: het type matchte geen enkele tak
+    en viel dus altijd door naar de laatste regel — "You", ook boven een bericht van iemand anders.
+    Dat viel niet op zolang mens-entries geen auteur DROEGEN; sinds de wall-poort de person-id
+    meeschrijft is het gewoon de verkeerde naam. `_person_name` valt terug op "Someone", en dat is
+    precies wat een niet-toegeschreven bericht van vóór die datum is: van iemand, niet van jou."""
+    if atype in ("person", "human"):
         nm = _person_name(st, aid) or "Someone"
         return _avatar(nm, False), nm
     if atype == "persona":

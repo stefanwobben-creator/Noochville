@@ -37,9 +37,14 @@ def test_feed_render_auteur_en_soort(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
                                         "text": ["mooi, ik publiceer"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    # AI-update toont AI-naam + @rolnaam; menselijke reactie toont 'Jij' (geen update-badge meer)
+    # AI-update toont AI-naam + @rolnaam; de menselijke reactie toont WIE het schreef.
+    #
+    # HIER STOND "You" (29 september 2026). Dat was geen keuze maar een gat: het auteurstype
+    # "human" matchte geen enkele tak in `_feed_who` en viel door naar de laatste regel, dus élk
+    # mens-bericht las als "van jou" — ook dat van een ander. Deze dispatch post als `guest` en
+    # schrijft dus geen auteur weg; dan is "Someone" het eerlijke antwoord, en niet "You".
     assert "Codie" in frag and "eerste versie staat klaar" in frag
-    assert "frole" in frag and "You" in frag
+    assert "frole" in frag and "Someone" in frag
     # composer = directe textarea + verborgen auteur 'human:' (een reactie is van jou)
     assert "comp-form" in frag and "value='human:'" in frag
 

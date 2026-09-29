@@ -122,3 +122,40 @@ def test_een_leeg_concept_is_geen_signaal(tmp_path):
     st.project_docs.write_concept(pid, "   ")
     kaart = P._proj_card(cockpit2._Stores(dd), st.projects.get(pid), "TOK", "/projects")
     assert "needs your confirmation" not in kaart
+
+
+# ══ 3. Wie het schreef, staat erboven ════════════════════════════════════════
+def test_een_bericht_van_een_ander_draagt_diens_naam(tmp_path):
+    """"You" BOVEN ANDERMANS BERICHT was geen keuze maar een gat: het auteurstype "human" matchte
+    geen enkele tak in `_feed_who` en viel door naar de laatste regel. Dat viel niet op zolang
+    mens-entries geen auteur DROEGEN — sinds de wall-poort de person-id meeschrijft is het gewoon
+    de verkeerde naam boven een bericht dat je niet eens mag bewerken."""
+    dd, pid, ik = _dorp(tmp_path)
+    ander = cockpit2._Stores(dd).people.add("Ander Iemand", "ander@nooch.earth")
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["dit schreef ik"], "next": ["/"]},
+                      username="ander@nooch.earth")
+    h = _wall(dd, pid)                                  # bekeken als IK, geschreven door ANDER
+    assert "Ander Iemand" in h
+    assert ">You<" not in h, "het bericht van een ander leest nog als van jezelf"
+    assert ander.id not in h.split("fbubble")[0], "het kale id staat op het scherm"
+
+
+def test_een_bericht_zonder_auteur_is_van_someone(tmp_path):
+    """De 156 mens-entries van vóór 29 september dragen geen auteur. "Someone" is dan het eerlijke
+    antwoord: van iemand, niet van jou — en niet een naam die niemand kan controleren."""
+    dd, pid, ik = _dorp(tmp_path)
+    cockpit2._Stores(dd).projects.add_feed_entry(pid, "van lang geleden", kind="comment",
+                                                 author_type="human", author_id="")
+    h = _wall(dd, pid)
+    assert "Someone" in h and ">You<" not in h
+
+
+def test_je_eigen_bericht_draagt_je_eigen_naam(tmp_path):
+    """Geen aparte tak voor "jij": je naam is je naam, ook boven je eigen regel. Dat de knoppen
+    eronder wél van jou afhangen, staat los van hoe je heet."""
+    dd, pid, ik = _dorp(tmp_path)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["van mij"], "next": ["/"]}, username=IK)
+    h = _wall(dd, pid)
+    assert "Ik Zelf" in h and "feed_edit" in h
