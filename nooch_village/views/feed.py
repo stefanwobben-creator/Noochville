@@ -346,6 +346,7 @@ def _keep_wiki_opties(st) -> str:
 
 def _keep_in_wiki_form(st, pid: str, entry: dict, csrf_token: str, terug: str) -> str:
     """De 'Keep in wiki'-uitklapper onder één bericht."""
+    from nooch_village.views.wiki import dubbele_namen_hint as _dubbele_namen_hint
     opties = _keep_wiki_opties(st)
     if not opties:
         return ""                     # geen enkele pagina → geen knop die nergens heen kan
@@ -359,6 +360,10 @@ def _keep_in_wiki_form(st, pid: str, entry: dict, csrf_token: str, terug: str) -
             f"<input type='hidden' name='next' value='{_e(terug)}'>"
             f"<label class='att-lbl' for='kw-{_e(eid)}'>Keep as a fact on which page?</label>"
             f"<select id='kw-{_e(eid)}' name='aid'>{opties}</select>"
+            # DEZELFDE WAARSCHUWING ALS OP HET RAPPORT-FORMULIER, uit dezelfde functie: twee
+            # pagina's die bijna hetzelfde heten laten je hier ongemerkt de verkeerde kiezen, en
+            # dan groeit dezelfde kennis op twee plekken.
+            f"{_dubbele_namen_hint(st)}"
             f"<p class='muted'>Added under <b>Facts</b>, with this project and this message as its "
             f"source.</p>"
             f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
