@@ -66,6 +66,17 @@ def test_de_melding_staat_in_de_pagina_en_niet_in_de_javascript():
     assert "Build the prompt" not in blok and "changed" not in blok.lower()
 
 
+def test_ook_de_copy_prompt_vergrijst(tmp_path):
+    """DEZELFDE VORM, ÉÉN ATTRIBUUT (30 september 2026). De chips daar herbouwen de prompt meteen
+    — die kunnen niet achterlopen — maar de BRIEF is een textarea en verstuurt zichzelf niet. Dat
+    is precies het geval waarvoor `data-verouderd-bij` generiek is gebouwd."""
+    from nooch_village.views.copy_prompt import render_copy_prompt
+    dd, st = _dorp(tmp_path)
+    h = render_copy_prompt(st, rol="mother_earth__nooch__community_and_email")
+    assert "id='cp-form'" in h and "data-verouderd-bij='#cp-form'" in h
+    assert "is-verouderd-melding" in h and "Update with this brief" in h
+
+
 def test_de_css_toont_de_melding_alleen_als_hij_geldt():
     from conftest import basis_css
     css = basis_css()

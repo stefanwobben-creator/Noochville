@@ -324,7 +324,7 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
         return blok
 
     formulier = (
-        f"<form class='qadd-form' method='get' action='/copy-prompt'>"
+        f"<form class='qadd-form' id='cp-form' method='get' action='/copy-prompt'>"
         f"<input type='hidden' name='rol' value='{_e(rol)}'>"
         f"<input type='hidden' name='doel' value='{_e(doel)}'>"
         f"<input type='hidden' name='awareness' value='{_e(awareness)}'>"
@@ -395,9 +395,16 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
                          awareness=awareness)
     # Het eindproduct, dus het krijgt de plek van een eindproduct: breed, leesbaar en BEWERKBAAR.
     # Niet readonly — wie een zin wil bijschaven voor hij plakt, moet dat hier kunnen doen.
+    # DEZELFDE VERGRIJZING ALS OP DE COACH (30 september 2026). De chips herbouwen de prompt
+    # meteen — die kunnen niet achterlopen — maar de BRIEF is een textarea, en die verstuurt
+    # zichzelf niet. Typ je daar iets bij zonder op "Update with this brief" te drukken, dan staat
+    # hieronder de prompt van je vorige brief, en niets zegt dat. `data-verouderd-bij` (nooch.js)
+    # zet er `is-verouderd` op zodra een veld afwijkt van wat de server neerzette.
     uitvoer = (
-        "<div class='card'>"
+        "<div class='card' data-verouderd-bij='#cp-form'>"
         "<p class='ptitle'>Your prompt</p>"
+        "<p class='muted is-verouderd-melding'>⚠ You changed the brief above. This prompt is the "
+        "previous version — press <b>Update with this brief</b> to bring it up to date.</p>"
         "<button class='btn ok' type='button' data-cp-kopieer>Copy the whole prompt</button>"
         f"<p class='muted'>Built live from {len(aan)} policies: {herkomst or '—'}. "
         "Every choice above rewrites it immediately. Edit it here if you want, then paste it into "

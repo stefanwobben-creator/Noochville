@@ -361,21 +361,20 @@ def _wo_schil(crec, binnen: str, fragment: bool, focus: bool = False) -> str:
     markering (`data-wo-focus`) die de modal-controller leest en omzet in dezelfde body-klasse —
     en weer weghaalt zodra de overlay sluit.
 
-    DE WEG TERUG hoort erbij: met de navigatie weg is dit scherm anders een doodlopende straat
-    voor iedereen die het overleg niet mag sluiten (`wo_close` is Circle-Lead-werk). Deze link
-    navigeert alleen; `st.werk.is_open` blijft ongemoeid, dus voor de anderen loopt het overleg
-    door."""
-    terug = ("<div class='c2-bar'><a href='/'>&larr; back to the village</a></div>"
-             if focus else "")
+    DE WEG TERUG STAAT IN DE KOP, en er is er precies ÉÉN. Hier stond een dag lang een tweede
+    ("← back to the village") naast de `✕ leave meeting` die `_wo_header` al rendert. Stefan, 30
+    september: dat is hetzelfde ding — je verlaat het overleg — en dan is één link genoeg. Die ene
+    kan ook meer dan een kale `<a href>`: in de modal sluit hij de overlay in plaats van de pagina
+    eronder weg te navigeren. Wat allebei gold blijft gelden: hij navigeert alleen, `is_open`
+    blijft ongemoeid, en voor de anderen loopt het overleg door."""
     if fragment:
         # De markering is leeg en onzichtbaar: hij is er voor de modal-controller, niet voor het
         # oog. In de volle-paginavorm hoeft hij niet, want daar staat de klasse al op de body.
         merk = "<div data-wo-focus hidden></div>" if focus else ""
-        return f"{merk}{terug}{binnen}"
+        return f"{merk}{binnen}"
     from nooch_village.cockpit2_util import _nav
     return _page("Tactical meeting",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
-                 f"{terug}"
                  # GEEN EIGEN BREEDTE. `.wo-breed` (max-width 1160px) kwam mee toen de losse
                  # "nog niet geopend"-pagina werd opgeheven: daar stond hij als inline
                  # style en is toen klasse geworden in plaats van weggehaald. Gevolg was een

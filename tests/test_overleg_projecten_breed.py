@@ -108,15 +108,21 @@ def test_de_cap_gaat_alleen_op_die_vlag_eraf():
     assert "max-width:none" in r.get("body.wo-vol", "")
 
 
-def test_er_is_een_weg_terug_naar_het_dorp(tmp_path):
+def test_er_is_precies_een_weg_terug(tmp_path):
     """MET DE NAVIGATIE WEG IS DIT ANDERS EEN DOODLOPENDE STRAAT. `wo_close` is Circle-Lead-werk,
-    dus wie alleen meedoet kan er niet via "sluiten" uit — en hoeft dat ook niet: deze link
-    navigeert alleen, het overleg loopt voor de anderen door."""
+    dus wie alleen meedoet kan er niet via "sluiten" uit.
+
+    EN HET IS ÉÉN LINK. Hier stond een dag lang een tweede ("← back to the village") naast de
+    `✕ leave meeting` die `_wo_header` al rendert — Stefan: dat is hetzelfde ding, je verlaat het
+    overleg. Twee uitgangen naast elkaar laten je kiezen tussen twee dingen die hetzelfde doen.
+
+    HIJ SLUIT HET OVERLEG NIET: geen `wo_close` in de buurt, dus voor de anderen loopt het door."""
     dd = _dd(tmp_path)
     _open(dd)
     html = _stap(dd, "agenda")
-    assert "back to the village" in html
-    assert "wo_close" not in html.split("back to the village")[0][-400:]
+    assert html.count("leave meeting") == 1
+    assert "back to the village" not in html, "de tweede uitgang is terug"
+    assert "wo_close" not in html.split("leave meeting")[0][-400:]
 
 
 def test_de_modalvorm_draagt_een_markering(tmp_path):
