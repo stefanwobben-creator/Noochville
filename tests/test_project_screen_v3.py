@@ -27,8 +27,9 @@ def _setup(tmp_path, *, missie="", owner=_RID, description=""):
     return dd, pid, codie
 
 
-def _frag(dd, pid, csrf="t"):
-    return render_project(cockpit2._Stores(dd), pid, csrf_token=csrf, fragment=True)
+def _frag(dd, pid, csrf="t", username=None):
+    return render_project(cockpit2._Stores(dd), pid, csrf_token=csrf, fragment=True,
+                          username=username)
 
 
 # a. elke bestaande actie is bereikbaar vanuit de nieuwe layout
@@ -37,11 +38,17 @@ def test_a_alle_acties_bereikbaar(tmp_path):
     st = cockpit2._Stores(dd)
     # feed-comment (mens) → react_add + feed_edit + feed_remove; attachment → attach_remove;
     # checklist met item → check_toggle/check_remove; check_add via '+ item'.
-    st.projects.add_feed_entry(pid, "let op de tone", kind="comment", author_type="human")
+    # MET EEN AUTEUR, en dat is sinds 29 september geen detail: de wall-knoppen vragen "mag deze
+    # mens dit", en op een bericht zonder auteur is het antwoord voor iedereen nee. Deze toets gaat
+    # over de LAYOUT (staat elke actie er), dus schrijft hij als een herkenbare mens en kijkt hij
+    # als diezelfde mens.
+    ik = st.people.add("Ik Zelf", "ik@nooch.earth")
+    st.projects.add_feed_entry(pid, "let op de tone", kind="comment", author_type="human",
+                               author_id=ik.id)
     st.projects.attach_add(pid, url="https://ref.example", title="Referentie")
     cl = st.projects.checklist_add(pid, title="Uitvoerplan")
     st.projects.check_add(pid, cl["id"], "onderzoek", skill="openalex_evidence", query="x")
-    frag = _frag(dd, pid)
+    frag = _frag(dd, pid, username="ik@nooch.earth")
     # proj_describe én ai_reply staan hier BEWUST niet meer: hun UI-ingang is verwijderd (opdracht-editor
     # resp. de 'Vraag …'-knop — een rol nodig je nu uit via @mention). De dispatch-takken blijven bestaan
     # en zijn via de API bereikbaar; ze hebben alleen geen UI-caller meer — daarom niet in deze lijst.

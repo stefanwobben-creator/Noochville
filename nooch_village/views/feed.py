@@ -35,8 +35,14 @@ def _feed_norm(entry: dict):
 
 
 def _feed_who(st, atype: str, aid: str):
-    """(avatar-html, naam) voor een feed-auteur."""
-    if atype == "person":
+    """(avatar-html, naam) voor een feed-auteur.
+
+    "HUMAN" HOORT HIER, en dat was tot 29 september 2026 niet zo: het type matchte geen enkele tak
+    en viel dus altijd door naar de laatste regel — "You", ook boven een bericht van iemand anders.
+    Dat viel niet op zolang mens-entries geen auteur DROEGEN; sinds de wall-poort de person-id
+    meeschrijft is het gewoon de verkeerde naam. `_person_name` valt terug op "Someone", en dat is
+    precies wat een niet-toegeschreven bericht van vóór die datum is: van iemand, niet van jou."""
+    if atype in ("person", "human"):
         nm = _person_name(st, aid) or "Someone"
         return _avatar(nm, False), nm
     if atype == "persona":
@@ -223,11 +229,44 @@ def reactie_blok(entry: dict, csrf_token: str, velden: dict) -> tuple[str, str]:
 
 def _feed_entry_html(st, entry: dict, role_name: str = "",
                      pid: str = "", csrf_token: str = "", mention_names=(),
-                     outcome_opts=None, terug: str = "") -> str:
+                     outcome_opts=None, terug: str = "", ik: str = "") -> str:
     """`terug` is de plek waar de bewerk-acties naartoe redirecten. Zonder die waarde valt de
     dispatch terug op "/" en belandt de mens na het opslaan van een comment op het beginscherm —
-    weg uit het project waarin hij aan het werk was."""
+    weg uit het project waarin hij aan het werk was.
+
+    `ik` is de person-id van de kijker. DE KNOPPEN STELLEN DEZELFDE VRAAG ALS DE DISPATCH —
+    `mag_wall_bewerken`/`mag_wall_verwijderen`, letterlijk dezelfde functies — zodat een knop die
+    er staat ook werkt en een knop die er niet staat niet alsnog via een POST langskomt. Tot 29
+    september 2026 stond er geen vraag: elke ingelogde kon elke regel van elk project
+    herschrijven."""
+    from nooch_village.cockpit2 import mag_wall_bewerken, mag_wall_verwijderen
     kind, atype, aid = _feed_norm(entry)
+    eid = entry.get("id")
+    mag_bewerken = bool(csrf_token and eid) and mag_wall_bewerken(st, entry, ik)
+    mag_wissen = bool(csrf_token and eid) and mag_wall_verwijderen(st, entry, ik, pid)
+    if kind == "system":
+        # EEN LOGREGEL IS GEEN OPMERKING. "✅ Mens-taak afgerond: …" wordt door de code geschreven
+        # (`project_items`), en stond hier als volwaardige comment-bubbel mét naam-kop en
+        # Edit-knop. Dat is drie keer mis: het leest als iets wat iemand zei, het trekt evenveel
+        # aandacht als een echt bericht, en het nodigt uit om een feit te HERSCHRIJVEN.
+        #
+        # HET ONDERSCHEID BESTOND AL: `kind="system"` staat sinds de eerste versie van
+        # `add_feed_entry` in het schema en werd hier alleen niet gelezen — het scherm keek naar
+        # het auteurs-TYPE (dat bij deze regels gewoon "human" is, want een mens vinkte het af).
+        #
+        # VERWIJDEREN MAG WEL: een audittrail opschonen is iets anders dan een feit herschrijven.
+        wis = ""
+        if mag_wissen:
+            hidl = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                    f"<input type='hidden' name='item' value='{_e(eid)}'>"
+                    f"<input type='hidden' name='next' value='{_e(terug)}'>")
+            wis = (f"<form method='post' action='/action' class='fentry-inline'>{hidl}"
+                   f"<button class='flink' type='submit' name='action' value='feed_remove' "
+                   f"onclick=\"return confirm('Remove log line?')\">Remove</button></form>")
+        return (f"<div class='fentry fentry-log'>"
+                f"<div class='fbubble'><span class='fstamp'>{_e(_stamp(entry.get('at')))}</span> "
+                f"{_md(entry.get('text', ''))}{wis}</div></div>")
     av, nm = _feed_who(st, atype, aid)
     if atype == "role":
         who = f"<b class='fname'>@{_e(nm)}</b>"
@@ -235,12 +274,11 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
     else:
         who = f"<b class='fname'>{_e(nm)}</b>"
-    eid = entry.get("id")
     rx, picker = reactie_blok(entry, csrf_token, {"pid": pid})
     bubble = _md(entry.get("text", ""))
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)
-    if csrf_token and eid and atype == "human":
+    if mag_bewerken:
         # HETZELFDE COMPONENT als "Edit before confirming" op /rapport — zie
         # cockpit2_util.inline_edit. `terug` gaat mee zodat opslaan je op de projectkaart houdt.
         _hid2 = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -251,9 +289,11 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
             bubble,
             md_editor("text", entry.get("text", ""), rows=3, placeholder="Edit your reply…"),
             sleutel=eid, opslaan="feed_edit", verborgen=_hid2, toon_cls="fbody")
-    # Eigen comment (mens) is wijzigbaar/verwijderbaar.
+    # BEWERKEN EN VERWIJDEREN ZIJN TWEE VRAGEN, en ze hebben twee antwoorden: je eigen woorden
+    # herschrijven mag alleen jijzelf, weghalen mag ook de rol die dit project draagt. Ze stonden
+    # hier als één `if` — en dat is precies hoe "wie mag wat" ongemerkt één regel werd.
     tools = ""
-    if csrf_token and eid and atype == "human":
+    if mag_bewerken or mag_wissen:
         hidf = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='item' value='{_e(eid)}'>")
@@ -261,13 +301,12 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         # tekst zelf, niet als tweede veld eronder. Een <details> dat een kopie van de bubbel
         # opent, laat je twee versies van dezelfde regel naast elkaar lezen en je moet raden welke
         # de echte is. De bubbel-kant staat in `_bubble_of_editor` hieronder.
-        editd = ""
         deld = (f"<form method='post' action='/action' class='fentry-inline'>{hidf}"
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
                 f"onclick=\"return confirm('Remove comment?')\">Remove</button></form>")
-        tools = (f"<span class='fsep'>·</span>"
-                 f"{inline_edit_knop()}"
-                 f"<span class='fsep'>·</span>{deld}")
+        stukken = ([f"<span class='fsep'>·</span>{inline_edit_knop()}"] if mag_bewerken else []) + \
+                  ([f"<span class='fsep'>·</span>{deld}"] if mag_wissen else [])
+        tools = "".join(stukken)
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
     # DE "→ outcome"-KIEZER IS WEG. Hij stond onder elk bericht en werd niet gebruikt: routeren

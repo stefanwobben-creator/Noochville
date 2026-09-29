@@ -360,6 +360,11 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    {who:rol}). Een 'Deliverable'-badge vereist een schema-tag = datawijziging → scope 2. */
 .fentry-opdracht .fbubble{border-left:3px solid var(--green);padding-top:.55rem}
 .fentry-attach .fbubble{border-left:3px solid var(--border)}
+/* Logregel (29 september 2026): door de code geschreven, geen opmerking van iemand. Modifier op
+   het bestaande `.fentry`, zoals `-opdracht` en `-attach`; geen nieuwe klasse-familie. De VORM van
+   de bubbel staat in de designsysteem-helft hieronder — daar wordt `.fbubble` omkaderd, en een
+   regel hier zou daar met gelijke specificiteit onder verliezen. */
+.fentry-log{margin-bottom:.4rem}
 .fkicker{display:block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 /* De genummerde lijst, zelfde inspringing als `.fbul` — het is dezelfde soort lijst met een
@@ -2697,6 +2702,13 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   box-shadow: none; color: var(--nu-text); }
 :root .pkaart-rail { border-left: var(--nu-border); border-top: none;
   border-right: none; border-bottom: none; }
+/* …behalve een LOGREGEL. Die is geen bericht: hij werd door de code geschreven (`kind="system"`,
+   bijv. "✅ Mens-taak afgerond: …") en stond tot 29 september 2026 als volwaardige comment-bubbel
+   in de wall — mét naam-kop en Edit-knop. Geen kader, geen vlak, kleiner en grijzer: een
+   audit-regel hoort te LEZEN als een audit-regel. Hij staat HIER en niet bij `.fentry-opdracht`
+   omdat de omhulsel-regel hierboven anders wint (gelijke specificiteit, later in het bestand). */
+:root .fentry-log .fbubble { border: none; background: none; box-shadow: none;
+  padding: .1rem 0; color: var(--nu-muted, var(--subtle)); font-size: .85rem; }
 
 /* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
 :root .railsplit, :root .menu-sep, :root .einddoc-split { background: var(--nu-text); height: 1.5px; }
