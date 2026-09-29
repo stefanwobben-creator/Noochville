@@ -421,13 +421,39 @@ def _doel_kop(st: _Stores, goal: str) -> str:
             f"<span>{v['pct']}% · {v['af']}/{v['totaal']} done</span></div></div>")
 
 
+def _concept_chip(st, p: dict) -> str:
+    """"Er ligt een rapport dat op jou wacht" — op de KAART, niet pas als je hem opent.
+
+    HET STOND ALLEEN BINNENIN. Een project in Done met een onbevestigd concept ziet er op het bord
+    precies uit als een project dat helemaal klaar is; het verschil zag je pas na het openen, en
+    dus zag je het niet. Dit is hetzelfde amber chipje met dezelfde woorden als de bevestigvraag
+    zelf (`_result_formulier`) — dezelfde toestand hoort er niet op twee plekken anders uit te
+    zien.
+
+    DE BRON IS HETZELFDE CONCEPT dat de kaart-binnenkant leest (`project_docs.concept`), geen
+    tweede vlag in het project. Reference, don't copy: een tweede administratie van "er wacht iets"
+    loopt uiteen zodra er één bevestigd wordt.
+
+    FAIL-SOFT zoals `_kaart_status`: een bord dat niet laadt omdat een chip struikelt is erger dan
+    een bord zonder chip."""
+    try:
+        store = getattr(st, "project_docs", None)
+        if store is None:
+            return ""
+        if not (store.concept(p.get("id") or "").get("tekst") or "").strip():
+            return ""
+        return "<span class='chip amber'>needs your confirmation</span>"
+    except Exception:
+        return ""
+
+
 def _kaart_chips(st: _Stores, p: dict) -> str:
     """De etiketten-rij op de kaart (fase 11, 1b): doel, batch/label, deadline-indien-gezet.
 
     ÉÉN RIJ, ÉÉN ATOOM. Alle drie zijn `.chip` — hetzelfde atoom dat de rest van het systeem al
     gebruikt. Wat er niet is, staat er niet: een kaart zonder deadline toont geen lege
     deadline-chip, want "niet ingevuld" is geen etiket."""
-    chips = [_doel_chip(st, p)]
+    chips = [_doel_chip(st, p), _concept_chip(st, p)]
     label = p.get("label")
     if label and label in _LABELS:
         chips.append(f"<span class='chip muted'>{_e(str(label))}</span>")
@@ -1646,6 +1672,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # viel daarop om met een UnboundLocalError. Hij beschrijft WAAR je bent, niet of je mag
     # schrijven, dus hij hoort hier.
     nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
+    # WIE ER KIJKT, ÉÉN KEER VASTGESTELD. Hij stond binnen `if rw:` voor de avatar in de
+    # composer; sinds de wall-knoppen per bericht vragen "mag deze mens dit" is het antwoord ook
+    # nodig op een kaart die je alleen mag LEZEN — en daar bestond `_ik` niet.
+    _ik = st.people.by_email(username) if username and username != "guest" else None
     composer = ""
     if rw:
         bijlage = (f"<details class='acard-d comp-attach'><summary class='flink'>📎 attachment</summary>"
@@ -1675,7 +1705,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         # stem is, en echte namen maken de @-hint een uitnodiging in plaats van een instructie.
         # Bewust GEEN gok op de avatar: zonder ingelogde persoon staat er niets, want een verkeerd
         # initiaal is erger dan geen.
-        _ik = st.people.by_email(username) if username and username != "guest" else None
         _av = (f"<span class='av' title='{_e(_ik.name)}'>{_e(_initials(_ik.name))}</span>"
                if _ik else "")
         _tagbaar = ", ".join(f"@{n}" for n in _ai_namen(st)[:2])
@@ -1704,7 +1733,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     for m in (p.get("log") or []):
         entries.append((m.get("at") or 0,
                         _feed_entry_html(st, m, role_name=role_name, pid=pid, terug=nxt_full,
-                                         csrf_token=csrf_token, mention_names=mention_names)))
+                                         csrf_token=csrf_token, mention_names=mention_names,
+                                         # WIE KIJKT ER, want dat bepaalt welke knoppen er staan.
+                                         # Zonder deze waarde zag iedereen alle knoppen en deed de
+                                         # dispatch daarna het echte werk — nu stellen scherm en
+                                         # server dezelfde vraag.
+                                         ik=(_ik.id if _ik else ""))))
     for a in (p.get("attachments") or []):
         entries.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     entries.sort(key=lambda t: t[0], reverse=True)   # nieuwste eerst

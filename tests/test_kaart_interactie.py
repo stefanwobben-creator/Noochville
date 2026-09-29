@@ -12,10 +12,18 @@ from nooch_village.views import projects as P
 ROLE = "mother_earth__nooch__brand_visual_designer"
 
 
+#: DE KAART HEEFT SINDS 29 SEPTEMBER EEN KIJKER NODIG. De wall-knoppen vragen per bericht "mag
+#: deze mens dit bewerken/weghalen", en dat antwoord is voor `guest` altijd nee — precies zoals
+#: Messages het al deed. Deze toetsen gaan over het bewerk-component, niet over de poort, dus
+#: schrijven en kijken gebeurt hier nu als één herkenbare mens.
+IK = "ik@nooch.earth"
+
+
 def _kaart(tmp_path, *, rw=True):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
+    st.people.add("Ik Zelf", IK)
     pid = st.projects.create(ROLE, "Interactie", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
@@ -26,8 +34,9 @@ def _kaart(tmp_path, *, rw=True):
     st.projects.check_add(pid, cl, "Tweede stap")
     item = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]["id"]
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["mijn comment"],
-                                        "author": ["human:"], "next": ["/"]}, username="guest")
-    html = P.render_project(cockpit2._Stores(dd), pid, csrf_token=("TOK" if rw else ""))
+                                        "author": ["human:"], "next": ["/"]}, username=IK)
+    html = P.render_project(cockpit2._Stores(dd), pid, csrf_token=("TOK" if rw else ""),
+                            username=IK)
     return dd, pid, cl, item, html
 
 
@@ -81,7 +90,7 @@ def test_opslaan_landt_ook_echt_daar(tmp_path):
     eid = _wall_regels(dd, pid)[-1]["id"]
     nxt, msg = cockpit2.dispatch(dd, "feed_edit",
                                  {"pid": [pid], "item": [eid], "text": ["bijgewerkt"],
-                                  "next": [f"/project?pid={pid}"]}, username="guest")
+                                  "next": [f"/project?pid={pid}"]}, username=IK)
     assert nxt.startswith(f"/project?pid={pid}"), nxt
     assert not cockpit2.is_weigering(msg), msg
     assert _wall_regels(dd, pid)[-1]["text"] == "bijgewerkt"
@@ -144,19 +153,20 @@ def test_comment_en_concept_delen_hetzelfde_edit_component(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
+    st.people.add("Ik Zelf", IK)
     pid = st.projects.create(ROLE, "Eén component", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     st.projects.check_add(pid, cl, "A")
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["comment"], "author": ["human:"],
-                                        "next": ["/"]}, username="guest")
+                                        "next": ["/"]}, username=IK)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
     # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
     # zijn eigen concept in plaats van op een verdwenen producent te leunen.
     cockpit2._Stores(dd).project_docs.write_concept(
         pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
-    kaart = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    kaart = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK)
     rapport = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
     for naam, html in (("kaart", kaart), ("rapport", rapport)):
         assert "editor-inline" in html, naam                    # dezelfde wrapper-klasse
@@ -175,19 +185,20 @@ def test_de_toggle_knop_vindt_zijn_eigen_blok(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
+    st.people.add("Ik Zelf", IK)
     pid = st.projects.create(ROLE, "Grens", "human", status="running", done_when="af")
     st.projects.start(pid)
     cl = st.projects.checklist_add(pid, "tasks")["id"]
     st.projects.check_add(pid, cl, "A")
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["c"], "author": ["human:"],
-                                        "next": ["/"]}, username="guest")
+                                        "next": ["/"]}, username=IK)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
     # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
     # zijn eigen concept in plaats van op een verdwenen producent te leunen.
     cockpit2._Stores(dd).project_docs.write_concept(
         pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
-    for html in (P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK"),
+    for html in (P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK),
                  render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")):
         # de wrapper opent VÓÓR het paar en VÓÓR de knop, en sluit erna: dan omvat hij beide
         w = html.index("editor-inline")

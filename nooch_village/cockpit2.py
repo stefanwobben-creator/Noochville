@@ -1865,6 +1865,69 @@ def mag_bericht_verwijderen(st, entry: dict, ik: str) -> bool:
     return channels.mag_wissen(entry, ik, wis_namens(st, ik))
 
 
+def eigenaar_rol_van_project(st, pid: str) -> str:
+    """De rol die dit project bezit, of "". Eén plek, want de wall-poort en de dispatch stellen
+    dezelfde vraag — en `_role_gate((pj.get(pid) or {}).get("owner") …)` stond al op vijf plekken
+    letterlijk uitgeschreven."""
+    return str(((st.projects.get(pid) or {}) if pid else {}).get("owner") or "")
+
+
+def mag_wall_verwijderen(st, entry: dict, ik: str, pid: str) -> bool:
+    """Mag deze mens dit wall-bericht weghalen? Dezelfde vraag voor het scherm én de actie.
+
+    DRIE TREDEN, en twee ervan komen ongewijzigd uit Messages (`mag_bericht_verwijderen`):
+
+      1. **Je eigen bericht**, of het bericht van een ROL die jij bekleedt — `channels.mag_wissen`
+         met `wis_namens`. Eén regel, twee schermen: de wall is een andere stroom, niet een andere
+         moraal.
+      2. **De eigenaar-rol van dit project.** Dit is de trede die de wall erbij heeft en Messages
+         niet, en ze is er omdat een project een eigenaar HEEFT: de rol die het draagt mag zijn
+         eigen draad opruimen, ook als een ander de regel schreef.
+      3. **De Circle Lead, alleen als die eigenaar-rol niet meer bestaat.** Niet als algemene
+         bevoegdheid — dan zou "lead" gelijkstaan aan "mag overal in" — maar als vangnet voor werk
+         dat anders bij niemand kan liggen. Precies de terugval die `wis_namens` al kent, en om
+         dezelfde reden.
+
+    WAT DIT VERANDERT VOOR OUDE BERICHTEN. Een mens-entry van vóór 29 september 2026 draagt geen
+    auteur-id (op prod: 156 van de 213). Trede 1 kan dan niemand aanwijzen, dus voor die berichten
+    blijft trede 2 over. Dat is fail-closed en niet te repareren met een migratie: wie het schreef
+    staat nergens, en een gok invullen is erger dan een lege plek."""
+    if not ik:
+        return False
+    namens = wis_namens(st, ik)
+    if channels.mag_wissen(entry, ik, namens):
+        return True
+    eigenaar = eigenaar_rol_van_project(st, pid)
+    return bool(eigenaar) and namens(eigenaar)
+
+
+def mag_wall_bewerken(st, entry: dict, ik: str) -> bool:
+    """Mag deze mens dit wall-bericht HERSCHRIJVEN? Alleen de auteur zelf.
+
+    STRENGER DAN VERWIJDEREN, en dat is dezelfde afweging die Messages al maakt: een rol (of de
+    eigenaar van een project) mag je het zwijgen opleggen, maar geen andere woorden in de mond
+    leggen. Daarom géén `rol_check` mee: zonder die callable valt de rol-tak in `mag_wissen` weg en
+    blijft alleen "de auteur is deze mens" over."""
+    return bool(ik) and channels.mag_wissen(entry, ik, None)
+
+
+def _wall_poort(c):
+    """(ik, pid, entry, fout) — de gedeelde voordeur van wall-bewerken en wall-verwijderen.
+
+    Hij zoekt de entry er zelf bij, want zonder entry is er niets om een poort over te stellen —
+    en de twee dispatch-takken deden tot nu toe allebei alleen `pj.feed_edit(...)` op de id die
+    de POST meebracht."""
+    ik = _web_actor_id(c.username, c.st)
+    if not ik:
+        return "", "", None, "✗ log in as a person — the wall knows who wrote what"
+    pid, item = (c.g("pid") or "").strip(), (c.g("item") or "").strip()
+    p = c.st.projects.get(pid) or {}
+    entry = next((e for e in (p.get("log") or []) if e.get("id") == item), None)
+    if entry is None:
+        return "", "", None, "✗ unknown message"
+    return ik, pid, entry, ""
+
+
 def _eigen_bericht_poort(c):
     """(ik, kanaal, item, fout) — de gedeelde voordeur van bewerken en wissen. `fout` is "" als
     alles klopt; is hij gevuld, dan zijn de andere drie leeg."""
@@ -2971,24 +3034,32 @@ def _act_react_add(c):
 
 
 def _act_feed_edit(c):
-        nxt, g, pj = c.nxt, c.g, c.pj
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        if pj.feed_edit(g("pid"), g("item"), g("text")):
-            msg = "✓ comment edited"
-        return nxt, msg
+        # AUTHZ: rolvervuller of Circle Lead — andermans woorden herschrijven is geen deelname.
+        # Hier stond "bewust ongated", en dat was hetzelfde gat dat Messages in #615 al dichtte:
+        # iedereen die ingelogd was kon elke regel van elk project herschrijven. Bewerken is de
+        # STRENGE kant: alleen de auteur zelf, ook voor de eigenaar-rol van het project.
+        nxt, pj = c.nxt, c.pj
+        ik, pid, entry, fout = _wall_poort(c)
+        if fout:
+            return nxt, fout
+        if not mag_wall_bewerken(c.st, entry, ik):
+            return nxt, "✗ only the author can edit a message"
+        return nxt, ("✓ comment edited" if pj.feed_edit(pid, entry["id"], c.g("text")) else "")
 
 
 def _act_feed_remove(c):
-        nxt, g, pj = c.nxt, c.g, c.pj
-        msg = ""
-        # AUTHZ: circle-member of iedereen-ingelogd — collaboratie: bijdragen aan de draad van
-        # een project is deelnemen, geen mutatie van de structuur. Bewust ongated; de
-        # sessie-check in do_POST dekt "ingelogd = mag".
-        pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment removed"
-        return nxt, msg
+        # AUTHZ: rolvervuller of Circle Lead — opruimen in de draad van een project hoort bij het
+        # dragen van dat project, niet bij het langslopen. Drie treden, zie `mag_wall_verwijderen`:
+        # je eigen bericht (of dat van een rol die jij bekleedt), de eigenaar-rol van dit project,
+        # en de Circle Lead alleen als die eigenaar-rol niet meer bestaat.
+        nxt, pj = c.nxt, c.pj
+        ik, pid, entry, fout = _wall_poort(c)
+        if fout:
+            return nxt, fout
+        if not mag_wall_verwijderen(c.st, entry, ik, pid):
+            return nxt, "✗ not yours to remove — ask the role that owns this project"
+        pj.feed_remove(pid, entry["id"])
+        return nxt, "🗑 comment removed"
 
 
 
@@ -3045,6 +3116,13 @@ def _act_proj_feed(c):
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
         kind = "comment" if atype == "human" else "update"
+        if atype == "human" and not aid:
+            # WIE HET SCHREEF, VASTGELEGD BIJ HET SCHRIJVEN (29 september 2026). Het formulier stuurt
+            # `author=human:` — een type zonder naam — en daardoor droeg elke mens-entry een LEGE
+            # auteur. Zolang iedereen alles mocht bewerken viel dat niet op; met de poort erop is
+            # het het verschil tussen "van mij" en "van niemand". Zelfde vorm als een bericht in
+            # Messages, dat de person-id al sinds het begin meedraagt.
+            aid = _web_actor_id(c.username, st)
         entry = pj.add_feed_entry(g("pid"), g("text"), kind=kind, author_type=atype, author_id=aid)
         if entry:
             msg = "💬 update geplaatst" if kind == "update" else "💬 reactie geplaatst"

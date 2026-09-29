@@ -44,19 +44,115 @@ def test_feed_render_auteur_en_soort(tmp_path):
     assert "comp-form" in frag and "value='human:'" in frag
 
 
+#: DE WALL HEEFT SINDS 29 SEPTEMBER EEN POORT, en die kent alleen MENSEN. Tot dan was
+#: `username="guest"` hier gewoon "iemand"; nu is het "niemand in het bijzonder", en dat mag
+#: andermans woorden niet aanraken. Zelfde stand als Messages, waar `_eigen_bericht_poort` een
+#: gast al weigerde: zonder naam is "van mij" niet vast te stellen.
+IK = "ik@nooch.earth"
+ANDER = "ander@nooch.earth"
+
+
+def _mensen(dd):
+    st = cockpit2._Stores(dd)
+    ik = st.people.by_email(IK) or st.people.add("Ik Zelf", IK)
+    ander = st.people.by_email(ANDER) or st.people.add("Ander Iemand", ANDER)
+    return ik, ander
+
+
+def _log(dd, pid):
+    return cockpit2._Stores(dd).projects.get(pid)["log"]
+
+
 def test_eigen_comment_wijzigen_verwijderen(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["mijn comment"], "next": ["/"]}, username="guest")
+    _mensen(dd)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["mijn comment"], "next": ["/"]}, username=IK)
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": [f"persona:{codie.id}"],
                                         "text": ["AI update"], "next": ["/"]}, username="guest")
-    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True,
+                                   username=IK)
     # eigen comment: edit/delete; AI-update: niet (dus precies 1 keer feed_remove)
     assert "Edit" in frag and frag.count("feed_remove") == 1
-    eid = cockpit2._Stores(dd).projects.get(pid)["log"][0]["id"]
-    cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid], "text": ["aangepast"], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["text"] == "aangepast"
-    cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid], "next": ["/"]}, username="guest")
-    assert len(cockpit2._Stores(dd).projects.get(pid)["log"]) == 1
+    eid = _log(dd, pid)[0]["id"]
+    cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid], "text": ["aangepast"], "next": ["/"]}, username=IK)
+    assert _log(dd, pid)[0]["text"] == "aangepast"
+    cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid], "next": ["/"]}, username=IK)
+    assert len(_log(dd, pid)) == 1
+
+
+def test_een_ander_mag_je_woorden_niet_aanraken(tmp_path):
+    """DE POORT ZIT IN DE ACTIE, niet in de knop. Deze toets post namens iemand anders en eist dat
+    er niets verandert — dezelfde vorm als `test_messages_eigen_bericht`, en om dezelfde reden: een
+    knop die er niet staat houdt een POST niet tegen."""
+    dd, rid, pid, codie = _setup(tmp_path)
+    _mensen(dd)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["mijn comment"], "next": ["/"]}, username=IK)
+    eid = _log(dd, pid)[0]["id"]
+
+    _n, msg = cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid],
+                                                  "text": ["gekaapt"], "next": ["/"]}, username=ANDER)
+    assert cockpit2.is_weigering(msg), msg
+    assert _log(dd, pid)[0]["text"] == "mijn comment"
+
+    _n, msg = cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid],
+                                                    "next": ["/"]}, username=ANDER)
+    assert cockpit2.is_weigering(msg), msg
+    assert len(_log(dd, pid)) == 1
+
+    # EN HET SCHERM ZEGT HETZELFDE: geen knoppen voor wie ze toch niet mag gebruiken.
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True,
+                                   username=ANDER)
+    assert "feed_remove" not in frag and "feed_edit" not in frag
+
+
+def test_de_eigenaar_rol_ruimt_op_maar_herschrijft_niet(tmp_path):
+    """EEN PROJECT HEEFT EEN EIGENAAR, en die mag zijn eigen draad opruimen — ook een regel die een
+    ander schreef. Herschrijven mag hij niet: een rol mag je het zwijgen opleggen, geen andere
+    woorden in de mond leggen (zelfde onderscheid als `mag_bericht_verwijderen` in Messages)."""
+    dd, rid, pid, codie = _setup(tmp_path)
+    ik, ander = _mensen(dd)
+    cockpit2._Stores(dd).assign.assign(rid, "person", ander.id)      # `ander` vervult de eigenaar-rol
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["mijn comment"], "next": ["/"]}, username=IK)
+    eid = _log(dd, pid)[0]["id"]
+
+    _n, msg = cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid],
+                                                  "text": ["gekaapt"], "next": ["/"]}, username=ANDER)
+    assert cockpit2.is_weigering(msg), msg
+    assert _log(dd, pid)[0]["text"] == "mijn comment"
+
+    _n, msg = cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid],
+                                                    "next": ["/"]}, username=ANDER)
+    assert not cockpit2.is_weigering(msg), msg
+    assert _log(dd, pid) == []
+
+
+def test_zonder_eigenaar_rol_is_de_circle_lead_het_vangnet(tmp_path):
+    """DE DERDE TREDE, en alleen deze: bestaat de eigenaar-rol niet meer, dan kan niemand het werk
+    nog opruimen. Dat is precies de terugval die `wis_namens` voor rol-berichten al kent. Bestaat
+    de rol WEL, dan geldt hij niet — anders is "lead" een sleutel op elke deur."""
+    dd, rid, pid, codie = _setup(tmp_path)
+    ik, ander = _mensen(dd)
+    st = cockpit2._Stores(dd)
+    weg = st.projects.create("rol_die_niet_meer_bestaat", "Wees", "human")
+    st.assign.assign("mother_earth__circle_lead", "person", ander.id)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [weg], "author": ["human:"],
+                                        "text": ["van mij"], "next": ["/"]}, username=IK)
+    eid = _log(dd, weg)[0]["id"]
+    _n, msg = cockpit2.dispatch(dd, "feed_remove", {"pid": [weg], "item": [eid],
+                                                    "next": ["/"]}, username=ANDER)
+    assert not cockpit2.is_weigering(msg), msg
+    assert _log(dd, weg) == []
+
+    # …en op een project met een BESTAANDE eigenaar-rol blijft dezelfde lead met lege handen staan.
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["van mij"], "next": ["/"]}, username=IK)
+    eid2 = _log(dd, pid)[0]["id"]
+    _n, msg = cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid2],
+                                                    "next": ["/"]}, username=ANDER)
+    assert cockpit2.is_weigering(msg), msg
+    assert len(_log(dd, pid)) == 1
 
 
 def _dms_van(st, rol):
