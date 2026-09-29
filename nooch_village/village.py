@@ -629,6 +629,21 @@ class Village:
         except Exception as e:                              # noqa: BLE001
             logging.getLogger("village").warning("weekmemo faalde: %s", e)
 
+    def _veilig_noochie_memo(self) -> None:
+        """De wekelijkse blik van Noochie op het hele dorp, als DM bij de founder.
+
+        NAAST DE WEEKMEMO EN NIET ERIN. Ze lezen andere dingen (die vijf externe signaalbronnen,
+        deze de stand van het dorp zelf), ze hebben een eigen ritme-bestand, en ze horen elkaar
+        niet mee te slepen als er één uitvalt. Wat ze delen is de dagcadans: `ronde` bewaakt zijn
+        eigen weekpoort, dus dagelijks aantikken kost niets."""
+        try:
+            from nooch_village import noochie_memo
+            uit = noochie_memo.ronde(self.context.data_dir, omgeving=self.context)
+            logging.getLogger("village").info(
+                "🌱 noochie-memo %s: %s", uit.get("periode"), uit.get("reden") or "niets te melden")
+        except Exception as e:                              # noqa: BLE001
+            logging.getLogger("village").warning("noochie-memo faalde: %s", e)
+
     def _veilig_weesprojecten(self) -> None:
         try:
             self._meld_weesprojecten()
@@ -664,6 +679,9 @@ class Village:
         # De weekmemo als laatste in deze rij: hij leest wat de ingest net heeft opgeleverd. Zijn
         # eigen weekpoort zorgt dat hij hooguit één keer per ISO-week iets doet.
         self.bus.subscribe("dag_begint", lambda e: self._veilig_weekmemo())
+        # En Noochie's eigen weekblik, ná de weekmemo: allebei wekelijks, allebei met hun eigen
+        # poort, en geen van beide afhankelijk van de ander.
+        self.bus.subscribe("dag_begint", lambda e: self._veilig_noochie_memo())
         self.start()
         print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")

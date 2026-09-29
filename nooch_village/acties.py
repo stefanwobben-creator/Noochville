@@ -174,6 +174,20 @@ class ActieStore(JsonStore):
         rij.sort(key=lambda a: (bool(a.get("done")), -float(a.get("at") or 0)))
         return rij
 
+    def alle(self) -> list[dict]:
+        """Alle acties, van iedereen — voor een lezer die naar het DORP kijkt en niet naar één
+        lijst (de wekelijkse Noochie-memo).
+
+        WAAROM NIET "PER MENS OPTELLEN". Dat kan (`voor()` per persoon), maar dan mis je stil de
+        acties van iemand die niet meer in `people` staat: ze horen bij niemand, dus ze komen in
+        geen enkele lus langs. Een dorpsbrede lezer hoort ze juist te zien.
+
+        Nieuwste eerst, en géén zichtbaarheidsfilter: dat is het werk van de aanroeper. Deze store
+        kent het leesrecht van een project niet (zie de kop van deze module)."""
+        rij = [dict(v) for v in self._items.values()]
+        rij.sort(key=lambda a: -float(a.get("at") or 0))
+        return rij
+
     def open_aantal(self, person: str) -> int:
         """Hoeveel er open staan. Voor het balkje in de zijbalk — zonder dat getal is een
         persoonlijke lijst een scherm dat je moet ONTHOUDEN te openen, en dan komt een actie uit

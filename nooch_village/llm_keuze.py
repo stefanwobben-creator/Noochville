@@ -53,7 +53,13 @@ def persona_van_rol(omgeving, role_id: str):
 # goedkoop oordeel liever niet geeft dan wel): daar is 'geen antwoord' een eerlijker uitkomst dan
 # een goedkoop antwoord dat als premium oordeel wordt gelezen. Zet een call_site hier neer en de
 # staart vervalt voor precies die site.
-PREMIUM_ONLY: frozenset[str] = frozenset()
+PREMIUM_ONLY: frozenset[str] = frozenset({
+    # De wekelijkse Noochie-memo (30 september 2026). Eén call per week over het HELE dorp, en het
+    # product is het oordeel zelf — "staat wat we doen nog in de richting van de missie". Een
+    # goedkoop antwoord is hier niet "sneller hetzelfde": het leest als Noochies blik terwijl het
+    # een samenvatting is. Liever geen memo dan een memo die je niet kunt wantrouwen.
+    "noochie_memo",
+})
 
 
 # ── De hoog-inzet-sites ──────────────────────────────────────────────────────────────────────
