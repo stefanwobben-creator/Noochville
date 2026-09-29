@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from nooch_village.web_base import _e, _page
+from nooch_village.web_base import _e, _field, _page
 from nooch_village.cockpit2_util import _AUTOSAVE, _DS_LINK, _name, _psec, _IC_CHECK
 from nooch_village import acc_ids, skill_labels, skill_links, skills_catalog
 
@@ -61,6 +61,97 @@ def _rov_groups(st: _Stores, circle_id: str):
     return [(gid, sorted(groups[gid], key=lambda i: i.get("created_at", 0))) for gid in order]
 
 
+def _rolkeuze(rollen, veld_id: str) -> str:
+    """De rollen van deze cirkel als ZICHTBARE lijst, naast het vrije tekstveld.
+
+    EEN `<datalist>` IS EEN SUGGESTIE, GEEN LIJST. Hij toont pas iets als je typt, en het pijltje
+    dat de volle lijst opent is in de praktijk niet te zien — dus las het veld als "typ de naam
+    maar, en hopelijk spel je hem goed". Precies verkeerd om: bestaande rollen kiezen is het
+    normale geval, een nieuwe naam typen de uitzondering.
+
+    ALLEBEI BLIJVEN BESTAAN, en dat is geen compromis: een nieuwe rol ontstaat hier óók, door een
+    naam te typen die nog niet bestaat. De server neemt het getypte veld als het gevuld is en
+    anders de keuze uit de lijst (zie `_act_rov2_add`) — één ding tegelijk, nooit allebei."""
+    if not rollen:
+        return ""
+    opts = "".join(f"<option value='{_e(_name(r))}'>{_e(_name(r))}</option>" for r in rollen)
+    return (f"<select name='naam_keuze' id='{_e(veld_id)}' aria-label='Pick an existing role'>"
+            f"<option value=''>— pick an existing role —</option>{opts}</select>")
+
+
+#: De labels die het plakformaat kent. Alles wat GEEN label draagt is een accountability — dat is
+#: de vorm waarin een rol nu eenmaal wordt opgeschreven: drie kopregels en dan een lijst.
+_PLAK_LABELS = ("role", "purpose", "domain")
+
+
+def plak_rol(tekst: str) -> dict:
+    """Een geplakte rolbeschrijving → {naam, purpose, domains, accs}.
+
+    HET FORMAAT IS WAT MENSEN AL TYPEN:
+
+        role: Website Developer
+        purpose: A site that answers before it sells
+        domain: nooch.earth
+        Keeping the shop reachable
+        Publishing the weekly page
+
+    DRIE REGELS DIE HET GEDRAG BEPALEN:
+
+      * ALLEEN DEZE DRIE LABELS TELLEN. `role:`, `purpose:` en `domain:` (hoofdletters maakt niet
+        uit). Een regel met een dubbele punt die géén van die drie is — "Keeping the shop: up" —
+        blijft gewoon een accountability, want anders verdwijnt hij stilzwijgend in een veld dat
+        niemand bedoelde.
+      * MEERDERE DOMEINEN MAG, elk op zijn eigen `domain:`-regel. Eén rol met twee domeinen is
+        normaal; ze op één regel met komma's splitsen zou raden zijn (een domeinnaam mag een komma
+        bevatten).
+      * GEEN `role:` IS GEEN ROL. Dan komt er niets op de agenda; zie de melding in `rov2_plak`.
+        Fail-closed, want de naam is het enige veld waar de rest aan hangt.
+
+    Hij PARSEERT alleen. Wat ermee gebeurt (agendapunt maken, draft vullen) loopt via het bestaande
+    pad — `_rov_add_item` plus `_rov_save_draft`, dezelfde twee die het scherm zelf gebruikt."""
+    uit = {"naam": "", "purpose": "", "domains": [], "accs": []}
+    for regel in (tekst or "").splitlines():
+        regel = regel.strip().lstrip("-*•").strip()
+        if not regel:
+            continue
+        label, _, waarde = regel.partition(":")
+        sleutel = label.strip().lower()
+        if _ and sleutel in _PLAK_LABELS and waarde.strip():
+            if sleutel == "role":
+                uit["naam"] = uit["naam"] or waarde.strip()
+            elif sleutel == "purpose":
+                uit["purpose"] = uit["purpose"] or waarde.strip()
+            else:
+                uit["domains"].append(waarde.strip())
+            continue
+        if sleutel in ("accountability", "accountabilities") and _:
+            if waarde.strip():
+                uit["accs"].append(waarde.strip())
+            continue
+        uit["accs"].append(regel)
+    return uit
+
+
+def _plak_veld() -> str:
+    """Het tekstvak zelf, met het formaat als placeholder — `_field` koppelt label en veld."""
+    voorbeeld = ("role: Website Developer\npurpose: A site that answers before it sells\n"
+                 "domain: nooch.earth\nKeeping the shop reachable\nPublishing the weekly page")
+    return _field("Paste the role", "tekst", kind="textarea", fid="rov-plak",
+                  attrs="rows='7'", placeholder=voorbeeld)
+
+
+def _plak_form(hid_html: str) -> str:
+    """"Paste a whole role" — één veld, het formaat ernaast, en verder niets nieuws."""
+    return (f"<details class='qadd'><summary>+ Paste a whole role</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>{hid_html}"
+            f"{_plak_veld()}"
+            f"<p class='muted'>One line each for <code>role:</code>, <code>purpose:</code> and "
+            f"<code>domain:</code>; every other line becomes an accountability. It lands on the "
+            f"agenda as a normal proposal &mdash; you can still change everything.</p>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+            f"value='rov2_plak'>Put it on the agenda</button></div></form></details>")
+
+
 def _rov_initials(text: str):
     """Splits een trailing '-SW' / '-JvdP' als initialen af. Geeft (rest, initialen)."""
     m = re.search(r"\s*-\s*([A-Za-z][A-Za-z.]{0,6})\s*$", text or "")
@@ -69,22 +160,27 @@ def _rov_initials(text: str):
     return (text or "").strip(), ""
 
 
-def _rov_add_item(st: _Stores, circle: str, naam_raw: str, group: str | None = None) -> bool:
+def _rov_add_item(st: _Stores, circle: str, naam_raw: str, group: str | None = None) -> str | None:
     """Zet een rol-wijziging op de agenda: bestaande rol (naam matcht een kind) -> amend, anders
     nieuwe rol. Met `group` hangt de wijziging onder een bestaand voorstel (GlassFrog: meerdere
-    wijzigingen per voorstel). Geeft True als er iets is toegevoegd."""
+    wijzigingen per voorstel).
+
+    GEEFT HET AGENDA-ID TERUG, of None. Hij gaf `True`/`False`, en beide aanroepers gebruiken hem
+    in een `if` — een gevuld id is net zo waar. Het plakformaat heeft dat id nodig: het vult daarna
+    purpose, domeinen en accountabilities via precies hetzelfde pad als het scherm
+    (`_rov_save_draft`), en daarvoor moet je weten wélk punt er net bij kwam."""
     naam, by = _rov_initials(naam_raw)        # '-SW' achteraan = initialen
     if not naam:
-        return False
+        return None
     match = next((r for r in _rov_children(st, circle) if _name(r).lower() == naam.lower()), None)
     if match is not None:
-        st.agenda.add(match.id, "amend_role", {}, "", by=by or "founder", title=_name(match), group=group)
-    else:
-        slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
-        st.agenda.add(f"{circle}__{slug}", "add_role",
-                      {"name": naam, "new_role_parent": circle, "purpose": "", "add_accountabilities": []},
-                      "", by=by or "founder", title=naam, group=group)
-    return True
+        return st.agenda.add(match.id, "amend_role", {}, "", by=by or "founder",
+                             title=_name(match), group=group)
+    slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
+    return st.agenda.add(f"{circle}__{slug}", "add_role",
+                         {"name": naam, "new_role_parent": circle, "purpose": "",
+                          "add_accountabilities": []},
+                         "", by=by or "founder", title=naam, group=group)
 
 
 def _rov_hard(st: _Stores, item: dict):
@@ -386,7 +482,7 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
     purpose_f = field_form("purpose", "Purpose", draft["purpose"], purp_was)
 
     def diff_list(label, orig, drafted, add_action, rm_action, per_issue=None,
-                  licht=lambda _x: ""):
+                  licht=lambda _x: "", edit_action=""):
         ol = {x.lower() for x in orig}
         dl = {x.lower() for x in drafted}
 
@@ -394,10 +490,29 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
             return (f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
                     f"<input type='hidden' name='text' value='{_e(text)}'>"
                     f"<button class='{cls}' type='submit' name='action' value='{action}'>{lbl}</button></form>")
+
+        def bijstel(text, idx):
+            """Tekst aanpassen op zijn plek — alleen waar `edit_action` bestaat (accountabilities).
+
+            WAAROM NIET WEGHALEN-EN-OPNIEUW-TOEVOEGEN: dan zakt de regel naar onderen en leest het
+            voorstel als "deze is weg, die is nieuw" terwijl er één woord veranderde. De index
+            reist mee, dus de rij blijft staan waar hij stond.
+
+            EEN `<details>` EN GEEN JS: hetzelfde idioom als "+ Add fact" en de cardmenu's. Dicht
+            is het een linkje, open is het een veld met de huidige tekst erin."""
+            if not edit_action:
+                return ""
+            return (f"<details class='rovm-edit'><summary class='flink'>edit</summary>"
+                    f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
+                    f"<input type='hidden' name='idx' value='{idx}'>"
+                    f"<input name='nieuw' value='{_e(text)}'>"
+                    f"<button class='btn ok sm' type='submit' name='action' "
+                    f"value='{edit_action}'>Save</button></form></details>")
         rows = ""
         for x in orig:                                   # bestaand: behouden of (doorgestreept) verwijderd
             if x.lower() in dl:
                 rows += (f"<div class='rovm-item'><span class='rovm-iv'>{_e(x)}</span>"
+                         f"{bijstel(x, drafted.index(x) if x in drafted else -1)}"
                          f"{itform(x, rm_action, '✕', 'dellink')}</div>"
                          f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}"
                          f"{licht(x)}")
@@ -408,6 +523,7 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
             if x.lower() not in ol:
                 badge = "<span class='chip green'>new</span> " if is_amend else ""
                 rows += (f"<div class='rovm-item is-new'><span class='rovm-iv'>{badge}{_e(x)}</span>"
+                         f"{bijstel(x, drafted.index(x))}"
                          f"{itform(x, rm_action, '✕', 'dellink')}</div>"
                          f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}"
                          f"{licht(x)}")
@@ -418,7 +534,7 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
 
     acc_b = diff_list("Accountabilities", list(snap["accountabilities"]) if snap else [], draft["accs"],
                       "rov2_acc_add", "rov2_acc_remove", per_issue=acc_issues,
-                      licht=_stoplicht)
+                      licht=_stoplicht, edit_action="rov2_acc_edit")
     dom_b = diff_list("Domains", list(snap["domains"]) if snap else [], draft["domains"],
                       "rov2_dom_add", "rov2_dom_remove")
 
@@ -468,11 +584,10 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
     keep = f"data-reopen='{_e(back)}'"
 
     roles = sorted(_rov_children(st, circle_id), key=lambda r: _name(r).lower())
-    dl = "".join(f"<option value='{_e(_name(r))}'>" for r in roles)
     add_role = (f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
                 f"<input type='hidden' name='group' value='{_e(gid)}'>"
-                f"<input name='naam' list='rov-roles-add' placeholder='Existing or new role… (-SW)' autocomplete='off'>"
-                f"<datalist id='rov-roles-add'>{dl}</datalist>"
+                f"{_rolkeuze(roles, f'rov-keuze-{_e(gid)}')}"
+                f"<input name='naam' placeholder='…or type a new name (-SW)' autocomplete='off'>"
                 f"<button class='btn ok sm' type='submit' name='action' value='rov2_add_to_group'>+</button></form>")
     soon = "<select disabled><option>Coming soon</option></select>"
     add_block = (f"<div class='rov-addprop'><div class='sec-kop'>Add to proposal</div>"
@@ -533,13 +648,15 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     if not rows:
         rows = "<p class='muted'>No agenda items yet.</p>"
 
-    # Toevoegen boven de lijst; minimalistisch: één veld (Enter of '+'); smart-search op bestaande rollen.
-    dl = "".join(f"<option value='{_e(_name(r))}'>" for r in roles)
+    # Toevoegen boven de lijst: KIEZEN uit de rollen van deze cirkel, of een nieuwe naam typen.
+    # Het `<datalist>` dat hier stond deed allebei in één veld en liet allebei onzichtbaar —
+    # zie `_rolkeuze`.
     add = (f"<form method='post' action='/action' class='rov-add'>{hid(base)}"
-           f"<input name='naam' list='rov-roles' placeholder='Role… (-SW for initials)' autocomplete='off'>"
-           f"<datalist id='rov-roles'>{dl}</datalist>"
+           f"{_rolkeuze(roles, 'rov-keuze')}"
+           f"<input name='naam' placeholder='…or type a new name (-SW for initials)' autocomplete='off'>"
            f"<button class='btn ok sm' type='submit' name='action' value='rov2_add'>+</button></form>")
-    left = _psec(_IC_CHECK, "Agenda", f"{add}<div class='rov-list'>{rows}</div>")
+    left = _psec(_IC_CHECK, "Agenda",
+                 f"{add}{_plak_form(hid(base))}<div class='rov-list'>{rows}</div>")
 
     # Rechts: editor van het geselecteerde voorstel; geen iid -> auto-selecteer het eerste open punt
     # (zo land je na consent vanzelf op het volgende).

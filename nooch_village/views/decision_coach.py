@@ -43,7 +43,7 @@ def _chips(naam: str, opties, huidig: str) -> str:
 
 def _generator(waarden: dict, base_dir: str) -> str:
     """Paneel A. Drie velden zijn verplicht; de rest mag leeg en wordt `not provided`."""
-    f = (f"<form class='qadd-form' method='get' action='/decision-coach'>"
+    f = (f"<form class='qadd-form' id='dc-form' method='get' action='/decision-coach'>"
          + "".join(f"<input type='hidden' name='{_e(n)}' value='{_e(str(waarden.get(n, '')))}'>"
                    for n in ("reversibility", "confidence", "mode"))
          + _field("The decision you face, in one line", "decision", value=waarden.get("decision", ""),
@@ -92,8 +92,16 @@ def _generator(waarden: dict, base_dir: str) -> str:
                    f"<p class='muted'>No prompt: {_e(str(e))}</p></div>")
         return f"<p class='ptitle'>1. Your decision</p>{f}{uitvoer}"
 
-    uitvoer = ("<div class='card'>"
+    # DEZE PROMPT HOORT BIJ DE VELDEN ZOALS ZE NU STAAN, en nergens anders staat dat. Typ je
+    # hierboven iets bij zonder opnieuw te bouwen, dan leest de tekst hieronder als het antwoord op
+    # je nieuwe vraag terwijl hij het antwoord op de oude is — en je plakt hem in een chat zonder
+    # dat iets je tegenhoudt. `data-verouderd-bij` (nooch.js) zet er `is-verouderd` op zodra een
+    # veld afwijkt van wat de server hier neerzette; de melding staat hieronder al klaar en wordt
+    # door de CSS zichtbaar. Zonder JS verandert er niets aan wat je nu hebt.
+    uitvoer = ("<div class='card' data-verouderd-bij='#dc-form'>"
                "<p class='ptitle'>Your prompt</p>"
+               "<p class='muted is-verouderd-melding'>⚠ You changed something above. This prompt is "
+               "the previous version — press <b>Build the prompt</b> to bring it up to date.</p>"
                "<button class='btn ok' type='button' data-dc-kopieer>Copy the whole prompt</button>"
                "<p class='muted'>Paste this into ChatGPT, Gemini or Claude. Nothing is sent from "
                "here — this page only builds text. Edit it first if you want.</p>"

@@ -102,16 +102,22 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
-def _agenda_substeps(st, crec, open_iid: str = "") -> str:
+def _agenda_substeps(st, crec, open_iid: str = "", csrf: str = "") -> str:
     """De gevangen punten als steekwoorden, genest onder de Agenda-stap in het linkermenu.
 
     Deze lijst verdween bij #355 toen de agenda-stap de GlassFrog-triage kreeg, en is nooit
     teruggekomen: een punt dat je boven typte kwam nergens in het menu te staan. Zonder deze
     lijst zie je alleen een teller, en een getal vertelt niet WÁT er op de agenda staat.
 
-    Geen microcopy, geen knoppen — dit is een inhoudsopgave. Weghalen en verwerken doe je op de
-    stap zelf. De klassen (`wo-substeps`, `rov-item`, `rov-title`) stonden nog in het
-    designsysteem; alleen de markup was weg.
+    ÉÉN KNOP, EN DAT IS EEN HERZIENING (29 september 2026). Hier stond "geen knoppen — dit is een
+    inhoudsopgave": afvinken deed je op de stap zelf, onderaan het verwerk-paneel. In de praktijk
+    is afvinken juist wat je vanuit de LIJST wilt doen — je ziet daar welk punt af is (de
+    doorgestreepte stijl stond er al) en je wilt het daar ook kunnen omzetten, zonder het punt
+    eerst te openen. Geen nieuw mechanisme: hetzelfde `vangst_klaar` dat de knop onderaan het
+    paneel al aanroept, en hetzelfde vinkje-atoom (`ck-chk`/`ck-box`) als op een checklist.
+
+    De klassen (`wo-substeps`, `rov-item`, `rov-title`) stonden al in het designsysteem; `.rov-item`
+    is al een flex-rij, dus het vakje past ernaast zonder nieuwe opmaak.
 
     Sinds de agenda-stap één punt tegelijk toont is deze lijst ook de NAVIGATIE. Welk punt
     'aan' staat leest hij daarom uit dezelfde `actief_punt` als het vlak ernaast: zou elk van de
@@ -125,8 +131,22 @@ def _agenda_substeps(st, crec, open_iid: str = "") -> str:
     for it in punten:
         klaar = it.get("status") == "done"
         aan = " on" if str(it.get("id") or "") == actief else ""
-        url = _open_nxt(base, str(it.get("id") or ""))
-        rijen += (f"<div class='rov-item{aan}{' done' if klaar else ''}'>"
+        iid = str(it.get("id") or "")
+        url = _open_nxt(base, iid)
+        # ZONDER CSRF GEEN VINKJE. Dat is de publieke/alleen-lezen stand; een knop die de server
+        # daarna weigert belooft iets wat niet kan.
+        vink = ""
+        if csrf:
+            vink = (f"<form method='post' action='/action' class='ck-chk'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                    f"<input type='hidden' name='circle' value='{_e(crec.id)}'>"
+                    f"<input type='hidden' name='iid' value='{_e(iid)}'>"
+                    f"<input type='hidden' name='klaar' value='{'0' if klaar else '1'}'>"
+                    f"<input type='hidden' name='next' value='{_e(url)}'>"
+                    f"<button class='ck-box{' on' if klaar else ''}' type='submit' name='action' "
+                    f"value='vangst_klaar' title='{'Reopen this item' if klaar else 'Mark this item done'}'>"
+                    f"{'✓' if klaar else ''}</button></form>")
+        rijen += (f"<div class='rov-item{aan}{' done' if klaar else ''}'>{vink}"
                   f"<a class='js-modal rov-link' href='{url}' data-href='{url}'>"
                   f"<span class='rov-title'>{_e(it.get('title') or '')}</span></a></div>")
     return f"<div class='wo-substeps'>{rijen}</div>" if rijen else ""
@@ -384,7 +404,7 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
             # mechaniek: het lijst-fragment draagt deze markup mee, dus na een vangst ververst
             # hij zonder herladen — net als de teller.
             nav += (f"<div id='wo-agenda-sub'>"
-                    f"{_agenda_substeps(st, crec, iid)}</div>")
+                    f"{_agenda_substeps(st, crec, iid, csrf_token)}</div>")
     # Het vangveld en de puntenlijst stonden hier als tweede kopie in de linkerkolom. Ze wonen nu
     # in de Agenda-stap zelf, want dat is waar je ze gebruikt — en het is één component.
     # Vangen staat BOVEN het stappenmenu: het hoort bij het overleg, niet bij een stap. Eén

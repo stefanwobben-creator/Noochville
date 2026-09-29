@@ -360,6 +360,16 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    {who:rol}). Een 'Deliverable'-badge vereist een schema-tag = datawijziging → scope 2. */
 .fentry-opdracht .fbubble{border-left:3px solid var(--green);padding-top:.55rem}
 .fentry-attach .fbubble{border-left:3px solid var(--border)}
+/* Een blok dat door een formulier is gebouwd en achterloopt (29 september 2026). De melding staat
+   in de pagina en wordt hier zichtbaar; de inhoud dooft, zodat je ziet dat je naar een oudere
+   versie kijkt zonder dat hij verdwijnt — je kunt hem nog gewoon lezen en kopiëren.
+
+   IN DE `is-`FAMILIE, net als `is-soon`, `is-new` en `is-del`: dit is een TOESTAND van een blok
+   dat er al staat, geen nieuw soort blok. Een eigen prefix zou een nieuwe klasse-familie zijn
+   (de ratchet in `test_ui_ratchets` telt ze) voor twee regels opmaak. */
+.is-verouderd-melding{display:none}
+.is-verouderd .is-verouderd-melding{display:block;color:var(--coral)}
+.is-verouderd .editor{opacity:.45}
 /* Logregel (29 september 2026): door de code geschreven, geen opmerking van iemand. Modifier op
    het bestaande `.fentry`, zoals `-opdracht` en `-attach`; geen nieuwe klasse-familie. De VORM van
    de bubbel staat in de designsysteem-helft hieronder — daar wordt `.fbubble` omkaderd, en een

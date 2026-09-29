@@ -108,7 +108,14 @@ def test_agenda_initialen_en_geen_kindlabel(tmp_path):
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "by SW" in frag and ">SW<" in frag                  # initialen-avatar
     assert "rov-kind" not in frag and "chip muted'>open" not in frag   # geen kind-label/open-chip
-    assert "list='rov-roles'" in frag and "<datalist" in frag    # smart-search
+    # DE ROLLENLIJST IS ZICHTBAAR GEWORDEN (29 september 2026). Hier stond een `<datalist>`: dat
+    # toont pas iets als je typt, en het pijltje naar de volle lijst is in de praktijk niet te
+    # zien — dus las het veld als "typ maar, en spel het goed". Nu een echte keuzelijst naast het
+    # vrije veld; de rollen van de cirkel staan er allemaal in, en typen blijft de weg naar een
+    # NIEUWE rol.
+    assert "name='naam_keuze'" in frag and "pick an existing role" in frag
+    assert "<datalist" not in frag, "de onzichtbare suggestielijst staat er nog"
+    assert ">Website Developer</option>" in frag, "de bestaande rol staat niet in de lijst"
     assert "name='by'" not in frag                               # los initialen-veld weg
 
 

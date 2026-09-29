@@ -213,9 +213,14 @@ def test_opslaan_is_groen_en_afgetikt_niet(tmp_path):
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t",
                                        fragment=True)
     opslaan = frag.split("value='vangst_uitkomst'")[0][-120:]
-    aftik = frag.split("value='vangst_klaar'")[0][-160:]
+    # OP DE AFTIK-KNOP ZELF, en niet op "de eerste `vangst_klaar` in de pagina". Sinds 29 september
+    # roept ook het vinkje in de agendalijst diezelfde actie aan, en dat vinkje staat eerder in de
+    # HTML — deze toets mat toen stilzwijgend een andere knop dan hij bedoelt. `wo-aftik` is wat
+    # hem uniek maakt, dus dat is het anker.
+    aftik = frag.split("wo-aftik")[1].split(">")[0]
     assert "btn ok sm" in opslaan, "Opslaan hoort de primaire groene knop te blijven"
-    assert "wo-aftik" in aftik and "ok" not in aftik.split("class='")[-1].split("'")[0]
+    assert "value='vangst_klaar'" in aftik, aftik
+    assert " ok " not in frag.split("wo-aftik")[0][-60:], "de aftikknop is toch groen geworden"
     assert "wo-afronden" in frag                         # en hij staat achter een scheidingslijn
 
 
