@@ -80,6 +80,31 @@ def main() -> None:
         elif not doen:
             print("\nDroge run. Draai met --doen om hem echt bij de founder te bezorgen.")
 
+    elif mode == "noochie_memo":
+        # Noochie's weekblik met de hand: standaard een DROGE RUN (toon de memo, bezorg niets),
+        # pas met --doen echt versturen. `--force` negeert de weekpoort.
+        #
+        # ZELFDE VORM ALS `weekmemo` HIERBOVEN, en dat is geen toeval: het is dezelfde handeling
+        # (een memo die bij een mens landt), dus dezelfde vlaggen en dezelfde volgorde van kijken
+        # vóór schrijven.
+        import os
+        from nooch_village import noochie_memo
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        doen = "--doen" in sys.argv[2:]
+        uit = noochie_memo.ronde(ctx.data_dir, omgeving=ctx, dry=not doen,
+                                 force="--force" in sys.argv[2:])
+        bronnen = ", ".join(
+            f"{b}: {v.get('fout') or v.get('aantal')}" for b, v in sorted(uit["rapport"].items()))
+        print(f"🌱 noochie-memo {uit['periode']} — {uit['reden'] or 'klaar'}")
+        print(f"   bronnen: {bronnen or 'geen'}")
+        if uit["tekst"]:
+            print("\n" + uit["tekst"])
+        if uit["kanalen"]:
+            print(f"\n✅ bezorgd in: {', '.join(uit['kanalen'])}")
+        elif not doen and uit["tekst"]:
+            print("\nDroge run. Draai met --doen om hem echt bij de founder te bezorgen.")
+
     elif mode == "governance":
         from nooch_village.demos.governance_demos import governance_demo
         governance_demo()
@@ -1275,6 +1300,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_domein | site_audit | doelen_zaad | status_log",
+              "wiki_zaad | wiki_broncheck | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "weekmemo | noochie_memo",
               file=sys.stderr)
         sys.exit(1)

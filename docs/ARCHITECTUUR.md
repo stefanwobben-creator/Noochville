@@ -333,6 +333,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 |---|
 | `co2_factoren.json` |
 | `llm_prijzen.json` |
+| `noochie_memo_staat.json` |
 | `notifications.json` |
 | `pulse_heartbeat.json` |
 | `rugzakken.json` |
@@ -343,4 +344,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_53 routes · 159 dispatch-acties · 29 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_53 routes · 159 dispatch-acties · 29 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
