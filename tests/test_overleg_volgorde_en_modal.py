@@ -96,7 +96,11 @@ def test_menu_markeert_hetzelfde_punt_als_het_scherm_toont(tmp_path):
     st = cockpit2._Stores(dd)
     verwacht = actief_punt(st.werk.punten(C))
     frag = render_werkoverleg(st, C, "agenda", csrf_token="t", fragment=True)
-    m = re.search(r"class='rov-item on'><a[^>]*open=([0-9a-f]+)", frag)
+    # OP HET GEMARKEERDE ITEM, niet op "de link die er direct op volgt". Sinds 29 september staat
+    # er een afvink-vakje tussen het item en zijn link — dezelfde actie als de knop op de stap
+    # zelf, alleen vanuit de lijst. Wat deze toets bewaakt is onveranderd: menu en scherm wijzen
+    # hetzelfde punt aan.
+    m = re.search(r"class='rov-item on'>.*?rov-link' href='[^']*open=([0-9a-f]+)", frag)
     assert m and m.group(1) == verwacht
     # het geopende blok hoort bij datzelfde punt (het afgetikt-formulier draagt de iid)
     assert f"name='iid' value='{verwacht}'" in frag

@@ -1773,6 +1773,42 @@
             "color"].indexOf(soort) === -1;
   }
 
+  // Een blok dat door een formulier IS GEBOUWD en dus VEROUDERT zodra dat formulier verandert.
+  //
+  // `<div data-verouderd-bij="<css-selector van het formulier>">` krijgt de klasse `is-verouderd`
+  // zodra een veld in dat formulier afwijkt van de waarde waarmee de pagina geladen is, en raakt
+  // hem weer kwijt zodra alles terugstaat. De vergelijking gaat tegen `defaultValue` — dat is
+  // precies "wat de server hier neerzette", dus er hoeft geen kopie van de waarden in een
+  // data-attribuut mee.
+  //
+  // WAAROM DIT EEN KLASSE ZET EN GEEN TEKST SCHRIJFT: de melding staat server-side in de pagina
+  // (verborgen tot deze klasse er is). Zo blijft taal waar taal hoort, en werkt de pagina zonder
+  // JS precies zoals hij nu werkt — je ziet dan alleen niet dát het blok achterloopt.
+  function verouderend(root) {
+    root.querySelectorAll("[data-verouderd-bij]").forEach(function (blok) {
+      if (blok.dataset.nvVerouderd) return;
+      var form = document.querySelector(blok.getAttribute("data-verouderd-bij"));
+      if (!form) return;
+      blok.dataset.nvVerouderd = "1";
+      function kijk() {
+        var anders = Array.prototype.some.call(
+          form.querySelectorAll("input, textarea, select"), function (v) {
+            if (v.type === "hidden" || v.type === "submit" || v.type === "button") return false;
+            if (v.type === "checkbox" || v.type === "radio") return v.checked !== v.defaultChecked;
+            if (v.tagName === "SELECT") {
+              return Array.prototype.some.call(v.options, function (o) {
+                return o.selected !== o.defaultSelected;
+              });
+            }
+            return v.value !== v.defaultValue;
+          });
+        blok.classList.toggle("is-verouderd", anders);
+      }
+      form.addEventListener("input", kijk);
+      form.addEventListener("change", kijk);
+    });
+  }
+
   function pollers(root) {
     Array.prototype.forEach.call(root.querySelectorAll("[data-poll]"), function (el) {
       if (el.dataset.nvPoll) return;
@@ -2140,6 +2176,7 @@
     navPaneel(root);
     overlegPoll(root);
     pollers(root);
+    verouderend(root);
     stickers(root);
     mentions(root);
     feest(root);

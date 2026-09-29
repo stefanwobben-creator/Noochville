@@ -209,7 +209,9 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `indicator_activate` | `_act_indicator_activate` |
 | `tile_remove` | `_act_tile_remove` |
 | `rov2_set` | `_act_rov2_set` |
+| `rov2_plak` | `_act_rov2_plak` |
 | `rov2_acc_add` | `_act_rov2_set` |
+| `rov2_acc_edit` | `_act_rov2_set` |
 | `rov2_acc_remove` | `_act_rov2_set` |
 | `rov2_dom_add` | `_act_rov2_set` |
 | `rov2_dom_remove` | `_act_rov2_set` |
@@ -336,4 +338,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_51 routes · 154 dispatch-acties · 29 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._
+_51 routes · 156 dispatch-acties · 29 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 9 zonder gevonden schrijver._

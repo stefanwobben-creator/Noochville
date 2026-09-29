@@ -3593,6 +3593,15 @@ def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | 
 # Bewerken kan gewoon met de hand; `_persona_kroniek` legt elke wijziging vast zoals altijd.
 
 
+def _rov_gekozen_naam(g) -> str:
+    """Het getypte veld, en anders de keuze uit de lijst. Nooit allebei.
+
+    HET SCHERM BIEDT TWEE INGANGEN voor dezelfde vraag: kies een bestaande rol, of typ een nieuwe
+    naam (`views/roloverleg._rolkeuze`). Wie iets TYPT bedoelt dat, ook als er nog een keuze in de
+    lijst staat van een vorige poging — vandaar deze volgorde, en niet omgekeerd."""
+    return (g("naam") or "").strip() or (g("naam_keuze") or "").strip()
+
+
 def _act_rov2_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -3600,9 +3609,49 @@ def _act_rov2_add(c):
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        if _rov_add_item(st, g("circle"), g("naam")):
+        if _rov_add_item(st, g("circle"), _rov_gekozen_naam(g)):
             msg = "✓ agenda item added"
         return nxt, msg
+
+
+def _act_rov2_plak(c):
+    """Een hele rol tegelijk op de agenda, geplakt uit een notitie of een chat.
+
+    # AUTHZ: circle-member — zelfde poort als `rov2_add`: een voorstel op de agenda brengen is
+    # deelnemen aan het overleg van je eigen cirkel. Het VOORSTEL verandert nog niets aan de
+    # organisatie; adoptie is een aparte stap met een eigen poort.
+
+    GEEN TWEEDE AANMAAKPAD. Hij knipt de tekst in velden (`plak_rol`) en loopt daarna exact de
+    route van het scherm: `_rov_add_item` zet het punt neer, `_rov_save_draft` schrijft de draft
+    én herberekent de change via `build_change_from_fields`. Alles wat het scherm daarna toont —
+    de secretaris-check, de diff, de consent-poort — werkt dus ongewijzigd.
+
+    WAT HIJ NIET DOET: adopteren. Wat je plakt is een VOORSTEL, en dat is precies de bedoeling van
+    het roloverleg; anders zou plakken een manier zijn om de governance-poort te omzeilen."""
+    from nooch_village.views.roloverleg import _rov_add_item, _rov_draft, _rov_save_draft, plak_rol
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    _deny = _member_gate(g("circle"), username, st)
+    if _deny:
+        return nxt, _deny
+    velden = plak_rol(g("tekst"))
+    if not velden["naam"]:
+        # FAIL-CLOSED EN MET HET FORMAAT ERBIJ. Zonder naam is er niets om aan te hangen, en een
+        # stille no-op laat je denken dat het gelukt is.
+        return nxt, "✗ no role: line found — start with “role: <name>”"
+    iid = _rov_add_item(st, g("circle"), velden["naam"])
+    if not iid:
+        return nxt, "✗ could not put it on the agenda"
+    item = st.agenda.get(iid)
+    draft = _rov_draft(st, item)
+    draft["purpose"] = velden["purpose"] or draft["purpose"]
+    for lijst, nieuw in (("domains", velden["domains"]), ("accs", velden["accs"])):
+        bestaand = {x.lower() for x in draft[lijst]}
+        # EEN GEPLAKTE ROL VULT AAN, hij overschrijft niet: plak je op een BESTAANDE rol, dan is
+        # dit een amendement en zijn de huidige accountabilities de basis waar je iets bij zet.
+        draft[lijst] += [x for x in nieuw if x.lower() not in bestaand]
+    _rov_save_draft(st, iid, draft)
+    n = len(velden["accs"])
+    return nxt, f"✓ {velden['naam']} is on the agenda ({n} accountabilit{'y' if n == 1 else 'ies'})"
 
 
 def _act_rov2_add_to_group(c):
@@ -3612,7 +3661,7 @@ def _act_rov2_add_to_group(c):
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
+        if _rov_add_item(st, g("circle"), _rov_gekozen_naam(g), group=g("group")):
             msg = "✓ added to the proposal"
         return nxt, msg
 
@@ -5150,7 +5199,7 @@ def _act_tile_remove(c):
         return nxt, msg
 
 
-def _act_rov2_set(c):   # + rov2_acc_add, rov2_acc_remove, rov2_dom_add, rov2_dom_remove
+def _act_rov2_set(c):   # + rov2_acc_add/edit/remove, rov2_dom_add, rov2_dom_remove
         nxt, st, g, username, action = c.nxt, c.st, c.g, c.username, c.action
         msg = ""
         # Autorisatie: cirkellid mag zijn eigen voorstel vormgeven
@@ -5167,6 +5216,21 @@ def _act_rov2_set(c):   # + rov2_acc_add, rov2_acc_remove, rov2_dom_add, rov2_do
                 t = g("text").strip()
                 if t.lower() not in {x.lower() for x in draft[key]}:   # dedup (ook bij 'herstel')
                     draft[key].append(t)
+            elif action == "rov2_acc_edit":
+                # TEKST BIJSTELLEN ZONDER ZIJN PLEK TE VERLIEZEN. Kon tot 29 september alleen als
+                # weghalen-en-opnieuw-toevoegen, en dan zakt de regel naar onderen en leest het
+                # voorstel als "deze is weg, die is nieuw" terwijl er één woord veranderde. Op
+                # INDEX en niet op tekst-gelijkheid: twee accountabilities mogen best hetzelfde
+                # beginnen, en de rij die je aanwees is de rij die je bedoelt.
+                nieuw_t = g("nieuw").strip()
+                try:
+                    i = int(g("idx"))
+                except (TypeError, ValueError):
+                    i = -1
+                if nieuw_t and 0 <= i < len(draft["accs"]):
+                    anderen = {x.lower() for j, x in enumerate(draft["accs"]) if j != i}
+                    if nieuw_t.lower() not in anderen:      # dedup, net als bij toevoegen
+                        draft["accs"][i] = nieuw_t
             elif action in ("rov2_acc_remove", "rov2_dom_remove"):
                 key = "accs" if action == "rov2_acc_remove" else "domains"
                 text = g("text")
@@ -5989,7 +6053,9 @@ ACTIONS = {
     "indicator_activate": _act_indicator_activate,
     "tile_remove": _act_tile_remove,
     "rov2_set": _act_rov2_set,
+    "rov2_plak": _act_rov2_plak,
     "rov2_acc_add": _act_rov2_set,
+    "rov2_acc_edit": _act_rov2_set,
     "rov2_acc_remove": _act_rov2_set,
     "rov2_dom_add": _act_rov2_set,
     "rov2_dom_remove": _act_rov2_set,
