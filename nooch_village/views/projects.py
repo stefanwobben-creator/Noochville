@@ -635,6 +635,12 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "fetch(frag(u)).then(function(r){"
         "if(!r.ok){toast('\\u26a0 kon deze kaart niet laden ('+r.status+')');throw new Error(r.status);}"
         "return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
+        # FOCUS-MODUS IN DE MODAL. De dorps-navigatie staat op de pagina ERONDER, buiten dit
+        # fragment, dus die kan het fragment niet zelf wegzetten. Het overleg markeert zichzelf
+        # (`data-wo-focus`, alleen als het lóópt) en wij zetten dezelfde body-klasse die de volle
+        # pagina server-side krijgt. Op de MARKERING en niet op de URL: alleen het fragment weet
+        # of het overleg open is.
+        "document.body.classList.toggle('wo-focus',!!bd.querySelector('[data-wo-focus]'));"
         # Fragmenten die een eigen flow meedragen (de project-wizard) markeren hun <script> met
         # data-modal-run; innerHTML voert scripts niet uit, dus vervangen we ze door verse elementen.
         "bd.querySelectorAll('script[data-modal-run]').forEach(function(o){var s=document.createElement('script');"
@@ -684,9 +690,11 @@ def _modal_html(mentions_json: str = "[]") -> str:
         # 2 seconden een fetch zonder nieuws.
         "volgMs=Math.min(volgMs*1.5,8000);volgTik();}else{volgStop();}},1200);},volgMs);}"
         "function shut(){if(history.state&&history.state.card){history.back();return;}"  # pushed kaart → pop naar bord-URL
+        "document.body.classList.remove('wo-focus');"
         "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
         # back-knop / gepopte kaart-entry: sluit de modal, herstel de bord-URL (browser deed dat al).
         "window.addEventListener('popstate',function(){if(ov.style.display!=='none'){"
+        "document.body.classList.remove('wo-focus');"
         "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}});"
         "function confetti(){var c=['#2e7d32','#ef6c5a','#f6c244','#7bb661'];for(var i=0;i<70;i++){"
         "var d=document.createElement('div');d.className='cfetti';d.style.left=(Math.random()*100)+'vw';"

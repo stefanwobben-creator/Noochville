@@ -321,30 +321,72 @@ def _wo_header(crec, circle_id: str, minuten: int | None) -> str:
             f"if(x){{x.click();return false;}}}}\">✕ leave meeting</a></div>")
 
 
-def _wo_schil(crec, binnen: str, fragment: bool, breed: bool = False) -> str:
+def bord_status_url(circle_id: str, group: str = "") -> str:
+    """Het pad dat het bord-fragment opnieuw rendert. Eén plek, want de poller-wrapper en de route
+    moeten hetzelfde pad kennen."""
+    extra = f"&group={group}" if group else ""
+    return f"/wo-bord-status?circle={circle_id}{extra}"
+
+
+def _bord_blok(st, crec, csrf_token: str, group: str, base: str) -> str:
+    """Het projectenbord van de Projects-stap, in zijn poller-omhulsel.
+
+    HET OMHULSEL DRAAGT DE ID, niet het bord: `nooch.js` vervangt de INHOUD van het element met
+    `data-poll`, dus dat element moet blijven staan. Zou de wrapper zelf uit de verse HTML komen,
+    dan verving hij zichzelf en was de tweede ronde er geen meer."""
+    bord = _projects_tab_html(st, crec, csrf_token, group=group, add=False,
+                              nav=f"{base}&step=projecten")
+    return (f"<div data-poll='{_e(bord_status_url(crec.id, group))}' data-poll-ms='6000'>"
+            f"{bord}</div>")
+
+
+def _wo_schil(crec, binnen: str, fragment: bool, focus: bool = False) -> str:
     """De pagina om het overleg heen. Eén plek, want de twee takken (open en nog-niet-open)
     hadden hem allebei zelf geschreven — en daardoor anders.
 
     HIER STOND GEEN `_nav()`. Het werkoverleg was het enige volledige scherm zonder linkermenu:
     je klikte erheen en de navigatie was weg, ook als het overleg gewoon liep. In de modal-vorm
     (`fragment=True`) klopt dat wél — daar is de pagina eromheen er nog — dus die tak levert
-    alleen de inhoud, precies zoals eerst."""
+    alleen de inhoud, precies zoals eerst.
+
+    `focus` = HET OVERLEG LOOPT (29 september 2026). Dan gaat de dorps-navigatie weg en gebruikt
+    het overleg het hele scherm. Dat is geen opmaak-voorkeur maar ruimte: de zijbalk reserveert
+    216px + 16px marge, en precies dat tekort (gemeten: 618px beschikbaar voor een bord dat er 669
+    wil) was de reden dat de Projects-stap zijn stappenmenu plat legde. Met de zijbalk weg past
+    het bord, en kan het stappenmenu op ELKE stap links blijven staan — de uitzondering is
+    daarmee vervallen in plaats van verplaatst.
+
+    TWEE INGANGEN, TWEE MANIEREN. Als volle pagina zet `_page` de klasse op `<body>`. In de MODAL
+    staat de navigatie op de pagina eronder, buiten dit fragment; daarom draagt het fragment een
+    markering (`data-wo-focus`) die de modal-controller leest en omzet in dezelfde body-klasse —
+    en weer weghaalt zodra de overlay sluit.
+
+    DE WEG TERUG hoort erbij: met de navigatie weg is dit scherm anders een doodlopende straat
+    voor iedereen die het overleg niet mag sluiten (`wo_close` is Circle-Lead-werk). Deze link
+    navigeert alleen; `st.werk.is_open` blijft ongemoeid, dus voor de anderen loopt het overleg
+    door."""
+    terug = ("<div class='c2-bar'><a href='/'>&larr; back to the village</a></div>"
+             if focus else "")
     if fragment:
-        return binnen
+        # De markering is leeg en onzichtbaar: hij is er voor de modal-controller, niet voor het
+        # oog. In de volle-paginavorm hoeft hij niet, want daar staat de klasse al op de body.
+        merk = "<div data-wo-focus hidden></div>" if focus else ""
+        return f"{merk}{terug}{binnen}"
     from nooch_village.cockpit2_util import _nav
     return _page("Tactical meeting",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
+                 f"{terug}"
                  # GEEN EIGEN BREEDTE. `.wo-breed` (max-width 1160px) kwam mee toen de losse
                  # "nog niet geopend"-pagina werd opgeheven: daar stond hij als inline
                  # style en is toen klasse geworden in plaats van weggehaald. Gevolg was een
-                 # lege strook rechts die geen ander nu-scherm heeft, en het hardst zichtbaar
-                 # bij de Projects-stap waar vier kolommen naast elkaar juist ruimte willen —
-                 # die stap gaat sinds 22 september zelfs buiten de app-brede cap, zie `breed`.
+                 # lege strook rechts die geen ander nu-scherm heeft. Een lopend overleg gaat
+                 # sinds 29 september buiten de app-brede cap én zonder zijbalk — zie `focus`.
                  f"<div class='c2-main'>{binnen}</div></div>",
-                 # `body.wo-vol` haalt de app-brede `max-width:1180px` eraf. Alleen op body te
-                 # regelen, en daarom alleen hier — zie `_page`. In de FRAGMENT-vorm is er geen
-                 # eigen body, dus dan gebeurt dit niet; de modal houdt zijn `.ovl-box`-cap.
-                 body_cls="wo-vol" if breed else "")
+                 # `body.wo-vol` haalt de app-brede `max-width:1180px` eraf en `body.wo-focus`
+                 # haalt de zijbalk weg. Allebei alleen op body te regelen, en daarom alleen hier
+                 # — zie `_page`. In de FRAGMENT-vorm is er geen eigen body, dus dan gebeurt dit
+                 # niet; daar doet de modal-controller het op de pagina eronder.
+                 body_cls="wo-vol wo-focus" if focus else "")
 
 
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
@@ -382,6 +424,8 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         left = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav wo-uit'>{uit}</div>")
         content = (f"<div class='c2-sec'><div class='cl-head'><h3>Check-in</h3></div>"
                    f"{start}{sec}</div>")
+        # GEEN FOCUS-MODUS HIER: er loopt niets, dus er is ook geen reden om de rest van het
+        # dorp weg te halen. Dit scherm is één knop met uitleg.
         return _wo_schil(crec, _wo_header(crec, circle_id, None)
                          + f"<div class='wo-grid'><div class='wo-left'>{left}</div>"
                            f"<div class='wo-mid'>{content}</div></div>", fragment)
@@ -389,7 +433,7 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     cur = step if step in dict(_WO_STEPS) else "checkin"
     st.werk.mark_visited(circle_id, cur)                 # voortgang: bezochte stappen
     visited = set(st.werk.visited(circle_id))
-    nav = nav_kaal = ""
+    nav = ""
     for i, (k, lbl) in enumerate(_WO_STEPS, 1):
         url = f"{base}&step={k}"
         done = k in visited and k != cur
@@ -398,7 +442,6 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         knop = (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
         nav += knop
-        nav_kaal += knop
         if k == "agenda":
             # De punten genest onder de Agenda-stap. Het `id` is het doelwit van de gedeelde
             # mechaniek: het lijst-fragment draagt deze markup mee, dus na een vangst ververst
@@ -423,8 +466,19 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         # In het overleg worden projecten via de triage (agenda) toegevoegd, niet hier los.
         # `nav`: het bord staat in de modal, dus zijn links en formulieren keren hier terug en niet
         # op de node-pagina. Zonder dit klapte het overleg dicht zodra je op 'by person' klikte.
-        content = _projects_tab_html(st, crec, csrf_token, group=group, add=False,
-                                     nav=f"{base}&step=projecten")
+        # LIVE MEEKIJKEN (29 september 2026). Slepen doet bij de sleper zelf een volledige
+        # herlaadbeurt (of, in de modal, een fetch + reopen); een TWEEDE kijker zag daar niets
+        # van. Tijdens een lopend overleg kijken meerdere mensen naar hetzelfde bord, en dan is
+        # "er is iets verplaatst, maar niet bij jou" precies het soort stilte dat een vergadering
+        # ontspoort.
+        #
+        # GEEN NIEUWE TECHNIEK: de generieke poller uit `nooch.js` (`data-poll`), dezelfde die de
+        # linkbuilding- en site-audit-panelen ververst. Hij slaat een ronde over terwijl iemand
+        # in een veld typt of een kaart versleept, en vervangt niets als er niets veranderd is.
+        #
+        # ALLEEN TIJDENS HET OVERLEG: buiten een vergadering kijkt er niemand mee en is elke
+        # vijf seconden een fetch puur werk zonder lezer.
+        content = _bord_blok(st, crec, csrf_token, group, base)
     elif cur == "agenda":
         content = _wo_agenda(st, crec, csrf_token, iid)
     elif cur == "checkout":
@@ -450,24 +504,16 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
 
     header = _wo_header(crec, circle_id, st.werk.duration_min(circle_id))
 
-    # LiveKit verhuist naar een dorp-brede call bar (volgende scope); het werkoverleg heeft geen
-    # eigen "In de room"-kolom meer. Twee kolommen: links de stap-navigatie, rechts de inhoud.
+    # TWEE KOLOMMEN OP ELKE STAP: links de stap-navigatie, rechts de inhoud.
     #
-    # BEHALVE OP DE PROJECTS-STAP, en dat is de enige uitzondering. Gemeten op een venster van
-    # 1500px: het raster reserveerde 250px links, de body-cap sneed er 320px af, en wat overbleef
-    # was 618px voor een bord dat er 669 nodig had — alle 36 kolommen op hun `min-width` van
-    # 160px, en FUTURE viel er half af. De andere zes stappen zijn één kolom tekst of één
-    # formulier; die willen die breedte niet en houden hun raster.
+    # DE UITZONDERING VOOR DE PROJECTS-STAP IS WEG (29 september 2026). Daar legde het
+    # stappenmenu zich plat als een balk bovenaan, om 250px terug te winnen voor het bord — een
+    # ruil die je bij het wisselen van stap ziet springen, en die je alleen op die ene stap terug
+    # naar boven duwde. De ruimte komt nu ergens anders vandaan: tijdens een lopend overleg gaat
+    # de DORPS-navigatie weg (`focus`, zie `_wo_schil`), en dat levert 232px op — meer dan het
+    # tekort van 51px. Het menu blijft dus gewoon staan waar het stond.
     #
-    # DE LINKERKOLOM VERDWIJNT NIET, hij gaat liggen. Zonder stappenmenu kun je alleen nog
-    # vooruit ("Next →") en nooit terug, en de vangbalk hoort bewust op ELKE stap (zie
-    # `_wo_vangbar`). Wat er níet mee gaat zijn de agenda-substappen: een geneste lijst past niet
-    # in een rij, en die lijst hoort thuis op de stap waar je hem gebruikt.
-    if cur == "projecten":
-        rij = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav wo-nav--rij'>{nav_kaal}</div>")
-        detail = (f"{header}{vangbar}{rij}"
-                  f"<div class='wo-mid'>{content}{step_action}</div>")
-        return _wo_schil(crec, detail, fragment, breed=True)
+    # `nav_kaal` (de variant zonder agenda-substappen) bestaat daarmee ook niet meer.
     detail = (f"{header}<div class='wo-grid'><div class='wo-left'>{left}</div>"
               f"<div class='wo-mid'>{content}{step_action}</div></div>")
-    return _wo_schil(crec, detail, fragment)
+    return _wo_schil(crec, detail, fragment, focus=st.werk.is_open(circle_id))

@@ -144,6 +144,50 @@ def mention_hits(st, q: str, limiet: int = _MENTION_MAX) -> list[dict]:
     return mensen[:n_mensen] + rollen[:n_rollen]
 
 
+#: Hoeveel pagina's de `[[`-typhulp hoogstens toont. Dezelfde orde als de @-lijst: een lijst die
+#: niet in één blik past, is geen hulp meer.
+_PAGINA_MAX = 8
+
+
+def pagina_hits(st, q: str, limiet: int = _PAGINA_MAX) -> list[dict]:
+    """De treffers voor `[[` in de editor: wiki-pagina's, op TITEL.
+
+    ALLEEN DE TITEL, en dat is het verschil met `_pages` hieronder. Die zoekt ook in de body en in
+    de feiten, en dat is precies goed voor de globale zoekbalk: je weet nog niet hoe iets heet. Een
+    link-picker beantwoordt een andere vraag — "hoe heet die pagina exact" — en een treffer op een
+    woord dat ergens middenin de tekst staat is daar ruis.
+
+    OP `wiki.verwijsbaar` EN NIET OP `by_kind("note")`: dat is dezelfde lijst waar `wiki.resolve`
+    tegen oplost, dus wat je hier kunt kiezen, vindt de pagina straks ook. Een picker die iets
+    aanbiedt wat daarna niet oplost, is erger dan geen picker.
+
+    DE TITEL GAAT TERUG, niet het id. `resolve` neemt allebei, maar een titel is leesbaar in de
+    tekst en een id is een sleutel — en bij een DUBBELE titel lost `resolve` bewust niet op. Daarom
+    krijgt een pagina waarvan de titel niet uniek is zijn id mee als `label`: dat is de enige vorm
+    die dan nog werkt.
+
+    PUUR TYPHULP: er wordt niets gelinkt of aangemaakt. De gekozen tekst is wat je zelf had kunnen
+    typen, alleen dan foutloos."""
+    from nooch_village import wiki
+    termen = [t for t in (q or "").lower().split() if t]
+    paginas = [a for a in wiki.verwijsbaar(st.att) if not getattr(a, "archived", False)]
+    tel: dict[str, int] = {}
+    for a in paginas:
+        sleutel = " ".join((a.title or "").split()).lower()
+        tel[sleutel] = tel.get(sleutel, 0) + 1
+    uit = []
+    for a in sorted(paginas, key=lambda x: (x.title or x.id).lower()):
+        titel = (a.title or "").strip()
+        if not _match(titel or a.id, termen):
+            continue
+        dubbel = tel.get(" ".join(titel.split()).lower(), 0) > 1
+        uit.append({"label": (a.id if (dubbel or not titel) else titel),
+                    "kind": a.kind, "titel": titel or a.id})
+        if len(uit) >= limiet:
+            break
+    return uit
+
+
 def _accountabilities(st, termen):
     """Losse accountabilities die matchen: waar is deze verantwoordelijkheid belegd (welke rol) en
     door wie wordt die rol vervuld? Klik opent de rol-pagina. Dit beantwoordt 'waar is X belegd?'."""

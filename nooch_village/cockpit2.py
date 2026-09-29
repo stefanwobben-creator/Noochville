@@ -6523,6 +6523,25 @@ def make_handler(data_dir: str, csrf_token: str,
                                        terug=(qs.get("next") or ["/site-audit"])[0],
                                        doel=_doel if _doel in _DOELEN else "live"), chrome=False)
                 return
+            if path == "/wo-bord-status":
+                # HET PROJECTENBORD VAN EEN LOPEND OVERLEG, voor de meekijkers. Server-gerenderd
+                # HTML en geen JSON: zo is er één plek die bepaalt hoe een bord eruitziet, en
+                # hoeft de poller niets te weten van kolommen, kaarten of sleep-bedrading.
+                #
+                # ALLEEN ALS HET OVERLEG LOOPT. Anders is dit een publiek pad waarmee iedereen
+                # elke zes seconden het volledige bord van elke cirkel kan opvragen; en er is ook
+                # niemand die meekijkt. `is_open` is dezelfde vraag die het scherm zelf stelt.
+                _cid = (qs.get("circle") or [""])[0]
+                _st = _Stores(data_dir)
+                _crec = _st.records.get(_cid)
+                if _crec is None or not _st.werk.is_open(_cid):
+                    self._send("", chrome=False)
+                    return
+                from nooch_village.views.werkoverleg import _projects_tab_html as _ptab
+                self._send(_ptab(_st, _crec, csrf_token if username else "",
+                                 group=(qs.get("group") or [""])[0], add=False,
+                                 nav=f"/werkoverleg?circle={_cid}&step=projecten"), chrome=False)
+                return
             if path == "/overleg-status":
                 # DE LIVE-STATUS VAN HET WERKOVERLEG, voor de knop in de balk.
                 #
@@ -6788,6 +6807,14 @@ def make_handler(data_dir: str, csrf_token: str,
                 # besluit met een eigen autorisatievraag ("wie mag wie pingen") — geen veld dat
                 # hier alvast meelift.
                 self._send_json({"hits": mention_hits(st, (qs.get("q") or [""])[0])})
+                return
+            if path == "/pagina-search":
+                # DE `[[`-TYPHULP. Zelfde vorm als `/mention-search` hierboven — een JSON-lijstje
+                # labels — en met opzet een APARTE route: de @-lijst gaat over mensen en rollen,
+                # deze over pagina's, en ze in één lijst gooien zou betekenen dat je bij `@` ook
+                # pagina's krijgt en omgekeerd.
+                from nooch_village.views.search import pagina_hits
+                self._send_json({"hits": pagina_hits(st, (qs.get("q") or [""])[0])})
                 return
             if path == "/nav-paneel":
                 # De uitklappanelen van de navigatiebalk. Puur leeswerk, altijd chrome=False:
