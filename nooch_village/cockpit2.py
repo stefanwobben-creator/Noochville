@@ -1506,6 +1506,15 @@ def _act_artefact_edit(c):
                             governance_ref=gref, change_note="bewerkt")
         artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
+        # EEN OPGESLAGEN TEKST MAAKT HET VOORSTEL OVERBODIG. Stond er een voorgestelde synthese
+        # klaar, dan zat hij ín dit bewerkveld: wat de mens ervan wilde staat nu in de body, en wat
+        # hij eruit haalde wilde hij niet. Hem laten staan zou hem de volgende pageload opnieuw
+        # onder de tekst plakken — een voorstel dat zichzelf blijft herhalen.
+        from nooch_village import wiki as _wiki
+        if nieuw_body is not None and (getattr(upd, "meta", None) or {}).get(_wiki.SYNTHESE_SLEUTEL):
+            _m = dict(upd.meta or {})
+            _m.pop(_wiki.SYNTHESE_SLEUTEL, None)
+            st.att.set_meta(upd.id, _m)
         msg = f"✏️ {upd.kind} updated ({upd.id})"
         return nxt, msg
 
@@ -2302,6 +2311,73 @@ def _act_actie_wis(c):
     return "/acties", f"🗑 {n} finished action{'s' if n != 1 else ''} cleared"
 
 
+def _feit_op_pagina(c, pagina, feit: dict, change_note: str) -> str:
+    """Schrijf één feit naar een pagina en log de wijziging. De gedeelde helft van twee ingangen.
+
+    TWEE KNOPPEN, ÉÉN SCHRIJFWEG: "Keep in wiki" onder een bericht en "Keep as a fact" op een
+    bevestigd rapport. Ze verschillen in WAT ze als feit aanbieden en in hun herkomst; alles daarna
+    — de poort, het meta-schrijven, de versie-entry, de audit-log — is hetzelfde, en een tweede
+    kopie daarvan is precies hoe twee ingangen uit elkaar gaan lopen.
+
+    DE POORT STAAT VÓÓR DE MUTATIE en is die van de PAGINA (`_artefact_gate`), niet van het project
+    waar het feit vandaan komt: een feit is inhoud van die pagina."""
+    st, username, data_dir = c.st, c.username, c.data_dir
+    _deny = _artefact_gate(pagina.anchor, username, st, domein=getattr(pagina, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    from nooch_village import wiki
+    meta = dict(getattr(pagina, "meta", None) or {})
+    meta["feiten"] = list(wiki.feiten(pagina)) + [feit]
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{pagina.anchor}"
+    upd = st.att.update(pagina.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note=change_note)
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return f"✓ kept on {upd.title or upd.id}"
+
+
+def _act_rapport_naar_wiki(c):
+    """Het resultaat van een BEVESTIGD rapport als één feit op een wiki-pagina.
+
+    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `keep_in_wiki` en
+    # `pagina_feit_add`, via `_feit_op_pagina`. Een feit is inhoud van die pagina.
+
+    EEN FEIT, GEEN PARAGRAAF, en dat is de hele vorm van deze stap. Een project levert één korte,
+    herleidbare regel op; een pagina krijgt pas een lopende alinea als een mens daar apart om
+    vraagt (`pagina_synthese`). Daarom ook GEEN model hier: er valt niets te formuleren wat het
+    rapport niet al zegt.
+
+    DE TEKST KOMT UIT HET FORMULIER, met `project_verslag.modeloordeel_kort(doc)` als voorzet. Dat
+    is geen vrijheid-blijheid maar een meting: van de 235 bevestigde rapporten op prod hebben er
+    6 een `## Result`-kop waar die functie uit leest. Zou de tekst hier server-side uit het document
+    worden gehaald, dan gaf deze knop op 229 rapporten "✗ a fact needs text" — een knop die vrijwel
+    altijd faalt. Nu vult het formulier voor wat het kan en schrijft de mens de rest."""
+    from nooch_village import wiki
+    nxt, st, g = c.nxt, c.st, c.g
+    pagina = st.att.get(g("aid"))
+    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    pid = g("pid")
+    p = st.projects.get(pid)
+    if p is None:
+        return nxt, "✗ project not found"
+    # DE URL IS HET VERSCHIL met de bestaande keep-in-wiki: `_grond_chip` maakt een bron-feit
+    # klikbaar zodra hij een url heeft, en zonder die url is de herkomst wel te LEZEN maar niet te
+    # VOLGEN — je weet dat er een rapport was en komt er niet.
+    # WANNEER HET AF WAS, uit `projects.tijdlijn` — dat is de plek die weet of die datum uit de
+    # status-historie komt of een benadering is. `updated_at` zou hier "laatst aangeraakt" noemen
+    # en dat is iets anders dan "afgerond".
+    from nooch_village.projects import tijdlijn
+    _af = tijdlijn(p).get("afgerond") or p.get("updated_at")
+    herkomst = f"{_scope_text(p) or pid} · confirmed · {_stamp(_af)}"
+    feit = wiki.maak_feit(g("tekst"), soort="bron", ref=str(pid), citaat=herkomst,
+                          url=f"/rapport?pid={pid}")
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit een bevestigd rapport")
+
+
 def _act_keep_in_wiki(c):
     """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
 
@@ -2328,27 +2404,106 @@ def _act_keep_in_wiki(c):
     tekst = " ".join(str(entry.get("text") or "").split())
     if not tekst:
         return nxt, "✗ nothing to keep — the message has no text"
-    _deny = _artefact_gate(pagina.anchor, username, st,
-                           domein=getattr(pagina, "domain", ""))    # check vóór de mutatie
-    if _deny:
-        raise Forbidden(_deny)
-
     from nooch_village.views.feed import _feed_norm, _feed_who
     _kind, atype, aid = _feed_norm(entry)
     wie, _ = _feed_who(st, atype, aid)
     herkomst = f"{_scope_text(p) or p.get('id', '')} · {wie} · {_stamp(entry.get('at'))}"
-    feit = wiki.maak_feit(tekst, soort="bron", ref=str(p.get("id") or ""), citaat=herkomst)
+    # DE URL ONTBRAK HIER (29 september 2026). `_grond_chip` maakt een bron-feit klikbaar zodra er
+    # een url bij staat, en die stond er niet: de herkomst was te lezen maar niet te volgen. Het
+    # project is de plek waar dit bericht staat, dus dat is waar de chip heen wijst. Geldt vanaf nu;
+    # bestaande feiten houden hun lege url — die valt niet af te leiden zonder te gokken.
+    feit = wiki.maak_feit(tekst, soort="bron", ref=str(p.get("id") or ""), citaat=herkomst,
+                          url=f"/project?pid={p.get('id', '')}")
     if feit is None:
         return nxt, "✗ a fact needs text"
-    meta = dict(getattr(pagina, "meta", None) or {})
-    meta["feiten"] = list(wiki.feiten(pagina)) + [feit]
-    actor_id = _web_actor_id(username, st)
-    gref = f"role:{pagina.anchor}"
-    upd = st.att.update(pagina.id, meta=meta, actor_id=actor_id, actor_type="person",
-                        governance_ref=gref, change_note="feit uit projectgesprek")
-    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
-                         actor_id=actor_id, actor_type="person", governance_ref=gref)
-    return nxt, f"✓ kept on {upd.title or upd.id}"
+    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit projectgesprek")
+
+
+_SYNTHESE_PROMPT = """Je bent de schrijver van een wiki-pagina in een klein bedrijf.
+
+De pagina heet: {titel}
+
+Dit zijn de vastgelegde FEITEN op die pagina, elk met zijn herkomst:
+{feiten}
+
+Schrijf ÉÉN alinea (maximaal 120 woorden) die deze feiten samenvat tot wat ze SAMEN zeggen.
+
+Regels:
+- Gebruik uitsluitend wat in de feiten staat. Voeg niets toe, ook geen algemene kennis.
+- Spreken feiten elkaar tegen, benoem dat in plaats van te kiezen.
+- Geen opsomming, geen kopjes, geen aanhalingstekens rond de alinea: lopende tekst.
+- Schrijf in het Engels, want de pagina's zijn Engels.
+- Geef alleen de alinea terug, zonder inleiding."""
+
+
+def _act_pagina_synthese(c):
+    """Stel een synthese-alinea voor op basis van ALLE feiten van deze pagina.
+
+    # AUTHZ: domeineigenaar of Circle Lead van de pagina — dezelfde poort als elke andere
+    # inhoudelijke wijziging aan deze pagina. Een voorstel dat in het bewerkveld landt is
+    # tekst-in-wording, en wie hem niet mag opslaan hoeft hem ook niet voorgesteld te krijgen.
+
+    DIT IS DE ENIGE PLEK IN DEZE SCOPE WAAR EEN MODEL SCHRIJFT, en dat is de hele reden dat het
+    twee stappen zijn. Een project levert een FEIT (kort, herleidbaar, geen model). Een pagina
+    krijgt een ALINEA, uit al haar feiten samen, en alleen als een mens erom vraagt.
+
+    HIJ SLAAT NIETS OP. Het voorstel wacht in `meta` en verschijnt in het gewone bewerkveld; pas
+    Save maakt het tekst van de pagina. Zelfde vorm als het concept-verslag van een project, en om
+    dezelfde reden: een model dat rechtstreeks in een pagina schrijft, schrijft over iemand heen.
+
+    FAIL-CLOSED. Geen werkende LLM-trede → `reason` geeft None → een zichtbare melding. Nooit een
+    lege of halve alinea, want die is van een echte niet te onderscheiden."""
+    from nooch_village import llm, wiki
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    a = st.att.get(g("aid"))
+    if a is None or a.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(a.anchor, username, st, domein=getattr(a, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    fs = wiki.feiten(a)
+    if not fs:
+        return nxt, "✗ no facts on this page yet — a synthesis needs something to summarise"
+    regels = []
+    for f in fs:
+        grond = (f.get("grond") or {}).get("citaat") or ""
+        regels.append(f"- {f.get('tekst', '')}" + (f" (source: {grond})" if grond else ""))
+    tekst = llm.reason(_SYNTHESE_PROMPT.format(titel=a.title or a.id, feiten="\n".join(regels)),
+                       max_tokens=400, call_site="wiki_synthese")
+    tekst = " ".join((tekst or "").split())
+    if not tekst:
+        # GEEN STILLE LEGE TEKST. Een mislukte oproep die niets zegt leest als "er viel niets te
+        # zeggen", en dat is een ander antwoord dan "ik kon het niet vragen".
+        return nxt, "✗ could not draft a synthesis — try again later"
+    meta = dict(getattr(a, "meta", None) or {})
+    meta[wiki.SYNTHESE_SLEUTEL] = {"tekst": tekst[:2000], "at": time.time(),
+                              "door": _web_actor_id(username, st)}
+    # `set_meta` EN NIET `update`: er verandert nog niets aan de pagina. Een versie-entry voor een
+    # voorstel zou de historie laten zeggen dat er bewerkt is terwijl de tekst hetzelfde bleef —
+    # dezelfde regel als bij de bron-check (CLAUDE.md, "machine-onderhoud versiont niet").
+    st.att.set_meta(a.id, meta)
+    # ✨ EN GEEN NIEUW TEKEN. Elke melding begint met een symbool dat is INGEDEELD als ja of nee
+    # (`test_weigering_is_geen_succes`); een zelfverzonnen teken leest op het scherm als succes
+    # zonder dat iemand dat besloot. ✨ staat al voor "er is iets nieuws klaar".
+    return nxt, "✨ draft synthesis ready — check it and press Save"
+
+
+def _act_pagina_synthese_verwerp(c):
+    # AUTHZ: domeineigenaar of Circle Lead van de pagina — zie `pagina_synthese`. Wie hem mag
+    # laten maken, mag hem ook weggooien; anders blijft een afgewezen voorstel staan.
+    from nooch_village import wiki
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    a = st.att.get(g("aid"))
+    if a is None or a.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(a.anchor, username, st, domein=getattr(a, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    meta = dict(getattr(a, "meta", None) or {})
+    if meta.pop(wiki.SYNTHESE_SLEUTEL, None) is None:
+        return nxt, ""
+    st.att.set_meta(a.id, meta)
+    return nxt, "🗑 draft synthesis discarded"
 
 
 def _act_pagina_feit_del(c):
@@ -5885,6 +6040,9 @@ ACTIONS = {
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
     "keep_in_wiki": _act_keep_in_wiki,
+    "rapport_naar_wiki": _act_rapport_naar_wiki,
+    "pagina_synthese": _act_pagina_synthese,
+    "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_voorstel": _act_pagina_voorstel,

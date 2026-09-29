@@ -16,7 +16,7 @@ op de kaart (#441), de acties zijn letterlijk dezelfde dispatch-takken (`proj_do
 """
 from __future__ import annotations
 
-from nooch_village.web_base import _e, _page, _banner
+from nooch_village.web_base import _e, _field, _page, _banner
 from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md_doc, _name, inline_edit,
                                           inline_edit_knop, md_editor)
 from nooch_village import projects as _projects
@@ -30,6 +30,60 @@ def _terug(pid: str, back: str) -> str:
     if back:
         q += "&back=" + urllib.parse.quote(back, safe="")
     return f"/project{q}"
+
+
+def _feit_form(st, pid: str, doc: str, titel: str, csrf_token: str) -> str:
+    """"Keep as a fact" — het resultaat van dit rapport als ÉÉN regel op een wiki-pagina.
+
+    NAAST "→ To the wiki" EN NIET IN PLAATS DAARVAN. Die knop stuurt het hele rapport als VOORSTEL
+    naar de Notes-tab van de eigenaar-rol, waar het een alinea wordt. Deze legt één korte,
+    herleidbare regel vast mét een klikbare bron. Twee verschillende dingen: een samenvatting die
+    iemand moet beoordelen, en een feit dat je later terugvindt.
+
+    DE TEKST IS VOORINGEVULD, NIET VASTGEZET, en dat is een meting en geen smaak: van de 235
+    bevestigde rapporten op prod hebben er 6 een `## Result`-kop waar `modeloordeel_kort` uit leest.
+    Zou die functie de tekst bepalen, dan zei deze knop op 229 rapporten "✗ a fact needs text". Nu
+    vult hij voor wat hij kan — en anders pakt hij de eerste zin van het rapport, ook echte tekst
+    uit het document en geen verzinsel.
+
+    GEEN MODEL. Een feit is wat er staat; formuleren gebeurt pas op de pagina zelf, uit alle feiten
+    samen, en alleen als een mens daarom vraagt (`pagina_synthese`)."""
+    from nooch_village.project_verslag import modeloordeel_kort
+    from nooch_village.views.feed import _keep_wiki_opties
+    from nooch_village.views.wiki import dubbele_namen_hint
+
+    opties = _keep_wiki_opties(st)
+    if not opties:
+        return ""                     # geen enkele pagina → geen knop die nergens heen kan
+    voorzet = modeloordeel_kort(doc) or _eerste_zin(doc)
+    return (f"<details class='cardmenu'><summary class='flink'>Keep as a fact</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='next' value='/rapport?pid={_e(pid)}'>"
+            f"{_field('The fact, in one line', 'tekst', value=voorzet, fid=f'rf-{_e(pid)}')}"
+            f"<label class='att-lbl' for='rp-{_e(pid)}'>On which page?</label>"
+            f"<select id='rp-{_e(pid)}' name='aid'>{opties}</select>"
+            f"{dubbele_namen_hint(st)}"
+            f"<p class='muted'>Added under <b>Facts</b>, with this report as its source &mdash; "
+            f"one click back to here.</p>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+            f"value='rapport_naar_wiki'>Keep</button></div></form></details>")
+
+
+def _eerste_zin(doc: str) -> str:
+    """De eerste echte zin van een rapport: geen kop, geen opsomming, geen lege regel.
+
+    TERUGVAL, GEEN VERVANGING van `modeloordeel_kort`. Die leest het OORDEEL; deze leest alleen wat
+    er als eerste staat. Daarom staat hij hier en niet in `project_verslag`: het is een
+    formulier-voorzet, geen uitspraak over de uitkomst."""
+    for regel in (doc or "").splitlines():
+        regel = regel.strip()
+        if not regel or regel.startswith(("#", "-", "*", ">", "|")):
+            continue
+        regel = regel.replace("**", "").replace("__", "")
+        return regel[:400]
+    return ""
 
 
 def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | None = None,
@@ -145,9 +199,16 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
         # Alleen tonen bij een écht bevestigd rapport: geen seed-vorm (dat is de opdracht, geen
         # antwoord) en geen lopend concept (dat heeft zijn eigen bevestig-stap, zie hierboven).
         wiki_knop = ""
-        if orec is not None and doc.strip() and not _projects.heeft_seed_vorm(doc):
-            wiki_knop = (f"<a class='btn sm' href='/node?id={_e(p.get('owner', ''))}&tab=notes"
-                        f"&van_rapport={_e(pid)}'>→ To the wiki</a>")
+        feit_knop = ""
+        if doc.strip() and not _projects.heeft_seed_vorm(doc):
+            # ÉÉN FEIT, NU, op een pagina naar keuze — zie `_feit_form`. Hij hangt NIET aan
+            # `orec`: een individuele actie heeft geen eigenaar-rol, maar zijn rapport kan net zo
+            # goed een feit opleveren. De knop ernaast wél, want die stuurt naar de Notes-tab van
+            # precies die rol.
+            feit_knop = _feit_form(st, pid, doc, titel, csrf_token)
+            if orec is not None:
+                wiki_knop = (f"<a class='btn sm' href='/node?id={_e(p.get('owner', ''))}&tab=notes"
+                            f"&van_rapport={_e(pid)}'>→ To the wiki</a>")
         acties = (f"<div class='card'>"
                   f"<details class='cardmenu'><summary class='flink'>Edit document</summary>"
                   f"<form method='post' action='/action' class='pf'>{hid}"
@@ -162,7 +223,7 @@ def render_projectrapport(st, pid: str, csrf_token: str = "", username: str | No
                   f"{md_editor('doc', value=doc, rows=16, help=True)}"
                   f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>"
                   f"Save document</button></form></details>"
-                  f"{wiki_knop}</div>")
+                  f"{feit_knop}{wiki_knop}</div>")
 
     main = f"<div class='c2-main'>{kop}{_banner(msg)}{concept}{body}{acties}</div>"
     return _page(f"Report · {titel}", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
