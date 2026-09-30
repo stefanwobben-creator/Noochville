@@ -1563,10 +1563,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # ALLEEN DE TITEL. Deadline, status en het ⋯-menu stonden hier én in de nieuwe chips-rij/rail;
     # de screenshot liet drie dubbelingen zien. Twee plekken voor hetzelfde veld is hoe een scherm
     # zichzelf tegenspreekt — zelfde reden als waarom de trekker uit de rail ging.
-    pakket_link = (f"<a class='btn sm' href='/project_pakket?pid={_e(pid)}' "
-                   f"title='All wall content + attachments as a zip, for manual AI analysis'"
-                   f">\u2b07 pakket</a>")
-    head = f"<div class='pcard-head'>{title}{pakket_link}</div>"
+    # DE PAKKET-KNOP STOND HIER EN IS WEG (30 september 2026, Stefan: "kan weg"). Hij zat naast de
+    # titel — de plek waar je naar het ONDERWERP kijkt — voor een handeling die je hoogstens één
+    # keer per project doet. De route `/project_pakket` blijft gewoon bestaan en werkt: de export
+    # is niet weggehaald, alleen zijn knop op deze kaart. Wie hem nodig heeft kent het adres, en
+    # komt hij vaker terug, dan is dat een vraag over WAAR hij hoort en niet of hij bestaat.
+    head = f"<div class='pcard-head'>{title}</div>"
 
     # ═══ RECHTS: STRUCTUUR (sticky kantlijn) ═══════════════════════════════════════════
     # 1) Projectdetails (rol+dangling, trekker, aangemaakt, zichtbaar, impacts, effort-buckets)

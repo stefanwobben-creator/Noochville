@@ -1910,13 +1910,43 @@ def mag_wall_verwijderen(st, entry: dict, ik: str, pid: str) -> bool:
     return bool(eigenaar) and namens(eigenaar)
 
 
-def mag_wall_bewerken(st, entry: dict, ik: str) -> bool:
-    """Mag deze mens dit wall-bericht HERSCHRIJVEN? Alleen de auteur zelf.
+#: De auteurstypen waar een NAAM bij hoort. Een entry met een van deze types én een gevuld id is
+#: van iemand; de rest staat naamloos op het scherm.
+_MET_STEM = ("human", "person")
+
+
+def zonder_stem(entry: dict) -> bool:
+    """Staat dit bericht naamloos op het scherm? Dan is er niemand wiens woorden je overschrijft.
+
+    GEMETEN, NIET AANGENOMEN. "Someone" in de wall komt uit `views.feed._feed_who`, en daar kan hij
+    maar uit één ding komen: auteurstype `human`/`person` met een LEEG id. Een onbekend id dat wél
+    gevuld is toont het id zelf, en een rol zonder record toont "Role" — allebei een naam, hoe kaal
+    ook. Op prod zijn dit de 156 van de 213 mens-entries die de migratie van vóór 29 september geen
+    identiteit kon geven, waaronder de doorgestuurde berichten in de Vietnam-wall.
+
+    EEN ROL-ENTRY VALT HIER BEWUST BUITEN, ook als zijn id leeg is: daar staat "Role" boven, en dat
+    is precies de misattributie waar het besluit van 26 september over ging."""
+    a = entry.get("author") or {}
+    return a.get("type") in _MET_STEM and not str(a.get("id") or "").strip()
+
+
+def mag_wall_bewerken(st, entry: dict, ik: str, pid: str = "") -> bool:
+    """Mag deze mens dit wall-bericht HERSCHRIJVEN? Alleen de auteur zelf — of, bij een bericht
+    zonder stem, wie het ook mag weghalen.
 
     STRENGER DAN VERWIJDEREN, en dat is dezelfde afweging die Messages al maakt: een rol (of de
     eigenaar van een project) mag je het zwijgen opleggen, maar geen andere woorden in de mond
     leggen. Daarom géén `rol_check` mee: zonder die callable valt de rol-tak in `mag_wissen` weg en
-    blijft alleen "de auteur is deze mens" over."""
+    blijft alleen "de auteur is deze mens" over. Dat blijft ongewijzigd voor elk bericht waar een
+    naam boven staat.
+
+    DE UITZONDERING (30 september 2026) RAAKT DIE REGEL NIET. Een bericht zonder stem — naamloos op
+    het scherm, zie `zonder_stem` — heeft geen auteur om te misattribueren. De 156 anonieme
+    mens-entries op prod waren daardoor wél te VERWIJDEREN (door de eigenaar-rol) en niet te
+    corrigeren: een typefout of een half geplakt bericht stond er voorgoed, of moest helemaal weg.
+    Nu geldt voor die ene categorie dezelfde poort als voor weghalen — niet ruimer."""
+    if zonder_stem(entry):
+        return mag_wall_verwijderen(st, entry, ik, pid)
     return bool(ik) and channels.mag_wissen(entry, ik, None)
 
 
@@ -3197,7 +3227,7 @@ def _act_feed_edit(c):
         ik, pid, entry, fout = _wall_poort(c)
         if fout:
             return nxt, fout
-        if not mag_wall_bewerken(c.st, entry, ik):
+        if not mag_wall_bewerken(c.st, entry, ik, pid):
             return nxt, "✗ only the author can edit a message"
         return nxt, ("✓ comment edited" if pj.feed_edit(pid, entry["id"], c.g("text")) else "")
 
