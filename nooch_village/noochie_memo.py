@@ -51,6 +51,27 @@ NOOCHIE_ROL = "noochie"
 #: Wanneer een OPEN actie "sleept". Geen meting maar een aanname — zie de kop van deze module.
 SLEEPT_DAGEN = 14
 
+#: Wanneer een PROJECT sleept: zoveel dagen zonder statuswijziging terwijl het loopt. Ruimer dan
+#: een actie, en dat is geen willekeur: een actie is één regel die je afvinkt, een project is werk
+#: dat weken kan duren zonder dat de STATUS verandert. Dezelfde soort aanname, andere maat.
+PROJECT_SLEEPT_DAGEN = 30
+
+#: Wanneer een BEMANDE rol stil is: zoveel dagen zonder actie, project of wiki-bewerking. "Geen
+#: vervuller" is de luide variant van hetzelfde signaal; dit is de stille.
+STIL_DAGEN = 30
+
+#: Wanneer een pagina met zwakke feiten "blijft liggen". Een feit dat vorige week ongegrond werd is
+#: werk in uitvoering; een feit dat dat een maand later nog is, is een pagina die iets beweert wat
+#: niemand meer nakijkt.
+ONGEGROND_DAGEN = 30
+
+#: WELKE grond-uitkomsten tellen als een DEFECT. `ongecontroleerd` staat er bewust NIET bij: dat is
+#: de normale stand van een geciteerde bron (herkomst, geen bewijs) en zou elke pagina met een
+#: bronverwijzing flaggen. Wat hier staat is stuk: geen bron, een bron zonder adres, een citaat dat
+#: er niet meer staat, een ingetrokken policy. Wil je strenger, zet `wiki.ONGECONTROLEERD` erbij —
+#: dat is één regel, en dan is het een keuze in plaats van een bijwerking.
+ZWAKKE_GROND = ("ongegrond", "ontbreekt", "vervallen")
+
 #: Hoeveel regels per bron hoogstens in de samenvatting komen. Een model dat honderd losse feiten
 #: moet wegen doet dat slechter dan twintig; wat erbuiten valt wordt GETELD, niet verzwegen
 #: (dezelfde afweging als `weekmemo.PROMPT_CAP`).
@@ -79,12 +100,43 @@ def _dagen(sinds: float | None, nu: float) -> int:
         return -1
 
 
+def laatste_beweging(p: dict) -> float:
+    """Wanneer dit project voor het laatst van STATUS veranderde (0.0 = onbekend).
+
+    UIT `status_log`, en daarom niet uit `updated_at`: dat laatste bumpt bij elke aanraking — een
+    comment, een checklist-vinkje, een hernoeming. "Beweegt dit nog" is een andere vraag dan "is
+    hier iets gebeurd", en juist een project met veel gepraat en geen voortgang is het signaal dat
+    je wilt zien. Zonder log valt hij terug op `updated_at`: dan is het een BENADERING, en de rij
+    zegt dat ook (`datum_bron`)."""
+    log_rijen = [e for e in (p.get("status_log") or [])
+                 if isinstance(e, dict) and e.get("at") is not None]
+    if log_rijen:
+        try:
+            return max(float(e["at"]) for e in log_rijen)
+        except (TypeError, ValueError):
+            pass
+    try:
+        return float(p.get("updated_at") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def projecten(st, nu: float) -> list[dict]:
-    """De lopende projecten, met hoe lang ze lopen en hoe ver ze zijn.
+    """De lopende projecten, met hoe lang ze lopen, hoe ver ze zijn, en of ze nog BEWEGEN.
 
     `tijdlijn()` weet of een datum uit de status-historie komt of een benadering is; die nuance
     reist mee als `datum_bron`, zodat de memo "loopt 40 dagen" niet als harde meting presenteert
-    voor een project van vóór 12 september 2026 (die hebben geen log)."""
+    voor een project van vóór 12 september 2026 (die hebben geen log).
+
+    SLEEPT = LOOPT WÉL MAAR BEWEEGT NIET (30 september 2026). "Hoe lang loopt dit al" zegt niets
+    over vastlopen: een project van 90 dagen dat vorige week een stap zette is gezond, een van 35
+    dagen dat al een maand op dezelfde status staat niet. Dezelfde vlag die `acties()` al draagt,
+    nu ook hier — en met een eigen, ruimere drempel, want een project kan weken werk zijn zonder
+    dat de STATUS verandert.
+
+    ALLEEN OP LOPEND WERK. Een afgerond of gearchiveerd project beweegt per definitie niet meer;
+    dat "slepend" noemen zou de lijst vullen met werk dat juist af is. `active()` levert alleen
+    niet-terminale projecten, dus die grens staat er al — de vlag maakt hem expliciet."""
     from nooch_village.projects import checklist_progress, tijdlijn
     from nooch_village.mission import strategie_relevantie
 
@@ -96,11 +148,17 @@ def projecten(st, nu: float) -> list[dict]:
         af, telbaar = checklist_progress(items)
         titel = str(p.get("scope") or p.get("id") or "")
         score, themas = strategie_relevantie(f"{titel} {p.get('description') or ''}")
+        stil_sinds = _dagen(laatste_beweging(p), nu)
         uit.append({"titel": titel, "status": str(p.get("status") or ""),
                     "dagen": _dagen(gestart, nu), "datum_bron": tl.get("bron") or "log",
                     "af": af, "telbaar": telbaar, "score": score, "themas": themas,
-                    "eigenaar": str(p.get("owner") or "")})
-    uit.sort(key=lambda r: (-r["score"], -r["dagen"]))
+                    "eigenaar": str(p.get("owner") or ""),
+                    "stil_dagen": stil_sinds,
+                    "sleept": stil_sinds >= PROJECT_SLEEPT_DAGEN})
+    # SLEPENDE PROJECTEN BOVENAAN, daarna pas de missie-score. Een project dat niet beweegt is de
+    # vraag die de memo moet stellen; dat het ook nog eens drie strategiethema's raakt maakt hem
+    # dringender, niet omgekeerd.
+    uit.sort(key=lambda r: (-int(r["sleept"]), -r["score"], -r["dagen"]))
     return uit
 
 
@@ -125,12 +183,17 @@ def acties(st, nu: float) -> list[dict]:
     return uit
 
 
-def wiki_beeld(st) -> dict:
+def wiki_beeld(st, nu: float) -> dict:
     """Wat er in de wiki staat, en hoe stevig het staat.
 
     DE GROND IS HET INTERESSANTE, niet het aantal pagina's. Een pagina met tien ongegronde feiten
     is iets anders dan een pagina met tien gegronde — en dat verschil is precies wat een
-    missie-blik zou moeten opvallen."""
+    missie-blik zou moeten opvallen.
+
+    EN SINDS 30 SEPTEMBER OOK HOE LANG AL. Dezelfde vraag die de claims-scan voor de LIVE site
+    stelt, nu voor de wiki zelf: een pagina met een kapotte grond die al een maand niet is
+    aangeraakt, beweert iets wat niemand meer nakijkt. `updated_at` staat al op elk artefact, dus
+    er hoeft niets bij in de opslag."""
     from nooch_village import wiki
 
     ledger = getattr(st, "evidence", None)
@@ -142,14 +205,63 @@ def wiki_beeld(st) -> dict:
         for status, n in tel.items():
             gronden[status] = gronden.get(status, 0) + n
         if tel:
+            zwak = sum(n for status, n in tel.items() if status in ZWAKKE_GROND)
+            stil = _dagen(getattr(a, "updated_at", 0.0), nu)
             paginas.append({"titel": str(a.title or a.id), "feiten": sum(tel.values()),
-                            "grond": tel})
-    paginas.sort(key=lambda r: -r["feiten"])
+                            "grond": tel, "zwak": zwak, "stil_dagen": stil,
+                            # BLIJFT LIGGEN = ALLEBEI. Een feit dat vorige week ongegrond werd is
+                            # werk in uitvoering; pas als niemand er een maand naar omkijkt is het
+                            # een pagina die iets beweert wat niemand nakijkt.
+                            "blijft_liggen": bool(zwak) and stil >= ONGEGROND_DAGEN})
+    # WAT BLIJFT LIGGEN EERST, daarna op omvang. Een pagina met twintig gegronde feiten is geen
+    # hygiëne-vraag; eentje met één kapotte bron die al een maand staat wel.
+    paginas.sort(key=lambda r: (-int(r["blijft_liggen"]), -r["zwak"], -r["feiten"]))
     return {"paginas": len(list(wiki.verwijsbaar(st.att))), "met_feiten": paginas,
-            "grond_totaal": gronden}
+            "grond_totaal": gronden,
+            "blijft_liggen": [p["titel"] for p in paginas if p["blijft_liggen"]]}
 
 
-def governance_beeld(st, data_dir: str) -> dict:
+def _rol_activiteit(st, nu: float) -> dict[str, int]:
+    """{rol-id: dagen sinds de laatste zichtbare activiteit}. Ontbreekt een rol, dan is er nooit
+    iets van hem gezien.
+
+    DRIE SPOREN, en meer heeft dit dorp niet: een PROJECT met deze rol als eigenaar, een
+    WIKI-ARTEFACT dat aan de rol hangt, en een ACTIE van een mens die de rol vervult. Wat geen
+    spoor achterlaat kunnen we niet zien, en dat staat ook in de memo — een stille rol is een
+    VRAAG ("gebeurt hier nog iets?"), geen vaststelling.
+
+    DE ACTIE HANGT AAN EEN MENS, NIET AAN EEN ROL. `acties.py` kent bewust geen rol-veld, dus de
+    brug loopt via de vervullers: wat een mens deed telt voor elke rol die hij bekleedt. Dat is
+    ruim — hij kan aan een andere rol hebben gewerkt — en die kant op is het juiste: liever een
+    rol niet flaggen die wel leeft, dan een die dood lijkt omdat het spoor elders ligt."""
+    laatste: dict[str, float] = {}
+
+    def _zet(rol: str, at) -> None:
+        try:
+            at = float(at or 0.0)
+        except (TypeError, ValueError):
+            return
+        if rol and at > laatste.get(rol, 0.0):
+            laatste[rol] = at
+
+    for p in st.projects.all():
+        _zet(str(p.get("owner") or ""), max(float(p.get("updated_at") or 0.0),
+                                            laatste_beweging(p)))
+    for a in st.att.by_kind("note") + st.att.by_kind("policy") + st.att.by_kind("tool"):
+        _zet(str(getattr(a, "anchor", "") or ""), getattr(a, "updated_at", 0.0))
+    # Van mens naar rol: één keer opzoeken welke rollen deze mens vervult, niet per actie.
+    rollen_van: dict[str, list[str]] = {}
+    for rec in st.records.all():
+        for f in st.assign.fillers_of(rec.id, record=rec):
+            if getattr(f, "type", "") == "person":
+                rollen_van.setdefault(f.id, []).append(rec.id)
+    for act in st.acties.alle():
+        for rol in rollen_van.get(str(act.get("person") or ""), []):
+            _zet(rol, max(float(act.get("at") or 0.0), float(act.get("done_at") or 0.0)))
+    return {rol: _dagen(at, nu) for rol, at in laatste.items()}
+
+
+def governance_beeld(st, data_dir: str, nu: float) -> dict:
     """Wat er structureel ligt: rollen zonder vervuller, en wat op de founder wacht.
 
     DE HUMAN INBOX IS GEEN BIJZAAK. Daar staat per definitie werk dat alleen een mens kan
@@ -157,19 +269,29 @@ def governance_beeld(st, data_dir: str) -> dict:
     from nooch_village.human_inbox import HumanInbox
 
     rollen = [r for r in st.records.all() if not getattr(r, "archived", False)]
-    onbemand = []
+    activiteit = _rol_activiteit(st, nu)
+    onbemand, stil = [], []
     for r in rollen:
         try:
             if not st.assign.fillers_of(r.id, record=r):
                 onbemand.append(str(getattr(r, "id", "")))
+                continue
         except Exception:                                         # noqa: BLE001
             continue
+        # BEMAND MAAR STIL — de zachte variant van hetzelfde signaal. "Geen vervuller" roept; "wel
+        # een vervuller en al een maand geen spoor" fluistert, en juist dat is wat een wekelijkse
+        # blik hoort op te pikken. NOOIT GEZIEN telt mee: een rol zonder enig spoor is niet
+        # "misschien net begonnen" — dan had hij een spoor.
+        dagen = activiteit.get(str(getattr(r, "id", "")), -1)
+        if dagen < 0 or dagen >= STIL_DAGEN:
+            stil.append({"rol": str(getattr(r, "id", "")), "dagen": dagen})
+    stil.sort(key=lambda x: -x["dagen"])
     inbox = HumanInbox(os.path.join(data_dir or ".", "human_inbox.json"))
     wacht = inbox.pending()
     soorten: dict[str, int] = {}
     for it in wacht:
         soorten[str(it.get("type") or "?")] = soorten.get(str(it.get("type") or "?"), 0) + 1
-    return {"rollen": len(rollen), "onbemand": onbemand,
+    return {"rollen": len(rollen), "onbemand": onbemand, "stil": stil,
             "inbox_open": len(wacht), "inbox_soorten": soorten}
 
 
@@ -183,8 +305,9 @@ def verzamel(data_dir: str, *, omgeving=None, nu: float | None = None) -> tuple[
     beeld = {
         "projecten": _veilig("projecten", rapport, lambda: projecten(st, nu), []),
         "acties": _veilig("acties", rapport, lambda: acties(st, nu), []),
-        "wiki": _veilig("wiki", rapport, lambda: wiki_beeld(st), {}),
-        "governance": _veilig("governance", rapport, lambda: governance_beeld(st, data_dir), {}),
+        "wiki": _veilig("wiki", rapport, lambda: wiki_beeld(st, nu), {}),
+        "governance": _veilig("governance", rapport,
+                              lambda: governance_beeld(st, data_dir, nu), {}),
     }
     return beeld, rapport
 
@@ -198,13 +321,17 @@ def samenvatting(beeld: dict, rapport: dict) -> str:
     het is wel waar. Vandaar dat hij als losse functie bestaat en niet in de prompt-string."""
     d = []
     pr = beeld.get("projecten") or []
-    d.append(f"PROJECTEN ({len(pr)} lopend)")
+    vast = [p for p in pr if p.get("sleept")]
+    d.append(f"PROJECTEN ({len(pr)} lopend, waarvan {len(vast)} langer dan "
+             f"{PROJECT_SLEEPT_DAGEN} dagen niet van status veranderd)")
     for p in pr[:CAP]:
         thema = ", ".join(p["themas"]) if p["themas"] else "raakt geen strategiethema"
         loopt = f"{p['dagen']}d" if p["dagen"] >= 0 else "onbekend hoe lang"
         bron = "" if p["datum_bron"] == "log" else " (datum is een benadering)"
         check = f"checklist {p['af']}/{p['telbaar']}" if p["telbaar"] else "geen checklist"
-        d.append(f"- [{p['status']}] {p['titel']} — {loopt}{bron}, {check} · {thema}")
+        beweegt = (f", {p['stil_dagen']}d geen statuswijziging" if p.get("sleept")
+                   else "")
+        d.append(f"- [{p['status']}] {p['titel']} — {loopt}{bron}{beweegt}, {check} · {thema}")
     if len(pr) > CAP:
         d.append(f"  (+{len(pr) - CAP} projecten niet in deze lijst)")
 
@@ -221,18 +348,29 @@ def samenvatting(beeld: dict, rapport: dict) -> str:
 
     w = beeld.get("wiki") or {}
     grond = ", ".join(f"{k}: {v}" for k, v in sorted((w.get("grond_totaal") or {}).items()))
-    d.append(f"\nWIKI ({w.get('paginas', 0)} pagina's; feiten per grond — {grond or 'geen feiten'})")
+    blijft = w.get("blijft_liggen") or []
+    d.append(f"\nWIKI ({w.get('paginas', 0)} pagina's; feiten per grond — {grond or 'geen feiten'}"
+             + (f"; {len(blijft)} pagina('s) met een kapotte grond die al {ONGEGROND_DAGEN}+ dagen "
+                f"niet is aangeraakt" if blijft else "") + ")")
     for p in (w.get("met_feiten") or [])[:CAP]:
+        blijft_tekst = (f" — BLIJFT LIGGEN: {p['zwak']} zwak feit(en), {p['stil_dagen']}d niet "
+                        f"bewerkt" if p.get("blijft_liggen") else "")
         d.append(f"- {p['titel']} — {p['feiten']} feit(en): "
-                 + ", ".join(f"{k} {v}" for k, v in sorted(p["grond"].items())))
+                 + ", ".join(f"{k} {v}" for k, v in sorted(p["grond"].items()))
+                 + blijft_tekst)
 
     g = beeld.get("governance") or {}
     soorten = ", ".join(f"{k}: {v}" for k, v in sorted((g.get("inbox_soorten") or {}).items()))
+    stil = g.get("stil") or []
     d.append(f"\nGOVERNANCE ({g.get('rollen', 0)} rollen, {len(g.get('onbemand') or [])} zonder "
-             f"vervuller; {g.get('inbox_open', 0)} beslissing(en) wachten op de founder"
+             f"vervuller, {len(stil)} met vervuller maar zonder spoor in {STIL_DAGEN}+ dagen; "
+             f"{g.get('inbox_open', 0)} beslissing(en) wachten op de founder"
              + (f" — {soorten}" if soorten else "") + ")")
     for r in (g.get("onbemand") or [])[:CAP]:
         d.append(f"- onbemand: {r}")
+    for r in stil[:CAP]:
+        wanneer = f"{r['dagen']}d geleden" if r["dagen"] >= 0 else "nooit iets van gezien"
+        d.append(f"- stil (wel bemand): {r['rol']} — laatste spoor {wanneer}")
 
     stuk = [f"{b}: {v['fout']}" for b, v in sorted(rapport.items()) if v.get("fout")]
     if stuk:
