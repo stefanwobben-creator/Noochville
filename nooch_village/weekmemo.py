@@ -364,6 +364,14 @@ VENSTER = 8 * 24 * 3600
 #: dat hij aan de dagcadans hangt en niet aan een rol-grant.
 AFZENDER = "village"
 
+#: HET KANAAL waarin beide wekelijkse memo's landen. `signaal.stuur` leidt het DM-kanaal af uit
+#: `by`, dus dezelfde waarde als `noochie_memo.AFZENDER` betekent dezelfde draad — één logboek dat
+#: over de tijd groeit in plaats van twee gesprekken die je allebei moet onthouden.
+#:
+#: `AFZENDER` HIERBOVEN BLIJFT BESTAAN en verandert niet: die staat als `author.id` in de drie
+#: berichten die er al zijn, en herkomst hoor je niet met terugwerkende kracht te herschrijven.
+LOGBOEK = "noochie"
+
 
 def _veilig(bron: str, rapport: dict, haal) -> list:
     """Eén adapter aanroepen zonder dat zijn val de andere vier meesleept.
@@ -439,8 +447,22 @@ def _bezorg_bij_de_founder(data_dir: str, tekst: str, omgeving=None) -> list[str
     # `stuur_en_volg` EN NIET `stuur_op_pad`: de afzender ("village") heeft geen Person-record, dus
     # dit kanaal landt in de rol/systeem-groep die niet meer getoond wordt. Volgen zet hem in
     # "Direct". Zie `signaal.stuur_en_volg` voor het gemeten geval.
+    # ÉÉN LOGBOEK, TWEE SCHRIJVERS (30 september 2026, besluit Stefan). De weekmemo ging naar
+    # `dm:<founder>|village` en de Noochie-memo naar `dm:<founder>|noochie`: twee gesprekken die je
+    # allebei apart moest onthouden te openen. Ze gaan over hetzelfde — wat er deze week in en om
+    # het dorp gebeurde — en horen dus in één draad die over de tijd groeit.
+    #
+    # EN JA, DE AFZENDERNAAM GAAT MEE. `signaal.stuur` leidt het kanaal én de `author_id` uit
+    # hetzelfde `by` af, dus een nieuwe weekmemo staat voortaan onder "Noochie" in plaats van
+    # "village". Dat is de prijs van één draad, en hij is te overzien: de memo begint met zijn
+    # eigen kop ("🗂 Weekmemo <periode>"), dus wie hem leest weet welk van de twee stukken hij
+    # voor zich heeft. Wil je de oude naam terug, dan is dat een tweede parameter op `stuur`
+    # (kanaal los van auteur) — een grotere ingreep dan deze adreswijziging, en een aparte keuze.
+    #
+    # DE BESTAANDE BERICHTEN VERANDEREN NIET: `author.id == "village"` blijft staan in alles wat
+    # er al is, ook na de eenmalige verhuizing (`noochie_kanaal.py`).
     return signaal.stuur_en_volg(data_dir, "role", FOUNDER_ROLE_ID, tekst,
-                                 by=AFZENDER, omgeving=omgeving)
+                                 by=LOGBOEK, omgeving=omgeving)
 
 
 def ronde(data_dir: str, *, omgeving=None, periode: str = "", nu: float | None = None,

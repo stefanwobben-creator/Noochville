@@ -199,7 +199,12 @@ def test_de_memo_gaat_altijd_naar_de_founder_rol(tmp_path, monkeypatch):
     kanalen = weekmemo._bezorg_bij_de_founder(str(tmp_path), "de memo", None)
     assert kanalen == ["dm:stefan"]
     assert gezien["doel_type"] == "role" and gezien["doel_id"] == FOUNDER_ROLE_ID
-    assert gezien["by"] == weekmemo.AFZENDER
+    # HET ADRES IS HET LOGBOEK, NIET DE AFZENDERNAAM (30 september 2026, besluit Stefan). `stuur`
+    # leidt het DM-kanaal af uit `by`, dus dezelfde waarde als `noochie_memo.AFZENDER` zet beide
+    # wekelijkse memo's in één draad. De ROL waar hij heen gaat is onveranderd — dat is wat deze
+    # guard bewaakt en dat blijft de founder.
+    from nooch_village import noochie_memo
+    assert gezien["by"] == weekmemo.LOGBOEK == noochie_memo.AFZENDER
 
 
 def test_de_ronde_kiest_geen_ontvanger(tmp_path):
