@@ -39,6 +39,15 @@ def main() -> None:
         ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         dm_samenvoegen.rapport(ctx.data_dir, apply="--apply" in sys.argv[2:])
 
+    elif mode == "noochie_kanaal":
+        # Eenmalig: de weekmemo's uit het village-kanaal bij de Noochie-memo's zetten, zodat de
+        # twee wekelijkse memo's één logboek zijn. Droge run standaard.
+        import os
+        from nooch_village import noochie_kanaal
+        from nooch_village.config import load_context
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        noochie_kanaal.rapport(ctx.data_dir, apply="--apply" in sys.argv[2:])
+
     elif mode == "voorstel_opruiming":
         # Eenmalig: de projectvoorstellen die vastzaten sinds de Founder Flow verdween.
         import os
@@ -1308,6 +1317,6 @@ def main() -> None:
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
               "wiki_zaad | wiki_broncheck | wiki_domein | site_audit | doelen_zaad | status_log | "
-              "weekmemo | noochie_memo",
+              "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

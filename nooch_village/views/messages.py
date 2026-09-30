@@ -20,8 +20,9 @@ import re
 import urllib.parse
 
 from nooch_village import channels
-from nooch_village.cockpit2_util import (_DS_LINK, _nav, _name, _person_name, _rol_naam, _stamp,
-                                         _ICON_STICKER, _avatar, inline_edit, inline_edit_knop)
+from nooch_village.cockpit2_util import (_DS_LINK, _md, _nav, _name, _person_name, _rol_naam,
+                                         _stamp, _ICON_STICKER, _avatar, inline_edit,
+                                         inline_edit_knop)
 from nooch_village.web_base import _e, _page, _banner
 
 #: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
@@ -463,6 +464,29 @@ def linkify(veilige_tekst: str) -> str:
     return _LINKIFY_RE.sub(vervang, veilige_tekst)
 
 
+def _md_met_links(tekst: str) -> str:
+    """`_md`, en daarna worden KALE adressen alsnog klikbaar.
+
+    WAAROM ALLEBEI. `_md` kent `[tekst](url)` maar laat een los `https://…` staan; `linkify` doet
+    precies dat ene ding. Een rol-bericht kreeg vóór 30 september alleen `linkify`, dus zonder deze
+    combinatie zou een memo die een bron als kaal adres noemt zijn link VERLIEZEN — een
+    opmaak-verbetering die stilletjes iets weghaalt, en dat is erger dan geen verbetering.
+
+    BUITEN DE TAGS, en dat is de hele moeilijkheid: `linkify` los op de HTML van `_md` zou ook het
+    adres ín een `href=`-attribuut nog eens linken. Daarom knippen we op tags en behandelen we
+    alleen de stukken tekst ertussen."""
+    import re
+
+    html = _md(tekst)
+    uit, laatst = [], 0
+    for m in re.finditer(r"<[^>]+>", html):
+        uit.append(linkify(html[laatst:m.start()]))
+        uit.append(m.group(0))
+        laatst = m.end()
+    uit.append(linkify(html[laatst:]))
+    return "".join(uit)
+
+
 _GROEP_S = 300
 
 
@@ -561,10 +585,25 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     cls = ("msg-item" + (" msg-item--ik" if van_mij else "")
            + (" msg-item--volg" if vervolg else "")
            + (" editor-inline" if bewerkbaar else ""))
-    # ESCAPEN, DAN PAS LINKEN — in die volgorde, zie `linkify`. Het bericht blijft kale tekst
-    # zonder markdown; alleen een adres wordt aanklikbaar, want dat is wat iemand in een chat
-    # plakt zonder erbij na te denken.
-    tekst = f"<div class='msg-text'>{linkify(_e(e.get('text') or ''))}</div>"
+    # TWEE SOORTEN SCHRIJVER, TWEE SOORTEN TEKST (30 september 2026).
+    #
+    # EEN MENS TYPT GEEN MARKDOWN in een chat — hij plakt een adres. Daarom blijft zijn bericht
+    # kale tekst: escapen, dan pas linken (zie `linkify`), en de sterretjes die hij typte blijven
+    # sterretjes. Dat was en blijft de regel.
+    #
+    # EEN ROL-AFZENDER WÉL, en dat is waarom hier een tak bij komt. De weekmemo en de
+    # Noochie-memo worden door een model geschreven en komen binnen via `signaal.stuur`, die elke
+    # melding wegschrijft met `author_type="role"`. Op het scherm stond hun opmaak daardoor
+    # letterlijk: `### kop` en `**vet**` als tekens. Dat is precies de plek waar `_md` al jaren
+    # voor bestaat (wiki, reacties, projectfeed) en waarom hij hier bewust NIET stond — die reden
+    # gold voor mensen, niet voor een memo.
+    #
+    # GEEN `blokken=True`: die stand hoort bij de wiki-editor en zet elk blok in een eigen
+    # `data-blok`-div, waar hier niets mee gebeurt.
+    if a.get("type") == "role":
+        tekst = f"<div class='msg-text'>{_md_met_links(e.get('text') or '')}</div>"
+    else:
+        tekst = f"<div class='msg-text'>{linkify(_e(e.get('text') or ''))}</div>"
     if bewerkbaar:
         tekst = _bewerk_veld(e, kanaal, csrf_token)
     return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
