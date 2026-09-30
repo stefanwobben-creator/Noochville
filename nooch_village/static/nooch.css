@@ -723,10 +723,8 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
    lopen. Geen nieuwe klasse. */
 .fieldform select{flex:1 1 auto;min-width:0;font:inherit;padding:.3rem .45rem;box-sizing:border-box}
 .pside .fieldform{flex-wrap:wrap}
-.pside .fieldform select{flex:1 1 auto;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
 /* Effort-rij (.eff): getal + uren/dagen-toggle + opslaan op één rij — de select niet full-width. */
 .pside .fieldform.eff select{flex:0 0 auto}
-.pside .fieldform.eff input{flex:0 0 4rem;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem;resize:vertical}
 .desc-read{white-space:pre-wrap;line-height:1.4}
 .descedit{margin-top:.3rem}
@@ -2453,7 +2451,15 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 
    Waarom een onderlijn en niet "niets": een veld moet vindbaar blijven. Hij ligt op de bodem van
    het veld, dus de ruimte tussen twee velden wordt wit in plaats van een rij randen die elkaar
-   raken. Bij focus wordt hij dikker en groen — de plek waar je bent, is de enige die opvalt. */
+   raken. Bij focus wordt hij dikker en groen — de plek waar je bent, is de enige die opvalt.
+
+   DERDE HERZIENING (30 september 2026): van onderlijn naar LICHTE KADERING. Op de Details-rail
+   las een kolom onderlijnen niet als velden maar als een lijst met strepen, en twee velden
+   (Effort, Deadline) zaten er door oude, specifiekere regels nooit onder. Nu draagt elk veld een
+   dunne 1,5px-rand in `--nu-border-subtle` — licht genoeg om geen muur van hokjes te worden,
+   een vorm genoeg om een veld te zijn. Focus blijft de enige plek die opvalt: 2px groen, rondom.
+   Het onderscheid met omhulsels blijft: die dragen 2px ZWART, een veld een lichte lijn. Hoekig
+   (`border-radius: 0`), zoals kaarten, tabbladen en filters — geen tweede vormtaal. */
 /* `input:not([type])` HOORT HIER, en stond er niet. Een `<input>` zonder type IS een tekstveld,
    maar `input[type=text]` matcht hem niet — het attribuut moet er staan. In de views staan er 47
    zonder, waaronder het agendaveld van het roloverleg en het vangst-formulier: die kregen dus geen
@@ -2461,12 +2467,12 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root input[type=text], :root input[type=search], :root input[type=email], :root input[type=number],
 :root input[type=url], :root input[type=date], :root input[type=password], :root input:not([type]),
 :root textarea, :root select, :root .ctrl, :root .fieldform {
-  font-family: var(--nu-font); border: 0; border-bottom: 1.5px solid var(--nu-text);
+  font-family: var(--nu-font); border: 1.5px solid var(--nu-border-subtle);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 :root input[type=text]:focus, :root input[type=search]:focus, :root input[type=email]:focus,
 :root input[type=number]:focus, :root input[type=url]:focus, :root input[type=date]:focus,
 :root input[type=password]:focus, :root input:not([type]):focus, :root textarea:focus, :root select:focus {
-  border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
+  border-color: var(--nu-accent); border-width: 2px; }
 /* DE PROJECTTITEL IS GEEN VELD MAAR EEN KOP (30 september 2026). `.title-edit` stond in de rij
    hierboven en kreeg daarmee dezelfde vaste onderlijn als een zoekveld. Op 1,5rem/700 leest die
    niet als "hier kun je typen" maar als een streep onder de titel — en een kop met een streep
@@ -2488,11 +2494,11 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 
 /* DE EIGEN CHEVRON (25 september 2026). Een `<select>` hield de NATIVE pijl van het besturings-
    systeem: een grijs driehoekje in een doosje, met een eigen vorm per platform. Naast een veld
-   dat verder alleen een onderlijn heeft is dat het enige stukje vreemde chrome op het scherm —
+   dat verder alleen een licht kader heeft is dat het enige stukje vreemde chrome op het scherm —
    precies wat een dropdown hier "een kale HTML-control" deed lijken.
 
    `appearance:none` HAALT MEER WEG DAN DE PIJL: op Safari en oudere Chrome verdwijnt daarmee ook
-   de doos eromheen, en dat is juist de bedoeling — de onderlijn hierboven is de veldstijl van
+   de doos eromheen, en dat is juist de bedoeling — het lichte kader hierboven is de veldstijl van
    deze huisstijl. De twee voorvoegsels staan erbij omdat Safari de kale variant pas sinds 15.4
    kent en dit dorp geen buildstap heeft die ze toevoegt.
 
@@ -2512,9 +2518,19 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* Bij focus volgt de chevron de lijn: één signaal, niet twee kleuren tegelijk. */
 :root select:not([multiple]):focus {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%2300A551' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>"); }
-/* `.fieldform` is een RIJ met een veld en een knop erin; de onderlijn hoort bij het veld, niet om
-   de rij heen. Vandaar hier geen lijn — de kinderen dragen hem al. */
-:root .fieldform { border-bottom: 0; }
+/* `.fieldform` is een RIJ met een veld en een knop erin; het kader hoort bij het veld, niet om
+   de rij heen. Vandaar hier geen rand en geen vlak — de kinderen dragen hem al. Zonder deze regel
+   tekent de rij, die in de veldregel hierboven staat, een kader om zijn eigen kaders heen. */
+:root .fieldform { border: 0; background: transparent; }
+/* Deadline op de rail: `.chip.outline` was het oude systeem (`--border`, `--gray`) en de enige
+   control op de rail die de fase-12-migratie oversloeg. GESCOPED op `.pkaart-rail` (de rail
+   zoals hij nu in de markup staat; `.pside` wordt nergens meer gerenderd): elders is `.chip`
+   een pil (reacties, AI-badges, wall) en dat blijft hij. `.chip.coral` (over de deadline) houdt
+   zijn eigen rode lijn — een alarm hoort niet op te gaan in de rust van de rest. */
+:root .pkaart-rail .chip.outline { background: var(--nu-surface); border: 1.5px solid var(--nu-border-subtle);
+  border-radius: 0; color: var(--nu-text); font-weight: 500; }
+:root .pkaart-rail .chip.outline:hover, :root .pkaart-rail details[open] > .chip.outline {
+  border-color: var(--nu-accent); }
 :root .c2-search input { border-color: var(--nu-text); }
 :root :focus-visible { outline: 3px solid var(--nu-neon); outline-offset: -1px; }
 

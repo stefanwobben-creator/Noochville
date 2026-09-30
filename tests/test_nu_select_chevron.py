@@ -94,11 +94,11 @@ def test_er_is_ruimte_voor_de_chevron():
     assert "background-repeat: no-repeat" in inhoud, "de chevron herhaalt zich over het veld"
 
 
-def test_de_onderlijn_blijft_de_veldstijl():
+def test_het_kader_blijft_de_veldstijl():
     """`appearance:none` mag de huisstijl niet slopen: de gedeelde veldregel hoort de select nog
     steeds te raken."""
     gedeeld = re.search(r":root textarea, :root select, [^{]*\{([^}]*)\}", NU)
-    assert gedeeld and "border-bottom: 1.5px solid var(--nu-text)" in gedeeld.group(1)
+    assert gedeeld and "border: 1.5px solid var(--nu-border-subtle)" in gedeeld.group(1)
 
 
 def test_een_meerkeuzelijst_krijgt_geen_chevron():

@@ -209,31 +209,36 @@ def test_het_voortgangs_atoom_is_informatie_geen_container():
 
 # ── derde ronde: een veld is geen container (21 september 2026) ──────────────────────────────
 
-#: De besturingselementen die een onderlijn dragen in plaats van een kader.
+#: De besturingselementen die een licht kader dragen in plaats van het zware 2px-omhulselkader.
 VELDEN = ("input[type=text]", "input[type=search]", "input[type=email]", "input[type=number]",
           "textarea", "select")
 
 
-def test_een_veld_draagt_een_onderlijn_geen_kader():
+def test_een_veld_draagt_een_licht_kader_geen_zwaar():
     """DE AANLEIDING, geteld: de projectkaart-modal had tien losse 2px-kaders in één blik — titel,
     pakket-label, omschrijving, checklist, elk hand-off-knopje en elk veld in de Details-kolom.
 
     De fase-12-regel zei dat een invoerveld als container zijn kader mocht houden. Dat klopt op een
     scherm met één veld en valt om op een scherm met twaalf: precies de muur van hokjes die fase 12
-    moest opheffen, nu in veldvorm. Een veld krijgt nu de lijn waar je TYPT en nergens anders."""
+    moest opheffen, nu in veldvorm.
+
+    DERDE HERZIENING (30 september 2026): de onderlijn werd een LICHT kader (1,5px
+    `--nu-border-subtle`). Het verschil met een omhulsel blijft wat deze test bewaakt: een veld
+    draagt nooit de zware zwarte lijn."""
     regels = {sel: body for sel, body in _regels()}
     veldregel = next((b for s, b in regels.items()
-                      if s.startswith(":root input[type=text]") and "border-bottom" in b), None)
+                      if s.startswith(":root input[type=text]") and "font-family" in b), None)
     assert veldregel, "de gedeelde veldregel bestaat niet"
-    assert "border: 0" in veldregel
-    assert "border-bottom: 1.5px solid var(--nu-text)" in veldregel
+    assert "border: 1.5px solid var(--nu-border-subtle)" in veldregel
+    assert "border-radius: 0" in veldregel, "een veld hoort hoekig te blijven, zoals de rest"
+    assert "solid var(--nu-text)" not in veldregel, "een veld draagt de zware lijn weer"
     for veld in VELDEN:
         assert veld in " ".join(regels), f"{veld} valt buiten de veldregel"
 
 
 def test_de_plek_waar_je_typt_is_de_enige_die_opvalt():
     """Zonder focus-markering ruil je een muur van hokjes in voor een vlakte zonder oriëntatie."""
-    focus = [b for s, b in _regels() if ":focus" in s and "border-bottom-color" in b]
+    focus = [b for s, b in _regels() if ":focus" in s and "border-color" in b]
     assert focus, "een veld in focus hoort zich te onderscheiden"
     assert any("var(--nu-accent)" in b for b in focus)
 
@@ -264,6 +269,17 @@ def test_omhulsels_houden_hun_kader():
 
 
 def test_de_rij_om_een_veld_draagt_geen_eigen_lijn():
-    """`.fieldform` is een rij met een veld en een knop erin. Een lijn om de rij én onder het veld
-    is twee lijnen voor één ding — en dat is hoe de muur van hokjes ontstond."""
-    assert "border-bottom: 0" in _body(r"^:root \.fieldform$")
+    """`.fieldform` is een rij met een veld en een knop erin. Een kader om de rij én om het veld
+    is kader-in-kader — en dat is hoe de muur van hokjes ontstond."""
+    body = _body(r"^:root \.fieldform$")
+    assert "border: 0" in body and "background: transparent" in body
+
+
+def test_deadline_op_de_rail_draagt_het_veldkader():
+    """Deadline is een `.chip.outline` en stond nog in het oude systeem (`--border`, `--gray`) — de
+    enige control op de rail die fase 12 oversloeg. De override is GESCOPED op de rail: elders is
+    `.chip` een pil en dat blijft hij."""
+    body = _body(r"^:root \.pkaart-rail \.chip\.outline$")
+    assert "border: 1.5px solid var(--nu-border-subtle)" in body and "border-radius: 0" in body
+    assert not any(s.strip() == ".chip.outline" and "nu-" in b for s, b in _regels()), (
+        "de rail-override lekt naar .chip.outline buiten de rail")
