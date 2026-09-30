@@ -2460,13 +2460,32 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    onderlijn en geen groene focus, precies de twee dingen waar dit blok voor bestaat. */
 :root input[type=text], :root input[type=search], :root input[type=email], :root input[type=number],
 :root input[type=url], :root input[type=date], :root input[type=password], :root input:not([type]),
-:root textarea, :root select, :root .ctrl, :root .fieldform, :root .title-edit {
+:root textarea, :root select, :root .ctrl, :root .fieldform {
   font-family: var(--nu-font); border: 0; border-bottom: 1.5px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 :root input[type=text]:focus, :root input[type=search]:focus, :root input[type=email]:focus,
 :root input[type=number]:focus, :root input[type=url]:focus, :root input[type=date]:focus,
 :root input[type=password]:focus, :root input:not([type]):focus, :root textarea:focus, :root select:focus {
   border-bottom-width: 2px; border-bottom-color: var(--nu-accent); }
+/* DE PROJECTTITEL IS GEEN VELD MAAR EEN KOP (30 september 2026). `.title-edit` stond in de rij
+   hierboven en kreeg daarmee dezelfde vaste onderlijn als een zoekveld. Op 1,5rem/700 leest die
+   niet als "hier kun je typen" maar als een streep onder de titel — en een kop met een streep
+   eronder ziet eruit als een fout, niet als een affordance.
+
+   DE AFFORDANCE BLIJFT, alleen op het moment dat hij iets betekent: de rand is er altijd (zodat de
+   tekst niet verspringt bij focus) maar doorzichtig, en kleurt groen zodra je erin staat. Hetzelfde
+   patroon als de velden hierboven, alleen omgekeerd: daar is rust de uitzondering, hier de norm.
+
+   `input.title-edit` EN NIET `.title-edit`, en dat is geen stijlkeuze maar rekenwerk. Het veld
+   draagt geen `type`-attribuut, dus het matcht óók `:root input:not([type])` hierboven — en die
+   selector weegt (0,2,1) tegen (0,2,0) van een kale klasse. Gemeten vóór deze correctie: de titel
+   hield zijn zwarte 1,5px-onderlijn terwijl de regel eronder stond te wachten. Met de tagnaam
+   erbij wegen ze gelijk, en dan wint de laatste — deze. */
+:root input.title-edit { font-family: var(--nu-font); border: 0;
+  border-bottom: 2px solid transparent; border-radius: 0; background: transparent;
+  color: var(--nu-text); box-shadow: none; }
+:root input.title-edit:focus { border-bottom-color: var(--nu-accent); outline: none; }
+
 /* DE EIGEN CHEVRON (25 september 2026). Een `<select>` hield de NATIVE pijl van het besturings-
    systeem: een grijs driehoekje in een doosje, met een eigen vorm per platform. Naast een veld
    dat verder alleen een onderlijn heeft is dat het enige stukje vreemde chrome op het scherm —

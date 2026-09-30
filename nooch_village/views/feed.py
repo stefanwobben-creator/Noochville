@@ -242,7 +242,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     from nooch_village.cockpit2 import mag_wall_bewerken, mag_wall_verwijderen
     kind, atype, aid = _feed_norm(entry)
     eid = entry.get("id")
-    mag_bewerken = bool(csrf_token and eid) and mag_wall_bewerken(st, entry, ik)
+    mag_bewerken = bool(csrf_token and eid) and mag_wall_bewerken(st, entry, ik, pid)
     mag_wissen = bool(csrf_token and eid) and mag_wall_verwijderen(st, entry, ik, pid)
     if kind == "system":
         # EEN LOGREGEL IS GEEN OPMERKING. "✅ Mens-taak afgerond: …" wordt door de code geschreven
@@ -294,9 +294,14 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     # hier als één `if` — en dat is precies hoe "wie mag wat" ongemerkt één regel werd.
     tools = ""
     if mag_bewerken or mag_wissen:
+        # `next` HOORT HIER, en stond er niet (30 september 2026). Zonder dat veld valt de dispatch
+        # terug op `nxt = g("next") or "/"`: je verwijdert één regel van een project en staat op
+        # de homepage. De system-log-tak hierboven gaf hem wél mee — dezelfde knop, twee plekken,
+        # en dus één die achterbleef.
         hidf = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-                f"<input type='hidden' name='item' value='{_e(eid)}'>")
+                f"<input type='hidden' name='item' value='{_e(eid)}'>"
+                f"<input type='hidden' name='next' value='{_e(terug)}'>")
         # INLINE BEWERKEN, zoals de projecttitel het al doet: het veld staat op de plek van de
         # tekst zelf, niet als tweede veld eronder. Een <details> dat een kopie van de bubbel
         # opent, laat je twee versies van dezelfde regel naast elkaar lezen en je moet raden welke

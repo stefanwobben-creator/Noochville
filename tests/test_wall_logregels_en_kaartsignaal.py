@@ -159,3 +159,104 @@ def test_je_eigen_bericht_draagt_je_eigen_naam(tmp_path):
                                         "text": ["van mij"], "next": ["/"]}, username=IK)
     h = _wall(dd, pid)
     assert "Ik Zelf" in h and "feed_edit" in h
+
+
+# ══ 4. De projectpagina, na het eerste echte gebruik (30 september 2026) ═════
+def test_de_pakketknop_staat_niet_meer_naast_de_titel(tmp_path):
+    """Stefan: "kan weg".
+
+    EN HIJ WAS BOVENDIEN DOOD. `/project_pakket` bestaat nergens in de code — geen route, geen
+    handler, geen export. Wie erop klikte kreeg de 404 van `do_GET`. Dezelfde klasse fout als de
+    Linkbuilding-kaart die negen dagen naar een verwijderd scherm wees: een knop is een LINK in
+    code, en verdwijnt (of komt er nooit) het scherm eronder, dan merkt niemand het tot iemand
+    klikt. Hem weghalen is hier dus geen verlies maar het opruimen van een belofte."""
+    import pathlib
+    dd, pid, ik = _dorp(tmp_path)
+    h = _wall(dd, pid)
+    kop = h.split("pcard-head")[1].split("</div>")[0]
+    assert "pakket" not in kop and "project_pakket" not in kop
+    bron = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "cockpit2.py").read_text()
+    assert "project_pakket" not in bron, (
+        "de route bestaat inmiddels wél — dan is dit een besluit over WAAR de knop hoort")
+
+
+def test_de_titel_draagt_geen_vaste_onderlijn():
+    """HET WAS GEEN ONTBREKENDE REGEL MAAR EEN EXPLICIETE. `.title-edit` stond in de veld-rij van
+    het designsysteem en kreeg daarmee dezelfde 1,5px onderlijn als een zoekveld — op 1,5rem/700
+    leest die als een streep ONDER de titel, niet als "hier kun je typen"."""
+    from conftest import designsysteem_css
+    css = designsysteem_css()
+    veldrij = css.split(":root textarea, :root select, :root .ctrl, :root .fieldform")[1].split("}")[0]
+    assert ".title-edit" not in veldrij, "de titel hangt weer aan de veld-onderlijn"
+    assert ":root input.title-edit { font-family" in css
+    eigen = css.split(":root input.title-edit {")[1].split("}")[0]
+    assert "border-bottom: 2px solid transparent" in eigen
+    assert ":root input.title-edit:focus { border-bottom-color: var(--nu-accent)" in css
+    # MÉT DE TAGNAAM, en dat is rekenwerk: het veld draagt geen `type`, dus het matcht ook
+    # `:root input:not([type])` — (0,2,1) tegen (0,2,0) voor een kale klasse. Gemeten in Firefox
+    # vóór deze correctie: de titel hield zijn zwarte 1,5px-onderlijn.
+    assert ":root .title-edit {" not in css, "de kale klasse verliest van input:not([type])"
+
+
+def test_een_bericht_zonder_stem_is_bewerkbaar_door_wie_het_mag_weghalen(tmp_path):
+    """DE 156 ANONIEME MENS-ENTRIES van vóór 29 september. Ze waren wél te VERWIJDEREN en niet te
+    corrigeren: een typefout of een half geplakt bericht stond er voorgoed, of moest helemaal weg.
+    Er is niemand wiens woorden je in de mond legt — het staat al naamloos op het scherm."""
+    from nooch_village.cockpit2 import mag_wall_bewerken, mag_wall_verwijderen, zonder_stem
+    dd, pid, ik = _dorp(tmp_path)
+    st = cockpit2._Stores(dd)
+    e = st.projects.add_feed_entry(pid, "Via Lotte: opusmanufacturing.com", kind="comment",
+                                   author_type="human", author_id="")
+    st = cockpit2._Stores(dd)
+    assert zonder_stem(e) is True
+    # `ik` vervult de eigenaar-rol van dit project (zie `_dorp`), dus hij mocht hem al weghalen.
+    assert mag_wall_verwijderen(st, e, ik.id, pid) is True
+    assert mag_wall_bewerken(st, e, ik.id, pid) is True
+    h = _wall(dd, pid)
+    assert "Someone" in h and "feed_edit" in h
+
+
+def test_een_bericht_mét_naam_blijft_strikt_auteur_only(tmp_path):
+    """DE GRENS, EN HET BESLUIT VAN 26 SEPTEMBER. Een rol-bericht mag je het zwijgen opleggen, geen
+    andere woorden in de mond leggen — ook niet als je de rol bekleedt, en ook niet als het id van
+    die rol leeg is (dan staat er "Role" boven, en dat is nog steeds een naam)."""
+    from nooch_village.cockpit2 import mag_wall_bewerken, zonder_stem
+    dd, pid, ik = _dorp(tmp_path)
+    st = cockpit2._Stores(dd)
+    ander = st.people.add("Ander", "ander@test.nl")
+    van_ander = st.projects.add_feed_entry(pid, "van een ander mens", kind="comment",
+                                           author_type="human", author_id=ander.id)
+    van_rol = st.projects.add_feed_entry(pid, "van een rol", kind="comment",
+                                         author_type="role", author_id=ROL)
+    rol_zonder_id = {"id": "x", "kind": "comment", "at": 1.0, "text": "van een naamloze rol",
+                     "author": {"type": "role", "id": ""}}
+    st = cockpit2._Stores(dd)
+    assert zonder_stem(van_ander) is False and zonder_stem(van_rol) is False
+    assert zonder_stem(rol_zonder_id) is False, "een rol toont 'Role' — dat is een naam"
+    for e in (van_ander, van_rol, rol_zonder_id):
+        assert mag_wall_bewerken(st, e, ik.id, pid) is False
+
+
+def test_verwijderen_houdt_je_op_de_projectpagina(tmp_path):
+    """Zonder `next` valt de dispatch terug op "/": je haalt één regel weg en staat op de
+    homepage. De system-log-tak gaf hem al wél mee — dezelfde knop, twee plekken, één die
+    achterbleef."""
+    dd, pid, ik = _dorp(tmp_path)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["weg hiermee"], "next": ["/"]}, username=IK)
+    st = cockpit2._Stores(dd)
+    eid = st.projects.get(pid)["log"][-1]["id"]
+    h = _wall(dd, pid)
+    # OP HET VERWIJDER-FORMULIER ZELF, en niet op "de eerste velden na het bericht-id". Die eerste
+    # is het INLINE-BEWERKVELD, dat zijn `next` altijd al had — een mutatie liet zien dat de toets
+    # daardoor groen bleef met het veld uit de verwijderknop gesloopt. Zelfde valkuil als bij de
+    # aftik-knop in het werkoverleg: anker op wat het formulier UNIEK maakt.
+    stuk = h[:h.index("value='feed_remove'")]
+    formulier = stuk[stuk.rindex("<form"):]
+    assert f"value='{eid}'" in formulier, "dit is het verkeerde bericht"
+    assert "name='next'" in formulier and f"/project?pid={pid}" in formulier
+    nxt, msg = cockpit2.dispatch(dd, "feed_remove",
+                                 {"pid": [pid], "item": [eid],
+                                  "next": [f"/project?pid={pid}"]}, username=IK)
+    assert not cockpit2.is_weigering(msg), msg
+    assert nxt.startswith(f"/project?pid={pid}")
