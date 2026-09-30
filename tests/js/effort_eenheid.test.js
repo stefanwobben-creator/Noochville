@@ -55,7 +55,12 @@ check("40 uren → dagen verstuurt 5", wissel("40", "uren", "dagen").verstuurd =
 check("2 dagen → uren verstuurt 16", wissel("2", "dagen", "uren").verstuurd === "16");
 // Niet afronden naar 0: `uren_uit` maakt van 0 een None, en dan is de schatting weg.
 check("3 uren → dagen verstuurt 0.375 (= 3 uur), geen 0", wissel("3", "uren", "dagen").verstuurd === "0.375");
-check("leeg veld blijft leeg, geen NaN", wissel("", "uren", "dagen").verstuurd === "");
+// Leeg veld: NIET versturen. Een lege post is voor de server "wissen", en de render van een lege
+// schatting valt terug op "uren" — de gekozen eenheid sprong dan terug.
+r = wissel("", "uren", "dagen");
+check("leeg veld verstuurt niets", r.verstuurd === null);
+check("leeg veld houdt de gekozen eenheid vast in data-unit", r.dataUnit === "dagen");
+check("onzin in het veld verstuurt ook niets", wissel("abc", "uren", "dagen").verstuurd === null);
 check("komma als decimaalteken: 1,5 dagen → 12", wissel("1,5", "dagen", "uren").verstuurd === "12");
 check("zelfde eenheid laat het getal staan", wissel("5", "uren", "uren").verstuurd === "5");
 

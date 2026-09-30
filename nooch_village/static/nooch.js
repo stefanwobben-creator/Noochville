@@ -2368,14 +2368,17 @@
   NV.effortEenheid = function (sel) {
     var form = sel.form, veld = form.querySelector("input[name=number]");
     var van = sel.getAttribute("data-unit") || sel.value, naar = sel.value;
-    if (veld && van !== naar) {
-      var n = parseFloat((veld.value || "").replace(",", "."));
-      if (!isNaN(n)) {
-        var uren = n * (van === "dagen" ? 8 : 1);
-        veld.value = Math.round((naar === "dagen" ? uren / 8 : uren) * 1000) / 1000;
-      }
-    }
+    var n = veld ? parseFloat((veld.value || "").replace(",", ".")) : NaN;
     sel.setAttribute("data-unit", naar);
+    // Nog geen getal: niets om op te slaan, dus geen submit. Anders las de server de lege post als
+    // "wissen", en de render van een lege schatting toont altijd de vaste standaard "uren" — de
+    // gekozen eenheid sprong terug. Nu blijft hij lokaal staan, en het getal dat je daarna typt
+    // gaat bij blur mee in DIE eenheid.
+    if (isNaN(n)) return;
+    if (van !== naar) {
+      var uren = n * (van === "dagen" ? 8 : 1);
+      veld.value = Math.round((naar === "dagen" ? uren / 8 : uren) * 1000) / 1000;
+    }
     if (form.requestSubmit) form.requestSubmit(); else form.submit();
   };
 
