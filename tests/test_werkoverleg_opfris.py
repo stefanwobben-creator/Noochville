@@ -68,7 +68,7 @@ def test_de_deelnemersrij_scheidt_met_een_lijn():
     assert "border: 0" in body
 
 
-def test_een_input_zonder_type_krijgt_de_onderlijn_en_de_groene_focus():
+def test_een_input_zonder_type_krijgt_het_kader_en_de_groene_focus():
     """DIT WAS HET STILLE DEEL VAN DE BUG. `<input name='naam'>` is een tekstveld, maar
     `input[type=text]` matcht hem niet. Het agendaveld van het overleg is er zo een."""
     # OP DE LOSSE SELECTOR, NIET OP EEN SUBSTRING. De eerste versie zocht
@@ -82,9 +82,9 @@ def test_een_input_zonder_type_krijgt_de_onderlijn_en_de_groene_focus():
                 uit |= {re.sub(r"\s+", " ", s.strip()) for s in sel.split(",")}
         return uit
 
-    onderlijn = _selectors(lambda b: "border-bottom: 1.5px solid var(--nu-text)" in b)
-    focus = _selectors(lambda b: "border-bottom-color: var(--nu-accent)" in b)
-    assert ":root input:not([type])" in onderlijn, "geen onderlijn voor een input zonder type"
+    kader = _selectors(lambda b: "border: 1.5px solid var(--nu-border-subtle)" in b)
+    focus = _selectors(lambda b: "border-color: var(--nu-accent)" in b)
+    assert ":root input:not([type])" in kader, "geen kader voor een input zonder type"
     assert ":root input:not([type]):focus" in focus, "geen groene focus voor een input zonder type"
     # En het veld waar het om begon draagt inderdaad geen type.
     vangst = open(os.path.join(BASIS, "nooch_village", "views", "vangst.py"), encoding="utf-8").read()
