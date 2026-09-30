@@ -2361,6 +2361,24 @@
     emoKiezer(root);
   };
 
+  /* Effort: de eenheid wisselen rekent het GETAL om, en verandert de omvang niet. Zonder dit postte
+   * de select `5` + `uren` terwijl er 5 dagen stond, en werd 40 uur 5 uur. `data-unit` is de
+   * eenheid waarin het getal NU staat (de server zet hem bij elke render); 8 uur per dag is dezelfde
+   * conventie als `uren_uit` in cockpit2.py, die daarna de enige is die opslaat. */
+  NV.effortEenheid = function (sel) {
+    var form = sel.form, veld = form.querySelector("input[name=number]");
+    var van = sel.getAttribute("data-unit") || sel.value, naar = sel.value;
+    if (veld && van !== naar) {
+      var n = parseFloat((veld.value || "").replace(",", "."));
+      if (!isNaN(n)) {
+        var uren = n * (van === "dagen" ? 8 : 1);
+        veld.value = Math.round((naar === "dagen" ? uren / 8 : uren) * 1000) / 1000;
+      }
+    }
+    sel.setAttribute("data-unit", naar);
+    if (form.requestSubmit) form.requestSubmit(); else form.submit();
+  };
+
   if (document.readyState !== "loading") NV.wire(document);
   else document.addEventListener("DOMContentLoaded", function () { NV.wire(document); });
 })();
