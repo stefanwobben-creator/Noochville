@@ -181,7 +181,12 @@ def test_een_droge_run_schrijft_niets(tmp_path, bronnen):
 
 def test_de_memo_gaat_altijd_naar_de_founder_rol(tmp_path, monkeypatch):
     """DE GUARD. Geen lookup, geen model, geen 'meest passende rol' — één adres dat niet kan
-    verschuiven. Wie het werk oppakt, beslist de mens die de memo leest."""
+    verschuiven. Wie het werk oppakt, beslist de mens die de memo leest.
+
+    HIJ MEET SINDS 30 SEPTEMBER 2026 `stuur_en_volg` IN PLAATS VAN `stuur_op_pad`, en dat is geen
+    ander adres maar dezelfde route met één stap erbij: de ontvanger gaat het kanaal volgen. Zonder
+    dat stond de memo in een DM met een afzender zonder Person-record, en die groep is in de
+    Messages-lijst niet zichtbaar — drie verstuurde memo's die niemand kon vinden."""
     from nooch_village import signaal
     from nooch_village.human_inbox import FOUNDER_ROLE_ID
     gezien: dict = {}
@@ -190,7 +195,7 @@ def test_de_memo_gaat_altijd_naar_de_founder_rol(tmp_path, monkeypatch):
         gezien.update(doel_type=doel_type, doel_id=doel_id, tekst=tekst, by=kw.get("by"))
         return ["dm:stefan"]
 
-    monkeypatch.setattr(signaal, "stuur_op_pad", _stuur)
+    monkeypatch.setattr(signaal, "stuur_en_volg", _stuur)
     kanalen = weekmemo._bezorg_bij_de_founder(str(tmp_path), "de memo", None)
     assert kanalen == ["dm:stefan"]
     assert gezien["doel_type"] == "role" and gezien["doel_id"] == FOUNDER_ROLE_ID
