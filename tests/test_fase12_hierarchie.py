@@ -193,7 +193,10 @@ def test_de_containers_in_die_families_houden_hun_lijn():
     houders = " | ".join(sel for sel, body in _regels() if CONTAINER_TOKEN in body)
     # (`ibx-drawer`, `ibx-row` en `ibx-head` stonden hier ook; de lade waar ze bij hoorden bleek
     # op 21 september 2026 niet te bestaan en is met stylesheet en al verwijderd.)
-    for klasse in ("wz-card", "cardmenu-b", "eff"):
+    # `eff` STOND HIER en is er op 1 oktober 2026 uit. De enige `.eff` in de markup is de Effort-
+    # RIJ (`fieldform eff`), geen omhulsel: met deze lijn droeg hij een 2px-zwart kader om twee
+    # lichte velden. `test_de_effort_rij_is_geen_omhulsel` bewaakt nu de andere kant.
+    for klasse in ("wz-card", "cardmenu-b"):
         assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", houders), (
             f".{klasse} is een container en hoort {CONTAINER_TOKEN} te dragen")
 

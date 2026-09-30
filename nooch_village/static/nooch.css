@@ -2802,7 +2802,10 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .einddoc-seg { background: var(--nu-surface); color: var(--nu-text);
   font-family: var(--nu-font); border-radius: 0; }
 :root .einddoc-kern { color: var(--nu-text); }
-:root .eff, :root .cardmenu-b { border: var(--nu-border); border-radius: 0;
+/* `.eff` STOND HIER, naast `.cardmenu-b`, en hoort er niet (1 oktober 2026). Het is de Effort-RIJ
+   (`fieldform eff`), geen omhulsel; met dezelfde specificiteit als `:root .fieldform { border: 0 }`
+   en later in het bestand won hij, en droeg de rij een 2px-zwart kader om twee lichte velden. */
+:root .cardmenu-b { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 :root .danger { color: var(--nu-danger); }
 :root .car { color: var(--nu-muted); }

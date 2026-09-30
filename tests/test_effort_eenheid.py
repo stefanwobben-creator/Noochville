@@ -26,7 +26,7 @@ def test_de_omrekening_in_de_browser():
         pytest.skip("node niet geïnstalleerd — draai `node tests/js/effort_eenheid.test.js` met de hand")
     uit = subprocess.run([node, str(TEST_JS)], capture_output=True, text=True, timeout=60)
     assert uit.returncode == 0, f"JS-toetsen rood:\n{uit.stdout}\n{uit.stderr}"
-    assert uit.stdout.count("  ok   ") >= 8, f"te weinig toetsen gedraaid:\n{uit.stdout}"
+    assert uit.stdout.count("  ok   ") >= 10, f"te weinig toetsen gedraaid:\n{uit.stdout}"
 
 
 def _frag(tmp_path, number, unit):
@@ -65,3 +65,13 @@ def test_een_fractie_dag_blijft_de_uren_die_het_waren(tmp_path):
     cockpit2.dispatch(dd, "proj_seteffort",
                       {"pid": [pid], "number": ["0.375"], "unit": ["dagen"], "next": ["/"]}, "guest")
     assert cockpit2._Stores(dd).projects.get(pid)["effort"] == {"hours": 3}
+
+
+def test_de_effort_rij_is_geen_omhulsel():
+    """`.eff` stond naast `.cardmenu-b` in een omhulselregel (2px zwart) en won daar de cascade van
+    `:root .fieldform { border: 0 }`: een zwaar kader om twee lichte velden."""
+    import re
+    css = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "static" / "nooch.css").read_text()
+    zwaar = [sel for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css) if "var(--nu-border)" in body]
+    assert not any(re.search(r"\.eff(?![\w-])", s) for s in zwaar), "de Effort-rij draagt weer het omhulselkader"
+    assert any(".cardmenu-b" in s for s in zwaar), ".cardmenu-b is wél een omhulsel en hoort zijn 2px te houden"
