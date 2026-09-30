@@ -194,7 +194,16 @@ def _impact_select(p, field: str, kind: str, opts, rw: bool, hid) -> str:
 def _effort_control(p, rw: bool, hid) -> str:
     """Effort als numeriek veld + uren/dagen-toggle (zelfde rij-patroon → proj_seteffort). Auto-opslaan:
     de toggle bij selectie (onchange), het getal bij blur (onblur) — geen knop. Een veelvoud van 8 uur
-    toont standaard in dagen. Leeg/ontbrekend → geen getal, default uren. Read-only → tekst."""
+    toont standaard in dagen. Leeg/ontbrekend → geen getal, default uren. Read-only → tekst.
+
+    DE EENHEID WISSELEN IS GEEN NIEUWE WAARDE (1 oktober 2026). De select postte met `_AUTOSAVE` het
+    formulier zoals het stond: 5 dagen → "uren" kiezen stuurde `5 uren`, en effort ging van 40 naar
+    5 uur. `NV.effortEenheid` (nooch.js) rekent het getal eerst om vanaf `data-unit` — de eenheid
+    van DEZE render — en post dan pas. `uren_uit` blijft de enige conversie die opslaat.
+
+    `step='any'` EN NIET `step='1'`: 3 uur in dagen is 0,375. Met `step='1'` blokkeert de browser
+    de submit op die waarde, en afronden naar 0 zou de schatting wissen (`uren_uit` maakt van 0 een
+    None). Zo komt 0,375 dag aan als 3 uur, en de volgende render toont weer "3 hours"."""
     hours = _effort_hours(p.get("effort"))
     if not rw:
         if not hours:
@@ -211,8 +220,8 @@ def _effort_control(p, rw: bool, hid) -> str:
                     for u in ("uren", "dagen"))
     return (f"<form method='post' action='/action' class='fieldform eff'>{hid()}"
             f"<input type='hidden' name='action' value='proj_seteffort'>"
-            f"<input type='number' name='number' value='{num}' min='0' step='1' placeholder='0' onblur='{_AUTOSAVE}'>"
-            f"<select name='unit' onchange='{_AUTOSAVE}'>{units}</select></form>")
+            f"<input type='number' name='number' value='{num}' min='0' step='any' placeholder='0' onblur='{_AUTOSAVE}'>"
+            f"<select name='unit' onchange='NV.effortEenheid(this)' data-unit='{unit}'>{units}</select></form>")
 
 
 def _missie_dot(p) -> str:
