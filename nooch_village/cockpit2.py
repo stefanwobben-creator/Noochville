@@ -6676,6 +6676,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_tools(st, csrf_token=effective_csrf, username=username,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
+            if path == "/bom":
+                # AUTHZ: iedereen-ingelogd — alleen lezen. Het scherm schrijft niets; elk getal komt
+                # uit de stuklijst of een wiki-pagina, en die hebben hun eigen schrijfpoort.
+                from nooch_village.views.bom import render_bom
+                self._send(render_bom(st))
+                return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
                 # herkende persoon is er niets te tonen (`render_acties` zegt dat zelf). Er is geen
