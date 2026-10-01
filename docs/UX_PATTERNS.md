@@ -31,6 +31,10 @@ Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.pill` (kle
 `.att-lbl` (formulier-label), `.qadd-form`/`.editor` (toevoeg-/bewerk-formulieren), `.flash` (banner),
 `.cl-bar` (rij van `.cl-filter`'s). Zie `web_base.py`/`cockpit2_util.py` voor de volledige set.
 
+**`.nu-term`** (atom, 1 oktober 2026): een vaste term binnen een kop of tegeltitel die géén
+hoofdletters mag krijgen — `<span class='nu-term'>CO2e</span>` in een `<th>` of `.tile-t`, anders
+leest "CO2e" als "CO2E". Rond de term, nooit rond de hele kop.
+
 **Een kaart hoort niet ín lopende tekst.** `.card` brengt rand, achtergrond en eigen marge mee, en
 alle drie botsen met een alinea. Een blok dat TUSSEN de tekst kan staan — een Feit, de backlinks —
 gebruikt daarom `.wiki-inline`: geen kader, dezelfde ritmiek als een alinea, en het onderscheid als
