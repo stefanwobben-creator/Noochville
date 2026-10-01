@@ -36,13 +36,77 @@ def _alternatieven(comment: str) -> tuple[str, ...]:
     return tuple(alts)
 
 
+#: De kolommen die een BOM op KOPNAAM kan dragen (kleine letters). `part` en `material` zijn
+#: verplicht; de rest is optioneel. Eén plek, zodat de parser en het BOM-scherm dezelfde namen lezen.
+KOLOMMEN = {"part": "part", "material": "material", "comment": "comment",
+            "weight (g)": "gram", "supplier": "supplier"}
+
+
+def _kolommen(tekst: str) -> dict[str, int] | None:
+    """{veld: kolomindex} uit de tab-gescheiden koprij, of None als er geen bruikbare kop is.
+
+    WAAROM OP KOPNAAM (1 oktober 2026). De positionele lezing hieronder neemt Part en Material als de
+    laatste twee niet-lege cellen vóór het commentaar. Dat werkte zolang Comment de laatste kolom
+    was; met `Weight (g)` en `Supplier` erachter zou een ingevuld gewicht als materiaal gelezen
+    worden. Lege cellen tellen hier wél mee, zodat een rij en zijn kop op dezelfde index staan."""
+    for regel in tekst.splitlines():
+        if "\t" not in regel:
+            continue
+        cellen = [c.strip().lower() for c in regel.split("\t")]
+        if "part" in cellen and "material" in cellen:
+            return {KOLOMMEN[c]: i for i, c in enumerate(cellen) if c in KOLOMMEN}
+    return None
+
+
+def bom_rijen(tekst: str) -> list[dict]:
+    """Elke componentrij als dict: part, material, comment, gram (float of None), supplier.
+
+    Alleen voor een tab-BOM mét koprij (zonder kop: lege lijst — het BOM-scherm heeft de kolommen
+    nodig). Een gewicht dat geen getal ≥ 0 is wordt None, niet 0: een onleesbaar vak is "nog open",
+    geen nul gram."""
+    kol = _kolommen(tekst)
+    if not kol:
+        return []
+    uit = []
+    kop_gezien = False
+    for regel in tekst.splitlines():
+        cellen = [c.strip() for c in regel.split("\t")]
+        if not kop_gezien:
+            kop_gezien = {c.lower() for c in cellen} >= {"part", "material"}
+            continue
+
+        def cel(veld: str) -> str:
+            i = kol.get(veld)
+            return cellen[i] if i is not None and i < len(cellen) else ""
+
+        part, material = cel("part"), cel("material")
+        if not part or not material:
+            continue
+        try:
+            gram = float(cel("gram").replace(",", ".")) if cel("gram") else None
+        except ValueError:
+            gram = None
+        if gram is not None and (gram != gram or gram < 0):
+            gram = None
+        uit.append({"part": part, "material": material, "comment": cel("comment"),
+                    "gram": gram, "supplier": " ".join(cel("supplier").split())})
+    return uit
+
+
 def ontleed_bom(tekst: str, bron: str = "BOM") -> list[Constituent]:
     """Parse een (tab- of dubbelspatie-gescheiden) Bill of Materials naar constituenten.
 
     Tolerant voor een leidende status/legenda-kolom: per rij worden de cellen ontdaan van
     lege waarden, het commentaar (vanaf '<') afgesplitst, en Part + Material als de laatste
     twee kop-cellen genomen. Zo werkt zowel 'Done<tab><tab>Outsole<tab>Pliant' als
-    '<tab><tab>Eyestay<tab>HyphaLite'. De koprij (Part/Material) wordt overgeslagen."""
+    '<tab><tab>Eyestay<tab>HyphaLite'. De koprij (Part/Material) wordt overgeslagen.
+
+    Heeft de BOM een tab-koprij, dan wordt op KOPNAAM gelezen (`bom_rijen`) — zie `_kolommen`."""
+    if _kolommen(tekst):
+        return [Constituent(naam=r["part"], realisatie=r["material"],
+                            alternatieven=_alternatieven(r["comment"]), bron=bron,
+                            opmerking=r["comment"].strip().lstrip("<").strip())
+                for r in bom_rijen(tekst)]
     uit: list[Constituent] = []
     for regel in tekst.splitlines():
         if not regel.strip():

@@ -93,7 +93,10 @@ def test_registry_dekt_de_eigenaar_rollen():
     assert set(_ROLE_TOOLS) == {
         "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp",
         "mother_earth__nooch__website_developer", "mother_earth__nooch"}
-    assert set(_DOMAIN_TOOLS) == {claims_db.DOMEIN}
+    #
+    # `materials` sinds 1 oktober 2026: het BOM-scherm hangt aan het materialen-domein, om dezelfde
+    # reden als claims — het gaat mee als een andere rol de materiaalkennis gaat houden.
+    assert set(_DOMAIN_TOOLS) == {claims_db.DOMEIN, "materials"}
 
 
 def test_copy_gereedschap_hangt_onder_de_nooch_cirkel():

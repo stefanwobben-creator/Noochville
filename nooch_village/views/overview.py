@@ -877,6 +877,11 @@ _ROLE_TOOLS = {
 # en verhuist mee met de rol die het bezit, dus de tools hangen daaraan. `{rol}` wordt vervangen
 # door het id van de rol die het domein nú bezit.
 _DOMAIN_TOOLS = {
+    # `materials` = het domein `Materials` (genormaliseerd, zie de lus in `render_tools`). De
+    # houder van de materiaalkennis vult de factoren op de pagina's die dit scherm optelt.
+    "materials": [
+        ("BOM", "Weight, cost price, CO2e and water per pair — from the bill of materials and the "
+         "material and supplier pages", "/bom")],
     claims_db.DOMEIN: [
         ("Claims checker", "EmpCo/ACM check on text or page: red, orange, green", "/claims"),
         # `&amp;` en niet `&`: de kaart zet de href ongeëscapet in het attribuut (de bestaande
