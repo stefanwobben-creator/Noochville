@@ -229,6 +229,9 @@ GROOTHEDEN: dict[str, dict[str, str]] = {
 #: ENGELS, op besluit van Stefan (1 oktober 2026): kopjes en uitlegzinnen die de APP aanlevert zijn
 #: systeemoutput — zie "Systeemoutput is Engels, mens-op-mens-tekst mag Nederlands" in docs/CONVENTIES.md.
 #: De tekst die een mens eronder schrijft blijft zijn eigen taal. Zelfde termen als `wiki_seed`.
+#: GEEN "Supplied by" IN HET MATERIAALSKELET (2 oktober 2026): wie levert, staat in de stuklijst, en
+#: `wiki_seed.materiaal_paginas` leidt het daaruit af — net als "Used in". Een handmatige kop zou een
+#: tweede plek zijn voor hetzelfde feit.
 #: ÉÉN PLEK — het "+ New page"-formulier toont de labels, `artefact_add` vult de body. Het blijft
 #: VRIJE TEKST: de kopjes zeggen wat er verwacht wordt, ze dwingen niets af. De zin onder elk kopje
 #: beschrijft de vorm, en beweert niets over wat er (nog niet) staat — die zou anders gaan liegen
@@ -241,7 +244,6 @@ SJABLONEN: dict[str, tuple[str, str]] = {
         "## CO2 & Water\nAs a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
         "TDS or another source. The BOM screen calculates with these values.",
         "## Circularity\nWhat can happen to it at the end of its life: reuse, recycling, composting.",
-        "## Supplied by\nThe supplier(s), each with a wiki link to their page.",
         "## Certification\nAs a fact, grounded in the certificate or Chronicle record.",
         "## Open items\nWhat still needs to be found out.",
     ))),

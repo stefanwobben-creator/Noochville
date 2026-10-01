@@ -52,7 +52,17 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
     Groeperen gebeurt hoofdletter-ongevoelig: 'Cotton thread' en 'Cotton Thread' zijn één materiaal.
     Dat is geen interpretatie maar noodzaak — twee pagina's met dezelfde titel lossen in de wiki
     bewust NIET op als link, dus die zouden allebei onbereikbaar zijn."""
-    from nooch_village.compositie import ontleed_bom
+    from nooch_village.compositie import bom_rijen, ontleed_bom
+
+    # LEVERANCIERS PER MATERIAAL, uit de `Supplier`-kolom van dezelfde stuklijst (BOM stuk 1).
+    # `ontleed_bom` kent die kolom niet — de belofte-graaf heeft hem niet nodig — dus hier de
+    # kop-bewuste lezing ernaast, op dezelfde tekst. Zelfde groepering (hoofdletter-ongevoelig,
+    # zonder de '(?)'), anders hoort een leverancier bij een materiaal dat er niet is.
+    leveranciers: dict[str, set] = {}
+    for r in bom_rijen(bom_tekst):
+        naam, _ = _materiaalnaam(r["material"])
+        if naam and r["supplier"]:
+            leveranciers.setdefault(naam.lower(), set()).add(r["supplier"])
 
     per_materiaal: dict[str, list] = {}
     spelling: dict[str, str] = {}
@@ -73,7 +83,16 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
         regels = [f"From the {BRON_STUKLIJST}.", "", "## Used in"]
         for c in sorted(delen, key=lambda x: x.naam):
             regels.append(f"- {c.naam}")
+        # SUPPLIED BY, afgeleid zoals "Used in" (2 oktober 2026). Stond eerst als lege kop in het
+        # handmatige skelet; maar wie levert, weet de stuklijst — dus komt het uit de stuklijst.
+        # Elke leverancier als [[link]]: bestaat zijn pagina, dan klikt hij door; bestaat hij nog
+        # niet, dan staat hij op de verlanglijst van deze pagina. Geen koppeling → een open punt.
+        regels += ["", "## Supplied by"]
+        lev = sorted(leveranciers.get(sleutel, set()), key=str.lower)
+        regels += [f"- [[{n}]]" for n in lev] or ["No supplier linked in the bill of materials yet."]
         open_punten = []
+        if not lev:
+            open_punten.append("- Supplied by: no supplier linked in the bill of materials yet")
         for c in sorted(delen, key=lambda x: x.naam):
             if c.naam in onzeker.get(sleutel, set()):
                 open_punten.append(f"- {c.naam}: material not yet certain — noted in the bill of "
