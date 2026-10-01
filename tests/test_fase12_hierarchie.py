@@ -286,3 +286,26 @@ def test_deadline_op_de_rail_draagt_het_veldkader():
     assert "border: 1.5px solid var(--nu-border-subtle)" in body and "border-radius: 0" in body
     assert not any(s.strip() == ".chip.outline" and "nu-" in b for s, b in _regels()), (
         "de rail-override lekt naar .chip.outline buiten de rail")
+
+
+# ── tegel, kaart en tabelcel (1 oktober 2026) ────────────────────────────────────────────────
+
+def test_kaart_en_tegel_zijn_hoekig_met_de_lichte_rand():
+    """Gevonden op het BOM-scherm: `.tile` droeg het oude systeem (tan, 9px), `.card` de nieuwe
+    rand maar ook 9px afronding. Gesloten in het patroon, niet op dat ene scherm."""
+    regels = list(_regels())
+    hoek = " | ".join(s for s, b in regels if "border-radius: 0" in b)
+    for klasse in ("card", "tile"):
+        assert re.search(rf":root \.{klasse}(?![\w-])", hoek), f".{klasse} is niet hoekig"
+    tegel = " ".join(b for s, b in regels if re.fullmatch(r":root \.tile", s.strip()))
+    assert "1.5px solid var(--nu-border-subtle)" in tegel, "de tegel draagt niet de rand van de kaart"
+
+
+def test_een_tabelcel_lijnt_uit_op_het_midden():
+    """`td` staat in de basislaag op `top`; met een statuslabel in de rij zit de tekst er dan
+    boven in plaats van ernaast."""
+    assert "vertical-align: middle" in _body(r"^:root \.mtab td$")
+
+
+def test_een_vaste_term_ontsnapt_aan_de_hoofdletters():
+    assert "text-transform: none" in _body(r"^:root \.nu-term$")

@@ -2276,7 +2276,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
      3. kaart-padding van 6,4-8px naar 14-16px.
 
    NIET AANGERAAKT (merkvragen, apart te bespreken): `border-radius: 0`, `box-shadow: none`,
-   `--nu-bg` en het kleurgebruik op canvasniveau. */
+   `--nu-bg` en het kleurgebruik op canvasniveau.
+   (De radius is op 1 oktober 2026 besloten voor `.card` en `.tile`: hoekig — zie het blok
+   "Tegel, kaart en tabelcel" hieronder.) */
 
 /* 1 · De kaart is geen container. `.box`, `.kpi` en `table` houden hun 2px: dat zijn blokken op
    paginaniveau, geen items in een lijst. */
@@ -2286,6 +2288,26 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    iets, en dat kan pas nu de rest hem niet meer draagt. */
 :root .pkaart:hover, :root .pcard:hover, :root .pdrag-ghost, :root .pcard.pdrag-bron {
   border-width: 2px; }
+
+/* ── TEGEL, KAART EN TABELCEL (1 oktober 2026) ───────────────────────────────────────────────
+   Gevonden op het BOM-scherm, gesloten in het PATROON en niet op dat scherm: `.tile` droeg nog
+   het oude systeem (1px crème/tan `--border`, `--radius` 9px), `.card` de nieuwe lichte rand maar
+   ook 9px afronding. Naast de hoekige `.pkaart`, `.kcard`, tabbladen en filters waren dat de twee
+   ronde vormen op een verder hoekig scherm.
+
+   DE BRON IS `.card`: die had de juiste rand al (hierboven, 1,5px `--nu-border-subtle`). `.tile`
+   krijgt dezelfde, en beide `border-radius: 0`. Raakt alle 86 `.card`-plekken (20 views) en de
+   tegels van `/metrics` — bewust: een kaart die per scherm anders afrondt is geen kaart meer. */
+:root .card, :root .tile { border-radius: 0; }
+:root .tile { border: 1.5px solid var(--nu-border-subtle); background: var(--nu-surface); }
+/* De basislaag (`web_base`) zet `td { vertical-align: top }`. In een tabel met alleen tekst valt
+   dat niet op; staat er een statuslabel in de rij (hoger dan de tekst, met eigen rand), dan zit de
+   tekst tegen de bovenrand en het label eronder. Midden is de as die beide delen. */
+:root .mtab td { vertical-align: middle; }
+/* EEN VASTE TERM DIE GEEN HOOFDLETTERS VERDRAAGT. Een kop of tegeltitel staat in hoofdletters
+   (`th`, `.tile-t`), en dan wordt "CO2e" "CO2E" — een andere eenheid. Geen uitzondering op de
+   hoofdletterregel zelf: alleen de term krijgt hem, als `<span class='nu-term'>`. */
+:root .nu-term { text-transform: none; }
 
 :root .box, :root .kpi, :root table {
   border: var(--nu-border); border-radius: 0; background: var(--nu-surface); box-shadow: none; }
