@@ -211,34 +211,49 @@ Praktisch, in volgorde van hardheid:
 En de keerzijde die dit werkbaar houdt: kan een herschrijving het feit niet behouden, dan is de ruwe
 tekst de uitkomst. **Onbegrijpelijk-maar-waar is te repareren; vloeiend-maar-onwaar niet.**
 
-### Chrome is Engels, inhoud is Nederlands
+### Systeemoutput is Engels, mens-op-mens-tekst mag Nederlands
 
-De taalgrens loopt niet om de applicatie maar dwars erdoorheen:
+**De regel (besluit Stefan, 2 oktober 2026):** alles wat het SYSTEEM schrijft is Engels; tekst die een
+MENS voor een ander mens schrijft mag Nederlands.
 
 | | taal | voorbeelden |
 |---|---|---|
-| **chrome** | Engels (i18n fase 1) | knoppen, kolomkoppen, menu's, statusmeldingen |
-| **inhoud** | Nederlands | bevindingen, Field Notes, spanningen, checklist-items, projecttitels |
+| **systeemoutput** | Engels | knoppen, kolomkoppen, menu's, statusmeldingen, model-prompts en -uitkomsten, skill-labels, meldingen die de app verstuurt, en de vaste vorm die de app in een pagina zet (skelet- en zaad-koppen, intro- en slotzinnen, open-punt-sjablonen) |
+| **mens-op-mens** | mag Nederlands | een bericht in een kanaal, een projecttitel, een checklist-item, de tekst die iemand onder een skelet-kop schrijft, een voorstel |
 
-Waarom dit erin staat: één regel in de checklist-prompt — `"Write all free text in English."` — zette
-134 Engelse berichten in de inbox van de founder, náást bevindingen en Field Notes die allemaal
-Nederlands zijn. De regel leek consistent (de cockpit is immers Engels) maar stond aan de verkeerde
-kant van de grens.
+Toets bij twijfel: **wie schreef deze zin?** Een `f"…"` in de code is het systeem, ook als hij op een
+wiki-pagina of in een DM belandt. Een veld dat een mens invult is de mens.
+
+**Herkomst — waarom hier eerder het omgekeerde stond.** Deze sectie heette "Chrome is Engels, inhoud
+is Nederlands" (na 134 Engelse berichten tussen Nederlandse Field Notes). PR #466 (6 september
+2026) draaide dat om — de inhoudslaag werd Engels, met het oog op internationale groei — maar dit
+document werd niet meegenomen. Het gevolg: nieuwe code volgde de oude regel, en het wiki-skelet van
+BOM-stuk 3 kreeg Nederlandse koppen (`## Kenmerken`, `## Nog open`) die pas live opvielen. Eén regel
+die op twee plekken anders staat is precies wat `reference, don't copy` verbiedt; deze sectie is nu
+de plek, en `CLAUDE.md` verwijst ernaar.
 
 Twee uitzonderingen, allebei principieel en geen slordigheid:
 
-- **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet Engels.
-- **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven.
+- **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet in de taal van de markt.
+- **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven. Een Nederlandse bron
+  wordt niet vertaald om in een Engelse zin te passen.
+
+Wat NIET onder de regel valt: commentaar en docstrings (ontwikkelaarstekst, bewust Nederlands) en
+interne sleutels/enum-waarden die worden vergeleken of opgeslagen (`fit == "nee"`, `"onderbouwd"`):
+die vertalen breekt opgeslagen data. Ook geen migratie van bestaande content zonder apart besluit.
+
+**De taalschuld** — systeemstrings die nog Nederlands zijn — wordt niet in één ronde vertaald.
+`tests/test_taal_ratchet.py` houdt hem per bestand op een plafond dat alleen omlaag mag.
 
 #### Een record neemt de taal van zijn buren
 
-De inhoudsregel hierboven zegt niets over wat er gebeurt als een bestaand record al in een andere
+De taalregel hierboven zegt niets over wat er gebeurt als een bestaand record al in een andere
 taal staat. Rol-DNA is zo'n record: het wordt als GEHEEL gelezen, en accountabilities verschijnen
 geciteerd naast elkaar op het scherm.
 
 `mother_earth__secretary` draagt vijf Engelse accountabilities uit de GlassFrog-import. Er een
-Nederlandse bij zetten leest als een **fout**, niet als een keuze — ook al is roldefinitie-tekst
-volgens de regel hierboven "inhoud". Dus: **een nieuwe regel neemt de taal van zijn buren, en een
+Nederlandse bij zetten leest als een **fout**, niet als een keuze — los van wat de regel hierboven
+over wie-schreef-het zegt. Dus: **een nieuwe regel neemt de taal van zijn buren, en een
 taalwissel is een bewuste hele-rol-pass.**
 
 Dat kost hier niets: de triage vergelijkt het citaat LETTERLIJK tegen de records, dus de matching is

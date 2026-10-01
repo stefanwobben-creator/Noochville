@@ -28,7 +28,7 @@ import os
 from nooch_village import artefacts
 from nooch_village import cert_register, wiki
 
-BRON_STUKLIJST = "stuklijst van de Nooch-schoen (founder-input)"
+BRON_STUKLIJST = "bill of materials of the Nooch shoe (founder input)"
 
 
 # ── materiaal-pagina's ──────────────────────────────────────────────────────
@@ -70,16 +70,16 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
     uit = []
     for sleutel, delen in sorted(per_materiaal.items()):
         materiaal = spelling[sleutel]
-        regels = [f"Uit de {BRON_STUKLIJST}.", "", "## Gebruikt in"]
+        regels = [f"From the {BRON_STUKLIJST}.", "", "## Used in"]
         for c in sorted(delen, key=lambda x: x.naam):
             regels.append(f"- {c.naam}")
         open_punten = []
         for c in sorted(delen, key=lambda x: x.naam):
             if c.naam in onzeker.get(sleutel, set()):
-                open_punten.append(f"- {c.naam}: materiaal nog onzeker — in de stuklijst genoteerd "
-                                   f"als “{c.realisatie}”")
+                open_punten.append(f"- {c.naam}: material not yet certain — noted in the bill of "
+                                   f"materials as “{c.realisatie}”")
             if c.alternatieven:
-                open_punten.append(f"- {c.naam}: alternatief in beeld — "
+                open_punten.append(f"- {c.naam}: alternative under consideration — "
                                    + ", ".join(c.alternatieven))
             elif c.opmerking:
                 open_punten.append(f"- {c.naam}: {c.opmerking}")
@@ -87,13 +87,16 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
         # dus hier staat alleen WAAR ze horen en in welke vorm. De zin beweert bewust niet dat het
         # getal ontbreekt: die tekst blijft staan als de eigenaar het feit toevoegt, en zou dan
         # liegen. Of het er is, toont het BOM-scherm — afgeleid bij het lezen.
-        regels += ["", "## CO2 & water",
-                   "Als feit met een waarde (CO2e per kg, water per kg), met de leverancier-TDS of "
-                   "een andere bron als grond. Het BOM-scherm rekent met die waarden."]
+        #
+        # DE KOPPEN ZIJN ENGELS (1 oktober 2026), dezelfde termen als `wiki.SJABLONEN`: wat de app
+        # als vaste vorm aanlevert is systeemoutput, en die is Engels. Zie docs/CONVENTIES.md.
+        regels += ["", "## CO2 & Water",
+                   "As a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
+                   "TDS or another source. The BOM screen calculates with these values."]
         if open_punten:
-            regels += ["", "## Nog open", *open_punten]
-        regels += ["", "Wat dit materiaal aantoonbaar wél of niet is, hoort als feit op deze "
-                   "pagina te staan, met een certificaat of Kroniek-record als grond."]
+            regels += ["", "## Open items", *open_punten]
+        regels += ["", "What this material demonstrably is or is not belongs on this page as a "
+                   "fact, grounded in a certificate or a Chronicle record."]
         uit.append({"titel": materiaal, "body": "\n".join(regels), "feiten": []})
     return uit
 
@@ -101,10 +104,10 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
 # ── claim-pagina's ──────────────────────────────────────────────────────────
 
 _OORDEEL_TEKST = {
-    "red": "rood — verboden, nooit gebruiken",
-    "orange": "oranje — risico, alleen met genoemd bewijs",
-    "green": "groen — veilig voor Nooch",
-    "escaleren": "escaleren — geen harde bron; compliance beoordeelt, de tool niet",
+    "red": "red — forbidden, never use",
+    "orange": "orange — risk, only with the evidence named",
+    "green": "green — safe for Nooch",
+    "escaleren": "escalate — no hard source; compliance judges, not the tool",
 }
 
 
@@ -131,24 +134,26 @@ def claim_paginas(db: dict, ledger=None, *, vandaag: str = "") -> list[dict]:
         if not claim:
             continue
         oordeel = str(rij.get("oordeel") or "")
-        regels = [f"**Oordeel:** {_OORDEEL_TEKST.get(oordeel, oordeel or 'onbekend')}."]
+        regels = [f"**Verdict:** {_OORDEEL_TEKST.get(oordeel, oordeel or 'unknown')}."]
         if rij.get("herformulering"):
-            regels.append(f"**Herformulering:** {rij['herformulering']}")
+            regels.append(f"**Rewording:** {rij['herformulering']}")
         if rij.get("status"):
             regels.append(f"**Status:** {rij['status']}")
-        regels.append(f"**Bron van het oordeel:** Nooch claims-database{' v' + versie if versie else ''} "
-                      f"(beheer: compliance).")
+        regels.append(f"**Source of the verdict:** Nooch claims database{' v' + versie if versie else ''} "
+                      f"(maintained by compliance).")
 
         feiten = []
         status = cert_register.status_voor(claim, certs, vandaag=vandaag)
         if status["status"] == "onderbouwd" and (status.get("cert") or {}).get("_record_id"):
-            feiten.append(wiki.maak_feit(f"Onderbouwd: {claim}", soort="cert",
+            feiten.append(wiki.maak_feit(f"Substantiated: {claim}", soort="cert",
                                          ref=str(status["cert"]["_record_id"])))
         else:
             # Geen certificaat = geen feit. De pagina zégt dat er iets ontbreekt in plaats van een
             # ongegronde bewering te dragen; dit is dezelfde wachtlijst als in cert_register.
-            regels.append(f"**Nog niet onderbouwd:** {status['reden']}.")
-            regels.append(f"**Wat er nodig is:** {cert_register.opdracht(status)}")
+            # De LABELS zijn hier Engels; `reden` en `opdracht` komen uit `cert_register` en zijn
+            # daar nog Nederlands (taalschuld buiten dit bestand, zie de scan van 2 oktober 2026).
+            regels.append(f"**Not yet substantiated:** {status['reden']}.")
+            regels.append(f"**What is needed:** {cert_register.opdracht(status)}")
         uit.append({"titel": claim[:200], "body": "\n".join(regels),
                     "feiten": [f for f in feiten if f]})
     return uit
@@ -156,7 +161,7 @@ def claim_paginas(db: dict, ledger=None, *, vandaag: str = "") -> list[dict]:
 
 # ── leverancier-pagina's ─────────────────────────────────────────────────────
 
-BRON_CERTREGISTER = "certificaten geregistreerd in de Kroniek"
+BRON_CERTREGISTER = "certificates registered in the Chronicle"
 
 
 def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
@@ -192,9 +197,9 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
         leverancier = spelling[sleutel]
         materialen = sorted({" ".join(str(c.get("materiaal") or "").split())
                              for c in cs if c.get("materiaal")})
-        regels = [f"Leverancier uit de {BRON_CERTREGISTER}."]
+        regels = [f"Supplier from the {BRON_CERTREGISTER}."]
         if materialen:
-            regels += ["", "## Materiaal"]
+            regels += ["", "## Material"]
             regels += [f"- {m}" for m in materialen]
 
         feiten = []
@@ -205,20 +210,20 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
                 continue
             verval = cert_register.verlopen(c, vandaag=vandaag)
             if verval or verval is None:
-                reden = "verlopen" if verval else "geen leesbare vervaldatum"
-                open_punten.append(f"- {feit_tekst}: certificaat {reden} — vernieuw het "
-                                   f"certificaat bij {leverancier} voordat dit feit weer gegrond is")
+                reden = "expired" if verval else "has no readable expiry date"
+                open_punten.append(f"- {feit_tekst}: certificate {reden} — renew the certificate "
+                                   f"with {leverancier} before this fact is grounded again")
             elif c.get("_record_id"):
                 feiten.append(wiki.maak_feit(feit_tekst, soort="cert", ref=str(c["_record_id"])))
 
         # PRIJSAFSPRAAK HOORT HIER en niet op de materiaalpagina: twee leveranciers van hetzelfde
         # materiaal kunnen verschillend prijzen. Zelfde regel als bij CO2 & water: de plek, geen
         # bewering over of het getal er al is.
-        regels += ["", "## Prijsafspraak",
-                   "Als feit met een waarde (kostprijs per kg), met de offerte of het contract als "
-                   "grond. Het BOM-scherm rekent met die waarde."]
+        regels += ["", "## Price agreement",
+                   "As a fact with a value (cost price per kg), grounded in the quote or the "
+                   "contract. The BOM screen calculates with this value."]
         if open_punten:
-            regels += ["", "## Nog open", *open_punten]
+            regels += ["", "## Open items", *open_punten]
         uit.append({"titel": leverancier, "body": "\n".join(regels),
                     "feiten": [f for f in feiten if f]})
     return uit

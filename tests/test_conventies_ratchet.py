@@ -244,7 +244,10 @@ def test_de_conventies_staan_opgeschreven():
     # De kern van 30 aug: bewijs raak je niet aan, en een poort meet zijn uitkomst.
     assert "Bewijs blijft woordelijk" in doc
     assert "Een ratchet toetst gedrag, niet broncode" in doc
-    assert "Chrome is Engels, inhoud is Nederlands" in doc
+    # De taalregel, sinds 2 oktober 2026 in de vorm van PR #466. De oude titel ("Chrome is Engels,
+    # inhoud is Nederlands") mag NIET terugkomen: die zei het omgekeerde en bleef een maand staan.
+    assert "Systeemoutput is Engels, mens-op-mens-tekst mag Nederlands" in doc
+    assert "Chrome is Engels, inhoud is Nederlands\n" not in doc
     assert "Onafhankelijke deelchecks dekken verschillende assen" in doc
     assert "Consolideer het mechaniek, niet de copy" in doc
     assert "Routeer op leven, niet op vermogen" in doc

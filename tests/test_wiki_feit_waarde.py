@@ -109,9 +109,9 @@ def test_de_context_van_een_ai_vervuller_krijgt_het_getal_mee():
 
 def test_een_nieuwe_materiaalpagina_heeft_de_plek_voor_co2_en_water():
     paginas = wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM)
-    assert paginas and all("## CO2 & water" in p["body"] for p in paginas)
+    assert paginas and all("## CO2 & Water" in p["body"] for p in paginas)
     # Geen bewering dat het getal ontbreekt: die zin blijft staan als het feit er komt, en liegt dan.
-    assert not any("nog geen" in p["body"].split("## CO2 & water")[1].split("##")[0].lower()
+    assert not any("not yet" in p["body"].split("## CO2 & Water")[1].split("##")[0].lower()
                    for p in paginas)
 
 
@@ -119,5 +119,5 @@ def test_een_nieuwe_leverancierpagina_heeft_de_plek_voor_de_prijs(monkeypatch):
     monkeypatch.setattr(wiki_seed.cert_register, "certs_uit_kroniek",
                         lambda _l: [{"leverancier": "LTA S.R.L.", "materiaal": "Helios 200"}])
     [p] = wiki_seed.leverancier_paginas(object())
-    assert "## Prijsafspraak" in p["body"]
-    assert "## CO2 & water" not in p["body"]           # prijs bij de leverancier, CO2 bij het materiaal
+    assert "## Price agreement" in p["body"]
+    assert "## CO2 & Water" not in p["body"]           # prijs bij de leverancier, CO2 bij het materiaal

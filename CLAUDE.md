@@ -154,7 +154,10 @@ Elke data-skill heeft een notie van de locales die hij ondersteunt:
 ### Taal van een output
 
 De taal van een output volgt de context:
-- **Rapportage aan de mens** (Field Note, voorstel, rationale): taal van de mens (nu NL).
+- **Systeemoutput is Engels, mens-op-mens-tekst mag Nederlands** (besluit 2 oktober 2026, bevestigt PR #466).
+  Rapportage die het SYSTEEM schrijft (Field Note, voorstel, rationale, melding) is dus Engels. De
+  enige uitgewerkte versie van deze regel staat in `docs/CONVENTIES.md` → "Systeemoutput is Engels,
+  mens-op-mens-tekst mag Nederlands"; hier alleen de verwijzing.
 - **Content-analyse**: taal van de data-bron (ngram EN corpus → EN termen in het event).
 - **`keyword_proposed`-events** dragen een `locale`-sleutel zodat de Librarian weet in welke taal het woord thuishoort.
 
