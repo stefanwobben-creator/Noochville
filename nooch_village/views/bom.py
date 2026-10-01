@@ -18,7 +18,10 @@ from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 from nooch_village.web_base import _e, _page, _status
 
 #: Tegelkop en eenheid per metriek. De SLEUTELS komen uit `bom_reken.METRIEKEN`.
-_TEGEL = {"gram": "Total weight", "prijs": "Total cost price", "co2e": "Total CO2e",
+#: "CO2e" staat in een `<span class='nu-term'>`: `.tile-t` en `th` zetten hun tekst in hoofdletters,
+#: en "CO2E" is een andere eenheid. Alleen de term ontsnapt, niet de hele titel (zie UX_PATTERNS).
+_CO2E = "<span class='nu-term'>CO2e</span>"
+_TEGEL = {"gram": "Total weight", "prijs": "Total cost price", "co2e": f"Total {_CO2E}",
           "water": "Water use"}
 
 
@@ -45,7 +48,8 @@ def _tegel(sleutel: str, t: dict) -> str:
     # ander aantal componenten mee (een gewicht kan er zijn zonder CO2-factor), en één gedeelde
     # regel zou voor drie van de vier tegels niet kloppen.
     som = _getal(sleutel, t["som"]) if t["n"] else "—"
-    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_TEGEL[sleutel])}"
+    # `_TEGEL` is vaste markup uit dit bestand (de `nu-term`-span), geen invoer — dus niet escapen.
+    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_TEGEL[sleutel]}"
             f"</span></div><div class='kpi-val'>{som}</div>"
             f"<div class='muted'>based on {t['n']} of {t['m']} components</div></div>")
 
@@ -62,8 +66,8 @@ def _rij(r: dict) -> str:
 def render_bom(st) -> str:
     uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, wiki.paginas(st.att))
     tegels = "".join(_tegel(k, uit["totalen"][k]) for k, _g, _w in bom_reken.METRIEKEN)
-    kop = ("<tr><th>Component</th><th>Material</th><th>Supplier</th><th class='num'>Weight</th>"
-           "<th class='num'>Cost price</th><th class='num'>CO2e</th><th class='num'>Water</th>"
+    kop = (f"<tr><th>Component</th><th>Material</th><th>Supplier</th><th class='num'>Weight</th>"
+           f"<th class='num'>Cost price</th><th class='num'>{_CO2E}</th><th class='num'>Water</th>"
            "<th>Status</th></tr>")
     tabel = f"<table class='mtab'>{kop}{''.join(_rij(r) for r in uit['rijen'])}</table>"
     open_rijen = [r for r in uit["rijen"] if r["open"]]

@@ -103,6 +103,8 @@ def test_het_scherm_zegt_eerlijk_op_hoeveel_het_rust(tmp_path):
     assert html.count("based on 0 of 23 components") == 4
     assert "Still open" in html and "weight not filled in" in html
     assert "class='mtab'" in html and "class='tile'" in html
+    # "CO2e" in een kop of tegeltitel ontsnapt aan de hoofdletters, anders staat er "CO2E".
+    assert html.count("<span class='nu-term'>CO2e</span>") == 2
     assert "style=" not in html.split("<body")[1].split("<script")[0].replace("<style", "")
 
 
