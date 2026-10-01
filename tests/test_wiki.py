@@ -325,6 +325,26 @@ def test_pagina_editknop_alleen_voor_de_domeinhouder(tmp_path):
     assert "artefact_edit" not in outsider and "pagina_feit_add" not in outsider
 
 
+def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
+    """Zonder feiten verdween de hele sectie, en daarmee ook "+ Add fact": het eerste feit kon
+    alleen via het /-menu. Nu krijgt de bewerker het ingeklapte formulier — maar géén kopje en géén
+    "No facts yet", want dat blijft meubilair. Een lezer ziet bij leeg nog steeds niets."""
+    st = _stores(tmp_path)
+    st.people.add("Alice", "alice@nooch.earth")
+    st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
+    st.people.add("Bob", "bob@nooch.earth")
+    a = st.att.add(OWNER, "note", title="HyphaLite", domain="Materials")
+    st2 = cockpit2._Stores(st.dd)
+
+    filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
+    assert "pagina_feit_add" in filler and "+ Add fact" in filler
+    assert ">Facts</h3>" not in filler and "No facts yet" not in filler
+    assert filler.count("pagina_feit_add") == 1                  # één ingang, niet twee
+
+    outsider = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
+    assert "pagina_feit_add" not in outsider and ">Facts</h3>" not in outsider
+
+
 def test_onbekende_pagina_geeft_nette_melding(tmp_path):
     st = _stores(tmp_path)
     assert "Page not found" in render_pagina(st, "NOTE-BESTAAT-999", csrf_token="tok",
