@@ -42,8 +42,7 @@ def test_stap_4_volgt_het_mechanisme_van_stap_1_tot_3(tmp_path):
 
 def test_een_materiaalpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "Biorel", sjabloon="materiaal")
-    for kop in ("Characteristics", "CO2 & Water", "Circularity", "Supplied by", "Certification",
-                "Open items"):
+    for kop in ("Characteristics", "CO2 & Water", "Circularity", "Certification", "Open items"):
         assert f"## {kop}" in a.body
     assert "Price agreement" not in a.body                    # de prijs hoort bij de leverancier
 
@@ -72,11 +71,12 @@ def test_een_skelet_bevat_geen_wiki_link():
 
 def test_zaad_en_skelet_gebruiken_dezelfde_koppen():
     """Eén vocabulaire. Een automatisch gezaaide pagina en een pagina uit het skelet horen dezelfde
-    kop te gebruiken voor hetzelfde onderdeel; "Used in" is de enige zaad-eigen kop (de stuklijst
+    kop te gebruiken voor hetzelfde onderdeel; "Used in" en "Supplied by" zijn zaad-eigen (de stuklijst
     weet waar een materiaal in zit, het skelet niet)."""
     from nooch_village import wiki_seed
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
     kop = re.compile(r"^## (.+)$", re.M)
     skelet = {k for _l, body in wiki.SJABLONEN.values() for k in kop.findall(body)}
     zaad = {k for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM) for k in kop.findall(p["body"])}
-    assert zaad - {"Used in"} <= skelet, zaad - skelet
+    assert zaad - {"Used in", "Supplied by"} <= skelet, zaad - skelet
+    assert "Supplied by" not in skelet                     # één plek voor dat feit: de stuklijst
