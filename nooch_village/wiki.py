@@ -225,6 +225,35 @@ GROOTHEDEN: dict[str, dict[str, str]] = {
 }
 
 
+#: Skeletten voor een nieuwe pagina (BOM stuk 3, 1 oktober 2026): sleutel → (label, body).
+#: ÉÉN PLEK — het "+ New page"-formulier toont de labels, `artefact_add` vult de body. Het blijft
+#: VRIJE TEKST: de kopjes zeggen wat er verwacht wordt, ze dwingen niets af. De zin onder elk kopje
+#: beschrijft de vorm, en beweert niets over wat er (nog niet) staat — die zou anders gaan liegen
+#: zodra de eigenaar het invult. GEEN `[[…]]` IN DEZE TEKST: dat is een echte wiki-link, en een
+#: voorbeeld als `[[link]]` zou een gewenste pagina "link" op elke nieuwe pagina zetten. Leverancier en materiaal zijn gescheiden om dezelfde reden als in
+#: `GROOTHEDEN`: de prijs hoort bij de leverancier, CO2 en water bij het materiaal.
+SJABLONEN: dict[str, tuple[str, str]] = {
+    "materiaal": ("Material page", "\n\n".join((
+        "## Kenmerken\nWat het is, waar het van gemaakt is, waar het in de schoen voor dient.",
+        "## CO2 & water\nAls feit met een waarde (CO2e per kg, water per kg), met de leverancier-TDS "
+        "of een andere bron als grond. Het BOM-scherm rekent met die waarden.",
+        "## Circulariteit\nWat er aan het eind van de levensduur mee kan: hergebruik, recycling, "
+        "composteren.",
+        "## Geleverd door\nDe leverancier(s), elk met een wiki-link naar hun pagina.",
+        "## Certificering\nAls feit met het certificaat of Kroniek-record als grond.",
+        "## Nog open\nWat er nog uitgezocht moet worden.",
+    ))),
+    "leverancier": ("Supplier page", "\n\n".join((
+        "## Locatie & contact\nLand, soort leverancier, contactpersoon.",
+        "## Bedrijfscertificering\nAls feit met het certificaat of Kroniek-record als grond.",
+        "## Materiaal\nWat deze leverancier aan Nooch levert, met een wiki-link naar de materiaalpagina.",
+        "## Prijsafspraak\nAls feit met een waarde (kostprijs per kg), met de offerte of het "
+        "contract als grond. Het BOM-scherm rekent met die waarde.",
+        "## Nog open\nWat er nog uitgezocht moet worden.",
+    ))),
+}
+
+
 def maak_waarde(grootheid: str, getal) -> dict | None:
     """`{grootheid, getal}` of None. Fail-closed: een onbekende grootheid, geen getal, een negatief
     of oneindig getal → None. Komma als decimaalteken mag ('2,4')."""

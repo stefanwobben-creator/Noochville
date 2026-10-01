@@ -1418,7 +1418,14 @@ def _act_artefact_add(c):
         _deny = _artefact_gate(owner, username, st, domein=domain)
         if _deny:
             raise Forbidden(_deny)                            # → HTTP 403, geen 303-redirect
-        te_lang = _body_te_lang(g("body"), kind)
+        # HET SKELET (BOM stuk 3). Alleen voor een pagina, alleen als er geen eigen tekst meekomt,
+        # en een onbekende sleutel is een lege pagina — geen fout: het formulier biedt alleen de
+        # sleutels uit `wiki.SJABLONEN` aan, dus een vreemde waarde is geen keuze van een mens.
+        from nooch_village import wiki as _wiki
+        body = g("body")
+        if kind == _wiki.PAGINA_KIND and not body.strip() and g("sjabloon") in _wiki.SJABLONEN:
+            body = _wiki.SJABLONEN[g("sjabloon")][1]
+        te_lang = _body_te_lang(body, kind)
         if te_lang:
             return nxt, te_lang
         gref = f"domain:{domain}" if domain else f"role:{owner}"
@@ -1432,7 +1439,7 @@ def _act_artefact_add(c):
             if g("sectie").strip() not in dict(_dom.BAKJES):
                 return nxt, "✗ unknown section"
             _meta = {"domein": g("sectie").strip()}
-        a = st.att.add(owner, kind, title=g("title"), body=g("body"), meta=_meta,
+        a = st.att.add(owner, kind, title=g("title"), body=body, meta=_meta,
                        url=g("url"), domain=domain, inherit=True,   # policies gelden altijd voor iedereen
                        actor_id=actor_id, actor_type="person",
                        governance_ref=gref, change_note="aangemaakt")
