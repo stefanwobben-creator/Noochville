@@ -54,6 +54,7 @@ from nooch_village.observations import ObservationStore
 from nooch_village import observations
 from nooch_village.evidence_ledger import EvidenceLedger
 from nooch_village.source_status import SourceStatusStore
+from nooch_village.bom_leveranciers import BomLeverancierStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
@@ -135,6 +136,7 @@ class _Stores:
         self.observations = ObservationStore(os.path.join(dd, "observations.jsonl"))
         self.evidence = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))   # De Kroniek — bewijsregister
         self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
+        self.bom_leveranciers = BomLeverancierStore(os.path.join(dd, "bom_leveranciers.json"))   # BOM: materiaal → leverancier
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
@@ -1621,6 +1623,25 @@ def _act_artefact_archive(c):
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"🗄️ {arch.kind} gearchiveerd ({arch.id})"
         return nxt, msg
+
+
+def _act_bom_leverancier_zet(c):
+        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`: wie de materiaalkennis
+        # houdt, zet de koppeling. Dezelfde poort als een pagina in dat domein bewerken
+        # (`_artefact_gate`), met de houder-rol als anker zodat ook zijn Circle Lead erbij mag.
+        from nooch_village import bom_leveranciers, org
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        houder = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+        _deny = _artefact_gate(houder.id if houder is not None else "", username, st,
+                               domein=bom_leveranciers.DOMEIN)   # check vóór de mutatie
+        if _deny:
+            raise Forbidden(_deny)
+        materiaal = " ".join((g("materiaal") or "").split())
+        if not st.bom_leveranciers.zet(materiaal, g("leverancier"),
+                                       door=_web_actor_id(username, st)):
+            return nxt, "✗ no material given"
+        naam = st.bom_leveranciers.van(materiaal)
+        return nxt, (f"✓ {materiaal} supplied by {naam}" if naam else f"✓ supplier removed from {materiaal}")
 
 
 def _act_artefact_unarchive(c):
@@ -6156,6 +6177,7 @@ ACTIONS = {
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
     "artefact_unarchive": _act_artefact_unarchive,
+    "bom_leverancier_zet": _act_bom_leverancier_zet,
     "artefact_delete": _act_artefact_delete,
     "pagina_sectie": _act_pagina_sectie,
     "msg_post": _act_msg_post,
@@ -6710,10 +6732,12 @@ def make_handler(data_dir: str, csrf_token: str,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/bom":
-                # AUTHZ: iedereen-ingelogd — alleen lezen. Het scherm schrijft niets; elk getal komt
-                # uit de stuklijst of een wiki-pagina, en die hebben hun eigen schrijfpoort.
+                # AUTHZ: iedereen-ingelogd — LEZEN. Het enige wat je hier kunt wijzigen is de
+                # leverancier-koppeling, en die loopt via `bom_leverancier_zet` met zijn eigen poort
+                # (houder van `Materials` of Circle Lead); het formulier verschijnt alleen voor wie mag.
                 from nooch_village.views.bom import render_bom
-                self._send(render_bom(st))
+                self._send(render_bom(st, csrf_token=effective_csrf, username=username,
+                                      msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder

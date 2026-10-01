@@ -7,15 +7,25 @@ volgende keer hier — er is geen tweede plek waar hij bijgewerkt moet worden.
 LAGEN (atom → molecule → pattern), allemaal bestaand:
   atom      `.kpi-val`, `.muted`, `web_base._status` (vorm + woord), een wiki-link
   molecule  `.tile` met `.tile-h`/`.tile-t` · `table.mtab` met `td.num` · `.card` voor "nog open"
+            · de Supplier-cel: `details.acard-d` > `summary.chip.outline` + `.datepop` met een
+              formulier — PRECIES de Deadline-cel van de projectrail (`views/projects.py`)
   pattern   dit scherm: vier tegels, de stuklijst, en wat er nog ontbreekt
 Geen nieuwe CSS-klasse en geen inline style.
+
+ÉÉN ding is hier te wijzigen (Correctie 2, 2 oktober 2026): welke leverancier een MATERIAAL levert.
+Die koppeling woont in `bom_leveranciers`; de Supplier-cel is er de ingang voor, en verschijnt als
+formulier alleen voor wie mag (houder van het domein `Materials` of Circle Lead).
 """
 from __future__ import annotations
 
-from nooch_village import bom_reken, wiki
+from nooch_village import artefacts, bom_leveranciers, bom_reken, wiki
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.data_bom import NOOCH_SCHOEN_BOM
-from nooch_village.web_base import _e, _page, _status
+from nooch_village.web_base import _banner, _e, _page, _status
+
+#: id van de suggestielijst met bestaande wiki-titels; één `<datalist>` per pagina, elke
+#: Supplier-cel verwijst ernaar.
+_LIJST_ID = "bom-lev-opties"
 
 #: Tegelkop en eenheid per metriek. De SLEUTELS komen uit `bom_reken.METRIEKEN`.
 #: "CO2e" staat in een `<span class='nu-term'>`: `.tile-t` en `th` zetten hun tekst in hoofdletters,
@@ -54,36 +64,81 @@ def _tegel(sleutel: str, t: dict) -> str:
             f"<div class='muted'>based on {t['n']} of {t['m']} components</div></div>")
 
 
-def _rij(r: dict) -> str:
+def _mag_koppelen(st, username: str | None) -> bool:
+    """Dezelfde vraag als de poort van `bom_leverancier_zet`, zodat het scherm geen knop toont die
+    de server daarna weigert. Guest (auth uit) mag alles, zoals overal in de cockpit."""
+    if username == "guest":
+        return True
+    actor = st.people.by_email(username) if username else None
+    if actor is None:
+        return False
+    from nooch_village import org
+    from nooch_village.cockpit2 import resolve_circle_id
+    houder = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+    cirkel = resolve_circle_id(houder.id, st.records) if houder is not None else ""
+    return artefacts.mag_schrijven_op_domein(st, bom_leveranciers.DOMEIN, actor.id,
+                                             circle_id=cirkel or "")
+
+
+def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool) -> str:
+    """Lezen: de leverancier als link (of tekst, of —). Bewerken: dezelfde chip als de Deadline op de
+    projectrail, die openklapt naar een formulier. Het veld stelt bestaande wiki-titels voor, maar
+    accepteert elke naam: een leverancier mag gekoppeld worden vóór iemand zijn pagina schrijft."""
+    lees = _link(r["lev"], r["supplier"])
+    if not bewerk:
+        return lees
+    label = _e(r["supplier"]) if r["supplier"] else "+ link supplier"
+    weg = (f"<button class='dellink' type='submit' name='leverancier' value=''>remove</button>"
+           if r["supplier"] else "")
+    return (f"<details class='acard-d'><summary class='chip outline'>{label}</summary>"
+            f"<div class='datepop'><form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='action' value='bom_leverancier_zet'>"
+            f"<input type='hidden' name='next' value='/bom'>"
+            f"<input type='hidden' name='materiaal' value='{_e(r['materiaal'])}'>"
+            f"<input name='leverancier' value='{_e(r['supplier'])}' list='{_LIJST_ID}' "
+            f"aria-label='supplier of {_e(r['materiaal'])}' placeholder='Supplier name'>"
+            f"<button class='btn ok sm' type='submit'>Save</button>{weg}"
+            f"</form>{lees if r['lev'] is not None else ''}</div></details>")
+
+
+def _rij(r: dict, csrf_token: str = "", bewerk: bool = False) -> str:
     b = r["bijdrage"]
     cellen = "".join(f"<td class='num'>{_getal(k, b.get(k))}</td>"
                      for k, _g, _w in bom_reken.METRIEKEN)
     status = _status("done", "Complete") if not r["open"] else _status("future", "Open")
     return (f"<tr><td>{_e(r['part'])}</td><td>{_link(r['mat'], r['materiaal'])}</td>"
-            f"<td>{_link(r['lev'], r['supplier'])}</td>{cellen}<td>{status}</td></tr>")
+            f"<td>{_leverancier_cel(r, csrf_token, bewerk)}</td>{cellen}<td>{status}</td></tr>")
 
 
-def render_bom(st) -> str:
-    uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, wiki.paginas(st.att))
+def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "") -> str:
+    pags = wiki.paginas(st.att)
+    uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, pags, st.bom_leveranciers.alle())
+    bewerk = bool(csrf_token) and _mag_koppelen(st, username)
+    opties = ("".join(f"<option value='{_e(p.title)}'></option>" for p in pags if p.title)
+              if bewerk else "")
+    lijst = f"<datalist id='{_LIJST_ID}'>{opties}</datalist>" if bewerk else ""
     tegels = "".join(_tegel(k, uit["totalen"][k]) for k, _g, _w in bom_reken.METRIEKEN)
     kop = (f"<tr><th>Component</th><th>Material</th><th>Supplier</th><th class='num'>Weight</th>"
            f"<th class='num'>Cost price</th><th class='num'>{_CO2E}</th><th class='num'>Water</th>"
            "<th>Status</th></tr>")
-    tabel = f"<table class='mtab'>{kop}{''.join(_rij(r) for r in uit['rijen'])}</table>"
+    tabel = (f"<table class='mtab'>{kop}{''.join(_rij(r, csrf_token, bewerk) for r in uit['rijen'])}"
+             f"</table>{lijst}")
     open_rijen = [r for r in uit["rijen"] if r["open"]]
     nog_open = ""
     if open_rijen:
         items = "".join(f"<li><strong>{_e(r['part'])}</strong> — {_e('; '.join(r['open']))}</li>"
                         for r in open_rijen)
         nog_open = (f"<div class='card'><h3>Still open</h3>"
-                    f"<p class='muted'>Fill in the weight in the bill of materials, and add the "
-                    f"numbers as a fact with a value on the material page (CO2e, water) or the "
-                    f"supplier page (cost price). The totals above pick them up by themselves.</p>"
+                    f"<p class='muted'>Fill in the weight in the bill of materials, link a supplier "
+                    f"in the Supplier column, and add the numbers as a fact with a value on the "
+                    f"material page (CO2e, water) or the supplier page (cost price). The totals "
+                    f"above pick them up by themselves.</p>"
                     f"<ul>{items}</ul></div>")
     main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · Nooch shoe</h1>"
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
-            f"Every number comes from the bill of materials or from a wiki page; nothing is "
-            f"stored here.</p>"
+            f"Weights come from the bill of materials, the factors from the material and supplier "
+            f"pages. The one thing set here is which supplier delivers a material.</p>{_banner(msg)}"
             f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

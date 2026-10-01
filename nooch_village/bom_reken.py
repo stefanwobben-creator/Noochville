@@ -43,16 +43,20 @@ def _factor(pagina, grootheid: str) -> tuple[float | None, str]:
     return waarden[0]["getal"], ""
 
 
-def bereken(bom_tekst: str, pags: list) -> dict:
+def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None) -> dict:
     """{"rijen": [...], "totalen": {sleutel: {"som", "n", "m"}}} voor één stuklijst.
 
     Per rij: de component, zijn materiaal- en leverancierpagina (of None), het gewicht, de bijdrage
-    per metriek (of None) en de open punten in leesbare tekst."""
+    per metriek (of None) en de open punten in leesbare tekst.
+
+    `leveranciers` = {materiaalsleutel: naam} uit `bom_leveranciers` (per MATERIAAL, niet per rij)."""
+    leveranciers = leveranciers or {}
     rijen = []
     for r in bom_rijen(bom_tekst):
         materiaal, _onzeker = _materiaalnaam(r["material"])
         mat = wiki.resolve(materiaal, pags)
-        lev = wiki.resolve(r["supplier"], pags) if r["supplier"] else None
+        supplier = leveranciers.get(materiaal.lower(), "")
+        lev = wiki.resolve(supplier, pags) if supplier else None
         gram = r["gram"]
         bijdrage: dict[str, float | None] = {"gram": gram}
         open_punten: list[str] = []
@@ -60,10 +64,10 @@ def bereken(bom_tekst: str, pags: list) -> dict:
             open_punten.append("weight not filled in")
         if mat is None:
             open_punten.append(f"no material page for “{materiaal}”")
-        if not r["supplier"]:
+        if not supplier:
             open_punten.append("no supplier")
         elif lev is None:
-            open_punten.append(f"no supplier page for “{r['supplier']}”")
+            open_punten.append(f"no supplier page for “{supplier}”")
         for sleutel, grootheid, waar in METRIEKEN:
             if grootheid is None:
                 continue
@@ -75,7 +79,7 @@ def bereken(bom_tekst: str, pags: list) -> dict:
                     open_punten.append(f"{wiki.GROOTHEDEN[grootheid]['label']}: {reden}")
                 continue
             bijdrage[sleutel] = gram / 1000 * factor if gram is not None else None
-        rijen.append({"part": r["part"], "materiaal": materiaal, "supplier": r["supplier"],
+        rijen.append({"part": r["part"], "materiaal": materiaal, "supplier": supplier,
                       "mat": mat, "lev": lev, "bijdrage": bijdrage, "open": open_punten})
 
     m = len(rijen)

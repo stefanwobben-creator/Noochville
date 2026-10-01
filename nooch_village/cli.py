@@ -746,7 +746,8 @@ def main() -> None:
         rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
                                        eigenaar_materiaal=MATERIAAL_ROL,
                                        eigenaar_claims=CLAIM_ROL,
-                                       eigenaar_leverancier=LEVERANCIER_ROL, apply=apply)
+                                       eigenaar_leverancier=LEVERANCIER_ROL, apply=apply,
+                                       leveranciers=st.bom_leveranciers.alle())
         # De methode-pagina hoort in dezelfde zaai-beurt: één commando, één rapport, dezelfde
         # dry-run. BEWUST NIET bij de cockpit-start — inhoud aanmaken is geen infrastructuur, en
         # een bootstrap die een pagina schrijft doet dat ook in elk test-dorp.
