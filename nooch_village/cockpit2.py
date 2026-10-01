@@ -1720,8 +1720,16 @@ def _act_pagina_feit_add(c):
                            domein=getattr(cur, "domain", ""))      # check vóór de mutatie
     if _deny:
         raise Forbidden(_deny)
+    # Een getal is optioneel, maar half ingevuld is een fout en geen stil "geen getal": wie een
+    # grootheid kiest en niets (of onzin) typt, of andersom, krijgt dat terug in plaats van een
+    # feit dat er wel staat maar in het BOM-scherm nooit meetelt.
+    waarde = None
+    if g("grootheid") or g("getal"):
+        waarde = wiki.maak_waarde(g("grootheid"), g("getal"))
+        if waarde is None:
+            return nxt, "✗ a value needs both a quantity and a number (0 or more)"
     feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=g("ref"),
-                          citaat=g("citaat"), url=g("url"))
+                          citaat=g("citaat"), url=g("url"), waarde=waarde)
     if feit is None:
         return nxt, "✗ a fact needs text"
     # Feiten leven in meta van dezelfde note: geen tweede opslag, dus ze reizen mee in de versie-

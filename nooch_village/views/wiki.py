@@ -230,7 +230,10 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     # kan het sinds `{{facts}}` in het blokmenu staat — botst een kaart met de tekst eromheen:
     # rand, achtergrond en eigen padding heeft een alinea alle drie niet. Het onderscheid blijft,
     # maar als een dunne accentlijn (`.wiki-inline`), niet als een losstaande doos.
-    return (f"<div><div class='ptitle'>{_e(feit.get('tekst') or '')}</div>"
+    w = wiki.waarde(feit)
+    getal = (f"<div class='muted'>{_e(wiki.GROOTHEDEN[w['grootheid']]['label'])}: "
+             f"<strong>{_e(wiki.waarde_tekst(w))}</strong></div>" if w else "")
+    return (f"<div><div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
             f"<div>{_grond_chip(g)}</div>{citaat}{weg}</div>")
 
 
@@ -240,6 +243,9 @@ def _feit_form(aid: str, csrf_token: str) -> str:
     # feiten-secties van meerdere pagina's onder elkaar staan (Notes-tab, inline), laat een kale
     # id elk gekoppeld label naar de EERSTE kaart wijzen in plaats van zijn eigen kaart.
     soort_id = f"feit-soort-{aid}"
+    grootheid_id = f"feit-grootheid-{aid}"
+    grootheden = "".join(f"<option value='{k}'>{_e(v['label'])} ({_e(v['eenheid'])})</option>"
+                         for k, v in wiki.GROOTHEDEN.items())
     return (f"<details class='qadd'><summary>+ Add fact</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -252,6 +258,12 @@ def _feit_form(aid: str, csrf_token: str) -> str:
             f"{_field('Reference (record / policy id)', 'ref', fid=f'feit-ref-{aid}')}"
             f"{_field('URL (for a cited source)', 'url', kind='url', fid=f'feit-url-{aid}')}"
             f"{_field('Quote', 'citaat', kind='textarea', fid=f'feit-citaat-{aid}')}"
+            # EEN GETAL ERBIJ, optioneel (1 oktober 2026). Dit is wat het BOM-scherm optelt; de
+            # grootheden en hun vaste eenheid staan in `wiki.GROOTHEDEN`, niet hier.
+            f"<label class='att-lbl' for='{_e(grootheid_id)}'>Value (optional)</label>"
+            f"<select id='{_e(grootheid_id)}' name='grootheid'>"
+            f"<option value=''>no number</option>{grootheden}</select>"
+            f"{_field('Number', 'getal', fid=f'feit-getal-{aid}', placeholder='e.g. 2.4', attrs="inputmode='decimal'")}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_feit_add'>Add</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "

@@ -205,10 +205,62 @@ def feiten(a) -> list[dict]:
     return [f for f in ruw if isinstance(f, dict)] if isinstance(ruw, list) else []
 
 
+#: De grootheden die een feit als GETAL kan dragen, met hun vaste eenheid. ÉÉN plek: het formulier,
+#: de weergave en het BOM-scherm lezen allemaal hier.
+#:
+#: DE EENHEID IS VAST, en dat is geen beperking maar de reden dat er gerekend kan worden. Het
+#: BOM-scherm vermenigvuldigt met grammen per component; een vrij eenheid-veld ("per meter",
+#: "per paar") zou een getal opleveren dat er niet mee te vermenigvuldigen is. Vandaar ook prijs
+#: per KG en niet "per eenheid": dat is de enige prijs die met een gewicht optelt.
+#: BEWUST VOORLOPIG: een eenheid per materiaalcategorie (stuk, meter, paar) volgt in een latere
+#: scope, zodra de inhoud is uitgezocht — dan rekent de BOM per categorie, niet alles in grammen.
+#:
+#: CO2 en water horen op de MATERIAALpagina, de prijs op de LEVERANCIERpagina — twee leveranciers
+#: van hetzelfde materiaal kunnen verschillend prijzen. Die verdeling dwingt deze tabel niet af;
+#: het BOM-scherm leest elke grootheid van de plek waar hij hoort.
+GROOTHEDEN: dict[str, dict[str, str]] = {
+    "co2e_per_kg": {"label": "CO2e per kg", "eenheid": "kg CO2e/kg"},
+    "water_per_kg": {"label": "Water per kg", "eenheid": "L/kg"},
+    "prijs_per_kg": {"label": "Cost price per kg", "eenheid": "EUR/kg"},
+}
+
+
+def maak_waarde(grootheid: str, getal) -> dict | None:
+    """`{grootheid, getal}` of None. Fail-closed: een onbekende grootheid, geen getal, een negatief
+    of oneindig getal → None. Komma als decimaalteken mag ('2,4')."""
+    if grootheid not in GROOTHEDEN:
+        return None
+    try:
+        n = float(str(getal).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    if n != n or n in (float("inf"), float("-inf")) or n < 0:
+        return None
+    return {"grootheid": grootheid, "getal": n}
+
+
+def waarde(feit: dict) -> dict | None:
+    """De getal-waarde van een feit, opnieuw gevalideerd bij het LEZEN — wat er in de opslag staat
+    is niet per se door `maak_waarde` gegaan (oudere data, een handmatige edit)."""
+    w = (feit or {}).get("waarde")
+    if not isinstance(w, dict):
+        return None
+    return maak_waarde(str(w.get("grootheid") or ""), w.get("getal"))
+
+
+def waarde_tekst(w: dict) -> str:
+    """'2.4 kg CO2e/kg'. Tot zes decimalen, zonder staartnullen en zonder e-notatie."""
+    getal = f"{w['getal']:.6f}".rstrip("0").rstrip(".")
+    return f"{getal} {GROOTHEDEN[w['grootheid']]['eenheid']}"
+
+
 def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
-              url: str = "") -> dict | None:
+              url: str = "", waarde: dict | None = None) -> dict | None:
     """Normaliseer één feit. None bij lege tekst (fail-closed: geen leeg feit in de lijst).
-    Een onbekende grond-soort valt weg — het feit blijft dan bestaan, maar heet `ongegrond`."""
+    Een onbekende grond-soort valt weg — het feit blijft dan bestaan, maar heet `ongegrond`.
+
+    `waarde` (uit `maak_waarde`) maakt er een feit MET GETAL van — de vorm die het BOM-scherm leest.
+    Het getal krijgt dezelfde grond als de tekst: geen tweede bron-veld, één feit is één bewering."""
     tekst = " ".join((tekst or "").split())[:_TEKST_MAX]
     if not tekst:
         return None
@@ -218,7 +270,10 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
                  "ref": (ref or "").strip()[:_REF_MAX],
                  "citaat": " ".join((citaat or "").split())[:_TEKST_MAX],
                  "url": (url or "").strip()[:_URL_MAX]}
-    return {"tekst": tekst, "grond": grond}
+    uit = {"tekst": tekst, "grond": grond}
+    if isinstance(waarde, dict) and maak_waarde(str(waarde.get("grootheid") or ""), waarde.get("getal")):
+        uit["waarde"] = maak_waarde(str(waarde["grootheid"]), waarde["getal"])
+    return uit
 
 
 def _kroniek_record(ledger, rid: str) -> dict | None:
