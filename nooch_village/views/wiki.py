@@ -1204,6 +1204,13 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
             f"<select id='np-sectie' name='sectie'>{_sectie_opties()}</select>"
             f"<div class='muted wiki-hint'>With a domain this follows by itself. Pick one for an "
             f"individual action, which has no role to derive it from.</div>"
+            # STAP 4, HETZELFDE MECHANISME ALS 1-3 (1 oktober 2026): een gewone select zonder
+            # handler, mee met de ene Create-knop. Het skelet zelf staat in `wiki.SJABLONEN`;
+            # `artefact_add` vult er de body mee. Je landt op de pagina met de kopjes erin.
+            f"<label class='att-lbl' for='np-sjabloon'>4. Start from</label>"
+            f"<select id='np-sjabloon' name='sjabloon'><option value=''>Blank page</option>"
+            + "".join(f"<option value='{_e(k)}'>{_e(lbl)}</option>"
+                      for k, (lbl, _b) in wiki.SJABLONEN.items()) + "</select>"
             f"{_soort_veld()}"
             f"{_field('Title', 'title', required=True, fid='np-title')}"
             f"<div class='qadd-row'>"
