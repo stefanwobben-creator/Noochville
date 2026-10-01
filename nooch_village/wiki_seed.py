@@ -83,6 +83,13 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
                                    + ", ".join(c.alternatieven))
             elif c.opmerking:
                 open_punten.append(f"- {c.naam}: {c.opmerking}")
+        # CO2 & WATER: de plek, geen getal (1 oktober 2026). De stuklijst kent geen milieucijfers,
+        # dus hier staat alleen WAAR ze horen en in welke vorm. De zin beweert bewust niet dat het
+        # getal ontbreekt: die tekst blijft staan als de eigenaar het feit toevoegt, en zou dan
+        # liegen. Of het er is, toont het BOM-scherm — afgeleid bij het lezen.
+        regels += ["", "## CO2 & water",
+                   "Als feit met een waarde (CO2e per kg, water per kg), met de leverancier-TDS of "
+                   "een andere bron als grond. Het BOM-scherm rekent met die waarden."]
         if open_punten:
             regels += ["", "## Nog open", *open_punten]
         regels += ["", "Wat dit materiaal aantoonbaar wél of niet is, hoort als feit op deze "
@@ -204,6 +211,12 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
             elif c.get("_record_id"):
                 feiten.append(wiki.maak_feit(feit_tekst, soort="cert", ref=str(c["_record_id"])))
 
+        # PRIJSAFSPRAAK HOORT HIER en niet op de materiaalpagina: twee leveranciers van hetzelfde
+        # materiaal kunnen verschillend prijzen. Zelfde regel als bij CO2 & water: de plek, geen
+        # bewering over of het getal er al is.
+        regels += ["", "## Prijsafspraak",
+                   "Als feit met een waarde (kostprijs per kg), met de offerte of het contract als "
+                   "grond. Het BOM-scherm rekent met die waarde."]
         if open_punten:
             regels += ["", "## Nog open", *open_punten]
         uit.append({"titel": leverancier, "body": "\n".join(regels),

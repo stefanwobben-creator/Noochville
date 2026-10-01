@@ -349,9 +349,13 @@ def _feiten_van(a, store, ledger) -> list[dict]:
     uit = []
     for f in wiki.feiten(a):
         g = wiki.grond_status(f, ledger=ledger, store=store)
-        uit.append({"tekst": f.get("tekst") or "", "grond": g["status"],
-                    "grond_label": g["label"], "grond_detail": g["detail"],
-                    "bron": g.get("url") or "", "citaat": g.get("citaat") or ""})
+        d = {"tekst": f.get("tekst") or "", "grond": g["status"],
+             "grond_label": g["label"], "grond_detail": g["detail"],
+             "bron": g.get("url") or "", "citaat": g.get("citaat") or ""}
+        w = wiki.waarde(f)
+        if w:
+            d["waarde"] = wiki.waarde_tekst(w)
+        uit.append(d)
     return uit
 
 
