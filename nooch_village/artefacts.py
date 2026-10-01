@@ -304,7 +304,7 @@ def log_change(data_dir: str, *, action: str, artefact, records,
                actor_id: str = "", actor_type: str = "", governance_ref: str = "") -> dict:
     """Append-only changelog van artefact-mutaties (`data/artefact_changelog.jsonl`).
 
-    Elke regel legt vast: tijdstip, actie (add|edit|archive), artefact-id, eigenaar (anchor),
+    Elke regel legt vast: tijdstip, actie (add|edit|archive|unarchive|delete), artefact-id, eigenaar (anchor),
     de erfketen-snapshot (welke rollen dit zien) en de governance_ref. Dit is de databron voor de
     'gewijzigd sinds laatst gezien'-markering in brok 5.
 
