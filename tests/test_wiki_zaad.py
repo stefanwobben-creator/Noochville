@@ -43,7 +43,7 @@ def test_materiaal_zonder_dubbele_titels():
 def test_onzeker_materiaal_wordt_een_open_punt_geen_eigen_pagina():
     ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM)}
     assert "BIOREL (?)" not in ps and "BIOREL" in ps
-    assert "nog onzeker" in ps["BIOREL"]["body"]
+    assert "not yet certain" in ps["BIOREL"]["body"]
     assert "Eyestay Reinforcement" in ps["BIOREL"]["body"]
 
 
@@ -65,8 +65,8 @@ def test_claim_zonder_certificaat_krijgt_geen_feit_maar_een_wachtlijstregel(tmp_
     st = _stores(tmp_path)
     p = wiki_seed.claim_paginas(_db(), st.evidence)[0]
     assert p["feiten"] == []                               # nooit een ongegronde bewering dragen
-    assert "Nog niet onderbouwd" in p["body"] and "Wat er nodig is" in p["body"]
-    assert "oranje" in p["body"] and "materiaal-voor-materiaal" in p["body"]
+    assert "Not yet substantiated" in p["body"] and "What is needed" in p["body"]
+    assert "orange" in p["body"] and "materiaal-voor-materiaal" in p["body"]
 
 
 def test_claim_met_geldig_certificaat_krijgt_dat_certificaat_als_grond(tmp_path):
@@ -79,7 +79,7 @@ def test_claim_met_geldig_certificaat_krijgt_dat_certificaat_als_grond(tmp_path)
     p = wiki_seed.claim_paginas(_db(), st.evidence, vandaag="2026-08-20")[0]
     assert len(p["feiten"]) == 1
     assert p["feiten"][0]["grond"] == {"soort": "cert", "ref": r["id"], "citaat": "", "url": ""}
-    assert "Nog niet onderbouwd" not in p["body"]
+    assert "Not yet substantiated" not in p["body"]
 
 
 def test_verlopen_certificaat_onderbouwt_de_claim_niet(tmp_path):
@@ -90,7 +90,7 @@ def test_verlopen_certificaat_onderbouwt_de_claim_niet(tmp_path):
                        meta={"feit": claim, "instantie": "PETA", "geldig_tot": "2024-01-01",
                              "claims": [claim]})
     p = wiki_seed.claim_paginas(_db(), st.evidence, vandaag="2026-08-20")[0]
-    assert p["feiten"] == [] and "Nog niet onderbouwd" in p["body"]
+    assert p["feiten"] == [] and "Not yet substantiated" in p["body"]
 
 
 # ── brok 4: zaaien ──────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ def test_gezaaide_pagina_is_meteen_een_echte_pagina(tmp_path):
     assert wiki.resolve("HyphaLite", pags) is not None      # linkbaar via [[HyphaLite]]
     from nooch_village.views.wiki import render_pagina
     html = render_pagina(st2, wiki.resolve("Pliant", pags).id, csrf_token="tok", username="guest")
-    assert "Outsole" in html and "stuklijst" in html
+    assert "Outsole" in html and "bill of materials" in html
 
 
 # ── brok 5: zegt de bron dit nog? ───────────────────────────────────────────
@@ -292,7 +292,7 @@ def test_verlopen_cert_levert_geen_feit_maar_de_pagina_blijft(tmp_path):
     ps = {p["titel"]: p for p in wiki_seed.leverancier_paginas(st.evidence, vandaag="2026-08-20")}
     p = ps["MycoWorks"]
     assert p["feiten"] == []
-    assert "Nog open" in p["body"] and "verlopen" in p["body"]
+    assert "Open items" in p["body"] and "expired" in p["body"]
 
 
 def test_leverancier_dedup_hoofdletter_ongevoelig(tmp_path):

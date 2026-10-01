@@ -220,7 +220,7 @@ def _projects(st, termen):
 
 def _snip(body: str) -> str:
     """Eén leesbare regel uit een pagina-body: markdown-tekens weg, koppen weg. In de trefferlijst
-    staat anders '## Gebruikt in - Lining' waar een zin hoort te staan."""
+    staat anders '## Used in - Lining' waar een zin hoort te staan."""
     regels = [r.strip() for r in (body or "").splitlines()]
     zinnen = [r.lstrip("-* ").strip() for r in regels if r and not r.startswith("#")]
     return " ".join(" ".join(zinnen).replace("**", "").split())[:150]

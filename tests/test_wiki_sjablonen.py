@@ -42,18 +42,18 @@ def test_stap_4_volgt_het_mechanisme_van_stap_1_tot_3(tmp_path):
 
 def test_een_materiaalpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "Biorel", sjabloon="materiaal")
-    for kop in ("Kenmerken", "CO2 & water", "Circulariteit", "Geleverd door", "Certificering",
-                "Nog open"):
+    for kop in ("Characteristics", "CO2 & Water", "Circularity", "Supplied by", "Certification",
+                "Open items"):
         assert f"## {kop}" in a.body
-    assert "Prijsafspraak" not in a.body                    # de prijs hoort bij de leverancier
+    assert "Price agreement" not in a.body                    # de prijs hoort bij de leverancier
 
 
 def test_een_leverancierpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "LTA S.R.L.", sjabloon="leverancier")
-    for kop in ("Locatie & contact", "Bedrijfscertificering", "Materiaal", "Prijsafspraak",
-                "Nog open"):
+    for kop in ("Location & contact", "Company certification", "Material", "Price agreement",
+                "Open items"):
         assert f"## {kop}" in a.body
-    assert "CO2 & water" not in a.body
+    assert "CO2 & Water" not in a.body
 
 
 def test_leeg_onbekend_of_met_eigen_tekst_geen_skelet(tmp_path):
@@ -68,3 +68,15 @@ def test_een_skelet_bevat_geen_wiki_link():
     verlanglijst van elke nieuwe pagina. Gezien bij de visuele check."""
     for _label, body in wiki.SJABLONEN.values():
         assert wiki.verwijzingen(body) == []
+
+
+def test_zaad_en_skelet_gebruiken_dezelfde_koppen():
+    """Eén vocabulaire. Een automatisch gezaaide pagina en een pagina uit het skelet horen dezelfde
+    kop te gebruiken voor hetzelfde onderdeel; "Used in" is de enige zaad-eigen kop (de stuklijst
+    weet waar een materiaal in zit, het skelet niet)."""
+    from nooch_village import wiki_seed
+    from nooch_village.data_bom import NOOCH_SCHOEN_BOM
+    kop = re.compile(r"^## (.+)$", re.M)
+    skelet = {k for _l, body in wiki.SJABLONEN.values() for k in kop.findall(body)}
+    zaad = {k for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM) for k in kop.findall(p["body"])}
+    assert zaad - {"Used in"} <= skelet, zaad - skelet
