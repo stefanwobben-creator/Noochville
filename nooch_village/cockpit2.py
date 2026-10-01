@@ -1616,6 +1616,31 @@ def _act_artefact_archive(c):
         return nxt, msg
 
 
+def _act_artefact_unarchive(c):
+        # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als `artefact_archive`: wie mag
+        # archiveren, mag terughalen. Geen ruimere en geen strengere regel voor de terugweg.
+        nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+        cur = st.att.get(g("aid"))
+        if cur is None:
+            return nxt, "✗ artefact not found"
+        _deny = _artefact_gate(cur.anchor, username, st,
+                               domein=getattr(cur, "domain", ""))   # check vóór de mutatie
+        if _deny:
+            raise Forbidden(_deny)
+        if cur.status != "archived":
+            return nxt, f"{cur.id} is not archived"
+        gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
+        actor_id = _web_actor_id(username, st)
+        # DE REDEN REIST MEE als change-note, zodat de terugweg net zo navolgbaar is als het
+        # archiveren: wie, wanneer, en waarom.
+        reden = " ".join((g("reden") or "").split())[:200]
+        terug = st.att.unarchive(cur.id, actor_id=actor_id, actor_type="person", governance_ref=gref,
+                                 change_note=f"uit het archief gehaald{': ' + reden if reden else ''}")
+        artefacts.log_change(data_dir, action="unarchive", artefact=terug, records=st.records,
+                             actor_id=actor_id, actor_type="person", governance_ref=gref)
+        return nxt, f"↩ {terug.kind} restored ({terug.id})"
+
+
 def _act_artefact_delete(c):
         nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
         # AUTHZ: Circle Lead — permanent verwijderen is de zwaarste knop die een artefact heeft, en
@@ -6123,6 +6148,7 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "artefact_unarchive": _act_artefact_unarchive,
     "artefact_delete": _act_artefact_delete,
     "pagina_sectie": _act_pagina_sectie,
     "msg_post": _act_msg_post,

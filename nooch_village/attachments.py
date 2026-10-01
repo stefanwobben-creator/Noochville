@@ -332,6 +332,31 @@ class AttachmentStore:
             self._save()
             return Attachment(**d)
 
+    def unarchive(self, aid: str, *, actor_id: str = "", actor_type: str = "",
+                  governance_ref: str = "", change_note: str = "") -> Attachment | None:
+        """De tegenhanger van `archive`: status terug naar "active", met een versie-entry.
+
+        BESTOND NIET TOT 1 OKTOBER 2026. Archiveren kon wel, terughalen niet — een gearchiveerd
+        artefact kon alleen nog met een directe JSON-edit terug, en dan stond nergens wie dat deed
+        of waarom. Zelfde vorm als `archive`, zodat beide richtingen in de historie leesbaar zijn.
+
+        Een artefact dat niet gearchiveerd is, blijft ongemoeid (geen lege versie-entry): None is
+        hier "niets gedaan", en de aanroeper meldt dat."""
+        with file_lock(self.path):
+            self._items = read_json(self.path, {})   # verse toestand onder slot
+            d = self._items.get(aid)
+            if d is None or d.get("status", "active") != "archived":
+                return None
+            d["status"] = "active"
+            d["updated_at"] = time.time()
+            if d.get("kind") in ARTEFACT_KINDS:
+                versions = d.setdefault("versions", [])
+                nr = (versions[-1]["version_nr"] + 1) if versions else 1
+                versions.append(_version(nr, actor_id, actor_type, d.get("body", ""),
+                                         change_note or "uit het archief gehaald", governance_ref))
+            self._save()
+            return Attachment(**d)
+
     def verplaats(self, aid: str, anchor: str, *, actor_id: str = "", actor_type: str = "",
                   governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Hang dit artefact aan een andere eigenaar. Legt een versie-entry vast.
