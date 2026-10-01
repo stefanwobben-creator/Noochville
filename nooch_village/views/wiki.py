@@ -1005,9 +1005,16 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
         EN DIE TWEE MOGEN NIET SAMENVALLEN. Heeft de schrijver de sectie zélf via het blokmenu
         neergezet, dan blijft hij staan ook als hij nog leeg is: dat is bewuste plaatsing en dus
         een lege plek die op gevuld wacht, geen restant. Vandaar dat de leeg-regel alleen geldt
-        voor de sectie die hier automatisch bij komt."""
+        voor de sectie die hier automatisch bij komt.
+
+        MAAR NIET VOOR WIE MAG SCHRIJVEN (1 oktober 2026). Met de lege feiten-sectie verdween ook
+        het "+ Add fact"-formulier, en dat zat erin: het EERSTE feit kon alleen via het /-menu.
+        Voor een lezer blijft leeg leeg; een bewerker krijgt alleen het ingeklapte formulier, zonder
+        kopje en zonder "No facts yet" — de ingang, niet het meubilair."""
         if k not in secties or k in geplaatst:
             return ""
+        if k == "facts" and not gevuld[k] and can_edit:
+            return _feit_form(a.id, csrf_token)
         return secties[k] if gevuld[k] else ""
 
     # HET WACHTENDE SYNTHESE-VOORSTEL, IN HET BEWERKVELD ZELF. Niet ernaast en niet eronder: het
