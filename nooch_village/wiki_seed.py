@@ -43,7 +43,7 @@ def _materiaalnaam(ruw: str) -> tuple[str, bool]:
     return naam, False
 
 
-def materiaal_paginas(bom_tekst: str) -> list[dict]:
+def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None) -> list[dict]:
     """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
 
     De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
@@ -53,6 +53,11 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
     Dat is geen interpretatie maar noodzaak — twee pagina's met dezelfde titel lossen in de wiki
     bewust NIET op als link, dus die zouden allebei onbereikbaar zijn."""
     from nooch_village.compositie import ontleed_bom
+
+    # LEVERANCIERS PER MATERIAAL komen uit `bom_leveranciers` (de bewerkbare store, BOM Correctie 2),
+    # als {materiaalsleutel: naam}. Zelfde sleutel als hieronder (hoofdletter-ongevoelig, zonder
+    # '(?)'), anders hoort een leverancier bij een materiaal dat er niet is.
+    leveranciers = leveranciers or {}
 
     per_materiaal: dict[str, list] = {}
     spelling: dict[str, str] = {}
@@ -73,7 +78,16 @@ def materiaal_paginas(bom_tekst: str) -> list[dict]:
         regels = [f"From the {BRON_STUKLIJST}.", "", "## Used in"]
         for c in sorted(delen, key=lambda x: x.naam):
             regels.append(f"- {c.naam}")
+        # SUPPLIED BY, afgeleid zoals "Used in" (2 oktober 2026). Stond eerst als lege kop in het
+        # handmatige skelet; nu komt hij uit de koppeling die op het BOM-scherm gezet wordt.
+        # Elke leverancier als [[link]]: bestaat zijn pagina, dan klikt hij door; bestaat hij nog
+        # niet, dan staat hij op de verlanglijst van deze pagina. Geen koppeling → een open punt.
+        regels += ["", "## Supplied by"]
+        lev = [leveranciers[sleutel]] if leveranciers.get(sleutel) else []
+        regels += [f"- [[{n}]]" for n in lev] or ["No supplier linked on the BOM screen yet."]
         open_punten = []
+        if not lev:
+            open_punten.append("- Supplied by: no supplier linked on the BOM screen yet")
         for c in sorted(delen, key=lambda x: x.naam):
             if c.naam in onzeker.get(sleutel, set()):
                 open_punten.append(f"- {c.naam}: material not yet certain — noted in the bill of "
@@ -292,7 +306,7 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
 
 def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar_claims: str,
                eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
-               vandaag: str = "") -> list[dict]:
+               vandaag: str = "", leveranciers: dict | None = None) -> list[dict]:
     """Alle sets in één keer. De helft (of het derde) waarvan de eigenaar-rol ontbreekt, wordt
     overgeslagen — de rest gaat gewoon door.
 
@@ -300,7 +314,7 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
     rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout."""
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 
-    rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM),
+    rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers),
                    eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply, actor_id=actor_id)
     if eigenaar_leverancier:
         rapport += zaai(store, records, paginas=leverancier_paginas(ledger, vandaag=vandaag),

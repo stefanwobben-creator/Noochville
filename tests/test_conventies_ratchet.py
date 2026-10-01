@@ -43,6 +43,10 @@ STORES = {
     # verdween met het scherm in #516 en wordt niet teruggehaald; `nominations` draagt woorden, geen
     # URL's; en een project/actie heeft geen plek voor de prioriteit die de skill meet.
     "linktargets",
+    # BOM Correctie 2 (2 oktober 2026, door Stefan bevestigd): materiaal → leverancier. De stuklijst
+    # is een hardcoded Python-bron; een koppeling die een mens in het scherm zet kan daar niet wonen,
+    # en een wiki-pagina is per materiaal geen rij-veld. Eén kleine store, één bewerkbare plek.
+    "bom_leveranciers",
 }
 
 

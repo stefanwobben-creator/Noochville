@@ -335,3 +335,31 @@ def test_zaai_alles_zonder_leverancier_rol_slaat_die_stap_over(tmp_path):
                                    eigenaar_materiaal=OWNER, eigenaar_claims="compliance",
                                    apply=True)
     assert [r for r in rapport if r["soort"] == "leverancier"] == []
+
+
+# ── Supplied by: afgeleid uit de koppeling op het BOM-scherm (2 oktober 2026) ──────────────
+
+_KOP = "Legenda\t\tPart\tMaterial\tComment\tWeight (g)\n"
+
+
+def test_supplied_by_komt_uit_de_koppeling():
+    """Wie levert, staat in `bom_leveranciers` (per materiaal) — als [[link]], één keer per pagina."""
+    bom = _KOP + "\t\tInsole\tJersey Co\t\t18\n\t\tPadding\tjersey co\t\t14\n"
+    [p] = wiki_seed.materiaal_paginas(bom, {"jersey co": "LTA S.R.L."})
+    blok = p["body"].split("## Supplied by")[1].split("##")[0]
+    assert blok.count("- [[LTA S.R.L.]]") == 1
+    assert "Supplied by:" not in p["body"]                           # geen open punt als het er is
+
+
+def test_zonder_koppeling_is_supplied_by_een_open_punt():
+    [p] = wiki_seed.materiaal_paginas(_KOP + "\t\tOutsole\tPliant\t\t48\n")
+    assert "## Supplied by\nNo supplier linked on the BOM screen yet." in p["body"]
+    assert "- Supplied by: no supplier linked" in p["body"].split("## Open items")[1]
+
+
+def test_een_onzeker_materiaal_deelt_zijn_leverancier_met_het_zekere():
+    """'BIOREL (?)' en 'BIOREL' zijn één pagina, dus één sleutel in de koppeling."""
+    from nooch_village import bom_leveranciers
+    bom = _KOP + "\t\tToe guard\tBIOREL\t\t7\n\t\tReinforcement\tBIOREL (?)\t\t2\n"
+    [p] = wiki_seed.materiaal_paginas(bom, {bom_leveranciers.sleutel("BIOREL (?)"): "BioFab"})
+    assert "- [[BioFab]]" in p["body"]

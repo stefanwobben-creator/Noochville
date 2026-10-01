@@ -39,7 +39,7 @@ def _alternatieven(comment: str) -> tuple[str, ...]:
 #: De kolommen die een BOM op KOPNAAM kan dragen (kleine letters). `part` en `material` zijn
 #: verplicht; de rest is optioneel. Eén plek, zodat de parser en het BOM-scherm dezelfde namen lezen.
 KOLOMMEN = {"part": "part", "material": "material", "comment": "comment",
-            "weight (g)": "gram", "supplier": "supplier"}
+            "weight (g)": "gram"}
 
 
 def _kolommen(tekst: str) -> dict[str, int] | None:
@@ -59,7 +59,8 @@ def _kolommen(tekst: str) -> dict[str, int] | None:
 
 
 def bom_rijen(tekst: str) -> list[dict]:
-    """Elke componentrij als dict: part, material, comment, gram (float of None), supplier.
+    """Elke componentrij als dict: part, material, comment, gram (float of None). De leverancier zit
+    niet in de stuklijst maar in `bom_leveranciers` (per materiaal, bewerkbaar).
 
     Alleen voor een tab-BOM mét koprij (zonder kop: lege lijst — het BOM-scherm heeft de kolommen
     nodig). Een gewicht dat geen getal ≥ 0 is wordt None, niet 0: een onleesbaar vak is "nog open",
@@ -88,8 +89,7 @@ def bom_rijen(tekst: str) -> list[dict]:
             gram = None
         if gram is not None and (gram != gram or gram < 0):
             gram = None
-        uit.append({"part": part, "material": material, "comment": cel("comment"),
-                    "gram": gram, "supplier": " ".join(cel("supplier").split())})
+        uit.append({"part": part, "material": material, "comment": cel("comment"), "gram": gram})
     return uit
 
 

@@ -7,7 +7,7 @@ from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 from nooch_village.views.bom import render_bom
 
 OWNER = "mother_earth__nooch__creator_of_shoes"
-KOP = "Legenda\t\tPart\tMaterial\tComment\tWeight (g)\tSupplier\n"
+KOP = "Legenda\t\tPart\tMaterial\tComment\tWeight (g)\n"
 
 
 def _bom(*rijen: str) -> str:
@@ -17,15 +17,15 @@ def _bom(*rijen: str) -> str:
 # ── de stuklijst: op kopnaam gelezen ────────────────────────────────────────
 
 def test_een_ingevuld_gewicht_wordt_geen_materiaal():
-    """De oude lezing nam de laatste twee niet-lege cellen als Part/Material. Met een gewicht en een
-    leverancier erachter was het materiaal dan '12' geworden."""
-    tekst = _bom("Done\t\tOutsole\tPliant\t\t48\tLTA S.R.L.",
-                 "\t\tVamp\tHyphaLite\t< Or hemp fabric\t22\t")
+    """De oude lezing nam de laatste twee niet-lege cellen als Part/Material. Met een gewicht erachter
+    was het materiaal dan '48' geworden."""
+    tekst = _bom("Done\t\tOutsole\tPliant\t\t48",
+                 "\t\tVamp\tHyphaLite\t< Or hemp fabric\t22")
     assert [(c.naam, c.realisatie) for c in ontleed_bom(tekst)] == [("Outsole", "Pliant"),
                                                                     ("Vamp", "HyphaLite")]
     assert ontleed_bom(tekst)[1].alternatieven == ("hemp fabric",)
-    assert [(r["gram"], r["supplier"]) for r in bom_rijen(tekst)] == [(48.0, "LTA S.R.L."),
-                                                                      (22.0, "")]
+    assert [r["gram"] for r in bom_rijen(tekst)] == [48.0, 22.0]
+    assert "supplier" not in bom_rijen(tekst)[0]     # de leverancier woont in bom_leveranciers
 
 
 def test_de_echte_stuklijst_leest_zoals_voorheen():
@@ -43,7 +43,8 @@ def test_een_onleesbaar_gewicht_is_open_en_geen_nul():
 
 def test_de_echte_stuklijst_heeft_nog_geen_verzonnen_cijfers():
     """Het prototype had illustratieve gewichten; die horen hier niet als echt te staan."""
-    assert all(r["gram"] is None and r["supplier"] == "" for r in bom_rijen(NOOCH_SCHOEN_BOM))
+    assert all(r["gram"] is None for r in bom_rijen(NOOCH_SCHOEN_BOM))
+    assert "supplier" not in NOOCH_SCHOEN_BOM.splitlines()[0].lower(), "de kolom is terug in de bron"
 
 
 # ── de rekenlaag ────────────────────────────────────────────────────────────
@@ -66,9 +67,10 @@ def test_de_totalen_vermenigvuldigen_en_tellen_wat_meetelt(tmp_path):
     _dd, st = _dorp(tmp_path)
     _pagina(st, "Helios 200", ("co2e_per_kg", "2"), ("water_per_kg", "100"))
     _pagina(st, "LTA S.R.L.", ("prijs_per_kg", "50"))
-    tekst = _bom("\t\tHeel counter\tHelios 200\t\t10\tLTA S.R.L.",
-                 "\t\tLaces\tCotton laces\t\t5\t")
-    uit = bom_reken.bereken(tekst, wiki.paginas(cockpit2._Stores(_dd).att))
+    tekst = _bom("\t\tHeel counter\tHelios 200\t\t10",
+                 "\t\tLaces\tCotton laces\t\t5")
+    uit = bom_reken.bereken(tekst, wiki.paginas(cockpit2._Stores(_dd).att),
+                            {"helios 200": "LTA S.R.L."})
     t = uit["totalen"]
     assert t["gram"] == {"som": 15.0, "n": 2, "m": 2}
     assert t["co2e"]["n"] == 1 and abs(t["co2e"]["som"] - 0.02) < 1e-9     # 10 g × 2 kg/kg
