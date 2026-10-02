@@ -1077,10 +1077,26 @@
    * \u00c9\u00c9N MENU TEGELIJK, en daarom staat `openMenu` hier en niet in een closure per aanroeper.
    * Twee open menu's laten je raden bij welk blok je bezig bent.
    */
-  var openMenu = null;
+  var openMenu = null, openBlok = null;
 
-  function sluitBlokMenu() {
+  /* `wis` (standaard aan): staat er in het blok nog PRECIES "/", dan was dat alleen de sleutel
+   * waarmee je het menu opende — en die hoort niet in de tekst. Zonder dit bleef hij staan na
+   * Escape of na Opslaan, en kwam hij als losse regel in de bron (gezien op prod, NFW-pagina).
+   * Bij een KEUZE uit het menu staat `wis` uit: `blokMenuKies` vervangt de "/" zelf. */
+  function sluitBlokMenu(wis) {
     if (openMenu) { openMenu.remove(); openMenu = null; }
+    if (wis !== false && openBlok && openBlok.isConnected && blokTekst(openBlok) === "/") {
+      // Alleen de TEKST van het blok, nooit de chrome (greep, knoppen): dezelfde grens als
+      // `blokTekst`. Het blok zelf blijft staan, leeg — je stond er, en daar kun je verder typen.
+      var w = document.createTreeWalker(openBlok, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          return n.parentNode.closest("[data-chrome]") ? NodeFilter.FILTER_REJECT
+                                                       : NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      for (var n = w.nextNode(); n; n = w.nextNode()) n.data = n.data.replace("/", "");
+    }
+    openBlok = null;
   }
 
   function blokMenuOpen(blok, body) {
@@ -1095,11 +1111,12 @@
       if (!knop) return;
       e.preventDefault();
       var doel = blok;
-      sluitBlokMenu();
+      sluitBlokMenu(false);                         // de keuze vervangt de "/" zelf
       blokMenuKies(doel, knop, body);
     });
     blok.appendChild(menu);
     openMenu = menu;
+    openBlok = blok;
     // ZWEVEN IN PLAATS VAN HANGEN (26 september 2026). Hiervoor zette `appendChild` hem waar het
     // blok toevallig stond, met `position:absolute` eronder: op een lange pagina viel het menu
     // daarmee onder de vouw, en dan kies je uit een lijst die je niet ziet.
@@ -1117,7 +1134,9 @@
       var blok = getSelection().anchorNode;
       blok = blok && (blok.nodeType === 1 ? blok : blok.parentNode);
       blok = blok && blok.closest ? blok.closest(".wb") : null;
-      sluitBlokMenu();
+      // Typ je verder in HETZELFDE blok, dan niet wissen: dat ben je aan het bewerken. Typ je in
+      // een ánder blok, dan is de "/" daar achtergelaten en gaat hij weg.
+      sluitBlokMenu(blok !== openBlok);
       if (!blok || blokTekst(blok) !== "/") return;
       blokMenuOpen(blok, body);
     });
@@ -1545,6 +1564,7 @@
       body.querySelectorAll("input[type=checkbox]").forEach(function (v) {
         v.toggleAttribute("checked", v.checked);
       });
+      sluitBlokMenu();                              // een open menu → zijn losse "/" gaat niet mee
       document.getElementById("wiki-titel-veld").value = titel.textContent.trim();
       document.getElementById("wiki-body-veld").value = body.innerHTML;
     });
@@ -2132,7 +2152,7 @@
     function token() {
       if (!rijk) {
         var tot = el.value.slice(0, el.selectionStart);
-        var m = /\[\[([^\[\]\n]{0,60})$/.exec(tot);
+        var m = LINK_OPENER.exec(tot);
         return m ? { term: m[1], start: tot.length - m[1].length - 2 } : null;
       }
       var sel = window.getSelection();
@@ -2140,7 +2160,7 @@
       var r = sel.getRangeAt(0);
       if (!r.collapsed || r.startContainer.nodeType !== 3) return null;
       var t2 = r.startContainer.data.slice(0, r.startOffset);
-      var m2 = /\[\[([^\[\]\n]{0,60})$/.exec(t2);
+      var m2 = LINK_OPENER.exec(t2);
       return m2 ? { term: m2[1], knoop: r.startContainer,
                     start: r.startOffset - m2[1].length - 2, eind: r.startOffset } : null;
     }
@@ -2253,8 +2273,15 @@
   //: kunnen draaien. Hij verandert niets aan wat de pagina doet.
   NV.__celBron = celBron;
 
+  /* HET OPENINGSTEKEN VAN EEN VERWIJZING: `[[`, en sinds 2 oktober 2026 óók `{{`. Een link is altijd
+   * `[[…]]`, maar `{{facts}}` staat in dezelfde editor, en wie een link wil leggen typt dan `{{`
+   * (gezien op prod: `{{PLIANT}}` op de NFW-pagina). De typhulp start nu op beide; KIEZEN schrijft
+   * altijd `[[…]]`. ÉÉN regex, door `NV.wikiToken` en de typhulp gedeeld. Beide openers zijn 2
+   * tekens, dus de startpositie rekent voor allebei hetzelfde. */
+  var LINK_OPENER = /(?:\[\[|\{\{)([^\[\]{}\n]{0,60})$/;
+
   NV.wikiToken = function (tot) {
-    var m = /\[\[([^\[\]\n]{0,60})$/.exec(tot || "");
+    var m = LINK_OPENER.exec(tot || "");
     return m ? m[1] : null;
   };
 

@@ -51,6 +51,36 @@ _GEEN_TEKST = "<p class='muted'>This page has no text yet.</p>"
 _TAAK_RE = re.compile(r"<li>\[([ xX])\] ")
 
 
+_ONBEKEND_RE = re.compile(r"\{\{([^{}<>\n]{1,60})\}\}")
+
+
+def _onbekend_blok(m) -> str:
+    naam = _html_mod.unescape(m.group(1)).strip()
+    if naam in wiki.AFGELEID:
+        return m.group(0)                      # een bekende markering (bv. midden in een zin)
+    return (f"<span class='chip muted' title='{{{{…}}}} is only for page blocks; links use [[…]]'>"
+            f"{m.group(0)}<span data-chrome> — did you mean [[{_e(naam)}]]?</span></span>")
+
+
+_TAG_RE = re.compile(r"(<[^>]+>)")
+_LETTERLIJK = ("pre", "code", "textarea")
+
+
+def _onbekende_markeringen(html: str) -> str:
+    """`_onbekend_blok` op TEKST alleen: niet in een attribuut (`data-blok-bron='…'` draagt de ruwe
+    bron van een tabel of codeblok) en niet binnen `pre`/`code`/`textarea`, waar `{{x}}` een
+    voorbeeld is en geen poging tot een link."""
+    delen, diep = _TAG_RE.split(html), 0
+    for i, d in enumerate(delen):
+        if i % 2:                                   # een tag
+            naam = re.match(r"</?\s*([a-zA-Z0-9]+)", d)
+            if naam and naam.group(1).lower() in _LETTERLIJK and not d.endswith("/>"):
+                diep += -1 if d.startswith("</") else 1
+        elif diep <= 0 and "{{" in d:
+            delen[i] = _ONBEKEND_RE.sub(_onbekend_blok, d)
+    return "".join(delen)
+
+
 def _body_html(body: str, pags: list, blokken: bool = False,
                secties: dict[str, str] | None = None) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
@@ -103,6 +133,13 @@ def _body_html(body: str, pags: list, blokken: bool = False,
                 f"href='{_e(wiki.pagina_url(doel.id))}'>{_e(doel.title or doel.id)}</a>")
 
     html = wiki.LINK_RE.sub(_sub, html)
+    # EEN ONBEKENDE `{{X}}` ZEGT DAT HIJ ONBEKEND IS (2 oktober 2026). Links zijn `[[…]]`; `{{…}}`
+    # bestaat alleen voor de afgeleide blokken (`wiki.AFGELEID`). Op prod stond `{{PLIANT}}` op de
+    # NFW-pagina als platte tekst — geen link, en niets dat dat zei. Nu een grijze chip met de
+    # vraag erbij. DE TEKST BLIJFT `{{X}}`: de vraag staat in `data-chrome`, dus de weg terug
+    # (`_md_naar_bron`) schrijft precies terug wat er stond — de chip verandert niets aan de bron,
+    # hij wijst alleen. NA de link-substitutie, anders werd de `[[X]]` in de vraag zelf een link.
+    html = _onbekende_markeringen(html)
     # DE TOOL-KAART. Een blok dat ALLEEN een verwijzing naar een tool bevat wordt een kaart;
     # midden in een zin blijft het een pil. Zelfde grens als bij de embed, en om dezelfde reden:
     # anders verandert één woord in een alinea de vorm van de hele pagina.

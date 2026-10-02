@@ -188,6 +188,9 @@ function start(html) {
     check("een gesloten link telt niet meer", t("[[Outsole]] en toen") === null);
     check("zonder haken niets", t("gewoon een zin") === null);
     check("één haakje is niet genoeg", t("[Outsole") === null);
+    // Sinds 2 oktober 2026 ook `{{`: wie een link wil en accolades typt, krijgt dezelfde hulp.
+    check("ook na {{", t("zie ook {{Pli") === "Pli");
+    check("een gesloten {{…}} telt niet meer", t("{{facts}} en toen") === null);
   }
 
   console.log(fouten ? `\n${fouten} toets(en) FOUT` : "\nalles groen");

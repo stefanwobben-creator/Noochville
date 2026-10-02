@@ -127,9 +127,15 @@ def test_zonder_de_blokstand_wordt_het_een_label(tmp_path):
 
 
 def test_het_label_kent_dezelfde_grens(tmp_path):
-    """Middenin een zin, en een markering die niet bestaat: allebei gewoon tekst."""
+    """Middenin een zin blijft een BEKENDE markering gewoon tekst.
+
+    Een markering die NIET bestaat was hier ook gewoon tekst; sinds 2 oktober 2026 (besluit Stefan,
+    na `{{PLIANT}}` op de NFW-pagina) krijgt hij een grijze chip met "did you mean [[…]]?". De BRON
+    verandert niet — dat bewaakt `tests/test_wiki_onbekende_markering.py`."""
+    from nooch_village.cockpit2_util import _md_naar_bron
     assert _body_html("zie {{facts}} hier", []) == "zie {{facts}} hier"
-    assert _body_html("{{kpi}}", []) == "{{kpi}}"
+    onbekend = _body_html("{{kpi}}", [])
+    assert "did you mean [[kpi]]?" in onbekend and _md_naar_bron(onbekend) == "{{kpi}}"
 
 
 def test_zonder_de_blokstand_verandert_er_niets_aan_de_tekst():
