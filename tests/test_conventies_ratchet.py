@@ -51,6 +51,11 @@ STORES = {
     # als hierboven (de stuklijst is code), maar PER COMPONENT, en dat is de reden dat het geen veld
     # in `bom_leveranciers` is: die store is per materiaal.
     "bom_materialen",
+    # BOM Stuk 4 (2 oktober 2026, door Stefan bevestigd): welke varianten een model heeft (de
+    # Shopify-handle als sleutel) en hun foto. Een variant komt erbij via een formulier op /bom
+    # (Stefans keuze), dus hij kan niet in de hardcoded `data_bom.MODELLEN` wonen; en het is geen
+    # afwijking per component, dus ook geen regel in `bom_materialen`.
+    "bom_varianten",
 }
 
 

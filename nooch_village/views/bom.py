@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from nooch_village import artefacts, bom_leveranciers, bom_reken, wiki
 from nooch_village.cockpit2_util import _DS_LINK, _nav
-from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 from nooch_village.web_base import _banner, _e, _page, _status
 
 #: id van de suggestielijst met bestaande wiki-titels; één `<datalist>` per pagina, elke
@@ -81,7 +80,16 @@ def _mag_koppelen(st, username: str | None) -> bool:
                                              circle_id=cirkel or "")
 
 
-def _maat_kiezer(maat: int, cfg: dict) -> str:
+def _url(model: str, variant: str, maat: int) -> str:
+    """Eén plek voor de `/bom`-URL, zodat maat, model en variant elkaar niet kwijtraken."""
+    from nooch_village.data_bom import STANDAARD_MODEL
+    delen = [] if model == STANDAARD_MODEL else [f"model={model}"]
+    delen += [f"variant={variant}"] if variant else []
+    delen += [f"maat={maat}"]
+    return "/bom?" + "&".join(delen)          # rauw; `_e()` waar hij in een attribuut landt
+
+
+def _maat_kiezer(maat: int, cfg: dict, model: str = "", variant: str = "") -> str:
     """De maat als keuzebalk: `.cl-bar` met `a.cl-filter` en `.on` — het bestaande vocabulaire voor
     een filter-/periode-keuze (UX_PATTERNS, Kern-klassen), geen nieuwe vorm. Hij bepaalt alleen
     WELKE geschaalde waarden je ziet; er wordt niets opgeslagen.
@@ -89,8 +97,10 @@ def _maat_kiezer(maat: int, cfg: dict) -> str:
     GEEN DROPDOWN, al noemde de correctie die als voorbeeld. Het `cardmenu` van `/metrics` klapt naar
     links uit (daar staat hij rechts op het scherm); hier, links op de pagina, viel het menu half
     achter de zijbalk. Elf maten passen op één regel, en dan zie je ook meteen waar je staat."""
+    from nooch_village.data_bom import STANDAARD_MODEL
+    model = model or STANDAARD_MODEL
     opties = " ".join(
-        f"<a class='cl-filter{' on' if m == maat else ''}' href='/bom?maat={m}'"
+        f"<a class='cl-filter{' on' if m == maat else ''}' href='{_e(_url(model, variant, m))}'"
         f"{' aria-current=' + chr(39) + 'true' + chr(39) if m == maat else ''}"
         f"{' title=' + chr(39) + 'reference size' + chr(39) if m == cfg['referentiemaat'] else ''}>{m}</a>"
         for m in cfg["maten"])
@@ -111,9 +121,27 @@ def _schatting(maat: int, cfg: dict) -> str:
             f"not yet based on factory data ({_e(cfg['bron'])}, {_e(cfg['datum'])}).</p>")
 
 
+def _verborgen(velden: dict) -> str:
+    return "".join(f"<input type='hidden' name='{k}' value='{_e(v)}'>" for k, v in velden.items())
+
+
+def _popover(summary: str, formulier: str, aria: str = "") -> str:
+    """Het popover-patroon van de Deadline-cel (projectrail), sinds #671 ook op `/bom`:
+    `details.acard-d` > `summary.chip.outline` + `.datepop`."""
+    a = f" aria-label='{_e(aria)}' title='change'" if aria else ""
+    return (f"<details class='acard-d'><summary class='chip outline'{a}>{summary}</summary>"
+            f"<div class='datepop'>{formulier}</div></details>")
+
+
+def _form(csrf_token: str, actie: str, terug: str, velden: dict, invoer: str, knoppen: str = "") -> str:
+    return (f"<form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"{_verborgen({'action': actie, 'next': terug, **velden})}{invoer}"
+            f"<button class='btn ok sm' type='submit'>Save</button>{knoppen}</form>")
+
+
 def _cel(*, waarde: str, pagina, bewerk: bool, csrf_token: str, terug: str, actie: str,
-         sleutel_veld: str, sleutel: str, veld: str, wat: str, leeg: str, wis_label: str,
-         titel: str = "") -> str:
+         velden: dict, veld: str, wat: str, leeg: str, wis: str = "", titel: str = "") -> str:
     """Eén bewerkbare BOM-cel, voor Materiaal én Supplier — hetzelfde klikgedrag (Correctie 3, D):
 
         ingevuld  → de waarde is een LINK naar zijn wiki-pagina (of tekst als die er nog niet is),
@@ -121,9 +149,8 @@ def _cel(*, waarde: str, pagina, bewerk: bool, csrf_token: str, terug: str, acti
         leeg      → de klik opent meteen het toewijsformulier ("+ …");
         lezer     → alleen de link (of "—").
 
-    Het formulier is het bestaande popover-patroon: `details.acard-d` > `summary.chip.outline` +
-    `.datepop` (de Deadline-cel van de projectrail, sinds #671 ook de Supplier-cel). Het veld stelt
-    bestaande wiki-titels voor maar accepteert elke naam."""
+    `velden` zijn de verborgen sleutels (component, model, variant …); `wis` is de HTML van een
+    terug-/wisknop, of leeg. Het veld stelt bestaande wiki-titels voor maar accepteert elke naam."""
     if waarde:
         lees = (f"<a href='{_e(wiki.pagina_url(pagina.id))}'{titel}>{_e(waarde)}</a>"
                 if pagina is not None else f"<span{titel}>{_e(waarde)}</span>")
@@ -131,52 +158,140 @@ def _cel(*, waarde: str, pagina, bewerk: bool, csrf_token: str, terug: str, acti
         lees = "—"
     if not bewerk:
         return lees
-    wis = (f"<button class='dellink' type='submit' name='{veld}' value=''>{wis_label}</button>"
-           if waarde and wis_label else "")
-    formulier = (f"<div class='datepop'><form method='post' action='/action'>"
-                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                 f"<input type='hidden' name='action' value='{actie}'>"
-                 f"<input type='hidden' name='next' value='{_e(terug)}'>"
-                 f"<input type='hidden' name='{sleutel_veld}' value='{_e(sleutel)}'>"
-                 f"<input name='{veld}' value='{_e(waarde)}' list='{_LIJST_ID}' "
-                 f"aria-label='{_e(wat)}' placeholder='Name'>"
-                 f"<button class='btn ok sm' type='submit'>Save</button>{wis}</form></div>")
+    invoer = (f"<input name='{veld}' value='{_e(waarde)}' list='{_LIJST_ID}' "
+              f"aria-label='{_e(wat)}' placeholder='Name'>")
+    formulier = _form(csrf_token, actie, terug, velden, invoer, wis if waarde else "")
     if not waarde:
-        return (f"<details class='acard-d'><summary class='chip outline'>{leeg}</summary>"
-                f"{formulier}</details>")
-    return (f"{lees} <details class='acard-d'><summary class='chip outline' "
-            f"aria-label='change {_e(wat)}' title='change'>✎</summary>{formulier}</details>")
+        return _popover(leeg, formulier)
+    return f"{lees} {_popover('✎', formulier, f'change {wat}')}"
 
 
-def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom") -> str:
+def _gewicht_cel(r: dict, bewerk: bool, csrf_token: str, terug: str, velden: dict) -> str:
+    """Het gewicht: geschaald getoond, maar het formulier bewerkt de REFERENTIEMAAT-waarde (die
+    staat in de stuklijst of in een afwijking; de maat-schaal rekent er pas daarna mee)."""
+    getoond = _getal("gram", r["bijdrage"].get("gram"))
+    if not bewerk:
+        return getoond
+    eigen = r.get("gram_eigen")
+    invoer = (f"<input name='gram' value='{'' if eigen is None else f'{eigen:g}'}' "
+              f"inputmode='decimal' aria-label='weight of {_e(r['part'])} in grams, reference size' "
+              f"placeholder='grams at reference size'>")
+    return f"{getoond} {_popover('✎', _form(csrf_token, 'bom_materiaal_zet', terug, velden, invoer), 'change weight of ' + r['part'])}"
+
+
+def _afwijking(r: dict, variant: str) -> tuple[str, str]:
+    """(chip, terug-knop-label) voor een rij die afwijkt. Zichtbaar als chip (niet alleen een
+    tooltip, die op een telefoon niet bestaat) — zelfde afwijk-patroon als #674, nu per niveau."""
+    if r.get("toegevoegd"):
+        return ("<span class='chip muted'>added in this variant</span>" if variant
+                else "<span class='chip muted'>added</span>", "remove component")
+    if variant and r.get("niveau") == variant:
+        return "<span class='chip muted'>differs from master</span>", "back to master"
+    if not variant and r.get("niveau") == "master" and r.get("gewijzigd"):
+        return ("<span class='chip muted'>changed</span>", "back to bill of materials")
+    return "", ""
+
+
+def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom",
+         model: str = "", variant: str = "") -> str:
+    from nooch_village.data_bom import STANDAARD_MODEL
     b = r["bijdrage"]
     cellen = "".join(f"<td class='num'>{_getal(k, b.get(k))}</td>"
-                     for k, _g, _w in bom_reken.METRIEKEN)
+                     for k, _g, _w in bom_reken.METRIEKEN if k != "gram")
     status = _status("done", "Complete") if not r["open"] else _status("future", "Open")
-    # Een GEWIJZIGD materiaal zegt waar het vandaan kwam: de stuklijst is de referentie, en zonder
-    # deze hint is niet te zien dat deze rij ervan afwijkt.
-    was = (f" title='changed on this screen; the bill of materials says {_e(r['origineel'])}'"
-           if r.get("gewijzigd") else "")
+    chip, terug_label = _afwijking(r, variant)
+    sleutels = {"part": r["part"], "model": model or STANDAARD_MODEL, "variant": variant}
+    wis = (f"<button class='dellink' type='submit' name='wis' value='1'>{terug_label}</button>"
+           if terug_label else "")
+    # Wat de STUKLIJST zegt, als hint op de link: dat is de referentie waarvan deze rij afwijkt.
+    was = (f" title='the bill of materials says {_e(r['origineel'])}'"
+           if r.get("gewijzigd") and r.get("origineel") else "")
     materiaal = _cel(waarde=r["materiaal"], pagina=r["mat"], bewerk=bewerk, csrf_token=csrf_token,
-                     terug=terug, actie="bom_materiaal_zet", sleutel_veld="part", sleutel=r["part"],
-                     veld="materiaal", wat=f"material of {r['part']}", leeg="+ set material",
-                     wis_label="back to bill of materials" if r.get("gewijzigd") else "", titel=was)
+                     terug=terug, actie="bom_materiaal_zet", velden=sleutels, veld="materiaal",
+                     wat=f"material of {r['part']}", leeg="+ material", wis=wis, titel=was)
     leverancier = _cel(waarde=r["supplier"], pagina=r["lev"], bewerk=bewerk, csrf_token=csrf_token,
-                       terug=terug, actie="bom_leverancier_zet", sleutel_veld="materiaal",
-                       sleutel=r["materiaal"], veld="leverancier",
-                       wat=f"supplier of {r['materiaal']}", leeg="+ link supplier",
-                       wis_label="remove")
+                       terug=terug, actie="bom_leverancier_zet", velden={"materiaal": r["materiaal"]},
+                       veld="leverancier", wat=f"supplier of {r['materiaal']}", leeg="+ supplier",
+                       wis="<button class='dellink' type='submit' name='leverancier' value=''>remove</button>")
     if not r["supplier"] and not bewerk:
         leverancier = "<span class='muted'>no supplier linked yet</span>"
-    return (f"<tr><td>{_e(r['part'])}</td><td>{materiaal}</td><td>{leverancier}</td>"
-            f"{cellen}<td>{status}</td></tr>")
+    gewicht = _gewicht_cel(r, bewerk, csrf_token, terug, sleutels)
+    return (f"<tr><td>{_e(r['part'])}{' ' + chip if chip else ''}</td><td>{materiaal}</td><td>{leverancier}</td>"
+            f"<td class='num'>{gewicht}</td>{cellen}<td>{status}</td></tr>")
+
+
+def _model_kiezer(model: str, variant: str, maat: int, varianten: list[dict], bewerk: bool,
+                  csrf_token: str) -> str:
+    """Model en variant als keuzebalk (`.cl-bar` + `a.cl-filter`), het patroon van de maatkiezer.
+    Alleen varianten die echt zijn aangemaakt; geen kruistabel. "Master" = geen variant."""
+    from nooch_village.data_bom import MODELLEN
+    modellen = " ".join(
+        f"<a class='cl-filter{' on' if k == model else ''}' href='{_e(_url(k, "", maat))}'>"
+        f"{_e(v['naam'])}</a>" for k, v in MODELLEN.items())
+    opties = [f"<a class='cl-filter{' on' if not variant else ''}' href='{_e(_url(model, "", maat))}'>"
+              f"Master</a>"]
+    opties += [f"<a class='cl-filter{' on' if v['handle'] == variant else ''}' "
+               f"href='{_e(_url(model, v["handle"], maat))}' title='{_e(v['handle'])}'>{_e(v['naam'])}</a>"
+               for v in varianten]
+    nieuw = ""
+    if bewerk:
+        invoer = (f"<input name='handle' aria-label='Shopify handle' placeholder='the-269-hi-black' "
+                  f"required><input name='naam' aria-label='display name' placeholder='Hi · Black'>")
+        nieuw = _popover("+ variant", _form(csrf_token, "bom_variant_add", _url(model, variant, maat),
+                                            {"model": model}, invoer))
+    return (f"<div class='cl-bar' aria-label='model'><span class='muted'>Model</span> {modellen}</div>"
+            f"<div class='cl-bar' aria-label='variant'><span class='muted'>Variant</span> "
+            f"{' '.join(opties)} {nieuw}</div>")
+
+
+def _foto(st, model: str, variant: str, maat: int, naam: str, bewerk: bool, csrf_token: str) -> str:
+    """De productfoto bovenaan: die van de variant, anders die van het model. Het BEELD is het
+    bestaande embed-atoom (`cockpit2_util._embed_html`), dezelfde `<figure>` als in de wiki."""
+    from nooch_village.cockpit2_util import _embed_html
+    foto = st.bom_varianten.foto(model, variant)
+    beeld = _embed_html(foto, naam, beeld=True) if foto else ""
+    if not bewerk:
+        return beeld
+    terug = _url(model, variant, maat)
+    wie = "this variant" if variant else "the model"
+    adres = _form(csrf_token, "bom_foto", terug, {"model": model, "variant": variant},
+                  f"<input name='foto' type='url' value='{_e(foto if foto.startswith('https://') else '')}' "
+                  f"aria-label='photo address for {wie}' placeholder='https://…'>",
+                  "<button class='dellink' type='submit' name='foto' value=''>remove</button>" if foto else "")
+    upload = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+              f"{_verborgen({'action': 'bom_foto', 'next': terug, 'model': model, 'variant': variant})}"
+              f"<input type='file' name='file' accept='image/*' aria-label='upload a photo for {wie}'>"
+              f"<button class='btn ok sm' type='submit'>Upload</button></form>")
+    return f"{beeld}{_popover('photo ✎' if foto else '+ photo', adres + upload, f'photo of {wie}')}"
+
+
+def _nieuwe_rij(model: str, variant: str, maat: int, csrf_token: str) -> str:
+    """Een component dat in de master niet bestaat (Hemp naast HyphaLite bij de Hi). Zelfde actie
+    als een materiaal wijzigen, met `toegevoegd`."""
+    invoer = ("<input name='part' aria-label='component' placeholder='Component' required>"
+              f"<input name='materiaal' list='{_LIJST_ID}' aria-label='material' "
+              "placeholder='Material' required>"
+              "<input name='gram' inputmode='decimal' aria-label='weight in grams at reference size' "
+              "placeholder='grams'>")
+    wie = "this variant" if variant else "the master"
+    return _popover(f"+ add a component to {wie}",
+                    _form(csrf_token, "bom_materiaal_zet", _url(model, variant, maat),
+                          {"model": model, "variant": variant, "toegevoegd": "1"}, invoer))
 
 
 def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "",
-               maat: str = "") -> str:
+               maat: str = "", model: str = "", variant: str = "") -> str:
+    from nooch_village.data_bom import MODELLEN, STANDAARD_MODEL
     pags = wiki.paginas(st.att)
-    # DE MAAT (Correctie 3). Een onbekende of ontbrekende maat is de referentiemaat — geen fout:
-    # het is een kijkknop, en een vreemde waarde in de URL is geen keuze van een mens.
+    # MODEL EN VARIANT (Stuk 4). Onbekend = het standaardmodel / de master: een kijkknop, en een
+    # vreemde waarde in de URL is geen keuze van een mens.
+    model = model if model in MODELLEN else STANDAARD_MODEL
+    varianten = st.bom_varianten.varianten(model)
+    if variant not in {v["handle"] for v in varianten}:
+        variant = ""
+    v_naam = next((v["naam"] for v in varianten if v["handle"] == variant), "")
+    # DE MAAT (Correctie 3). Zelfde regel: een onbekende maat is de referentiemaat.
     cfg = bom_reken.maat_config()
     ref = cfg.get("referentiemaat", 42) if cfg else 42
     try:
@@ -185,10 +300,10 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
         gekozen = ref
     if not cfg or gekozen not in cfg["maten"]:
         gekozen = ref
-    terug = f"/bom?maat={gekozen}"
-    uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, pags, st.bom_leveranciers.alle(),
+    terug = _url(model, variant, gekozen)
+    uit = bom_reken.bereken(MODELLEN[model]["master"], pags, st.bom_leveranciers.alle(),
                             schaal=bom_reken.schaalfactor(gekozen, cfg),
-                            materialen=st.bom_materialen.alle())
+                            afwijkingen=st.bom_materialen.afwijkingen(model, variant))
     bewerk = bool(csrf_token) and _mag_koppelen(st, username)
     opties = ("".join(f"<option value='{_e(p.title)}'></option>" for p in pags if p.title)
               if bewerk else "")
@@ -197,25 +312,30 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     kop = (f"<tr><th>Component</th><th>Material</th><th>Supplier</th><th class='num'>Weight</th>"
            f"<th class='num'>Cost price</th><th class='num'>{_CO2E}</th><th class='num'>Water</th>"
            "<th>Status</th></tr>")
-    tabel = (f"<table class='mtab'>{kop}{''.join(_rij(r, csrf_token, bewerk, terug) for r in uit['rijen'])}"
-             f"</table>{lijst}")
+    rijen = "".join(_rij(r, csrf_token, bewerk, terug, model, variant) for r in uit["rijen"])
+    erbij = _nieuwe_rij(model, variant, gekozen, csrf_token) if bewerk else ""
+    tabel = f"<table class='mtab'>{kop}{rijen}</table>{erbij}{lijst}"
     open_rijen = [r for r in uit["rijen"] if r["open"]]
     nog_open = ""
     if open_rijen:
         items = "".join(f"<li><strong>{_e(r['part'])}</strong> — {_e('; '.join(r['open']))}</li>"
                         for r in open_rijen)
         nog_open = (f"<div class='card'><h3>Still open</h3>"
-                    f"<p class='muted'>Fill in the weight in the bill of materials, link a supplier "
-                    f"in the Supplier column, and add the numbers as a fact with a value on the "
+                    f"<p class='muted'>Fill in the weight{' (✎ in the Weight column)' if bewerk else ''}, "
+                    f"link a supplier in the Supplier column, and add the numbers as a fact with a value on the "
                     f"material page (CO2e, water) or the supplier page (cost price). The totals "
                     f"above pick them up by themselves.</p>"
                     f"<ul>{items}</ul></div>")
-    main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · Nooch shoe</h1>"
+    titel = MODELLEN[model]["naam"] + (f" · {v_naam}" if variant else "")
+    uitleg = ("This variant shows the master with its own differences on top." if variant else
+              "The master bill of materials; a variant shows its own differences on top of it.")
+    main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · {_e(titel)}</h1>"
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
-            f"Weights come from the bill of materials, the factors from the material and supplier "
-            f"pages. What you set here: the material of a component, and which supplier delivers "
-            f"a material.</p>{_banner(msg)}"
-            f"{_maat_kiezer(gekozen, cfg) if cfg else ''}{_schatting(gekozen, cfg)}"
+            f"{uitleg} Weights and materials can be changed here per component; the factors come "
+            f"from the material and supplier pages.</p>{_banner(msg)}"
+            f"{_foto(st, model, variant, gekozen, titel, bewerk, csrf_token)}"
+            f"{_model_kiezer(model, variant, gekozen, varianten, bewerk, csrf_token)}"
+            f"{_maat_kiezer(gekozen, cfg, model, variant) if cfg else ''}{_schatting(gekozen, cfg)}"
             f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

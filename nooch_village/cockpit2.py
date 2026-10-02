@@ -56,6 +56,7 @@ from nooch_village.evidence_ledger import EvidenceLedger
 from nooch_village.source_status import SourceStatusStore
 from nooch_village.bom_leveranciers import BomLeverancierStore
 from nooch_village.bom_materialen import BomMateriaalStore
+from nooch_village.bom_varianten import BomVariantStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
@@ -138,7 +139,8 @@ class _Stores:
         self.evidence = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))   # De Kroniek — bewijsregister
         self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
         self.bom_leveranciers = BomLeverancierStore(os.path.join(dd, "bom_leveranciers.json"))   # BOM: materiaal → leverancier
-        self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: component → materiaal (wijzigingen)
+        self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: afwijkingen per (model, variant, component)
+        self.bom_varianten = BomVariantStore(os.path.join(dd, "bom_varianten.json"))             # BOM: welke varianten een model heeft + foto
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
@@ -1642,14 +1644,86 @@ def _bom_poort(c) -> None:
 def _act_bom_materiaal_zet(c):
         # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`, via `_bom_poort`:
         # dezelfde poort als de leverancier-koppeling. Wie de materiaalkennis houdt, kiest het materiaal.
+        #
+        # SINDS STUK 4 per (model, variant, component), met een optioneel gewicht, en een rij die
+        # in de master niet bestaat (`toegevoegd`). `wis` haalt de afwijking op dit niveau weg.
+        from nooch_village.data_bom import MODELLEN
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         _bom_poort(c)                                             # check vóór de mutatie
+        model = g("model") or _standaard_bom_model()
+        if model not in MODELLEN:
+            return nxt, "✗ unknown model"
+        variant = g("variant") or ""
+        if variant and st.bom_varianten.get(model, variant) is None:
+            return nxt, "✗ unknown variant"
         part = " ".join((g("part") or "").split())
-        if not st.bom_materialen.zet(part, g("materiaal"), door=_web_actor_id(username, st)):
+        if not part:
             return nxt, "✗ no component given"
-        naam = st.bom_materialen.van(part)
-        return nxt, (f"✓ {part} is now {naam}" if naam
-                     else f"✓ {part} follows the bill of materials again")
+        terug_naar = "the master" if variant else "the bill of materials"
+        if g("wis"):
+            st.bom_materialen.wis(part, model=model, variant=variant)
+            return nxt, f"✓ {part} follows {terug_naar} again"
+        # ALLEEN WAT HET FORMULIER MEESTUURT VERANDERT. Het materiaal- en het gewichtformulier
+        # schrijven op hetzelfde niveau; zonder deze samenvoeging wiste het ene wat het andere zette.
+        huidig = st.bom_materialen.regel(part, model=model, variant=variant)
+        materiaal = g("materiaal") if "materiaal" in c.form else str(huidig.get("materiaal") or "")
+        gram = g("gram") if "gram" in c.form else huidig.get("gram")
+        toegevoegd = bool(g("toegevoegd")) or bool(huidig.get("toegevoegd"))
+        if "gram" in c.form and g("gram").strip() and bom_materialen_gram(g("gram")) is None:
+            return nxt, "✗ the weight must be a number of grams (0 or more)"
+        if not st.bom_materialen.zet(part, materiaal, door=_web_actor_id(username, st),
+                                     model=model, variant=variant, gram=gram,
+                                     toegevoegd=toegevoegd):
+            return nxt, "✗ an added component needs a material"
+        nu = st.bom_materialen.regel(part, model=model, variant=variant)
+        if not nu:
+            return nxt, f"✓ {part} follows {terug_naar} again"
+        delen = ([f"is now {nu['materiaal']}"] if nu.get("materiaal") else []) + \
+                ([f"weighs {nu['gram']:g} g"] if nu.get("gram") is not None else [])
+        return nxt, f"✓ {part} " + " and ".join(delen)
+
+
+def _standaard_bom_model() -> str:
+    from nooch_village.data_bom import STANDAARD_MODEL
+    return STANDAARD_MODEL
+
+
+def bom_materialen_gram(waarde):
+    from nooch_village.bom_materialen import _gram
+    return _gram(waarde)
+
+
+def _act_bom_variant_add(c):
+        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`, via `_bom_poort`: een
+        # variant is een afwijkende BOM, dus dezelfde poort als een materiaal wijzigen.
+        from nooch_village.bom_varianten import geldige_handle
+        from nooch_village.data_bom import MODELLEN
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _bom_poort(c)                                             # check vóór de mutatie
+        model = g("model") or _standaard_bom_model()
+        if model not in MODELLEN:
+            return nxt, "✗ unknown model"
+        handle = (g("handle") or "").strip().lower()
+        if not geldige_handle(handle):
+            return nxt, "✗ a variant key is the Shopify handle: lowercase letters, digits and hyphens"
+        if not st.bom_varianten.voeg_toe(model, handle, g("naam"), door=_web_actor_id(username, st)):
+            return nxt, f"✗ variant {handle} already exists"
+        return nxt, f"✓ variant {handle} added"
+
+
+def _act_bom_foto(c):
+        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`, via `_bom_poort`. De
+        # foto als ADRES (https); een upload loopt via de multipart-tak met dezelfde poort.
+        from nooch_village.data_bom import MODELLEN
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _bom_poort(c)                                             # check vóór de mutatie
+        model = g("model") or _standaard_bom_model()
+        if model not in MODELLEN:
+            return nxt, "✗ unknown model"
+        if not st.bom_varianten.zet_foto(model, g("variant") or "", g("foto"),
+                                         door=_web_actor_id(username, st)):
+            return nxt, "✗ a photo address must start with https://"
+        return nxt, "✓ photo saved" if g("foto").strip() else "✓ photo removed"
 
 
 def _act_bom_leverancier_zet(c):
@@ -6200,6 +6274,8 @@ ACTIONS = {
     "artefact_unarchive": _act_artefact_unarchive,
     "bom_leverancier_zet": _act_bom_leverancier_zet,
     "bom_materiaal_zet": _act_bom_materiaal_zet,
+    "bom_variant_add": _act_bom_variant_add,
+    "bom_foto": _act_bom_foto,
     "artefact_delete": _act_artefact_delete,
     "pagina_sectie": _act_pagina_sectie,
     "msg_post": _act_msg_post,
@@ -6760,7 +6836,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 from nooch_village.views.bom import render_bom
                 self._send(render_bom(st, csrf_token=effective_csrf, username=username,
                                       msg=(qs.get("msg") or [""])[0],
-                                      maat=(qs.get("maat") or [""])[0]))
+                                      maat=(qs.get("maat") or [""])[0],
+                                      model=(qs.get("model") or [""])[0],
+                                      variant=(qs.get("variant") or [""])[0]))
                 return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
@@ -7238,6 +7316,27 @@ def make_handler(data_dir: str, csrf_token: str,
                     _mt, _inline = _t
                 self._send_bijlage(_data, _mt, _b.get("name", "bestand"), inline=_inline)
                 return
+            if path.startswith("/bom-foto/"):
+                # AUTHZ: iedereen-ingelogd — lezen, zoals de `/bom`-pagina waar de foto op staat.
+                # Zelfde regels als `/wiki-bestand/`: sessie vereist, twee segmenten via
+                # `basename`, en ALLEEN een bestand dat in `bom_varianten` als foto geregistreerd
+                # staat — een map die je kunt aflopen is geen leescheck.
+                if username is None:
+                    self._send("<p>Not found</p>", 404); return
+                _delen = [d for d in path[len("/bom-foto/"):].split("/") if d]
+                if len(_delen) != 2:
+                    self._send("<p>File not found</p>", 404); return
+                _model = os.path.basename(urllib.parse.unquote(_delen[0]))
+                _naam = os.path.basename(urllib.parse.unquote(_delen[1]))
+                if not st.bom_varianten.heeft_foto(_model, _naam):
+                    self._send("<p>File not found</p>", 404); return
+                _soort = channels.bijlage_type(_naam)
+                _full = os.path.join(data_dir, "attachments", "bom", _model, _naam)
+                if _soort is None or not os.path.exists(_full):
+                    self._send("<p>File not found</p>", 404); return
+                with open(_full, "rb") as fh:
+                    self._send_bytes(fh.read(), _soort[0])
+                return
             if path.startswith("/wiki-bestand/"):
                 # DE POORT STAAT ER METEEN OP, en dat is de les van `/file`: die route stuurde
                 # jarenlang projectbestanden zonder één leescheck en op prod lagen er 48 open.
@@ -7649,6 +7748,39 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") == "bom_foto":
+                    # AUTHZ: domeineigenaar of Circle Lead — van `Materials`, dezelfde poort als
+                    # `bom_foto` met een adres (`_bom_poort`). Alleen een AFBEELDING; dezelfde
+                    # grootte- en typecontrole als de andere uploads.
+                    from nooch_village import bom_leveranciers as _bl, org as _org
+                    from nooch_village.bom_varianten import BOM_FOTO
+                    from nooch_village.cockpit2_util import _is_beeldbestand
+                    from nooch_village.data_bom import MODELLEN
+                    _st = _Stores(data_dir)
+                    _houder = _org.role_for_domain(_st.records.all(), _bl.DOMEIN)
+                    _fout = _artefact_gate(_houder.id if _houder is not None else "", username,
+                                           _st, domein=_bl.DOMEIN)
+                    if _fout:
+                        self._send(_fout, 403); return
+                    _model = fields.get("model") or _standaard_bom_model()
+                    _variant = fields.get("variant", "")
+                    if _model not in MODELLEN or (_variant and _st.bom_varianten.get(_model, _variant) is None):
+                        self._send("Unknown model or variant", 404); return
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:
+                        self._send(err[0], err[1]); return
+                    fname, blob = files["file"]
+                    safe = _wiki_bijlage_naam(fname)
+                    if channels.bijlage_type(safe) is None or not _is_beeldbestand(safe):
+                        self._send("Only an image can be a product photo", 415); return
+                    opgeslagen = uuid.uuid4().hex[:8] + "_" + safe
+                    full = os.path.join(data_dir, "attachments", "bom", _model, opgeslagen)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "wb") as fh:
+                        fh.write(blob)
+                    _st.bom_varianten.zet_foto(_model, _variant, f"{BOM_FOTO}{_model}/{opgeslagen}",
+                                               door=_web_actor_id(username, _st))
+                    self._redirect(fields.get("next", "/bom"), "✓ photo uploaded"); return
                 if fields.get("action") == "wiki_bijlage":
                     # AUTHZ: domeineigenaar of Circle Lead — `_artefact_gate`, dezelfde poort als
                     # het bewerken van de tekst. Dat is geen keuze maar een gevolg: deze upload

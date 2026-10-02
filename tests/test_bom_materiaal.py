@@ -77,7 +77,9 @@ def test_used_in_volgt_het_gewijzigde_materiaal():
 # ── D: het klikgedrag ───────────────────────────────────────────────────────
 
 def _rij(html, part):
-    return re.search(rf"<tr><td>{re.escape(part)}</td>.*?</tr>", html, re.S).group(0)
+    # De component kan een afwijk-chip dragen (Stuk 4); die hoort bij de rij.
+    return re.search(rf"<tr><td>{re.escape(part)}(?: <span class='chip muted'>[^<]*</span>)?</td>.*?</tr>",
+                     html, re.S).group(0)
 
 
 def test_ingevuld_is_een_link_met_een_los_potloodje(tmp_path):
@@ -96,7 +98,7 @@ def test_ingevuld_is_een_link_met_een_los_potloodje(tmp_path):
 def test_leeg_opent_meteen_het_formulier(tmp_path):
     _dd, st = _dorp(tmp_path)
     rij = _rij(render_bom(st, csrf_token="T", username="houder@t.nl"), "Outsole")
-    assert "<summary class='chip outline'>+ link supplier</summary>" in rij
+    assert "<summary class='chip outline'>+ supplier</summary>" in rij
 
 
 def test_een_lezer_ziet_links_en_geen_potloodje(tmp_path):

@@ -87,8 +87,44 @@ def _factor(pagina, grootheid: str) -> tuple[float | None, str]:
     return waarden[0]["getal"], ""
 
 
+def effectieve_rijen(bom_tekst: str, afwijkingen: list[dict] | None = None) -> list[dict]:
+    """De stuklijst zoals hij voor DIT model en DEZE variant geldt (BOM Stuk 4).
+
+    `afwijkingen` komt uit `bom_materialen.afwijkingen(model, variant)`: eerst de master-, dan de
+    variant-afwijkingen, zodat een variant de master overschrijft. Een afwijking VERVANGT het
+    materiaal en/of gewicht van een bestaande rij, of VOEGT een rij toe die in de master niet
+    bestaat (`toegevoegd`). Per rij: `origineel` (wat de stuklijst zegt), `niveau` ("" = stuklijst,
+    "master" of de variant-handle die hem het laatst veranderde) en `toegevoegd`."""
+    from nooch_village.bom_materialen import sleutel as part_sleutel
+    rijen, index = [], {}
+    for r in bom_rijen(bom_tekst):
+        rij = {**r, "origineel": r["material"], "gram_origineel": r["gram"], "niveau": "",
+               "toegevoegd": False}
+        index[part_sleutel(r["part"])] = rij
+        rijen.append(rij)
+    for a in afwijkingen or []:
+        niveau = a.get("variant") or "master"
+        rij = index.get(a["sleutel"])
+        if rij is None:
+            if not a.get("toegevoegd") or not a.get("materiaal"):
+                continue                         # afwijking op een rij die niet (meer) bestaat
+            rij = {"part": a.get("part") or a["sleutel"], "material": a["materiaal"],
+                   "comment": "", "gram": a.get("gram"), "origineel": "", "gram_origineel": None,
+                   "niveau": niveau, "toegevoegd": True}
+            index[a["sleutel"]] = rij
+            rijen.append(rij)
+            continue
+        if a.get("materiaal"):
+            rij["material"] = a["materiaal"]
+        if a.get("gram") is not None:
+            rij["gram"] = a["gram"]
+        rij["niveau"] = niveau
+    return rijen
+
+
 def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
-            schaal: float = 1.0, materialen: dict | None = None) -> dict:
+            schaal: float = 1.0, materialen: dict | None = None,
+            afwijkingen: list[dict] | None = None) -> dict:
     """{"rijen": [...], "totalen": {sleutel: {"som", "n", "m"}}} voor één stuklijst.
 
     Per rij: de component, zijn materiaal- en leverancierpagina (of None), het gewicht, de bijdrage
@@ -97,16 +133,20 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
     `leveranciers` = {materiaalsleutel: naam} uit `bom_leveranciers` (per MATERIAAL, niet per rij).
     `schaal` = de maat-schaalfactor (`schaalfactor`); hij werkt op de hoeveelheid, en alle vier de
     totalen rekenen daarmee. (Niet `factor` genoemd: zo heet hieronder de waarde van een pagina.)
-    `materialen` = {partsleutel: materiaal} uit `bom_materialen` (per COMPONENT): een gewijzigd
-    materiaal vervangt dat uit de stuklijst, en de leverancier volgt het NIEUWE materiaal."""
-    from nooch_village.bom_materialen import sleutel as part_sleutel
+    `afwijkingen` = de regels uit `bom_materialen.afwijkingen(model, variant)` (Stuk 4): per
+    component een ander materiaal, een ander gewicht, of een rij die erbij komt; zie
+    `effectieve_rijen`. `materialen` = de oudere vorm {partsleutel: materiaal} (alleen materiaal,
+    alleen master) — blijft werken. De leverancier volgt altijd het NIEUWE materiaal."""
     leveranciers = leveranciers or {}
-    materialen = materialen or {}
+    if afwijkingen is None:
+        afwijkingen = [{"sleutel": k, "materiaal": v, "variant": ""}
+                       for k, v in (materialen or {}).items()]
     rijen = []
-    for r in bom_rijen(bom_tekst):
-        origineel, _ = _materiaalnaam(r["material"])
-        gewijzigd = materialen.get(part_sleutel(r["part"]), "")
-        materiaal, _onzeker = _materiaalnaam(gewijzigd or r["material"])
+    for r in effectieve_rijen(bom_tekst, afwijkingen):
+        origineel, _ = _materiaalnaam(r["origineel"])
+        materiaal, _onzeker = _materiaalnaam(r["material"])
+        gewijzigd = bool(r["niveau"]) and not r["toegevoegd"] and (
+            materiaal != origineel or r["gram"] != r["gram_origineel"])
         mat = wiki.resolve(materiaal, pags)
         supplier = leveranciers.get(materiaal.lower(), "")
         lev = wiki.resolve(supplier, pags) if supplier else None
@@ -133,7 +173,10 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
                 continue
             bijdrage[sleutel] = gram / 1000 * factor if gram is not None else None
         rijen.append({"part": r["part"], "materiaal": materiaal, "supplier": supplier,
-                      "origineel": origineel, "gewijzigd": bool(gewijzigd),
+                      "origineel": origineel, "gewijzigd": gewijzigd,
+                      "toegevoegd": r["toegevoegd"], "niveau": r["niveau"],
+                      "gram_origineel": r["gram_origineel"],
+                      "gram_eigen": r["gram"],              # vóór de maat-schaal, voor het formulier
                       "mat": mat, "lev": lev, "bijdrage": bijdrage, "open": open_punten})
 
     m = len(rijen)

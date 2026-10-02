@@ -77,9 +77,10 @@ def test_de_maatkiezer_is_het_bestaande_keuzebalkpatroon(tmp_path):
     """`.cl-bar` + `a.cl-filter`/`.on`. Een dropdown (`cardmenu`) klapte hier half achter de zijbalk."""
     h = render_bom(_st(tmp_path), maat="44")
     assert "<div class='cl-bar' aria-label='EU size'>" in h
-    assert h.count("class='cl-filter") == 11
+    maatbalk = h.split("aria-label='EU size'>")[1].split("</div>")[0]
+    assert maatbalk.count("class='cl-filter") == 11          # (model en variant hebben hun eigen balk)
     assert "class='cl-filter on' href='/bom?maat=44' aria-current='true'" in h
-    assert "cardmenu" not in h.split("BOM · Nooch shoe")[1]
+    assert "cardmenu" not in h.split("class='ptitle'")[1]
 
 
 def test_een_vreemde_maat_is_de_referentie(tmp_path):

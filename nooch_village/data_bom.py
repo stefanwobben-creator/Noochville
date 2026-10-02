@@ -47,3 +47,16 @@ NOOCH_SCHOEN_BOM = (
     "\t\tEyestay Reinforcement\tBIOREL (?)\t\t\n"
     "\t\tHeel Embroidery\tCotton Thread\t\t\n"
 )
+
+
+# MODELLEN (BOM Stuk 4, 2 oktober 2026). Een model is een schoen met één MASTER-stuklijst; varianten
+# (hoogte, kleur) zijn afwijkingen daarop en wonen niet hier maar in `bom_varianten` (welke er
+# bestaan) en `bom_materialen` (wat ze anders doen). De sleutel is een slug in Shopify-stijl; de naam
+# is wat het scherm toont. Een tweede model krijgt hier zijn eigen regel en zijn eigen stuklijst.
+#
+# GEEN WIKI-PAGINATYPE VOOR EEN SCHOEN (besluit Stefan): `/bom` is de schoenpagina. Een tweede plek
+# met dezelfde informatie zou uit de pas gaan lopen.
+STANDAARD_MODEL = "the-269"
+MODELLEN = {
+    "the-269": {"naam": "THE '269'", "master": NOOCH_SCHOEN_BOM},
+}
