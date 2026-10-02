@@ -2500,10 +2500,10 @@ def _act_actie_wis(c):
 def _feit_op_pagina(c, pagina, feit: dict, change_note: str) -> str:
     """Schrijf één feit naar een pagina en log de wijziging. De gedeelde helft van twee ingangen.
 
-    TWEE KNOPPEN, ÉÉN SCHRIJFWEG: "Keep in wiki" onder een bericht en "Keep as a fact" op een
-    bevestigd rapport. Ze verschillen in WAT ze als feit aanbieden en in hun herkomst; alles daarna
-    — de poort, het meta-schrijven, de versie-entry, de audit-log — is hetzelfde, en een tweede
-    kopie daarvan is precies hoe twee ingangen uit elkaar gaan lopen.
+    Er waren twee ingangen: "Keep in wiki" onder een projectbericht en "Keep as a fact" op een
+    bevestigd rapport. De eerste is op 2 oktober 2026 weggehaald (een bericht is een update, geen
+    feit); de helper blijft apart omdat de poort, het meta-schrijven, de versie-entry en de
+    audit-log het deel zijn dat bij een volgende ingang NIET opnieuw geschreven moet worden.
 
     DE POORT STAAT VÓÓR DE MUTATIE en is die van de PAGINA (`_artefact_gate`), niet van het project
     waar het feit vandaan komt: een feit is inhoud van die pagina."""
@@ -2526,8 +2526,8 @@ def _feit_op_pagina(c, pagina, feit: dict, change_note: str) -> str:
 def _act_rapport_naar_wiki(c):
     """Het resultaat van een BEVESTIGD rapport als één feit op een wiki-pagina.
 
-    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `keep_in_wiki` en
-    # `pagina_feit_add`, via `_feit_op_pagina`. Een feit is inhoud van die pagina.
+    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `pagina_feit_add`,
+    # via `_feit_op_pagina`. Een feit is inhoud van die pagina.
 
     EEN FEIT, GEEN PARAGRAAF, en dat is de hele vorm van deze stap. Een project levert één korte,
     herleidbare regel op; een pagina krijgt pas een lopende alinea als een mens daar apart om
@@ -2548,7 +2548,7 @@ def _act_rapport_naar_wiki(c):
     p = st.projects.get(pid)
     if p is None:
         return nxt, "✗ project not found"
-    # DE URL IS HET VERSCHIL met de bestaande keep-in-wiki: `_grond_chip` maakt een bron-feit
+    # DE URL MAAKT DE HERKOMST VOLGBAAR: `_grond_chip` maakt een bron-feit
     # klikbaar zodra hij een url heeft, en zonder die url is de herkomst wel te LEZEN maar niet te
     # VOLGEN — je weet dat er een rapport was en komt er niet.
     # WANNEER HET AF WAS, uit `projects.tijdlijn` — dat is de plek die weet of die datum uit de
@@ -2562,47 +2562,6 @@ def _act_rapport_naar_wiki(c):
     if feit is None:
         return nxt, "✗ a fact needs text"
     return nxt, _feit_op_pagina(c, pagina, feit, "feit uit een bevestigd rapport")
-
-
-def _act_keep_in_wiki(c):
-    """Eén bericht uit een projectgesprek als FEIT op een wiki-pagina, met herkomst (fase 7).
-
-    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — dezelfde poort als `pagina_feit_add`.
-    # Bewust niet losser: een feit is inhoud van die pagina, en wie hem mag schrijven is een
-    # bestaande regel. Dat betekent wel dat je een feit niet zomaar op andermans pagina kunt
-    # zetten; komt dat in de weg te zitten, dan is dat een governance-vraag en geen UI-vraag.
-
-    DE HERKOMST IS HET PUNT. Een losse zin in een wiki is een bewering; dezelfde zin mét "uit
-    project X, gezegd door Y op datum Z" is navolgbaar. Daarom `soort="bron"`: dat is herkomst,
-    geen bewijs — `wiki.grond_status` leest hem als `ongecontroleerd` en niet als `gegrond`, en
-    dat is precies goed voor een uitspraak uit een gesprek."""
-    from nooch_village import wiki
-    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
-    pagina = st.att.get(g("aid"))
-    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
-        return nxt, "✗ page not found"
-    p = st.projects.get(g("pid"))
-    if p is None:
-        return nxt, "✗ project not found"
-    entry = next((e for e in (p.get("log") or []) if str(e.get("id") or "") == g("item")), None)
-    if entry is None:
-        return nxt, "✗ message not found"
-    tekst = " ".join(str(entry.get("text") or "").split())
-    if not tekst:
-        return nxt, "✗ nothing to keep — the message has no text"
-    from nooch_village.views.feed import _feed_norm, _feed_who
-    _kind, atype, aid = _feed_norm(entry)
-    wie, _ = _feed_who(st, atype, aid)
-    herkomst = f"{_scope_text(p) or p.get('id', '')} · {wie} · {_stamp(entry.get('at'))}"
-    # DE URL ONTBRAK HIER (29 september 2026). `_grond_chip` maakt een bron-feit klikbaar zodra er
-    # een url bij staat, en die stond er niet: de herkomst was te lezen maar niet te volgen. Het
-    # project is de plek waar dit bericht staat, dus dat is waar de chip heen wijst. Geldt vanaf nu;
-    # bestaande feiten houden hun lege url — die valt niet af te leiden zonder te gokken.
-    feit = wiki.maak_feit(tekst, soort="bron", ref=str(p.get("id") or ""), citaat=herkomst,
-                          url=f"/project?pid={p.get('id', '')}")
-    if feit is None:
-        return nxt, "✗ a fact needs text"
-    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit projectgesprek")
 
 
 _SYNTHESE_PROMPT = """Je bent de schrijver van een wiki-pagina in een klein bedrijf.
@@ -6294,7 +6253,6 @@ ACTIONS = {
     "linkbuilding_besluit": _act_linkbuilding_besluit,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
-    "keep_in_wiki": _act_keep_in_wiki,
     "rapport_naar_wiki": _act_rapport_naar_wiki,
     "pagina_synthese": _act_pagina_synthese,
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,

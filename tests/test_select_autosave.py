@@ -41,8 +41,6 @@ BUITEN = {
     # ── SCHULD ────────────────────────────────────────────────────────────────
     "claims.py:_tab_werklijst:claims_work_status":
         "schuld — een statuscel in een tabel; zelfde omzetting als /acties, andere beurt",
-    "feed.py:_keep_in_wiki_form:keep_in_wiki":
-        "schuld — 'Keep' schrijft een feit op een wikipagina; de knop is nu de bevestiging",
     "overview.py:_middel_picker:skilllink_add":
         "schuld — koppelt een dorpsmiddel aan een accountability",
     "overview.py:render_rolefillers:role_assign":
@@ -132,7 +130,7 @@ def test_de_uitzonderingen_bestaan_nog():
 
 def test_de_lijst_mag_alleen_korter():
     """Monotone daling, zoals de inline-style- en de `_NU_ROUTES`-ratchet."""
-    assert len(BUITEN) <= 7, f"{len(BUITEN)} uitzonderingen — de lijst is gegroeid"
+    assert len(BUITEN) <= 6, f"{len(BUITEN)} uitzonderingen — de lijst is gegroeid"
 
 
 def test_de_scanner_vindt_de_bekende_gevallen():
@@ -140,7 +138,8 @@ def test_de_scanner_vindt_de_bekende_gevallen():
     keuzelijsten in `views/projects.py` die het patroon al volgden."""
     gevonden = _keuzelijst_formulieren()
     met_autosave = [s for s, v in gevonden.items() if v["onchange"]]
-    assert len(gevonden) >= 15, f"de scanner vindt er nog maar {len(gevonden)}"
+    # 14, niet 15: de "Keep in wiki"-keuzelijst onder een bericht is op 2 oktober 2026 weggehaald.
+    assert len(gevonden) >= 14, f"de scanner vindt er nog maar {len(gevonden)}"
     assert len([s for s in met_autosave if s.startswith("projects.py:")]) >= 7
 
 

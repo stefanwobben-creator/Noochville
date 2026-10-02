@@ -105,16 +105,6 @@ def test_een_leeg_feit_wordt_geweigerd(tmp_path):
     assert _feiten(dd, aid) == []
 
 
-def test_ook_de_oude_keep_in_wiki_krijgt_een_klikbare_bron(tmp_path):
-    """Hij miste de url, waardoor die feiten wel hun herkomst TOONDEN maar nergens heen gingen."""
-    dd, st, aid, pid = _dorp(tmp_path)
-    e = cockpit2._Stores(dd).projects.add_feed_entry(pid, "Leverancier bevestigde 4mm",
-                                                     kind="comment", author_type="human")
-    _n, msg = _doe(dd, "keep_in_wiki", aid=aid, pid=pid, item=e["id"])
-    assert not cockpit2.is_weigering(msg), msg
-    assert _feiten(dd, aid)[0]["grond"]["url"] == f"/project?pid={pid}"
-
-
 # ══ 2. De pagina krijgt een ALINEA, en alleen op verzoek ═════════════════════
 def _met_feiten(dd, aid, n=2):
     st = cockpit2._Stores(dd)
@@ -235,15 +225,12 @@ def test_zonder_verwarring_geen_waarschuwing(tmp_path):
     assert dubbele_namen_hint(cockpit2._Stores(dd)) == ""
 
 
-def test_de_hint_staat_onder_allebei_de_keuzelijsten(tmp_path):
+def test_de_hint_staat_onder_de_keuzelijst_van_het_rapport(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
     st.att.add(ROL, "note", title="Outsole materials 2026")
     st = cockpit2._Stores(dd)
     rap = render_projectrapport(st, pid, csrf_token="TOK", username=IK)
     assert "nearly the same name" in rap
-    from nooch_village.views.feed import _keep_in_wiki_form
-    keep = _keep_in_wiki_form(st, pid, {"id": "x"}, "TOK", "/")
-    assert "nearly the same name" in keep
 
 
 # ══ 4. Het archief wijst naar zijn rapport ═══════════════════════════════════

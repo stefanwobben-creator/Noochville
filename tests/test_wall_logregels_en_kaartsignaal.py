@@ -260,3 +260,35 @@ def test_verwijderen_houdt_je_op_de_projectpagina(tmp_path):
                                   "next": [f"/project?pid={pid}"]}, username=IK)
     assert not cockpit2.is_weigering(msg), msg
     assert nxt.startswith(f"/project?pid={pid}")
+
+
+# ══ 3. Lichtere acties onder een bericht (2 oktober 2026) ════════════════════
+def test_bewerken_is_klikken_op_de_tekst_en_alleen_voor_de_auteur(tmp_path):
+    """Geen Edit-knop meer: je eigen tekst IS de ingang. Een ander z'n bericht blijft platte tekst —
+    click-to-edit is een andere ingang, geen ruimere bevoegdheid."""
+    dd, pid, ik = _dorp(tmp_path)
+    st = cockpit2._Stores(dd)
+    anna = st.people.add("Anna Ander", "anna@nooch.earth")
+    st.projects.add_feed_entry(pid, "van Anna", kind="comment", author_type="human",
+                               author_id=anna.id)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["van mij"], "next": ["/"]}, username=IK)
+    h = _wall(dd, pid)
+    assert ">Edit</button>" not in h, "de losse Edit-knop staat er nog"
+    assert h.count("data-klik-bewerk") == 1
+    mijn = h[h.index("data-klik-bewerk"):]
+    assert "van mij" in mijn[:mijn.index("</div>")], "de klikbare tekst is niet die van mij"
+    # Een klik op een link IN de tekst volgt de link; anders kaapt de editor elke @rol en [[link]].
+    assert "closest('a," in h
+
+
+def test_de_wall_acties_zijn_linkjes_en_geen_omrande_knoppen():
+    """`:root .flink` omrandt elke `.flink`; onder een bericht moet dat terug naar een linkje, en
+    die regel moet NA de omrandende regel staan (gelijke of lagere specificiteit verliest anders)."""
+    import pathlib
+    css = (pathlib.Path(cockpit2.__file__).parent / "static" / "nooch.css").read_text()
+    knop = css.index(":root .addlink, :root .vswitch a, :root .flink {")
+    licht = css.index(":root .ffoot .flink, :root .fentry-log .flink {")
+    assert licht > knop
+    blok = css[licht:css.index("}", licht)]
+    assert "border: 0" in blok and "background: none" in blok

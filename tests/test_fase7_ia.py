@@ -124,58 +124,20 @@ def test_de_wiki_index_toont_het_hele_dorp(tmp_path):
     assert "Overig" in html, "een onbekend domein hoort zichtbaar in Overig te landen"
 
 
-# ── 4. Keep-in-wiki ──────────────────────────────────────────────────────────
-def _project_met_bericht(st, dd):
+# ── 4. Keep-in-wiki: weggehaald (2 oktober 2026) ─────────────────────────────
+def test_keep_in_wiki_bestaat_niet_meer(tmp_path):
+    """Een bericht in een projectgesprek is een update, geen feit (besluit Stefan, 2 oktober 2026).
+    Kennis gaat naar de wiki via het bevestigde rapport (`rapport_naar_wiki`). Niet alleen de knop
+    is weg maar ook de actie: een schrijfpad zonder ingang is een achterdeur."""
+    dd, st = _stores(tmp_path)
+    pagina = st.att.add(OWNER, wiki.PAGINA_KIND, title="Selco (supplier)")
     pid = st.projects.create(OWNER, "Batch 4", "human", status="running")
-    st.projects.add_feed_entry(pid, "Selco levert in 3 weken.", kind="comment",
-                               author_type="human", author_id="")
-    return pid
-
-
-def test_keep_in_wiki_schrijft_een_feit_met_herkomst(tmp_path):
-    dd, st = _stores(tmp_path)
-    pagina = st.att.add(OWNER, wiki.PAGINA_KIND, title="Selco (supplier)")
-    pid = _project_met_bericht(st, dd)
-    eid = st.projects.get(pid)["log"][0]["id"]
-    _, msg = cockpit2.dispatch(dd, "keep_in_wiki",
-                               {"aid": [pagina.id], "pid": [pid], "item": [eid], "next": ["/"]},
-                               username="guest")
-    assert "kept on" in msg
-    feiten = wiki.feiten(cockpit2._Stores(dd).att.get(pagina.id))
-    assert len(feiten) == 1
-    assert "3 weken" in feiten[0]["tekst"]
-    # De herkomst IS het punt: zonder bron is het een bewering.
-    assert feiten[0]["grond"]["soort"] == "bron" and feiten[0]["grond"]["ref"] == pid
-    assert "Batch 4" in feiten[0]["grond"]["citaat"]
-
-
-def test_een_feit_uit_een_gesprek_is_herkomst_en_geen_bewijs(tmp_path):
-    """`soort="bron"` leest als `ongecontroleerd`, niet als `gegrond`. Een uitspraak in een
-    projectgesprek is precies dat."""
-    dd, st = _stores(tmp_path)
-    pagina = st.att.add(OWNER, wiki.PAGINA_KIND, title="Selco (supplier)")
-    pid = _project_met_bericht(st, dd)
-    eid = st.projects.get(pid)["log"][0]["id"]
-    cockpit2.dispatch(dd, "keep_in_wiki",
-                      {"aid": [pagina.id], "pid": [pid], "item": [eid], "next": ["/"]},
-                      username="guest")
-    st2 = cockpit2._Stores(dd)
-    status = wiki.grond_status(wiki.feiten(st2.att.get(pagina.id))[0])
-    assert status != wiki.GEGROND
-
-
-def test_keep_in_wiki_weigert_fail_closed(tmp_path):
-    dd, st = _stores(tmp_path)
-    pagina = st.att.add(OWNER, wiki.PAGINA_KIND, title="Selco (supplier)")
-    pid = _project_met_bericht(st, dd)
-    eid = st.projects.get(pid)["log"][0]["id"]
-    for velden, waarom in (
-            ({"aid": ["bestaat-niet"], "pid": [pid], "item": [eid]}, "page not found"),
-            ({"aid": [pagina.id], "pid": ["xxx"], "item": [eid]}, "project not found"),
-            ({"aid": [pagina.id], "pid": [pid], "item": ["xxx"]}, "message not found")):
-        _, msg = cockpit2.dispatch(dd, "keep_in_wiki", {**{k: v for k, v in velden.items()},
-                                                        "next": ["/"]}, username="guest")
-        assert waarom in msg, (velden, msg)
+    e = st.projects.add_feed_entry(pid, "Selco levert in 3 weken.", kind="comment",
+                                   author_type="human", author_id="")
+    from nooch_village.views import projects as P
+    assert "Keep in wiki" not in P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    cockpit2.dispatch(dd, "keep_in_wiki", {"aid": [pagina.id], "pid": [pid], "item": [e["id"]],
+                                           "next": ["/"]}, username="guest")
     assert wiki.feiten(cockpit2._Stores(dd).att.get(pagina.id)) == []
 
 

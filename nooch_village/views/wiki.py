@@ -310,7 +310,7 @@ def _feit_form(aid: str, csrf_token: str) -> str:
 def bijna_gelijke_paginas(st) -> list[list[str]]:
     """Groepjes pagina-titels die bijna hetzelfde heten — zodat je ze ziet vóórdat je kiest.
 
-    HET PROBLEEM IS EEN KEUZELIJST, geen zoekopdracht. "Keep in wiki" en "Keep as a fact" tonen een
+    HET PROBLEEM IS EEN KEUZELIJST, geen zoekopdracht. "Keep as a fact" op /rapport toont een
     `<select>` met alle pagina's; staan er twee bijna gelijk in ("Ecovative" en "Ecovative BV"),
     dan kies je er één zonder te weten dat de ander bestaat, en groeit de kennis uit elkaar over
     twee pagina's die over hetzelfde gaan.

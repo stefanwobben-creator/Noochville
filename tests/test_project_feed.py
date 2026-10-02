@@ -76,8 +76,8 @@ def test_eigen_comment_wijzigen_verwijderen(tmp_path):
                                         "text": ["AI update"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True,
                                    username=IK)
-    # eigen comment: edit/delete; AI-update: niet (dus precies 1 keer feed_remove)
-    assert "Edit" in frag and frag.count("feed_remove") == 1
+    # eigen comment: bewerken (klik op de tekst) en verwijderen; AI-update: niet
+    assert frag.count("data-klik-bewerk") == 1 and frag.count("feed_remove") == 1
     eid = _log(dd, pid)[0]["id"]
     cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid], "text": ["aangepast"], "next": ["/"]}, username=IK)
     assert _log(dd, pid)[0]["text"] == "aangepast"

@@ -2787,6 +2787,28 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .fentry-log .fbubble { border: none; background: none; box-shadow: none;
   padding: .1rem 0; color: var(--nu-muted, var(--subtle)); font-size: .85rem; }
 
+/* DE ACTIES ONDER EEN BERICHT ZIJN LINKJES, GEEN KNOPPEN (2 oktober 2026, melding Stefan: "deze
+   zwarte kaders horen niet over de knoppen"). `:root .flink` maakt van elke `.flink` een omrande
+   zwart-op-wit knop — goed voor een sectie-actie als "+ new checklist", fout voor iets dat onder
+   ÉLK bericht staat: dan wordt de wall een rij kaders, en op een logregel plakte het kader tegen
+   de tekst. Zelfde oplossing als "+ link to a project" (`.ck-meta`, hierboven in dit bestand):
+   gedempt, klein, met een zachte onderstreping. Hier met een selector in plaats van de klasse
+   weghalen, omdat `.flink` op deze knoppen elders (de oude laag) nog zijn typografie levert. */
+:root .ffoot .flink, :root .fentry-log .flink {
+  border: 0; background: none; padding: 0; color: var(--nu-muted);
+  font-size: .78rem; font-weight: 500; text-decoration: underline;
+  text-decoration-color: var(--nu-border-subtle); text-underline-offset: 2px; }
+:root .fentry-log .flink { margin-left: .5rem; }
+:root .ffoot .flink:hover, :root .fentry-log .flink:hover,
+:root .ffoot .flink:focus-visible, :root .fentry-log .flink:focus-visible {
+  background: none; color: var(--nu-text); text-decoration-color: var(--nu-text); }
+/* KLIK OP DE TEKST = BEWERKEN (`inline_edit(klikbaar=True)`), alleen voor wie mag bewerken. De
+   cursor en een lichte tint bij hover zijn de enige aanwijzing; een tekstcursor, omdat je hier
+   tekst gaat bewerken en niet een knop indrukt. */
+:root [data-klik-bewerk] { cursor: text; }
+:root [data-klik-bewerk]:hover, :root [data-klik-bewerk]:focus-visible {
+  background: var(--nu-bg-alt); outline: none; }
+
 /* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
 :root .railsplit, :root .menu-sep, :root .einddoc-split { background: var(--nu-text); height: 1.5px; }
 
