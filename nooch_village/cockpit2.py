@@ -55,6 +55,7 @@ from nooch_village import observations
 from nooch_village.evidence_ledger import EvidenceLedger
 from nooch_village.source_status import SourceStatusStore
 from nooch_village.bom_leveranciers import BomLeverancierStore
+from nooch_village.bom_materialen import BomMateriaalStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
@@ -137,6 +138,7 @@ class _Stores:
         self.evidence = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))   # De Kroniek — bewijsregister
         self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
         self.bom_leveranciers = BomLeverancierStore(os.path.join(dd, "bom_leveranciers.json"))   # BOM: materiaal → leverancier
+        self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: component → materiaal (wijzigingen)
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
@@ -1625,17 +1627,36 @@ def _act_artefact_archive(c):
         return nxt, msg
 
 
-def _act_bom_leverancier_zet(c):
-        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`: wie de materiaalkennis
-        # houdt, zet de koppeling. Dezelfde poort als een pagina in dat domein bewerken
-        # (`_artefact_gate`), met de houder-rol als anker zodat ook zijn Circle Lead erbij mag.
-        from nooch_village import bom_leveranciers, org
+def _bom_poort(c) -> None:
+    """De ENE poort voor een BOM-wijziging (leverancier én materiaal): houder van het domein
+    `Materials` of Circle Lead — `_artefact_gate` met de houder-rol als anker, zodat ook zijn Circle
+    Lead erbij mag. Twee acties met elk een eigen kopie zouden na één wijziging uiteenlopen."""
+    from nooch_village import bom_leveranciers, org
+    houder = org.role_for_domain(c.st.records.all(), bom_leveranciers.DOMEIN)
+    _deny = _artefact_gate(houder.id if houder is not None else "", c.username, c.st,
+                           domein=bom_leveranciers.DOMEIN)
+    if _deny:
+        raise Forbidden(_deny)
+
+
+def _act_bom_materiaal_zet(c):
+        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`, via `_bom_poort`:
+        # dezelfde poort als de leverancier-koppeling. Wie de materiaalkennis houdt, kiest het materiaal.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        houder = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
-        _deny = _artefact_gate(houder.id if houder is not None else "", username, st,
-                               domein=bom_leveranciers.DOMEIN)   # check vóór de mutatie
-        if _deny:
-            raise Forbidden(_deny)
+        _bom_poort(c)                                             # check vóór de mutatie
+        part = " ".join((g("part") or "").split())
+        if not st.bom_materialen.zet(part, g("materiaal"), door=_web_actor_id(username, st)):
+            return nxt, "✗ no component given"
+        naam = st.bom_materialen.van(part)
+        return nxt, (f"✓ {part} is now {naam}" if naam
+                     else f"✓ {part} follows the bill of materials again")
+
+
+def _act_bom_leverancier_zet(c):
+        # AUTHZ: domeineigenaar of Circle Lead — van het domein `Materials`, via `_bom_poort`:
+        # wie de materiaalkennis houdt, zet de koppeling.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _bom_poort(c)                                             # check vóór de mutatie
         materiaal = " ".join((g("materiaal") or "").split())
         if not st.bom_leveranciers.zet(materiaal, g("leverancier"),
                                        door=_web_actor_id(username, st)):
@@ -6178,6 +6199,7 @@ ACTIONS = {
     "artefact_archive": _act_artefact_archive,
     "artefact_unarchive": _act_artefact_unarchive,
     "bom_leverancier_zet": _act_bom_leverancier_zet,
+    "bom_materiaal_zet": _act_bom_materiaal_zet,
     "artefact_delete": _act_artefact_delete,
     "pagina_sectie": _act_pagina_sectie,
     "msg_post": _act_msg_post,

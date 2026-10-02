@@ -747,7 +747,8 @@ def main() -> None:
                                        eigenaar_materiaal=MATERIAAL_ROL,
                                        eigenaar_claims=CLAIM_ROL,
                                        eigenaar_leverancier=LEVERANCIER_ROL, apply=apply,
-                                       leveranciers=st.bom_leveranciers.alle())
+                                       leveranciers=st.bom_leveranciers.alle(),
+                                       materialen=st.bom_materialen.alle())
         # De methode-pagina hoort in dezelfde zaai-beurt: één commando, één rapport, dezelfde
         # dry-run. BEWUST NIET bij de cockpit-start — inhoud aanmaken is geen infrastructuur, en
         # een bootstrap die een pagina schrijft doet dat ook in elk test-dorp.

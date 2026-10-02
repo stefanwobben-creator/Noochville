@@ -47,6 +47,10 @@ STORES = {
     # is een hardcoded Python-bron; een koppeling die een mens in het scherm zet kan daar niet wonen,
     # en een wiki-pagina is per materiaal geen rij-veld. Eén kleine store, één bewerkbare plek.
     "bom_leveranciers",
+    # BOM Correctie 3C (2 oktober 2026, door Stefan bevestigd): component → materiaal. Zelfde reden
+    # als hierboven (de stuklijst is code), maar PER COMPONENT, en dat is de reden dat het geen veld
+    # in `bom_leveranciers` is: die store is per materiaal.
+    "bom_materialen",
 }
 
 

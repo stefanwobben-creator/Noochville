@@ -12,9 +12,10 @@ LAGEN (atom → molecule → pattern), allemaal bestaand:
   pattern   dit scherm: vier tegels, de stuklijst, en wat er nog ontbreekt
 Geen nieuwe CSS-klasse en geen inline style.
 
-ÉÉN ding is hier te wijzigen (Correctie 2, 2 oktober 2026): welke leverancier een MATERIAAL levert.
-Die koppeling woont in `bom_leveranciers`; de Supplier-cel is er de ingang voor, en verschijnt als
-formulier alleen voor wie mag (houder van het domein `Materials` of Circle Lead).
+TWEE dingen zijn hier te wijzigen, allebei alleen voor wie mag (houder van `Materials` of Circle
+Lead): welke leverancier een MATERIAAL levert (`bom_leveranciers`, Correctie 2) en welk materiaal
+een COMPONENT heeft (`bom_materialen`, Correctie 3). Beide cellen klikken op dezelfde manier: zie
+`_cel`.
 """
 from __future__ import annotations
 
@@ -110,26 +111,41 @@ def _schatting(maat: int, cfg: dict) -> str:
             f"not yet based on factory data ({_e(cfg['bron'])}, {_e(cfg['datum'])}).</p>")
 
 
-def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool, terug: str = "/bom") -> str:
-    """Lezen: de leverancier als link (of tekst, of —). Bewerken: dezelfde chip als de Deadline op de
-    projectrail, die openklapt naar een formulier. Het veld stelt bestaande wiki-titels voor, maar
-    accepteert elke naam: een leverancier mag gekoppeld worden vóór iemand zijn pagina schrijft."""
-    lees = _link(r["lev"], r["supplier"])
+def _cel(*, waarde: str, pagina, bewerk: bool, csrf_token: str, terug: str, actie: str,
+         sleutel_veld: str, sleutel: str, veld: str, wat: str, leeg: str, wis_label: str,
+         titel: str = "") -> str:
+    """Eén bewerkbare BOM-cel, voor Materiaal én Supplier — hetzelfde klikgedrag (Correctie 3, D):
+
+        ingevuld  → de waarde is een LINK naar zijn wiki-pagina (of tekst als die er nog niet is),
+                    met ernaast een los potloodje om te wijzigen; de hoofdklik bewerkt niet;
+        leeg      → de klik opent meteen het toewijsformulier ("+ …");
+        lezer     → alleen de link (of "—").
+
+    Het formulier is het bestaande popover-patroon: `details.acard-d` > `summary.chip.outline` +
+    `.datepop` (de Deadline-cel van de projectrail, sinds #671 ook de Supplier-cel). Het veld stelt
+    bestaande wiki-titels voor maar accepteert elke naam."""
+    if waarde:
+        lees = (f"<a href='{_e(wiki.pagina_url(pagina.id))}'{titel}>{_e(waarde)}</a>"
+                if pagina is not None else f"<span{titel}>{_e(waarde)}</span>")
+    else:
+        lees = "—"
     if not bewerk:
         return lees
-    label = _e(r["supplier"]) if r["supplier"] else "+ link supplier"
-    weg = (f"<button class='dellink' type='submit' name='leverancier' value=''>remove</button>"
-           if r["supplier"] else "")
-    return (f"<details class='acard-d'><summary class='chip outline'>{label}</summary>"
-            f"<div class='datepop'><form method='post' action='/action'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='action' value='bom_leverancier_zet'>"
-            f"<input type='hidden' name='next' value='{_e(terug)}'>"
-            f"<input type='hidden' name='materiaal' value='{_e(r['materiaal'])}'>"
-            f"<input name='leverancier' value='{_e(r['supplier'])}' list='{_LIJST_ID}' "
-            f"aria-label='supplier of {_e(r['materiaal'])}' placeholder='Supplier name'>"
-            f"<button class='btn ok sm' type='submit'>Save</button>{weg}"
-            f"</form>{lees if r['lev'] is not None else ''}</div></details>")
+    wis = (f"<button class='dellink' type='submit' name='{veld}' value=''>{wis_label}</button>"
+           if waarde and wis_label else "")
+    formulier = (f"<div class='datepop'><form method='post' action='/action'>"
+                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='action' value='{actie}'>"
+                 f"<input type='hidden' name='next' value='{_e(terug)}'>"
+                 f"<input type='hidden' name='{sleutel_veld}' value='{_e(sleutel)}'>"
+                 f"<input name='{veld}' value='{_e(waarde)}' list='{_LIJST_ID}' "
+                 f"aria-label='{_e(wat)}' placeholder='Name'>"
+                 f"<button class='btn ok sm' type='submit'>Save</button>{wis}</form></div>")
+    if not waarde:
+        return (f"<details class='acard-d'><summary class='chip outline'>{leeg}</summary>"
+                f"{formulier}</details>")
+    return (f"{lees} <details class='acard-d'><summary class='chip outline' "
+            f"aria-label='change {_e(wat)}' title='change'>✎</summary>{formulier}</details>")
 
 
 def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom") -> str:
@@ -137,8 +153,23 @@ def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom
     cellen = "".join(f"<td class='num'>{_getal(k, b.get(k))}</td>"
                      for k, _g, _w in bom_reken.METRIEKEN)
     status = _status("done", "Complete") if not r["open"] else _status("future", "Open")
-    return (f"<tr><td>{_e(r['part'])}</td><td>{_link(r['mat'], r['materiaal'])}</td>"
-            f"<td>{_leverancier_cel(r, csrf_token, bewerk, terug)}</td>{cellen}<td>{status}</td></tr>")
+    # Een GEWIJZIGD materiaal zegt waar het vandaan kwam: de stuklijst is de referentie, en zonder
+    # deze hint is niet te zien dat deze rij ervan afwijkt.
+    was = (f" title='changed on this screen; the bill of materials says {_e(r['origineel'])}'"
+           if r.get("gewijzigd") else "")
+    materiaal = _cel(waarde=r["materiaal"], pagina=r["mat"], bewerk=bewerk, csrf_token=csrf_token,
+                     terug=terug, actie="bom_materiaal_zet", sleutel_veld="part", sleutel=r["part"],
+                     veld="materiaal", wat=f"material of {r['part']}", leeg="+ set material",
+                     wis_label="back to bill of materials" if r.get("gewijzigd") else "", titel=was)
+    leverancier = _cel(waarde=r["supplier"], pagina=r["lev"], bewerk=bewerk, csrf_token=csrf_token,
+                       terug=terug, actie="bom_leverancier_zet", sleutel_veld="materiaal",
+                       sleutel=r["materiaal"], veld="leverancier",
+                       wat=f"supplier of {r['materiaal']}", leeg="+ link supplier",
+                       wis_label="remove")
+    if not r["supplier"] and not bewerk:
+        leverancier = "<span class='muted'>no supplier linked yet</span>"
+    return (f"<tr><td>{_e(r['part'])}</td><td>{materiaal}</td><td>{leverancier}</td>"
+            f"{cellen}<td>{status}</td></tr>")
 
 
 def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "",
@@ -156,7 +187,8 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
         gekozen = ref
     terug = f"/bom?maat={gekozen}"
     uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, pags, st.bom_leveranciers.alle(),
-                            schaal=bom_reken.schaalfactor(gekozen, cfg))
+                            schaal=bom_reken.schaalfactor(gekozen, cfg),
+                            materialen=st.bom_materialen.alle())
     bewerk = bool(csrf_token) and _mag_koppelen(st, username)
     opties = ("".join(f"<option value='{_e(p.title)}'></option>" for p in pags if p.title)
               if bewerk else "")
@@ -181,7 +213,8 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · Nooch shoe</h1>"
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
             f"Weights come from the bill of materials, the factors from the material and supplier "
-            f"pages. The one thing set here is which supplier delivers a material.</p>{_banner(msg)}"
+            f"pages. What you set here: the material of a component, and which supplier delivers "
+            f"a material.</p>{_banner(msg)}"
             f"{_maat_kiezer(gekozen, cfg) if cfg else ''}{_schatting(gekozen, cfg)}"
             f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")

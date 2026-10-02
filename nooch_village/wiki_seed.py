@@ -43,7 +43,8 @@ def _materiaalnaam(ruw: str) -> tuple[str, bool]:
     return naam, False
 
 
-def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None) -> list[dict]:
+def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None,
+                      materialen: dict | None = None) -> list[dict]:
     """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
 
     De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
@@ -58,11 +59,19 @@ def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None) -> list[
     # als {materiaalsleutel: naam}. Zelfde sleutel als hieronder (hoofdletter-ongevoelig, zonder
     # '(?)'), anders hoort een leverancier bij een materiaal dat er niet is.
     leveranciers = leveranciers or {}
+    # MATERIAAL PER COMPONENT, zoals het op het BOM-scherm gezet is (`bom_materialen`, Correctie 3).
+    # Een gewijzigd materiaal vervangt dat uit de stuklijst — dus "Used in" volgt de BOM zoals hij
+    # NU is, niet zoals hij in de code stond.
+    from dataclasses import replace as _vervang
+    from nooch_village.bom_materialen import sleutel as part_sleutel
+    materialen = materialen or {}
 
     per_materiaal: dict[str, list] = {}
     spelling: dict[str, str] = {}
     onzeker: dict[str, set] = {}
     for c in ontleed_bom(bom_tekst, bron=BRON_STUKLIJST):
+        if materialen.get(part_sleutel(c.naam)):
+            c = _vervang(c, realisatie=materialen[part_sleutel(c.naam)])
         naam, twijfel = _materiaalnaam(c.realisatie)
         if not naam:
             continue
@@ -306,7 +315,8 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
 
 def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar_claims: str,
                eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
-               vandaag: str = "", leveranciers: dict | None = None) -> list[dict]:
+               vandaag: str = "", leveranciers: dict | None = None,
+               materialen: dict | None = None) -> list[dict]:
     """Alle sets in één keer. De helft (of het derde) waarvan de eigenaar-rol ontbreekt, wordt
     overgeslagen — de rest gaat gewoon door.
 
@@ -314,7 +324,7 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
     rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout."""
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 
-    rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers),
+    rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen),
                    eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply, actor_id=actor_id)
     if eigenaar_leverancier:
         rapport += zaai(store, records, paginas=leverancier_paginas(ledger, vandaag=vandaag),
