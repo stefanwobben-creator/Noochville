@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nooch_village import project_verslag, sleutelmasker, web_read
+from nooch_village import sleutelmasker, web_read
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition

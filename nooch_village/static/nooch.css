@@ -1150,81 +1150,14 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
 .wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
 .wall-scroll{overflow-y:auto}
-.einddoc-d{margin-bottom:.6rem}
-.einddoc-d>summary{list-style:none;cursor:pointer}
-.einddoc-d>summary::-webkit-details-marker{display:none}
-.einddoc-toggle{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);font-weight:700}
-/* LEESLAAG. Het einddocument is PROZA, en erfde de regelafstand van de interface eromheen. Bij een
-   lang rapport werd dat één grijze massa: koppen die nauwelijks van de tekst verschilden (1.05 →
-   .95 → .85 is 0,1rem per niveau), regels zo breed als de kolom, en krappe alinea-afstand.
-   De waarden komen uit het bestaande vocabulaire (.editor 1.55, .att-body 1.5), aan de ruime kant
-   omdat dit gelezen wordt en niet ingevuld.
-   De cap blijft — verruimd van 46vh naar 70vh. Hij staat er zodat een lang rapport de checklist en
-   het reactievak eronder niet uit beeld duwt; laten vallen zou de ene klacht oplossen en de andere
-   verergeren. De <details open> eromheen is de ontsnapping voor wie het hele document wil. */
-/* GEEN HOOGTE-CAP MEER. Die bestond toen het rapport inline op de kaart stond; sindsdien woont
-   het op /rapport, waar `.einddoc-vol` de cap toch al ophief. Wat overbleef was een geneste
-   scrollbak die het muiswiel opslokt — en dan is de knop eronder onbereikbaar. */
-.einddoc-body{line-height:1.6}
-/* Een codeblok IN een document: de Claude Code-opdracht of het commando dat Noochie's memo
-   meegeeft om te plakken (scope 42a). Monospace, pre-wrap zodat
-   een lange regel de kolom niet openbreekt, en een rand zodat je ziet waar het plakwerk begint
-   en eindigt. Element-selector onder de bestaande familie, geen nieuwe klasse. */
-.einddoc-body pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.4;
- padding:.5rem .6rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);
- white-space:pre-wrap;overflow-x:auto;margin:.4rem 0 .8rem}
-/* De essentie op de kaart: één of twee zinnen, iets groter dan lopende tekst want dit is het
-   enige wat een scanner leest. `einddoc-` en geen eigen prefix — het IS het einddocument, alleen
-   ingekort; een nieuwe familie zou een privé-stylesheet voor twee regels zijn. */
-/* Het onbevestigde concept. Zichtbaar ánders dan het document eronder: een amberen rand zegt
-   "hier moet nog iemand ja op zeggen" zonder dat het een waarschuwing wordt. `einddoc-` en geen
-   eigen `verslag-`-familie: dit IS het einddocument, in ontwerp. Een nieuw prefix voor twee regels
-   is een privé-stylesheet. */
-.einddoc-concept{border-left:3px solid var(--yellow)}
-.einddoc-ckop{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
-/* De twee signalen naast elkaar: modeloordeel en checklist-kruischeck. Bewust NIET samengevoegd
-   tot één regel — juist als ze botsen wil je dat zien. */
-/* Inline bewerken, ÉÉN component voor de wall-comment en het conceptverslag
+/* Inline bewerken, ÉÉN component voor de wall-comment en de Conclusion van een project
    (cockpit2_util.inline_edit). Namen uit de bestaande `editor-`-familie, want dit IS de editor —
    alleen op de plek van wat hij bewerkt. `.fentry-inline` blijft voor de verwijder-knop en
    vervangt een style='display:inline' die er stond. */
 .fentry-inline{display:inline}
 .editor-inline-f{margin-top:.3rem}
 .editor-inline-f .qadd-row{margin-top:.4rem}
-/* De compacte bevestigbalk (docs/confirm_schoon.html): twee signalen op één regel, één keuze,
-   drie acties. Alles op de bestaande tokens; `einddoc-` want dit hoort bij het einddocument. */
-.einddoc-banner{display:flex;align-items:center;gap:.55rem;background:var(--green-tint);
-  border:1px solid var(--border);border-radius:10px;padding:.6rem .9rem;font-size:.9rem;
-  font-weight:600;color:var(--green-dark);margin-bottom:.9rem}
-.einddoc-concept{border-left:3px solid var(--yellow)}
-.einddoc-prov{font-size:.82rem;margin:.1rem 0 .5rem}
-.einddoc-vervangt{margin:.1rem 0 .8rem;font-size:.86rem}
-.einddoc-split{height:1px;background:var(--border);margin:1.1rem 0 .9rem}
-.einddoc-sig{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem;font-size:.88rem;
-  color:var(--gray);margin-bottom:.7rem}
-.einddoc-sig b{color:var(--ink)}
-.einddoc-sigsep{color:var(--subtle)}
-.einddoc-verdict{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;margin-bottom:.8rem}
-.einddoc-vq{font-weight:600;font-size:.92rem}
-.einddoc-seggroup{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-pill);
-  overflow:hidden}
-.einddoc-seg{border:0;background:var(--surface);color:var(--ink);font:inherit;font-size:.86rem;
-  font-weight:600;padding:.3rem .85rem;cursor:pointer}
-.einddoc-seg+.einddoc-seg{border-left:1px solid var(--border)}
-.einddoc-seg:hover{background:var(--green-tint);color:var(--green-dark)}
-.einddoc-acties{display:flex;flex-wrap:wrap;align-items:center;gap:.9rem}
-.einddoc-hint{font-size:.82rem;margin:.8rem 0 0}
-.einddoc-kern{font-size:1.02rem;line-height:1.6;color:var(--ink);margin:0 0 .5rem;max-width:68ch}
-.einddoc-meer{margin:0}
 .att-hint{margin:.2rem 0 .5rem}
-.einddoc-body h3,.einddoc-body h4,.einddoc-body h5,.einddoc-body h6{margin:1.4rem 0 .5rem;font-family:var(--font-display);line-height:1.2}
-.einddoc-body>:first-child{margin-top:0}
-.einddoc-body h3{font-size:1.25rem}.einddoc-body h4{font-size:1.1rem}.einddoc-body h5{font-size:.95rem}.einddoc-body h6{font-size:.85rem}
-/* max-width op de TEKST en niet op de container: die draagt ook koppen en de inspringing van
-   lijsten, en die mogen de volle breedte houden. */
-.einddoc-body p{margin:.75rem 0;max-width:68ch}
-.einddoc-body ul,.einddoc-body ol{margin:.6rem 0 .6rem 1.1rem}
-.einddoc-body li{margin:.25rem 0;max-width:68ch}
 /* Hoogte-koppeling projectdetail (niet roloverleg): main en zijbalk delen één bounded frame, elk met
    eigen interne scroll, zodat de onderkanten uitlijnen i.p.v. dat de wall op een vaste hoogte afkapt
    terwijl de zijbalk doorloopt. Alleen desktop; op mobiel (1 kolom) groeit alles natuurlijk mee. */
@@ -2810,13 +2743,13 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   background: var(--nu-bg-alt); outline: none; }
 
 /* 2 · Scheidingslijnen: 1px crème → 1.5px zwart */
-:root .railsplit, :root .menu-sep, :root .einddoc-split { background: var(--nu-text); height: 1.5px; }
+:root .railsplit, :root .menu-sep { background: var(--nu-text); height: 1.5px; }
 
 /* 3 · Grijstinten uit het oude palet → één muted */
 :root .pf, :root .fstamp, :root .rail-l, :root .psec-bij, :root .pkaart-crumb, :root .vz-t,
-:root .mk, :root .einddoc-sigsep, :root .pbadge, :root .pstatus {
+:root .mk, :root .pbadge, :root .pstatus {
   color: var(--nu-muted); font-family: var(--nu-font); }
-:root .rail-v, :root .ptitle-ro, :root .einddoc-sig { color: var(--nu-text);
+:root .rail-v, :root .ptitle-ro { color: var(--nu-text);
   font-family: var(--nu-font); }
 
 /* 4 · Groen dat niet in de beelden staat (#14713C / --green-tint) */
@@ -2846,10 +2779,6 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .clabel { border-radius: 0; }
 
 /* 7 · De staart: nog een pil-radius, twee omhulsels en een losse coral */
-:root .einddoc-seggroup { border: var(--nu-border); border-radius: 0; }
-:root .einddoc-seg { background: var(--nu-surface); color: var(--nu-text);
-  font-family: var(--nu-font); border-radius: 0; }
-:root .einddoc-kern { color: var(--nu-text); }
 /* `.eff` STOND HIER, naast `.cardmenu-b`, en hoort er niet (1 oktober 2026). Het is de Effort-RIJ
    (`fieldform eff`), geen omhulsel; met dezelfde specificiteit als `:root .fieldform { border: 0 }`
    en later in het bestand won hij, en droeg de rij een 2px-zwart kader om twee lichte velden. */
@@ -2898,7 +2827,6 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* 3 · Groen als vulling → rustig, met de vorm als drager
        `.rdr-row` houdt zijn dashed outline: dát is het signaal, niet de tint erachter. */
 :root .rdr-row { background: var(--nu-bg-alt); outline-color: var(--nu-text); }
-:root .einddoc-body { color: var(--nu-text); }
 :root .done { color: var(--nu-muted); }
 :root .c2-bar { color: var(--nu-muted); font-family: var(--nu-font); }
 

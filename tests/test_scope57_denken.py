@@ -25,7 +25,6 @@ from unittest.mock import patch
 
 import pytest
 
-from nooch_village import project_verslag
 from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.inhabitant import Inhabitant

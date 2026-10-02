@@ -227,8 +227,6 @@ def test_afrond_uitkomst_draagt_de_overgeslagen_taak_mee(tmp_path):
     cockpit2_.dispatch(dd, "check_skip", {"pid": [pid], "clid": [clid], "item": [item["id"]],
                                           "reason": ["niet meer nodig"], "next": ["/"]},
                        username="guest")
-    st2 = cockpit2._Stores(dd)
-    st2.project_docs.write(pid, "# Rapport\n\nEcht antwoord op de vraag, met bevindingen.")
 
     cockpit2_.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
 

@@ -279,7 +279,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)
     if mag_bewerken:
-        # HETZELFDE COMPONENT als "Edit before confirming" op /rapport — zie
+        # HETZELFDE COMPONENT als de Conclusion bovenaan het project — zie
         # cockpit2_util.inline_edit. `terug` gaat mee zodat opslaan je op de projectkaart houdt.
         _hid2 = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                  f"<input type='hidden' name='pid' value='{_e(pid)}'>"
@@ -318,8 +318,8 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     # `_wall_outcome_form` en `_wall_outcome_opts` blijven bestaan: de checklist-kant gebruikt ze
     # nog (views/checklists.py) en de `wall_outcome`-dispatch bedient de inbox-route.
     # KEEP IN WIKI IS HIER WEG (2 oktober 2026, besluit Stefan). Een bericht in een projectgesprek
-    # is een update, geen feit; kennis gaat naar de wiki via het BEVESTIGDE rapport ("Keep as a
-    # fact" op /rapport, #647) — één doordacht moment in plaats van een knop onder elk bericht.
+    # is een update, geen feit; kennis gaat naar de wiki via "Keep as a fact" onder de Conclusion
+    # van het project — één doordacht moment in plaats van een knop onder elk bericht.
     return (f"<div class='fentry editor-inline'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"

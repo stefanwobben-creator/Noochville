@@ -94,39 +94,17 @@ def test_een_legacy_queued_project_wordt_actief_bij_het_laden(tmp_path):
 
 # ── 4: het verslag sluit het project af ──────────────────────────────────────
 
-def _afgesloten(dd, st, titel="Sluitstuk"):
-    pid = st.projects.create(ROLE, titel, "human", status="running", done_when="af")
-    cl = st.projects.checklist_add(pid, "tasks")["id"]
-    st.projects.check_add(pid, cl, "A")
-    it = next(c for c in st.projects.get(pid)["checklists"] if c["id"] == cl)["items"][0]
-    st.projects.check_toggle(pid, cl, it["id"])
+def test_done_blijft_op_het_bord_tot_iemand_archiveert(tmp_path):
+    """Tot 2 oktober 2026 archiveerde het BEVESTIGEN VAN HET RAPPORT een project. Het rapport is
+    weg (besluit Stefan): een project in Done blijft op het bord staan tot een mens de bestaande
+    archiveer-knop gebruikt."""
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Sluitstuk", "human", status="running", done_when="af")
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
-    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
-    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
-    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
-    cockpit2._Stores(dd).project_docs.write_concept(
-        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
-    return pid
-
-
-def test_bevestigd_verslag_archiveert(tmp_path):
-    dd, st = _st(tmp_path)
-    pid = _afgesloten(dd, st)
-    assert not cockpit2._Stores(dd).projects.get(pid).get("archived")     # done, nog op het bord
-    _, msg = cockpit2.dispatch(dd, "verslag_bevestig_behaald", {"pid": [pid], "next": ["/"]}, username="guest")
     p = cockpit2._Stores(dd).projects.get(pid)
-    assert p["archived"] is True and p["status"] == "done" and p["resultaat"] == "behaald"
-    assert msg.startswith("✓ report confirmed") and "gearchiveerd" in msg
-
-
-def test_niet_behaald_en_overslaan_archiveren_ook(tmp_path):
-    dd, st = _st(tmp_path)
-    a = _afgesloten(dd, st, "Niet gelukt")
-    cockpit2.dispatch(dd, "verslag_bevestig_niet_behaald", {"pid": [a], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(a)["archived"] is True
-    b = _afgesloten(dd, st, "Zonder verslag")
-    _, msg = cockpit2.dispatch(dd, "verslag_overslaan", {"pid": [b], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(b)["archived"] is True and "gearchiveerd" in msg
+    assert p["status"] == "done" and not p.get("archived")
+    cockpit2.dispatch(dd, "proj_archive", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["archived"] is True
 
 
 def test_een_afgerond_project_blijft_voor_zijn_doel_meetellen(tmp_path):
@@ -144,8 +122,8 @@ def test_een_afgerond_project_blijft_voor_zijn_doel_meetellen(tmp_path):
 
 
 def test_archiveren_is_een_gedeelde_route(tmp_path):
-    """Eén plek voor 'het bord af': de knop en het verslag delen `archiveer`. Twee kopieën drijven
-    uiteen, en dat was precies het risico toen er nog een signaal-plaatsing aan hing — die is op
-    19 sept 2026 vervallen met de radarlaag, de gedeelde route blijft."""
-    for f in (cockpit2._act_proj_archive, cockpit2._bevestig_met, cockpit2._act_verslag_overslaan):
+    """Eén plek voor 'het bord af': `archiveer`. De verslag-ingangen die hem deelden zijn op
+    2 oktober 2026 met het rapport verdwenen; de knop gebruikt hem nog, en een nieuwe ingang hoort
+    hem ook te gebruiken in plaats van een tweede kopie."""
+    for f in (cockpit2._act_proj_archive,):
         assert "archiveer(" in inspect.getsource(f), f.__name__

@@ -307,7 +307,7 @@ def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
 #: .cl--familie: de andere lege staten in het systeem zijn losse <span class='muted'>-zinnen, en die
 #: dragen geen ruimte of toon.
 _CL_LEEG = ("<li class='cl-empty'>No actions yet. Put the first step from the meeting "
-            "here — or split the end document into what still needs doing.</li>")
+            "here.</li>")
 
 
 #: Slepen om te herordenen. Zelfde idioom als de statements-lijst in de kennisbank en het

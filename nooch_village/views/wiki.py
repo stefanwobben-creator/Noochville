@@ -310,7 +310,7 @@ def _feit_form(aid: str, csrf_token: str) -> str:
 def bijna_gelijke_paginas(st) -> list[list[str]]:
     """Groepjes pagina-titels die bijna hetzelfde heten — zodat je ze ziet vóórdat je kiest.
 
-    HET PROBLEEM IS EEN KEUZELIJST, geen zoekopdracht. "Keep as a fact" op /rapport toont een
+    HET PROBLEEM IS EEN KEUZELIJST, geen zoekopdracht. "Keep as a fact" onder een projectconclusie toont een
     `<select>` met alle pagina's; staan er twee bijna gelijk in ("Ecovative" en "Ecovative BV"),
     dan kies je er één zonder te weten dat de ander bestaat, en groeit de kennis uit elkaar over
     twee pagina's die over hetzelfde gaan.
@@ -434,17 +434,12 @@ def _backlink_sectie(a, pags: list) -> str:
     return f"<div class='wiki-inline'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
-def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str = "") -> str:
+def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
     """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
 
     Het loopt langs het bestaande verzoekmechanisme: het wordt een `naar_rol`-item in de inbox van
     de beslisser, met dezelfde drie knoppen (accepteren / aanpassen / weigeren). Hier staat alleen
-    wie het krijgt en waarom, zodat niemand een verzoek de leegte in stuurt.
-
-    `prefill` (scope 61, wiki_kennisborging.md — "wiki vóór archief"): komt een bezoeker hier via
-    "→ To the wiki" op een projectrapport, dan is het rapport de tekst waar het om gaat, niet de
-    huidige pagina-body. Leeg (het gewone geval) verandert er niets aan: dan vult het formulier
-    zichzelf zoals altijd met `a.body`."""
+    wie het krijgt en waarom, zodat niemand een verzoek de leegte in stuurt."""
     ontv = wiki.ontvanger(a.anchor, st.records, st.assign)
     rec = st.records.get(ontv["rol"])
     naar = _name(rec) if rec is not None else ontv["rol"]
@@ -463,7 +458,7 @@ def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "", prefill: str =
             f"{_field('Why', 'waarom', fid=f'vst-waarom-{a.id}', required=True, placeholder='one line: what is wrong now')}"
             # `data-wikilink`: ook hier helpt de `[[`-typhulp, want dit veld wordt straks de
             # tekst van de pagina en draagt dus dezelfde verwijzingen.
-            f"{_field('Proposed text', 'voorstel', kind='textarea', value=(prefill or a.body), fid=f'vst-body-{a.id}', attrs='data-wikilink')}"
+            f"{_field('Proposed text', 'voorstel', kind='textarea', value=a.body, fid=f'vst-body-{a.id}', attrs='data-wikilink')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_voorstel'>Send</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
