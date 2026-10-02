@@ -29,7 +29,6 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
 | `/projects` | `render_projects_screen` | `nooch_village/views/projects.py` |
 | `/node` | `render_node` | `nooch_village/views/overview.py` |
-| `/rapport` | `render_projectrapport` | `nooch_village/views/rapport.py` |
 | `/pagina` | `render_pagina` | `nooch_village/views/wiki.py` |
 | `/project/nieuw` | `render_wizard` | `nooch_village/views/wizard.py` |
 | `/project` | `render_project` | `nooch_village/views/projects.py` |
@@ -113,7 +112,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `linkbuilding_besluit` | `_act_linkbuilding_besluit` |
 | `kanaal_ontvolg` | `_act_kanaal_ontvolg` |
 | `kanaal_verwijder` | `_act_kanaal_verwijder` |
-| `rapport_naar_wiki` | `_act_rapport_naar_wiki` |
 | `pagina_synthese` | `_act_pagina_synthese` |
 | `pagina_synthese_verwerp` | `_act_pagina_synthese_verwerp` |
 | `pagina_feit_add` | `_act_pagina_feit_add` |
@@ -130,11 +128,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_conclusie_ai` | `_act_proj_conclusie_ai` |
 | `proj_conclusie_verwerp` | `_act_proj_conclusie_verwerp` |
 | `conclusie_naar_wiki` | `_act_conclusie_naar_wiki` |
-| `proj_doc_edit` | `_act_proj_doc_edit` |
-| `verslag_bevestig_behaald` | `_act_verslag_bevestig_behaald` |
-| `verslag_bevestig_niet_behaald` | `_act_verslag_bevestig_niet_behaald` |
-| `verslag_overslaan` | `_act_verslag_overslaan` |
-| `verslag_bijwerken` | `_act_verslag_bijwerken` |
 | `proj_settrekker` | `_act_proj_settrekker` |
 | `proj_setowner` | `_act_proj_setowner` |
 | `proj_approve` | `_act_proj_approve` |
@@ -356,4 +349,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_54 routes · 167 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
+_53 routes · 161 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._

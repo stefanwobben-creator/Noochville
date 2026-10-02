@@ -12,6 +12,10 @@ niet. Dat oordeel hoort bij de mens. Bij het intrekken stonden 65 projecten op d
 Bewust ook geen zachte variant: geen nudge, geen waarschuwing, geen "weet je het zeker". Die zijn
 expliciet afgewezen — half blokkeren houdt de traagheid zonder de zekerheid te leveren.
 
+Sinds 2 oktober 2026 bestaat het einddocument helemaal niet meer (het rapport is vervangen door
+de Conclusion bovenaan het project). De regel hieronder geldt dus a fortiori: Done kijkt naar het
+werk, er is geen document om naar te kijken.
+
 Waarom dit een test is en geen aantekening: een conventie die je moet onthouden is een
 waarschuwing, geen guard. Zou iemand de poort ooit opnieuw invoeren, dan valt deze test om en
 leest hij meteen waarom hij weg was.
@@ -19,7 +23,7 @@ leest hij meteen waarom hij weg was.
 from __future__ import annotations
 
 from nooch_village import cockpit2
-from nooch_village.projects import ProjectLedger, seed_document
+from nooch_village.projects import ProjectLedger
 
 ROLE = "mother_earth__nooch__website_developer"
 
@@ -31,11 +35,10 @@ def test_er_is_geen_document_poort_meer():
         "dod_poort is terug. Dat is een beleidswijziging (Done zou weer een document vereisen) "
         "en hoort een eigen besluit te zijn — zie de docstring bovenaan dit bestand.")
     assert not hasattr(P, "is_seed_van_dit_project"), (
-        "is_seed_van_dit_project hoorde bij die poort en had daarna geen consument meer. "
-        "Voor de weergavevraag is er `heeft_seed_vorm`.")
+        "is_seed_van_dit_project hoorde bij die poort en had daarna geen consument meer.")
 
 
-def _done(tmp_path, doc: str | None):
+def _done(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
@@ -43,35 +46,19 @@ def _done(tmp_path, doc: str | None):
     pid = st.projects.create(ROLE, "Hoeveel massa verliest een schoenzool?", "human",
                              done_when=done_when)
     st.projects.start(pid)
-    if doc is not None:
-        cockpit2._Stores(dd).project_docs.write(pid, doc)
     _, msg = cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     return cockpit2._Stores(dd).projects.get(pid), msg, done_when
 
 
 def test_afronden_zonder_enig_einddocument(tmp_path):
-    p, msg, _ = _done(tmp_path, None)
+    p, msg, _ = _done(tmp_path)
     assert p["status"] == "done", msg
     assert not cockpit2.is_weigering(msg), msg
-
-
-def test_afronden_met_alleen_de_opdracht_in_het_document(tmp_path):
-    """Precies het geval dat de poort blokkeerde: het document is nog de seed."""
-    seed = seed_document("Er ligt een getal met bron, of de uitleg waarom dat niet kan.")
-    p, msg, _ = _done(tmp_path, seed)
-    assert p["status"] == "done", msg
-    assert not cockpit2.is_weigering(msg), msg
-
-
-def test_afronden_met_een_geschreven_rapport_blijft_gewoon_werken(tmp_path):
-    doc = seed_document("Er ligt een getal met bron.") + "\n\n## Conclusie\nCa. 1-5 g per 100 km."
-    p, msg, _ = _done(tmp_path, doc)
-    assert p["status"] == "done", msg
 
 
 def test_de_uitkomst_wordt_nog_steeds_vastgelegd(tmp_path):
     """De poort is weg, de administratie niet: er hoort nog altijd een outcome bij een Done."""
-    p, _, _ = _done(tmp_path, None)
+    p, _, _ = _done(tmp_path)
     assert (p.get("dod_outcome") or p.get("outcome") or "").strip(), p
 
 

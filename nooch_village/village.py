@@ -103,8 +103,6 @@ class Village:
         # Gedeelde set (daemon-intern): pids die _claim_run_complete AL inline als route="autonoom"
         # aankondigde. De board-watch skipt die zodat een autonome afronding niet dubbel vuurt.
         self.context._autonomous_done = set()
-        from nooch_village.project_doc_store import ProjectDocStore
-        self.context.project_docs = ProjectDocStore(self.context.data_dir)   # levend einddocument per project
         from nooch_village.personas import PersonaStore
         # De inwoners in de rugzak: `llm_keuze` leest hier de modelvoorkeur van de persona die op een
         # rol zit (`context.personas`). Zonder deze regel is dat attribuut None en valt ELK daemon-pad

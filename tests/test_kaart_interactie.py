@@ -144,64 +144,37 @@ def test_verwijderen_blijft_om_bevestiging_vragen(tmp_path):
 
 
 # ── één component voor inline bewerken ───────────────────────────────────────
-def test_comment_en_concept_delen_hetzelfde_edit_component(tmp_path):
-    """ÉÉN INTERACTIE, ÉÉN IMPLEMENTATIE. De comment-edit toggelde `[data-fb]`/`[data-fe]` binnen
-    `.fentry`; "Edit before confirming" op /rapport opende een <details> met een tweede textarea
-    ónder het concept. Twee bouwsels voor dezelfde handeling lopen uiteen zodra er één verandert,
-    en de gebruiker moet het patroon twee keer leren."""
-    from nooch_village.views.rapport import render_projectrapport
+def _kaart_met_comment_en_conclusie(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    st.people.add("Ik Zelf", IK)
+    ik = st.people.add("Ik Zelf", IK)
+    st.assign.assign(ROLE, "person", ik.id)
     pid = st.projects.create(ROLE, "Eén component", "human", status="running", done_when="af")
-    st.projects.start(pid)
-    cl = st.projects.checklist_add(pid, "tasks")["id"]
-    st.projects.check_add(pid, cl, "A")
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["comment"], "author": ["human:"],
                                         "next": ["/"]}, username=IK)
-    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
-    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
-    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
-    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
-    cockpit2._Stores(dd).project_docs.write_concept(
-        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
-    kaart = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK)
-    rapport = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    for naam, html in (("kaart", kaart), ("rapport", rapport)):
-        assert "editor-inline" in html, naam                    # dezelfde wrapper-klasse
-        assert html.count("data-toon=") == html.count("data-bewerk="), naam
-        assert html.count("data-toon=") >= 1, naam
-    # en de oude, parallelle bouwsels zijn weg
+    cockpit2._Stores(dd).projects.set_conclusie(pid, "Alles klaar.")
+    return P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK)
+
+
+def test_comment_en_conclusie_delen_hetzelfde_edit_component(tmp_path):
+    """ÉÉN INTERACTIE, ÉÉN IMPLEMENTATIE. De comment-edit toggelde `[data-fb]`/`[data-fe]` binnen
+    `.fentry`; "Edit before confirming" op /rapport opende een <details> met een tweede textarea.
+    Sinds 2 oktober 2026 zijn de twee gebruikers de wall en de Conclusion — op dezelfde pagina,
+    met hetzelfde `inline_edit`."""
+    kaart = _kaart_met_comment_en_conclusie(tmp_path)
+    assert kaart.count("data-toon=") == kaart.count("data-bewerk=")
+    assert kaart.count("data-toon=") >= 2                       # de comment én de conclusie
     assert "data-fb=" not in kaart and "fentry-edit" not in kaart
-    assert "<summary class='flink'>Edit before confirming" not in rapport
 
 
 def test_de_toggle_knop_vindt_zijn_eigen_blok(tmp_path):
     """DE GASTHEER MARKEERT DE GRENS. Een wrapper strak om het PAAR zou smaller zijn dan de knop —
-    die staat bij de andere acties — en dan geeft `closest()` null terug. Dat ging bij de eerste
-    poging precies zo mis, in beide schermen tegelijk."""
-    from nooch_village.views.rapport import render_projectrapport
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    st.people.add("Ik Zelf", IK)
-    pid = st.projects.create(ROLE, "Grens", "human", status="running", done_when="af")
-    st.projects.start(pid)
-    cl = st.projects.checklist_add(pid, "tasks")["id"]
-    st.projects.check_add(pid, cl, "A")
-    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "text": ["c"], "author": ["human:"],
-                                        "next": ["/"]}, username=IK)
-    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
-    # Het concept kwam hier tot 19 sept 2026 uit de auto-assemblage bij het afsluiten;
-    # die assembler is weg (BLOK B). De bevestig-flow leeft door, dus schrijft de test
-    # zijn eigen concept in plaats van op een verdwenen producent te leunen.
-    cockpit2._Stores(dd).project_docs.write_concept(
-        pid, "## Goal\naf\n\n## Result\nAchieved. Alles klaar.", bronnen=["checklist"])
-    for html in (P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK),
-                 render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK")):
-        # de wrapper opent VÓÓR het paar en VÓÓR de knop, en sluit erna: dan omvat hij beide
-        w = html.index("editor-inline")
-        assert html.index("data-toon=", w) > w
-        # De onclick wordt ge-escaped gerenderd; zoek op het stabiele deel dat beide vormen delen.
-        assert "closest(" in html[w:] and ".editor-inline" in html[w:]
+    die staat bij de andere acties — en dan geeft `closest()` null terug. Elke `data-toon` moet dus
+    BINNEN een `.editor-inline` staan, voor elke gebruiker op de pagina."""
+    html = _kaart_met_comment_en_conclusie(tmp_path)
+    i = 0
+    while (i := html.find("data-toon=", i + 1)) != -1:
+        w = html.rfind("editor-inline", 0, i)
+        assert w != -1, "een bewerkblok zonder omhullende .editor-inline"
+    assert "closest(" in html and ".editor-inline" in html

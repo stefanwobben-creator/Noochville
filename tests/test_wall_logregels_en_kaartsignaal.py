@@ -88,40 +88,13 @@ def test_de_rustige_vorm_staat_waar_hij_wint():
         "de uitzondering staat vóór de regel die hij moet overrulen")
 
 
-# ══ 2. Het kaartsignaal ══════════════════════════════════════════════════════
-def test_done_met_onbevestigd_rapport_draagt_het_op_de_kaart(tmp_path):
+# ══ 2. Het kaartsignaal — weg met het rapport (2 oktober 2026) ═════════════
+def test_er_is_geen_bevestig_chip_meer_op_de_kaart(tmp_path):
+    """"needs your confirmation" hoorde bij een onbevestigd rapport. Het rapport is weg; een chip
+    die naar iets wijst dat niet meer bestaat, is een kaart die liegt."""
     dd, pid, ik = _dorp(tmp_path)
-    st = cockpit2._Stores(dd)
-    kaart_voor = P._proj_card(st, st.projects.get(pid), "TOK", "/projects")
-    assert "needs your confirmation" not in kaart_voor
-
-    st.project_docs.write_concept(pid, "## Result\nAchieved.", bronnen=["checklist"])
-    st = cockpit2._Stores(dd)
-    kaart = P._proj_card(st, st.projects.get(pid), "TOK", "/projects")
-    assert "needs your confirmation" in kaart
-    # HETZELFDE CHIPJE ALS BINNENIN: dezelfde toestand hoort er niet op twee plekken anders uit te
-    # zien — en een kleur is nooit de enige drager, dus het woord staat erbij.
-    assert "chip amber" in kaart
-
-
-def test_een_bevestigd_project_draagt_niets(tmp_path):
-    """Zodra het concept weg is, is er niets meer te bevestigen — en dan hoort de kaart te zwijgen."""
-    dd, pid, ik = _dorp(tmp_path)
-    st = cockpit2._Stores(dd)
-    st.project_docs.write_concept(pid, "## Result\nAchieved.")
-    st.project_docs.clear_concept(pid)
-    kaart = P._proj_card(cockpit2._Stores(dd), st.projects.get(pid), "TOK", "/projects")
-    assert "needs your confirmation" not in kaart
-
-
-def test_een_leeg_concept_is_geen_signaal(tmp_path):
-    """Een concept-bestand zonder tekst is geen wachtend rapport; de kaart-binnenkant stelt dezelfde
-    eis (`(concept.get("tekst") or "").strip()`)."""
-    dd, pid, ik = _dorp(tmp_path)
-    st = cockpit2._Stores(dd)
-    st.project_docs.write_concept(pid, "   ")
-    kaart = P._proj_card(cockpit2._Stores(dd), st.projects.get(pid), "TOK", "/projects")
-    assert "needs your confirmation" not in kaart
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert "needs your confirmation" not in _wall(dd, pid)
 
 
 # ══ 3. Wie het schreef, staat erboven ════════════════════════════════════════

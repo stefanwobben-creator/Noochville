@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from nooch_village import project_verslag, site_audit
+from nooch_village import site_audit
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition

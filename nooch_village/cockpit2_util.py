@@ -1098,92 +1098,6 @@ def _md_naar_bron(html: str) -> str:
     return uit.rstrip("\n") if parser._blok_einde else uit
 
 
-def _md_doc(text: str) -> str:
-    """Vollere markdown-render voor het einddocument (leesbaar i.p.v. rauw). Kent kop-niveaus
-    (# .. ###### -> h3..h6), **vet**/*cursief*/~~doorhalen~~, geordende (1.) en ongeordende (- )
-    lijsten, [tekst](url)-links (alleen http(s)), alinea's en regelafbrekingen. Omringende
-    codefences (```), waar de LLM het document soms in wikkelt, worden gestript; een codefence
-    BINNEN het document (een opdracht om te plakken, een commando) wordt een `<pre>`-blok waarin
-    niets wordt opgemaakt — sinds Noochie's memo (scope 42a) die een Claude Code-opdracht kan
-    dragen. XSS-veilig: de tekst wordt eerst ge-escaped (`_e`), pas daarna draaien de
-    opmaak-regexes; een codeblok wordt apart ge-escaped. Losstaand van `_md` (de lichte
-    comment-formatter blijft ongemoeid)."""
-    import re
-    s = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-    fences = sum(1 for ln in s.split("\n") if ln.strip().startswith("```"))
-    if s.startswith("```") and fences <= 2:                   # LLM-codefence om het hele document -> strippen
-        lines = s.split("\n")[1:]
-        while lines and not lines[-1].strip():
-            lines.pop()
-        if lines and lines[-1].strip().startswith("```"):
-            lines.pop()
-        s = "\n".join(lines)
-    # Codeblokken eerst uit de tekst halen: wat erin staat is letterlijk (geen vet, geen lijst,
-    # geen link), dus het mag niet door de regexes hieronder. Ze komen aan het eind terug als <pre>.
-    blokken: list[str] = []
-
-    def _vang(m):
-        blokken.append(m.group(1))
-        return f"\n\x00CODE{len(blokken) - 1}\x00\n"
-
-    s = re.sub(r"```[^\n]*\n(.*?)\n?```", _vang, s, flags=re.S)
-    s = _e(s)                                                 # eerst escapen (fail-closed tegen XSS)
-    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet vóór cursief
-    s = re.sub(r"~~(.+?)~~", r"<del>\1</del>", s)
-    s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)
-
-    def _link(m):
-        url = m.group(2)
-        if url.startswith("http://") or url.startswith("https://"):
-            return f"<a href='{url}' target='_blank' rel='noopener'>{m.group(1)}</a>"
-        return m.group(0)
-
-    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, s)
-    out, mode = [], None                                      # mode: None | 'ul' | 'ol'
-    for ln in s.split("\n"):
-        t = ln.strip()
-        h = re.match(r"(#{1,6})\s+(.*)", t)
-        if h:
-            if mode:
-                out.append("</ul>" if mode == "ul" else "</ol>")
-                mode = None
-            tag = {1: "h3", 2: "h4", 3: "h5"}.get(len(h.group(1)), "h6")
-            out.append(f"<{tag}>{h.group(2)}</{tag}>")
-            continue
-        o = re.match(r"\d+\.\s+(.*)", t)
-        if o:
-            if mode != "ol":
-                if mode == "ul":
-                    out.append("</ul>")
-                out.append("<ol class='fbul'>")
-                mode = "ol"
-            out.append(f"<li>{o.group(1)}</li>")
-            continue
-        if t.startswith("- "):
-            if mode != "ul":
-                if mode == "ol":
-                    out.append("</ol>")
-                out.append("<ul class='fbul'>")
-                mode = "ul"
-            out.append(f"<li>{t[2:]}</li>")
-            continue
-        if mode:
-            out.append("</ul>" if mode == "ul" else "</ol>")
-            mode = None
-        if t:
-            out.append(f"<p>{ln}</p>")
-    if mode:
-        out.append("</ul>" if mode == "ul" else "</ol>")
-    html = "".join(out)
-    for i, code in enumerate(blokken):
-        html = html.replace(f"<p>\x00CODE{i}\x00</p>", f"<pre>{_e(code)}</pre>")
-    return html
-
-
-# De guarded wrapSel-definitie: één authoritatieve bron (`_WRAPSEL_DEF`), gebruikt door zowel de
-# meegedragen editor-<script> (`_WRAPSEL_JS`) als de modal-controller (`_modal_html`). `if(!window.wrapSel)`
-# → nooit dubbel gedefinieerd, ongeacht hoeveel editors of dat de modal 'm óók definieert. De modal heeft
-# een eigen kopie nodig want een <script> in een fragment draait niet bij innerHTML (zie _modal_html).
 _WRAPSEL_DEF = ("if(!window.wrapSel){window.wrapSel=function(btn,pre,post){"
                 "var f=btn.closest('form');var t=f&&f.querySelector('textarea');if(!t)return;"
                 "var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
@@ -1200,7 +1114,7 @@ _WRAPSEL_JS = f"<script>{_WRAPSEL_DEF}</script>"
 # verandert — en de gebruiker leert het patroon twee keer.
 #
 # De wrapper draagt zijn eigen klasse (`.editor-inline`), zodat de JS niet afhangt van de gastheer:
-# `.fentry` op de wall, de conceptkaart op /rapport, en wat er hierna bij komt.
+# `.fentry` op de wall, de Conclusion op de projectpagina, en wat er hierna bij komt.
 _INLINE_TOON_JS = ("var w=this.closest('.editor-inline');"
                    "w.querySelector('[data-toon]').hidden=true;"
                    "var e=w.querySelector('[data-bewerk]');e.hidden=false;"
@@ -1245,7 +1159,7 @@ def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
     veld waar je het aanpast, niet eerst zoeken.
 
     DE GASTHEER MARKEERT DE GRENS, niet deze helper: zet `editor-inline` op het element dat zowel
-    het paar ALS de knop omvat (`.fentry` op de wall, de conceptkaart op /rapport). Een wrapper hier
+    het paar ALS de knop omvat (`.fentry` op de wall, de Conclusion op de projectpagina). Een wrapper hier
     zou strakker om het paar zitten dan om de knop, en dan vindt `closest()` hem niet — precies wat
     er misging toen ik het wél zo probeerde."""
     klik = (f" data-klik-bewerk tabindex='0' title='Click to edit'"

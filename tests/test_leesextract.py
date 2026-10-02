@@ -18,7 +18,6 @@ import pytest
 
 from nooch_village import leesextract as le
 from nooch_village import deliverable_kop as dk
-from nooch_village import project_verslag as pv
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RoleDefinition, RecordType

@@ -73,22 +73,6 @@ def uitvoerlijst(project: dict) -> dict | None:
         return cls[0]
     return None
 
-# ── DE DRIE WAARDEN VAN HET MENSELIJKE OORDEEL ────────────────────────────────────────────────
-# Sleutels, geen labels: ze worden opgeslagen en geteld, dus ze horen op ÉÉN plek te staan en niet
-# in twee spellingen. Ze stonden even zowel hier ("niet_behaald") als in project_verslag
-# ("niet behaald"), en het gevolg was meteen zichtbaar: de kaart toonde "Checklist says:
-# niet_behaald" — de rauwe sleutel, omdat de labeltabel de andere spelling kende.
-#
-# Ze wonen hier en niet in project_verslag omdat projects.py niets mag importeren uit die module
-# (dat zou een cirkel zijn); andersom wel.
-#
-# "overgeslagen" is een volwaardige derde waarde: wie de vraag overslaat hoort niet als "behaald"
-# of "niet behaald" in een telling te belanden.
-BEHAALD = "behaald"
-NIET_BEHAALD = "niet_behaald"
-OVERGESLAGEN = "overgeslagen"
-RESULTAAT_WAARDEN = (BEHAALD, NIET_BEHAALD, OVERGESLAGEN)
-
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 
 # ── DE PROJECTSTATUSSEN ────────────────────────────────────────────────────────────────────────
@@ -370,28 +354,6 @@ class ProjectLedger:
         self._save()
         return True
 
-    RESULTAAT_WAARDEN = RESULTAAT_WAARDEN          # zie de module-constanten hierboven
-
-    def set_resultaat(self, pid: str, oordeel: str, toelichting: str = "",
-                      learnings: str = "") -> bool:
-        """Het menselijke sluitstuk: is het doel behaald, met een toelichting en optionele leringen.
-
-        WAAROM EEN EIGEN VELD EN NIET IN DE VERSLAGTEKST. Een ja/nee dat je later wilt tellen —
-        hoeveel projecten haalden hun doel, en hoeveel niet — mag niet in proza wonen. Dat is
-        dezelfde reden als bij de essentie: tekst is voor mensen, een sleutel is voor de machine.
-        De tekst komt er ook, maar in het verslag; dit is het telbare deel.
-
-        `learnings` is nooit verplicht: het orggeheugen is een aanbod, geen formulier-eis."""
-        p = self._projects.get(pid)
-        if p is None or oordeel not in self.RESULTAAT_WAARDEN:
-            return False
-        p["resultaat"] = oordeel
-        p["resultaat_toelichting"] = (toelichting or "").strip()[:2000]
-        p["learnings"] = (learnings or "").strip()[:2000]
-        p["resultaat_at"] = time.time()
-        self._touch(p)
-        self._save()
-        return True
 
     def add_reaction(self, pid: str, entry_id: str, emoji: str) -> bool:
         """Voeg een emoji-reactie toe aan een feed-entry (per emoji een teller). Alleen entries met
@@ -1557,61 +1519,6 @@ def dagen_per_status(p: dict, now: float | None = None) -> dict:
     return {k: round(v, 2) for k, v in dagen.items()}
 
 
-def seed_document(dod: str) -> str:
-    """De start van het levende einddocument: de 'klaar wanneer' (de uitgebreide DoD) als kop.
-    De inwoner schrijft hieronder naar het antwoord toe; zodra het document van deze seed afwijkt
-    schrijft de inwoner het antwoord. Leeg → "" (geen seed).
-
-    Dit sjabloon is óók de bron voor `heeft_seed_vorm`, die eruit afleidt hoe een onaangeroerd
-    document eruitziet. Verander je de tekst hier, dan verandert die herkenning mee."""
-    d = (dod or "").strip()
-    if not d:
-        return ""
-    return (f"**Klaar wanneer**\n\n{d}\n\n---\n\n"
-            "*De inwoner werkt dit document bij elke puls bij en schrijft hieronder "
-            "naar het antwoord toe.*\n")
-
-
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s or "").strip()
-
-
-# ── DE SEED HERKENNEN — voor de WEERGAVE, niet voor een poort ─────────────────────────────────
-# Hier stonden tot 4 sep 2026 twee vragen naast elkaar: "is dit exact de seed van dít project"
-# (voor `dod_poort`) en "is dit niets dan de opdracht" (voor de essentie op de kaart).
-#
-# STEFANS ONTWERPBESLUIT (4 sep 2026): een Done vereist geen einddocument. `dod_poort` is
-# daarmee vervallen — inclusief de strikte `is_seed_van_dit_project`, die na de verwijdering geen
-# enkele consument meer had. Wat overblijft is de weergavevraag, en die is dus geen "helft van een
-# splitsing" meer maar gewoon de enige vraag die het dorp over een seed stelt.
-
-# Het seed-sjabloon met een merkteken op de plek van de opdracht, zodat we de vaste kop en staart
-# kunnen aflezen ZONDER ze ergens over te tikken. Verandert `seed_document`, dan verandert dit mee.
-_SEED_MERK = "\x00OPDRACHT\x00"
-_SEED_KOP, _SEED_STAART = seed_document(_SEED_MERK).split(_SEED_MERK, 1)
-
-
-def heeft_seed_vorm(doc_text: str = "") -> bool:
-    """Is dit document niets dan de opdracht — welke opdracht dan ook?
-
-    Anders gezegd: bestaat er een X waarvoor dit gelijk is aan `seed_document(X)`? Kop en staart
-    komen uit `seed_document` zelf, dus het sjabloon staat op één plek.
-
-    WAAROM NIET TEGEN `done_when` VERGELIJKEN: 67 geseede documenten op productie hebben een leeg
-    `done_when` op het record terwijl het document wél geseed is. Zonder deze vormvraag toont de
-    kaart daar de sjabloonzin ("De inwoner werkt dit document bij elke puls bij…") als samenvatting
-    — een kaart die zegt dat er een rapport is dat er niet is.
-
-    Dit is een WEERGAVEVRAAG en niets meer. Hij bepaalt wat er op de kaart staat, niet of iets
-    afgerond mag worden; zie het besluit hierboven.
-    """
-    n = _norm(doc_text or "")
-    kop, staart = _norm(_SEED_KOP), _norm(_SEED_STAART)
-    if not n or not kop:
-        return False
-    return n.startswith(kop) and n.endswith(staart) and len(n) > len(kop) + len(staart)
-
-
 # ── Concurrency-poort: ALLE schrijfpaden lopen door _synchronized (slot + verse read onder het slot).
 # Eén auditbare lijst (1-op-1 met de methodes die self._save() aanroepen). Een NIEUW schrijfpad MOET hier
 # bij — de guard-test tests/test_projectledger_concurrency.py::test_alle_schrijfpaden_gesynchroniseerd
@@ -1621,7 +1528,7 @@ _WRITE_METHODS = (
     "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
-    "set_resultaat", "set_conclusie", "set_conclusie_voorstel",
+    "set_conclusie", "set_conclusie_voorstel",
     "set_item_offer", "accept_item_offer", "plan_akkoord", "set_checklist_uitvoer",
     "edit", "approve", "discard",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",

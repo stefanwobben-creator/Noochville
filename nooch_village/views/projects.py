@@ -6,13 +6,11 @@ import urllib.parse
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner, _field, _status
-from nooch_village.project_essentie import essentie_van
-from nooch_village.projects import heeft_seed_vorm
 from nooch_village import projects as _PJ                 # tijdlijn (scope 48)
 from nooch_village import doelen as _D
 from nooch_village.cockpit2_util import (
     _AUTOSAVE, _DS_LINK,
-    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
+    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET, _nav,)
@@ -430,39 +428,13 @@ def _doel_kop(st: _Stores, goal: str) -> str:
             f"<span>{v['pct']}% · {v['af']}/{v['totaal']} done</span></div></div>")
 
 
-def _concept_chip(st, p: dict) -> str:
-    """"Er ligt een rapport dat op jou wacht" — op de KAART, niet pas als je hem opent.
-
-    HET STOND ALLEEN BINNENIN. Een project in Done met een onbevestigd concept ziet er op het bord
-    precies uit als een project dat helemaal klaar is; het verschil zag je pas na het openen, en
-    dus zag je het niet. Dit is hetzelfde amber chipje met dezelfde woorden als de bevestigvraag
-    zelf (`_result_formulier`) — dezelfde toestand hoort er niet op twee plekken anders uit te
-    zien.
-
-    DE BRON IS HETZELFDE CONCEPT dat de kaart-binnenkant leest (`project_docs.concept`), geen
-    tweede vlag in het project. Reference, don't copy: een tweede administratie van "er wacht iets"
-    loopt uiteen zodra er één bevestigd wordt.
-
-    FAIL-SOFT zoals `_kaart_status`: een bord dat niet laadt omdat een chip struikelt is erger dan
-    een bord zonder chip."""
-    try:
-        store = getattr(st, "project_docs", None)
-        if store is None:
-            return ""
-        if not (store.concept(p.get("id") or "").get("tekst") or "").strip():
-            return ""
-        return "<span class='chip amber'>needs your confirmation</span>"
-    except Exception:
-        return ""
-
-
 def _kaart_chips(st: _Stores, p: dict) -> str:
     """De etiketten-rij op de kaart (fase 11, 1b): doel, batch/label, deadline-indien-gezet.
 
     ÉÉN RIJ, ÉÉN ATOOM. Alle drie zijn `.chip` — hetzelfde atoom dat de rest van het systeem al
     gebruikt. Wat er niet is, staat er niet: een kaart zonder deadline toont geen lege
     deadline-chip, want "niet ingevuld" is geen etiket."""
-    chips = [_doel_chip(st, p), _concept_chip(st, p)]
+    chips = [_doel_chip(st, p)]
     label = p.get("label")
     if label and label in _LABELS:
         chips.append(f"<span class='chip muted'>{_e(str(label))}</span>")
@@ -731,9 +703,8 @@ def _modal_html(mentions_json: str = "[]") -> str:
         # response.ok-poort (generiek voor ELKE modal-actie, incl. de auto-opslaan-controls): een 413
         # (bestand te groot) of elke andere niet-2xx toont de server-melding en NOOIT '✓ opgeslagen'.
         "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'not saved').slice(0,90)));});return;}"
-        # ZELFDE POORT ALS BIJ DE DROP. Hier liep de done-knop óók langs: de server weigerde
-        # met "⛔ het einddocument is nog leeg", de redirect gaf 200, en dit toastte
-        # "✓ saved". Geen confetti op een weigering.
+        # ZELFDE POORT ALS BIJ DE DROP: een weigering van de server (de redirect geeft 200) mag
+        # nooit als "✓ saved" toasten. Geen confetti op een weigering.
         "var w=weigering(resp.url);"
         "if(w){reopen();toast(w.slice(0,140));return;}"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
@@ -875,13 +846,7 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
                 f"<button class='btn' type='submit' name='action' value='proj_unarchive'>restore</button>"
                 f"<button type='submit' name='action' value='proj_delete' class='dellink' "
                 f"onclick=\"return confirm('Delete permanently?')\">delete</button></form>")
-        # DE WEG TERUG NAAR WAT HET OPLEVERDE. Een archiefregel was alleen een naam met twee
-        # knoppen: het rapport van dat project was vanaf hier niet te bereiken, terwijl juist een
-        # gearchiveerd project alleen nog als rapport bestaat. `/rapport` geeft zelf een nette
-        # melding als er geen document is, dus de link mag onvoorwaardelijk.
-        lees = (f" <a class='flink' href='/rapport?pid={_e(p['id'])}"
-                f"&back={urllib.parse.quote(back, safe='')}'>report</a>")
-        rows += f"<li class='muted'>{_e(str(scope or '—'))}{lees}{ctrl}</li>"
+        rows += f"<li class='muted'>{_e(str(scope or '—'))}{ctrl}</li>"
     return (f"<details class='box-details' style='margin-top:.6rem'><summary>🗄 Archived ({len(archived)})</summary>"
             f"<ul class='clean'>{rows}</ul></details>")
 
@@ -1097,156 +1062,6 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
             f"<span class='fwho'><b class='fname'>Attachment added</b></span>"
             f"<span class='fstamp'>{_e(_stamp(a.get('at')))}</span></div>"
             f"<div class='fbubble'>{card}<div class='ffoot'><div class='ffoot-l'>{rm}</div></div></div></div>")
-
-
-def _herkomst_chip(st: _Stores, pid: str) -> str:
-    """Welk model schreef dit einddocument — en was dat het gevraagde model?
-
-    Een persona-voorkeur is een kop met de dorpsladder als staart: valt de dure trede weg, dan komt
-    er alsnog een document, maar van een goedkoper model. Zonder deze markering leest zo'n document
-    als een premium exemplaar, en dat is precies de stille verwisseling die een reviewer niet kan
-    zien. Geen herkomst (mens-edit, of van vóór de markering) → geen chip, geen ruis."""
-    store = getattr(st, "project_docs", None)
-    meta = store.meta(pid) if store is not None else {}
-    tier = (meta or {}).get("tier")
-    if not tier:
-        return ""
-    if meta.get("terugval"):
-        return (f"<span class='chip amber' title='The requested model was unavailable; this document "
-                f"came from the cheaper fallback rung.'>⚠ fallback: {_e(tier)}</span>")
-    return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
-
-
-def result_balk(pid: str, concept: dict, hid, *, edit_knop: str = "") -> str:
-    """De compacte bevestigbalk onder het rapport: twee signalen, één keuze, drie acties.
-
-    HET RAPPORT ÍS HET FORMULIER. Hier stonden losse WHY- en Learnings-velden; die herhaalden de
-    Result- en Learnings-sectie die al in het rapport staan, dus je typte tweemaal hetzelfde en er
-    ontstonden twee versies van dezelfde gedachte. Bewerken gebeurt nu op één plek — in het rapport
-    zelf, via "Edit before confirming".
-
-    HET TELBARE OORDEEL IS DE ENIGE GESTRUCTUREERDE INVOER. Een ja/nee dat je later wilt tellen
-    hoort niet in proza; de rest van de betekenis staat in de tekst die de mens leest en goedkeurt.
-
-    GEEN VOORSELECTIE: elke default duwt de mens naar een antwoord zodra de twee signalen botsen —
-    en juist die botsing is de reden dat hij kijkt."""
-    from nooch_village.project_verslag import label_voor, modeloordeel_kort
-    tekst = concept.get("tekst") or ""
-    model = modeloordeel_kort(tekst)
-    kruis = label_voor((concept.get("voorzet") or "").strip())
-    signalen = []
-    if model:
-        signalen.append(f"<span>Draft concluded <b>{_e(model)}</b></span>")
-    signalen.append(f"<span>Checklist says <b>{_e(kruis)}</b></span>")
-    sig = "<span class='einddoc-sigsep'>·</span>".join(signalen)
-
-    # DE KEUZE ÍS DE BEVESTIGING. Er stonden vier losse submitknoppen in één formulier: twee met
-    # `name='oordeel'` en één met `name='action'`. Een HTML-submit draagt alleen zijn EIGEN
-    # naam/waarde, dus die twee konden nooit samen in één POST — "Achieved" stuurde een oordeel
-    # zonder actie (er gebeurde niets) en "Confirm report" een actie zonder oordeel (validatie
-    # faalde). Er was geen klik die beide droeg.
-    #
-    # Nu draagt elke keuzeknop de hele beslissing: één actie, oordeel eringebakken. Geen JavaScript,
-    # en nog steeds geen voorselectie — het zijn ACTIES, geen toggles, en dat is precies wat een
-    # keuze zonder default hoort te zijn.
-    keuze = "".join(
-        f"<button class='einddoc-seg' type='submit' name='action' value='{_e(act)}'>{_e(lbl)}</button>"
-        for act, lbl in (("verslag_bevestig_behaald", "Achieved"),
-                         ("verslag_bevestig_niet_behaald", "Not achieved")))
-    return (f"<div class='einddoc-split'></div>"
-            f"<div class='einddoc-sig'>{sig}</div>"
-            # `hid()` draagt csrf, pid ÉN next; hier stond nóg een next-input, dus elk formulier
-            # verstuurde er twee. De eerste won, de tweede was ruis.
-            f"<form method='post' action='/action' class='pf einddoc-rform'>{hid()}"
-            f"<div class='einddoc-verdict'>"
-            f"<span class='einddoc-vq'>Did it reach its goal?</span>"
-            f"<span class='einddoc-seggroup'>{keuze}</span></div>"
-            f"<div class='einddoc-acties'>"
-            f"{edit_knop}"
-            f"<button class='flink' type='submit' name='action' value='verslag_overslaan' "
-            f"title='Close without recording a result — the report says so honestly'>Skip</button>"
-            f"</div></form>"
-            f"<p class='muted einddoc-hint'>Your pick is the one that counts. The reasoning and "
-            f"learnings live in the report above — change them with “Edit before confirming”.</p>")
-
-
-def _result_formulier(st, pid: str, p: dict, concept: dict, hid, nxt: str) -> str:
-    """De bevestigvraag op de KAART. Hier staat het rapport niet, dus de knop die het opent is de
-    weg naar de tekst waar de toelichting en leringen in leven."""
-    return (f"<div class='card einddoc-concept'>"
-            f"<div class='einddoc-ckop'><span class='chip amber'>needs your confirmation</span>"
-            f"<span class='muted'>the report is assembled but not confirmed</span></div>"
-            f"{result_balk(pid, concept, hid, edit_knop=f_lees(nxt))}</div>")
-
-
-def f_lees(nxt: str) -> str:
-    """De 'lees het concept'-link voor de kaartvariant van de bevestigbalk."""
-    return f"<a class='flink' href='{nxt}'>Read the draft</a>"
-
-
-def _einddocument_delen(st: _Stores, pid: str, rw: bool, hid, back: str = "/") -> tuple[str, str]:
-    """De Description-sectie: de ESSENTIE plus een weg naar het volledige rapport.
-
-    Hiervóór stond het hele einddocument hier inline. Dat maakte de kaart onscanbaar — je opent
-    een project om te zien waar het staat en krijgt een document van vijf schermen. De kaart toont
-    nu een of twee zinnen; het rapport woont op `/rapport?pid=…` (zie views/rapport.py voor waarom
-    een eigen route en geen uitklapper).
-
-    GEEN INFORMATIEVERLIES: de essentie snijdt niets weg dat niet één klik verder staat, en bij een
-    gekapte zin is de link geen aanbod maar noodzaak — daarom staat hij er dan ook altijd.
-
-    DRIE TOESTANDEN, DRIE ZINNEN. Een document dat nog alleen de opdracht is (107x op productie) is
-    iets anders dan geen document. Een essentie tonen bij een seed zou zeggen dat er een rapport
-    is, en dat is niet waar; de 'klaar wanneer'-regel als samenvatting tonen zou bovendien bij 84
-    van die 107 bijna letterlijk de projecttitel herhalen die er twee centimeter boven staat.
-
-    De acties (`proj_doc_edit`, `proj_regen_doc`) horen bij het volledige rapport en verhuizen dus
-    mee naar die route; wat hier blijft is de ingang ernaartoe."""
-    store = getattr(st, "project_docs", None)
-    doc = store.read(pid) if store is not None else ""
-    p = st.projects.get(pid) or {}
-    nxt = f"/rapport?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
-
-    def lees(label: str) -> str:
-        # GEEN %-formatting hier: `nxt` bevat url-gecodeerde tekens (%2F), en die leest %-formatting
-        # als een format-specifier. De suite ving dat als een TypeError op elk project zonder
-        # bruikbare essentie.
-        return f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>{_e(label)} →</a></p>"
-
-    # HET MENSELIJKE SLUITSTUK, MAAR ALLEEN WAAR HET NIET OPDRINGT. Staat er al een écht rapport
-    # (geen seed), dan is een formulier dat vraagt of we het mogen vervangen een stille downgrade
-    # in beleefde vorm — daar blijft het bij een link naar de route. Gemeten op productie: 152 van
-    # de 300 afsluitbare projecten hebben een leeg of seed-document en krijgen de vraag dus wél;
-    # 148 hebben een echt rapport en krijgen hem niet.
-    _c = store.concept(pid) if store is not None else {}
-    if rw and (_c.get("tekst") or "").strip() and (not doc.strip() or heeft_seed_vorm(doc)):
-        return _result_formulier(st, pid, p, _c, hid, nxt), ""
-
-    # EEN WACHTEND CONCEPT IS EEN SIGNAAL, GEEN VERSLAG. De essentie blijft die van het BEVESTIGDE
-    # document: onbevestigde modeltekst als samenvatting tonen zou de kaart weer laten zeggen dat er
-    # iets ligt wat er niet ligt — precies wat we bij de seeds weghaalden. Wel een merkteken, want
-    # er valt iets te doen.
-    wacht = ""
-    if store is not None and (store.concept(pid).get("tekst") or "").strip():
-        wacht = (f"<p class='einddoc-meer'><a class='flink' href='{nxt}'>"
-                 f"Draft report awaiting confirmation →</a></p>")
-
-    if not doc.strip():
-        body = ("<p class='muted'>No end document yet — the assigned inhabitant writes it on "
-                "every successful pulse.</p>") + wacht
-        return body, ""
-
-    ess = essentie_van(doc)
-    if ess.soort == "seed":
-        body = ("<p class='muted'>No report written yet — only the assignment.</p>"
-                + lees("Read the assignment") + wacht)
-    elif ess.heeft_tekst:
-        body = f"<p class='einddoc-kern'>{_e(ess.tekst)}</p>" + lees("Full report") + wacht
-    else:
-        # Trede 4: wel een rapport, maar geen zin die als essentie kan dienen (4x op productie).
-        # Liever niets dan een fragment dat zich als samenvatting voordoet.
-        body = lees("Full report") + wacht
-    return body, ""
 
 
 def _ai_namen(st) -> list[str]:
@@ -1722,10 +1537,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"</div>")
     details_panel = _psec(_IC_INFO, "Project details", details_dcol + verzwakt_block)
 
-    # 1b) De DoD-contract-box is vervallen (founder, 21 jul): de 'klaar wanneer' (uitgebreide DoD)
-    # staat nu als kop van het einddocument (direct onder de titel), en de projectpoort is
-    # De poort die daarbij hoorde (projects.dod_poort) is 4 sep 2026 ingetrokken:
-    # een Done vereist geen einddocument. Zie tests/test_project_dod_poort.py.
+    # 1b) De DoD-contract-box is vervallen (founder, 21 jul). De titel IS de uitkomst (scope 47);
+    # het einddocument dat de 'klaar wanneer' als kop droeg is op 2 oktober 2026 weggehaald.
 
     # 2) Checklist — vier onderscheidbare states + skill/payload (zie _checklists_html)
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw, st=st)
@@ -1861,7 +1674,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
-    einddoc_body, einddoc_acties = _einddocument_delen(st, pid, rw, hid, back)
     # ═══ DE HERINDELING ═══════════════════════════════════════════════════════════════
     # Header (crumb + titel + chips), dan drie secties in de hoofdkolom en een lichte rail. De
     # oude koppen "END DOCUMENT" en "WALL — CONTENT & CONVERSATION" zijn weg: ze schreeuwden en
@@ -1872,10 +1684,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # blijft hier: het is een SIGNAAL over dit project, geen instelbaar veld, en het hoort gezien te
     # worden zonder dat je de rail afgaat. (Het verdween ooit met de .dcol en werd onbereikbaar —
     # de suite ving dat, en die eis geldt nog steeds.)
-    kop = f"<div class='pkaart-head'>{_crumb}{head}{_herkomst_chip(st, pid)}{verzwakt_block}</div>"
+    kop = f"<div class='pkaart-head'>{_crumb}{head}{verzwakt_block}</div>"
     concl_body, concl_acties = _conclusie_sectie(st, p, pid, csrf_token, username, nxt_full)
+    # CONCLUSION VERVANGT DESCRIPTION (2 oktober 2026). Daar stond de essentie van het rapport plus
+    # een weg naar /rapport; het rapport is weg, en wat een project opleverde staat nu hier, door
+    # een mens bijgehouden terwijl het project loopt.
     secties = (_psectie("Conclusion", concl_body, acties=concl_acties)
-               + _psectie("Description", einddoc_body, acties=einddoc_acties)
                # "+ new checklist" stond in de rail onder "Add". Hij hoort bij de checklist waar hij
                # iets aan toevoegt — zo staat het ook in de mock.
                + _psectie("Checklist", checklists_html, bijschrift="actions from the meeting",

@@ -376,37 +376,13 @@ def _outsider_ziend_op(st):
     return "bob@nooch.earth"
 
 
-def test_van_rapport_vult_het_voorstel_met_het_rapport_niet_de_pagina_body(tmp_path):
-    """Kom je via '→ To the wiki' op een rapport, dan vult het Suggest-a-change-formulier zich met
-    het RAPPORT in plaats van de pagina's eigen tekst. De kaart-body (los van het formulier) blijft
-    gewoon de pagina tonen — alleen het formulier verandert, er wordt niets overschreven."""
+def test_het_voorstel_vult_zich_met_de_pagina_body(tmp_path):
+    """Het Suggest-a-change-formulier begint bij wat de pagina NU zegt. (Tot 2 oktober 2026 kon
+    `van_rapport` daar een projectrapport voor in de plaats zetten; het rapport is weg.)"""
     st = _stores(tmp_path)
     bob = _outsider_ziend_op(st)
     st.att.add(OWNER, "note", title="HyphaLite", body="De oude pagina-tekst.")
-    pid = st.projects.create(OWNER, "Onderzoek naar HyphaLite", "human", status="running")
-    st.project_docs.write(pid, "Het bevestigde rapport, uniek en herkenbaar.")
-    st2 = cockpit2._Stores(st.dd)
-
-    zonder = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob)
-    # zonder van_rapport: de oude tekst staat er twee keer (kaart-body + formulier vult zich ermee)
-    assert zonder.count("De oude pagina-tekst.") == 2
-    assert "Het bevestigde rapport, uniek en herkenbaar." not in zonder
-
-    met = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob,
-                               van_rapport=pid)
-    # met van_rapport: de kaart-body toont de pagina nog steeds (1x), maar het formulier vult zich
-    # nu met het rapport in plaats van de pagina-tekst
-    assert met.count("De oude pagina-tekst.") == 1
-    assert "Het bevestigde rapport, uniek en herkenbaar." in met
-
-
-def test_van_rapport_zonder_leesbaar_rapport_valt_terug_op_de_pagina_body(tmp_path):
-    """Fail-soft: een onbestaand project-id bij `van_rapport` mag de tab niet breken — gewoon de
-    normale voorinvulling, geen fout op het scherm."""
-    st = _stores(tmp_path)
-    bob = _outsider_ziend_op(st)
-    st.att.add(OWNER, "note", title="HyphaLite", body="De oude pagina-tekst.")
-    st2 = cockpit2._Stores(st.dd)
-    html = cockpit2.render_node(st2, OWNER, "notes", csrf_token="tok", username=bob,
-                                van_rapport="bestaat-niet")
+    html = cockpit2.render_node(cockpit2._Stores(st.dd), OWNER, "notes", csrf_token="tok",
+                                username=bob)
+    # twee keer: de kaart-body én het formulier dat zich ermee vult
     assert html.count("De oude pagina-tekst.") == 2

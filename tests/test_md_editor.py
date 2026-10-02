@@ -5,7 +5,7 @@ from __future__ import annotations
 from nooch_village import cockpit2
 from nooch_village.cockpit2_util import md_editor, _md
 from nooch_village.views.projects import _modal_html
-from nooch_village.views.rapport import render_projectrapport
+from nooch_village.views.projects import render_project
 
 CIRCLE = "mother_earth__nooch"
 ROLE = "mother_earth__nooch__website_developer"
@@ -30,13 +30,14 @@ def test_md_editor_rendert_en_escapet_value():
 
 
 def test_editor_werkt_op_pagina_zonder_modal_html(tmp_path):
-    """Het rapport-scherm laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee).
-    (Tot 11 september 2026 was het backlog-scherm hier het voertuig; dat is verwijderd.)"""
+    """De volle projectpagina laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee).
+    (Voertuigen eerder: het backlog-scherm tot 11 september 2026, het rapport-scherm tot 2 oktober
+    2026 — allebei weg. Nu de Conclusion-editor op de projectpagina.)"""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     pid = st.projects.create(ROLE, "Eén document", "human", status="running", done_when="af")
     st.projects.start(pid)
-    tab = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="t")
+    tab = render_project(cockpit2._Stores(dd), pid, csrf_token="t", username="guest")
     assert "class='editor'" in tab and "if(!window.wrapSel)" in tab
     assert "wrapSel=function" not in tab.replace("if(!window.wrapSel){window.wrapSel=function", "")
     # de modal definieert wrapSel nu WÉL (guarded): een <script> in een fragment draait niet bij

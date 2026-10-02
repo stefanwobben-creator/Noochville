@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nooch_village import project_verslag
+import nooch_village
 from nooch_village.event_bus import EventBus
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.models import Record, RecordType, RoleDefinition
@@ -160,7 +160,7 @@ def test_linkbuilding_zonder_onderwerp_blokkeert_bij_het_plannen_en_bij_het_draa
     res = s.run({"brands": ["x"]}, SimpleNamespace(settings={"SERPAPI_API_KEY": "k"}))
     assert _classify(res) == "fout" and "linkbuilding_query" in res["error"]
     assert "topic" in s.input_schema and "_GUIDE_QUERY" not in open(
-        os.path.join(os.path.dirname(project_verslag.__file__), "skills_impl", "linkbuilding.py")).read()
+        os.path.join(os.path.dirname(nooch_village.__file__), "skills_impl", "linkbuilding.py")).read()
 
 
 def test_linkbuilding_geen_gidsen_is_leeg():
