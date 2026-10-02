@@ -175,6 +175,10 @@ def materiaal_paginas(bom_tekst: str = "", leveranciers: dict | None = None,
         regels += ["", "## CO2 & Water",
                    "As a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
                    "TDS or another source. The BOM screen calculates with these values."]
+        # COMPLIANCE-KLAAR (2 oktober 2026): de sectie en zijn standaard-open-punten uit
+        # `wiki.DIERLIJK_CHEMISCH` — dezelfde tekst als het skelet, één plek.
+        regels += ["", wiki.DIERLIJK_CHEMISCH[0], wiki.DIERLIJK_CHEMISCH[1]]
+        open_punten += [f"- {p}" for p in wiki.DIERLIJK_CHEMISCH[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
         regels += ["", "What this material demonstrably is or is not belongs on this page as a "
@@ -328,6 +332,9 @@ def leverancier_paginas(ledger, *, vandaag: str = "",
         regels += ["", "## Price agreement",
                    "As a fact with a value (cost price per kg), grounded in the quote or the "
                    "contract. The BOM screen calculates with this value."]
+        # COMPLIANCE-KLAAR (2 oktober 2026): zie `wiki.ARBEID_COMPLIANCE`.
+        regels += ["", wiki.ARBEID_COMPLIANCE[0], wiki.ARBEID_COMPLIANCE[1]]
+        open_punten += [f"- {p}" for p in wiki.ARBEID_COMPLIANCE[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
         uit.append({"titel": leverancier, "body": "\n".join(regels),
