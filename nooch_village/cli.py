@@ -731,7 +731,6 @@ def main() -> None:
         from nooch_village import claims_db, org
 
         from nooch_village import bom_leveranciers
-        LEVERANCIER_ROL = "mother_earth__nooch__supply_chain_coordinator"
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
         # DE MATERIAAL-EIGENAAR WORDT AFGELEID uit het domein `Materials` (2 oktober 2026), zoals de
@@ -740,8 +739,13 @@ def main() -> None:
         _mat_rec = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
         MATERIAAL_ROL = _mat_rec.id if _mat_rec is not None else ""
         if not MATERIAAL_ROL:
-            print(f"⚠ no living role holds the domain '{bom_leveranciers.DOMEIN}' — material pages "
-                  f"are skipped. Assign the domain to a role via governance.")
+            print(f"⚠ no living role holds the domain '{bom_leveranciers.DOMEIN}' — material and "
+                  f"supplier pages are skipped. Assign the domain to a role via governance.")
+        # LEVERANCIERPAGINA'S BIJ DEZELFDE ROL (besluit Stefan, 3 oktober 2026). Stond vast op
+        # `supply_chain_coordinator`, een slapende rol: een pagina daar is in de praktijk alleen
+        # door de Circle Lead te onderhouden. Wie `Materials` houdt, zet op `/bom` ook de
+        # leverancier-koppelingen — dus houdt hij ook de pagina's.
+        LEVERANCIER_ROL = MATERIAAL_ROL
         # `--alleen=materiaal,leverancier` beperkt de run; `--ook-gewist` zaait ook pagina's die
         # bewust verwijderd zijn (een expliciete mensbeslissing — zie `wiki_seed._bestaat`).
         _alleen = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--alleen=")), "")
