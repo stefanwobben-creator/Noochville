@@ -68,7 +68,8 @@ def test_de_greep_acties_blijven_bij_hun_greep():
 def test_er_is_een_menu_tegelijk():
     """Twee open menu's laten je raden bij welk blok je bezig bent."""
     kaal = js_zonder_uitleg(JS)
-    assert "function sluitBlokMenu()" in kaal
+    # Sinds 2 oktober 2026 met een `wis`-parameter (de losse "/" weghalen bij sluiten).
+    assert "function sluitBlokMenu(" in kaal
     assert "sluitBlokMenu();" in _fn("blokMenuOpen"), "een tweede menu blijft naast het eerste open"
 
 
