@@ -335,6 +335,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 | Databestand |
 |---|
+| `bom_maten.json` |
 | `co2_factoren.json` |
 | `llm_prijzen.json` |
 | `noochie_memo_staat.json` |
@@ -348,4 +349,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_54 routes · 161 dispatch-acties · 30 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
+_54 routes · 161 dispatch-acties · 30 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._

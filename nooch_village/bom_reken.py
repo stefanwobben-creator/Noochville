@@ -16,9 +16,53 @@ het is, is een besluit van de eigenaar, geen keuze van deze code.
 """
 from __future__ import annotations
 
+import json
+import logging
+import os
+
 from nooch_village import wiki
 from nooch_village.compositie import bom_rijen
 from nooch_village.wiki_seed import _materiaalnaam
+
+log = logging.getLogger("village.bom")
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MATEN_PAD = os.path.join(BASE_DIR, "config", "bom_maten.json")
+
+
+def maat_config(pad: str | None = None) -> dict:
+    """De maat-schaling uit `config/bom_maten.json` (Correctie 3): referentiemaat, schaal per maat,
+    de maten die je kunt kiezen en waar het getal vandaan komt. FAIL-CLOSED: een ontbrekende of
+    kapotte config geeft {} — dan rekent het scherm alleen op de referentiewaarden en zegt het dat,
+    in plaats van met een verzonnen factor te schalen."""
+    try:
+        with open(pad or MATEN_PAD, encoding="utf-8") as f:
+            cfg = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        log.warning("bom_maten.json unreadable (%s): no size scaling", e)
+        return {}
+    if not isinstance(cfg, dict):
+        return {}
+    try:
+        ref = int(cfg["referentiemaat"])
+        stap = float(cfg["schaal_per_maat"])
+        maten = [int(m) for m in cfg.get("maten") or [ref]]
+    except (KeyError, TypeError, ValueError):
+        return {}
+    return {"referentiemaat": ref, "schaal_per_maat": stap, "maten": maten,
+            "bron": str(cfg.get("bron") or ""), "datum": str(cfg.get("datum") or "")}
+
+
+def schaalfactor(maat: int, cfg: dict) -> float:
+    """1 + schaal × (maat − referentie). Eén factor op de component-HOEVEELHEID, niet op de vier
+    totalen apart — die volgen vanzelf. Zonder config (of bij een niet-positieve uitkomst): 1.0."""
+    if not cfg:
+        return 1.0
+    f = 1 + cfg["schaal_per_maat"] * (maat - cfg["referentiemaat"])
+    return f if f > 0 else 1.0
+
 
 #: De vier totalen, in schermvolgorde: (sleutel, grootheid op de pagina of None voor gewicht,
 #: waar die grootheid woont).
@@ -43,13 +87,16 @@ def _factor(pagina, grootheid: str) -> tuple[float | None, str]:
     return waarden[0]["getal"], ""
 
 
-def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None) -> dict:
+def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
+            schaal: float = 1.0) -> dict:
     """{"rijen": [...], "totalen": {sleutel: {"som", "n", "m"}}} voor één stuklijst.
 
     Per rij: de component, zijn materiaal- en leverancierpagina (of None), het gewicht, de bijdrage
     per metriek (of None) en de open punten in leesbare tekst.
 
-    `leveranciers` = {materiaalsleutel: naam} uit `bom_leveranciers` (per MATERIAAL, niet per rij)."""
+    `leveranciers` = {materiaalsleutel: naam} uit `bom_leveranciers` (per MATERIAAL, niet per rij).
+    `schaal` = de maat-schaalfactor (`schaalfactor`); hij werkt op de hoeveelheid, en alle vier de
+    totalen rekenen daarmee. (Niet `factor` genoemd: zo heet hieronder de waarde van een pagina.)"""
     leveranciers = leveranciers or {}
     rijen = []
     for r in bom_rijen(bom_tekst):
@@ -57,7 +104,7 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None) -> dic
         mat = wiki.resolve(materiaal, pags)
         supplier = leveranciers.get(materiaal.lower(), "")
         lev = wiki.resolve(supplier, pags) if supplier else None
-        gram = r["gram"]
+        gram = r["gram"] * schaal if r["gram"] is not None else None
         bijdrage: dict[str, float | None] = {"gram": gram}
         open_punten: list[str] = []
         if gram is None:

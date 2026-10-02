@@ -80,7 +80,37 @@ def _mag_koppelen(st, username: str | None) -> bool:
                                              circle_id=cirkel or "")
 
 
-def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool) -> str:
+def _maat_kiezer(maat: int, cfg: dict) -> str:
+    """De maat als keuzebalk: `.cl-bar` met `a.cl-filter` en `.on` — het bestaande vocabulaire voor
+    een filter-/periode-keuze (UX_PATTERNS, Kern-klassen), geen nieuwe vorm. Hij bepaalt alleen
+    WELKE geschaalde waarden je ziet; er wordt niets opgeslagen.
+
+    GEEN DROPDOWN, al noemde de correctie die als voorbeeld. Het `cardmenu` van `/metrics` klapt naar
+    links uit (daar staat hij rechts op het scherm); hier, links op de pagina, viel het menu half
+    achter de zijbalk. Elf maten passen op één regel, en dan zie je ook meteen waar je staat."""
+    opties = " ".join(
+        f"<a class='cl-filter{' on' if m == maat else ''}' href='/bom?maat={m}'"
+        f"{' aria-current=' + chr(39) + 'true' + chr(39) if m == maat else ''}"
+        f"{' title=' + chr(39) + 'reference size' + chr(39) if m == cfg['referentiemaat'] else ''}>{m}</a>"
+        for m in cfg["maten"])
+    return f"<div class='cl-bar' aria-label='EU size'><span class='muted'>EU size</span> {opties}</div>"
+
+
+def _schatting(maat: int, cfg: dict) -> str:
+    """WAT DE MAAT DOET, en dat het een schatting is — op de pagina, niet in een tooltip. Het getal
+    zelf komt uit de config (`bom_reken.maat_config`), nooit uit deze tekst."""
+    if not cfg:
+        return ("<p class='muted'>Size scaling is unavailable (no readable config/bom_maten.json); "
+                "the quantities are the reference values.</p>")
+    pct = f"{cfg['schaal_per_maat'] * 100:g}%"
+    ref = cfg["referentiemaat"]
+    waar = (f"the reference size {ref}" if maat == ref else
+            f"size {maat}, scaled from reference size {ref} by {pct} per size step")
+    return (f"<p class='muted'>Quantities for {waar}. The scaling is a provisional assumption, "
+            f"not yet based on factory data ({_e(cfg['bron'])}, {_e(cfg['datum'])}).</p>")
+
+
+def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool, terug: str = "/bom") -> str:
     """Lezen: de leverancier als link (of tekst, of —). Bewerken: dezelfde chip als de Deadline op de
     projectrail, die openklapt naar een formulier. Het veld stelt bestaande wiki-titels voor, maar
     accepteert elke naam: een leverancier mag gekoppeld worden vóór iemand zijn pagina schrijft."""
@@ -94,7 +124,7 @@ def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool) -> str:
             f"<div class='datepop'><form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='action' value='bom_leverancier_zet'>"
-            f"<input type='hidden' name='next' value='/bom'>"
+            f"<input type='hidden' name='next' value='{_e(terug)}'>"
             f"<input type='hidden' name='materiaal' value='{_e(r['materiaal'])}'>"
             f"<input name='leverancier' value='{_e(r['supplier'])}' list='{_LIJST_ID}' "
             f"aria-label='supplier of {_e(r['materiaal'])}' placeholder='Supplier name'>"
@@ -102,18 +132,31 @@ def _leverancier_cel(r: dict, csrf_token: str, bewerk: bool) -> str:
             f"</form>{lees if r['lev'] is not None else ''}</div></details>")
 
 
-def _rij(r: dict, csrf_token: str = "", bewerk: bool = False) -> str:
+def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom") -> str:
     b = r["bijdrage"]
     cellen = "".join(f"<td class='num'>{_getal(k, b.get(k))}</td>"
                      for k, _g, _w in bom_reken.METRIEKEN)
     status = _status("done", "Complete") if not r["open"] else _status("future", "Open")
     return (f"<tr><td>{_e(r['part'])}</td><td>{_link(r['mat'], r['materiaal'])}</td>"
-            f"<td>{_leverancier_cel(r, csrf_token, bewerk)}</td>{cellen}<td>{status}</td></tr>")
+            f"<td>{_leverancier_cel(r, csrf_token, bewerk, terug)}</td>{cellen}<td>{status}</td></tr>")
 
 
-def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "") -> str:
+def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "",
+               maat: str = "") -> str:
     pags = wiki.paginas(st.att)
-    uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, pags, st.bom_leveranciers.alle())
+    # DE MAAT (Correctie 3). Een onbekende of ontbrekende maat is de referentiemaat — geen fout:
+    # het is een kijkknop, en een vreemde waarde in de URL is geen keuze van een mens.
+    cfg = bom_reken.maat_config()
+    ref = cfg.get("referentiemaat", 42) if cfg else 42
+    try:
+        gekozen = int(maat)
+    except (TypeError, ValueError):
+        gekozen = ref
+    if not cfg or gekozen not in cfg["maten"]:
+        gekozen = ref
+    terug = f"/bom?maat={gekozen}"
+    uit = bom_reken.bereken(NOOCH_SCHOEN_BOM, pags, st.bom_leveranciers.alle(),
+                            schaal=bom_reken.schaalfactor(gekozen, cfg))
     bewerk = bool(csrf_token) and _mag_koppelen(st, username)
     opties = ("".join(f"<option value='{_e(p.title)}'></option>" for p in pags if p.title)
               if bewerk else "")
@@ -122,7 +165,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     kop = (f"<tr><th>Component</th><th>Material</th><th>Supplier</th><th class='num'>Weight</th>"
            f"<th class='num'>Cost price</th><th class='num'>{_CO2E}</th><th class='num'>Water</th>"
            "<th>Status</th></tr>")
-    tabel = (f"<table class='mtab'>{kop}{''.join(_rij(r, csrf_token, bewerk) for r in uit['rijen'])}"
+    tabel = (f"<table class='mtab'>{kop}{''.join(_rij(r, csrf_token, bewerk, terug) for r in uit['rijen'])}"
              f"</table>{lijst}")
     open_rijen = [r for r in uit["rijen"] if r["open"]]
     nog_open = ""
@@ -139,6 +182,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
             f"Weights come from the bill of materials, the factors from the material and supplier "
             f"pages. The one thing set here is which supplier delivers a material.</p>{_banner(msg)}"
+            f"{_maat_kiezer(gekozen, cfg) if cfg else ''}{_schatting(gekozen, cfg)}"
             f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

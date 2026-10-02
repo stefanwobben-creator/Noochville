@@ -1,0 +1,9 @@
+{
+ "_": "Maat-schaling van de BOM (Correctie 3, 2 oktober 2026). De hoeveelheden in data_bom.py zijn de waarden bij de REFERENTIEMAAT. Voor een andere maat schaalt het BOM-scherm elke component-hoeveelheid met één lineaire factor: 1 + schaal_per_maat × (maat − referentiemaat). Daarna lopen gewicht, kostprijs, CO2e en water vanzelf mee, want ze rekenen allemaal vanuit die hoeveelheid. Eén plek: bom_reken leest dit bestand, nergens anders staat een schaalgetal.",
+ "referentiemaat": 42,
+ "schaal_per_maat": 0.03,
+ "_schaal_per_maat": "Fractie per volledige EU-maatstap, voor alle componenten gelijk. VOORLOPIGE AANNAME, geen fabrieksdata — het scherm zegt dat erbij. Vervangen zodra de fabriek (of een gewogen paar per maat) een echte reeks geeft.",
+ "bron": "set by Stefan",
+ "datum": "2026-10-02",
+ "maten": [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]
+}

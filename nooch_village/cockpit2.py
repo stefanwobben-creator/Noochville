@@ -6737,7 +6737,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # (houder van `Materials` of Circle Lead); het formulier verschijnt alleen voor wie mag.
                 from nooch_village.views.bom import render_bom
                 self._send(render_bom(st, csrf_token=effective_csrf, username=username,
-                                      msg=(qs.get("msg") or [""])[0]))
+                                      msg=(qs.get("msg") or [""])[0],
+                                      maat=(qs.get("maat") or [""])[0]))
                 return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
