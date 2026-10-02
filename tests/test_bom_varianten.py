@@ -165,7 +165,8 @@ def test_een_geuploade_foto_is_een_beeld_een_adres_een_kaart(tmp_path):
     dd, st = _dorp(tmp_path)
     st.bom_varianten.zet_foto(M, "", "/bom-foto/the-269/ab_269.jpg")
     h = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
-    assert "<img" in h and "/bom-foto/the-269/ab_269.jpg" in h
+    kop = h.split("class='ptitle'")[1].split("aria-label='model'")[0]   # niet het logo meetellen
+    assert "<img" in kop and "/bom-foto/the-269/ab_269.jpg" in kop
     assert "enctype='multipart/form-data'" not in h                 # een lezer krijgt geen upload
     _doe(dd, "bom_foto", foto="https://cdn.example/269.jpg")
     h2 = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
@@ -184,3 +185,17 @@ def test_used_in_noemt_de_variant(tmp_path):
     assert gebruik == [("Hemp fabric", "Upper hemp", "Hi · Black")]
     ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM, varianten=gebruik)}
     assert "- Upper hemp — Hi · Black" in ps["Hemp fabric"]["body"]
+
+
+def test_een_foto_van_de_eigen_shopify_winkel_is_een_beeld(tmp_path):
+    """De ene externe uitzondering (`NOOCH_SHOPIFY_BEELDEN`): de productfoto's die Nooch zelf in
+    Shopify heeft, zijn een eigen asset en mogen bovenaan `/bom` als beeld staan."""
+    from nooch_village.cockpit2_util import NOOCH_SHOPIFY_BEELDEN
+    dd, _st = _dorp(tmp_path)
+    url = NOOCH_SHOPIFY_BEELDEN[0] + "files/269-hi-black.jpg"
+    assert "photo saved" in _doe(dd, "bom_foto", foto=url)
+    h = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
+    # ALLEEN het stuk tussen titel en kiezers: het logo in de navigatie is óók een `<img>`, en daar
+    # liep deze toets eerst op mee (een mutatieproef bleef groen).
+    kop = h.split("class='ptitle'")[1].split("aria-label='model'")[0]
+    assert "<img" in kop and url in kop
