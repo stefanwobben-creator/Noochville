@@ -61,13 +61,12 @@ from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import (BEHAALD, NIET_BEHAALD, ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
+from nooch_village.projects import (ProjectLedger, PREP_CHECKLIST_TITLE, uitvoerlijst, _MISSIE_IMPACT,
                                     _BUSINESS_IMPACT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.acties import ActieStore
 from nooch_village.linkbuilding import LinkTargetQueue
 from nooch_village.channels import ChannelStore
-from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
 from nooch_village.registry_factory import shared_registry
 from functools import lru_cache
@@ -144,7 +143,6 @@ class _Stores:
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
-        self.project_docs = ProjectDocStore(dd)   # levend einddocument per project (weergave + edit-route)
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
         # Eenmalig, idempotent: koppelingen die nog aan een index hangen krijgen het stabiele
         # acc_id van de accountability die nú op die positie staat.
@@ -358,7 +356,6 @@ from nooch_village.views.decision_coach import render_decision_coach
 from nooch_village.views.copy_check import render_copy_check
 from nooch_village.views.wiki import render_wiki_index, render_pagina
 from nooch_village.views.messages import render_messages
-from nooch_village.views.rapport import render_projectrapport
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
 from nooch_village.library import Library
@@ -2523,47 +2520,6 @@ def _feit_op_pagina(c, pagina, feit: dict, change_note: str) -> str:
     return f"✓ kept on {upd.title or upd.id}"
 
 
-def _act_rapport_naar_wiki(c):
-    """Het resultaat van een BEVESTIGD rapport als één feit op een wiki-pagina.
-
-    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `pagina_feit_add`,
-    # via `_feit_op_pagina`. Een feit is inhoud van die pagina.
-
-    EEN FEIT, GEEN PARAGRAAF, en dat is de hele vorm van deze stap. Een project levert één korte,
-    herleidbare regel op; een pagina krijgt pas een lopende alinea als een mens daar apart om
-    vraagt (`pagina_synthese`). Daarom ook GEEN model hier: er valt niets te formuleren wat het
-    rapport niet al zegt.
-
-    DE TEKST KOMT UIT HET FORMULIER, met `project_verslag.modeloordeel_kort(doc)` als voorzet. Dat
-    is geen vrijheid-blijheid maar een meting: van de 235 bevestigde rapporten op prod hebben er
-    6 een `## Result`-kop waar die functie uit leest. Zou de tekst hier server-side uit het document
-    worden gehaald, dan gaf deze knop op 229 rapporten "✗ a fact needs text" — een knop die vrijwel
-    altijd faalt. Nu vult het formulier voor wat het kan en schrijft de mens de rest."""
-    from nooch_village import wiki
-    nxt, st, g = c.nxt, c.st, c.g
-    pagina = st.att.get(g("aid"))
-    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
-        return nxt, "✗ page not found"
-    pid = g("pid")
-    p = st.projects.get(pid)
-    if p is None:
-        return nxt, "✗ project not found"
-    # DE URL MAAKT DE HERKOMST VOLGBAAR: `_grond_chip` maakt een bron-feit
-    # klikbaar zodra hij een url heeft, en zonder die url is de herkomst wel te LEZEN maar niet te
-    # VOLGEN — je weet dat er een rapport was en komt er niet.
-    # WANNEER HET AF WAS, uit `projects.tijdlijn` — dat is de plek die weet of die datum uit de
-    # status-historie komt of een benadering is. `updated_at` zou hier "laatst aangeraakt" noemen
-    # en dat is iets anders dan "afgerond".
-    from nooch_village.projects import tijdlijn
-    _af = tijdlijn(p).get("afgerond") or p.get("updated_at")
-    herkomst = f"{_scope_text(p) or pid} · confirmed · {_stamp(_af)}"
-    feit = wiki.maak_feit(g("tekst"), soort="bron", ref=str(pid), citaat=herkomst,
-                          url=f"/rapport?pid={pid}")
-    if feit is None:
-        return nxt, "✗ a fact needs text"
-    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit een bevestigd rapport")
-
-
 _SYNTHESE_PROMPT = """Je bent de schrijver van een wiki-pagina in een klein bedrijf.
 
 De pagina heet: {titel}
@@ -2768,13 +2724,7 @@ def _act_proj_done(c):
         # Gemeten op de draaiende server bij het intrekken: 65 projecten stonden hierop vast
         # (44 met een leeg document, 21 met alleen de opdracht). Zie tests/test_project_dod_poort.py
         # voor de regel die dit besluit vastlegt in plaats van in iemands hoofd.
-        #
-        # Het document wordt hier nog wél gelezen: het voedt verderop de conclusie van het
-        # radarsignaal. Bij het weghalen van de poort ging deze lezing eerst mee, en omdat de
-        # signaal-aanmaak fail-soft in een `except` zit, verdween het signaal stil — de suite ving
-        # het, de logging niet.
-        _ds = getattr(st, "project_docs", None)
-        _doc = _ds.read(pid) if _ds is not None else ""
+
         # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
         p = pj.get(pid) or {}
         cl = uitvoerlijst(p)                     # dezelfde lijst als de rol afwerkte, niet 'die ene naam'
@@ -2791,13 +2741,9 @@ def _act_proj_done(c):
             outcome = "approved after review"
         _wie = st.people.by_email(username) if username and username != "guest" else None
         pj.complete(pid, outcome, door=(_wie.id if _wie else (username or ""))); msg = "✓ afgerond"
-        # HIER STELDE HET VERSLAG ZICHZELF SAMEN bij het afsluiten: één LLM-ronde over
-        # definitie + checklist + gesprek + document, weggeschreven als concept naast het
-        # document. Weg op 19 september 2026 (besluit Stefan, BLOK B). De 363 bestaande
-        # einddocumenten blijven leesbaar op /rapport; er komt alleen geen nieuw concept meer
-        # bij. Wat een afgerond project achterlaat, zet een mens in de wiki — Keep-in-wiki,
-        # fase 7. Geen vervanging hier, want een half-automatische samenvatting die niemand
-        # bevestigt is precies wat we kwijt wilden.
+        # HIER STELDE HET VERSLAG ZICHZELF SAMEN bij het afsluiten (weg op 19 september 2026,
+        # BLOK B). Sinds 2 oktober 2026 is het hele rapport weg: wat een project opleverde staat in
+        # de Conclusion bovenaan het project, door een mens geschreven terwijl het loopt.
         # DE LUS SLUIT. Vroeg iemand dit als taak, dan hoort hij nu dat het klaar is. Zonder deze
         # regel is werk dat een rol voor je oppakt een eenrichtingsweg: het gebeurt, en jij hoort
         # er nooit meer iets van. Fail-soft — een melding die niet lukt blokkeert geen afronding.
@@ -2889,11 +2835,6 @@ def _act_proj_delete(c):
         dstore = getattr(st, "deliverables", None)
         if dstore is not None:
             dstore.delete_for_project(pid)
-        # Cascade: het levende einddocument (sidecar-.md) mee-verwijderen.
-        docstore = getattr(st, "project_docs", None)
-        if docstore is not None and docstore.delete_for(pid):
-            logging.getLogger("village.project_docs").info(
-                "cascade: einddocument verwijderd bij project-delete %s", pid)
         msg = "🗑 removed"
         return _na_verwijderen(nxt, pid), msg
 
@@ -2924,109 +2865,139 @@ def _act_proj_describe(c):
         return nxt, msg
 
 
-def _bevestig_met(c, oordeel: str):
-    """Bevestig het concept mét een oordeel. Eén plek, twee ingangen (behaald / niet behaald).
+# ── De conclusie (2 oktober 2026): vervangt het rapport ──────────────────────────────────────
+# Vier acties, één veld (`ProjectLedger.set_conclusie`). Alle vier hebben dezelfde poort als de
+# titel en de beschrijving: het is inhoud van het project.
 
-    HET OORDEEL ZIT IN DE ACTIE, niet in een apart veld. Een HTML-submitknop draagt alleen zijn
-    EIGEN naam/waarde, dus "Achieved" (name=oordeel) en "Confirm report" (name=action) konden nooit
-    samen in één POST: de eerste stuurde een oordeel zonder actie (er gebeurde niets), de tweede een
-    actie zonder oordeel (validatie faalde). Er was geen klik die beide droeg.
-
-    Twee acties met het oordeel eringebakken lost dat op zonder JavaScript en zonder voorselectie —
-    het zijn ACTIES, geen toggles, en dat is precies wat een keuze-zonder-default hoort te zijn."""
-    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+def _act_proj_conclusie(c):
+    # AUTHZ: rolvervuller of Circle Lead — de conclusie is operationeel werk binnen de rol die het
+    # project draagt, dezelfde poort als `proj_rename`/`proj_describe`.
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
     pid = g("pid")
-    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
+    if pj.get(pid) is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
     if _deny:
         return nxt, _deny
-    store = getattr(st, "project_docs", None)
-    if store is None:
-        return nxt, "✗ no document store"
-    if not (store.concept(pid).get("tekst") or "").strip():
-        return nxt, "✗ no draft report to confirm"
-    # DE TEKST GAAT ONGEWIJZIGD DOOR: wat de mens las is wat er wordt vastgelegd. Het oordeel is
-    # het telbare deel en woont in zijn eigen veld.
-    if not st.projects.set_resultaat(pid, oordeel):
-        return nxt, "✗ unknown result value"
-    if not store.confirm_concept(pid):
-        return nxt, "✗ nothing to confirm"
-    # HET BEVESTIGDE VERSLAG SLUIT HET PROJECT AF (scope 49). Stefan: "als ik een project op done
-    # sleep kan ik het rapport maken; als ik dat gedaan heb moet ie eigenlijk worden gearchiveerd."
-    # De kolom Done toont daarmee precies de projecten waarvan het verslag nog moet.
-    return nxt, "✓ report confirmed · " + archiveer(st, st.projects, pid)
+    pj.set_conclusie(pid, g("conclusion"), door=_web_actor_id(username, st))
+    return nxt, "✓ conclusion saved"
 
 
-def _act_verslag_bevestig_behaald(c):
-    # AUTHZ: rolvervuller of Circle Lead — het verslag hoort bij het project, dus dezelfde poort als
-    # het bewerken van het document zelf. Bevestigen is een oordeel over eigen werk.
-    return _bevestig_met(c, BEHAALD)
+_CONCLUSIE_PROMPT = """You help a small team write the CONCLUSION of a project: what it found, decided or
+delivered so far, in plain words.
+
+Project title (the intended outcome): {titel}
+{beschrijving}
+Checklist:
+{checklist}
+
+Conversation on the project, oldest first:
+{gesprek}
+{huidig}
+Write the conclusion in 5 to 10 short lines.
+
+Rules:
+- Use only what is in the material above. Add nothing, no general knowledge.
+- Say what is known now. If the project is not finished, say what is still open in one line.
+- If the material contradicts itself, name that instead of choosing.
+- Content, not process: not "the team discussed", but what came out of it.
+- Write in English. Return only the lines, no heading, no introduction."""
 
 
-def _act_verslag_bevestig_niet_behaald(c):
-    # AUTHZ: rolvervuller of Circle Lead — zie hierboven.
-    return _bevestig_met(c, NIET_BEHAALD)
+def _conclusie_bronnen(st, p: dict) -> dict:
+    """Het materiaal voor het voorstel: titel, beschrijving, checklist, gesprek, huidige tekst.
+
+    BEGRENSD, en van achteren: de laatste berichten zijn het meest actueel. Een project met
+    honderden regels mag geen prompt van honderden regels worden."""
+    from nooch_village.views.feed import _feed_norm, _feed_who
+    cl = []
+    for lijst in p.get("checklists") or []:
+        for it in lijst.get("items") or []:
+            cl.append(f"- [{'x' if it.get('done') else ' '}] {it.get('text', '')}")
+    gesprek = []
+    for e in (p.get("log") or [])[-60:]:
+        tekst = " ".join(str(e.get("text") or "").split())
+        if not tekst:
+            continue
+        kind, atype, aid = _feed_norm(e)
+        wie = "log" if kind == "system" else (_feed_who(st, atype, aid)[1] or "someone")
+        gesprek.append(f"- {wie}: {tekst[:600]}")
+    huidig = (p.get("conclusion") or "").strip()
+    return {
+        "titel": _scope_text(p),
+        "beschrijving": (f"Description: {p['description']}\n" if (p.get("description") or "").strip() else ""),
+        "checklist": "\n".join(cl[-40:]) or "(none)",
+        "gesprek": "\n".join(gesprek) or "(no messages yet)",
+        "huidig": (f"\nThe current conclusion, to improve rather than replace blindly:\n{huidig}\n"
+                   if huidig else ""),
+    }
 
 
-def _act_verslag_overslaan(c):
-    # AUTHZ: rolvervuller of Circle Lead — zie _act_verslag_bevestig.
-    #
-    # OVERSLAAN IS EEN ANTWOORD, GEEN STILTE. Het verslag zegt dan "not recorded" in plaats van de
-    # voorzet als oordeel te laten staan — anders leest een overgeslagen vraag later als een
-    # bevestigd "behaald", en dat is precies de stille mislukking die we vermijden.
-    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+def _act_proj_conclusie_ai(c):
+    """Een VOORSTEL voor de conclusie, uit titel, checklist en gesprek. Slaat niets op.
+
+    # AUTHZ: rolvervuller of Circle Lead — wie de conclusie mag opslaan mag er een voorstel voor
+    # vragen; wie niet mag opslaan heeft niets aan een voorstel in een veld dat hij niet kan bewaren.
+
+    AI IS HIER INSTRUMENT: het voorstel landt in het bewerkveld met een Discard ernaast, en pas
+    Save (een mens) maakt er de conclusie van. Fail-closed: geen werkend model → een zichtbare
+    melding, nooit een lege of halve tekst die voor een echte kan doorgaan."""
+    from nooch_village import llm
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
     pid = g("pid")
-    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
+    p = pj.get(pid)
+    if p is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate(p.get("owner") or "", username, st)
     if _deny:
         return nxt, _deny
-    store = getattr(st, "project_docs", None)
-    concept = store.concept(pid) if store is not None else {}
-    if not (concept.get("tekst") or "").strip():
-        return nxt, "✗ no draft report"
-    # OVERSLAAN LAAT DE TEKST OOK STAAN, maar zet er één regel onder: anders leest het rapport als
-    # een bevestigd oordeel terwijl niemand er ja op zei. Toevoegen, niet herschrijven.
-    st.projects.set_resultaat(pid, "overgeslagen")
-    store.write_concept(pid, concept["tekst"].rstrip()
-                        + "\n\n_Closed without a recorded result._",
-                        bronnen=concept.get("bronnen") or [],
-                        voorzet=concept.get("voorzet") or "")
-    store.confirm_concept(pid)
-    # Overslaan is ook een afsluiting: ook dan verlaat het project het bord (scope 49).
-    return nxt, "✓ closed without a recorded result · " + archiveer(st, st.projects, pid)
-
-
-def _act_verslag_bijwerken(c):
-    # AUTHZ: rolvervuller of Circle Lead — zie _act_verslag_bevestig. Bijwerken raakt het CONCEPT,
-    # niet het document: het blijft dus onbevestigd tot iemand er expliciet ja op zegt.
-    nxt, st, g, username = c.nxt, c.st, c.g, c.username
-    pid = g("pid")
-    _deny = _role_gate((st.projects.get(pid) or {}).get("owner") or "", username, st)
-    if _deny:
-        return nxt, _deny
-    store = getattr(st, "project_docs", None)
-    if store is None:
-        return nxt, "✗ no document store"
-    huidig = store.concept(pid)
-    tekst = (g("tekst") or "").strip()
+    tekst = llm.reason(_CONCLUSIE_PROMPT.format(**_conclusie_bronnen(st, p)),
+                       max_tokens=500, call_site="project_conclusie")
+    tekst = "\n".join(r.rstrip() for r in (tekst or "").strip().splitlines()).strip()
     if not tekst:
-        return nxt, "✗ empty draft — nothing saved"
-    # De provenance blijft staan: hij beschrijft waaruit is samengesteld, en dat verandert niet
-    # doordat een mens de formulering bijschaaft.
-    store.write_concept(pid, tekst, bronnen=huidig.get("bronnen") or [],
-                        voorzet=huidig.get("voorzet") or "")
-    return nxt, "✓ draft saved — still unconfirmed"
+        return nxt, "✗ could not draft a conclusion — try again later"
+    pj.set_conclusie_voorstel(pid, tekst, door=_web_actor_id(username, st))
+    return nxt, "✨ draft conclusion ready — check it and press Save"
 
 
-def _act_proj_doc_edit(c):
-        # AUTHZ: rolvervuller of Circle Lead — het einddocument is operationeel werk binnen de rol; de
-        # mens redigeert het bij review via dezelfde poort als andere project-operaties.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        store = getattr(st, "project_docs", None)
-        if store is not None:                              # atomic write; last-writer wint (v1, geen merge)
-            store.write(g("pid"), g("doc"))
-        return nxt, "📄 end document saved"
+def _act_proj_conclusie_verwerp(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie `proj_conclusie_ai`. Wie hem mag laten maken, mag hem
+    # ook weggooien; anders blijft een afgewezen voorstel staan.
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+    pid = g("pid")
+    if pj.get(pid) is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    if not pj.set_conclusie_voorstel(pid, None):
+        return nxt, ""
+    return nxt, "🗑 draft conclusion discarded"
+
+
+def _act_conclusie_naar_wiki(c):
+    """Eén regel uit de conclusie als FEIT op een wiki-pagina, met het project als bron.
+
+    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `pagina_feit_add`, via
+    # `_feit_op_pagina`. Een feit is inhoud van die pagina, niet van het project.
+
+    DE OPVOLGER VAN "Keep as a fact" OP HET RAPPORT: het rapport is weg, de conclusie is de plek
+    waar wat een project opleverde nu staat. `soort="bron"` — herkomst, geen bewijs."""
+    from nooch_village import wiki
+    nxt, st, g = c.nxt, c.st, c.g
+    pagina = st.att.get(g("aid"))
+    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    pid = g("pid")
+    p = st.projects.get(pid)
+    if p is None:
+        return nxt, "✗ project not found"
+    herkomst = f"{_scope_text(p) or pid} · conclusion · {_stamp(p.get('conclusion_at') or time.time())}"
+    feit = wiki.maak_feit(g("tekst"), soort="bron", ref=str(pid), citaat=herkomst,
+                          url=f"/project?pid={pid}")
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit een projectconclusie")
 
 
 def _act_proj_settrekker(c):
@@ -6253,7 +6224,6 @@ ACTIONS = {
     "linkbuilding_besluit": _act_linkbuilding_besluit,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
     "kanaal_verwijder": _act_kanaal_verwijder,
-    "rapport_naar_wiki": _act_rapport_naar_wiki,
     "pagina_synthese": _act_pagina_synthese,
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
@@ -6266,11 +6236,10 @@ ACTIONS = {
     "proj_delete": _act_proj_delete,
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
-    "proj_doc_edit": _act_proj_doc_edit,
-    "verslag_bevestig_behaald": _act_verslag_bevestig_behaald,
-    "verslag_bevestig_niet_behaald": _act_verslag_bevestig_niet_behaald,
-    "verslag_overslaan": _act_verslag_overslaan,
-    "verslag_bijwerken": _act_verslag_bijwerken,
+    "proj_conclusie": _act_proj_conclusie,
+    "proj_conclusie_ai": _act_proj_conclusie_ai,
+    "proj_conclusie_verwerp": _act_proj_conclusie_verwerp,
+    "conclusie_naar_wiki": _act_conclusie_naar_wiki,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,
@@ -6846,18 +6815,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                        van=(qs.get("van") or [""])[0],
                                        tot=(qs.get("tot") or [""])[0],
                                        compare=(qs.get("compare") or [""])[0] == "1",
-                                       van_rapport=(qs.get("van_rapport") or [""])[0],
                                        username=username))
-                return
-            if path == "/rapport":
-                # AUTHZ: iedereen-ingelogd — het rapport IS het einddocument van een project, dus
-                # exact dezelfde read-scope als /project (die de kaart toont, waar het rapport tot
-                # nu toe inline stond). Schrijven (proj_doc_edit, proj_regen_doc) zit achter de
-                # bestaande poorten in de dispatch-takken, niet hier.
-                self._send(render_projectrapport(st, (qs.get("pid") or qs.get("id") or [""])[0],
-                                          csrf_token=effective_csrf, username=username,
-                                          msg=(qs.get("msg") or [""])[0],
-                                          back=(qs.get("back") or ["/"])[0]))
                 return
             if path == "/pagina":
                 # AUTHZ: iedereen-ingelogd — een wiki-pagina IS een rol-note, dus exact dezelfde
@@ -7543,8 +7501,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     # (Future). Zelfde vertaling als proj_add, want dit is de andere weg naar
                     # hetzelfde bord. Slapend is de default (scope 49): een mens sleept naar Active.
                     col = g1("col")
-                    # Titel = scope, done-when = de DoD (én de kop van het einddocument).
-                    from nooch_village.projects import seed_document
+                    # Titel = scope, done-when = de DoD.
                     pj = st.projects
                     pid = pj.create(role, titel, "human",
                                     status=("running" if col == "actief" else "future"),
@@ -7568,14 +7525,6 @@ def make_handler(data_dir: str, csrf_token: str,
                     # belofte die dat blok waarmaakte — een gesloten spanning is niet weg maar
                     # terug te vinden vanaf het bord — hoeft niet meer waargemaakt te worden: er
                     # wordt niets meer gesloten, en het bericht blijft in het kanaal staan.
-                    # Seed het levende einddocument met de DoD als kop. Vanaf hier is de projectpoort
-                    # doc-gedreven: Done kan pas als het document van deze seed afwijkt (echt antwoord).
-                    try:
-                        ds = getattr(st, "project_docs", None)
-                        if ds is not None:
-                            ds.write(pid, seed_document(uitkomst))
-                    except Exception:
-                        logging.getLogger("cockpit2.wizard").exception("einddoc-seed faalde (pid=%s)", pid)
                     try:
                         items = json.loads(g1("items") or "[]")
                     except ValueError:

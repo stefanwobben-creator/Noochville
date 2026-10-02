@@ -45,7 +45,6 @@ TWEEDE_DRAGER_IN_DE_MARKUP = {
     ".kc-n": "het stapnummer staat ín het bolletje (views/metrics.py, `kc-step`)",
     ".noo-cta": "knop met het woord 'Noochie' erin (views/noochie.py)",
     ".noo-head": "kop met '🐸 Noochie' (views/noochie.py)",
-    ".einddoc-banner": "'📄 Draft report — …' (views/rapport.py)",
     ".ck-skill": "de chip bevat de skill-NAAM als tekst (views/checklists.py)",
     ".ck-warn": "'⚠ payload incomplete' (views/checklists.py)",
     ".ck-human": "'🙋 human task …' (views/checklists.py)",

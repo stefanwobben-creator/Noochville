@@ -124,7 +124,7 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 67   # +1 'wb-' (22 sept 2026, wiki brok 2): het BLOK-vocabulaire. `.wb` zelf
+_PREFIX_CEILING = 66   # -1 'einddoc-' (2 oktober 2026): het rapport is weg. Daarvóór: +1 'wb-' (22 sept 2026, wiki brok 2): het BLOK-vocabulaire. `.wb` zelf
                        #      bestaat sinds brok 1 als omhulsel van één blok, maar telde niet mee
                        #      (deze teller kijkt alleen naar klassen mét een streepje); `.wb-taak`
                        #      is zijn eerste variant. Bewust een eigen familie en geen leen van

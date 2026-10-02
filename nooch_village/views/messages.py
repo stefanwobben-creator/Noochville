@@ -622,7 +622,7 @@ def _msg_verborgen(e: dict, kanaal: str, csrf_token: str) -> str:
 def _bewerk_veld(e: dict, kanaal: str, csrf_token: str) -> str:
     """De tekst van je eigen bericht, plus het veld dat er bij "Edit" voor in de plaats komt.
 
-    HETZELFDE COMPONENT als de project-wall en /rapport: `inline_edit`. Het veld staat op de
+    HETZELFDE COMPONENT als de project-wall en de Conclusion: `inline_edit`. Het veld staat op de
     plek van de tekst en niet als tweede vak eronder — anders lees je twee versies van dezelfde
     zin naast elkaar en moet je raden welke de echte is.
 

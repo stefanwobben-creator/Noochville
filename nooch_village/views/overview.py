@@ -770,7 +770,7 @@ def _artefact_inherited_card(it, *, st: _Stores | None = None, pags: list | None
 
 
 def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: str | None,
-                       *, titel: str, leeg: str, van_rapport: str = "") -> str:
+                       *, titel: str, leeg: str) -> str:
     can_edit = _can_edit_artefacts(st, rec, csrf_token, username)
     oi = artefacts.own_and_inherited(rec.id, kind, st.records, st.att)
 
@@ -778,18 +778,6 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     # lijst i.p.v. een badge/slotje per item.
     kop = ("<p class='muted'>All policies below are "
            "governance-owned.</p>" if kind == "policy" else "")
-
-    # Wiki vóór archief (scope 61): kom je hier via "→ To the wiki" op een projectrapport, dan is
-    # het RAPPORT de tekst die het voorstel-formulier moet voorinvullen, niet de pagina's eigen
-    # body. Fail-soft: geen rapport leesbaar (project weg, geen store) → gewoon terugvallen op de
-    # normale voorinvulling, geen fout op het scherm.
-    rapport_tekst = ""
-    if van_rapport and kind == wiki.PAGINA_KIND:
-        try:
-            store = getattr(st, "project_docs", None)
-            rapport_tekst = (store.read(van_rapport) or "").strip() if store is not None else ""
-        except Exception:                                    # noqa: BLE001 — nooit de tab breken
-            rapport_tekst = ""
 
     # Een note IS een wiki-pagina, en op de permalink kan wie hem niet bezit al een wijziging
     # voorstellen. Op déze tab kon dat niet: een niet-eigenaar zag alleen tekst, zonder enige weg om
@@ -799,8 +787,7 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
             return ""
         from nooch_village.views.wiki import _voorstel_form
         return _voorstel_form(st, a, csrf_token,
-                              next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}",
-                              prefill=rapport_tekst)
+                              next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}")
 
     _pags = wiki.paginas(st.att) if kind == wiki.PAGINA_KIND else None
     own = "".join(_artefact_own_card(a, csrf_token, can_edit, anders=_anders(a), st=st, pags=_pags)
@@ -947,7 +934,7 @@ def _ritme_html(st: _Stores, rec) -> str:
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
                 van: str = "", tot: str = "", compare: bool = False, goal: str = "",
-                van_rapport: str = "", kind_flt: str = "") -> str:
+                kind_flt: str = "") -> str:
     # OUDE TABNAMEN BLIJVEN WERKEN. policies/notes/tools zijn sinds fase 7 één Wiki-tab. De alias
     # staat HIER en niet in de route, zodat elke aanroeper hem krijgt — de route, een test, een
     # ingebedde render. Hij vertaalt naar het juiste voorfilter, wat preciezer is dan doorsturen.
@@ -1011,8 +998,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                                             leeg="No policies on this role/circle yet."))
         if soort in ("all", "note"):
             delen.append(_artefact_tab_html(st, rec, "note", csrf_token, username, titel="Notes",
-                                            leeg="No notes on this role/circle yet.",
-                                            van_rapport=van_rapport))
+                                            leeg="No notes on this role/circle yet."))
         # HIER STONDEN DE TOOLS. De rol-tools en de tool-artefacten zijn naar `/tools` verhuisd;
         # `_ritme_html` ging mee naar de overview-tab, want dat is geen gereedschap maar
         # rol-context ("wat draait hier vanzelf") en het stond alleen onder dit filter omdat het

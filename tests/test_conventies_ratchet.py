@@ -31,7 +31,7 @@ STORES = {
     "agenda", "ai", "assign", "att", "checklists", "copy_stack", "defs", "doelen",
     "deliverables", "evidence", "kennisbank", "library", "link_kroniek", "metrics",
     "nom_kroniek", "nominations", "noochie", "observations", "people",
-    "channels", "personas", "project_docs", "projects", "radar", "records", "sources",
+    "channels", "personas", "projects", "radar", "records", "sources",
     "strategies", "werk",
     # `acties` (27 september 2026): persoonlijke acties. BEWUST EEN NIEUWE STORE, en de
     # bestaande mechaniek is eerst nagelopen — een project eist een rol- of cirkel-eigenaar plus

@@ -3,7 +3,7 @@
 DE SPLITSING IS HET ONTWERP, en niet een implementatiedetail:
 
   1. EEN PROJECT LEVERT EEN FEIT. Eén regel, herleidbaar, met een klikbare bron — en zonder model.
-     Er valt niets te formuleren wat het rapport niet al zegt.
+     Sinds 2 oktober 2026 komt die regel uit de Conclusion van het project (het rapport is weg).
   2. EEN PAGINA KRIJGT EEN ALINEA, uit AL haar feiten samen, en alleen als een mens erom vraagt.
      Dat is de enige plek in deze scope waar een model schrijft, en hij slaat niets op: het
      voorstel landt in het gewone bewerkveld en wacht daar op Save.
@@ -17,20 +17,14 @@ from __future__ import annotations
 import pytest
 
 from nooch_village import cockpit2, wiki
-from nooch_village.views.rapport import render_projectrapport
+from nooch_village.views.projects import render_project
 from nooch_village.views.wiki import bijna_gelijke_paginas, dubbele_namen_hint, render_pagina
 
 IK = "b@t.nl"
 ROL = "mother_earth__nooch__website_developer"
 
-RAPPORT = """# Barefoot-zolen
-
-## Result
-**Achieved.** The supplier confirmed a natural-rubber outsole at 4mm.
-
-## Learnings
-Ask for the datasheet earlier next time.
-"""
+CONCLUSIE = """The supplier confirmed a natural-rubber outsole at 4mm.
+Ask for the datasheet earlier next time."""
 
 
 def _dorp(tmp_path):
@@ -42,7 +36,7 @@ def _dorp(tmp_path):
     pagina = st.att.add(ROL, "note", title="Outsole materials", body="Wat we weten.")
     pid = st.projects.create(ROL, "Outsole-onderzoek", "human", status="running")
     st.projects.complete(pid, "behaald", door=mens.id)
-    st.project_docs.write(pid, RAPPORT)
+    st.projects.set_conclusie(pid, CONCLUSIE)
     return dd, cockpit2._Stores(dd), pagina.id, pid
 
 
@@ -55,52 +49,48 @@ def _feiten(dd, aid):
     return wiki.feiten(cockpit2._Stores(dd).att.get(aid))
 
 
-# ══ 1. Het rapport levert één FEIT ═══════════════════════════════════════════
-def test_de_knop_staat_op_een_bevestigd_rapport(tmp_path):
+# ══ 1. De conclusie levert één FEIT ═════════════════════════════════════════
+def _scherm(dd, pid):
+    return render_project(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK)
+
+
+def test_de_knop_staat_onder_de_conclusie(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
-    h = render_projectrapport(st, pid, csrf_token="TOK", username=IK)
-    assert "Keep as a fact" in h and "value='rapport_naar_wiki'" in h
-    # DE VOORZET STAAT ERIN, en het is de KORTE zin — niet de rapporttekst.
-    assert 'name="tekst" value="Achieved"' in h, h[h.index("Keep as a fact"):][:600]
-    assert "Ask for the datasheet" not in h.split("Keep as a fact")[1].split("</form>")[0]
+    h = _scherm(dd, pid)
+    assert "Keep as a fact" in h and "value='conclusie_naar_wiki'" in h
+    # DE VOORZET IS DE EERSTE REGEL van de conclusie — één regel, niet de hele tekst.
+    assert 'value="The supplier confirmed a natural-rubber outsole at 4mm."' in h
 
 
-def test_zonder_rapport_geen_knop(tmp_path):
-    """Een project zonder document heeft niets vast te leggen; een seed-document is de OPDRACHT."""
+def test_zonder_conclusie_geen_knop(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
-    st.project_docs.write(pid, "")
-    h = render_projectrapport(cockpit2._Stores(dd), pid, csrf_token="TOK", username=IK)
-    assert "Keep as a fact" not in h
+    st.projects.set_conclusie(pid, "")
+    assert "conclusie_naar_wiki" not in _scherm(dd, pid)
 
 
-def test_het_feit_is_kort_en_draagt_zijn_bron(tmp_path):
+def test_het_feit_draagt_het_project_als_klikbare_bron(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
-    _n, msg = _doe(dd, "rapport_naar_wiki", aid=aid, pid=pid, tekst="Achieved")
+    _n, msg = _doe(dd, "conclusie_naar_wiki", aid=aid, pid=pid, tekst="Natural-rubber outsole, 4mm")
     assert not cockpit2.is_weigering(msg), msg
-    fs = _feiten(dd, aid)
-    assert len(fs) == 1
-    feit = fs[0]
-    # KORT: één regel, niet het rapport. De lengte van `modeloordeel_kort` is de maat (≤60+1).
-    assert feit["tekst"] == "Achieved" and len(feit["tekst"]) <= 61
-    assert "Learnings" not in feit["tekst"]
+    feit = _feiten(dd, aid)[0]
     g = feit["grond"]
     assert g["soort"] == "bron" and g["ref"] == pid
-    assert g["url"] == f"/rapport?pid={pid}"
-    assert "confirmed" in g["citaat"] and "Outsole-onderzoek" in g["citaat"]
+    assert g["url"] == f"/project?pid={pid}"
+    assert "conclusion" in g["citaat"] and "Outsole-onderzoek" in g["citaat"]
 
 
 def test_de_chip_op_de_pagina_is_klikbaar(tmp_path):
-    """De url is het hele verschil met de oude keep-in-wiki: herkomst die je kunt VOLGEN, niet
-    alleen lezen. `_grond_chip` maakt een bron-feit klikbaar zodra er een url bij staat."""
+    """Herkomst die je kunt VOLGEN, niet alleen lezen: `_grond_chip` maakt een bron-feit
+    klikbaar zodra er een url bij staat."""
     dd, st, aid, pid = _dorp(tmp_path)
-    _doe(dd, "rapport_naar_wiki", aid=aid, pid=pid, tekst="Achieved")
+    _doe(dd, "conclusie_naar_wiki", aid=aid, pid=pid, tekst="Natural-rubber outsole, 4mm")
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="TOK", username=IK)
-    assert f"<a href='/rapport?pid={pid}'" in h
+    assert f"<a href='/project?pid={pid}'" in h
 
 
 def test_een_leeg_feit_wordt_geweigerd(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
-    _n, msg = _doe(dd, "rapport_naar_wiki", aid=aid, pid=pid, tekst="   ")
+    _n, msg = _doe(dd, "conclusie_naar_wiki", aid=aid, pid=pid, tekst="   ")
     assert cockpit2.is_weigering(msg), msg
     assert _feiten(dd, aid) == []
 
@@ -225,20 +215,18 @@ def test_zonder_verwarring_geen_waarschuwing(tmp_path):
     assert dubbele_namen_hint(cockpit2._Stores(dd)) == ""
 
 
-def test_de_hint_staat_onder_de_keuzelijst_van_het_rapport(tmp_path):
+def test_de_hint_staat_onder_de_keuzelijst_van_de_conclusie(tmp_path):
     dd, st, aid, pid = _dorp(tmp_path)
     st.att.add(ROL, "note", title="Outsole materials 2026")
-    st = cockpit2._Stores(dd)
-    rap = render_projectrapport(st, pid, csrf_token="TOK", username=IK)
-    assert "nearly the same name" in rap
+    assert "nearly the same name" in _scherm(dd, pid)
 
 
-# ══ 4. Het archief wijst naar zijn rapport ═══════════════════════════════════
-def test_een_archiefregel_heeft_een_weg_naar_het_rapport(tmp_path):
-    """Een gearchiveerd project bestaat alleen nog als rapport; zonder link is dat niet te vinden."""
+# ══ 4. Het archief heeft geen rapportlink meer ═══════════════════════════════
+def test_een_archiefregel_wijst_niet_meer_naar_een_rapport(tmp_path):
+    """Het rapport is weg (2 oktober 2026); een link naar /rapport zou een dode link zijn."""
     from nooch_village.views.projects import _archived_html
     dd, st, aid, pid = _dorp(tmp_path)
     st.projects.archive(pid)
     p = cockpit2._Stores(dd).projects.get(pid)
     h = _archived_html(cockpit2._Stores(dd), [p], "TOK", "/projects")
-    assert f"/rapport?pid={pid}" in h and "report" in h
+    assert "/rapport" not in h
