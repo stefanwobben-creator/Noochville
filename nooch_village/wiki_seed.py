@@ -43,8 +43,26 @@ def _materiaalnaam(ruw: str) -> tuple[str, bool]:
     return naam, False
 
 
+def variant_gebruik(materialen_store, varianten_store, model: str = "") -> list[tuple[str, str, str]]:
+    """(materiaal, component, variantnaam) voor elke VARIANT-afwijking met een materiaal (BOM
+    Stuk 4). De master-afwijkingen zitten al in `materialen`; dit is wat varianten daarbovenop doen
+    — een ander materiaal op een rij, of een rij die erbij komt (Hemp bij de Hi)."""
+    from nooch_village.data_bom import STANDAARD_MODEL
+    model = model or STANDAARD_MODEL
+    namen = {v["handle"]: v.get("naam") or v["handle"] for v in varianten_store.varianten(model)}
+    uit = []
+    for variant, regels in materialen_store.per_variant(model).items():
+        if not variant or variant not in namen:
+            continue
+        for r in regels:
+            if r.get("materiaal"):
+                uit.append((str(r["materiaal"]), str(r.get("part") or r["sleutel"]), namen[variant]))
+    return sorted(uit)
+
+
 def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None,
-                      materialen: dict | None = None) -> list[dict]:
+                      materialen: dict | None = None,
+                      varianten: list[tuple[str, str, str]] | None = None) -> list[dict]:
     """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
 
     De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
@@ -80,6 +98,18 @@ def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None,
         spelling.setdefault(sleutel, naam)
         if twijfel:
             onzeker.setdefault(sleutel, set()).add(c.naam)
+    # VARIANTEN IN "USED IN" (Stuk 4): een component in een variant telt als gebruik van zijn
+    # materiaal, met de variantnaam erbij. Een materiaal dat alleen in een variant voorkomt krijgt
+    # zo ook een pagina — het wordt gebruikt, dus het is er.
+    from nooch_village.belofte_graaf import Constituent
+    for mat, part, label in varianten or []:
+        naam, _ = _materiaalnaam(mat)
+        if not naam:
+            continue
+        sleutel = naam.lower()
+        per_materiaal.setdefault(sleutel, []).append(
+            Constituent(naam=f"{part} — {label}", realisatie=mat, bron=BRON_STUKLIJST))
+        spelling.setdefault(sleutel, naam)
 
     uit = []
     for sleutel, delen in sorted(per_materiaal.items()):
@@ -316,7 +346,8 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
 def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar_claims: str,
                eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
                vandaag: str = "", leveranciers: dict | None = None,
-               materialen: dict | None = None) -> list[dict]:
+               materialen: dict | None = None,
+               varianten: list[tuple[str, str, str]] | None = None) -> list[dict]:
     """Alle sets in één keer. De helft (of het derde) waarvan de eigenaar-rol ontbreekt, wordt
     overgeslagen — de rest gaat gewoon door.
 
@@ -324,7 +355,8 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
     rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout."""
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 
-    rapport = zaai(store, records, paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen),
+    rapport = zaai(store, records,
+                   paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen, varianten),
                    eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply, actor_id=actor_id)
     if eigenaar_leverancier:
         rapport += zaai(store, records, paginas=leverancier_paginas(ledger, vandaag=vandaag),

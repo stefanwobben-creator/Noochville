@@ -93,6 +93,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `artefact_unarchive` | `_act_artefact_unarchive` |
 | `bom_leverancier_zet` | `_act_bom_leverancier_zet` |
 | `bom_materiaal_zet` | `_act_bom_materiaal_zet` |
+| `bom_variant_add` | `_act_bom_variant_add` |
+| `bom_foto` | `_act_bom_foto` |
 | `artefact_delete` | `_act_artefact_delete` |
 | `pagina_sectie` | `_act_pagina_sectie` |
 | `msg_post` | `_act_msg_post` |
@@ -252,6 +254,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `sources` | `SourceStatusStore` | `sources.json` |
 | `bom_leveranciers` | `BomLeverancierStore` | `bom_leveranciers.json` |
 | `bom_materialen` | `BomMateriaalStore` | `bom_materialen.json` |
+| `bom_varianten` | `BomVariantStore` | `bom_varianten.json` |
 | `personas` | `PersonaStore` | `personas.json` |
 | `projects` | `ProjectLedger` | `projects.json` |
 | `deliverables` | `DeliverableStore` | `deliverables.json` |
@@ -351,4 +354,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_54 routes · 162 dispatch-acties · 31 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._
+_54 routes · 164 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._

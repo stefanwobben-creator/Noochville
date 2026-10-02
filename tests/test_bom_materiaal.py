@@ -77,7 +77,9 @@ def test_used_in_volgt_het_gewijzigde_materiaal():
 # ── D: het klikgedrag ───────────────────────────────────────────────────────
 
 def _rij(html, part):
-    return re.search(rf"<tr><td>{re.escape(part)}</td>.*?</tr>", html, re.S).group(0)
+    # De component kan een afwijk-chip dragen (Stuk 4); die hoort bij de rij.
+    return re.search(rf"<tr><td>{re.escape(part)}(?: <span class='chip muted'>[^<]*</span>)?</td>.*?</tr>",
+                     html, re.S).group(0)
 
 
 def test_ingevuld_is_een_link_met_een_los_potloodje(tmp_path):

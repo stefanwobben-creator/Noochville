@@ -287,6 +287,11 @@ _STREEP_RE = re.compile(r"^-{3,}$")
 #: en de embed-regex moeten het over hetzelfde hebben — zou dat uiteenlopen, dan rendert een
 #: bijlage wel en komt hij niet terug uit de rondgang (of andersom).
 EIGEN_BESTAND = "/wiki-bestand/"
+#: Een productfoto die op `/bom` geüpload is (BOM Stuk 4). Ook ONZE server, dus ook een eigen
+#: bestand voor `_embed_html` — maar een eigen leesroute, want hij hangt niet aan een wiki-pagina.
+BOM_FOTO = "/bom-foto/"
+#: Alles wat op onze eigen server staat. `_embed_html` maakt alleen hiervan een `<img>`.
+EIGEN_VOORVOEGSELS = (EIGEN_BESTAND, BOM_FOTO)
 
 #: Een kale url op een eigen regel. `/…` hoort erbij sinds eigen uploads bestaan; `//…` niet
 #: (protocol-relatief, zie `_link`).
@@ -370,7 +375,7 @@ def _embed_html(url: str, label: str, beeld: bool = False) -> str:
 
     Wil je externe afbeeldingen er later toch bij, dan is dat deze ene voorwaarde — plus een
     bewuste keuze over die verzoeken, en het bijwerken van die toets."""
-    if beeld and url.startswith(EIGEN_BESTAND) and _is_beeldbestand(url):
+    if beeld and url.startswith(EIGEN_VOORVOEGSELS) and _is_beeldbestand(url):
         # GEEN `.card`. Zelfde regel als `.wiki-inline` uit #604: een blok dat tussen de tekst kan
         # staan, krijgt geen rand en geen eigen achtergrondvlak — een alinea heeft die ook niet.
         #
