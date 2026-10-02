@@ -6836,7 +6836,6 @@ def make_handler(data_dir: str, csrf_token: str,
                 from nooch_village.views.bom import render_bom
                 self._send(render_bom(st, csrf_token=effective_csrf, username=username,
                                       msg=(qs.get("msg") or [""])[0],
-                                      maat=(qs.get("maat") or [""])[0],
                                       model=(qs.get("model") or [""])[0],
                                       variant=(qs.get("variant") or [""])[0]))
                 return

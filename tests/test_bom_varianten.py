@@ -1,6 +1,7 @@
 """BOM Stuk 4 (2 oktober 2026): modellen en varianten op de BOM.
 
-A  model = topnaam met één master (`data_bom.MODELLEN`); varianten (Shopify-handle) in `bom_varianten`
+A  model = topnaam met één master (`data_bom.MODELLEN`: sinds 2 oktober 269 Lo en 269 Hi, elk een
+   eigen model); kleurvarianten (Shopify-handle) in `bom_varianten`
 B  afwijkingen per (model, variant, component): materiaal en/of gewicht, of een rij erbij
 C  `/bom` met model- en variantkeuze, afwijk-chips, foto
 D  "Used in" op de materiaalpagina's noemt ook de varianten
@@ -22,9 +23,13 @@ M = STANDAARD_MODEL
 
 # ── A ───────────────────────────────────────────────────────────────────────
 
-def test_het_eerste_model_draagt_de_huidige_stuklijst_als_master():
-    assert MODELLEN[M]["naam"] == "THE '269'"
-    assert MODELLEN[M]["master"] is NOOCH_SCHOEN_BOM
+def test_269_lo_en_269_hi_zijn_twee_modellen():
+    """Besluit Stefan (2 oktober): hoogte is geen variant maar een model; kleur is de variant. De
+    huidige stuklijst is 269 Lo; 269 Hi begint ervan (verwijzing, geen kopie) en zegt dat erbij."""
+    assert M == "269-lo"
+    assert (MODELLEN["269-lo"]["naam"], MODELLEN["269-hi"]["naam"]) == ("269 Lo", "269 Hi")
+    assert MODELLEN["269-lo"]["master"] is NOOCH_SCHOEN_BOM
+    assert MODELLEN["269-hi"]["master"] is NOOCH_SCHOEN_BOM and MODELLEN["269-hi"]["basis_van"] == "269-lo"
 
 
 def test_een_variant_is_een_shopify_handle_en_bestaat_maar_een_keer(tmp_path):
@@ -41,8 +46,8 @@ def test_de_foto_valt_terug_op_het_model_en_weigert_vreemde_adressen(tmp_path):
     s.voeg_toe(M, "the-269-hi-black")
     assert s.zet_foto(M, "", "https://cdn.example/model.jpg")
     assert s.foto(M, "the-269-hi-black") == "https://cdn.example/model.jpg"
-    assert s.zet_foto(M, "the-269-hi-black", "/bom-foto/the-269/ab_hi.jpg")
-    assert s.foto(M, "the-269-hi-black") == "/bom-foto/the-269/ab_hi.jpg"
+    assert s.zet_foto(M, "the-269-hi-black", f"/bom-foto/{M}/ab_hi.jpg")
+    assert s.foto(M, "the-269-hi-black") == f"/bom-foto/{M}/ab_hi.jpg"
     assert s.heeft_foto(M, "ab_hi.jpg") and not s.heeft_foto(M, "ander.jpg")
     for slecht in ("javascript:alert(1)", "data:image/png;base64,x", "http://x/y.jpg"):
         assert not s.zet_foto(M, "", slecht), slecht
@@ -134,10 +139,10 @@ def test_alleen_aangemaakte_varianten_en_master_zonder_keuze(tmp_path):
     _doe(dd, "bom_variant_add", handle="the-269-hi-black", naam="Hi · Black")
     h = render_bom(cockpit2._Stores(dd), csrf_token="T", username="houder@t.nl")
     balk = h.split("aria-label='variant'>")[1].split("</div>")[0]
-    assert "class='cl-filter on' href='/bom?maat=42'>Master</a>" in balk
+    assert "class='cl-filter on' href='/bom'>Master</a>" in balk
     assert ">Hi · Black</a>" in balk and balk.count("class='cl-filter") == 2
     assert "+ variant" in balk
-    assert "BOM · THE &#x27;269&#x27;" in h or "BOM · THE '269'" in h
+    assert "BOM · 269 Lo" in h
 
 
 def test_een_variant_toont_zijn_afwijkingen_met_een_terugknop(tmp_path):
@@ -151,7 +156,7 @@ def test_een_variant_toont_zijn_afwijkingen_met_een_terugknop(tmp_path):
     assert "Upper hemp <span class='chip muted'>added in this variant</span>" in h
     assert ">back to master</button>" in h and ">remove component</button>" in h
     # De terugweg houdt de variant vast — en wordt niet dubbel ge-escaped.
-    assert "name='next' value='/bom?variant=hi&amp;maat=42'" in h
+    assert "name='next' value='/bom?variant=hi'" in h
     # De master ziet niets van de variant.
     master = render_bom(cockpit2._Stores(dd), csrf_token="T", username="houder@t.nl")
     assert "Upper hemp" not in master and "differs from master" not in master
@@ -163,10 +168,10 @@ def test_een_geuploade_foto_is_een_beeld_een_adres_een_kaart(tmp_path):
     elke paginaweergave een verzoek naar een derde partij doen (`test_er_wordt_geen_img_geladen`).
     Een https-foto blijft dus een kaart met link, tot daar bewust anders over besloten wordt."""
     dd, st = _dorp(tmp_path)
-    st.bom_varianten.zet_foto(M, "", "/bom-foto/the-269/ab_269.jpg")
+    st.bom_varianten.zet_foto(M, "", f"/bom-foto/{M}/ab_269.jpg")
     h = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
     kop = h.split("class='ptitle'")[1].split("aria-label='model'")[0]   # niet het logo meetellen
-    assert "<img" in kop and "/bom-foto/the-269/ab_269.jpg" in kop
+    assert "<img" in kop and f"/bom-foto/{M}/ab_269.jpg" in kop
     assert "enctype='multipart/form-data'" not in h                 # een lezer krijgt geen upload
     _doe(dd, "bom_foto", foto="https://cdn.example/269.jpg")
     h2 = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
@@ -199,3 +204,50 @@ def test_een_foto_van_de_eigen_shopify_winkel_is_een_beeld(tmp_path):
     # liep deze toets eerst op mee (een mutatieproef bleef groen).
     kop = h.split("class='ptitle'")[1].split("aria-label='model'")[0]
     assert "<img" in kop and url in kop
+
+
+
+# ── 2 oktober: twee modellen, geen maat, foto naar het model ────────────────
+
+def test_geen_maatkiezer_meer_alles_bij_de_referentiemaat(tmp_path):
+    _dd, st = _dorp(tmp_path)
+    h = render_bom(st, csrf_token="", username="buiten@t.nl")
+    assert "aria-label='EU size'" not in h and "maat=" not in h
+    assert "Quantities at reference size EU 42." in h
+
+
+def test_269_hi_zegt_dat_hij_van_269_lo_begint(tmp_path):
+    _dd, st = _dorp(tmp_path)
+    hi = render_bom(st, csrf_token="", username="buiten@t.nl", model="269-hi")
+    assert "BOM · 269 Hi" in hi and "it starts from 269 Lo" in hi
+    assert "it starts from" not in render_bom(st, csrf_token="", username="buiten@t.nl")
+    modellen = hi.split("aria-label='model'>")[1].split("</div>")[0]
+    assert ">269 Lo</a>" in modellen and "class='cl-filter on' href='/bom?model=269-hi'>269 Hi</a>" in modellen
+
+
+def test_een_afwijking_van_269_hi_raakt_269_lo_niet(tmp_path):
+    dd, _st = _dorp(tmp_path)
+    _doe(dd, "bom_materiaal_zet", model="269-hi", part="Upper hemp", materiaal="Hemp fabric",
+         gram="12", toegevoegd="1")
+    st = cockpit2._Stores(dd)
+    assert "Upper hemp" in render_bom(st, csrf_token="T", username="houder@t.nl", model="269-hi")
+    assert "Upper hemp" not in render_bom(st, csrf_token="T", username="houder@t.nl")
+
+
+def test_een_nieuwe_foto_in_een_kleur_gaat_naar_het_model(tmp_path):
+    """Stefans check: "+ photo" in een kleurvariant zonder foto mag GEEN losse variant-foto maken die
+    de andere kleuren niet zien. De keuze staat op het model; "only this colour" kan bewust."""
+    dd, _st = _dorp(tmp_path)
+    _doe(dd, "bom_variant_add", handle="the-269-black", naam="Black")
+    h = render_bom(cockpit2._Stores(dd), csrf_token="T", username="houder@t.nl",
+                   variant="the-269-black")
+    keuze = h.split("aria-label='who gets this photo'>")[1].split("</select>")[0]
+    assert "<option value='' selected>whole model (every colour)</option>" in keuze
+    assert "<option value='the-269-black'>only this colour</option>" in keuze
+    # Het formulier draagt zelf geen vaste variant meer: de keuze beslist.
+    assert "name='variant' value='the-269-black'" not in h.split("+ photo")[1].split("</details>")[0]
+    # Een foto zonder variant komt bij het model, en elke kleur ziet hem.
+    _doe(dd, "bom_foto", foto="https://cdn.example/lo.jpg", variant="")
+    st = cockpit2._Stores(dd)
+    assert st.bom_varianten.foto(M, "the-269-black") == "https://cdn.example/lo.jpg"
+    assert (st.bom_varianten.get(M, "the-269-black") or {}).get("foto") == ""

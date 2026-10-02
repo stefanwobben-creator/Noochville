@@ -80,45 +80,14 @@ def _mag_koppelen(st, username: str | None) -> bool:
                                              circle_id=cirkel or "")
 
 
-def _url(model: str, variant: str, maat: int) -> str:
-    """Eén plek voor de `/bom`-URL, zodat maat, model en variant elkaar niet kwijtraken."""
+def _url(model: str, variant: str) -> str:
+    """Eén plek voor de `/bom`-URL, zodat model en variant elkaar niet kwijtraken. Rauw; `_e()` waar
+    hij in een attribuut landt. (De maat zat hier ook in, tot de maat-schaling op 2 oktober 2026
+    verviel — zie `data_bom.REFERENTIEMAAT`.)"""
     from nooch_village.data_bom import STANDAARD_MODEL
-    delen = [] if model == STANDAARD_MODEL else [f"model={model}"]
-    delen += [f"variant={variant}"] if variant else []
-    delen += [f"maat={maat}"]
-    return "/bom?" + "&".join(delen)          # rauw; `_e()` waar hij in een attribuut landt
-
-
-def _maat_kiezer(maat: int, cfg: dict, model: str = "", variant: str = "") -> str:
-    """De maat als keuzebalk: `.cl-bar` met `a.cl-filter` en `.on` — het bestaande vocabulaire voor
-    een filter-/periode-keuze (UX_PATTERNS, Kern-klassen), geen nieuwe vorm. Hij bepaalt alleen
-    WELKE geschaalde waarden je ziet; er wordt niets opgeslagen.
-
-    GEEN DROPDOWN, al noemde de correctie die als voorbeeld. Het `cardmenu` van `/metrics` klapt naar
-    links uit (daar staat hij rechts op het scherm); hier, links op de pagina, viel het menu half
-    achter de zijbalk. Elf maten passen op één regel, en dan zie je ook meteen waar je staat."""
-    from nooch_village.data_bom import STANDAARD_MODEL
-    model = model or STANDAARD_MODEL
-    opties = " ".join(
-        f"<a class='cl-filter{' on' if m == maat else ''}' href='{_e(_url(model, variant, m))}'"
-        f"{' aria-current=' + chr(39) + 'true' + chr(39) if m == maat else ''}"
-        f"{' title=' + chr(39) + 'reference size' + chr(39) if m == cfg['referentiemaat'] else ''}>{m}</a>"
-        for m in cfg["maten"])
-    return f"<div class='cl-bar' aria-label='EU size'><span class='muted'>EU size</span> {opties}</div>"
-
-
-def _schatting(maat: int, cfg: dict) -> str:
-    """WAT DE MAAT DOET, en dat het een schatting is — op de pagina, niet in een tooltip. Het getal
-    zelf komt uit de config (`bom_reken.maat_config`), nooit uit deze tekst."""
-    if not cfg:
-        return ("<p class='muted'>Size scaling is unavailable (no readable config/bom_maten.json); "
-                "the quantities are the reference values.</p>")
-    pct = f"{cfg['schaal_per_maat'] * 100:g}%"
-    ref = cfg["referentiemaat"]
-    waar = (f"the reference size {ref}" if maat == ref else
-            f"size {maat}, scaled from reference size {ref} by {pct} per size step")
-    return (f"<p class='muted'>Quantities for {waar}. The scaling is a provisional assumption, "
-            f"not yet based on factory data ({_e(cfg['bron'])}, {_e(cfg['datum'])}).</p>")
+    delen = ([] if model == STANDAARD_MODEL else [f"model={model}"]) + \
+            ([f"variant={variant}"] if variant else [])
+    return "/bom" + ("?" + "&".join(delen) if delen else "")
 
 
 def _verborgen(velden: dict) -> str:
@@ -168,7 +137,7 @@ def _cel(*, waarde: str, pagina, bewerk: bool, csrf_token: str, terug: str, acti
 
 def _gewicht_cel(r: dict, bewerk: bool, csrf_token: str, terug: str, velden: dict) -> str:
     """Het gewicht: geschaald getoond, maar het formulier bewerkt de REFERENTIEMAAT-waarde (die
-    staat in de stuklijst of in een afwijking; de maat-schaal rekent er pas daarna mee)."""
+    staat in de stuklijst of in een afwijking) — bij de referentiemaat."""
     getoond = _getal("gram", r["bijdrage"].get("gram"))
     if not bewerk:
         return getoond
@@ -220,53 +189,69 @@ def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom
             f"<td class='num'>{gewicht}</td>{cellen}<td>{status}</td></tr>")
 
 
-def _model_kiezer(model: str, variant: str, maat: int, varianten: list[dict], bewerk: bool,
+def _model_kiezer(model: str, variant: str, varianten: list[dict], bewerk: bool,
                   csrf_token: str) -> str:
     """Model en variant als keuzebalk (`.cl-bar` + `a.cl-filter`), het patroon van de maatkiezer.
     Alleen varianten die echt zijn aangemaakt; geen kruistabel. "Master" = geen variant."""
     from nooch_village.data_bom import MODELLEN
     modellen = " ".join(
-        f"<a class='cl-filter{' on' if k == model else ''}' href='{_e(_url(k, "", maat))}'>"
+        f"<a class='cl-filter{' on' if k == model else ''}' href='{_e(_url(k, ""))}'>"
         f"{_e(v['naam'])}</a>" for k, v in MODELLEN.items())
-    opties = [f"<a class='cl-filter{' on' if not variant else ''}' href='{_e(_url(model, "", maat))}'>"
+    opties = [f"<a class='cl-filter{' on' if not variant else ''}' href='{_e(_url(model, ""))}'>"
               f"Master</a>"]
     opties += [f"<a class='cl-filter{' on' if v['handle'] == variant else ''}' "
-               f"href='{_e(_url(model, v["handle"], maat))}' title='{_e(v['handle'])}'>{_e(v['naam'])}</a>"
+               f"href='{_e(_url(model, v["handle"]))}' title='{_e(v['handle'])}'>{_e(v['naam'])}</a>"
                for v in varianten]
     nieuw = ""
     if bewerk:
         invoer = (f"<input name='handle' aria-label='Shopify handle' placeholder='the-269-hi-black' "
                   f"required><input name='naam' aria-label='display name' placeholder='Hi · Black'>")
-        nieuw = _popover("+ variant", _form(csrf_token, "bom_variant_add", _url(model, variant, maat),
+        nieuw = _popover("+ variant", _form(csrf_token, "bom_variant_add", _url(model, variant),
                                             {"model": model}, invoer))
     return (f"<div class='cl-bar' aria-label='model'><span class='muted'>Model</span> {modellen}</div>"
             f"<div class='cl-bar' aria-label='variant'><span class='muted'>Variant</span> "
             f"{' '.join(opties)} {nieuw}</div>")
 
 
-def _foto(st, model: str, variant: str, maat: int, naam: str, bewerk: bool, csrf_token: str) -> str:
+def _foto(st, model: str, variant: str, naam: str, bewerk: bool, csrf_token: str) -> str:
     """De productfoto bovenaan: die van de variant, anders die van het model. Het BEELD is het
-    bestaande embed-atoom (`cockpit2_util._embed_html`), dezelfde `<figure>` als in de wiki."""
+    bestaande embed-atoom (`cockpit2_util._embed_html`), dezelfde `<figure>` als in de wiki.
+
+    WAAR EEN NIEUWE FOTO HEEN GAAT (2 oktober 2026, gevonden door Stefan): naar het MODEL, tenzij
+    deze kleur al een eigen foto heeft. Daarvoor schreef "+ photo" in een kleurvariant naar die
+    variant, en kregen de andere kleuren hem niet als terugval — een losse, ongebruikte plek. In een
+    kleurvariant kun je met de keuze in het formulier bewust "only this colour" nemen."""
     from nooch_village.cockpit2_util import _embed_html
     foto = st.bom_varianten.foto(model, variant)
     beeld = _embed_html(foto, naam, beeld=True) if foto else ""
     if not bewerk:
         return beeld
-    terug = _url(model, variant, maat)
-    wie = "this variant" if variant else "the model"
-    adres = _form(csrf_token, "bom_foto", terug, {"model": model, "variant": variant},
-                  f"<input name='foto' type='url' value='{_e(foto if foto.startswith('https://') else '')}' "
-                  f"aria-label='photo address for {wie}' placeholder='https://…'>",
+    terug = _url(model, variant)
+    eigen = bool(variant) and bool((st.bom_varianten.get(model, variant) or {}).get("foto"))
+    doel = variant if eigen else ""
+    if variant:
+        keuze = (f"<select name='variant' aria-label='who gets this photo'>"
+                 f"<option value=''{'' if eigen else ' selected'}>whole model (every colour)</option>"
+                 f"<option value='{_e(variant)}'{' selected' if eigen else ''}>only this colour</option>"
+                 f"</select>")
+        sleutels = {"model": model}
+    else:
+        keuze, sleutels = "", {"model": model, "variant": ""}
+    huidig = st.bom_varianten.foto(model, doel) if (eigen or not variant) else foto
+    adres = _form(csrf_token, "bom_foto", terug, sleutels,
+                  f"{keuze}<input name='foto' type='url' "
+                  f"value='{_e(huidig if huidig.startswith('https://') else '')}' "
+                  f"aria-label='photo address' placeholder='https://…'>",
                   "<button class='dellink' type='submit' name='foto' value=''>remove</button>" if foto else "")
     upload = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-              f"{_verborgen({'action': 'bom_foto', 'next': terug, 'model': model, 'variant': variant})}"
-              f"<input type='file' name='file' accept='image/*' aria-label='upload a photo for {wie}'>"
+              f"{_verborgen({'action': 'bom_foto', 'next': terug, **sleutels})}{keuze}"
+              f"<input type='file' name='file' accept='image/*' aria-label='upload a photo'>"
               f"<button class='btn ok sm' type='submit'>Upload</button></form>")
-    return f"{beeld}{_popover('photo ✎' if foto else '+ photo', adres + upload, f'photo of {wie}')}"
+    return f"{beeld}{_popover('photo ✎' if foto else '+ photo', adres + upload, 'photo')}"
 
 
-def _nieuwe_rij(model: str, variant: str, maat: int, csrf_token: str) -> str:
+def _nieuwe_rij(model: str, variant: str, csrf_token: str) -> str:
     """Een component dat in de master niet bestaat (Hemp naast HyphaLite bij de Hi). Zelfde actie
     als een materiaal wijzigen, met `toegevoegd`."""
     invoer = ("<input name='part' aria-label='component' placeholder='Component' required>"
@@ -276,13 +261,13 @@ def _nieuwe_rij(model: str, variant: str, maat: int, csrf_token: str) -> str:
               "placeholder='grams'>")
     wie = "this variant" if variant else "the master"
     return _popover(f"+ add a component to {wie}",
-                    _form(csrf_token, "bom_materiaal_zet", _url(model, variant, maat),
+                    _form(csrf_token, "bom_materiaal_zet", _url(model, variant),
                           {"model": model, "variant": variant, "toegevoegd": "1"}, invoer))
 
 
 def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "",
-               maat: str = "", model: str = "", variant: str = "") -> str:
-    from nooch_village.data_bom import MODELLEN, STANDAARD_MODEL
+               model: str = "", variant: str = "") -> str:
+    from nooch_village.data_bom import MODELLEN, REFERENTIEMAAT, STANDAARD_MODEL
     pags = wiki.paginas(st.att)
     # MODEL EN VARIANT (Stuk 4). Onbekend = het standaardmodel / de master: een kijkknop, en een
     # vreemde waarde in de URL is geen keuze van een mens.
@@ -291,18 +276,8 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     if variant not in {v["handle"] for v in varianten}:
         variant = ""
     v_naam = next((v["naam"] for v in varianten if v["handle"] == variant), "")
-    # DE MAAT (Correctie 3). Zelfde regel: een onbekende maat is de referentiemaat.
-    cfg = bom_reken.maat_config()
-    ref = cfg.get("referentiemaat", 42) if cfg else 42
-    try:
-        gekozen = int(maat)
-    except (TypeError, ValueError):
-        gekozen = ref
-    if not cfg or gekozen not in cfg["maten"]:
-        gekozen = ref
-    terug = _url(model, variant, gekozen)
+    terug = _url(model, variant)
     uit = bom_reken.bereken(MODELLEN[model]["master"], pags, st.bom_leveranciers.alle(),
-                            schaal=bom_reken.schaalfactor(gekozen, cfg),
                             afwijkingen=st.bom_materialen.afwijkingen(model, variant))
     bewerk = bool(csrf_token) and _mag_koppelen(st, username)
     opties = ("".join(f"<option value='{_e(p.title)}'></option>" for p in pags if p.title)
@@ -313,7 +288,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
            f"<th class='num'>Cost price</th><th class='num'>{_CO2E}</th><th class='num'>Water</th>"
            "<th>Status</th></tr>")
     rijen = "".join(_rij(r, csrf_token, bewerk, terug, model, variant) for r in uit["rijen"])
-    erbij = _nieuwe_rij(model, variant, gekozen, csrf_token) if bewerk else ""
+    erbij = _nieuwe_rij(model, variant, csrf_token) if bewerk else ""
     tabel = f"<table class='mtab'>{kop}{rijen}</table>{erbij}{lijst}"
     open_rijen = [r for r in uit["rijen"] if r["open"]]
     nog_open = ""
@@ -327,15 +302,23 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
                     f"above pick them up by themselves.</p>"
                     f"<ul>{items}</ul></div>")
     titel = MODELLEN[model]["naam"] + (f" · {v_naam}" if variant else "")
-    uitleg = ("This variant shows the master with its own differences on top." if variant else
-              "The master bill of materials; a variant shows its own differences on top of it.")
+    uitleg = ("This colour variant shows the model's bill of materials with its own differences "
+              "on top." if variant else
+              "The model's bill of materials; a colour variant shows its own differences on top of it.")
+    # 269 HI BEGINT BIJ DE LIJST VAN 269 LO (`basis_van`, besluit Stefan): dat staat erbij, anders
+    # leest een identieke lijst als een eigen, gecontroleerde Hi-lijst.
+    basis = MODELLEN[model].get("basis_van")
+    basis_zin = (f" This model has no list of its own yet: it starts from "
+                 f"{_e(MODELLEN[basis]['naam'])}, and its differences are set here."
+                 if basis in MODELLEN else "")
     main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · {_e(titel)}</h1>"
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
-            f"{uitleg} Weights and materials can be changed here per component; the factors come "
-            f"from the material and supplier pages.</p>{_banner(msg)}"
-            f"{_foto(st, model, variant, gekozen, titel, bewerk, csrf_token)}"
-            f"{_model_kiezer(model, variant, gekozen, varianten, bewerk, csrf_token)}"
-            f"{_maat_kiezer(gekozen, cfg, model, variant) if cfg else ''}{_schatting(gekozen, cfg)}"
+            f"{uitleg}{basis_zin} Weights and materials can be changed here per component; the "
+            f"factors come from the material and supplier pages.</p>{_banner(msg)}"
+            f"{_foto(st, model, variant, titel, bewerk, csrf_token)}"
+            f"{_model_kiezer(model, variant, varianten, bewerk, csrf_token)}"
+            # GEEN MAATKIEZER MEER (2 oktober 2026): alle hoeveelheden gelden bij de referentiemaat.
+            f"<p class='muted'>Quantities at reference size EU {REFERENTIEMAAT}.</p>"
             f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
