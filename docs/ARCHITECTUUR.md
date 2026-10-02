@@ -126,6 +126,10 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_delete` | `_act_proj_delete` |
 | `proj_rename` | `_act_proj_rename` |
 | `proj_describe` | `_act_proj_describe` |
+| `proj_conclusie` | `_act_proj_conclusie` |
+| `proj_conclusie_ai` | `_act_proj_conclusie_ai` |
+| `proj_conclusie_verwerp` | `_act_proj_conclusie_verwerp` |
+| `conclusie_naar_wiki` | `_act_conclusie_naar_wiki` |
 | `proj_doc_edit` | `_act_proj_doc_edit` |
 | `verslag_bevestig_behaald` | `_act_verslag_bevestig_behaald` |
 | `verslag_bevestig_niet_behaald` | `_act_verslag_bevestig_niet_behaald` |
@@ -352,4 +356,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_54 routes · 163 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
+_54 routes · 167 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._

@@ -1277,6 +1277,85 @@ def _ai_namen(st) -> list[str]:
     return uit
 
 
+def mag_conclusie_bewerken(st, p: dict, username) -> bool:
+    """Dezelfde vraag als de dispatch (`_role_gate` op de eigenaar-rol), zodat een ingang die er
+    staat ook werkt en een die er niet staat niet via een POST alsnog langskomt."""
+    from nooch_village.cockpit2 import _role_gate
+    return bool(username) and _role_gate(p.get("owner") or "", username, st) is None
+
+
+def _conclusie_sectie(st, p: dict, pid: str, csrf_token: str, username, terug: str) -> tuple[str, str]:
+    """De Conclusion bovenaan het project: (inhoud, acties in de kop). Vervangt het rapport.
+
+    EEN LOPENDE SAMENVATTING, GEEN EINDDOCUMENT. 5-10 regels die groeien terwijl het project loopt;
+    klik op de tekst om te bewerken (hetzelfde `inline_edit` als de wall). "✨ Draft with AI" legt
+    een VOORSTEL in het bewerkveld — open, met Discard ernaast — en pas Save maakt er tekst van.
+    "Keep as a fact" zet één regel ervan op een wiki-pagina, met dit project als bron."""
+    from nooch_village.cockpit2_util import inline_edit
+    tekst = (p.get("conclusion") or "").strip()
+    voorstel = (p.get("conclusion_voorstel") or {}).get("tekst", "") if csrf_token else ""
+    mag = bool(csrf_token) and mag_conclusie_bewerken(st, p, username)
+    hid = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+           f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+           f"<input type='hidden' name='next' value='{_e(terug)}'>")
+    if not mag:
+        body = (f"<div class='fbody'>{_md(tekst)}</div>" if tekst
+                else "<p class='muted'>No conclusion yet.</p>")
+        return body, ""
+    getoond = (_md(tekst) if tekst
+               else "<p class='muted'>No conclusion yet — click here to write one, in 5 to 10 "
+                    "lines: what this project found, decided or delivered.</p>")
+    veld = md_editor("conclusion", voorstel or tekst, rows=7,
+                     placeholder="What this project found, decided or delivered — 5 to 10 lines")
+    kaart = ""
+    if voorstel:
+        kaart = (f"<div class='card'><span class='chip amber'>draft conclusion</span> "
+                 f"<span class='muted'>Written from the title, checklist and conversation. Nothing "
+                 f"is saved until you press Save.</span>"
+                 f"<form method='post' action='/action' class='fentry-inline'>{hid}"
+                 f"<button class='flink' type='submit' name='action' "
+                 f"value='proj_conclusie_verwerp'>Discard</button></form></div>")
+    # KEEP AS A FACT STAAT ONDER DE TEKST, niet in de sectiekop: hij klapt een formulier uit, en in
+    # de kop duwde dat de kop zelf uit elkaar (gezien in de browser, 2 oktober 2026).
+    feit = _conclusie_feit_form(st, pid, tekst, csrf_token, terug) if tekst else ""
+    body = (f"<div class='editor-inline'>{kaart}"
+            + inline_edit(getoond, veld, sleutel=f"concl-{pid}", opslaan="proj_conclusie",
+                          verborgen=hid, toon_cls="fbody", klikbaar=True, open=bool(voorstel))
+            + "</div>" + feit)
+    ai = (f"<form method='post' action='/action' class='fentry-inline'>{hid}"
+          f"<button class='addlink' type='submit' name='action' value='proj_conclusie_ai' "
+          f"title='Proposes a conclusion from the title, checklist and conversation. Nothing is "
+          f"saved until you press Save.'>✨ Draft with AI</button></form>")
+    return body, ai
+
+
+def _conclusie_feit_form(st, pid: str, tekst: str, csrf_token: str, terug: str) -> str:
+    """"Keep as a fact" — één regel uit de conclusie op een wiki-pagina (`conclusie_naar_wiki`).
+
+    De opvolger van dezelfde knop op het rapport. Voorgevuld met de eerste regel van de conclusie,
+    niet vastgezet: een feit is één regel, en welke dat is beslist de mens."""
+    from nooch_village.views.feed import _keep_wiki_opties
+    from nooch_village.views.wiki import dubbele_namen_hint
+    opties = _keep_wiki_opties(st)
+    if not opties:
+        return ""                     # geen enkele pagina → geen knop die nergens heen kan
+    voorzet = next((r.strip().lstrip("-*• ").replace("**", "")
+                    for r in tekst.splitlines() if r.strip()), "")[:400]
+    return (f"<details class='cardmenu'><summary class='flink'>Keep as a fact</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='next' value='{_e(terug)}'>"
+            f"{_field('The fact, in one line', 'tekst', value=voorzet, fid=f'cf-{_e(pid)}')}"
+            f"<label class='att-lbl' for='cp-{_e(pid)}'>On which page?</label>"
+            f"<select id='cp-{_e(pid)}' name='aid'>{opties}</select>"
+            f"{dubbele_namen_hint(st)}"
+            f"<p class='muted'>Added under <b>Facts</b>, with this project as its source &mdash; "
+            f"one click back to here.</p>"
+            f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
+            f"value='conclusie_naar_wiki'>Keep</button></div></form></details>")
+
+
 def _psectie(kop: str, inhoud: str, *, bijschrift: str = "", acties: str = "") -> str:
     """Eén sectie in de hoofdkolom: kleine kop in kapitalen, acties rechts, inhoud eronder.
 
@@ -1794,7 +1873,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # worden zonder dat je de rail afgaat. (Het verdween ooit met de .dcol en werd onbereikbaar —
     # de suite ving dat, en die eis geldt nog steeds.)
     kop = f"<div class='pkaart-head'>{_crumb}{head}{_herkomst_chip(st, pid)}{verzwakt_block}</div>"
-    secties = (_psectie("Description", einddoc_body, acties=einddoc_acties)
+    concl_body, concl_acties = _conclusie_sectie(st, p, pid, csrf_token, username, nxt_full)
+    secties = (_psectie("Conclusion", concl_body, acties=concl_acties)
+               + _psectie("Description", einddoc_body, acties=einddoc_acties)
                # "+ new checklist" stond in de rail onder "Add". Hij hoort bij de checklist waar hij
                # iets aan toevoegt — zo staat het ook in de mock.
                + _psectie("Checklist", checklists_html, bijschrift="actions from the meeting",

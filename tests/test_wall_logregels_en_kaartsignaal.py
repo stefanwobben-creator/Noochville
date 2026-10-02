@@ -274,6 +274,7 @@ def test_bewerken_is_klikken_op_de_tekst_en_alleen_voor_de_auteur(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
                                         "text": ["van mij"], "next": ["/"]}, username=IK)
     h = _wall(dd, pid)
+    h = h[h.index("<h2>Conversation</h2>"):]           # de Conclusion bovenaan is ook klikbaar
     assert ">Edit</button>" not in h, "de losse Edit-knop staat er nog"
     assert h.count("data-klik-bewerk") == 1
     mijn = h[h.index("data-klik-bewerk"):]

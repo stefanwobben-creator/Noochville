@@ -2924,6 +2924,141 @@ def _act_proj_describe(c):
         return nxt, msg
 
 
+# ── De conclusie (2 oktober 2026): vervangt het rapport ──────────────────────────────────────
+# Vier acties, één veld (`ProjectLedger.set_conclusie`). Alle vier hebben dezelfde poort als de
+# titel en de beschrijving: het is inhoud van het project.
+
+def _act_proj_conclusie(c):
+    # AUTHZ: rolvervuller of Circle Lead — de conclusie is operationeel werk binnen de rol die het
+    # project draagt, dezelfde poort als `proj_rename`/`proj_describe`.
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+    pid = g("pid")
+    if pj.get(pid) is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    pj.set_conclusie(pid, g("conclusion"), door=_web_actor_id(username, st))
+    return nxt, "✓ conclusion saved"
+
+
+_CONCLUSIE_PROMPT = """You help a small team write the CONCLUSION of a project: what it found, decided or
+delivered so far, in plain words.
+
+Project title (the intended outcome): {titel}
+{beschrijving}
+Checklist:
+{checklist}
+
+Conversation on the project, oldest first:
+{gesprek}
+{huidig}
+Write the conclusion in 5 to 10 short lines.
+
+Rules:
+- Use only what is in the material above. Add nothing, no general knowledge.
+- Say what is known now. If the project is not finished, say what is still open in one line.
+- If the material contradicts itself, name that instead of choosing.
+- Content, not process: not "the team discussed", but what came out of it.
+- Write in English. Return only the lines, no heading, no introduction."""
+
+
+def _conclusie_bronnen(st, p: dict) -> dict:
+    """Het materiaal voor het voorstel: titel, beschrijving, checklist, gesprek, huidige tekst.
+
+    BEGRENSD, en van achteren: de laatste berichten zijn het meest actueel. Een project met
+    honderden regels mag geen prompt van honderden regels worden."""
+    from nooch_village.views.feed import _feed_norm, _feed_who
+    cl = []
+    for lijst in p.get("checklists") or []:
+        for it in lijst.get("items") or []:
+            cl.append(f"- [{'x' if it.get('done') else ' '}] {it.get('text', '')}")
+    gesprek = []
+    for e in (p.get("log") or [])[-60:]:
+        tekst = " ".join(str(e.get("text") or "").split())
+        if not tekst:
+            continue
+        kind, atype, aid = _feed_norm(e)
+        wie = "log" if kind == "system" else (_feed_who(st, atype, aid)[1] or "someone")
+        gesprek.append(f"- {wie}: {tekst[:600]}")
+    huidig = (p.get("conclusion") or "").strip()
+    return {
+        "titel": _scope_text(p),
+        "beschrijving": (f"Description: {p['description']}\n" if (p.get("description") or "").strip() else ""),
+        "checklist": "\n".join(cl[-40:]) or "(none)",
+        "gesprek": "\n".join(gesprek) or "(no messages yet)",
+        "huidig": (f"\nThe current conclusion, to improve rather than replace blindly:\n{huidig}\n"
+                   if huidig else ""),
+    }
+
+
+def _act_proj_conclusie_ai(c):
+    """Een VOORSTEL voor de conclusie, uit titel, checklist en gesprek. Slaat niets op.
+
+    # AUTHZ: rolvervuller of Circle Lead — wie de conclusie mag opslaan mag er een voorstel voor
+    # vragen; wie niet mag opslaan heeft niets aan een voorstel in een veld dat hij niet kan bewaren.
+
+    AI IS HIER INSTRUMENT: het voorstel landt in het bewerkveld met een Discard ernaast, en pas
+    Save (een mens) maakt er de conclusie van. Fail-closed: geen werkend model → een zichtbare
+    melding, nooit een lege of halve tekst die voor een echte kan doorgaan."""
+    from nooch_village import llm
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+    pid = g("pid")
+    p = pj.get(pid)
+    if p is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate(p.get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    tekst = llm.reason(_CONCLUSIE_PROMPT.format(**_conclusie_bronnen(st, p)),
+                       max_tokens=500, call_site="project_conclusie")
+    tekst = "\n".join(r.rstrip() for r in (tekst or "").strip().splitlines()).strip()
+    if not tekst:
+        return nxt, "✗ could not draft a conclusion — try again later"
+    pj.set_conclusie_voorstel(pid, tekst, door=_web_actor_id(username, st))
+    return nxt, "✨ draft conclusion ready — check it and press Save"
+
+
+def _act_proj_conclusie_verwerp(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie `proj_conclusie_ai`. Wie hem mag laten maken, mag hem
+    # ook weggooien; anders blijft een afgewezen voorstel staan.
+    nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+    pid = g("pid")
+    if pj.get(pid) is None:
+        return nxt, "✗ project not found"
+    _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
+    if _deny:
+        return nxt, _deny
+    if not pj.set_conclusie_voorstel(pid, None):
+        return nxt, ""
+    return nxt, "🗑 draft conclusion discarded"
+
+
+def _act_conclusie_naar_wiki(c):
+    """Eén regel uit de conclusie als FEIT op een wiki-pagina, met het project als bron.
+
+    # AUTHZ: domeineigenaar of Circle Lead van de PAGINA — zelfde poort als `pagina_feit_add`, via
+    # `_feit_op_pagina`. Een feit is inhoud van die pagina, niet van het project.
+
+    DE OPVOLGER VAN "Keep as a fact" OP HET RAPPORT: het rapport is weg, de conclusie is de plek
+    waar wat een project opleverde nu staat. `soort="bron"` — herkomst, geen bewijs."""
+    from nooch_village import wiki
+    nxt, st, g = c.nxt, c.st, c.g
+    pagina = st.att.get(g("aid"))
+    if pagina is None or pagina.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    pid = g("pid")
+    p = st.projects.get(pid)
+    if p is None:
+        return nxt, "✗ project not found"
+    herkomst = f"{_scope_text(p) or pid} · conclusion · {_stamp(p.get('conclusion_at') or time.time())}"
+    feit = wiki.maak_feit(g("tekst"), soort="bron", ref=str(pid), citaat=herkomst,
+                          url=f"/project?pid={pid}")
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    return nxt, _feit_op_pagina(c, pagina, feit, "feit uit een projectconclusie")
+
+
 def _bevestig_met(c, oordeel: str):
     """Bevestig het concept mét een oordeel. Eén plek, twee ingangen (behaald / niet behaald).
 
@@ -6266,6 +6401,10 @@ ACTIONS = {
     "proj_delete": _act_proj_delete,
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
+    "proj_conclusie": _act_proj_conclusie,
+    "proj_conclusie_ai": _act_proj_conclusie_ai,
+    "proj_conclusie_verwerp": _act_proj_conclusie_verwerp,
+    "conclusie_naar_wiki": _act_conclusie_naar_wiki,
     "proj_doc_edit": _act_proj_doc_edit,
     "verslag_bevestig_behaald": _act_verslag_bevestig_behaald,
     "verslag_bevestig_niet_behaald": _act_verslag_bevestig_niet_behaald,

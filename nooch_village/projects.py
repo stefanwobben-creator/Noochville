@@ -1117,6 +1117,41 @@ class ProjectLedger:
         self._save()
         return True
 
+    # ── De conclusie: een lopende samenvatting bovenaan het project (2 oktober 2026) ─────────
+    # VERVANGT HET RAPPORT. Geen einddocument meer dat aan het eind wordt samengesteld en bevestigd,
+    # maar 5-10 regels die gaandeweg groeien terwijl het project loopt. Eén veld, door een mens
+    # geschreven; een model mag hooguit een VOORSTEL neerleggen (`conclusion_voorstel`), en pas
+    # Save maakt er tekst van — zelfde vorm als de synthese-alinea op een wiki-pagina.
+
+    def set_conclusie(self, pid: str, tekst: str, door: str = "") -> bool:
+        """Sla de conclusie op (leeg = wissen). Ruimt een wachtend voorstel op: wie opslaat heeft
+        het gezien, overgenomen of bewust overschreven. Ook op een afgerond project — juist daar
+        wordt de conclusie vaak pas af."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["conclusion"] = (tekst or "").strip()[:4000]
+        p["conclusion_at"] = time.time()
+        p["conclusion_door"] = door or ""
+        p.pop("conclusion_voorstel", None)
+        self._touch(p)
+        self._save()
+        return True
+
+    def set_conclusie_voorstel(self, pid: str, tekst: str | None, door: str = "") -> bool:
+        """Leg een voorstel neer (of gooi het weg met None). Raakt `conclusion` zelf NIET."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        if tekst is None:
+            if p.pop("conclusion_voorstel", None) is None:
+                return False
+        else:
+            p["conclusion_voorstel"] = {"tekst": tekst.strip()[:4000], "at": time.time(),
+                                        "door": door or ""}
+        self._save()
+        return True
+
     def approve(self, pid: str, door: str = "") -> bool:
         """Keur een concept-project (draft) goed → het komt bij de rol in TOEKOMST te staan; een mens
         sleept het naar Active als het aan de beurt is. Alleen drafts. Zo zie je eerst de
@@ -1586,7 +1621,7 @@ _WRITE_METHODS = (
     "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
-    "set_resultaat",
+    "set_resultaat", "set_conclusie", "set_conclusie_voorstel",
     "set_item_offer", "accept_item_offer", "plan_akkoord", "set_checklist_uitvoer",
     "edit", "approve", "discard",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
