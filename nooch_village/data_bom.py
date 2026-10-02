@@ -50,13 +50,30 @@ NOOCH_SCHOEN_BOM = (
 
 
 # MODELLEN (BOM Stuk 4, 2 oktober 2026). Een model is een schoen met één MASTER-stuklijst; varianten
-# (hoogte, kleur) zijn afwijkingen daarop en wonen niet hier maar in `bom_varianten` (welke er
+# (kleur) zijn afwijkingen daarop en wonen niet hier maar in `bom_varianten` (welke er
 # bestaan) en `bom_materialen` (wat ze anders doen). De sleutel is een slug in Shopify-stijl; de naam
 # is wat het scherm toont. Een tweede model krijgt hier zijn eigen regel en zijn eigen stuklijst.
 #
 # GEEN WIKI-PAGINATYPE VOOR EEN SCHOEN (besluit Stefan): `/bom` is de schoenpagina. Een tweede plek
 # met dezelfde informatie zou uit de pas gaan lopen.
-STANDAARD_MODEL = "the-269"
+#
+# TWEE MODELLEN, NIET ÉÉN MET HOOGTE ALS VARIANT (besluit Stefan, 2 oktober 2026). "269 Hi" en
+# "269 Lo" zijn elk een model met een eigen basislijst; hun KLEUREN zijn de varianten (5 onder Hi,
+# 10 onder Lo). Zo heeft elk model — ook een toekomstige Runner of Barefoot — dezelfde diepte:
+# model → kleurvariant, zonder uitzondering voor de '269.
+#
+# DE STUKLIJST HIERBOVEN IS 269 LO. 269 Hi heeft nog geen eigen lijst; hij BEGINT bij dezelfde
+# (een verwijzing, geen kopie — `basis_van` zegt het erbij) en zijn afwijkingen (de Hemp-upper,
+# andere gewichten) staan als model-afwijkingen op `/bom`. Komt er een echte Hi-lijst, dan krijgt
+# hij hier zijn eigen constante en vervalt `basis_van`.
+STANDAARD_MODEL = "269-lo"
 MODELLEN = {
-    "the-269": {"naam": "THE '269'", "master": NOOCH_SCHOEN_BOM},
+    "269-lo": {"naam": "269 Lo", "master": NOOCH_SCHOEN_BOM},
+    "269-hi": {"naam": "269 Hi", "master": NOOCH_SCHOEN_BOM, "basis_van": "269-lo"},
 }
+
+#: De maat waarop de gewichten in een stuklijst gelden (EU, industriestandaard). Er wordt NIET
+#: geschaald naar andere maten: één percentage per maat klopt niet (lengte, omtrek en hoogte
+#: graderen elk anders, per onderdeel). Maatafhankelijk verbruik komt bij de materiaalplanning,
+#: per onderdeel — besluit Stefan, 2 oktober 2026.
+REFERENTIEMAAT = 42
