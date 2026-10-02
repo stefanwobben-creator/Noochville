@@ -730,10 +730,28 @@ def main() -> None:
 
         from nooch_village import claims_db, org
 
-        MATERIAAL_ROL = "mother_earth__nooch__creator_of_shoes"
-        LEVERANCIER_ROL = "mother_earth__nooch__supply_chain_coordinator"
+        from nooch_village import bom_leveranciers
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
+        # DE MATERIAAL-EIGENAAR WORDT AFGELEID uit het domein `Materials` (2 oktober 2026), zoals de
+        # claim-eigenaar hieronder. Stond hier vast op `creator_of_shoes`, terwijl het domein naar
+        # een andere rol verhuisde — de pagina's waren dan bij de verkeerde rol geland.
+        _mat_rec = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+        MATERIAAL_ROL = _mat_rec.id if _mat_rec is not None else ""
+        if not MATERIAAL_ROL:
+            print(f"⚠ no living role holds the domain '{bom_leveranciers.DOMEIN}' — material and "
+                  f"supplier pages are skipped. Assign the domain to a role via governance.")
+        # LEVERANCIERPAGINA'S BIJ DEZELFDE ROL (besluit Stefan, 3 oktober 2026). Stond vast op
+        # `supply_chain_coordinator`, een slapende rol: een pagina daar is in de praktijk alleen
+        # door de Circle Lead te onderhouden. Wie `Materials` houdt, zet op `/bom` ook de
+        # leverancier-koppelingen — dus houdt hij ook de pagina's.
+        LEVERANCIER_ROL = MATERIAAL_ROL
+        # `--alleen=materiaal,leverancier` beperkt de run; `--ook-gewist` zaait ook pagina's die
+        # bewust verwijderd zijn (een expliciete mensbeslissing — zie `wiki_seed._bestaat`).
+        _alleen = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--alleen=")), "")
+        soorten = tuple(s.strip() for s in _alleen.split(",") if s.strip()) or None
+        ook_gewist = "--ook-gewist" in sys.argv
+        modellen, varianten = wiki_seed.bom_bronnen(st.bom_materialen, st.bom_varianten)
         # De claim-eigenaar wordt AFGELEID uit governance, niet hier genoemd. Stond hier als
         # "compliance"; die rol is inmiddels verhuisd en het oude record is gearchiveerd — en een
         # archief-record bestaat nog, dus de zaaier zou zijn 20 pagina's dáár hebben neergezet.
@@ -748,20 +766,22 @@ def main() -> None:
                                        eigenaar_claims=CLAIM_ROL,
                                        eigenaar_leverancier=LEVERANCIER_ROL, apply=apply,
                                        leveranciers=st.bom_leveranciers.alle(),
-                                       materialen=st.bom_materialen.alle(),
-                                       varianten=wiki_seed.variant_gebruik(st.bom_materialen,
-                                                                           st.bom_varianten))
+                                       modellen=modellen, varianten=varianten,
+                                       koppelingen=st.bom_leveranciers.koppelingen(),
+                                       soorten=soorten, negeer_gewist=ook_gewist)
         # De methode-pagina hoort in dezelfde zaai-beurt: één commando, één rapport, dezelfde
         # dry-run. BEWUST NIET bij de cockpit-start — inhoud aanmaken is geen infrastructuur, en
         # een bootstrap die een pagina schrijft doet dat ook in elk test-dorp.
         from nooch_village import wiki_how_we_decide as hwd
-        rapport += hwd.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
+        if soorten is None or "methode" in soorten:
+            rapport += hwd.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
         # De beleidspagina gaat mee in dezelfde beurt, en met een VASTE eigenaar-rol — niet via
         # `org.role_for_domain` zoals de claim-pagina's hierboven. Die afleiding levert sinds
         # 18 sept 2026 niets op (geen levende eigenaar van 'claims-database'), en een beleidspagina
         # die wacht op een domein-grant verschijnt nooit. Zie wiki_claims_policy voor het besluit.
         from nooch_village import wiki_claims_policy as wcp
-        rapport += wcp.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
+        if soorten is None or "beleid" in soorten:
+            rapport += wcp.zorg_voor_pagina(st.att, st.records, BASE_DIR, apply=apply)
         print(wiki_seed.rapport_tekst(rapport))
         if not apply:
             print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")

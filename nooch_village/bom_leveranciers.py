@@ -53,6 +53,11 @@ class BomLeverancierStore(JsonStore):
         return {k: str(v.get("leverancier") or "") for k, v in self._d.items()
                 if isinstance(v, dict) and v.get("leverancier")}
 
+    def koppelingen(self) -> list[tuple[str, str]]:
+        """(materiaal zoals gespeld, leverancier) — voor de leverancierpagina's in `wiki_seed`."""
+        return sorted((str(v.get("materiaal") or k), str(v.get("leverancier") or ""))
+                      for k, v in self._d.items() if isinstance(v, dict) and v.get("leverancier"))
+
     def zet(self, materiaal: str, leverancier: str, *, door: str = "") -> bool:
         """Koppel (of ontkoppel, bij een lege naam) een leverancier aan een materiaal. False bij een
         lege materiaalnaam: dan valt er niets te koppelen."""

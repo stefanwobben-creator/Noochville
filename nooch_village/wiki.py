@@ -238,14 +238,42 @@ GROOTHEDEN: dict[str, dict[str, str]] = {
 #: zodra de eigenaar het invult. GEEN `[[…]]` IN DEZE TEKST: dat is een echte wiki-link, en een
 #: voorbeeld als `[[link]]` zou een gewenste pagina "link" op elke nieuwe pagina zetten. Leverancier en materiaal zijn gescheiden om dezelfde reden als in
 #: `GROOTHEDEN`: de prijs hoort bij de leverancier, CO2 en water bij het materiaal.
+#: COMPLIANCE-KLAAR (2 oktober 2026, besluit Stefan): twee secties die het zaad én het skelet allebei
+#: schrijven — ÉÉN plek voor hun tekst en hun standaard-open-punten, zodat ze niet uiteenlopen. Zelfde
+#: vorm als "CO2 & Water": een feit met grond (`soort` bron of cert), geen nieuw feiten-mechanisme.
+DIERLIJK_CHEMISCH = (
+    "## Animal-derived & chemical status",
+    "As a fact, grounded in a certificate (for example vegan) or the supplier's disclosure: whether "
+    "the material contains anything animal-derived, and which dyes and chemicals are used.",
+    ("Animal-derived status: not yet verified", "Dye/chemical disclosure: not yet provided"),
+)
+ARBEID_COMPLIANCE = (
+    "## Labor & compliance",
+    "As a fact, grounded in an audit, a certificate or the supplier's own policy: where the work is "
+    "done, whether wages are verified as living wages, and which compliance policies apply.",
+    ("Facility address: not yet provided", "Living wage verification: not yet provided",
+     "Compliance policies (modern slavery, child labor, health & safety, anti-discrimination, "
+     "union rights): not yet provided"),
+)
+
+
+def _sectie(s: tuple) -> str:
+    return f"{s[0]}\n{s[1]}"
+
+
+def _open(*secties: tuple) -> str:
+    return "\n".join(f"- {p}" for s in secties for p in s[2])
+
+
 SJABLONEN: dict[str, tuple[str, str]] = {
     "materiaal": ("Material page", "\n\n".join((
         "## Characteristics\nWhat it is, what it is made of, what it does in the shoe.",
         "## CO2 & Water\nAs a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
         "TDS or another source. The BOM screen calculates with these values.",
+        _sectie(DIERLIJK_CHEMISCH),
         "## Circularity\nWhat can happen to it at the end of its life: reuse, recycling, composting.",
         "## Certification\nAs a fact, grounded in the certificate or Chronicle record.",
-        "## Open items\nWhat still needs to be found out.",
+        "## Open items\nWhat still needs to be found out.\n" + _open(DIERLIJK_CHEMISCH),
     ))),
     "leverancier": ("Supplier page", "\n\n".join((
         "## Location & contact\nCountry, kind of supplier, contact person.",
@@ -253,7 +281,8 @@ SJABLONEN: dict[str, tuple[str, str]] = {
         "## Material\nWhat this supplier delivers to Nooch, with a wiki link to the material page.",
         "## Price agreement\nAs a fact with a value (cost price per kg), grounded in the quote or "
         "the contract. The BOM screen calculates with this value.",
-        "## Open items\nWhat still needs to be found out.",
+        _sectie(ARBEID_COMPLIANCE),
+        "## Open items\nWhat still needs to be found out.\n" + _open(ARBEID_COMPLIANCE),
     ))),
 }
 

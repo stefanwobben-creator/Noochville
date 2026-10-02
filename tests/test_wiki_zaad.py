@@ -363,3 +363,98 @@ def test_een_onzeker_materiaal_deelt_zijn_leverancier_met_het_zekere():
     bom = _KOP + "\t\tToe guard\tBIOREL\t\t7\n\t\tReinforcement\tBIOREL (?)\t\t2\n"
     [p] = wiki_seed.materiaal_paginas(bom, {bom_leveranciers.sleutel("BIOREL (?)"): "BioFab"})
     assert "- [[BioFab]]" in p["body"]
+
+
+# ── 2 oktober 2026: twee modellen, leveranciers uit /bom, gerichte run ──────────────────────
+
+from nooch_village.bom_leveranciers import BomLeverancierStore as _LevStore
+from nooch_village.bom_materialen import BomMateriaalStore as _MatStore
+from nooch_village.bom_varianten import BomVariantStore as _VarStore
+
+
+def _bom_stores(tmp_path):
+    return (_MatStore(str(tmp_path / "m.json")), _VarStore(str(tmp_path / "v.json")),
+            _LevStore(str(tmp_path / "l.json")))
+
+
+def test_used_in_noemt_269_hi_en_269_lo_op_een_regel(tmp_path):
+    m, v, _l = _bom_stores(tmp_path)
+    m.zet("Upper hemp", "Hemp fabric", model="269-hi", gram=12, toegevoegd=True)
+    v.voeg_toe("269-hi", "the-269-hi-black", "Black")
+    m.zet("Vamp", "Hemp fabric", model="269-hi", variant="the-269-hi-black")
+    modellen, varianten = wiki_seed.bom_bronnen(m, v)
+    ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(modellen=modellen, varianten=varianten)}
+    gebruikt = ps["HyphaLite"]["body"].split("## Used in")[1].split("##")[0]
+    assert "- Vamp — 269 Lo, 269 Hi" in gebruikt and gebruikt.count("- Vamp") == 1
+    hemp = ps["Hemp fabric"]["body"]
+    assert "- Upper hemp — 269 Hi" in hemp and "- Vamp — 269 Hi · Black" in hemp
+    # Twee modellen met dezelfde rij geven het open punt één keer, niet twee keer.
+    assert ps["BIOREL"]["body"].count("material not yet certain") == 1
+
+
+def test_een_leverancier_van_bom_krijgt_een_pagina_zonder_certificaat(tmp_path):
+    _m, _v, l = _bom_stores(tmp_path)
+    l.zet("Pliant", "NFW")
+    l.zet("HyphaLite", "ISA > COSM")
+    ps = {p["titel"]: p for p in wiki_seed.leverancier_paginas(None, koppelingen=l.koppelingen())}
+    assert set(ps) == {"NFW", "ISA > COSM"}
+    assert "Supplier from the supplier links on the BOM screen." in ps["NFW"]["body"]
+    assert "## Material\n- [[Pliant]]" in ps["NFW"]["body"]
+    assert "## Price agreement" in ps["NFW"]["body"]
+
+
+def test_ook_gewist_zaait_een_verwijderde_pagina_maar_overschrijft_niets(tmp_path):
+    st = _stores(tmp_path)
+    a = st.att.add(OWNER, "note", title="Pliant", body="weg")
+    cockpit2.dispatch(st.dd, "artefact_delete", {"aid": [a.id], "next": ["/"]}, username="guest")
+    st = cockpit2._Stores(st.dd)
+    pag = [{"titel": "Pliant", "body": "nieuw", "feiten": []},
+           {"titel": "BIOREL", "body": "nieuw", "feiten": []}]
+    st.att.add(OWNER, "note", title="BIOREL", body="gearchiveerd")
+    st.att.archive(next(x.id for x in st.att.by_kind("note") if x.title == "BIOREL"))
+    zonder = {r["titel"]: r["actie"] for r in wiki_seed.zaai(st.att, st.records, paginas=pag,
+                                                              eigenaar=OWNER, soort="materiaal")}
+    met = {r["titel"]: r["actie"] for r in wiki_seed.zaai(st.att, st.records, paginas=pag,
+                                                           eigenaar=OWNER, soort="materiaal",
+                                                           negeer_gewist=True)}
+    assert zonder == {"Pliant": "bestaat al", "BIOREL": "bestaat al"}
+    assert met == {"Pliant": "zou aanmaken", "BIOREL": "bestaat al"}   # gearchiveerd blijft staan
+
+
+def test_alleen_materiaal_en_leverancier(tmp_path):
+    st = _stores(tmp_path)
+    rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence, eigenaar_materiaal=OWNER,
+                                   eigenaar_claims=OWNER, eigenaar_leverancier=OWNER,
+                                   soorten=("materiaal", "leverancier"))
+    assert {r["soort"] for r in rapport} <= {"materiaal", "leverancier"}
+
+
+# ── compliance-klaar (2 oktober 2026): de secties staan er vóór de eerste --apply ──────────────
+
+def test_een_materiaalpagina_heeft_de_dierlijk_en_chemisch_sectie_met_open_punten():
+    [p] = [x for x in wiki_seed.materiaal_paginas(_KOP + "\t\tOutsole\tPliant\t\t48\n")]
+    body = p["body"]
+    assert body.index("## CO2 & Water") < body.index("## Animal-derived & chemical status")
+    open_ = body.split("## Open items")[1]
+    assert "- Animal-derived status: not yet verified" in open_
+    assert "- Dye/chemical disclosure: not yet provided" in open_
+
+
+def test_een_leverancierpagina_heeft_arbeid_en_compliance_met_open_punten():
+    [p] = wiki_seed.leverancier_paginas(None, koppelingen=[("Pliant", "NFW")])
+    body = p["body"]
+    assert body.index("## Price agreement") < body.index("## Labor & compliance")
+    open_ = body.split("## Open items")[1]
+    for punt in ("Facility address: not yet provided", "Living wage verification: not yet provided",
+                 "Compliance policies (modern slavery, child labor, health & safety, "
+                 "anti-discrimination, union rights): not yet provided"):
+        assert f"- {punt}" in open_, punt
+
+
+def test_zaad_en_skelet_delen_de_compliance_tekst():
+    """Eén plek (`wiki.DIERLIJK_CHEMISCH`, `wiki.ARBEID_COMPLIANCE`): een handmatig gemaakte
+    pagina krijgt dezelfde sectie en dezelfde open punten als een gezaaide."""
+    for sectie, soort in ((wiki.DIERLIJK_CHEMISCH, "materiaal"), (wiki.ARBEID_COMPLIANCE, "leverancier")):
+        skelet = wiki.SJABLONEN[soort][1]
+        assert sectie[0] in skelet and sectie[1] in skelet
+        assert all(f"- {p}" in skelet for p in sectie[2])
