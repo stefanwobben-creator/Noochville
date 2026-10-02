@@ -208,10 +208,10 @@ def _rij(r: dict, csrf_token: str = "", bewerk: bool = False, terug: str = "/bom
            if r.get("gewijzigd") and r.get("origineel") else "")
     materiaal = _cel(waarde=r["materiaal"], pagina=r["mat"], bewerk=bewerk, csrf_token=csrf_token,
                      terug=terug, actie="bom_materiaal_zet", velden=sleutels, veld="materiaal",
-                     wat=f"material of {r['part']}", leeg="+ set material", wis=wis, titel=was)
+                     wat=f"material of {r['part']}", leeg="+ material", wis=wis, titel=was)
     leverancier = _cel(waarde=r["supplier"], pagina=r["lev"], bewerk=bewerk, csrf_token=csrf_token,
                        terug=terug, actie="bom_leverancier_zet", velden={"materiaal": r["materiaal"]},
-                       veld="leverancier", wat=f"supplier of {r['materiaal']}", leeg="+ link supplier",
+                       veld="leverancier", wat=f"supplier of {r['materiaal']}", leeg="+ supplier",
                        wis="<button class='dellink' type='submit' name='leverancier' value=''>remove</button>")
     if not r["supplier"] and not bewerk:
         leverancier = "<span class='muted'>no supplier linked yet</span>"

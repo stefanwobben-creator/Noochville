@@ -72,7 +72,7 @@ def test_de_supplier_cel_is_het_deadline_patroon_voor_wie_mag(tmp_path):
     dd, st = _dorp(tmp_path)
     html = render_bom(st, csrf_token="T", username="houder@t.nl")
     assert html.count("value='bom_leverancier_zet'") == 23          # één per component
-    assert "<details class='acard-d'><summary class='chip outline'>+ link supplier</summary>" in html
+    assert "<details class='acard-d'><summary class='chip outline'>+ supplier</summary>" in html
     assert "<div class='datepop'>" in html and "list='bom-lev-opties'" in html
     assert html.count("<datalist id='bom-lev-opties'>") == 1
 
