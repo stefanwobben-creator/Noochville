@@ -1211,9 +1211,19 @@ _INLINE_TERUG_JS = ("var w=this.closest('.editor-inline');"
                     "w.querySelector('[data-toon]').hidden=false;")
 
 
+#: Klik op de tekst zelf = bewerken. Drie uitzonderingen, anders kaapt de tekst gewone handelingen:
+#: een klik op een link of knop IN de tekst (een `@rol`, een `[[pagina]]`) volgt die; wie tekst
+#: selecteert om te kopiëren krijgt geen editor; en Enter werkt alleen op de tekst zelf, zodat
+#: toetsenbordgebruikers dezelfde ingang hebben.
+_INLINE_KLIK_JS = ("if(event.target.closest('a,button,summary,input,select,textarea'))return;"
+                   "if(String(window.getSelection()))return;" + _INLINE_TOON_JS)
+_INLINE_TOETS_JS = ("if(event.key!=='Enter'||event.target!==this)return;"
+                    "event.preventDefault();" + _INLINE_TOON_JS)
+
+
 def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
                 opslaan: str, opslaan_label: str = "Save", verborgen: str = "",
-                toon_cls: str = "") -> str:
+                toon_cls: str = "", klikbaar: bool = False) -> str:
     """Het getoonde blok plus een bewerkformulier dat er OP dezelfde plek voor in de plaats komt.
 
     `getoond`          de gerenderde weergave (bubbel, conceptverslag, …)
@@ -1226,12 +1236,18 @@ def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
     Geeft alleen het PAAR terug; de knop die het opent komt uit `inline_edit_knop`, want die staat
     bij de andere acties en niet in de bubbel.
 
+    `klikbaar` maakt de TEKST ZELF de ingang (de wall, 2 oktober 2026: "Edit zou gewoon moeten door
+    op het tekstvlak te klikken"); dan is er geen aparte knop nodig. Het is een andere ingang tot
+    dezelfde actie, geen andere bevoegdheid: de aanroeper zet het alleen aan voor wie mag bewerken.
+
     DE GASTHEER MARKEERT DE GRENS, niet deze helper: zet `editor-inline` op het element dat zowel
     het paar ALS de knop omvat (`.fentry` op de wall, de conceptkaart op /rapport). Een wrapper hier
     zou strakker om het paar zitten dan om de knop, en dan vindt `closest()` hem niet — precies wat
     er misging toen ik het wél zo probeerde."""
+    klik = (f" data-klik-bewerk tabindex='0' title='Click to edit'"
+            f" onclick=\"{_INLINE_KLIK_JS}\" onkeydown=\"{_INLINE_TOETS_JS}\"") if klikbaar else ""
     return (f"<div data-toon='{_e(sleutel)}'"
-            f"{f' class={chr(39)}{toon_cls}{chr(39)}' if toon_cls else ''}>{getoond}</div>"
+            f"{f' class={chr(39)}{toon_cls}{chr(39)}' if toon_cls else ''}{klik}>{getoond}</div>"
             f"<form method='post' action='/action' class='pf editor-inline-f' "
             f"data-bewerk='{_e(sleutel)}' hidden>{verborgen}{formulier_inhoud}"
             f"<div class='qadd-row'>"

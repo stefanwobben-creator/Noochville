@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from nooch_village.web_base import _e
-from nooch_village.cockpit2_util import inline_edit, inline_edit_knop, _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
+from nooch_village.cockpit2_util import inline_edit, _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
 from nooch_village import org
 
 # Gecureerde set standaard emoji's met zoekwoorden voor de picker.
@@ -288,12 +288,12 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         bubble = inline_edit(
             bubble,
             md_editor("text", entry.get("text", ""), rows=3, placeholder="Edit your reply…"),
-            sleutel=eid, opslaan="feed_edit", verborgen=_hid2, toon_cls="fbody")
+            sleutel=eid, opslaan="feed_edit", verborgen=_hid2, toon_cls="fbody", klikbaar=True)
     # BEWERKEN EN VERWIJDEREN ZIJN TWEE VRAGEN, en ze hebben twee antwoorden: je eigen woorden
-    # herschrijven mag alleen jijzelf, weghalen mag ook de rol die dit project draagt. Ze stonden
-    # hier als één `if` — en dat is precies hoe "wie mag wat" ongemerkt één regel werd.
+    # herschrijven mag alleen jijzelf (de tekst is dan klikbaar, zie hierboven), weghalen mag ook de
+    # rol die dit project draagt (de Remove-knop hieronder).
     tools = ""
-    if mag_bewerken or mag_wissen:
+    if mag_wissen:
         # `next` HOORT HIER, en stond er niet (30 september 2026). Zonder dat veld valt de dispatch
         # terug op `nxt = g("next") or "/"`: je verwijdert één regel van een project en staat op
         # de homepage. De system-log-tak hierboven gaf hem wél mee — dezelfde knop, twee plekken,
@@ -302,16 +302,12 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='item' value='{_e(eid)}'>"
                 f"<input type='hidden' name='next' value='{_e(terug)}'>")
-        # INLINE BEWERKEN, zoals de projecttitel het al doet: het veld staat op de plek van de
-        # tekst zelf, niet als tweede veld eronder. Een <details> dat een kopie van de bubbel
-        # opent, laat je twee versies van dezelfde regel naast elkaar lezen en je moet raden welke
-        # de echte is. De bubbel-kant staat in `_bubble_of_editor` hieronder.
         deld = (f"<form method='post' action='/action' class='fentry-inline'>{hidf}"
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
                 f"onclick=\"return confirm('Remove comment?')\">Remove</button></form>")
-        stukken = ([f"<span class='fsep'>·</span>{inline_edit_knop()}"] if mag_bewerken else []) + \
-                  ([f"<span class='fsep'>·</span>{deld}"] if mag_wissen else [])
-        tools = "".join(stukken)
+        # GEEN EDIT-KNOP MEER (2 oktober 2026): de tekst zelf is de ingang (`klikbaar` hierboven),
+        # en alleen voor wie mag bewerken — voor ieder ander is het gewoon tekst.
+        tools = f"<span class='fsep'>·</span>{deld}"
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
     # DE "→ outcome"-KIEZER IS WEG. Hij stond onder elk bericht en werd niet gebruikt: routeren
@@ -321,18 +317,14 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
     #
     # `_wall_outcome_form` en `_wall_outcome_opts` blijven bestaan: de checklist-kant gebruikt ze
     # nog (views/checklists.py) en de `wall_outcome`-dispatch bedient de inbox-route.
-    # KEEP IN WIKI (fase 7). Eén regel uit dit gesprek als FEIT op een wiki-pagina, met herkomst.
-    # De opslag bestond al (`meta["feiten"]`, zie wiki.py); dit is alleen de ingang, zoals het
-    # prototype hem toont: een knop per bericht die een keuzelijst van pagina's uitklapt.
-    #
-    # Niet op de system-entry: die IS al de audit-trail van het project, en een feit dat zegt
-    # "moved from Active to Waiting" hoort niet in een wiki. Alleen op wat een mens schreef.
-    keep = _keep_in_wiki_form(st, pid, entry, csrf_token, terug) if (csrf_token and eid and atype != "system") else ""
+    # KEEP IN WIKI IS HIER WEG (2 oktober 2026, besluit Stefan). Een bericht in een projectgesprek
+    # is een update, geen feit; kennis gaat naar de wiki via het BEVESTIGDE rapport ("Keep as a
+    # fact" op /rapport, #647) — één doordacht moment in plaats van een knop onder elk bericht.
     return (f"<div class='fentry editor-inline'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
             f"<div class='fbubble'>{bubble}</div>"
-            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}{tools}{keep}</div></div>"
+            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}{tools}</div></div>"
             f"</div>")
 
 
@@ -347,32 +339,6 @@ def _keep_wiki_opties(st) -> str:
     for a in st.att.by_kind(wiki.PAGINA_KIND):
         uit.append(f"<option value='{_e(a.id)}'>{_e(a.title or a.id)}</option>")
     return "".join(uit)
-
-
-def _keep_in_wiki_form(st, pid: str, entry: dict, csrf_token: str, terug: str) -> str:
-    """De 'Keep in wiki'-uitklapper onder één bericht."""
-    from nooch_village.views.wiki import dubbele_namen_hint as _dubbele_namen_hint
-    opties = _keep_wiki_opties(st)
-    if not opties:
-        return ""                     # geen enkele pagina → geen knop die nergens heen kan
-    eid = str(entry.get("id") or "")
-    return (f"<span class='fsep'>·</span>"
-            f"<details class='fentry-keep'><summary class='flink'>Keep in wiki</summary>"
-            f"<form method='post' action='/action' class='qadd-form'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='item' value='{_e(eid)}'>"
-            f"<input type='hidden' name='next' value='{_e(terug)}'>"
-            f"<label class='att-lbl' for='kw-{_e(eid)}'>Keep as a fact on which page?</label>"
-            f"<select id='kw-{_e(eid)}' name='aid'>{opties}</select>"
-            # DEZELFDE WAARSCHUWING ALS OP HET RAPPORT-FORMULIER, uit dezelfde functie: twee
-            # pagina's die bijna hetzelfde heten laten je hier ongemerkt de verkeerde kiezen, en
-            # dan groeit dezelfde kennis op twee plekken.
-            f"{_dubbele_namen_hint(st)}"
-            f"<p class='muted'>Added under <b>Facts</b>, with this project and this message as its "
-            f"source.</p>"
-            f"<div class='qadd-row'><button class='btn ok sm' type='submit' name='action' "
-            f"value='keep_in_wiki'>Keep</button></div></form></details>")
 
 
 def _feed_author_options(st, p: dict) -> str:
