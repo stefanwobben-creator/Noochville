@@ -91,3 +91,18 @@ def test_het_uitroepteken_komt_terug():
 def test_een_gewone_link_krijgt_geen_uitroepteken():
     bron = "[Batch4](https://example.org/rapport.pdf)"
     assert _md_naar_bron(_md(bron)) == bron
+
+
+def test_de_eigen_shopify_winkel_is_de_enige_externe_uitzondering():
+    """Besluit 2 oktober 2026: productfoto's van Nooch's EIGEN Shopify-winkel mogen inline — dat is
+    een eigen asset. Op het winkel-pad, niet op `cdn.shopify.com`: dat domein delen alle winkels."""
+    from nooch_village.cockpit2_util import NOOCH_SHOPIFY_BEELDEN
+    eigen = NOOCH_SHOPIFY_BEELDEN[0] + "files/269-hi-black.jpg?v=1712345678"
+    assert "<img" in _md(f"![THE 269]({eigen})")
+    for vreemd in ("https://cdn.shopify.com/s/files/1/0000/1111/2222/files/x.jpg",   # andere winkel
+                   "https://cdn.shopify.com/files/x.jpg",
+                   "https://example.org/foto.jpg"):
+        assert "<img" not in _md(f"![x]({vreemd})"), vreemd
+    # Ook bij de eigen winkel alleen een AFBEELDING, en alleen met `![…]` (de bestaande poort).
+    assert "<img" not in _md(f"![x]({NOOCH_SHOPIFY_BEELDEN[0]}files/handleiding.pdf)")
+    assert "<img" not in _md(f"[x]({eigen})")

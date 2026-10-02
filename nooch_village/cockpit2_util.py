@@ -292,6 +292,13 @@ EIGEN_BESTAND = "/wiki-bestand/"
 BOM_FOTO = "/bom-foto/"
 #: Alles wat op onze eigen server staat. `_embed_html` maakt alleen hiervan een `<img>`.
 EIGEN_VOORVOEGSELS = (EIGEN_BESTAND, BOM_FOTO)
+#: DE ENE EXTERNE UITZONDERING, met reden (besluit Stefan, 2 oktober 2026). De regel "geen `<img>`
+#: naar een derde partij" blijft staan; maar de productfoto's van Nooch op de eigen Shopify-winkel
+#: zijn praktisch een eigen asset. NIET het domein `cdn.shopify.com`: dat delen alle Shopify-winkels,
+#: en dan laadt ook een foto van een willekeurige andere winkel inline. Wel het WINKEL-pad van Nooch.
+#: Gemeten op 2 oktober 2026 uit https://nooch.earth/products.json: alle 120 productafbeeldingen
+#: (16 producten) staan onder dit pad. Verhuist de winkel, dan is dit de ene regel om aan te passen.
+NOOCH_SHOPIFY_BEELDEN = ("https://cdn.shopify.com/s/files/1/0549/3817/3529/",)
 
 #: Een kale url op een eigen regel. `/…` hoort erbij sinds eigen uploads bestaan; `//…` niet
 #: (protocol-relatief, zie `_link`).
@@ -375,7 +382,7 @@ def _embed_html(url: str, label: str, beeld: bool = False) -> str:
 
     Wil je externe afbeeldingen er later toch bij, dan is dat deze ene voorwaarde — plus een
     bewuste keuze over die verzoeken, en het bijwerken van die toets."""
-    if beeld and url.startswith(EIGEN_VOORVOEGSELS) and _is_beeldbestand(url):
+    if beeld and url.startswith(EIGEN_VOORVOEGSELS + NOOCH_SHOPIFY_BEELDEN) and _is_beeldbestand(url):
         # GEEN `.card`. Zelfde regel als `.wiki-inline` uit #604: een blok dat tussen de tekst kan
         # staan, krijgt geen rand en geen eigen achtergrondvlak — een alinea heeft die ook niet.
         #
