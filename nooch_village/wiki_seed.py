@@ -43,26 +43,31 @@ def _materiaalnaam(ruw: str) -> tuple[str, bool]:
     return naam, False
 
 
-def variant_gebruik(materialen_store, varianten_store, model: str = "") -> list[tuple[str, str, str]]:
-    """(materiaal, component, variantnaam) voor elke VARIANT-afwijking met een materiaal (BOM
-    Stuk 4). De master-afwijkingen zitten al in `materialen`; dit is wat varianten daarbovenop doen
-    — een ander materiaal op een rij, of een rij die erbij komt (Hemp bij de Hi)."""
-    from nooch_village.data_bom import STANDAARD_MODEL
-    model = model or STANDAARD_MODEL
-    namen = {v["handle"]: v.get("naam") or v["handle"] for v in varianten_store.varianten(model)}
-    uit = []
-    for variant, regels in materialen_store.per_variant(model).items():
-        if not variant or variant not in namen:
-            continue
-        for r in regels:
-            if r.get("materiaal"):
-                uit.append((str(r["materiaal"]), str(r.get("part") or r["sleutel"]), namen[variant]))
-    return sorted(uit)
+def bom_bronnen(materialen_store, varianten_store) -> tuple[list[dict], list[tuple[str, str, str]]]:
+    """(modellen, varianten) voor `materiaal_paginas`, uit wat op `/bom` staat (2 oktober 2026).
+
+    modellen  = per model in `data_bom.MODELLEN`: zijn naam, zijn stuklijst en zijn MODEL-afwijkingen
+                (variant "", inclusief toegevoegde rijen);
+    varianten = (materiaal, component, "Model · Kleur") voor elke kleur-afwijking met een materiaal."""
+    from nooch_village.data_bom import MODELLEN
+    modellen, varianten = [], []
+    for sleutel, m in MODELLEN.items():
+        modellen.append({"label": m["naam"], "bom": m["master"],
+                         "afwijkingen": materialen_store.afwijkingen(sleutel, "")})
+        namen = {v["handle"]: v.get("naam") or v["handle"] for v in varianten_store.varianten(sleutel)}
+        for variant, regels in materialen_store.per_variant(sleutel).items():
+            if variant and variant in namen:
+                for r in regels:
+                    if r.get("materiaal"):
+                        varianten.append((str(r["materiaal"]), str(r.get("part") or r["sleutel"]),
+                                          f"{m['naam']} · {namen[variant]}"))
+    return modellen, sorted(varianten)
 
 
-def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None,
+def materiaal_paginas(bom_tekst: str = "", leveranciers: dict | None = None,
                       materialen: dict | None = None,
-                      varianten: list[tuple[str, str, str]] | None = None) -> list[dict]:
+                      varianten: list[tuple[str, str, str]] | None = None,
+                      modellen: list[dict] | None = None) -> list[dict]:
     """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
 
     De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
@@ -82,41 +87,65 @@ def materiaal_paginas(bom_tekst: str, leveranciers: dict | None = None,
     # NU is, niet zoals hij in de code stond.
     from dataclasses import replace as _vervang
     from nooch_village.bom_materialen import sleutel as part_sleutel
+    from nooch_village.belofte_graaf import Constituent
     materialen = materialen or {}
 
     per_materiaal: dict[str, list] = {}
     spelling: dict[str, str] = {}
     onzeker: dict[str, set] = {}
-    for c in ontleed_bom(bom_tekst, bron=BRON_STUKLIJST):
-        if materialen.get(part_sleutel(c.naam)):
-            c = _vervang(c, realisatie=materialen[part_sleutel(c.naam)])
+    #: sleutel → component → [labels]. Leeg in de oude vorm (één stuklijst, geen modelnaam erbij).
+    gebruik: dict[str, dict[str, list[str]]] = {}
+
+    def _neem(c, label: str = "") -> None:
         naam, twijfel = _materiaalnaam(c.realisatie)
         if not naam:
-            continue
+            return
         sleutel = naam.lower()
-        per_materiaal.setdefault(sleutel, []).append(c)
+        labels = gebruik.setdefault(sleutel, {}).setdefault(c.naam, [])
+        if label and label not in labels:
+            labels.append(label)
+        # ÉÉN CONSTITUENT PER COMPONENT per materiaal: twee modellen met dezelfde rij gaven anders
+        # elk open punt twee keer.
+        if not any(x.naam == c.naam for x in per_materiaal.get(sleutel, [])):
+            per_materiaal.setdefault(sleutel, []).append(c)
         spelling.setdefault(sleutel, naam)
         if twijfel:
             onzeker.setdefault(sleutel, set()).add(c.naam)
+
+    if modellen is None:
+        for c in ontleed_bom(bom_tekst, bron=BRON_STUKLIJST):
+            if materialen.get(part_sleutel(c.naam)):
+                c = _vervang(c, realisatie=materialen[part_sleutel(c.naam)])
+            _neem(c)
+    else:
+        # PER MODEL (2 oktober 2026: 269 Hi en 269 Lo zijn twee modellen). De rijen zoals ze voor dat
+        # model gelden — stuklijst plus model-afwijkingen, ook toegevoegde rijen — via dezelfde
+        # `effectieve_rijen` als het BOM-scherm, zodat pagina en scherm hetzelfde zeggen.
+        from nooch_village.bom_reken import effectieve_rijen
+        from nooch_village.compositie import _alternatieven
+        for m in modellen:
+            for r in effectieve_rijen(m["bom"], m.get("afwijkingen")):
+                opm = str(r.get("comment") or "")
+                _neem(Constituent(naam=r["part"], realisatie=r["material"],
+                                  alternatieven=_alternatieven(opm), bron=BRON_STUKLIJST,
+                                  opmerking=opm.strip().lstrip("<").strip()), m["label"])
     # VARIANTEN IN "USED IN" (Stuk 4): een component in een variant telt als gebruik van zijn
     # materiaal, met de variantnaam erbij. Een materiaal dat alleen in een variant voorkomt krijgt
     # zo ook een pagina — het wordt gebruikt, dus het is er.
-    from nooch_village.belofte_graaf import Constituent
     for mat, part, label in varianten or []:
-        naam, _ = _materiaalnaam(mat)
-        if not naam:
-            continue
-        sleutel = naam.lower()
-        per_materiaal.setdefault(sleutel, []).append(
-            Constituent(naam=f"{part} — {label}", realisatie=mat, bron=BRON_STUKLIJST))
-        spelling.setdefault(sleutel, naam)
+        if modellen is None:
+            _neem(Constituent(naam=f"{part} — {label}", realisatie=mat, bron=BRON_STUKLIJST))
+        else:
+            _neem(Constituent(naam=part, realisatie=mat, bron=BRON_STUKLIJST), label)
 
     uit = []
     for sleutel, delen in sorted(per_materiaal.items()):
         materiaal = spelling[sleutel]
         regels = [f"From the {BRON_STUKLIJST}.", "", "## Used in"]
+        # "Vamp — 269 Hi, 269 Lo": één regel per component, met de modellen (en kleuren) erbij.
         for c in sorted(delen, key=lambda x: x.naam):
-            regels.append(f"- {c.naam}")
+            labels = gebruik.get(sleutel, {}).get(c.naam) or []
+            regels.append(f"- {c.naam}" + (f" — {', '.join(labels)}" if labels else ""))
         # SUPPLIED BY, afgeleid zoals "Used in" (2 oktober 2026). Stond eerst als lege kop in het
         # handmatige skelet; nu komt hij uit de koppeling die op het BOM-scherm gezet wordt.
         # Elke leverancier als [[link]]: bestaat zijn pagina, dan klikt hij door; bestaat hij nog
@@ -217,7 +246,8 @@ def claim_paginas(db: dict, ledger=None, *, vandaag: str = "") -> list[dict]:
 BRON_CERTREGISTER = "certificates registered in the Chronicle"
 
 
-def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
+def leverancier_paginas(ledger, *, vandaag: str = "",
+                        koppelingen: list[tuple[str, str]] | None = None) -> list[dict]:
     """Eén pagina per leverancier uit de certificaten in de Kroniek: welk materiaal, en welk feit
     daarover gegrond is.
 
@@ -232,11 +262,25 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
 
     **Een verlopen (of ongedateerd) certificaat levert geen feit.** Zelfde principe als bij claims:
     een goedkeuring mag zijn bewijs niet overleven. De pagina zelf blijft gewoon bestaan — de
-    leverancier is nog steeds een leverancier — met een open punt dat zegt wat er moet gebeuren."""
+    leverancier is nog steeds een leverancier — met een open punt dat zegt wat er moet gebeuren.
+
+    `koppelingen` (2 oktober 2026, besluit Stefan) = (materiaal, leverancier) uit `bom_leveranciers`,
+    de koppelingen die op `/bom` gezet zijn. Een leverancier die daar staat krijgt óók een pagina,
+    certificaat of niet, met zijn materialen als [[link]]."""
     certs = cert_register.certs_uit_kroniek(ledger) if ledger is not None else []
 
     per_leverancier: dict[str, list] = {}
     spelling: dict[str, str] = {}
+    #: leveranciersleutel → materialen zoals ze op `/bom` gekoppeld zijn (als [[link]] op de pagina).
+    via_bom: dict[str, set] = {}
+    for materiaal, lev in koppelingen or []:
+        naam = " ".join(str(lev or "").split())
+        if not naam or not str(materiaal or "").strip():
+            continue
+        sleutel = naam.lower()
+        per_leverancier.setdefault(sleutel, [])
+        spelling.setdefault(sleutel, naam)
+        via_bom.setdefault(sleutel, set()).add(" ".join(str(materiaal).split()))
     for c in certs:
         naam = " ".join(str(c.get("leverancier") or "").split())
         if not naam:
@@ -250,10 +294,19 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
         leverancier = spelling[sleutel]
         materialen = sorted({" ".join(str(c.get("materiaal") or "").split())
                              for c in cs if c.get("materiaal")})
-        regels = [f"Supplier from the {BRON_CERTREGISTER}."]
-        if materialen:
+        gekoppeld = sorted(via_bom.get(sleutel, set()), key=str.lower)
+        # WAAR DEZE PAGINA VANDAAN KOMT, in de eerste zin: uit het certificatenregister, uit de
+        # koppelingen op het BOM-scherm, of allebei.
+        bronnen = ([BRON_CERTREGISTER] if cs else []) + (["supplier links on the BOM screen"]
+                                                         if gekoppeld else [])
+        regels = [f"Supplier from the {' and the '.join(bronnen)}."]
+        if materialen or gekoppeld:
             regels += ["", "## Material"]
-            regels += [f"- {m}" for m in materialen]
+            # Een gekoppeld materiaal als [[link]] naar zijn materiaalpagina; een materiaal uit een
+            # certificaat als tekst (zo stond het er al, en een cert-naam is niet altijd de paginatitel).
+            regels += [f"- [[{m}]]" for m in gekoppeld]
+            regels += [f"- {m}" for m in materialen
+                       if m.lower() not in {g.lower() for g in gekoppeld}]
 
         feiten = []
         open_punten = []
@@ -284,7 +337,7 @@ def leverancier_paginas(ledger, *, vandaag: str = "") -> list[dict]:
 
 # ── zaaien ──────────────────────────────────────────────────────────────────
 
-def _bestaat(store, eigenaar: str, titel: str) -> bool:
+def _bestaat(store, eigenaar: str, titel: str, *, negeer_gewist: bool = False) -> bool:
     """Staat deze pagina er al, óf is hij er met opzet niet meer?
 
     TWEE VRAGEN, één antwoord, en de tweede is nieuw (27 september 2026). De archief-check dekte
@@ -299,11 +352,14 @@ def _bestaat(store, eigenaar: str, titel: str) -> bool:
     if any(artefacts.norm_titel(a.title) == doel
            for a in store.list(eigenaar, wiki.PAGINA_KIND, include_archived=True)):
         return True
-    return artefacts.is_gewist_bij(store, eigenaar, titel)
+    # `negeer_gewist` (2 oktober 2026): een MENS die expliciet zegt "zaai de verwijderde opnieuw"
+    # (`wiki_zaad --ook-gewist`). Ook dan: wat er wél staat, ook gearchiveerd, wordt nooit
+    # overschreven — die check hierboven blijft.
+    return False if negeer_gewist else artefacts.is_gewist_bij(store, eigenaar, titel)
 
 
 def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
-         apply: bool = False, actor_id: str = "") -> list[dict]:
+         apply: bool = False, actor_id: str = "", negeer_gewist: bool = False) -> list[dict]:
     """Zet één set pagina's bij één eigenaar. Geeft een rapportregel per pagina.
 
     `apply=False` (default) schrijft niets — dan is dit een dry-run die precies laat zien wat er
@@ -325,7 +381,7 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
                      "actie": "overgeslagen", "reden": reden}]
     rapport = []
     for p in paginas:
-        if _bestaat(store, eigenaar, p["titel"]):
+        if _bestaat(store, eigenaar, p["titel"], negeer_gewist=negeer_gewist):
             rapport.append({"soort": soort, "eigenaar": eigenaar, "titel": p["titel"],
                             "actie": "bestaat al", "reden": "niet overschreven"})
             continue
@@ -347,21 +403,39 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
                eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
                vandaag: str = "", leveranciers: dict | None = None,
                materialen: dict | None = None,
-               varianten: list[tuple[str, str, str]] | None = None) -> list[dict]:
+               varianten: list[tuple[str, str, str]] | None = None,
+               modellen: list[dict] | None = None,
+               koppelingen: list[tuple[str, str]] | None = None,
+               soorten: tuple[str, ...] | None = None,
+               negeer_gewist: bool = False) -> list[dict]:
     """Alle sets in één keer. De helft (of het derde) waarvan de eigenaar-rol ontbreekt, wordt
     overgeslagen — de rest gaat gewoon door.
 
     `eigenaar_leverancier` is optioneel; zonder waarde wordt die stap helemaal overgeslagen (geen
-    rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout."""
+    rapportregel) — niet elk dorp heeft de leverancier-pagina's al ingericht, en dat is geen fout.
+
+    `modellen`/`varianten` (uit `bom_bronnen`) en `koppelingen` (uit `bom_leveranciers`) maken de
+    materiaal- en leverancierpagina's uit wat er op `/bom` staat. `soorten` beperkt de run
+    (bijvoorbeeld ("materiaal", "leverancier")); `negeer_gewist` zie `_bestaat`."""
     from nooch_village.data_bom import NOOCH_SCHOEN_BOM
 
-    rapport = zaai(store, records,
-                   paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen, varianten),
-                   eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply, actor_id=actor_id)
-    if eigenaar_leverancier:
-        rapport += zaai(store, records, paginas=leverancier_paginas(ledger, vandaag=vandaag),
+    def mee(soort: str) -> bool:
+        return soorten is None or soort in soorten
+
+    rapport = []
+    if mee("materiaal"):
+        rapport += zaai(store, records,
+                        paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen,
+                                                  varianten, modellen=modellen),
+                        eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply,
+                        actor_id=actor_id, negeer_gewist=negeer_gewist)
+    if eigenaar_leverancier and mee("leverancier"):
+        rapport += zaai(store, records,
+                        paginas=leverancier_paginas(ledger, vandaag=vandaag, koppelingen=koppelingen),
                         eigenaar=eigenaar_leverancier, soort="leverancier", apply=apply,
-                        actor_id=actor_id)
+                        actor_id=actor_id, negeer_gewist=negeer_gewist)
+    if not mee("claim"):
+        return rapport
     try:
         db = claims_db()
     except Exception as e:                      # noqa: BLE001 — nette regel i.p.v. een halve run

@@ -186,10 +186,10 @@ def test_used_in_noemt_de_variant(tmp_path):
     _doe(dd, "bom_materiaal_zet", part="Upper hemp", variant="the-269-hi-black",
          materiaal="Hemp fabric", toegevoegd="1")
     st = cockpit2._Stores(dd)
-    gebruik = wiki_seed.variant_gebruik(st.bom_materialen, st.bom_varianten)
-    assert gebruik == [("Hemp fabric", "Upper hemp", "Hi · Black")]
-    ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM, varianten=gebruik)}
-    assert "- Upper hemp — Hi · Black" in ps["Hemp fabric"]["body"]
+    modellen, gebruik = wiki_seed.bom_bronnen(st.bom_materialen, st.bom_varianten)
+    assert gebruik == [("Hemp fabric", "Upper hemp", "269 Lo · Hi · Black")]
+    ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(modellen=modellen, varianten=gebruik)}
+    assert "- Upper hemp — 269 Lo · Hi · Black" in ps["Hemp fabric"]["body"]
 
 
 def test_een_foto_van_de_eigen_shopify_winkel_is_een_beeld(tmp_path):
