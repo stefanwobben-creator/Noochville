@@ -2304,6 +2304,10 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    dat niet op; staat er een statuslabel in de rij (hoger dan de tekst, met eigen rand), dan zit de
    tekst tegen de bovenrand en het label eronder. Midden is de as die beide delen. */
 :root .mtab td { vertical-align: middle; }
+/* Een popover-cel (`details.acard-d`) IN een tabelcel staat naast zijn link, niet eronder
+   (BOM Correctie 3D, 2 oktober 2026): link + potloodje op één regel. `details` is standaard een
+   blok, en dan werd elke BOM-rij twee regels hoog. Uitbreiding van de bestaande klasse, geen nieuwe. */
+:root .mtab td > .acard-d { display: inline-block; vertical-align: middle; }
 /* EEN VASTE TERM DIE GEEN HOOFDLETTERS VERDRAAGT. Een kop of tegeltitel staat in hoofdletters
    (`th`, `.tile-t`), en dan wordt "CO2e" "CO2E" — een andere eenheid. Geen uitzondering op de
    hoofdletterregel zelf: alleen de term krijgt hem, als `<span class='nu-term'>`. */

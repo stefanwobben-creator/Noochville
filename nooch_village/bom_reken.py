@@ -88,7 +88,7 @@ def _factor(pagina, grootheid: str) -> tuple[float | None, str]:
 
 
 def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
-            schaal: float = 1.0) -> dict:
+            schaal: float = 1.0, materialen: dict | None = None) -> dict:
     """{"rijen": [...], "totalen": {sleutel: {"som", "n", "m"}}} voor één stuklijst.
 
     Per rij: de component, zijn materiaal- en leverancierpagina (of None), het gewicht, de bijdrage
@@ -96,11 +96,17 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
 
     `leveranciers` = {materiaalsleutel: naam} uit `bom_leveranciers` (per MATERIAAL, niet per rij).
     `schaal` = de maat-schaalfactor (`schaalfactor`); hij werkt op de hoeveelheid, en alle vier de
-    totalen rekenen daarmee. (Niet `factor` genoemd: zo heet hieronder de waarde van een pagina.)"""
+    totalen rekenen daarmee. (Niet `factor` genoemd: zo heet hieronder de waarde van een pagina.)
+    `materialen` = {partsleutel: materiaal} uit `bom_materialen` (per COMPONENT): een gewijzigd
+    materiaal vervangt dat uit de stuklijst, en de leverancier volgt het NIEUWE materiaal."""
+    from nooch_village.bom_materialen import sleutel as part_sleutel
     leveranciers = leveranciers or {}
+    materialen = materialen or {}
     rijen = []
     for r in bom_rijen(bom_tekst):
-        materiaal, _onzeker = _materiaalnaam(r["material"])
+        origineel, _ = _materiaalnaam(r["material"])
+        gewijzigd = materialen.get(part_sleutel(r["part"]), "")
+        materiaal, _onzeker = _materiaalnaam(gewijzigd or r["material"])
         mat = wiki.resolve(materiaal, pags)
         supplier = leveranciers.get(materiaal.lower(), "")
         lev = wiki.resolve(supplier, pags) if supplier else None
@@ -127,6 +133,7 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
                 continue
             bijdrage[sleutel] = gram / 1000 * factor if gram is not None else None
         rijen.append({"part": r["part"], "materiaal": materiaal, "supplier": supplier,
+                      "origineel": origineel, "gewijzigd": bool(gewijzigd),
                       "mat": mat, "lev": lev, "bijdrage": bijdrage, "open": open_punten})
 
     m = len(rijen)
