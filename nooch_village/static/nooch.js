@@ -1002,6 +1002,7 @@
     // Dual parser: GROUNDING-format facts OR markdown narrative blocks.
     // GROUNDING: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
     // Markdown: "## Heading\nContent for this section..."
+    // Note: blok and body parameters are optional; function can be called without them
     function parseFacts(text) {
       // Detect format: if text contains "##" or "###", treat as markdown. Otherwise GROUNDING.
       if (/^#+\s+/m.test(text)) {
