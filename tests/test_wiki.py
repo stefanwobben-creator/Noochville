@@ -314,21 +314,22 @@ def test_pagina_editknop_alleen_voor_de_domeinhouder(tmp_path):
     st2 = cockpit2._Stores(st.dd)
 
     # MET ÉÉN FEIT, want sinds 26 september verschijnt een LEGE feiten-sectie niet meer vanzelf
-    # — en het "+ Add fact"-formulier zit in die sectie. De vraag hier is wie hem mag zien, niet
-    # wanneer hij bestaat; zonder feit meet deze toets stil het leeg-gedrag.
+    # — en de feiten-ingang zit in die sectie. De vraag hier is wie hem mag zien, niet wanneer hij
+    # bestaat; zonder feit meet deze toets stil het leeg-gedrag. (Sinds 3 oktober 2026 is de
+    # ingang een wijzer naar Bulk Import, niet meer het "+ Add fact"-formulier.)
     st2.att.update(a.id, meta={"feiten": [wiki.maak_feit("Een schoen weegt 300 gram")]})
     filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
-    assert "artefact_edit" in filler and "pagina_feit_add" in filler
+    assert "artefact_edit" in filler and "Bulk Import Facts" in filler
 
     outsider = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
     assert "HyphaLite" in outsider                            # lezen mag
-    assert "artefact_edit" not in outsider and "pagina_feit_add" not in outsider
+    assert "artefact_edit" not in outsider and "To add facts" not in outsider
 
 
 def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
-    """Zonder feiten verdween de hele sectie, en daarmee ook "+ Add fact": het eerste feit kon
-    alleen via het /-menu. Nu krijgt de bewerker het ingeklapte formulier — maar géén kopje en géén
-    "No facts yet", want dat blijft meubilair. Een lezer ziet bij leeg nog steeds niets."""
+    """Zonder feiten verdween de hele sectie, en daarmee de ingang. Een bewerker krijgt een wijzer
+    naar Bulk Import in het /-menu (het "+ Add fact"-formulier is weg sinds 3 oktober 2026) — maar
+    géén kopje en géén "No facts yet", want dat blijft meubilair. Een lezer ziet bij leeg niets."""
     st = _stores(tmp_path)
     st.people.add("Alice", "alice@nooch.earth")
     st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
@@ -337,12 +338,12 @@ def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
     st2 = cockpit2._Stores(st.dd)
 
     filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
-    assert "pagina_feit_add" in filler and "+ Add fact" in filler
+    assert "To add facts" in filler and "+ Add fact" not in filler
     assert ">Facts</h3>" not in filler and "No facts yet" not in filler
-    assert filler.count("pagina_feit_add") == 1                  # één ingang, niet twee
+    assert filler.count("To add facts") == 1                     # één ingang, niet twee
 
     outsider = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
-    assert "pagina_feit_add" not in outsider and ">Facts</h3>" not in outsider
+    assert "To add facts" not in outsider and ">Facts</h3>" not in outsider
 
 
 def test_onbekende_pagina_geeft_nette_melding(tmp_path):

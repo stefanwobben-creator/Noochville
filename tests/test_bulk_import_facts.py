@@ -104,3 +104,39 @@ def test_de_knop_roept_geen_functie_aan_die_hier_niet_bestaat():
     js = _bulk_js()
     assert "zeg(" not in js
     assert "function meld(" in js
+
+
+# ══ Value: het getal dat /bom optelt (3 oktober 2026) ═══════════════════════
+# "+ Add fact" was de enige weg voor een getal; met dat formulier weg moet Bulk Import de
+# `Value:`-regel uit de feiten-prompts lezen, anders kan /bom nergens meer een cijfer vandaan halen.
+def test_een_value_regel_wordt_een_getal_op_het_feit(tmp_path):
+    dd, aid = _dorp(tmp_path)
+    _n, msg = _importeer(dd, aid, [{**NFW, "Value": '"Cost price per kg" = 4,20'},
+                                   {**NFW, "Value": "CO2e per kg (kg CO2e/kg) = 2.4"},
+                                   {**NFW, "Value": "water_per_kg = 180"}])
+    assert not cockpit2.is_weigering(msg) and "warning" not in msg, msg
+    ws = [wiki.waarde(f) for f in _feiten(dd, aid)]
+    assert ws == [{"grootheid": "prijs_per_kg", "getal": 4.2},
+                  {"grootheid": "co2e_per_kg", "getal": 2.4},
+                  {"grootheid": "water_per_kg", "getal": 180.0}]
+
+
+def test_een_onleesbare_value_valt_niet_stil_weg(tmp_path):
+    """Het feit komt binnen, zonder getal — en de melding zegt waarom."""
+    dd, aid = _dorp(tmp_path)
+    _n, msg = _importeer(dd, aid, [{**NFW, "Value": "Cost price per metre = 3.10"}])
+    assert "1 facts imported" in msg and "without a number" in msg and "Cost price per kg" in msg, msg
+    f = _feiten(dd, aid)[0]
+    assert wiki.waarde(f) is None
+
+
+def test_de_knop_geeft_de_value_regel_door():
+    assert "fact.Value = val" in _bulk_js()
+
+
+def test_er_is_geen_tweede_feitenformulier_meer(tmp_path):
+    from nooch_village.views.wiki import render_pagina
+    dd, aid = _dorp(tmp_path)
+    h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="tok", username=IK)
+    assert "+ Add fact" not in h and "value='pagina_feit_add'" not in h
+    assert "Bulk Import Facts" in h

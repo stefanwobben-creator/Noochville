@@ -82,8 +82,9 @@ def test_half_ingevuld_is_een_fout_en_geen_stil_feit(tmp_path):
 
 # ── wat je ziet ─────────────────────────────────────────────────────────────
 
-def test_de_pagina_toont_het_getal_en_het_formulier_biedt_de_grootheden(tmp_path):
-    # Als de rolvervuller: het "+ Add fact"-formulier krijgt alleen wie mag bewerken.
+def test_de_pagina_toont_het_getal(tmp_path):
+    # Het "+ Add fact"-formulier met zijn grootheden-keuzelijst is weg (3 oktober 2026); een getal
+    # komt nu binnen via de `Value:`-regel van Bulk Import — zie tests/test_bulk_import_facts.py.
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     st.people.add("Alice", "alice@nooch.earth")
@@ -93,9 +94,7 @@ def test_de_pagina_toont_het_getal_en_het_formulier_biedt_de_grootheden(tmp_path
         "Water volgens de TDS", soort="bron", url="https://x", waarde=wiki.maak_waarde("water_per_kg", "180"))]})
     html = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="tok", username="alice@nooch.earth")
     assert "Water per kg: <strong>180 L/kg</strong>" in html
-    assert "name='grootheid'" in html and 'name="getal"' in html
-    for sleutel in wiki.GROOTHEDEN:                                   # uit de ene tabel
-        assert f"value='{sleutel}'" in html
+    assert "name='grootheid'" not in html                            # het oude formulier is weg
 
 
 def test_de_context_van_een_ai_vervuller_krijgt_het_getal_mee():

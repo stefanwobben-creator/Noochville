@@ -33,14 +33,6 @@ _STATUS_ICON = {
     wiki.ONGEGROND: "—",
 }
 
-_SOORT_LABEL = {
-    "kroniek": "Chronicle record",
-    "cert": "Certificate",
-    "policy": "Policy",
-    "bron": "Cited source (URL)",
-}
-
-
 #: Wat er staat als een artefact nog geen tekst heeft. Op ÉÉN plek, want drie soorten pagina's
 #: zeggen het: een note zonder body, een policy zonder body, en de tool die op prod leeg is
 #: (TOOL-WEBSIT-001). Een pagina die dan niets zegt, ziet eruit als een fout.
@@ -274,37 +266,11 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
             f"<div>{_grond_chip(g)}</div>{citaat}{weg}</div>")
 
 
-def _feit_form(aid: str, csrf_token: str) -> str:
-    opts = "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in _SOORT_LABEL.items())
-    # De veld-ids dragen de artefact-id (zelfde reden als _voorstel_form hieronder): zodra
-    # feiten-secties van meerdere pagina's onder elkaar staan (Notes-tab, inline), laat een kale
-    # id elk gekoppeld label naar de EERSTE kaart wijzen in plaats van zijn eigen kaart.
-    soort_id = f"feit-soort-{aid}"
-    grootheid_id = f"feit-grootheid-{aid}"
-    grootheden = "".join(f"<option value='{k}'>{_e(v['label'])} ({_e(v['eenheid'])})</option>"
-                         for k, v in wiki.GROOTHEDEN.items())
-    return (f"<details class='qadd'><summary>+ Add fact</summary>"
-            f"<form method='post' action='/action' class='qadd-form'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='aid' value='{_e(aid)}'>"
-            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
-            f"{_field('Fact', 'tekst', required=True, fid=f'feit-tekst-{aid}')}"
-            f"<label class='att-lbl' for='{_e(soort_id)}'>Grounding</label>"
-            f"<select id='{_e(soort_id)}' name='soort'>"
-            f"<option value=''>none (shows as ungrounded)</option>{opts}</select>"
-            f"{_field('Reference (record / policy id)', 'ref', fid=f'feit-ref-{aid}')}"
-            f"{_field('URL (for a cited source)', 'url', kind='url', fid=f'feit-url-{aid}')}"
-            f"{_field('Quote', 'citaat', kind='textarea', fid=f'feit-citaat-{aid}')}"
-            # EEN GETAL ERBIJ, optioneel (1 oktober 2026). Dit is wat het BOM-scherm optelt; de
-            # grootheden en hun vaste eenheid staan in `wiki.GROOTHEDEN`, niet hier.
-            f"<label class='att-lbl' for='{_e(grootheid_id)}'>Value (optional)</label>"
-            f"<select id='{_e(grootheid_id)}' name='grootheid'>"
-            f"<option value=''>no number</option>{grootheden}</select>"
-            f"{_field('Number', 'getal', fid=f'feit-getal-{aid}', placeholder='e.g. 2.4', attrs="inputmode='decimal'")}"
-            f"<div class='qadd-row'>"
-            f"<button class='btn ok' type='submit' name='action' value='pagina_feit_add'>Add</button>"
-            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-            f"aria-label='cancel'>✕</button></div></form></details>")
+#: De ingang voor feiten, sinds "+ Add fact" weg is (3 oktober 2026, besluit Stefan): het /-menu.
+#: Eén zin, op de twee plekken waar het formulier stond — zonder deze wijzer is een lege
+#: feitenlijst voor een bewerker een doodlopende plek.
+_FEIT_INGANG = ("<div class='muted'>To add facts: type <b>/</b> in the text and choose "
+                "<b>Bulk Import Facts</b>.</div>")
 
 
 def bijna_gelijke_paginas(st) -> list[list[str]]:
@@ -379,7 +345,9 @@ def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
                     for i, f in enumerate(wiki.feiten(a)))
     rijen = rijen or ("<div class='muted'>No facts yet. A fact carries its own grounding: "
                       "a chronicle record, a certificate, a policy or a cited source.</div>")
-    add = _feit_form(a.id, csrf_token) if can_edit else ""
+    # "+ Add fact" IS WEG (3 oktober 2026): feiten komen binnen via Bulk Import in het /-menu, ook
+    # één tegelijk en mét getal (`Value:`). Twee formulieren voor hetzelfde liepen al uiteen.
+    add = _FEIT_INGANG if can_edit else ""
     synth = _synthese_knop(a, csrf_token) if can_edit else ""
     return f"<div class='wiki-inline'><h3>Facts</h3>{rijen}{add}{synth}</div>"
 
@@ -1039,14 +1007,14 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
         een lege plek die op gevuld wacht, geen restant. Vandaar dat de leeg-regel alleen geldt
         voor de sectie die hier automatisch bij komt.
 
-        MAAR NIET VOOR WIE MAG SCHRIJVEN (1 oktober 2026). Met de lege feiten-sectie verdween ook
-        het "+ Add fact"-formulier, en dat zat erin: het EERSTE feit kon alleen via het /-menu.
-        Voor een lezer blijft leeg leeg; een bewerker krijgt alleen het ingeklapte formulier, zonder
-        kopje en zonder "No facts yet" — de ingang, niet het meubilair."""
+        MAAR NIET VOOR WIE MAG SCHRIJVEN (1 oktober 2026). Voor een lezer blijft leeg leeg; een
+        bewerker krijgt de ingang, zonder kopje en zonder "No facts yet" — de wijzer, niet het
+        meubilair. Sinds 3 oktober 2026 is die ingang een zin naar Bulk Import in het /-menu (het
+        "+ Add fact"-formulier is weg)."""
         if k not in secties or k in geplaatst:
             return ""
         if k == "facts" and not gevuld[k] and can_edit:
-            return _feit_form(a.id, csrf_token)
+            return _FEIT_INGANG
         return secties[k] if gevuld[k] else ""
 
     # HET WACHTENDE SYNTHESE-VOORSTEL, IN HET BEWERKVELD ZELF. Niet ernaast en niet eronder: het
