@@ -288,8 +288,7 @@ def _feit_form(aid: str, csrf_token: str) -> str:
     bulk_btn = (f"<button type='button' class='btn' onclick='bulkImportFacts()' "
                 f"title='Paste facts in GROUNDING or markdown format'>"
                 f"Bulk Import</button>")
-    return (f"<div style='display:flex; gap:0.5rem; margin-bottom:0.5rem'>"
-            f"<details class='qadd' style='flex:1'><summary>+ Add fact</summary>"
+    return (f"<details class='qadd'><summary>+ Add fact</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
@@ -311,7 +310,7 @@ def _feit_form(aid: str, csrf_token: str) -> str:
             f"<button class='btn ok' type='submit' name='action' value='pagina_feit_add'>Add</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
             f"aria-label='cancel'>✕</button></div></form></details>"
-            f"{bulk_btn}</div>")
+            f"{bulk_btn}")
 
 
 def bijna_gelijke_paginas(st) -> list[list[str]]:

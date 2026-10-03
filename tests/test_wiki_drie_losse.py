@@ -69,7 +69,7 @@ def test_de_hint_hangt_aan_een_bloktype_dat_bestaat():
 
 
 def test_de_hint_reist_mee_in_het_sjabloon():
-    knop = next(s for s in blok_menu().split("<button") if ">Tabel</button>" in s)
+    knop = next(s for s in blok_menu().split("<button") if ">Table</button>" in s)
     assert "data-wiki-hint='" in knop
     assert "column names" in knop
 

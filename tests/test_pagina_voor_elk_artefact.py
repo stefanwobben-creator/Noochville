@@ -245,9 +245,9 @@ def test_alleen_de_note_krijgt_de_feiten_knop_in_het_menu(tmp_path):
     backlink op. Zie `test_een_policy_heeft_echte_backlinks`."""
     dd, st, art, mens = _dorp(tmp_path)
     note, pol = _pagina(st, art["note"]), _pagina(st, art["policy"])
-    assert ">Feiten<" in note and ">Backlinks<" in note
-    assert ">Feiten<" not in pol, "de feiten-knop hoort niet in het menu van een policy"
-    assert ">Backlinks<" in pol, "backlinks werken wél voor een policy"
+    assert ">Facts<" in note and ">Backlinks<" in note
+    assert ">Facts<" not in pol, "the facts button should not be in the menu of a policy"
+    assert ">Backlinks<" in pol, "backlinks work for policies too"
 
 
 def test_een_policy_heeft_echte_backlinks(tmp_path):
