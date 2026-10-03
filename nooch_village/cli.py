@@ -765,7 +765,6 @@ def main() -> None:
                                        eigenaar_materiaal=MATERIAAL_ROL,
                                        eigenaar_claims=CLAIM_ROL,
                                        eigenaar_leverancier=LEVERANCIER_ROL, apply=apply,
-                                       leveranciers=st.bom_leveranciers.alle(),
                                        modellen=modellen, varianten=varianten,
                                        koppelingen=st.bom_leveranciers.koppelingen(),
                                        soorten=soorten, negeer_gewist=ook_gewist)
@@ -885,6 +884,23 @@ def main() -> None:
         print(wiki_bronnen.rapport_tekst(rapport))
         if rapport and not apply:
             print("\nDRY-RUN — de uitkomst is niet opgeslagen. Draai opnieuw met --apply.")
+
+    elif mode == "wiki_bom_opschoon":
+        # Haalt "Used in"/"Supplied by"/"Material" (zaad-vorm) uit de tekst van wiki-pagina's: die
+        # worden sinds 3 oktober 2026 berekend getoond uit /bom. Dry-run; --apply schrijft een
+        # nieuwe versie per pagina (terug te draaien via de historie).
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.bom_opschoon(st.att, apply=apply, actor_id="cli")
+        print(wiki_seed.bom_opschoon_tekst(rapport))
+        if any(r["weg"] for r in rapport) and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
     elif mode == "wiki_domein":
         # De indeling van de wiki: waar landt elke pagina, en wat vraagt nog een mens. Read-only;
@@ -1340,7 +1356,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

@@ -434,6 +434,55 @@ def _backlink_sectie(a, pags: list) -> str:
     return f"<div class='wiki-inline'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
+def _bom_sectie(st, a, pags: list) -> str:
+    """"From the BOM": wat /bom over deze pagina weet, BEREKEND bij elke weergave (3 oktober 2026).
+
+    WAAROM NIET IN DE TEKST. "Used in", "Supplied by" en "Material" stonden als gewone tekst in de
+    body, gezaaid door `wiki_seed`. Een gewone bewerking veegde ze weg (gebeurd op de NFW-pagina),
+    en een hernoemde leverancier liet een dode [[link]] achter. Hier lezen ze rechtstreeks uit
+    dezelfde stores als /bom (`bom_leveranciers`, `bom_materialen`, `bom_varianten`): ze lopen mee
+    met /bom en staan buiten wat een bewerking kan raken.
+
+    WELKE PAGINA WAT KRIJGT, op TITEL — dezelfde sleutel als /bom en de [[links]] gebruiken:
+      * een MATERIAAL (de titel is een materiaal in de stuklijst of in een koppeling):
+        Used in + Supplied by;
+      * een LEVERANCIER (de titel is een leverancier in een koppeling): Material.
+    Een pagina die geen van beide is, krijgt niets. FAIL-SOFT: een pagina mag nooit breken omdat
+    de BOM-stores niet te lezen zijn."""
+    try:
+        from nooch_village import bom_leveranciers as _bl, wiki_seed
+        lev_store = getattr(st, "bom_leveranciers", None)
+        mat_store = getattr(st, "bom_materialen", None)
+        var_store = getattr(st, "bom_varianten", None)
+        if lev_store is None or mat_store is None or var_store is None:
+            return ""
+        titel = a.title or ""
+        sl = _bl.sleutel(titel)
+        gebruik = wiki_seed.bom_gebruik(mat_store, var_store)
+        leveranciers = lev_store.alle()
+        norm = lambda t: " ".join(str(t or "").split()).lower()
+        materialen = sorted({m for m, lev in lev_store.koppelingen() if norm(lev) == norm(titel)},
+                            key=str.lower)
+        delen = []
+        if sl and (sl in gebruik or sl in leveranciers):
+            regels = [f"- {c}" + (f" — {', '.join(lbl)}" if lbl else "")
+                      for c, lbl in (gebruik.get(sl) or {}).get("delen", [])]
+            delen.append("**Used in**\n" + ("\n".join(regels) or "Not in the bill of materials."))
+            lev = leveranciers.get(sl)
+            delen.append("**Supplied by**\n" + (f"- [[{lev}]]" if lev
+                                                 else "No supplier linked on the BOM screen yet."))
+        if materialen:
+            delen.append("**Material**\n" + "\n".join(f"- [[{m}]]" for m in materialen))
+        if not delen:
+            return ""
+        inhoud = _body_html("\n\n".join(delen), pags)
+        return (f"<div class='wiki-inline'><h3>From the BOM</h3>{inhoud}"
+                f"<p class='muted'>Kept up to date from the "
+                f"<a href='/bom'>BOM screen</a> — change it there.</p></div>")
+    except Exception:                                         # noqa: BLE001 — nooit de pagina breken
+        return ""
+
+
 def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
     """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
 
@@ -1084,7 +1133,7 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # hetzelfde omhulsel en delen dus één linkerrand en één vlak; de metadata-voet valt er met zijn
     # scheidingslijn vanzelf onder.
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_banner(msg)}{body}{voorstel}"
-            f"{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
+            f"{_bom_sectie(st, a, pags) if is_note else ''}{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
             f"{meta}</div></div>")
     return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

@@ -23,6 +23,7 @@ staan.
 from __future__ import annotations
 
 import json
+import re
 import os
 
 from nooch_village import artefacts
@@ -64,30 +65,19 @@ def bom_bronnen(materialen_store, varianten_store) -> tuple[list[dict], list[tup
     return modellen, sorted(varianten)
 
 
-def materiaal_paginas(bom_tekst: str = "", leveranciers: dict | None = None,
-                      materialen: dict | None = None,
-                      varianten: list[tuple[str, str, str]] | None = None,
-                      modellen: list[dict] | None = None) -> list[dict]:
-    """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
+def _verzamel(bom_tekst: str, materialen: dict | None, varianten, modellen):
+    """WAT ZIT WAAR: per materiaal de componenten, hun modellen/kleuren en wat onzeker is.
 
-    De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
-    geen tweede lezing van dezelfde stuklijst ontstaat.
-
-    Groeperen gebeurt hoofdletter-ongevoelig: 'Cotton thread' en 'Cotton Thread' zijn één materiaal.
-    Dat is geen interpretatie maar noodzaak — twee pagina's met dezelfde titel lossen in de wiki
-    bewust NIET op als link, dus die zouden allebei onbereikbaar zijn."""
-    from nooch_village.compositie import ontleed_bom
-
-    # LEVERANCIERS PER MATERIAAL komen uit `bom_leveranciers` (de bewerkbare store, BOM Correctie 2),
-    # als {materiaalsleutel: naam}. Zelfde sleutel als hieronder (hoofdletter-ongevoelig, zonder
-    # '(?)'), anders hoort een leverancier bij een materiaal dat er niet is.
-    leveranciers = leveranciers or {}
+    Eén berekening voor twee lezers: de zaaier (`materiaal_paginas`) en het berekende blok op een
+    wiki-pagina (`bom_gebruik`, 3 oktober 2026). Twee kopieën van deze lus zouden na de eerste
+    wijziging iets anders zeggen over dezelfde stuklijst."""
     # MATERIAAL PER COMPONENT, zoals het op het BOM-scherm gezet is (`bom_materialen`, Correctie 3).
     # Een gewijzigd materiaal vervangt dat uit de stuklijst — dus "Used in" volgt de BOM zoals hij
     # NU is, niet zoals hij in de code stond.
     from dataclasses import replace as _vervang
     from nooch_village.bom_materialen import sleutel as part_sleutel
     from nooch_village.belofte_graaf import Constituent
+    from nooch_village.compositie import ontleed_bom
     materialen = materialen or {}
 
     per_materiaal: dict[str, list] = {}
@@ -138,24 +128,47 @@ def materiaal_paginas(bom_tekst: str = "", leveranciers: dict | None = None,
         else:
             _neem(Constituent(naam=part, realisatie=mat, bron=BRON_STUKLIJST), label)
 
+    return per_materiaal, spelling, onzeker, gebruik
+
+
+def bom_gebruik(materialen_store, varianten_store) -> dict[str, dict]:
+    """`{materiaalsleutel: {"naam", "delen": [(component, [labels])]}}` uit wat NU op /bom staat.
+
+    Voor het berekende "Used in"-blok op een materiaalpagina: bij elke weergave opnieuw afgeleid,
+    zodat het niet kan verouderen en niet per ongeluk uit de tekst kan worden weggeveegd."""
+    modellen, varianten = bom_bronnen(materialen_store, varianten_store)
+    per_materiaal, spelling, _onzeker, gebruik = _verzamel("", None, varianten, modellen)
+    return {k: {"naam": spelling[k],
+                "delen": [(c.naam, gebruik.get(k, {}).get(c.naam) or [])
+                          for c in sorted(delen, key=lambda x: x.naam)]}
+            for k, delen in per_materiaal.items()}
+
+
+def materiaal_paginas(bom_tekst: str = "",
+                      materialen: dict | None = None,
+                      varianten: list[tuple[str, str, str]] | None = None,
+                      modellen: list[dict] | None = None) -> list[dict]:
+    """Eén pagina per materiaal uit de stuklijst: waar het in zit, en wat er nog open staat.
+
+    De parse komt uit `compositie.ontleed_bom` — dezelfde als de belofte-graaf gebruikt, zodat er
+    geen tweede lezing van dezelfde stuklijst ontstaat.
+
+    Groeperen gebeurt hoofdletter-ongevoelig: 'Cotton thread' en 'Cotton Thread' zijn één materiaal.
+    Dat is geen interpretatie maar noodzaak — twee pagina's met dezelfde titel lossen in de wiki
+    bewust NIET op als link, dus die zouden allebei onbereikbaar zijn.
+
+    GEEN "USED IN" EN GEEN "SUPPLIED BY" MEER IN DE TEKST (3 oktober 2026, besluit Stefan). Die twee
+    stonden hier als gewone tekst in de body, en een gewone bewerking veegde ze weg (gebeurd op de
+    NFW-pagina) of liet ze verouderen (een hernoemde leverancier gaf een dode [[link]]). Ze worden
+    nu bij elke weergave berekend uit /bom (`views.wiki._bom_sectie`); hier staat alleen nog wat
+    een mens aanvult."""
+    per_materiaal, spelling, onzeker, _gebruik = _verzamel(bom_tekst, materialen, varianten, modellen)
+
     uit = []
     for sleutel, delen in sorted(per_materiaal.items()):
         materiaal = spelling[sleutel]
-        regels = [f"From the {BRON_STUKLIJST}.", "", "## Used in"]
-        # "Vamp — 269 Hi, 269 Lo": één regel per component, met de modellen (en kleuren) erbij.
-        for c in sorted(delen, key=lambda x: x.naam):
-            labels = gebruik.get(sleutel, {}).get(c.naam) or []
-            regels.append(f"- {c.naam}" + (f" — {', '.join(labels)}" if labels else ""))
-        # SUPPLIED BY, afgeleid zoals "Used in" (2 oktober 2026). Stond eerst als lege kop in het
-        # handmatige skelet; nu komt hij uit de koppeling die op het BOM-scherm gezet wordt.
-        # Elke leverancier als [[link]]: bestaat zijn pagina, dan klikt hij door; bestaat hij nog
-        # niet, dan staat hij op de verlanglijst van deze pagina. Geen koppeling → een open punt.
-        regels += ["", "## Supplied by"]
-        lev = [leveranciers[sleutel]] if leveranciers.get(sleutel) else []
-        regels += [f"- [[{n}]]" for n in lev] or ["No supplier linked on the BOM screen yet."]
+        regels = [f"From the {BRON_STUKLIJST}."]
         open_punten = []
-        if not lev:
-            open_punten.append("- Supplied by: no supplier linked on the BOM screen yet")
         for c in sorted(delen, key=lambda x: x.naam):
             if c.naam in onzeker.get(sleutel, set()):
                 open_punten.append(f"- {c.naam}: material not yet certain — noted in the bill of "
@@ -304,13 +317,12 @@ def leverancier_paginas(ledger, *, vandaag: str = "",
         bronnen = ([BRON_CERTREGISTER] if cs else []) + (["supplier links on the BOM screen"]
                                                          if gekoppeld else [])
         regels = [f"Supplier from the {' and the '.join(bronnen)}."]
-        if materialen or gekoppeld:
-            regels += ["", "## Material"]
-            # Een gekoppeld materiaal als [[link]] naar zijn materiaalpagina; een materiaal uit een
-            # certificaat als tekst (zo stond het er al, en een cert-naam is niet altijd de paginatitel).
-            regels += [f"- [[{m}]]" for m in gekoppeld]
-            regels += [f"- {m}" for m in materialen
-                       if m.lower() not in {g.lower() for g in gekoppeld}]
+        # DE /BOM-MATERIALEN STAAN NIET MEER IN DE TEKST (3 oktober 2026): die toont de pagina als
+        # berekend blok (`views.wiki._bom_sectie`), zodat ze meelopen met /bom en niet weggeveegd
+        # kunnen worden. Alleen een materiaal dat ALLEEN uit een certificaat komt, staat hier nog.
+        alleen_cert = [m for m in materialen if m.lower() not in {g.lower() for g in gekoppeld}]
+        if alleen_cert:
+            regels += ["", "## Material (from certificates)"] + [f"- {m}" for m in alleen_cert]
 
         feiten = []
         open_punten = []
@@ -408,7 +420,7 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
 
 def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar_claims: str,
                eigenaar_leverancier: str = "", apply: bool = False, actor_id: str = "",
-               vandaag: str = "", leveranciers: dict | None = None,
+               vandaag: str = "",
                materialen: dict | None = None,
                varianten: list[tuple[str, str, str]] | None = None,
                modellen: list[dict] | None = None,
@@ -432,7 +444,7 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
     rapport = []
     if mee("materiaal"):
         rapport += zaai(store, records,
-                        paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, leveranciers, materialen,
+                        paginas=materiaal_paginas(NOOCH_SCHOEN_BOM, materialen,
                                                   varianten, modellen=modellen),
                         eigenaar=eigenaar_materiaal, soort="materiaal", apply=apply,
                         actor_id=actor_id, negeer_gewist=negeer_gewist)
@@ -452,6 +464,91 @@ def zaai_alles(store, records, ledger=None, *, eigenaar_materiaal: str, eigenaar
     rapport += zaai(store, records, paginas=claim_paginas(db, ledger, vandaag=vandaag),
                     eigenaar=eigenaar_claims, soort="claim", apply=apply, actor_id=actor_id)
     return rapport
+
+
+# ── BOM-secties uit de tekst halen (3 oktober 2026) ──────────────────────────
+# "Used in", "Supplied by" en "Material" (de /bom-koppelingen) worden sinds vandaag berekend
+# getoond (`views.wiki._bom_sectie`). Op bestaande pagina's staan ze nog als tekst, en dan staan
+# ze er twee keer — waarvan de tekstversie veroudert. Dit haalt ALLEEN weg wat precies in de vorm
+# staat die de zaaier schreef; wat een mens eronder of erbij typte blijft staan en komt in het
+# rapport, zodat niemand zijn eigen tekst kwijtraakt aan een opruimronde.
+
+_BOM_KOPPEN = {"used in", "supplied by", "material"}
+_KOP_RE = re.compile(r"^(#{1,3})\s+(.*?)\s*$")
+_GEEN_LEV = "No supplier linked on the BOM screen yet."
+_GEEN_LEV_OPEN = "- Supplied by: no supplier linked on the BOM screen yet"
+
+
+def _is_zaadregel(kop: str, regel: str) -> bool:
+    r = regel.strip()
+    if kop == "used in":
+        return r.startswith("- ")
+    if kop == "supplied by":
+        return r == _GEEN_LEV or bool(re.fullmatch(r"- \[\[[^\]]+\]\]", r))
+    return bool(re.fullmatch(r"- \[\[[^\]]+\]\]", r))              # material
+
+
+def bom_secties_weg(body: str) -> tuple[str, list[str], list[str]]:
+    """`(nieuwe body, weggehaald, laten staan)`. Een sectie gaat alleen weg als ELKE regel erin
+    zaad-vorm heeft; anders blijft hij heel staan en staat hij in `laten staan`. Een kopje zonder
+    `#` (gewone tekst die toevallig "Material" heet) wordt niet aangeraakt maar wel gemeld."""
+    regels = (body or "").split("\n")
+    uit, weg, blijft = [], [], []
+    i = 0
+    while i < len(regels):
+        m = _KOP_RE.match(regels[i])
+        kop = (m.group(2).strip().lower() if m else "")
+        if m and kop in _BOM_KOPPEN:
+            j = i + 1
+            while j < len(regels) and not _KOP_RE.match(regels[j]):
+                j += 1
+            inhoud = [r for r in regels[i + 1:j] if r.strip()]
+            if inhoud and all(_is_zaadregel(kop, r) for r in inhoud):
+                weg.append(m.group(2).strip())
+                while uit and not uit[-1].strip():          # geen dubbele lege regel achterlaten
+                    uit.pop()
+                if uit:
+                    uit.append("")
+                i = j
+                while i < len(regels) and not regels[i].strip():
+                    i += 1
+                continue
+            blijft.append(f"{m.group(2).strip()} (has text that is not from the seed)")
+        elif not m and regels[i].strip().lower() in _BOM_KOPPEN:
+            blijft.append(f"{regels[i].strip()} (plain text, not a heading — check by hand)")
+        if regels[i].strip() == _GEEN_LEV_OPEN:
+            weg.append("open item: no supplier linked")
+            i += 1
+            continue
+        uit.append(regels[i])
+        i += 1
+    return "\n".join(uit).strip() + ("\n" if (body or "").endswith("\n") else ""), weg, blijft
+
+
+def bom_opschoon(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Over alle wiki-pagina's: `[{id, titel, weg, blijft}]` voor elke pagina met iets te melden.
+    Met `apply` wordt de body bijgewerkt als NIEUWE VERSIE (terug te draaien via de historie)."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        nieuw, weg, blijft = bom_secties_weg(a.body or "")
+        if not weg and not blijft:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "weg": weg, "blijft": blijft})
+        if apply and weg and nieuw != (a.body or ""):
+            store.update(a.id, body=nieuw, actor_id=actor_id, actor_type="person",
+                         change_note="BOM sections removed from the text — now shown from the BOM screen")
+    return rapport
+
+
+def bom_opschoon_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to clean up: no page has BOM sections in its text."
+    uit = []
+    for r in rapport:
+        uit.append(f"{r['id']}  {r['titel']}")
+        uit += [f"    remove: {w}" for w in r["weg"]]
+        uit += [f"    leave:  {b}" for b in r["blijft"]]
+    return "\n".join(uit)
 
 
 def rapport_tekst(rapport: list[dict]) -> str:

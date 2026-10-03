@@ -278,7 +278,6 @@ SJABLONEN: dict[str, tuple[str, str]] = {
     "leverancier": ("Supplier page", "\n\n".join((
         "## Location & contact\nCountry, kind of supplier, contact person.",
         "## Company certification\nAs a fact, grounded in the certificate or Chronicle record.",
-        "## Material\nWhat this supplier delivers to Nooch, with a wiki link to the material page.",
         "## Price agreement\nAs a fact with a value (cost price per kg), grounded in the quote or "
         "the contract. The BOM screen calculates with this value.",
         _sectie(ARBEID_COMPLIANCE),
