@@ -999,9 +999,19 @@
   }
 
   function bulkImportFacts(blok, body) {
-    // Parser voor GROUNDING-format feiten. Verwacht blokken gescheiden door lege regels.
-    // Elk blok: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
-    function parseGroundingFacts(text) {
+    // Dual parser: GROUNDING-format facts OR markdown narrative blocks.
+    // GROUNDING: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
+    // Markdown: "## Heading\nContent for this section..."
+    function parseFacts(text) {
+      // Detect format: if text contains "##" or "###", treat as markdown. Otherwise GROUNDING.
+      if (/^#+\s+/m.test(text)) {
+        return parseMarkdown(text);
+      } else {
+        return parseGrounding(text);
+      }
+    }
+
+    function parseGrounding(text) {
       var facts = [];
       var blocks = text.split(/\n\s*\n+/);
       blocks.forEach(function(block) {
@@ -1013,7 +1023,6 @@
           if (m) {
             var key = m[1].trim();
             var val = m[2].trim();
-            // Map keys (case-insensitive, support beide Nederlands & Engels)
             if (/^text$/i.test(key)) fact.Text = val;
             else if (/^type$/i.test(key)) fact.Type = val;
             else if (/^ref$/i.test(key)) fact.Ref = val;
@@ -1022,6 +1031,31 @@
           }
         });
         if (fact.Text) facts.push(fact);
+      });
+      return facts;
+    }
+
+    function parseMarkdown(text) {
+      // Parse markdown sections (H2/H3 headings + content)
+      // Each section becomes a "fact" with Text = heading + narrative, Type = source
+      var facts = [];
+      var sections = text.split(/^#+\s+/m);
+      sections.forEach(function(section) {
+        if (!section.trim()) return;
+        var lines = section.trim().split('\n');
+        var heading = lines[0] || '';
+        var content = lines.slice(1).join(' ').trim();
+        // Combine heading + content as the fact text
+        var text = heading + (content ? '\n' + content : '');
+        if (text) {
+          facts.push({
+            Text: text.substring(0, 400),  // Cap at reasonable length
+            Type: "source",                 // Default type for markdown imports
+            Ref: "",
+            Quote: "",
+            URL: ""
+          });
+        }
       });
       return facts;
     }
@@ -1046,18 +1080,18 @@
 
     // Live preview
     textarea.addEventListener('input', function() {
-      var facts = parseGroundingFacts(textarea.value);
+      var facts = parseFacts(textarea.value);
       preview.innerHTML = facts.length ?
         '<strong>' + facts.length + ' fact(s) ready:</strong><ul>' +
         facts.map(function(f,i) {
           return '<li><strong>' + (f.Text || '').substring(0,60) + '...</strong></li>';
         }).join('') +
-        '</ul>' : '<em>No facts parsed yet</em>';
+        '</ul>' : '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
     });
 
     // Import
     importBtn.addEventListener('click', function() {
-      var facts = parseGroundingFacts(textarea.value);
+      var facts = parseFacts(textarea.value);
       if (!facts.length) { zeg("No facts to import"); return; }
 
       // POST ke backend

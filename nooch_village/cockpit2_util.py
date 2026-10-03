@@ -1280,7 +1280,7 @@ def _accept(alleen_beeld: bool = False) -> str:
 #: sectie op het scherm staat ("Links here"); in dit menu staat waar je het BLOK bij noemt, in de
 #: taal van de andere negen knoppen. Ontbreekt een naam hier, dan valt hij terug op het kopje —
 #: een nieuwe markering krijgt zo altijd een knop, nooit stilzwijgend geen.
-_AFGELEID_LABEL = {"facts": "Feiten", "backlinks": "Backlinks"}
+_AFGELEID_LABEL = {"facts": "Facts", "backlinks": "Backlinks"}
 
 #: HET /-MENU: welk bloktype je kunt invoegen, hoe het heet, en met welk commando. De vierde
 #: kolom is het argument voor `execCommand`.
@@ -1293,32 +1293,33 @@ _AFGELEID_LABEL = {"facts": "Feiten", "backlinks": "Backlinks"}
 #: GEEN KNOP ZONDER WEG TERUG — dezelfde regel als in brok 2. Elke tag hieronder staat in
 #: `_BRON_BLOK` (of is `p`, de terugval), en een test bewaakt dat.
 BLOK_MENU = (
-    ("p", "Tekst", "formatBlock", "<p>"),
-    # DE LABELS HEETTEN "Kop 1/2/3" (26 september 2026). Dat telde de koppen van deze pagina, niet
-    # die van het document: h3/h4/h5 zijn wat de tekst hier gebruikt, want de paginatitel is de h1
-    # en `_md` begint bij h3. Wie "Kop 1" kiest krijgt dus geen h1 — en dat is precies het soort
-    # naam dat je pas doorhebt als je het HTML-resultaat bekijkt.
+    ("p", "Text", "formatBlock", "<p>"),
+    # THE LABELS WERE "Kop 1/2/3" (26 september 2026). That counted the headings of this page, not
+    # of the document: h3/h4/h5 are what the text here uses, since the page title is the h1
+    # and `_md` starts at h3. Who chooses "Kop 1" gets no h1 — and that's exactly the kind of
+    # name you only discover when you look at the HTML result.
     #
-    # ALLEEN HET LABEL VERANDERT. De tag en het `execCommand`-argument blijven h3/h4/h5, dus de
-    # markdown-opslag (`# / ## / ###`) is niet geraakt. Wat je kiest heet nu waar het op uitkomt.
-    ("h3", "H2", "formatBlock", "<h3>"),
-    ("h4", "H3", "formatBlock", "<h4>"),
-    ("h5", "H4", "formatBlock", "<h5>"),
-    ("ul", "Lijst", "insertUnorderedList", ""),
-    ("ol", "Genummerde lijst", "insertOrderedList", ""),
-    ("blockquote", "Citaat", "formatBlock", "<blockquote>"),
-    ("hr", "Scheiding", "insertHorizontalRule", ""),
-    # TABEL EN CODE KUNNEN NIET VIA `execCommand`. Een `formatBlock` op een `<pre>` haalt de
-    # regelovergangen eruit en een tabel kent de browser als commando niet eens. Die twee krijgen
-    # daarom hun MARKDOWN-SJABLOON mee (vierde kolom) en openen het bron-bewerkvlak dat voor deze
-    # twee soorten al bestaat — hetzelfde `bron`-pad als de greep-actie "bewerk als tekst".
+    # ONLY THE LABEL CHANGES. The tag and the `execCommand` argument remain h3/h4/h5, so the
+    # markdown storage (`# / ## / ###`) is untouched. What you choose is now called what it is.
+    ("h3", "Heading 2", "formatBlock", "<h3>"),
+    ("h4", "Heading 3", "formatBlock", "<h4>"),
+    ("h5", "Heading 4", "formatBlock", "<h5>"),
+    ("ul", "Bullet List", "insertUnorderedList", ""),
+    ("ol", "Numbered List", "insertOrderedList", ""),
+    ("blockquote", "Quote", "formatBlock", "<blockquote>"),
+    ("hr", "Divider", "insertHorizontalRule", ""),
+    # TABLE AND CODE CANNOT GO VIA `execCommand`. A `formatBlock` on a `<pre>` strips line breaks
+    # and a table is not even a browser command. Those two get their MARKDOWN TEMPLATE (fourth column)
+    # and open the source editor that already exists for these types — same `bron` path as the grip
+    # action "edit as text".
     #
-    # HET SJABLOON STAAT HIER en niet in `nooch.js`, om dezelfde reden als de rest van deze
-    # tabel: dan zou het vocabulaire op een derde plek wonen, en op de enige zonder toets.
-    ("table", "Tabel", "bron", "| A | B |\n|---|---|\n| | |"),
-    ("pre", "Codeblok", "bron", "```\ncode\n```"),
-    # BULK IMPORT FACTS (3 oktober 2026). Dialog-gestuurde input van GROUNDING-gestructureerde feiten.
-    # Opent een modal met textarea, preview en import-knop. Parset lokaal, stuurt naar backend.
+    # THE TEMPLATE IS HERE and not in `nooch.js`, for the same reason as the rest of this table:
+    # the vocabulary would live in a third place, and the only one without a key.
+    ("table", "Table", "bron", "| A | B |\n|---|---|\n| | |"),
+    ("pre", "Code Block", "bron", "```\ncode\n```"),
+    # BULK IMPORT FACTS (3 oktober 2026). Dialog-driven input of GROUNDING-structured facts
+    # or markdown-narrative blocks. Opens modal with textarea, preview, and import button.
+    # Parses locally, sends to backend. Supports both formats per page type.
     ("p", "Bulk Import Facts", "bulk_import_facts", ""),
 ) + tuple(
     # FEITEN EN BACKLINKS HOREN ER OOK IN (26 september 2026). De markering `{{facts}}` bestaat
@@ -1338,15 +1339,15 @@ BLOK_MENU = (
     ("p", _AFGELEID_LABEL.get(naam, engels), "bron", _wiki.marker(naam))
     for naam, engels in _wiki.AFGELEID.items()
 ) + (
-    # AFBEELDING EN BESTAND (26 september 2026). Ze openen een bestandskiezer in plaats van een
-    # `execCommand`: de derde soort menu-item, naast "de browser maakt het blok" (formatBlock) en
-    # "de server levert een sjabloon" (bron). De upload-aanroep is dezelfde `wiki_bijlage`-actie
-    # als het formulier dat hiermee vervalt — geen tweede uploadpad.
+    # IMAGE AND FILE (26 september 2026). They open a file picker instead of
+    # `execCommand`: the third kind of menu item, alongside "browser makes the block" (formatBlock) and
+    # "server supplies a template" (bron). The upload call is the same `wiki_bijlage` action
+    # as the form it replaces — no second upload path.
     #
-    # `p` ALS TAG, om dezelfde reden als bij Feiten en Backlinks: er is geen tag die de BROWSER
-    # hier achterlaat. Wat er komt te staan, rendert de server.
-    ("p", "Afbeelding", "upload", _accept(alleen_beeld=True)),
-    ("p", "Bestand", "upload", _accept()),
+    # `p` AS TAG, for the same reason as Facts and Backlinks: there's no tag the BROWSER
+    # leaves here. What ends up displayed, the server renders.
+    ("p", "Image", "upload", _accept(alleen_beeld=True)),
+    ("p", "File", "upload", _accept()),
 )
 
 
