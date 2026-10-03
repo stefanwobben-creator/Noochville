@@ -49,10 +49,11 @@ def test_een_materiaalpagina_krijgt_de_kopjes(tmp_path):
 
 def test_een_leverancierpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "LTA S.R.L.", sjabloon="leverancier")
-    for kop in ("Location & contact", "Company certification", "Material", "Price agreement",
-                "Open items"):
+    for kop in ("Location & contact", "Company certification", "Price agreement", "Open items"):
         assert f"## {kop}" in a.body
     assert "CO2 & Water" not in a.body
+    # "Material" is geen skelet-kop meer: die wordt berekend uit /bom (3 oktober 2026).
+    assert "## Material" not in a.body
 
 
 def test_leeg_onbekend_of_met_eigen_tekst_geen_skelet(tmp_path):

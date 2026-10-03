@@ -26,8 +26,12 @@ def _stores(tmp_path):
 def test_materiaal_pagina_zegt_alleen_wat_de_stuklijst_zegt():
     ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM)}
     hypha = ps["HyphaLite"]
-    for deel in ("Vamp", "Tongue", "Heel counter"):
-        assert f"- {deel}" in hypha["body"]
+    # WAAR HET IN ZIT staat niet meer in de tekst (3 oktober 2026) maar komt uit dezelfde
+    # verzameling die het berekende blok leest.
+    per_materiaal, *_ = wiki_seed._verzamel(NOOCH_SCHOEN_BOM, None, None, None)
+    delen = {c.naam for c in per_materiaal["hyphalite"]}
+    assert {"Vamp", "Tongue", "Heel counter"} <= delen
+    assert "## Used in" not in hypha["body"]
     assert "hemp fabric" in hypha["body"]                  # het alternatief uit de comment-kolom
     assert hypha["feiten"] == []                           # géén verzonnen duurzaamheidsfeit
 
@@ -342,27 +346,12 @@ def test_zaai_alles_zonder_leverancier_rol_slaat_die_stap_over(tmp_path):
 _KOP = "Legenda\t\tPart\tMaterial\tComment\tWeight (g)\n"
 
 
-def test_supplied_by_komt_uit_de_koppeling():
-    """Wie levert, staat in `bom_leveranciers` (per materiaal) — als [[link]], één keer per pagina."""
-    bom = _KOP + "\t\tInsole\tJersey Co\t\t18\n\t\tPadding\tjersey co\t\t14\n"
-    [p] = wiki_seed.materiaal_paginas(bom, {"jersey co": "LTA S.R.L."})
-    blok = p["body"].split("## Supplied by")[1].split("##")[0]
-    assert blok.count("- [[LTA S.R.L.]]") == 1
-    assert "Supplied by:" not in p["body"]                           # geen open punt als het er is
-
-
-def test_zonder_koppeling_is_supplied_by_een_open_punt():
+def test_het_zaad_schrijft_geen_used_in_en_geen_supplied_by_meer():
+    """Sinds 3 oktober 2026 berekend getoond (tests/test_wiki_bom_berekend.py). In de tekst zouden
+    ze er dubbel staan, en die kopie verouderde of werd weggeveegd."""
     [p] = wiki_seed.materiaal_paginas(_KOP + "\t\tOutsole\tPliant\t\t48\n")
-    assert "## Supplied by\nNo supplier linked on the BOM screen yet." in p["body"]
-    assert "- Supplied by: no supplier linked" in p["body"].split("## Open items")[1]
-
-
-def test_een_onzeker_materiaal_deelt_zijn_leverancier_met_het_zekere():
-    """'BIOREL (?)' en 'BIOREL' zijn één pagina, dus één sleutel in de koppeling."""
-    from nooch_village import bom_leveranciers
-    bom = _KOP + "\t\tToe guard\tBIOREL\t\t7\n\t\tReinforcement\tBIOREL (?)\t\t2\n"
-    [p] = wiki_seed.materiaal_paginas(bom, {bom_leveranciers.sleutel("BIOREL (?)"): "BioFab"})
-    assert "- [[BioFab]]" in p["body"]
+    assert "## Used in" not in p["body"] and "## Supplied by" not in p["body"]
+    assert "no supplier linked" not in p["body"]
 
 
 # ── 2 oktober 2026: twee modellen, leveranciers uit /bom, gerichte run ──────────────────────
@@ -384,10 +373,11 @@ def test_used_in_noemt_269_hi_en_269_lo_op_een_regel(tmp_path):
     m.zet("Vamp", "Hemp fabric", model="269-hi", variant="the-269-hi-black")
     modellen, varianten = wiki_seed.bom_bronnen(m, v)
     ps = {p["titel"]: p for p in wiki_seed.materiaal_paginas(modellen=modellen, varianten=varianten)}
-    gebruikt = ps["HyphaLite"]["body"].split("## Used in")[1].split("##")[0]
-    assert "- Vamp — 269 Lo, 269 Hi" in gebruikt and gebruikt.count("- Vamp") == 1
-    hemp = ps["Hemp fabric"]["body"]
-    assert "- Upper hemp — 269 Hi" in hemp and "- Vamp — 269 Hi · Black" in hemp
+    gebruik = wiki_seed.bom_gebruik(m, v)                 # wat het berekende blok toont
+    assert ("Vamp", ["269 Lo", "269 Hi"]) in gebruik["hyphalite"]["delen"]
+    assert [d for d, _ in gebruik["hyphalite"]["delen"]].count("Vamp") == 1
+    hemp = dict(gebruik["hemp fabric"]["delen"])
+    assert hemp["Upper hemp"] == ["269 Hi"] and hemp["Vamp"] == ["269 Hi · Black"]
     # Twee modellen met dezelfde rij geven het open punt één keer, niet twee keer.
     assert ps["BIOREL"]["body"].count("material not yet certain") == 1
 
@@ -399,7 +389,8 @@ def test_een_leverancier_van_bom_krijgt_een_pagina_zonder_certificaat(tmp_path):
     ps = {p["titel"]: p for p in wiki_seed.leverancier_paginas(None, koppelingen=l.koppelingen())}
     assert set(ps) == {"NFW", "ISA > COSM"}
     assert "Supplier from the supplier links on the BOM screen." in ps["NFW"]["body"]
-    assert "## Material\n- [[Pliant]]" in ps["NFW"]["body"]
+    # De /bom-materialen staan niet meer in de tekst: berekend blok (3 oktober 2026).
+    assert "## Material" not in ps["NFW"]["body"] and "[[Pliant]]" not in ps["NFW"]["body"]
     assert "## Price agreement" in ps["NFW"]["body"]
 
 

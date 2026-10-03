@@ -68,10 +68,9 @@ def test_de_leverancier_volgt_het_nieuwe_materiaal():
 
 
 def test_used_in_volgt_het_gewijzigde_materiaal():
-    paginas = {p["titel"]: p for p in wiki_seed.materiaal_paginas(
-        NOOCH_SCHOEN_BOM, materialen={"vamp": "Hemp fabric"})}
-    assert "- Vamp" in paginas["Hemp fabric"]["body"].split("## Used in")[1].split("##")[0]
-    assert "- Vamp" not in paginas["HyphaLite"]["body"].split("## Used in")[1].split("##")[0]
+    per_materiaal, *_ = wiki_seed._verzamel(NOOCH_SCHOEN_BOM, {"vamp": "Hemp fabric"}, None, None)
+    assert "Vamp" in {c.naam for c in per_materiaal["hemp fabric"]}
+    assert "Vamp" not in {c.naam for c in per_materiaal["hyphalite"]}
 
 
 # ── D: het klikgedrag ───────────────────────────────────────────────────────

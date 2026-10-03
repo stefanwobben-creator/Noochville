@@ -95,9 +95,12 @@ def test_een_koppeling_staat_op_alle_componenten_van_dat_materiaal(tmp_path):
 
 # ── de materiaalpagina leest dezelfde bron ──────────────────────────────────
 
-def test_het_zaad_leest_dezelfde_koppeling(tmp_path):
-    dd, _st = _dorp(tmp_path)
+def test_de_pagina_leest_dezelfde_koppeling(tmp_path):
+    """Eén bron: wat op /bom gekoppeld is, toont de materiaalpagina — berekend, niet gezaaid."""
+    from nooch_village.views.wiki import render_pagina
+    dd, st = _dorp(tmp_path)
     _zet(dd, "Pliant", "NFW")
-    lev = cockpit2._Stores(dd).bom_leveranciers.alle()
-    pliant = next(p for p in wiki_seed.materiaal_paginas(NOOCH_SCHOEN_BOM, lev) if p["titel"] == "Pliant")
-    assert "## Supplied by\n- [[NFW]]" in pliant["body"]
+    a = st.att.add(HOUDER, "note", title="Pliant")
+    h = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="t", username="guest")
+    blok = h[h.index("From the BOM"):]
+    assert "Supplied by" in blok and "NFW" in blok[:blok.index("BOM screen")]
