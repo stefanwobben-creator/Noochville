@@ -283,11 +283,6 @@ def _feit_form(aid: str, csrf_token: str) -> str:
     grootheid_id = f"feit-grootheid-{aid}"
     grootheden = "".join(f"<option value='{k}'>{_e(v['label'])} ({_e(v['eenheid'])})</option>"
                          for k, v in wiki.GROOTHEDEN.items())
-    # BULK IMPORT FACTS (3 oktober 2026). Separate button next to "+ Add fact" to open the bulk
-    # import dialog. This allows pasting pre-extracted facts in GROUNDING or markdown format.
-    bulk_btn = (f"<button type='button' class='btn' onclick='bulkImportFacts()' "
-                f"title='Paste facts in GROUNDING or markdown format'>"
-                f"Bulk Import</button>")
     return (f"<details class='qadd'><summary>+ Add fact</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -309,8 +304,7 @@ def _feit_form(aid: str, csrf_token: str) -> str:
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_feit_add'>Add</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-            f"aria-label='cancel'>✕</button></div></form></details>"
-            f"{bulk_btn}")
+            f"aria-label='cancel'>✕</button></div></form></details>")
 
 
 def bijna_gelijke_paginas(st) -> list[list[str]]:

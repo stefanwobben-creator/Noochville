@@ -336,6 +336,11 @@ _UITKOMST = {
               "| | |</textarea></div>", "| A | B |\n|---|---|\n| | |"),
     "Code Block": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
                  "</textarea></div>", "```\ncode\n```"),
+    # BULK IMPORT FACTS: expandable textarea for pasting facts in dual format (GROUNDING or markdown).
+    # The marker is not stored; import button opens modal via JavaScript and POSTs facts to backend.
+    "Bulk Import Facts": ("<div class='wb' data-blok='p'><textarea data-blok-bron></textarea>"
+                          "<button onclick='bulkImportFacts()' type='button'>Bulk Import</button>"
+                          "</div>", ""),
     # FEITEN EN BACKLINKS lopen langs hetzelfde bron-pad als tabel en codeblok, met de markering
     # als sjabloon. Dat de weg terug één regel `{{facts}}` oplevert is het hele punt: de INHOUD
     # (feiten uit `meta`, backlinks uit andere pagina's) hoort nooit in de opslag te komen.

@@ -1317,6 +1317,9 @@ BLOK_MENU = (
     # the vocabulary would live in a third place, and the only one without a key.
     ("table", "Table", "bron", "| A | B |\n|---|---|\n| | |"),
     ("pre", "Code Block", "bron", "```\ncode\n```"),
+    # BULK IMPORT FACTS (3 oktober 2026). Expandable form with textarea for pasting facts
+    # in GROUNDING or markdown format. Opens bulkImportFacts() modal to process and import.
+    ("p", "Bulk Import Facts", "bulk_import_facts", ""),
 ) + tuple(
     # FEITEN EN BACKLINKS HOREN ER OOK IN (26 september 2026). De markering `{{facts}}` bestaat
     # sinds #595 en de renderer maakt er een volwaardig blok van — met greep, met sleepstand —
