@@ -1317,6 +1317,9 @@ BLOK_MENU = (
     # tabel: dan zou het vocabulaire op een derde plek wonen, en op de enige zonder toets.
     ("table", "Tabel", "bron", "| A | B |\n|---|---|\n| | |"),
     ("pre", "Codeblok", "bron", "```\ncode\n```"),
+    # BULK IMPORT FACTS (3 oktober 2026). Dialog-gestuurde input van GROUNDING-gestructureerde feiten.
+    # Opent een modal met textarea, preview en import-knop. Parset lokaal, stuurt naar backend.
+    ("p", "Bulk Import Facts", "bulk_import_facts", ""),
 ) + tuple(
     # FEITEN EN BACKLINKS HOREN ER OOK IN (26 september 2026). De markering `{{facts}}` bestaat
     # sinds #595 en de renderer maakt er een volwaardig blok van — met greep, met sleepstand —

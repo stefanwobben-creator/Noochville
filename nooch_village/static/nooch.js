@@ -998,6 +998,115 @@
     kiezer.click();
   }
 
+  function bulkImportFacts(blok, body) {
+    // Parser voor GROUNDING-format feiten. Verwacht blokken gescheiden door lege regels.
+    // Elk blok: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
+    function parseGroundingFacts(text) {
+      var facts = [];
+      var blocks = text.split(/\n\s*\n+/);
+      blocks.forEach(function(block) {
+        if (!block.trim()) return;
+        var lines = block.trim().split('\n');
+        var fact = {};
+        lines.forEach(function(line) {
+          var m = line.match(/^([^:]+):\s*(.*)$/);
+          if (m) {
+            var key = m[1].trim();
+            var val = m[2].trim();
+            // Map keys (case-insensitive, support beide Nederlands & Engels)
+            if (/^text$/i.test(key)) fact.Text = val;
+            else if (/^type$/i.test(key)) fact.Type = val;
+            else if (/^ref$/i.test(key)) fact.Ref = val;
+            else if (/^quote$/i.test(key)) fact.Quote = val;
+            else if (/^url$/i.test(key)) fact.URL = val;
+          }
+        });
+        if (fact.Text) facts.push(fact);
+      });
+      return facts;
+    }
+
+    // Open modal dialog
+    var dialog = document.createElement('div');
+    dialog.className = 'bulk-import-dialog';
+    dialog.innerHTML = '<div class="bulk-import-modal">' +
+      '<h3>Bulk Import Facts</h3>' +
+      '<textarea id="bulk-facts-input" placeholder="Paste GROUNDING format facts here..." style="width:100%;height:200px;font-family:monospace;"></textarea>' +
+      '<div id="bulk-facts-preview" style="margin-top:10px;padding:10px;background:#f5f5f5;border-radius:4px;max-height:200px;overflow:auto;"></div>' +
+      '<div style="margin-top:10px;text-align:right;">' +
+      '<button id="bulk-cancel-btn" type="button">Cancel</button>' +
+      '<button id="bulk-import-btn" type="button">Import</button>' +
+      '</div></div>';
+
+    document.body.appendChild(dialog);
+    var textarea = dialog.querySelector('#bulk-facts-input');
+    var preview = dialog.querySelector('#bulk-facts-preview');
+    var importBtn = dialog.querySelector('#bulk-import-btn');
+    var cancelBtn = dialog.querySelector('#bulk-cancel-btn');
+
+    // Live preview
+    textarea.addEventListener('input', function() {
+      var facts = parseGroundingFacts(textarea.value);
+      preview.innerHTML = facts.length ?
+        '<strong>' + facts.length + ' fact(s) ready:</strong><ul>' +
+        facts.map(function(f,i) {
+          return '<li><strong>' + (f.Text || '').substring(0,60) + '...</strong></li>';
+        }).join('') +
+        '</ul>' : '<em>No facts parsed yet</em>';
+    });
+
+    // Import
+    importBtn.addEventListener('click', function() {
+      var facts = parseGroundingFacts(textarea.value);
+      if (!facts.length) { zeg("No facts to import"); return; }
+
+      // POST ke backend
+      var aidEl = document.querySelector('input[name="aid"]');
+      var csrfEl = document.querySelector('input[name="csrf_token"]');
+      if (!aidEl || !csrfEl) { zeg("Form not found"); return; }
+
+      var form = new FormData();
+      form.append('action', 'pagina_bulk_import_facts');
+      form.append('aid', aidEl.value);
+      form.append('facts_json', JSON.stringify(facts));
+      form.append('csrf_token', csrfEl.value);
+
+      fetch('/dispatch', { method: 'POST', body: form })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+          // Extract message from response
+          var m = html.match(/>([✓✗✅💪📍➕🗑❌]\s+[^<]*)</);
+          var msg = m ? m[1] : 'Import completed';
+          zeg(msg);
+          dialog.remove();
+          // Reload page
+          setTimeout(function() { location.reload(); }, 500);
+        })
+        .catch(function(e) { zeg("Import error: " + e.message); });
+    });
+
+    cancelBtn.addEventListener('click', function() { dialog.remove(); });
+
+    // Styling
+    var style = document.createElement('style');
+    style.textContent = '.bulk-import-dialog { position: fixed; top: 0; left: 0; right: 0; bottom: 0; ' +
+      'background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 10000; } ' +
+      '.bulk-import-modal { background: white; border-radius: 8px; padding: 20px; max-width: 600px; max-height: 80vh; ' +
+      'overflow: auto; box-shadow: 0 4px 12px rgba(0,0,0,.3); }' +
+      '.bulk-import-modal h3 { margin: 0 0 15px 0; }' +
+      '.bulk-import-modal button { padding: 8px 16px; margin-left: 10px; border: 1px solid #ccc; ' +
+      'border-radius: 4px; background: #f0f0f0; cursor: pointer; }' +
+      '.bulk-import-modal button:hover { background: #e0e0e0; }' +
+      '.bulk-import-modal #bulk-import-btn { background: #4CAF50; color: white; border-color: #45a049; }' +
+      '.bulk-import-modal #bulk-import-btn:hover { background: #45a049; }';
+    if (!document.querySelector('style[data-bulk-import]')) {
+      style.setAttribute('data-bulk-import', '1');
+      document.head.appendChild(style);
+    }
+
+    textarea.focus();
+  }
+
   /* DE INHOUD WAAROP HET COMMANDO WERKT.
    *
    * Bij de `/`-weg is dat het tekstknooppunt met de streep erin; bij "wijzig type" op een
@@ -1037,6 +1146,11 @@
     // browser maakt het blok" (execCommand) en "de server levert een sjabloon" (bron).
     if (knop.dataset.wikiCmd === "upload") {
       uploadInBlok(blok, body, knop.dataset.wikiArg || "");
+      return;
+    }
+    // BULK IMPORT FACTS. Opent een dialog voor GROUNDING-format feiten.
+    if (knop.dataset.wikiCmd === "bulk_import_facts") {
+      bulkImportFacts(blok, body);
       return;
     }
     var r = document.createRange();
