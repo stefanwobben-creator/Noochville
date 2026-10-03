@@ -310,36 +310,36 @@ _BESTAND_REGEL = "[brief.pdf](/wiki-bestand/NOTE-1/ef56gh78_brief.pdf)"
 #: lijst-commando's nesten erín, en `insertHorizontalRule` levert er een `id="null"` bij omdat
 #: `null` als argument wordt doorgegeven.
 #:
-#: OP HET LABEL EN NIET OP DE TAG (26 september 2026). De tag-kolom is niet uniek: "Tekst",
-#: "Feiten" en "Backlinks" staan alle drie op `p`, want er béstaat geen HTML-tag voor een afgeleid
+#: OP HET LABEL EN NIET OP DE TAG (26 september 2026). De tag-kolom is niet uniek: "Text",
+#: "Facts" en "Backlinks" staan alle drie op `p`, want er béstaat geen HTML-tag voor een afgeleid
 #: blok — de tag zegt alleen wat de browser na het commando overhoudt. Op de tag sleutelen gaf
-#: hier stil de uitkomst van "Tekst" voor alle drie.
+#: hier stil de uitkomst van "Text" voor alle drie.
 _UITKOMST = {
-    "Tekst": ("<p>regel</p>", "regel"),
+    "Text": ("<p>regel</p>", "regel"),
     # DE LABELS HEETTEN "Kop 1/2/3" en zijn op 26 september "H2/H3/H4" geworden. Alleen de NAAM:
     # de tags (h3/h4/h5) en de markdown eronder (`#`/`##`/`###`) staan er nog precies zo.
-    "H2": ("<h3>regel</h3>", "# regel"),
-    "H3": ("<h4>regel</h4>", "## regel"),
-    "H4": ("<h5>regel</h5>", "### regel"),
-    "Lijst": ("<div class='wb' data-blok='p'><ul><li>regel</li></ul></div>", "- regel"),
-    "Genummerde lijst": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>",
+    "Heading 2": ("<h3>regel</h3>", "# regel"),
+    "Heading 3": ("<h4>regel</h4>", "## regel"),
+    "Heading 4": ("<h5>regel</h5>", "### regel"),
+    "Bullet List": ("<div class='wb' data-blok='p'><ul><li>regel</li></ul></div>", "- regel"),
+    "Numbered List": ("<div class='wb' data-blok='p'><ol><li>regel</li></ol></div>",
                          "1. regel"),
-    "Citaat": ("<blockquote>regel</blockquote>", "> regel"),
-    "Scheiding": ("<div class='wb' data-blok='p'><hr id=\"null\"></div>", "---"),
+    "Quote": ("<blockquote>regel</blockquote>", "> regel"),
+    "Divider": ("<div class='wb' data-blok='p'><hr id=\"null\"></div>", "---"),
     # TABEL EN CODEBLOK LOPEN NIET LANGS `execCommand` (25 september 2026). Die twee kan de
     # browser niet maken: een `formatBlock` op een `<pre>` haalt de regelovergangen eruit en een
     # tabel kent hij als commando niet eens. Ze openen daarom het BRON-BEWERKVLAK met het
     # markdown-sjabloon van de server erin — dezelfde `<textarea data-blok-bron>` die de
     # greep-actie "bewerk als tekst" al gebruikte. Wat de weg terug dus leest is die textarea,
     # niet een omhulsel dat de browser bouwde.
-    "Tabel": ("<div class='wb' data-blok='p'><textarea data-blok-bron>| A | B |\n|---|---|\n"
+    "Table": ("<div class='wb' data-blok='p'><textarea data-blok-bron>| A | B |\n|---|---|\n"
               "| | |</textarea></div>", "| A | B |\n|---|---|\n| | |"),
-    "Codeblok": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
+    "Code Block": ("<div class='wb' data-blok='p'><textarea data-blok-bron>```\ncode\n```"
                  "</textarea></div>", "```\ncode\n```"),
     # FEITEN EN BACKLINKS lopen langs hetzelfde bron-pad als tabel en codeblok, met de markering
     # als sjabloon. Dat de weg terug één regel `{{facts}}` oplevert is het hele punt: de INHOUD
     # (feiten uit `meta`, backlinks uit andere pagina's) hoort nooit in de opslag te komen.
-    "Feiten": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{facts}}"
+    "Facts": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{facts}}"
                "</textarea></div>", "{{facts}}"),
     "Backlinks": ("<div class='wb' data-blok='p'><textarea data-blok-bron>{{backlinks}}"
                   "</textarea></div>", "{{backlinks}}"),
@@ -348,8 +348,8 @@ _UITKOMST = {
     # dus wat de SERVER oplevert — vandaar dat de uitkomst hieronder wordt berekend en niet
     # overgeschreven: een kopie zou na één wijziging aan `_md` stil iets anders toetsen dan wat er
     # werkelijk in de pagina belandt.
-    "Afbeelding": (_md(_BEELD_REGEL, blokken=True), _BEELD_REGEL),
-    "Bestand": (_md(_BESTAND_REGEL, blokken=True), _BESTAND_REGEL),
+    "Image": (_md(_BEELD_REGEL, blokken=True), _BEELD_REGEL),
+    "File": (_md(_BESTAND_REGEL, blokken=True), _BESTAND_REGEL),
 }
 
 
@@ -401,7 +401,7 @@ def test_javascript_kent_de_labels_niet():
     """`reference, don't copy`, nu voor de menu-teksten.
 
     OP STRING-LITERALEN EN NIET OP LOSSE WOORDEN. De eerste versie zocht het label ergens in het
-    bestand, en sloeg aan op de FUNCTIENAAM `blokTekst` omdat "Tekst" daarin voorkomt. Een eigen
+    bestand, en sloeg aan op de FUNCTIENAAM `blokTekst` omdat "Text" daarin voorkomt. Een eigen
     lijst zou eruitzien als een string in de code; daar toetst hij nu op."""
     from nooch_village.cockpit2_util import BLOK_MENU
     kaal = _zonder_commentaar(JS)

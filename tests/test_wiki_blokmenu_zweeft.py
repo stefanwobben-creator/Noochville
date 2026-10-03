@@ -141,7 +141,7 @@ def test_de_koppen_heten_naar_wat_ze_worden():
     """"Kop 1" telde de koppen van deze pagina, niet die van het document: `_md` begint bij h3,
     want de paginatitel is de h1. Wie "Kop 1" koos kreeg dus geen h1."""
     per_tag = {tag: label for tag, label, _c, _a in BLOK_MENU}
-    assert per_tag["h3"] == "H2" and per_tag["h4"] == "H3" and per_tag["h5"] == "H4"
+    assert per_tag["h3"] == "Heading 2" and per_tag["h4"] == "Heading 3" and per_tag["h5"] == "Heading 4"
 
 
 def test_alleen_het_label_veranderde():
@@ -155,7 +155,7 @@ def test_alleen_het_label_veranderde():
 
 def test_de_labels_staan_in_het_sjabloon():
     html = blok_menu()
-    for label in ("H2", "H3", "H4"):
+    for label in ("Heading 2", "Heading 3", "Heading 4"):
         assert f">{label}</button>" in html
 
 

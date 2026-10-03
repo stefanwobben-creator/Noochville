@@ -60,13 +60,13 @@ def _pagina(tmp_path, **kw):
 # ── 1. Feiten en Backlinks zijn kiesbare blokken ─────────────────────────────
 def test_het_menu_kent_feiten_en_backlinks():
     labels = {rij[1] for rij in BLOK_MENU}
-    assert "Feiten" in labels and "Backlinks" in labels
+    assert "Facts" in labels and "Backlinks" in labels
 
 
 def test_ze_voegen_de_bestaande_markering_in():
     """GEEN NIEUWE OPSLAG — de markering bestaat sinds #595. Dit maakt hem alleen bereikbaar."""
     per_label = {rij[1]: rij for rij in BLOK_MENU}
-    assert per_label["Feiten"][3] == "{{facts}}"
+    assert per_label["Facts"][3] == "{{facts}}"
     assert per_label["Backlinks"][3] == "{{backlinks}}"
 
 
@@ -81,7 +81,7 @@ def test_de_markeringen_komen_uit_de_bestaande_tabel():
 
 def test_ze_staan_ook_in_het_gerenderde_menu():
     html = blok_menu()
-    assert "Feiten" in html and "Backlinks" in html
+    assert "Facts" in html and "Backlinks" in html
     assert "{{facts}}" in html and "{{backlinks}}" in html
 
 
