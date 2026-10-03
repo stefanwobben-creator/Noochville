@@ -142,16 +142,16 @@ def test_de_afbeelding_heeft_geen_kader_maar_wel_een_maat():
 # ── 2. Uploaden via het blokmenu, op de +-positie ────────────────────────────
 def test_het_menu_kent_afbeelding_en_bestand():
     labels = {rij[1] for rij in BLOK_MENU}
-    assert "Afbeelding" in labels and "Bestand" in labels
+    assert "Image" in labels and "File" in labels
 
 
 def test_de_bestandskiezer_krijgt_de_bestaande_allowlist():
     """GEEN TWEEDE LIJST. Zou het menu een eigen opsomming dragen, dan biedt hij morgen een type
     aan dat de server weigert zonder dat iemand dat besloot."""
     per_label = {rij[1]: rij for rij in BLOK_MENU}
-    alles = set(per_label["Bestand"][3].split(","))
+    alles = set(per_label["File"][3].split(","))
     assert alles == set(channels.BIJLAGE_TYPES), "de bestandskiezer wijkt af van de allowlist"
-    beeld = set(per_label["Afbeelding"][3].split(","))
+    beeld = set(per_label["Image"][3].split(","))
     assert beeld <= alles, "het beeldfilter biedt iets aan dat niet geupload mag worden"
     assert all(_is_beeldbestand("x" + e) for e in beeld), "er zit een niet-afbeelding in"
 
@@ -165,7 +165,7 @@ def test_svg_zit_in_geen_van_beide():
 
 def test_de_twee_items_openen_een_kiezer_en_geen_commando():
     per_label = {rij[1]: rij for rij in BLOK_MENU}
-    assert per_label["Afbeelding"][2] == "upload" and per_label["Bestand"][2] == "upload"
+    assert per_label["Image"][2] == "upload" and per_label["File"][2] == "upload"
     assert "data-wiki-cmd='upload'" in blok_menu()
 
 

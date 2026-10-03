@@ -2638,6 +2638,80 @@ def _act_pagina_feit_del(c):
     return nxt, "🗑 fact removed"
 
 
+def _act_pagina_bulk_import_facts(c):
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_add
+    from nooch_village import wiki
+    import json
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+
+    # Lees geparste feiten van frontend (JSON-array)
+    try:
+        raw_facts = json.loads(g("facts_json") or "[]")
+        if not isinstance(raw_facts, list):
+            return nxt, "✗ facts must be an array"
+    except (json.JSONDecodeError, ValueError):
+        return nxt, "✗ invalid JSON"
+
+    # Map GROUNDING-format naar maak_feit-parameters
+    # Type-mapping: "source" → "bron", etc.
+    type_map = {
+        "source": "bron",
+        "bron": "bron",
+        "kroniek": "kroniek",
+        "cert": "cert",
+        "certificate": "cert",
+        "policy": "policy",
+    }
+
+    new_facts = []
+    errors = []
+    for i, fact_data in enumerate(raw_facts):
+        try:
+            tekst = (fact_data.get("Text") or fact_data.get("text") or "").strip()
+            ftype = (fact_data.get("Type") or fact_data.get("type") or "").strip().lower()
+            ref = (fact_data.get("Ref") or fact_data.get("ref") or "").strip()
+            citaat = (fact_data.get("Quote") or fact_data.get("quote") or "").strip()
+            url = (fact_data.get("URL") or fact_data.get("url") or "").strip()
+
+            # Map type naar soort
+            soort = type_map.get(ftype, ftype or "")
+
+            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url)
+            if feit is None:
+                errors.append(f"Fact {i+1}: empty text")
+                continue
+            new_facts.append(feit)
+        except Exception as e:
+            errors.append(f"Fact {i+1}: {str(e)}")
+
+    if not new_facts:
+        return nxt, f"✗ no valid facts ({len(errors)} errors)"
+
+    # Voeg toe aan bestaande feiten
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = list(wiki.feiten(cur)) + new_facts
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note=f"bulk import: {len(new_facts)} facts")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+
+    msg = f"✅ {len(new_facts)} facts imported"
+    if errors:
+        msg += f" ({len(errors)} skipped: " + "; ".join(errors[:3])
+        if len(errors) > 3:
+            msg += f"; +{len(errors)-3} more"
+        msg += ")"
+    return nxt, msg
+
+
 def _act_pagina_voorstel(c):
     # AUTHZ: iedereen-ingelogd — een voorstel is géén mutatie. Je vraagt de eigenaar-rol iets; die
     # beslist via het bestaande verzoekmechanisme (verzoek_besluit) en pas dán wordt er geschreven.
@@ -6228,6 +6302,7 @@ ACTIONS = {
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
+    "pagina_bulk_import_facts": _act_pagina_bulk_import_facts,
     "pagina_voorstel": _act_pagina_voorstel,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
