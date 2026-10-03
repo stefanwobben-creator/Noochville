@@ -1090,34 +1090,47 @@
         '</ul>' : '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
     });
 
-    // Import
+    // De melding staat IN de dialog, op de plek van de voorvertoning. `zeg` hoort bij
+    // `uploadInBlok` en bestaat hier niet: een aanroep gaf een ReferenceError in de console en op
+    // het scherm gebeurde niets (4 oktober 2026, melding Stefan op NOTE-FACTOR-003).
+    function meld(tekst) { preview.textContent = tekst; }
+
+    // Import — ZELFDE ROUTE ALS `uploadInBlok`: de velden van `#wiki-form` (`csrf`, `aid`) en een
+    // POST naar `/action`. Hier stond `/dispatch` (bestaat niet: 404), het veld `csrf_token`
+    // (bestaat niet op de pagina) en een multipart-`FormData` — en multipart met een actie die geen
+    // upload is, stuurt de server stil door zonder iets te doen. URL-gecodeerd gaat langs de
+    // gewone dispatch, met de gewone poort en de gewone melding.
     importBtn.addEventListener('click', function() {
       var facts = parseFacts(textarea.value);
-      if (!facts.length) { zeg("No facts to import"); return; }
-
-      // POST ke backend
-      var aidEl = document.querySelector('input[name="aid"]');
-      var csrfEl = document.querySelector('input[name="csrf_token"]');
-      if (!aidEl || !csrfEl) { zeg("Form not found"); return; }
-
-      var form = new FormData();
-      form.append('action', 'pagina_bulk_import_facts');
-      form.append('aid', aidEl.value);
-      form.append('facts_json', JSON.stringify(facts));
-      form.append('csrf_token', csrfEl.value);
-
-      fetch('/dispatch', { method: 'POST', body: form })
-        .then(function(r) { return r.text(); })
-        .then(function(html) {
-          // Extract message from response
-          var m = html.match(/>([✓✗✅💪📍➕🗑❌]\s+[^<]*)</);
-          var msg = m ? m[1] : 'Import completed';
-          zeg(msg);
-          dialog.remove();
-          // Reload page
-          setTimeout(function() { location.reload(); }, 500);
+      if (!facts.length) { meld("No facts to import."); return; }
+      var wikiForm = document.querySelector("#wiki-form");
+      function veld(naam) {
+        var el = wikiForm && wikiForm.querySelector("[name=" + naam + "]");
+        return el ? el.value || "" : "";
+      }
+      if (!veld("csrf") || !veld("aid")) {
+        meld("Could not find this page's form — reload the page and try again.");
+        return;
+      }
+      var data = new URLSearchParams();
+      data.set("csrf", veld("csrf"));
+      data.set("aid", veld("aid"));
+      data.set("action", "pagina_bulk_import_facts");
+      data.set("facts_json", JSON.stringify(facts));
+      data.set("next", location.pathname + location.search);
+      importBtn.disabled = true;
+      meld("Importing " + facts.length + " fact(s)…");
+      fetch("/action", { method: "POST", body: data, credentials: "same-origin" })
+        .then(function(r) {
+          if (!r.ok) return Promise.reject(r.status);
+          // De server stuurt door naar de pagina mét de melding in de url; daarheen gaan toont
+          // die melding als banner en de nieuwe feiten in de lijst.
+          location.href = r.url;
         })
-        .catch(function(e) { zeg("Import error: " + e.message); });
+        .catch(function(status) {
+          importBtn.disabled = false;
+          meld("Import failed (" + status + "). Nothing was saved.");
+        });
     });
 
     cancelBtn.addEventListener('click', function() { dialog.remove(); });

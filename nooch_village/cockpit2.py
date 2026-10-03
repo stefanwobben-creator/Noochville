@@ -2638,6 +2638,18 @@ def _act_pagina_feit_del(c):
     return nxt, "🗑 fact removed"
 
 
+def _alleen_url(waarde: str) -> str:
+    """Het adres uit een URL-regel, of "" als er geen is.
+
+    Een plakregel is vaak méér dan een adres: "https://search.fsc.org (search on the licence
+    code…)", of "NO PUBLIC URL — will show as source missing" (zo vraagt de feiten-prompt het
+    zelfs). Alles opslaan maakte er een url van die de bron-check niet kan openen, en van de
+    tweede een feit dat NIET als "source missing" toont terwijl het dat wel is. Dus: alleen een
+    http(s)-adres telt, tot de eerste spatie, zonder afsluitend leesteken."""
+    m = re.match(r"https?://\S+", (waarde or "").strip())
+    return m.group(0).rstrip(".,;)") if m else ""
+
+
 def _act_pagina_bulk_import_facts(c):
     # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_add
     from nooch_village import wiki
@@ -2677,7 +2689,7 @@ def _act_pagina_bulk_import_facts(c):
             ftype = (fact_data.get("Type") or fact_data.get("type") or "").strip().lower()
             ref = (fact_data.get("Ref") or fact_data.get("ref") or "").strip()
             citaat = (fact_data.get("Quote") or fact_data.get("quote") or "").strip()
-            url = (fact_data.get("URL") or fact_data.get("url") or "").strip()
+            url = _alleen_url(fact_data.get("URL") or fact_data.get("url") or "")
 
             # Map type naar soort
             soort = type_map.get(ftype, ftype or "")
