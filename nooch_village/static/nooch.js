@@ -1029,6 +1029,9 @@
             else if (/^ref$/i.test(key)) fact.Ref = val;
             else if (/^quote$/i.test(key)) fact.Quote = val;
             else if (/^url$/i.test(key)) fact.URL = val;
+            // De getal-regel uit de feiten-prompts ("Cost price per kg" = 4,20). De server leest
+            // hem (`_waarde_uit_regel`); hier alleen doorgeven. Zonder deze regel viel hij stil weg.
+            else if (/^value$/i.test(key)) fact.Value = val;
           }
         });
         if (fact.Text) facts.push(fact);
@@ -1085,7 +1088,9 @@
       preview.innerHTML = facts.length ?
         '<strong>' + facts.length + ' fact(s) ready:</strong><ul>' +
         facts.map(function(f,i) {
-          return '<li><strong>' + (f.Text || '').substring(0,60) + '...</strong></li>';
+          var tekst = document.createElement('span');
+          tekst.textContent = (f.Text || '').substring(0,60) + '…' + (f.Value ? ' · value: ' + f.Value : '');
+          return '<li><strong>' + tekst.innerHTML + '</strong></li>';
         }).join('') +
         '</ul>' : '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
     });

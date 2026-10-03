@@ -2877,6 +2877,23 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    Vierkante hoeken, zoals overal in deze laag. */
 :root .wiki-body.wiki-aan .wb{border-radius:0}
 :root .wiki-body.wiki-aan .wb:hover{background:var(--nu-bg-alt)}
+/* KOPPEN OP EEN WIKI-PAGINA: EEN TRAP, GEEN DRIE BIJNA-GELIJKEN (3 oktober 2026, melding Stefan).
+   Gemeten bij 14px lopende tekst: Heading 2 (h3) 16,4px, Heading 3 (h4) 14px — even groot als de
+   tekst, alleen vet — en Heading 4 (h5) 11,6px, KLEINER dan de tekst (browser-standaard voor h5).
+   Nu stapt elk niveau duidelijk af en blijft het kleinste nog boven de tekst. Alleen typografie
+   onder de bestaande `.wiki-body`; geen nieuwe klasse. Heading 2 houdt de hoofdletters van de
+   huisstijl (`:root h3`), de twee niveaus eronder bewust niet — anders lezen ze als één familie. */
+/* ALLEEN KOPPEN VAN DE TEKST ZELF: direct in een blok (`.wb > h3`) of direct in de body. Een
+   `{{facts}}`-blok draagt zijn eigen kleine kop ("Facts", `.wiki-inline h3`) een laag dieper, en
+   die moet het label blijven dat hij is — gezien in de browser, 3 oktober 2026. */
+:root .wiki-body > h3, :root .wiki-body .wb > h3 {
+  font-size: 1.35rem; line-height: 1.2; margin: 1.6rem 0 .5rem; }
+:root .wiki-body > h4, :root .wiki-body .wb > h4 {
+  font-size: 1.1rem; line-height: 1.25; font-weight: 700;
+  text-transform: none; margin: 1.3rem 0 .4rem; color: var(--nu-text); }
+:root .wiki-body > h5, :root .wiki-body .wb > h5 {
+  font-size: .95rem; line-height: 1.3; font-weight: 700;
+  text-transform: none; margin: 1rem 0 .3rem; color: var(--nu-muted); }
 /* DE SLEEP-TOESTANDEN (25 september 2026). `--cream-2` en `--green` bestaan in deze huisstijl
    niet; `--nu-bg-alt` is de zachte vlakvulling en `--nu-accent` de accentkleur.
    NA DE HOVER-REGEL HIERBOVEN, en dat is geen willekeur: tijdens het slepen hover je ook. De

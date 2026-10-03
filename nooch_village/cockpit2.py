@@ -2650,6 +2650,35 @@ def _alleen_url(waarde: str) -> str:
     return m.group(0).rstrip(".,;)") if m else ""
 
 
+def _waarde_uit_regel(regel: str) -> tuple[dict | None, str]:
+    """De `Value:`-regel van een geplakt feit → `(waarde, fout)`.
+
+    De feiten-prompts schrijven hem als `"Cost price per kg" = 4,20` of `CO2e per kg = 2.4`. Links
+    het LABEL uit het formulier (of de sleutel, met of zonder eenheid tussen haakjes), rechts het
+    getal; de vertaling naar een sleutel staat op één plek, `wiki.GROOTHEDEN`. Leeg → `(None, "")`.
+    Niet te lezen → `(None, reden)`: het feit komt dan WEL binnen, zonder getal, en de melding zegt
+    waarom. Een getal dat stil wegvalt is precies hoe /bom met een gat rekent zonder dat iemand het
+    ziet."""
+    from nooch_village import wiki
+    regel = (regel or "").strip()
+    if not regel:
+        return None, ""
+    if "=" not in regel:
+        return None, f"value '{regel[:40]}' has no '='"
+    links, rechts = regel.split("=", 1)
+    naam = re.sub(r"\(.*?\)", "", links).strip().strip('"\'').strip().lower()
+    sleutel = next((k for k, v in wiki.GROOTHEDEN.items()
+                    if naam in (k.lower(), v["label"].lower())), "")
+    if not sleutel:
+        bekend = ", ".join(v["label"] for v in wiki.GROOTHEDEN.values())
+        return None, f"unknown value '{links.strip()[:30]}' (known: {bekend})"
+    getal = re.sub(r"[^0-9,.\-]", "", rechts.split()[0] if rechts.split() else "")
+    waarde = wiki.maak_waarde(sleutel, getal)
+    if waarde is None:
+        return None, f"value '{rechts.strip()[:20]}' is not a number ≥ 0"
+    return waarde, ""
+
+
 def _act_pagina_bulk_import_facts(c):
     # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_add
     from nooch_village import wiki
@@ -2694,10 +2723,13 @@ def _act_pagina_bulk_import_facts(c):
             # Map type naar soort
             soort = type_map.get(ftype, ftype or "")
 
-            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url)
+            waarde, waarde_fout = _waarde_uit_regel(fact_data.get("Value") or fact_data.get("value") or "")
+            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde)
             if feit is None:
                 errors.append(f"Fact {i+1}: empty text")
                 continue
+            if waarde_fout:
+                errors.append(f"Fact {i+1}: imported without a number — {waarde_fout}")
             new_facts.append(feit)
         except Exception as e:
             errors.append(f"Fact {i+1}: {str(e)}")
@@ -2717,7 +2749,7 @@ def _act_pagina_bulk_import_facts(c):
 
     msg = f"✅ {len(new_facts)} facts imported"
     if errors:
-        msg += f" ({len(errors)} skipped: " + "; ".join(errors[:3])
+        msg += f" ({len(errors)} warning{'s' if len(errors) != 1 else ''}: " + "; ".join(errors[:3])
         if len(errors) > 3:
             msg += f"; +{len(errors)-3} more"
         msg += ")"
