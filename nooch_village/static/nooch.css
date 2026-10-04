@@ -2939,6 +2939,25 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .wiki-inline>a{color:var(--nu-text)}
 :root .wiki-inline>a:hover{border-left-color:var(--nu-accent)}
 :root .wiki-meta{border-top-color:var(--nu-border-subtle)}
+/* DE WIKIPAGINA MET ZIJBALK (4 oktober 2026, prototype v2). Dezelfde indeling als de projectpagina
+   (`.pkaart-body`); alleen wat op een wikipagina anders moet, staat hier, op bestaande klassen.
+   - de zijbalk blijft in beeld tijdens het lezen (sticky, alleen naast de inhoud — op een smal
+     scherm staat hij eronder en hoeft hij nergens te blijven);
+   - de inhoudskolom heeft geen eigen padding: `.wiki-doc` draagt de goot voor de blok-greep al;
+   - het meta-raster stapelt in de smalle zijbalk (label boven waarde), zoals in het prototype;
+   - het meta-blok staat bovenaan de zijbalk, dus zonder de scheidingslijn van een voet. */
+:root .wiki-doc .pkaart-main{padding:0 1.4rem 0 0}
+:root .wiki-doc .pkaart-rail{align-self:start;position:sticky;top:.8rem}
+@media(max-width:760px){:root .wiki-doc .pkaart-rail{position:static}:root .wiki-doc .pkaart-main{padding:0}}
+:root .wiki-doc .pkaart-rail .dcol{grid-template-columns:1fr;gap:.1rem}
+:root .wiki-doc .pkaart-rail .dv{margin-bottom:.6rem}
+:root .wiki-doc .pkaart-rail .wiki-meta{margin:0;padding-top:0;border-top:0}
+/* De werkbalk: uitleg links, Save rechts (prototype v2). Volgorde in CSS, niet in de HTML: de
+   tabvolgorde blijft Save → ✕, en dat is de volgorde waarin je handelt. */
+:root .qadd-bar .wiki-hint{order:-1;margin-right:auto}
+/* De telling "N facts" naast een kop (chrome, niet in de tekst): de afstand zit hier, niet als
+   spatie in de HTML — zie `_feiten_per_sectie`. */
+:root .wiki-body .wb > h3 > .chip, :root .wiki-body .wb > h4 > .chip, :root .wiki-body .wb > h5 > .chip{margin-left:.5rem;vertical-align:middle}
 
 /* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
    zandtint; hier gaan ze mee met de rest van de nu-lijnen. */

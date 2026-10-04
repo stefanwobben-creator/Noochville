@@ -902,6 +902,23 @@ def main() -> None:
         if any(r["weg"] for r in rapport) and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_bom_sleutels":
+        # Zet op bestaande materiaal-/leverancierpagina's hun /bom-naam vast (`wiki.BOM_NAMEN`), zodat
+        # een hernoeming de koppeling niet meer breekt. Dry-run; --apply schrijft (set_meta).
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.bom_sleutels(st.att, st.bom_materialen, st.bom_varianten,
+                                         st.bom_leveranciers, apply=apply)
+        print(wiki_seed.bom_sleutels_tekst(rapport))
+        if any(r["actie"] == "set" for r in rapport) and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_domein":
         # De indeling van de wiki: waar landt elke pagina, en wat vraagt nog een mens. Read-only;
         # pas met --apply worden de handmatige domein-toewijzingen geschreven.
@@ -1356,7 +1373,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

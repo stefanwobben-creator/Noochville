@@ -2728,10 +2728,24 @@ def _act_pagina_bulk_import_facts(c):
             ftype = (fact_data.get("Type") or fact_data.get("type") or "").strip().lower()
             ref = (fact_data.get("Ref") or fact_data.get("ref") or "").strip()
             citaat = (fact_data.get("Quote") or fact_data.get("quote") or "").strip()
-            url = _alleen_url(fact_data.get("URL") or fact_data.get("url") or "")
+            url_regel = (fact_data.get("URL") or fact_data.get("url") or "").strip()
+            url = _alleen_url(url_regel)
 
             # Map type naar soort
             soort = type_map.get(ftype, ftype or "")
+            # "on file: <bestandsnaam>" (4 oktober 2026): een document dat op DEZE pagina geüpload
+            # is maar geen publieke vindplaats heeft. Het feit wordt `document`, met het opgeslagen
+            # bestand als ref. Staat het bestand er niet, dan komt het feit binnen zonder URL en
+            # zegt de melding wat er moet gebeuren — geen stille "no source".
+            m_file = re.match(r"(?i)on[ \t]*file[ \t]*:[ \t]*(.+)$", url_regel)
+            if m_file:
+                opgeslagen = _wiki_bijlage_zoek(data_dir, cur.id, m_file.group(1))
+                if opgeslagen:
+                    soort, ref = "document", opgeslagen
+                    url = f"/wiki-bestand/{cur.id}/{opgeslagen}"
+                else:
+                    errors.append(f"Fact {i+1}: file '{m_file.group(1).strip()[:60]}' is not uploaded "
+                                  f"on this page — upload it, then import again")
 
             waarde, waarde_fout = _waarde_uit_regel(fact_data.get("Value") or fact_data.get("value") or "")
             # `For:` UIT DE FEITEN-PROMPT wordt de sectie van het feit (4 oktober 2026). Vóór vandaag
@@ -6916,7 +6930,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # deze persoon ook echt op mag schrijven.
                 self._send(render_wiki_index(st, csrf_token=effective_csrf,
                                              soort=(qs.get("kind") or ["all"])[0],
-                                             username=username))
+                                             username=username,
+                                             bak=(qs.get("bak") or [""])[0]))
                 return
             if path == "/projects":
                 # AUTHZ: iedereen-ingelogd — lezen van het bord is vrij; de mutaties eronder gaan
@@ -8020,6 +8035,21 @@ def _wiki_bijlage_naam(rauw: str) -> str:
     markdown-link heel laten."""
     kaal = os.path.basename(rauw or "bestand").translate(_BIJLAGE_ONVEILIG)[:120]
     return kaal or "bestand"
+
+
+def _wiki_bijlage_zoek(data_dir: str, aid: str, naam: str) -> str:
+    """De OPGESLAGEN naam (`<id>_<naam>`) van een bijlage op deze pagina, gezocht op de naam zoals
+    de mens hem kent, of "". Hoofdletter-ongevoelig; dezelfde opschoning als bij het uploaden, zodat
+    "NFW D6866 - Tunera and Pliant.pdf" het bestand terugvindt dat zo geüpload is."""
+    map_ = os.path.join(data_dir, "attachments", "wiki", os.path.basename(aid or ""))
+    gezocht = _wiki_bijlage_naam((naam or "").strip()).lower()
+    if not gezocht or not os.path.isdir(map_):
+        return ""
+    for f in sorted(os.listdir(map_)):
+        _id, _, rest = f.partition("_")
+        if rest.lower() == gezocht and os.path.isfile(os.path.join(map_, f)):
+            return f
+    return ""
 
 
 def _wiki_bijlage_regel(aid: str, opgeslagen: str, label: str) -> str:

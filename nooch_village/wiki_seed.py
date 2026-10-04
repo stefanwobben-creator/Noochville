@@ -409,7 +409,11 @@ def zaai(store, records, *, paginas: list[dict], eigenaar: str, soort: str,
                             "actie": "zou aanmaken", "reden": f"{len(p.get('feiten') or [])} feit(en)"})
             continue
         a = store.add(eigenaar, wiki.PAGINA_KIND, title=p["titel"], body=p["body"],
-                      meta={"feiten": p.get("feiten") or []},
+                      meta={"feiten": p.get("feiten") or [],
+                            # Materiaal en leverancier onthouden hun /bom-naam: een latere hernoeming
+                            # breekt de koppeling dan niet (`wiki.resolve_bom`, 4 oktober 2026).
+                            **({wiki.BOM_NAMEN: [p["titel"]]}
+                               if soort in ("materiaal", "leverancier") else {})},
                       actor_id=actor_id, actor_type="person",
                       governance_ref=f"role:{eigenaar}", change_note="zaad uit bestaande bron")
         rapport.append({"soort": soort, "eigenaar": eigenaar, "titel": p["titel"],
@@ -548,6 +552,49 @@ def bom_opschoon_tekst(rapport: list[dict]) -> str:
         uit.append(f"{r['id']}  {r['titel']}")
         uit += [f"    remove: {w}" for w in r["weg"]]
         uit += [f"    leave:  {b}" for b in r["blijft"]]
+    return "\n".join(uit)
+
+
+def bom_sleutels(store, materialen_store, varianten_store, leveranciers_store, *,
+                 apply: bool = False) -> list[dict]:
+    """Geef bestaande materiaal- en leverancierpagina's hun /bom-naam (`wiki.BOM_NAMEN`).
+
+    Alleen een pagina waarvan de TITEL nu nog precies een naam op /bom is, en die nog geen namen
+    draagt: dan is de koppeling vandaag al raak en wordt hij alleen vastgezet. Een pagina die al
+    hernoemd is, valt hier niet onder — die koppeling moet een mens leggen, en het rapport zegt
+    welke /bom-namen geen pagina hebben. `set_meta`: machine-onderhoud versiont niet."""
+    norm = lambda t: " ".join(str(t or "").split()).lower()
+    gebruik = bom_gebruik(materialen_store, varianten_store)
+    namen = {norm(v["naam"]): v["naam"] for v in gebruik.values()}
+    for m, lev in leveranciers_store.koppelingen():
+        namen.setdefault(norm(m), m)
+        namen.setdefault(norm(lev), lev)
+    rapport, gevonden = [], set()
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        sleutel = norm(a.title)
+        if sleutel not in namen:
+            continue
+        gevonden.add(sleutel)
+        if wiki.bom_namen(a):
+            continue
+        rapport.append({"id": a.id, "titel": a.title, "actie": "set", "naam": namen[sleutel]})
+        if apply:
+            meta = dict(getattr(a, "meta", None) or {})
+            meta[wiki.BOM_NAMEN] = [namen[sleutel]]
+            store.set_meta(a.id, meta)
+    for sleutel, naam in sorted(namen.items()):
+        if sleutel not in gevonden:
+            rapport.append({"id": "", "titel": "", "actie": "no page", "naam": naam})
+    return rapport
+
+
+def bom_sleutels_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to do: every BOM name already has its page."
+    uit = [f"{r['id']}  {r['titel']}  ← BOM name '{r['naam']}'" for r in rapport if r["actie"] == "set"]
+    los = [r["naam"] for r in rapport if r["actie"] == "no page"]
+    if los:
+        uit.append("BOM names without a page (link them by hand or create the page): " + ", ".join(los))
     return "\n".join(uit)
 
 

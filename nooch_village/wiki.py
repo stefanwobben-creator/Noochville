@@ -40,7 +40,7 @@ from nooch_village import cert_register
 PAGINA_KIND = "note"
 
 # De vier soorten grond die een feit kan dragen.
-GROND_SOORTEN = ("kroniek", "cert", "policy", "bron")
+GROND_SOORTEN = ("kroniek", "cert", "policy", "bron", "document")
 
 # Grond-uitkomsten. `ongecontroleerd` is bewust geen synoniem van `gegrond`: een geciteerde URL of
 # een niet-bevestigd Kroniek-record is herkomst, geen bewijs.
@@ -107,6 +107,31 @@ def resolve(ref: str, pags: list):
             return a
     treffers = [a for a in pags if _norm(a.title) == r]
     return treffers[0] if len(treffers) == 1 else None
+
+
+#: DE BOM-NAMEN VAN EEN PAGINA (4 oktober 2026). Een materiaal- of leverancierpagina onthoudt onder
+#: welke naam /bom haar kent ("Pliant PCS", "NFW"). Zo blijft de koppeling staan als iemand de pagina
+#: hernoemt — eerst brak "Supplied by" stil zodra een titel veranderde. Zet de zaaier bij het aanmaken
+#: en `village wiki_bom_sleutels` voor bestaande pagina's; een mens hoeft het niet te onderhouden.
+BOM_NAMEN = "bom_namen"
+
+
+def bom_namen(a) -> list[str]:
+    ruw = (getattr(a, "meta", None) or {}).get(BOM_NAMEN)
+    return [str(n) for n in ruw if str(n).strip()] if isinstance(ruw, list) else []
+
+
+def resolve_bom(naam: str, pags: list):
+    """De pagina die bij een naam op /bom hoort: eerst op de BOM-namen die pagina's zelf onthouden
+    (overleeft een hernoeming), daarna zoals elke [[link]] (`resolve`). Twee pagina's met dezelfde
+    BOM-naam → geen treffer op die grond, net als bij een dubbele titel."""
+    r = _norm(naam)
+    if not r:
+        return None
+    treffers = [a for a in pags if r in {_norm(n) for n in bom_namen(a)}]
+    if len(treffers) == 1:
+        return treffers[0]
+    return resolve(naam, pags)
 
 
 #: De afgeleide blokken: markering → het label op het scherm. Hun INHOUD woont ergens anders —
@@ -374,7 +399,8 @@ LABEL = {
 }
 
 
-def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "") -> dict:
+def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "",
+                 bestaat=None) -> dict:
     """Draagt dit feit nu nog? Een LEVENDE vergelijking, elke keer opnieuw.
 
     Dit is dezelfde regel als bij een claim: een goedkeuring mag zijn bewijs niet overleven. Er
@@ -407,6 +433,17 @@ def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "") -> d
         # Niet gelukt om te kijken (netwerk, HTTP-fout): dat is géén oordeel over de bron.
         return _uit(grond, ONGECONTROLEERD, LABEL["niet_te_lezen"],
                     f"could not check{': ' + str(check.get('reden')) if check.get('reden') else ''}")
+
+    if soort == "document":
+        # GEDEELD, NIET PUBLIEK (4 oktober 2026). Een document dat iemand op deze pagina uploadde
+        # maar dat nergens publiek staat (het labrapport van NFW). Grijs en niet rood: er IS een
+        # bron, alleen kan niemand buiten NoochVille hem openen en kan de bron-check er niets mee.
+        # `bestaat(url)` is optioneel: wie de schijf kan zien (de pagina-weergave) geeft hem mee,
+        # en dan wordt een verdwenen bestand eerlijk "no source".
+        url = str(grond.get("url") or "")
+        if not url or (bestaat is not None and not bestaat(url)):
+            return _uit(grond, ONTBREEKT, LABEL["geen_bron"], "the file is no longer on this page")
+        return _uit(grond, ONGECONTROLEERD, LABEL["op_file"], "shared document")
 
     if soort == "policy":
         a = store.get(str(grond.get("ref") or "")) if store is not None else None

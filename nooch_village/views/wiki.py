@@ -10,6 +10,7 @@ Alles hergebruikt het bestaande artefact-idioom: `.card`, `.ptitle`, `.att-body`
 """
 from __future__ import annotations
 
+import os
 import urllib.parse
 
 import html as _html_mod
@@ -235,15 +236,31 @@ def _grond_chip(g: dict) -> str:
     label = f"{icon} {_e(g['label'])}"
     # Een geciteerde bron is altijd klikbaar, ongeacht de uitkomst van de laatste check: juist bij
     # "citaat niet meer gevonden" wil de lezer meteen kunnen kijken wat er dan wél staat.
-    if g["soort"] == "bron" and g["url"]:
+    if g["soort"] in ("bron", "document") and g["url"]:
         label = (f"{icon} <a href='{_e(g['url'])}' target='_blank' rel='noopener'>"
                  f"{_e(g['label'])}</a>")
     detail = f" <span class='muted'>{_e(g['detail'])}</span>" if g["detail"] else ""
     return f"<span class='chip'>{label}</span>{detail}"
 
 
+def _bijlage_bestaat(st):
+    """`bestaat(url)` voor een `document`-feit: staat het geüploade bestand nog op schijf?"""
+    dd = getattr(st, "dd", "")
+    if not dd:
+        return None
+
+    def bestaat(url: str) -> bool:
+        delen = [d for d in (url or "").split("/") if d]
+        if len(delen) != 3 or delen[0] != "wiki-bestand":
+            return False
+        return os.path.isfile(os.path.join(dd, "attachments", "wiki",
+                                           os.path.basename(delen[1]), os.path.basename(delen[2])))
+    return bestaat
+
+
 def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool) -> str:
-    g = wiki.grond_status(feit, ledger=getattr(st, "evidence", None), store=st.att)
+    g = wiki.grond_status(feit, ledger=getattr(st, "evidence", None), store=st.att,
+                          bestaat=_bijlage_bestaat(st))
     citaat = (f"<div class='att-body muted'>“{_e(g['citaat'])}”</div>"
               if g.get("citaat") else "")
     weg = ""
@@ -340,16 +357,78 @@ def _synthese_knop(a, csrf_token: str) -> str:
             f"press Save.'>Draft conclusion from facts</button></form>")
 
 
-def _feiten_sectie(a, st, csrf_token: str, can_edit: bool) -> str:
-    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit)
-                    for i, f in enumerate(wiki.feiten(a)))
-    rijen = rijen or ("<div class='muted'>No facts yet. A fact carries its own grounding: "
-                      "a chronicle record, a certificate, a policy or a cited source.</div>")
+def _feiten_sectie(a, st, csrf_token: str, can_edit: bool, *, overslaan: frozenset = frozenset()) -> str:
+    """De feitenlijst onderaan (of op de plek van `{{facts}}`).
+
+    SINDS 4 OKTOBER 2026 ALLEEN WAT NIET BIJ EEN KOPJE STAAT. Een feit met een `sectie` die als kop
+    op de pagina bestaat, staat al onder dat kopje (`_feiten_per_sectie`); hier komt de rest, onder
+    "Other facts". Zo staat geen feit twee keer op het scherm, en verdwijnt er ook geen: een feit
+    zonder sectie, of met een sectie die (niet meer) als kop bestaat, landt hier."""
+    rest = [(i, f) for i, f in enumerate(wiki.feiten(a)) if i not in overslaan]
+    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit) for i, f in rest)
+    if rest:
+        kop = "Other facts" if overslaan else "Facts"
+        lijst = f"<h3>{kop}</h3>{rijen}"
+    elif overslaan:
+        lijst = ""                     # alles staat al onder een kopje — geen leeg "Other facts"
+    else:
+        lijst = ("<h3>Facts</h3><div class='muted'>No facts yet. A fact carries its own grounding: "
+                 "a chronicle record, a certificate, a policy or a cited source.</div>")
     # "+ Add fact" IS WEG (3 oktober 2026): feiten komen binnen via Bulk Import in het /-menu, ook
     # één tegelijk en mét getal (`Value:`). Twee formulieren voor hetzelfde liepen al uiteen.
     add = _FEIT_INGANG if can_edit else ""
     synth = _synthese_knop(a, csrf_token) if can_edit else ""
-    return f"<div class='wiki-inline'><h3>Facts</h3>{rijen}{add}{synth}</div>"
+    return f"<div class='wiki-inline'>{lijst}{add}{synth}</div>"
+
+
+#: Een kopblok in de body zoals `_md(blokken=True)` hem schrijft.
+_KOPBLOK_RE = re.compile(r"<div class='wb' data-blok='h'><h([345])>(.*?)</h\1></div>", re.S)
+
+
+def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tuple[str, frozenset]:
+    """Zet elk feit met een `sectie` direct onder ZIJN kopje in de tekst. `(html, geplaatst)`.
+
+    FEITEN ZIJN DE INHOUD (besluit Stefan, 4 oktober 2026 — prototype v2). De `For:`-regel van Bulk
+    Import is de sectie; die wordt vergeleken met de koppen van de pagina, hoofdletter- en
+    spatie-ongevoelig. Het feitblok komt aan het EIND van die sectie: vóór de volgende kop van
+    hetzelfde of een hoger niveau, zodat de eigen tekst en de subkopjes eerst komen.
+
+    `data-chrome` EN NIET-BEWERKBAAR: het blok staat midden in het bewerkvlak maar hoort niet bij de
+    tekst. De editor haalt elk `[data-chrome]` weg vóór het opslaan en de server negeert het
+    (`_BronParser`) — de opgeslagen markdown verandert dus niet. De telling "N facts" naast de kop
+    is om dezelfde reden chrome."""
+    feiten = wiki.feiten(a)
+    per = {}
+    for i, f in enumerate(feiten):
+        sl = " ".join(str(f.get("sectie") or "").split()).lower()
+        if sl:
+            per.setdefault(sl, []).append(i)
+    if not per:
+        return html, frozenset()
+    koppen = []
+    for m in _KOPBLOK_RE.finditer(html):
+        tekst = _html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
+        koppen.append((m.start(), m.end(), int(m.group(1)), " ".join(tekst.split()).lower(), m))
+    geplaatst, invoegen = set(), []
+    for n, (start, eind, niveau, tekst, m) in enumerate(koppen):
+        idx = [i for i in per.get(tekst, []) if i not in geplaatst]
+        if not idx:
+            continue
+        geplaatst.update(idx)
+        einde = next((k[0] for k in koppen[n + 1:] if k[2] <= niveau), len(html))
+        rijen = "".join(_feit_html(i, feiten[i], st, a.id, csrf_token, can_edit) for i in idx)
+        invoegen.append((einde, f"<div class='wiki-inline' data-chrome contenteditable='false'>"
+                                f"{rijen}</div>"))
+        # GEEN SPATIE VOOR HET CHIPJE: die zou een tekstknoop BUITEN de chrome zijn, en dan schreef
+        # elke opslag een spatie achter de kop ("## Company certification "). De afstand staat in
+        # de CSS (`.wiki-body .wb > h4 > .chip`). Gevonden met een echte opslag in de browser.
+        telling = (f"<span class='chip muted' data-chrome contenteditable='false'>"
+                   f"{len(idx)} fact{'s' if len(idx) != 1 else ''}</span>")
+        sluit = m.end() - len(f"</h{niveau}></div>")
+        invoegen.append((sluit, telling))
+    for pos, stuk in sorted(invoegen, key=lambda t: t[0], reverse=True):
+        html = html[:pos] + stuk + html[pos:]
+    return html, frozenset(geplaatst)
 
 
 #: Een pagina die naar de coach wijst, krijgt het logboek eronder. Waarom aan de INHOUD opgehangen
@@ -424,27 +503,45 @@ def _bom_sectie(st, a, pags: list) -> str:
         var_store = getattr(st, "bom_varianten", None)
         if lev_store is None or mat_store is None or var_store is None:
             return ""
-        titel = a.title or ""
-        sl = _bl.sleutel(titel)
+        # WIE IS DEZE PAGINA VOOR /BOM: haar eigen BOM-namen (overleven een hernoeming) plus de
+        # huidige titel, voor pagina's van vóór 4 oktober 2026 die nog geen namen dragen.
+        namen = wiki.bom_namen(a) + [a.title or ""]
+        sleutels = {_bl.sleutel(n) for n in namen if n.strip()}
+        norm = lambda t: " ".join(str(t or "").split()).lower()
+        eigen = {norm(n) for n in namen if n.strip()}
         gebruik = wiki_seed.bom_gebruik(mat_store, var_store)
         leveranciers = lev_store.alle()
-        norm = lambda t: " ".join(str(t or "").split()).lower()
-        materialen = sorted({m for m, lev in lev_store.koppelingen() if norm(lev) == norm(titel)},
+        materialen = sorted({m for m, lev in lev_store.koppelingen() if norm(lev) in eigen},
                             key=str.lower)
+
+        def link(naam: str) -> str:
+            # RECHTSTREEKS NAAR DE PAGINA, met haar huidige titel. Een [[naam]] zou weer op titel
+            # zoeken, en dan brak de link alsnog bij een hernoeming.
+            doel = wiki.resolve_bom(naam, pags)
+            if doel is None:
+                return f"{_e(naam)} <span class='muted'>(no page yet)</span>"
+            return (f"<a class='pill' href='{_e(wiki.pagina_url(doel.id))}'>"
+                    f"{_e(doel.title or naam)}</a>")
+
+        def lijst(items: list[str]) -> str:
+            return "<ul class='fbul'>" + "".join(f"<li>{x}</li>" for x in items) + "</ul>"
+
         delen = []
-        if sl and (sl in gebruik or sl in leveranciers):
-            regels = [f"- {c}" + (f" — {', '.join(lbl)}" if lbl else "")
-                      for c, lbl in (gebruik.get(sl) or {}).get("delen", [])]
-            delen.append("**Used in**\n" + ("\n".join(regels) or "Not in the bill of materials."))
-            lev = leveranciers.get(sl)
-            delen.append("**Supplied by**\n" + (f"- [[{lev}]]" if lev
-                                                 else "No supplier linked on the BOM screen yet."))
+        mat_sl = next((k for k in sleutels if k in gebruik or k in leveranciers), "")
+        if mat_sl:
+            regels = [_e(c) + (f" — {_e(', '.join(lbl))}" if lbl else "")
+                      for c, lbl in (gebruik.get(mat_sl) or {}).get("delen", [])]
+            delen.append("<p><strong>Used in</strong></p>"
+                         + (lijst(regels) if regels else "<p class='muted'>Not in the bill of materials.</p>"))
+            lev = leveranciers.get(mat_sl)
+            delen.append("<p><strong>Supplied by</strong></p>"
+                         + (lijst([link(lev)]) if lev
+                            else "<p class='muted'>No supplier linked on the BOM screen yet.</p>"))
         if materialen:
-            delen.append("**Material**\n" + "\n".join(f"- [[{m}]]" for m in materialen))
+            delen.append("<p><strong>Material</strong></p>" + lijst([link(m) for m in materialen]))
         if not delen:
             return ""
-        inhoud = _body_html("\n\n".join(delen), pags)
-        return (f"<div class='wiki-inline'><h3>From the BOM</h3>{inhoud}"
+        return (f"<div class='wiki-inline'><h3>From the BOM</h3>{''.join(delen)}"
                 f"<p class='muted'>Kept up to date from the "
                 f"<a href='/bom'>BOM screen</a> — change it there.</p></div>")
     except Exception:                                         # noqa: BLE001 — nooit de pagina breken
@@ -584,8 +681,7 @@ def _meta_blok(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
     rij("Section", _sectie_form(a, bakje, csrf_token, can_edit, st=st, username=username),
         f"Where it appears in the wiki navigation. Now: {_e(_dom.label(bakje))} "
         f"({'set here' if _gezet else 'derived'}).")
-    rij("Id", f"<code class='pill'>{_e(a.id)}</code>")
-    rij("Last edited", _e(_dt(getattr(a, "updated_at", 0))))
+    # ID EN "LAST EDITED" STAAN SINDS 4 OKTOBER 2026 COMPACT ONDER DE TITEL (prototype v2).
     hist = _artefact_versions_html(a)
     if hist:
         rij("History", hist)
@@ -888,7 +984,8 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
 
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
-                 secties: dict[str, str] | None = None, *, feiten: bool = True) -> str:
+                 secties: dict[str, str] | None = None, *, feiten: bool = True,
+                 nabewerk=None) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek.
 
     `feiten=False` HAALT DE FEITEN-KNOP UIT HET /-MENU, en dat is de enige aanpassing die een
@@ -901,6 +998,10 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
     inhoud = _body_html(a.body, pags, blokken=True, secties=secties) if a.body else _GEEN_TEKST
+    # `nabewerk`: wat de pagina-weergave er nog in zet dat NIET bij de tekst hoort (de feiten per
+    # sectie, 4 oktober 2026). Alleen chrome; zie `_feiten_per_sectie`.
+    if nabewerk is not None and a.body:
+        inhoud = nabewerk(inhoud)
     # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
     # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
@@ -939,6 +1040,20 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
               f"<button type='button' class='qadd-x' data-wiki-cancel aria-label='cancel'>✕</button>"
               f"<span class='muted wiki-hint'>Click in the text and type. Formatting stays visible."
               f"</span></div></form>")
+
+
+def _wiki_melding(msg: str) -> str:
+    """De melding na een handeling. Een SUCCES is een klein, wegklikbaar label (prototype v2: "draft
+    synthesis discarded" was een groot blok dat de eerste indruk van de pagina bepaalde). Een
+    WEIGERING houdt de grote banner: die mag je niet over het hoofd zien."""
+    from nooch_village.cockpit2 import is_weigering
+    if not msg:
+        return ""
+    if is_weigering(msg):
+        return _banner(msg)
+    return (f"<p><span class='chip muted'>{_e(msg)} "
+            f"<button type='button' class='qadd-x' aria-label='dismiss' "
+            f"onclick=\"this.closest('p').remove()\">✕</button></span></p>")
 
 
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
@@ -1011,8 +1126,20 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # ONDERAAN de pagina in plaats van hier direct onder de titel.
     # HET ICOON VOLGT DE SOORT (`_KIND_ICON`), zodat een policy niet als note leest. Dezelfde
     # tabel als op de kaart en in de index; geen tweede opsomming hier.
-    kop = (f"<div class='c2-bar'><a href='{_e(terug)}'>← {_e(tab)}</a></div>"
-           f"<h1 class='ptitle'>{_KIND_ICON.get(a.kind, '📄')} {titel}</h1>")
+    # HET KRUIMELPAD VERVANGT "← notes" (4 oktober 2026, prototype v2): terug naar het
+    # wiki-OVERZICHT en naar de sectie waar deze pagina staat, niet naar de Notes-tab van een rol.
+    # Hetzelfde atoom als de projectpagina (`.pkaart-crumb`). Het ID en "laatst bewerkt" staan
+    # compact onder de titel; de rest van de administratie staat in de zijbalk.
+    from nooch_village import domeinen as _dom
+    from nooch_village.views.overview import _dt
+    _bak = _dom.bakje_van(a, list(st.records.all()))[0]
+    _versies = len(getattr(a, "versions", None) or [])
+    kop = (f"<div class='pkaart-crumb'><a href='/wiki'>Wiki</a> › "
+           f"<a href='/wiki?bak={_e(_bak)}'>{_e(_dom.label(_bak))}</a> › {_e(a.title or a.id)}</div>"
+           f"<h1 class='ptitle'>{_KIND_ICON.get(a.kind, '📄')} {titel}</h1>"
+           f"<p class='muted'><code class='pill'>{_e(a.id)}</code> "
+           f"Edited {_e(_dt(getattr(a, 'updated_at', 0)))}"
+           + (f" · {_versies} version{'s' if _versies != 1 else ''}" if _versies else "") + "</p>")
     # GEEN "EDIT PAGE"-KNOP (26 september 2026). Wie de pagina mag bewerken, bewerkt hem — zoals
     # een tekstverwerker: je klikt in de tekst en typt.
     #
@@ -1032,7 +1159,11 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # en `_afgeleid_blok` kunnen daar allebei tegen.
     secties = {"backlinks": _backlink_sectie(a, pags)}
     if is_note:
-        secties["facts"] = _feiten_sectie(a, st, csrf_token, can_edit)
+        # WELKE FEITEN STAAN AL ONDER HUN KOPJE? Eerst vastgesteld, want de lijst onderaan toont
+        # alleen de rest. Dezelfde functie als die ze straks in de tekst zet, dus geen tweede regel.
+        _, _geplaatst = (_feiten_per_sectie(_body_html(a.body, pags, blokken=True), a, st,
+                                            csrf_token, can_edit) if a.body else (None, frozenset()))
+        secties["facts"] = _feiten_sectie(a, st, csrf_token, can_edit, overslaan=_geplaatst)
     geplaatst = wiki.markers(a.body)
     #: Heeft deze sectie IETS te melden? Dat is een vraag over de inhoud, niet over het scherm,
     #: dus hij wordt hier één keer beantwoord en niet uit de HTML teruggelezen.
@@ -1084,7 +1215,9 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
             f"<button class='flink' type='submit' name='action' value='pagina_synthese_verwerp'>"
             f"Discard</button></form></div>")
-    body = voorstel_blok + _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note)
+    _nb = ((lambda h: _feiten_per_sectie(h, a, st, csrf_token, can_edit)[0]) if is_note else None)
+    body = voorstel_blok + _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note,
+                                        nabewerk=_nb)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
     # schrijf-sessie (publieke view), dan ook geen voorstelknop. En alleen op een note, want
     # `pagina_voorstel` poort op de soort — zie de docstring hierboven.
@@ -1100,9 +1233,14 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # ÉÉN DOORLOPEND DOCUMENT (26 september 2026). Titel, tekst en de afgeleide secties zitten in
     # hetzelfde omhulsel en delen dus één linkerrand en één vlak; de metadata-voet valt er met zijn
     # scheidingslijn vanzelf onder.
-    main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_banner(msg)}{body}{voorstel}"
-            f"{_bom_sectie(st, a, pags) if is_note else ''}{_onder('facts')}{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}"
-            f"{meta}</div></div>")
+    # DE INHOUD EN DE ADMINISTRATIE ERNAAST (4 oktober 2026, prototype v2). Dezelfde indeling als de
+    # projectpagina (`.pkaart-body` / `-main` / `-rail`): op een smal scherm valt de zijbalk vanzelf
+    # onder de inhoud. Owner, domein, sectie, historie en opruimen zijn beheer, geen tekst.
+    main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_wiki_melding(msg)}"
+            f"<div class='pkaart-body'><div class='pkaart-main'>{body}{voorstel}"
+            f"{_bom_sectie(st, a, pags) if is_note else ''}{_onder('facts')}"
+            f"{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>"
+            f"<aside class='pkaart-rail'>{meta}</aside></div></div></div>")
     return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
@@ -1269,7 +1407,7 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
 
 
 def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
-                      username: str | None = None) -> str:
+                      username: str | None = None, bak: str = "") -> str:
     """Alles wat het dorp heeft opgeschreven, op één scherm."""
     soort = soort if soort in {k for k, _ in _WIKI_SOORTEN} else "all"
     items = _wiki_items(st, soort)
@@ -1292,7 +1430,9 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
         links = "".join(
             f"<li><a href='/pagina?id={_e(a.id)}'>{_e(a.title or a.id)} "
             f"<span class='pill'>{_e(a.kind)}</span></a></li>" for a in rij)
-        kolom.append(f"<details{' open' if n == 0 else ''}><summary>{_e(label)} "
+        # `bak` KOMT VAN HET KRUIMELPAD op een pagina (4 oktober 2026): dan staat díe sectie open.
+        open_ = (sleutel == bak) if bak else (n == 0)
+        kolom.append(f"<details{' open' if open_ else ''}><summary>{_e(label)} "
                      f"<span class='muted'>{len(rij)}</span></summary><ul class='clean'>{links}</ul></details>")
     nav = f"<nav class='wiki-doms'>{''.join(kolom) or ''}</nav>"
 
