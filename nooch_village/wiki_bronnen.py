@@ -76,7 +76,9 @@ def check_pagina(store, a, *, ophaler=None, nu: str = "",
     netwerk; zonder injectie loopt het via `safe_fetch`."""
     nu = nu or _vandaag()
     haal = ophaler or _standaard_ophaler
-    feiten = list(wiki.feiten(a))
+    # EERST DE IDS VASTZETTEN, dán de waarneming erbij: een afgeleid id hangt aan de inhoud van
+    # het feit, en een bijgeschreven check zou het anders veranderen tussen weergave en bewerking.
+    feiten = wiki.met_ids(list(wiki.feiten(a)))
     rapport = []
     gewijzigd = False
     for i in te_checken(a, nu=nu, ouder_dan_dagen=ouder_dan_dagen):
