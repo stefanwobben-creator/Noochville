@@ -1185,6 +1185,10 @@ def _nav_chrome(st, body: str) -> str:
         return body.replace(_SIDE_OVERLEG, "", 1)
 
 
+#: Paden die in het menu onder een ander item vallen: `{pad: menu-pad}`.
+_NAV_ALIAS = {"/pagina": "/wiki"}
+
+
 def _nav_actief(pad: str, body: str) -> str:
     """Zet `aria-current='page'` op het nav-item dat bij dit pad hoort.
 
@@ -1213,6 +1217,12 @@ def _nav_actief(pad: str, body: str) -> str:
         return body
     nav, _, rest = staart.partition("</nav>")
     huidig_pad, _, huidig_q = (pad or "/").partition("?")
+    # EEN PAGINA HOORT BIJ HAAR OVERZICHT (4 oktober 2026, melding Stefan): een wiki-pagina staat op
+    # `/pagina?id=…`, het menu wijst naar `/wiki`, en de exacte vergelijking hieronder vond dus nooit
+    # een treffer — op een wiki-pagina lichtte niets op. De query van de pagina (`id`) telt dan niet
+    # mee: hij hoort bij de pagina, niet bij het overzicht.
+    if huidig_pad in _NAV_ALIAS:
+        huidig_pad, huidig_q = _NAV_ALIAS[huidig_pad], ""
     huidige = urllib.parse.parse_qs(huidig_q)
 
     beste, beste_score = None, -1
@@ -2724,7 +2734,11 @@ def _act_pagina_bulk_import_facts(c):
             soort = type_map.get(ftype, ftype or "")
 
             waarde, waarde_fout = _waarde_uit_regel(fact_data.get("Value") or fact_data.get("value") or "")
-            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde)
+            # `For:` UIT DE FEITEN-PROMPT wordt de sectie van het feit (4 oktober 2026). Vóór vandaag
+            # gooide Bulk Import die regel weg; hij was bedoeld als leeshulp.
+            sectie = (fact_data.get("For") or fact_data.get("for") or "").strip()
+            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde,
+                                  sectie=sectie)
             if feit is None:
                 errors.append(f"Fact {i+1}: empty text")
                 continue
