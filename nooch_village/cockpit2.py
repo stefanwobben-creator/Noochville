@@ -1185,6 +1185,10 @@ def _nav_chrome(st, body: str) -> str:
         return body.replace(_SIDE_OVERLEG, "", 1)
 
 
+#: Paden die in het menu onder een ander item vallen: `{pad: menu-pad}`.
+_NAV_ALIAS = {"/pagina": "/wiki"}
+
+
 def _nav_actief(pad: str, body: str) -> str:
     """Zet `aria-current='page'` op het nav-item dat bij dit pad hoort.
 
@@ -1213,6 +1217,12 @@ def _nav_actief(pad: str, body: str) -> str:
         return body
     nav, _, rest = staart.partition("</nav>")
     huidig_pad, _, huidig_q = (pad or "/").partition("?")
+    # EEN PAGINA HOORT BIJ HAAR OVERZICHT (4 oktober 2026, melding Stefan): een wiki-pagina staat op
+    # `/pagina?id=…`, het menu wijst naar `/wiki`, en de exacte vergelijking hieronder vond dus nooit
+    # een treffer — op een wiki-pagina lichtte niets op. De query van de pagina (`id`) telt dan niet
+    # mee: hij hoort bij de pagina, niet bij het overzicht.
+    if huidig_pad in _NAV_ALIAS:
+        huidig_pad, huidig_q = _NAV_ALIAS[huidig_pad], ""
     huidige = urllib.parse.parse_qs(huidig_q)
 
     beste, beste_score = None, -1
@@ -2718,13 +2728,31 @@ def _act_pagina_bulk_import_facts(c):
             ftype = (fact_data.get("Type") or fact_data.get("type") or "").strip().lower()
             ref = (fact_data.get("Ref") or fact_data.get("ref") or "").strip()
             citaat = (fact_data.get("Quote") or fact_data.get("quote") or "").strip()
-            url = _alleen_url(fact_data.get("URL") or fact_data.get("url") or "")
+            url_regel = (fact_data.get("URL") or fact_data.get("url") or "").strip()
+            url = _alleen_url(url_regel)
 
             # Map type naar soort
             soort = type_map.get(ftype, ftype or "")
+            # "on file: <bestandsnaam>" (4 oktober 2026): een document dat op DEZE pagina geüpload
+            # is maar geen publieke vindplaats heeft. Het feit wordt `document`, met het opgeslagen
+            # bestand als ref. Staat het bestand er niet, dan komt het feit binnen zonder URL en
+            # zegt de melding wat er moet gebeuren — geen stille "no source".
+            m_file = re.match(r"(?i)on[ \t]*file[ \t]*:[ \t]*(.+)$", url_regel)
+            if m_file:
+                opgeslagen = _wiki_bijlage_zoek(data_dir, cur.id, m_file.group(1))
+                if opgeslagen:
+                    soort, ref = "document", opgeslagen
+                    url = f"/wiki-bestand/{cur.id}/{opgeslagen}"
+                else:
+                    errors.append(f"Fact {i+1}: file '{m_file.group(1).strip()[:60]}' is not uploaded "
+                                  f"on this page — upload it, then import again")
 
             waarde, waarde_fout = _waarde_uit_regel(fact_data.get("Value") or fact_data.get("value") or "")
-            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde)
+            # `For:` UIT DE FEITEN-PROMPT wordt de sectie van het feit (4 oktober 2026). Vóór vandaag
+            # gooide Bulk Import die regel weg; hij was bedoeld als leeshulp.
+            sectie = (fact_data.get("For") or fact_data.get("for") or "").strip()
+            feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde,
+                                  sectie=sectie)
             if feit is None:
                 errors.append(f"Fact {i+1}: empty text")
                 continue
@@ -6902,7 +6930,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # deze persoon ook echt op mag schrijven.
                 self._send(render_wiki_index(st, csrf_token=effective_csrf,
                                              soort=(qs.get("kind") or ["all"])[0],
-                                             username=username))
+                                             username=username,
+                                             bak=(qs.get("bak") or [""])[0]))
                 return
             if path == "/projects":
                 # AUTHZ: iedereen-ingelogd — lezen van het bord is vrij; de mutaties eronder gaan
@@ -8006,6 +8035,21 @@ def _wiki_bijlage_naam(rauw: str) -> str:
     markdown-link heel laten."""
     kaal = os.path.basename(rauw or "bestand").translate(_BIJLAGE_ONVEILIG)[:120]
     return kaal or "bestand"
+
+
+def _wiki_bijlage_zoek(data_dir: str, aid: str, naam: str) -> str:
+    """De OPGESLAGEN naam (`<id>_<naam>`) van een bijlage op deze pagina, gezocht op de naam zoals
+    de mens hem kent, of "". Hoofdletter-ongevoelig; dezelfde opschoning als bij het uploaden, zodat
+    "NFW D6866 - Tunera and Pliant.pdf" het bestand terugvindt dat zo geüpload is."""
+    map_ = os.path.join(data_dir, "attachments", "wiki", os.path.basename(aid or ""))
+    gezocht = _wiki_bijlage_naam((naam or "").strip()).lower()
+    if not gezocht or not os.path.isdir(map_):
+        return ""
+    for f in sorted(os.listdir(map_)):
+        _id, _, rest = f.partition("_")
+        if rest.lower() == gezocht and os.path.isfile(os.path.join(map_, f)):
+            return f
+    return ""
 
 
 def _wiki_bijlage_regel(aid: str, opgeslagen: str, label: str) -> str:

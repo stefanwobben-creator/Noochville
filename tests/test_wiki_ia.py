@@ -136,7 +136,9 @@ def test_boven_de_vouw_staat_alleen_de_titel(tmp_path):
     html, a = _pagina(tmp_path)
     kop = html[:html.index("id='wiki-body'")]
     assert "wiki-titel" in kop
-    for weg in ("class='dcol'", ">Last edited<", a.id, "data-wiki-start"):
+    # Sinds 4 oktober 2026 (prototype v2) staan het ID en "Edited …" COMPACT onder de titel; het
+    # meta-RASTER (eigenaar, domein, sectie, historie, opruimen) staat in de zijbalk, na de tekst.
+    for weg in ("class='dcol'", ">Last edited<", "data-wiki-start"):
         assert weg not in kop, f"{weg} staat nog boven de tekst"
 
 

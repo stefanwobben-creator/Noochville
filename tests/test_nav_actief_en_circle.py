@@ -114,7 +114,8 @@ def test_elke_node_markeert_organization(tmp_path):
 def test_een_scherm_zonder_nav_item_markeert_niets(tmp_path):
     """MUTATIE-CONTROLE: "markeer altijd iets" zou op de tests hierboven ook slagen."""
     dd = _dd(tmp_path)
-    for pad in ("/vangst", "/werkoverleg", "/pagina"):
+    # `/pagina` stond hier tot 4 oktober 2026; een wiki-pagina laat nu "Wiki" oplichten (zie onder).
+    for pad in ("/vangst", "/werkoverleg"):
         assert _actief(_nav_van(dd, pad)) == [], pad
 
 
@@ -208,3 +209,11 @@ def test_de_stijlregel_verliest_bewust_van_de_overlegknop():
     def spec(sel):
         return (sel.count("#"), sel.count(".") + sel.count("["), len(re.findall(r"(?<![.\[#\w-])[a-z]+", sel)))
     assert spec(".c2-subnav [aria-current]") < spec(".c2-subnav a.c2-overleg")
+
+
+def test_een_wiki_pagina_laat_wiki_oplichten():
+    """4 oktober 2026: `/pagina?id=…` vond nooit een treffer tegen het menu-item `/wiki`."""
+    nav = "<nav class='c2-subnav'><a href='/projects'>Projects</a><a href='/wiki'>Wiki</a></nav>"
+    uit = cockpit2._nav_actief("/pagina?id=NOTE-FACTOR-003", nav)
+    assert "<a href='/wiki' aria-current='page'>" in uit
+    assert "<a href='/projects' aria-current" not in uit

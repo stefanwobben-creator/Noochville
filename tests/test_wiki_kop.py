@@ -85,10 +85,11 @@ def test_het_id_staat_zichtbaar_in_het_metadata_blok(tmp_path):
 
     IN PR 1 STOND HIJ IN DE HERKOMST-REGEL, in PR 2 in het metadata-blok — dat was de bedoelde
     eindplek; de kopbalk was de tussenstap."""
+    # SINDS 4 OKTOBER 2026 (prototype v2) staat hij compact onder de titel, niet meer in het blok.
     html, a, _ = _pagina(tmp_path)
-    assert "<span class='dk'>Id</span>" in html, "er is geen Id-rij in het metadata-blok"
-    rij = html.split("<span class='dk'>Id</span>")[1][:200]
-    assert a.id in rij, "het ID staat nergens waar je het kunt lezen"
+    kop = html[:html.index("id='wiki-body'")]
+    assert f"<code class='pill'>{a.id}</code>" in kop, "het ID staat nergens waar je het kunt lezen"
+    assert "<span class='dk'>Id</span>" not in html                  # niet op twee plekken
 
 
 # ── 2. De eigenaar is één zin ────────────────────────────────────────────────
@@ -296,7 +297,8 @@ def test_alle_metadata_staat_bij_elkaar(tmp_path):
     """Het ontwerpdocument: "los verspreid rond de titel" wordt één sectie."""
     html, _a, _ = _pagina(tmp_path)
     blok = html.split("class='dcol'")[1].split("</div></div>")[0]
-    for sleutel in ("Owner", "Domain", "Id", "Last edited"):
+    # Id en "Last edited" staan sinds 4 oktober 2026 compact onder de titel (zie hierboven).
+    for sleutel in ("Owner", "Domain", "Section"):
         assert f">{sleutel}</span>" in blok, f"{sleutel} staat niet in het blok"
 
 

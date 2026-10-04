@@ -77,7 +77,7 @@ def test_geen_publieke_url_wordt_een_lege_url(tmp_path):
     _importeer(dd, aid, [{**NFW, "URL": "NO PUBLIC URL — will show as source missing"}])
     f = _feiten(dd, aid)[0]
     assert f["grond"]["url"] == ""
-    assert wiki.grond_status(f)["label"] == "source missing"
+    assert wiki.grond_status(f)["label"] == wiki.LABEL["geen_bron"] == "no source"
 
 
 def test_een_afsluitend_leesteken_hoort_niet_bij_het_adres(tmp_path):
@@ -140,3 +140,16 @@ def test_er_is_geen_tweede_feitenformulier_meer(tmp_path):
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="tok", username=IK)
     assert "+ Add fact" not in h and "value='pagina_feit_add'" not in h
     assert "Bulk Import Facts" in h
+
+
+# ══ For: wordt de sectie van het feit (4 oktober 2026) ══════════════════════
+def test_de_for_regel_wordt_de_sectie(tmp_path):
+    dd, aid = _dorp(tmp_path)
+    _importeer(dd, aid, [{**NFW, "For": "Company certification"}, NFW])
+    f1, f2 = _feiten(dd, aid)
+    assert f1["sectie"] == "Company certification"
+    assert "sectie" not in f2                          # zonder For: geen sectie, wel het feit
+
+
+def test_de_knop_geeft_de_for_regel_door():
+    assert "fact.For = val" in _bulk_js()

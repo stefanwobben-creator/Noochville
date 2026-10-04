@@ -106,9 +106,9 @@ def bereken(bom_tekst: str, pags: list, leveranciers: dict | None = None,
         materiaal, _onzeker = _materiaalnaam(r["material"])
         gewijzigd = bool(r["niveau"]) and not r["toegevoegd"] and (
             materiaal != origineel or r["gram"] != r["gram_origineel"])
-        mat = wiki.resolve(materiaal, pags)
+        mat = wiki.resolve_bom(materiaal, pags)
         supplier = leveranciers.get(materiaal.lower(), "")
-        lev = wiki.resolve(supplier, pags) if supplier else None
+        lev = wiki.resolve_bom(supplier, pags) if supplier else None
         gram = r["gram"]
         bijdrage: dict[str, float | None] = {"gram": gram}
         open_punten: list[str] = []
