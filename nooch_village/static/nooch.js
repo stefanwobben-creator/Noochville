@@ -882,7 +882,10 @@
     //
     // De verdediging die chrome BUITEN DE OPSLAG houdt blijft wél op `[data-chrome]` staan: die
     // zit in de submit-handler, en daar hoort hij ook.
-    body.querySelectorAll(".wb-greep").forEach(function (g) { g.remove(); });
+    // EN ALLEEN DIE VAN DE BLOKKEN (5 oktober 2026): een feit onder een kopje draagt dezelfde
+    // `.wb-greep`, en die hoort niet bij deze opruiming — hij staat er vanaf de server en zou
+    // anders bij de eerste herschikking verdwijnen.
+    body.querySelectorAll(":scope > .wb > .wb-greep").forEach(function (g) { g.remove(); });
     if (!aan) return;
     body.querySelectorAll(":scope > .wb").forEach(function (blok, i) {
       blok.setAttribute("data-blok-id", "b" + i);
@@ -1609,12 +1612,41 @@
      * HIJ START NÁ `editeerbaar(true)`, want het aanzetten hangt zelf de grepen en de plus in de
      * blokken — dat zijn chrome-mutaties, geen bewerkingen.
      */
-    function gewijzigd() {
+    function gewijzigd(records) {
+      // ALLEEN CHROME VERANDERD? Dan is er niets aan de tekst gebeurd (5 oktober 2026): een feit
+      // dat versleept wordt, of het bewerkformulier van een feit dat opengaat, staat in een
+      // `[data-chrome]`-element en gaat nooit mee bij het opslaan. De opslaan-balk hoort daar niet
+      // bij te verschijnen.
+      if (records && records.length && records.every(chromeMutatie)) return;
       if (form.hidden) form.hidden = false;
+    }
+    function inChrome(n) {
+      var el = n && (n.nodeType === 1 ? n : n.parentNode);
+      return !!(el && el.closest && el.closest("[data-chrome]"));
+    }
+    function chromeMutatie(m) {
+      if (inChrome(m.target)) return true;
+      // BEDRADING, GEEN TEKST: een `data-nv-*`-markering (bijv. `data-nv-wikilink`, gezet door de
+      // [[link]]-hulp NADAT deze waarnemer al liep). Tot 5 oktober 2026 telde dat als bewerking,
+      // en daardoor stond de opslaan-balk op elke wikipagina al open vóór iemand iets typte.
+      // En `data-feit-*`: de sectie die een versleept feit meekrijgt. Hij wordt gezet als het feit
+      // al uit dit vlak is (naar "Other facts"), en een MutationObserver volgt een net verwijderd
+      // element nog even — dus zonder deze regel opende een versleping de balk.
+      if (m.type === "attributes" && /^data-(nv|feit)-/.test(m.attributeName || "")) return true;
+      // DE SLEEP-MARKERING OP EEN KOPJE (`over`, `over-boven`, …): een kopje is een dropzone voor
+      // feiten maar zelf geen chrome. Alleen de klasse veranderde, de tekst niet.
+      if (m.type === "attributes" && m.attributeName === "class" && m.target.hasAttribute &&
+          m.target.hasAttribute("data-feit-doel")) return true;
+      if (m.type !== "childList") return false;
+      var knopen = Array.prototype.slice.call(m.addedNodes).concat(Array.prototype.slice.call(m.removedNodes));
+      return knopen.length > 0 && knopen.every(function (k) {
+        return k.nodeType === 1 && k.hasAttribute("data-chrome");
+      });
     }
 
     editeerbaar(true);
     form.hidden = true;
+    feitSleep(root);
     var waarnemer = new MutationObserver(gewijzigd);
     waarnemer.observe(body, {
       childList: true, subtree: true, characterData: true, attributes: true
@@ -2538,6 +2570,76 @@
         var det = knop.closest("details");
         if (det) det.open = false;                   // gekozen is klaar
       });
+    });
+  }
+
+  /* ── Feiten slepen (5 oktober 2026) ───────────────────────────────────────────────────────
+   *
+   * NV.sleep MET ANDERE SELECTORS, geen tweede sleepmechanisme. De kaart is een feit
+   * (`data-feit-id`); een doel is een ander feit (vóór/ná, `helft`) of een zone (`s:<kopje>`, of
+   * `s:` = "Other facts"). Eerst verplaatsen we in de DOM (je ziet meteen het resultaat), dan
+   * vragen we de server; weigert die, dan gaat het feit terug en staat de reden erbij.
+   */
+  function feitSleep(root) {
+    var form = root.querySelector("#wiki-form");
+    var veld = function (n) { var el = form && form.querySelector("[name=" + n + "]"); return el ? el.value : ""; };
+    if (!form || !veld("csrf") || !veld("aid")) return;
+    NV.sleep(document, {
+      kaart: "[data-feit-id]", id: "data-feit-id",
+      greep: ".wb-greep-knop",
+      doel: "[data-feit-doel]", naar: "data-feit-doel",
+      helft: true,
+      onDrop: function (fid, naar, e) {
+        var kaart = document.querySelector("[data-feit-id='" + fid + "']");
+        var doel = document.querySelector("[data-feit-doel='" + naar + "']");
+        if (!kaart || !doel || kaart === doel) return;
+        var terugOuder = kaart.parentNode, terugVoor = kaart.nextSibling;
+        var sectie = "", voor = "", plek = null, ouder = null;
+        if (naar.indexOf("f:") === 0) {
+          sectie = doel.getAttribute("data-feit-sectie") || "";
+          var m = doel.getBoundingClientRect();
+          var boven = e.clientY < m.top + m.height / 2;
+          if (boven) { voor = naar.slice(2); plek = doel; }
+          else {
+            var na = doel.nextElementSibling;
+            while (na && !na.hasAttribute("data-feit-id")) na = na.nextElementSibling;
+            voor = na ? na.getAttribute("data-feit-id") : "";
+            plek = doel.nextSibling;
+          }
+          ouder = doel.parentNode;
+        } else {
+          sectie = naar.slice(2);
+          // Een zone met feiten erin: achteraan bij de feiten. Een kopje zonder feiten heeft nog
+          // geen blok om in te staan; dan laat de herlaadbeurt hem op zijn plek zien.
+          var laatste = Array.prototype.filter.call(doel.querySelectorAll("[data-feit-id]"),
+                                                    function (x) { return x !== kaart; }).pop();
+          if (laatste) { ouder = laatste.parentNode; plek = laatste.nextSibling; }
+        }
+        if (ouder) { ouder.insertBefore(kaart, plek); kaart.setAttribute("data-feit-sectie", sectie); }
+        var data = new URLSearchParams();
+        data.set("csrf", veld("csrf")); data.set("aid", veld("aid"));
+        data.set("action", "pagina_feit_verplaats"); data.set("fid", fid);
+        data.set("sectie", sectie); data.set("voor_fid", voor);
+        data.set("next", location.pathname + location.search);
+        function terug(reden) {
+          terugOuder.insertBefore(kaart, terugVoor);
+          var p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = reden;
+          kaart.parentNode.insertBefore(p, kaart);
+          setTimeout(function () { p.remove(); }, 6000);
+        }
+        fetch("/action", { method: "POST", body: data, credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { terug((t || "Not moved (" + r.status + ")").slice(0, 160)); });
+            var q = new URL(r.url, location.origin).searchParams;
+            if (q.get("ok") === "0") { terug(q.get("msg") || "Not moved"); return; }
+            // Naar een kopje zonder feiten: daar stond nog geen blok, dus de pagina toont hem pas
+            // na herladen op zijn plek. Alleen als er geen onbewaarde tekst is.
+            if (!ouder && form.hidden) location.reload();
+          })
+          .catch(function () { terug("Not moved — no connection"); });
+      }
     });
   }
 

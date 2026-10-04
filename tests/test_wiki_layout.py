@@ -63,7 +63,7 @@ def test_het_feitblok_hoort_niet_bij_de_opgeslagen_tekst(tmp_path):
     st, a = _pagina(tmp_path, [_f("USDA lists Pliant PCS", "Company certification")])
     h = render_pagina(st, a.id, csrf_token="TOK", username=IK)
     body = h[h.index("id='wiki-body'"):]
-    body = body[body.index(">") + 1:body.index("<form")]
+    body = body[body.index(">") + 1:body.index("<form method='post' action='/action' class='wiki-form'")]
     assert "data-chrome contenteditable='false'>" in body and "1 fact<" in body
     terug = _md_naar_bron(body) if callable(_md_naar_bron) else ""
     assert "USDA lists" not in terug and "1 fact" not in terug
@@ -110,6 +110,6 @@ def test_de_telling_laat_geen_spatie_achter_in_de_kop(tmp_path):
     st, a = _pagina(tmp_path, [_f("USDA lists Pliant PCS", "Company certification")])
     h = render_pagina(st, a.id, csrf_token="TOK", username=IK)
     body = h[h.index("id='wiki-body'"):]
-    body = body[body.index(">") + 1:body.index("<form")]
+    body = body[body.index(">") + 1:body.index("<form method='post' action='/action' class='wiki-form'")]
     terug = _md_naar_bron(body)
     assert "## Company certification\n" in terug and "## Company certification \n" not in terug

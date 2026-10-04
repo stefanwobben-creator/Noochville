@@ -2958,6 +2958,16 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* De telling "N facts" naast een kop (chrome, niet in de tekst): de afstand zit hier, niet als
    spatie in de HTML — zie `_feiten_per_sectie`. */
 :root .wiki-body .wb > h3 > .chip, :root .wiki-body .wb > h4 > .chip, :root .wiki-body .wb > h5 > .chip{margin-left:.5rem;vertical-align:middle}
+/* FEITEN SLEPEN (5 oktober 2026). Dezelfde greep als de wiki-blokken (`.wb-greep`), op een feit
+   in plaats van een blok; alleen de selector is nieuw, op een attribuut (`data-feit-id`), geen
+   klasse. Het doel licht op zoals een blok (`.over-boven`/`.over-onder` op een feit, `.over` op
+   een zone: een kopje, een feitblok of "Other facts"). */
+:root [data-feit-id]{position:relative}
+:root [data-feit-id]:hover > .wb-greep, :root [data-feit-id] > .wb-greep:focus-within{opacity:1}
+:root [data-feit-doel].over-boven{box-shadow:inset 0 2px 0 0 var(--nu-accent)}
+:root [data-feit-doel].over-onder{box-shadow:inset 0 -2px 0 0 var(--nu-accent)}
+:root [data-feit-doel].over{background:var(--nu-bg-alt)}
+:root [data-feit-id].pdrag-bron{opacity:.35}
 
 /* Het blok-vocabulaire van de wiki (brok 2). De basislaag tekent ze op `--border`, de warme
    zandtint; hier gaan ze mee met de rest van de nu-lijnen. */
