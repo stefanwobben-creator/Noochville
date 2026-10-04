@@ -2617,6 +2617,107 @@ def _act_pagina_synthese_verwerp(c):
     return nxt, "🗑 draft synthesis discarded"
 
 
+def _feit_index(feiten: list, fid: str, i_ruw: str = "") -> int | None:
+    """Waar staat dit feit NU in de lijst? Op zijn id (`wiki.feit_id`); de plek (`i`) alleen als er
+    geen id meekwam — een oud formulier in een open tabblad. Zonder treffer: None, en dan gebeurt
+    er niets: liever "niet gevonden" dan het verkeerde feit bewerken of weghalen."""
+    if fid:
+        return next((n for n, f in enumerate(feiten) if wiki_feit_id(f) == fid), None)
+    try:
+        i = int(i_ruw)
+    except (TypeError, ValueError):
+        return None
+    return i if 0 <= i < len(feiten) else None
+
+
+def wiki_feit_id(f: dict) -> str:
+    from nooch_village import wiki
+    return wiki.feit_id(f)
+
+
+def _persoon_naam(username: str | None, st) -> str:
+    """De naam van wie ingelogd is — voor `attested`. Uit de sessie, NOOIT uit een formulierveld:
+    iemand verklaart alleen voor zichzelf."""
+    if username in (None, "guest"):
+        return "guest"
+    p = st.people.by_email(username)
+    return (getattr(p, "name", "") or username) if p else username
+
+
+def _act_pagina_feit_edit(c):
+    """Bewerk één feit op zijn plek (4 oktober 2026, besluit Stefan: "dat moet een echte edit worden").
+
+    # AUTHZ: domeineigenaar of Circle Lead — zie pagina_feit_add. Bewerken is inhoud van de pagina.
+
+    WAT BLIJFT: het id, de sectie als die niet is meegestuurd, en de laatste bron-check zolang URL
+    én citaat gelijk blijven. Verandert een van die twee, dan vervalt de check: een oude waarneming
+    hoort niet bij een nieuw citaat.
+
+    BEWIJS ERBIJ: `URL: on file: <bestand>` (een bestand dat al op de pagina staat) of een upload in
+    hetzelfde formulier (de multipart-tak schrijft het bestand en vult dan dit veld). `attested`
+    neemt de naam van de ingelogde persoon en de datum van vandaag — nooit uit het formulier."""
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    huidig = list(wiki.feiten(cur))
+    i = _feit_index(huidig, g("fid"))
+    if i is None:
+        return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
+    oud = huidig[i]
+    waarde = None
+    if g("grootheid") or g("getal"):
+        waarde = wiki.maak_waarde(g("grootheid"), g("getal"))
+        if waarde is None:
+            return nxt, "✗ a value needs both a quantity and a number (0 or more)"
+    soort, ref, url_regel = g("soort"), g("ref"), g("url").strip()
+    url = _alleen_url(url_regel)
+    m_file = re.match(r"(?i)on[ \t]*file[ \t]*:[ \t]*(.+)$", url_regel)
+    if m_file:
+        opgeslagen = _wiki_bijlage_zoek(data_dir, cur.id, m_file.group(1))
+        if not opgeslagen:
+            return nxt, (f"✗ file '{m_file.group(1).strip()[:60]}' is not on this page — "
+                         f"upload it in this form")
+        soort, ref, url = "document", opgeslagen, f"/wiki-bestand/{cur.id}/{opgeslagen}"
+    elif soort == "document":
+        url = g("url_document").strip() or (oud.get("grond") or {}).get("url", "")
+        ref = url.rsplit("/", 1)[-1] if url else ""
+    oud_grond = oud.get("grond") or {}
+    if soort == "attested":
+        # Behoud wie en wanneer als het al een verklaring was van DEZELFDE persoon; anders is dit een
+        # nieuwe verklaring van wie nu ingelogd is.
+        wie = _persoon_naam(username, st)
+        zelfde = oud_grond.get("soort") == "attested" and oud_grond.get("ref") == wie
+        ref = wie
+        op = oud_grond.get("op", "") if zelfde else ""
+    else:
+        op = ""
+    sectie = g("sectie") if "sectie" in c.form else oud.get("sectie", "")
+    nieuw = wiki.maak_feit(g("tekst"), soort=soort, ref=ref, citaat=g("citaat"), url=url,
+                           waarde=waarde, sectie=sectie, fid=wiki.feit_id(oud), op=op)
+    if nieuw is None:
+        return nxt, "✗ a fact needs text"
+    ng = nieuw.get("grond") or {}
+    if (oud_grond.get("check") and ng.get("soort") == oud_grond.get("soort") == "bron"
+            and ng.get("url") == oud_grond.get("url") and ng.get("citaat") == oud_grond.get("citaat")):
+        ng["check"] = oud_grond["check"]
+    huidig[i] = nieuw
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = huidig
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref,
+                        change_note=f"fact edited: {str(nieuw.get('tekst') or '')[:80]}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, "✓ fact updated"
+
+
 def _act_pagina_feit_del(c):
     # AUTHZ: domeineigenaar of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
     # achter, zodat de historie laat zien dát er een feit weg is (nooit een stille verdwijning).
@@ -2629,12 +2730,9 @@ def _act_pagina_feit_del(c):
     if _deny:
         raise Forbidden(_deny)
     huidig = list(wiki.feiten(cur))
-    try:
-        i = int(g("i"))
-    except (TypeError, ValueError):
-        return nxt, "✗ unknown fact"
-    if not 0 <= i < len(huidig):
-        return nxt, "✗ unknown fact"
+    i = _feit_index(huidig, g("fid"), g("i"))
+    if i is None:
+        return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
     weg = huidig.pop(i)
     meta = dict(getattr(cur, "meta", None) or {})
     meta["feiten"] = huidig
@@ -2718,6 +2816,7 @@ def _act_pagina_bulk_import_facts(c):
         "cert": "cert",
         "certificate": "cert",
         "policy": "policy",
+        "attested": "attested",
     }
 
     new_facts = []
@@ -2733,6 +2832,10 @@ def _act_pagina_bulk_import_facts(c):
 
             # Map type naar soort
             soort = type_map.get(ftype, ftype or "")
+            if soort == "attested":
+                # Uit eerste hand: wie importeert verklaart het, met de datum van vandaag. Een naam
+                # in Ref telt niet — je verklaart alleen voor jezelf.
+                ref = _persoon_naam(username, st)
             # "on file: <bestandsnaam>" (4 oktober 2026): een document dat op DEZE pagina geüpload
             # is maar geen publieke vindplaats heeft. Het feit wordt `document`, met het opgeslagen
             # bestand als ref. Staat het bestand er niet, dan komt het feit binnen zonder URL en
@@ -6373,6 +6476,7 @@ ACTIONS = {
     "pagina_synthese": _act_pagina_synthese,
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
+    "pagina_feit_edit": _act_pagina_feit_edit,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_bulk_import_facts": _act_pagina_bulk_import_facts,
     "pagina_voorstel": _act_pagina_voorstel,
@@ -7899,6 +8003,40 @@ def make_handler(data_dir: str, csrf_token: str,
                                                    else f"role:{_a.anchor}"),
                                    change_note=f"bijlage toegevoegd: {safe}")
                     self._redirect(fields.get("next", "/"), "📎 bijlage toegevoegd"); return
+                if fields.get("action") == "pagina_feit_edit":
+                    # AUTHZ: domeineigenaar of Circle Lead — de poort van `pagina_feit_edit` zelf,
+                    # hier vóór het wegschrijven ook al, zodat een geweigerde upload niets achterlaat.
+                    # EEN FEIT BEWERKEN MÉT BEWIJS (4 oktober 2026): het bestand komt bij de pagina,
+                    # zonder de tekst te raken, en het feit wijst ernaar ("on file"). Zonder bestand is
+                    # dit gewoon de bewerking. Daarna EXACT dezelfde dispatch als zonder upload.
+                    _st = _Stores(data_dir)
+                    _aid = fields.get("aid", "")
+                    _a = _st.att.get(_aid)
+                    if _a is None:
+                        self._send("Page not found", 404); return
+                    _fout = _artefact_gate(_a.anchor, username, _st, domein=getattr(_a, "domain", ""))
+                    if _fout:
+                        self._send(_fout, 403); return
+                    if files.get("file") and files["file"][1]:
+                        err = _upload_error(files, _upload_max_bytes())
+                        if err:
+                            self._send(err[0], err[1]); return
+                        fname, blob = files["file"]
+                        safe = _wiki_bijlage_naam(fname)
+                        if channels.bijlage_type(safe) is None:
+                            self._send("This file type cannot be attached", 415); return
+                        opgeslagen = uuid.uuid4().hex[:8] + "_" + safe
+                        full = os.path.join(data_dir, "attachments", "wiki", _aid, opgeslagen)
+                        os.makedirs(os.path.dirname(full), exist_ok=True)
+                        with open(full, "wb") as fh:
+                            fh.write(blob)
+                        fields["url"] = f"on file: {opgeslagen}"     # het EXACTE bestand, niet op naam
+                    try:
+                        nxt, msg = dispatch(data_dir, "pagina_feit_edit",
+                                            {k: [v] for k, v in fields.items()}, username=username)
+                    except Forbidden as e:
+                        self._send(str(e), 403); return
+                    self._redirect(nxt, msg); return
                 if fields.get("action") == "kanaal_bijlage":
                     # AUTHZ: iedereen-ingelogd die in dit kanaal mag SCHRIJVEN. Dat is dezelfde
                     # voorwaarde als het antwoordveld (`kan_antwoorden`), en bewust geen tweede
@@ -8045,6 +8183,9 @@ def _wiki_bijlage_zoek(data_dir: str, aid: str, naam: str) -> str:
     gezocht = _wiki_bijlage_naam((naam or "").strip()).lower()
     if not gezocht or not os.path.isdir(map_):
         return ""
+    exact = os.path.basename((naam or "").strip())
+    if exact and os.path.isfile(os.path.join(map_, exact)):
+        return exact                                 # de opgeslagen naam zelf (na een upload)
     for f in sorted(os.listdir(map_)):
         _id, _, rest = f.partition("_")
         if rest.lower() == gezocht and os.path.isfile(os.path.join(map_, f)):

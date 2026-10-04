@@ -21,7 +21,7 @@ from dataclasses import replace as _replace
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, link_kaart,
                                          opmaak_werkbalk,
-                                         BLOK_SOORTEN, blok_menu)
+                                         BLOK_SOORTEN, blok_menu, inline_edit)
 from nooch_village import domeinen, wiki
 
 # Status → chip-icoon. Bewust vijf verschillende tekens: 'gegrond' en 'ongecontroleerd' mogen op
@@ -258,17 +258,82 @@ def _bijlage_bestaat(st):
     return bestaat
 
 
-def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool) -> str:
+#: De soorten in het bewerkformulier, met hun uitleg. Volgorde = hoe vaak ze voorkomen.
+_SOORT_KEUZE = (("bron", "Cited source (URL)"),
+                ("document", "Document on this page (on file, not public)"),
+                ("attested", "Attested — first-hand, by you, no document"),
+                ("cert", "Certificate (Chronicle record id in Ref)"),
+                ("kroniek", "Chronicle record (id in Ref)"),
+                ("policy", "Policy (id in Ref)"),
+                ("", "None (shows as ungrounded)"))
+
+
+def _kopjes(body: str) -> list[str]:
+    """De koppen van de pagina, voor de sectie-keuze van een feit."""
+    return [m.group(2).strip() for m in re.finditer(r"(?m)^(#{1,3})\s+(.+?)\s*$", body or "")]
+
+
+def _bijlagen(st, aid: str) -> list[str]:
+    """De opgeslagen bestanden op deze pagina (`attachments/wiki/<aid>/`)."""
+    dd = getattr(st, "dd", "")
+    map_ = os.path.join(dd, "attachments", "wiki", os.path.basename(aid)) if dd else ""
+    return sorted(os.listdir(map_)) if map_ and os.path.isdir(map_) else []
+
+
+def _feit_formulier(feit: dict, a, st) -> str:
+    """De velden van één feit, op zijn plek te bewerken (4 oktober 2026). Bestaande atomen:
+    `_field`, `.att-lbl`, een `<select>` en `.muted` voor de uitleg — geen nieuwe klasse."""
+    fid = wiki.feit_id(feit)
+    g = feit.get("grond") or {}
+    soort = g.get("soort", "")
+    w = wiki.waarde(feit) or {}
+    def sel(naam: str, opties: list[tuple[str, str]], gekozen: str, label: str) -> str:
+        oid = f"ff-{naam}-{fid}"
+        return (f"<label class='att-lbl' for='{_e(oid)}'>{_e(label)}</label>"
+                f"<select id='{_e(oid)}' name='{_e(naam)}'>"
+                + "".join(f"<option value='{_e(k)}'{' selected' if k == gekozen else ''}>{_e(v)}</option>"
+                          for k, v in opties) + "</select>")
+    bestanden = _bijlagen(st, a.id)
+    huidig_doc = g.get("url", "") if soort == "document" else ""
+    doc_keuze = ([("", "— keep / none —")]
+                 + [(f"/wiki-bestand/{a.id}/{b}", b.partition("_")[2] or b) for b in bestanden])
+    kopjes = _kopjes(a.body or "")
+    sectie = feit.get("sectie", "")
+    sectie_keuze = ([("", "— no section (Other facts) —")] + [(k, k) for k in kopjes]
+                    + ([(sectie, f"{sectie} (not a heading on this page)")]
+                       if sectie and sectie not in kopjes else []))
+    url_waarde = g.get("url", "") if soort == "bron" else ""
+    return (f"{_field('Fact', 'tekst', value=feit.get('tekst', ''), required=True, fid=f'ff-tekst-{fid}')}"
+            + sel("soort", list(_SOORT_KEUZE), soort, "Grounding")
+            + _field("Reference", "ref", value=g.get("ref", "") if soort != "attested" else "",
+                     fid=f"ff-ref-{fid}")
+            + _field("URL (or: on file: <file name>)", "url", value=url_waarde, fid=f"ff-url-{fid}")
+            + _field("Quote", "citaat", kind="textarea", value=g.get("citaat", ""), fid=f"ff-citaat-{fid}")
+            + "<p class='muted'>A cited source is only checked when its quote is copied exactly from "
+              "the URL and is at least 12 characters. Without a quote it stays &ldquo;not yet "
+              "checked&rdquo;.</p>"
+            + (sel("url_document", doc_keuze, huidig_doc, "Document on this page") if bestanden else "")
+            + f"<label class='att-lbl' for='ff-file-{_e(fid)}'>Upload evidence (makes this fact on file)</label>"
+              f"<input type='file' id='ff-file-{_e(fid)}' name='file'>"
+            + sel("grootheid", [("", "no number")] + [(k, f"{v['label']} ({v['eenheid']})")
+                                                       for k, v in wiki.GROOTHEDEN.items()],
+                  w.get("grootheid", ""), "Value")
+            + _field("Number", "getal", value=(str(w["getal"]) if w else ""), fid=f"ff-getal-{fid}")
+            + sel("sectie", sectie_keuze, sectie, "Section"))
+
+
+def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool, a=None) -> str:
     g = wiki.grond_status(feit, ledger=getattr(st, "evidence", None), store=st.att,
                           bestaat=_bijlage_bestaat(st))
     citaat = (f"<div class='att-body muted'>“{_e(g['citaat'])}”</div>"
               if g.get("citaat") else "")
+    fid = wiki.feit_id(feit)
     weg = ""
     if can_edit:
         weg = (f"<form method='post' action='/action'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                f"<input type='hidden' name='aid' value='{_e(aid)}'>"
-               f"<input type='hidden' name='i' value='{i}'>"
+               f"<input type='hidden' name='fid' value='{_e(fid)}'>"
                f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
                f"<button class='dellink' type='submit' name='action' value='pagina_feit_del' "
                f"onclick=\"return confirm('Remove this fact?')\">remove</button></form>")
@@ -279,8 +344,20 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     w = wiki.waarde(feit)
     getal = (f"<div class='muted'>{_e(wiki.GROOTHEDEN[w['grootheid']]['label'])}: "
              f"<strong>{_e(wiki.waarde_tekst(w))}</strong></div>" if w else "")
-    return (f"<div><div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-            f"<div>{_grond_chip(g)}</div>{citaat}{weg}</div>")
+    getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
+               f"<div>{_grond_chip(g)}</div>{citaat}")
+    if can_edit and a is not None:
+        # KLIK OP HET FEIT = BEWERKEN (4 oktober 2026), hetzelfde `inline_edit` als de wall en de
+        # Conclusion. Multipart, want in hetzelfde formulier kan bewijs worden geüpload.
+        verborgen = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                     f"<input type='hidden' name='aid' value='{_e(aid)}'>"
+                     f"<input type='hidden' name='fid' value='{_e(fid)}'>"
+                     f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>")
+        getoond = inline_edit(getoond, _feit_formulier(feit, a, st), sleutel=f"feit-{fid}",
+                              opslaan="pagina_feit_edit", verborgen=verborgen, klikbaar=True,
+                              multipart=True)
+        return f"<div class='editor-inline'>{getoond}{weg}</div>"
+    return f"<div>{getoond}{weg}</div>"
 
 
 #: De ingang voor feiten, sinds "+ Add fact" weg is (3 oktober 2026, besluit Stefan): het /-menu.
@@ -365,7 +442,7 @@ def _feiten_sectie(a, st, csrf_token: str, can_edit: bool, *, overslaan: frozens
     "Other facts". Zo staat geen feit twee keer op het scherm, en verdwijnt er ook geen: een feit
     zonder sectie, of met een sectie die (niet meer) als kop bestaat, landt hier."""
     rest = [(i, f) for i, f in enumerate(wiki.feiten(a)) if i not in overslaan]
-    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit) for i, f in rest)
+    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a) for i, f in rest)
     if rest:
         kop = "Other facts" if overslaan else "Facts"
         lijst = f"<h3>{kop}</h3>{rijen}"
@@ -416,7 +493,7 @@ def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tup
             continue
         geplaatst.update(idx)
         einde = next((k[0] for k in koppen[n + 1:] if k[2] <= niveau), len(html))
-        rijen = "".join(_feit_html(i, feiten[i], st, a.id, csrf_token, can_edit) for i in idx)
+        rijen = "".join(_feit_html(i, feiten[i], st, a.id, csrf_token, can_edit, a) for i in idx)
         invoegen.append((einde, f"<div class='wiki-inline' data-chrome contenteditable='false'>"
                                 f"{rijen}</div>"))
         # GEEN SPATIE VOOR HET CHIPJE: die zou een tekstknoop BUITEN de chrome zijn, en dan schreef

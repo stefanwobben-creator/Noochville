@@ -94,7 +94,7 @@ def test_de_pagina_toont_het_getal(tmp_path):
         "Water volgens de TDS", soort="bron", url="https://x", waarde=wiki.maak_waarde("water_per_kg", "180"))]})
     html = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="tok", username="alice@nooch.earth")
     assert "Water per kg: <strong>180 L/kg</strong>" in html
-    assert "name='grootheid'" not in html                            # het oude formulier is weg
+    assert "value='pagina_feit_add'" not in html                   # het oude formulier is weg
 
 
 def test_de_context_van_een_ai_vervuller_krijgt_het_getal_mee():

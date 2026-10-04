@@ -31,8 +31,12 @@ Puur domein: dit moduul rendert geen HTML (dat doet `views/wiki.py`) en schrijft
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import time
 import urllib.parse
+import uuid
 
 from nooch_village import cert_register
 
@@ -40,7 +44,7 @@ from nooch_village import cert_register
 PAGINA_KIND = "note"
 
 # De vier soorten grond die een feit kan dragen.
-GROND_SOORTEN = ("kroniek", "cert", "policy", "bron", "document")
+GROND_SOORTEN = ("kroniek", "cert", "policy", "bron", "document", "attested")
 
 # Grond-uitkomsten. `ongecontroleerd` is bewust geen synoniem van `gegrond`: een geciteerde URL of
 # een niet-bevestigd Kroniek-record is herkomst, geen bewijs.
@@ -341,8 +345,22 @@ def waarde_tekst(w: dict) -> str:
     return f"{getal} {GROOTHEDEN[w['grootheid']]['eenheid']}"
 
 
+def feit_id(f: dict) -> str:
+    """Het vaste id van een feit (4 oktober 2026). Feiten van daarvoor hebben er geen: die krijgen
+    een id AFGELEID uit hun inhoud, zodat bewerken en verwijderen ze ook zonder migratie op hun
+    inhoud terugvinden in plaats van op hun plek in de lijst — die plek verschuift zodra iemand
+    intussen een feit weghaalt, en dan raakte "verwijder nummer 3" het verkeerde feit."""
+    if f.get("id"):
+        return str(f["id"])
+    g = f.get("grond") or {}
+    sleutel = json.dumps([f.get("tekst"), g.get("soort"), g.get("ref"), g.get("url")],
+                         ensure_ascii=False)
+    return "h" + hashlib.sha1(sleutel.encode("utf-8")).hexdigest()[:10]
+
+
 def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
-              url: str = "", waarde: dict | None = None, sectie: str = "") -> dict | None:
+              url: str = "", waarde: dict | None = None, sectie: str = "",
+              fid: str = "", op: str = "") -> dict | None:
     """Normaliseer één feit. None bij lege tekst (fail-closed: geen leeg feit in de lijst).
     Een onbekende grond-soort valt weg — het feit blijft dan bestaan, maar heet `ongegrond`.
 
@@ -351,7 +369,10 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
 
     `sectie` (4 oktober 2026): onder welk kopje van de pagina dit feit hoort — de `For:`-regel van
     Bulk Import. Optioneel; een feit zonder (of met een niet-bestaande) sectie verdwijnt nooit, hij
-    landt bij de weergave in "Other facts"."""
+    landt bij de weergave in "Other facts".
+
+    `fid`: het id dat het feit houdt bij een BEWERKING; leeg = een nieuw id.
+    `op`: bij `attested` de datum van de verklaring (ISO); leeg = vandaag."""
     tekst = " ".join((tekst or "").split())[:_TEKST_MAX]
     if not tekst:
         return None
@@ -361,7 +382,11 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
                  "ref": (ref or "").strip()[:_REF_MAX],
                  "citaat": " ".join((citaat or "").split())[:_TEKST_MAX],
                  "url": (url or "").strip()[:_URL_MAX]}
-    uit = {"tekst": tekst, "grond": grond}
+        if soort == "attested":
+            # UIT EERSTE HAND, ZONDER DOCUMENT (4 oktober 2026). Wie en wanneer zijn het hele bewijs,
+            # dus ze staan erbij; een citaat of URL heeft zo'n feit per definitie niet.
+            grond.update(citaat="", url="", op=(op or time.strftime("%Y-%m-%d"))[:10])
+    uit = {"id": fid or uuid.uuid4().hex[:10], "tekst": tekst, "grond": grond}
     sectie = " ".join((sectie or "").split())[:_SECTIE_MAX]
     if sectie:
         uit["sectie"] = sectie
@@ -395,6 +420,7 @@ LABEL = {
     "veranderd": "changed — recheck",          # citaat niet meer op de URL
     "niet_te_lezen": "couldn't check",         # URL niet te lezen (bijv. een PDF) — geen oordeel
     "op_file": "on file, not public",          # gedeeld document zonder publieke vindplaats
+    "attested": "attested by {wie}, {wanneer}",  # uit eerste hand, zonder document
     # Een geldig certificaat houdt zijn label "<uitgever> — valid until <datum>": zie grond_status.
 }
 
@@ -433,6 +459,19 @@ def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "",
         # Niet gelukt om te kijken (netwerk, HTTP-fout): dat is géén oordeel over de bron.
         return _uit(grond, ONGECONTROLEERD, LABEL["niet_te_lezen"],
                     f"could not check{': ' + str(check.get('reden')) if check.get('reden') else ''}")
+
+    if soort == "attested":
+        # GRIJS, NIET ROOD: het staat vast voor wie het verklaarde, er is alleen geen papier. De
+        # bron-check slaat hem over (hij kijkt alleen naar `bron`).
+        wanneer = str(grond.get("op") or "")
+        try:
+            wanneer = time.strftime("%-d %b %Y", time.strptime(wanneer, "%Y-%m-%d"))
+        except ValueError:
+            pass
+        return _uit(grond, ONGECONTROLEERD,
+                    LABEL["attested"].format(wie=str(grond.get("ref") or "someone"),
+                                             wanneer=wanneer or "date unknown"),
+                    "first-hand, no document")
 
     if soort == "document":
         # GEDEELD, NIET PUBLIEK (4 oktober 2026). Een document dat iemand op deze pagina uploadde

@@ -45,10 +45,14 @@ def test_een_feit_staat_onder_zijn_kopje_en_niet_nog_eens_onderaan(tmp_path):
     h = render_pagina(st, a.id, csrf_token="TOK", username=IK)
     body = h[h.index("id='wiki-body'"):h.index("</div></div><aside") if "<aside" in h else None]
     # onder zijn kopje, vóór het volgende kopje van hetzelfde niveau
-    assert body.index("Company certification") < body.index("USDA lists Pliant PCS") < body.index("Labor &amp; compliance")
-    assert body.index("Where the work is done") < body.index("Molded in Vietnam") < body.index("Open items")
+    # Op de KOPPEN zelf (`<h4>`/`<h5>`): dezelfde woorden staan ook in de sectie-keuzelijst van het
+    # bewerkformulier van een feit.
+    import re as _re
+    k = lambda tekst: _re.search(rf"<h[345]>{_re.escape(tekst)}", body).start()
+    assert k("Company certification") < body.index("USDA lists Pliant PCS") < k("Labor &amp; compliance")
+    assert k("Where the work is done") < body.index("Molded in Vietnam") < k("Open items")
     # niet dubbel: de lijst onderaan heet nu "Other facts" en draagt alleen de rest
-    assert h.count("USDA lists Pliant PCS") == 1
+    assert h.count("<div class='ptitle'>USDA lists Pliant PCS") == 1   # (het bewerkveld telt niet)
     rest = h[h.index(">Other facts<"):]
     assert "Zonder sectie" in rest and "USDA lists" not in rest
 
