@@ -177,3 +177,46 @@ def test_een_onleesbaar_bestand_is_een_fout_geen_leegte():
     from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
     uit = CertEvidenceSkill().run({"bestand": "bestaat-niet.txt"}, _Ctx(_Ledger(), "/tmp/xyz"))
     assert "error" in uit and "niet te lezen" in uit["error"]
+
+
+# ── Echte documenten, 4 oktober 2026: maandnamen en alleen-de-labelregel ─────
+# Fragmenten uit de FSC-registratie van MMG Polymer (FSC-C164605). Voor de fix las de parser hier
+# een instantie uit de disclaimer en een materiaal uit "a material contractual obligation", en de
+# vervaldatum niet — een record dat wél geschreven was, had onzin gedragen.
+FSC = """FSC CERTIFICATION RECORD
+Company Name: MMG Polymer Company Limited
+Certification status: Valid
+Date of first issue: Feb 23, 2021
+Expiry date: Feb 22, 2031
+Standards assessed: FSC-STD-40-004 V3-1
+Certification information and data are managed and maintained by the accredited Certification
+Body that issues the certificate. FSC makes no warranties about the accuracy.
+respect of damages caused by a slightly negligent breach of a material contractual obligation
+"""
+
+
+def test_een_datum_met_maandnaam_wordt_gelezen():
+    assert cr.lees_cert(FSC)["geldig_tot"] == "2031-02-22"
+    for regel, iso in (("Valid until: 22 February 2031", "2031-02-22"),
+                       ("Geldig tot: 3 maart 2027", "2027-03-03"),
+                       ("Expires: Sept 9, 2028", "2028-09-09")):
+        assert cr.lees_cert(regel)["geldig_tot"] == iso, regel
+
+
+def test_een_onmogelijke_maanddatum_wordt_niet_geraden():
+    assert cr.lees_cert("Expiry date: Feb 30, 2031")["geldig_tot"] == ""
+    assert cr.lees_cert("Expiry date: Smarch 3, 2031")["geldig_tot"] == ""
+
+
+def test_een_veld_komt_alleen_van_zijn_eigen_labelregel():
+    c = cr.lees_cert(FSC)
+    assert c["instantie"] == "" and c["materiaal"] == "", c
+    # De eerste uitgifte is geen vervaldatum: alleen een vervaldatum-label telt.
+    assert cr.lees_cert("Date of first issue: Feb 23, 2021")["geldig_tot"] == ""
+
+
+def test_een_fsc_registratie_levert_nog_steeds_geen_feit():
+    """Besluit 4 oktober 2026: een feit wordt GELEZEN, nooit samengesteld uit losse velden. Een
+    FSC-registratie heeft geen "certifies that"-regel, dus geen feit, dus geen record."""
+    c = cr.lees_cert(FSC)
+    assert c["feit"] == "" and "feit" in c["ontbreekt"]

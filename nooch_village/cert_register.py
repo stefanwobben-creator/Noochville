@@ -49,14 +49,56 @@ VELDEN = ("feit", "certificeert", "materiaal", "leverancier", "niveau", "instant
 
 NIVEAUS = ("component", "eindproduct")
 
-_DATUM = re.compile(r"(?:geldig\s*tot|valid\s*until|expiry|expires?|vervaldatum|valid\s*through)"
-                    r"\D{0,20}(\d{4}-\d{2}-\d{2}|\d{2}[-/]\d{2}[-/]\d{4})", re.I)
-_INSTANTIE = re.compile(r"(?:issued\s*by|uitgegeven\s*door|instantie|certifying\s*body|"
-                        r"certification\s*body)\s*[:\-]?\s*(.{3,60})", re.I)
-_LEVERANCIER = re.compile(r"(?:supplier|leverancier|manufacturer|producent)\s*[:\-]?\s*(.{3,60})", re.I)
-_FEIT = re.compile(r"(?:feit|fact|claim|statement|certifies\s+that|verklaart\s+dat)\s*[:\-]?\s*"
-                   r"(.{6,200})", re.I)
-_MATERIAAL = re.compile(r"(?:materiaal|material)\s*[:\-]?\s*(.{2,60})", re.I)
+# ALLEEN VAN DE REGEL DIE MET HET LABEL BEGINT (4 oktober 2026). Hiervoor zocht elk patroon het
+# label ÓVERAL in de tekst, en op een FSC-registratie leverde dat onzin op: "instantie" kwam uit de
+# disclaimer ("...the accredited Certification Body that issues the certificate. FSC makes no
+# warranties...") en "materiaal" uit "a material contractual obligation". Een veld is nu wat er na
+# het label op DIE regel staat, tot het regeleinde — een losse zin die het woord toevallig noemt telt
+# niet. `(?m)^\s*` = begin van een regel; de waarde stopt bij het regeleinde.
+def _label(namen: str) -> "re.Pattern[str]":
+    return re.compile(rf"(?im)^[ \t]*(?:{namen})\b[ \t]*[:\-][ \t]*(\S[^\n]*)$")
+
+
+#: Een datum zoals hij in een certificaat staat. ISO, dag-maand-jaar met streepjes of schuine
+#: strepen, en (4 oktober 2026) met een MAANDNAAM: "Feb 22, 2031", "22 February 2031",
+#: "22 februari 2031". Nog steeds letterlijk gelezen, nooit geraden.
+_DATUM_VORM = (r"\d{4}-\d{2}-\d{2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}"
+               r"|[A-Za-z]{3,9}\.?[ \t]+\d{1,2},?[ \t]+\d{4}"
+               r"|\d{1,2}[ \t]+[A-Za-z]{3,9}\.?,?[ \t]+\d{4}")
+_DATUM = re.compile(r"(?im)^[ \t]*(?:geldig[ \t]*tot|valid[ \t]*until|expiry(?:[ \t]*date)?|"
+                    r"expires?(?:[ \t]*on)?|vervaldatum|valid[ \t]*through)\b[ \t]*[:\-]?[ \t]*"
+                    rf"({_DATUM_VORM})")
+_INSTANTIE = _label(r"issued[ \t]*by|uitgegeven[ \t]*door|instantie|certifying[ \t]*body|"
+                    r"certification[ \t]*body")
+_LEVERANCIER = _label(r"supplier|leverancier|manufacturer|producent")
+_FEIT = _label(r"feit|fact|claim|statement|certifies[ \t]+that|verklaart[ \t]+dat")
+_MATERIAAL = _label(r"materiaal|material")
+
+#: Maandnamen, Engels en Nederlands, voluit en afgekort. Hier en niet via `strptime`: die leest
+#: alleen de maandnamen van de locale van de server.
+_MAANDEN = {n: i for i, namen in enumerate((
+    ("jan", "january", "januari"), ("feb", "february", "februari"), ("mar", "march", "maart", "mrt"),
+    ("apr", "april"), ("may", "mei"), ("jun", "june", "juni"), ("jul", "july", "juli"),
+    ("aug", "august", "augustus"), ("sep", "sept", "september"), ("oct", "october", "okt", "oktober"),
+    ("nov", "november"), ("dec", "december")), start=1) for n in namen}
+
+
+def _maanddatum(ruw: str) -> str:
+    """'Feb 22, 2031' / '22 februari 2031' → '2031-02-22', of "" als het geen geldige datum is."""
+    delen = re.findall(r"[A-Za-z]+|\d+", ruw)
+    if len(delen) != 3:
+        return ""
+    if delen[0].isalpha():
+        maand, dag, jaar = delen
+    else:
+        dag, maand, jaar = delen
+    m = _MAANDEN.get(maand.lower().rstrip("."))
+    if not m:
+        return ""
+    try:
+        return datetime.date(int(jaar), m, int(dag)).isoformat()
+    except ValueError:
+        return ""
 
 
 def pad(data_dir: str) -> str:
@@ -68,12 +110,15 @@ def _datum(tekst: str) -> str:
     m = _DATUM.search(tekst or "")
     if not m:
         return ""
-    ruw = m.group(1)
+    ruw = m.group(1).strip()
     for vorm in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
         try:
             return datetime.datetime.strptime(ruw, vorm).strftime("%Y-%m-%d")
         except ValueError:
             continue
+    iso = _maanddatum(ruw)
+    if iso:
+        return iso
     log.warning("cert: vervaldatum %r niet te parsen — leeg gelaten", ruw)
     return ""
 
