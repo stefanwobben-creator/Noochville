@@ -1137,7 +1137,8 @@ _INLINE_TOETS_JS = ("if(event.key!=='Enter'||event.target!==this)return;"
 
 def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
                 opslaan: str, opslaan_label: str = "Save", verborgen: str = "",
-                toon_cls: str = "", klikbaar: bool = False, open: bool = False) -> str:
+                toon_cls: str = "", klikbaar: bool = False, open: bool = False,
+                multipart: bool = False) -> str:
     """Het getoonde blok plus een bewerkformulier dat er OP dezelfde plek voor in de plaats komt.
 
     `getoond`          de gerenderde weergave (bubbel, conceptverslag, …)
@@ -1162,12 +1163,15 @@ def inline_edit(getoond: str, formulier_inhoud: str, *, sleutel: str,
     het paar ALS de knop omvat (`.fentry` op de wall, de Conclusion op de projectpagina). Een wrapper hier
     zou strakker om het paar zitten dan om de knop, en dan vindt `closest()` hem niet — precies wat
     er misging toen ik het wél zo probeerde."""
+    # `multipart`: het formulier draagt een bestand (een feit met bewijs, 4 oktober 2026).
+    enctype = "enctype='multipart/form-data' " if multipart else ""
     klik = (f" data-klik-bewerk tabindex='0' title='Click to edit'"
             f" onclick=\"{_INLINE_KLIK_JS}\" onkeydown=\"{_INLINE_TOETS_JS}\"") if klikbaar else ""
     return (f"<div data-toon='{_e(sleutel)}'"
             f"{f' class={chr(39)}{toon_cls}{chr(39)}' if toon_cls else ''}{klik}"
             f"{' hidden' if open else ''}>{getoond}</div>"
             f"<form method='post' action='/action' class='pf editor-inline-f' "
+            f"{enctype}"
             f"data-bewerk='{_e(sleutel)}'{'' if open else ' hidden'}>{verborgen}{formulier_inhoud}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok sm' type='submit' name='action' value='{_e(opslaan)}'>"

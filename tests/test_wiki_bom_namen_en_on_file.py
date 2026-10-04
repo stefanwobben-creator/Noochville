@@ -110,4 +110,6 @@ def test_een_verdwenen_bestand_wordt_no_source(tmp_path):
     _importeer(dd, a.id, "on file: rapport.pdf")
     os.remove(os.path.join(dd, "attachments", "wiki", a.id, opgeslagen))
     h = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="t", username=IK)
-    assert "no source" in h and "on file, not public" not in h
+    # Op de CHIP (niet in de keuzelijst van het bewerkformulier, waar de soort ook zo heet).
+    assert "no source</span>" in h or "no source<" in h
+    assert "on file, not public</a>" not in h
