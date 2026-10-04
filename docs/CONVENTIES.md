@@ -236,7 +236,11 @@ Twee uitzonderingen, allebei principieel en geen slordigheid:
 
 - **Klant-copy blijft in zijn eigen taal.** De Copywriter schrijft met opzet in de taal van de markt.
 - **Citaten blijven letterlijk** — zie "Bewijs blijft woordelijk" hierboven. Een Nederlandse bron
-  wordt niet vertaald om in een Engelse zin te passen.
+  wordt niet vertaald om in een Engelse zin te passen. *Bevestigd door Stefan, 4 oktober 2026.*
+  Hier rust de wiki-feitencontrole op: `wiki_bronnen` toetst of het citaat LETTERLIJK op de URL
+  staat, dus een vertaald citaat zou elk feit uit een niet-Engelse bron als "changed — recheck"
+  laten eindigen. Het citaat van een feit staat daarom altijd in de taal van zijn bron, ook als de
+  feit-tekst Engels is.
 
 Wat NIET onder de regel valt: commentaar en docstrings (ontwikkelaarstekst, bewust Nederlands) en
 interne sleutels/enum-waarden die worden vergeleken of opgeslagen (`fit == "nee"`, `"onderbouwd"`):
