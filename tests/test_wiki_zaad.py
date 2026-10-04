@@ -196,7 +196,7 @@ def test_citaat_weg_maakt_het_feit_vervallen(tmp_path):
     wiki_bronnen.check_pagina(st2.att, a, ophaler=lambda u: "De pagina is herschreven.",
                               nu="2026-08-20", apply=True)
     g = wiki.grond_status(wiki.feiten(cockpit2._Stores(st.dd).att.get(a.id))[0])
-    assert g["status"] == wiki.VERVALLEN and "no longer found" in g["label"]
+    assert g["status"] == wiki.VERVALLEN and g["label"] == wiki.LABEL["veranderd"]
 
 
 def test_een_fout_is_geen_oordeel_over_de_bron(tmp_path):
