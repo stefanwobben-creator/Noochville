@@ -352,10 +352,19 @@ def feit_id(f: dict) -> str:
     intussen een feit weghaalt, en dan raakte "verwijder nummer 3" het verkeerde feit."""
     if f.get("id"):
         return str(f["id"])
-    g = f.get("grond") or {}
-    sleutel = json.dumps([f.get("tekst"), g.get("soort"), g.get("ref"), g.get("url")],
-                         ensure_ascii=False)
+    # HET HELE FEIT, niet een paar velden (hotfix 4 oktober 2026). Op prod stond een feit twee keer:
+    # het oude exemplaar en een herimport mét sectie. Met alleen tekst/soort/ref/url kregen ze
+    # hetzelfde id, en bewerken van het exemplaar onder zijn kopje wijzigde het OUDE. Twee feiten die
+    # in álles gelijk zijn, delen nog steeds een id — maar dan maakt het niet uit welke je raakt.
+    sleutel = json.dumps(f, ensure_ascii=False, sort_keys=True)
     return "h" + hashlib.sha1(sleutel.encode("utf-8")).hexdigest()[:10]
+
+
+def met_ids(feiten: list) -> list:
+    """Geef elk feit zonder id zijn (afgeleide) id als VAST id. Bij elke schrijfactie op de
+    feitenlijst: daarna verandert het id niet meer als het feit later wijzigt (een bron-check, een
+    bewerking). Pure functie; de aanroeper slaat op."""
+    return [f if f.get("id") else {**f, "id": feit_id(f)} for f in feiten]
 
 
 def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",

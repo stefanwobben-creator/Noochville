@@ -129,3 +129,24 @@ def test_het_feit_is_klikbaar_met_een_upload_formulier_voor_de_eigenaar(tmp_path
     assert "name='file'" in h and "at least 12 characters" in h
     h2 = render_pagina(cockpit2._Stores(dd), aid, csrf_token="TOK", username=ANDER)
     assert "value='pagina_feit_edit'" not in h2
+
+
+def test_een_herimport_met_sectie_is_een_ander_feit_dan_het_oude(tmp_path):
+    """Prod, 4 oktober 2026: vijf feiten stonden twee keer — oud zonder sectie, herimport mét. Het
+    afgeleide id keek niet naar de sectie, dus bewerken van het nieuwe exemplaar raakte het oude."""
+    oud = {"tekst": "RISK: wind-down", "grond": {"soort": "bron", "ref": "", "citaat": "", "url": "https://t"}}
+    nieuw = dict(oud, sectie="Risk signal")
+    assert wiki.feit_id(oud) != wiki.feit_id(nieuw)
+    dd, aid = _dorp(tmp_path, [oud, nieuw])
+    _doe(dd, "pagina_feit_edit", aid=aid, fid=wiki.feit_id(nieuw), tekst="RISK: wind-down, bewerkt",
+         soort="bron", url="https://t", sectie="Risk signal")
+    assert [f["tekst"] for f in _feiten(dd, aid)] == ["RISK: wind-down", "RISK: wind-down, bewerkt"]
+
+
+def test_na_een_schrijfactie_heeft_elk_oud_feit_een_vast_id(tmp_path):
+    oud = {"tekst": "oud", "grond": {}}
+    afgeleid = wiki.feit_id(oud)
+    dd, aid = _dorp(tmp_path, [oud, wiki.maak_feit("ander")])
+    _doe(dd, "pagina_feit_del", aid=aid, fid=_feiten(dd, aid)[1]["id"])
+    [blijft] = _feiten(dd, aid)
+    assert blijft["id"] == afgeleid                     # vastgezet, zelfde id als op het scherm

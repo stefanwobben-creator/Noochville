@@ -1891,7 +1891,7 @@ def _act_pagina_feit_add(c):
     # historie, in het erven en in /context. Verse lees vlak vóór de update (de store her-leest
     # onder het slot, maar de meta-lijst bouwen we hier op).
     meta = dict(getattr(cur, "meta", None) or {})
-    meta["feiten"] = list(wiki.feiten(cur)) + [feit]
+    meta["feiten"] = wiki.met_ids(list(wiki.feiten(cur))) + [feit]
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
@@ -2520,7 +2520,7 @@ def _feit_op_pagina(c, pagina, feit: dict, change_note: str) -> str:
         raise Forbidden(_deny)
     from nooch_village import wiki
     meta = dict(getattr(pagina, "meta", None) or {})
-    meta["feiten"] = list(wiki.feiten(pagina)) + [feit]
+    meta["feiten"] = wiki.met_ids(list(wiki.feiten(pagina))) + [feit]
     actor_id = _web_actor_id(username, st)
     gref = f"role:{pagina.anchor}"
     upd = st.att.update(pagina.id, meta=meta, actor_id=actor_id, actor_type="person",
@@ -2707,7 +2707,7 @@ def _act_pagina_feit_edit(c):
         ng["check"] = oud_grond["check"]
     huidig[i] = nieuw
     meta = dict(getattr(cur, "meta", None) or {})
-    meta["feiten"] = huidig
+    meta["feiten"] = wiki.met_ids(huidig)
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
@@ -2735,7 +2735,7 @@ def _act_pagina_feit_del(c):
         return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
     weg = huidig.pop(i)
     meta = dict(getattr(cur, "meta", None) or {})
-    meta["feiten"] = huidig
+    meta["feiten"] = wiki.met_ids(huidig)
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
@@ -2870,7 +2870,7 @@ def _act_pagina_bulk_import_facts(c):
 
     # Voeg toe aan bestaande feiten
     meta = dict(getattr(cur, "meta", None) or {})
-    meta["feiten"] = list(wiki.feiten(cur)) + new_facts
+    meta["feiten"] = wiki.met_ids(list(wiki.feiten(cur))) + new_facts
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
