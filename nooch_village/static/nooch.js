@@ -1629,14 +1629,12 @@
       // BEDRADING, GEEN TEKST: een `data-nv-*`-markering (bijv. `data-nv-wikilink`, gezet door de
       // [[link]]-hulp NADAT deze waarnemer al liep). Tot 5 oktober 2026 telde dat als bewerking,
       // en daardoor stond de opslaan-balk op elke wikipagina al open vóór iemand iets typte.
-      // En `data-feit-*`: de sectie die een versleept feit meekrijgt. Hij wordt gezet als het feit
-      // al uit dit vlak is (naar "Other facts"), en een MutationObserver volgt een net verwijderd
-      // element nog even — dus zonder deze regel opende een versleping de balk.
-      if (m.type === "attributes" && /^data-(nv|feit)-/.test(m.attributeName || "")) return true;
-      // DE SLEEP-MARKERING OP EEN KOPJE (`over`, `over-boven`, …): een kopje is een dropzone voor
-      // feiten maar zelf geen chrome. Alleen de klasse veranderde, de tekst niet.
-      if (m.type === "attributes" && m.attributeName === "class" && m.target.hasAttribute &&
-          m.target.hasAttribute("data-feit-doel")) return true;
+      if (m.type === "attributes" && /^data-nv-/.test(m.attributeName || "")) return true;
+      // DE SLEEP-MARKERING OP EEN BLOK (`over-boven`, `over-onder`, de contour van de bron): alleen
+      // de klasse veranderde, de tekst niet. Zonder dit opende elke sleepbeweging over de tekst de
+      // balk, ook als je het feit daarna toch niet losliet.
+      if (m.type === "attributes" && m.attributeName === "class" && m.target.classList &&
+          m.target.classList.contains("wb")) return true;
       if (m.type !== "childList") return false;
       var knopen = Array.prototype.slice.call(m.addedNodes).concat(Array.prototype.slice.call(m.removedNodes));
       return knopen.length > 0 && knopen.every(function (k) {
@@ -1646,7 +1644,7 @@
 
     editeerbaar(true);
     form.hidden = true;
-    feitSleep(root);
+    feitPlaats(root);
     var waarnemer = new MutationObserver(gewijzigd);
     waarnemer.observe(body, {
       childList: true, subtree: true, characterData: true, attributes: true
@@ -2573,73 +2571,82 @@
     });
   }
 
-  /* ── Feiten slepen (5 oktober 2026) ───────────────────────────────────────────────────────
+  /* ── Een feit de tekst in slepen (5 oktober 2026) ─────────────────────────────────────────
    *
-   * NV.sleep MET ANDERE SELECTORS, geen tweede sleepmechanisme. De kaart is een feit
-   * (`data-feit-id`); een doel is een ander feit (vóór/ná, `helft`) of een zone (`s:<kopje>`, of
-   * `s:` = "Other facts"). Eerst verplaatsen we in de DOM (je ziet meteen het resultaat), dan
-   * vragen we de server; weigert die, dan gaat het feit terug en staat de reden erbij.
+   * EEN FEIT IS EEN BLOK IN DE TEKST (besluit Stefan). Staat het er al, dan is het een `.wb` als
+   * elk ander en sleep je het met de blok-greep — daar is hier niets voor nodig. Dit stuk is voor
+   * de feiten die nog GEEN plek hebben: die staan onder de tekst en sleep je erin.
+   *
+   * NV.sleep MET ANDERE SELECTORS, geen tweede sleepmechanisme. De kaart is een ongeplaatst feit
+   * (`data-feit-los`), het doel een blok in de tekst (vóór of ná, `helft`).
+   *
+   * DE SERVER LEVERT DE REGEL EN DE SOORT. `data-feit-los` is de bronregel die in de tekst komt en
+   * `data-feit-soort` de bloksoort; dit bestand zet ze door en kent geen van beide. Het blok dat
+   * hier ontstaat heeft precies de vorm die de server zelf rendert (`views/wiki._feit_blok`):
+   * de bron in `data-blok-bron`, niet bewerkbaar, de inhoud als chrome.
+   *
+   * ER WORDT NIETS OPGESLAGEN. Het blok staat in het bewerkvlak; de opslaan-balk gaat open omdat de
+   * tekst veranderde, en Save bewaart de plek samen met wat er verder getypt is.
    */
-  function feitSleep(root) {
-    var form = root.querySelector("#wiki-form");
-    var veld = function (n) { var el = form && form.querySelector("[name=" + n + "]"); return el ? el.value : ""; };
-    if (!form || !veld("csrf") || !veld("aid")) return;
+  function feitPlaats(root) {
+    var body = root.querySelector("#wiki-body");
+    if (!body || !root.querySelector("[data-feit-los]")) return;
     NV.sleep(document, {
-      kaart: "[data-feit-id]", id: "data-feit-id",
+      kaart: "[data-feit-los]", id: "data-feit-los",
       greep: ".wb-greep-knop",
-      doel: "[data-feit-doel]", naar: "data-feit-doel",
+      doel: "#wiki-body > .wb[data-blok-id]", naar: "data-blok-id",
       helft: true,
-      onDrop: function (fid, naar, e) {
-        var kaart = document.querySelector("[data-feit-id='" + fid + "']");
-        var doel = document.querySelector("[data-feit-doel='" + naar + "']");
-        if (!kaart || !doel || kaart === doel) return;
-        var terugOuder = kaart.parentNode, terugVoor = kaart.nextSibling;
-        var sectie = "", voor = "", plek = null, ouder = null;
-        if (naar.indexOf("f:") === 0) {
-          sectie = doel.getAttribute("data-feit-sectie") || "";
-          var m = doel.getBoundingClientRect();
-          var boven = e.clientY < m.top + m.height / 2;
-          if (boven) { voor = naar.slice(2); plek = doel; }
-          else {
-            var na = doel.nextElementSibling;
-            while (na && !na.hasAttribute("data-feit-id")) na = na.nextElementSibling;
-            voor = na ? na.getAttribute("data-feit-id") : "";
-            plek = doel.nextSibling;
-          }
-          ouder = doel.parentNode;
-        } else {
-          sectie = naar.slice(2);
-          // Een zone met feiten erin: achteraan bij de feiten. Een kopje zonder feiten heeft nog
-          // geen blok om in te staan; dan laat de herlaadbeurt hem op zijn plek zien.
-          var laatste = Array.prototype.filter.call(doel.querySelectorAll("[data-feit-id]"),
-                                                    function (x) { return x !== kaart; }).pop();
-          if (laatste) { ouder = laatste.parentNode; plek = laatste.nextSibling; }
-        }
-        if (ouder) { ouder.insertBefore(kaart, plek); kaart.setAttribute("data-feit-sectie", sectie); }
-        var data = new URLSearchParams();
-        data.set("csrf", veld("csrf")); data.set("aid", veld("aid"));
-        data.set("action", "pagina_feit_verplaats"); data.set("fid", fid);
-        data.set("sectie", sectie); data.set("voor_fid", voor);
-        data.set("next", location.pathname + location.search);
-        function terug(reden) {
-          terugOuder.insertBefore(kaart, terugVoor);
-          var p = document.createElement("p");
-          p.className = "muted";
-          p.textContent = reden;
-          kaart.parentNode.insertBefore(p, kaart);
-          setTimeout(function () { p.remove(); }, 6000);
-        }
-        fetch("/action", { method: "POST", body: data, credentials: "same-origin" })
-          .then(function (r) {
-            if (!r.ok) return r.text().then(function (t) { terug((t || "Not moved (" + r.status + ")").slice(0, 160)); });
-            var q = new URL(r.url, location.origin).searchParams;
-            if (q.get("ok") === "0") { terug(q.get("msg") || "Not moved"); return; }
-            // Naar een kopje zonder feiten: daar stond nog geen blok, dus de pagina toont hem pas
-            // na herladen op zijn plek. Alleen als er geen onbewaarde tekst is.
-            if (!ouder && form.hidden) location.reload();
-          })
-          .catch(function () { terug("Not moved — no connection"); });
+      onDrop: function (bron, naar, e) {
+        var kaart = null;
+        document.querySelectorAll("[data-feit-los]").forEach(function (k) {
+          if (k.getAttribute("data-feit-los") === bron) kaart = k;
+        });
+        var doel = body.querySelector(".wb[data-blok-id='" + naar + "']");
+        if (!kaart || !doel) return;
+        var blok = document.createElement("div");
+        blok.className = "wb";
+        blok.setAttribute("data-blok", kaart.getAttribute("data-feit-soort") || "p");
+        blok.setAttribute("data-blok-bron", bron);
+        blok.contentEditable = "false";
+        var inhoud = document.createElement("div");
+        inhoud.className = "wiki-inline";
+        inhoud.setAttribute("data-chrome", "");
+        // De eigen greep en de "place"-knop horen bij een feit ZONDER plek; het blok krijgt zo
+        // meteen de greep van de editor.
+        kaart.querySelectorAll(":scope > .wb-greep, :scope > form").forEach(function (x) {
+          var knop = x.querySelector("[name=action]");
+          if (x.classList.contains("wb-greep") ||
+              (knop && knop.value === kaart.getAttribute("data-feit-plaats"))) x.remove();
+        });
+        kaart.removeAttribute("data-feit-los");
+        kaart.removeAttribute("data-nv-sleep");
+        inhoud.appendChild(kaart);
+        blok.appendChild(inhoud);
+        var m = doel.getBoundingClientRect();
+        body.insertBefore(blok, e.clientY < m.top + m.height / 2 ? doel : doel.nextSibling);
+        NV.blokNormaliseer(body);
+        grepen(body, true);
       }
+    });
+  }
+
+  /* HET FEITFORMULIER TOONT ALLEEN DE VELDEN VAN DE GEKOZEN BRON. `data-bij` op een veldgroep
+   * noemt de keuzes waar hij bij hoort; dit leest dat attribuut en vergelijkt het met de waarde
+   * van de keuzelijst. Hier staan geen soorten — die tabel woont op de server. Zonder JS staan
+   * alle velden er gewoon. */
+  function feitBron(root) {
+    root.querySelectorAll("select[data-feit-bron]").forEach(function (kies) {
+      if (kies.dataset.nvWired) return;
+      kies.dataset.nvWired = "1";
+      var form = kies.closest("form");
+      if (!form) return;
+      function toon() {
+        form.querySelectorAll("[data-bij]").forEach(function (groep) {
+          groep.hidden = (groep.getAttribute("data-bij") || "").split(" ").indexOf(kies.value) < 0;
+        });
+      }
+      kies.addEventListener("change", toon);
+      toon();
     });
   }
 
@@ -2648,6 +2655,7 @@
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
     barReset(root);
     inlineEdit(root);
+    feitBron(root);
     mdPreview(root);
     wikiEdit(root);
     navPaneel(root);

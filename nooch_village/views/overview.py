@@ -714,7 +714,12 @@ def _artefact_body_html(a, *, st: _Stores | None = None, pags: list | None = Non
         return ""
     if a.kind == wiki.PAGINA_KIND and pags is not None:
         from nooch_village.views.wiki import _body_html as _pagina_body_html
-        return f"<div class='att-body'>{_pagina_body_html(a.body, pags)}</div>"
+        # EEN FEIT IN DE TEKST (5 oktober 2026) staat hier als zijn bewering, op zijn plek. Deze
+        # tab leest alleen; de grond en de handelingen staan op de pagina zelf.
+        feit_tekst = {wiki.feit_id(f): f"<span class='chip muted'>fact</span> {_e(f.get('tekst') or '')}"
+                      for f in wiki.feiten(a)}
+        return (f"<div class='att-body'>"
+                f"{_pagina_body_html(a.body, pags, feit_blokken=feit_tekst)}</div>")
     return f"<div class='att-body'>{_md(a.body)}</div>"
 
 

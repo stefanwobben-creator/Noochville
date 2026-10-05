@@ -555,6 +555,65 @@ def bom_opschoon_tekst(rapport: list[dict]) -> str:
     return "\n".join(uit)
 
 
+def feiten_plaatsen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Geef bestaande feiten hun plek in de tekst (besluit Stefan, 5 oktober 2026).
+
+    Tot die dag stond een feit onder zijn kopje omdat het een `sectie` droeg; de tekst wist daar
+    niets van. Nu staat de plek IN de tekst, als één regel `{{fact:<id>}}`. Dit zet die regel neer
+    voor elk feit dat een `sectie` heeft die als kop op de pagina bestaat: aan het eind van die
+    sectie, in de volgorde van de feitenlijst — precies waar het feit gisteren op het scherm stond.
+
+    WAT HIJ NIET DOET: een feit zonder sectie, of met een sectie die de pagina niet heeft, een plek
+    geven. Dat blijft ongeplaatst en staat onderaan de pagina; waar het hoort is aan de schrijver.
+
+    Idempotent (een feit dat al in de tekst staat wordt overgeslagen) en dry-run tenzij `apply`.
+    Met `apply` één NIEUWE VERSIE per pagina, terug te draaien via de historie; de id's van de
+    feiten worden in dezelfde beurt vastgezet, want de regel in de tekst wijst ernaar.
+
+    Rapport: `[{id, titel, geplaatst: [(sectie, tekst)], blijft: [tekst]}]` per pagina met feiten
+    die nog geen plek hebben."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        feiten = wiki.met_ids(list(wiki.feiten(a)))
+        if not feiten:
+            continue
+        body = a.body or ""
+        al = set(wiki.geplaatste_feiten(body))
+        geplaatst, blijft = [], []
+        for f in feiten:
+            if f["id"] in al:
+                continue
+            tekst = str(f.get("tekst") or "")[:70]
+            sectie = str(f.get("sectie") or "")
+            body, gedaan = (wiki.plaats_feit_marker(body, f["id"], sectie) if sectie
+                            else (body, False))
+            if gedaan:
+                geplaatst.append((sectie, tekst))
+            else:
+                blijft.append(tekst)
+        if not geplaatst and not blijft:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "geplaatst": geplaatst,
+                        "blijft": blijft})
+        if apply and geplaatst:
+            meta = dict(getattr(a, "meta", None) or {})
+            meta["feiten"] = feiten
+            store.update(a.id, body=body, meta=meta, actor_id=actor_id, actor_type="person",
+                         change_note=f"facts placed in text ({len(geplaatst)})")
+    return rapport
+
+
+def feiten_plaatsen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to place: every fact already has its place in the text."
+    uit = []
+    for r in rapport:
+        uit.append(f"{r['id']}  {r['titel']}")
+        uit += [f"    place under '{s}': {t}" for s, t in r["geplaatst"]]
+        uit += [f"    stays unplaced: {t}" for t in r["blijft"]]
+    return "\n".join(uit)
+
+
 def bom_sleutels(store, materialen_store, varianten_store, leveranciers_store, *,
                  apply: bool = False) -> list[dict]:
     """Geef bestaande materiaal- en leverancierpagina's hun /bom-naam (`wiki.BOM_NAMEN`).

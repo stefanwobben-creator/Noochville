@@ -192,9 +192,11 @@ def test_zonder_markering_staan_de_secties_waar_ze_stonden(tmp_path):
     dd, st, rol = _dorp(tmp_path)
     a = _met_inhoud(st, rol, "Gewone tekst.")
     html = _pagina(st, a)
-    assert html.count(">Facts</h3>") == 1
+    # Sinds 5 oktober 2026 heet dit voor wie mag bewerken "Not placed yet": feiten zonder plek in
+    # de tekst. De plek is dezelfde gebleven — onder de tekst.
+    assert html.count(">Not placed yet</h3>") == 1
     assert html.count(">Links here</h3>") == 1
-    assert html.index("id='wiki-body'") < html.index(">Facts</h3>")
+    assert html.index("id='wiki-body'") < html.index(">Not placed yet</h3>")
 
 
 def test_met_markering_staat_de_sectie_in_de_tekst_en_niet_meer_eronder(tmp_path):
@@ -214,7 +216,7 @@ def test_de_backlink_markering_werkt_hetzelfde(tmp_path):
     html = _pagina(st, a)
     assert html.count(">Links here</h3>") == 1
     assert "data-blok='backlinks'" in html
-    assert html.count(">Facts</h3>") == 1, "de feiten horen onderaan te blijven staan"
+    assert html.count(">Not placed yet</h3>") == 1, "de feiten horen onderaan te blijven staan"
 
 
 def test_de_feiten_zelf_staan_in_het_blok(tmp_path):
@@ -284,5 +286,5 @@ def test_de_volgorde_onderaan_blijft_zoals_hij_was(tmp_path):
     dd, st, rol = _dorp(tmp_path)
     a = _met_inhoud(st, rol, "Kijk op /decision-coach voor de sessies.")
     html = _pagina(st, a)
-    assert (html.index(">Facts</h3>") < html.index(">Decisions logged</h3>")
+    assert (html.index(">Not placed yet</h3>") < html.index(">Decisions logged</h3>")
             < html.index(">Links here</h3>"))

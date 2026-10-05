@@ -20,6 +20,9 @@ stukken.
 """
 from __future__ import annotations
 
+# Sinds 5 oktober 2026 heet de feitensectie voor een SCHRIJVER "Not placed yet" (wat nog geen plek in
+# de tekst heeft); een lezer ziet "Facts" of "Other facts". Deze toetsen renderen als schrijver.
+
 import pathlib
 import re
 
@@ -125,7 +128,7 @@ def test_de_metadata_staat_na_feiten_en_backlinks(tmp_path):
     dus de feiten-sectie staat er; voor de backlinks zorgt een verwijzing naar een pagina die nog
     niet bestaat (die zet de verlanglijst erin)."""
     html, _a = _pagina(tmp_path, body="Alleen tekst, met een [[Andere pagina]] erin.")
-    assert html.index(">Facts</h3>") < html.index("class='dcol'")
+    assert html.index(">Not placed yet</h3>") < html.index("class='dcol'")
     assert html.index(">Links here</h3>") < html.index("class='dcol'")
 
 
@@ -222,7 +225,7 @@ def test_onderaan_ziet_het_er_hetzelfde_uit(tmp_path):
     """DE EIS DIE JE ZOU VERGETEN: ook bij een schrijver die niets verplaatst heeft. Dezelfde
     functie rendert beide gevallen, dus dat mag niet uiteenlopen."""
     html, _a = _pagina(tmp_path, body="Alleen tekst, geen markeringen.")
-    sectie = html.split(">Facts</h3>")[1].split("</div>")[0]
+    sectie = html.split(">Not placed yet</h3>")[1].split("</div>")[0]
     assert "class='card'" not in sectie
     assert "wiki-inline" in html
 

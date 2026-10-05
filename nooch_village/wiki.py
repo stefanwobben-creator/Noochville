@@ -178,6 +178,94 @@ def markers(body: str) -> set[str]:
     return {m.group(1) for m in MARKER_RE.finditer(body or "") if m.group(1) in AFGELEID}
 
 
+# ── Een feit als blok in de tekst ───────────────────────────────────────────
+#: EEN FEIT STAAT OP EEN PLEK IN DE TEKST (besluit Stefan, 5 oktober 2026). De wikitekst en de
+#: feiten zijn één geheel: een feit is een blok tussen de alinea's, en verslepen is hetzelfde als
+#: een alinea verslepen. Vervangt "feiten onder hun kopje" van 4 oktober.
+#:
+#: DE INHOUD BLIJFT IN `meta["feiten"]`, de PLEK staat in de body als één regel `{{fact:<id>}}`.
+#: Zou de tekst zelf het feit dragen, dan waren er twee waarheden — dezelfde reden als bij
+#: `AFGELEID` hierboven. Een aparte regex en geen uitbreiding van `MARKER_RE`: die kent alleen
+#: namen uit een vaste lijst, dit draagt een id.
+FEIT_MARKER_RE = re.compile(r"^\{\{fact:([A-Za-z0-9_-]{1,40})\}\}[ \t]*$", re.M)
+
+_KOP_REGEL_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
+
+
+def feit_marker(fid: str) -> str:
+    """De BRONREGEL van één feit in de tekst. Eén plek voor de vorm, net als `marker()`."""
+    return "{{fact:%s}}" % fid
+
+
+def geplaatste_feiten(body: str) -> list[str]:
+    """De feit-id's die deze tekst zelf plaatst, in tekstvolgorde, elk één keer."""
+    uit: list[str] = []
+    for m in FEIT_MARKER_RE.finditer(body or ""):
+        if m.group(1) not in uit:
+            uit.append(m.group(1))
+    return uit
+
+
+def zonder_feit_marker(body: str, fid: str) -> str:
+    """De tekst zonder de markering van dit ene feit (het feit is verwijderd, of uit de tekst
+    gehaald). Alleen de regel zelf verdwijnt; de rest van de tekst blijft zoals hij was."""
+    doel = feit_marker(fid)
+    return "\n".join(r for r in (body or "").split("\n") if r.strip() != doel)
+
+
+def zonder_feitmarkeringen(body: str) -> str:
+    """De tekst zonder ENIGE feit-markering — voor wie de tekst als tekst leest (de rol-context van
+    een AI-vervuller, een export). De feiten zelf gaan daar apart mee, met hun grond erbij."""
+    return "\n".join(r for r in (body or "").split("\n") if not FEIT_MARKER_RE.match(r.strip()))
+
+
+def plaats_feit_marker(body: str, fid: str, sectie: str | None = None) -> tuple[str, bool]:
+    """Zet de markering van een feit in de tekst. `(body, geplaatst)`.
+
+    `sectie=None`  → aan het eind van de tekst.
+    `sectie="..."` → aan het eind van die sectie: vóór de volgende kop van hetzelfde of een hoger
+                     niveau, na de eigen tekst en de subkopjes. Bestaat het kopje niet, dan
+                     gebeurt er NIETS (`geplaatst=False`): het feit blijft ongeplaatst en dus
+                     zichtbaar onderaan — liever dat dan een gok over waar het hoort.
+
+    Staat het feit er al, dan verandert er niets. Koppen binnen een codeblok tellen niet mee."""
+    body = body or ""
+    if fid in geplaatste_feiten(body):
+        return body, False
+    regels = body.split("\n") if body else []
+    doel = feit_marker(fid)
+    if sectie is None:
+        while regels and not regels[-1].strip():
+            regels.pop()
+        return "\n".join(regels + [doel]), True
+    zoek = _norm(sectie)
+    if not zoek:
+        return body, False
+    in_code, start, niveau, einde = False, None, 0, len(regels)
+    for i, r in enumerate(regels):
+        if r.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        m = _KOP_REGEL_RE.match(r)
+        if not m:
+            continue
+        if start is None:
+            if _norm(m.group(2)) == zoek:
+                start, niveau = i, len(m.group(1))
+        elif len(m.group(1)) <= niveau:
+            einde = i
+            break
+    if start is None:
+        return body, False
+    plek = einde
+    while plek > start + 1 and not regels[plek - 1].strip():
+        plek -= 1
+    regels.insert(plek, doel)
+    return "\n".join(regels), True
+
+
 def verwijzingen(body: str) -> list[str]:
     """De ruwe `[[…]]`-verwijzingen in een body, in tekstvolgorde (met duplicaten)."""
     return [m.group(1).strip() for m in LINK_RE.finditer(body or "")]
@@ -367,9 +455,50 @@ def met_ids(feiten: list) -> list:
     return [f if f.get("id") else {**f, "id": feit_id(f)} for f in feiten]
 
 
+_DATUM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _datum(s) -> str:
+    """Een ISO-datum (`2026-10-05`) of leeg. Fail-closed: wat geen datum is, is er geen."""
+    s = str(s or "").strip()[:10]
+    if not _DATUM_RE.match(s):
+        return ""
+    try:
+        time.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        return ""
+    return s
+
+
+def nagekeken(feit: dict) -> dict:
+    """Wie dit feit heeft nagekeken en wanneer: `{door, op}` of `{}`. Opnieuw gevalideerd bij het
+    lezen, net als `waarde()`."""
+    z = (feit or {}).get("gezien")
+    if not isinstance(z, dict):
+        return {}
+    door, op = " ".join(str(z.get("door") or "").split())[:_REF_MAX], _datum(z.get("op"))
+    return {"door": door, "op": op} if door and op else {}
+
+
+def hercheck_datum(feit: dict) -> str:
+    """De datum waarop dit feit opnieuw bekeken moet worden (ISO), of leeg."""
+    return _datum((feit or {}).get("hercheck"))
+
+
+def bewijs_gelijk(a: dict, b: dict) -> bool:
+    """Zegt en bewijst feit `b` hetzelfde als feit `a`? Tekst en bron (soort, ref, url, citaat).
+    Verandert een van die, dan hoort een eerder "nagekeken" er niet meer bij: iemand keek naar
+    iets anders dan wat er nu staat."""
+    ga, gb = (a or {}).get("grond") or {}, (b or {}).get("grond") or {}
+    return ((a or {}).get("tekst") == (b or {}).get("tekst")
+            and all(str(ga.get(k) or "") == str(gb.get(k) or "")
+                    for k in ("soort", "ref", "url", "citaat")))
+
+
 def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
               url: str = "", waarde: dict | None = None, sectie: str = "",
-              fid: str = "", op: str = "") -> dict | None:
+              fid: str = "", op: str = "", gezien: dict | None = None,
+              hercheck: str = "") -> dict | None:
     """Normaliseer één feit. None bij lege tekst (fail-closed: geen leeg feit in de lijst).
     Een onbekende grond-soort valt weg — het feit blijft dan bestaan, maar heet `ongegrond`.
 
@@ -377,11 +506,15 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
     Het getal krijgt dezelfde grond als de tekst: geen tweede bron-veld, één feit is één bewering.
 
     `sectie` (4 oktober 2026): onder welk kopje van de pagina dit feit hoort — de `For:`-regel van
-    Bulk Import. Optioneel; een feit zonder (of met een niet-bestaande) sectie verdwijnt nooit, hij
-    landt bij de weergave in "Other facts".
+    Bulk Import. Sinds 5 oktober 2026 is dat een AANWIJZING VOOR HET PLAATSEN, niet de plek zelf:
+    de import zet het feit aan het eind van die sectie in de tekst (`plaats_feit_marker`), en
+    daarna bepaalt de tekst waar het staat. Een feit zonder (of met een niet-bestaande) sectie
+    verdwijnt nooit; het blijft ongeplaatst en staat onderaan de pagina.
 
     `fid`: het id dat het feit houdt bij een BEWERKING; leeg = een nieuw id.
-    `op`: bij `attested` de datum van de verklaring (ISO); leeg = vandaag."""
+    `op`: bij `attested` de datum van de verklaring (ISO); leeg = vandaag.
+    `gezien` (`{door, op}`) en `hercheck` (ISO-datum): wie het feit nakeek en wanneer het opnieuw
+    bekeken moet worden — zie `grond_status`."""
     tekst = " ".join((tekst or "").split())[:_TEKST_MAX]
     if not tekst:
         return None
@@ -401,6 +534,14 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
         uit["sectie"] = sectie
     if isinstance(waarde, dict) and maak_waarde(str(waarde.get("grootheid") or ""), waarde.get("getal")):
         uit["waarde"] = maak_waarde(str(waarde["grootheid"]), waarde["getal"])
+    # NAGEKEKEN DOOR EEN MENS, EN TOT WANNEER (5 oktober 2026). Twee losse velden op het feit, niet
+    # in `grond`: de grond zegt waar het vandaan komt, dit zegt wie ernaar keek.
+    z = nagekeken({"gezien": gezien})
+    if z:
+        uit["gezien"] = z
+    h = _datum(hercheck)
+    if h:
+        uit["hercheck"] = h
     return uit
 
 
@@ -431,12 +572,63 @@ LABEL = {
     "op_file": "on file, not public",          # gedeeld document zonder publieke vindplaats
     "attested": "attested by {wie}, {wanneer}",  # uit eerste hand, zonder document
     # Een geldig certificaat houdt zijn label "<uitgever> — valid until <datum>": zie grond_status.
+    "gezien": "checked by {wie}, {wanneer}",   # een mens keek ernaar (zie `grond_status`)
+    "hercheck": "check again — was due {wanneer}",   # de hercontroledatum is voorbij
 }
+
+
+def _mooie_datum(iso: str) -> str:
+    try:
+        return time.strftime("%-d %b %Y", time.strptime(iso, "%Y-%m-%d"))
+    except ValueError:
+        return iso
 
 
 def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "",
                  bestaat=None) -> dict:
-    """Draagt dit feit nu nog? Een LEVENDE vergelijking, elke keer opnieuw.
+    """Draagt dit feit nu nog? De bron-status, met erbovenop wat een MENS ervan zei.
+
+    TWEE VRAGEN, UIT ELKAAR GEHAALD (besluit Stefan, 5 oktober 2026). Waar komt het vandaan — dat
+    is de grond, en `_bron_status` vergelijkt die elke keer opnieuw. En wie keek ernaar — dat is
+    `gezien`, een naam en een datum. De machine kon dat tweede alleen bij een pdf met einddatum of
+    een statische webpagina; een publiek register (USDA, FSC) viel erbuiten, en dat zijn precies de
+    bronnen waar de claims op rusten.
+
+    DE VOLGORDE:
+    1. Geen bron, of een bron die er niet (meer) is: dat blijft zo. Er valt niets na te kijken.
+    2. De hercontroledatum is voorbij: `vervallen`, wat er verder ook staat. Dit vervangt de
+       verplichte einddatum — een datum die een mens zelf zet.
+    3. Nagekeken door een mens: `gegrond`, met naam en datum. Twee dingen winnen daarvan: een
+       certificaat dat intussen verliep, en een machinale waarneming van NA het nakijken dat het
+       citaat van de bron verdween. Een oordeel van voor die datum niet.
+    4. Anders: wat de bron zelf zegt.
+
+    DE MACHINE IS HULP, GEEN POORT. Vindt de bron-check het citaat, dan staat er `verified`; lukt
+    het niet, dan verandert dat niets aan wat een mens vaststelde."""
+    u = _bron_status(feit, ledger=ledger, store=store, vandaag=vandaag, bestaat=bestaat)
+    if u["status"] in (ONGEGROND, ONTBREEKT):
+        return u
+    grond = (feit or {}).get("grond") or {}
+    nu = vandaag or time.strftime("%Y-%m-%d")
+    h = hercheck_datum(feit)
+    if h and h < nu:
+        return _uit(grond, VERVALLEN, LABEL["hercheck"].format(wanneer=_mooie_datum(h)),
+                    "the check-again date has passed")
+    z = nagekeken(feit)
+    if not z:
+        return u
+    if u["status"] == VERVALLEN:
+        check = grond.get("check") or {}
+        if grond.get("soort") != "bron" or str(check.get("op") or "") > z["op"]:
+            return u
+    return _uit(grond, GEGROND,
+                LABEL["gezien"].format(wie=z["door"], wanneer=_mooie_datum(z["op"])),
+                u["detail"] if u["status"] != VERVALLEN else "")
+
+
+def _bron_status(feit: dict, *, ledger=None, store=None, vandaag: str = "",
+                 bestaat=None) -> dict:
+    """Draagt de BRON van dit feit nu nog? Een LEVENDE vergelijking, elke keer opnieuw.
 
     Dit is dezelfde regel als bij een claim: een goedkeuring mag zijn bewijs niet overleven. Er
     wordt daarom nooit een uitkomst opgeslagen — verloopt het certificaat of verdwijnt het

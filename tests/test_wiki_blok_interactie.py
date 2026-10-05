@@ -486,35 +486,57 @@ def test_het_wissen_van_de_streep_laat_de_greep_staan():
     assert s and "data-chrome" in s.group(1), "streepNode slaat de chrome niet over"
 
 
-# ── Feiten slepen (5 oktober 2026) ─────────────────────────────────────────────────────────
-# Dezelfde `NV.sleep` met andere selectors; geen tweede sleepmechanisme, geen native HTML5-drag.
-def _feit_sleep_js() -> str:
+# ── Een feit de tekst in slepen (5 oktober 2026) ───────────────────────────────────────────
+# Een feit IN de tekst is een `.wb` en sleept met de blok-greep; daar is niets nieuws voor nodig.
+# Wat hier getoetst wordt is het stuk voor feiten ZONDER plek: dezelfde `NV.sleep` met andere
+# selectors, geen tweede sleepmechanisme, geen native HTML5-drag, en geen serveraanroep — het blok
+# landt in het bewerkvlak en Save bewaart het.
+def _feit_plaats_js() -> str:
     js = _zonder_commentaar(JS)
-    i = js.index("function feitSleep(")
+    i = js.index("function feitPlaats(")
     return js[i:js.index("\n  }\n", i)]
 
 
-def test_feiten_slepen_gebruikt_de_gedeelde_sleep_vanaf_de_greep():
-    f = _feit_sleep_js()
+def test_een_los_feit_sleept_met_de_gedeelde_sleep_vanaf_de_greep():
+    f = _feit_plaats_js()
     assert "NV.sleep(" in f and 'greep: ".wb-greep-knop"' in f
-    assert 'kaart: "[data-feit-id]"' in f and 'doel: "[data-feit-doel]"' in f and "helft: true" in f
+    assert 'kaart: "[data-feit-los]"' in f and "helft: true" in f
+    assert 'doel: "#wiki-body > .wb[data-blok-id]"' in f
     assert "dragstart" not in f and "draggable = true" not in f
-    assert 'action", "pagina_feit_verplaats"' in f
 
 
-def test_een_geweigerde_versleping_zet_het_feit_terug():
-    f = _feit_sleep_js()
-    assert 'q.get("ok") === "0"' in f and "terug(" in f and "terugOuder.insertBefore(kaart, terugVoor)" in f
+def test_het_neergezette_blok_heeft_de_vorm_die_de_server_rendert():
+    """Bron in `data-blok-bron`, niet bewerkbaar, inhoud als chrome — zie `views/wiki._feit_blok`.
+    Wijkt dit af, dan schrijft de opslag iets anders dan wat er na herladen staat."""
+    f = _feit_plaats_js()
+    assert 'setAttribute("data-blok-bron", bron)' in f
+    assert 'contentEditable = "false"' in f
+    assert 'setAttribute("data-chrome", "")' in f
+    assert "NV.blokNormaliseer(body)" in f and "grepen(body, true)" in f
 
 
-def test_het_slepen_staat_alleen_aan_met_bewerkrecht():
-    """`feitSleep` hangt aan `wikiEdit`, en die start alleen als er een `#wiki-form` is."""
+def test_slepen_bewaart_niets_zelf():
+    """De plek hoort bij de TEKST; die bewaar je met Save, samen met wat je verder typte. Een
+    eigen serveraanroep hier zou de opgeslagen body wijzigen terwijl er onbewaarde tekst staat."""
+    f = _feit_plaats_js()
+    assert "fetch(" not in f and "pagina_feit_" not in f
+
+
+def test_javascript_kent_de_vorm_van_een_feitregel_niet():
+    """De regel (`{{fact:…}}`) en de bloksoort komen van de server mee als attributen. Stonden ze
+    hier, dan woonde de vorm van een markering op een tweede plek, en de enige zonder toets."""
+    js = _zonder_commentaar(JS)
+    assert "{{fact" not in js and '"fact"' not in js and "'fact'" not in js
+
+
+def test_het_plaatsen_staat_alleen_aan_met_bewerkrecht():
+    """`feitPlaats` hangt aan `wikiEdit`, en die start alleen als er een `#wiki-form` is."""
     js = _zonder_commentaar(JS)
     w = js[js.index("function wikiEdit("):]
-    assert "feitSleep(root)" in w[:w.index("\n  }\n")]
+    assert "feitPlaats(root)" in w[:w.index("\n  }\n")]
 
 
-def test_grepen_ruimt_de_feit_grepen_niet_op():
+def test_grepen_ruimt_alleen_blok_grepen_op():
     js = _zonder_commentaar(JS)
     g = js[js.index("function grepen("):]
     g = g[:g.index("\n  }")]
@@ -533,46 +555,48 @@ def _pagina(tmp_path, wie="guest"):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    a = st.att.add("mother_earth", "note", "Een pagina", "## Kop een\ntekst\n\n## Kop twee",
-                   meta={"feiten": [wiki.maak_feit("onder kop een", sectie="Kop een"),
-                                    wiki.maak_feit("los")]})
+    f1, f2 = wiki.maak_feit("in de tekst", soort="bron", url="https://e.org"), wiki.maak_feit("los")
+    body = "## Kop een\ntekst\n" + wiki.feit_marker(f1["id"]) + "\n\n## Kop twee"
+    a = st.att.add("mother_earth", "note", "Een pagina", body, meta={"feiten": [f1, f2]})
     return render_pagina(cockpit2._Stores(dd), a.id, csrf_token="t", username=wie), a, dd
 
 
-def test_elk_feit_heeft_een_greep_en_elk_kopje_is_een_dropzone(tmp_path):
+def test_alleen_een_los_feit_heeft_een_eigen_greep(tmp_path):
     html, a, _ = _pagina(tmp_path)
-    assert html.count("aria-label='Drag to move this fact'") == 2
-    assert "data-feit-doel='s:Kop een'" in html and "data-feit-doel='s:Kop twee'" in html
-    assert "data-feit-doel='s:'" in html                      # "Other facts" ook zonder sectie
+    assert html.count("aria-label='Drag this fact into the text'") == 1
+    assert html.count("data-feit-los='{{fact:") == 1
+    assert "data-feit-soort='fact'" in html and "data-blok='fact'" in html
 
 
-def test_zonder_bewerkrecht_geen_greep(tmp_path):
+def test_zonder_bewerkrecht_geen_greep_en_geen_knoppen(tmp_path):
     from nooch_village import cockpit2
     from nooch_village.views.wiki import render_pagina
     html, a, dd = _pagina(tmp_path)
     leesbaar = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="", username="guest")
-    assert "Drag to move this fact" not in leesbaar
+    assert "Drag this fact into the text" not in leesbaar and "data-feit-los" not in leesbaar
+    assert "pagina_feit_gezien" not in leesbaar and "pagina_feit_del" not in leesbaar
+    assert "in de tekst" in leesbaar and "los" in leesbaar          # lezen kan iedereen
 
 
-def test_de_dropzones_veranderen_de_opgeslagen_tekst_niet(tmp_path):
-    """Pagina opslaan na een versleping verandert de markdown niet: de attributen op het kopje en
-    de feitblokken zelf komen niet in de bron terug."""
+def test_opslaan_schrijft_de_regel_terug_en_niets_van_het_feit(tmp_path):
+    """De weg terug: het blok wordt weer één regel `{{fact:<id>}}`. De tekst van het feit, de chip
+    en het bewerkformulier zijn uitvoer en komen niet in de bron."""
     from nooch_village.cockpit2_util import _md_naar_bron
     html, a, _ = _pagina(tmp_path)
     body = html[html.index("id='wiki-body'"):]
-    # Tot het PAGINAformulier (`class='wiki-form'`), niet tot de eerste `<form`: sinds 4 oktober
-    # staat er in de tekst ook het bewerkformulier van een feit.
+    # Tot het PAGINAformulier (`class='wiki-form'`), niet tot de eerste `<form`: in de tekst staat
+    # ook het bewerkformulier van een feit.
     body = body[body.index(">") + 1:body.index("<form method='post' action='/action' class='wiki-form'")]
     assert _md_naar_bron(body).strip() == a.body.strip()
 
 
-def test_bedrading_en_sleep_administratie_openen_de_opslaan_balk_niet():
+def test_bedrading_en_sleep_markering_openen_de_opslaan_balk_niet():
     """Gemeten in Chrome én Firefox (5 oktober 2026): de balk stond op ELKE wikipagina al open vóór
-    iemand typte — de [[link]]-hulp zet `data-nv-wikilink` nadat de waarnemer loopt. En een feit
-    dat uit het vlak werd gesleept, kreeg zijn `data-feit-sectie` toen hij al buiten de chrome
-    stond. Allebei administratie, geen tekst."""
+    iemand typte — de [[link]]-hulp zet `data-nv-wikilink` nadat de waarnemer loopt. En tijdens
+    het slepen krijgt een blok een klasse (`over-boven`, de contour van de bron). Allebei
+    administratie, geen tekst."""
     js = _zonder_commentaar(JS)
     w = js[js.index("function chromeMutatie("):]
     w = w[:w.index("\n    }\n")]
-    assert "/^data-(nv|feit)-/" in w
-    assert 'm.attributeName === "class"' in w and 'hasAttribute("data-feit-doel")' in w
+    assert "/^data-nv-/" in w
+    assert 'm.attributeName === "class"' in w and 'classList.contains("wb")' in w
