@@ -116,7 +116,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `pagina_synthese_verwerp` | `_act_pagina_synthese_verwerp` |
 | `pagina_feit_add` | `_act_pagina_feit_add` |
 | `pagina_feit_edit` | `_act_pagina_feit_edit` |
-| `pagina_feit_verplaats` | `_act_pagina_feit_verplaats` |
+| `pagina_feit_gezien` | `_act_pagina_feit_gezien` |
+| `pagina_feit_plaats` | `_act_pagina_feit_plaats` |
 | `pagina_feit_del` | `_act_pagina_feit_del` |
 | `pagina_bulk_import_facts` | `_act_pagina_bulk_import_facts` |
 | `pagina_voorstel` | `_act_pagina_voorstel` |
@@ -352,4 +353,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_53 routes · 164 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
+_53 routes · 165 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._

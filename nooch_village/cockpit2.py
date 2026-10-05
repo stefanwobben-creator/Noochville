@@ -2697,10 +2697,17 @@ def _act_pagina_feit_edit(c):
     else:
         op = ""
     sectie = g("sectie") if "sectie" in c.form else oud.get("sectie", "")
+    hercheck = g("hercheck") if "hercheck" in c.form else oud.get("hercheck", "")
     nieuw = wiki.maak_feit(g("tekst"), soort=soort, ref=ref, citaat=g("citaat"), url=url,
-                           waarde=waarde, sectie=sectie, fid=wiki.feit_id(oud), op=op)
+                           waarde=waarde, sectie=sectie, fid=wiki.feit_id(oud), op=op,
+                           hercheck=hercheck)
     if nieuw is None:
         return nxt, "✗ a fact needs text"
+    # NAGEKEKEN BLIJFT ALLEEN STAAN ALS HET FEIT HETZELFDE ZEGT EN BEWIJST (5 oktober 2026). Wie de
+    # tekst of de bron verandert, verandert waar de naam onder staat; dan moet er opnieuw gekeken
+    # worden. Een andere hercontroledatum of een getal erbij raakt dat niet.
+    if wiki.nagekeken(oud) and wiki.bewijs_gelijk(oud, nieuw):
+        nieuw["gezien"] = wiki.nagekeken(oud)
     ng = nieuw.get("grond") or {}
     if (oud_grond.get("check") and ng.get("soort") == oud_grond.get("soort") == "bron"
             and ng.get("url") == oud_grond.get("url") and ng.get("citaat") == oud_grond.get("citaat")):
@@ -2718,15 +2725,17 @@ def _act_pagina_feit_edit(c):
     return nxt, "✓ fact updated"
 
 
-def _act_pagina_feit_verplaats(c):
-    """Een feit naar een ander kopje, of binnen een kopje van plek (5 oktober 2026, scope slepen).
+def _act_pagina_feit_gezien(c):
+    """"I checked this" — een mens zet zijn naam en de datum van vandaag onder een feit.
 
-    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_edit: de plek van een
-    # feit is inhoud van de pagina.
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_edit. Nakijken is een
+    # uitspraak over de inhoud van de pagina, en die is van wie de pagina cureert.
 
-    `sectie` = het kopje (leeg = "Other facts"); `voor_fid` = het feit waar hij vóór komt (leeg =
-    achteraan in die sectie). Id, grond en bron-check blijven ongemoeid: verplaatsen is geen
-    bewerking van het feit."""
+    DE NAAM KOMT UIT DE SESSIE, nooit uit het formulier (zelfde regel als `attested`): je kijkt
+    alleen voor jezelf na. `uit=1` haalt het weer weg.
+
+    ALLEEN ALS ER IETS NA TE KIJKEN VALT. Een feit zonder bron, of met een bestand dat er niet
+    meer is, krijgt geen vinkje: dan stond er "checked" onder iets waar niemand naar kon kijken."""
     from nooch_village import wiki
     nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
     cur = st.att.get(g("aid"))
@@ -2739,33 +2748,68 @@ def _act_pagina_feit_verplaats(c):
     i = _feit_index(feiten, g("fid"))
     if i is None:
         return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
-    feit = dict(feiten.pop(i))
-    sectie = " ".join(g("sectie").split())
-    if sectie:
-        feit["sectie"] = sectie[:80]
+    feit = dict(feiten[i])
+    if g("uit"):
+        feit.pop("gezien", None)
+        notitie, melding = "fact check undone", "✓ check undone"
     else:
-        feit.pop("sectie", None)
-    voor = g("voor_fid")
-    if voor:
-        j = _feit_index(feiten, voor)
-        if j is None:
-            return nxt, "✗ the place to drop on no longer exists — reload the page"
-    else:
-        # ACHTERAAN IN DIE SECTIE: na het laatste feit met dezelfde sectie, anders achteraan.
-        norm = lambda t: " ".join(str(t or "").split()).lower()
-        zelfde = [n for n, f in enumerate(feiten) if norm(f.get("sectie")) == norm(sectie)]
-        j = (zelfde[-1] + 1) if zelfde else len(feiten)
-    feiten.insert(j, feit)
+        zonder = {k: v for k, v in feit.items() if k not in ("gezien", "hercheck")}
+        bron = wiki.grond_status(zonder, ledger=getattr(st, "evidence", None), store=st.att)
+        if bron["status"] in (wiki.ONGEGROND, wiki.ONTBREEKT):
+            return nxt, "✗ this fact has no source to check — add a link or a file first"
+        feit["gezien"] = {"door": _persoon_naam(username, st), "op": time.strftime("%Y-%m-%d")}
+        # EEN VERLOPEN HERCONTROLE IS HIERMEE GEDAAN. De oude datum laten staan zou het feit rood
+        # houden terwijl er net naar gekeken is; een nieuwe datum kiest de schrijver zelf.
+        h = wiki.hercheck_datum(feit)
+        if h and h < feit["gezien"]["op"]:
+            feit.pop("hercheck", None)
+        notitie, melding = "fact checked", "✓ checked"
+    feiten[i] = feit
     meta = dict(getattr(cur, "meta", None) or {})
     meta["feiten"] = feiten
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
                         governance_ref=gref,
-                        change_note=f"fact moved: {str(feit.get('tekst') or '')[:80]}")
+                        change_note=f"{notitie}: {str(feit.get('tekst') or '')[:80]}")
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
-    return nxt, "✓ fact moved"
+    return nxt, melding
+
+
+def _act_pagina_feit_plaats(c):
+    """Zet een feit zonder plek aan het eind van de tekst — de weg zonder slepen.
+
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_edit: dit schrijft een
+    # regel in de tekst van de pagina.
+
+    Slepen zet het blok neer in het bewerkvlak en wordt met Save bewaard; deze knop doet het voor
+    wie niet sleept (toetsenbord, touch). Staat het feit al in de tekst, dan gebeurt er niets."""
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    feiten = wiki.met_ids(list(wiki.feiten(cur)))
+    i = _feit_index(feiten, g("fid"))
+    if i is None:
+        return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
+    body, gedaan = wiki.plaats_feit_marker(cur.body or "", wiki.feit_id(feiten[i]))
+    if not gedaan:
+        return nxt, "✓ this fact is already in the text"
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = feiten               # de id's vastgezet: de regel in de tekst wijst ernaar
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, body=body, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref,
+                        change_note=f"fact placed in text: {str(feiten[i].get('tekst') or '')[:80]}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, "✓ fact placed at the end of the text"
 
 
 def _act_pagina_feit_del(c):
@@ -2788,7 +2832,13 @@ def _act_pagina_feit_del(c):
     meta["feiten"] = wiki.met_ids(huidig)
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
-    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+    # OOK ZIJN REGEL UIT DE TEKST (5 oktober 2026). Bleef `{{fact:<id>}}` staan, dan stond er op
+    # die plek voortaan "Fact not found". Alleen als de regel er staat: anders blijft de body
+    # ongemoeid en is dit, zoals altijd, een wijziging van de feitenlijst alleen.
+    fid_weg = wiki.feit_id(weg)
+    body = (wiki.zonder_feit_marker(cur.body or "", fid_weg)
+            if fid_weg in wiki.geplaatste_feiten(cur.body or "") else None)
+    upd = st.att.update(cur.id, body=body, meta=meta, actor_id=actor_id, actor_type="person",
                         governance_ref=gref,
                         change_note=f"feit verwijderd: {str(weg.get('tekst') or '')[:80]}")
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
@@ -2923,7 +2973,16 @@ def _act_pagina_bulk_import_facts(c):
     meta["feiten"] = wiki.met_ids(list(wiki.feiten(cur))) + new_facts
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
-    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+    # `For:` ZET HET FEIT OP ZIJN PLEK IN DE TEKST (5 oktober 2026): aan het eind van die sectie.
+    # Zonder `For:`, of met een kopje dat de pagina niet heeft, blijft het feit ongeplaatst en
+    # staat het onderaan — nooit weg, en nooit op een gegokte plek.
+    body, geplaatst = cur.body or "", 0
+    for feit in new_facts:
+        if feit.get("sectie"):
+            body, gedaan = wiki.plaats_feit_marker(body, feit["id"], feit["sectie"])
+            geplaatst += 1 if gedaan else 0
+    upd = st.att.update(cur.id, body=(body if geplaatst else None), meta=meta,
+                        actor_id=actor_id, actor_type="person",
                         governance_ref=gref, change_note=f"bulk import: {len(new_facts)} facts")
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
@@ -6527,7 +6586,8 @@ ACTIONS = {
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_edit": _act_pagina_feit_edit,
-    "pagina_feit_verplaats": _act_pagina_feit_verplaats,
+    "pagina_feit_gezien": _act_pagina_feit_gezien,
+    "pagina_feit_plaats": _act_pagina_feit_plaats,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_bulk_import_facts": _act_pagina_bulk_import_facts,
     "pagina_voorstel": _act_pagina_voorstel,

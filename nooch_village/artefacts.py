@@ -452,7 +452,11 @@ def _md_section(block: dict, *, tool: bool = False) -> list[str]:
             # De body van een pagina is een DOCUMENT (met eigen koppen en lijstjes). Inline achter
             # een streepje zou die koppen in de structuur van dit document laten vallen — dan
             # concurreert '## Gebruikt in' met '## Notes'. Als blok eronder blijft beide leesbaar.
-            regels += [f"  > {r}" for r in str(a["body"]).splitlines()]
+            # ZONDER DE PLEK-REGELS VAN FEITEN (`{{fact:<id>}}`, 5 oktober 2026). Die zeggen waar
+            # een feit op het scherm staat; de feiten zelf volgen hieronder, mét hun grond. Een
+            # lezer van deze tekst heeft aan een id tussen accolades niets.
+            from nooch_village import wiki as _wiki
+            regels += [f"  > {r}" for r in _wiki.zonder_feitmarkeringen(str(a["body"])).splitlines()]
         return regels + _feit_regels(a)
 
     out = ["### Van deze rol"]

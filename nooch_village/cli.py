@@ -902,6 +902,24 @@ def main() -> None:
         if any(r["weg"] for r in rapport) and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_feit_plaats":
+        # Geeft bestaande feiten hun plek in de tekst (`{{fact:<id>}}`), aan het eind van de sectie
+        # waar ze tot 5 oktober 2026 onder stonden. Dry-run; --apply schrijft één nieuwe versie per
+        # pagina (terug te draaien via de historie). Feiten zonder (bestaande) sectie blijven
+        # ongeplaatst en staan onderaan de pagina.
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.feiten_plaatsen(st.att, apply=apply, actor_id="cli")
+        print(wiki_seed.feiten_plaatsen_tekst(rapport))
+        if any(r["geplaatst"] for r in rapport) and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_bom_sleutels":
         # Zet op bestaande materiaal-/leverancierpagina's hun /bom-naam vast (`wiki.BOM_NAMEN`), zodat
         # een hernoeming de koppeling niet meer breekt. Dry-run; --apply schrijft (set_meta).
@@ -1373,7 +1391,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

@@ -49,7 +49,7 @@ _ONBEKEND_RE = re.compile(r"\{\{([^{}<>\n]{1,60})\}\}")
 
 def _onbekend_blok(m) -> str:
     naam = _html_mod.unescape(m.group(1)).strip()
-    if naam in wiki.AFGELEID:
+    if naam in wiki.AFGELEID or wiki.FEIT_MARKER_RE.match(m.group(0)):
         return m.group(0)                      # een bekende markering (bv. midden in een zin)
     return (f"<span class='chip muted' title='{{{{…}}}} is only for page blocks; links use [[…]]'>"
             f"{m.group(0)}<span data-chrome> — did you mean [[{_e(naam)}]]?</span></span>")
@@ -75,11 +75,16 @@ def _onbekende_markeringen(html: str) -> str:
 
 
 def _body_html(body: str, pags: list, blokken: bool = False,
-               secties: dict[str, str] | None = None) -> str:
+               secties: dict[str, str] | None = None,
+               feit_blokken: dict[str, str] | None = None) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
 
     De substitutie draait NÁ `_md` (dus over ge-escapete HTML) en alleen hier — `_md` zelf wordt
     ook voor reacties en projectfeeds gebruikt, en die zijn geen wiki.
+
+    `feit_blokken` (5 oktober 2026): feit-id → de HTML van dat feit. Een regel `{{fact:<id>}}` in
+    de tekst wordt op die plek het feit; zie `_feit_blok`. Zonder deze tabel (de Notes-tab van een
+    rol zonder stores) blijft er een label staan, nooit rauwe accolades.
 
     `blokken=True` geeft elk blok op het hoogste niveau een eigen `<div class='wb'>`; zie `_md`.
     Ook hier standaard UIT: dezelfde functie rendert de Notes-tab op `/node`, en die heeft de
@@ -147,12 +152,20 @@ def _body_html(body: str, pags: list, blokken: bool = False,
         # blokstand, want buiten die stand bestaan er geen blokken om dit aan op te hangen — en
         # een sectie tussen twee `<br>`'s is geen blok maar een ongeluk.
         html = _MARKER_BLOK_RE.sub(lambda m: _afgeleid_blok(m.group(1), secties), html)
+        # EEN FEIT OP ZIJN PLEK. Eén keer per feit: een tweede regel met hetzelfde id (geplakt,
+        # gekopieerd) zegt dat het feit hierboven al staat in plaats van het twee keer te tonen —
+        # twee bewerkformulieren voor één feit zouden elkaars knoppen aanspreken.
+        getoond: set[str] = set()
+        html = _FEIT_BLOK_RE.sub(lambda m: _feit_blok(m.group(1), feit_blokken, getoond), html)
     else:
         # BUITEN DE BLOKSTAND GEEN SECTIE MAAR EEN LABEL. De Notes-tab van `/node` rendert plat:
         # daar bestaan geen blokken, en een `.c2-sec` met een eigen kopje tussen twee `<br>`'s is
         # geen blok maar een ongeluk. Wat er WEL moet gebeuren is de accolades wegwerken — rauwe
         # `{{facts}}` op het scherm is het slechtste van twee werelden.
         html = _MARKER_PLAT_RE.sub(_afgeleid_label, html)
+        html = _FEIT_PLAT_RE.sub(
+            lambda m: (feit_blokken or {}).get(m.group(1) or m.group(2))
+            or "<span class='chip muted'>fact</span>", html)
     return html
 
 
@@ -172,6 +185,41 @@ def _afgeleid_label(m) -> str:
 #: Een blok dat ALLEEN uit een markering bestaat. Zelfde vorm als `_TOOLREF_RE` hierboven.
 _MARKER_BLOK_RE = re.compile(
     r"<div class='wb' data-blok='p'>\{\{([a-z]+)\}\}</div>")
+
+
+#: Een blok dat ALLEEN uit de markering van één feit bestaat, en dezelfde regel in de platte stand.
+_FEIT_BLOK_RE = re.compile(
+    r"<div class='wb' data-blok='p'>\{\{fact:([A-Za-z0-9_-]{1,40})\}\}\s*</div>")
+_FEIT_PLAT_RE = re.compile(r"(?<=<br>)\{\{fact:([A-Za-z0-9_-]{1,40})\}\}(?=<br>|$)"
+                           r"|^\{\{fact:([A-Za-z0-9_-]{1,40})\}\}(?=<br>|$)")
+
+#: De bloksoort van een feit in de tekst. Eén plek: de server schrijft hem op het blok en op een
+#: ongeplaatst feit (`data-feit-soort`), zodat `nooch.js` hem kan doorgeven zonder hem te kennen.
+FEIT_BLOK = "fact"
+
+
+def _feit_blok(fid: str, feit_blokken: dict[str, str] | None, getoond: set) -> str:
+    """Eén feit als blok in de tekst (besluit Stefan, 5 oktober 2026).
+
+    DEZELFDE DRIE DINGEN ALS `_afgeleid_blok` hieronder: `data-blok-bron` draagt de bron (één regel,
+    `{{fact:<id>}}`), `contenteditable='false'` maakt het ondeelbaar, en het omhulsel is hetzelfde
+    `.wb` als elk ander blok — dus dezelfde greep, hetzelfde menu, hetzelfde slepen.
+
+    DE INHOUD IS `data-chrome`. Het bewerkformulier van een feit gaat open en dicht binnen dit
+    blok; zonder dat attribuut telt de editor dat als een bewerking van de TEKST en gaat de
+    opslaan-balk open terwijl er niets aan de tekst veranderde.
+
+    EEN ONBEKEND ID BLIJFT STAAN, als label. Het feit kan verwijderd zijn terwijl de regel in een
+    oude versie van de tekst terugkwam; de regel weghalen is aan de schrijver."""
+    bron = _e(wiki.feit_marker(fid))
+    inhoud = (feit_blokken or {}).get(fid)
+    if fid in getoond:
+        inhoud = "<div class='muted'>This fact is already shown above.</div>"
+    elif not inhoud:
+        inhoud = "<div class='muted'>Fact not found — it may have been removed.</div>"
+    getoond.add(fid)
+    return (f"<div class='wb' data-blok='{FEIT_BLOK}' data-blok-bron='{bron}' "
+            f"contenteditable='false'><div class='wiki-inline' data-chrome>{inhoud}</div></div>")
 
 
 def _afgeleid_blok(naam: str, secties: dict[str, str] | None) -> str:
@@ -258,19 +306,21 @@ def _bijlage_bestaat(st):
     return bestaat
 
 
-#: De soorten in het bewerkformulier, met hun uitleg. Volgorde = hoe vaak ze voorkomen.
-_SOORT_KEUZE = (("bron", "Cited source (URL)"),
-                ("document", "Document on this page (on file, not public)"),
-                ("attested", "Attested — first-hand, by you, no document"),
-                ("cert", "Certificate (Chronicle record id in Ref)"),
-                ("kroniek", "Chronicle record (id in Ref)"),
-                ("policy", "Policy (id in Ref)"),
-                ("", "None (shows as ungrounded)"))
+#: WAAR KOMT HET VANDAAN — drie antwoorden (besluit Stefan, 5 oktober 2026). Hier stonden zeven
+#: soorten grond; vier daarvan (certificaat-record, Kroniek-record, policy, geen) vroegen de
+#: schrijver om een id uit een ander scherm en waren op de pagina's van prod niet één keer goed
+#: ingevuld. Een link, een bestand, of "dat weet ik zelf".
+_SOORT_KEUZE = (("bron", "A link"),
+                ("document", "A file on this page"),
+                ("attested", "I know this first-hand"),
+                ("", "No source yet"))
 
-
-def _kopjes(body: str) -> list[str]:
-    """De koppen van de pagina, voor de sectie-keuze van een feit."""
-    return [m.group(2).strip() for m in re.finditer(r"(?m)^(#{1,3})\s+(.+?)\s*$", body or "")]
+#: De soorten die het formulier niet meer aanbiedt maar die een bestaand feit kan dragen. Zo'n
+#: feit houdt zijn soort bij het bewerken (de keuze staat er dan bij), en `grond_status` rekent er
+#: gewoon mee: een geldig certificaat-record blijft een geldig certificaat.
+_SOORT_OUD = {"cert": "Certificate record (id in Reference)",
+              "kroniek": "Chronicle record (id in Reference)",
+              "policy": "Policy (id in Reference)"}
 
 
 def _bijlagen(st, aid: str) -> list[str]:
@@ -281,62 +331,86 @@ def _bijlagen(st, aid: str) -> list[str]:
 
 
 def _feit_formulier(feit: dict, a, st) -> str:
-    """De velden van één feit, op zijn plek te bewerken (4 oktober 2026). Bestaande atomen:
-    `_field`, `.att-lbl`, een `<select>` en `.muted` voor de uitleg — geen nieuwe klasse."""
+    """De velden van één feit, op zijn plek te bewerken. Bestaande atomen: `_field`, `.att-lbl`,
+    een `<select>`, `<details>` en `.muted` voor de uitleg — geen nieuwe klasse.
+
+    VIER VRAGEN (5 oktober 2026): wat is het feit, waar komt het vandaan, wanneer kijk je er
+    opnieuw naar, en hoort er een getal bij voor de stuklijst. Reference en Quote staan onder
+    "More": ze zijn er voor wie de automatische bron-check wil laten meekijken, niet om een feit
+    te kunnen opslaan.
+
+    `data-bij` ZEGT BIJ WELKE BRON EEN VELD HOORT. `nooch.js` verbergt de rest als de keuze
+    verandert; het leest het attribuut en kent zelf geen soorten. Zonder JS staan alle velden er
+    gewoon, en de server kijkt alleen naar het veld dat bij de gekozen bron hoort."""
     fid = wiki.feit_id(feit)
     g = feit.get("grond") or {}
     soort = g.get("soort", "")
     w = wiki.waarde(feit) or {}
-    def sel(naam: str, opties: list[tuple[str, str]], gekozen: str, label: str) -> str:
+    def sel(naam: str, opties: list[tuple[str, str]], gekozen: str, label: str, attrs: str = "") -> str:
         oid = f"ff-{naam}-{fid}"
         return (f"<label class='att-lbl' for='{_e(oid)}'>{_e(label)}</label>"
-                f"<select id='{_e(oid)}' name='{_e(naam)}'>"
+                f"<select id='{_e(oid)}' name='{_e(naam)}'{attrs}>"
                 + "".join(f"<option value='{_e(k)}'{' selected' if k == gekozen else ''}>{_e(v)}</option>"
                           for k, v in opties) + "</select>")
+    def bij(soorten: str, inhoud: str) -> str:
+        toon = soort in soorten.split()
+        return f"<div data-bij='{_e(soorten)}'{'' if toon else ' hidden'}>{inhoud}</div>"
     bestanden = _bijlagen(st, a.id)
     huidig_doc = g.get("url", "") if soort == "document" else ""
-    doc_keuze = ([("", "— keep / none —")]
+    doc_keuze = ([("", "— choose a file —")]
                  + [(f"/wiki-bestand/{a.id}/{b}", b.partition("_")[2] or b) for b in bestanden])
-    kopjes = _kopjes(a.body or "")
-    sectie = feit.get("sectie", "")
-    sectie_keuze = ([("", "— no section (Other facts) —")] + [(k, k) for k in kopjes]
-                    + ([(sectie, f"{sectie} (not a heading on this page)")]
-                       if sectie and sectie not in kopjes else []))
+    soorten = list(_SOORT_KEUZE) + ([(soort, _SOORT_OUD[soort])] if soort in _SOORT_OUD else [])
     url_waarde = g.get("url", "") if soort == "bron" else ""
+    oud = soort in _SOORT_OUD
     return (f"{_field('Fact', 'tekst', value=feit.get('tekst', ''), required=True, fid=f'ff-tekst-{fid}')}"
-            + sel("soort", list(_SOORT_KEUZE), soort, "Grounding")
-            + _field("Reference", "ref", value=g.get("ref", "") if soort != "attested" else "",
-                     fid=f"ff-ref-{fid}")
-            + _field("URL (or: on file: <file name>)", "url", value=url_waarde, fid=f"ff-url-{fid}")
-            + _field("Quote", "citaat", kind="textarea", value=g.get("citaat", ""), fid=f"ff-citaat-{fid}")
-            + "<p class='muted'>A cited source is only checked when its quote is copied exactly from "
-              "the URL and is at least 12 characters. Without a quote it stays &ldquo;not yet "
-              "checked&rdquo;.</p>"
-            + (sel("url_document", doc_keuze, huidig_doc, "Document on this page") if bestanden else "")
-            + f"<label class='att-lbl' for='ff-file-{_e(fid)}'>Upload evidence (makes this fact on file)</label>"
-              f"<input type='file' id='ff-file-{_e(fid)}' name='file'>"
+            + sel("soort", soorten, soort, "Where does it come from", " data-feit-bron")
+            + bij("bron", _field("Link", "url", kind="url", value=url_waarde, fid=f"ff-url-{fid}"))
+            + bij("document",
+                  (sel("url_document", doc_keuze, huidig_doc, "File on this page") if bestanden else "")
+                  + f"<label class='att-lbl' for='ff-file-{_e(fid)}'>Upload a file</label>"
+                    f"<input type='file' id='ff-file-{_e(fid)}' name='file'>")
+            + bij("attested", "<p class='muted'>Saved with your name and today&rsquo;s date. "
+                              "No document needed.</p>")
+            + _field("Check again by (optional)", "hercheck", kind="date",
+                     value=wiki.hercheck_datum(feit), fid=f"ff-hercheck-{fid}")
             + sel("grootheid", [("", "no number")] + [(k, f"{v['label']} ({v['eenheid']})")
                                                        for k, v in wiki.GROOTHEDEN.items()],
-                  w.get("grootheid", ""), "Value")
+                  w.get("grootheid", ""), "Number for the BOM (optional)")
             + _field("Number", "getal", value=(str(w["getal"]) if w else ""), fid=f"ff-getal-{fid}")
-            + sel("sectie", sectie_keuze, sectie, "Section"))
+            + f"<details{' open' if oud else ''}><summary class='muted'>More: reference and "
+              f"automatic re-check</summary>"
+            + _field("Reference", "ref", value=g.get("ref", "") if soort != "attested" else "",
+                     fid=f"ff-ref-{fid}")
+            + _field("Quote", "citaat", kind="textarea", value=g.get("citaat", ""), fid=f"ff-citaat-{fid}")
+            + "<p class='muted'>Optional. With a quote copied exactly from the link (at least 12 "
+              "characters), the periodic source check can tell you when the page stops saying it. "
+              "It never blocks a fact you checked yourself.</p></details>")
 
 
-def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool, a=None) -> str:
+def _feit_knop(actie: str, label: str, klasse: str, aid: str, fid: str, csrf_token: str,
+               extra: str = "", attrs: str = "") -> str:
+    """Eén handeling op een feit als eigen formulier — zelfde vorm als "remove" altijd had."""
+    return (f"<form method='post' action='/action' class='fentry-inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(aid)}'>"
+            f"<input type='hidden' name='fid' value='{_e(fid)}'>{extra}"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
+            f"<button class='{klasse}' type='submit' name='action' value='{_e(actie)}'{attrs}>"
+            f"{_e(label)}</button></form>")
+
+
+def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool, a=None,
+               los: bool = False) -> str:
+    """Eén feit: de bewering, wat er met de bron is gedaan, en voor wie mag bewerken de handelingen.
+
+    `los=True`: het feit heeft nog geen plek in de tekst. Het krijgt dan een greep om het de tekst
+    in te slepen en een knop die hetzelfde doet zonder slepen. Een feit dat al in de tekst staat
+    heeft die niet nodig: daar is het blok zelf het ding dat je beetpakt."""
     g = wiki.grond_status(feit, ledger=getattr(st, "evidence", None), store=st.att,
                           bestaat=_bijlage_bestaat(st))
     citaat = (f"<div class='att-body muted'>“{_e(g['citaat'])}”</div>"
               if g.get("citaat") else "")
     fid = wiki.feit_id(feit)
-    weg = ""
-    if can_edit:
-        weg = (f"<form method='post' action='/action'>"
-               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-               f"<input type='hidden' name='aid' value='{_e(aid)}'>"
-               f"<input type='hidden' name='fid' value='{_e(fid)}'>"
-               f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
-               f"<button class='dellink' type='submit' name='action' value='pagina_feit_del' "
-               f"onclick=\"return confirm('Remove this fact?')\">remove</button></form>")
     # GEEN `.card` (26 september 2026). Zodra een Feit tussen twee alinea's kan staan — en dat
     # kan het sinds `{{facts}}` in het blokmenu staat — botst een kaart met de tekst eromheen:
     # rand, achtergrond en eigen padding heeft een alinea alle drie niet. Het onderscheid blijft,
@@ -344,17 +418,30 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     w = wiki.waarde(feit)
     getal = (f"<div class='muted'>{_e(wiki.GROOTHEDEN[w['grootheid']]['label'])}: "
              f"<strong>{_e(wiki.waarde_tekst(w))}</strong></div>" if w else "")
+    # DE HERCONTROLE DIE NOG KOMT. Is de datum voorbij, dan zegt de chip het al (`grond_status`).
+    h = wiki.hercheck_datum(feit)
+    straks = (f" <span class='muted'>check again by {_e(wiki._mooie_datum(h))}</span>"
+              if h and g["status"] != wiki.VERVALLEN else "")
     getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-               f"<div>{_grond_chip(g)}</div>{citaat}")
-    # SLEEPBAAR (5 oktober 2026): de kaart is het feit zelf (`data-feit-id`), het doel is óók het
-    # feit (`data-feit-doel`, vóór of ná), en de sectie staat erop zodat de browser weet waar hij
-    # landt. Attributen en geen klasse; de greep is dezelfde als die van de wiki-blokken.
-    sleep = (f" data-feit-id='{_e(fid)}' data-feit-doel='f:{_e(fid)}' "
-             f"data-feit-sectie='{_e(feit.get('sectie') or '')}'")
-    greep = ("<span class='wb-greep' data-chrome contenteditable='false'>"
-             "<button type='button' class='wb-greep-knop' aria-label='Drag to move this fact' "
-             "title='Drag to another heading'>⠿</button></span>") if can_edit else ""
-    if can_edit and a is not None:
+               f"<div>{_grond_chip(g)}{straks}</div>{citaat}")
+    if not can_edit:
+        return f"<div>{getoond}</div>"
+    # NAKIJKEN IS ÉÉN KLIK (5 oktober 2026). Alleen als er iets na te kijken valt: een feit zonder
+    # bron, of met een bestand dat weg is, krijgt de knop niet — de server weigert het ook.
+    nagekeken = wiki.nagekeken(feit)
+    kan_nakijken = g["status"] not in (wiki.ONGEGROND, wiki.ONTBREEKT)
+    if nagekeken:
+        check = _feit_knop("pagina_feit_gezien", "undo check", "flink", aid, fid, csrf_token,
+                           extra="<input type='hidden' name='uit' value='1'>")
+    elif (feit.get("grond") or {}).get("soort") == "attested":
+        check = ""                 # de verklaring IS het nakijken: naam en datum staan er al
+    elif kan_nakijken:
+        check = _feit_knop("pagina_feit_gezien", "I checked this", "btn ok sm", aid, fid, csrf_token)
+    else:
+        check = ""
+    weg = _feit_knop("pagina_feit_del", "remove", "dellink", aid, fid, csrf_token,
+                     attrs=" onclick=\"return confirm('Remove this fact?')\"")
+    if a is not None:
         # KLIK OP HET FEIT = BEWERKEN (4 oktober 2026), hetzelfde `inline_edit` als de wall en de
         # Conclusion. Multipart, want in hetzelfde formulier kan bewijs worden geüpload.
         verborgen = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -364,8 +451,18 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
         getoond = inline_edit(getoond, _feit_formulier(feit, a, st), sleutel=f"feit-{fid}",
                               opslaan="pagina_feit_edit", verborgen=verborgen, klikbaar=True,
                               multipart=True)
-        return f"<div class='editor-inline'{sleep}>{greep}{getoond}{weg}</div>"
-    return f"<div{sleep}>{getoond}{weg}</div>"
+    if not los:
+        return f"<div class='editor-inline'>{getoond}{check}{weg}</div>"
+    # EEN FEIT ZONDER PLEK. De greep is dezelfde als die van de wiki-blokken; `data-feit-los`
+    # draagt de regel die in de tekst komt en `data-feit-soort` de bloksoort, zodat de browser het
+    # blok kan neerzetten zonder de vorm van een markering of een soort te kennen.
+    greep = ("<span class='wb-greep' data-chrome contenteditable='false'>"
+             "<button type='button' class='wb-greep-knop' aria-label='Drag this fact into the text' "
+             "title='Drag into the text'>⠿</button></span>")
+    plaats = _feit_knop("pagina_feit_plaats", "place at end of text", "flink", aid, fid, csrf_token)
+    return (f"<div class='editor-inline' data-feit-los='{_e(wiki.feit_marker(fid))}' "
+            f"data-feit-soort='{FEIT_BLOK}' data-feit-plaats='pagina_feit_plaats'>"
+            f"{greep}{getoond}{check}{plaats}{weg}</div>")
 
 
 #: De ingang voor feiten, sinds "+ Add fact" weg is (3 oktober 2026, besluit Stefan): het /-menu.
@@ -442,93 +539,35 @@ def _synthese_knop(a, csrf_token: str) -> str:
             f"press Save.'>Draft conclusion from facts</button></form>")
 
 
-def _feiten_sectie(a, st, csrf_token: str, can_edit: bool, *, overslaan: frozenset = frozenset()) -> str:
-    """De feitenlijst onderaan (of op de plek van `{{facts}}`).
+def _feiten_sectie(a, st, csrf_token: str, can_edit: bool, *,
+                   overslaan: frozenset = frozenset()) -> str:
+    """De feiten die (nog) geen plek in de tekst hebben — onderaan, of op de plek van `{{facts}}`.
 
-    SINDS 4 OKTOBER 2026 ALLEEN WAT NIET BIJ EEN KOPJE STAAT. Een feit met een `sectie` die als kop
-    op de pagina bestaat, staat al onder dat kopje (`_feiten_per_sectie`); hier komt de rest, onder
-    "Other facts". Zo staat geen feit twee keer op het scherm, en verdwijnt er ook geen: een feit
-    zonder sectie, of met een sectie die (niet meer) als kop bestaat, landt hier."""
-    rest = [(i, f) for i, f in enumerate(wiki.feiten(a)) if i not in overslaan]
-    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a) for i, f in rest)
-    if rest:
-        kop = "Other facts" if overslaan else "Facts"
-        lijst = f"<h3>{kop}</h3>{rijen}"
+    SINDS 5 OKTOBER 2026 IS DIT HET BAKJE, NIET DE LIJST. Een feit staat in de tekst op de plek van
+    zijn `{{fact:<id>}}`-regel; hier komt alleen wat die regel niet heeft (`overslaan` = de id's
+    die de tekst zelf plaatst). Zo staat geen feit twee keer op het scherm, en verdwijnt er ook
+    geen: een nieuw feit, of een feit waarvan iemand het blok uit de tekst haalde, landt hier.
+
+    VOOR EEN LEZER HEET HET "Other facts" (of "Facts" als er niets in de tekst staat): die hoeft
+    niet te weten dat plaatsen bestaat. Een bewerker ziet wat ermee moet gebeuren."""
+    rest = [(i, f) for i, f in enumerate(wiki.feiten(a)) if wiki.feit_id(f) not in overslaan]
+    rijen = "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a, los=can_edit)
+                    for i, f in rest)
+    if rest and can_edit:
+        lijst = (f"<h3>Not placed yet</h3><p class='muted'>These facts are on this page but have "
+                 f"no place in the text. Drag one into the text by its handle.</p>{rijen}")
+    elif rest:
+        lijst = f"<h3>{'Other facts' if overslaan else 'Facts'}</h3>{rijen}"
     elif overslaan:
-        lijst = ""                     # alles staat al onder een kopje — geen leeg "Other facts"
+        lijst = ""                     # alles staat al in de tekst — geen leeg kopje
     else:
-        lijst = ("<h3>Facts</h3><div class='muted'>No facts yet. A fact carries its own grounding: "
-                 "a chronicle record, a certificate, a policy or a cited source.</div>")
+        lijst = ("<h3>Facts</h3><div class='muted'>No facts yet. A fact says where it comes from: "
+                 "a link, a file on this page, or first-hand.</div>")
     # "+ Add fact" IS WEG (3 oktober 2026): feiten komen binnen via Bulk Import in het /-menu, ook
     # één tegelijk en mét getal (`Value:`). Twee formulieren voor hetzelfde liepen al uiteen.
     add = _FEIT_INGANG if can_edit else ""
     synth = _synthese_knop(a, csrf_token) if can_edit else ""
-    # DROPZONE "Other facts" (`s:` = geen sectie), ook als hij leeg is: daar sleep je een feit
-    # onder zijn kopje vandaan.
-    return f"<div class='wiki-inline' data-feit-doel='s:'>{lijst}{add}{synth}</div>"
-
-
-#: Een kopblok in de body zoals `_md(blokken=True)` hem schrijft.
-_KOPBLOK_RE = re.compile(r"<div class='wb' data-blok='h'(?: data-feit-doel='[^']*')?><h([345])>(.*?)</h\1></div>", re.S)
-
-
-def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tuple[str, frozenset]:
-    """Zet elk feit met een `sectie` direct onder ZIJN kopje in de tekst. `(html, geplaatst)`.
-
-    FEITEN ZIJN DE INHOUD (besluit Stefan, 4 oktober 2026 — prototype v2). De `For:`-regel van Bulk
-    Import is de sectie; die wordt vergeleken met de koppen van de pagina, hoofdletter- en
-    spatie-ongevoelig. Het feitblok komt aan het EIND van die sectie: vóór de volgende kop van
-    hetzelfde of een hoger niveau, zodat de eigen tekst en de subkopjes eerst komen.
-
-    `data-chrome` EN NIET-BEWERKBAAR: het blok staat midden in het bewerkvlak maar hoort niet bij de
-    tekst. De editor haalt elk `[data-chrome]` weg vóór het opslaan en de server negeert het
-    (`_BronParser`) — de opgeslagen markdown verandert dus niet. De telling "N facts" naast de kop
-    is om dezelfde reden chrome."""
-    feiten = wiki.feiten(a)
-    per = {}
-    for i, f in enumerate(feiten):
-        sl = " ".join(str(f.get("sectie") or "").split()).lower()
-        if sl:
-            per.setdefault(sl, []).append(i)
-    koppen, origineel = [], []
-    for m in _KOPBLOK_RE.finditer(html):
-        tekst = _html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
-        koppen.append((m.start(), m.end(), int(m.group(1)), " ".join(tekst.split()).lower(), m))
-        origineel.append(" ".join(tekst.split()))
-    # ELK KOPJE IS EEN DROPZONE (5 oktober 2026), ook een kopje zonder feiten: laat een feit op de
-    # kop zelf vallen. Een attribuut op het kopblok; de opslag kent het niet (`_BronParser` maakt
-    # er markdown van en negeert attributen), dus de tekst verandert er niet door.
-    for k, (start, eind, niveau, tekst, m) in reversed(list(enumerate(koppen))):
-        open_tag = "<div class='wb' data-blok='h'>"
-        html = (html[:start] + f"<div class='wb' data-blok='h' data-feit-doel='s:{_e(origineel[k])}'>"
-                + html[start + len(open_tag):])
-    if not per:
-        return html, frozenset()
-    koppen, origineel = [], []
-    for m in _KOPBLOK_RE.finditer(html):
-        tekst = _html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
-        koppen.append((m.start(), m.end(), int(m.group(1)), " ".join(tekst.split()).lower(), m))
-        origineel.append(" ".join(tekst.split()))
-    geplaatst, invoegen = set(), []
-    for n, (start, eind, niveau, tekst, m) in enumerate(koppen):
-        idx = [i for i in per.get(tekst, []) if i not in geplaatst]
-        if not idx:
-            continue
-        geplaatst.update(idx)
-        einde = next((k[0] for k in koppen[n + 1:] if k[2] <= niveau), len(html))
-        rijen = "".join(_feit_html(i, feiten[i], st, a.id, csrf_token, can_edit, a) for i in idx)
-        invoegen.append((einde, f"<div class='wiki-inline' data-chrome contenteditable='false' "
-                                f"data-feit-doel='s:{_e(origineel[n])}'>{rijen}</div>"))
-        # GEEN SPATIE VOOR HET CHIPJE: die zou een tekstknoop BUITEN de chrome zijn, en dan schreef
-        # elke opslag een spatie achter de kop ("## Company certification "). De afstand staat in
-        # de CSS (`.wiki-body .wb > h4 > .chip`). Gevonden met een echte opslag in de browser.
-        telling = (f"<span class='chip muted' data-chrome contenteditable='false'>"
-                   f"{len(idx)} fact{'s' if len(idx) != 1 else ''}</span>")
-        sluit = m.end() - len(f"</h{niveau}></div>")
-        invoegen.append((sluit, telling))
-    for pos, stuk in sorted(invoegen, key=lambda t: t[0], reverse=True):
-        html = html[:pos] + stuk + html[pos:]
-    return html, frozenset(geplaatst)
+    return f"<div class='wiki-inline'>{lijst}{add}{synth}</div>"
 
 
 #: Een pagina die naar de coach wijst, krijgt het logboek eronder. Waarom aan de INHOUD opgehangen
@@ -1085,7 +1124,7 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
 
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
                  secties: dict[str, str] | None = None, *, feiten: bool = True,
-                 nabewerk=None) -> str:
+                 feit_blokken: dict[str, str] | None = None) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek.
 
     `feiten=False` HAALT DE FEITEN-KNOP UIT HET /-MENU, en dat is de enige aanpassing die een
@@ -1097,11 +1136,9 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # blokken niet nodig. Visueel verandert er niets — een `<div>` op de plek van een `<br>`-regel
     # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
-    inhoud = _body_html(a.body, pags, blokken=True, secties=secties) if a.body else _GEEN_TEKST
-    # `nabewerk`: wat de pagina-weergave er nog in zet dat NIET bij de tekst hoort (de feiten per
-    # sectie, 4 oktober 2026). Alleen chrome; zie `_feiten_per_sectie`.
-    if nabewerk is not None and a.body:
-        inhoud = nabewerk(inhoud)
+    # `feit_blokken`: de feiten die de tekst zelf plaatst, per id (5 oktober 2026). Zie `_feit_blok`.
+    inhoud = (_body_html(a.body, pags, blokken=True, secties=secties, feit_blokken=feit_blokken)
+              if a.body else _GEEN_TEKST)
     # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
     # (`cockpit2_util.BLOK_SOORTEN`) in plaats van ook nog eens in JS, waar geen test bij kan.
@@ -1258,12 +1295,16 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # FEITEN ALLEEN OP EEN NOTE (zie de docstring): de sleutel ontbreekt dan gewoon, en `_onder`
     # en `_afgeleid_blok` kunnen daar allebei tegen.
     secties = {"backlinks": _backlink_sectie(a, pags)}
+    feit_blokken: dict[str, str] = {}
     if is_note:
-        # WELKE FEITEN STAAN AL ONDER HUN KOPJE? Eerst vastgesteld, want de lijst onderaan toont
-        # alleen de rest. Dezelfde functie als die ze straks in de tekst zet, dus geen tweede regel.
-        _, _geplaatst = (_feiten_per_sectie(_body_html(a.body, pags, blokken=True), a, st,
-                                            csrf_token, can_edit) if a.body else (None, frozenset()))
-        secties["facts"] = _feiten_sectie(a, st, csrf_token, can_edit, overslaan=_geplaatst)
+        # WELKE FEITEN STAAN IN DE TEKST? De tekst zegt het zelf (`{{fact:<id>}}`); wat daar niet
+        # staat komt in het bakje onderaan. Eén bron voor allebei, dus geen feit twee keer.
+        per_id = {wiki.feit_id(f): (i, f) for i, f in enumerate(wiki.feiten(a))}
+        in_tekst = [fid for fid in wiki.geplaatste_feiten(a.body) if fid in per_id]
+        feit_blokken = {fid: _feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token,
+                                        can_edit, a) for fid in in_tekst}
+        secties["facts"] = _feiten_sectie(a, st, csrf_token, can_edit,
+                                          overslaan=frozenset(in_tekst))
     geplaatst = wiki.markers(a.body)
     #: Heeft deze sectie IETS te melden? Dat is een vraag over de inhoud, niet over het scherm,
     #: dus hij wordt hier één keer beantwoord en niet uit de HTML teruggelezen.
@@ -1315,9 +1356,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
             f"<button class='flink' type='submit' name='action' value='pagina_synthese_verwerp'>"
             f"Discard</button></form></div>")
-    _nb = ((lambda h: _feiten_per_sectie(h, a, st, csrf_token, can_edit)[0]) if is_note else None)
     body = voorstel_blok + _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note,
-                                        nabewerk=_nb)
+                                        feit_blokken=feit_blokken)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
     # schrijf-sessie (publieke view), dan ook geen voorstelknop. En alleen op een note, want
     # `pagina_voorstel` poort op de soort — zie de docstring hierboven.

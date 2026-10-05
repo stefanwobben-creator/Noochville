@@ -10,6 +10,9 @@
 """
 from __future__ import annotations
 
+# Sinds 5 oktober 2026 heet de feitensectie voor een SCHRIJVER "Not placed yet" (wat nog geen plek in
+# de tekst heeft); een lezer ziet "Facts" of "Other facts". Deze toetsen renderen als schrijver.
+
 import pathlib
 import re
 
@@ -50,7 +53,7 @@ def test_zonder_feiten_geen_feiten_sectie(tmp_path):
     """Op de 92 pagina's van prod heeft er vandaag nul een feit, dus dit kopje stond onder élke
     tekst met "No facts yet" eronder. Dat is meubilair, geen informatie."""
     html, _a = _html(tmp_path)
-    assert ">Facts</h3>" not in html
+    assert ">Not placed yet</h3>" not in html
 
 
 def test_zonder_backlinks_geen_links_here(tmp_path):
@@ -60,7 +63,7 @@ def test_zonder_backlinks_geen_links_here(tmp_path):
 
 def test_met_feiten_staat_de_sectie_er_wel(tmp_path):
     html, _a = _html(tmp_path, feiten=("Een schoen weegt 300 gram",))
-    assert ">Facts</h3>" in html
+    assert ">Not placed yet</h3>" in html
 
 
 def test_een_wens_telt_ook_als_inhoud(tmp_path):
@@ -90,7 +93,7 @@ def test_zelf_geplaatst_blijft_staan_ook_als_hij_leeg_is(tmp_path):
 def test_zelf_geplaatst_staat_er_nog_steeds_maar_een_keer(tmp_path):
     """De oude regel blijft: in de tekst óf eronder, nooit allebei."""
     html, _a = _html(tmp_path, body="Tekst.\n\n{{facts}}", feiten=("Een feit",))
-    assert html.count(">Facts</h3>") == 1
+    assert html.count(">Not placed yet</h3>") == 1
 
 
 # ── 2. Geen domein is een keuze ──────────────────────────────────────────────
