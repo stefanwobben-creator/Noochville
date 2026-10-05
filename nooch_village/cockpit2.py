@@ -2917,11 +2917,28 @@ def _act_pagina_bulk_import_facts(c):
         "certificate": "cert",
         "policy": "policy",
         "attested": "attested",
+        # De woorden van het feitformulier sinds 5 oktober 2026 ("A link", "I know this first-hand").
+        "link": "bron",
+        "first-hand": "attested",
+        "firsthand": "attested",
     }
 
     new_facts = []
     errors = []
+    # IN VOLGORDE (5 oktober 2026): de plak is de pagina. Een feit en een losse alinea onder
+    # hetzelfde kopje komen in de tekst in de volgorde waarin ze geplakt werden.
+    volgorde: list[tuple[str, object, str]] = []          # (soort, feit-of-tekst, kopje)
     for i, fact_data in enumerate(raw_facts):
+        if not isinstance(fact_data, dict):
+            errors.append(f"Fact {i+1}: not an object")
+            continue
+        if str(fact_data.get("Kind") or "").lower() == "text":
+            # Een alinea zonder Text:/Type:-regels: tekst van de pagina, geen feit. Open items
+            # bijvoorbeeld — dat is een takenlijst, en die heeft geen bron.
+            losse = str(fact_data.get("Text") or "").strip()
+            if losse:
+                volgorde.append(("tekst", losse, str(fact_data.get("For") or "").strip()))
+            continue
         try:
             tekst = (fact_data.get("Text") or fact_data.get("text") or "").strip()
             ftype = (fact_data.get("Type") or fact_data.get("type") or "").strip().lower()
@@ -2954,18 +2971,26 @@ def _act_pagina_bulk_import_facts(c):
             # `For:` UIT DE FEITEN-PROMPT wordt de sectie van het feit (4 oktober 2026). Vóór vandaag
             # gooide Bulk Import die regel weg; hij was bedoeld als leeshulp.
             sectie = (fact_data.get("For") or fact_data.get("for") or "").strip()
+            # "Check again by:" — de datum waarop dit opnieuw bekeken moet worden (bv. de einddatum
+            # van een certificaat). Een datum die niet als YYYY-MM-DD te lezen is valt weg, met een
+            # waarschuwing: liever geen herinnering dan een verkeerde.
+            hercheck_regel = str(fact_data.get("CheckAgainBy") or fact_data.get("Check again by") or "").strip()
+            hercheck = wiki._datum(hercheck_regel)
+            if hercheck_regel and not hercheck:
+                errors.append(f"Fact {i+1}: 'Check again by' is not a date (use YYYY-MM-DD)")
             feit = wiki.maak_feit(tekst, soort=soort, ref=ref, citaat=citaat, url=url, waarde=waarde,
-                                  sectie=sectie)
+                                  sectie=sectie, hercheck=hercheck)
             if feit is None:
                 errors.append(f"Fact {i+1}: empty text")
                 continue
             if waarde_fout:
                 errors.append(f"Fact {i+1}: imported without a number — {waarde_fout}")
             new_facts.append(feit)
+            volgorde.append(("feit", feit, sectie))
         except Exception as e:
             errors.append(f"Fact {i+1}: {str(e)}")
 
-    if not new_facts:
+    if not volgorde:
         return nxt, f"✗ no valid facts ({len(errors)} errors)"
 
     # Voeg toe aan bestaande feiten
@@ -2973,21 +2998,30 @@ def _act_pagina_bulk_import_facts(c):
     meta["feiten"] = wiki.met_ids(list(wiki.feiten(cur))) + new_facts
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
-    # `For:` ZET HET FEIT OP ZIJN PLEK IN DE TEKST (5 oktober 2026): aan het eind van die sectie.
-    # Zonder `For:`, of met een kopje dat de pagina niet heeft, blijft het feit ongeplaatst en
-    # staat het onderaan — nooit weg, en nooit op een gegokte plek.
-    body, geplaatst = cur.body or "", 0
-    for feit in new_facts:
-        if feit.get("sectie"):
-            body, gedaan = wiki.plaats_feit_marker(body, feit["id"], feit["sectie"])
-            geplaatst += 1 if gedaan else 0
-    upd = st.att.update(cur.id, body=(body if geplaatst else None), meta=meta,
+    # DE PLAK IS DE PAGINA (5 oktober 2026). Elk feit met een kopje (`## Kop` erboven, of `For:`)
+    # komt als regel `{{fact:<id>}}` aan het eind van die sectie, losse tekst ook, in de volgorde
+    # van de plak. Heeft de pagina dat kopje nog niet, dan komt het erbij: de plakker noemde het.
+    # Zonder kopje blijft een feit ongeplaatst en staat het onder "Not placed yet" — nooit weg.
+    oud_body = cur.body or ""
+    body = oud_body
+    for soort_item, item, kop in volgorde:
+        if soort_item == "feit":
+            if kop:
+                body = wiki.plaats_in_sectie(body, wiki.feit_marker(item["id"]), kop)
+        else:
+            body = wiki.plaats_in_sectie(body, item, kop)
+    te_lang = _body_te_lang(body, cur.kind) if body != oud_body else None
+    if te_lang:
+        return nxt, te_lang
+    n_tekst = sum(1 for v in volgorde if v[0] == "tekst")
+    notitie = f"bulk import: {len(new_facts)} facts" + (f", {n_tekst} text blocks" if n_tekst else "")
+    upd = st.att.update(cur.id, body=(body if body != oud_body else None), meta=meta,
                         actor_id=actor_id, actor_type="person",
-                        governance_ref=gref, change_note=f"bulk import: {len(new_facts)} facts")
+                        governance_ref=gref, change_note=notitie)
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
 
-    msg = f"✅ {len(new_facts)} facts imported"
+    msg = f"✅ {len(new_facts)} facts imported" + (f", {n_tekst} text blocks" if n_tekst else "")
     if errors:
         msg += f" ({len(errors)} warning{'s' if len(errors) != 1 else ''}: " + "; ".join(errors[:3])
         if len(errors) > 3:

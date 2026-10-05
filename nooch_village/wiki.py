@@ -219,6 +219,39 @@ def zonder_feitmarkeringen(body: str) -> str:
     return "\n".join(r for r in (body or "").split("\n") if not FEIT_MARKER_RE.match(r.strip()))
 
 
+def plaats_in_sectie(body: str, tekst: str, sectie: str) -> str:
+    """Zet `tekst` (een of meer regels) aan het eind van sectie `sectie`; bestaat die kop niet,
+    dan komt hij er aan het eind bij als `## <sectie>` (5 oktober 2026, Bulk Import in één plak).
+
+    Een kop maken mag hier WEL, anders dan bij `plaats_feit_marker`: de plakker noemde hem zelf
+    (`## Kop` of `For:`). Dat is geen gok over de plek, het is de tekst die hij aanleverde."""
+    body = (body or "").rstrip("\n")
+    sectie = (sectie or "").strip()
+    tekst = (tekst or "").strip("\n")
+    if not tekst:
+        return body
+    if not sectie:
+        return (body + "\n\n" if body else "") + tekst
+    if not heeft_kop(body, sectie):
+        body = (body + "\n\n" if body else "") + f"## {sectie}"
+    tijdelijk = "{{fact:__plek__}}"
+    nieuw, _ = plaats_feit_marker(body, "__plek__", sectie)
+    return nieuw.replace(tijdelijk, tekst, 1)
+
+
+def heeft_kop(body: str, sectie: str) -> bool:
+    """Heeft de tekst een kop met deze naam (zelfde vergelijking als `plaats_feit_marker`)?"""
+    zoek, in_code = _norm(sectie), False
+    for r in (body or "").split("\n"):
+        if r.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        m = None if in_code else _KOP_REGEL_RE.match(r)
+        if m and _norm(m.group(2)) == zoek:
+            return True
+    return False
+
+
 def plaats_feit_marker(body: str, fid: str, sectie: str | None = None) -> tuple[str, bool]:
     """Zet de markering van een feit in de tekst. `(body, geplaatst)`.
 

@@ -216,3 +216,73 @@ def test_de_migratie_is_eerst_een_droogloop_en_daarna_idempotent(tmp_path):
     voor = a.body
     wiki_seed.feiten_plaatsen(cockpit2._Stores(dd).att, apply=True)
     assert _pagina(dd, aid).body == voor
+
+
+# ── Bulk Import: de plak is de pagina ──────────────────────────────────────────────────────────
+
+def _plak(dd, aid, items):
+    return cockpit2.dispatch(dd, "pagina_bulk_import_facts",
+                             {"aid": [aid], "facts_json": [json.dumps(items)], "next": ["/"]},
+                             username=IK)[1]
+
+
+def test_feiten_en_tekst_komen_in_de_volgorde_van_de_plak(tmp_path):
+    dd, aid = _dorp(tmp_path, [])
+    msg = _plak(dd, aid, [
+        {"Kind": "text", "Text": "Eerst een zin.", "For": "Company certification"},
+        {"Text": "Daarna een feit", "Type": "source", "URL": "https://e.org", "For": "Company certification"},
+        {"Kind": "text", "Text": "- Verify in FSC Search", "For": "Open items"},
+    ])
+    assert "1 facts imported, 2 text blocks" in msg, msg
+    a = _pagina(dd, aid)
+    fid = wiki.feit_id(wiki.feiten(a)[0])
+    b = a.body
+    assert b.index("Certificates.") < b.index("Eerst een zin.") < b.index("{{fact:%s}}" % fid) \
+        < b.index("## Open items") < b.index("- Verify in FSC Search")
+
+
+def test_een_kop_die_er_nog_niet_is_komt_erbij(tmp_path):
+    """De plakker noemde hem zelf. Op een nieuwe pagina bouwt één plak zo de hele pagina."""
+    dd, aid = _dorp(tmp_path, [], body="")
+    _plak(dd, aid, [{"Text": "Molded in Vietnam", "Type": "source", "URL": "https://e.org",
+                     "For": "Location & contact"},
+                    {"Kind": "text", "Text": "not found", "For": "Labor & compliance"}])
+    b = _pagina(dd, aid).body
+    assert b.startswith("## Location & contact\n{{fact:")
+    assert "## Labor & compliance\nnot found" in b
+
+
+def test_alleen_tekst_plakken_kan_ook(tmp_path):
+    dd, aid = _dorp(tmp_path, [])
+    msg = _plak(dd, aid, [{"Kind": "text", "Text": "- Ask for SDS", "For": "Open items"}])
+    assert not cockpit2.is_weigering(msg) and "0 facts imported, 1 text blocks" in msg, msg
+    assert _pagina(dd, aid).body.rstrip().endswith("- Ask for SDS")
+
+
+def test_check_again_by_wordt_de_hercontrole(tmp_path):
+    dd, aid = _dorp(tmp_path, [])
+    msg = _plak(dd, aid, [{"Text": "FSC CoC", "Type": "source", "URL": "https://e.org",
+                           "CheckAgainBy": "2031-02-22"},
+                          {"Text": "Rare datum", "Type": "source", "URL": "https://e.org",
+                           "CheckAgainBy": "22 Feb 2031"}])
+    f1, f2 = wiki.feiten(_pagina(dd, aid))
+    assert wiki.hercheck_datum(f1) == "2031-02-22" and not wiki.hercheck_datum(f2)
+    assert "not a date" in msg
+
+
+def test_de_woorden_van_het_formulier_werken_als_type(tmp_path):
+    dd, aid = _dorp(tmp_path, [])
+    _plak(dd, aid, [{"Text": "a", "Type": "link", "URL": "https://e.org"},
+                    {"Text": "b", "Type": "first-hand"}])
+    f1, f2 = wiki.feiten(_pagina(dd, aid))
+    assert f1["grond"]["soort"] == "bron"
+    assert f2["grond"]["soort"] == "attested" and f2["grond"]["ref"] == "Tess Beheerder"
+
+
+def test_de_parser_kent_kopjes_tekst_en_check_again_by():
+    from pathlib import Path
+    js = (Path(cockpit2.__file__).parent / "static" / "nooch.js").read_text(encoding="utf-8")
+    p = js[js.index("function parseFacts("):js.index("// Open modal dialog")]
+    assert 'Kind: "text"' in p and "fact.For = kop" in p
+    assert "fact.CheckAgainBy = val" in p
+    assert "parseMarkdown" not in js        # een sectie wordt nooit meer een feit zonder bron

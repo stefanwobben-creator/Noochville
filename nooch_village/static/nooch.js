@@ -1002,71 +1002,53 @@
   }
 
   function bulkImportFacts(blok, body) {
-    // Dual parser: GROUNDING-format facts OR markdown narrative blocks.
-    // GROUNDING: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
-    // Markdown: "## Heading\nContent for this section..."
-    // Note: blok and body parameters are optional; function can be called without them
+    // ÉÉN PARSER, DE PLAK IS DE PAGINA (5 oktober 2026). Een `## Kop`-regel zet het kopje voor wat
+    // erna komt. Blokken worden gescheiden door een lege regel. Een blok met een `Text:`-regel is
+    // een feit ("Text: …\nType: …\nRef: …\nQuote: …\nURL: …"); elk ander blok is gewone tekst
+    // van de pagina onder dat kopje (Open items bijvoorbeeld). Een expliciete `For:`-regel wint van
+    // het kopje erboven. Tot vandaag maakte een plak met kopjes van elke SECTIE een feit — tekst
+    // zonder bron die als bewering op de pagina kwam te staan.
     function parseFacts(text) {
-      // Detect format: if text contains "##" or "###", treat as markdown. Otherwise GROUNDING.
-      if (/^#+\s+/m.test(text)) {
-        return parseMarkdown(text);
-      } else {
-        return parseGrounding(text);
-      }
-    }
-
-    function parseGrounding(text) {
-      var facts = [];
-      var blocks = text.split(/\n\s*\n+/);
-      blocks.forEach(function(block) {
-        if (!block.trim()) return;
-        var lines = block.trim().split('\n');
+      var items = [];
+      var kop = "";
+      var blok = [];
+      function sluit() {
+        if (!blok.length) return;
         var fact = {};
-        lines.forEach(function(line) {
+        blok.forEach(function(line) {
           var m = line.match(/^([^:]+):\s*(.*)$/);
-          if (m) {
-            var key = m[1].trim();
-            var val = m[2].trim();
-            if (/^text$/i.test(key)) fact.Text = val;
-            else if (/^type$/i.test(key)) fact.Type = val;
-            else if (/^ref$/i.test(key)) fact.Ref = val;
-            else if (/^quote$/i.test(key)) fact.Quote = val;
-            else if (/^url$/i.test(key)) fact.URL = val;
-            // De getal-regel uit de feiten-prompts ("Cost price per kg" = 4,20). De server leest
-            // hem (`_waarde_uit_regel`); hier alleen doorgeven. Zonder deze regel viel hij stil weg.
-            else if (/^value$/i.test(key)) fact.Value = val;
-            // Onder welk kopje dit feit hoort (de `For:`-regel uit de feiten-prompts).
-            else if (/^for$/i.test(key)) fact.For = val;
-          }
+          if (!m) return;
+          var key = m[1].trim();
+          var val = m[2].trim();
+          if (/^text$/i.test(key)) fact.Text = val;
+          else if (/^type$/i.test(key)) fact.Type = val;
+          else if (/^ref$/i.test(key)) fact.Ref = val;
+          else if (/^quote$/i.test(key)) fact.Quote = val;
+          else if (/^url$/i.test(key)) fact.URL = val;
+          // De getal-regel uit de feiten-prompts ("Cost price per kg" = 4,20). De server leest
+          // hem (`_waarde_uit_regel`); hier alleen doorgeven. Zonder deze regel viel hij stil weg.
+          else if (/^value$/i.test(key)) fact.Value = val;
+          // Onder welk kopje dit feit hoort (de `For:`-regel uit de feiten-prompts).
+          else if (/^for$/i.test(key)) fact.For = val;
+          // Wanneer opnieuw kijken (bv. de einddatum van een certificaat), als YYYY-MM-DD.
+          else if (/^check again by$/i.test(key)) fact.CheckAgainBy = val;
         });
-        if (fact.Text) facts.push(fact);
-      });
-      return facts;
-    }
-
-    function parseMarkdown(text) {
-      // Parse markdown sections (H2/H3 headings + content)
-      // Each section becomes a "fact" with Text = heading + narrative, Type = source
-      var facts = [];
-      var sections = text.split(/^#+\s+/m);
-      sections.forEach(function(section) {
-        if (!section.trim()) return;
-        var lines = section.trim().split('\n');
-        var heading = lines[0] || '';
-        var content = lines.slice(1).join(' ').trim();
-        // Combine heading + content as the fact text
-        var text = heading + (content ? '\n' + content : '');
-        if (text) {
-          facts.push({
-            Text: text.substring(0, 400),  // Cap at reasonable length
-            Type: "source",                 // Default type for markdown imports
-            Ref: "",
-            Quote: "",
-            URL: ""
-          });
+        if (fact.Text) {
+          if (!fact.For && kop) fact.For = kop;
+          items.push(fact);
+        } else {
+          items.push({ Kind: "text", Text: blok.join("\n"), For: kop });
         }
+        blok = [];
+      }
+      text.split("\n").forEach(function(line) {
+        var m = line.match(/^#{1,3}\s+(.+?)\s*$/);
+        if (m) { sluit(); kop = m[1]; return; }
+        if (!line.trim()) { sluit(); return; }
+        blok.push(line.replace(/\s+$/, ""));
       });
-      return facts;
+      sluit();
+      return items;
     }
 
     // Open modal dialog
@@ -1074,7 +1056,7 @@
     dialog.className = 'bulk-import-dialog';
     dialog.innerHTML = '<div class="bulk-import-modal">' +
       '<h3>Bulk Import Facts</h3>' +
-      '<textarea id="bulk-facts-input" placeholder="Paste GROUNDING format facts here..." style="width:100%;height:200px;font-family:monospace;"></textarea>' +
+      '<textarea id="bulk-facts-input" placeholder="Paste the output of the facts prompt here..." style="width:100%;height:200px;font-family:monospace;"></textarea>' +
       '<div id="bulk-facts-preview" style="margin-top:10px;padding:10px;background:#f5f5f5;border-radius:4px;max-height:200px;overflow:auto;"></div>' +
       '<div style="margin-top:10px;text-align:right;">' +
       '<button id="bulk-cancel-btn" type="button">Cancel</button>' +
@@ -1089,16 +1071,19 @@
 
     // Live preview
     textarea.addEventListener('input', function() {
-      var facts = parseFacts(textarea.value);
-      preview.innerHTML = facts.length ?
-        '<strong>' + facts.length + ' fact(s) ready:</strong><ul>' +
-        facts.map(function(f,i) {
+      var items = parseFacts(textarea.value);
+      var feiten = items.filter(function(f) { return f.Kind !== "text"; });
+      var teksten = items.length - feiten.length;
+      preview.innerHTML = items.length ?
+        '<strong>' + feiten.length + ' fact(s)' + (teksten ? ' and ' + teksten + ' text block(s)' : '')
+        + ' ready:</strong><ul>' +
+        items.map(function(f) {
           var tekst = document.createElement('span');
-          tekst.textContent = (f.Text || '').substring(0,60) + '…' + (f.Value ? ' · value: ' + f.Value : '')
-            + (f.For ? ' · section: ' + f.For : '');
+          tekst.textContent = (f.Kind === "text" ? 'text · ' : '') + (f.Text || '').substring(0,60) + '…'
+            + (f.Value ? ' · value: ' + f.Value : '') + (f.For ? ' · under: ' + f.For : '');
           return '<li><strong>' + tekst.innerHTML + '</strong></li>';
         }).join('') +
-        '</ul>' : '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
+        '</ul>' : '<em>Nothing parsed yet: paste the output of the facts prompt</em>';
     });
 
     // De melding staat IN de dialog, op de plek van de voorvertoning. `zeg` hoort bij
