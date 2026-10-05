@@ -2718,6 +2718,56 @@ def _act_pagina_feit_edit(c):
     return nxt, "✓ fact updated"
 
 
+def _act_pagina_feit_verplaats(c):
+    """Een feit naar een ander kopje, of binnen een kopje van plek (5 oktober 2026, scope slepen).
+
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_edit: de plek van een
+    # feit is inhoud van de pagina.
+
+    `sectie` = het kopje (leeg = "Other facts"); `voor_fid` = het feit waar hij vóór komt (leeg =
+    achteraan in die sectie). Id, grond en bron-check blijven ongemoeid: verplaatsen is geen
+    bewerking van het feit."""
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    feiten = wiki.met_ids(list(wiki.feiten(cur)))
+    i = _feit_index(feiten, g("fid"))
+    if i is None:
+        return nxt, "✗ unknown fact — it may have been changed or removed meanwhile"
+    feit = dict(feiten.pop(i))
+    sectie = " ".join(g("sectie").split())
+    if sectie:
+        feit["sectie"] = sectie[:80]
+    else:
+        feit.pop("sectie", None)
+    voor = g("voor_fid")
+    if voor:
+        j = _feit_index(feiten, voor)
+        if j is None:
+            return nxt, "✗ the place to drop on no longer exists — reload the page"
+    else:
+        # ACHTERAAN IN DIE SECTIE: na het laatste feit met dezelfde sectie, anders achteraan.
+        norm = lambda t: " ".join(str(t or "").split()).lower()
+        zelfde = [n for n, f in enumerate(feiten) if norm(f.get("sectie")) == norm(sectie)]
+        j = (zelfde[-1] + 1) if zelfde else len(feiten)
+    feiten.insert(j, feit)
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = feiten
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref,
+                        change_note=f"fact moved: {str(feit.get('tekst') or '')[:80]}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, "✓ fact moved"
+
+
 def _act_pagina_feit_del(c):
     # AUTHZ: domeineigenaar of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
     # achter, zodat de historie laat zien dát er een feit weg is (nooit een stille verdwijning).
@@ -6477,6 +6527,7 @@ ACTIONS = {
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_edit": _act_pagina_feit_edit,
+    "pagina_feit_verplaats": _act_pagina_feit_verplaats,
     "pagina_feit_del": _act_pagina_feit_del,
     "pagina_bulk_import_facts": _act_pagina_bulk_import_facts,
     "pagina_voorstel": _act_pagina_voorstel,

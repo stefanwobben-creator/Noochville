@@ -129,7 +129,9 @@ def test_bewerken_haalt_alleen_de_grepen_weg_en_niet_alle_chrome():
 
     i = js.index("function grepen(")
     lichaam = js[i:js.index("\n  }", i)]
-    assert 'querySelectorAll(".wb-greep")' in lichaam, "grepen() sloopt nog alle chrome"
+    # Sinds 5 oktober 2026 nog smaller: alleen de grepen DIRECT in een blok, want een feit onder een
+    # kopje draagt dezelfde `.wb-greep` en die hoort niet bij deze opruiming.
+    assert 'querySelectorAll(":scope > .wb > .wb-greep")' in lichaam, "grepen() sloopt nog alle chrome"
     assert 'querySelectorAll("[data-chrome]")' not in lichaam
 
     # en de opslag-verdediging staat er nog wél

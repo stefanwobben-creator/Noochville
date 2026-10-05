@@ -162,7 +162,7 @@ def test_opslaan_blijft_een_eigen_handeling():
     """GEEN AUTOSAVE. De balk verschijnt bij een wijziging; wegschrijven doet pas de knop."""
     haak = _wikiedit()
     assert "form.hidden = true;" in haak, "de opslaan-balk staat meteen open"
-    assert "function gewijzigd()" in haak
+    assert "function gewijzigd(" in haak       # sinds 5 okt met `records`: chrome telt niet
     for verboden in ("setTimeout(bewaar", "autosave", "form.submit()"):
         assert verboden not in haak, f"er wordt vanzelf opgeslagen ({verboden})"
 

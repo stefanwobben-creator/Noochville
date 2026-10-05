@@ -346,6 +346,14 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
              f"<strong>{_e(wiki.waarde_tekst(w))}</strong></div>" if w else "")
     getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
                f"<div>{_grond_chip(g)}</div>{citaat}")
+    # SLEEPBAAR (5 oktober 2026): de kaart is het feit zelf (`data-feit-id`), het doel is óók het
+    # feit (`data-feit-doel`, vóór of ná), en de sectie staat erop zodat de browser weet waar hij
+    # landt. Attributen en geen klasse; de greep is dezelfde als die van de wiki-blokken.
+    sleep = (f" data-feit-id='{_e(fid)}' data-feit-doel='f:{_e(fid)}' "
+             f"data-feit-sectie='{_e(feit.get('sectie') or '')}'")
+    greep = ("<span class='wb-greep' data-chrome contenteditable='false'>"
+             "<button type='button' class='wb-greep-knop' aria-label='Drag to move this fact' "
+             "title='Drag to another heading'>⠿</button></span>") if can_edit else ""
     if can_edit and a is not None:
         # KLIK OP HET FEIT = BEWERKEN (4 oktober 2026), hetzelfde `inline_edit` als de wall en de
         # Conclusion. Multipart, want in hetzelfde formulier kan bewijs worden geüpload.
@@ -356,8 +364,8 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
         getoond = inline_edit(getoond, _feit_formulier(feit, a, st), sleutel=f"feit-{fid}",
                               opslaan="pagina_feit_edit", verborgen=verborgen, klikbaar=True,
                               multipart=True)
-        return f"<div class='editor-inline'>{getoond}{weg}</div>"
-    return f"<div>{getoond}{weg}</div>"
+        return f"<div class='editor-inline'{sleep}>{greep}{getoond}{weg}</div>"
+    return f"<div{sleep}>{getoond}{weg}</div>"
 
 
 #: De ingang voor feiten, sinds "+ Add fact" weg is (3 oktober 2026, besluit Stefan): het /-menu.
@@ -455,11 +463,13 @@ def _feiten_sectie(a, st, csrf_token: str, can_edit: bool, *, overslaan: frozens
     # één tegelijk en mét getal (`Value:`). Twee formulieren voor hetzelfde liepen al uiteen.
     add = _FEIT_INGANG if can_edit else ""
     synth = _synthese_knop(a, csrf_token) if can_edit else ""
-    return f"<div class='wiki-inline'>{lijst}{add}{synth}</div>"
+    # DROPZONE "Other facts" (`s:` = geen sectie), ook als hij leeg is: daar sleep je een feit
+    # onder zijn kopje vandaan.
+    return f"<div class='wiki-inline' data-feit-doel='s:'>{lijst}{add}{synth}</div>"
 
 
 #: Een kopblok in de body zoals `_md(blokken=True)` hem schrijft.
-_KOPBLOK_RE = re.compile(r"<div class='wb' data-blok='h'><h([345])>(.*?)</h\1></div>", re.S)
+_KOPBLOK_RE = re.compile(r"<div class='wb' data-blok='h'(?: data-feit-doel='[^']*')?><h([345])>(.*?)</h\1></div>", re.S)
 
 
 def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tuple[str, frozenset]:
@@ -480,12 +490,25 @@ def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tup
         sl = " ".join(str(f.get("sectie") or "").split()).lower()
         if sl:
             per.setdefault(sl, []).append(i)
-    if not per:
-        return html, frozenset()
-    koppen = []
+    koppen, origineel = [], []
     for m in _KOPBLOK_RE.finditer(html):
         tekst = _html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
         koppen.append((m.start(), m.end(), int(m.group(1)), " ".join(tekst.split()).lower(), m))
+        origineel.append(" ".join(tekst.split()))
+    # ELK KOPJE IS EEN DROPZONE (5 oktober 2026), ook een kopje zonder feiten: laat een feit op de
+    # kop zelf vallen. Een attribuut op het kopblok; de opslag kent het niet (`_BronParser` maakt
+    # er markdown van en negeert attributen), dus de tekst verandert er niet door.
+    for k, (start, eind, niveau, tekst, m) in reversed(list(enumerate(koppen))):
+        open_tag = "<div class='wb' data-blok='h'>"
+        html = (html[:start] + f"<div class='wb' data-blok='h' data-feit-doel='s:{_e(origineel[k])}'>"
+                + html[start + len(open_tag):])
+    if not per:
+        return html, frozenset()
+    koppen, origineel = [], []
+    for m in _KOPBLOK_RE.finditer(html):
+        tekst = _html_mod.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
+        koppen.append((m.start(), m.end(), int(m.group(1)), " ".join(tekst.split()).lower(), m))
+        origineel.append(" ".join(tekst.split()))
     geplaatst, invoegen = set(), []
     for n, (start, eind, niveau, tekst, m) in enumerate(koppen):
         idx = [i for i in per.get(tekst, []) if i not in geplaatst]
@@ -494,8 +517,8 @@ def _feiten_per_sectie(html: str, a, st, csrf_token: str, can_edit: bool) -> tup
         geplaatst.update(idx)
         einde = next((k[0] for k in koppen[n + 1:] if k[2] <= niveau), len(html))
         rijen = "".join(_feit_html(i, feiten[i], st, a.id, csrf_token, can_edit, a) for i in idx)
-        invoegen.append((einde, f"<div class='wiki-inline' data-chrome contenteditable='false'>"
-                                f"{rijen}</div>"))
+        invoegen.append((einde, f"<div class='wiki-inline' data-chrome contenteditable='false' "
+                                f"data-feit-doel='s:{_e(origineel[n])}'>{rijen}</div>"))
         # GEEN SPATIE VOOR HET CHIPJE: die zou een tekstknoop BUITEN de chrome zijn, en dan schreef
         # elke opslag een spatie achter de kop ("## Company certification "). De afstand staat in
         # de CSS (`.wiki-body .wb > h4 > .chip`). Gevonden met een echte opslag in de browser.
