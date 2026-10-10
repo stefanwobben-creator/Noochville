@@ -104,7 +104,7 @@ def uitstel(pagina, k: str) -> dict | None:
 
 def placeholders_van(soort: str, k: str) -> tuple[str, ...]:
     """De open-punt-regels die het zaad onder deze vraag zette ("Dye/chemical disclosure: not yet
-    provided"). Ze verdwijnen uit de tekst zodra de vraag deferred is — dan staat de afspraak er."""
+    provided")."""
     v = next((x for x in vragen(soort) if x["k"] == k), None)
     if v is None or not v["koppen"]:
         return ()
@@ -112,9 +112,31 @@ def placeholders_van(soort: str, k: str) -> tuple[str, ...]:
     return tuple(sectie[2]) if sectie else ()
 
 
-def body_zonder_placeholders(body: str, soort: str, k: str) -> str:
-    weg = {f"- {p}" for p in placeholders_van(soort, k)}
-    return "\n".join(r for r in (body or "").split("\n") if r.strip() not in weg)
+# DE OPEN-PUNT-REGEL WORDT AFGELEID, NIET WEGGEHAALD (fix 11 oktober 2026). Tot dan haalde uitstellen
+# de regel uit de TEKST, en terugdraaien zette hem niet terug: de pagina was na uitstellen en
+# terugdraaien een andere pagina, en een verlopen datum bracht de regel ook niet terug. Nu blijft
+# de tekst onaangeroerd en beslist de STAAT VAN HET VELD of de regel getoond (en geteld) wordt:
+#   leeg (ook verlopen) → de regel staat er;
+#   deferred            → de afspraak staat er ("deferred, research by …");
+#   beantwoord          → niets (een "not yet provided" naast een antwoord is onwaar).
+# Er hoeft dus nooit iets "teruggezet" te worden, en een tussentijdse bewerking van de pagina kan
+# niet botsen met een opgeslagen regel.
+
+def placeholder_vragen(soort: str) -> dict[str, str]:
+    """{open-punt-regel: vraag-sleutel} voor een paginasoort."""
+    return {p: v["k"] for v in vragen(soort) for p in placeholders_van(soort, v["k"])}
+
+
+def soort_van(rij: dict) -> str:
+    return "materiaal" if "onderdelen" in rij else "leverancier"
+
+
+def verborgen_placeholders(rij: dict, soort: str = "") -> dict[str, dict]:
+    """{open-punt-regel: cel} voor de regels die NIET getoond worden, omdat hun veld niet leeg is
+    (deferred of beantwoord)."""
+    soort = soort or soort_van(rij)
+    return {p: rij["cellen"][k] for p, k in placeholder_vragen(soort).items()
+            if rij["cellen"].get(k, {}).get("status", LEEG) != LEEG}
 
 
 def _norm(s: str) -> str:
@@ -325,8 +347,9 @@ def gestaafd(rij: dict, **ctx) -> bool:
     3. geen enkel feit op de pagina is ongecheckt of in conflict;
     4. bij een MATERIAAL: er is een leverancier gekoppeld.
 
-    Dit vervangt de placeholder-toets van de vorige versie: "not yet provided" verdwijnt zodra een
-    veld deferred is, en een veld dat leeg is zonder afspraak houdt de pagina hoe dan ook tegen.
+    Dit vervangt de placeholder-toets van de vorige versie: "not yet provided" wordt niet meer
+    getoond zodra een veld deferred is (`verborgen_placeholders`), en een veld dat leeg is zonder
+    afspraak houdt de pagina hoe dan ook tegen.
     "Lege vragen mogen blijven staan" vervalt daarmee."""
     pagina = rij.get("pagina")
     if pagina is None:
@@ -341,8 +364,16 @@ def gestaafd(rij: dict, **ctx) -> bool:
 
 
 def heeft_placeholder(rij: dict) -> bool:
-    body = (getattr(rij.get("pagina"), "body", "") or "").lower()
-    return any(p in body for p in PLACEHOLDERS)
+    """Draagt de pagina nog een ZICHTBARE open-punt-regel? Een regel bij een deferred of beantwoord
+    veld telt niet: die wordt ook niet getoond (`verborgen_placeholders`)."""
+    weg = verborgen_placeholders(rij)
+    for regel in (getattr(rij.get("pagina"), "body", "") or "").split("\n"):
+        r = regel.strip()
+        if r[:2] in ("- ", "* "):
+            r = r[2:].strip()
+        if any(p in r.lower() for p in PLACEHOLDERS) and r not in weg:
+            return True
+    return False
 
 
 def cijfers(dek: dict, **ctx) -> dict:

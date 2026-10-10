@@ -76,7 +76,8 @@ def _onbekende_markeringen(html: str) -> str:
 
 def _body_html(body: str, pags: list, blokken: bool = False,
                secties: dict[str, str] | None = None,
-               feit_blokken: dict[str, str] | None = None) -> str:
+               feit_blokken: dict[str, str] | None = None,
+               placeholders: dict[str, dict] | None = None) -> str:
     """De body als markdown, met `[[verwijzingen]]` omgezet in links.
 
     De substitutie draait NÁ `_md` (dus over ge-escapete HTML) en alleen hier — `_md` zelf wordt
@@ -138,6 +139,8 @@ def _body_html(body: str, pags: list, blokken: bool = False,
     # (`_md_naar_bron`) schrijft precies terug wat er stond — de chip verandert niets aan de bron,
     # hij wijst alleen. NA de link-substitutie, anders werd de `[[X]]` in de vraag zelf een link.
     html = _onbekende_markeringen(html)
+    if placeholders:
+        html = _placeholders_afgeleid(html, placeholders)
     # DE TOOL-KAART. Een blok dat ALLEEN een verwijzing naar een tool bevat wordt een kaart;
     # midden in een zin blijft het een pil. Zelfde grens als bij de embed, en om dezelfde reden:
     # anders verandert één woord in een alinea de vorm van de hele pagina.
@@ -687,6 +690,29 @@ def _bom_sectie(st, a, pags: list) -> str:
         return ""
 
 
+def _dekking_rij(st, a):
+    """(rij, soort, ctx) van deze pagina in de dekking van /bom, of (None, "", {}). Eén plek, want
+    de Questions-sectie en de afgeleide open-punt-regels moeten hetzelfde zien."""
+    from nooch_village import wiki_dekking as dek
+    d, ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
+                            ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
+    for s, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
+        rij = next((r for r in d[sleutel] if r.get("pagina") is not None and r["pagina"].id == a.id), None)
+        if rij is not None:
+            return rij, s, ctx
+    return None, "", {}
+
+
+def _verborgen_placeholders(st, a) -> dict[str, dict]:
+    """FAIL-SOFT: lukt de dekking niet, dan toont de pagina haar tekst zoals hij is."""
+    try:
+        from nooch_village import wiki_dekking as dek
+        rij, soort, _ctx = _dekking_rij(st, a)
+        return dek.verborgen_placeholders(rij, soort) if rij is not None else {}
+    except Exception:                                         # noqa: BLE001 — nooit de pagina breken
+        return {}
+
+
 def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
     """"Questions": de vraagcellen van /bom voor DEZE pagina, met per vraag de status en — voor wie de
     pagina mag bewerken — "Defer" (een datum) of "undo" (CN3, 10 oktober 2026).
@@ -698,14 +724,7 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
         from nooch_village import wiki_dekking as dek
         from nooch_village.views.bom import _DEK_VORM, _sprong
         from nooch_village.views.open_vragen import terug_form, uitstel_form
-        d, _ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
-                                 ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
-        rij, soort = None, ""
-        for s, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
-            rij = next((r for r in d[sleutel] if r.get("pagina") is not None and r["pagina"].id == a.id), None)
-            if rij is not None:
-                soort = s
-                break
+        rij, soort, _ctx = _dekking_rij(st, a)
         if rij is None:
             return ""
         terug = wiki.pagina_url(a.id)
@@ -1173,9 +1192,28 @@ def _domein_form(a, eigenaar, csrf_token: str, can_edit: bool, records=None,
             f"title='{_e(tip)}'>Move page</button></form>")
 
 
+def _placeholders_afgeleid(html: str, placeholders: dict[str, dict]) -> str:
+    """Een open-punt-regel ("- Dye/chemical disclosure: not yet provided") van een veld dat NIET
+    leeg is, wordt bij het tonen de afspraak (deferred) of niets (beantwoord) — zie
+    `wiki_dekking.verborgen_placeholders`. DE BRON BLIJFT DE REGEL: hij reist mee in
+    `data-blok-bron`, dus bewerken en opslaan schrijft hem ongewijzigd terug (`_md_naar_bron`).
+    Zo verandert uitstellen de tekst nooit, en hoeft terugdraaien niets terug te zetten."""
+    for tekst, cel in placeholders.items():
+        bron = _e(f"- {tekst}")
+        if cel.get("status") == "deferred":
+            label = tekst.split(":")[0]
+            vervang = (f"<li data-blok-bron='{bron}' class='muted'>{_e(label)}: deferred, research by "
+                       f"{_e(cel.get('tot', ''))}</li>")
+        else:
+            vervang = f"<li data-blok-bron='{bron}' hidden></li>"
+        html = html.replace(f"<li>{_e(tekst)}</li>", vervang)
+    return html
+
+
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
                  secties: dict[str, str] | None = None, *, feiten: bool = True,
-                 feit_blokken: dict[str, str] | None = None) -> str:
+                 feit_blokken: dict[str, str] | None = None,
+                 placeholders: dict[str, dict] | None = None) -> str:
     """De tekst van de pagina — te lezen, en voor de eigenaar ook te bewerken op zijn plek.
 
     `feiten=False` HAALT DE FEITEN-KNOP UIT HET /-MENU, en dat is de enige aanpassing die een
@@ -1188,7 +1226,8 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # heeft dezelfde hoogte, en een lege regel houdt zijn `<br>`. Wat er wél is: elk blok is nu
     # een element met een soort, zodat brok 3 er een greep aan kan hangen.
     # `feit_blokken`: de feiten die de tekst zelf plaatst, per id (5 oktober 2026). Zie `_feit_blok`.
-    inhoud = (_body_html(a.body, pags, blokken=True, secties=secties, feit_blokken=feit_blokken)
+    inhoud = (_body_html(a.body, pags, blokken=True, secties=secties, feit_blokken=feit_blokken,
+                         placeholders=placeholders)
               if a.body else _GEEN_TEKST)
     # DE SOORTEN-TABEL REIST MEE, als attribuut op de bewerk-container. De normaliseerpas in
     # `nooch.js` leest hem daar; zo bestaat de koppeling tag→bloksoort op precies één plek
@@ -1408,7 +1447,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
             f"<button class='flink' type='submit' name='action' value='pagina_synthese_verwerp'>"
             f"Discard</button></form></div>")
     body = voorstel_blok + _wiki_editor(a, pags, csrf_token, can_edit, secties, feiten=is_note,
-                                        feit_blokken=feit_blokken)
+                                        feit_blokken=feit_blokken,
+                                        placeholders=_verborgen_placeholders(st, a) if is_note else None)
     # Eigenaar bewerkt in de tekst zelf; ieder ander doet een voorstel. Geen csrf-token = geen
     # schrijf-sessie (publieke view), dan ook geen voorstelknop. En alleen op een note, want
     # `pagina_voorstel` poort op de soort — zie de docstring hierboven.

@@ -82,14 +82,18 @@ def test_uitstel_vraagt_datum_en_eigenaar():
     assert wd.maak_uitstel("31-12-2026", OWNER) is None
 
 
-def test_deferred_haalt_alleen_de_placeholders_van_die_vraag_weg():
+def test_deferred_verbergt_alleen_de_placeholders_van_die_vraag():
+    """Sinds 11 oktober: de regel wordt niet uit de tekst gehaald maar bij het tonen afgeleid."""
     body = ("## Open items\n- Animal-derived status: not yet verified\n"
             "- Dye/chemical disclosure: not yet provided\n- Eigen notitie")
-    uit = wd.body_zonder_placeholders(body, "materiaal", "chem")
-    assert "Dye/chemical disclosure" not in uit and "Animal-derived status" in uit and "Eigen notitie" in uit
-    arbeid = wd.body_zonder_placeholders("- Facility address: not yet provided\n- Living wage verification: "
-                                         "not yet provided", "leverancier", "labor")
-    assert arbeid.strip() == ""
+    rij = _dek(("A", "P", _uitgesteld("P", "2026-12-31", "chem", body=body), "", None))["materialen"][0]
+    assert set(wd.verborgen_placeholders(rij)) == {"Dye/chemical disclosure: not yet provided"}
+    assert rij["pagina"].body == body                                     # de tekst is onaangeroerd
+    lev = _dek(("A", "M", None, "NFW", _uitgesteld("N", "2026-12-31", "labor")))["leveranciers"][0]
+    assert set(wd.verborgen_placeholders(lev)) == {
+        "Facility address: not yet provided", "Living wage verification: not yet provided",
+        "Compliance policies (modern slavery, child labor, health & safety, anti-discrimination, "
+        "union rights): not yet provided"}
 
 
 def test_open_vragen_deferred_achteraan_op_research_by():
@@ -251,10 +255,10 @@ def test_defer_en_undo_via_de_actie(tmp_path):
     a = cockpit2._Stores(dd).att.get(aid)
     assert a.meta[wd.UITSTEL_SLEUTEL]["chem"]["tot"] == "2026-12-31"
     assert a.meta[wd.UITSTEL_SLEUTEL]["chem"]["eigenaar"] == OWNER       # de pagina-eigenaar
-    assert "not yet provided" not in a.body
+    assert "not yet provided" in a.body                                 # de tekst blijft (11 okt)
     assert "✗" in cockpit2.dispatch(dd, "vraag_uitstel", dict(form, tot=[""]), username="guest")[1]
     cockpit2.dispatch(dd, "vraag_uitstel_weg", {"aid": [aid], "k": ["chem"], "next": ["/"]}, username="guest")
-    assert "chem" not in cockpit2._Stores(dd).att.get(aid).meta[wd.UITSTEL_SLEUTEL]
+    assert wd.UITSTEL_SLEUTEL not in cockpit2._Stores(dd).att.get(aid).meta
 
 
 def test_defer_staat_op_open_questions_en_op_de_wikipagina(tmp_path):

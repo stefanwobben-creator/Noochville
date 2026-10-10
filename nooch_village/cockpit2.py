@@ -2816,10 +2816,11 @@ def _act_vraag_uitstel(c):
         return nxt, "✗ a research-by date (YYYY-MM-DD) and an owner are required"
     meta = dict(getattr(cur, "meta", None) or {})
     meta[wd.UITSTEL_SLEUTEL] = {**(meta.get(wd.UITSTEL_SLEUTEL) or {}), k: u}
-    body = wd.body_zonder_placeholders(cur.body or "", soort, k)
+    # DE TEKST BLIJFT STAAN (fix 11 oktober 2026): de "not yet …"-regel wordt bij het tonen
+    # afgeleid uit de staat van het veld (`wiki_dekking.verborgen_placeholders`), niet weggehaald.
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
-    upd = st.att.update(cur.id, body=body, meta=meta, actor_id=actor_id, actor_type="person",
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
                         governance_ref=gref, change_note=f"question deferred until {u['tot']}: {k}")
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
@@ -2842,7 +2843,11 @@ def _act_vraag_uitstel_weg(c):
     uit = dict(meta.get(wd.UITSTEL_SLEUTEL) or {})
     if uit.pop(g("k"), None) is None:
         return nxt, "✗ this question was not deferred"
-    meta[wd.UITSTEL_SLEUTEL] = uit
+    # Geen lege sleutel achterlaten: na uitstellen en terugdraaien is de pagina dezelfde als ervoor.
+    if uit:
+        meta[wd.UITSTEL_SLEUTEL] = uit
+    else:
+        meta.pop(wd.UITSTEL_SLEUTEL, None)
     actor_id = _web_actor_id(username, st)
     gref = f"role:{cur.anchor}"
     upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
