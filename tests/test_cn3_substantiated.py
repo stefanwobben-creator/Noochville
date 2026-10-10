@@ -32,15 +32,21 @@ def _dek(*rijen):
 
 # ── de cijfers ──────────────────────────────────────────────────────────────
 
-def test_een_pagina_telt_als_alles_erop_gecheckt_is_ook_zonder_feiten():
-    leeg = _pagina("L")
+def test_een_pagina_telt_alleen_als_alle_drie_de_voorwaarden_kloppen():
+    """Sinds 10 oktober 2026: geen placeholder, geen ongecheckt feit, en bij een materiaal een
+    leverancier. Een lege pagina telt dus pas als hij geen 'not yet provided' meer draagt."""
+    lev = _pagina("Lev")                                              # leverancier, schoon
+    schoon = _pagina("S")                                             # materiaal, geen feiten
     goed = _pagina("G", "## Biobased\n{{fact:a}}", [_feit("a", GEZIEN)])
     half = _pagina("H", "## Biobased\n{{fact:a}}", [_feit("a")])
-    d = _dek(("A", "Leeg", leeg, "", None), ("B", "Goed", goed, "", None),
-             ("C", "Half", half, "", None), ("D", "Geen", None, "", None))
+    open_ = _pagina("O", "## Open items\n- Dye/chemical disclosure: not yet provided")
+    d = _dek(("A", "Schoon", schoon, "Lev", lev), ("B", "Goed", goed, "Lev", lev),
+             ("C", "Half", half, "Lev", lev), ("D", "Open", open_, "Lev", lev),
+             ("E", "Zonder leverancier", _pagina("Z"), "", None), ("F", "Geen", None, "", None))
+    gestaafd = {r["naam"] for r in d["materialen"] + d["leveranciers"] if wd.gestaafd(r, vandaag="2026-10-10")}
+    assert gestaafd == {"Schoon", "Goed", "Lev"}
     c = wd.cijfers(d, vandaag="2026-10-10")
-    assert (c["gestaafd"], c["paginas_totaal"], c["gestaafd_pct"]) == (2, 4, 50.0)
-    assert c["paginas_bestaan"] == 3
+    assert (c["gestaafd"], c["paginas_totaal"]) == (3, 7)
 
 
 def test_laag_1_en_2_koppeling_en_placeholders():

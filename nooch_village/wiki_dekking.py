@@ -260,11 +260,20 @@ def voor_het_dorp(uitkomsten: list[dict], **ctx) -> dict:
 
 
 def gestaafd(rij: dict, **ctx) -> bool:
-    """Telt deze pagina mee voor CN3? Hij BESTAAT en alles wat erop staat is gevalideerd: geen enkel
-    feit ongecheckt of in conflict. Lege vragen mogen — die staan als open vraag in de lijst (de
-    Smart Number ernaast), zodat ze zichtbaar blijven."""
+    """Telt deze pagina mee voor CN3? STRENGER SINDS 10 OKTOBER 2026 (besluit Stefan) — alle drie:
+
+    1. de pagina bestaat en draagt geen placeholder-zin meer (`PLACEHOLDERS`: "not yet provided",
+       "not yet verified" — wat het zaad neerzet zolang iets niet bekend is);
+    2. geen enkel feit erop is ongecheckt of in conflict;
+    3. bij een MATERIAAL: er is een leverancier gekoppeld.
+
+    De eerste versie telde alleen (2), en dan scoorde een lege pagina: 15 van 17 op prod, terwijl
+    3 van de 14 materialen een leverancier hadden. Lege vragen mogen nog steeds — die staan als open
+    vraag in de lijst, zolang er geen placeholder-zin bij staat die zegt dat het antwoord ontbreekt."""
     pagina = rij.get("pagina")
-    if pagina is None:
+    if pagina is None or heeft_placeholder(rij):
+        return False
+    if "onderdelen" in rij and not rij.get("leverancier"):       # een materiaalrij zonder leverancier
         return False
     c = {"ledger": ctx.get("ledger"), "store": ctx.get("store"), "vandaag": ctx.get("vandaag", ""),
          "bestaat": ctx.get("bestaat")}
