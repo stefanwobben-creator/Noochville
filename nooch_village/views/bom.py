@@ -280,7 +280,10 @@ def _nieuwe_rij(model: str, variant: str, csrf_token: str) -> str:
 
 #: celstatus → (vorm uit `.nu-status`, woord). De vorm draagt de betekenis, niet de kleur.
 _DEK_VORM = {dek.GECHECKT: ("ok", "Checked"), dek.ONGECHECKT: ("wait", "Unchecked"),
-             dek.LEEG: ("open", "Open"), dek.CONFLICT: ("off", "Conflict")}
+             dek.LEEG: ("open", "Open"), dek.CONFLICT: ("off", "Conflict"),
+             # DEFERRED: de vorm van open (gestippeld — er is nog geen antwoord), het woord zegt de
+             # afspraak. Bewust geen eigen vorm of kleur: het is geen antwoord en telt niet als gecheckt.
+             dek.UITGESTELD: ("open", "Deferred")}
 
 
 def _sprong(pagina, kop: str) -> str:
@@ -293,6 +296,8 @@ def _sprong(pagina, kop: str) -> str:
 
 def _dek_cel(vraag: dict, cel: dict, pagina) -> str:
     vorm, woord = _DEK_VORM[cel["status"]]
+    if cel["status"] == dek.UITGESTELD:
+        woord = f"Deferred · {cel['tot']}"
     reden = f" — {cel['reden']}" if cel["status"] == dek.CONFLICT and cel["reden"] else ""
     label = _e(f"{vraag['label']}: {woord}{reden}")
     if pagina is None:

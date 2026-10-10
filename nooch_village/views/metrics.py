@@ -622,6 +622,12 @@ _DEKKING_MEASURES = {
                          "Question cells with a fact that nobody has checked yet."),
     "cellen_conflict": ("Conflicts", "questions", "down",
                         "Question cells with contradicting values or an expired certificate."),
+    "cellen_deferred": ("Deferred questions", "questions", "",
+                        "Questions deferred to a research-by date that has not passed. Never counted "
+                        "as checked."),
+    "cellen_deferred_verlopen": ("Expired deferrals", "questions", "down",
+                                 "Deferred questions whose research-by date has passed; they count "
+                                 "as open again."),
 }
 
 
@@ -1646,6 +1652,11 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             goal += f"<div class='tile-goal muted'>Missing: {_e(', '.join(r['ontbreekt']))}</div>"
     if tile["source"] == "bom" and form != "formule":
         goal += _bom_volledigheid(res)
+    if tile["source"] == "dekking" and tile["measure"] == "cellen_deferred":
+        # "Deferred questions" draagt zijn verlopen afspraken mee: die tellen weer als open.
+        verlopen = _dekking_fetch(st, "cellen_deferred_verlopen", "totaal", None).get("value")
+        goal += (f"<div class='tile-goal muted'>{_num(verlopen or 0)} expired — open again · "
+                 f"<a href='/open-questions?status=deferred'>deferred questions</a></div>")
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>towards goal: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"

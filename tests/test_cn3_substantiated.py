@@ -32,21 +32,73 @@ def _dek(*rijen):
 
 # ── de cijfers ──────────────────────────────────────────────────────────────
 
-def test_een_pagina_telt_alleen_als_alle_drie_de_voorwaarden_kloppen():
-    """Sinds 10 oktober 2026: geen placeholder, geen ongecheckt feit, en bij een materiaal een
-    leverancier. Een lege pagina telt dus pas als hij geen 'not yet provided' meer draagt."""
-    lev = _pagina("Lev")                                              # leverancier, schoon
-    schoon = _pagina("S")                                             # materiaal, geen feiten
-    goed = _pagina("G", "## Biobased\n{{fact:a}}", [_feit("a", GEZIEN)])
-    half = _pagina("H", "## Biobased\n{{fact:a}}", [_feit("a")])
-    open_ = _pagina("O", "## Open items\n- Dye/chemical disclosure: not yet provided")
-    d = _dek(("A", "Schoon", schoon, "Lev", lev), ("B", "Goed", goed, "Lev", lev),
-             ("C", "Half", half, "Lev", lev), ("D", "Open", open_, "Lev", lev),
-             ("E", "Zonder leverancier", _pagina("Z"), "", None), ("F", "Geen", None, "", None))
+def _uitgesteld(pid, tot, *vragen_, body="", feiten=None):
+    """Een pagina waarop deze vragen deferred zijn tot `tot`."""
+    p = _pagina(pid, body, feiten)
+    p.meta[wd.UITSTEL_SLEUTEL] = {k: {"tot": tot, "eigenaar": OWNER} for k in vragen_}
+    return p
+
+
+ALLE_MAT = ("plastic", "biobased", "animal", "chem", "co2", "water", "cert")
+ALLE_LEV = ("loc", "cert", "price", "labor", "own")
+
+
+def test_een_pagina_telt_als_elk_veld_gecheckt_of_geldig_deferred_is():
+    """De regel sinds de aanvulling "deferred": elk veld gecheckt of deferred met een datum die nog
+    niet voorbij is, geen ongecheckt feit, en bij een materiaal een leverancier."""
+    lev = _uitgesteld("Lev", "2026-12-31", *ALLE_LEV)
+    goed = _uitgesteld("Goed", "2026-12-31", *ALLE_MAT)
+    verlopen = _uitgesteld("Verlopen", "2026-10-01", *ALLE_MAT)          # datum voorbij
+    half = _uitgesteld("Half", "2026-12-31", *ALLE_MAT[:-1])             # cert niet deferred
+    met_feit = _uitgesteld("Feit", "2026-12-31", *ALLE_MAT,
+                           body="## Characteristics\n{{fact:a}}", feiten=[_feit("a")])
+    d = _dek(("A", "Goed", goed, "Lev", lev), ("B", "Verlopen", verlopen, "Lev", lev),
+             ("C", "Half", half, "Lev", lev), ("D", "Feit", met_feit, "Lev", lev),
+             ("E", "Zonder leverancier", _uitgesteld("Z", "2026-12-31", *ALLE_MAT), "", None))
     gestaafd = {r["naam"] for r in d["materialen"] + d["leveranciers"] if wd.gestaafd(r, vandaag="2026-10-10")}
-    assert gestaafd == {"Schoon", "Goed", "Lev"}
+    assert gestaafd == {"Goed", "Lev"}
+
+
+def test_een_lege_pagina_telt_niet_meer():
+    d = _dek(("A", "Leeg", _pagina("L"), "Lev", _pagina("Lev")))
+    assert not any(wd.gestaafd(r, vandaag="2026-10-10") for r in d["materialen"] + d["leveranciers"])
+
+
+def test_deferred_apart_geteld_en_verlopen_valt_terug_op_leeg():
+    p = _uitgesteld("P", "2026-12-31", "plastic", "biobased")
+    p.meta[wd.UITSTEL_SLEUTEL]["chem"] = {"tot": "2026-10-01", "eigenaar": OWNER}       # verlopen
+    d = _dek(("A", "P", p, "", None))
+    cel = d["materialen"][0]["cellen"]
+    assert (cel["plastic"]["status"], cel["plastic"]["tot"]) == (wd.UITGESTELD, "2026-12-31")
+    assert cel["chem"]["status"] == wd.LEEG and cel["chem"]["verlopen"]
     c = wd.cijfers(d, vandaag="2026-10-10")
-    assert (c["gestaafd"], c["paginas_totaal"]) == (3, 7)
+    assert (c["cellen_deferred"], c["cellen_deferred_verlopen"], c["cellen_checked"], c["cellen_open"]) == \
+           (2, 1, 0, 5)
+
+
+def test_uitstel_vraagt_datum_en_eigenaar():
+    assert wd.maak_uitstel("2026-12-31", OWNER)["tot"] == "2026-12-31"
+    assert wd.maak_uitstel("", OWNER) is None and wd.maak_uitstel("2026-12-31", "") is None
+    assert wd.maak_uitstel("31-12-2026", OWNER) is None
+
+
+def test_deferred_haalt_alleen_de_placeholders_van_die_vraag_weg():
+    body = ("## Open items\n- Animal-derived status: not yet verified\n"
+            "- Dye/chemical disclosure: not yet provided\n- Eigen notitie")
+    uit = wd.body_zonder_placeholders(body, "materiaal", "chem")
+    assert "Dye/chemical disclosure" not in uit and "Animal-derived status" in uit and "Eigen notitie" in uit
+    arbeid = wd.body_zonder_placeholders("- Facility address: not yet provided\n- Living wage verification: "
+                                         "not yet provided", "leverancier", "labor")
+    assert arbeid.strip() == ""
+
+
+def test_open_vragen_deferred_achteraan_op_research_by():
+    p = _uitgesteld("P", "2026-12-31", "plastic")
+    p.meta[wd.UITSTEL_SLEUTEL]["biobased"] = {"tot": "2026-11-01", "eigenaar": OWNER}
+    vragen_ = wd.open_vragen(_dek(("A", "P", p, "", None)))
+    deferred = [v for v in vragen_ if v["status"] == wd.UITGESTELD]
+    assert [v["k"] for v in deferred] == ["biobased", "plastic"]          # vroegste datum eerst
+    assert vragen_[-1]["status"] == wd.UITGESTELD
 
 
 def test_laag_1_en_2_koppeling_en_placeholders():
@@ -172,3 +224,47 @@ def test_een_ongeldige_lijn_wordt_geweigerd():
     assert maak_lijn("2026-12-31", "2026-10-01") is None
     assert maak_lijn("2026-10-01", "2026-12-31", oranje=1.5) is None
     assert maak_lijn("geen datum", "2026-12-31") is None
+
+
+# ── deferred via de knoppen ─────────────────────────────────────────────────
+
+def _dorp_met_pagina(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    # MET DOMEIN: dan mag alleen de houder (of de Circle Lead) de pagina — en dus het uitstel —
+    # wijzigen. Op prod hebben de pagina's (nog) geen domein; dan mag elke herkende gebruiker het,
+    # precies zoals bij het bewerken van de pagina zelf.
+    a = st.att.add(OWNER, "note", title="Pliant", domain="Materials",
+                   body="## Dyes & chemicals\nx\n## Open items\n- Dye/chemical disclosure: not yet provided")
+    st.bom_materialen.zet("Outsole", "Pliant")
+    st.people.add("Buiten", "buiten@t.nl")
+    return dd, a.id
+
+
+def test_defer_en_undo_via_de_actie(tmp_path):
+    dd, aid = _dorp_met_pagina(tmp_path)
+    form = {"aid": [aid], "soort": ["materiaal"], "k": ["chem"], "tot": ["2026-12-31"], "next": ["/"]}
+    import pytest
+    with pytest.raises(cockpit2.Forbidden):
+        cockpit2.dispatch(dd, "vraag_uitstel", form, username="buiten@t.nl")
+    assert "✓" in cockpit2.dispatch(dd, "vraag_uitstel", form, username="guest")[1]
+    a = cockpit2._Stores(dd).att.get(aid)
+    assert a.meta[wd.UITSTEL_SLEUTEL]["chem"]["tot"] == "2026-12-31"
+    assert a.meta[wd.UITSTEL_SLEUTEL]["chem"]["eigenaar"] == OWNER       # de pagina-eigenaar
+    assert "not yet provided" not in a.body
+    assert "✗" in cockpit2.dispatch(dd, "vraag_uitstel", dict(form, tot=[""]), username="guest")[1]
+    cockpit2.dispatch(dd, "vraag_uitstel_weg", {"aid": [aid], "k": ["chem"], "next": ["/"]}, username="guest")
+    assert "chem" not in cockpit2._Stores(dd).att.get(aid).meta[wd.UITSTEL_SLEUTEL]
+
+
+def test_defer_staat_op_open_questions_en_op_de_wikipagina(tmp_path):
+    from nooch_village.views.wiki import render_pagina
+    dd, aid = _dorp_met_pagina(tmp_path)
+    st = cockpit2._Stores(dd)
+    h = render_open_vragen(st, csrf_token="t", username="guest")
+    assert "value='vraag_uitstel'" in h and "Research by" in h and ">Deferred" in h
+    assert "value='vraag_uitstel'" not in render_open_vragen(st)       # zonder sessie geen knop
+    p = render_pagina(st, aid, csrf_token="t", username="guest")
+    blok = p[p.index("<h3>Questions</h3>"):]
+    assert "Dyes &amp; chemicals" in blok and "value='vraag_uitstel'" in blok
+    assert "counts as substantiated: <strong>no</strong>" in blok

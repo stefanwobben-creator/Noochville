@@ -191,6 +191,18 @@
       "target": null,
       "oranje": null,
       "eigenaar_rol": "mother_earth__nooch__factory_sourcing_manager"
+    },
+    {
+      "sleutel": "cn3_deferred",
+      "titel": "Deferred questions",
+      "niveau": "smart",
+      "source": "dekking",
+      "measure": "cellen_deferred",
+      "dim": "totaal",
+      "form": "getal",
+      "target": null,
+      "oranje": null,
+      "eigenaar_rol": "mother_earth__nooch__factory_sourcing_manager"
     }
   ],
   "zicht": {

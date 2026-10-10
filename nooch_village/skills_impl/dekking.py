@@ -16,7 +16,7 @@ from nooch_village.skills import DataSourceSkill
 #: De velden die als reeks worden bewaard (sleutels uit `wiki_dekking.cijfers`).
 VELDEN = ("gestaafd_pct", "gestaafd", "paginas_totaal", "cellen_open", "met_leverancier",
           "materialen", "paginas_zonder_placeholder", "cellen_checked", "cellen_unchecked",
-          "cellen_conflict")
+          "cellen_conflict", "cellen_deferred", "cellen_deferred_verlopen")
 
 
 def cijfers_uit_map(data_dir: str) -> dict:

@@ -63,10 +63,58 @@ GECHECKT = "checked"        # een gegrond feit: nagekeken door een mens, geldig 
 ONGECHECKT = "unchecked"    # er staat een feit, maar de bron ontbreekt of de check is (nog) niet geldig
 LEEG = "open"               # geen feit onder deze vraag
 CONFLICT = "conflict"       # twee getallen spreken elkaar tegen, of een certificaat is verlopen
+UITGESTELD = "deferred"     # nog geen antwoord, bewust uitgesteld tot een datum, met een eigenaar
 
 #: Hoe zwaar een status weegt als een cel meerdere feiten heeft: een conflict mag nooit wegvallen
 #: achter een ander, gecheckt feit.
-_GEWICHT = {CONFLICT: 3, GECHECKT: 2, ONGECHECKT: 1, LEEG: 0}
+_GEWICHT = {CONFLICT: 3, GECHECKT: 2, ONGECHECKT: 1, UITGESTELD: 0, LEEG: 0}
+
+# ── Uitstel ("Deferred, to research later", 10 oktober 2026) ──────────────────
+#: Waar een pagina haar uitgestelde vragen onthoudt: in haar eigen `meta`, naast de feiten — geen
+#: tweede store. Per vraag: {tot (ISO "research by"), eigenaar (rol-id), door, op}.
+#:
+#: WAAROM: een lege vraag is niet hetzelfde als een vraag waarvan iemand zegt "die zoeken we uit vóór
+#: datum X". Het eerste is een gat, het tweede een afspraak. Een afspraak met een datum telt mee voor
+#: CN3 zolang de datum niet voorbij is; daarna valt hij terug op leeg en telt de pagina niet meer.
+#: Deferred wordt NOOIT opgeteld bij gecheckt: het is een belofte, geen antwoord.
+UITSTEL_SLEUTEL = "uitgesteld"
+
+
+def maak_uitstel(tot: str, eigenaar: str, door: str = "") -> dict | None:
+    """{tot, eigenaar, door, op} of None. Datum en eigenaar zijn verplicht."""
+    import time as _t
+    tot = str(tot or "").strip()[:10]
+    try:
+        _t.strptime(tot, "%Y-%m-%d")
+    except ValueError:
+        return None
+    eigenaar = " ".join(str(eigenaar or "").split())[:120]
+    if not eigenaar:
+        return None
+    return {"tot": tot, "eigenaar": eigenaar, "door": str(door or "")[:64], "op": _t.time()}
+
+
+def uitstel(pagina, k: str) -> dict | None:
+    """Het uitstel van vraag `k` op deze pagina, opnieuw gevalideerd bij het lezen, of None."""
+    u = ((getattr(pagina, "meta", None) or {}).get(UITSTEL_SLEUTEL) or {}).get(k)
+    if not isinstance(u, dict):
+        return None
+    return u if maak_uitstel(u.get("tot"), u.get("eigenaar")) else None
+
+
+def placeholders_van(soort: str, k: str) -> tuple[str, ...]:
+    """De open-punt-regels die het zaad onder deze vraag zette ("Dye/chemical disclosure: not yet
+    provided"). Ze verdwijnen uit de tekst zodra de vraag deferred is — dan staat de afspraak er."""
+    v = next((x for x in vragen(soort) if x["k"] == k), None)
+    if v is None or not v["koppen"]:
+        return ()
+    sectie = next((s for s in wiki.VRAAGSECTIES.get(soort, ()) if wiki.kopnamen(s) == v["koppen"]), None)
+    return tuple(sectie[2]) if sectie else ()
+
+
+def body_zonder_placeholders(body: str, soort: str, k: str) -> str:
+    weg = {f"- {p}" for p in placeholders_van(soort, k)}
+    return "\n".join(r for r in (body or "").split("\n") if r.strip() not in weg)
 
 
 def _norm(s: str) -> str:
@@ -165,7 +213,17 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
         if kop is not None:
             treffers.append((f, kop))
     if not treffers:
+        import time as _t
         plek = next((k for k in koppen if _norm(k) in toegestaan), "")
+        u = uitstel(pagina, vraag["k"])
+        vandaag = ctx.get("vandaag") or _t.strftime("%Y-%m-%d")
+        if u and u["tot"] >= vandaag:
+            return {"status": UITGESTELD, "feiten": [], "kop": plek, "reden": "",
+                    "tot": u["tot"], "eigenaar": u["eigenaar"]}
+        if u:
+            # VERLOPEN: terug naar leeg — de afspraak is niet nagekomen, de pagina telt niet meer.
+            return {"status": LEEG, "feiten": [], "kop": plek, "verlopen": True, "tot": u["tot"],
+                    "eigenaar": u["eigenaar"], "reden": f"deferred until {u['tot']} — expired"}
         return {"status": LEEG, "feiten": [], "kop": plek, "reden": "no fact for this question"}
     statussen = [_feit_status(f, ctx) for f, _k in treffers]
     reden = ""
@@ -260,20 +318,22 @@ def voor_het_dorp(uitkomsten: list[dict], **ctx) -> dict:
 
 
 def gestaafd(rij: dict, **ctx) -> bool:
-    """Telt deze pagina mee voor CN3? STRENGER SINDS 10 OKTOBER 2026 (besluit Stefan) — alle drie:
+    """Telt deze pagina mee voor CN3? Sinds de aanvulling "deferred" (10 oktober 2026) — alles:
 
-    1. de pagina bestaat en draagt geen placeholder-zin meer (`PLACEHOLDERS`: "not yet provided",
-       "not yet verified" — wat het zaad neerzet zolang iets niet bekend is);
-    2. geen enkel feit erop is ongecheckt of in conflict;
-    3. bij een MATERIAAL: er is een leverancier gekoppeld.
+    1. de pagina bestaat;
+    2. ELK VELD is gecheckt, of deferred met een "research by"-datum die nog niet voorbij is;
+    3. geen enkel feit op de pagina is ongecheckt of in conflict;
+    4. bij een MATERIAAL: er is een leverancier gekoppeld.
 
-    De eerste versie telde alleen (2), en dan scoorde een lege pagina: 15 van 17 op prod, terwijl
-    3 van de 14 materialen een leverancier hadden. Lege vragen mogen nog steeds — die staan als open
-    vraag in de lijst, zolang er geen placeholder-zin bij staat die zegt dat het antwoord ontbreekt."""
+    Dit vervangt de placeholder-toets van de vorige versie: "not yet provided" verdwijnt zodra een
+    veld deferred is, en een veld dat leeg is zonder afspraak houdt de pagina hoe dan ook tegen.
+    "Lege vragen mogen blijven staan" vervalt daarmee."""
     pagina = rij.get("pagina")
-    if pagina is None or heeft_placeholder(rij):
+    if pagina is None:
         return False
     if "onderdelen" in rij and not rij.get("leverancier"):       # een materiaalrij zonder leverancier
+        return False
+    if any(c["status"] not in (GECHECKT, UITGESTELD) for c in rij["cellen"].values()):
         return False
     c = {"ledger": ctx.get("ledger"), "store": ctx.get("store"), "vandaag": ctx.get("vandaag", ""),
          "bestaat": ctx.get("bestaat")}
@@ -309,13 +369,16 @@ def cijfers(dek: dict, **ctx) -> dict:
         "cellen_unchecked": sum(1 for c in cellen if c["status"] == ONGECHECKT),
         "cellen_open": sum(1 for c in cellen if c["status"] == LEEG),
         "cellen_conflict": sum(1 for c in cellen if c["status"] == CONFLICT),
+        # Deferred staat APART, nooit bij gecheckt: een belofte met een datum is geen antwoord.
+        "cellen_deferred": sum(1 for c in cellen if c["status"] == UITGESTELD),
+        "cellen_deferred_verlopen": sum(1 for c in cellen if c.get("verlopen")),
     }
 
 
 def open_vragen(dek: dict) -> list[dict]:
     """Elke vraagcel die nog niet gecheckt is, als rij: {soort, naam, pagina, vraag, status, kop}.
     Conflicten eerst, dan ongecheckt, dan leeg — de volgorde waarin ze aandacht vragen."""
-    volgorde = {CONFLICT: 0, ONGECHECKT: 1, LEEG: 2}
+    volgorde = {CONFLICT: 0, ONGECHECKT: 1, LEEG: 2, UITGESTELD: 3}
     uit = []
     for soort, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
         labels = {v["k"]: v["label"] for v in vragen(soort)}
@@ -323,9 +386,13 @@ def open_vragen(dek: dict) -> list[dict]:
             for k, c in r["cellen"].items():
                 if c["status"] != GECHECKT:
                     uit.append({"soort": soort, "naam": r["naam"], "pagina": r.get("pagina"),
-                                "vraag": labels[k], "status": c["status"], "kop": c.get("kop", ""),
-                                "reden": c.get("reden", "")})
-    return sorted(uit, key=lambda x: (volgorde[x["status"]], x["soort"], x["naam"].lower()))
+                                "k": k, "vraag": labels[k], "status": c["status"],
+                                "kop": c.get("kop", ""), "reden": c.get("reden", ""),
+                                "tot": c.get("tot", ""), "eigenaar": c.get("eigenaar", ""),
+                                "verlopen": bool(c.get("verlopen"))})
+    # Deferred sorteert op "research by" (de vroegste afspraak bovenaan), de rest op naam.
+    return sorted(uit, key=lambda x: (volgorde[x["status"]], x["tot"] if x["status"] == UITGESTELD else "",
+                                      x["soort"], x["naam"].lower()))
 
 
 def uit_stores(att, leveranciers, materialen, *, ledger=None, bestaat=None) -> tuple[dict, dict]:
