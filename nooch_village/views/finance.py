@@ -737,7 +737,7 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
             f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
             f"<input type='file' name='file' accept='.csv,.xlsx' aria-label='CSV or XLSX in the export format' required>"
             f"<button class='btn sm' type='submit'>Preview</button></form>"
-            f"<p class='muted'>Same format as the export. An empty cell in the file clears a cell that has a value. You see a preview first; nothing is saved until you confirm.</p>"))
+            f"<p class='muted'>Same format as the export. An empty cell in the file only clears a filled cell if you tick that in the preview. You see a preview first; nothing is saved until you confirm.</p>"))
     log = fh.Instellingen(st.dd).alle()[-5:]
     loghtml = ("<ul>" + "".join(
         f"<li class='muted'>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))} · "
@@ -817,10 +817,27 @@ def _vorm_wijziging(w: dict, labels: dict) -> str:
             f"<td class='num'>{was}</td><td class='num'>{na}</td></tr>")
 
 
+def _import_diffs(gelezen: dict, laatste: dict, cfg: dict) -> tuple[dict, dict, list[dict]]:
+    """(zonder, met, te_legen): de import ZONDER leegmaken (de standaard), MET leegmaken, en de
+    regels die alleen het vinkje "also clear" toevoegt — lege cellen in het bestand die nu een waarde
+    hebben (ook paren die leeg zijn aangeboden). Zo toont de preview ze altijd, en schrijft de import
+    ze alleen als Stefan het vinkje aanzet (besluit 10 oktober)."""
+    from nooch_village import finance_historie as fh
+    zonder = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], laatste, cfg)
+    met = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], laatste, cfg,
+                       leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
+    basis = {(w["period"], w["line_key"]): w for w in zonder["schrijf"]}
+    te_legen = [w for w in met["schrijf"]
+                if {k: v for k, v in w.items() if k != "oud"}
+                != {k: v for k, v in (basis.get((w["period"], w["line_key"])) or {}).items() if k != "oud"}]
+    return zonder, met, te_legen
+
+
 def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: str) -> tuple[str, str]:
     """Stap 1: bewaar het bestand (borging) en toon een PREVIEW → ("html", pagina) of ("msg", melding).
     Stap 2 (`bevestig`): lees het bewaarde bestand opnieuw (hash gecontroleerd), vergelijk opnieuw
-    met de actuele stand en schrijf. Fouten blokkeren tenzij expliciet "ook de geldige rijen"."""
+    met de actuele stand en schrijf. Fouten blokkeren tenzij expliciet "ook de geldige rijen". Een
+    lege cel in het bestand maakt een gevulde cel ALLEEN leeg met het vinkje `also_clear`."""
     from nooch_village import finance_historie as fh
     cfg = fc.laad()
     log = fh.ImportLog(st.dd)
@@ -833,35 +850,49 @@ def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: st
         if blob is None:
             return "msg", f"✗ {fout}"
         gelezen = fh.lees_bestand(imp["attachment"]["filename"], blob, cfg)
-        diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.laatste(), cfg,
-                            leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
+        zonder, met, te_legen = _import_diffs(gelezen, hreg.laatste(), cfg)
+        legen = fields.get("also_clear") == "1"
+        diff = met if legen else zonder
         fouten = gelezen["fouten"] + diff["fouten"]
         if fouten and fields.get("valid_rows") != "1":
             return "msg", "✗ nothing imported: the file has errors — confirm that the valid rows may go ahead"
         hreg.schrijf(diff["schrijf"], door=door, bron=f"import:{imp['import_id']}",
                      note=f"Import {imp['attachment']['filename']}")
+        geleegd = len(te_legen) if legen else 0
         log.meld(imp, door=door, status="applied", rows=gelezen["rijen"], new=diff["nieuw"],
-                 changed=diff["gewijzigd"], cleared=diff["geleegd"], errors=len(fouten))
-        return "msg", (f"✓ imported: {diff['nieuw']} new, {diff['gewijzigd']} changed, {diff['geleegd']} cleared, "
-                       f"{diff['ongewijzigd']} unchanged")
+                 changed=diff["gewijzigd"], cleared=geleegd, skipped_clears=0 if legen else len(te_legen),
+                 errors=len(fouten))
+        uit = (f"✓ imported: {zonder['nieuw']} new, {zonder['gewijzigd']} changed, {geleegd} cleared, "
+               f"{zonder['ongewijzigd']} unchanged")
+        if te_legen and not legen:
+            uit += f" — {len(te_legen)} empty cell(s) in the file were skipped (not cleared)"
+        return "msg", uit
     fname, blob = files.get("file") or ("", b"")
     imp, fout = log.bewaar(fname, blob, door=door)
     if imp is None:
         return "msg", f"✗ {fout}"
     gelezen = fh.lees_bestand(fname, blob, cfg)
-    diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.laatste(), cfg,
-                        leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
-    fouten = gelezen["fouten"] + diff["fouten"]
+    zonder, met, te_legen = _import_diffs(gelezen, hreg.laatste(), cfg)
+    fouten = gelezen["fouten"] + zonder["fouten"]
     labels = {x["key"]: x["label"] for x in fh.lijnen(cfg)}
     tabel = ("<table class='mtab' aria-label='changes'><tr><th>Month</th><th>Line</th><th class='num'>Now</th>"
              "<th class='num'>After import</th></tr>"
-             + "".join(_vorm_wijziging(w, labels) for w in diff["schrijf"][:300]) + "</table>"
-             if diff["schrijf"] else "<p class='muted'>No changes.</p>")
+             + "".join(_vorm_wijziging(w, labels) for w in zonder["schrijf"][:300]) + "</table>"
+             if zonder["schrijf"] else "<p class='muted'>No changes.</p>")
+    leeg_tabel = ""
+    if te_legen:
+        leeg_tabel = ("<h2>Empty in the file, filled now</h2><p class='muted'>Skipped unless you tick "
+                      "\"also clear\" below.</p><table class='mtab' aria-label='cells to clear'><tr><th>Month</th>"
+                      "<th>Line</th><th class='num'>Now</th><th class='num'>With the tick</th></tr>"
+                      + "".join(_vorm_wijziging(w, labels) for w in te_legen[:300]) + "</table>")
     foutlijst = ("<h2>Errors</h2><ul>" + "".join(f"<li>{_e(f)}</li>" for f in fouten[:200]) + "</ul>"
                  if fouten else "")
     ook = ("<input type='checkbox' id='fin-valid-rows' name='valid_rows' value='1'>"
            "<label for='fin-valid-rows'>Import the valid rows anyway; the rows with errors are skipped</label>"
            if fouten else "")
+    if te_legen:
+        ook += (f"<input type='checkbox' id='fin-also-clear' name='also_clear' value='1'>"
+                f"<label for='fin-also-clear'>Also clear {len(te_legen)} cell(s)</label>")
     bevestig = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
                 f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                 f"<input type='hidden' name='action' value='finance_hist_import_bevestig'>"
@@ -869,13 +900,13 @@ def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: st
                 f"<input type='hidden' name='next' value='{_e(fields.get('next') or '/finance/history')}'>{ook}"
                 f"<button class='btn ok sm' type='submit'>Confirm import</button> "
                 f"<a href='{_e(fields.get('next') or '/finance/history')}'>Cancel</a></form>"
-                if diff["schrijf"] else "")
+                if (zonder["schrijf"] or te_legen) else "")
     inhoud = (f"<p>{_e(imp['attachment']['filename'])} · sha256 <code>{_e(imp['attachment']['sha256'][:16])}…</code> · "
               f"{gelezen['rijen']} row(s)</p>"
-              f"<p><strong>{diff['nieuw']}</strong> new · <strong>{diff['gewijzigd']}</strong> changed · "
-              f"<strong>{diff['geleegd']}</strong> cleared · "
-              f"<strong>{diff['ongewijzigd']}</strong> unchanged · <strong>{len(fouten)}</strong> error(s)</p>"
-              f"{foutlijst}{bevestig}<div class='c2-sec'>{tabel}</div>")
+              f"<p><strong>{zonder['nieuw']}</strong> new · <strong>{zonder['gewijzigd']}</strong> changed · "
+              f"<strong>{len(te_legen)}</strong> to clear (only with the tick) · "
+              f"<strong>{zonder['ongewijzigd']}</strong> unchanged · <strong>{len(fouten)}</strong> error(s)</p>"
+              f"{foutlijst}{bevestig}<div class='c2-sec'>{tabel}{leeg_tabel}</div>")
     return "html", _frame("Finance · Import preview", "/finance/history", inhoud)
 
 

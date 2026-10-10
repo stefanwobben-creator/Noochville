@@ -111,17 +111,49 @@ def test_export_en_import_van_een_leeggemaakte_cel(tmp_path, soort):
     g = fh.lees_bestand(f"x.{soort}", blob, fc.laad())
     diff = fh.vergelijk(g["bedragen"], g["paren"], reg.laatste(), fc.laad(), leeg=g["leeg"], paren_leeg=g["paren_leeg"])
     assert (diff["nieuw"], diff["gewijzigd"], diff["geleegd"], diff["ongewijzigd"]) == (0, 0, 0, 1)
-    # een cel in het bestand leeg die nu een waarde heeft: leegmaken, zichtbaar in de preview
-    leeg_feb = fh.export_csv([tab[0], ["brand", "Brand"] + [None] * 12]).encode()
+    assert len(reg.geschiedenis("2025-02", "brand")) == 1
+
+
+def _import(dd, blob, **bevestig):
     st = _st(dd)
-    soort_, html = fin.verwerk_history_import(st, {"action": "finance_hist_import"},
-                                              {"file": ("c.csv", leeg_feb)}, door="fc", csrf="t")
-    assert "1</strong> cleared" in html and "no data (cleared)" in html
+    soort, html = fin.verwerk_history_import(st, {"action": "finance_hist_import"},
+                                             {"file": ("c.csv", blob)}, door="fc", csrf="t")
     iid = fh.ImportLog(dd).alle()[-1]["import_id"]
-    assert "1 cleared" in fin.verwerk_history_import(st, {"action": "finance_hist_import_bevestig",
-                                                          "import_id": iid}, {}, door="fc", csrf="t")[1]
+    msg = fin.verwerk_history_import(st, {"action": "finance_hist_import_bevestig", "import_id": iid, **bevestig},
+                                     {}, door="fc", csrf="t")[1]
+    return html, msg
+
+
+def test_lege_cel_in_import_wordt_zonder_vinkje_overgeslagen(tmp_path):
+    """Besluit Stefan: leegmaken via een import alleen met het vinkje "also clear"; standaard uit.
+    De preview toont de cellen die geleegd ZOUDEN worden."""
+    dd = _dorp(tmp_path)
+    _opslaan(dd, {("2025-02", "brand"): "200", ("2025-02", "net_sales"): "900", ("2025-02", fh.PAREN): "9"})
+    kop = ["line_key", "label", *fh.maanden_van("2025")]
+    blob = fh.export_csv([kop, ["brand", "Brand"] + [None] * 12, ["net_sales_pairs", ""] + [None] * 12,
+                          ["purchased_goods", ""] + [None, 5000] + [None] * 10]).encode()
+    html, msg = _import(dd, blob)
+    assert "2</strong> to clear" in html and "Also clear 2 cell(s)" in html and "no data (cleared)" in html
+    assert "1 new" in msg and "0 cleared" in msg and "2 empty cell(s) in the file were skipped" in msg
+    act = fh.HistorieRegister(dd).actueel()
+    assert act[("2025-02", "brand")]["amount_cents"] == 20000                 # niet geleegd
+    assert act[("2025-02", "net_sales")]["pairs"] == 9                        # paren ook niet
+    assert act[("2025-02", "purchased_goods")]["amount_cents"] == 5000
+    assert fh.ImportLog(dd).alle()[-1]["skipped_clears"] == 2
+
+
+def test_lege_cel_in_import_wordt_met_vinkje_geleegd(tmp_path):
+    dd = _dorp(tmp_path)
+    _opslaan(dd, {("2025-02", "brand"): "200", ("2025-02", "net_sales"): "900", ("2025-02", fh.PAREN): "9"})
+    kop = ["line_key", "label", *fh.maanden_van("2025")]
+    blob = fh.export_csv([kop, ["brand", "Brand"] + [None] * 12, ["net_sales_pairs", ""] + [None] * 12]).encode()
+    html, msg = _import(dd, blob, also_clear="1")
+    assert "2 cleared" in msg
+    reg = fh.HistorieRegister(dd)
     assert ("2025-02", "brand") not in reg.actueel()
-    assert len(reg.geschiedenis("2025-02", "brand")) == 2
+    assert reg.actueel()[("2025-02", "net_sales")]["pairs"] is None and \
+        reg.actueel()[("2025-02", "net_sales")]["amount_cents"] == 90000
+    assert [r.get("cleared", False) for r in reg.geschiedenis("2025-02", "brand")] == [True, False]
 
 
 def test_negatief_alleen_waar_de_regel_een_krediet_toestaat(tmp_path):
