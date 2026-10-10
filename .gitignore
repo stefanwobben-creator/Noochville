@@ -68,3 +68,5 @@ claude/stickers_22sept/
 experiments/stage0/rapport_*
 experiments/stage0/misses_*
 experiments/stage0/scores_cache.jsonl
+experiments/stage0/titels.jsonl
+experiments/stage0/evalset.jsonl

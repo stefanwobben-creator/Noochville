@@ -16,34 +16,33 @@ Drie ontwerpkeuzes volgen daaruit:
 3. **Elke precision krijgt een Wilson-95%-CI.** Bij ~90 dismisses (20% van 450) is een punt-
    schatting van 90% niet scherp genoeg om als poort te dienen. Lees een run als richting.
 
-Sinds 10 oktober 2026 schrijft elke run twee bestanden naast dit script (gitignored — ze bevatten
-interne radartekst):
+DE INVOER IS DE RUWE KOP (vervolg, 10 oktober 2026). `content` én `rationale` in de gelabelde set
+zijn geschreven door de Gemini-ladder (`news_distill`, vóór 19 september 2026). Een filter dat vóór
+die ladder draait, ziet alleen feed, domein en kop — die haalt `haal_titels.py` terug via de link
+(lokaal, `titels.jsonl`). Runs op de modeltekst blijven in het rapport als "lekkage / bovengrens".
 
-    rapport_<datum>.md   alle modellen naast elkaar, per feed, scorespreiding, holdout apart
-    misses_<datum>.md    elke keep onder de drempel bij 20% wegvegen, plus 30 weggeveegde dismisses
+Per model twee eerlijke prompts: de oude 0-100 (basis) en ja/nee met de kans op "ja" uit de
+logprobs (fijnere schaal). Plus per run een combinatie met het lexicale filter (rang-gemiddelde,
+weging alleen op de afstel-set gekozen).
 
-En vier regels die je niet stilletjes moet omdraaien:
+Elke run schrijft (gitignored — interne radartekst):
+    rapport_<datum>_vervolg.md   alle runs naast elkaar, ook zonder Legal & Green Claims, per feed
+    misses_<datum>_vervolg.md    per run de goedgekeurde items onder de drempel
 
-* **Holdout.** 100 rijen (vaste seed) blijven buiten het afstellen. De drempel wordt op de REST
-  gekozen en daarna ongewijzigd op de holdout toegepast. De ids staan in `holdout_ids.txt`; die
-  wordt bij een volgende run hergebruikt, zodat de holdout niet stilletjes verschuift.
-* **EXCLUDE_FEEDS** (standaard `Projecten`, een interne feed) haalt rijen uit de HELE meting —
-  ook uit `WITH_GEMINI=1`. Er gaat niets van een interne feed naar een externe API.
-* **Met én zonder rationale.** Elke run draait ook zonder de regel "WHY IT WAS SURFACED", om te
-  zien of het model alleen het eerdere oordeel napraat.
-* **Modellen uit `ollama list`**, alleen die in het geheugen passen (zie `modellen()`).
+Regels die je niet stilletjes moet omdraaien:
+* **Holdout:** de rijen in `holdout_ids.txt` blijven buiten het afstellen, en worden ÉÉN keer
+  gemeten — alleen met `HOLDOUT=1`, voor de ene configuratie die op de afstel-set het beste is.
+* **EXCLUDE_FEEDS** (standaard `Projecten`) haalt rijen uit de hele meting, ook uit `WITH_GEMINI=1`.
+* **FILTER_FEEDS** (komma-lijst, leeg = alle) bepaalt op welke feeds het filter mag draaien.
+* **Modellen uit `ollama list`** onder min(16 GB, RAM − 4 GB).
 
-Gebruik (op Stefans Mac, met de Ollama op localhost:11434):
-    python3 experiments/stage0/eval_triage.py
-    OLLAMA_MODELS=qwen2.5:3b python3 experiments/stage0/eval_triage.py      # één model
-    NO_LLM=1 python3 experiments/stage0/eval_triage.py                       # alleen lexicaal
-    WITH_GEMINI=1 python3 experiments/stage0/eval_triage.py                  # + Gemini-plafond
+Gebruik (lokaal, Ollama op localhost:11434):
+    RADAR=<kopie prod radar.json> python3 experiments/stage0/haal_titels.py
+    python3 experiments/stage0/eval_triage.py                 # afstel-set, alle passende modellen
+    HOLDOUT=1 python3 experiments/stage0/eval_triage.py       # de eindrun, één holdout-meting
+    OLLAMA_MODELS=gemma2:2b FILTER_FEEDS="Material Innovation" python3 experiments/stage0/eval_triage.py
 
-Scores worden gecachet in `scores_cache.jsonl` (gitignored, per model + exacte prompt): een tweede
-run doet alleen wat nog niet gedaan is.
-
-Eval-set: `evalset.jsonl` als die bestaat, anders `data/live_radar.json` — goedgekeurd=keep,
-afgewezen=dismiss.
+Scores worden gecachet in `scores_cache.jsonl` (per model + exacte prompt).
 """
 from __future__ import annotations
 
@@ -112,6 +111,30 @@ def prompt_for(row: dict, met_rationale: bool = True) -> str:
         f"{waarom}\n"
         'Answer ONLY with JSON: {"score": <integer 0-100>}'
     )
+
+
+#: Het eerlijke ja/nee-format (stap 2, 10 oktober 2026): één woord, en de score is de kans op "ja"
+#: uit de logprobs — een fijne schaal i.p.v. de 8 à 13 waarden van de 0-100-prompt.
+_JANEE = ("A radar surfaces external signals (trends, competitors, materials, news) for this brand. "
+          "A human then KEEPS the ones worth acting on and DISMISSES the rest. Many signals look "
+          "topically related but are still not worth keeping.\n\n")
+
+
+def _signaal(row: dict, t: dict) -> str:
+    """Wat een filter VÓÓR de Gemini-ladder ziet: de feed, het domein en de kop van het artikel —
+    niet de `content` en `rationale` die de ladder zelf schreef (zie `haal_titels.py`)."""
+    return f"FEED: {row['feed']}\nSOURCE: {t.get('source', '')}\nHEADLINE: {t['titel']}\n"
+
+
+def prompt_titel(row: dict, t: dict) -> str:
+    """De oude 0-100-prompt, maar op de eerlijke invoer: de basis om het ja/nee-verschil aan af te zetten."""
+    return (f"{ANCHOR_PURPOSE}\n\n{_TASK}{_signaal(row, t)}\n"
+            'Answer ONLY with JSON: {"score": <integer 0-100>}')
+
+
+def prompt_janee(row: dict, t: dict) -> str:
+    return (f"{ANCHOR_PURPOSE}\n\n{_JANEE}{_signaal(row, t)}\n"
+            "Is this signal worth keeping? Answer with one word: Yes or No.")
 
 
 # ── Eval-set laden ────────────────────────────────────────────────────────────────────────────
@@ -193,6 +216,29 @@ def ask_ollama(prompt: str, model: str) -> str:
         return json.loads(r.read())["response"]
 
 
+def ask_janee(prompt: str, model: str) -> float | None:
+    """100 × P(ja) uit de logprobs van het eerste antwoord-token (Ollama ≥ 0.12: `logprobs` +
+    `top_logprobs`). Ja = 'yes', nee = 'no', hoofdletter- en spatie-ongevoelig; P(ja) wordt
+    genormaliseerd over ja + nee. Staat geen van beide in de top: None (telt als skipped)."""
+    import math
+    body = json.dumps({"model": model, "prompt": prompt, "stream": False, "logprobs": True,
+                       "top_logprobs": 10, "options": {"temperature": 0, "num_predict": 1}}).encode()
+    req = urllib.request.Request(f"{OLLAMA_BASE}/api/generate", data=body,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        lp = json.loads(r.read()).get("logprobs") or []
+    if not lp:
+        return None
+    ja = nee = 0.0
+    for t in lp[0].get("top_logprobs") or []:
+        w = str(t.get("token", "")).strip().lower()
+        if w == "yes":
+            ja += math.exp(t["logprob"])
+        elif w == "no":
+            nee += math.exp(t["logprob"])
+    return 100 * ja / (ja + nee) if ja + nee > 0 else None
+
+
 def parse_score(raw) -> float | None:
     """Haal een 0-100 keep-waardigheid uit het antwoord. None = onbruikbaar (telt als skipped)."""
     if raw is None:
@@ -243,29 +289,6 @@ class Cache:
         self.d[k] = score
         with open(self.pad, "a", encoding="utf-8") as f:
             f.write(json.dumps({"k": k, "s": score}) + "\n")
-
-
-def score_run(rows: list[dict], model: str, met_rationale: bool, cache: Cache,
-              vraag=None) -> tuple[list[float | None], float, int]:
-    """(scores, seconden, aantal echt gevraagd). `vraag` = de aanroep (Ollama of Gemini)."""
-    vraag = vraag or (lambda p: parse_score(ask_ollama(p, model)))
-    scores, t0, gevraagd = [], time.time(), 0
-    for i, r in enumerate(rows, 1):
-        p = prompt_for(r, met_rationale)
-        s = cache.get(model, p)
-        if s is None:
-            try:
-                s = vraag(p)
-            except Exception as e:
-                print(f"  [{model} {i}] fout: {e}")
-                s = None
-            gevraagd += 1
-            cache.put(model, p, s)
-        scores.append(s)
-        if i % 50 == 0:
-            print(f"  {model} {'met' if met_rationale else 'zonder'} rationale: {i}/{len(rows)}"
-                  f"  ({time.time() - t0:.0f}s)")
-    return scores, time.time() - t0, gevraagd
 
 
 # ── Statistiek ────────────────────────────────────────────────────────────────────────────────
@@ -380,10 +403,6 @@ def _pct(x) -> str:
     return "—" if x is None else f"{x * 100:.1f}%"
 
 
-def _ci(d: dict) -> str:
-    return f"{'~' if d.get('approx') else ''}[{d['lo'] * 100:.0f}–{d['hi'] * 100:.0f}]"
-
-
 def _tabel(kop: list[str], rijen: list[list]) -> list[str]:
     return (["| " + " | ".join(kop) + " |", "|" + "|".join("---" for _ in kop) + "|"]
             + ["| " + " | ".join(str(c) for c in r) + " |" for r in rijen])
@@ -395,253 +414,324 @@ def _cel(x: str, n: int = 220) -> str:
     return t if len(t) <= n else t[:n - 1] + "…"
 
 
+# ── Runs ──────────────────────────────────────────────────────────────────────────────────────
 class Run:
-    """Eén scoring: een model (of de lexicale baseline) met of zonder rationale."""
+    """Eén configuratie: model × prompt × invoer (of lexicaal, of een combinatie).
 
-    def __init__(self, naam: str, rows: list[dict], scores: list, seconden: float = 0.0,
-                 gevraagd: int = 0, model: str = "", met_rationale: bool = True):
-        self.naam, self.model, self.met_rationale = naam, model, met_rationale
-        self.seconden, self.gevraagd = seconden, gevraagd
-        self.alle = list(zip(rows, scores))
-        self.skipped = sum(1 for _r, s in self.alle if s is None)
+    `scores` = {rij-id: score} op de AFSTEL-rijen. De holdout wordt niet per run gescoord: die
+    meten we één keer, voor de beste configuratie (`holdout_meting`).
+    `lekkage` = de invoer kwam uit de Gemini-ladder (content/rationale) — een bovengrens, geen
+    resultaat voor een filter dat vóór die ladder draait."""
 
-    def deel(self, ids: set | None) -> tuple[list[dict], list[float], list[int]]:
-        paren = [(r, s) for r, s in self.alle if s is not None and (ids is None or r["id"] in ids)]
+    def __init__(self, naam: str, model: str, prompt: str, invoer: str, scores: dict,
+                 seconden: float = 0.0, gevraagd: int = 0, lekkage: bool = False,
+                 bouw=None, vraag=None, extra: dict | None = None):
+        self.naam, self.model, self.prompt, self.invoer = naam, model, prompt, invoer
+        self.scores, self.seconden, self.gevraagd, self.lekkage = scores, seconden, gevraagd, lekkage
+        self.bouw, self.vraag, self.extra = bouw, vraag, extra or {}
+
+    def op(self, rows: list[dict]) -> tuple[list[dict], list[float], list[int]]:
+        paren = [(r, self.scores.get(r["id"])) for r in rows]
+        paren = [(r, s) for r, s in paren if s is not None]
         return [r for r, _ in paren], [s for _, s in paren], [r["label"] for r, _ in paren]
 
 
-def rapport(runs: list[Run], lex: Run, afstel: list[dict], holdout: list[dict], meta: dict) -> str:
-    a_ids, h_ids = {r["id"] for r in afstel}, {r["id"] for r in holdout}
-    L: list[str] = [f"# Stage 0 — triage-evaluatie, {meta['datum']}", ""]
+def scoor(rows: list[dict], model: str, bouw, vraag, cache: Cache, label: str) -> tuple[dict, float, int]:
+    """({id: score}, seconden, echt gevraagd). `bouw(row)` maakt de prompt, `vraag(prompt)` geeft
+    een score of None. Gecachet per (model, exacte prompt)."""
+    uit, t0, gevraagd = {}, time.time(), 0
+    for i, r in enumerate(rows, 1):
+        p = bouw(r)
+        s = cache.get(model, p)
+        if s is None:
+            try:
+                s = vraag(p)
+            except Exception as e:
+                print(f"  [{label} {i}] fout: {e}")
+                s = None
+            gevraagd += 1
+            cache.put(model, p, s)
+        uit[r["id"]] = s
+        if i % 50 == 0:
+            print(f"  {label}: {i}/{len(rows)} ({time.time() - t0:.0f}s)")
+    return uit, time.time() - t0, gevraagd
+
+
+def _cdf(ref: list[float]):
+    """Score → percentiel-rang t.o.v. de AFSTEL-verdeling (gemiddelde rang bij gelijkspel). Zo
+    blijft een drempel die op de afstel-set is gekozen ook op de holdout geldig."""
+    s = sorted(ref)
+    n = len(s)
+
+    def f(x: float) -> float:
+        import bisect
+        lo, hi = bisect.bisect_left(s, x), bisect.bisect_right(s, x)
+        return (lo + hi) / 2 / n
+    return f
+
+
+def combineer(model: Run, lex: Run, afstel: list[dict]) -> Run:
+    """Rang-gemiddelde van modelscore en lexicale score: w·rang(model) + (1−w)·rang(lexicaal). De
+    weging w ∈ {0, 0.1, …, 1} wordt ALLEEN op de afstel-set gekozen (beste precision bij het
+    werkpunt). w=1 is het model alleen, w=0 het lexicale filter alleen."""
+    _r, ms, _y = model.op(afstel)
+    _r, ls, _y = lex.op(afstel)
+    fm, fl = _cdf(ms), _cdf(ls)
+    gedeeld = [r for r in afstel if model.scores.get(r["id"]) is not None
+               and lex.scores.get(r["id"]) is not None]
+    ys = [r["label"] for r in gedeeld]
+    beste = None
+    for w10 in range(11):
+        w = w10 / 10
+        sc = [w * fm(model.scores[r["id"]]) + (1 - w) * fl(lex.scores[r["id"]]) for r in gedeeld]
+        tn, k = dismiss_precision_at_k(sc, ys, int(round(WERKPUNT * len(sc))))
+        if k and (beste is None or tn / k > beste[0] + 1e-12):
+            beste = (tn / k, w)
+    w = beste[1] if beste else 1.0
+    scores = {r["id"]: w * fm(model.scores[r["id"]]) + (1 - w) * fl(lex.scores[r["id"]]) for r in gedeeld}
+    return Run(f"{model.naam} + lexicaal (w={w:.1f})", model.model, f"{model.prompt} + lexicaal",
+               model.invoer, scores, extra={"w": w, "fm": fm, "fl": fl, "delen": (model, lex)})
+
+
+# ── Rapport ───────────────────────────────────────────────────────────────────────────────────
+def _werkpunt(run: Run, rows: list[dict]) -> dict | None:
+    """Dismiss-precision bij precies WERKPUNT wegvegen (gelijkspel = verwachting over de groep),
+    met Wilson-CI, plus wat een echte drempel op deze rijen doet en hoeveel unieke scores er zijn."""
+    _r, ss, ys = run.op(rows)
+    if not ss:
+        return None
+    k = int(round(WERKPUNT * len(ss)))
+    tn, k = dismiss_precision_at_k(ss, ys, k)
+    if not k:
+        return None
+    lo, hi = wilson(round(tn), k)
+    t = drempel_voor(ss, WERKPUNT)
+    echt = bij_drempel(ss, ys, t)
+    return {"n": len(ss), "k": k, "prec": tn / k, "lo": lo, "hi": hi,
+            "approx": abs(tn - round(tn)) > 1e-9, "uniek": len(set(ss)), "drempel": t,
+            "echt_k": echt["k"], "echt_prec": echt["prec"], "vloer": 1 - sum(ys) / len(ys)}
+
+
+def _kop_tabel(runs: list[Run], rows: list[dict], lex_titel: Run) -> list[str]:
+    lw = _werkpunt(lex_titel, rows)
+    rijen = []
+    for run in runs:
+        d = _werkpunt(run, rows)
+        if d is None:
+            continue
+        rijen.append([
+            run.naam + (" ⚠ lekkage / bovengrens" if run.lekkage else ""),
+            run.prompt, run.invoer, d["n"], d["uniek"],
+            f"{_pct(d['prec'])} {'~' if d['approx'] else ''}[{d['lo'] * 100:.0f}–{d['hi'] * 100:.0f}]",
+            f"{(d['prec'] - d['vloer']) * 100:+.1f}pp",
+            "" if lw is None or run is lex_titel else f"{(d['prec'] - lw['prec']) * 100:+.1f}pp",
+            f"{d['echt_k']} ({d['echt_k'] / d['n'] * 100:.0f}%) · {_pct(d['echt_prec'])}",
+            f"{run.seconden / 60:.1f} min" if run.seconden else ""])
+    vloer = _werkpunt(lex_titel, rows)
+    kop = ["run", "prompt", "invoer", "N", "unieke scores", f"precision @{WERKPUNT * 100:.0f}% [95%-CI]",
+           "Δ blind", "Δ lexicaal (titel)", "echte drempel: weg · precision", "duur"]
+    return (_tabel(kop, rijen)
+            + ["", f"Blind wegvegen op deze rijen: {_pct(vloer['vloer']) if vloer else '—'}. "
+               f"Lexicaal op de titel: {_pct(vloer['prec']) if vloer else '—'}. (Ter vergelijking, de "
+               "eerste run op alle 450 rijen en de modeltekst: blind 50,2%, lexicaal 61,5%.)", ""])
+
+
+def rapport(runs: list[Run], lex_titel: Run, afstel: list[dict], meta: dict, holdout: dict | None) -> str:
+    L = [f"# Stage 0 — triage-evaluatie (vervolg), {meta['datum']}", ""]
     L += [f"- Eval-set: {meta['n_totaal']} rijen; uitgesloten feeds: "
-          f"{', '.join(f'{f} ({n})' for f, n in meta['uitgesloten'].items()) or 'geen'} "
-          f"→ {len(afstel) + len(holdout)} in de meting.",
-          f"- Afstellen: {len(afstel)} rijen · holdout: {len(holdout)} rijen (seed {SEED}, ids in "
-          f"`{os.path.basename(HOLDOUT_FILE)}`). De drempel wordt op de afstel-set gekozen bij "
-          f"{WERKPUNT * 100:.0f}% wegvegen en ongewijzigd op de holdout toegepast.",
-          f"- Modellen uit `ollama list` onder de grens van {meta['grens'] / 1024 ** 3:.1f} GB "
-          f"(min(16 GB, RAM {meta['ram'] / 1024 ** 3:.0f} GB − 4 GB)): "
-          f"{', '.join(f'{m} ({b / 1024 ** 3:.1f} GB)' for m, b in meta['modellen']) or 'geen'}"
-          + (f"; te groot: {', '.join(m for m, _b in meta['te_groot'])}" if meta['te_groot'] else "")
-          + ".",
-          f"- Totale duur: {meta['duur'] / 60:.1f} min ({meta['gevraagd']} model-aanroepen, de rest "
-          f"uit de cache).", ""]
-    if meta.get("oude_logs"):
-        L += ["## Eerdere runs", "", meta["oude_logs"], ""]
+          f"{', '.join(f'{f} ({n})' for f, n in meta['uitgesloten'].items())}.",
+          f"- Eerlijke invoer = feed + domein + **ruwe kop** (`haal_titels.py`): {meta['met_titel']} "
+          f"van {meta['in_meting']} rijen hebben er een; de rest valt weg ({meta['zonder_titel']}).",
+          f"- Afstel-set met titel: {len(afstel)} rijen. FILTER_FEEDS: {', '.join(meta['filter_feeds'])}.",
+          f"- Modellen: {', '.join(f'{m} ({b / 1024 ** 3:.1f} GB)' for m, b in meta['modellen'])}; "
+          f"grens {meta['grens'] / 1024 ** 3:.1f} GB.",
+          f"- Totale looptijd: {meta['duur'] / 60:.1f} min ({meta['gevraagd']} model-aanroepen; de "
+          "rest uit de cache).", ""]
+    L += ["## Waarom de invoer veranderde", "",
+          "`rationale` én `content` in de gelabelde set zijn geschreven door de Gemini-ladder "
+          "(`news_distill`, vóór 19 september 2026). Een filter dat vóór die ladder draait, ziet "
+          "alleen de kop, het domein en de feed. De runs op `content`/`rationale` staan hieronder "
+          "als **⚠ lekkage / bovengrens** — ter vergelijking, niet als resultaat. De set bevat "
+          "bovendien alleen items die de ladder al doorliet (selectie-effect).", ""]
 
-    # 1. Naast elkaar, op de afstel-set.
-    L += ["## Alle runs naast elkaar (afstel-set)", "",
-          "Dismiss-precision bij gelijke offload, met Wilson-95%-CI. Blind wegvegen haalt per "
-          "definitie het aandeel echte dismisses: dat is de vloer.", ""]
-    _r, _s, ys = lex.deel(a_ids)
-    vloer = 1 - (sum(ys) / len(ys)) if ys else 0
-    lp = at_offloads(*lex.deel(a_ids)[1:])
-    kop = ["run", "N", "unieke scores", "p10/p50/p90"] + [f"@{p * 100:.0f}%" for p in OFFLOAD_POINTS] \
-        + [f"Δ lexicaal @{WERKPUNT * 100:.0f}%", "duur"]
-    rijen = []
-    for run in [lex] + runs:
-        _r, ss, ys = run.deel(a_ids)
-        if not ss:
-            rijen.append([run.naam, 0, "", "", *["—"] * len(OFFLOAD_POINTS), "", ""])
-            continue
-        mp = at_offloads(ss, ys)
-        delta = ("" if run is lex or WERKPUNT not in mp or WERKPUNT not in lp
-                 else f"{(mp[WERKPUNT]['prec'] - lp[WERKPUNT]['prec']) * 100:+.1f}pp")
-        rijen.append([run.naam, len(ss) if not run.skipped else f"{len(ss)} ({run.skipped} skipped)",
-                      len(set(ss)), kwantielen(ss),
-                      *[f"{_pct(mp[p]['prec'])} {_ci(mp[p])}" if p in mp else "—" for p in OFFLOAD_POINTS],
-                      delta, f"{run.seconden / 60:.1f} min" if run.seconden else ""])
-    L += _tabel(kop, rijen) + ["", f"Vloer (blind wegvegen): {_pct(vloer)}.", ""]
+    def blok(titel: str, rows: list[dict]):
+        feeds = sorted({r["feed"] for r in rows})
+        return ([f"## {titel}", "", f"Feeds in deze tabel: {', '.join(feeds)} ({len(rows)} rijen).", ""]
+                + _kop_tabel([lex_titel] + runs, rows, lex_titel))
 
-    # 2. Holdout.
-    L += ["## Holdout (apart, drempel van de afstel-set)", "",
-          f"Per run de drempel die op de afstel-set {WERKPUNT * 100:.0f}% wegveegt, ongewijzigd op de "
-          f"{len(holdout)} holdout-rijen.", ""]
-    rijen = []
-    for run in [lex] + runs:
-        _r, sa, _ya = run.deel(a_ids)
-        _r, sh, yh = run.deel(h_ids)
-        if not sa or not sh:
-            continue
-        t = drempel_voor(sa, WERKPUNT)
-        a, h = bij_drempel(sa, _ya, t), bij_drempel(sh, yh, t)
-        rijen.append([run.naam, f"{t:g}", f"{_pct(a['offload'])} / {_pct(a['prec'])}",
-                      f"{_pct(h['offload'])} ({h['k']})",
-                      f"{_pct(h['prec'])} [{h['lo'] * 100:.0f}–{h['hi'] * 100:.0f}]",
-                      f"{h['verloren_n']} ({_pct(h['verloren'])})"])
-    L += _tabel(["run", "drempel (<)", "afstel: offload / precision", "holdout: weggeveegd",
-                 "holdout: precision [CI]", "holdout: verloren keeps"], rijen) + [""]
+    L += blok(f"Alle runs (afstel-set, FILTER_FEEDS)", afstel)
+    zonder = [r for r in afstel if r["feed"] != "Legal & Green Claims"]
+    L += blok("Zonder Legal & Green Claims", zonder)
 
-    # 3. Met vs zonder rationale.
-    paren = [(m, z) for m in runs for z in runs
-             if m.model and m.model == z.model and m.met_rationale and not z.met_rationale]
-    if paren:
-        L += ["## Met en zonder rationale", "",
-              "Praat het model alleen het eerdere oordeel na? Als de precision zonder de rationale-"
-              "regel sterk zakt en de scores nauwelijks samenhangen, leunde het model op die regel.", ""]
-        rijen = []
-        for m, z in paren:
-            _r, sm, ym = m.deel(a_ids)
-            _r, sz, yz = z.deel(a_ids)
-            pm, pz = at_offloads(sm, ym).get(WERKPUNT), at_offloads(sz, yz).get(WERKPUNT)
-            gedeeld = {r["id"]: s for r, s in zip(*m.deel(a_ids)[:2])}
-            zonder = {r["id"]: s for r, s in zip(*z.deel(a_ids)[:2])}
-            ids = [i for i in gedeeld if i in zonder]
-            rho = spearman([gedeeld[i] for i in ids], [zonder[i] for i in ids])
-            rijen.append([m.model, _pct(pm["prec"]) if pm else "—", _pct(pz["prec"]) if pz else "—",
-                          (f"{(pz['prec'] - pm['prec']) * 100:+.1f}pp" if pm and pz else "—"),
-                          "—" if rho is None else f"{rho:.2f}"])
-        L += _tabel(["model", f"met @{WERKPUNT * 100:.0f}%", f"zonder @{WERKPUNT * 100:.0f}%",
-                     "verschil", "Spearman ρ (met vs zonder)"], rijen) + [""]
-
-    # 4. Per feed.
+    # Per feed
     feeds = sorted({r["feed"] for r in afstel})
-    L += ["## Per feed (afstel-set, bij de drempel van het werkpunt)", "",
-          "Per feed: hoeveel er wordt weggeveegd, hoeveel daarvan terecht, en hoeveel keeps verloren "
-          "gaan. Een feed waar de precision ver onder het gemiddelde ligt, is waar het model het "
-          "oordeel van de mens het minst begrijpt.", ""]
-    kop = ["feed", "N", "keeps"] + [run.naam for run in [lex] + runs]
+    L += ["## Per feed (afstel-set)", "",
+          f"Per feed: aantal, aandeel dismiss, en de dismiss-precision bij {WERKPUNT * 100:.0f}% wegvegen "
+          "BINNEN die feed (de laagste scores van die feed).", ""]
+    eerlijk = [lex_titel] + [r for r in runs if not r.lekkage]
+    kop = ["feed", "N", "dismiss"] + [r.naam for r in eerlijk]
     rijen = []
     for f in feeds:
         fr = [r for r in afstel if r["feed"] == f]
-        rij = [f, len(fr), sum(r["label"] for r in fr)]
-        fids = {r["id"] for r in fr}
-        for run in [lex] + runs:
-            _r, sa, _ya = run.deel(a_ids)
-            if not sa:
-                rij.append("—")
-                continue
-            t = drempel_voor(sa, WERKPUNT)
-            _r, sf, yf = run.deel(fids)
-            d = bij_drempel(sf, yf, t) if sf else None
-            rij.append("—" if not d or not d["k"] else
-                       f"{d['k']} weg · {_pct(d['prec'])} · {d['verloren_n']} keeps kwijt")
+        rij = [f, len(fr), _pct(1 - sum(r["label"] for r in fr) / len(fr))]
+        for run in eerlijk:
+            d = _werkpunt(run, fr)
+            rij.append("—" if d is None else f"{_pct(d['prec'])} ({d['k']})")
         rijen.append(rij)
     L += _tabel(kop, rijen) + [""]
 
-    # 5. Scorespreiding.
-    L += ["## Scorespreiding per run (afstel-set)", "",
-          "Aantal keeps / dismisses per scoreband. Een model dat alles op één waarde zet, heeft "
-          "voor een drempel niets te kiezen.", ""]
-    banden = [(0, 10), (10, 20), (20, 30), (30, 40), (40, 50), (50, 60), (60, 70), (70, 80),
-              (80, 90), (90, 101)]
-    rijen = []
-    for run in runs:
-        _r, ss, ys = run.deel(a_ids)
-        rij = [run.naam]
-        for lo, hi in banden:
-            k = sum(1 for s, y in zip(ss, ys) if lo <= s < hi and y == 1)
-            d = sum(1 for s, y in zip(ss, ys) if lo <= s < hi and y == 0)
-            rij.append(f"{k}/{d}" if k or d else "")
-        rijen.append(rij)
-    L += _tabel(["run"] + [f"{lo}–{min(hi, 100)}" for lo, hi in banden], rijen) + [""]
+    # Met/zonder rationale (alleen de lekkage-runs hebben die tweedeling)
+    L += ["## Scorespreiding", "", "Unieke scores per eerlijke run (meer = een drempel kan fijner).", ""]
+    L += _tabel(["run", "unieke scores", "p10 / p50 / p90"],
+                [[r.naam, len(set(r.op(afstel)[1])), kwantielen(r.op(afstel)[1])]
+                 for r in eerlijk if r.op(afstel)[1]]) + [""]
 
-    # 6. De volledige tabellen per run (wat het script altijd al printte).
-    L += ["## Per run: offload-tabel, verdict en drempel-sweep (afstel-set)", ""]
+    L += ["## Holdout (één meting, voor de beste configuratie)", ""]
+    if holdout is None:
+        L += ["Niet gemeten (zet HOLDOUT=1 voor de ene eindmeting).", ""]
+    else:
+        h = holdout
+        L += [f"Beste configuratie op de afstel-set: **{h['naam']}** (drempel van de afstel-set, "
+              "ongewijzigd toegepast).", "",
+              f"- Holdout-rijen met titel: {h['n']}; weggeveegd: **{h['k']}**; terecht: {h['tn']}; "
+              f"precision {_pct(h['prec'])} [{h['lo'] * 100:.0f}–{h['hi'] * 100:.0f}]; keeps verloren: "
+              f"{h['k'] - h['tn']}.", ""]
+        if h["k"] < 15:
+            L += [f"**Geen uitspraak:** {h['k']} weggeveegde holdout-rijen is te weinig.", ""]
+    return "\n".join(L)
+
+
+def misses(runs: list[Run], afstel: list[dict], titels: dict, datum: str) -> str:
+    L = [f"# Stage 0 — misses (vervolg), {datum}", "",
+         f"Per eerlijke run: de goedgekeurde items onder de drempel bij {WERKPUNT * 100:.0f}% wegvegen "
+         "(afstel-set). Dat zijn de fouten die ertoe doen. Interne tekst: niet committen.", ""]
     for run in runs:
-        _r, ss, ys = run.deel(a_ids)
+        if run.lekkage:
+            continue
+        rows, ss, _ys = run.op(afstel)
         if not ss:
             continue
-        mp = at_offloads(ss, ys)
-        L += [f"### {run.naam}", ""]
-        L += _tabel(["offload", "weggeveegd", "dismiss-precision", "95%-CI", "lexicaal", "verdict"],
-                    [[f"{p * 100:.0f}%", mp[p]["k"], _pct(mp[p]["prec"]), _ci(mp[p]),
-                      _pct(lp[p]["prec"]) if p in lp else "—",
-                      ("—" if p not in lp else
-                       ("model" if mp[p]["prec"] > lp[p]["prec"] else
-                        "gelijk" if mp[p]["prec"] == lp[p]["prec"] else "lexicaal")
-                       + f" ({(mp[p]['prec'] - lp[p]['prec']) * 100:+.1f}pp), vloer "
-                       f"{(mp[p]['prec'] - vloer) * 100:+.1f}pp")]
-                     for p in OFFLOAD_POINTS if p in mp])
-        L += ["", "<details><summary>drempel-sweep</summary>", ""]
-        L += _tabel(["drempel (<)", "offload", "dismiss-precision", "verloren kansen"],
-                    [[f"{t:g}", _pct(o), _pct(p), _pct(v)] for t, o, p, v in sweep_rijen(ss, ys)])
-        L += ["", "</details>", ""]
-    L += ["Lees dit als RICHTING, niet als poort: bij deze N is een CI van ±8pp normaal. Promoveren "
-          "pas als de ondergrens van het CI boven de lexicale bovengrens ligt.", ""]
+        t = drempel_voor(ss, WERKPUNT)
+        fout = sorted([(r, s) for r, s in zip(rows, ss) if s < t and r["label"] == 1], key=lambda x: x[1])
+        L += [f"## {run.naam} — drempel < {t:.3g} — {len(fout)} goedgekeurde items weggeveegd", ""]
+        L += (_tabel(["score", "feed", "kop", "bron"],
+                     [[f"{s:.3g}", r["feed"], _cel(titels[r["id"]]["titel"]),
+                       _cel(titels[r["id"]].get("source", ""), 40)] for r, s in fout])
+              if fout else ["Geen."]) + [""]
     return "\n".join(L)
 
 
-def misses(runs: list[Run], afstel: list[dict], holdout: list[dict], datum: str) -> str:
-    """Per run: elke keep onder de werkpunt-drempel (afstel + holdout), en een steekproef van 30
-    terecht of onterecht weggeveegde dismisses — om te lezen WAT het model wegveegt."""
-    a_ids, h_ids = {r["id"] for r in afstel}, {r["id"] for r in holdout}
-    L = [f"# Stage 0 — misses, {datum}", "",
-         f"Drempel per run gekozen op de afstel-set bij {WERKPUNT * 100:.0f}% wegvegen. "
-         "Interne radartekst: niet committen, niet delen buiten NoochVille.", ""]
-    for run in runs:
-        _r, sa, _ya = run.deel(a_ids)
-        if not sa:
-            continue
-        t = drempel_voor(sa, WERKPUNT)
-        rows, ss, _ys = run.deel(None)
-        weg = [(r, s) for r, s in zip(rows, ss) if s < t]
-        gemist = sorted([(r, s) for r, s in weg if r["label"] == 1], key=lambda x: x[1])
-        dismissed = [(r, s) for r, s in weg if r["label"] == 0]
-        steekproef = random.Random(SEED).sample(dismissed, min(STEEKPROEF_N, len(dismissed)))
-        split = lambda r: "holdout" if r["id"] in h_ids else "afstel"
-        L += [f"## {run.naam} — drempel < {t:g}", "",
-              f"### Keeps die weggeveegd zouden worden ({len(gemist)})", ""]
-        L += _tabel(["score", "feed", "set", "content", "rationale"],
-                    [[f"{s:g}", r["feed"], split(r), _cel(r["content"]), _cel(r["rationale"], 160)]
-                     for r, s in gemist]) if gemist else ["Geen."]
-        L += ["", f"### Steekproef van weggeveegde dismisses ({len(steekproef)} van {len(dismissed)})", ""]
-        L += _tabel(["score", "feed", "set", "content", "rationale"],
-                    [[f"{s:g}", r["feed"], split(r), _cel(r["content"]), _cel(r["rationale"], 160)]
-                     for r, s in sorted(steekproef, key=lambda x: x[1])]) if steekproef else ["Geen."]
-        L += [""]
-    return "\n".join(L)
+def holdout_meting(run: Run, afstel: list[dict], holdout: list[dict], cache: Cache) -> dict:
+    """Scoor de holdout voor ÉÉN configuratie en pas de drempel van de afstel-set toe."""
+    _r, sa, _y = run.op(afstel)
+    t = drempel_voor(sa, WERKPUNT)
+    if "delen" in run.extra:                                   # combinatie: beide delen scoren
+        m, lex = run.extra["delen"]
+        ms, _s, _g = scoor(holdout, m.model, m.bouw, m.vraag, cache, f"holdout {m.naam}")
+        w = run.extra["w"]
+        hs = {i: w * run.extra["fm"](ms[i]) + (1 - w) * run.extra["fl"](lex.scores_h[i])
+              for i in ms if ms[i] is not None and lex.scores_h.get(i) is not None}
+    elif run.bouw is not None:
+        hs, _s, _g = scoor(holdout, run.model, run.bouw, run.vraag, cache, f"holdout {run.naam}")
+    else:                                                      # lexicaal
+        hs = run.scores_h
+    paren = [(hs[r["id"]], r["label"]) for r in holdout if hs.get(r["id"]) is not None]
+    k = sum(1 for s, _y in paren if s < t)
+    tn = sum(1 for s, y in paren if s < t and y == 0)
+    lo, hi = wilson(tn, k) if k else (0.0, 0.0)
+    return {"naam": run.naam, "n": len(paren), "k": k, "tn": tn, "prec": tn / k if k else None,
+            "lo": lo, "hi": hi}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────────────────────
+TITELS_FILE = _env("TITELS_FILE", os.path.join(_HIER, "titels.jsonl"))
+#: De feeds waarop het filter mag draaien. Leeg = alle feeds die niet uitgesloten zijn.
+FILTER_FEEDS = [f.strip() for f in _env("FILTER_FEEDS", "").split(",") if f.strip()]
+
+
 def main() -> None:
     t_start = time.time()
     datum = datetime.date.today().isoformat()
     alle = load_rows()
     uitgesloten = {f: sum(1 for r in alle if r["feed"] == f) for f in EXCLUDE_FEEDS}
-    # EXCLUDE_FEEDS VÓÓR ALLES: een interne feed komt in geen enkele run, en dus ook nooit bij een
-    # externe API (WITH_GEMINI). Daarom hier gefilterd en niet pas bij de Gemini-aanroep.
+    # EXCLUDE_FEEDS VÓÓR ALLES: een interne feed komt in geen enkele run (ook niet WITH_GEMINI).
     rows = [r for r in alle if r["feed"] not in EXCLUDE_FEEDS]
-    limit = int(_env("LIMIT", "0")) or len(rows)
-    rows = rows[:limit]
-    afstel, holdout = splits(rows)
-    print(f"meting: {len(rows)} rijen (uitgesloten: {uitgesloten}) → afstel {len(afstel)}, "
-          f"holdout {len(holdout)}")
+    if FILTER_FEEDS:
+        rows = [r for r in rows if r["feed"] in FILTER_FEEDS]
+    titels = {}
+    if os.path.exists(TITELS_FILE):
+        titels = {e["id"]: e for e in (json.loads(l) for l in open(TITELS_FILE, encoding="utf-8"))}
+    in_meting = len(rows)
+    afstel_alle, holdout_alle = splits(rows)                   # holdout_ids.txt blijft de bron
+    met = lambda rs: [r for r in rs if titels.get(r["id"], {}).get("titel")]
+    afstel, holdout = met(afstel_alle), met(holdout_alle)
+    print(f"meting: {in_meting} rijen; met titel: afstel {len(afstel)}, holdout {len(holdout)}")
 
-    lex = Run("lexicaal (strategie_relevantie)", rows,
-              [float(strategie_relevantie(f"{r['content']} {r['rationale']}")[0]) for r in rows])
-    runs: list[Run] = []
     cache = Cache(CACHE_FILE)
-    passend, grens, te_groot = ([], 0, []) if _env("NO_LLM") else modellen()
+    lex_titel = Run("lexicaal", "", "trefwoorden", "titel",
+                    {r["id"]: float(strategie_relevantie(titels[r["id"]]["titel"])[0]) for r in afstel})
+    lex_titel.scores_h = {r["id"]: float(strategie_relevantie(titels[r["id"]]["titel"])[0])
+                          for r in holdout}
+    lex_lek = Run("lexicaal", "", "trefwoorden", "content + rationale",
+                  {r["id"]: float(strategie_relevantie(f"{r['content']} {r['rationale']}")[0])
+                   for r in afstel}, lekkage=True)
+    runs: list[Run] = [lex_lek]
+    passend, grens, _te_groot = modellen()
     gevraagd = 0
-    for model, _b in passend:
-        for met in (True, False):
-            print(f"\n→ {model} {'met' if met else 'zonder'} rationale")
-            scores, sec, n = score_run(rows, model, met, cache)
+    for model, grootte in passend:
+        # LEKKAGE-REFERENTIE op de modeltekst. "Met rationale" alleen voor de kleine modellen van de
+        # eerste run (die staan in de cache); voor de grotere vroeg stap 1 alleen "zonder".
+        for met_r in ((True, False) if grootte < 3 * 1024 ** 3 else (False,)):
+            bouw = (lambda r, m=met_r: prompt_for(r, m))
+            vraag = (lambda p, mo=model: parse_score(ask_ollama(p, mo)))
+            sc, sec, n = scoor(afstel, model, bouw, vraag, cache,
+                               f"{model} content{' + rationale' if met_r else ''}")
             gevraagd += n
-            runs.append(Run(f"{model}{'' if met else ' · zonder rationale'}", rows, scores, sec, n,
-                            model=model, met_rationale=met))
+            runs.append(Run(model, model, "0-100", "content" + (" + rationale" if met_r else ""),
+                            sc, sec, n, lekkage=True))
+        # EERLIJK: kop + domein + feed, 0-100 (basis) en ja/nee met logprobs.
+        for prompt, bouw, vraag in (
+                ("0-100", lambda r: prompt_titel(r, titels[r["id"]]),
+                 lambda p, mo=model: parse_score(ask_ollama(p, mo))),
+                ("ja/nee (logprob)", lambda r: prompt_janee(r, titels[r["id"]]),
+                 lambda p, mo=model: ask_janee(p, mo))):
+            sc, sec, n = scoor(afstel, model, bouw, vraag, cache, f"{model} titel {prompt}")
+            gevraagd += n
+            runs.append(Run(model, model, prompt, "titel", sc, sec, n, bouw=bouw, vraag=vraag))
     if _env("WITH_GEMINI"):
-        print("\n→ Gemini (ladder-plafond), met rationale")
+        # Kost quota; standaard UIT. Zelfde eerlijke invoer, en EXCLUDE_FEEDS is hierboven al
+        # toegepast: er gaat niets van een interne feed naar een externe API.
         traag = float(_env("GEMINI_SLEEP", "1.0"))
-
-        def via_gemini(p):
-            time.sleep(traag)
-            return gemini_score(p)
-        scores, sec, n = score_run(rows, "gemini", True, cache, vraag=via_gemini)
+        bouw = lambda r: prompt_titel(r, titels[r["id"]])
+        vraag = lambda p: (time.sleep(traag), gemini_score(p))[1]
+        sc, sec, n = scoor(afstel, "gemini", bouw, vraag, cache, "gemini titel 0-100")
         gevraagd += n
-        runs.append(Run("Gemini (ladder-plafond)", rows, scores, sec, n))
+        runs.append(Run("Gemini (ladder-plafond)", "gemini", "0-100", "titel", sc, sec, n,
+                        bouw=bouw, vraag=vraag))
+    eerlijk = [r for r in runs if not r.lekkage]
+    combis = [combineer(r, lex_titel, afstel) for r in eerlijk]
+    runs += combis
 
-    meta = {"datum": datum, "n_totaal": len(alle), "uitgesloten": uitgesloten, "grens": grens,
-            "ram": ram_bytes(), "modellen": passend, "te_groot": te_groot,
-            "duur": time.time() - t_start, "gevraagd": gevraagd,
-            "oude_logs": _env("OUDE_LOGS", "")}
-    pad_r = os.path.join(_HIER, f"rapport_{datum}.md")
-    pad_m = os.path.join(_HIER, f"misses_{datum}.md")
+    # DE HOLDOUT ÉÉN KEER: de eerlijke configuratie met de hoogste precision bij het werkpunt.
+    kandidaten = [(d["prec"], r) for r in [lex_titel] + eerlijk + combis
+                  if (d := _werkpunt(r, afstel)) is not None]
+    beste = max(kandidaten, key=lambda x: x[0])[1] if kandidaten else None
+    # ALLEEN MET HOLDOUT=1: een proefrun mag de holdout niet "even" bekijken — dan is hij geen
+    # holdout meer. De eindrun zet hem aan, één keer.
+    hold = (holdout_meting(beste, afstel, holdout, cache)
+            if beste is not None and _env("HOLDOUT") == "1" else None)
+
+    meta = {"datum": datum, "n_totaal": len(alle), "uitgesloten": uitgesloten,
+            "in_meting": in_meting, "met_titel": len(afstel) + len(holdout),
+            "zonder_titel": in_meting - len(afstel) - len(holdout),
+            "filter_feeds": FILTER_FEEDS or sorted({r["feed"] for r in rows}),
+            "modellen": passend, "grens": grens, "duur": time.time() - t_start, "gevraagd": gevraagd}
+    pad_r = os.path.join(_HIER, f"rapport_{datum}_vervolg.md")
+    pad_m = os.path.join(_HIER, f"misses_{datum}_vervolg.md")
     with open(pad_r, "w", encoding="utf-8") as f:
-        f.write(rapport(runs, lex, afstel, holdout, meta))
+        f.write(rapport(runs, lex_titel, afstel, meta, hold))
     with open(pad_m, "w", encoding="utf-8") as f:
-        f.write(misses(runs, afstel, holdout, datum))
+        f.write(misses([lex_titel] + runs, afstel, titels, datum))
     print(f"\nklaar in {meta['duur'] / 60:.1f} min → {pad_r}\n{' ' * 18}{pad_m}")
 
 
