@@ -7347,15 +7347,29 @@ def make_handler(data_dir: str, csrf_token: str,
                 if path == "/finance/monthly":
                     self._send(_fin.render_monthly(st, username)); return
                 if path == "/finance/pnl":
-                    self._send(_fin.render_pnl(st, username, _q("van"), _q("tot"), _q("batch"))); return
+                    self._send(_fin.render_pnl(st, username, _q("van"), _q("tot"), _q("batch"),
+                                               per=_q("per"))); return
+                if path == "/finance/revenue":
+                    self._send(_fin.render_revenue(st, username, effective_csrf,
+                                                   {k: _q(k) for k in _fin.OMZET_FILTERS}, _msg)); return
+                if path == "/finance/revenue/view":
+                    h = _fin.render_revenue_regel(st, username, effective_csrf, _q("id"), _msg)
+                    self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
+                if path == "/finance/revenue.csv":
+                    body = _fin.csv_omzet(_fin.omzet_gefilterd(st, {k: _q(k) for k in _fin.OMZET_FILTERS}))
+                    self._send_bijlage(body.encode("utf-8"), "text/csv; charset=utf-8",
+                                       f"nooch_revenue_{time.strftime('%Y%m%d')}.csv", inline=False,
+                                       geen_cache=True); return
                 if path == "/finance/costs.csv":
                     body = _fin.csv_export(_fin.gefilterd(st, {k: _q(k) for k in _fin.FILTERS}))
                     self._send_bijlage(body.encode("utf-8"), "text/csv; charset=utf-8",
                                        f"nooch_costs_{time.strftime('%Y%m%d')}.csv", inline=False,
                                        geen_cache=True); return
                 if path == "/finance/file":
+                    # `reg=revenue`: een bijlage uit het opbrengstregister (PR 1b); anders de kosten.
+                    from nooch_village.finance_omzet import OpbrengstRegister
                     from nooch_village.finance_register import KostenRegister
-                    _reg = KostenRegister(st.dd)
+                    _reg = (OpbrengstRegister if _q("reg") == "revenue" else KostenRegister)(st.dd)
                     _r = _reg.get(_q("id"))
                     if _r is None or not _r.get("attachment"):
                         self._send("<p>404</p>", 404); return
@@ -8319,6 +8333,17 @@ def make_handler(data_dir: str, csrf_token: str,
                     _msg = _fin.verwerk_kost(_st, fields, files, username=username,
                                              door=_web_actor_id(username, _st) or str(username or ""))
                     self._redirect(fields.get("next", "/finance/costs"), _msg); return
+                if fields.get("action") in ("finance_omzet_add", "finance_omzet_correct"):
+                    # AUTHZ: zicht-groep `finance`, recht "wijzigen" — dezelfde poort als de kosten
+                    # hierboven; geen recht = een 404. Alleen toevoegen: een correctie is een
+                    # tegenboeking plus een nieuwe regel (`finance_omzet.OpbrengstRegister`).
+                    from nooch_village.views import finance as _fin
+                    _st = _Stores(data_dir)
+                    if not _fin.mag_wijzigen(_st, username):
+                        self._send("<p>404</p>", 404); return
+                    _msg = _fin.verwerk_omzet(_st, fields, files, username=username,
+                                              door=_web_actor_id(username, _st) or str(username or ""))
+                    self._redirect(fields.get("next", "/finance/revenue"), _msg); return
                 if fields.get("action") == "bom_foto":
                     # AUTHZ: domeineigenaar of Circle Lead — van `Materials`, dezelfde poort als
                     # `bom_foto` met een adres (`_bom_poort`). Alleen een AFBEELDING; dezelfde

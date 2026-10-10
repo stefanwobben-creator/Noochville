@@ -880,7 +880,27 @@ _DOMAIN_TOOLS = {
         # tool-URLs hebben geen tweede parameter), dus de escaping hoort hier in de waarde.
         ("Claim pages", "One wiki page per claim, with its evidence or what is still missing",
          "/node?id={rol}&amp;tab=notes")],
+    # Het domein `Financial administration` (zelfde naam als in `config/zicht.json`, groep
+    # `finance`; een test bewaakt dat ze gelijk blijven). AFGESCHERMD: de kaart verschijnt alleen
+    # voor wie de finance-schermen mag zien (`_tool_zichtbaar`) — wie dat niet mag, krijgt op
+    # /finance/* een 404 en hoort de kaart dus ook niet te zien. Geen knop in het hoofdmenu.
+    "financial administration": [
+        ("Finance", "Costs, revenue and the P&L", "/finance/costs")],
 }
+
+#: Tool-schermen die achter een zicht-groep liggen (`zicht.py`): href-voorvoegsel → groep.
+_TOOL_ZICHT = {"/finance/": "finance"}
+
+
+def _tool_zichtbaar(st, username, href: str) -> bool:
+    """Mag deze kijker de kaart zien? Fail-closed: zonder stores of gebruiker geen afgeschermde kaart."""
+    groep = next((g for pre, g in _TOOL_ZICHT.items() if href.startswith(pre)), None)
+    if groep is None:
+        return True
+    if st is None:
+        return False
+    from nooch_village import zicht
+    return zicht.mag(st, username, groep, "zien")
 
 
 def _tool_kaart(label: str, desc: str, href: str) -> str:
@@ -896,15 +916,16 @@ def _tool_kaart(label: str, desc: str, href: str) -> str:
             f"<div class='muted'>{_e(desc)}</div></a>")
 
 
-def _role_tools_html(rec) -> str:
+def _role_tools_html(rec, st=None, username: str | None = None) -> str:
     """De tool-schermen die onder deze rol wonen, als kaarten bovenaan de Tools-tab. Geen
     eigenaar-mapping en geen domein-mapping → lege string (dan toont de tab alleen radar +
-    artefact-tools)."""
+    artefact-tools). Een afgeschermde kaart (`_TOOL_ZICHT`) alleen voor wie hem mag zien."""
     rid = getattr(rec, "id", "")
     tools = list(_ROLE_TOOLS.get(rid, []))
     for d in (getattr(getattr(rec, "definition", None), "domains", None) or []):
         for label, desc, href in _DOMAIN_TOOLS.get(" ".join(str(d).split()).lower(), []):
             tools.append((label, desc, href.replace("{rol}", _e(rid))))
+    tools = [t for t in tools if _tool_zichtbaar(st, username, t[2])]
     if not tools:
         return ""
     cards = "".join(_tool_kaart(label, desc, href) for label, desc, href in tools)

@@ -30,7 +30,8 @@ def test_geen_enkele_rol_tool_wijst_naar_een_verdwenen_scherm():
 
     from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS
     bron = (pathlib.Path(__file__).resolve().parents[1] / "nooch_village" / "cockpit2.py").read_text()
-    routes = set(re.findall(r'path == "(/[a-z0-9_-]*)"', bron))
+    # Ook geneste paden (`/finance/costs`): de schuine streep hoort in de tekenklasse.
+    routes = set(re.findall(r'path == "(/[a-z0-9_/-]*)"', bron))
     routes |= {"/node", "/"}                       # via andere vergelijkingen afgehandeld
 
     dood = []
@@ -96,7 +97,9 @@ def test_registry_dekt_de_eigenaar_rollen():
     #
     # `materials` sinds 1 oktober 2026: het BOM-scherm hangt aan het materialen-domein, om dezelfde
     # reden als claims — het gaat mee als een andere rol de materiaalkennis gaat houden.
-    assert set(_DOMAIN_TOOLS) == {claims_db.DOMEIN, "materials"}
+    # `financial administration` sinds 10 oktober 2026: de Finance-kaart, afgeschermd per kijker
+    # (`overview._tool_zichtbaar`, zicht-groep `finance`).
+    assert set(_DOMAIN_TOOLS) == {claims_db.DOMEIN, "materials", "financial administration"}
 
 
 def test_copy_gereedschap_hangt_onder_de_nooch_cirkel():

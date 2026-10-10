@@ -188,5 +188,20 @@
   "_accounts_uitleg": "Hoofdgroepen uit Venema's jaarrekening, nog zonder code. De standaard-managementregel is een VOORSTEL (de mapping uit het ontwerp, op hoofdgroep): bij invoer te overschrijven. Porti (outbound_freight) en reclame (brand/performance) zitten in een hoofdgroep met een andere standaard — kies bij invoer de juiste regel.",
   "batches": [
     "Batch 4"
-  ]
+  ],
+  "revenue_lines": [
+    {
+      "key": "net_sales",
+      "label": "Net sales",
+      "basis": true
+    },
+    {
+      "key": "other_income_grants",
+      "label": "Grants and subsidies",
+      "from_layer": "ebitda"
+    }
+  ],
+  "_revenue_uitleg": "Net sales is de basis van alle marges en percentages. Een andere opbrengstregel telt mee vanaf de laag in from_layer (een laag-sleutel: cm1, cm2, cm3, ebitda, ebit, ebt, net) en nooit in de percentagebasis. Venema bepaalt waar een subsidie hoort; pas from_layer dan hier aan.",
+  "net_sales_source_from": "",
+  "_net_sales_source_from_uitleg": "YYYY-MM of leeg. Leeg = Net sales komt uit het handmatige register. Gezet (na de Shopify-koppeling) = vanaf die maand uit Shopify, eerdere maanden uit het register; een maand komt nooit uit twee bronnen."
 }
