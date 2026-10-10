@@ -3,7 +3,7 @@
 Het dorp is open: elke ingelogde ziet elke tegel. Cash, de lijst vaste kosten en de runway zijn de
 uitzondering (besluit Stefan): alleen de rolhouders van Financial Controller en Business strategy,
 en Stefan zelf (de anchor lead). Een tegel of KPI draagt daarvoor `zicht: "<groep>"`; de groep en
-haar rollen staan op ÉÉN plek, in `config/critical_numbers.json` → `zicht`. Een tegel draagt dus
+haar rollen staan op ÉÉN plek, in `config/zicht.json`. Een tegel draagt dus
 een VERWIJZING, geen kopie van de rollen: wie de rollen verandert, doet dat op één plek.
 
 ÉÉN POORT VOOR ALLE LEESPLEKKEN. In plaats van de gebruikersnaam door elke view te sturen, krijgt een
@@ -12,34 +12,64 @@ alleen tegels en KPI's terug die deze kijker mag zien. Zo kan geen leesplek verg
 sparkline in de catalogus en de CSV-export niet. Het is per request; er is geen globale toestand.
 
 FAIL-CLOSED: een onbekende groep of een onbekende ingelogde ziet niets van die groep. Guest (auth
-uit) mag alles, zoals overal in de cockpit.
+uit) mag alles, zoals overal in de cockpit. De anchor lead heeft GEEN automatisch recht (sinds
+Finance PR 1): Stefan staat er als persoon in.
 """
 from __future__ import annotations
 
+import json
+import os
 
-def groepen() -> dict:
-    """{groep: {"zien": [rol-id's], "wijzigen": [rol-id's]}} uit het seed-bestand."""
-    from nooch_village import critical_numbers
+
+_PAD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "zicht.json")
+
+
+def groepen(pad: str = "") -> dict:
+    """{groep: {domeinen, fallback, zien: {...}, wijzigen: {...}}} uit `config/zicht.json`."""
     try:
-        return critical_numbers.laad().get("zicht") or {}
+        with open(pad or _PAD, encoding="utf-8") as f:
+            d = json.load(f)
     except (OSError, ValueError):
         return {}
+    return {k: v for k, v in d.items() if not k.startswith("_") and isinstance(v, dict)}
+
+
+def _rollen(st, spec: dict, groep: dict) -> set[str]:
+    """De rol-id's die dit recht geven: de HOUDER van elk domein van de groep (via governance —
+    verhuist het domein, dan verhuist het recht mee), of de fallback-rol zolang niemand het domein
+    houdt, plus de losse rollen."""
+    from nooch_village import org
+    uit = set(spec.get("rollen") or [])
+    if spec.get("domein"):
+        for dom in groep.get("domeinen") or []:
+            houder = org.role_for_domain(st.records.all(), dom)
+            rid = houder.id if houder is not None else (groep.get("fallback") or {}).get(dom, "")
+            if rid:
+                uit.add(rid)
+    return uit
 
 
 def mag(st, username: str | None, groep: str, wat: str = "zien") -> bool:
-    """Mag deze gebruiker `wat` (zien | wijzigen) bij deze groep? Lege groep = open."""
+    """Mag deze gebruiker `wat` (zien | wijzigen) bij deze groep? Lege groep = open.
+
+    SINDS FINANCE PR 1 (10 oktober 2026): geen automatisch recht meer voor de anchor lead. Wie
+    erbij hoort, staat in `config/zicht.json` — als domeinhouder, als rol of als persoon (Stefan,
+    op e-mail). Fail-closed: onbekende groep, onbekende gebruiker of geen sessie = nee."""
     if not groep:
         return True
     if username == "guest":
         return True
-    actor = st.people.by_email(username) if username else None
+    g = groepen().get(groep)
+    if not g or not username:
+        return False
+    spec = g.get(wat) or {}
+    if username.strip().lower() in {p.strip().lower() for p in spec.get("personen") or []}:
+        return True
+    actor = st.people.by_email(username)
     if actor is None:
         return False
-    from nooch_village.cockpit2 import is_circle_lead, is_role_filler
-    if is_circle_lead(actor.id, "mother_earth", st.assign):          # de anchor lead (Stefan)
-        return True
-    rollen = (groepen().get(groep) or {}).get(wat) or []
-    return any(is_role_filler(actor.id, r, st.assign) for r in rollen)
+    from nooch_village.cockpit2 import is_role_filler
+    return any(is_role_filler(actor.id, r, st.assign) for r in _rollen(st, spec, g))
 
 
 class _KijkMetrics:

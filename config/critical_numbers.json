@@ -1,5 +1,5 @@
 {
-  "_uitleg": "De Critical Numbers van dit kwartaal (Scaling Up). Doelen en grenzen staan HIER en nergens anders; `village cn_zaad --apply` zet ze als tegel op de kring. Grenswaarden zijn voorlopig, Stefan bevestigt.",
+  "_uitleg": "De Critical Numbers van dit kwartaal (Scaling Up). Doelen en grenzen staan HIER en nergens anders; `village cn_zaad --apply` zet ze als tegel op de kring. Grenswaarden zijn voorlopig, Stefan bevestigt. Wie wat mag zien staat in config/zicht.json.",
   "kwartaal": {
     "naam": "Q4 2026",
     "van": "2026-10-01",
@@ -204,23 +204,5 @@
       "oranje": null,
       "eigenaar_rol": "mother_earth__nooch__factory_sourcing_manager"
     }
-  ],
-  "zicht": {
-    "_uitleg": "Wie een afgeschermde tegel, KPI of lijst mag zien en wijzigen (zie nooch_village/zicht.py). De anchor lead mag altijd beide.",
-    "finance": {
-      "zien": [
-        "mother_earth__nooch__financial_controller",
-        "mother_earth__nooch__strategic_lead_founder_steward"
-      ],
-      "wijzigen": [
-        "mother_earth__nooch__financial_controller"
-      ]
-    },
-    "sales": {
-      "zien": [],
-      "wijzigen": [
-        "mother_earth__nooch__sales"
-      ]
-    }
-  }
+  ]
 }

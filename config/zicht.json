@@ -1,0 +1,49 @@
+{
+  "_uitleg": "Wie een afgeschermde tegel, KPI, lijst of Finance-scherm mag zien en wijzigen (nooch_village/zicht.py). Per groep en per recht: de houder van een domein (bij geen houder de fallback-rol), losse rollen en personen (op e-mail). De anchor lead heeft hier GEEN automatisch recht: wie erbij hoort, staat er.",
+  "finance": {
+    "domeinen": [
+      "Financial administration"
+    ],
+    "fallback": {
+      "Financial administration": "mother_earth__nooch__financial_controller"
+    },
+    "zien": {
+      "domein": true,
+      "rollen": [
+        "mother_earth__nooch__strategic_lead_founder_steward"
+      ],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    },
+    "wijzigen": {
+      "domein": true,
+      "rollen": [],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    }
+  },
+  "sales": {
+    "domeinen": [],
+    "fallback": {},
+    "zien": {
+      "domein": false,
+      "rollen": [
+        "mother_earth__nooch__sales"
+      ],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    },
+    "wijzigen": {
+      "domein": false,
+      "rollen": [
+        "mother_earth__nooch__sales"
+      ],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    }
+  }
+}

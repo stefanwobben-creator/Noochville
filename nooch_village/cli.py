@@ -937,6 +937,26 @@ def main() -> None:
         if any(r["actie"] == "set" for r in rapport) and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "finance_vaste_kosten":
+        # Zet de vaste-kostenlijst van CN2 (data/vaste_kosten.json) over naar de terugkerende kosten
+        # van Finance (data/finance/recurring.json, in centen). Idempotent; dry-run tenzij --apply.
+        # Het oude bestand blijft staan.
+        from nooch_village import finance_recurring
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = finance_recurring.migreer(ctx.data_dir, st.vaste_kosten, apply=apply)
+        if not rapport:
+            print("Nothing to migrate: there is no data/vaste_kosten.json.")
+        for r in rapport:
+            print(f"  {r['actie']:<12} {r['id']}  {r['omschrijving']}")
+        if rapport and not apply and any(r["actie"] == "over" for r in rapport):
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "cn_zaad":
         # De Critical Numbers van het kwartaal uit config/critical_numbers.json als tegels op de
         # kring. Dry-run; --apply schrijft. Idempotent (herkent een tegel aan zijn `cn`-sleutel).
@@ -1426,7 +1446,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

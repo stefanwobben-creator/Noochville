@@ -58,7 +58,7 @@ from nooch_village.bom_leveranciers import BomLeverancierStore
 from nooch_village.bom_materialen import BomMateriaalStore
 from nooch_village.bom_varianten import BomVariantStore
 from nooch_village import zicht as _zicht
-from nooch_village.vaste_kosten import VasteKostenStore
+from nooch_village.finance_recurring import RecurringCostStore, pad as _recurring_pad
 from nooch_village.productieverplichtingen import ProductieVerplichtingStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
@@ -143,7 +143,10 @@ class _Stores:
         self.bom_leveranciers = BomLeverancierStore(os.path.join(dd, "bom_leveranciers.json"))   # BOM: materiaal → leverancier
         self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: afwijkingen per (model, variant, component)
         self.bom_varianten = BomVariantStore(os.path.join(dd, "bom_varianten.json"))             # BOM: welke varianten een model heeft + foto
-        self.vaste_kosten = VasteKostenStore(os.path.join(dd, "vaste_kosten.json"))             # CN2: vaste kosten per maand (runway-noemer)
+        # CN2 + Finance PR 1: de terugkerende kosten (de runway-noemer). Sinds Finance PR 1 in
+        # data/finance/recurring.json, in centen; de oude data/vaste_kosten.json gaat over met
+        # `village finance_vaste_kosten`. De naam `vaste_kosten` blijft, zodat de runway niets merkt.
+        self.vaste_kosten = RecurringCostStore(_recurring_pad(dd))
         self.productieverplichtingen = ProductieVerplichtingStore(os.path.join(dd, "productieverplichtingen.json"))  # CN2: wat de fabriek per batch nog krijgt
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
@@ -1028,6 +1031,11 @@ def _member_gate(circle_id: str, username: str | None, st) -> str | None:
     if is_circle_member(actor.id, circle_id, st.records, st.assign):
         return None
     return "No access — only members of this circle may do this"
+
+
+class NietGevonden(Exception):
+    """Een finance-actie of -route voor wie er geen recht op heeft: een 404, geen 403 — het bestaan
+    van Finance wordt niet verraden (besluit Stefan, 10 oktober 2026)."""
 
 
 class Forbidden(Exception):
@@ -5472,13 +5480,15 @@ def _act_vaste_kosten_zet(c):
         # AUTHZ: rolvervuller of Circle Lead — de Financial Controller of de anchor lead (zicht-groep
         # `finance`, recht "wijzigen"; `zicht.py`). Business strategy mag de lijst zien, niet wijzigen.
         # Een regel toevoegen (leeg `rid`) of vervangen. Fail-closed op een ongeldige regel.
-        from nooch_village.vaste_kosten import maak_regel
+        from nooch_village.finance_recurring import maak_regel
         st, g = c.st, c.g
         if not _zicht.mag(st, c.username, "finance", "wijzigen"):
-            raise Forbidden("only the Financial Controller or the anchor lead can change fixed costs")
+            raise NietGevonden()
         if g("rid") and g("rid") not in {r["id"] for r in st.vaste_kosten.alle()}:
             return c.nxt, "✗ not found"
-        regel, fout = maak_regel(g("omschrijving"), g("bedrag"), categorie=g("categorie"),
+        regel, fout = maak_regel(g("omschrijving"), g("bedrag"), leverancier=g("leverancier"),
+                                 account_code=g("account_code") or g("categorie"),
+                                 management_line=g("management_line"),
                                  van=g("van"), tot=g("tot"), notitie=g("notitie"))
         if regel is None:
             return c.nxt, f"✗ {fout}"
@@ -5493,7 +5503,7 @@ def _act_verplichting_zet(c):
         from nooch_village.productieverplichtingen import maak_regel
         st, g = c.st, c.g
         if not _zicht.mag(st, c.username, "finance", "wijzigen"):
-            raise Forbidden("only the Financial Controller or the anchor lead can change commitments")
+            raise NietGevonden()
         if g("rid") and g("rid") not in {r["id"] for r in st.productieverplichtingen.alle()}:
             return c.nxt, "✗ not found"
         regel, fout = maak_regel(g("batch"), g("totaal"), g("betaald"), g("status") or "open",
@@ -5508,7 +5518,7 @@ def _act_verplichting_weg(c):
         # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `verplichting_zet`.
         st = c.st
         if not _zicht.mag(st, c.username, "finance", "wijzigen"):
-            raise Forbidden("only the Financial Controller or the anchor lead can change commitments")
+            raise NietGevonden()
         return c.nxt, ("✓ removed" if st.productieverplichtingen.weg(c.g("rid")) else "✗ not found")
 
 
@@ -5516,8 +5526,9 @@ def _act_vaste_kosten_weg(c):
         # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `vaste_kosten_zet`.
         st = c.st
         if not _zicht.mag(st, c.username, "finance", "wijzigen"):
-            raise Forbidden("only the Financial Controller or the anchor lead can change fixed costs")
-        return c.nxt, ("✓ removed" if st.vaste_kosten.weg(c.g("rid")) else "✗ not found")
+            raise NietGevonden()
+        return c.nxt, ("✓ removed" if st.vaste_kosten.weg(c.g("rid"), door=_web_actor_id(c.username, st))
+                       else "✗ not found")
 
 
 def _act_metrics2_dim(c):
@@ -7121,7 +7132,8 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
             self._schrijf(data)
 
-        def _send_bijlage(self, data: bytes, mime: str, naam: str, *, inline: bool):
+        def _send_bijlage(self, data: bytes, mime: str, naam: str, *, inline: bool,
+                          geen_cache: bool = False):
             """Bytes met de twee regels die bij ons eigen domein horen.
 
             `nosniff` op ALLES, ook op een plaatje: zonder die header mag de browser alsnog zelf
@@ -7134,6 +7146,8 @@ def make_handler(data_dir: str, csrf_token: str,
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Disposition",
                              f'{"inline" if inline else "attachment"}; filename="{veilig}"')
+            if geen_cache:                                   # finance: nergens onderweg bewaren
+                self.send_header("Cache-Control", "no-store, private")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self._schrijf(data)
@@ -7314,10 +7328,52 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_tools(st, csrf_token=effective_csrf, username=username,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
+            if path.startswith("/finance/"):
+                # AUTHZ: zicht-groep `finance` (recht "zien"; `zicht.py`). Wie het niet mag, krijgt
+                # een 404 — niet verraden dat Finance bestaat (besluit Stefan, 10 oktober 2026).
+                from nooch_village.views import finance as _fin
+                if not _fin.mag_zien(st, username):
+                    self._send("<p>404</p>", 404); return
+                _q = lambda k: (qs.get(k) or [""])[0]
+                _msg = _q("msg")
+                if path == "/finance/costs":
+                    self._send(_fin.render_costs(st, username, effective_csrf,
+                                                 {k: _q(k) for k in _fin.FILTERS}, _msg)); return
+                if path == "/finance/costs/view":
+                    h = _fin.render_cost(st, username, effective_csrf, _q("id"), _msg)
+                    self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
+                if path == "/finance/recurring":
+                    self._send(_fin.render_recurring(st, username, effective_csrf, _msg)); return
+                if path == "/finance/monthly":
+                    self._send(_fin.render_monthly(st, username)); return
+                if path == "/finance/pnl":
+                    self._send(_fin.render_pnl(st, username, _q("van"), _q("tot"), _q("batch"))); return
+                if path == "/finance/costs.csv":
+                    body = _fin.csv_export(_fin.gefilterd(st, {k: _q(k) for k in _fin.FILTERS}))
+                    self._send_bijlage(body.encode("utf-8"), "text/csv; charset=utf-8",
+                                       f"nooch_costs_{time.strftime('%Y%m%d')}.csv", inline=False,
+                                       geen_cache=True); return
+                if path == "/finance/file":
+                    from nooch_village.finance_register import KostenRegister
+                    _reg = KostenRegister(st.dd)
+                    _r = _reg.get(_q("id"))
+                    if _r is None or not _r.get("attachment"):
+                        self._send("<p>404</p>", 404); return
+                    _blob, _fout = _reg.lees_bijlage(_r)
+                    if _blob is None:
+                        # DE HASH KLOPT NIET (of het bestand is weg): een duidelijke fout, geen levering.
+                        self._send(f"<p>The document cannot be delivered: {_e(_fout)}</p>", 409); return
+                    _reg.log_download(_r["id"], _web_actor_id(username, st) or str(username or ""))
+                    _b = _r["attachment"]
+                    self._send_bijlage(_blob, _b["mime"], _b["filename"], inline=_q("inline") == "1",
+                                       geen_cache=True); return
+                self._send("<p>404</p>", 404); return
             if path == "/fixed-costs":
                 # AUTHZ: zicht-groep `finance` (recht "zien") — de view toetst het zelf en toont
                 # anders alleen dat de pagina afgeschermd is. Zie `zicht.py`.
                 from nooch_village.views.vaste_kosten import render_vaste_kosten
+                if not _zicht.mag(st, username, "finance", "zien"):
+                    self._send("<p>404</p>", 404); return     # finance niet verraden
                 self._send(render_vaste_kosten(st, username, csrf_token=effective_csrf,
                                                msg=(qs.get("msg") or [""])[0]))
                 return
@@ -8251,6 +8307,18 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") in ("finance_kost_add", "finance_kost_correct"):
+                    # AUTHZ: zicht-groep `finance`, recht "wijzigen" (domeinhouder van "Financial
+                    # administration" — tot die er is de Financial Controller — en Stefan). Geen recht:
+                    # een 404, net als de schermen. Alleen toevoegen: ook een correctie is twee
+                    # nieuwe regels (`finance_register.KostenRegister.correctie`).
+                    from nooch_village.views import finance as _fin
+                    _st = _Stores(data_dir)
+                    if not _fin.mag_wijzigen(_st, username):
+                        self._send("<p>404</p>", 404); return
+                    _msg = _fin.verwerk_kost(_st, fields, files, username=username,
+                                             door=_web_actor_id(username, _st) or str(username or ""))
+                    self._redirect(fields.get("next", "/finance/costs"), _msg); return
                 if fields.get("action") == "bom_foto":
                     # AUTHZ: domeineigenaar of Circle Lead — van `Materials`, dezelfde poort als
                     # `bom_foto` met een adres (`_bom_poort`). Alleen een AFBEELDING; dezelfde
@@ -8379,6 +8447,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     try:
                         nxt, msg = dispatch(data_dir, "pagina_feit_edit",
                                             {k: [v] for k, v in fields.items()}, username=username)
+                    except NietGevonden:
+                        self._send("<p>404</p>", 404); return
                     except Forbidden as e:
                         self._send(str(e), 403); return
                     self._redirect(nxt, msg); return
@@ -8459,6 +8529,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             try:
                 nxt, msg = dispatch(data_dir, action, form, username=username)
+            except NietGevonden:
+                self._send("<p>404</p>", 404); return    # finance zonder recht: niet verraden dat het bestaat
             except Forbidden as e:
                 self._send(str(e), 403); return    # geweigerde artefact-mutatie → echte 403 + reden
             self._redirect(nxt, msg)
