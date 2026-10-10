@@ -111,6 +111,12 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
                 _kpi(metrics, kring, n)
             elif (bestaand.get("source"), bestaand.get("measure")) != (n["source"], n["measure"]):
                 metrics.set_tile_bron(kring, bestaand["id"], n["source"], n["measure"])
+                # EEN NIEUWE BRON KRIJGT ZIJN EIGEN DIMENSIE (11 oktober 2026). De cash-tegel ging
+                # van een KPI (dimensie "none") naar `runway/cash`, die alleen "totaal" kent; de
+                # titel eindigde daardoor op "· none". Alleen bij een bronwissel: een segmentatie
+                # die iemand in de UI koos, blijft verder staan.
+                if bestaand.get("dim") != n.get("dim", "totaal"):
+                    metrics.set_tile_dim(kring, bestaand["id"], n.get("dim", "totaal"))
             metrics.set_tile_extra(kring, bestaand["id"], **extra)
         fout = metrics.set_tile_grens(kring, bestaand["id"], n.get("niveau", ""), n.get("target"),
                                       n.get("oranje"))
