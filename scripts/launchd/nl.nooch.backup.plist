@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  NoochVille back-up: elke dag een snapshot van prod data/ naar ~/NoochVille-backups (scripts/backup_mac.sh).
+
+  Installeren (eenmalig, op Stefans Mac):
+    cp scripts/launchd/nl.nooch.backup.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/nl.nooch.backup.plist
+  Weghalen:
+    launchctl unload ~/Library/LaunchAgents/nl.nooch.backup.plist && rm ~/Library/LaunchAgents/nl.nooch.backup.plist
+
+  Sliep de Mac om 07:15, dan draait launchd hem bij het wakker worden — een gemiste dag wordt ingehaald,
+  niet overgeslagen.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>nl.nooch.backup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/stefanwobben/noochville/scripts/backup_mac.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>15</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/stefanwobben/NoochVille-backups/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/stefanwobben/NoochVille-backups/launchd.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
