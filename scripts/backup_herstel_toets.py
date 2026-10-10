@@ -26,13 +26,15 @@ sys.path.insert(0, _REPO)
 
 
 def _finance_bijlagen(data: str) -> list[str]:
-    """Elke bijlage in de Finance-registers (kosten én opbrengsten, PR 1b) moet er zijn, met de
-    sha256 uit het register. Een back-up met een kapotte of ontbrekende factuur of beschikking is
-    voor de borging geen back-up. Leest alleen `finance/costs.jsonl`, `finance/revenue.jsonl` en de
-    bestanden; geen finance-code nodig. Zonder register: niets te doen."""
+    """Elke bijlage in de Finance-registers (kosten én opbrengsten, PR 1b) en elk geïmporteerd
+    historiebestand (PR 2a, `history_imports.jsonl`) moet er zijn, met de sha256 uit het register.
+    Een back-up met een kapotte of ontbrekende factuur, beschikking of import is voor de borging geen
+    back-up. Leest alleen die JSONL-bestanden en de bestanden; geen finance-code nodig. Zonder
+    register: niets te doen. (`history.jsonl` en `history_settings.jsonl` hebben geen bestanden; ze
+    vallen onder de gewone JSONL-controle.)"""
     import hashlib
     regels = []
-    for naam in ("costs.jsonl", "revenue.jsonl"):
+    for naam in ("costs.jsonl", "revenue.jsonl", "history_imports.jsonl"):
         pad = os.path.join(data, "finance", naam)
         if os.path.exists(pad):
             with open(pad, encoding="utf-8") as f:

@@ -77,3 +77,23 @@ def test_ook_de_bijlagen_van_het_opbrengstregister(tmp_path):
     assert toets_mod.toets(dd) == []
     open(os.path.join(dd, rel), "ab").write(b"x")
     assert any("sha256" in f and "b.pdf" in f for f in toets_mod.toets(dd))
+
+
+def test_ook_de_geimporteerde_historiebestanden(tmp_path):
+    """Finance PR 2a: een importbestand in `finance/imports/` is geborgd met zijn sha256, en een
+    kapotte `history.jsonl` valt op zoals elke andere JSONL."""
+    import hashlib
+    import json
+    dd = _data(tmp_path)
+    os.makedirs(os.path.join(dd, "finance", "imports"))
+    blob = b"line_key;label;2025-01\nbrand;;1\n"
+    rel = "finance/imports/i.csv"
+    open(os.path.join(dd, rel), "wb").write(blob)
+    regel = {"import_id": "i1", "attachment": {"path": rel, "sha256": hashlib.sha256(blob).hexdigest()}}
+    open(os.path.join(dd, "finance", "history_imports.jsonl"), "w").write(json.dumps(regel) + "\n")
+    assert toets_mod.toets(dd) == []
+    open(os.path.join(dd, rel), "ab").write(b"x")
+    assert any("sha256" in f and "i.csv" in f for f in toets_mod.toets(dd))
+    open(os.path.join(dd, rel), "wb").write(blob)
+    open(os.path.join(dd, "finance", "history.jsonl"), "w").write('{"a": 1}\nkapot\n{"b": 2}\n')
+    assert any("history.jsonl" in f for f in toets_mod.toets(dd))
