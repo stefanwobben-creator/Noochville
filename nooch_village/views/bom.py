@@ -19,7 +19,7 @@ een COMPONENT heeft (`bom_materialen`, Correctie 3). Beide cellen klikken op dez
 """
 from __future__ import annotations
 
-from nooch_village import artefacts, bom_leveranciers, bom_reken, wiki
+from nooch_village import artefacts, bom_co2, bom_leveranciers, bom_reken, wiki
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.web_base import _banner, _e, _page, _status
 
@@ -319,6 +319,9 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
             f"{_model_kiezer(model, variant, varianten, bewerk, csrf_token)}"
             # GEEN MAATKIEZER MEER (2 oktober 2026): alle hoeveelheden gelden bij de referentiemaat.
             f"<p class='muted'>Quantities at reference size EU {REFERENTIEMAAT}.</p>"
-            f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
+            f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div>"
+            # CO2E PER PAAR MET ZIJN VOLLEDIGHEID (10 oktober 2026): dezelfde zin als op de
+            # metrics-tegel, uit `bom_co2` — welke materialen nog geen factor hebben, staat erbij.
+            f"<p class='muted'>{_e(bom_co2.tekst(bom_co2.co2_per_paar(uit)))}</p></div>"
             f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

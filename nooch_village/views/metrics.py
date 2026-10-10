@@ -460,6 +460,10 @@ def _sources_for(st: _Stores, rec):
     srcs.append({"id": f"inbox:{rec.id}", "label": "Inbox / tensions",
                  "measures": [("verwerkt", "Processed"), ("open", "Open")],
                  "dims": [("over_tijd", "over time"), ("totaal", "total"), ("per_type", "by outcome")]})
+    # CO2E PER PAAR UIT /BOM (10 oktober 2026): één measure per model, met de volledigheid erbij.
+    srcs.append({"id": "bom", "label": "Product footprint (BOM)",
+                 "measures": [(m, f"CO₂e per pair · {v['naam']}") for m, v in _BOM_MODELLEN.items()],
+                 "dims": [("over_tijd", "over time"), ("totaal", "last value")]})
     srcs.append({"id": "co2", "label": "LLM usage & CO₂",
                  "measures": [("gram_co2e", "CO₂ (grams)"), ("calls", "LLM calls"),
                               ("ongeschat_calls", "Calls without a count")],
@@ -587,6 +591,32 @@ def _co2_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
         vals = [v for _a, v, _d in pts]
         return {"kind": "number", "value": (sum(vals) if vals else None), "unit": unit}
     return {"kind": "series", "points": pts, "unit": unit, "chart": "line"}
+
+
+def _bom_fetch(st: _Stores, model: str, dim: str, cutoff, end=None):
+    """CO2e per paar van één model uit de dag-observaties (bron=bom). `totaal` = de LAATSTE waarde:
+    een stand per paar telt niet op over dagen. `meta` = de volledigheid van het laatste punt."""
+    metric, bron = _obs_key_for_indicator("bom", "co2e_per_paar", dim=model)
+    rows = st.observations.daily_series(metric, bron=bron) if metric else []
+    samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")} for r in rows]
+    pts = filter_samples(samples, cutoff, end)
+    meta = (rows[-1].get("meta") or {}) if rows else {}
+    unit = "kg CO₂e/pair"
+    if dim == "totaal":
+        return {"kind": "number", "value": (pts[-1][1] if pts else None), "unit": unit, "meta": meta}
+    return {"kind": "series", "points": pts, "unit": unit, "chart": "line", "meta": meta}
+
+
+def _bom_volledigheid(res: dict) -> str:
+    """De volledigheidszin onder een bom-tegel. ALTIJD, ook bij een compleet getal: wie het getal
+    leest, moet weten waarop het rust. Zonder meta (oud punt, geen data) niets."""
+    from nooch_village import bom_co2
+    meta = res.get("meta") or {}
+    if not meta or "met_factor" not in meta:
+        return ""
+    waarde = res.get("value") if res.get("kind") == "number" else (
+        (res.get("points") or [[None, None]])[-1][1])
+    return f"<div class='tile-goal muted'>{_e(bom_co2.tekst({**meta, 'kg': waarde}))}</div>"
 
 
 def _default_form(dim: str) -> str:
@@ -719,6 +749,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
                 "fout": "de inbox-metriek is vervallen met de inbox (B2)"}
     if source == "co2":
         return _co2_fetch(st, measure, dim, cutoff, end)
+    if source == "bom":
+        return _bom_fetch(st, measure, dim, cutoff, end)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
@@ -782,6 +814,8 @@ def _tile_agg(st: _Stores, source: str, measure: str) -> str:
         return {"verwerkt": "som", "open": "laatste_waarde"}.get(measure, DEFAULT_AGGREGATIE)
     if source == "co2":
         return "som"                              # dorpsbrede uitstoot/gebruik telt op over het venster
+    if source == "bom":
+        return "laatste_waarde"                   # een stand per paar, geen som over dagen
     return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
 
 
@@ -938,6 +972,8 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
 
 
 # Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
+from nooch_village.data_bom import MODELLEN as _BOM_MODELLEN   # de modellen van /bom: één plek
+
 _SOURCE_GRONDSLAG = {
     "pulse_visitors|visitors": ("Unique website visitors per day (daily series from the observations).",
                                 "visitors", "observations (Plausible daily value)", "up"),
@@ -952,6 +988,10 @@ _SOURCE_GRONDSLAG = {
     "co2|gram_co2e": ("Estimated CO₂ emissions of all LLM calls in the village (context KPI: not "
                       "'lower is better'; no ISO claim).", "g CO₂e", "co2_village (llm_usage.jsonl)", ""),
     "co2|calls": ("Number of LLM calls in the village.", "calls", "co2_village (llm_usage.jsonl)", ""),
+    **{f"bom|{_m}": ("CO₂e per pair from the materials on the bill of materials: weight × CO₂e per kg "
+                     "of each material page. Materials only, not a full LCA; a lower bound while "
+                     "factors or weights are missing.", "kg CO₂e/pair", "/bom (material pages)", "down")
+       for _m in _BOM_MODELLEN},
     "co2|ongeschat_calls": ("LLM calls on a model without an emission factor in config/co2_factoren.json "
                             "(not estimated — counted separately, never as zero).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),
@@ -1376,6 +1416,8 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
                 data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
+    if tile["source"] == "bom" and form != "formule":
+        goal += _bom_volledigheid(res)
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>towards goal: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"

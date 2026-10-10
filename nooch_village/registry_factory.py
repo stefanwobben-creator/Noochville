@@ -39,6 +39,7 @@ from nooch_village.skills_impl.escaleer import EscaleerSkill
 from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
 from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
+from nooch_village.skills_impl.bom_co2 import BomCo2Source
 from nooch_village.skills_impl.haal_pagina import HaalPaginaSkill
 from nooch_village.skills_impl.web_zoek import WebZoekSkill
 from nooch_village.skills_impl.mobiel_audit import MobielAuditSkill
@@ -76,6 +77,7 @@ def build_skill_registry() -> SkillRegistry:
         # hij past, met een citaat (scope 51). Ronde twee van een onderzoek plant hem per lead.
         MobielAuditSkill(),           # Lighthouse op mobiel via PageSpeed Insights; ook meetbron (wekelijks)
         Co2VillageSource(),
+        BomCo2Source(),               # CO2e per paar uit /bom, per model (10 okt 2026)
     ):
         reg.register(skill)
     return reg
