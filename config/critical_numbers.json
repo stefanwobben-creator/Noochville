@@ -61,7 +61,13 @@
       "form": "getal",
       "target": 100,
       "oranje": null,
-      "eigenaar_domein": "Materials"
+      "eigenaar_rol": "mother_earth__nooch__factory_sourcing_manager",
+      "lijn": {
+        "van": "2026-10-10",
+        "tot": "2026-12-31",
+        "start": 0,
+        "oranje": 0.8
+      }
     },
     {
       "sleutel": "cn3_open_questions",
@@ -73,7 +79,7 @@
       "form": "trend",
       "target": null,
       "oranje": null,
-      "eigenaar_domein": "Materials"
+      "eigenaar_rol": "mother_earth__nooch__factory_sourcing_manager"
     }
   ],
   "zicht": {

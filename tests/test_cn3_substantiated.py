@@ -32,15 +32,21 @@ def _dek(*rijen):
 
 # ── de cijfers ──────────────────────────────────────────────────────────────
 
-def test_een_pagina_telt_als_alles_erop_gecheckt_is_ook_zonder_feiten():
-    leeg = _pagina("L")
+def test_een_pagina_telt_alleen_als_alle_drie_de_voorwaarden_kloppen():
+    """Sinds 10 oktober 2026: geen placeholder, geen ongecheckt feit, en bij een materiaal een
+    leverancier. Een lege pagina telt dus pas als hij geen 'not yet provided' meer draagt."""
+    lev = _pagina("Lev")                                              # leverancier, schoon
+    schoon = _pagina("S")                                             # materiaal, geen feiten
     goed = _pagina("G", "## Biobased\n{{fact:a}}", [_feit("a", GEZIEN)])
     half = _pagina("H", "## Biobased\n{{fact:a}}", [_feit("a")])
-    d = _dek(("A", "Leeg", leeg, "", None), ("B", "Goed", goed, "", None),
-             ("C", "Half", half, "", None), ("D", "Geen", None, "", None))
+    open_ = _pagina("O", "## Open items\n- Dye/chemical disclosure: not yet provided")
+    d = _dek(("A", "Schoon", schoon, "Lev", lev), ("B", "Goed", goed, "Lev", lev),
+             ("C", "Half", half, "Lev", lev), ("D", "Open", open_, "Lev", lev),
+             ("E", "Zonder leverancier", _pagina("Z"), "", None), ("F", "Geen", None, "", None))
+    gestaafd = {r["naam"] for r in d["materialen"] + d["leveranciers"] if wd.gestaafd(r, vandaag="2026-10-10")}
+    assert gestaafd == {"Schoon", "Goed", "Lev"}
     c = wd.cijfers(d, vandaag="2026-10-10")
-    assert (c["gestaafd"], c["paginas_totaal"], c["gestaafd_pct"]) == (2, 4, 50.0)
-    assert c["paginas_bestaan"] == 3
+    assert (c["gestaafd"], c["paginas_totaal"]) == (3, 7)
 
 
 def test_laag_1_en_2_koppeling_en_placeholders():
@@ -89,7 +95,9 @@ def test_zaaien_is_dry_run_dan_idempotent(tmp_path):
     critical_numbers.zaai(st.metrics, cfg, apply=True)
     tiles = {t["cn"]: t for t in cockpit2._Stores(dd).metrics.tiles_of(C)}
     t = tiles["cn3_substantiated"]
-    assert (t["niveau"], t["target"], t["eigenaar_domein"]) == ("critical", 100.0, "Materials")
+    assert (t["niveau"], t["target"]) == ("critical", 100.0)
+    assert t["eigenaar_rol"] == "mother_earth__nooch__factory_sourcing_manager"
+    assert t["lijn"] == {"van": "2026-10-10", "tot": "2026-12-31", "start": 0.0, "oranje": 0.8}
     st = cockpit2._Stores(dd)
     assert {x["actie"] for x in critical_numbers.zaai(st.metrics, cfg, apply=True)} == {"ongewijzigd"}
     assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == len(cfg["nummers"])
@@ -115,7 +123,7 @@ def test_de_tegel_toont_de_live_waarde_en_de_eigenaar(tmp_path):
     h = render_metrics2_tab(st, st.records.get(C), "t")
     assert "<span class='badge'>Critical</span>" in h
     assert "Owner: " in h and "no role holds" not in h
-    assert "Off target</span> target 100" in h                         # niets gestaafd in een leeg dorp
+    assert "target 100 by 2026-12-31" in h                             # de lijn, welke dag het ook is
 
 
 # ── de dagbron ──────────────────────────────────────────────────────────────
@@ -141,3 +149,25 @@ def test_open_questions_toont_rijen_en_filtert(tmp_path):
     assert "Nothing here." in leeg
     vreemd = render_open_vragen(st, status="<b>x</b>")              # onbekend = alles, nooit echoën
     assert "<b>x</b>" not in vreemd and "class='cl-filter on' href='/open-questions'" in vreemd
+
+
+# ── de lijn naar het doel (stap 1, 10 oktober 2026) ─────────────────────────
+
+def test_de_lijn_loopt_van_start_naar_doel_en_kleurt_80_procent():
+    from nooch_village.metrics import GROEN, ORANJE, ROOD, lijn_status, lijn_waarde, maak_lijn
+    lijn = maak_lijn("2026-10-01", "2026-12-31", start=0, oranje=0.8)
+    assert lijn_waarde(lijn, 100, "2026-09-30") is None                # vóór de start: niets
+    assert lijn_waarde(lijn, 100, "2026-10-01") == 0
+    assert abs(lijn_waarde(lijn, 100, "2026-11-15") - 49.45) < 0.1   # halverwege ~ de helft
+    assert lijn_waarde(lijn, 100, "2027-02-01") == 100                 # na de deadline: het doel
+    assert lijn_status(50, 100, lijn, "2026-11-15") == GROEN
+    assert lijn_status(40, 100, lijn, "2026-11-15") == ORANJE          # ≥ 80% van ~49
+    assert lijn_status(30, 100, lijn, "2026-11-15") == ROOD
+    assert lijn_status(0, 100, lijn, "2026-09-01") == ""
+
+
+def test_een_ongeldige_lijn_wordt_geweigerd():
+    from nooch_village.metrics import maak_lijn
+    assert maak_lijn("2026-12-31", "2026-10-01") is None
+    assert maak_lijn("2026-10-01", "2026-12-31", oranje=1.5) is None
+    assert maak_lijn("geen datum", "2026-12-31") is None

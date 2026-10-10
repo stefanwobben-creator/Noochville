@@ -1466,9 +1466,23 @@ def _eigenaar_regel(st: _Stores, domein: str, rol: str = "") -> str:
 def _grens_regel(tile: dict, waarde, richting: str) -> str:
     """De status ten opzichte van het doel, of niets. GEEN DOEL, GEEN STATUS. Een `benchmark`-tegel
     draagt in `target` een vergelijkwaarde, geen doel — die krijgt dus ook geen status."""
-    from nooch_village.metrics import grens_status
+    import time as _t
+    from nooch_village.metrics import grens_status, lijn_status, lijn_waarde
     if tile.get("ref_kind") == "benchmark":
         return ""
+    lijn = tile.get("lijn")
+    if isinstance(lijn, dict):
+        # EEN LIJN NAAR HET DOEL (CN1, CN3): de status volgt waar je vandaag zou moeten staan, niet
+        # het einddoel. Vóór de begindatum geen status — dan is er nog niets te halen.
+        vandaag = _t.strftime("%Y-%m-%d")
+        uit = lijn_status(waarde, tile.get("target"), lijn, vandaag)
+        lw = lijn_waarde(lijn, tile.get("target"), vandaag)
+        if not uit:
+            return (f"<div class='tile-goal muted'>Line to {_num(tile.get('target'))} by "
+                    f"{_e(lijn['tot'])} starts {_e(lijn['van'])}</div>") if lw is None else ""
+        vorm, woord = _GRENS_VORM[uit]
+        return (f"<div class='tile-goal muted'><span class='nu-status nu-status--{vorm}'>{woord}</span> "
+                f"line today {_num(round(lw, 1))} · target {_num(tile['target'])} by {_e(lijn['tot'])}</div>")
     uit = grens_status(waarde, tile.get("target"), tile.get("oranje"), richting)
     if not uit:
         return ""
