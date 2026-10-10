@@ -104,18 +104,24 @@ def paren_per_maand(regels_: list[dict]) -> dict[str, int]:
     return uit
 
 
-def net_sales_per_maand(opbrengsten: list[tuple], vanaf: str = "",
-                        andere_bron: str = "shopify") -> tuple[dict[str, int], dict[str, str]]:
+def net_sales_per_maand(opbrengsten: list[tuple], vanaf: str = "", andere_bron: str = "shopify",
+                        historie_tot: str = "") -> tuple[dict[str, int], dict[str, str]]:
     """({maand: centen}, {maand: bron}) voor Net sales, met de bronregel: vóór `vanaf` alleen het
     register (handmatig), vanaf `vanaf` alleen de andere bron. Leeg `vanaf` = alles uit het
     register. Een maand komt NOOIT uit twee bronnen — wat er uit de andere bron in een registermaand
-    staat (of andersom) telt niet mee."""
+    staat (of andersom) telt niet mee.
+
+    PR 2a: tot en met `historie_tot` komt Net sales uit de HISTORIE (`finance_historie`), en dat gaat
+    vóór: overlapt `vanaf` met de historie, dan wint de historie voor die maanden."""
     som: dict[str, int] = {}
     bron: dict[str, str] = {}
     for maand, lijn, cents, b in opbrengsten:
         if lijn != NET_SALES:
             continue
-        verwacht = andere_bron if (vanaf and maand >= vanaf) else BRON_HANDMATIG
+        if historie_tot and maand <= historie_tot:
+            verwacht = "history"
+        else:
+            verwacht = andere_bron if (vanaf and maand >= vanaf) else BRON_HANDMATIG
         if b != verwacht:
             continue
         som[maand] = som.get(maand, 0) + int(cents)

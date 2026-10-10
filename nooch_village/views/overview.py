@@ -885,7 +885,9 @@ _DOMAIN_TOOLS = {
     # voor wie de finance-schermen mag zien (`_tool_zichtbaar`) — wie dat niet mag, krijgt op
     # /finance/* een 404 en hoort de kaart dus ook niet te zien. Geen knop in het hoofdmenu.
     "financial administration": [
-        ("Finance", "Costs, revenue and the P&L", "/finance/costs")],
+        ("Finance", "Costs, revenue and the P&L", "/finance/costs"),
+        ("Finance history", "Monthly figures before the register, entered by hand or imported",
+         "/finance/history")],
 }
 
 #: Tool-schermen die achter een zicht-groep liggen (`zicht.py`): href-voorvoegsel → groep.

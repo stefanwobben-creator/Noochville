@@ -5514,6 +5514,32 @@ def _act_verplichting_zet(c):
         return c.nxt, "✓ commitment saved"
 
 
+def _act_finance_hist_opslaan(c):
+        # AUTHZ: rolvervuller of Circle Lead — zicht-groep `finance`, recht "wijzigen" (domeinhouder
+        # van "Financial administration", tot die er is de Financial Controller, en Stefan). Geen
+        # recht = 404. Alleen gewijzigde cellen worden nieuwe regels (`finance_historie`).
+        from nooch_village.views import finance as _fin
+        st = c.st
+        if not _fin.mag_wijzigen(st, c.username):
+            raise NietGevonden()
+        return c.nxt, _fin.verwerk_history_opslaan(st, c.form, door=_web_actor_id(c.username, st) or "")
+
+
+def _act_finance_hist_cutover(c):
+        # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `finance_hist_opslaan`. De cutover
+        # bepaalt welke bron per maand telt; elke wijziging is een regel in het logboek.
+        from nooch_village import finance_historie as _fh
+        from nooch_village.views import finance as _fin
+        st = c.st
+        if not _fin.mag_wijzigen(st, c.username):
+            raise NietGevonden()
+        ok, fout = _fh.Instellingen(st.dd).zet_history_until(c.g("history_until"),
+                                                             door=_web_actor_id(c.username, st) or "")
+        if not ok:
+            return c.nxt, f"✗ {fout}"
+        return c.nxt, ("✓ cutover unchanged" if fout == "unchanged" else "✓ cutover saved")
+
+
 def _act_verplichting_weg(c):
         # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `verplichting_zet`.
         st = c.st
@@ -6835,6 +6861,8 @@ ACTIONS = {
     "vraag_uitstel_weg": _act_vraag_uitstel_weg,
     "verplichting_zet": _act_verplichting_zet,
     "verplichting_weg": _act_verplichting_weg,
+    "finance_hist_opslaan": _act_finance_hist_opslaan,
+    "finance_hist_cutover": _act_finance_hist_cutover,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
@@ -7355,6 +7383,20 @@ def make_handler(data_dir: str, csrf_token: str,
                 if path == "/finance/revenue/view":
                     h = _fin.render_revenue_regel(st, username, effective_csrf, _q("id"), _msg)
                     self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
+                if path == "/finance/history":
+                    self._send(_fin.render_history(st, username, effective_csrf, _q("jaar"), _msg)); return
+                if path == "/finance/history/cell":
+                    h = _fin.render_history_cel(st, username, _q("period"), _q("line"))
+                    self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
+                if path in ("/finance/history.csv", "/finance/history.xlsx"):
+                    from nooch_village import finance_config as _fc, finance_historie as _fh
+                    _jr = _fin._jaar(_q("jaar"))
+                    _tab = _fh.export_tabel(_fh.HistorieRegister(st.dd).actueel(), _fc.laad(), _fh.maanden_van(_jr))
+                    if path.endswith(".csv"):
+                        self._send_bijlage(_fh.export_csv(_tab).encode("utf-8"), "text/csv; charset=utf-8",
+                                           f"nooch_history_{_jr}.csv", inline=False, geen_cache=True); return
+                    self._send_bijlage(_fh.export_xlsx(_tab), _fh.IMPORT_EXT["xlsx"],
+                                       f"nooch_history_{_jr}.xlsx", inline=False, geen_cache=True); return
                 if path == "/finance/revenue.csv":
                     body = _fin.csv_omzet(_fin.omzet_gefilterd(st, {k: _q(k) for k in _fin.OMZET_FILTERS}))
                     self._send_bijlage(body.encode("utf-8"), "text/csv; charset=utf-8",
@@ -8333,6 +8375,20 @@ def make_handler(data_dir: str, csrf_token: str,
                     _msg = _fin.verwerk_kost(_st, fields, files, username=username,
                                              door=_web_actor_id(username, _st) or str(username or ""))
                     self._redirect(fields.get("next", "/finance/costs"), _msg); return
+                if fields.get("action") in ("finance_hist_import", "finance_hist_import_bevestig"):
+                    # AUTHZ: zicht-groep `finance`, recht "wijzigen" — zelfde poort als de registers;
+                    # geen recht = een 404. Eerst een preview (het bestand wordt meteen geborgd), pas
+                    # na bevestiging nieuwe historie-regels (`finance_historie`).
+                    from nooch_village.views import finance as _fin
+                    _st = _Stores(data_dir)
+                    if not _fin.mag_wijzigen(_st, username):
+                        self._send("<p>404</p>", 404); return
+                    _soort, _uit = _fin.verwerk_history_import(
+                        _st, fields, files, door=_web_actor_id(username, _st) or str(username or ""),
+                        csrf=csrf_token)
+                    if _soort == "html":
+                        self._send(_uit); return
+                    self._redirect(fields.get("next", "/finance/history"), _uit); return
                 if fields.get("action") in ("finance_omzet_add", "finance_omzet_correct"):
                     # AUTHZ: zicht-groep `finance`, recht "wijzigen" — dezelfde poort als de kosten
                     # hierboven; geen recht = een 404. Alleen toevoegen: een correctie is een
