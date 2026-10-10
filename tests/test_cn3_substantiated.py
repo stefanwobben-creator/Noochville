@@ -92,9 +92,11 @@ def test_zaaien_is_dry_run_dan_idempotent(tmp_path):
     assert (t["niveau"], t["target"], t["eigenaar_domein"]) == ("critical", 100.0, "Materials")
     st = cockpit2._Stores(dd)
     assert {x["actie"] for x in critical_numbers.zaai(st.metrics, cfg, apply=True)} == {"ongewijzigd"}
-    assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == 2
-    cfg["nummers"][0]["target"] = 90
-    assert critical_numbers.zaai(st.metrics, cfg)[0]["actie"] == "update"
+    assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == len(cfg["nummers"])
+    cn3 = next(n for n in cfg["nummers"] if n["sleutel"] == "cn3_substantiated")
+    cn3["target"] = 90
+    r = {x["sleutel"]: x["actie"] for x in critical_numbers.zaai(st.metrics, cfg)}
+    assert r["cn3_substantiated"] == "update" and r["cn3_open_questions"] == "ongewijzigd"
 
 
 def test_een_nummer_dat_nog_niet_mag_wordt_overgeslagen(tmp_path):

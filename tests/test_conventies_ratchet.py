@@ -56,6 +56,11 @@ STORES = {
     # (Stefans keuze), dus hij kan niet in de hardcoded `data_bom.MODELLEN` wonen; en het is geen
     # afwijking per component, dus ook geen regel in `bom_materialen`.
     "bom_varianten",
+    # CN2 Runway (10 oktober 2026, door Stefan gevraagd): een korte lijst vaste kosten per maand,
+    # de noemer van runway = cash ÷ vaste kosten. BEWUST GEEN boekhouding en geen KPI-samples: een
+    # regel heeft een looptijd (van/tot) en een categorie, en het totaal is de som op een peildatum —
+    # dat past niet in een reeks metingen. De boekhouding zelf blijft bij de accountant.
+    "vaste_kosten",
 }
 
 

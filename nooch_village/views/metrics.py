@@ -467,6 +467,12 @@ def _sources_for(st: _Stores, rec):
     srcs.append({"id": "bom", "label": "Product footprint (BOM)",
                  "measures": [(m, f"CO₂e per pair · {v['naam']}") for m, v in _BOM_MODELLEN.items()],
                  "dims": [("over_tijd", "over time"), ("totaal", "last value")]})
+    # CN2 RUNWAY (10 oktober 2026): alleen voor wie de groep `finance` mag zien (zie `zicht.py`).
+    from nooch_village import zicht as _zicht
+    if _zicht.mag_zien(st, RUNWAY_ZICHT):
+        srcs.append({"id": "runway", "label": "Runway (cash ÷ fixed costs)",
+                     "measures": [(k, l) for k, (l, *_r) in _RUNWAY_MEASURES.items()],
+                     "dims": [("totaal", "now")]})
     # CN3 (10 oktober 2026): de onderbouwing van de materiaal- en leverancierpagina's van /bom.
     srcs.append({"id": "dekking", "label": "Materials & suppliers substantiated",
                  "measures": [(k, l) for k, (l, *_r) in _DEKKING_MEASURES.items()],
@@ -617,6 +623,41 @@ _DEKKING_MEASURES = {
     "cellen_conflict": ("Conflicts", "questions", "down",
                         "Question cells with contradicting values or an expired certificate."),
 }
+
+
+#: CN2: de zicht-groep van cash, vaste kosten en runway, en de `cn`-sleutel van de cash-KPI.
+RUNWAY_ZICHT = "finance"
+CASH_CN = "cn2_cash"
+
+_RUNWAY_MEASURES = {
+    "maanden": ("Runway (months)", "months", "up",
+                "Cash and cash equivalents divided by fixed costs per month (dividing, not "
+                "subtracting: the cautious variant without revenue)."),
+    "vaste_kosten": ("Fixed costs per month", "EUR", "",
+                     "Sum of the fixed-cost lines that run on today's date (/fixed-costs)."),
+    "cash": ("Cash and cash equivalents", "EUR", "up",
+             "The latest reading of the cash KPI, entered by hand in the tactical meeting until "
+             "the bank is linked. Basis: Dutch GAAP (RJ)."),
+}
+
+
+def runway(st) -> dict:
+    """{cash, vaste_kosten, maanden}. Geen cash of geen vaste kosten → `maanden` None, nooit 0 of
+    oneindig: een deling door nul is geen runway."""
+    it = getattr(st.metrics, "_m", st.metrics).by_cn(CASH_CN)
+    s = (it or {}).get("samples") or []
+    cash = max(s, key=lambda x: x.get("at", 0))["value"] if s else None
+    kosten = st.vaste_kosten.totaal_op()
+    maanden = round(cash / kosten, 1) if cash is not None and kosten > 0 else None
+    return {"cash": cash, "vaste_kosten": kosten, "maanden": maanden}
+
+
+def _runway_fetch(st: _Stores, measure: str):
+    from nooch_village import zicht as _zicht
+    unit = _RUNWAY_MEASURES.get(measure, ("", ""))[1]
+    if not _zicht.mag_zien(st, RUNWAY_ZICHT):           # dubbel slot: de tegel is al verborgen
+        return {"kind": "number", "value": None, "unit": unit}
+    return {"kind": "number", "value": runway(st).get(measure), "unit": unit}
 
 
 def _dekking_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
@@ -797,6 +838,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         return _bom_fetch(st, measure, dim, cutoff, end)
     if source == "dekking":
         return _dekking_fetch(st, measure, dim, cutoff, end)
+    if source == "runway":
+        return _runway_fetch(st, measure)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
@@ -860,7 +903,7 @@ def _tile_agg(st: _Stores, source: str, measure: str) -> str:
         return {"verwerkt": "som", "open": "laatste_waarde"}.get(measure, DEFAULT_AGGREGATIE)
     if source == "co2":
         return "som"                              # dorpsbrede uitstoot/gebruik telt op over het venster
-    if source in ("bom", "dekking"):
+    if source in ("bom", "dekking", "runway"):
         return "laatste_waarde"                   # een stand, geen som over dagen
     return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
 
@@ -1040,6 +1083,8 @@ _SOURCE_GRONDSLAG = {
        for _m in _BOM_MODELLEN},
     **{f"dekking|{_k}": (_d, _u, "/bom coverage (wiki pages)", _r)
        for _k, (_l, _u, _r, _d) in _DEKKING_MEASURES.items()},
+    **{f"runway|{_k}": (_d, _u, "cash KPI + /fixed-costs", _r)
+       for _k, (_l, _u, _r, _d) in _RUNWAY_MEASURES.items()},
     "co2|ongeschat_calls": ("LLM calls on a model without an emission factor in config/co2_factoren.json "
                             "(not estimated — counted separately, never as zero).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),
@@ -1404,9 +1449,14 @@ _GRENS_VORM = {"green": ("ok", "On target"), "amber": ("wait", "Close to target"
                "red": ("off", "Off target")}
 
 
-def _eigenaar_regel(st: _Stores, domein: str) -> str:
-    """"Owner: <rol>" voor een Critical Number. De tegel onthoudt het DOMEIN, niet de rol: verhuist
-    het domein via governance, dan verhuist de eigenaar mee. Geen houder → dat staat er."""
+def _eigenaar_regel(st: _Stores, domein: str, rol: str = "") -> str:
+    """"Owner: <rol>" voor een Critical Number. Bij voorkeur onthoudt de tegel het DOMEIN: verhuist
+    het domein via governance, dan verhuist de eigenaar mee. Een rol zonder domein (de Financial
+    Controller) staat er met zijn rol-id. Geen houder → dat staat er."""
+    if rol and not domein:
+        rec = st.records.get(rol)
+        naam = getattr(getattr(rec, "definition", None), "name", "") or rol
+        return f"<div class='tile-goal muted'>Owner: {_e(naam)}</div>"
     houder = org.role_for_domain(st.records.all(), domein)
     naam = getattr(getattr(houder, "definition", None), "name", "") or getattr(houder, "id", "")
     return (f"<div class='tile-goal muted'>Owner: {_e(naam)}</div>" if houder is not None
@@ -1497,8 +1547,13 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
                 data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
-    if tile.get("eigenaar_domein"):
-        goal += _eigenaar_regel(st, tile["eigenaar_domein"])
+    if tile.get("eigenaar_domein") or tile.get("eigenaar_rol"):
+        goal += _eigenaar_regel(st, tile.get("eigenaar_domein", ""), tile.get("eigenaar_rol", ""))
+    if tile["source"] == "runway":
+        r = runway(st)
+        goal += (f"<div class='tile-goal muted'>Cash {_num(r['cash']) if r['cash'] is not None else '—'}"
+                 f" ÷ fixed costs {_num(r['vaste_kosten'])}/month · "
+                 f"<a href='/fixed-costs'>fixed costs</a></div>")
     if tile["source"] == "bom" and form != "formule":
         goal += _bom_volledigheid(res)
     if gp is not None:

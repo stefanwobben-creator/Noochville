@@ -57,6 +57,8 @@ from nooch_village.source_status import SourceStatusStore
 from nooch_village.bom_leveranciers import BomLeverancierStore
 from nooch_village.bom_materialen import BomMateriaalStore
 from nooch_village.bom_varianten import BomVariantStore
+from nooch_village import zicht as _zicht
+from nooch_village.vaste_kosten import VasteKostenStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
@@ -140,6 +142,7 @@ class _Stores:
         self.bom_leveranciers = BomLeverancierStore(os.path.join(dd, "bom_leveranciers.json"))   # BOM: materiaal → leverancier
         self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: afwijkingen per (model, variant, component)
         self.bom_varianten = BomVariantStore(os.path.join(dd, "bom_varianten.json"))             # BOM: welke varianten een model heeft + foto
+        self.vaste_kosten = VasteKostenStore(os.path.join(dd, "vaste_kosten.json"))             # CN2: vaste kosten per maand (runway-noemer)
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
@@ -5383,6 +5386,32 @@ def _act_metrics2_grens(c):
         return c.nxt, (f"✗ {fout}" if fout else "✓ level and target saved")
 
 
+def _act_vaste_kosten_zet(c):
+        # AUTHZ: rolvervuller of Circle Lead — de Financial Controller of de anchor lead (zicht-groep
+        # `finance`, recht "wijzigen"; `zicht.py`). Business strategy mag de lijst zien, niet wijzigen.
+        # Een regel toevoegen (leeg `rid`) of vervangen. Fail-closed op een ongeldige regel.
+        from nooch_village.vaste_kosten import maak_regel
+        st, g = c.st, c.g
+        if not _zicht.mag(st, c.username, "finance", "wijzigen"):
+            raise Forbidden("only the Financial Controller or the anchor lead can change fixed costs")
+        if g("rid") and g("rid") not in {r["id"] for r in st.vaste_kosten.alle()}:
+            return c.nxt, "✗ not found"
+        regel, fout = maak_regel(g("omschrijving"), g("bedrag"), categorie=g("categorie"),
+                                 van=g("van"), tot=g("tot"), notitie=g("notitie"))
+        if regel is None:
+            return c.nxt, f"✗ {fout}"
+        st.vaste_kosten.zet(regel, rid=g("rid"), door=_web_actor_id(c.username, st))
+        return c.nxt, "✓ fixed cost saved"
+
+
+def _act_vaste_kosten_weg(c):
+        # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `vaste_kosten_zet`.
+        st = c.st
+        if not _zicht.mag(st, c.username, "finance", "wijzigen"):
+            raise Forbidden("only the Financial Controller or the anchor lead can change fixed costs")
+        return c.nxt, ("✓ removed" if st.vaste_kosten.weg(c.g("rid")) else "✗ not found")
+
+
 def _act_metrics2_dim(c):
         # AUTHZ: circle-member of iedereen-ingelogd — zie het metrics2-blok hierboven.
         # Segmentatie: de dimensie van een tegel wisselen (bv. per land / per product / over tijd).
@@ -5745,9 +5774,16 @@ def _act_m_sample(c):
         # ÉÉN SCHRIJFROUTE voor het cockpit-scherm en het werkoverleg (10 oktober 2026): hetzelfde
         # sample, met wie het invoerde en optioneel een datum en een notitie.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
-        if _deny:
-            return nxt, _deny
+        item = st.metrics.get(g("mid")) or {}
+        if item.get("zicht"):
+            # ZICHT (CN2, 10 oktober 2026): een afgeschermde KPI (cash) — alleen wie hem mag
+            # WIJZIGEN, niet de vervuller van de rol waar hij op staat.
+            if not _zicht.mag(st, username, item["zicht"], "wijzigen"):
+                return nxt, "⛔ only the Financial Controller or the anchor lead can enter this"
+        else:
+            _deny = _role_gate(item.get("node") or "", username, st)
+            if _deny:
+                return nxt, _deny
         at = None
         if g("datum").strip():
             at = _sample_datum(g("datum"))
@@ -6673,6 +6709,8 @@ ACTIONS = {
     "metrics2_form": _act_metrics2_form,
     "metrics2_dim": _act_metrics2_dim,
     "metrics2_grens": _act_metrics2_grens,
+    "vaste_kosten_zet": _act_vaste_kosten_zet,
+    "vaste_kosten_weg": _act_vaste_kosten_weg,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
@@ -7163,6 +7201,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_tools(st, csrf_token=effective_csrf, username=username,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
+            if path == "/fixed-costs":
+                # AUTHZ: zicht-groep `finance` (recht "zien") — de view toetst het zelf en toont
+                # anders alleen dat de pagina afgeschermd is. Zie `zicht.py`.
+                from nooch_village.views.vaste_kosten import render_vaste_kosten
+                self._send(render_vaste_kosten(st, username, csrf_token=effective_csrf,
+                                               msg=(qs.get("msg") or [""])[0]))
+                return
             if path == "/open-questions":
                 # AUTHZ: iedereen-ingelogd — LEZEN. Dezelfde gegevens als de sectie Coverage op /bom
                 # en de wikipagina's zelf, die elke ingelogde al mag lezen; er valt hier niets te wijzigen.
@@ -7216,6 +7261,9 @@ def make_handler(data_dir: str, csrf_token: str,
                     goal=(qs.get("goal") or [""])[0]))
                 return
             if path == "/node":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 nid = (qs.get("id") or [""])[0]
                 ntab = (qs.get("tab") or ["overview"])[0]
                 # Oude tabnamen (policies/notes/tools) vertaalt `render_node` zelf naar de
@@ -7296,6 +7344,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                                  csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 self._send(render_person(st, (qs.get("id") or [""])[0],
                                          tab=(qs.get("tab") or ["rollen"])[0],
                                          username=username, csrf_token=effective_csrf))
@@ -7434,6 +7485,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._redirect_to("/keywords?lens=scientist")
                 return
             if path == "/metrics2":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
                 node = (qs.get("node") or [""])[0]
                 rec = st.records.get(node) if node else None
@@ -7446,6 +7500,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                            mset=(qs.get("mset") or ["critical"])[0]))
                 return
             if path == "/catalog":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld
                 # → indicator) rendert alleen voor de curator. guest (auth-uit) telt als curator.
                 actor = st.people.by_email(username) if username and username != "guest" else None
@@ -7454,6 +7511,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                           koppel=(qs.get("koppel") or [""])[0], curator=curator))
                 return
             if path == "/kpi_new":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
                                                csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
@@ -7495,6 +7555,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                          msg=(qs.get("msg") or [""])[0], open_iid=_open))
                 return
             if path == "/werkoverleg":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_werkoverleg(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("step") or ["checkin"])[0],
@@ -7594,6 +7657,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/metric_export":
+                # ZICHT: deze route toont metrics; de kijker-versie laat alleen zien wat deze
+                # gebruiker mag zien (cash, vaste kosten, runway). Zie `zicht.voor`.
+                st = _zicht.voor(st, username)
                 res = _metric_csv(st, (qs.get("mid") or [""])[0])
                 if res is None:
                     self._send("<p>KPI not found</p>", 404); return

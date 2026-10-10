@@ -186,7 +186,7 @@ class MetricStore:
         return False
 
     #: Velden die `set_tile_extra` mag zetten. Een vaste lijst: een tegel is geen vrij JSON-object.
-    _TEGEL_EXTRA = ("eigenaar_domein",)
+    _TEGEL_EXTRA = ("eigenaar_domein", "eigenaar_rol", "zicht")
 
     def set_tile_extra(self, node: str, tid: str, **velden) -> bool:
         """Zet losse tegelvelden uit `_TEGEL_EXTRA` (de eigenaar van een Critical Number)."""
@@ -346,6 +346,22 @@ class MetricStore:
         return True
 
     # ── lezen ────────────────────────────────────────────────────────────────
+    #: Velden die `set_item_extra` op een KPI mag zetten: de Critical-Number-sleutel en de
+    #: zicht-groep (zie `zicht.py`). Een vaste lijst, net als `_TEGEL_EXTRA`.
+    _ITEM_EXTRA = ("cn", "zicht")
+
+    def set_item_extra(self, mid: str, **velden) -> bool:
+        it = self._items.get(mid)
+        if it is None:
+            return False
+        it.update({k: v for k, v in velden.items() if k in self._ITEM_EXTRA})
+        self._save()
+        return True
+
+    def by_cn(self, cn: str) -> dict | None:
+        """De KPI die bij een Critical Number hoort (zijn `cn`-sleutel), of None."""
+        return next((it for it in self._items.values() if it.get("cn") == cn), None)
+
     def get(self, mid: str) -> dict | None:
         return self._items.get(mid)
 

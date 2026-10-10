@@ -1,8 +1,56 @@
 {
   "_uitleg": "De Critical Numbers van dit kwartaal (Scaling Up). Doelen en grenzen staan HIER en nergens anders; `village cn_zaad --apply` zet ze als tegel op de kring. Grenswaarden zijn voorlopig, Stefan bevestigt.",
-  "kwartaal": {"naam": "Q4 2026", "van": "2026-10-01", "tot": "2026-12-31"},
+  "kwartaal": {
+    "naam": "Q4 2026",
+    "van": "2026-10-01",
+    "tot": "2026-12-31"
+  },
   "kring": "mother_earth__nooch",
   "nummers": [
+    {
+      "sleutel": "cn2_runway",
+      "titel": "Runway (months)",
+      "niveau": "critical",
+      "source": "runway",
+      "measure": "maanden",
+      "dim": "totaal",
+      "form": "getal",
+      "target": 12,
+      "oranje": 6,
+      "zicht": "finance",
+      "eigenaar_rol": "mother_earth__nooch__financial_controller"
+    },
+    {
+      "sleutel": "cn2_cash",
+      "titel": "Cash and cash equivalents",
+      "soort": "kpi",
+      "naam": "Cash and cash equivalents",
+      "eenheid": "EUR",
+      "richting": "up",
+      "definitie": "Cash at bank and in hand plus deposits available on demand, entered by hand in the tactical meeting until the bank is linked. Basis: Dutch GAAP (RJ).",
+      "niveau": "",
+      "source": "kpi",
+      "measure": "value",
+      "dim": "none",
+      "form": "getal",
+      "target": null,
+      "oranje": null,
+      "zicht": "finance",
+      "eigenaar_rol": "mother_earth__nooch__financial_controller"
+    },
+    {
+      "sleutel": "cn2_fixed_costs",
+      "titel": "Fixed costs per month",
+      "niveau": "",
+      "source": "runway",
+      "measure": "vaste_kosten",
+      "dim": "totaal",
+      "form": "getal",
+      "target": null,
+      "oranje": null,
+      "zicht": "finance",
+      "eigenaar_rol": "mother_earth__nooch__financial_controller"
+    },
     {
       "sleutel": "cn3_substantiated",
       "titel": "Substantiated pages",
@@ -27,5 +75,17 @@
       "oranje": null,
       "eigenaar_domein": "Materials"
     }
-  ]
+  ],
+  "zicht": {
+    "_uitleg": "Wie een afgeschermde tegel, KPI of lijst mag zien en wijzigen (zie nooch_village/zicht.py). De anchor lead mag altijd beide.",
+    "finance": {
+      "zien": [
+        "mother_earth__nooch__financial_controller",
+        "mother_earth__nooch__strategic_lead_founder_steward"
+      ],
+      "wijzigen": [
+        "mother_earth__nooch__financial_controller"
+      ]
+    }
+  }
 }
