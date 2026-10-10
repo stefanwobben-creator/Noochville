@@ -285,6 +285,21 @@ def _grens_menu(node: str, tile: dict, csrf: str, nxt: str) -> str:
             f"{_e(label)}</summary><div class='datepop'>{form}</div></details>")
 
 
+def _start_menu(node: str, tile: dict, csrf: str, nxt: str) -> str:
+    """De startdatum van een batch-nummer (CN1) verzetten, in hetzelfde popover-patroon als
+    `_grens_menu`. De server toetst wie het mag (Sales of de anchor lead)."""
+    van = (tile.get("lijn") or {}).get("van", "")
+    hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+           f"<input type='hidden' name='node' value='{_e(node)}'>"
+           f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+           f"<input type='hidden' name='tid' value='{_e(tile.get('id', ''))}'>")
+    form = (f"<form method='post' action='/action'>{hid}"
+            f"<input type='date' name='datum' value='{_e(van)}' aria-label='batch start date' required>"
+            f"<button class='btn ok sm' name='action' value='cn_startdatum_zet'>Save</button></form>")
+    return (f"<details class='acard-d'><summary class='chip outline' aria-label='batch start date'>"
+            f"Starts {_e(van)}</summary><div class='datepop'>{form}</div></details>")
+
+
 def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot: str,
                nxt: str, editable: bool, mset: str = "all") -> str:
     node = rec.id
@@ -314,6 +329,8 @@ def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot
         vergelijk = "" if is_formule else _compare_menu(st, rec, node, t, csrf, nxt)
         rm = _post("metrics2_unfav", node, "remove", "dellink", csrf, nxt, tid=t.get("id", ""))
         grens = _grens_menu(node, t, csrf, nxt)
+        if t.get("source") == "batch":
+            grens += _start_menu(node, t, csrf, nxt)
         ctrls = f"<div class='tile-foot-l'>{segment}{weergave}{vergelijk}{grens}</div>"
         foot = f"<div class='tile-foot'>{ctrls}<div class='tile-foot-r'>{rm}</div></div>"
         cells.append(f"<div class='tile-wrap'>{chart}{foot}</div>")

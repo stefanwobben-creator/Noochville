@@ -8,6 +8,25 @@
   "kring": "mother_earth__nooch",
   "nummers": [
     {
+      "sleutel": "cn1_batch4",
+      "titel": "Batch 4 sold",
+      "niveau": "critical",
+      "source": "batch",
+      "measure": "cn1_batch4",
+      "dim": "totaal",
+      "form": "getal",
+      "target": 500,
+      "oranje": null,
+      "lijn": {
+        "van": "2026-11-15",
+        "tot": "2026-12-31",
+        "start": 0,
+        "oranje": 0.8
+      },
+      "eigenaar_rol": "mother_earth__nooch__sales",
+      "_uitleg": "Startdatum voorlopig (2026-11-15); Sales of de anchor lead verzet hem in de UI, en dan wint die keuze van deze waarde."
+    },
+    {
       "sleutel": "cn2_runway",
       "titel": "Runway (months)",
       "niveau": "critical",
@@ -91,6 +110,12 @@
       ],
       "wijzigen": [
         "mother_earth__nooch__financial_controller"
+      ]
+    },
+    "sales": {
+      "zien": [],
+      "wijzigen": [
+        "mother_earth__nooch__sales"
       ]
     }
   }
