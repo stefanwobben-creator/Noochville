@@ -42,6 +42,10 @@ Tot die dag draaide er GEEN back-up: de stap hieronder werd niet uitgevoerd, en 
 - **Terugzetten**: `rsync -a ~/NoochVille-backups/<datum>/data/ root@138.201.154.162:/opt/noochville/data/`
   met de services gestopt, daarna `chown -R nooch:nooch /opt/noochville/data` en de services starten.
 - Een nieuwe map onder `data/` (bijv. `data/finance/`) zit er automatisch in.
+- **To-do (besluit Stefan, 10 oktober 2026: nu niet):** een aparte SSH-sleutel die alleen `data/` mag
+  lezen (`authorized_keys` met `command="rrsync -ro /opt/noochville/data"`). Nu logt het script in als
+  root met de gewone sleutel. Pas dit aan op de server zodra het aan de beurt is; het script hoeft dan
+  alleen `NOOCH_SERVER` en de sleutel te kennen.
 
 ## Deploy-stappen (op de server, data blijft staan)
 1. **Snapshot de data** (veiligheidsnet, met de hand vóór een migratie): `tar czf backups/data_$(date +%F_%H%M).tgz data/`.
