@@ -31,6 +31,10 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/finance/pnl` | `render_pnl` | `nooch_village/views/finance.py` |
 | `/finance/revenue` | `render_revenue` | `nooch_village/views/finance.py` |
 | `/finance/revenue/view` | `render_revenue_regel` | `nooch_village/views/finance.py` |
+| `/finance/history` | `render_history` | `nooch_village/views/finance.py` |
+| `/finance/history/cell` | `render_history_cel` | `nooch_village/views/finance.py` |
+| `/finance/history.csv` | `(inline)` | `cockpit2.py` |
+| `/finance/history.xlsx` | `(inline)` | `cockpit2.py` |
 | `/finance/revenue.csv` | `(inline)` | `cockpit2.py` |
 | `/finance/costs.csv` | `(inline)` | `cockpit2.py` |
 | `/finance/file` | `(inline)` | `cockpit2.py` |
@@ -178,6 +182,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `vraag_uitstel_weg` | `_act_vraag_uitstel_weg` |
 | `verplichting_zet` | `_act_verplichting_zet` |
 | `verplichting_weg` | `_act_verplichting_weg` |
+| `finance_hist_opslaan` | `_act_finance_hist_opslaan` |
+| `finance_hist_cutover` | `_act_finance_hist_cutover` |
 | `metrics2_compare` | `_act_metrics2_compare` |
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
@@ -369,6 +375,9 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `co2_factoren.json` |
 | `critical_numbers.json` |
 | `finance.json` |
+| `history.jsonl` |
+| `history_imports.jsonl` |
+| `history_settings.jsonl` |
 | `llm_prijzen.json` |
 | `noochie_memo_staat.json` |
 | `notifications.json` |
@@ -383,4 +392,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_65 routes · 173 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 14 zonder gevonden schrijver._
+_69 routes · 175 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 17 zonder gevonden schrijver._

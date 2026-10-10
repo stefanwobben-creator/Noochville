@@ -20,7 +20,7 @@ from __future__ import annotations
 
 def bereken(posten: list[tuple], cfg: dict, *, omzet: dict[str, int] | None = None,
             maanden: list[str] | None = None, opbrengsten: list[tuple] | None = None,
-            paren: dict[str, int] | None = None) -> dict:
+            paren: dict[str, int] | None = None, historie_tot: str = "") -> dict:
     """{maanden, rijen, kosten_alleen, onbekend, bron, paren}.
 
     `opbrengsten` (PR 1b): posten (maand, opbrengstregel, centen, bron) uit het opbrengstregister.
@@ -35,7 +35,8 @@ def bereken(posten: list[tuple], cfg: dict, *, omzet: dict[str, int] | None = No
     extra: dict[str, dict[str, int]] = {}                   # opbrengstregel → {maand: centen}
     if opbrengsten is not None:
         from nooch_village.finance_omzet import NET_SALES, net_sales_per_maand
-        ns, bron_per_maand = net_sales_per_maand(opbrengsten, cfg.get("net_sales_source_from") or "")
+        ns, bron_per_maand = net_sales_per_maand(opbrengsten, cfg.get("net_sales_source_from") or "",
+                                                 historie_tot=historie_tot)
         omzet = ns or omzet
         for maand, lijn, cents, _b in opbrengsten:
             if lijn != NET_SALES:

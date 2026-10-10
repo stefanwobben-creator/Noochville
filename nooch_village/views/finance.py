@@ -30,8 +30,11 @@ GROEP = "finance"
 _CHIP_CORR = "<span class='chip'>correction</span>"
 _CHIP_GEEN_DOC = "<span class='chip'>missing document</span>"
 _DOORLOPEND = "<span class='muted'>ongoing</span>"
+_STREEP = "<span class='muted'>—</span>"
+_GEEN_DATA = "<span class='muted'>no data</span>"
 _SCHERMEN = (("/finance/costs", "Costs"), ("/finance/revenue", "Revenue"), ("/finance/recurring", "Recurring"),
-             ("/finance/monthly", "Monthly"), ("/finance/pnl", "P&L"), ("/fixed-costs", "Runway inputs"))
+             ("/finance/monthly", "Monthly"), ("/finance/pnl", "P&L"), ("/finance/history", "History"),
+             ("/fixed-costs", "Runway inputs"))
 
 
 def mag_zien(st, username) -> bool:
@@ -341,14 +344,36 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
     `per="paar"`: elke rij gedeeld door het aantal paren van die maand; ontbreken paren, een streepje."""
     from nooch_village.finance_omzet import OpbrengstRegister, paren_per_maand
     from nooch_village.finance_omzet import posten as opbrengst_posten
+    from nooch_village import finance_historie as fh
     cfg = fc.laad()
     binnen = lambda r: ((not van or r["period"] >= van) and (not tot or r["period"] <= tot)
                         and (not batch or r.get("batch") == batch))
     kosten = [r for r in KostenRegister(st.dd).alle() if binnen(r)]
     opbr = [r for r in OpbrengstRegister(st.dd).alle() if binnen(r)]
-    uit = finance_pnl.bereken(posten(kosten), cfg, omzet=omzet, opbrengsten=opbrengst_posten(opbr),
-                              paren=paren_per_maand(opbr))
+    # PR 2a: ÉÉN BRON PER MAAND. Tot en met de cutover de historie, daarna het register. Historie
+    # heeft geen batch: in een batch-weergave telt alleen het register, en historie-maanden tonen
+    # een streepje.
+    h_tot = fh.Instellingen(st.dd).history_until()
+    hk, ho, hp = fh.posten({k: r for k, r in fh.HistorieRegister(st.dd).actueel().items()
+                            if (not van or k[0] >= van) and (not tot or k[0] <= tot)}, cfg)
+    if batch:
+        hk, ho, hp = [], [], {}
+    k_posten, o_posten, genegeerd = fh.kies_bronnen(posten(kosten), opbrengst_posten(opbr), hk, ho, h_tot)
+    par = {m: n for m, n in paren_per_maand(opbr).items() if not h_tot or m > h_tot}
+    par.update({m: n for m, n in hp.items() if h_tot and m <= h_tot})
+    # Met een volledig bereik (van én tot) staat elke maand erin; een maand zonder data in zijn
+    # bron toont "no data", geen nul.
+    bereik = []
+    if van and tot and van <= tot:
+        j, m = int(van[:4]), int(van[5:7])
+        while f"{j}-{m:02d}" <= tot and len(bereik) < 120:
+            bereik.append(f"{j}-{m:02d}")
+            j, m = (j + 1, 1) if m == 12 else (j, m + 1)
+    uit = finance_pnl.bereken(k_posten, cfg, omzet=omzet, opbrengsten=o_posten, paren=par,
+                              maanden=bereik, historie_tot=h_tot)
     maanden = uit["maanden"]
+    met_data = {p[0] for p in k_posten} | {p[0] for p in o_posten} | set(omzet or {})
+    is_hist = lambda m: bool(h_tot) and m <= h_tot
     perpaar = per == "paar"
     filt = (f"<form method='get' action='/finance/pnl' class='cl-bar' aria-label='filters'>"
             f"<input type='month' name='van' value='{_e(van)}' aria-label='from month'>"
@@ -365,6 +390,9 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
     paren_tot = sum(paren.get(m, 0) for m in maanden) if all(paren.get(m) for m in maanden) else 0
 
     def cel(c, m=None):
+        if m is not None and m not in met_data:
+            # GEEN DATA IS GEEN NUL. Een historie-maand in een batch-weergave: historie heeft geen batch.
+            return "—" if (batch and is_hist(m)) else "<span class='muted'>no data</span>"
         if c is None:
             return ""
         if not perpaar:
@@ -374,7 +402,14 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
 
     kop = ("".join(f"<th class='num'>{_e(m)}</th>" for m in maanden)
            + "<th class='num'>Total</th><th class='num'>% of net sales</th>")
-    bron = ("<tr><td class='muted'>Source of net sales</td>"
+    def bron_van(m):
+        if m not in met_data:
+            return "—" if (batch and is_hist(m)) else "no data"
+        return fh.BRON if is_hist(m) else "register"
+    bron = ("<tr><td class='muted'>Source</td>"
+            + "".join(f"<td class='num muted'>{_e(bron_van(m))}</td>" for m in maanden)
+            + "<td></td><td></td></tr>"
+            "<tr><td class='muted'>Source of net sales</td>"
             + "".join(f"<td class='num muted'>{_e(uit['bron'].get(m, '—'))}</td>" for m in maanden)
             + "<td></td><td></td></tr>")
     rijen = []
@@ -409,7 +444,17 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
             "set in the configuration, never in net sales or the percentage basis.</p>")
     if perpaar:
         noot += "<p class='muted'>Per pair: every row divided by the pairs of that month; no pairs, no number.</p>"
+    if h_tot:
+        noot += (f"<p class='muted'>Months up to and including {_e(h_tot)} come from the "
+                 f"<a href='/finance/history'>{_e(fh.LABEL)}</a>; later months from the register.</p>")
+    if genegeerd:
+        noot += _cutover_waarschuwing(genegeerd, h_tot)
     return _frame("Finance · P&L", "/finance/pnl", f"{filt}{noot}<div class='c2-sec'>{tabel}</div>")
+
+
+def _cutover_waarschuwing(n: int, h_tot: str) -> str:
+    return (f"<div class='card'>⚠ {n} register line(s) fall in months up to the cutover "
+            f"({_e(h_tot)}). They are kept, but not counted: those months come from the history.</div>")
 
 
 # ── /finance/revenue ────────────────────────────────────────────────────────
@@ -588,6 +633,281 @@ def verwerk_omzet(st, fields: dict, files: dict, *, username, door: str) -> str:
         return "✓ corrected: a reversal and a new line were added"
     reg.voeg_toe(regel, door=door)
     return "✓ revenue saved" + (f" — ⚠ {waarschuwing}" if waarschuwing else "")
+
+
+# ── /finance/history (PR 2a) ────────────────────────────────────────────────
+
+def _jaar(jaar: str) -> str:
+    return jaar if (len(jaar) == 4 and jaar.isdigit()) else time.strftime("%Y")
+
+
+def _register_voor_cutover(st, h_tot: str) -> int:
+    from nooch_village.finance_omzet import OpbrengstRegister
+    if not h_tot:
+        return 0
+    return sum(1 for r in KostenRegister(st.dd).alle() + OpbrengstRegister(st.dd).alle() if r["period"] <= h_tot)
+
+
+def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> str:
+    """Het raster: regels in P&L-volgorde × de maanden van één jaar. Bewerkbaar voor wie mag
+    wijzigen; alleen gewijzigde cellen worden nieuwe regels. Onderaan de lagen als controle."""
+    from nooch_village import finance_historie as fh
+    cfg = fc.laad()
+    jaar = _jaar(jaar)
+    maanden = fh.maanden_van(jaar)
+    hreg = fh.HistorieRegister(st.dd)
+    actueel = hreg.actueel()
+    met_geschiedenis = {(r["period"], r["line_key"]) for r in hreg.alle()}
+    h_tot = fh.Instellingen(st.dd).history_until()
+    schrijven = mag_wijzigen(st, username) and bool(csrf)
+
+    def invoer(x, m):
+        if x["soort"] == "paren":
+            r = actueel.get((m, fh.NET_SALES))
+            waarde = "" if not r or r.get("pairs") is None else str(r["pairs"])
+            sleutel = (m, fh.NET_SALES)
+        else:
+            r = actueel.get((m, x["key"]))
+            waarde = euro(r["amount_cents"]) if r else ""
+            sleutel = (m, x["key"])
+        terug = ""
+        if sleutel in met_geschiedenis:
+            terug = (f" <a class='muted' href='/finance/history/cell?period={_e(sleutel[0])}&amp;line={_e(sleutel[1])}' "
+                     f"aria-label='earlier values of {_e(x['label'])} {_e(m)}'>↺</a>")
+        if not schrijven:
+            return f"<td class='num'>{_e(waarde) or _STREEP}{terug}</td>"
+        modus = "numeric" if x["soort"] == "paren" else "decimal"
+        return (f"<td class='num'><input name='c|{_e(x['key'])}|{m}' value='{_e(waarde)}' inputmode='{modus}' "
+                f"size='8' aria-label='{_e(x['label'])} {m}'>{terug}</td>")
+
+    kop = "".join(f"<th class='num'>{m[5:]}</th>" for m in maanden)
+    rijen = []
+    for x in fh.lijnen(cfg):
+        if x["soort"] == "kop":
+            rijen.append(f"<tr><td colspan='{len(maanden) + 1}'><strong>{_e(x['label'])}</strong></td></tr>")
+            continue
+        rijen.append(f"<tr><td>{_e(x['label'])}</td>{''.join(invoer(x, m) for m in maanden)}</tr>")
+    raster = (f"<table class='mtab' aria-label='history {jaar}'><tr><th>{jaar}</th>{kop}</tr>"
+              f"{''.join(rijen)}</table>")
+    if schrijven:
+        raster = (f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                  f"<input type='hidden' name='action' value='finance_hist_opslaan'>"
+                  f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
+                  f"<input type='hidden' name='jaar' value='{jaar}'>{raster}"
+                  f"<input name='note' aria-label='note for this save' placeholder='Note (e.g. Venema 2025 annual figures)'>"
+                  f"<button class='btn ok sm' type='submit'>Save changed cells</button></form>"
+                  f"<p class='muted'>An empty cell means no data, not zero. Emptying a cell that has a value "
+                  f"clears it; the old value stays in the cell history (↺).</p>")
+    # DE LAGEN ALS CONTROLE: alleen uit de ingevulde historie van dit jaar, los van de cutover — zo
+    # vergelijk je de invoer met het resultaat van Venema.
+    hk, ho, hp = fh.posten({k: r for k, r in actueel.items() if k[0][:4] == jaar}, cfg)
+    uit = finance_pnl.bereken(hk, cfg, opbrengsten=ho, paren=hp, maanden=maanden, historie_tot=f"{jaar}-12")
+    gevuld = {p[0] for p in hk} | {p[0] for p in ho}
+    lagen = "".join(
+        f"<tr><td><strong>{_e(r['label'])}</strong></td>"
+        + "".join(f"<td class='num'>{_eur(r['waarden'].get(m)) if m in gevuld else _GEEN_DATA}</td>"
+                  for m in maanden) + "</tr>"
+        for r in uit["rijen"] if r["soort"] in ("omzet", "laag"))
+    controle = (f"<h2>Check: layers from the history above</h2><table class='mtab' aria-label='layers {jaar}'>"
+                f"<tr><th></th>{kop}</tr>{lagen}</table>")
+    nav = (f"<p><a href='/finance/history?jaar={int(jaar) - 1}'>← {int(jaar) - 1}</a> · <strong>{jaar}</strong> · "
+           f"<a href='/finance/history?jaar={int(jaar) + 1}'>{int(jaar) + 1} →</a> · "
+           f"<a href='/finance/history.csv?jaar={jaar}'>Export CSV</a> · "
+           f"<a href='/finance/history.xlsx?jaar={jaar}'>Export XLSX</a> · <a href='/finance/pnl'>P&amp;L</a></p>")
+    cutover = (f"<p>Cutover: months up to and including <strong>{_e(h_tot)}</strong> come from this history; "
+               f"later months from the register.</p>" if h_tot else
+               "<p class='muted'>No cutover set: the P&amp;L uses only the register. Set a cutover month to use "
+               "this history.</p>")
+    n_voor = _register_voor_cutover(st, h_tot)
+    if n_voor:
+        cutover += _cutover_waarschuwing(n_voor, h_tot)
+    beheer = ""
+    if schrijven:
+        beheer = _popover("Cutover", (
+            f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='action' value='finance_hist_cutover'>"
+            f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
+            f"<input type='month' name='history_until' value='{_e(h_tot)}' aria-label='history until (empty = no history)'>"
+            f"<button class='btn ok sm' type='submit'>Save</button></form>"
+            f"<p class='muted'>Every change is logged (who, when, old and new value).</p>"))
+        beheer += _popover("Import", (
+            f"<form method='post' action='/action' enctype='multipart/form-data'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='action' value='finance_hist_import'>"
+            f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
+            f"<input type='file' name='file' accept='.csv,.xlsx' aria-label='CSV or XLSX in the export format' required>"
+            f"<button class='btn sm' type='submit'>Preview</button></form>"
+            f"<p class='muted'>Same format as the export. An empty cell in the file only clears a filled cell if you tick that in the preview. You see a preview first; nothing is saved until you confirm.</p>"))
+    log = fh.Instellingen(st.dd).alle()[-5:]
+    loghtml = ("<ul>" + "".join(
+        f"<li class='muted'>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))} · "
+        f"{_e(r.get('created_by') or '—')}: {_e(r.get('old') or 'none')} → {_e(r.get('new') or 'none')}</li>"
+        for r in reversed(log)) + "</ul>") if log else ""
+    inhoud = (f"<p><span class='chip'>{_e(fh.LABEL)}</span></p>{cutover}{loghtml}{nav}{beheer}"
+              f"<div class='c2-sec'>{raster}</div><div class='c2-sec'>{controle}</div>")
+    return _frame("Finance · History", "/finance/history", inhoud, msg)
+
+
+def render_history_cel(st, username, period: str, line: str) -> str | None:
+    from nooch_village import finance_historie as fh
+    reg = fh.HistorieRegister(st.dd)
+    hist = reg.geschiedenis(period, line)
+    if not hist:
+        return None
+    labels = {x["key"]: x["label"] for x in fh.lijnen(fc.laad())}
+    rijen = "".join(
+        f"<tr><td>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))}</td>"
+        f"<td>{_e(r.get('created_by') or '—')}</td>"
+        f"<td class='num'>{'no data (cleared)' if r.get('cleared') else _eur(r['amount_cents'])}</td>"
+        f"<td class='num'>{'' if r.get('pairs') is None else r['pairs']}</td><td>{_e(r.get('source', ''))}</td>"
+        f"<td>{_e(r.get('note', ''))}</td><td>{'current' if i == 0 else 'replaced'}</td></tr>"
+        for i, r in enumerate(hist))
+    tabel = ("<table class='mtab' aria-label='cell history'><tr><th>When</th><th>Who</th><th class='num'>Amount</th>"
+             f"<th class='num'>Pairs</th><th>Source</th><th>Note</th><th></th></tr>{rijen}</table>")
+    terug = f"<p><a href='/finance/history?jaar={_e(period[:4])}'>← history {_e(period[:4])}</a></p>"
+    return _frame(f"Finance · {labels.get(line, line)} {period}", "/finance/history",
+                  f"{terug}<div class='c2-sec'>{tabel}</div>")
+
+
+def verwerk_history_opslaan(st, form: dict, *, door: str) -> str:
+    """Het raster opslaan: alleen GEWIJZIGDE cellen worden nieuwe regels (met `supersedes`). Een
+    cel met een waarde die leeg wordt aangeboden, wordt leeggemaakt (`cleared`). De rechten toetst
+    de aanroeper (404)."""
+    from nooch_village import finance_historie as fh
+    cfg = fc.laad()
+    hreg = fh.HistorieRegister(st.dd)
+    bedragen, paren_, leeg, paren_leeg, fouten = {}, {}, set(), set(), []
+    for naam, waarden in form.items():
+        if not naam.startswith("c|"):
+            continue
+        _c, key, m = (naam.split("|") + ["", ""])[:3]
+        v = (waarden[0] if isinstance(waarden, list) else waarden).strip()
+        if key == fh.PAREN:
+            n, fout = fh.paren(v)
+            if fout:
+                fouten.append(f"{m} pairs: {fout}")
+            elif n is not None:
+                paren_[m] = n
+            else:
+                paren_leeg.add(m)
+            continue
+        c, fout = fh.bedrag(v)
+        if fout:
+            fouten.append(f"{m} {key}: {fout}")
+        elif c is not None:
+            bedragen[(m, key)] = c
+        else:
+            leeg.add((m, key))
+    if fouten:
+        return "✗ nothing saved — " + "; ".join(fouten[:5])
+    diff = fh.vergelijk(bedragen, paren_, hreg.laatste(), cfg, leeg=leeg, paren_leeg=paren_leeg)
+    if diff["fouten"]:
+        return "✗ nothing saved — " + "; ".join(diff["fouten"][:5])
+    note = form.get("note", [""])
+    hreg.schrijf(diff["schrijf"], door=door, note=note[0] if isinstance(note, list) else note)
+    return f"✓ {diff['nieuw']} new, {diff['gewijzigd']} changed, {diff['geleegd']} cleared"
+
+
+def _vorm_wijziging(w: dict, labels: dict) -> str:
+    oud = w.get("oud")
+    was = f"{_eur(oud['amount_cents'])}" if oud else "no data"
+    paar = f" · pairs {w['pairs']}" if w.get("pairs") is not None else ""
+    na = "no data (cleared)" if w.get("cleared") else f"{_eur(w['amount_cents'])}{paar}"
+    return (f"<tr><td>{_e(w['period'])}</td><td>{_e(labels.get(w['line_key'], w['line_key']))}</td>"
+            f"<td class='num'>{was}</td><td class='num'>{na}</td></tr>")
+
+
+def _import_diffs(gelezen: dict, laatste: dict, cfg: dict) -> tuple[dict, dict, list[dict]]:
+    """(zonder, met, te_legen): de import ZONDER leegmaken (de standaard), MET leegmaken, en de
+    regels die alleen het vinkje "also clear" toevoegt — lege cellen in het bestand die nu een waarde
+    hebben (ook paren die leeg zijn aangeboden). Zo toont de preview ze altijd, en schrijft de import
+    ze alleen als Stefan het vinkje aanzet (besluit 10 oktober)."""
+    from nooch_village import finance_historie as fh
+    zonder = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], laatste, cfg)
+    met = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], laatste, cfg,
+                       leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
+    basis = {(w["period"], w["line_key"]): w for w in zonder["schrijf"]}
+    te_legen = [w for w in met["schrijf"]
+                if {k: v for k, v in w.items() if k != "oud"}
+                != {k: v for k, v in (basis.get((w["period"], w["line_key"])) or {}).items() if k != "oud"}]
+    return zonder, met, te_legen
+
+
+def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: str) -> tuple[str, str]:
+    """Stap 1: bewaar het bestand (borging) en toon een PREVIEW → ("html", pagina) of ("msg", melding).
+    Stap 2 (`bevestig`): lees het bewaarde bestand opnieuw (hash gecontroleerd), vergelijk opnieuw
+    met de actuele stand en schrijf. Fouten blokkeren tenzij expliciet "ook de geldige rijen". Een
+    lege cel in het bestand maakt een gevulde cel ALLEEN leeg met het vinkje `also_clear`."""
+    from nooch_village import finance_historie as fh
+    cfg = fc.laad()
+    log = fh.ImportLog(st.dd)
+    hreg = fh.HistorieRegister(st.dd)
+    if fields.get("action") == "finance_hist_import_bevestig":
+        imp = log.status(fields.get("import_id", ""))
+        if imp is None or imp.get("status") != "previewed":
+            return "msg", "✗ this import does not exist or was already handled"
+        blob, fout = log.lees_bijlage(imp)
+        if blob is None:
+            return "msg", f"✗ {fout}"
+        gelezen = fh.lees_bestand(imp["attachment"]["filename"], blob, cfg)
+        zonder, met, te_legen = _import_diffs(gelezen, hreg.laatste(), cfg)
+        legen = fields.get("also_clear") == "1"
+        diff = met if legen else zonder
+        fouten = gelezen["fouten"] + diff["fouten"]
+        if fouten and fields.get("valid_rows") != "1":
+            return "msg", "✗ nothing imported: the file has errors — confirm that the valid rows may go ahead"
+        hreg.schrijf(diff["schrijf"], door=door, bron=f"import:{imp['import_id']}",
+                     note=f"Import {imp['attachment']['filename']}")
+        geleegd = len(te_legen) if legen else 0
+        log.meld(imp, door=door, status="applied", rows=gelezen["rijen"], new=diff["nieuw"],
+                 changed=diff["gewijzigd"], cleared=geleegd, skipped_clears=0 if legen else len(te_legen),
+                 errors=len(fouten))
+        uit = (f"✓ imported: {zonder['nieuw']} new, {zonder['gewijzigd']} changed, {geleegd} cleared, "
+               f"{zonder['ongewijzigd']} unchanged")
+        if te_legen and not legen:
+            uit += f" — {len(te_legen)} empty cell(s) in the file were skipped (not cleared)"
+        return "msg", uit
+    fname, blob = files.get("file") or ("", b"")
+    imp, fout = log.bewaar(fname, blob, door=door)
+    if imp is None:
+        return "msg", f"✗ {fout}"
+    gelezen = fh.lees_bestand(fname, blob, cfg)
+    zonder, met, te_legen = _import_diffs(gelezen, hreg.laatste(), cfg)
+    fouten = gelezen["fouten"] + zonder["fouten"]
+    labels = {x["key"]: x["label"] for x in fh.lijnen(cfg)}
+    tabel = ("<table class='mtab' aria-label='changes'><tr><th>Month</th><th>Line</th><th class='num'>Now</th>"
+             "<th class='num'>After import</th></tr>"
+             + "".join(_vorm_wijziging(w, labels) for w in zonder["schrijf"][:300]) + "</table>"
+             if zonder["schrijf"] else "<p class='muted'>No changes.</p>")
+    leeg_tabel = ""
+    if te_legen:
+        leeg_tabel = ("<h2>Empty in the file, filled now</h2><p class='muted'>Skipped unless you tick "
+                      "\"also clear\" below.</p><table class='mtab' aria-label='cells to clear'><tr><th>Month</th>"
+                      "<th>Line</th><th class='num'>Now</th><th class='num'>With the tick</th></tr>"
+                      + "".join(_vorm_wijziging(w, labels) for w in te_legen[:300]) + "</table>")
+    foutlijst = ("<h2>Errors</h2><ul>" + "".join(f"<li>{_e(f)}</li>" for f in fouten[:200]) + "</ul>"
+                 if fouten else "")
+    ook = ("<input type='checkbox' id='fin-valid-rows' name='valid_rows' value='1'>"
+           "<label for='fin-valid-rows'>Import the valid rows anyway; the rows with errors are skipped</label>"
+           if fouten else "")
+    if te_legen:
+        ook += (f"<input type='checkbox' id='fin-also-clear' name='also_clear' value='1'>"
+                f"<label for='fin-also-clear'>Also clear {len(te_legen)} cell(s)</label>")
+    bevestig = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='finance_hist_import_bevestig'>"
+                f"<input type='hidden' name='import_id' value='{_e(imp['import_id'])}'>"
+                f"<input type='hidden' name='next' value='{_e(fields.get('next') or '/finance/history')}'>{ook}"
+                f"<button class='btn ok sm' type='submit'>Confirm import</button> "
+                f"<a href='{_e(fields.get('next') or '/finance/history')}'>Cancel</a></form>"
+                if (zonder["schrijf"] or te_legen) else "")
+    inhoud = (f"<p>{_e(imp['attachment']['filename'])} · sha256 <code>{_e(imp['attachment']['sha256'][:16])}…</code> · "
+              f"{gelezen['rijen']} row(s)</p>"
+              f"<p><strong>{zonder['nieuw']}</strong> new · <strong>{zonder['gewijzigd']}</strong> changed · "
+              f"<strong>{len(te_legen)}</strong> to clear (only with the tick) · "
+              f"<strong>{zonder['ongewijzigd']}</strong> unchanged · <strong>{len(fouten)}</strong> error(s)</p>"
+              f"{foutlijst}{bevestig}<div class='c2-sec'>{tabel}{leeg_tabel}</div>")
+    return "html", _frame("Finance · Import preview", "/finance/history", inhoud)
 
 
 # ── CSV voor Venema ─────────────────────────────────────────────────────────

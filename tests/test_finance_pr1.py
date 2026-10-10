@@ -193,7 +193,7 @@ def test_invoeren_alleen_fc_en_stefan(tmp_path):
 
 #: De enige modules die het register (of `data/finance/`) mogen kennen.
 _TOEGESTAAN = {"finance_register.py", "finance_recurring.py", "finance_pnl.py", "finance_config.py",
-               "finance_omzet.py", "views/finance.py", "cockpit2.py", "cli.py"}
+               "finance_omzet.py", "finance_historie.py", "views/finance.py", "cockpit2.py", "cli.py"}
 
 
 def test_guard_niemand_anders_leest_finance():
@@ -216,11 +216,14 @@ def test_guard_niemand_anders_leest_finance():
                     mods = [a.name for a in n.names]
                 elif isinstance(n, ast.ImportFrom):
                     mods = [n.module or ""] + [f"{n.module}.{a.name}" for a in n.names]
-                if any("finance_register" in m or "finance_omzet" in m or "views.finance" in m
+                if any("finance_register" in m or "finance_omzet" in m or "finance_historie" in m or "views.finance" in m
                        or m.endswith("views.finance") for m in mods):
                     fout.append(f"{rel}: importeert finance")
-                if isinstance(n, ast.Constant) and isinstance(n.value, str) and any(
-                        b in n.value for b in ("costs.jsonl", "revenue.jsonl")):
+                # `history.jsonl` exact (of als padstuk): `pulse_history.jsonl` e.d. zijn geen finance.
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) and (any(
+                        b in n.value for b in ("costs.jsonl", "revenue.jsonl", "history_imports.jsonl",
+                                               "history_settings.jsonl"))
+                        or n.value == "history.jsonl" or n.value.endswith("/history.jsonl")):
                     fout.append(f"{rel}: verwijst naar een finance-register")
     assert fout == []
 
