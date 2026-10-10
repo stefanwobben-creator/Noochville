@@ -62,6 +62,7 @@ LABELS: dict[str, str] = {
     "shopify_sales": "Reads how many pairs were sold",
     "co2_village": "Works out how much CO2 the village's thinking cost",
     "bom_co2": "Works out the CO2 per pair from the materials on the bill of materials",
+    "dekking": "Counts how many material and supplier pages are fully substantiated",
 }
 
 

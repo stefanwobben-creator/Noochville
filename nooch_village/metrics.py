@@ -185,6 +185,18 @@ class MetricStore:
                 return True
         return False
 
+    #: Velden die `set_tile_extra` mag zetten. Een vaste lijst: een tegel is geen vrij JSON-object.
+    _TEGEL_EXTRA = ("eigenaar_domein",)
+
+    def set_tile_extra(self, node: str, tid: str, **velden) -> bool:
+        """Zet losse tegelvelden uit `_TEGEL_EXTRA` (de eigenaar van een Critical Number)."""
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                t.update({k: v for k, v in velden.items() if k in self._TEGEL_EXTRA})
+                self._save()
+                return True
+        return False
+
     def set_tile_compare(self, node: str, tid: str, cmp_source: str = "",
                          cmp_measure: str = "", cmp_dim: str = "over_tijd") -> bool:
         """Koppel (of ontkoppel) een tweede meting aan een tegel voor een metric-vs-metric combo

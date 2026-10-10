@@ -7163,6 +7163,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_tools(st, csrf_token=effective_csrf, username=username,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
+            if path == "/open-questions":
+                # AUTHZ: iedereen-ingelogd — LEZEN. Dezelfde gegevens als de sectie Coverage op /bom
+                # en de wikipagina's zelf, die elke ingelogde al mag lezen; er valt hier niets te wijzigen.
+                from nooch_village.views.open_vragen import render_open_vragen
+                self._send(render_open_vragen(st, status=(qs.get("status") or [""])[0]))
+                return
             if path == "/bom":
                 # AUTHZ: iedereen-ingelogd — LEZEN. Het enige wat je hier kunt wijzigen is de
                 # leverancier-koppeling, en die loopt via `bom_leverancier_zet` met zijn eigen poort

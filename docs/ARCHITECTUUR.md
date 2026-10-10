@@ -24,6 +24,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/messages` | `render_messages` | `nooch_village/views/messages.py` |
 | `/version` | `(inline)` | `cockpit2.py` |
 | `/tools` | `render_tools` | `nooch_village/views/tools.py` |
+| `/open-questions` | `render_open_vragen` | `nooch_village/views/open_vragen.py` |
 | `/bom` | `render_bom` | `nooch_village/views/bom.py` |
 | `/acties` | `render_acties` | `nooch_village/views/acties.py` |
 | `/wiki` | `render_wiki_index` | `nooch_village/views/wiki.py` |
@@ -342,6 +343,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | Databestand |
 |---|
 | `co2_factoren.json` |
+| `critical_numbers.json` |
 | `llm_prijzen.json` |
 | `noochie_memo_staat.json` |
 | `notifications.json` |
@@ -354,4 +356,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_53 routes · 166 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 10 zonder gevonden schrijver._
+_54 routes · 166 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._

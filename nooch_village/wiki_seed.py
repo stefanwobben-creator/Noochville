@@ -698,8 +698,8 @@ def _koppen(regels: list[str]) -> list[tuple[int, int, str]]:
 
 
 def _kopnamen(sectie: tuple) -> set[str]:
-    """De namen waaronder een vraag-sectie al op een pagina kan staan: zijn kop plus zijn aliassen."""
-    return {" ".join(sectie[0].lstrip("#").split()).lower(), *sectie[3]}
+    """De namen waaronder een vraag-sectie al op een pagina kan staan (`wiki.kopnamen`)."""
+    return set(wiki.kopnamen(sectie))
 
 
 def vraagkoppen_body(body: str, soort: str) -> tuple[str, list[str], str]:

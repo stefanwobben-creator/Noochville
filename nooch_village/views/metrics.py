@@ -467,6 +467,10 @@ def _sources_for(st: _Stores, rec):
     srcs.append({"id": "bom", "label": "Product footprint (BOM)",
                  "measures": [(m, f"CO₂e per pair · {v['naam']}") for m, v in _BOM_MODELLEN.items()],
                  "dims": [("over_tijd", "over time"), ("totaal", "last value")]})
+    # CN3 (10 oktober 2026): de onderbouwing van de materiaal- en leverancierpagina's van /bom.
+    srcs.append({"id": "dekking", "label": "Materials & suppliers substantiated",
+                 "measures": [(k, l) for k, (l, *_r) in _DEKKING_MEASURES.items()],
+                 "dims": [("totaal", "now"), ("over_tijd", "over time")]})
     srcs.append({"id": "co2", "label": "LLM usage & CO₂",
                  "measures": [("gram_co2e", "CO₂ (grams)"), ("calls", "LLM calls"),
                               ("ongeschat_calls", "Calls without a count")],
@@ -594,6 +598,43 @@ def _co2_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
         vals = [v for _a, v, _d in pts]
         return {"kind": "number", "value": (sum(vals) if vals else None), "unit": unit}
     return {"kind": "series", "points": pts, "unit": unit, "chart": "line"}
+
+
+#: De measures van de bron `dekking`: sleutel (= veld in `wiki_dekking.cijfers`) → (label, eenheid,
+#: richting, definitie). ÉÉN plek: de catalogus, de grondslag en de fetch lezen hier.
+_DEKKING_MEASURES = {
+    "gestaafd_pct": ("Substantiated pages", "%", "up",
+                     "Share of material and supplier pages that exist and carry no unchecked or "
+                     "conflicting fact. Empty questions do not count against a page."),
+    "cellen_open": ("Open questions", "questions", "down",
+                    "Question cells with no fact yet (7 per material, 5 per supplier)."),
+    "met_leverancier": ("Materials with a supplier", "materials", "up",
+                        "Materials on the bill of materials with a linked supplier."),
+    "paginas_zonder_placeholder": ("Pages without placeholders", "pages", "up",
+                                   "Pages that no longer carry a 'not yet provided' line."),
+    "cellen_unchecked": ("Unchecked answers", "questions", "down",
+                         "Question cells with a fact that nobody has checked yet."),
+    "cellen_conflict": ("Conflicts", "questions", "down",
+                        "Question cells with contradicting values or an expired certificate."),
+}
+
+
+def _dekking_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
+    """`totaal` = NU, live uit de wiki (zelfde berekening als /bom en /open-questions);
+    `over_tijd` = de dagreeks van de bron `dekking`."""
+    unit = _DEKKING_MEASURES.get(measure, ("", ""))[1]
+    if dim != "over_tijd":
+        from nooch_village import wiki_dekking
+        from nooch_village.views.wiki import _bijlage_bestaat
+        dek, ctx = wiki_dekking.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
+                                           ledger=getattr(st, "evidence", None),
+                                           bestaat=_bijlage_bestaat(st))
+        return {"kind": "number", "value": wiki_dekking.cijfers(dek, **ctx).get(measure), "unit": unit}
+    metric, bron = _obs_key_for_indicator("dekking", measure)
+    rows = st.observations.daily_series(metric, bron=bron) if metric else []
+    samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")} for r in rows]
+    return {"kind": "series", "points": filter_samples(samples, cutoff, end), "unit": unit,
+            "chart": "line"}
 
 
 def _bom_fetch(st: _Stores, model: str, dim: str, cutoff, end=None):
@@ -754,6 +795,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         return _co2_fetch(st, measure, dim, cutoff, end)
     if source == "bom":
         return _bom_fetch(st, measure, dim, cutoff, end)
+    if source == "dekking":
+        return _dekking_fetch(st, measure, dim, cutoff, end)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
@@ -817,8 +860,8 @@ def _tile_agg(st: _Stores, source: str, measure: str) -> str:
         return {"verwerkt": "som", "open": "laatste_waarde"}.get(measure, DEFAULT_AGGREGATIE)
     if source == "co2":
         return "som"                              # dorpsbrede uitstoot/gebruik telt op over het venster
-    if source == "bom":
-        return "laatste_waarde"                   # een stand per paar, geen som over dagen
+    if source in ("bom", "dekking"):
+        return "laatste_waarde"                   # een stand, geen som over dagen
     return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
 
 
@@ -995,6 +1038,8 @@ _SOURCE_GRONDSLAG = {
                      "of each material page. Materials only, not a full LCA; a lower bound while "
                      "factors or weights are missing.", "kg CO₂e/pair", "/bom (material pages)", "down")
        for _m in _BOM_MODELLEN},
+    **{f"dekking|{_k}": (_d, _u, "/bom coverage (wiki pages)", _r)
+       for _k, (_l, _u, _r, _d) in _DEKKING_MEASURES.items()},
     "co2|ongeschat_calls": ("LLM calls on a model without an emission factor in config/co2_factoren.json "
                             "(not estimated — counted separately, never as zero).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),
@@ -1359,6 +1404,15 @@ _GRENS_VORM = {"green": ("ok", "On target"), "amber": ("wait", "Close to target"
                "red": ("off", "Off target")}
 
 
+def _eigenaar_regel(st: _Stores, domein: str) -> str:
+    """"Owner: <rol>" voor een Critical Number. De tegel onthoudt het DOMEIN, niet de rol: verhuist
+    het domein via governance, dan verhuist de eigenaar mee. Geen houder → dat staat er."""
+    houder = org.role_for_domain(st.records.all(), domein)
+    naam = getattr(getattr(houder, "definition", None), "name", "") or getattr(houder, "id", "")
+    return (f"<div class='tile-goal muted'>Owner: {_e(naam)}</div>" if houder is not None
+            else f"<div class='tile-goal muted'>Owner: no role holds “{_e(domein)}”</div>")
+
+
 def _grens_regel(tile: dict, waarde, richting: str) -> str:
     """De status ten opzichte van het doel, of niets. GEEN DOEL, GEEN STATUS. Een `benchmark`-tegel
     draagt in `target` een vergelijkwaarde, geen doel — die krijgt dus ook geen status."""
@@ -1443,6 +1497,8 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
                 data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
+    if tile.get("eigenaar_domein"):
+        goal += _eigenaar_regel(st, tile["eigenaar_domein"])
     if tile["source"] == "bom" and form != "formule":
         goal += _bom_volledigheid(res)
     if gp is not None:

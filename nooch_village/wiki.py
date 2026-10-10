@@ -430,6 +430,13 @@ VRAAGSECTIES: dict[str, tuple[tuple, ...]] = {
     "leverancier": (LOCATIE, BEDRIJFSCERT, ARBEID_COMPLIANCE, EIGENDOM),
 }
 
+def kopnamen(sectie: tuple) -> tuple[str, ...]:
+    """De namen waaronder een vraag-sectie op een pagina kan staan: zijn kop plus zijn aliassen,
+    klein geschreven. ÉÉN plek: de migratie (`wiki_seed.vraagkoppen`) en de dekking op /bom
+    (`wiki_dekking.VRAGEN`) lezen allebei hier."""
+    return (" ".join(sectie[0].lstrip("#").split()).lower(), *sectie[3])
+
+
 #: Het oude gedeelde kopje, dat de migratie weghaalt als er niets onder staat dan zijn eigen zin.
 OUD_DIERLIJK_CHEMISCH = (
     "## Animal-derived & chemical status",
