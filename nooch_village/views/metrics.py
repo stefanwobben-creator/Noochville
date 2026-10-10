@@ -625,31 +625,71 @@ _DEKKING_MEASURES = {
 }
 
 
-#: CN2: de zicht-groep van cash, vaste kosten en runway, en de `cn`-sleutel van de cash-KPI.
+#: CN2: de zicht-groep van cash, verplichtingen, vaste kosten en runway.
 RUNWAY_ZICHT = "finance"
-CASH_CN = "cn2_cash"
+#: De handmatige metingen van CN2 (KPI's met deze `cn`-sleutel; invoer in het werkoverleg).
+CASH_REKENINGEN = {"cn2_cash_bunq": "bunq", "cn2_cash_mollie": "Mollie"}
+BELASTING_CN, CREDITEUREN_CN = "cn2_tax", "cn2_payables"
 
 _RUNWAY_MEASURES = {
     "maanden": ("Runway (months)", "months", "up",
-                "Cash and cash equivalents divided by fixed costs per month (dividing, not "
-                "subtracting: the cautious variant without revenue)."),
+                "Free cash divided by fixed costs per month (dividing, not subtracting: the cautious "
+                "variant without future revenue)."),
+    "vrije_cash": ("Free cash", "EUR", "up",
+                   "Cash minus production commitments, tax liabilities and supplier payables."),
+    "cash": ("Cash and cash equivalents", "EUR", "up",
+             "bunq plus Mollie, the latest reading of each, entered by hand in the tactical meeting "
+             "until the accounts are linked. Basis: Dutch GAAP (RJ)."),
+    "verplichtingen": ("Production commitments (open batches)", "EUR", "",
+                       "Per batch: total production cost minus what the factory has been paid "
+                       "(50% at order, 50% at delivery); 0 once delivered and paid in full."),
+    "belasting": ("Tax liabilities", "EUR", "",
+                  "VAT and corporate income tax still to be paid (latest manual reading)."),
+    "crediteuren": ("Supplier payables", "EUR", "",
+                    "Open supplier invoices, not the factory (latest manual reading)."),
     "vaste_kosten": ("Fixed costs per month", "EUR", "",
                      "Sum of the fixed-cost lines that run on today's date (/fixed-costs)."),
-    "cash": ("Cash and cash equivalents", "EUR", "up",
-             "The latest reading of the cash KPI, entered by hand in the tactical meeting until "
-             "the bank is linked. Basis: Dutch GAAP (RJ)."),
 }
 
 
-def runway(st) -> dict:
-    """{cash, vaste_kosten, maanden}. Geen cash of geen vaste kosten → `maanden` None, nooit 0 of
-    oneindig: een deling door nul is geen runway."""
-    it = getattr(st.metrics, "_m", st.metrics).by_cn(CASH_CN)
+def _laatste(st, cn: str) -> float | None:
+    """De laatste handmatige meting van de KPI met deze `cn`-sleutel, of None."""
+    it = getattr(st.metrics, "_m", st.metrics).by_cn(cn)
     s = (it or {}).get("samples") or []
-    cash = max(s, key=lambda x: x.get("at", 0))["value"] if s else None
+    return max(s, key=lambda x: x.get("at", 0))["value"] if s else None
+
+
+def runway(st) -> dict:
+    """{cash, verplichtingen, belasting, crediteuren, vrije_cash, vaste_kosten, maanden, ontbreekt}.
+
+    Vrije cash = cash − productieverplichtingen − belastingschulden − leveranciersschulden; runway =
+    vrije cash ÷ vaste kosten per maand. ONTBREEKT EEN INVOER, DAN GEEN GETAL — nooit stil als nul:
+    een runway zonder de belastingschuld is precies de te rooskleurige runway die dit moet voorkomen.
+    `ontbreekt` zegt welke invoer er nog niet is. Lege batchlijst = geen open batches (0)."""
+    rek = {naam: _laatste(st, cn) for cn, naam in CASH_REKENINGEN.items()}
+    belasting, crediteuren = _laatste(st, BELASTING_CN), _laatste(st, CREDITEUREN_CN)
+    ontbreekt = [f"cash {n}" for n, v in rek.items() if v is None]
+    ontbreekt += [w for w, v in (("tax liabilities", belasting), ("supplier payables", crediteuren))
+                  if v is None]
+    cash = sum(rek.values()) if all(v is not None for v in rek.values()) else None
+    verpl = st.productieverplichtingen.totaal_cents() / 100
     kosten = st.vaste_kosten.totaal_op()
-    maanden = round(cash / kosten, 1) if cash is not None and kosten > 0 else None
-    return {"cash": cash, "vaste_kosten": kosten, "maanden": maanden}
+    vrij = (round(cash - verpl - belasting - crediteuren, 2)
+            if cash is not None and belasting is not None and crediteuren is not None else None)
+    if kosten <= 0:
+        ontbreekt.append("fixed costs")
+    maanden = round(vrij / kosten, 1) if vrij is not None and kosten > 0 else None
+    return {"cash": cash, "rekeningen": rek, "verplichtingen": verpl, "belasting": belasting,
+            "crediteuren": crediteuren, "vrije_cash": vrij, "vaste_kosten": kosten,
+            "maanden": maanden, "ontbreekt": ontbreekt}
+
+
+def _runway_fetch(st: _Stores, measure: str):
+    from nooch_village import zicht as _zicht
+    unit = _RUNWAY_MEASURES.get(measure, ("", ""))[1]
+    if not _zicht.mag_zien(st, RUNWAY_ZICHT):           # dubbel slot: de tegel is al verborgen
+        return {"kind": "number", "value": None, "unit": unit}
+    return {"kind": "number", "value": runway(st).get(measure), "unit": unit}
 
 
 def _batch_tegel(st, cn: str) -> dict | None:
@@ -688,14 +728,6 @@ def _batch_regel(stand: dict, tile: dict) -> str:
         tekst = (f"Open since {lijn.get('van', '?')}"
                  + ("" if stand["paren"] is not None else " — no Shopify data yet"))
     return f"<div class='tile-goal muted'>{_e(tekst)}</div>"
-
-
-def _runway_fetch(st: _Stores, measure: str):
-    from nooch_village import zicht as _zicht
-    unit = _RUNWAY_MEASURES.get(measure, ("", ""))[1]
-    if not _zicht.mag_zien(st, RUNWAY_ZICHT):           # dubbel slot: de tegel is al verborgen
-        return {"kind": "number", "value": None, "unit": unit}
-    return {"kind": "number", "value": runway(st).get(measure), "unit": unit}
 
 
 def _dekking_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
@@ -1603,11 +1635,15 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
                 data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
     if tile.get("eigenaar_domein") or tile.get("eigenaar_rol"):
         goal += _eigenaar_regel(st, tile.get("eigenaar_domein", ""), tile.get("eigenaar_rol", ""))
-    if tile["source"] == "runway":
+    if tile["source"] == "runway" and tile["measure"] in ("maanden", "vrije_cash"):
         r = runway(st)
-        goal += (f"<div class='tile-goal muted'>Cash {_num(r['cash']) if r['cash'] is not None else '—'}"
-                 f" ÷ fixed costs {_num(r['vaste_kosten'])}/month · "
-                 f"<a href='/fixed-costs'>fixed costs</a></div>")
+        eur = lambda x: "—" if x is None else _num(round(x, 2))
+        goal += (f"<div class='tile-goal muted'>Cash {eur(r['cash'])} − commitments "
+                 f"{eur(r['verplichtingen'])} − tax {eur(r['belasting'])} − payables "
+                 f"{eur(r['crediteuren'])} = free cash {eur(r['vrije_cash'])} · fixed costs "
+                 f"{eur(r['vaste_kosten'])}/month · <a href='/fixed-costs'>runway inputs</a></div>")
+        if r["ontbreekt"]:
+            goal += f"<div class='tile-goal muted'>Missing: {_e(', '.join(r['ontbreekt']))}</div>"
     if tile["source"] == "bom" and form != "formule":
         goal += _bom_volledigheid(res)
     if gp is not None:

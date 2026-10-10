@@ -59,6 +59,7 @@ from nooch_village.bom_materialen import BomMateriaalStore
 from nooch_village.bom_varianten import BomVariantStore
 from nooch_village import zicht as _zicht
 from nooch_village.vaste_kosten import VasteKostenStore
+from nooch_village.productieverplichtingen import ProductieVerplichtingStore
 from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
@@ -143,6 +144,7 @@ class _Stores:
         self.bom_materialen = BomMateriaalStore(os.path.join(dd, "bom_materialen.json"))         # BOM: afwijkingen per (model, variant, component)
         self.bom_varianten = BomVariantStore(os.path.join(dd, "bom_varianten.json"))             # BOM: welke varianten een model heeft + foto
         self.vaste_kosten = VasteKostenStore(os.path.join(dd, "vaste_kosten.json"))             # CN2: vaste kosten per maand (runway-noemer)
+        self.productieverplichtingen = ProductieVerplichtingStore(os.path.join(dd, "productieverplichtingen.json"))  # CN2: wat de fabriek per batch nog krijgt
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
@@ -5424,6 +5426,32 @@ def _act_vaste_kosten_zet(c):
         return c.nxt, "✓ fixed cost saved"
 
 
+def _act_verplichting_zet(c):
+        # AUTHZ: rolvervuller of Circle Lead — de Financial Controller of de anchor lead (zicht-groep
+        # `finance`, recht "wijzigen"; `zicht.py`). Productieverplichting per batch toevoegen of
+        # bijwerken (een stand, geen boeking — wijzigen mag).
+        from nooch_village.productieverplichtingen import maak_regel
+        st, g = c.st, c.g
+        if not _zicht.mag(st, c.username, "finance", "wijzigen"):
+            raise Forbidden("only the Financial Controller or the anchor lead can change commitments")
+        if g("rid") and g("rid") not in {r["id"] for r in st.productieverplichtingen.alle()}:
+            return c.nxt, "✗ not found"
+        regel, fout = maak_regel(g("batch"), g("totaal"), g("betaald"), g("status") or "open",
+                                 g("notitie"))
+        if regel is None:
+            return c.nxt, f"✗ {fout}"
+        st.productieverplichtingen.zet(regel, rid=g("rid"), door=_web_actor_id(c.username, st))
+        return c.nxt, "✓ commitment saved"
+
+
+def _act_verplichting_weg(c):
+        # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `verplichting_zet`.
+        st = c.st
+        if not _zicht.mag(st, c.username, "finance", "wijzigen"):
+            raise Forbidden("only the Financial Controller or the anchor lead can change commitments")
+        return c.nxt, ("✓ removed" if st.productieverplichtingen.weg(c.g("rid")) else "✗ not found")
+
+
 def _act_vaste_kosten_weg(c):
         # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `vaste_kosten_zet`.
         st = c.st
@@ -6732,6 +6760,8 @@ ACTIONS = {
     "vaste_kosten_zet": _act_vaste_kosten_zet,
     "cn_startdatum_zet": _act_cn_startdatum_zet,
     "vaste_kosten_weg": _act_vaste_kosten_weg,
+    "verplichting_zet": _act_verplichting_zet,
+    "verplichting_weg": _act_verplichting_weg,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,

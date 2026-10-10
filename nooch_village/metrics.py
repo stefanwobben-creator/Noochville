@@ -236,6 +236,16 @@ class MetricStore:
                 return True
         return False
 
+    def set_tile_bron(self, node: str, tid: str, source: str, measure: str) -> bool:
+        """Wijs een tegel naar een andere bron/meting (CN2: de cash-tegel toont nu de som van twee
+        rekeningen in plaats van één KPI). De tegel, zijn niveau en zijn plek blijven."""
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                t["source"], t["measure"] = source, measure
+                self._save()
+                return True
+        return False
+
     def set_tile_compare(self, node: str, tid: str, cmp_source: str = "",
                          cmp_measure: str = "", cmp_dim: str = "over_tijd") -> bool:
         """Koppel (of ontkoppel) een tweede meting aan een tegel voor een metric-vs-metric combo
@@ -387,7 +397,7 @@ class MetricStore:
     # ── lezen ────────────────────────────────────────────────────────────────
     #: Velden die `set_item_extra` op een KPI mag zetten: de Critical-Number-sleutel en de
     #: zicht-groep (zie `zicht.py`). Een vaste lijst, net als `_TEGEL_EXTRA`.
-    _ITEM_EXTRA = ("cn", "zicht")
+    _ITEM_EXTRA = ("cn", "zicht", "name")
 
     def set_item_extra(self, mid: str, **velden) -> bool:
         it = self._items.get(mid)

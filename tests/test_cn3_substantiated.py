@@ -100,7 +100,8 @@ def test_zaaien_is_dry_run_dan_idempotent(tmp_path):
     assert t["lijn"] == {"van": "2026-10-10", "tot": "2026-12-31", "start": 0.0, "oranje": 0.8}
     st = cockpit2._Stores(dd)
     assert {x["actie"] for x in critical_numbers.zaai(st.metrics, cfg, apply=True)} == {"ongewijzigd"}
-    assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == len(cfg["nummers"])
+    assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == sum(1 for n in cfg["nummers"]
+                                                                   if n.get("tegel") is not False)
     cn3 = next(n for n in cfg["nummers"] if n["sleutel"] == "cn3_substantiated")
     cn3["target"] = 90
     r = {x["sleutel"]: x["actie"] for x in critical_numbers.zaai(st.metrics, cfg)}

@@ -99,6 +99,12 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
         u = f"{base}&kpi={t['id']}"
         links += f"<a class='chip outline js-modal' href='{u}' data-href='{u}'>{_e(_tile_meta(st, crec, t))}</a> "
     tabrow = f"<div class='wo-kpitabs'>{links}</div>" if links else ""
+    from nooch_village import zicht as _zicht
+    if _zicht.mag_zien(st, "finance"):
+        # CN2: cash en schulden staan hieronder als eigen KPI's; de batches en vaste kosten op hun
+        # eigen scherm. Alleen voor wie finance mag zien — de link verraadt anders al dat het er is.
+        tabrow += ("<p class='muted'>Runway: enter cash and liabilities below, production "
+                   "commitments and fixed costs on <a href='/fixed-costs'>runway inputs</a>.</p>")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
