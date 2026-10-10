@@ -97,3 +97,63 @@ def test_ook_de_geimporteerde_historiebestanden(tmp_path):
     open(os.path.join(dd, rel), "wb").write(blob)
     open(os.path.join(dd, "finance", "history.jsonl"), "w").write('{"a": 1}\nkapot\n{"b": 2}\n')
     assert any("history.jsonl" in f for f in toets_mod.toets(dd))
+
+
+# ── het script zelf: een handmatige snapshot overschrijft nooit (11 oktober 2026) ─────────────
+
+def _draai(tmp_path, *args, stempel="2026-10-11_120000", py=""):
+    """Draai `backup_mac.sh` met een nep-rsync (kopieert een lokale datamap) en een vaste klok."""
+    import shutil
+    import subprocess
+    bron = tmp_path / "bron"
+    if not bron.exists():
+        cockpit2._bootstrap(str(bron))
+    stubs = tmp_path / "stubs"
+    stubs.mkdir(exist_ok=True)
+    (stubs / "rsync").write_text('#!/bin/bash\nfor a; do doel="$a"; done\nmkdir -p "$doel"\n'
+                                 'cp -R "$NEP_BRON"/. "$doel"\n')
+    (stubs / "date").write_text(f'#!/bin/bash\nif [ "$1" = "+%Y-%m-%d_%H%M%S" ]; then echo {stempel}; '
+                                f'else exec /bin/date "$@"; fi\n')
+    for s in ("rsync", "date"):
+        (stubs / s).chmod(0o755)
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    import sys
+    # NOOCH_PY: de Python van DEZE testrun. CI heeft geen `venv/` in de repo (setup-python + pip),
+    # en de standaard `$REPO/venv/bin/python` bestaat daar niet.
+    env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}", "NEP_BRON": str(bron),
+           "NOOCH_BACKUP_DIR": str(tmp_path / "doel"), "NOOCH_REPO": repo, "NOOCH_BACKUP_STIL": "1",
+           "NOOCH_PY": py or sys.executable}
+    assert shutil.which("bash")
+    return subprocess.run(["bash", os.path.join(repo, "scripts", "backup_mac.sh"), *args],
+                          env=env, capture_output=True, text=True, timeout=120)
+
+
+def test_handmatige_snapshot_krijgt_eigen_map_en_overschrijft_nooit(tmp_path):
+    r = _draai(tmp_path, "--label", "pre-apply")
+    assert r.returncode == 0, r.stdout + r.stderr
+    doel = tmp_path / "doel"
+    map_ = doel / "2026-10-11_120000_pre-apply"
+    assert (map_ / "data").is_dir() and "herstel-toets OK" in (doel / "backup.log").read_text()
+    (map_ / "data" / "merkteken.txt").write_text("vóór")
+    # zelfde naam nog eens: weigeren, en de bestaande map blijft precies zoals hij was
+    r2 = _draai(tmp_path, "--label", "pre-apply")
+    assert r2.returncode != 0 and "overschrijft nooit" in (doel / "backup.log").read_text()
+    assert (map_ / "data" / "merkteken.txt").read_text() == "vóór"
+    # de dagelijkse run (zonder argumenten) blijft zijn dagmap schrijven en laat de gelabelde staan
+    r3 = _draai(tmp_path)
+    assert r3.returncode == 0, r3.stdout + r3.stderr
+    import time as _t
+    assert (doel / _t.strftime("%Y-%m-%d") / "data").is_dir() and map_.is_dir()
+
+
+def test_onbekend_argument_of_leeg_label_wordt_geweigerd(tmp_path):
+    assert _draai(tmp_path, "--label", "").returncode == 2
+    assert _draai(tmp_path, "pre-apply").returncode == 2
+
+
+def test_zonder_python_voor_de_herstel_toets_een_duidelijke_melding(tmp_path):
+    """Ontbreekt de Python (geen venv, geen NOOCH_PY), dan zegt het log dat — niet alleen
+    "herstel-toets faalde"."""
+    r = _draai(tmp_path, "--label", "zonder-py", py=str(tmp_path / "bestaat_niet" / "python"))
+    assert r.returncode == 1
+    assert "geen Python voor de herstel-toets" in (tmp_path / "doel" / "backup.log").read_text()

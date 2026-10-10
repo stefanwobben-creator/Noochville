@@ -362,7 +362,12 @@ def _feiten_van(a, store, ledger) -> list[dict]:
 def _art_item(a, *, editable: bool, store=None, ledger=None) -> dict:
     """Eén artefact als serialisatie-dict. `editable` = mag deze rol het bewerken (eigen=True,
     geërfd=False). `mutation_path="artefact"`: te wijzigen via de artefact-routes (bij de eigenaar)."""
-    d = {"id": a.id, "kind": a.kind, "title": a.title, "body": a.body,
+    # Een deferred vraag op een pagina staat in de context als afspraak, niet als "not yet
+    # provided" (11 oktober 2026): wie dit leest (een AI-vervuller, de copy-tools) zou het veld
+    # anders voor leeg aanzien.
+    from nooch_village.wiki_dekking import tekst_voor_lezers
+    d = {"id": a.id, "kind": a.kind, "title": a.title,
+         "body": tekst_voor_lezers(a) if a.kind == "note" else a.body,
          "status": a.status, "editable": editable, "mutation_path": "artefact",
          "updated_at": getattr(a, "updated_at", 0)}
     if a.kind == "policy":

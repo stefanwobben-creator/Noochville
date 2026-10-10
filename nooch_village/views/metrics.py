@@ -473,6 +473,12 @@ def _sources_for(st: _Stores, rec):
         srcs.append({"id": "runway", "label": "Runway (cash ÷ fixed costs)",
                      "measures": [(k, l) for k, (l, *_r) in _RUNWAY_MEASURES.items()],
                      "dims": [("totaal", "now")]})
+    # CN1 (10 oktober 2026): een batch als Critical Number (`batch_cn`). De measures en hun naam
+    # komen uit `config/critical_numbers.json` — één plek; zonder deze bron toonde de tegel zijn
+    # interne sleutel als titel (gevonden bij de uitrol van 11 oktober).
+    srcs.append({"id": "batch", "label": "Batch sales",
+                 "measures": _batch_measures(),
+                 "dims": [("totaal", "now")]})
     # CN3 (10 oktober 2026): de onderbouwing van de materiaal- en leverancierpagina's van /bom.
     srcs.append({"id": "dekking", "label": "Materials & suppliers substantiated",
                  "measures": [(k, l) for k, (l, *_r) in _DEKKING_MEASURES.items()],
@@ -610,14 +616,16 @@ def _co2_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
 #: richting, definitie). ÉÉN plek: de catalogus, de grondslag en de fetch lezen hier.
 _DEKKING_MEASURES = {
     "gestaafd_pct": ("Substantiated pages", "%", "up",
-                     "Share of material and supplier pages that exist and carry no unchecked or "
-                     "conflicting fact. Empty questions do not count against a page."),
+                     "Share of material and supplier pages where every question is checked or "
+                     "deferred to a research-by date that has not passed, no fact is unchecked or "
+                     "conflicting, and a material has a linked supplier."),
     "cellen_open": ("Open questions", "questions", "down",
                     "Question cells with no fact yet (7 per material, 5 per supplier)."),
     "met_leverancier": ("Materials with a supplier", "materials", "up",
                         "Materials on the bill of materials with a linked supplier."),
     "paginas_zonder_placeholder": ("Pages without placeholders", "pages", "up",
-                                   "Pages that no longer carry a 'not yet provided' line."),
+                                   "Pages that no longer show a 'not yet provided' line (a line under "
+                                   "a deferred or answered question is not shown)."),
     "cellen_unchecked": ("Unchecked answers", "questions", "down",
                          "Question cells with a fact that nobody has checked yet."),
     "cellen_conflict": ("Conflicts", "questions", "down",
@@ -1141,6 +1149,21 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
 from nooch_village.data_bom import MODELLEN as _BOM_MODELLEN   # de modellen van /bom: één plek
 
 # Grondslag-laag (IRIS-idee): definitie, eenheid, bron, richting per bron-measure.
+def _batch_measures() -> list[tuple[str, str]]:
+    """[(measure, titel)] van de batch-nummers in `config/critical_numbers.json`."""
+    try:
+        from nooch_village import critical_numbers
+        return [(n["measure"], n.get("titel") or n["measure"])
+                for n in critical_numbers.laad().get("nummers", []) if n.get("source") == "batch"]
+    except Exception:                                         # noqa: BLE001 — een tegel breekt niet op config
+        return []
+
+
+_BATCH_DEFINITIE = ("Pairs sold in this batch, counted by order date from the batch's start date "
+                    "(the start of the line on the tile). Not started before that date; closed once "
+                    "the target or the deadline is reached, and the final count stays. Never red "
+                    "while not started or closed.")
+
 _SOURCE_GRONDSLAG = {
     "pulse_visitors|visitors": ("Unique website visitors per day (daily series from the observations).",
                                 "visitors", "observations (Plausible daily value)", "up"),
@@ -1163,6 +1186,8 @@ _SOURCE_GRONDSLAG = {
        for _k, (_l, _u, _r, _d) in _DEKKING_MEASURES.items()},
     **{f"runway|{_k}": (_d, _u, "cash KPI + /fixed-costs", _r)
        for _k, (_l, _u, _r, _d) in _RUNWAY_MEASURES.items()},
+    **{f"batch|{_m}": (_BATCH_DEFINITIE, "pairs", "Shopify (pairs per order day)", "up")
+       for _m, _t in _batch_measures()},
     "co2|ongeschat_calls": ("LLM calls on a model without an emission factor in config/co2_factoren.json "
                             "(not estimated — counted separately, never as zero).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),

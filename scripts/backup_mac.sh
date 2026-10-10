@@ -15,8 +15,15 @@
 #     hij terug te zetten is, is geen back-up;
 #   - mislukt iets: een macOS-melding en een niet-nul exit, en het log zegt wat.
 #
-# Gebruik:   bash scripts/backup_mac.sh            (handmatig)
-# Dagelijks: scripts/launchd/nl.nooch.backup.plist (zie de kop van dat bestand).
+# Gebruik:   bash scripts/backup_mac.sh --label pre-apply   (handmatig: een EIGEN map)
+# Dagelijks: scripts/launchd/nl.nooch.backup.plist (zie de kop van dat bestand) — zonder argumenten.
+#
+# HANDMATIG = MET EEN LABEL (11 oktober 2026). Zonder argumenten schrijft het script de DAGMAP
+# (<datum>), en een tweede run op dezelfde dag verving die: zo verdween bij de uitrol van 11 oktober
+# de snapshot van vlak vóór de uitrol onder een snapshot van erna. Met `--label <naam>` komt de
+# snapshot in <datum>_<tijd>_<naam>, en bestaat die map al, dan stopt het script — hij overschrijft
+# nooit. Gelabelde snapshots ruimt de opruimronde niet op (die kijkt alleen naar dagmappen): een
+# snapshot met een reden blijft staan tot een mens hem weghaalt.
 #
 # LET OP: dit zijn prod-gegevens, straks ook finance-PDF's. Ze staan versleuteld zolang FileVault
 # aan staat (Systeeminstellingen → Privacy en beveiliging → FileVault).
@@ -31,14 +38,29 @@ BEWAAR_DAGEN="${NOOCH_BACKUP_DAGEN:-30}"
 # nog de venv en de stores voor de herstel-toets. De toets zelf staat naast dit script.
 REPO="${NOOCH_REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
 HIER="$(cd "$(dirname "$0")" && pwd)"
-PY="$REPO/venv/bin/python"
+# NOOCH_PY: de Python voor de herstel-toets. Standaard de venv van de repo (launchd en handmatig);
+# te zetten waar geen venv is — CI installeert Python zonder venv, en daar faalde de toets van dit
+# script op een ontbrekende `venv/bin/python` (11 oktober 2026).
+PY="${NOOCH_PY:-$REPO/venv/bin/python}"
 
+label=""
+if [ "${1:-}" = "--label" ]; then
+  label="$(printf '%s' "${2:-}" | tr -c 'A-Za-z0-9-' '-' | sed 's/-*$//' | cut -c1-40)"
+  [ -n "$label" ] || { echo "gebruik: $0 --label <naam>" >&2; exit 2; }
+elif [ -n "${1:-}" ]; then
+  echo "gebruik: $0 [--label <naam>]" >&2; exit 2
+fi
 stamp="$(date +%Y-%m-%d)"
+if [ -n "$label" ]; then stamp="$(date +%Y-%m-%d_%H%M%S)_$label"; fi
 log(){ printf '%s  %s\n' "$(date '+%F %T')" "$*" | tee -a "$DOEL/backup.log"; }
-meld(){ /usr/bin/osascript -e "display notification \"$1\" with title \"NoochVille back-up\"" 2>/dev/null || true; }
+# NOOCH_BACKUP_STIL: geen macOS-melding (de toets van dit script mag geen melding op het scherm zetten).
+meld(){ [ -n "${NOOCH_BACKUP_STIL:-}" ] && return 0; /usr/bin/osascript -e "display notification \"$1\" with title \"NoochVille back-up\"" 2>/dev/null || true; }
 faal(){ log "MISLUKT: $*"; meld "Back-up mislukt: $*"; exit 1; }
 
 mkdir -p "$DOEL"
+if [ -n "$label" ] && [ -e "$DOEL/$stamp" ]; then
+  faal "$stamp bestaat al — een handmatige snapshot overschrijft nooit"
+fi
 vorige="$(ls -1d "$DOEL"/20??-??-?? 2>/dev/null | grep -v "/$stamp$" | tail -1 || true)"
 werk="$DOEL/$stamp.bezig"
 rm -rf "$werk"
@@ -54,10 +76,18 @@ rsync -a --delete --numeric-ids ${link[@]+"${link[@]}"} \
       -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
       "$SERVER:$BRON" "$werk/data/" >>"$DOEL/backup.log" 2>&1 || faal "rsync gaf een fout (zie backup.log)"
 
-rm -rf "$DOEL/$stamp"
+if [ -n "$label" ]; then
+  # Nog één keer kijken, vlak voor het hernoemen: ook een gelijktijdige run mag niets overschrijven.
+  if [ -e "$DOEL/$stamp" ]; then faal "$stamp bestaat al — een handmatige snapshot overschrijft nooit"; fi
+else
+  rm -rf "$DOEL/$stamp"
+fi
 mv "$werk" "$DOEL/$stamp"
 log "snapshot klaar: $(du -sh "$DOEL/$stamp" | cut -f1) ($(find "$DOEL/$stamp/data" -type f | wc -l | tr -d ' ') bestanden)"
 
+# Eerst kijken of de Python er IS: anders zegt het log alleen "herstel-toets faalde" en zoekt
+# iemand de fout in de snapshot in plaats van in de installatie.
+if [ ! -x "$PY" ]; then faal "geen Python voor de herstel-toets: $PY (zet NOOCH_PY of maak de venv)"; fi
 NOOCH_REPO="$REPO" "$PY" "$HIER/backup_herstel_toets.py" "$DOEL/$stamp/data" >>"$DOEL/backup.log" 2>&1 \
   || faal "de herstel-toets op $stamp faalde (zie backup.log)"
 log "herstel-toets OK"
