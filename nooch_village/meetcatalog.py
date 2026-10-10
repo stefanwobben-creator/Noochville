@@ -42,6 +42,7 @@ CATALOG = [
     ("werk_duur_day",                     "werkoverleg",        "irregular", "active"),   # per overleg → geen N-check
     ("werk_tevredenheid_day",             "werkoverleg",        "irregular", "active"),
     ("bom_co2e_per_paar_day::*",          "bom",                "daily",     "active"),    # per model, 10 okt 2026
+    ("dekking_*_day",                     "dekking",            "daily",     "active"),    # CN3, 10 okt 2026
     ("shopify_*_day",                     "shopify",            "daily",     "active"),    # actief sinds 10 okt 2026
     ("semanticscholar_*_day",             "semanticscholar",    "monthly",   "inactive"),
 ]

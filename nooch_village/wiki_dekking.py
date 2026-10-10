@@ -36,25 +36,25 @@ DOELEN: dict[str, str] = {"vs": "Vegan Society", "pp": "Product Passport", "cfj"
 #: `grootheid` = voor een getal-vraag de grootheid uit `wiki.GROOTHEDEN`, anders "".
 #: De doelen komen uit het prototype van 10 oktober 2026 (arrays MQ en SQ).
 #:
-#: "Animal-derived & chemical status" STAAT HIER BEWUST NIET: dat ene kopje uit het zaad
-#: (`wiki.DIERLIJK_CHEMISCH`) draagt twee vragen, en een feit eronder zegt niet welke van de twee
-#: het beantwoordt. Gokken zou "animal-derived: answered" kunnen maken van een REACH-brief.
+#: DE KOPNAMEN KOMEN UIT `wiki.VRAAGSECTIES` (een kopje per vraag, #697): het skelet, het zaad en
+#: deze dekking lezen dezelfde namen. Het oude gedeelde kopje "Animal-derived & chemical status"
+#: telt nergens voor: een feit eronder zegt niet welke van de twee vragen het beantwoordt.
 VRAGEN: dict[str, tuple[tuple[str, str, tuple[str, ...], tuple[str, ...], str], ...]] = {
     "materiaal": (
-        ("plastic", "Contains plastic?", ("pp",), ("contains plastic", "plastic"), ""),
-        ("biobased", "Biobased?", ("pp",), ("biobased", "biobased content"), ""),
-        ("animal", "Animal-derived", ("vs",), ("animal-derived", "animal-derived status"), ""),
-        ("chem", "Dyes & chemicals", ("vs", "pp"), ("dyes & chemicals", "dyes and chemicals"), ""),
+        ("plastic", "Contains plastic?", ("pp",), wiki.kopnamen(wiki.PLASTIC), ""),
+        ("biobased", "Biobased?", ("pp",), wiki.kopnamen(wiki.BIOBASED), ""),
+        ("animal", "Animal-derived", ("vs",), wiki.kopnamen(wiki.DIERLIJK), ""),
+        ("chem", "Dyes & chemicals", ("vs", "pp"), wiki.kopnamen(wiki.CHEMISCH), ""),
         ("co2", "CO2e per kg", ("pp",), (), "co2e_per_kg"),
         ("water", "Water per kg", ("pp",), (), "water_per_kg"),
-        ("cert", "Certificate", ("vs", "pp"), ("certificate", "certification", "certifications"), ""),
+        ("cert", "Certificate", ("vs", "pp"), wiki.kopnamen(wiki.CERTIFICERING), ""),
     ),
     "leverancier": (
-        ("loc", "Location & contact", ("pp",), ("location & contact",), ""),
-        ("cert", "Company certification", ("vs", "pp"), ("company certification",), ""),
+        ("loc", "Location & contact", ("pp",), wiki.kopnamen(wiki.LOCATIE), ""),
+        ("cert", "Company certification", ("vs", "pp"), wiki.kopnamen(wiki.BEDRIJFSCERT), ""),
         ("price", "Price per kg", ("pp",), (), "prijs_per_kg"),
-        ("labor", "Labor & compliance", ("cfj",), ("labor & compliance",), ""),
-        ("own", "Ownership & health", ("pp",), ("ownership & health",), ""),
+        ("labor", "Labor & compliance", ("cfj",), wiki.kopnamen(wiki.ARBEID_COMPLIANCE), ""),
+        ("own", "Ownership & health", ("pp",), wiki.kopnamen(wiki.EIGENDOM), ""),
     ),
 }
 
@@ -244,3 +244,88 @@ def rollup(dek: dict) -> dict:
             per[sleutel] = (sum(1 for r in rijen if volledig(r, soort, doel)), len(rijen))
         uit[doel] = per
     return uit
+
+
+# ── Het dorp als geheel: CN3 "Substantiated pages" (10 oktober 2026) ─────────
+
+#: De zin die het zaad op een pagina zet zolang iets niet bekend is (`wiki.ARBEID_COMPLIANCE`, …).
+#: Een pagina die er nog een draagt, is nog niet "met alles wat we weten" ingevuld (laag 2 van CN3).
+PLACEHOLDERS = ("not yet provided", "not yet verified")
+
+
+def voor_het_dorp(uitkomsten: list[dict], **ctx) -> dict:
+    """De dekking over ALLE modellen samen: elk materiaal en elke leverancier één keer, ook als ze in
+    twee modellen zitten. `uitkomsten` = `bom_reken.bereken` per model."""
+    return dekking({"rijen": [r for u in uitkomsten for r in u.get("rijen", [])]}, **ctx)
+
+
+def gestaafd(rij: dict, **ctx) -> bool:
+    """Telt deze pagina mee voor CN3? Hij BESTAAT en alles wat erop staat is gevalideerd: geen enkel
+    feit ongecheckt of in conflict. Lege vragen mogen — die staan als open vraag in de lijst (de
+    Smart Number ernaast), zodat ze zichtbaar blijven."""
+    pagina = rij.get("pagina")
+    if pagina is None:
+        return False
+    c = {"ledger": ctx.get("ledger"), "store": ctx.get("store"), "vandaag": ctx.get("vandaag", ""),
+         "bestaat": ctx.get("bestaat")}
+    return all(_feit_status(f, c) == GECHECKT for f in wiki.feiten(pagina))
+
+
+def heeft_placeholder(rij: dict) -> bool:
+    body = (getattr(rij.get("pagina"), "body", "") or "").lower()
+    return any(p in body for p in PLACEHOLDERS)
+
+
+def cijfers(dek: dict, **ctx) -> dict:
+    """Alle getallen van CN3 uit één dekking — berekend, nooit opgeslagen.
+
+    Laag 1 · koppeling: materialen met een leverancier.
+    Laag 2 · pagina: materialen + leveranciers met een pagina zonder placeholder-zin.
+    Laag 3 · dekking: de vraagcellen per status.
+    Critical Number: aandeel gestaafde pagina's. Smart Number: het aantal lege cellen."""
+    mats, levs = dek["materialen"], dek["leveranciers"]
+    rijen = mats + levs
+    cellen = [c for r in rijen for c in r["cellen"].values()]
+    n_gestaafd = sum(1 for r in rijen if gestaafd(r, **ctx))
+    return {
+        "materialen": len(mats),
+        "met_leverancier": sum(1 for m in mats if m.get("leverancier")),
+        "paginas_totaal": len(rijen),
+        "paginas_bestaan": sum(1 for r in rijen if r.get("pagina") is not None),
+        "paginas_zonder_placeholder": sum(1 for r in rijen if r.get("pagina") is not None
+                                          and not heeft_placeholder(r)),
+        "gestaafd": n_gestaafd,
+        "gestaafd_pct": round(100 * n_gestaafd / len(rijen), 1) if rijen else None,
+        "cellen_checked": sum(1 for c in cellen if c["status"] == GECHECKT),
+        "cellen_unchecked": sum(1 for c in cellen if c["status"] == ONGECHECKT),
+        "cellen_open": sum(1 for c in cellen if c["status"] == LEEG),
+        "cellen_conflict": sum(1 for c in cellen if c["status"] == CONFLICT),
+    }
+
+
+def open_vragen(dek: dict) -> list[dict]:
+    """Elke vraagcel die nog niet gecheckt is, als rij: {soort, naam, pagina, vraag, status, kop}.
+    Conflicten eerst, dan ongecheckt, dan leeg — de volgorde waarin ze aandacht vragen."""
+    volgorde = {CONFLICT: 0, ONGECHECKT: 1, LEEG: 2}
+    uit = []
+    for soort, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
+        labels = {v["k"]: v["label"] for v in vragen(soort)}
+        for r in dek[sleutel]:
+            for k, c in r["cellen"].items():
+                if c["status"] != GECHECKT:
+                    uit.append({"soort": soort, "naam": r["naam"], "pagina": r.get("pagina"),
+                                "vraag": labels[k], "status": c["status"], "kop": c.get("kop", ""),
+                                "reden": c.get("reden", "")})
+    return sorted(uit, key=lambda x: (volgorde[x["status"]], x["soort"], x["naam"].lower()))
+
+
+def uit_stores(att, leveranciers, materialen, *, ledger=None, bestaat=None) -> tuple[dict, dict]:
+    """(dekking over alle modellen, ctx) uit de stores die /bom ook leest. Op modelniveau: een
+    kleurvariant verandert welke materialen het dorp heeft niet."""
+    from nooch_village import bom_reken
+    from nooch_village.data_bom import MODELLEN
+    pags = wiki.paginas(att)
+    uitk = [bom_reken.bereken(MODELLEN[m]["master"], pags, leveranciers.alle(),
+                              afwijkingen=materialen.afwijkingen(m, "")) for m in MODELLEN]
+    ctx = {"ledger": ledger, "store": att, "bestaat": bestaat}
+    return voor_het_dorp(uitk, **ctx), ctx

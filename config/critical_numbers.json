@@ -1,0 +1,31 @@
+{
+  "_uitleg": "De Critical Numbers van dit kwartaal (Scaling Up). Doelen en grenzen staan HIER en nergens anders; `village cn_zaad --apply` zet ze als tegel op de kring. Grenswaarden zijn voorlopig, Stefan bevestigt.",
+  "kwartaal": {"naam": "Q4 2026", "van": "2026-10-01", "tot": "2026-12-31"},
+  "kring": "mother_earth__nooch",
+  "nummers": [
+    {
+      "sleutel": "cn3_substantiated",
+      "titel": "Substantiated pages",
+      "niveau": "critical",
+      "source": "dekking",
+      "measure": "gestaafd_pct",
+      "dim": "totaal",
+      "form": "getal",
+      "target": 100,
+      "oranje": null,
+      "eigenaar_domein": "Materials"
+    },
+    {
+      "sleutel": "cn3_open_questions",
+      "titel": "Open questions",
+      "niveau": "smart",
+      "source": "dekking",
+      "measure": "cellen_open",
+      "dim": "over_tijd",
+      "form": "trend",
+      "target": null,
+      "oranje": null,
+      "eigenaar_domein": "Materials"
+    }
+  ]
+}

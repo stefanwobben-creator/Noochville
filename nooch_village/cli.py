@@ -937,6 +937,23 @@ def main() -> None:
         if any(r["actie"] == "set" for r in rapport) and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "cn_zaad":
+        # De Critical Numbers van het kwartaal uit config/critical_numbers.json als tegels op de
+        # kring. Dry-run; --apply schrijft. Idempotent (herkent een tegel aan zijn `cn`-sleutel).
+        from nooch_village import critical_numbers
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        cfg = critical_numbers.laad()
+        apply = "--apply" in sys.argv
+        rapport = critical_numbers.zaai(st.metrics, cfg, apply=apply)
+        print(critical_numbers.rapport_tekst(rapport, cfg))
+        if not apply and any(r["actie"] in ("add", "update") for r in rapport):
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_vraagkoppen":
         # Eén kopje per vraag op de materiaal- en leverancierpagina's van /bom (10 oktober 2026),
         # zodat de dekking per vraag kan zien of er een antwoord staat. Dry-run; --apply schrijft
@@ -1409,7 +1426,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)
