@@ -38,7 +38,10 @@ BEWAAR_DAGEN="${NOOCH_BACKUP_DAGEN:-30}"
 # nog de venv en de stores voor de herstel-toets. De toets zelf staat naast dit script.
 REPO="${NOOCH_REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
 HIER="$(cd "$(dirname "$0")" && pwd)"
-PY="$REPO/venv/bin/python"
+# NOOCH_PY: de Python voor de herstel-toets. Standaard de venv van de repo (launchd en handmatig);
+# te zetten waar geen venv is — CI installeert Python zonder venv, en daar faalde de toets van dit
+# script op een ontbrekende `venv/bin/python` (11 oktober 2026).
+PY="${NOOCH_PY:-$REPO/venv/bin/python}"
 
 label=""
 if [ "${1:-}" = "--label" ]; then
@@ -82,6 +85,9 @@ fi
 mv "$werk" "$DOEL/$stamp"
 log "snapshot klaar: $(du -sh "$DOEL/$stamp" | cut -f1) ($(find "$DOEL/$stamp/data" -type f | wc -l | tr -d ' ') bestanden)"
 
+# Eerst kijken of de Python er IS: anders zegt het log alleen "herstel-toets faalde" en zoekt
+# iemand de fout in de snapshot in plaats van in de installatie.
+if [ ! -x "$PY" ]; then faal "geen Python voor de herstel-toets: $PY (zet NOOCH_PY of maak de venv)"; fi
 NOOCH_REPO="$REPO" "$PY" "$HIER/backup_herstel_toets.py" "$DOEL/$stamp/data" >>"$DOEL/backup.log" 2>&1 \
   || faal "de herstel-toets op $stamp faalde (zie backup.log)"
 log "herstel-toets OK"

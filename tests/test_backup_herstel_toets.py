@@ -101,7 +101,7 @@ def test_ook_de_geimporteerde_historiebestanden(tmp_path):
 
 # ── het script zelf: een handmatige snapshot overschrijft nooit (11 oktober 2026) ─────────────
 
-def _draai(tmp_path, *args, stempel="2026-10-11_120000"):
+def _draai(tmp_path, *args, stempel="2026-10-11_120000", py=""):
     """Draai `backup_mac.sh` met een nep-rsync (kopieert een lokale datamap) en een vaste klok."""
     import shutil
     import subprocess
@@ -117,8 +117,12 @@ def _draai(tmp_path, *args, stempel="2026-10-11_120000"):
     for s in ("rsync", "date"):
         (stubs / s).chmod(0o755)
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    import sys
+    # NOOCH_PY: de Python van DEZE testrun. CI heeft geen `venv/` in de repo (setup-python + pip),
+    # en de standaard `$REPO/venv/bin/python` bestaat daar niet.
     env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}", "NEP_BRON": str(bron),
-           "NOOCH_BACKUP_DIR": str(tmp_path / "doel"), "NOOCH_REPO": repo, "NOOCH_BACKUP_STIL": "1"}
+           "NOOCH_BACKUP_DIR": str(tmp_path / "doel"), "NOOCH_REPO": repo, "NOOCH_BACKUP_STIL": "1",
+           "NOOCH_PY": py or sys.executable}
     assert shutil.which("bash")
     return subprocess.run(["bash", os.path.join(repo, "scripts", "backup_mac.sh"), *args],
                           env=env, capture_output=True, text=True, timeout=120)
@@ -145,3 +149,11 @@ def test_handmatige_snapshot_krijgt_eigen_map_en_overschrijft_nooit(tmp_path):
 def test_onbekend_argument_of_leeg_label_wordt_geweigerd(tmp_path):
     assert _draai(tmp_path, "--label", "").returncode == 2
     assert _draai(tmp_path, "pre-apply").returncode == 2
+
+
+def test_zonder_python_voor_de_herstel_toets_een_duidelijke_melding(tmp_path):
+    """Ontbreekt de Python (geen venv, geen NOOCH_PY), dan zegt het log dat — niet alleen
+    "herstel-toets faalde"."""
+    r = _draai(tmp_path, "--label", "zonder-py", py=str(tmp_path / "bestaat_niet" / "python"))
+    assert r.returncode == 1
+    assert "geen Python voor de herstel-toets" in (tmp_path / "doel" / "backup.log").read_text()
