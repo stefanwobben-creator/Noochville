@@ -34,11 +34,25 @@ def _kpi(metrics, kring: str, n: dict) -> dict:
     """Een nummer met `"soort": "kpi"` is een HANDMATIGE meting (cash): eerst de KPI zelf, met zijn
     `cn`-sleutel en zicht-groep, dan de tegel die hem toont. Bestaat hij al, dan dezelfde KPI."""
     it = metrics.by_cn(n["sleutel"])
+    if it is None and n.get("was_cn"):
+        # VERHUISD (CN2, 10 oktober 2026): de ene cash-KPI wordt de bunq-rekening. Dezelfde KPI,
+        # met zijn metingen; alleen de sleutel en de naam veranderen.
+        it = metrics.by_cn(n["was_cn"])
     if it is None:
         it = metrics.add_kpi(kring, n.get("naam") or n["titel"], n.get("eenheid", ""),
                              direction=n.get("richting", ""), definition=n.get("definitie", ""))
-    metrics.set_item_extra(it["id"], cn=n["sleutel"], zicht=n.get("zicht", ""))
+    metrics.set_item_extra(it["id"], cn=n["sleutel"], zicht=n.get("zicht", ""),
+                           name=n.get("naam") or n["titel"])
     return it
+
+
+def _kpi_actie(metrics, n: dict) -> str:
+    it = metrics.by_cn(n["sleutel"])
+    if it is None:
+        return "update" if n.get("was_cn") and metrics.by_cn(n["was_cn"]) else "add"
+    zelfde = (it.get("zicht", "") == n.get("zicht", "")
+              and it.get("name") == (n.get("naam") or n["titel"]))
+    return "ongewijzigd" if zelfde else "update"
 
 
 def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
@@ -49,6 +63,13 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
         if n.get("zaai") is False:
             rapport.append({"sleutel": n["sleutel"], "titel": n["titel"],
                             "actie": f"overgeslagen: {n.get('reden') or 'zaai=false'}"})
+            continue
+        if n.get("tegel") is False:
+            # ALLEEN EEN KPI (een handmatige meting zonder eigen tegel: een cash-rekening, een schuld).
+            actie = _kpi_actie(metrics, n)
+            rapport.append({"sleutel": n["sleutel"], "titel": n["titel"], "actie": actie})
+            if apply and actie != "ongewijzigd":
+                _kpi(metrics, kring, n)
             continue
         lijn = None
         if n.get("lijn"):
@@ -68,6 +89,9 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
                    "lijn": lijn}
         if bestaand is None:
             actie = "add"
+        elif n.get("soort") != "kpi" and (bestaand.get("source"), bestaand.get("measure")) != \
+                (n["source"], n["measure"]):
+            actie = "update"
         elif all(bestaand.get(k) == (None if v is None else float(v)) if k in ("target", "oranje")
                  else bestaand.get(k) == v if k == "lijn"
                  else (bestaand.get(k) or "") == (v or "") for k, v in gewenst.items()):
@@ -85,6 +109,8 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
         else:
             if n.get("soort") == "kpi":
                 _kpi(metrics, kring, n)
+            elif (bestaand.get("source"), bestaand.get("measure")) != (n["source"], n["measure"]):
+                metrics.set_tile_bron(kring, bestaand["id"], n["source"], n["measure"])
             metrics.set_tile_extra(kring, bestaand["id"], **extra)
         fout = metrics.set_tile_grens(kring, bestaand["id"], n.get("niveau", ""), n.get("target"),
                                       n.get("oranje"))

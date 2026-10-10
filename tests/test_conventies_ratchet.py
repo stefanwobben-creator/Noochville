@@ -61,6 +61,10 @@ STORES = {
     # regel heeft een looptijd (van/tot) en een categorie, en het totaal is de som op een peildatum —
     # dat past niet in een reeks metingen. De boekhouding zelf blijft bij de accountant.
     "vaste_kosten",
+    # CN2 aanvulling (10 oktober 2026, door Stefan gevraagd): productieverplichtingen per batch
+    # (totaal, al betaald, status). Een stand per batch, geen reeks metingen en geen kostregel — de
+    # fabriek wordt in twee delen betaald, en wat open staat volgt uit totaal − betaald.
+    "productieverplichtingen",
 }
 
 
