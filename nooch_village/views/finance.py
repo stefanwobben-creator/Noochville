@@ -696,8 +696,8 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
                   f"<input type='hidden' name='jaar' value='{jaar}'>{raster}"
                   f"<input name='note' aria-label='note for this save' placeholder='Note (e.g. Venema 2025 annual figures)'>"
                   f"<button class='btn ok sm' type='submit'>Save changed cells</button></form>"
-                  f"<p class='muted'>An empty cell means no data, not zero. Clearing a cell that has a value is not "
-                  f"possible yet: the value stays and the save says so.</p>")
+                  f"<p class='muted'>An empty cell means no data, not zero. Emptying a cell that has a value "
+                  f"clears it; the old value stays in the cell history (↺).</p>")
     # DE LAGEN ALS CONTROLE: alleen uit de ingevulde historie van dit jaar, los van de cutover — zo
     # vergelijk je de invoer met het resultaat van Venema.
     hk, ho, hp = fh.posten({k: r for k, r in actueel.items() if k[0][:4] == jaar}, cfg)
@@ -737,7 +737,7 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
             f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
             f"<input type='file' name='file' accept='.csv,.xlsx' aria-label='CSV or XLSX in the export format' required>"
             f"<button class='btn sm' type='submit'>Preview</button></form>"
-            f"<p class='muted'>Same format as the export. You see a preview first; nothing is saved until you confirm.</p>"))
+            f"<p class='muted'>Same format as the export. An empty cell in the file clears a cell that has a value. You see a preview first; nothing is saved until you confirm.</p>"))
     log = fh.Instellingen(st.dd).alle()[-5:]
     loghtml = ("<ul>" + "".join(
         f"<li class='muted'>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))} · "
@@ -757,7 +757,8 @@ def render_history_cel(st, username, period: str, line: str) -> str | None:
     labels = {x["key"]: x["label"] for x in fh.lijnen(fc.laad())}
     rijen = "".join(
         f"<tr><td>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))}</td>"
-        f"<td>{_e(r.get('created_by') or '—')}</td><td class='num'>{_eur(r['amount_cents'])}</td>"
+        f"<td>{_e(r.get('created_by') or '—')}</td>"
+        f"<td class='num'>{'no data (cleared)' if r.get('cleared') else _eur(r['amount_cents'])}</td>"
         f"<td class='num'>{'' if r.get('pairs') is None else r['pairs']}</td><td>{_e(r.get('source', ''))}</td>"
         f"<td>{_e(r.get('note', ''))}</td><td>{'current' if i == 0 else 'replaced'}</td></tr>"
         for i, r in enumerate(hist))
@@ -769,13 +770,13 @@ def render_history_cel(st, username, period: str, line: str) -> str | None:
 
 
 def verwerk_history_opslaan(st, form: dict, *, door: str) -> str:
-    """Het raster opslaan: alleen GEWIJZIGDE cellen worden nieuwe regels (met `supersedes`).
-    De rechten toetst de aanroeper (404)."""
+    """Het raster opslaan: alleen GEWIJZIGDE cellen worden nieuwe regels (met `supersedes`). Een
+    cel met een waarde die leeg wordt aangeboden, wordt leeggemaakt (`cleared`). De rechten toetst
+    de aanroeper (404)."""
     from nooch_village import finance_historie as fh
     cfg = fc.laad()
     hreg = fh.HistorieRegister(st.dd)
-    actueel = hreg.actueel()
-    bedragen, paren_, fouten, leeg_gelaten = {}, {}, [], 0
+    bedragen, paren_, leeg, paren_leeg, fouten = {}, {}, set(), set(), []
     for naam, waarden in form.items():
         if not naam.startswith("c|"):
             continue
@@ -783,40 +784,37 @@ def verwerk_history_opslaan(st, form: dict, *, door: str) -> str:
         v = (waarden[0] if isinstance(waarden, list) else waarden).strip()
         if key == fh.PAREN:
             n, fout = fh.paren(v)
-            bestaand = (actueel.get((m, fh.NET_SALES)) or {}).get("pairs")
             if fout:
                 fouten.append(f"{m} pairs: {fout}")
             elif n is not None:
                 paren_[m] = n
-            elif bestaand is not None:
-                leeg_gelaten += 1
+            else:
+                paren_leeg.add(m)
             continue
         c, fout = fh.bedrag(v)
         if fout:
             fouten.append(f"{m} {key}: {fout}")
         elif c is not None:
             bedragen[(m, key)] = c
-        elif (m, key) in actueel:
-            leeg_gelaten += 1
+        else:
+            leeg.add((m, key))
     if fouten:
         return "✗ nothing saved — " + "; ".join(fouten[:5])
-    diff = fh.vergelijk(bedragen, paren_, actueel, cfg)
+    diff = fh.vergelijk(bedragen, paren_, hreg.laatste(), cfg, leeg=leeg, paren_leeg=paren_leeg)
     if diff["fouten"]:
         return "✗ nothing saved — " + "; ".join(diff["fouten"][:5])
     note = form.get("note", [""])
     hreg.schrijf(diff["schrijf"], door=door, note=note[0] if isinstance(note, list) else note)
-    uit = f"✓ {diff['nieuw']} new, {diff['gewijzigd']} changed"
-    if leeg_gelaten:
-        uit += f" — ⚠ {leeg_gelaten} emptied cell(s) kept their value: clearing is not possible yet"
-    return uit
+    return f"✓ {diff['nieuw']} new, {diff['gewijzigd']} changed, {diff['geleegd']} cleared"
 
 
 def _vorm_wijziging(w: dict, labels: dict) -> str:
     oud = w.get("oud")
     was = f"{_eur(oud['amount_cents'])}" if oud else "no data"
     paar = f" · pairs {w['pairs']}" if w.get("pairs") is not None else ""
+    na = "no data (cleared)" if w.get("cleared") else f"{_eur(w['amount_cents'])}{paar}"
     return (f"<tr><td>{_e(w['period'])}</td><td>{_e(labels.get(w['line_key'], w['line_key']))}</td>"
-            f"<td class='num'>{was}</td><td class='num'>{_eur(w['amount_cents'])}{paar}</td></tr>")
+            f"<td class='num'>{was}</td><td class='num'>{na}</td></tr>")
 
 
 def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: str) -> tuple[str, str]:
@@ -835,21 +833,24 @@ def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: st
         if blob is None:
             return "msg", f"✗ {fout}"
         gelezen = fh.lees_bestand(imp["attachment"]["filename"], blob, cfg)
-        diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.actueel(), cfg)
+        diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.laatste(), cfg,
+                            leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
         fouten = gelezen["fouten"] + diff["fouten"]
         if fouten and fields.get("valid_rows") != "1":
             return "msg", "✗ nothing imported: the file has errors — confirm that the valid rows may go ahead"
         hreg.schrijf(diff["schrijf"], door=door, bron=f"import:{imp['import_id']}",
                      note=f"Import {imp['attachment']['filename']}")
         log.meld(imp, door=door, status="applied", rows=gelezen["rijen"], new=diff["nieuw"],
-                 changed=diff["gewijzigd"], errors=len(fouten))
-        return "msg", f"✓ imported: {diff['nieuw']} new, {diff['gewijzigd']} changed, {diff['ongewijzigd']} unchanged"
+                 changed=diff["gewijzigd"], cleared=diff["geleegd"], errors=len(fouten))
+        return "msg", (f"✓ imported: {diff['nieuw']} new, {diff['gewijzigd']} changed, {diff['geleegd']} cleared, "
+                       f"{diff['ongewijzigd']} unchanged")
     fname, blob = files.get("file") or ("", b"")
     imp, fout = log.bewaar(fname, blob, door=door)
     if imp is None:
         return "msg", f"✗ {fout}"
     gelezen = fh.lees_bestand(fname, blob, cfg)
-    diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.actueel(), cfg)
+    diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], hreg.laatste(), cfg,
+                        leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
     fouten = gelezen["fouten"] + diff["fouten"]
     labels = {x["key"]: x["label"] for x in fh.lijnen(cfg)}
     tabel = ("<table class='mtab' aria-label='changes'><tr><th>Month</th><th>Line</th><th class='num'>Now</th>"
@@ -872,6 +873,7 @@ def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: st
     inhoud = (f"<p>{_e(imp['attachment']['filename'])} · sha256 <code>{_e(imp['attachment']['sha256'][:16])}…</code> · "
               f"{gelezen['rijen']} row(s)</p>"
               f"<p><strong>{diff['nieuw']}</strong> new · <strong>{diff['gewijzigd']}</strong> changed · "
+              f"<strong>{diff['geleegd']}</strong> cleared · "
               f"<strong>{diff['ongewijzigd']}</strong> unchanged · <strong>{len(fouten)}</strong> error(s)</p>"
               f"{foutlijst}{bevestig}<div class='c2-sec'>{tabel}</div>")
     return "html", _frame("Finance · Import preview", "/finance/history", inhoud)

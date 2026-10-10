@@ -60,12 +60,68 @@ def test_wijziging_is_nieuwe_regel_met_supersedes(tmp_path):
     assert len(reg.alle()) == 2
 
 
-def test_lege_cel_is_geen_nul_en_leegmaken_kan_niet(tmp_path):
+def test_leegmaken_opnieuw_invullen_en_de_hele_keten(tmp_path):
+    """Besluit Stefan: leegmaken = een regel met `cleared` zonder bedrag die de vorige vervangt."""
     dd = _dorp(tmp_path)
     _opslaan(dd, {("2025-03", "brand"): "100"})
-    msg = _opslaan(dd, {("2025-03", "brand"): "", ("2025-04", "brand"): ""})
-    assert "kept their value" in msg
-    assert set(fh.HistorieRegister(dd).actueel()) == {("2025-03", "brand")}
+    assert "1 cleared" in _opslaan(dd, {("2025-03", "brand"): "", ("2025-04", "brand"): ""})
+    reg = fh.HistorieRegister(dd)
+    assert ("2025-03", "brand") not in reg.actueel()                      # actueel: no data
+    leeg = reg.laatste()[("2025-03", "brand")]
+    assert leeg["cleared"] is True and leeg["amount_cents"] is None
+    assert len(reg.alle()) == 2                                           # 2025-04 was al leeg: niets
+    assert "0 new, 0 changed, 0 cleared" in _opslaan(dd, {("2025-03", "brand"): ""})
+    assert "1 new" in _opslaan(dd, {("2025-03", "brand"): "80"})          # opnieuw invullen
+    keten = reg.geschiedenis("2025-03", "brand")
+    assert [r.get("cleared", False) for r in keten] == [False, True, False]
+    assert keten[0]["supersedes"] == keten[1]["id"] and keten[1]["supersedes"] == keten[2]["id"]
+    assert reg.actueel()[("2025-03", "brand")]["amount_cents"] == 8000
+    h = fin.render_history_cel(_st(dd), "fc@t.nl", "2025-03", "brand")
+    assert h.count("no data (cleared)") == 1 and "€80.00" in h and "€100.00" in h
+
+
+def test_leeggemaakte_paren_en_net_sales(tmp_path):
+    dd = _dorp(tmp_path)
+    _opslaan(dd, {("2025-03", "net_sales"): "1000", ("2025-03", fh.PAREN): "10"})
+    assert "1 changed" in _opslaan(dd, {("2025-03", "net_sales"): "1000", ("2025-03", fh.PAREN): ""})
+    assert fh.HistorieRegister(dd).actueel()[("2025-03", "net_sales")]["pairs"] is None
+    assert "1 cleared" in _opslaan(dd, {("2025-03", "net_sales"): "", ("2025-03", fh.PAREN): ""})
+
+
+def test_pnl_toont_no_data_voor_een_leeggemaakte_maand(tmp_path):
+    dd = _dorp(tmp_path)
+    _opslaan(dd, {("2026-01", "brand"): "100", ("2026-02", "brand"): "200"})
+    _opslaan(dd, {("2026-02", "brand"): ""})
+    fh.Instellingen(dd).zet_history_until("2026-03", door="fc")
+    h = fin.render_pnl(_st(dd), "fc@t.nl", van="2026-01", tot="2026-02")
+    i = h.index("<td>Brand</td>")
+    rij = h[i:h.index("</tr>", i)]
+    assert "-€100.00" in rij and "no data" in rij and "€200.00" not in rij
+
+
+@pytest.mark.parametrize("soort", ["csv", "xlsx"])
+def test_export_en_import_van_een_leeggemaakte_cel(tmp_path, soort):
+    dd = _dorp(tmp_path)
+    _opslaan(dd, {("2025-01", "brand"): "100", ("2025-02", "brand"): "200"})
+    _opslaan(dd, {("2025-01", "brand"): ""})
+    reg = fh.HistorieRegister(dd)
+    tab = fh.export_tabel(reg.actueel(), fc.laad(), fh.maanden_van("2025"))
+    assert next(r for r in tab if r[0] == "brand")[2:4] == [None, 20000]   # leeg geëxporteerd
+    blob = fh.export_csv(tab).encode() if soort == "csv" else fh.export_xlsx(tab)
+    g = fh.lees_bestand(f"x.{soort}", blob, fc.laad())
+    diff = fh.vergelijk(g["bedragen"], g["paren"], reg.laatste(), fc.laad(), leeg=g["leeg"], paren_leeg=g["paren_leeg"])
+    assert (diff["nieuw"], diff["gewijzigd"], diff["geleegd"], diff["ongewijzigd"]) == (0, 0, 0, 1)
+    # een cel in het bestand leeg die nu een waarde heeft: leegmaken, zichtbaar in de preview
+    leeg_feb = fh.export_csv([tab[0], ["brand", "Brand"] + [None] * 12]).encode()
+    st = _st(dd)
+    soort_, html = fin.verwerk_history_import(st, {"action": "finance_hist_import"},
+                                              {"file": ("c.csv", leeg_feb)}, door="fc", csrf="t")
+    assert "1</strong> cleared" in html and "no data (cleared)" in html
+    iid = fh.ImportLog(dd).alle()[-1]["import_id"]
+    assert "1 cleared" in fin.verwerk_history_import(st, {"action": "finance_hist_import_bevestig",
+                                                          "import_id": iid}, {}, door="fc", csrf="t")[1]
+    assert ("2025-02", "brand") not in reg.actueel()
+    assert len(reg.geschiedenis("2025-02", "brand")) == 2
 
 
 def test_negatief_alleen_waar_de_regel_een_krediet_toestaat(tmp_path):
@@ -166,7 +222,8 @@ def test_export_en_terug_importeren_wijzigt_niets(tmp_path, soort):
     blob = fh.export_csv(tab).encode() if soort == "csv" else fh.export_xlsx(tab)
     gelezen = fh.lees_bestand(f"x.{soort}", blob, fc.laad())
     assert gelezen["fouten"] == []
-    diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], fh.HistorieRegister(dd).actueel(), fc.laad())
+    diff = fh.vergelijk(gelezen["bedragen"], gelezen["paren"], fh.HistorieRegister(dd).laatste(), fc.laad(),
+                        leeg=gelezen["leeg"], paren_leeg=gelezen["paren_leeg"])
     assert (diff["nieuw"], diff["gewijzigd"], diff["ongewijzigd"]) == (0, 0, 5)              # net sales + paren = één regel
 
 

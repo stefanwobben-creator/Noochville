@@ -18,8 +18,9 @@ DRIE REGELS DIE JE NIET MAG OMDRAAIEN:
    staat in `history_settings.jsonl`: elke wijziging een regel (wie, wanneer, oud, nieuw), de
    laatste is de waarde.
 
-Een lege cel is GEEN DATA, geen nul. Een cel leegmaken kan (nog) niet: dat zou een regel zonder
-bedrag vragen, en dat is een andere datastructuur dan besloten — het scherm zegt dat erbij.
+Een lege cel is GEEN DATA, geen nul. LEEGMAKEN (besluit Stefan, 10 oktober): een nieuwe regel met
+`cleared: true` en geen bedrag die de vorige vervangt (`supersedes`); de actuele waarde is dan "no
+data", en de oude waarde blijft in de keten en in de celgeschiedenis staan.
 
 `net_sales_pairs` bestaat alleen in het raster en in het bestand: de paren zijn een veld van de
 net_sales-regel van die maand (`pairs`), zoals in het opbrengstregister.
@@ -53,8 +54,14 @@ class HistorieRegister(_Register):
     BEDRAGEN = ()
 
     def actueel(self) -> dict[tuple[str, str], dict]:
-        """{(period, line_key): regel} — per cel de regel die door niets is vervangen (bij twee
-        onvervangen regels voor één cel, wat alleen bij een gelijktijdige opslag kan: de laatste)."""
+        """{(period, line_key): regel} — de cellen MET een waarde. Een leeggemaakte cel (`cleared`)
+        staat er niet in: zijn actuele waarde is "no data"."""
+        return {k: r for k, r in self.laatste().items() if not r.get("cleared")}
+
+    def laatste(self) -> dict[tuple[str, str], dict]:
+        """{(period, line_key): regel} — per cel de regel die door niets is vervangen, ook als dat
+        een leegmaak-regel is (bij twee onvervangen regels voor één cel, wat alleen bij een
+        gelijktijdige opslag kan: de laatste). Nodig om de keten heel te houden (`supersedes`)."""
         regels = self.alle()
         vervangen = {r.get("supersedes") for r in regels if r.get("supersedes")}
         uit: dict[tuple[str, str], dict] = {}
@@ -72,6 +79,7 @@ class HistorieRegister(_Register):
         """Eén append voor alle gewijzigde cellen van één opslag of import."""
         regels = [self._stempel({"period": w["period"], "line_key": w["line_key"],
                                  "amount_cents": w["amount_cents"], "pairs": w.get("pairs"),
+                                 **({"cleared": True} if w.get("cleared") else {}),
                                  "note": _tekst(note, 500), "source": bron,
                                  "supersedes": w.get("supersedes") or ""}, door) for w in wijzigingen]
         if regels:
@@ -228,35 +236,58 @@ def euro_nl(c: int) -> str:
 # ── vergelijken: wat verandert er ───────────────────────────────────────────
 
 def vergelijk(bedragen: dict[tuple[str, str], int], paren_: dict[str, int],
-              actueel: dict[tuple[str, str], dict], cfg: dict) -> dict:
-    """Gewenste celwaarden tegen de actuele → {nieuw, gewijzigd, ongewijzigd, fouten, schrijf}.
-    `schrijf` zijn de regels die een opslag of import zou toevoegen (met `supersedes`)."""
+              laatste: dict[tuple[str, str], dict], cfg: dict, *,
+              leeg: set | frozenset = frozenset(), paren_leeg: set | frozenset = frozenset()) -> dict:
+    """Gewenste celwaarden tegen de laatste stand (`HistorieRegister.laatste`, dus INCLUSIEF
+    leeggemaakte cellen, zodat een nieuwe waarde de leegmaak-regel vervangt en de keten heel blijft)
+    → {nieuw, gewijzigd, geleegd, ongewijzigd, fouten, schrijf}.
+
+    `leeg`: cellen die leeg zijn aangeboden. Had zo'n cel een waarde, dan wordt hij LEEGGEMAAKT (een
+    regel met `cleared`); was hij al leeg, dan gebeurt er niets. `paren_leeg`: maanden waarvan de
+    paren leeg zijn aangeboden."""
     sleutels = _sleutels(cfg)
-    uit = {"nieuw": 0, "gewijzigd": 0, "ongewijzigd": 0, "fouten": [], "schrijf": []}
-    cellen = set(bedragen) | {(p, NET_SALES) for p in paren_}
+    uit = {"nieuw": 0, "gewijzigd": 0, "geleegd": 0, "ongewijzigd": 0, "fouten": [], "schrijf": []}
+    cellen = (set(bedragen) | set(leeg) | {(p, NET_SALES) for p in paren_}
+              | {(p, NET_SALES) for p in paren_leeg})
     for (p, k) in sorted(cellen):
         lijn = sleutels.get(k)
         if lijn is None or not _PERIODE.match(p):
             uit["fouten"].append(f"{p} {k}: unknown line or month")
             continue
-        oud = actueel.get((p, k))
-        cents = bedragen.get((p, k), oud["amount_cents"] if oud else None)
-        if cents is None:
-            uit["fouten"].append(f"{p}: pairs without net sales — enter the net sales of that month too")
+        vorige = laatste.get((p, k))
+        huidig = None if (vorige is None or vorige.get("cleared")) else vorige
+        keten = vorige["id"] if vorige else ""
+        if (p, k) in leeg and (p, k) not in bedragen:
+            if k == NET_SALES and p in paren_:
+                uit["fouten"].append(f"{p}: pairs without net sales — enter the net sales of that month too")
+            elif huidig is not None:
+                uit["geleegd"] += 1
+                uit["schrijf"].append({"period": p, "line_key": k, "amount_cents": None, "pairs": None,
+                                       "cleared": True, "supersedes": keten, "oud": huidig})
             continue
+        cents = bedragen.get((p, k), huidig["amount_cents"] if huidig else None)
+        if cents is None:
+            if p in paren_:
+                uit["fouten"].append(f"{p}: pairs without net sales — enter the net sales of that month too")
+            continue                                 # alleen lege paren bij een lege maand: niets
         if cents < 0 and not lijn.get("negatief"):
             uit["fouten"].append(f"{p} {lijn['label']}: negative amounts only on lines that allow a credit")
             continue
-        nieuw_paren = paren_.get(p, oud.get("pairs") if oud else None) if k == NET_SALES else None
-        if oud is None:
+        nieuw_paren = None
+        if k == NET_SALES:
+            if p in paren_:
+                nieuw_paren = paren_[p]
+            elif p not in paren_leeg and huidig:
+                nieuw_paren = huidig.get("pairs")
+        if huidig is None:
             uit["nieuw"] += 1
-        elif oud["amount_cents"] == cents and oud.get("pairs") == nieuw_paren:
+        elif huidig["amount_cents"] == cents and huidig.get("pairs") == nieuw_paren:
             uit["ongewijzigd"] += 1
             continue
         else:
             uit["gewijzigd"] += 1
         uit["schrijf"].append({"period": p, "line_key": k, "amount_cents": cents, "pairs": nieuw_paren,
-                               "supersedes": oud["id"] if oud else "", "oud": oud})
+                               "supersedes": keten, "oud": huidig})
     return uit
 
 
@@ -295,9 +326,9 @@ def lees_bestand(bestandsnaam: str, blob: bytes, cfg: dict) -> dict:
     try:
         rijen = _rijen_xlsx(blob) if ext == "xlsx" else _rijen_csv(blob)
     except Exception as e:                          # een kapot bestand is een fout, geen crash
-        return {"bedragen": {}, "paren": {}, "fouten": [f"the file cannot be read: {type(e).__name__}"],
-                "rijen": 0}
-    uit = {"bedragen": {}, "paren": {}, "fouten": [], "rijen": 0}
+        return {"bedragen": {}, "paren": {}, "leeg": set(), "paren_leeg": set(),
+                "fouten": [f"the file cannot be read: {type(e).__name__}"], "rijen": 0}
+    uit = {"bedragen": {}, "paren": {}, "leeg": set(), "paren_leeg": set(), "fouten": [], "rijen": 0}
     if not rijen:
         uit["fouten"].append("the file is empty")
         return uit
@@ -330,12 +361,16 @@ def lees_bestand(bestandsnaam: str, blob: bytes, cfg: dict) -> dict:
                     uit["fouten"].append(f"row {nr}, {m}: {fout}")
                 elif n is not None:
                     uit["paren"][m] = n
+                else:
+                    uit["paren_leeg"].add(m)
             else:
                 c, fout = bedrag(v)
                 if fout:
                     uit["fouten"].append(f"row {nr}, {m}: {fout}")
                 elif c is not None:
                     uit["bedragen"][(m, key)] = c
+                else:
+                    uit["leeg"].add((m, key))       # een lege cel in het bestand: leegmaken als hij een waarde had
     return uit
 
 
