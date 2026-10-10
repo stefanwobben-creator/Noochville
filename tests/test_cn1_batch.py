@@ -57,6 +57,7 @@ def _dd(tmp_path):
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     for naam, mail, rol in (("Sanne", "sales@t.nl", SALES),
+                            ("Stefan", "stefan@nooch.earth", "mother_earth__nooch__shoe_developer"),
                             ("Lid", "lid@t.nl", "mother_earth__nooch__marketing_lead")):
         st.people.add(naam, mail)
         st.assign.assign(rol, "person", st.people.by_email(mail).id)
@@ -140,3 +141,12 @@ def test_sales_verzet_de_startdatum_en_het_zaad_houdt_hem_vast(tmp_path):
     st = cockpit2._Stores(dd)
     critical_numbers.zaai(st.metrics, critical_numbers.laad(), apply=True)
     assert _cn1(cockpit2._Stores(dd))["lijn"]["van"] == "2026-11-20"          # niet teruggezet
+
+
+def test_stefan_als_persoon_mag_de_startdatum_verzetten(tmp_path):
+    """Sales EN Stefan (als persoon, `config/zicht.json` → `sales`), niemand anders."""
+    dd = _dd(tmp_path)
+    tid = _cn1(cockpit2._Stores(dd))["id"]
+    form = {"node": [C], "tid": [tid], "datum": ["2026-11-22"], "next": ["/"]}
+    assert "✓" in cockpit2.dispatch(dd, "cn_startdatum_zet", form, username="stefan@nooch.earth")[1]
+    assert _cn1(cockpit2._Stores(dd))["lijn"]["van"] == "2026-11-22"
