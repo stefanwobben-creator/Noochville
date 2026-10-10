@@ -237,15 +237,18 @@ def _pages(st, termen):
     Een policy alleen op titel kunnen vinden was precies de reden dat niemand ze las."""
     uit = []
     from nooch_village import wiki
+    from nooch_village.wiki_dekking import tekst_voor_lezers
     for soort in ("policy", "note", "tool"):
         for a in st.att.by_kind(soort):
             feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
-            if _match(f"{a.title} {a.body} {feiten}", termen):
+            # Een deferred vraag staat hier als afspraak, niet als "not yet provided" (11 oktober).
+            tekst = tekst_voor_lezers(a)
+            if _match(f"{a.title} {tekst} {feiten}", termen):
                 # ÉÉN categorie voor alle drie: sinds fase 7 zijn policy/note/tool één oppervlak,
                 # en een trefferlijst die ze uit elkaar trekt zet de oude drie-deuren-indeling terug.
                 uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
                             "titel": a.title or a.id,
-                            "snip": _snip(a.body or feiten)})
+                            "snip": _snip(tekst or feiten)})
     return uit
 
 

@@ -718,8 +718,11 @@ def _artefact_body_html(a, *, st: _Stores | None = None, pags: list | None = Non
         # tab leest alleen; de grond en de handelingen staan op de pagina zelf.
         feit_tekst = {wiki.feit_id(f): f"<span class='chip muted'>fact</span> {_e(f.get('tekst') or '')}"
                       for f in wiki.feiten(a)}
+        # Dezelfde afgeleide open-punt-regels als op de pagina zelf (11 oktober 2026).
+        from nooch_village.views.wiki import _verborgen_placeholders
+        ph = _verborgen_placeholders(st, a) if st is not None else None
         return (f"<div class='att-body'>"
-                f"{_pagina_body_html(a.body, pags, feit_blokken=feit_tekst)}</div>")
+                f"{_pagina_body_html(a.body, pags, feit_blokken=feit_tekst, placeholders=ph)}</div>")
     return f"<div class='att-body'>{_md(a.body)}</div>"
 
 

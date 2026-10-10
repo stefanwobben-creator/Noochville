@@ -363,6 +363,29 @@ def gestaafd(rij: dict, **ctx) -> bool:
     return all(_feit_status(f, c) == GECHECKT for f in wiki.feiten(pagina))
 
 
+def tekst_voor_lezers(pagina, vandaag: str = "") -> str:
+    """De paginatekst voor wie hem BUITEN de pagina leest (zoeken, `/context`, de wiki-kaarten):
+    de open-punt-regel van een deferred vraag (datum niet voorbij) wordt de afspraak, net als op de
+    pagina. Leest alleen de pagina zelf (`meta`), geen stores — dus ook bruikbaar waar de dekking
+    van /bom niet beschikbaar is. Een verlopen uitstel laat de regel staan: het veld is weer leeg."""
+    import time as _t
+    body = getattr(pagina, "body", "") or ""
+    uit_meta = (getattr(pagina, "meta", None) or {}).get(UITSTEL_SLEUTEL) or {}
+    if not uit_meta or not body:
+        return body
+    vandaag = vandaag or _t.strftime("%Y-%m-%d")
+    per_regel = {**placeholder_vragen("materiaal"), **placeholder_vragen("leverancier")}
+    regels = []
+    for regel in body.split("\n"):
+        r = regel.strip()
+        k = per_regel.get(r[2:].strip()) if r[:2] in ("- ", "* ") else None
+        u = uitstel(pagina, k) if k else None
+        if u and u["tot"] >= vandaag:
+            regel = f"- {r[2:].split(':')[0].strip()}: deferred, research by {u['tot']}"
+        regels.append(regel)
+    return "\n".join(regels)
+
+
 def heeft_placeholder(rij: dict) -> bool:
     """Draagt de pagina nog een ZICHTBARE open-punt-regel? Een regel bij een deferred of beantwoord
     veld telt niet: die wordt ook niet getoond (`verborgen_placeholders`)."""

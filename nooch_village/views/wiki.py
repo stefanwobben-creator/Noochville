@@ -713,6 +713,11 @@ def _verborgen_placeholders(st, a) -> dict[str, dict]:
         return {}
 
 
+def _dek_lezer(a) -> str:
+    from nooch_village.wiki_dekking import tekst_voor_lezers
+    return tekst_voor_lezers(a)
+
+
 def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
     """"Questions": de vraagcellen van /bom voor DEZE pagina, met per vraag de status en — voor wie de
     pagina mag bewerken — "Defer" (een datum) of "undo" (CN3, 10 oktober 2026).
@@ -1675,7 +1680,7 @@ def render_wiki_index(st, csrf_token: str = "", soort: str = "all",
         + f"<span class='pill'>{_e(_wiki_domein(a, recs))}</span>"
         + f"</span></div>"
           f"<p class='muted'>Owner: {_e(_name(st.records.get(a.anchor)) if st.records.get(a.anchor) else a.anchor)}"
-        + (f" &middot; {_e((a.body or '')[:120])}" if a.body else "") + "</p></div>"
+        + (f" &middot; {_e(_dek_lezer(a)[:120])}" if a.body else "") + "</p></div>"
         for a in items)
     if not kaarten:
         kaarten = ("<p class='muted'>Nothing written down yet. A policy or note starts on the "

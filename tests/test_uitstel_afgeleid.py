@@ -108,3 +108,38 @@ def test_cn3_en_open_vragen_op_de_productie_vorm(tmp_path):
     assert "Deferred" in h
     rapport = critical_numbers.zaai(cockpit2._Stores(dd).metrics, critical_numbers.laad(), apply=False)
     assert any(r["sleutel"] == "cn3_deferred" for r in rapport)
+
+
+def test_wie_de_ruwe_tekst_leest_ziet_de_afspraak_niet_een_leeg_veld(tmp_path):
+    """Zoeken, /context (systeemprompt en export), de wiki-kaarten en de wiki-tab op /node lezen de
+    tekst buiten de pagina om. Een deferred veld mag daar niet als "not yet provided" staan."""
+    from nooch_village import artefacts
+    from nooch_village.views.overview import render_node
+    from nooch_village.views.search import _pages
+    from nooch_village.views.wiki import render_wiki_index
+    dd, aid = _dorp(tmp_path)
+
+    def lezers():
+        st = cockpit2._Stores(dd)
+        ctx = artefacts.serialize_context(OWNER, st.records, st.att)
+        pagina_ctx = next(n for n in ctx["notes"]["own"] if n["id"] == aid)
+        zoek = [p for p in _pages(st, ["pliant"]) if aid in p["url"]][0]
+        return {"context_json": pagina_ctx["body"],
+                "context_md": artefacts.render_context_markdown(ctx),
+                "zoek": zoek["snip"] + " " + " ".join(p["url"] for p in _pages(st, ["provided"])),
+                "wiki": render_wiki_index(st),
+                "node": render_node(st, OWNER, "wiki")}
+
+    voor = lezers()
+    assert REGEL in voor["context_json"] and REGEL in voor["context_md"]
+    _uitstel(dd, aid)
+    tijdens = lezers()
+    assert REGEL not in tijdens["context_json"] and "deferred, research by 2026-12-31" in tijdens["context_json"]
+    assert REGEL not in tijdens["context_md"] and "deferred, research by 2026-12-31" in tijdens["context_md"]
+    assert "not yet provided" not in tijdens["zoek"] and aid not in tijdens["zoek"].split(" ", 1)[1]
+    assert REGEL not in tijdens["wiki"]
+    assert f"<li>{REGEL}</li>" not in tijdens["node"]
+    assert "Animal-derived status: not yet verified" in tijdens["context_md"]   # de andere vraag blijft
+    assert cockpit2._Stores(dd).att.get(aid).body == BODY                        # de bron blijft
+    _terug(dd, aid)
+    assert lezers()["context_json"] == voor["context_json"]
