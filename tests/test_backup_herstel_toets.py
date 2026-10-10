@@ -61,3 +61,19 @@ def test_finance_bijlagen_worden_tegen_hun_sha256_nagelopen(tmp_path):
     assert any("sha256" in f for f in toets_mod.toets(dd))
     os.remove(os.path.join(dd, rel))
     assert any("ontbreekt" in f for f in toets_mod.toets(dd))
+
+
+def test_ook_de_bijlagen_van_het_opbrengstregister(tmp_path):
+    """Finance PR 1b: een subsidie-beschikking in `finance/revenue.jsonl` is net zo goed geborgd."""
+    import hashlib
+    import json
+    dd = _data(tmp_path)
+    os.makedirs(os.path.join(dd, "finance", "attachments", "2026"))
+    blob = b"%PDF-1.4 beschikking"
+    rel = "finance/attachments/2026/b.pdf"
+    open(os.path.join(dd, rel), "wb").write(blob)
+    regel = {"id": "o1", "attachment": {"path": rel, "sha256": hashlib.sha256(blob).hexdigest()}}
+    open(os.path.join(dd, "finance", "revenue.jsonl"), "w").write(json.dumps(regel) + "\n")
+    assert toets_mod.toets(dd) == []
+    open(os.path.join(dd, rel), "ab").write(b"x")
+    assert any("sha256" in f and "b.pdf" in f for f in toets_mod.toets(dd))

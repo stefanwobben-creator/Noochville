@@ -26,31 +26,34 @@ sys.path.insert(0, _REPO)
 
 
 def _finance_bijlagen(data: str) -> list[str]:
-    """Elke bijlage in het kostenregister (Finance) moet er zijn, met de sha256 uit het register.
-    Een back-up met een kapotte of ontbrekende factuur is voor de borging geen back-up. Leest alleen
-    `finance/costs.jsonl` en de bestanden; geen finance-code nodig. Zonder register: niets te doen."""
+    """Elke bijlage in de Finance-registers (kosten én opbrengsten, PR 1b) moet er zijn, met de
+    sha256 uit het register. Een back-up met een kapotte of ontbrekende factuur of beschikking is
+    voor de borging geen back-up. Leest alleen `finance/costs.jsonl`, `finance/revenue.jsonl` en de
+    bestanden; geen finance-code nodig. Zonder register: niets te doen."""
     import hashlib
-    pad = os.path.join(data, "finance", "costs.jsonl")
-    if not os.path.exists(pad):
-        return []
+    regels = []
+    for naam in ("costs.jsonl", "revenue.jsonl"):
+        pad = os.path.join(data, "finance", naam)
+        if os.path.exists(pad):
+            with open(pad, encoding="utf-8") as f:
+                regels += f.readlines()
     fouten, n = [], 0
-    with open(pad, encoding="utf-8") as f:
-        for regel in f:
-            try:
-                r = json.loads(regel)
-            except ValueError:
-                continue
-            b = r.get("attachment") or {}
-            if not b.get("path"):
-                continue
-            n += 1
-            vol = os.path.join(data, b["path"])
-            if not os.path.isfile(vol):
-                fouten.append(f"finance-bijlage ontbreekt: {b['path']}")
-                continue
-            with open(vol, "rb") as h:
-                if hashlib.sha256(h.read()).hexdigest() != b.get("sha256"):
-                    fouten.append(f"finance-bijlage klopt niet met zijn sha256: {b['path']}")
+    for regel in regels:
+        try:
+            r = json.loads(regel)
+        except ValueError:
+            continue
+        b = r.get("attachment") or {}
+        if not b.get("path"):
+            continue
+        n += 1
+        vol = os.path.join(data, b["path"])
+        if not os.path.isfile(vol):
+            fouten.append(f"finance-bijlage ontbreekt: {b['path']}")
+            continue
+        with open(vol, "rb") as h:
+            if hashlib.sha256(h.read()).hexdigest() != b.get("sha256"):
+                fouten.append(f"finance-bijlage klopt niet met zijn sha256: {b['path']}")
     print(f"{n} finance-bijlage(n) nagelopen")
     return fouten
 
