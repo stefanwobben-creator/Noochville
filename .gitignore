@@ -63,3 +63,8 @@ backups/
 # waar ze niets mee te maken hadden, door een `git add -A … claude` in plaats van per bestand.
 # De regel eronder is de tweede verdediging; de eerste is: noem je bestanden bij naam.
 claude/stickers_22sept/
+
+# Stage 0: rapport en misses bevatten interne radartekst; de score-cache is lokaal werk.
+experiments/stage0/rapport_*
+experiments/stage0/misses_*
+experiments/stage0/scores_cache.jsonl
