@@ -2,7 +2,7 @@
 
 Een indicator is INFORMATIE, geen doel (Goodhart). Het schema legt twee dingen vast:
 
-1. de GRONDSLAG (GAAP/IRIS-idee: zonder vaste definitie geen vergelijkbaarheid):
+1. de GRONDSLAG (IRIS-idee: zonder vaste definitie geen vergelijkbaarheid):
    wat telt mee (definitie), eenheid, richting (hoger/lager = beter), drempel;
 2. het MEETMOMENT: hoe vaak gemeten (cadans) en hoe een waarde geldt (meettype):
    - snapshot   = stand op het meetmoment (bijv. voorraad nu)

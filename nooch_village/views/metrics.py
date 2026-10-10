@@ -352,8 +352,11 @@ def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, cir
         add = (f"<form method='post' action='/action' class='kpi-add'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='mid' value='{_e(item['id'])}'>"
-               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
-               f"<input name='value' inputmode='decimal' placeholder='reading' size='6'>"
+               f"<input type='hidden' name='next' value='{_e(terug)}'>"
+               f"<input name='value' inputmode='decimal' placeholder='reading' size='6' "
+               f"aria-label='reading for {_e(item.get('name', ''))}' required>"
+               f"<input name='datum' type='date' aria-label='date (empty = today)'>"
+               f"<input name='notitie' placeholder='note (optional)' aria-label='note'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
     pin = ""
     if csrf and circle:
@@ -937,7 +940,7 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
     return _geen_data_html() if _agg(res, agg) is None else ""
 
 
-# Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
+# Grondslag-laag (IRIS-idee): definitie, eenheid, bron, richting per bron-measure.
 _SOURCE_GRONDSLAG = {
     "pulse_visitors|visitors": ("Unique website visitors per day (daily series from the observations).",
                                 "visitors", "observations (Plausible daily value)", "up"),
@@ -1307,6 +1310,30 @@ def _tile_headline(res, agg: str, win: str, cutoff, end, now: float | None = Non
     return num + _agg_label(agg, win, res, end, now) + _range_label(cutoff, end)
 
 
+#: Het niveau als etiket in de tegelkop (`.badge`, bestaand atoom). Leeg niveau = geen etiket.
+_NIVEAU_BADGE = {"critical": "<span class='badge'>Critical</span>",
+                 "smart": "<span class='badge'>Smart</span>"}
+
+#: grens-uitkomst → (vorm uit `.nu-status`, woord). Vorm en woord, nooit alleen kleur.
+_GRENS_VORM = {"green": ("ok", "On target"), "amber": ("wait", "Close to target"),
+               "red": ("off", "Off target")}
+
+
+def _grens_regel(tile: dict, waarde, richting: str) -> str:
+    """De status ten opzichte van het doel, of niets. GEEN DOEL, GEEN STATUS. Een `benchmark`-tegel
+    draagt in `target` een vergelijkwaarde, geen doel — die krijgt dus ook geen status."""
+    from nooch_village.metrics import grens_status
+    if tile.get("ref_kind") == "benchmark":
+        return ""
+    uit = grens_status(waarde, tile.get("target"), tile.get("oranje"), richting)
+    if not uit:
+        return ""
+    vorm, woord = _GRENS_VORM[uit]
+    drempel = (f" · amber from {_num(tile['oranje'])}" if tile.get("oranje") is not None else "")
+    return (f"<div class='tile-goal muted'><span class='nu-status nu-status--{vorm}'>{woord}</span> "
+            f"target {_num(tile['target'])}{drempel}</div>")
+
+
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,
                  prev_win=None, actueel=False, win: str = "", now: float | None = None) -> str:
     if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
@@ -1389,6 +1416,9 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             warn = f"<span class='tile-warn' title='below/above the threshold ({thr:g})'>⚠</span>"
     if g.get("verificatie") == "voorlopig":
         warn += "<span class='tile-prov' title='provisional value, not verified yet'>provisional</span>"
+    # NIVEAU EN GRENS (10 oktober 2026) — op de tegel, zie `MetricStore.set_tile_grens`.
+    niveau = _NIVEAU_BADGE.get(tile.get("niveau") or "", "")
+    goal += _grens_regel(tile, val, g.get("richting") or "")
     rm = ""
     if csrf:
         rm = (f"<form method='post' action='/action' class='tile-rm'>"
@@ -1403,7 +1433,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             f"<div class='muted'>{_e(g.get('definitie') or 'No definition in the catalogue item.')}</div>"
             f"<div class='muted'>Source: {_e(g.get('bron') or tile['source'])}{std}</div>"
             f"<button class='dellink js-flipback' type='button'>↩ back</button></div>")
-    front = (f"<div class='tile-front'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
+    front = (f"<div class='tile-front'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{niveau}{warn}</span>"
              f"<span class='tile-h-r'>{flip}{rm}</span></div>"
              f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
     return f"<div class='tile'>{front}{back}</div>"
@@ -1472,7 +1502,10 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
     return f"{safe}.csv", buf.getvalue()
 
 
-def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
+def _kpi_data_row(st: _Stores, item: dict, csrf: str, terug: str = "") -> str:
+    """Eén KPI-rij met (voor een handmatige KPI) de invoer. `terug` = waar je na opslaan landt: het
+    werkoverleg geeft zijn eigen stap mee, zodat invoeren in het overleg je niet uit het overleg haalt."""
+    terug = terug or f"/node?id={item['node']}&tab=metrics"
     raw = _kpi_samples(st, item)
     pts = filter_samples(raw, None)
     val = _num(pts[-1][1]) if pts else "—"
@@ -1484,8 +1517,11 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
     if csrf and not is_sys:
         add = (f"<form method='post' action='/action' class='kpi-add'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
-               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
-               f"<input name='value' inputmode='decimal' placeholder='reading' size='6'>"
+               f"<input type='hidden' name='next' value='{_e(terug)}'>"
+               f"<input name='value' inputmode='decimal' placeholder='reading' size='6' "
+               f"aria-label='reading for {_e(item.get('name', ''))}' required>"
+               f"<input name='datum' type='date' aria-label='date (empty = today)'>"
+               f"<input name='notitie' placeholder='note (optional)' aria-label='note'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
     # grondslag (definitie + meetmoment) op de rij zelf, naast de naam (klik op de ⓘ)
     info = _grondslag_popover(_grondslag(st, f"kpi:{item['id']}", "value"))
@@ -1575,7 +1611,7 @@ _METRICS_JS = """<script>(function(){
 })();</script>"""
 
 
-def _metrics_manage_html(st: _Stores, rec, csrf: str = "") -> str:
+def _metrics_manage_html(st: _Stores, rec, csrf: str = "", terug: str = "") -> str:
     """Het beheer-blok onder het dashboard: eigen (handmatige) KPI's om data in te voeren, de aanvullende
     lijst systeem-KPI's (automatisch gevoed, nog niet getegeld), en links naar externe cijfers. Eén bron,
     hergebruikt door zowel het oude als het nieuwe metrics-scherm zodat er niets verloren gaat."""
@@ -1590,10 +1626,10 @@ def _metrics_manage_html(st: _Stores, rec, csrf: str = "") -> str:
     handmatig = [i for i in kpis if not _is_system_kpi(i)]
     systeem = [i for i in kpis if _is_system_kpi(i) and i["id"] not in tiled_kids]
     if handmatig:
-        rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
+        rows = "".join(_kpi_data_row(st, i, csrf, terug) for i in handmatig)
         out += f"<div class='c2-sec'><div class='cl-head'><h3>Own KPIs (enter data)</h3></div>{rows}</div>"
     if systeem:
-        rows = "".join(_kpi_data_row(st, i, csrf) for i in systeem)
+        rows = "".join(_kpi_data_row(st, i, csrf, terug) for i in systeem)
         out += f"<div class='c2-sec'><div class='cl-head'><h3>System KPIs (fed automatically)</h3></div>{rows}</div>"
     links = st.metrics.links_for(rec.id)
     if links:
@@ -1696,7 +1732,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
 
     # 2/3. Het beheer-blok (eigen KPI's om data in te voeren, systeem-KPI's, links) — gedeeld met het
     # nieuwe metrics-scherm zodat de migratie niets van deze functionaliteit verliest.
-    out += _metrics_manage_html(st, rec, csrf)
+    out += _metrics_manage_html(st, rec, csrf, terug=nav)
     return out
 
 

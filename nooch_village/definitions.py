@@ -2,8 +2,13 @@
 
 Een definitie is de grondslag van een indicator (wat telt mee, eenheid, richting, drempel,
 meetmoment), losgekoppeld van een specifieke KPI zodat meerdere KPI's dezelfde definitie kunnen
-delen. Eén bron, dus vergelijkbaarheid (GAAP/IRIS-idee). De Librarian cureert; anderen lezen vrij,
+delen. Eén bron, dus vergelijkbaarheid (het IRIS-idee). De Librarian cureert; anderen lezen vrij,
 hetzelfde domein-eigenaarschap als bij het Lexicon en de Library.
+
+FINANCIËLE BEGRIPPEN: ENGELSE LABELS, NEDERLANDSE GRONDSLAG (besluit Stefan, 10 oktober 2026).
+Revenue, Gross margin, Cash and cash equivalents, Working capital — gemeten volgens Dutch GAAP (RJ,
+Richtlijnen voor de Jaarverslaggeving), niet US GAAP. De grondslag staat één keer in de
+definitietekst; `_HERNOEMD` neemt bestaande definities met de oude Nederlandse naam mee.
 
 Versionering (kern van het migratiebeleid):
 - Een definitie wordt NOOIT in-place gewijzigd. `amend()` maakt een nieuwe versie.
@@ -70,9 +75,10 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "Orders (Shopify)", "source": "shopify", "unit": "n", "direction": "up",
      "cadence": "maand", "meettype": "cumulatief",
      "definition": "Aantal betaalde bestellingen."},
-    {"name": "Omzet (Shopify)", "source": "shopify", "unit": "EUR", "direction": "up",
+    {"name": "Revenue (Shopify)", "source": "shopify", "unit": "EUR", "direction": "up",
      "cadence": "maand", "meettype": "cumulatief",
-     "definition": "Totale omzet uit betaalde bestellingen."},
+     "definition": "Total value of paid Shopify orders, including VAT and shipping. This is order "
+                   "value, not revenue under Dutch GAAP (RJ): see Revenue (finance)."},
     {"name": "Gemiddelde orderwaarde (Shopify)", "source": "shopify", "unit": "EUR", "direction": "up",
      "cadence": "maand", "meettype": "venster", "window": "30d",
      "definition": "Omzet gedeeld door aantal orders (AOV)."},
@@ -267,12 +273,22 @@ _DEFINITION_SEED: tuple[dict, ...] = (
      "cadence": "jaar", "meettype": "cumulatief",
      "definition": "Bedrag gedoneerd of teruggegeven aan goede doelen (bijv. TRAID)."},
     # Financiën (boekhouding)
-    {"name": "Brutomarge", "source": "finance", "unit": "%", "direction": "up",
+    {"name": "Revenue", "source": "finance", "unit": "EUR", "direction": "up",
      "cadence": "maand", "meettype": "venster", "window": "30d",
-     "definition": "Brutowinst gedeeld door omzet."},
-    {"name": "Cashpositie", "source": "finance", "unit": "EUR", "direction": "up",
+     "definition": "Net revenue (netto-omzet) in the period, excluding VAT and after discounts and "
+                   "returns. Basis: Dutch GAAP (RJ)."},
+    {"name": "Gross margin", "source": "finance", "unit": "%", "direction": "up",
+     "cadence": "maand", "meettype": "venster", "window": "30d",
+     "definition": "Gross profit (revenue minus cost of sales) divided by revenue. "
+                   "Basis: Dutch GAAP (RJ)."},
+    {"name": "Cash and cash equivalents", "source": "finance", "unit": "EUR", "direction": "up",
      "cadence": "maand", "meettype": "snapshot",
-     "definition": "Beschikbare liquide middelen op het meetmoment."},
+     "definition": "Cash at bank and in hand plus deposits available on demand (liquide middelen), "
+                   "at the moment of measurement. Basis: Dutch GAAP (RJ)."},
+    {"name": "Working capital", "source": "finance", "unit": "EUR", "direction": "",
+     "cadence": "maand", "meettype": "snapshot",
+     "definition": "Current assets minus current liabilities (kortlopende schulden), at the moment "
+                   "of measurement. Basis: Dutch GAAP (RJ)."},
     {"name": "Runway", "source": "finance", "unit": "maanden", "direction": "up",
      "cadence": "maand", "meettype": "snapshot",
      "definition": "Maanden tot het geld op is bij de huidige burn rate."},
@@ -414,7 +430,7 @@ _GROUNDING: dict[str, dict] = {
     # Verkoop (e-commerce standaard)
     "Paren verkocht (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
     "Orders (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
-    "Omzet (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Revenue (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
     "Gemiddelde orderwaarde (Shopify)": {"standaard": "e-commerce standaard (AOV)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "wereldwijd ~€110 (2024)"},
     "Conversie (orders ÷ unieke bezoekers)": {"standaard": "e-commerce standaard (definitie-afwijking)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "e-commerce ~2,7% (2024); noemer hier = unieke bezoekers, niet sessies"},
     # Zoekvraag / cultuur / onderzoek (vraagsignalen, meestal leading)
@@ -466,8 +482,10 @@ _GROUNDING: dict[str, dict] = {
     "Aandeel biobased materiaal": {"standaard": "intern (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Donaties goede doelen": {"standaard": "intern (impact)", "tijd": "lagging", "bruikbaar": "vanity"},
     # Financiën
-    "Brutomarge": {"standaard": "boekhouding (GAAP)", "tijd": "lagging", "bruikbaar": "actionable"},
-    "Cashpositie": {"standaard": "boekhouding", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Revenue": {"standaard": "Dutch GAAP (RJ)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Gross margin": {"standaard": "Dutch GAAP (RJ)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Cash and cash equivalents": {"standaard": "Dutch GAAP (RJ)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Working capital": {"standaard": "Dutch GAAP (RJ)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Runway": {"standaard": "startup-finance (cash ÷ burn)", "tijd": "leading", "bruikbaar": "actionable"},
     # Werkoverleg (Holacracy tactical meeting)
     "Tevredenheid werkoverleg": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "actionable"},
@@ -496,6 +514,37 @@ def _meetwijze_for(source: str) -> str:
     return _SOURCE_MEETWIJZE.get(source, "systeem")
 
 
+#: Definities die een nieuwe naam kregen: (oude naam, bron) → nieuwe naam. `hernoem_seed` neemt de
+#: bestaande definitie mee als `clarify`-versie — dezelfde meting, dezelfde reeks — VÓÓR het zaaien,
+#: want `seed_catalog` dedupt op naam en zou anders een tweede definitie naast de oude zetten.
+_HERNOEMD: dict[tuple[str, str], str] = {
+    ("Omzet (Shopify)", "shopify"): "Revenue (Shopify)",
+    ("Brutomarge", "finance"): "Gross margin",
+    ("Cashpositie", "finance"): "Cash and cash equivalents",
+}
+
+
+def hernoem_seed(store: DefinitionStore, metrics=None) -> int:
+    """Geef bestaande definities hun nieuwe naam (`_HERNOEMD`), met de tekst en grondslag uit de seed.
+    Idempotent: een definitie die al zo heet, of een oude naam die niet (meer) bestaat, wordt
+    overgeslagen. `metrics` (de MetricStore) krijgt de nieuwe versie door op zijn KPI's."""
+    n = 0
+    seed = {e["name"]: _merge_grounding(e) for e in _DEFINITION_SEED}
+    for (oud, bron), nieuw in _HERNOEMD.items():
+        d = store.find(oud, bron)
+        if d is None or store.find(nieuw, bron) is not None or nieuw not in seed:
+            continue
+        e = seed[nieuw]
+        ver = store.amend(d["id"], "clarify", name=nieuw, definition=e.get("definition"),
+                          standaard=e.get("standaard"))
+        if ver is None:
+            continue
+        if metrics is not None:
+            metrics.retune_kpis_to_def(d["id"], ver["version"], ver, "clarify")
+        n += 1
+    return n
+
+
 def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     added = 0
     for entry in _DEFINITION_SEED:
@@ -520,7 +569,7 @@ _SEED_VELD = {
     "Bezoekers (Plausible)": "visitors", "Paginaweergaven (Plausible)": "pageviews",
     "Bezoekduur (Plausible)": "visit_duration", "Bouncepercentage (Plausible)": "bounce_rate",
     "Paren verkocht (Shopify)": "pairs_sold", "Orders (Shopify)": "orders",
-    "Omzet (Shopify)": "revenue", "Gemiddelde orderwaarde (Shopify)": "aov",
+    "Revenue (Shopify)": "revenue", "Gemiddelde orderwaarde (Shopify)": "aov",
     "Vertoningen (GSC)": "impressions", "Klikken (GSC)": "clicks",
     "CTR (GSC)": "ctr", "Gemiddelde positie (GSC)": "position",
     "Academische werken (OpenAlex)": "works", "Gem. citaties (OpenAlex)": "citations",
