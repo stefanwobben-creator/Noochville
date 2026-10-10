@@ -128,15 +128,21 @@ def sha256(blob: bytes) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-class KostenRegister:
-    """Het register op schijf: `data/finance/costs.jsonl` (alleen toevoegen), de bijlagen in
-    `data/finance/attachments/`, en `data/finance/downloads.jsonl` (wie downloadde wat).
+class _Register:
+    """De gedeelde borging van elk finance-register (Finance PR 1b: kosten én opbrengsten): één
+    JSONL-bestand dat alleen groeit, bijlagen met hun sha256 in `data/finance/attachments/`, en één
+    downloadlog `data/finance/downloads.jsonl` voor beide.
 
-    LET OP: deze klasse heeft bewust GEEN update/delete. Wie er een toevoegt, breekt de borging."""
+    LET OP: deze klasse heeft bewust GEEN update/delete. Wie er een toevoegt, breekt de borging.
+    Een subklasse zet alleen `BESTAND` (en eventueel wat er bij een tegenboeking omdraait)."""
+
+    BESTAND = ""
+    #: De bedragvelden die een tegenboeking omdraait.
+    BEDRAGEN = ("amount_excl_cents", "vat_cents")
 
     def __init__(self, data_dir: str):
         self.dir = os.path.join(data_dir, MAP)
-        self.pad = os.path.join(self.dir, "costs.jsonl")
+        self.pad = os.path.join(self.dir, self.BESTAND)
         self.bijlagen = os.path.join(self.dir, "attachments")
         self.downloads = os.path.join(self.dir, "downloads.jsonl")
 
@@ -191,8 +197,8 @@ class KostenRegister:
         if oud is None:
             return None
         storno = {k: v for k, v in oud.items() if k not in ("id", "created_at", "created_by")}
-        storno.update(amount_excl_cents=-oud["amount_excl_cents"], vat_cents=-oud["vat_cents"],
-                      corrects=oud_id, note=f"Reversal of {oud_id}",
+        storno.update({k: -oud[k] for k in self.BEDRAGEN if isinstance(oud.get(k), int)})
+        storno.update(corrects=oud_id, note=f"Reversal of {oud_id}",
                       attachment=oud.get("attachment"), no_document_reason=oud.get("no_document_reason", ""))
         s, n = self._stempel(storno, door), self._stempel({**nieuw, "corrects": ""}, door)
         n["note"] = (n.get("note") + " · " if n.get("note") else "") + f"Replaces {oud_id}"
@@ -237,8 +243,15 @@ class KostenRegister:
         os.makedirs(self.dir, exist_ok=True)
         with open(self.downloads, "a", encoding="utf-8") as f:
             fcntl.flock(f, fcntl.LOCK_EX)
-            f.write(json.dumps({"id": kid, "door": door, "at": time.time()}) + "\n")
+            f.write(json.dumps({"id": kid, "register": self.BESTAND, "door": door,
+                                "at": time.time()}) + "\n")
             fcntl.flock(f, fcntl.LOCK_UN)
+
+
+class KostenRegister(_Register):
+    """Het kostenregister: `data/finance/costs.jsonl`."""
+
+    BESTAND = "costs.jsonl"
 
 
 def filter_regels(regels: list[dict], *, periode: str = "", account: str = "", regel: str = "",

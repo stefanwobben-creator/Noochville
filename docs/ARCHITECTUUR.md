@@ -29,6 +29,9 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/finance/recurring` | `render_recurring` | `nooch_village/views/finance.py` |
 | `/finance/monthly` | `render_monthly` | `nooch_village/views/finance.py` |
 | `/finance/pnl` | `render_pnl` | `nooch_village/views/finance.py` |
+| `/finance/revenue` | `render_revenue` | `nooch_village/views/finance.py` |
+| `/finance/revenue/view` | `render_revenue_regel` | `nooch_village/views/finance.py` |
+| `/finance/revenue.csv` | `(inline)` | `cockpit2.py` |
 | `/finance/costs.csv` | `(inline)` | `cockpit2.py` |
 | `/finance/file` | `(inline)` | `cockpit2.py` |
 | `/fixed-costs` | `render_vaste_kosten` | `nooch_village/views/vaste_kosten.py` |
@@ -370,6 +373,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `noochie_memo_staat.json` |
 | `notifications.json` |
 | `pulse_heartbeat.json` |
+| `revenue.jsonl` |
 | `rugzakken.json` |
 | `seed_surges.json` |
 | `trend_signals.jsonl` |
@@ -379,4 +383,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_62 routes · 173 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 13 zonder gevonden schrijver._
+_65 routes · 173 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 14 zonder gevonden schrijver._

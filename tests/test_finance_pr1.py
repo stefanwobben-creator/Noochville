@@ -193,7 +193,7 @@ def test_invoeren_alleen_fc_en_stefan(tmp_path):
 
 #: De enige modules die het register (of `data/finance/`) mogen kennen.
 _TOEGESTAAN = {"finance_register.py", "finance_recurring.py", "finance_pnl.py", "finance_config.py",
-               "views/finance.py", "cockpit2.py", "cli.py"}
+               "finance_omzet.py", "views/finance.py", "cockpit2.py", "cli.py"}
 
 
 def test_guard_niemand_anders_leest_finance():
@@ -216,11 +216,12 @@ def test_guard_niemand_anders_leest_finance():
                     mods = [a.name for a in n.names]
                 elif isinstance(n, ast.ImportFrom):
                     mods = [n.module or ""] + [f"{n.module}.{a.name}" for a in n.names]
-                if any("finance_register" in m or "views.finance" in m or m.endswith("views.finance")
-                       for m in mods):
+                if any("finance_register" in m or "finance_omzet" in m or "views.finance" in m
+                       or m.endswith("views.finance") for m in mods):
                     fout.append(f"{rel}: importeert finance")
-                if isinstance(n, ast.Constant) and isinstance(n.value, str) and "costs.jsonl" in n.value:
-                    fout.append(f"{rel}: verwijst naar costs.jsonl")
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) and any(
+                        b in n.value for b in ("costs.jsonl", "revenue.jsonl")):
+                    fout.append(f"{rel}: verwijst naar een finance-register")
     assert fout == []
 
 
@@ -339,5 +340,5 @@ def test_de_pnl_pagina_toont_kosten_negatief_en_wacht_op_omzet(tmp_path):
     dd = _dorp(tmp_path)
     _boek(dd, amount_excl="100", period="2026-10")
     h = fin.render_pnl(_st(dd), "fc@t.nl")
-    assert "Revenue comes from Shopify (PR 3)" in h and "-€100.00" in h and "costs only" in h
+    assert "No revenue in this selection yet" in h and "-€100.00" in h and "costs only" in h
     assert posten(KostenRegister(dd).alle()) == [("2026-10", "purchased_goods", 10000, "register")]

@@ -118,7 +118,7 @@ def _nieuwe_tool_form(st, csrf_token: str, username: str | None) -> str:
 
 def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str = "") -> str:
     """Alle tools van het dorp. Lezen is vrij; bewerken blijft bij de eigenaar van het artefact."""
-    from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS, _banner, _tool_kaart
+    from nooch_village.views.overview import _DOMAIN_TOOLS, _ROLE_TOOLS, _banner, _tool_kaart, _tool_zichtbaar
 
     actor = st.people.by_email(username) if username and username != "guest" else None
     actor_id = getattr(actor, "id", "")
@@ -155,7 +155,7 @@ def render_tools(st, csrf_token: str = "", username: str | None = None, msg: str
             # ZONDER DE ROL-KOPPEN IS EEN DUBBELE KAART EEN DUBBELE KAART. Twee rollen met hetzelfde
             # domein leverden eerst twee kaarten onder twee kopjes — leesbaar. Naast elkaar in één
             # lijst is dat ruis, en de tweede voegt niets toe: zelfde naam, zelfde bestemming.
-            if (label, href) in gezien:
+            if (label, href) in gezien or not _tool_zichtbaar(st, username, href):
                 continue
             gezien.add((label, href))
             regels.append((label.lower(), _tool_kaart(label, desc, href)))
