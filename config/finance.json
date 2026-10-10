@@ -1,0 +1,192 @@
+{
+  "_uitleg": "Managementadministratie, Finance PR 1 (10 oktober 2026). Venema blijft leidend (Dutch GAAP, RJ); dit is GEEN boekhouding. Bron: claude/ontwerp_managementadministratie_10okt.md. Koppel op rekeningcode zodra Venema het schema levert; tot dan op de naam van de hoofdgroep.",
+  "management_lines": [
+    {
+      "groep": "cost_of_sales",
+      "label": "Cost of sales",
+      "regels": [
+        {
+          "key": "purchased_goods",
+          "label": "Purchased goods"
+        },
+        {
+          "key": "transport_inbound",
+          "label": "Transport cost (inbound)"
+        },
+        {
+          "key": "packaging_logistics",
+          "label": "Packaging and other logistic costs"
+        }
+      ],
+      "laag": {
+        "key": "cm1",
+        "label": "Gross profit (CM1)"
+      }
+    },
+    {
+      "groep": "outbound",
+      "label": "Costs of goods sold (outbound)",
+      "regels": [
+        {
+          "key": "outbound_picking",
+          "label": "Picking costs"
+        },
+        {
+          "key": "outbound_freight",
+          "label": "Outbound freight"
+        }
+      ],
+      "laag": {
+        "key": "cm2",
+        "label": "Trading profit (CM2)"
+      }
+    },
+    {
+      "groep": "selling",
+      "label": "Selling expenses",
+      "regels": [
+        {
+          "key": "brand",
+          "label": "Brand"
+        },
+        {
+          "key": "performance",
+          "label": "Performance"
+        },
+        {
+          "key": "marketing_contribution_suppliers",
+          "label": "Marketing contribution from suppliers",
+          "negatief": true
+        },
+        {
+          "key": "other_selling",
+          "label": "Other selling expenses"
+        }
+      ],
+      "laag": {
+        "key": "cm3",
+        "label": "Contribution margin 3 (CM3)"
+      }
+    },
+    {
+      "groep": "opex",
+      "label": "Operational expenses",
+      "regels": [
+        {
+          "key": "personnel",
+          "label": "Personnel costs"
+        },
+        {
+          "key": "other_housing_it",
+          "label": "Other costs like housing and IT"
+        }
+      ],
+      "laag": {
+        "key": "ebitda",
+        "label": "EBITDA"
+      }
+    },
+    {
+      "groep": "depreciation",
+      "label": "",
+      "regels": [
+        {
+          "key": "depreciation",
+          "label": "Depreciation"
+        },
+        {
+          "key": "amortization",
+          "label": "Amortization"
+        }
+      ],
+      "laag": {
+        "key": "ebit",
+        "label": "EBIT"
+      }
+    },
+    {
+      "groep": "financial",
+      "label": "",
+      "regels": [
+        {
+          "key": "interest_loans",
+          "label": "Interest loans"
+        },
+        {
+          "key": "financial_result_other",
+          "label": "Financial result and other"
+        },
+        {
+          "key": "psp_transaction_cost",
+          "label": "Transaction cost PSP (Mollie, Shopify Payments)"
+        }
+      ],
+      "laag": {
+        "key": "ebt",
+        "label": "EBT"
+      }
+    },
+    {
+      "groep": "tax",
+      "label": "",
+      "regels": [
+        {
+          "key": "tax",
+          "label": "Tax"
+        }
+      ],
+      "laag": {
+        "key": "net",
+        "label": "Net earnings"
+      }
+    }
+  ],
+  "accounts": [
+    {
+      "code": "",
+      "naam_nl": "Kostprijs van de omzet",
+      "naam_en": "Cost of sales",
+      "standaard_regel": "purchased_goods"
+    },
+    {
+      "code": "",
+      "naam_nl": "Afschrijvingen",
+      "naam_en": "Depreciation",
+      "standaard_regel": "depreciation"
+    },
+    {
+      "code": "",
+      "naam_nl": "Huisvestingskosten",
+      "naam_en": "Premises",
+      "standaard_regel": "other_housing_it"
+    },
+    {
+      "code": "",
+      "naam_nl": "Kantoorkosten",
+      "naam_en": "Office costs",
+      "standaard_regel": "other_housing_it"
+    },
+    {
+      "code": "",
+      "naam_nl": "Verkoopkosten",
+      "naam_en": "Selling costs",
+      "standaard_regel": "other_selling"
+    },
+    {
+      "code": "",
+      "naam_nl": "Algemene kosten",
+      "naam_en": "General costs",
+      "standaard_regel": "other_housing_it"
+    },
+    {
+      "code": "",
+      "naam_nl": "Financiële baten en lasten",
+      "naam_en": "Financial items",
+      "standaard_regel": "financial_result_other"
+    }
+  ],
+  "_accounts_uitleg": "Hoofdgroepen uit Venema's jaarrekening, nog zonder code. De standaard-managementregel is een VOORSTEL (de mapping uit het ontwerp, op hoofdgroep): bij invoer te overschrijven. Porti (outbound_freight) en reclame (brand/performance) zitten in een hoofdgroep met een andere standaard — kies bij invoer de juiste regel.",
+  "batches": [
+    "Batch 4"
+  ]
+}

@@ -24,6 +24,13 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/messages` | `render_messages` | `nooch_village/views/messages.py` |
 | `/version` | `(inline)` | `cockpit2.py` |
 | `/tools` | `render_tools` | `nooch_village/views/tools.py` |
+| `/finance/costs` | `render_costs` | `nooch_village/views/finance.py` |
+| `/finance/costs/view` | `render_cost` | `nooch_village/views/finance.py` |
+| `/finance/recurring` | `render_recurring` | `nooch_village/views/finance.py` |
+| `/finance/monthly` | `render_monthly` | `nooch_village/views/finance.py` |
+| `/finance/pnl` | `render_pnl` | `nooch_village/views/finance.py` |
+| `/finance/costs.csv` | `(inline)` | `cockpit2.py` |
+| `/finance/file` | `(inline)` | `cockpit2.py` |
 | `/fixed-costs` | `render_vaste_kosten` | `nooch_village/views/vaste_kosten.py` |
 | `/open-questions` | `render_open_vragen` | `nooch_village/views/open_vragen.py` |
 | `/bom` | `render_bom` | `nooch_village/views/bom.py` |
@@ -265,7 +272,6 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `bom_leveranciers` | `BomLeverancierStore` | `bom_leveranciers.json` |
 | `bom_materialen` | `BomMateriaalStore` | `bom_materialen.json` |
 | `bom_varianten` | `BomVariantStore` | `bom_varianten.json` |
-| `vaste_kosten` | `VasteKostenStore` | `vaste_kosten.json` |
 | `productieverplichtingen` | `ProductieVerplichtingStore` | `productieverplichtingen.json` |
 | `personas` | `PersonaStore` | `personas.json` |
 | `projects` | `ProjectLedger` | `projects.json` |
@@ -308,9 +314,11 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `claims_runtime.json` | `claims_db.py` |
 | `competitor_brands.json` | `village.py` |
 | `constraints.json` | `cli.py` |
+| `costs.jsonl` | `finance_register.py` |
 | `csrf.json` | `cockpit2.py` |
 | `deadsource_state.json` | `village.py` |
 | `decision_sheets.jsonl` | `decision_sheets.py` |
+| `downloads.jsonl` | `finance_register.py` |
 | `draaistaat.jsonl` | `draaistaat.py` |
 | `feeds.json` | `radar_store.py` |
 | `gaps.jsonl` | `gap_ledger.py` |
@@ -321,6 +329,8 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `notes.json` | `kennisbank.py` |
 | `persona_kroniek.jsonl` | `cockpit2.py` |
 | `pinboard.json` | `village.py` |
+| `recurring.json` | `finance_recurring.py` |
+| `recurring_log.jsonl` | `finance_recurring.py` |
 | `role_metrics.json` | `village.py` |
 | `role_status.json` | `village.py` |
 | `sessions.json` | `cockpit2.py` |
@@ -328,6 +338,7 @@ Sectie (c) dekt alleen de stores die als handle op `_Stores` hangen — ongeveer
 | `site_audit.jsonl` | `site_audit.py` |
 | `site_audit_dev.jsonl` | `site_audit.py` |
 | `strategy.json` | `pinboard.py` |
+| `vaste_kosten.json` | `finance_recurring.py` |
 | `verwerkingen.jsonl` | `zelf_verwerking.py` |
 | `weekmemo.json` | `weekmemo.py` |
 
@@ -354,6 +365,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 |---|
 | `co2_factoren.json` |
 | `critical_numbers.json` |
+| `finance.json` |
 | `llm_prijzen.json` |
 | `noochie_memo_staat.json` |
 | `notifications.json` |
@@ -363,7 +375,8 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `trend_signals.jsonl` |
 | `triage_uitkomsten.jsonl` |
 | `villageraad.jsonl` |
+| `zicht.json` |
 
 
 ---
-_55 routes · 173 dispatch-acties · 34 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._
+_62 routes · 173 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 13 zonder gevonden schrijver._

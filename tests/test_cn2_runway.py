@@ -4,7 +4,8 @@ from __future__ import annotations
 import pytest
 
 from nooch_village import cockpit2, critical_numbers, zicht
-from nooch_village.vaste_kosten import maak_regel
+from nooch_village.finance_recurring import maak_regel
+from nooch_village.vaste_kosten import maak_regel as oude_maak_regel
 from nooch_village.views.metrics import _sources_for, runway
 from nooch_village.views.metrics2 import render_metrics2_tab
 from nooch_village.views.vaste_kosten import render_vaste_kosten
@@ -21,6 +22,7 @@ def _dorp(tmp_path):
     st = cockpit2._Stores(dd)
     for naam, mail, rol in (("Fien", "fc@t.nl", FC), ("Bas", "bs@t.nl", BS),
                             ("Anker", "anker@t.nl", "mother_earth__circle_lead"),
+                            ("Stefan", "stefan@nooch.earth", "mother_earth__nooch__shoe_developer"),
                             ("Lid", "lid@t.nl", "mother_earth__nooch__marketing_lead")):
         st.people.add(naam, mail)
         st.assign.assign(rol, "person", st.people.by_email(mail).id)
@@ -49,7 +51,9 @@ def _vul(dd, bunq=None, mollie=None, tax=None, payables=None, kosten=None, batch
 # ── vaste kosten ────────────────────────────────────────────────────────────
 
 def test_een_regel_wordt_gevalideerd():
-    assert maak_regel("Huur", "1200,50", van="2026-01-01")[0]["bedrag"] == 1200.5
+    # Sinds Finance PR 1 in centen (de terugkerende kosten); de oude CN2-vorm blijft voor de migratie.
+    assert maak_regel("Huur", "1200,50", van="2026-01-01")[0]["amount_cents"] == 120050
+    assert oude_maak_regel("Huur", "1200,50", van="2026-01-01")[0]["bedrag"] == 1200.5
     assert maak_regel("", "10", van="2026-01-01")[0] is None
     assert maak_regel("Huur", "veel", van="2026-01-01")[0] is None
     assert maak_regel("Huur", "10", van="")[0] is None
@@ -121,8 +125,11 @@ def test_de_grens_6_en_12_maanden(tmp_path, bunq, woord):
 def test_wie_mag_zien_en_wijzigen(tmp_path):
     st = _st(_dorp(tmp_path))
     rechten = {u: (zicht.mag(st, u, "finance"), zicht.mag(st, u, "finance", "wijzigen"))
-               for u in ("fc@t.nl", "bs@t.nl", "anker@t.nl", "lid@t.nl", "onbekend@t.nl", None, "guest")}
-    assert rechten == {"fc@t.nl": (True, True), "bs@t.nl": (True, False), "anker@t.nl": (True, True),
+               for u in ("fc@t.nl", "bs@t.nl", "stefan@nooch.earth", "anker@t.nl", "lid@t.nl",
+                         "onbekend@t.nl", None, "guest")}
+    # Sinds Finance PR 1 geen automatisch recht voor de anchor lead: Stefan staat er als PERSOON in.
+    assert rechten == {"fc@t.nl": (True, True), "bs@t.nl": (True, False),
+                       "stefan@nooch.earth": (True, True), "anker@t.nl": (False, False),
                        "lid@t.nl": (False, False), "onbekend@t.nl": (False, False),
                        None: (False, False), "guest": (True, True)}
     assert not zicht.mag(st, "fc@t.nl", "bestaat_niet")                   # onbekende groep: dicht
@@ -153,7 +160,8 @@ def test_in_het_werkoverleg_alleen_voor_wie_mag(tmp_path):
 def test_cash_invoeren_alleen_fc_en_anker(tmp_path):
     dd = _dorp(tmp_path)
     mid = _st(dd).metrics.by_cn("cn2_cash_bunq")["id"]
-    for wie, mag in (("lid@t.nl", False), ("bs@t.nl", False), ("fc@t.nl", True), ("anker@t.nl", True)):
+    for wie, mag in (("lid@t.nl", False), ("bs@t.nl", False), ("fc@t.nl", True),
+                     ("stefan@nooch.earth", True)):
         _n, msg = cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["1000"], "next": ["/"]},
                                     username=wie)
         assert ("✓" in msg) is mag, (wie, msg)
@@ -165,7 +173,7 @@ def test_vaste_kosten_wijzigen_alleen_fc_en_anker(tmp_path):
     dd = _dorp(tmp_path)
     form = {"omschrijving": ["Huur"], "bedrag": ["1000"], "van": ["2026-01-01"], "next": ["/fixed-costs"]}
     for wie in ("lid@t.nl", "bs@t.nl"):
-        with pytest.raises(cockpit2.Forbidden):
+        with pytest.raises(cockpit2.NietGevonden):                # Finance: 404, niet verraden
             cockpit2.dispatch(dd, "vaste_kosten_zet", form, username=wie)
     assert "✓" in cockpit2.dispatch(dd, "vaste_kosten_zet", form, username="fc@t.nl")[1]
     assert _st(dd).vaste_kosten.totaal_op("2026-10-10") == 1000
@@ -175,10 +183,11 @@ def test_de_pagina_vaste_kosten_per_rol(tmp_path):
     dd = _dorp(tmp_path)
     _st(dd).vaste_kosten.zet(maak_regel("Huur", 1234, van="2026-01-01")[0])
     lid = render_vaste_kosten(_st(dd), "lid@t.nl", "t")
-    assert "1,234" not in lid and "Only the Financial Controller" in lid
+    assert "1,234" not in lid and "404" in lid                          # niet verraden
     bs = render_vaste_kosten(_st(dd), "bs@t.nl", "t")
-    assert "€1,234.00" in bs and "vaste_kosten_zet" not in bs
-    assert "vaste_kosten_zet" in render_vaste_kosten(_st(dd), "fc@t.nl", "t")
+    assert "€1,234.00" in bs and "verplichting_zet" not in bs           # zien, niet wijzigen
+    fc = render_vaste_kosten(_st(dd), "fc@t.nl", "t")
+    assert "verplichting_zet" in fc and "/finance/recurring" in fc
 
 
 def test_het_zaad_maakt_de_vijf_onderdelen(tmp_path):
@@ -223,7 +232,7 @@ def test_verplichtingen_wijzigen_alleen_fc_en_anker(tmp_path):
     form = {"batch": ["Batch 4"], "totaal": ["20000"], "betaald": ["10000"], "status": ["ordered"],
             "next": ["/fixed-costs"]}
     for wie in ("lid@t.nl", "bs@t.nl"):
-        with pytest.raises(cockpit2.Forbidden):
+        with pytest.raises(cockpit2.NietGevonden):
             cockpit2.dispatch(dd, "verplichting_zet", form, username=wie)
     assert "✓" in cockpit2.dispatch(dd, "verplichting_zet", form, username="fc@t.nl")[1]
     assert _st(dd).productieverplichtingen.totaal_cents() == 1000000
@@ -235,7 +244,7 @@ def test_de_invoerpagina_toont_alle_onderdelen(tmp_path):
     for kop in ("Runway inputs", "Cash — bunq", "Cash — Mollie", "Tax liabilities", "Supplier payables",
                 "Production commitments (open batches)", "Fixed costs per month", "missing: cash bunq"):
         assert kop in h, kop
-    assert "value='m_sample'" in h and "verplichting_zet" in h
+    assert "value='m_sample'" in h and "verplichting_zet" in h and "/finance/costs" in h
 
 
 # ── de routes gebruiken de kijker-versie ────────────────────────────────────

@@ -68,3 +68,6 @@ claude/stickers_22sept/
 experiments/stage0/rapport_*
 experiments/stage0/misses_*
 experiments/stage0/scores_cache.jsonl
+
+# Finance PR 1: kostenregister, facturen (PDF) en downloadlog — nooit in git (data/ staat al uit, dit maakt het expliciet).
+data/finance/
