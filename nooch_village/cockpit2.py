@@ -7126,7 +7126,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_bom(st, csrf_token=effective_csrf, username=username,
                                       msg=(qs.get("msg") or [""])[0],
                                       model=(qs.get("model") or [""])[0],
-                                      variant=(qs.get("variant") or [""])[0]))
+                                      variant=(qs.get("variant") or [""])[0],
+                                      doel=(qs.get("doel") or [""])[0]))
                 return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder

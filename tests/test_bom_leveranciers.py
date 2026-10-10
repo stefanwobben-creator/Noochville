@@ -90,7 +90,8 @@ def test_een_koppeling_staat_op_alle_componenten_van_dat_materiaal(tmp_path):
     _zet(dd, "HyphaLite", "Hypha Labs")
     a = st.att.add(HOUDER, "note", title="Hypha Labs")
     html = render_bom(cockpit2._Stores(dd), csrf_token="", username="buiten@t.nl")
-    assert html.count(f"href='{wiki.pagina_url(a.id)}'>Hypha Labs</a>") == 7
+    stuklijst = html.split("id='coverage'")[0]      # de dekking eronder linkt de leverancier ook
+    assert stuklijst.count(f"href='{wiki.pagina_url(a.id)}'>Hypha Labs</a>") == 7
 
 
 # ── de materiaalpagina leest dezelfde bron ──────────────────────────────────
