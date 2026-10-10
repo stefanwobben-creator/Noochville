@@ -37,6 +37,8 @@ Tot die dag draaide er GEEN back-up: de stap hieronder werd niet uitgevoerd, en 
 - **Dagelijks naar Stefans Mac**: `scripts/backup_mac.sh` haalt `data/` binnen als dagsnapshot in
   `~/NoochVille-backups/<datum>/data` (hardlinks naar de vorige dag; 30 dagen bewaard). launchd draait
   hem om 07:15 (`scripts/launchd/nl.nooch.backup.plist`; een gemiste dag haalt hij in bij het wakker worden).
+  launchd draait een vaste kopie van de scripts in `~/NoochVille-backups/bin/` (zie de kop van de plist),
+  zodat de back-up niet afhangt van welke branch er in de repo uitgecheckt is.
 - **Na elke run een herstel-toets** (`scripts/backup_herstel_toets.py`): alle JSON leesbaar en de
   stores te openen, op een kopie. Mislukt iets: een macOS-melding en een regel in `backup.log`.
 - **Terugzetten**: `rsync -a ~/NoochVille-backups/<datum>/data/ root@138.201.154.162:/opt/noochville/data/`

@@ -3,9 +3,13 @@
 <!--
   NoochVille back-up: elke dag een snapshot van prod data/ naar ~/NoochVille-backups (scripts/backup_mac.sh).
 
-  Installeren (eenmalig, op Stefans Mac):
+  Installeren (eenmalig, op Stefans Mac) — een VASTE KOPIE van de twee scripts buiten de repo, zodat
+  de back-up niet afhangt van welke branch er uitgecheckt is:
+    mkdir -p ~/NoochVille-backups/bin
+    cp scripts/backup_mac.sh scripts/backup_herstel_toets.py ~/NoochVille-backups/bin/
     cp scripts/launchd/nl.nooch.backup.plist ~/Library/LaunchAgents/
     launchctl load ~/Library/LaunchAgents/nl.nooch.backup.plist
+  Na een wijziging aan de scripts: opnieuw kopiëren.
   Weghalen:
     launchctl unload ~/Library/LaunchAgents/nl.nooch.backup.plist && rm ~/Library/LaunchAgents/nl.nooch.backup.plist
 
@@ -19,8 +23,13 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/stefanwobben/noochville/scripts/backup_mac.sh</string>
+        <string>/Users/stefanwobben/NoochVille-backups/bin/backup_mac.sh</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NOOCH_REPO</key>
+        <string>/Users/stefanwobben/noochville</string>
+    </dict>
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>

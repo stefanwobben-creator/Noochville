@@ -26,7 +26,11 @@ SERVER="${NOOCH_SERVER:-root@138.201.154.162}"
 BRON="${NOOCH_DATA:-/opt/noochville/data/}"
 DOEL="${NOOCH_BACKUP_DIR:-$HOME/NoochVille-backups}"
 BEWAAR_DAGEN="${NOOCH_BACKUP_DAGEN:-30}"
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# NOOCH_REPO: launchd draait een VASTE KOPIE van dit script buiten de repo (~/NoochVille-backups/bin),
+# want in de repo bestaat het alleen zolang de juiste branch is uitgecheckt. De repo levert dan alleen
+# nog de venv en de stores voor de herstel-toets. De toets zelf staat naast dit script.
+REPO="${NOOCH_REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
+HIER="$(cd "$(dirname "$0")" && pwd)"
 PY="$REPO/venv/bin/python"
 
 stamp="$(date +%Y-%m-%d)"
@@ -54,7 +58,7 @@ rm -rf "$DOEL/$stamp"
 mv "$werk" "$DOEL/$stamp"
 log "snapshot klaar: $(du -sh "$DOEL/$stamp" | cut -f1) ($(find "$DOEL/$stamp/data" -type f | wc -l | tr -d ' ') bestanden)"
 
-"$PY" "$REPO/scripts/backup_herstel_toets.py" "$DOEL/$stamp/data" >>"$DOEL/backup.log" 2>&1 \
+NOOCH_REPO="$REPO" "$PY" "$HIER/backup_herstel_toets.py" "$DOEL/$stamp/data" >>"$DOEL/backup.log" 2>&1 \
   || faal "de herstel-toets op $stamp faalde (zie backup.log)"
 log "herstel-toets OK"
 

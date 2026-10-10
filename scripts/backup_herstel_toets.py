@@ -21,7 +21,7 @@ import shutil
 import sys
 import tempfile
 
-_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO = os.environ.get("NOOCH_REPO") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO)
 
 
