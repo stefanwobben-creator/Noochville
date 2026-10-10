@@ -61,6 +61,7 @@ LABELS: dict[str, str] = {
     # ── Business operations ──────────────────────────────────────────────────
     "shopify_sales": "Reads how many pairs were sold",
     "co2_village": "Works out how much CO2 the village's thinking cost",
+    "bom_co2": "Works out the CO2 per pair from the materials on the bill of materials",
 }
 
 
@@ -142,6 +143,7 @@ MATCH_NL: dict[str, str] = {
     "escaleer": "Brengt een uitkomst of een beslissing bij de juiste rol of bij de mens",
     "shopify_sales": "Leest hoeveel paren er verkocht zijn",
     "co2_village": "Rekent uit hoeveel CO2 het denkwerk van het dorp kostte",
+    "bom_co2": "Rekent de CO2 per paar uit met de materialen op de stuklijst",
 }
 
 

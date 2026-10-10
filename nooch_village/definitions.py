@@ -263,6 +263,14 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "CO2 per paar", "source": "impact", "unit": "kg CO2e", "direction": "down",
      "cadence": "kwartaal", "meettype": "snapshot",
      "definition": "Levenscyclus-emissies per paar schoenen (LCA-onderbouwing vereist)."},
+    # MATERIALEN, GEEN LCA (10 oktober 2026): naast "CO2 per paar" hierboven, niet in plaats ervan.
+    # Die is een levenscyclus-cijfer (2030calculator); deze telt alleen gewicht × factor van de
+    # materialen op /bom, en is zolang er factoren ontbreken een ondergrens.
+    {"name": "CO2e per pair, materials (BOM)", "source": "bom", "unit": "kg CO2e", "direction": "down",
+     "cadence": "dag", "meettype": "snapshot",
+     "definition": "Sum over the components of the bill of materials of weight times the CO2e per kg on "
+                   "the material page, per model. Materials only: no manufacturing, transport or end of "
+                   "life. A lower bound while materials lack a factor or components lack a weight."},
     {"name": "Aandeel gerecycled materiaal", "source": "impact", "unit": "%", "direction": "up",
      "cadence": "kwartaal", "meettype": "snapshot",
      "definition": "Massa-aandeel gerecycled materiaal in het product."},
@@ -478,6 +486,8 @@ _GROUNDING: dict[str, dict] = {
                      "tijd": "lagging", "bruikbaar": "actionable",
                      "benchmark": "conventioneel ~13,6 kg → −65% (voorlopig, herrekenen)",
                      "bron_url": "/carbon-footprint-of-shoes", "verificatie": "voorlopig", "waarde": 4.75},
+    "CO2e per pair, materials (BOM)": {"standaard": "GHG Protocol (cradle-to-gate, materials only)",
+                                       "tijd": "lagging", "bruikbaar": "actionable"},
     "Aandeel gerecycled materiaal": {"standaard": "IRIS+ (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Aandeel biobased materiaal": {"standaard": "intern (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Donaties goede doelen": {"standaard": "intern (impact)", "tijd": "lagging", "bruikbaar": "vanity"},
@@ -584,7 +594,7 @@ _SEED_VELD = {
 _SOURCE_CATEGORIE = {
     "plausible": "Website", "shopify": "Verkoop", "gsc": "Zoekprestaties",
     "werkoverleg": "Werkoverleg", "finance": "Financieel", "budget": "Financieel",
-    "erp": "Supply chain", "impact": "Impact",
+    "erp": "Supply chain", "impact": "Impact", "bom": "Impact",
     "survey": "Team & klant", "hris": "Team & klant", "support": "Team & klant",
     "monitoring": "IT", "site_health": "IT", "mobiel_audit": "Website",
     "trends": "Onderzoek", "keywords_everywhere": "Onderzoek", "ngram": "Onderzoek",
@@ -612,6 +622,7 @@ _AGGREGATIE: dict[tuple[str, str], str] = {
     ("shopify", "pairs_sold"): "som",
     ("shopify", "orders"): "som",
     ("shopify", "revenue"): "som",
+    ("bom", "co2e_per_paar"): "laatste_waarde",      # een stand per paar, geen som over dagen
     ("shopify", "aov"): "laatste_waarde",
     ("werkoverleg", "tevredenheid"): "gemiddelde",
     ("werkoverleg", "duur"): "gemiddelde",

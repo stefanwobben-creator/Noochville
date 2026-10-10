@@ -188,6 +188,8 @@ def migrate_data_sources(dd: str) -> None:
         sources.set_active("plausible", True)
     if "co2_village" not in sources.all():          # CO2-KPI: standaard actief (geen sleutel nodig)
         sources.set_active("co2_village", True)
+    if "bom" not in sources.all():                  # CO2e per paar uit /bom: geen sleutel nodig
+        sources.set_active("bom", True)
     # SHOPIFY STANDAARD ACTIEF (besluit Stefan, 10 oktober 2026): de verkoopcijfers horen dagelijks
     # binnen te komen. Zonder token schrijft hij niets — de collector logt "actief maar niet
     # geconfigureerd" en de healthcheck slaat een familie zonder data over, dus geen vals alarm.
