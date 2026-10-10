@@ -359,11 +359,53 @@ GROOTHEDEN: dict[str, dict[str, str]] = {
 #: COMPLIANCE-KLAAR (2 oktober 2026, besluit Stefan): twee secties die het zaad én het skelet allebei
 #: schrijven — ÉÉN plek voor hun tekst en hun standaard-open-punten, zodat ze niet uiteenlopen. Zelfde
 #: vorm als "CO2 & Water": een feit met grond (`soort` bron of cert), geen nieuw feiten-mechanisme.
-DIERLIJK_CHEMISCH = (
-    "## Animal-derived & chemical status",
+#: ÉÉN KOPJE PER VRAAG (besluit Stefan, 10 oktober 2026). Hier stond `DIERLIJK_CHEMISCH`: één kopje
+#: "Animal-derived & chemical status" voor twee vragen. De dekking op /bom leest per vraag het kopje
+#: waar een feit onder staat, en onder dat gedeelde kopje viel niet te zeggen of een feit over
+#: dierlijk of over chemisch ging — een REACH-brief zou dan "animal-derived" groen kleuren. Nu heeft
+#: elke vraag van de Vegan Society, het Product Passport en CFJ zijn eigen kopje.
+#:
+#: Een sectie is (kop, uitlegzin, standaard-open-punten, andere namen). De ANDERE NAMEN zijn kopjes
+#: die al op pagina's staan en dezelfde vraag dragen ("Certifications"): de migratie
+#: (`wiki_seed.vraagkoppen`) voegt dan geen tweede kopje toe.
+PLASTIC = (
+    "## Contains plastic",
+    "As a fact, grounded in the technical data sheet or a lab report: whether the material contains "
+    "plastic, and which share. Under EU guidance PLA counts as plastic.",
+    (), ("plastic",),
+)
+BIOBASED = (
+    "## Biobased",
+    "As a fact, grounded in a measured biobased content (for example ASTM D6866) or a biobased "
+    "certificate, not only the supplier's word.",
+    (), ("biobased content",),
+)
+DIERLIJK = (
+    "## Animal-derived",
     "As a fact, grounded in a certificate (for example vegan) or the supplier's disclosure: whether "
-    "the material contains anything animal-derived, and which dyes and chemicals are used.",
-    ("Animal-derived status: not yet verified", "Dye/chemical disclosure: not yet provided"),
+    "the material contains anything animal-derived, including glues, dyes and finishing aids.",
+    ("Animal-derived status: not yet verified",), ("animal-derived status",),
+)
+CHEMISCH = (
+    "## Dyes & chemicals",
+    "As a fact, grounded in the supplier's disclosure, a product-specific REACH/SVHC statement or an "
+    "OEKO-TEX report: which dyes and chemicals are used.",
+    ("Dye/chemical disclosure: not yet provided",), ("dyes and chemicals",),
+)
+CERTIFICERING = (
+    "## Certification",
+    "As a fact, grounded in the certificate or Chronicle record.",
+    (), ("certifications", "certificate"),
+)
+LOCATIE = (
+    "## Location & contact",
+    "Country, kind of supplier, contact person.",
+    (), (),
+)
+BEDRIJFSCERT = (
+    "## Company certification",
+    "As a fact, grounded in the certificate or Chronicle record.",
+    (), (),
 )
 ARBEID_COMPLIANCE = (
     "## Labor & compliance",
@@ -372,6 +414,27 @@ ARBEID_COMPLIANCE = (
     ("Facility address: not yet provided", "Living wage verification: not yet provided",
      "Compliance policies (modern slavery, child labor, health & safety, anti-discrimination, "
      "union rights): not yet provided"),
+    (),
+)
+EIGENDOM = (
+    "## Ownership & health",
+    "As facts with a source: who owns the supplier, recent funding or acquisitions, lawsuits and "
+    "restructuring.",
+    (), (),
+)
+
+#: De vraag-secties per paginasoort, in pagina-volgorde. Het skelet, het zaad en de migratie lezen
+#: hier; de dekking op /bom leest dezelfde kopnamen.
+VRAAGSECTIES: dict[str, tuple[tuple, ...]] = {
+    "materiaal": (PLASTIC, BIOBASED, DIERLIJK, CHEMISCH, CERTIFICERING),
+    "leverancier": (LOCATIE, BEDRIJFSCERT, ARBEID_COMPLIANCE, EIGENDOM),
+}
+
+#: Het oude gedeelde kopje, dat de migratie weghaalt als er niets onder staat dan zijn eigen zin.
+OUD_DIERLIJK_CHEMISCH = (
+    "## Animal-derived & chemical status",
+    "As a fact, grounded in a certificate (for example vegan) or the supplier's disclosure: whether "
+    "the material contains anything animal-derived, and which dyes and chemicals are used.",
 )
 
 
@@ -386,20 +449,24 @@ def _open(*secties: tuple) -> str:
 SJABLONEN: dict[str, tuple[str, str]] = {
     "materiaal": ("Material page", "\n\n".join((
         "## Characteristics\nWhat it is, what it is made of, what it does in the shoe.",
+        _sectie(PLASTIC),
+        _sectie(BIOBASED),
         "## CO2 & Water\nAs a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
         "TDS or another source. The BOM screen calculates with these values.",
-        _sectie(DIERLIJK_CHEMISCH),
+        _sectie(DIERLIJK),
+        _sectie(CHEMISCH),
         "## Circularity\nWhat can happen to it at the end of its life: reuse, recycling, composting.",
-        "## Certification\nAs a fact, grounded in the certificate or Chronicle record.",
-        "## Open items\nWhat still needs to be found out.\n" + _open(DIERLIJK_CHEMISCH),
+        _sectie(CERTIFICERING),
+        "## Open items\nWhat still needs to be found out.\n" + _open(*VRAAGSECTIES["materiaal"]),
     ))),
     "leverancier": ("Supplier page", "\n\n".join((
-        "## Location & contact\nCountry, kind of supplier, contact person.",
-        "## Company certification\nAs a fact, grounded in the certificate or Chronicle record.",
+        _sectie(LOCATIE),
+        _sectie(BEDRIJFSCERT),
         "## Price agreement\nAs a fact with a value (cost price per kg), grounded in the quote or "
         "the contract. The BOM screen calculates with this value.",
         _sectie(ARBEID_COMPLIANCE),
-        "## Open items\nWhat still needs to be found out.\n" + _open(ARBEID_COMPLIANCE),
+        _sectie(EIGENDOM),
+        "## Open items\nWhat still needs to be found out.\n" + _open(*VRAAGSECTIES["leverancier"]),
     ))),
 }
 

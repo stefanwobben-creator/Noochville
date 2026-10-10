@@ -188,10 +188,11 @@ def materiaal_paginas(bom_tekst: str = "",
         regels += ["", "## CO2 & Water",
                    "As a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
                    "TDS or another source. The BOM screen calculates with these values."]
-        # COMPLIANCE-KLAAR (2 oktober 2026): de sectie en zijn standaard-open-punten uit
-        # `wiki.DIERLIJK_CHEMISCH` — dezelfde tekst als het skelet, één plek.
-        regels += ["", wiki.DIERLIJK_CHEMISCH[0], wiki.DIERLIJK_CHEMISCH[1]]
-        open_punten += [f"- {p}" for p in wiki.DIERLIJK_CHEMISCH[2]]
+        # EEN KOPJE PER VRAAG (10 oktober 2026): de secties en hun standaard-open-punten uit
+        # `wiki.VRAAGSECTIES` — dezelfde tekst als het skelet, één plek.
+        for sectie in wiki.VRAAGSECTIES["materiaal"]:
+            regels += ["", sectie[0], sectie[1]]
+            open_punten += [f"- {p}" for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
         regels += ["", "What this material demonstrably is or is not belongs on this page as a "
@@ -341,12 +342,17 @@ def leverancier_paginas(ledger, *, vandaag: str = "",
         # PRIJSAFSPRAAK HOORT HIER en niet op de materiaalpagina: twee leveranciers van hetzelfde
         # materiaal kunnen verschillend prijzen. Zelfde regel als bij CO2 & water: de plek, geen
         # bewering over of het getal er al is.
+        # EEN KOPJE PER VRAAG (10 oktober 2026), uit `wiki.VRAAGSECTIES`: locatie en certificering
+        # vóór de prijs, arbeid en eigendom erna — dezelfde volgorde als het skelet.
+        voor, na = wiki.VRAAGSECTIES["leverancier"][:2], wiki.VRAAGSECTIES["leverancier"][2:]
+        for sectie in voor:
+            regels += ["", sectie[0], sectie[1]]
         regels += ["", "## Price agreement",
                    "As a fact with a value (cost price per kg), grounded in the quote or the "
                    "contract. The BOM screen calculates with this value."]
-        # COMPLIANCE-KLAAR (2 oktober 2026): zie `wiki.ARBEID_COMPLIANCE`.
-        regels += ["", wiki.ARBEID_COMPLIANCE[0], wiki.ARBEID_COMPLIANCE[1]]
-        open_punten += [f"- {p}" for p in wiki.ARBEID_COMPLIANCE[2]]
+        for sectie in na:
+            regels += ["", sectie[0], sectie[1]]
+        open_punten += [f"- {p}" for sectie in wiki.VRAAGSECTIES["leverancier"] for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
         uit.append({"titel": leverancier, "body": "\n".join(regels),
@@ -671,3 +677,119 @@ def rapport_tekst(rapport: list[dict]) -> str:
     regels.append("")
     regels.append(" · ".join(f"{k}: {v}" for k, v in sorted(tel.items())))
     return "\n".join(regels)
+
+
+# ── een kopje per vraag (10 oktober 2026) ───────────────────────────────────
+
+_KOP_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+
+
+def _koppen(regels: list[str]) -> list[tuple[int, int, str]]:
+    """(regelnummer, niveau, genormaliseerde tekst) van elk kopje, buiten codeblokken."""
+    uit, in_code = [], False
+    for i, r in enumerate(regels):
+        if r.strip().startswith("```"):
+            in_code = not in_code
+            continue
+        m = None if in_code else _KOP_RE.match(r.strip())
+        if m:
+            uit.append((i, len(m.group(1)), " ".join(m.group(2).split()).lower()))
+    return uit
+
+
+def _kopnamen(sectie: tuple) -> set[str]:
+    """De namen waaronder een vraag-sectie al op een pagina kan staan: zijn kop plus zijn aliassen."""
+    return {" ".join(sectie[0].lstrip("#").split()).lower(), *sectie[3]}
+
+
+def vraagkoppen_body(body: str, soort: str) -> tuple[str, list[str], str]:
+    """(nieuwe body, toegevoegde koppen, wat er met het oude gedeelde kopje gebeurde). Puur.
+
+    1. Elke vraag-sectie die de pagina nog niet heeft (onder zijn naam of een alias), komt erbij
+       met zijn uitlegzin — vóór "Open items", of anders aan het eind.
+    2. Het oude kopje "Animal-derived & chemical status" verdwijnt ALLEEN als er niets onder staat
+       dan zijn eigen uitlegzin. Staat er een feit of eigen tekst onder, dan blijft het staan: welke
+       van de twee nieuwe kopjes het hoort, is aan de schrijver. Het rapport zegt het.
+    Bestaande tekst en feiten verschuiven nooit naar een ander kopje."""
+    regels = (body or "").split("\n")
+    oud_naam = " ".join(wiki.OUD_DIERLIJK_CHEMISCH[0].lstrip("#").split()).lower()
+    oud = ""
+    koppen = _koppen(regels)
+    for n, (i, niveau, tekst) in enumerate(koppen):
+        if tekst != oud_naam:
+            continue
+        einde = next((j for j, nv, _t in koppen[n + 1:] if nv <= niveau), len(regels))
+        inhoud = [r for r in regels[i + 1:einde]
+                  if r.strip() and r.strip() != wiki.OUD_DIERLIJK_CHEMISCH[1]]
+        if inhoud:
+            oud = f"kept: “{wiki.OUD_DIERLIJK_CHEMISCH[0][3:]}” has {len(inhoud)} line(s) under it " \
+                  f"— move them under Animal-derived or Dyes & chemicals by hand"
+        else:
+            del regels[i:einde]
+            oud = "removed the empty shared heading"
+        break
+    aanwezig = {t for _i, _n, t in _koppen(regels)}
+    nieuw = [s for s in wiki.VRAAGSECTIES.get(soort, ()) if not (_kopnamen(s) & aanwezig)]
+    if not nieuw and not oud.startswith("removed"):
+        return body, [], oud
+    open_items, niveau = next(((i, n) for i, n, t in _koppen(regels) if t == "open items"),
+                              (None, 2))
+    # HET NIVEAU VAN "OPEN ITEMS": op een pagina met H1-koppen (NFW) zou een `##` anders een
+    # subkopje worden van de sectie ervóór.
+    blok: list[str] = []
+    for s in nieuw:
+        blok += ["#" * niveau + " " + s[0].lstrip("#").strip(), s[1], ""]
+    if open_items is None:
+        while regels and not regels[-1].strip():
+            regels.pop()
+        regels += ([""] if regels and blok else []) + blok
+        while regels and not regels[-1].strip():
+            regels.pop()
+    else:
+        regels[open_items:open_items] = blok
+    return "\n".join(regels), [s[0][3:] for s in nieuw], oud
+
+
+def vraagkoppen(store, materialen_store, varianten_store, leveranciers_store, *,
+                apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Geef de materiaal- en leverancierpagina's van /bom een kopje per vraag (besluit Stefan,
+    10 oktober 2026) — zodat de dekking op /bom per vraag kan zien of er een antwoord staat.
+
+    Welke pagina's: wat /bom vandaag als materiaal of leverancier kent (`wiki.resolve_bom`), net als
+    "From the BOM". Idempotent en dry-run tenzij `apply`; met `apply` één NIEUWE VERSIE per pagina,
+    terug te draaien via de historie. Rapport: `[{id, titel, soort, toegevoegd, oud}]`."""
+    pags = wiki.paginas(store)
+    norm = lambda t: " ".join(str(t or "").split()).lower()
+    doelen: dict[str, tuple] = {}
+    for v in bom_gebruik(materialen_store, varianten_store).values():
+        a = wiki.resolve_bom(v["naam"], pags)
+        if a is not None:
+            doelen.setdefault(a.id, (a, "materiaal"))
+    for _m, lev in leveranciers_store.koppelingen():
+        a = wiki.resolve_bom(lev, pags)
+        if a is not None and a.id not in doelen:
+            doelen[a.id] = (a, "leverancier")
+    rapport = []
+    for a, soort in sorted(doelen.values(), key=lambda x: (x[1], norm(x[0].title))):
+        body, toegevoegd, oud = vraagkoppen_body(a.body or "", soort)
+        if not toegevoegd and not oud:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "soort": soort,
+                        "toegevoegd": toegevoegd, "oud": oud})
+        if apply and body != (a.body or ""):
+            store.update(a.id, body=body, actor_id=actor_id, actor_type="person",
+                         change_note="one heading per question")
+    return rapport
+
+
+def vraagkoppen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to do: every page already has a heading per question."
+    uit = []
+    for r in rapport:
+        uit.append(f"{r['id']}  {r['titel']}  ({r['soort']})")
+        if r["toegevoegd"]:
+            uit.append(f"    add: {', '.join(r['toegevoegd'])}")
+        if r["oud"]:
+            uit.append(f"    {r['oud']}")
+    return "\n".join(uit)
