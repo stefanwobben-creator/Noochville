@@ -225,7 +225,7 @@ class MetricStore:
         return False
 
     #: Velden die `set_tile_extra` mag zetten. Een vaste lijst: een tegel is geen vrij JSON-object.
-    _TEGEL_EXTRA = ("eigenaar_domein", "eigenaar_rol", "zicht", "lijn")
+    _TEGEL_EXTRA = ("eigenaar_domein", "eigenaar_rol", "zicht", "lijn", "lijn_handmatig")
 
     def set_tile_extra(self, node: str, tid: str, **velden) -> bool:
         """Zet losse tegelvelden uit `_TEGEL_EXTRA` (de eigenaar van een Critical Number)."""

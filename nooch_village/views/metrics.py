@@ -652,6 +652,44 @@ def runway(st) -> dict:
     return {"cash": cash, "vaste_kosten": kosten, "maanden": maanden}
 
 
+def _batch_tegel(st, cn: str) -> dict | None:
+    """De tegel van een batch-nummer (CN1), op elke node — zijn lijn draagt de startdatum."""
+    from nooch_village import critical_numbers
+    try:
+        kring = critical_numbers.laad()["kring"]
+    except (OSError, ValueError, KeyError):
+        return None
+    return next((t for t in st.metrics.tiles_of(kring) if t.get("cn") == cn), None)
+
+
+def _batch_stand(st, tile: dict) -> dict:
+    from nooch_village import batch_cn
+    from nooch_village.observations import SHOPIFY_DAILY
+    return batch_cn.stand(st.observations.daily_series(SHOPIFY_DAILY["pairs_sold"], bron="shopify"), tile)
+
+
+def _batch_fetch(st: _Stores, cn: str):
+    """Paren verkocht in deze batch (op besteldatum, vanaf de startdatum). Geen Shopify-reeks → None."""
+    tile = _batch_tegel(st, cn)
+    paren = _batch_stand(st, tile)["paren"] if tile is not None else None
+    return {"kind": "number", "value": paren, "unit": "pairs"}
+
+
+def _batch_regel(stand: dict, tile: dict) -> str:
+    """De toestand onder de tegel. Alleen "open" krijgt daarna een status ten opzichte van de lijn."""
+    from nooch_village import batch_cn
+    lijn = tile.get("lijn") or {}
+    if stand["toestand"] == batch_cn.NIET_GESTART:
+        tekst = f"Not started — the batch opens {lijn.get('van', '?')}"
+    elif stand["toestand"] == batch_cn.GESLOTEN:
+        tekst = (f"Closed {stand['sluitdatum']} — final count "
+                 f"{_num(stand['paren']) if stand['paren'] is not None else '—'} of {_num(tile.get('target'))}")
+    else:
+        tekst = (f"Open since {lijn.get('van', '?')}"
+                 + ("" if stand["paren"] is not None else " — no Shopify data yet"))
+    return f"<div class='tile-goal muted'>{_e(tekst)}</div>"
+
+
 def _runway_fetch(st: _Stores, measure: str):
     from nooch_village import zicht as _zicht
     unit = _RUNWAY_MEASURES.get(measure, ("", ""))[1]
@@ -840,6 +878,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         return _dekking_fetch(st, measure, dim, cutoff, end)
     if source == "runway":
         return _runway_fetch(st, measure)
+    if source == "batch":
+        return _batch_fetch(st, measure)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
@@ -903,7 +943,7 @@ def _tile_agg(st: _Stores, source: str, measure: str) -> str:
         return {"verwerkt": "som", "open": "laatste_waarde"}.get(measure, DEFAULT_AGGREGATIE)
     if source == "co2":
         return "som"                              # dorpsbrede uitstoot/gebruik telt op over het venster
-    if source in ("bom", "dekking", "runway"):
+    if source in ("bom", "dekking", "runway", "batch"):
         return "laatste_waarde"                   # een stand, geen som over dagen
     return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
 
@@ -1585,7 +1625,14 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         warn += "<span class='tile-prov' title='provisional value, not verified yet'>provisional</span>"
     # NIVEAU EN GRENS (10 oktober 2026) — op de tegel, zie `MetricStore.set_tile_grens`.
     niveau = _NIVEAU_BADGE.get(tile.get("niveau") or "", "")
-    goal += _grens_regel(tile, val, g.get("richting") or "")
+    if tile["source"] == "batch":
+        # CN1: alleen een OPEN batch krijgt een status; "not started" en "closed" nooit rood.
+        stand = _batch_stand(st, tile)
+        goal += _batch_regel(stand, tile)
+        if stand["toestand"] == "open":
+            goal += _grens_regel(tile, val, "up")
+    else:
+        goal += _grens_regel(tile, val, g.get("richting") or "")
     rm = ""
     if csrf:
         rm = (f"<form method='post' action='/action' class='tile-rm'>"

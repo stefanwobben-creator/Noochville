@@ -5386,6 +5386,26 @@ def _act_metrics2_grens(c):
         return c.nxt, (f"✗ {fout}" if fout else "✓ level and target saved")
 
 
+def _act_cn_startdatum_zet(c):
+        # AUTHZ: rolvervuller of Circle Lead — de rol Sales of de anchor lead (zicht-groep `sales`,
+        # recht "wijzigen"; `zicht.py`). De startdatum van een batch is een verkoopbesluit.
+        # Verzet de begindatum van de lijn op een batch-tegel (CN1). De tegel onthoudt dat het met de
+        # hand is gezet, zodat `cn_zaad` hem niet terugzet naar de voorlopige waarde uit de config.
+        from nooch_village.metrics import maak_lijn
+        st, g = c.st, c.g
+        if not _zicht.mag(st, c.username, "sales", "wijzigen"):
+            raise Forbidden("only Sales or the anchor lead can set the batch start date")
+        tile = next((t for t in st.metrics.tiles_of(g("node")) if t.get("id") == g("tid")), None)
+        if tile is None or tile.get("source") != "batch" or not tile.get("lijn"):
+            return c.nxt, "✗ not a batch number"
+        oud = tile["lijn"]
+        lijn = maak_lijn(g("datum"), oud["tot"], oud.get("start", 0), oud.get("oranje", 0.8))
+        if lijn is None:
+            return c.nxt, f"✗ the start date must be a date before the deadline ({oud['tot']})"
+        st.metrics.set_tile_extra(g("node"), g("tid"), lijn=lijn, lijn_handmatig=True)
+        return c.nxt, f"✓ batch starts {lijn['van']}"
+
+
 def _act_vaste_kosten_zet(c):
         # AUTHZ: rolvervuller of Circle Lead — de Financial Controller of de anchor lead (zicht-groep
         # `finance`, recht "wijzigen"; `zicht.py`). Business strategy mag de lijst zien, niet wijzigen.
@@ -6710,6 +6730,7 @@ ACTIONS = {
     "metrics2_dim": _act_metrics2_dim,
     "metrics2_grens": _act_metrics2_grens,
     "vaste_kosten_zet": _act_vaste_kosten_zet,
+    "cn_startdatum_zet": _act_cn_startdatum_zet,
     "vaste_kosten_weg": _act_vaste_kosten_weg,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,

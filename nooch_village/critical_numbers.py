@@ -50,7 +50,6 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
             rapport.append({"sleutel": n["sleutel"], "titel": n["titel"],
                             "actie": f"overgeslagen: {n.get('reden') or 'zaai=false'}"})
             continue
-        bestaand = next((t for t in metrics.tiles_of(kring) if t.get("cn") == n["sleutel"]), None)
         lijn = None
         if n.get("lijn"):
             from nooch_village.metrics import maak_lijn
@@ -59,6 +58,10 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
                 rapport.append({"sleutel": n["sleutel"], "titel": n["titel"],
                                 "actie": "fout: ongeldige lijn in het seed-bestand"})
                 continue
+        bestaand = next((t for t in metrics.tiles_of(kring) if t.get("cn") == n["sleutel"]), None)
+        if lijn is not None and bestaand is not None and bestaand.get("lijn_handmatig") and bestaand.get("lijn"):
+            # IN DE UI VERZET (CN1: de startdatum van de batch) wint van de voorlopige seed-waarde.
+            lijn = {**lijn, "van": bestaand["lijn"]["van"]}
         gewenst = {"niveau": n.get("niveau", ""), "target": n.get("target"), "oranje": n.get("oranje"),
                    "eigenaar_domein": n.get("eigenaar_domein", ""),
                    "eigenaar_rol": n.get("eigenaar_rol", ""), "zicht": n.get("zicht", ""),
