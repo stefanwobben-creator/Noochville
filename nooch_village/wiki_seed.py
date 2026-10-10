@@ -750,14 +750,10 @@ def vraagkoppen_body(body: str, soort: str) -> tuple[str, list[str], str]:
     return "\n".join(regels), [s[0][3:] for s in nieuw], oud
 
 
-def vraagkoppen(store, materialen_store, varianten_store, leveranciers_store, *,
-                apply: bool = False, actor_id: str = "") -> list[dict]:
-    """Geef de materiaal- en leverancierpagina's van /bom een kopje per vraag (besluit Stefan,
-    10 oktober 2026) — zodat de dekking op /bom per vraag kan zien of er een antwoord staat.
-
-    Welke pagina's: wat /bom vandaag als materiaal of leverancier kent (`wiki.resolve_bom`), net als
-    "From the BOM". Idempotent en dry-run tenzij `apply`; met `apply` één NIEUWE VERSIE per pagina,
-    terug te draaien via de historie. Rapport: `[{id, titel, soort, toegevoegd, oud}]`."""
+def bom_paginas(store, materialen_store, varianten_store, leveranciers_store) -> list[tuple]:
+    """[(pagina, "materiaal" | "leverancier")] — de pagina's die /bom vandaag als materiaal of
+    leverancier kent (`wiki.resolve_bom`), net als "From the BOM". ÉÉN definitie voor de scripts die
+    over "de materiaal- en leverancierpagina's" gaan (`vraagkoppen`, `domein_zetten`)."""
     pags = wiki.paginas(store)
     norm = lambda t: " ".join(str(t or "").split()).lower()
     doelen: dict[str, tuple] = {}
@@ -769,8 +765,58 @@ def vraagkoppen(store, materialen_store, varianten_store, leveranciers_store, *,
         a = wiki.resolve_bom(lev, pags)
         if a is not None and a.id not in doelen:
             doelen[a.id] = (a, "leverancier")
+    return sorted(doelen.values(), key=lambda x: (x[1], norm(x[0].title)))
+
+
+def domein_zetten(store, records, materialen_store, varianten_store, leveranciers_store, *,
+                  domein: str = "Materials", apply: bool = False, actor_id: str = "") -> dict:
+    """Geef de materiaal- en leverancierpagina's van /bom het domein `domein` (10 oktober 2026),
+    zodat alleen de domeinhouder en de Circle Lead ze — en hun uitgestelde vragen — kunnen wijzigen.
+
+    Fail-closed: bestaat het domein niet in governance (`artefacts.alle_domeinen`), dan gebeurt er
+    NIETS en zegt het rapport dat; het domein aanmaken is een governance-besluit, geen script.
+    Een pagina die al een domein heeft, blijft ongemoeid. Dry-run tenzij `apply`; met `apply` één
+    nieuwe versie per pagina (terug te draaien via de historie).
+
+    Rapport: {"domein_bestaat", "zetten": [(id, titel)], "al_domein": [(id, titel, domein)]}."""
+    from nooch_village import artefacts
+    rapport = {"domein": domein, "domein_bestaat": domein in artefacts.alle_domeinen(records),
+               "zetten": [], "al_domein": []}
+    if not rapport["domein_bestaat"]:
+        return rapport
+    for a, _soort in bom_paginas(store, materialen_store, varianten_store, leveranciers_store):
+        if getattr(a, "domain", ""):
+            rapport["al_domein"].append((a.id, a.title or a.id, a.domain))
+            continue
+        rapport["zetten"].append((a.id, a.title or a.id))
+        if apply:
+            store.update(a.id, domain=domein, actor_id=actor_id, actor_type="person",
+                         change_note=f"domain set to {domein} (BOM page)")
+    return rapport
+
+
+def domein_zetten_tekst(r: dict) -> str:
+    if not r["domein_bestaat"]:
+        return (f"The domain '{r['domein']}' does not exist in governance. Nothing changed — assigning a "
+                f"domain is a governance decision, not a script.")
+    uit = [f"Domain '{r['domein']}':"]
+    uit += [f"  set        {i}  {t}" for i, t in r["zetten"]]
+    uit += [f"  unchanged  {i}  {t}  (already has domain '{d}')" for i, t, d in r["al_domein"]]
+    if not r["zetten"] and not r["al_domein"]:
+        uit.append("  no BOM pages found")
+    return "\n".join(uit)
+
+
+def vraagkoppen(store, materialen_store, varianten_store, leveranciers_store, *,
+                apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Geef de materiaal- en leverancierpagina's van /bom een kopje per vraag (besluit Stefan,
+    10 oktober 2026) — zodat de dekking op /bom per vraag kan zien of er een antwoord staat.
+
+    Welke pagina's: wat /bom vandaag als materiaal of leverancier kent (`wiki.resolve_bom`), net als
+    "From the BOM". Idempotent en dry-run tenzij `apply`; met `apply` één NIEUWE VERSIE per pagina,
+    terug te draaien via de historie. Rapport: `[{id, titel, soort, toegevoegd, oud}]`."""
     rapport = []
-    for a, soort in sorted(doelen.values(), key=lambda x: (x[1], norm(x[0].title))):
+    for a, soort in bom_paginas(store, materialen_store, varianten_store, leveranciers_store):
         body, toegevoegd, oud = vraagkoppen_body(a.body or "", soort)
         if not toegevoegd and not oud:
             continue
