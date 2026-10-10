@@ -25,6 +25,36 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO)
 
 
+def _finance_bijlagen(data: str) -> list[str]:
+    """Elke bijlage in het kostenregister (Finance) moet er zijn, met de sha256 uit het register.
+    Een back-up met een kapotte of ontbrekende factuur is voor de borging geen back-up. Leest alleen
+    `finance/costs.jsonl` en de bestanden; geen finance-code nodig. Zonder register: niets te doen."""
+    import hashlib
+    pad = os.path.join(data, "finance", "costs.jsonl")
+    if not os.path.exists(pad):
+        return []
+    fouten, n = [], 0
+    with open(pad, encoding="utf-8") as f:
+        for regel in f:
+            try:
+                r = json.loads(regel)
+            except ValueError:
+                continue
+            b = r.get("attachment") or {}
+            if not b.get("path"):
+                continue
+            n += 1
+            vol = os.path.join(data, b["path"])
+            if not os.path.isfile(vol):
+                fouten.append(f"finance-bijlage ontbreekt: {b['path']}")
+                continue
+            with open(vol, "rb") as h:
+                if hashlib.sha256(h.read()).hexdigest() != b.get("sha256"):
+                    fouten.append(f"finance-bijlage klopt niet met zijn sha256: {b['path']}")
+    print(f"{n} finance-bijlage(n) nagelopen")
+    return fouten
+
+
 def toets(data: str) -> list[str]:
     """De fouten in deze data-map; leeg = te herstellen."""
     fouten: list[str] = []
@@ -54,6 +84,7 @@ def toets(data: str) -> list[str]:
                             fouten.append(f"{rel}: regel {i + 1} is geen JSON")
                             break
     print(f"{n_json} json- en {n_jsonl} jsonl-bestanden gelezen")
+    fouten += _finance_bijlagen(data)
     # Herstel op een kopie: de stores openen zoals de cockpit dat doet.
     with tempfile.TemporaryDirectory() as tmp:
         kopie = os.path.join(tmp, "data")

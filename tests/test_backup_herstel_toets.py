@@ -44,3 +44,20 @@ def test_een_lege_map_is_geen_back_up(tmp_path):
     leeg.mkdir()
     assert toets_mod.toets(str(leeg))                          # geen records, geen mensen
     assert toets_mod.toets(str(tmp_path / "bestaat_niet")) == [f"geen map: {tmp_path / 'bestaat_niet'}"]
+
+
+def test_finance_bijlagen_worden_tegen_hun_sha256_nagelopen(tmp_path):
+    import hashlib
+    import json
+    dd = _data(tmp_path)
+    os.makedirs(os.path.join(dd, "finance", "attachments", "2026"))
+    blob = b"%PDF-1.4 factuur"
+    rel = "finance/attachments/2026/a.pdf"
+    open(os.path.join(dd, rel), "wb").write(blob)
+    regel = {"id": "k1", "attachment": {"path": rel, "sha256": hashlib.sha256(blob).hexdigest()}}
+    open(os.path.join(dd, "finance", "costs.jsonl"), "w").write(json.dumps(regel) + "\n")
+    assert toets_mod.toets(dd) == []
+    open(os.path.join(dd, rel), "ab").write(b"x")                     # beschadigd in de back-up
+    assert any("sha256" in f for f in toets_mod.toets(dd))
+    os.remove(os.path.join(dd, rel))
+    assert any("ontbreekt" in f for f in toets_mod.toets(dd))
