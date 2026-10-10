@@ -51,20 +51,30 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
                             "actie": f"overgeslagen: {n.get('reden') or 'zaai=false'}"})
             continue
         bestaand = next((t for t in metrics.tiles_of(kring) if t.get("cn") == n["sleutel"]), None)
+        lijn = None
+        if n.get("lijn"):
+            from nooch_village.metrics import maak_lijn
+            lijn = maak_lijn(**n["lijn"])
+            if lijn is None:
+                rapport.append({"sleutel": n["sleutel"], "titel": n["titel"],
+                                "actie": "fout: ongeldige lijn in het seed-bestand"})
+                continue
         gewenst = {"niveau": n.get("niveau", ""), "target": n.get("target"), "oranje": n.get("oranje"),
                    "eigenaar_domein": n.get("eigenaar_domein", ""),
-                   "eigenaar_rol": n.get("eigenaar_rol", ""), "zicht": n.get("zicht", "")}
+                   "eigenaar_rol": n.get("eigenaar_rol", ""), "zicht": n.get("zicht", ""),
+                   "lijn": lijn}
         if bestaand is None:
             actie = "add"
-        elif all((bestaand.get(k) or "") == (v or "") if k not in ("target", "oranje")
-                 else bestaand.get(k) == (None if v is None else float(v)) for k, v in gewenst.items()):
+        elif all(bestaand.get(k) == (None if v is None else float(v)) if k in ("target", "oranje")
+                 else bestaand.get(k) == v if k == "lijn"
+                 else (bestaand.get(k) or "") == (v or "") for k, v in gewenst.items()):
             actie = "ongewijzigd"
         else:
             actie = "update"
         rapport.append({"sleutel": n["sleutel"], "titel": n["titel"], "actie": actie})
         if not apply or actie == "ongewijzigd":
             continue
-        extra = {k: gewenst[k] for k in ("eigenaar_domein", "eigenaar_rol", "zicht")}
+        extra = {k: gewenst[k] for k in ("eigenaar_domein", "eigenaar_rol", "zicht", "lijn")}
         if bestaand is None:
             source = f"kpi:{_kpi(metrics, kring, n)['id']}" if n.get("soort") == "kpi" else n["source"]
             bestaand = metrics.add_tile(kring, source, n["measure"], n.get("dim", "totaal"),

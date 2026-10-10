@@ -74,6 +74,45 @@ def grens_status(waarde, target, oranje, richting: str) -> str:
     return ROOD
 
 
+def maak_lijn(van: str, tot: str, start=0, oranje=0.8) -> dict | None:
+    """Een LIJN naar het doel (10 oktober 2026): van `start` op datum `van` naar het doel van de tegel
+    op datum `tot`. None bij ongeldige datums of een oranje-fractie buiten (0, 1]. De lijn is een
+    instelling (seed-bestand of UI), nooit een getal in de code."""
+    import time as _t
+    try:
+        a, b = _t.strptime(str(van)[:10], "%Y-%m-%d"), _t.strptime(str(tot)[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+    s, o = _getal(start), _getal(oranje)
+    if a >= b or s is None or o is None or not 0 < o <= 1:
+        return None
+    return {"van": str(van)[:10], "tot": str(tot)[:10], "start": s, "oranje": o}
+
+
+def lijn_waarde(lijn: dict, target, vandaag: str) -> float | None:
+    """Waar de lijn vandaag staat: lineair van `start` naar `target`, begrensd op de twee einden.
+    None vóór de begindatum (dan is er nog niets te halen) of zonder doel."""
+    import time as _t
+    tgt = _getal(target)
+    if tgt is None or vandaag < lijn["van"]:
+        return None
+    t0, t1 = (_t.mktime(_t.strptime(lijn[k], "%Y-%m-%d")) for k in ("van", "tot"))
+    nu = _t.mktime(_t.strptime(vandaag[:10], "%Y-%m-%d"))
+    frac = min(1.0, max(0.0, (nu - t0) / (t1 - t0)))
+    return lijn["start"] + (tgt - lijn["start"]) * frac
+
+
+def lijn_status(waarde, target, lijn: dict, vandaag: str) -> str:
+    """Groen op of boven de lijn, oranje tussen `oranje` × lijn en de lijn, anders rood. "" vóór de
+    begindatum, zonder waarde of zonder doel. Een lijn die nog op 0 staat, haal je met elke waarde."""
+    v, lw = _getal(waarde), lijn_waarde(lijn, target, vandaag)
+    if v is None or lw is None:
+        return ""
+    if v >= lw:
+        return GROEN
+    return ORANJE if v >= lijn["oranje"] * lw else ROOD
+
+
 def critical_te_veel(tiles: list[dict]) -> int:
     """Het aantal Critical Numbers als dat boven `MAX_CRITICAL` ligt, anders 0."""
     n = sum(1 for t in tiles if t.get("niveau") == "critical")
@@ -186,7 +225,7 @@ class MetricStore:
         return False
 
     #: Velden die `set_tile_extra` mag zetten. Een vaste lijst: een tegel is geen vrij JSON-object.
-    _TEGEL_EXTRA = ("eigenaar_domein", "eigenaar_rol", "zicht")
+    _TEGEL_EXTRA = ("eigenaar_domein", "eigenaar_rol", "zicht", "lijn")
 
     def set_tile_extra(self, node: str, tid: str, **velden) -> bool:
         """Zet losse tegelvelden uit `_TEGEL_EXTRA` (de eigenaar van een Critical Number)."""
