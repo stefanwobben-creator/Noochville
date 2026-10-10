@@ -2531,6 +2531,30 @@
     setTimeout(function () { laag.remove(); }, 2600);
   }
 
+  // ── Naar een kopje springen: `#kop=<tekst>` (10 oktober 2026) ─────────────────────────────
+  // De dekking op /bom linkt naar het kopje waar een antwoord hoort. Wiki-koppen hebben geen id,
+  // en een tekstfragment (`#:~:text=`) springt in Chrome NIET in bewerkbare tekst — en de wiki
+  // staat standaard in bewerkstand. Dus zoeken we het kopje zelf, op zijn tekst (hoofdletter- en
+  // spatie-ongevoelig). Geen treffer: niets doen, de pagina staat dan gewoon bovenaan.
+  function naarKop(root) {
+    var hash = (window.location && window.location.hash) || "";
+    if (root !== document || hash.indexOf("#kop=") !== 0) return;
+    var norm = function (t) { return (t || "").replace(/\s+/g, " ").trim().toLowerCase(); };
+    var doel = norm(decodeURIComponent(hash.slice(5)));
+    var kop = Array.prototype.find.call(document.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+      function (h) { return norm(h.textContent) === doel; });
+    if (!kop) return;
+    // ONDER DE VASTE BALK, en NOG EEN KEER na `load`: lettertypes en afbeeldingen boven het kopje
+    // veranderen de hoogte nog, en dan stond het kopje na de eerste sprong ergens anders.
+    var balk = document.querySelector(".c2-top, header");
+    var ga = function () {
+      var marge = (balk ? balk.getBoundingClientRect().height : 0) + 16;
+      window.scrollTo(0, kop.getBoundingClientRect().top + window.scrollY - marge);
+    };
+    ga();
+    if (document.readyState !== "complete") window.addEventListener("load", ga, { once: true });
+  }
+
   // ── De emoji-kiezer: zoeken, en invoegen in een tekstveld ─────────────────────────────────
   // ZOEKEN STOND IN EEN INLINE-SCRIPT dat alleen op schermen met de project-modal werd
   // meegestuurd (`window.emoFilter` in `_modal_html`). In Messages bestond die functie niet,
@@ -2665,6 +2689,7 @@
     stickers(root);
     mentions(root);
     feest(root);
+    naarKop(root);
     emoKiezer(root);
   };
 

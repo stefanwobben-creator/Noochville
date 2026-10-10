@@ -106,15 +106,28 @@ def test_shopify_datasource_contract_en_failclosed():
     assert not sk.is_configured(_ctx())
 
 
-def test_shopify_blijft_inactief_tot_expliciete_activatie(tmp_path):
-    """Shopify staat NIET default actief; de collector pakt 'm pas op na sources activate shopify."""
+def test_shopify_is_standaard_actief_en_een_uitschakeling_blijft_staan(tmp_path):
+    """Sinds 10 oktober 2026 zet de migratie Shopify actief — maar alleen als er nog geen keuze in
+    sources.json staat. Wie hem met de hand uitzette, houdt hem uit."""
+    from nooch_village.collector import migrate_data_sources
+    dd = _dd(tmp_path)
+    migrate_data_sources(dd)
+    assert cockpit2._Stores(dd).sources.active("shopify")
+    cockpit2._Stores(dd).sources.set_active("shopify", False)
+    migrate_data_sources(dd)
+    assert not cockpit2._Stores(dd).sources.active("shopify")
+
+
+def test_shopify_actief_zonder_token_schrijft_niets_en_crasht_niet(tmp_path):
+    from nooch_village.collector import migrate_data_sources
     from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
     dd = _dd(tmp_path)
-    assert not cockpit2._Stores(dd).sources.active("shopify")     # default inactief
+    migrate_data_sources(dd)
     reg = SkillRegistry(); reg.register(ShopifySalesSkill())
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
                                    cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 6))
-    assert w == []                                               # inactief → geen fetch/write
+    assert w == []
+    assert cockpit2._Stores(dd).sources.all()["shopify"].get("configured") is False
 
 
 class _LaggedSource(_FakeSource):

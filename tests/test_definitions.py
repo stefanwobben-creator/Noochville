@@ -116,7 +116,7 @@ def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
     cockpit2._bootstrap(dd)
     rid = "mother_earth__nooch__marketing_lead"
     # knows-exactly: zoeken op naam koppelt aan de catalogus
-    _kpi_uit_def(dd, rid, naam="Omzet (Shopify)")
+    _kpi_uit_def(dd, rid, naam="Revenue (Shopify)")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] and it["origin"] == "shopify"
@@ -275,7 +275,7 @@ def test_catalogus_usage_telt_gebruik(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     rid = "mother_earth__nooch__marketing_lead"
-    d = st.defs.by_name("Omzet (Shopify)")
+    d = st.defs.by_name("Revenue (Shopify)")
     _kpi_uit_def(dd, rid, d["id"])
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     assert "in use 1×" in page
@@ -439,7 +439,7 @@ def test_zaad_catalogus_krijgt_verplichte_aard(tmp_path):
     s = DefinitionStore(str(tmp_path / "d.json"))
     seed_catalog(s)
     assert all((s.current(d["id"]) or {}).get("aard") in AARD for d in s.all())
-    assert s.current(s.by_name("Cashpositie")["id"])["aard"] == "moment"            # snapshot → moment
+    assert s.current(s.by_name("Cash and cash equivalents")["id"])["aard"] == "moment"            # snapshot → moment
     assert s.current(s.by_name("Bezoekers (Plausible)")["id"])["aard"] == "reeks"   # venster → reeks
 
 

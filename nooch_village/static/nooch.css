@@ -3143,3 +3143,11 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pdrag-ghost { border: var(--nu-border); background: var(--nu-surface);
   box-shadow: 8px 8px 0 rgba(0,0,0,.18); }
 :root progress.nu-progress::-webkit-progress-value { transition: width .35s ease; }
+
+/* ── De invoerrij van een KPI, ook op een telefoon (10 oktober 2026) ──────────────────────────
+   Sinds het werkoverleg er een datum en een notitie bij vraagt, zijn het drie velden en een knop:
+   op een smal scherm liep de rij van het scherm af. Ze breekt nu om; de datum krijgt de breedte
+   die zijn eigen kiezer nodig heeft, de notitie neemt de rest. */
+:root .kpi-add { flex-wrap: wrap; align-items: center; }
+:root .kpi-add input[type=date] { width: auto; }
+:root .kpi-add input[name=notitie] { flex: 1 1 8rem; width: auto; }

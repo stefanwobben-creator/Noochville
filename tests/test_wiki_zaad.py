@@ -422,10 +422,16 @@ def test_alleen_materiaal_en_leverancier(tmp_path):
 
 # ── compliance-klaar (2 oktober 2026): de secties staan er vóór de eerste --apply ──────────────
 
-def test_een_materiaalpagina_heeft_de_dierlijk_en_chemisch_sectie_met_open_punten():
+def test_een_materiaalpagina_heeft_een_kopje_per_vraag_met_open_punten():
+    """Eén kopje per vraag (10 oktober 2026): het oude gedeelde "Animal-derived & chemical status"
+    is gesplitst, en plastic, biobased en certificering hebben hun eigen kopje."""
     [p] = [x for x in wiki_seed.materiaal_paginas(_KOP + "\t\tOutsole\tPliant\t\t48\n")]
     body = p["body"]
-    assert body.index("## CO2 & Water") < body.index("## Animal-derived & chemical status")
+    assert "& chemical status" not in body
+    plekken = [body.index(k) for k in ("## CO2 & Water", "## Contains plastic", "## Biobased",
+                                       "## Animal-derived\n", "## Dyes & chemicals",
+                                       "## Certification", "## Open items")]
+    assert plekken == sorted(plekken)
     open_ = body.split("## Open items")[1]
     assert "- Animal-derived status: not yet verified" in open_
     assert "- Dye/chemical disclosure: not yet provided" in open_
@@ -434,7 +440,10 @@ def test_een_materiaalpagina_heeft_de_dierlijk_en_chemisch_sectie_met_open_punte
 def test_een_leverancierpagina_heeft_arbeid_en_compliance_met_open_punten():
     [p] = wiki_seed.leverancier_paginas(None, koppelingen=[("Pliant", "NFW")])
     body = p["body"]
-    assert body.index("## Price agreement") < body.index("## Labor & compliance")
+    plekken = [body.index(k) for k in ("## Location & contact", "## Company certification",
+                                       "## Price agreement", "## Labor & compliance",
+                                       "## Ownership & health", "## Open items")]
+    assert plekken == sorted(plekken)
     open_ = body.split("## Open items")[1]
     for punt in ("Facility address: not yet provided", "Living wage verification: not yet provided",
                  "Compliance policies (modern slavery, child labor, health & safety, "
@@ -443,9 +452,10 @@ def test_een_leverancierpagina_heeft_arbeid_en_compliance_met_open_punten():
 
 
 def test_zaad_en_skelet_delen_de_compliance_tekst():
-    """Eén plek (`wiki.DIERLIJK_CHEMISCH`, `wiki.ARBEID_COMPLIANCE`): een handmatig gemaakte
-    pagina krijgt dezelfde sectie en dezelfde open punten als een gezaaide."""
-    for sectie, soort in ((wiki.DIERLIJK_CHEMISCH, "materiaal"), (wiki.ARBEID_COMPLIANCE, "leverancier")):
+    """Eén plek (`wiki.VRAAGSECTIES`): een handmatig gemaakte pagina krijgt dezelfde secties en
+    dezelfde open punten als een gezaaide."""
+    for soort, secties in wiki.VRAAGSECTIES.items():
         skelet = wiki.SJABLONEN[soort][1]
-        assert sectie[0] in skelet and sectie[1] in skelet
-        assert all(f"- {p}" in skelet for p in sectie[2])
+        for sectie in secties:
+            assert sectie[0] in skelet and sectie[1] in skelet
+            assert all(f"- {p}" in skelet for p in sectie[2])

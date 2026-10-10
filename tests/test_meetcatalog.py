@@ -22,9 +22,18 @@ def test_ongecatalogiseerde_reeks_signaal():
 
 def test_inactieve_bron_stil():
     # Stond op gdelt_tone; die bron is op 19 september 2026 uit de catalogus gehaald (fase 6).
-    # shopify is nu het inactieve voorbeeld: inactief + 100 dagen oud → GÉÉN alarm, en het matcht
-    # de catalogus, dus ook geen 'ongecatalogiseerd'.
-    assert healthcheck([_row("shopify", "shopify_orders_day", NOW - 100 * DAY)], now_ts=NOW) == []
+    # semanticscholar is het inactieve voorbeeld (shopify is sinds 10 oktober 2026 actief): inactief
+    # + 100 dagen oud → GÉÉN alarm, en het matcht de catalogus, dus ook geen 'ongecatalogiseerd'.
+    assert healthcheck([_row("semanticscholar", "semanticscholar_works_day", NOW - 100 * DAY)],
+                       now_ts=NOW) == []
+
+
+def test_shopify_actief_zonder_data_geeft_geen_vals_alarm():
+    """Actief maar (nog) zonder token: er komt geen enkele rij binnen, en een familie zonder data
+    slaat de healthcheck over. Pas als er WEL data was en die stopt, is het een echt signaal."""
+    assert healthcheck([], now_ts=NOW) == []
+    sigs = healthcheck([_row("shopify", "shopify_orders_day", NOW - 4 * DAY)], now_ts=NOW)
+    assert any(s["type"] == "niet-vullend" and s["bron"] == "shopify" for s in sigs)
 
 
 def test_niet_vullend_na_N():
@@ -76,6 +85,6 @@ def test_schone_store_nul_vals_alarm():
         _row("trends", "trends_ratio_thrift_luxury_day", NOW - 2 * DAY),
         _row("keywordseverywhere", "keywordseverywhere_footwear_day", NOW - 2 * DAY),
         _row("werkoverleg", "werk_tevredenheid_day", NOW - 100 * DAY),   # irregular → geen alarm
-        _row("shopify", "shopify_orders_day", NOW - 100 * DAY),           # inactief → geen alarm
+        _row("semanticscholar", "semanticscholar_works_day", NOW - 100 * DAY),   # inactief → geen alarm
     ]
     assert healthcheck(rows, now_ts=NOW) == []

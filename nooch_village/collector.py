@@ -106,7 +106,7 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         # SCOPE 2 fail-closed guard: een ACTIEVE + geconfigureerde bron die NUL velden aanbiedt schrijft stil
         # niets (de trends-klassefout: active=True + available_metrics()==[]). Luid loggen, maar NIET raisen —
         # de puls moet de overige bronnen blijven verzamelen. Alleen actieve bronnen bereiken dit punt (regel
-        # 99: inactief → continue), dus bewust-inactieve bronnen (Shopify, Semantic Scholar) geven géén alarm.
+        # 99: inactief → continue), dus bewust-inactieve bronnen (Semantic Scholar) geven géén alarm.
         # available_metrics wordt door het totaal- én dimensie-pad gedeeld, dus deze check dekt beide. Het
         # geval 'velden wél, maar 0 dimensie-waarden' is GEEN volledige stille no-op (de totalen verzamelen
         # dan wél) → bewust buiten deze guard (zie rapport).
@@ -190,3 +190,8 @@ def migrate_data_sources(dd: str) -> None:
         sources.set_active("co2_village", True)
     if "bom" not in sources.all():                  # CO2e per paar uit /bom: geen sleutel nodig
         sources.set_active("bom", True)
+    # SHOPIFY STANDAARD ACTIEF (besluit Stefan, 10 oktober 2026): de verkoopcijfers horen dagelijks
+    # binnen te komen. Zonder token schrijft hij niets — de collector logt "actief maar niet
+    # geconfigureerd" en de healthcheck slaat een familie zonder data over, dus geen vals alarm.
+    if "shopify" not in sources.all():
+        sources.set_active("shopify", True)

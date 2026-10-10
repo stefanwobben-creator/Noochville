@@ -19,7 +19,10 @@ een COMPONENT heeft (`bom_materialen`, Correctie 3). Beide cellen klikken op dez
 """
 from __future__ import annotations
 
+import urllib.parse
+
 from nooch_village import artefacts, bom_co2, bom_leveranciers, bom_reken, wiki
+from nooch_village import wiki_dekking as dek
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.web_base import _banner, _e, _page, _status
 
@@ -80,13 +83,13 @@ def _mag_koppelen(st, username: str | None) -> bool:
                                              circle_id=cirkel or "")
 
 
-def _url(model: str, variant: str) -> str:
+def _url(model: str, variant: str, doel: str = "") -> str:
     """Eén plek voor de `/bom`-URL, zodat model en variant elkaar niet kwijtraken. Rauw; `_e()` waar
     hij in een attribuut landt. (De maat zat hier ook in, tot de maat-schaling op 2 oktober 2026
-    verviel — zie `data_bom.REFERENTIEMAAT`.)"""
+    verviel — zie `data_bom.REFERENTIEMAAT`.) `doel` is het filter van de dekking."""
     from nooch_village.data_bom import STANDAARD_MODEL
     delen = ([] if model == STANDAARD_MODEL else [f"model={model}"]) + \
-            ([f"variant={variant}"] if variant else [])
+            ([f"variant={variant}"] if variant else []) + ([f"doel={doel}"] if doel else [])
     return "/bom" + ("?" + "&".join(delen) if delen else "")
 
 
@@ -265,8 +268,140 @@ def _nieuwe_rij(model: str, variant: str, csrf_token: str) -> str:
                           {"model": model, "variant": variant, "toegevoegd": "1"}, invoer))
 
 
+# ── Dekking: welke vragen de pagina's al beantwoorden (10 oktober 2026) ──────
+# LAGEN, allemaal bestaand (akkoord Stefan, 10 oktober 2026):
+#   atom      `.nu-status` met zijn vier vormen — vol rondje, half vierkant, gestippeld leeg rondje,
+#             driehoek — plus het woord; `.muted`; een wiki-link
+#   molecule  `.tile` (de rollup per doel) · `table.mtab` (één strook per materiaal/leverancier)
+#             · `.cl-bar` + `a.cl-filter` (het doelfilter, zelfde vorm als de modelkiezer)
+#   pattern   de sectie "Coverage" onder de stuklijst
+# Bewust NIET uit het prototype: het zijpaneel, de weergave "By question" en "least covered
+# first". Een klik op een cel opent de wikipagina bij het kopje van die vraag.
+
+#: celstatus → (vorm uit `.nu-status`, woord). De vorm draagt de betekenis, niet de kleur.
+_DEK_VORM = {dek.GECHECKT: ("ok", "Checked"), dek.ONGECHECKT: ("wait", "Unchecked"),
+             dek.LEEG: ("open", "Open"), dek.CONFLICT: ("off", "Conflict")}
+
+
+def _sprong(pagina, kop: str) -> str:
+    """De pagina-URL, bij een kopje met `#kop=<tekst>`. Wiki-koppen hebben geen id; `naarKop` in
+    nooch.js zoekt het kopje op zijn tekst (een `#:~:text=`-fragment werkt niet in bewerkbare tekst).
+    Zonder JavaScript opent gewoon de pagina."""
+    url = wiki.pagina_url(pagina.id)
+    return url + ("#kop=" + urllib.parse.quote(kop, safe="") if kop else "")
+
+
+def _dek_cel(vraag: dict, cel: dict, pagina) -> str:
+    vorm, woord = _DEK_VORM[cel["status"]]
+    reden = f" — {cel['reden']}" if cel["status"] == dek.CONFLICT and cel["reden"] else ""
+    label = _e(f"{vraag['label']}: {woord}{reden}")
+    if pagina is None:
+        return (f"<span class='nu-status nu-status--{vorm}' aria-label='{label}' "
+                f"title='{label}'>{woord}</span>")
+    return (f"<a class='nu-status nu-status--{vorm}' href='{_e(_sprong(pagina, cel['kop']))}' "
+            f"aria-label='{label}' title='{label}'>{woord}</a>")
+
+
+def _nieuwe_pagina(st, naam: str, sjabloon: str, terug: str, csrf_token: str) -> str:
+    """"Create page" voor een rij zonder pagina: het BESTAANDE `artefact_add`, met het skelet van
+    deze paginasoort, op het domein `Materials` bij zijn houder — waar de zaaier de andere
+    materiaal- en leverancierpagina's ook neerzette. Geen houder → geen knop, maar de reden."""
+    from nooch_village import org
+    houder = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+    if houder is None:
+        return f"<div class='muted'>No page yet — no role holds “{bom_leveranciers.DOMEIN}”.</div>"
+    velden = {"action": "artefact_add", "next": terug, "owner": houder.id, "kind": wiki.PAGINA_KIND,
+              "domain": bom_leveranciers.DOMEIN, "sjabloon": sjabloon, "title": naam,
+              "naar_pagina": "1"}
+    return (f"<form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>{_verborgen(velden)}"
+            f"<button class='btn sm' type='submit'>Create page</button></form>")
+
+
+def _dek_tabel(st, rijen: list[dict], soort: str, doel: str, bewerk: bool, csrf_token: str,
+               terug: str) -> str:
+    vragen = dek.vragen(soort, doel)
+    if not vragen or not rijen:
+        return ""
+    # `_CO2E` om dezelfde reden als in de stuklijst: `th` zet zijn tekst in hoofdletters.
+    kop = "".join(f"<th>{_e(v['label']).replace('CO2e', _CO2E)}<div class='muted'>"
+                  f"{_e(' · '.join(dek.DOELEN[d] for d in v['doelen']))}</div></th>" for v in vragen)
+    wat = "Material" if soort == "materiaal" else "Supplier"
+    uit = [f"<table class='mtab' aria-label='{wat} coverage'><tr><th>{wat}</th>{kop}</tr>"]
+    for r in rijen:
+        if soort == "materiaal":
+            sub = (f"Supplied by {r['leverancier']}" if r["leverancier"] else "No supplier linked")
+            sub += " · " + ", ".join(r["onderdelen"])
+        else:
+            sub = "Supplies " + ", ".join(r["materialen"])
+        if r["pagina"] is not None:
+            naam = f"<a href='{_e(wiki.pagina_url(r['pagina'].id))}'>{_e(r['naam'])}</a>"
+        else:
+            naam = _e(r["naam"]) + (_nieuwe_pagina(st, r["naam"], soort, terug, csrf_token) if bewerk
+                                    else "<div class='muted'>No page yet</div>")
+        cellen = "".join(f"<td>{_dek_cel(v, r['cellen'][v['k']], r['pagina'])}</td>" for v in vragen)
+        uit.append(f"<tr><td>{naam}<div class='muted'>{_e(sub)}</div></td>{cellen}</tr>")
+    return "".join(uit) + "</table>"
+
+
+def _rollup_tegels(per_model: dict[str, dict], doel: str) -> str:
+    """Eén tegel per doel: per model hoeveel materialen en leveranciers volledig zijn."""
+    from nooch_village.data_bom import MODELLEN
+    tegels = []
+    for d, label in dek.DOELEN.items():
+        if doel and d != doel:
+            continue
+        regels = []
+        for m, ru in per_model.items():
+            delen = [f"{ru[d][sleutel][0]} of {ru[d][sleutel][1]} {wat}"
+                     for wat, sleutel in (("materials", "materialen"), ("suppliers", "leveranciers"))
+                     if sleutel in ru[d]]
+            regels.append(f"<div class='muted'><strong>{_e(MODELLEN[m]['naam'])}</strong>: "
+                          f"{_e(', '.join(delen))} complete</div>")
+        tegels.append(f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(label)}"
+                      f"</span></div>{''.join(regels)}</div>")
+    return f"<div class='tile-grid'>{''.join(tegels)}</div>"
+
+
+def _dekking_sectie(st, uit: dict, model: str, variant: str, doel: str, bewerk: bool,
+                    csrf_token: str) -> str:
+    from nooch_village.data_bom import MODELLEN
+    # DEZELFDE CONTEXT ALS DE PAGINA (`views.wiki._feit_html`), ook `bestaat`: anders telt een
+    # document-feit waarvan het bestand weg is hier als gecheckt, terwijl de pagina "no source" zegt.
+    from nooch_village.views.wiki import _bijlage_bestaat
+    ctx = {"ledger": getattr(st, "evidence", None), "store": st.att, "bestaat": _bijlage_bestaat(st)}
+    d = dek.dekking(uit, **ctx)
+    # DE ROLLUP IS PER MODEL, op modelniveau (zonder kleurvariant): de vraag is of de 269 Lo en de
+    # 269 Hi klaar zijn, niet één kleur. Voor het getoonde model zonder variant is `uit` dat al.
+    pags = wiki.paginas(st.att)
+    per_model = {}
+    for m in MODELLEN:
+        b = uit if (m == model and not variant) else bom_reken.bereken(
+            MODELLEN[m]["master"], pags, st.bom_leveranciers.alle(),
+            afwijkingen=st.bom_materialen.afwijkingen(m, ""))
+        per_model[m] = dek.rollup(dek.dekking(b, **ctx))
+    filter_ = " ".join(
+        f"<a class='cl-filter{' on' if k == doel else ''}' "
+        f"href='{_e(_url(model, variant, k))}#coverage'>{_e(lbl)}</a>"
+        for k, lbl in (("", "All"), *dek.DOELEN.items()))
+    legenda = " ".join(f"<span class='nu-status nu-status--{v}'>{w}</span>"
+                       for v, w in _DEK_VORM.values())
+    terug = _url(model, variant, doel)
+    return (f"<div class='c2-sec' id='coverage'><h2>Coverage</h2>"
+            f"<p class='muted'>Which questions each material and supplier page answers, computed "
+            f"from the facts on the page. Checked = a person checked it, a valid certificate, or the "
+            f"quote was found at the source. Open means not answered yet — not “no”. A cell opens "
+            f"the page at the heading where the answer belongs.</p>"
+            f"<div class='cl-bar' aria-label='goal'><span class='muted'>Goal</span> {filter_}</div>"
+            f"{_rollup_tegels(per_model, doel)}"
+            f"<p class='muted'>{legenda}</p>"
+            f"{_dek_tabel(st, d['materialen'], 'materiaal', doel, bewerk, csrf_token, terug)}"
+            f"{_dek_tabel(st, d['leveranciers'], 'leverancier', doel, bewerk, csrf_token, terug)}"
+            f"</div>")
+
+
 def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str = "",
-               model: str = "", variant: str = "") -> str:
+               model: str = "", variant: str = "", doel: str = "") -> str:
     from nooch_village.data_bom import MODELLEN, REFERENTIEMAAT, STANDAARD_MODEL
     pags = wiki.paginas(st.att)
     # MODEL EN VARIANT (Stuk 4). Onbekend = het standaardmodel / de master: een kijkknop, en een
@@ -276,6 +411,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     if variant not in {v["handle"] for v in varianten}:
         variant = ""
     v_naam = next((v["naam"] for v in varianten if v["handle"] == variant), "")
+    doel = doel if doel in dek.DOELEN else ""
     terug = _url(model, variant)
     uit = bom_reken.bereken(MODELLEN[model]["master"], pags, st.bom_leveranciers.alle(),
                             afwijkingen=st.bom_materialen.afwijkingen(model, variant))
@@ -319,9 +455,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
             f"{_model_kiezer(model, variant, varianten, bewerk, csrf_token)}"
             # GEEN MAATKIEZER MEER (2 oktober 2026): alle hoeveelheden gelden bij de referentiemaat.
             f"<p class='muted'>Quantities at reference size EU {REFERENTIEMAAT}.</p>"
-            f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div>"
-            # CO2E PER PAAR MET ZIJN VOLLEDIGHEID (10 oktober 2026): dezelfde zin als op de
-            # metrics-tegel, uit `bom_co2` — welke materialen nog geen factor hebben, staat erbij.
-            f"<p class='muted'>{_e(bom_co2.tekst(bom_co2.co2_per_paar(uit)))}</p></div>"
-            f"<div class='c2-sec'>{tabel}</div>{nog_open}</div>")
+            f"<div class='c2-sec'><div class='tile-grid'>{tegels}</div></div>"
+            f"<div class='c2-sec'>{tabel}</div>{nog_open}"
+            f"{_dekking_sectie(st, uit, model, variant, doel, bewerk, csrf_token)}</div>")
     return _page("BOM", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
