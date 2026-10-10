@@ -2784,6 +2784,66 @@ def _act_pagina_feit_gezien(c):
     return nxt, melding
 
 
+def _act_vraag_uitstel(c):
+    """Een vraag op een materiaal- of leverancierpagina "Deferred, to research later" zetten
+    (CN3, 10 oktober 2026): een datum ("research by") en een eigenaar, allebei verplicht.
+
+    # AUTHZ: domeineigenaar of Circle Lead — dezelfde poort als pagina_feit_plaats: dit wijzigt de
+    # pagina (haar `meta`, en de "not yet …"-regels van die vraag verdwijnen uit de tekst).
+
+    Een nieuwe versie van de pagina, net als een bewerking: terug te lezen in de historie."""
+    from nooch_village import wiki, wiki_dekking as wd
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    soort, k = g("soort"), g("k")
+    if k not in {v["k"] for v in wd.vragen(soort)}:
+        return nxt, "✗ unknown question"
+    u = wd.maak_uitstel(g("tot"), g("eigenaar") or cur.anchor, door=_web_actor_id(username, st))
+    if u is None:
+        return nxt, "✗ a research-by date (YYYY-MM-DD) and an owner are required"
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta[wd.UITSTEL_SLEUTEL] = {**(meta.get(wd.UITSTEL_SLEUTEL) or {}), k: u}
+    body = wd.body_zonder_placeholders(cur.body or "", soort, k)
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, body=body, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note=f"question deferred until {u['tot']}: {k}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, f"✓ deferred until {u['tot']}"
+
+
+def _act_vraag_uitstel_weg(c):
+    """Het uitstel van een vraag weer weghalen — de vraag staat dan weer open.
+
+    # AUTHZ: domeineigenaar of Circle Lead — zelfde poort als vraag_uitstel."""
+    from nooch_village import wiki, wiki_dekking as wd
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st, domein=getattr(cur, "domain", ""))
+    if _deny:
+        raise Forbidden(_deny)
+    meta = dict(getattr(cur, "meta", None) or {})
+    uit = dict(meta.get(wd.UITSTEL_SLEUTEL) or {})
+    if uit.pop(g("k"), None) is None:
+        return nxt, "✗ this question was not deferred"
+    meta[wd.UITSTEL_SLEUTEL] = uit
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note=f"deferral removed: {g('k')}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, "✓ the question is open again"
+
+
 def _act_pagina_feit_plaats(c):
     """Zet een feit zonder plek aan het eind van de tekst — de weg zonder slepen.
 
@@ -6760,6 +6820,8 @@ ACTIONS = {
     "vaste_kosten_zet": _act_vaste_kosten_zet,
     "cn_startdatum_zet": _act_cn_startdatum_zet,
     "vaste_kosten_weg": _act_vaste_kosten_weg,
+    "vraag_uitstel": _act_vraag_uitstel,
+    "vraag_uitstel_weg": _act_vraag_uitstel_weg,
     "verplichting_zet": _act_verplichting_zet,
     "verplichting_weg": _act_verplichting_weg,
     "metrics2_compare": _act_metrics2_compare,
@@ -7263,7 +7325,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 # AUTHZ: iedereen-ingelogd — LEZEN. Dezelfde gegevens als de sectie Coverage op /bom
                 # en de wikipagina's zelf, die elke ingelogde al mag lezen; er valt hier niets te wijzigen.
                 from nooch_village.views.open_vragen import render_open_vragen
-                self._send(render_open_vragen(st, status=(qs.get("status") or [""])[0]))
+                self._send(render_open_vragen(st, status=(qs.get("status") or [""])[0],
+                                              csrf_token=effective_csrf, username=username))
                 return
             if path == "/bom":
                 # AUTHZ: iedereen-ingelogd — LEZEN. Het enige wat je hier kunt wijzigen is de

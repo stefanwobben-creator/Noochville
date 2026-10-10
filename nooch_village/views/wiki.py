@@ -687,6 +687,57 @@ def _bom_sectie(st, a, pags: list) -> str:
         return ""
 
 
+def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
+    """"Questions": de vraagcellen van /bom voor DEZE pagina, met per vraag de status en — voor wie de
+    pagina mag bewerken — "Defer" (een datum) of "undo" (CN3, 10 oktober 2026).
+
+    Zelfde berekening als /bom en /open-questions (`wiki_dekking`); niets opgeslagen behalve het
+    uitstel zelf, in de `meta` van deze pagina. Een pagina die /bom niet kent, krijgt niets.
+    FAIL-SOFT, net als "From the BOM": een pagina mag nooit breken op de dekking."""
+    try:
+        from nooch_village import wiki_dekking as dek
+        from nooch_village.views.bom import _DEK_VORM, _sprong
+        from nooch_village.views.open_vragen import terug_form, uitstel_form
+        d, _ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
+                                 ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
+        rij, soort = None, ""
+        for s, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
+            rij = next((r for r in d[sleutel] if r.get("pagina") is not None and r["pagina"].id == a.id), None)
+            if rij is not None:
+                soort = s
+                break
+        if rij is None:
+            return ""
+        terug = wiki.pagina_url(a.id)
+        regels = []
+        for v in dek.vragen(soort):
+            c = rij["cellen"][v["k"]]
+            vorm, woord = _DEK_VORM[c["status"]]
+            if c["status"] == dek.UITGESTELD:
+                woord = f"Deferred · research by {c['tot']}"
+            elif c.get("verlopen"):
+                woord = f"Open — deferral expired {c['tot']}"
+            actie = ""
+            if can_edit and csrf_token:
+                if c["status"] == dek.UITGESTELD:
+                    actie = terug_form(csrf_token, a, v["k"], terug)
+                elif c["status"] == dek.LEEG:
+                    actie = uitstel_form(csrf_token, a, soort, v["k"], terug)
+            antwoord = (f"<a href='{_e(_sprong(a, c['kop']))}'>answer</a>"
+                        if c["status"] in (dek.LEEG, dek.UITGESTELD) else "")
+            regels.append(f"<tr><td>{_e(v['label'])}</td><td><span class='nu-status nu-status--{vorm}'>"
+                          f"{_e(woord)}</span></td><td>{antwoord} {actie}</td></tr>")
+        gestaafd = dek.gestaafd(rij, **_ctx)
+        return (f"<div class='wiki-inline'><h3>Questions</h3>"
+                f"<p class='muted'>What this page should answer (the coverage on the "
+                f"<a href='/bom#coverage'>BOM screen</a>). A question without an answer can be deferred "
+                f"to a research-by date; it then no longer holds the page back, until the date passes. "
+                f"This page counts as substantiated: <strong>{'yes' if gestaafd else 'no'}</strong>.</p>"
+                f"<table class='mtab' aria-label='questions on this page'>{''.join(regels)}</table></div>")
+    except Exception:                                         # noqa: BLE001 — nooit de pagina breken
+        return ""
+
+
 def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
     """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
 
@@ -1378,7 +1429,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # onder de inhoud. Owner, domein, sectie, historie en opruimen zijn beheer, geen tekst.
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_wiki_melding(msg)}"
             f"<div class='pkaart-body'><div class='pkaart-main'>{body}{voorstel}"
-            f"{_bom_sectie(st, a, pags) if is_note else ''}{_onder('facts')}"
+            f"{_bom_sectie(st, a, pags) if is_note else ''}"
+            f"{_vragen_sectie(st, a, csrf_token, can_edit) if is_note else ''}{_onder('facts')}"
             f"{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>"
             f"<aside class='pkaart-rail'>{meta}</aside></div></div></div>")
     return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",
