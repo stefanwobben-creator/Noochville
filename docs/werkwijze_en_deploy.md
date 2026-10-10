@@ -31,8 +31,26 @@ Hoe we van idee naar draaiende functionaliteit gaan zonder serverdata te oversch
   verandert tot ze gebruikt wordt. Twijfel je of iets al aan mag? Zet het achter een simpele
   vlag in `settings.ini` (bijv. `feature_doelen = aan`) en zet 'm pas aan als je klaar bent.
 
+## Back-up (sinds 10 oktober 2026)
+Tot die dag draaide er GEEN back-up: de stap hieronder werd niet uitgevoerd, en de losse `.bak`- en
+`backups/`-kopieën staan op dezelfde schijf als de data. Nu:
+- **Dagelijks naar Stefans Mac**: `scripts/backup_mac.sh` haalt `data/` binnen als dagsnapshot in
+  `~/NoochVille-backups/<datum>/data` (hardlinks naar de vorige dag; 30 dagen bewaard). launchd draait
+  hem om 07:15 (`scripts/launchd/nl.nooch.backup.plist`; een gemiste dag haalt hij in bij het wakker worden).
+  launchd draait een vaste kopie van de scripts in `~/NoochVille-backups/bin/` (zie de kop van de plist),
+  zodat de back-up niet afhangt van welke branch er in de repo uitgecheckt is.
+- **Na elke run een herstel-toets** (`scripts/backup_herstel_toets.py`): alle JSON leesbaar en de
+  stores te openen, op een kopie. Mislukt iets: een macOS-melding en een regel in `backup.log`.
+- **Terugzetten**: `rsync -a ~/NoochVille-backups/<datum>/data/ root@138.201.154.162:/opt/noochville/data/`
+  met de services gestopt, daarna `chown -R nooch:nooch /opt/noochville/data` en de services starten.
+- Een nieuwe map onder `data/` (bijv. `data/finance/`) zit er automatisch in.
+- **To-do (besluit Stefan, 10 oktober 2026: nu niet):** een aparte SSH-sleutel die alleen `data/` mag
+  lezen (`authorized_keys` met `command="rrsync -ro /opt/noochville/data"`). Nu logt het script in als
+  root met de gewone sleutel. Pas dit aan op de server zodra het aan de beurt is; het script hoeft dan
+  alleen `NOOCH_SERVER` en de sleutel te kennen.
+
 ## Deploy-stappen (op de server, data blijft staan)
-1. **Snapshot de data** (veiligheidsnet): `tar czf backups/data_$(date +%F_%H%M).tgz data/`.
+1. **Snapshot de data** (veiligheidsnet, met de hand vóór een migratie): `tar czf backups/data_$(date +%F_%H%M).tgz data/`.
 2. **Code bijwerken:** `git fetch && git checkout <tag-of-main>` (alleen code; `data/` wordt niet geraakt).
 3. **Additieve migratie** draaien indien nodig (idempotent; veilig om twee keer te draaien).
 4. **Herstart** cockpit/village.
