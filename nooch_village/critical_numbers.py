@@ -30,6 +30,17 @@ def laad(pad: str = "") -> dict:
     return d
 
 
+def _kpi(metrics, kring: str, n: dict) -> dict:
+    """Een nummer met `"soort": "kpi"` is een HANDMATIGE meting (cash): eerst de KPI zelf, met zijn
+    `cn`-sleutel en zicht-groep, dan de tegel die hem toont. Bestaat hij al, dan dezelfde KPI."""
+    it = metrics.by_cn(n["sleutel"])
+    if it is None:
+        it = metrics.add_kpi(kring, n.get("naam") or n["titel"], n.get("eenheid", ""),
+                             direction=n.get("richting", ""), definition=n.get("definitie", ""))
+    metrics.set_item_extra(it["id"], cn=n["sleutel"], zicht=n.get("zicht", ""))
+    return it
+
+
 def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
     """[{sleutel, titel, actie}] — actie ∈ add | update | ongewijzigd | overgeslagen (reden)."""
     kring = cfg["kring"]
@@ -41,24 +52,27 @@ def zaai(metrics, cfg: dict, *, apply: bool = False) -> list[dict]:
             continue
         bestaand = next((t for t in metrics.tiles_of(kring) if t.get("cn") == n["sleutel"]), None)
         gewenst = {"niveau": n.get("niveau", ""), "target": n.get("target"), "oranje": n.get("oranje"),
-                   "eigenaar_domein": n.get("eigenaar_domein", "")}
+                   "eigenaar_domein": n.get("eigenaar_domein", ""),
+                   "eigenaar_rol": n.get("eigenaar_rol", ""), "zicht": n.get("zicht", "")}
         if bestaand is None:
             actie = "add"
-        elif all(bestaand.get(k) == v for k, v in gewenst.items()) and \
-                (bestaand.get("source"), bestaand.get("measure")) == (n["source"], n["measure"]):
+        elif all((bestaand.get(k) or "") == (v or "") if k not in ("target", "oranje")
+                 else bestaand.get(k) == (None if v is None else float(v)) for k, v in gewenst.items()):
             actie = "ongewijzigd"
         else:
             actie = "update"
         rapport.append({"sleutel": n["sleutel"], "titel": n["titel"], "actie": actie})
         if not apply or actie == "ongewijzigd":
             continue
+        extra = {k: gewenst[k] for k in ("eigenaar_domein", "eigenaar_rol", "zicht")}
         if bestaand is None:
-            bestaand = metrics.add_tile(kring, n["source"], n["measure"], n.get("dim", "totaal"),
-                                        n.get("form", "getal"),
-                                        extra={"cn": n["sleutel"],
-                                               "eigenaar_domein": n.get("eigenaar_domein", "")})
+            source = f"kpi:{_kpi(metrics, kring, n)['id']}" if n.get("soort") == "kpi" else n["source"]
+            bestaand = metrics.add_tile(kring, source, n["measure"], n.get("dim", "totaal"),
+                                        n.get("form", "getal"), extra={"cn": n["sleutel"], **extra})
         else:
-            metrics.set_tile_extra(kring, bestaand["id"], eigenaar_domein=n.get("eigenaar_domein", ""))
+            if n.get("soort") == "kpi":
+                _kpi(metrics, kring, n)
+            metrics.set_tile_extra(kring, bestaand["id"], **extra)
         fout = metrics.set_tile_grens(kring, bestaand["id"], n.get("niveau", ""), n.get("target"),
                                       n.get("oranje"))
         if fout:

@@ -24,6 +24,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/messages` | `render_messages` | `nooch_village/views/messages.py` |
 | `/version` | `(inline)` | `cockpit2.py` |
 | `/tools` | `render_tools` | `nooch_village/views/tools.py` |
+| `/fixed-costs` | `render_vaste_kosten` | `nooch_village/views/vaste_kosten.py` |
 | `/open-questions` | `render_open_vragen` | `nooch_village/views/open_vragen.py` |
 | `/bom` | `render_bom` | `nooch_village/views/bom.py` |
 | `/acties` | `render_acties` | `nooch_village/views/acties.py` |
@@ -160,6 +161,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `metrics2_form` | `_act_metrics2_form` |
 | `metrics2_dim` | `_act_metrics2_dim` |
 | `metrics2_grens` | `_act_metrics2_grens` |
+| `vaste_kosten_zet` | `_act_vaste_kosten_zet` |
+| `vaste_kosten_weg` | `_act_vaste_kosten_weg` |
 | `metrics2_compare` | `_act_metrics2_compare` |
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
@@ -257,6 +260,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `bom_leveranciers` | `BomLeverancierStore` | `bom_leveranciers.json` |
 | `bom_materialen` | `BomMateriaalStore` | `bom_materialen.json` |
 | `bom_varianten` | `BomVariantStore` | `bom_varianten.json` |
+| `vaste_kosten` | `VasteKostenStore` | `vaste_kosten.json` |
 | `personas` | `PersonaStore` | `personas.json` |
 | `projects` | `ProjectLedger` | `projects.json` |
 | `deliverables` | `DeliverableStore` | `deliverables.json` |
@@ -356,4 +360,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_54 routes · 166 dispatch-acties · 32 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._
+_55 routes · 168 dispatch-acties · 33 stores in `_Stores` · 33 daarbuiten met één schrijver · 6 met meerdere · 11 zonder gevonden schrijver._
