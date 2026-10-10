@@ -18,6 +18,68 @@ from nooch_village.metric_schema import normalize as _normalize_indicator, SCHEM
 from nooch_village.util import atomic_write_json
 
 
+#: Scaling Up: een Critical Number is wat dit kwartaal telt, een Smart Number wat je volgt. Een tegel
+#: zonder niveau is gewoon een meting op het dashboard.
+NIVEAUS = ("critical", "smart")
+
+#: ZACHTE GRENS op het aantal Critical Numbers per kring: daarboven waarschuwt het scherm, het
+#: blokkeert niets. Focus — in Scaling Up krijgt een team er per kwartaal één of twee.
+MAX_CRITICAL = 3
+
+# De drie grens-uitkomsten van `grens_status`.
+GROEN, ORANJE, ROOD = "green", "amber", "red"
+
+
+def _getal(x) -> float | None:
+    """Een eindig getal of None (leeg / onleesbaar). Komma als decimaalteken mag."""
+    s = str(x if x is not None else "").strip().replace(",", ".")
+    if s in ("", "None"):
+        return None
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    return v if v == v and v not in (float("inf"), float("-inf")) else None
+
+
+def grens_fout(target, oranje, richting: str) -> str:
+    """Ligt de oranje-drempel aan de goede kant van het doel? "" als het klopt (of niets te toetsen
+    valt), anders de reden. Bij `up` ligt oranje ONDER het doel, bij `down` erboven."""
+    tgt, ora = _getal(target), _getal(oranje)
+    if tgt is None or ora is None or richting not in ("up", "down"):
+        return ""
+    if richting == "up" and ora > tgt:
+        return "for a measure that should go up, the amber threshold must be at or below the target"
+    if richting == "down" and ora < tgt:
+        return "for a measure that should go down, the amber threshold must be at or above the target"
+    return ""
+
+
+def grens_status(waarde, target, oranje, richting: str) -> str:
+    """Groen / oranje / rood ten opzichte van het doel, of "" als er niets te zeggen valt.
+
+    GEEN DOEL, GEEN STATUS — en geen verzonnen standaard. Ook geen status zonder waarde of zonder
+    richting: of 80 goed of slecht is, hangt af van welke kant op beter is.
+    `up`  : waarde ≥ doel → groen · ≥ oranje → oranje · anders rood
+    `down`: waarde ≤ doel → groen · ≤ oranje → oranje · anders rood
+    Zonder oranje-drempel is het groen of rood."""
+    v, tgt, ora = _getal(waarde), _getal(target), _getal(oranje)
+    if v is None or tgt is None or richting not in ("up", "down"):
+        return ""
+    beter = (lambda a, b: a >= b) if richting == "up" else (lambda a, b: a <= b)
+    if beter(v, tgt):
+        return GROEN
+    if ora is not None and beter(v, ora):
+        return ORANJE
+    return ROOD
+
+
+def critical_te_veel(tiles: list[dict]) -> int:
+    """Het aantal Critical Numbers als dat boven `MAX_CRITICAL` ligt, anders 0."""
+    n = sum(1 for t in tiles if t.get("niveau") == "critical")
+    return n if n > MAX_CRITICAL else 0
+
+
 class MetricStore:
     def __init__(self, path: str):
         self.path = path
@@ -88,6 +150,27 @@ class MetricStore:
                 self._save()
                 return True
         return False
+
+    def set_tile_grens(self, node: str, tid: str, niveau: str = "", target=None,
+                       oranje=None) -> str:
+        """Niveau (critical/smart), doel en oranje-drempel van één tegel (10 oktober 2026). "" bij
+        succes, anders de reden. Zie `grens_status` voor wat ze betekenen.
+
+        OP DE TEGEL, NIET OP DE DEFINITIE (besluit Stefan): de tegel is per kring, en daar stond het
+        doel (`target`) al. Een label of doel wijzigen raakt de definitie-versie en de reeks dus niet.
+        De oranje-drempel moet aan de goede kant van het doel liggen; welke kant dat is, weet alleen
+        de richting van de meting — die toetst de aanroeper met `grens_fout`."""
+        if niveau not in ("",) + NIVEAUS:
+            return "unknown level"
+        tgt, ora = _getal(target), _getal(oranje)
+        if ora is not None and tgt is None:
+            return "an amber threshold needs a target"
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                t["niveau"], t["target"], t["oranje"] = niveau, tgt, ora
+                self._save()
+                return ""
+        return "not found"
 
     def set_tile_dim(self, node: str, tid: str, dim: str, form: str = "") -> bool:
         """Segmenteer één tegel: wissel de dimensie (bv. per land / per product / over tijd). Optioneel
@@ -188,7 +271,7 @@ class MetricStore:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
-        # (GAAP/IRIS: wat telt mee, eenheid, richting, drempel; meetmoment: cadans + meettype).
+        # (IRIS-idee: wat telt mee, eenheid, richting, drempel; meetmoment: cadans + meettype).
         # veld/categorie/aard komen mee uit de catalogus-def (create-flow): zonder `veld` kan geen enkel
         # pad de bron-dagreeks (<source>_<veld>_day) reconstrueren. `aard` alleen doorgeven als gezet;
         # anders leidt het schema 'm af uit het meettype.
@@ -216,7 +299,11 @@ class MetricStore:
         self._save()
         return it
 
-    def add_sample(self, mid: str, value, at: float | None = None) -> bool:
+    def add_sample(self, mid: str, value, at: float | None = None, door: str = "",
+                   notitie: str = "") -> bool:
+        """Eén handmatige meting. `door` = person-id van wie hem invoerde, `notitie` = optionele
+        toelichting (10 oktober 2026): dezelfde route vanuit het cockpit-scherm en het werkoverleg,
+        en een getal waarvan niemand meer weet wie het noteerde is geen bewijs."""
         it = self._items.get(mid)
         if it is None or it.get("kind") != "kpi" or it.get("source") or it.get("auto"):
             return False                       # bron-/systeem-KPI's worden gevoed; geen handmatige sample
@@ -226,8 +313,13 @@ class MetricStore:
             return False
         # defv = de definitie-versie waaronder gemeten is; nodig om later te back-casten of een
         # reeksbreuk te tonen. 0 voor een losse KPI zonder catalogus-definitie.
-        it.setdefault("samples", []).append({"at": at or time.time(), "value": v,
-                                             "defv": int(it.get("def_version", 0))})
+        sample = {"at": at or time.time(), "value": v, "defv": int(it.get("def_version", 0))}
+        if door:
+            sample["door"] = str(door)[:64]
+        notitie = " ".join(str(notitie or "").split())[:280]
+        if notitie:
+            sample["notitie"] = notitie
+        it.setdefault("samples", []).append(sample)
         self._save()
         return True
 

@@ -225,6 +225,8 @@ def _bootstrap(dd: str) -> None:
         import_org(nooch_poc_org(), st.records, st.people, st.assign)
     _ensure_facilitator_health(st)
     _ensure_transparency_policy(st)
+    from nooch_village.definitions import hernoem_seed as _hernoem_seed
+    _hernoem_seed(st.defs, st.metrics)   # hernoemde definities meenemen VÓÓR het zaaien (idempotent)
     _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
@@ -5359,6 +5361,28 @@ def _act_metrics2_form(c):
         return c.nxt, ("display changed" if ok else "✗ not found")
 
 
+def _act_metrics2_grens(c):
+        # AUTHZ: circle-member of iedereen-ingelogd — zelfde poort als de rest van de tegel-bediening
+        # (`metrics2_formula`): welk getal Critical is en wat het doel is, beslist de kring zelf.
+        # Niveau, doel en oranje-drempel van één tegel (10 oktober 2026); de oranje-drempel wordt
+        # getoetst tegen de richting van de meting, zodat "oranje" niet beter kan zijn dan "groen".
+        from nooch_village.metrics import grens_fout
+        from nooch_village.views.metrics import _grondslag
+        st, g = c.st, c.g
+        _deny = _member_gate(resolve_circle_id(g("node"), st.records), c.username, st)
+        if _deny:
+            return c.nxt, _deny
+        tile = next((t for t in st.metrics.tiles_of(g("node")) if t.get("id") == g("tid")), None)
+        if tile is None:
+            return c.nxt, "✗ not found"
+        richting = _grondslag(st, tile["source"], tile["measure"]).get("richting") or ""
+        fout = grens_fout(g("target"), g("oranje"), richting)
+        if fout:
+            return c.nxt, f"✗ {fout}"
+        fout = st.metrics.set_tile_grens(g("node"), g("tid"), g("niveau"), g("target"), g("oranje"))
+        return c.nxt, (f"✗ {fout}" if fout else "✓ level and target saved")
+
+
 def _act_metrics2_dim(c):
         # AUTHZ: circle-member of iedereen-ingelogd — zie het metrics2-blok hierboven.
         # Segmentatie: de dimensie van een tegel wisselen (bv. per land / per product / over tijd).
@@ -5716,13 +5740,33 @@ def _act_m_add_link(c):
 
 
 def _act_m_sample(c):
+        # AUTHZ: rolvervuller of Circle Lead — `_role_gate` op de node van de KPI: wie de rol vult
+        # levert het getal, de Circle Lead mag het in het overleg namens hem noteren.
+        # ÉÉN SCHRIJFROUTE voor het cockpit-scherm en het werkoverleg (10 oktober 2026): hetzelfde
+        # sample, met wie het invoerde en optioneel een datum en een notitie.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
         _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
-        msg = "✓ meting genoteerd" if st.metrics.add_sample(g("mid"), g("value")) else "⛔ ongeldige meting"
-        return nxt, msg
+        at = None
+        if g("datum").strip():
+            at = _sample_datum(g("datum"))
+            if at is None:
+                return nxt, "⛔ invalid date (use a date that is not in the future)"
+        ok = st.metrics.add_sample(g("mid"), g("value"), at=at, door=_web_actor_id(username, st),
+                                   notitie=g("notitie"))
+        return nxt, "✓ reading saved" if ok else "⛔ invalid reading"
+
+
+def _sample_datum(s: str) -> float | None:
+    """Een ISO-datum (`2026-10-10`) als tijdstip, 12:00 lokale tijd — midden op de dag, zodat geen
+    tijdzone hem naar de dag ervoor of erna schuift. None bij onleesbaar of in de toekomst."""
+    import time as _t
+    try:
+        ts = _t.mktime(_t.strptime(s.strip()[:10], "%Y-%m-%d")) + 12 * 3600
+    except ValueError:
+        return None
+    return None if ts - 12 * 3600 > _t.time() else ts
 
 
 def _act_m_remove(c):
@@ -6628,6 +6672,7 @@ ACTIONS = {
     "metrics2_unfav": _act_metrics2_unfav,
     "metrics2_form": _act_metrics2_form,
     "metrics2_dim": _act_metrics2_dim,
+    "metrics2_grens": _act_metrics2_grens,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
@@ -7178,6 +7223,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                        van=(qs.get("van") or [""])[0],
                                        tot=(qs.get("tot") or [""])[0],
                                        compare=(qs.get("compare") or [""])[0] == "1",
+                                       mset=(qs.get("mset") or ["critical"])[0],
                                        username=username))
                 return
             if path == "/pagina":
@@ -7389,7 +7435,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 van = (qs.get("van") or [""])[0]
                 tot = (qs.get("tot") or [""])[0]
                 self._send(render_metrics2(st, rec, csrf_token=effective_csrf, win=win,
-                                           compare=compare, van=van, tot=tot))
+                                           compare=compare, van=van, tot=tot,
+                                           mset=(qs.get("mset") or ["critical"])[0]))
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld

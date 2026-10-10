@@ -250,8 +250,43 @@ def _window_bar(node: str, win: str, compare: bool, live: bool, base: str) -> st
     return f"<div class='cl-bar'><span class='muted'>Period:</span> {seg}{sw}</div>"
 
 
+#: De set-keuze bovenaan het dashboard (10 oktober 2026). STANDAARD `critical`: per kring eerst wat
+#: dit kwartaal telt, de rest uitklapbaar. `smart` toont Critical én Smart, `all` alles open.
+_SETS = (("critical", "Critical only"), ("smart", "Smart"), ("all", "All"))
+
+
+def _set_bar(mset: str, base: str) -> str:
+    """De set-keuze als `.cl-bar` + `a.cl-filter`, zelfde vorm als elders. Elke keuze is een link."""
+    links = " ".join(f"<a class='cl-filter{' on' if k == mset else ''}' href='{base}&mset={k}'>"
+                     f"{_e(l)}</a>" for k, l in _SETS)
+    return f"<div class='cl-bar' aria-label='which metrics'><span class='muted'>Show</span> {links}</div>"
+
+
+def _grens_menu(node: str, tile: dict, csrf: str, nxt: str) -> str:
+    """Niveau, doel en oranje-drempel van één tegel, in het popover-patroon van de Deadline-cel
+    (`details.acard-d` > `summary.chip.outline` + `.datepop`), zoals op /bom."""
+    def opt(k, l):
+        return f"<option value='{k}'{' selected' if (tile.get('niveau') or '') == k else ''}>{l}</option>"
+    num = lambda x: "" if x is None else f"{x:g}"
+    hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+           f"<input type='hidden' name='node' value='{_e(node)}'>"
+           f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+           f"<input type='hidden' name='tid' value='{_e(tile.get('id', ''))}'>")
+    form = (f"<form method='post' action='/action'>{hid}"
+            f"<select name='niveau' aria-label='level'>{opt('', 'No level')}"
+            f"{opt('critical', 'Critical Number')}{opt('smart', 'Smart Number')}</select>"
+            f"<input name='target' value='{num(tile.get('target'))}' inputmode='decimal' "
+            f"aria-label='target' placeholder='target'>"
+            f"<input name='oranje' value='{num(tile.get('oranje'))}' inputmode='decimal' "
+            f"aria-label='amber threshold' placeholder='amber from'>"
+            f"<button class='btn ok sm' name='action' value='metrics2_grens'>Save</button></form>")
+    label = {"critical": "Critical", "smart": "Smart"}.get(tile.get("niveau") or "", "Level & target")
+    return (f"<details class='acard-d'><summary class='chip outline' aria-label='level and target'>"
+            f"{_e(label)}</summary><div class='datepop'>{form}</div></details>")
+
+
 def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot: str,
-               nxt: str, editable: bool) -> str:
+               nxt: str, editable: bool, mset: str = "all") -> str:
     node = rec.id
     if not tiles:
         if not editable:
@@ -278,21 +313,47 @@ def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot
         weergave = "" if (t.get("cmp_measure") or is_formule) else _weergave_menu(node, t, csrf, nxt)
         vergelijk = "" if is_formule else _compare_menu(st, rec, node, t, csrf, nxt)
         rm = _post("metrics2_unfav", node, "remove", "dellink", csrf, nxt, tid=t.get("id", ""))
-        ctrls = f"<div class='tile-foot-l'>{segment}{weergave}{vergelijk}</div>"
+        grens = _grens_menu(node, t, csrf, nxt)
+        ctrls = f"<div class='tile-foot-l'>{segment}{weergave}{vergelijk}{grens}</div>"
         foot = f"<div class='tile-foot'>{ctrls}<div class='tile-foot-r'>{rm}</div></div>"
         cells.append(f"<div class='tile-wrap'>{chart}{foot}</div>")
-    return f"<div class='tile-grid'>{''.join(cells)}</div>"
+    return _in_sets(tiles, cells, mset)
+
+
+def _in_sets(tiles: list[dict], cells: list[str], mset: str) -> str:
+    """Wat bovenaan staat en wat uitklapbaar is, volgens de set-keuze. Zonder één tegel in de
+    gekozen set staat de rest OPEN — een leeg dashboard achter een dichte klap is geen keuze."""
+    from nooch_village.metrics import MAX_CRITICAL, critical_te_veel
+    boven_niveaus = {"critical": ("critical",), "smart": ("critical", "smart")}.get(mset)
+    waarschuwing = ""
+    n = critical_te_veel(tiles)
+    if n:
+        waarschuwing = (f"<p class='muted'>⚠ This circle has {n} Critical Numbers. Scaling Up "
+                        f"suggests one or two per quarter; more than {MAX_CRITICAL} dilutes the "
+                        f"focus.</p>")
+    if boven_niveaus is None:
+        return f"{waarschuwing}<div class='tile-grid'>{''.join(cells)}</div>"
+    boven = [c for t, c in zip(tiles, cells) if t.get("niveau") in boven_niveaus]
+    rest = [c for t, c in zip(tiles, cells) if t.get("niveau") not in boven_niveaus]
+    wat = "Critical Numbers" if mset == "critical" else "Critical or Smart Numbers"
+    kop = (f"<div class='tile-grid'>{''.join(boven)}</div>" if boven
+           else f"<p class='muted'>No {wat} set yet. Pick a level under a tile (Level & target).</p>")
+    if not rest:
+        return waarschuwing + kop
+    return (f"{waarschuwing}{kop}<details{'' if boven else ' open'}><summary>Other metrics "
+            f"({len(rest)})</summary><div class='tile-grid'>{''.join(rest)}</div></details>")
 
 
 def _metrics2_body(st, rec, csrf: str, win: str = "7d", compare: bool = False,
-                   van: str = "", tot: str = "", base: str = "") -> str:
+                   van: str = "", tot: str = "", base: str = "", mset: str = "critical") -> str:
     """De gedeelde inhoud van het metrics-scherm (zonder pagina-chrome). `base` = de terugkeer-URL
     (node-tab óf losse pagina); `csrf` leeg → read-only lens (alleen de tegels, geen bediening)."""
     node = rec.id
     editable = bool(csrf)
     if not base:
         base = f"/metrics2?node={_e(node)}"
-    nxt = f"{base}&mw={_e(win)}" + ("&compare=1" if compare else "")
+    mset = mset if mset in {k for k, _l in _SETS} else "critical"
+    nxt = f"{base}&mw={_e(win)}" + ("&compare=1" if compare else "") + f"&mset={mset}"
     tiles = st.metrics.tiles_of(node)
     if not editable:                                        # read-only aggregatie-lens (bv. persoon)
         return _favorites(st, rec, tiles, "", win, compare, van, tot, nxt, editable=False)
@@ -312,18 +373,20 @@ def _metrics2_body(st, rec, csrf: str, win: str = "7d", compare: bool = False,
             f"<div class='cl-head'><span class='muted'>Your dashboard</span>"
             f"<span class='kc-actions'>{maak}</span></div>"
             f"{_window_bar(node, win, compare, live, base)}"
-            f"{_favorites(st, rec, tiles, csrf, win, compare, van, tot, nxt, editable=True)}</div>")
+            f"{_set_bar(mset, f'{base}&mw={_e(win)}' + ('&compare=1' if compare else ''))}"
+            f"{_favorites(st, rec, tiles, csrf, win, compare, van, tot, nxt, editable=True, mset=mset)}</div>")
     cat = (f"<div data-m2v='cat'{' hidden' if show_dash else ''}>"
            f"{_catalog(st, rec, tiles, csrf, nxt)}</div>")
     return f"{subtabs}{dash}{cat}{_M2_JS}{_METRICS_JS}"
 
 
 def render_metrics2_tab(st, rec, csrf_token: str = "", win: str = "7d",
-                        compare: bool = False, van: str = "", tot: str = "") -> str:
+                        compare: bool = False, van: str = "", tot: str = "",
+                        mset: str = "critical") -> str:
     """De metrics-NODE-TAB: dezelfde body, ingebed in de node-pagina (die levert de tabbar + h1).
     Terugkeer-URL = de node-tab, zodat elke actie op deze tab blijft."""
     base = f"/node?id={_e(rec.id)}&tab=metrics"
-    return _metrics2_body(st, rec, csrf_token, win, compare, van, tot, base=base)
+    return _metrics2_body(st, rec, csrf_token, win, compare, van, tot, base=base, mset=mset)
 
 
 def render_metrics2_person(st, rec, base: str) -> str:
@@ -332,14 +395,15 @@ def render_metrics2_person(st, rec, base: str) -> str:
 
 
 def render_metrics2(st, rec, csrf_token: str = "", win: str = "7d",
-                    compare: bool = False, van: str = "", tot: str = "") -> str:
+                    compare: bool = False, van: str = "", tot: str = "",
+                    mset: str = "critical") -> str:
     """De losse volledige pagina (`/metrics2?node=…`): dezelfde body met eigen pagina-chrome."""
     if rec is None:
         inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'>"
                  "<p class='muted'>Pick a circle or role to view metrics for.</p></div></div>")
         return _page("Metrics", inner)
     body = _metrics2_body(st, rec, csrf_token, win, compare, van, tot,
-                          base=f"/metrics2?node={_e(rec.id)}")
+                          base=f"/metrics2?node={_e(rec.id)}", mset=mset)
     main = (f"<div class='c2-main'><h1 class='ptitle'>Metrics — {_e(_name(rec))}</h1>"
             f"<p class='muted'>Scan the catalogue and star what you want to follow. "
             f"You do not need to know what is interesting; the overview is there.</p>{body}</div>")

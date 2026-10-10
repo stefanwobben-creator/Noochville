@@ -41,7 +41,7 @@ CATALOG = [
     ("mobiel_audit_*_day",                "mobiel_audit",       "weekly",    "active"),   # Lighthouse mobiel (PSI)
     ("werk_duur_day",                     "werkoverleg",        "irregular", "active"),   # per overleg → geen N-check
     ("werk_tevredenheid_day",             "werkoverleg",        "irregular", "active"),
-    ("shopify_*_day",                     "shopify",            "daily",     "inactive"),
+    ("shopify_*_day",                     "shopify",            "daily",     "active"),    # actief sinds 10 okt 2026
     ("semanticscholar_*_day",             "semanticscholar",    "monthly",   "inactive"),
 ]
 

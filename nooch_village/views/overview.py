@@ -939,7 +939,7 @@ def _ritme_html(st: _Stores, rec) -> str:
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
                 van: str = "", tot: str = "", compare: bool = False, goal: str = "",
-                kind_flt: str = "") -> str:
+                kind_flt: str = "", mset: str = "critical") -> str:
     # OUDE TABNAMEN BLIJVEN WERKEN. policies/notes/tools zijn sinds fase 7 één Wiki-tab. De alias
     # staat HIER en niet in de route, zodat elke aanroeper hem krijgt — de route, een test, een
     # ingebedde render. Hij vertaalt naar het juiste voorfilter, wat preciezer is dan doorsturen.
@@ -1014,7 +1014,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "metrics":
         # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als
         # node-tab. Vervangt het oude _metrics_tab_html; KPI-aanmaken loopt via de rijke composer.
-        content = render_metrics2_tab(st, rec, csrf_token, win=mw, compare=compare, van=van, tot=tot)
+        content = render_metrics2_tab(st, rec, csrf_token, win=mw, compare=compare, van=van, tot=tot,
+                                      mset=mset)
     elif tab == "goals":
         # Dezelfde inhoud als /goals, uit dezelfde functie. Een tweede kopie zou na één wijziging
         # uit de pas lopen — de regel die ook bij het projectenbord geldt.
