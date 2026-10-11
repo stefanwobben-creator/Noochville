@@ -41,7 +41,10 @@ def test_de_kleuren_zijn_de_gesampelde_waarden():
     assert t["--nu-neon"] == "#00FF00"          # de CTA-vulling, met zwarte tekst erop
     assert t["--nu-accent"] == "#00A551"        # de aankondigingsbalk, met witte tekst erop
     assert t["--nu-bg-alt"] == "#E2FFE3"        # het lichtgroene vlak (18% van de productpagina)
-    assert t["--nu-accent-text"] == "#1F9D55"   # #14713C kwam in geen van beide beelden voor
+    # TEKSTGROEN: bewust NIET meer de gesampelde #1F9D55 (besluit Stefan, A1, 11 oktober 2026). Die haalde
+    # 3,27-3,49:1 en dus geen 4,5:1; tekstgroen is nu --green-dark (#14713C). Het gesampelde groen
+    # blijft bestaan als --green, voor vulling. Zie tests/test_contrast.py.
+    assert t["--nu-accent-text"] == "var(--green-dark)"
     assert t["--nu-muted"] == "#58595B"
     assert t["--nu-border-subtle"] == "#E6E7E8"
     assert t["--nu-text"] == "#000000"          # bewust één token: #1A1A1A is met het oog gelijk

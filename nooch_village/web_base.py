@@ -33,7 +33,7 @@ _FONTS = (
 
 _CSS = """
 :root{
- --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
+ --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#717171;--muted:#777161;
  --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
  --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
  --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--error-tint:#FDEAEA;
@@ -110,7 +110,7 @@ tr.st-future td{opacity:.55}
 .btn:hover{background:rgba(27,27,27,.05)}
 .btn.ok{background:var(--green);border-color:var(--green);color:#fff}
 .btn.ok:hover{background:var(--green-dark);border-color:var(--green-dark)}
-.btn.no{background:#fff;border-color:var(--coral);color:var(--coral)}
+.btn.no{background:#fff;border-color:var(--coral);color:var(--danger-text,#DE1E13)}
 .tension{background:var(--cream-3);border:1px solid var(--border);border-radius:var(--radius);
  padding:.7rem .9rem;margin:.6rem 0 1.4rem}
 details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
