@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 from nooch_village.views import finance as fin
 
 from tests.test_finance_omzet import _omzet
@@ -61,5 +63,67 @@ def test_kale_finance_ingang_stuurt_door_naar_de_kosten_en_blijft_404_zonder_rec
             assert r.status == verwacht, wie
             if verwacht == 303:
                 assert r.getheader("Location") == "/finance/costs"
+    finally:
+        httpd.shutdown()
+
+
+# ── History, Recurring, Monthly en Runway inputs (11 oktober 2026) ─────────────
+# Na de uitrol van #718 gemeten op prod (390px): History 1124px, Recurring 659px, Runway inputs 478px
+# en Monthly 421px breed. Zelfde oplossing als #718: de tabel in `.c2-scroll`, de kolom `c2-main--vol`.
+
+def _vier_schermen(dd):
+    from nooch_village.finance_recurring import maak_regel
+    from nooch_village.views.vaste_kosten import render_vaste_kosten
+    _boek(dd, period="2026-10")
+    st = _st(dd)
+    st.vaste_kosten.zet(maak_regel("Rent", 45000, van="2026-01-01")[0], door="t")
+    return {"/finance/history": fin.render_history(st, "fc@t.nl", "t", "2025"),
+            "/finance/recurring": fin.render_recurring(st, "fc@t.nl", "t"),
+            "/finance/monthly": fin.render_monthly(st, "fc@t.nl"),
+            "/fixed-costs": render_vaste_kosten(st, "fc@t.nl", "t")}
+
+
+def test_de_tabellen_van_de_vier_schermen_staan_in_een_scrollcontainer(tmp_path):
+    import re
+    for pad, html in _vier_schermen(_dorp(tmp_path)).items():
+        assert "class='c2-main c2-main--vol'" in html, pad
+        tabellen = [m.start() for m in re.finditer("<table class='mtab'", html)]
+        assert tabellen, pad
+        for i in tabellen:
+            # de dichtstbijzijnde open <div> vóór de tabel is de scrollcontainer
+            assert "c2-scroll'>" in html[html.rindex("<div", 0, i):i], (pad, html[i:i + 60])
+
+
+def test_op_390px_is_geen_van_de_vier_paginas_breder_dan_het_scherm(tmp_path):
+    """Gemeten in een echte browser, zoals de rooktest op prod. Zonder playwright of Chromium (CI
+    installeert alleen requirements.txt) slaat deze test over; de test hierboven bewaakt dan de
+    bedrading."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from nooch_village import auth as _auth
+    from nooch_village import cockpit2
+    dd = _dorp(tmp_path)
+    _vier_schermen(dd)
+    sessies = _auth.SessionStore()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), cockpit2.make_handler(dd, "T", sessions=sessies))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    basis = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        with sync_api.sync_playwright() as p:
+            try:
+                browser = p.chromium.launch()
+            except Exception as e:                                  # Chromium niet geïnstalleerd
+                pytest.skip(f"geen Chromium: {e}")
+            ctx = browser.new_context(viewport={"width": 390, "height": 844})
+            ctx.add_cookies([{"name": "nv_session", "value": sessies.create("fc@t.nl"), "url": basis}])
+            page = ctx.new_page()
+            for pad in ("/finance/history", "/finance/recurring", "/finance/monthly", "/fixed-costs"):
+                page.goto(basis + pad)
+                assert page.locator("table.mtab").count(), pad
+                breed, scherm = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+                assert breed <= scherm, f"{pad}: pagina {breed}px op een scherm van {scherm}px"
+            browser.close()
     finally:
         httpd.shutdown()
