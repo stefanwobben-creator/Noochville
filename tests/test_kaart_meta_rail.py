@@ -21,8 +21,10 @@ ROLE = "mother_earth__nooch__website_developer"
 _CSS = pathlib.Path("nooch_village/static/nooch.css")
 
 # Elke meta-control hoort in de RAIL. Geen enkele hoort meer boven de content.
+# `proj_setprivate` STAAT ER NIET MEER BIJ: privé-projecten staan uit (11 oktober 2026); de knop
+# verschijnt alleen nog bij een oud privé-project, om het terug te zetten naar zichtbaar.
 _META = ("proj_status", "proj_done", "proj_setimpact", "proj_seteffort", "proj_settrekker",
-         "proj_setdue", "proj_setprivate", "proj_setowner")
+         "proj_setdue", "proj_setowner")
 # Deze horen juist in de WALL: ze werken op de inhoud die daar staat.
 _WALL = ("checklist_add", "check_add", "proj_feed", "attach_add")
 
@@ -141,14 +143,17 @@ def test_nieuwe_checklist_heeft_geen_naamveld_en_heet_tasks(tmp_path):
 
 
 def test_visible_is_een_toggle_en_geen_vinkje(tmp_path):
-    """Zichtbaar is de normale toestand; de actie die je soms wilt is verbergen. Het vinkje vroeg
-    je een negatieve eigenschap aan te zetten — een omweg om "hou dit binnen" te zeggen."""
+    """Zichtbaar is de normale toestand. SINDS 11 OKTOBER 2026 staan privé-projecten uit: een gewoon
+    project heeft geen knop meer om te verbergen, en de server weigert het (`cockpit2.PRIVE_UIT`).
+    Alleen een oud privé-project houdt de knop, om terug te gaan naar zichtbaar."""
     dd, pid, _, _, _, rail = _kaart(tmp_path)
     assert "only for this circle</label>" not in rail
     assert "type='checkbox'" not in rail
-    assert "Whole circle tree" in rail and "proj_setprivate" in rail
-    cockpit2.dispatch(dd, "proj_setprivate", {"pid": [pid], "private": ["1"], "next": ["/"]},
-                      username="guest")
+    assert "Whole circle tree" in rail and "proj_setprivate" not in rail
+    _n, msg = cockpit2.dispatch(dd, "proj_setprivate", {"pid": [pid], "private": ["1"], "next": ["/"]},
+                                username="guest")
+    assert msg == cockpit2.PRIVE_UIT
+    cockpit2._Stores(dd).projects.edit(pid, private=True, allow_done=True)      # een oud privé-project
     html = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     rail2 = html[html.index("pkaart-rail"):]
     assert "Only this circle" in rail2                     # en terug te draaien met dezelfde knop
