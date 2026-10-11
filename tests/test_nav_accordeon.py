@@ -39,9 +39,11 @@ def _nav_ingevuld(cid: str = "mother_earth__nooch") -> str:
 
     DE CIRCLE-KNOP STOND HIER OOK, tot 23 september 2026. Hij is weg als concept: een cirkel is
     een rol die rollen bevat, dus wat hij toonde was altijd een deel van de organisatieboom."""
-    from nooch_village.cockpit2_util import _SIDE_OVERLEG, overleg_items
+    from nooch_village.cockpit2_util import _SIDE_ADMIN, _SIDE_OVERLEG, _side_item, overleg_items
     h = _nav()
-    return h.replace(_SIDE_OVERLEG, overleg_items(cid), 1)
+    # Admin vult `_send` per verzoek in, alleen voor wie het mag (`cockpit2._nav_admin`); hier zoals
+    # Stefan hem ziet.
+    return h.replace(_SIDE_OVERLEG, overleg_items(cid), 1).replace(_SIDE_ADMIN, _side_item("/admin", "Admin"), 1)
 
 
 def _dorp(tmp_path):

@@ -33,7 +33,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _md_naar_bron, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer, _DS_LINK,
-    _SIDE_OVERLEG, _initials,
+    _SIDE_ADMIN, _SIDE_OVERLEG, _initials,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
     _is_beeldbestand,
@@ -838,14 +838,13 @@ def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -
 
     Velden: voornaam, achternaam, email. Geeft (HTML-body, statuscode) terug (geen redirect),
     zodat het tijdelijke wachtwoord niet in een URL of browser-history terechtkomt.
-    Autorisatie: alleen anchor-lead (people-beheer is org-breed); guest mag alles.
+    Autorisatie: de zicht-groep `admin` (alleen Stefan); guest mag alles.
     """
     st = _Stores(data_dir)
-    actor = st.people.by_email(username) if username != "guest" else None
-    if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-        return "No access — only the anchor lead may do this", 403
-    if actor is None and username != "guest":
-        return "No access — user not recognised", 403
+    # AUTHZ: anchor-lead — via de zicht-groep `admin`, recht "wijzigen" (alleen Stefan, sinds
+    # 11 oktober 2026). Geen recht = 404, zoals /admin: niet verraden dat dit beheer bestaat.
+    if not mag_admin(st, username, "wijzigen"):
+        return "<p>404</p>", 404
     g = lambda k: (form.get(k) or [""])[0].strip()
     voornaam, achternaam, email = g("voornaam"), g("achternaam"), g("email")
     back = g("next") or "/"
@@ -882,13 +881,12 @@ def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -
 def _handle_person_reset(data_dir: str, form: dict, username: str | None = None) -> tuple[str, int]:
     """Reset het wachtwoord van een bestaande deelnemer: zet een nieuw tijdelijk wachtwoord en
     toon dat éénmalig (niet via redirect, zodat het niet in de URL/history belandt).
-    Autorisatie: alleen anchor-lead (people-beheer is org-breed); guest mag alles."""
+    Autorisatie: de zicht-groep `admin` (alleen Stefan); guest mag alles."""
     st = _Stores(data_dir)
-    actor = st.people.by_email(username) if username != "guest" else None
-    if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-        return "No access — only the anchor lead may do this", 403
-    if actor is None and username != "guest":
-        return "No access — user not recognised", 403
+    # AUTHZ: anchor-lead — via de zicht-groep `admin`, recht "wijzigen" (alleen Stefan, sinds
+    # 11 oktober 2026). Geen recht = 404, zoals /admin: niet verraden dat dit beheer bestaat.
+    if not mag_admin(st, username, "wijzigen"):
+        return "<p>404</p>", 404
     g = lambda k: (form.get(k) or [""])[0].strip()
     pid = g("pid")
     back = g("next") or "/admin"
@@ -1198,6 +1196,28 @@ def _nav_chrome(st, body: str) -> str:
             _SIDE_OVERLEG, overleg_items(cid, werk_open=st.werk.is_open(cid)), 1)
     except Exception:                                          # noqa: BLE001
         return body.replace(_SIDE_OVERLEG, "", 1)
+
+
+#: De zicht-groep voor het beheer van mensen (`config/zicht.json`): /admin, het nav-item en de vier
+#: people-acties. Dezelfde poort als Finance, geen los vergelijk op een gebruikersnaam.
+ADMIN_GROEP = "admin"
+
+
+def mag_admin(st, username, wat: str = "zien") -> bool:
+    """Mag deze gebruiker het beheer van mensen zien of wijzigen? `zicht.mag`, fail-closed."""
+    return _zicht.mag(st, username, ADMIN_GROEP, wat)
+
+
+def _nav_admin(st, username, body: str) -> str:
+    """Het nav-item Admin invullen, alleen voor wie het mag; anders blijft er niets staan."""
+    if _SIDE_ADMIN not in body:
+        return body
+    from nooch_village.cockpit2_util import _side_item
+    try:
+        ja = st is not None and mag_admin(st, username)
+    except Exception:                                          # noqa: BLE001 — fail-closed
+        ja = False
+    return body.replace(_SIDE_ADMIN, _side_item("/admin", "Admin") if ja else "", 1)
 
 
 #: Paden die in het menu onder een ander item vallen: `{pad: menu-pad}`.
@@ -6182,13 +6202,10 @@ def _act_rov2_set(c):   # + rov2_acc_add/edit/remove, rov2_dom_add, rov2_dom_rem
 def _act_person_edit(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
-        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
-        actor = st.people.by_email(username) if username != "guest" else None
-        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "No access — only the anchor lead may do this"
-        if actor is None and username != "guest":
-            return nxt, "No access — user not recognised"
-        # ── einde autorisatie ──
+        # AUTHZ: anchor-lead — org-breed beheer van mensen, sinds 11 oktober 2026 via de zicht-groep
+        # `admin` (recht "wijzigen", alleen Stefan). Geen recht = 404, net als /admin zelf.
+        if not mag_admin(st, username, "wijzigen"):
+            raise NietGevonden()
         if st.people.update(g("pid"), name=g("name"), email=g("email")):
             msg = "✓ person saved"
         else:
@@ -6199,13 +6216,10 @@ def _act_person_edit(c):
 def _act_person_remove(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
-        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
-        actor = st.people.by_email(username) if username != "guest" else None
-        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "No access — only the anchor lead may do this"
-        if actor is None and username != "guest":
-            return nxt, "No access — user not recognised"
-        # ── einde autorisatie ──
+        # AUTHZ: anchor-lead — org-breed beheer van mensen, sinds 11 oktober 2026 via de zicht-groep
+        # `admin` (recht "wijzigen", alleen Stefan). Geen recht = 404, net als /admin zelf.
+        if not mag_admin(st, username, "wijzigen"):
+            raise NietGevonden()
         pid = g("pid")
         # ruim ook de rol-toewijzingen op, anders blijven die als wees achter
         for rid in list(st.assign.roles_of("person", pid)):
@@ -7153,6 +7167,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 # dus niet weten over WELKE cirkel het gaat; `_send` wel. Twee plekken, dezelfde
                 # bron (`_home_node`): de Circle-knop en de twee overleg-knoppen.
                 body = _nav_chrome(_st, body)
+                body = _nav_admin(_st, self._session_username(), body)
                 # WELK ITEM IS DE HUIDIGE PAGINA. Pas ná het invullen hierboven: de Circle-knop
                 # bestaat op dit punt pas, en hij is er een van de vijf die kan oplichten.
                 body = _nav_actief((self.path or "/"), body)
@@ -7675,7 +7690,12 @@ def make_handler(data_dir: str, csrf_token: str,
                                          tab=(qs.get("tab") or ["rollen"])[0],
                                          username=username, csrf_token=effective_csrf))
                 return
-            if path == "/admin":
+            if path == "/admin" or path.startswith("/admin/"):
+                # AUTHZ: zicht-groep `admin`, recht "zien" (alleen Stefan; besluit 11 oktober 2026).
+                # Voor alle anderen een 404 — geen redirect en geen 403, ook bij een directe URL, en
+                # ook voor alles wat ooit onder /admin komt. Zonder sessie is de login al eerder.
+                if not mag_admin(st, username) or path != "/admin":
+                    self._send("<p>404</p>", 404); return
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/search":

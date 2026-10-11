@@ -65,7 +65,9 @@ def _nav_van(dd, pad: str) -> str:
     """De zijbalk zoals `_send` hem uitlevert voor dit pad."""
     from nooch_village.cockpit2_util import _nav
     body = f"<html><body>{_nav()}</body></html>"
-    return cockpit2._nav_actief(pad, cockpit2._nav_chrome(cockpit2._Stores(dd), body))
+    st = cockpit2._Stores(dd)
+    body = cockpit2._nav_admin(st, "stefan@nooch.earth", cockpit2._nav_chrome(st, body))
+    return cockpit2._nav_actief(pad, body)
 
 
 def _actief(html: str) -> list[str]:

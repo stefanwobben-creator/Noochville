@@ -24,6 +24,25 @@
       ]
     }
   },
+  "admin": {
+    "_uitleg": "Het beheer van mensen (/admin en de vier people-acties). Alleen Stefan, als persoon; geen domein en geen rol (besluit Stefan, 11 oktober 2026). Een tweede beheerder is één regel hier.",
+    "domeinen": [],
+    "fallback": {},
+    "zien": {
+      "domein": false,
+      "rollen": [],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    },
+    "wijzigen": {
+      "domein": false,
+      "rollen": [],
+      "personen": [
+        "stefan@nooch.earth"
+      ]
+    }
+  },
   "sales": {
     "domeinen": [],
     "fallback": {},

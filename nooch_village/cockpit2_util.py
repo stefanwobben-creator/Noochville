@@ -1634,6 +1634,8 @@ _SIDE_ITEMS = (
 #: ontbrekende routes. `_nav()` heeft geen stores en kan die cirkel dus niet zelf opzoeken;
 #: `_send` vult hem in, net als bij `_SIDE_OVERLEG` hieronder.
 _SIDE_OVERLEG = "<!--c2-overleg-->"
+#: Plek voor het nav-item Admin: alleen voor wie de zicht-groep `admin` mag zien (`_nav_admin`).
+_SIDE_ADMIN = "<!--c2-admin-->"
 
 
 def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
@@ -1780,7 +1782,10 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # `hier` op je eigen cirkel landt (uitgeklapt én gemarkeerd) toont die knop alles wat
         # Circle toonde, plus het pad erheen. De vier governancerollen die de boom bewust weglaat
         # staan op de Roles-tab van die cirkel, onder "Core roles".
-        + _side_item("/admin", "Admin")
+        # ADMIN STAAT ER ALLEEN VOOR WIE HET MAG (besluit Stefan, 11 oktober 2026): `_nav()` kent
+        # de gebruiker niet, dus `_send` vult deze plek per verzoek in (`_nav_admin`), zoals de
+        # overleg-knoppen. Voor wie het niet mag blijft er niets staan.
+        + _SIDE_ADMIN
         # ORGANISATIE ALS GEWOON NAV-ITEM (voorstel Stefan, 21 september 2026). Hij hing als
         # `<details class='c2-orgfly'>` onder de balk: een tweede uitklap-mechanisme naast de
         # panelen, op een plek waar je hem alleen vond door naar beneden te scrollen. Nu dezelfde

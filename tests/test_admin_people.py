@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from nooch_village import cockpit2, auth
 
 
@@ -203,32 +205,34 @@ def test_gate_anchor_guest_mag_verwijderen(tmp_path):
     assert cockpit2._Stores(dd).people.get(target.id) is None
 
 
-def test_gate_anchor_lead_mag_verwijderen(tmp_path):
+# SINDS 11 OKTOBER 2026 is het beheer van mensen de zicht-groep `admin` (alleen Stefan), niet meer
+# "anchor lead": een andere anchor lead verliest het (besluit Stefan). Geen recht = 404.
+_ADMIN = "stefan@nooch.earth"
+
+
+def test_gate_admin_mag_verwijderen(tmp_path):
     dd, st = _st(tmp_path)
-    lead = st.people.add("Anchor", "anchor@nooch.earth")
-    st.assign.assign(_ANCHOR_LEAD, "person", lead.id)
     target = st.people.add("Doel", "doel@nooch.earth")
-    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="anchor@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username=_ADMIN)
     assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).people.get(target.id) is None
 
 
-def test_gate_anchor_subcirkel_lead_geweigerd(tmp_path):
+@pytest.mark.parametrize("wie", ["anchor", "sub", "onbekend"])
+def test_gate_niet_admin_krijgt_404_ook_een_andere_anchor_lead(tmp_path, wie):
     dd, st = _st(tmp_path)
-    subly = st.people.add("Sub", "sub@nooch.earth")
-    st.assign.assign(_GATE_LEAD, "person", subly.id)          # lead van mother_earth__nooch, niet anchor
+    if wie == "anchor":
+        st.assign.assign(_ANCHOR_LEAD, "person", st.people.add("Anchor", "anchor@nooch.earth").id)
+    if wie == "sub":
+        st.assign.assign(_GATE_LEAD, "person", st.people.add("Sub", "sub@nooch.earth").id)
+    user = {"anchor": "anchor@nooch.earth", "sub": "sub@nooch.earth", "onbekend": "niemand@nergens.nl"}[wie]
     target = st.people.add("Doel", "doel@nooch.earth")
-    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="sub@nooch.earth")
-    assert "No access" in msg and "anchor lead" in msg
-    assert cockpit2._Stores(dd).people.get(target.id) is not None
-
-
-def test_gate_anchor_onbekende_gebruiker_geweigerd(tmp_path):
-    dd, st = _st(tmp_path)
-    target = st.people.add("Doel", "doel@nooch.earth")
-    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="niemand@nergens.nl")
-    assert "not recognised" in msg
-    assert cockpit2._Stores(dd).people.get(target.id) is not None
+    for actie, form in (("person_remove", {"pid": [target.id], "next": ["/x"]}),
+                        ("person_edit", {"pid": [target.id], "name": ["X"], "email": ["x@y.z"], "next": ["/x"]})):
+        with pytest.raises(cockpit2.NietGevonden):
+            cockpit2.dispatch(dd, actie, form, username=user)
+    p = cockpit2._Stores(dd).people.get(target.id)
+    assert p is not None and p.name == "Doel"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -540,27 +544,20 @@ def test_person_add_gate_guest_mag(tmp_path):
     assert code == 200 and "added" in body
 
 
-def test_person_add_gate_anchor_lead_mag(tmp_path):
+def test_person_add_gate_admin_mag(tmp_path):
     dd, st = _st(tmp_path)
-    lead = st.people.add("Anchor", "anchor@nooch.earth")
-    st.assign.assign(_ANCHOR, "person", lead.id)
-    body, code = cockpit2._handle_person_add(dd, _add_form(), username="anchor@nooch.earth")
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username=_ADMIN)
     assert code == 200 and "added" in body
 
 
-def test_person_add_gate_niet_lead_geweigerd(tmp_path):
+@pytest.mark.parametrize("rol", [_ANCHOR, _GATE_LEAD, None])
+def test_person_add_gate_niet_admin_404_ook_anchor_lead(tmp_path, rol):
     dd, st = _st(tmp_path)
-    subly = st.people.add("Sub", "sub@nooch.earth")
-    st.assign.assign(_GATE_LEAD, "person", subly.id)          # subcirkel-lead, geen anchor
-    body, code = cockpit2._handle_person_add(dd, _add_form(), username="sub@nooch.earth")
-    assert code == 403 and "anchor lead" in body
-    assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
-
-
-def test_person_add_gate_onbekende_gebruiker_geweigerd(tmp_path):
-    dd, st = _st(tmp_path)
-    body, code = cockpit2._handle_person_add(dd, _add_form(), username="niemand@nergens.nl")
-    assert code == 403 and "not recognised" in body
+    p = st.people.add("Iemand", "iemand@nooch.earth")
+    if rol:
+        st.assign.assign(rol, "person", p.id)
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username="iemand@nooch.earth")
+    assert (body, code) == ("<p>404</p>", 404)
     assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
 
 
@@ -571,29 +568,22 @@ def test_person_reset_gate_guest_mag(tmp_path):
     assert code == 200 and "gereset" in body
 
 
-def test_person_reset_gate_anchor_lead_mag(tmp_path):
+def test_person_reset_gate_admin_mag(tmp_path):
     dd, st = _st(tmp_path)
-    lead = st.people.add("Anchor", "anchor@nooch.earth")
-    st.assign.assign(_ANCHOR, "person", lead.id)
     p = st.people.add("Doel", "doel@nooch.earth")
-    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="anchor@nooch.earth")
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username=_ADMIN)
     assert code == 200 and "gereset" in body
 
 
-def test_person_reset_gate_niet_lead_geweigerd(tmp_path):
+@pytest.mark.parametrize("wie", ["anchor@nooch.earth", "niemand@nergens.nl"])
+def test_person_reset_gate_niet_admin_404(tmp_path, wie):
     dd, st = _st(tmp_path)
-    subly = st.people.add("Sub", "sub@nooch.earth")
-    st.assign.assign(_GATE_LEAD, "person", subly.id)
+    st.assign.assign(_ANCHOR, "person", st.people.add("Anchor", "anchor@nooch.earth").id)
     p = st.people.add("Doel", "doel@nooch.earth")
-    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="sub@nooch.earth")
-    assert code == 403 and "anchor lead" in body
-
-
-def test_person_reset_gate_onbekende_gebruiker_geweigerd(tmp_path):
-    dd, st = _st(tmp_path)
-    p = st.people.add("Doel", "doel@nooch.earth")
-    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="niemand@nergens.nl")
-    assert code == 403 and "not recognised" in body
+    oud = cockpit2._Stores(dd).people.get(p.id).password_hash
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username=wie)
+    assert (body, code) == ("<p>404</p>", 404)
+    assert cockpit2._Stores(dd).people.get(p.id).password_hash == oud
 
 
 # ══════════════════════════════════════════════════════════════════════════════
