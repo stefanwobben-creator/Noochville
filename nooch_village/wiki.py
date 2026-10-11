@@ -544,14 +544,67 @@ def _datum(s) -> str:
     return s
 
 
+#: DE ANTWOORDEN BIJ HET NAKIJKEN (W1, 11 oktober 2026). Bij "I checked this" zegt de mens welke
+#: vraag dit feit beantwoordt en met welke waarde. Ze staan IN `gezien`, niet ernaast: een antwoord
+#: dat niemand bevestigde bestaat dan niet, en wie de tekst of de bron verandert verliest het
+#: nakijken én de antwoorden in één keer (`bewijs_gelijk`). Een antwoord wijzigen = opnieuw nakijken.
+#:   yes / no  — een tekstvraag ("Fossil-based plastic?")
+#:   value     — een getalvraag (CO2e, water, prijs): het getal van het feit zelf (`waarde`)
+#:   na        — not applicable, ALTIJD met een reden
+ANTWOORD_WAARDEN = ("yes", "no", "na", "value")
+_ANTWOORD_LABEL = {"yes": "yes", "no": "no", "na": "not applicable", "value": "value"}
+
+
+def maak_antwoord(vraag: str, waarde: str, reden: str = "") -> tuple[dict | None, str]:
+    """(antwoord, "") of (None, reden). Welke vragen er bestaan weet `wiki_dekking`; hier alleen de
+    vorm, zodat een opgeslagen antwoord bij het lezen opnieuw te valideren is."""
+    vraag = re.sub(r"[^a-z0-9_]", "", str(vraag or "").lower())[:30]
+    waarde = str(waarde or "").strip().lower()
+    reden = " ".join(str(reden or "").split())[:_TEKST_MAX]
+    if not vraag:
+        return None, "pick a question"
+    if waarde not in ANTWOORD_WAARDEN:
+        return None, "the answer must be yes, no, not applicable or value"
+    if waarde == "na" and not reden:
+        return None, "'not applicable' needs a reason"
+    uit = {"vraag": vraag, "waarde": waarde}
+    if reden:
+        uit["reden"] = reden
+    return uit, ""
+
+
+def antwoorden(feit: dict) -> list[dict]:
+    """De bevestigde antwoorden van dit feit (uit `gezien`), opnieuw gevalideerd. Zonder geldig
+    `gezien` zijn er geen antwoorden: een antwoord bestaat alleen als iemand het nakeek."""
+    return nagekeken(feit).get("antwoorden", [])
+
+
+def antwoord_label(w: str) -> str:
+    return _ANTWOORD_LABEL.get(w, w)
+
+
 def nagekeken(feit: dict) -> dict:
-    """Wie dit feit heeft nagekeken en wanneer: `{door, op}` of `{}`. Opnieuw gevalideerd bij het
-    lezen, net als `waarde()`."""
+    """Wie dit feit heeft nagekeken en wanneer: `{door, op}` (plus `antwoorden` als die er zijn) of
+    `{}`. Opnieuw gevalideerd bij het lezen, net als `waarde()`. Een ongeldig antwoord valt weg; één
+    vraag telt maar één keer (het eerste antwoord)."""
     z = (feit or {}).get("gezien")
     if not isinstance(z, dict):
         return {}
     door, op = " ".join(str(z.get("door") or "").split())[:_REF_MAX], _datum(z.get("op"))
-    return {"door": door, "op": op} if door and op else {}
+    if not (door and op):
+        return {}
+    uit: dict = {"door": door, "op": op}
+    goed, gezien_vragen = [], set()
+    for a in z.get("antwoorden") or []:
+        if not isinstance(a, dict):
+            continue
+        ant, _f = maak_antwoord(a.get("vraag"), a.get("waarde"), a.get("reden", ""))
+        if ant and ant["vraag"] not in gezien_vragen:
+            goed.append(ant)
+            gezien_vragen.add(ant["vraag"])
+    if goed:
+        uit["antwoorden"] = goed
+    return uit
 
 
 def hercheck_datum(feit: dict) -> str:

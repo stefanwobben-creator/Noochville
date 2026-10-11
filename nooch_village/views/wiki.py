@@ -402,6 +402,69 @@ def _feit_knop(actie: str, label: str, klasse: str, aid: str, fid: str, csrf_tok
             f"{_e(label)}</button></form>")
 
 
+def _vraag_soort(st, a) -> str:
+    """"materiaal" / "leverancier" als deze pagina in de dekking van /bom zit, anders "". Per
+    render één keer berekend (een pagina heeft veel feiten, de dekking is niet gratis)."""
+    if a is None:
+        return ""
+    cache = getattr(st, "_w1_vraag_soort", None)
+    if cache is None:
+        cache = {}
+        try:
+            st._w1_vraag_soort = cache
+        except Exception:                                     # noqa: BLE001 — een kijker-proxy
+            pass
+    if a.id not in cache:
+        try:
+            _rij, soort, _ctx = _dekking_rij(st, a)
+        except Exception:                                     # noqa: BLE001 — nooit de pagina breken
+            soort = ""
+        cache[a.id] = soort
+    return cache[a.id]
+
+
+def _antwoorden_html(feit: dict, soort: str) -> str:
+    """De bevestigde antwoorden van een feit, leesbaar: "Contains plastic?: yes"."""
+    from nooch_village import wiki_dekking as dek
+    ants = wiki.antwoorden(feit)
+    if not ants:
+        return ""
+    labels = {v["k"]: v["label"] for s in ("materiaal", "leverancier") for v in dek.vragen(s)}
+    if soort:
+        labels.update({v["k"]: v["label"] for v in dek.vragen(soort)})
+    delen = [f"{labels.get(x['vraag'], x['vraag'])}: <strong>{_e(wiki.antwoord_label(x['waarde']))}</strong>"
+             + (f" ({_e(x['reden'])})" if x.get("reden") else "") for x in ants]
+    return "<div class='muted'>Answers: " + " · ".join(delen) + "</div>"
+
+
+def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str) -> str:
+    """"I checked this", met erbij welke vraag dit feit beantwoordt (W1). Geen keuze = gewoon
+    nakijken, zoals altijd. Eén klein formulier in de bestaande popover, geen apart scherm."""
+    from nooch_village import wiki_dekking as dek
+    rijen = []
+    for v in dek.vragen(soort):
+        opties = (("", "—"), ("value", "value (the number of this fact)"), ("na", "not applicable")) \
+            if v["grootheid"] else (("", "—"), ("yes", "yes"), ("no", "no"), ("na", "not applicable"))
+        sid, rid = f"ck-{fid}-{v['k']}", f"ckr-{fid}-{v['k']}"
+        rijen.append(
+            f"<tr><td><label for='{sid}'>{_e(v['label'])}</label></td>"
+            f"<td><select id='{sid}' name='antwoord_{_e(v['k'])}'>"
+            + "".join(f"<option value='{w}'>{_e(t)}</option>" for w, t in opties)
+            + f"</select></td><td><label class='sr' for='{rid}'>Reason for {_e(v['label'])}</label>"
+              f"<input id='{rid}' name='reden_{_e(v['k'])}' placeholder='Reason (required for not applicable)'></td></tr>")
+    return (f"<details class='acard-d'><summary class='btn ok sm'>I checked this</summary><div class='datepop'>"
+            f"<form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(aid)}'>"
+            f"<input type='hidden' name='fid' value='{_e(fid)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
+            f"<p class='muted'>Which question does this fact answer? Leave '—' for questions it does "
+            f"not answer. Changing an answer later means checking again.</p>"
+            f"<table class='mtab' aria-label='answers'>{''.join(rijen)}</table>"
+            f"<button class='btn ok sm' type='submit' name='action' value='pagina_feit_gezien'>Check</button>"
+            f"</form></div></details>")
+
+
 def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool, a=None,
                los: bool = False) -> str:
     """Eén feit: de bewering, wat er met de bron is gedaan, en voor wie mag bewerken de handelingen.
@@ -425,8 +488,9 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     h = wiki.hercheck_datum(feit)
     straks = (f" <span class='muted'>check again by {_e(wiki._mooie_datum(h))}</span>"
               if h and g["status"] != wiki.VERVALLEN else "")
+    soort = _vraag_soort(st, a)
     getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-               f"<div>{_grond_chip(g)}{straks}</div>{citaat}")
+               f"<div>{_grond_chip(g)}{straks}</div>{citaat}{_antwoorden_html(feit, soort)}")
     if not can_edit:
         return f"<div>{getoond}</div>"
     # NAKIJKEN IS ÉÉN KLIK (5 oktober 2026). Alleen als er iets na te kijken valt: een feit zonder
@@ -436,6 +500,10 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     if nagekeken:
         check = _feit_knop("pagina_feit_gezien", "undo check", "flink", aid, fid, csrf_token,
                            extra="<input type='hidden' name='uit' value='1'>")
+    elif soort and kan_nakijken:
+        # OP EEN PAGINA VAN /bom: nakijken met een antwoord (W1). Ook bij een verklaring (attested):
+        # die is wie het zegt, maar welke VRAAG ze beantwoordt moet een mens nog steeds zeggen.
+        check = _check_formulier(feit, soort, aid, fid, csrf_token)
     elif (feit.get("grond") or {}).get("soort") == "attested":
         check = ""                 # de verklaring IS het nakijken: naam en datum staan er al
     elif kan_nakijken:

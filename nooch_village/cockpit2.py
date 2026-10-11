@@ -2772,13 +2772,45 @@ def _act_pagina_feit_gezien(c):
         bron = wiki.grond_status(zonder, ledger=getattr(st, "evidence", None), store=st.att)
         if bron["status"] in (wiki.ONGEGROND, wiki.ONTBREEKT):
             return nxt, "✗ this fact has no source to check — add a link or a file first"
+        # DE ANTWOORDEN (W1, 11 oktober 2026): welke vraag dit feit beantwoordt en met welke
+        # waarde, gekozen BIJ het nakijken. Ze staan in `gezien` — een antwoord wijzigen is dus
+        # altijd opnieuw nakijken, met naam en datum. Fail-closed: één ongeldig antwoord en er
+        # wordt niets opgeslagen.
+        from nooch_village import wiki_dekking as _wd
+        gekozen, fouten = [], []
+        for veld in sorted(c.form):
+            if not veld.startswith("antwoord_"):
+                continue
+            k, w = veld[len("antwoord_"):], g(veld).strip().lower()
+            if not w:
+                continue
+            toegestaan = _wd.toegestane_antwoorden(k)
+            if w not in toegestaan:
+                fouten.append(f"'{w}' is not an answer to {k}")
+                continue
+            if w == "value":
+                gr = next((v["grootheid"] for s in _wd.VRAGEN for v in _wd.vragen(s) if v["k"] == k), "")
+                if (wiki.waarde(feit) or {}).get("grootheid") != gr:
+                    fouten.append(f"{k}: this fact carries no number for that question")
+                    continue
+            ant, fout = wiki.maak_antwoord(k, w, g(f"reden_{k}"))
+            if ant is None:
+                fouten.append(f"{k}: {fout}")
+            else:
+                gekozen.append(ant)
+        if fouten:
+            return nxt, "✗ not checked — " + "; ".join(fouten)
         feit["gezien"] = {"door": _persoon_naam(username, st), "op": time.strftime("%Y-%m-%d")}
+        if gekozen:
+            feit["gezien"]["antwoorden"] = gekozen
         # EEN VERLOPEN HERCONTROLE IS HIERMEE GEDAAN. De oude datum laten staan zou het feit rood
         # houden terwijl er net naar gekeken is; een nieuwe datum kiest de schrijver zelf.
         h = wiki.hercheck_datum(feit)
         if h and h < feit["gezien"]["op"]:
             feit.pop("hercheck", None)
-        notitie, melding = "fact checked", "✓ checked"
+        notitie = "fact checked" + (" — answers: " + ", ".join(f"{a['vraag']}={a['waarde']}" for a in gekozen)
+                                    if gekozen else "")
+        melding = "✓ checked" + (f" — {len(gekozen)} answer(s)" if gekozen else "")
     feiten[i] = feit
     meta = dict(getattr(cur, "meta", None) or {})
     meta["feiten"] = feiten
