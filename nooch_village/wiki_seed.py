@@ -188,10 +188,10 @@ def materiaal_paginas(bom_tekst: str = "",
         regels += ["", "## CO2 & Water",
                    "As a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
                    "TDS or another source. The BOM screen calculates with these values."]
-        # EEN KOPJE PER VRAAG (10 oktober 2026): de secties en hun standaard-open-punten uit
-        # `wiki.VRAAGSECTIES` — dezelfde tekst als het skelet, één plek.
+        # GEEN LEEG KOPJE PER VRAAG MEER (W1, 11 oktober 2026; was: een kopje per vraag sinds 10
+        # oktober). De uitleg staat bij de vraag (`wiki_dekking.wat_telt`); de standaard-open-punten
+        # uit `wiki.VRAAGSECTIES` blijven, onder "Open items".
         for sectie in wiki.VRAAGSECTIES["materiaal"]:
-            regels += ["", sectie[0], sectie[1]]
             open_punten += [f"- {p}" for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
@@ -342,16 +342,10 @@ def leverancier_paginas(ledger, *, vandaag: str = "",
         # PRIJSAFSPRAAK HOORT HIER en niet op de materiaalpagina: twee leveranciers van hetzelfde
         # materiaal kunnen verschillend prijzen. Zelfde regel als bij CO2 & water: de plek, geen
         # bewering over of het getal er al is.
-        # EEN KOPJE PER VRAAG (10 oktober 2026), uit `wiki.VRAAGSECTIES`: locatie en certificering
-        # vóór de prijs, arbeid en eigendom erna — dezelfde volgorde als het skelet.
-        voor, na = wiki.VRAAGSECTIES["leverancier"][:2], wiki.VRAAGSECTIES["leverancier"][2:]
-        for sectie in voor:
-            regels += ["", sectie[0], sectie[1]]
+        # GEEN LEEG KOPJE PER VRAAG MEER (W1, 11 oktober 2026): zie de materiaalpagina hierboven.
         regels += ["", "## Price agreement",
                    "As a fact with a value (cost price per kg), grounded in the quote or the "
                    "contract. The BOM screen calculates with this value."]
-        for sectie in na:
-            regels += ["", sectie[0], sectie[1]]
         open_punten += [f"- {p}" for sectie in wiki.VRAAGSECTIES["leverancier"] for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
@@ -958,4 +952,54 @@ def feiten_herstellen_tekst(rapport: list[dict]) -> str:
             if f["citaat"]:
                 uit.append(f"    source quote: “{f['citaat']}”")
             uit += [f"    - {n}" for n in f["notities"]]
+    return "\n".join(uit)
+
+
+# ── Lege vraagkopjes weghalen (W1, 11 oktober 2026) ─────────────────────────────────────────────
+#
+# Het sjabloon en de migratie `vraagkoppen` (#697) zetten per vraag een kopje met zijn uitlegzin op
+# elke materiaal- en leverancierpagina. Op 14 van de 14 materiaalpagina's stond onder "Contains
+# plastic", "Biobased", "Animal-derived" en "Dyes & chemicals" niets anders dan die zin. De uitleg
+# staat nu bij de VRAAG (de Questions-tabel, "What counts"); het kopje op de pagina zei alleen nog
+# "hier hoort iets" en verwarde: een feit erboven of ernaast telde niet.
+#
+# ALLEEN HELEMAAL LEGE: een kopje gaat weg als eronder EXACT zijn uitlegzin staat en verder niets —
+# geen feit, geen eigen tekst, geen subkopje. Al het andere blijft staan.
+
+def _lege_vraagkop_blokken(body: str) -> tuple[str, list[str]]:
+    """(nieuwe body, weggehaalde kopjes)."""
+    weg = []
+    for soort_secties in wiki.VRAAGSECTIES.values():
+        for s in soort_secties:
+            kop, uitleg = s[0], s[1]
+            patroon = re.compile(r"(^|\n)" + re.escape(kop) + r"[ \t]*\n+" + re.escape(uitleg) + r"[ \t]*(?=\n\s*#|\s*$)")
+            m = patroon.search(body)
+            if m:
+                body = body[:m.start()] + (m.group(1) if m.start() else "") + body[m.end():].lstrip("\n")
+                weg.append(kop.lstrip("# "))
+    body = re.sub(r"\n{3,}", "\n\n", body).strip("\n") + ("\n" if body.endswith("\n") else "")
+    return body, weg
+
+
+def lege_koppen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Rapport `[{id, titel, weg: [kopje]}]`. Dry-run tenzij `apply`; met `apply` één nieuwe versie
+    per pagina (terug te draaien via de historie)."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        body = a.body or ""
+        nieuw, weg = _lege_vraagkop_blokken(body)
+        if not weg:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "weg": weg})
+        if apply:
+            store.update(a.id, body=nieuw, actor_id=actor_id, actor_type="person",
+                         change_note=f"empty question headings removed ({len(weg)}): " + ", ".join(weg))
+    return rapport
+
+
+def lege_koppen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to remove: no page carries an empty question heading."
+    uit = [f"{r['id']}  {r['titel']}: remove " + ", ".join(f"'{k}'" for k in r["weg"]) for r in rapport]
+    uit.append(f"\n{len(rapport)} page(s), {sum(len(r['weg']) for r in rapport)} heading(s).")
     return "\n".join(uit)

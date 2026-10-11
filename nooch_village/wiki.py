@@ -454,25 +454,20 @@ def _open(*secties: tuple) -> str:
 
 
 SJABLONEN: dict[str, tuple[str, str]] = {
+    # GEEN LEEG KOPJE PER VRAAG MEER (W1, 11 oktober 2026). Een feit beantwoordt een vraag doordat een
+    # mens dat bij het nakijken zegt, niet doordat het onder een kopje staat; de uitleg per vraag staat
+    # in de Questions-tabel ("What counts", `wiki_dekking.wat_telt`). De secties blijven bestaan als
+    # definitie (`VRAAGSECTIES`), alleen het sjabloon zet ze niet meer op de pagina.
     "materiaal": ("Material page", "\n\n".join((
         "## Characteristics\nWhat it is, what it is made of, what it does in the shoe.",
-        _sectie(PLASTIC),
-        _sectie(BIOBASED),
         "## CO2 & Water\nAs a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
         "TDS or another source. The BOM screen calculates with these values.",
-        _sectie(DIERLIJK),
-        _sectie(CHEMISCH),
         "## Circularity\nWhat can happen to it at the end of its life: reuse, recycling, composting.",
-        _sectie(CERTIFICERING),
         "## Open items\nWhat still needs to be found out.\n" + _open(*VRAAGSECTIES["materiaal"]),
     ))),
     "leverancier": ("Supplier page", "\n\n".join((
-        _sectie(LOCATIE),
-        _sectie(BEDRIJFSCERT),
         "## Price agreement\nAs a fact with a value (cost price per kg), grounded in the quote or "
         "the contract. The BOM screen calculates with this value.",
-        _sectie(ARBEID_COMPLIANCE),
-        _sectie(EIGENDOM),
         "## Open items\nWhat still needs to be found out.\n" + _open(*VRAAGSECTIES["leverancier"]),
     ))),
 }

@@ -143,6 +143,20 @@ def _norm(s: str) -> str:
     return " ".join((s or "").split()).lower()
 
 
+def wat_telt(soort: str, k: str) -> str:
+    """Wat deze vraag als antwoord telt — de uitlegzin die tot W1 als leeg kopje op elke pagina stond.
+    Eén bron: de tekstvragen lezen hem uit `wiki.VRAAGSECTIES`, de getalvragen uit `wiki.GROOTHEDEN`."""
+    v = next((x for x in vragen(soort) if x["k"] == k), None)
+    if v is None:
+        return ""
+    if v["grootheid"]:
+        label = wiki.GROOTHEDEN.get(v["grootheid"], {}).get("label", v["label"])
+        return (f"A fact with a number ({label}), grounded in the supplier's data sheet, a quote or "
+                f"another source. The BOM screen calculates with it.")
+    sectie = next((s for s in wiki.VRAAGSECTIES.get(soort, ()) if wiki.kopnamen(s) == v["koppen"]), None)
+    return sectie[1] if sectie else ""
+
+
 def toegestane_antwoorden(k: str) -> tuple[str, ...]:
     """Welke antwoorden een vraag kent: een getalvraag (CO2e, water, prijs) `value` of `na`, een
     tekstvraag `yes`, `no` of `na`. () voor een vraag die niet bestaat."""

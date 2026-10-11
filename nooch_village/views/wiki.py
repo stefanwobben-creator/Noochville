@@ -817,7 +817,11 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                     actie = uitstel_form(csrf_token, a, soort, v["k"], terug)
             antwoord = (f"<a href='{_e(_sprong(a, c['kop']))}'>answer</a>"
                         if c["status"] in (dek.LEEG, dek.UITGESTELD) else "")
-            regels.append(f"<tr><td>{_e(v['label'])}</td><td><span class='nu-status nu-status--{vorm}'>"
+            if c.get("antwoord"):
+                woord = f"{woord}: {wiki.antwoord_label(c['antwoord'])}"
+            # WAT TELT (W1): de uitleg stond als leeg kopje op de pagina; nu staat hij bij de vraag.
+            telt = f"<div class='muted'>{_e(dek.wat_telt(soort, v['k']))}</div>"
+            regels.append(f"<tr><td>{_e(v['label'])}{telt}</td><td><span class='nu-status nu-status--{vorm}'>"
                           f"{_e(woord)}</span></td><td>{antwoord} {actie}</td></tr>")
         gestaafd = dek.gestaafd(rij, **_ctx)
         return (f"<div class='wiki-inline'><h3>Questions</h3>"

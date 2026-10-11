@@ -937,6 +937,22 @@ def main() -> None:
         if rapport and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_lege_koppen":
+        # W1 (11 oktober 2026): de lege vraagkopjes (alleen hun uitlegzin, verder niets) van de pagina's
+        # af; de uitleg staat bij de vraag. Dry-run; --apply schrijft één nieuwe versie per pagina.
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.lege_koppen(st.att, apply=apply, actor_id="cli")
+        print(wiki_seed.lege_koppen_tekst(rapport))
+        if rapport and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_bom_sleutels":
         # Zet op bestaande materiaal-/leverancierpagina's hun /bom-naam vast (`wiki.BOM_NAMEN`), zodat
         # een hernoeming de koppeling niet meer breekt. Dry-run; --apply schrijft (set_meta).
