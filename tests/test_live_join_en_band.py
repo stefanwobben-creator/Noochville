@@ -45,9 +45,9 @@ def _dorp(tmp_path):
 # ── 1. De live-knop ──────────────────────────────────────────────────────────
 def test_de_knop_verandert_pas_als_er_echt_een_overleg_draait():
     dicht = overleg_items(CIRCLE)
-    assert "Tactical meeting" in dicht and "Join meeting" not in dicht
+    assert "Tactical meeting" in dicht and ">Join<" not in dicht and "c2-overleg--live" not in dicht
     open_ = overleg_items(CIRCLE, werk_open=True)
-    assert "Join meeting" in open_ and "c2-overleg--live" in open_
+    assert ">Join<" in open_ and "c2-overleg--live" in open_         # B1: het label blijft, "Join" komt erbij
 
 
 def test_het_rondje_is_nooit_de_enige_drager():
@@ -55,16 +55,17 @@ def test_het_rondje_is_nooit_de_enige_drager():
     groen niet ziet. De TEKST verandert mee, en het stipje draagt `aria-hidden` omdat het niets
     toevoegt voor wie het voorgelezen krijgt."""
     h = overleg_items(CIRCLE, werk_open=True)
-    assert "Join meeting" in h                       # de tweede drager
-    assert "<span class='c2-live' aria-hidden='true'></span>" in h
+    assert ">Join<" in h                             # de tweede drager (B1: het woord "Join")
+    assert "<span class='c2-live' aria-hidden='true'></span>" in h   # de stip: gevuld door de CSS
 
 
 def test_alleen_het_werkoverleg_wordt_live():
     """Roloverleg heeft geen open/dicht-staat — zijn agenda is een lijst governance-voorstellen.
     Die staat erbij bouwen is een eigen klus en valt buiten deze ronde (besluit Stefan)."""
     h = overleg_items(CIRCLE, werk_open=True)
-    rol = h.split("/roloverleg2")[1]
-    assert "Join meeting" not in rol and "c2-live" not in rol
+    rol = h[h.rindex("<a ", 0, h.index("/roloverleg2")):]
+    # B1: ook een rustige meeting draagt een (holle) stip; live is de klasse plus "Join".
+    assert ">Join<" not in rol and "c2-overleg--live" not in rol
 
 
 def test_de_pulse_gaat_uit_voor_wie_geen_beweging_wil():

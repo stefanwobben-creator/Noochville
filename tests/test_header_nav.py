@@ -1,4 +1,12 @@
-"""De gedeelde chrome, gesplitst in een horizontale header en een kale zijbalk.
+"""De gedeelde chrome — SINDS B1 (11 oktober 2026) weer één zijbalk, zonder header.
+
+B1 VOLGT HET PROTOTYPE V2 (`claude/prototype_v2_vormgeving_live.html`): merk, een zoekknop ("Search
+or jump to", toets `/`), de twee meetings, de hoofditems, Admin en Organization, en onderaan de
+gebruiker. De header die hieronder beschreven staat (september 2026) is vervallen; de tests die hem
+vastlegden zijn omgezet naar de nieuwe vorm. Wat bleef: de paneel-knoppen, de hamburger, de
+initialen met de volle naam.
+
+WAT ER TOEN VERANDERDE (historie):
 
 WAT ER VERANDERT. `_nav()` rendert alles in één `<aside class='c2-side'>`: logo, zoekbalk,
 begroeting, navigatie-items, en onderaan de twee overleg-pillen. Het prototype splitst dat:
@@ -44,27 +52,26 @@ def _tussen(html: str, start: str, eind: str) -> str:
 
 
 # ── 1. De splitsing ─────────────────────────────────────────────────────────────────────────
-def test_logo_zoek_en_profiel_staan_in_de_header():
-    html = _nav()
-    kop = _tussen(html, "<header class='c2-header'>", "</header>")
-    for stuk in ("c2-logo", "c2-search", "gs-input", "c2-av"):
-        assert stuk in kop, stuk
-
-
-def test_de_zijbalk_houdt_alleen_navigatie():
-    """Alles wat naar de header ging, hoort daar niet meer te staan — anders staat het er twee
-    keer en is de "één bron"-regel van deze functie stuk."""
+def test_merk_zoekknop_en_gebruiker_staan_in_de_zijbalk():
     html = _nav()
     zij = _tussen(html, "<aside class='c2-side'>", "</aside>")
-    for stuk in ("c2-logo", "c2-search", "gs-input", "c2-greet"):
-        assert stuk not in zij, stuk
-    assert "c2-subnav" in zij
+    for stuk in ("c2-logo", "id='c2-zoek'", "c2-subnav", "c2-av"):
+        assert stuk in zij, stuk
+    # de volgorde van het prototype: merk, zoeken, meetings, navigatie, gebruiker onderaan
+    assert zij.index("c2-logo") < zij.index("id='c2-zoek'") < zij.index(_SIDE_OVERLEG) \
+        < zij.index("href='/projects'") < zij.index("c2-av")
 
-
-def test_de_header_staat_vóór_de_zijbalk():
+def test_de_zoekknop_is_zonder_js_een_link_naar_de_zoekpagina():
+    """Voorwaarde Stefan (B1): zonder JS linkt de zoekknop naar /search, en daar staat een veld."""
+    from nooch_village.views.search import render_search
     html = _nav()
-    assert html.index("<header class='c2-header'>") < html.index("<aside class='c2-side'>")
+    knop = _tussen(html, "id='c2-zoek'", "</a>")
+    assert "href='/search'" in knop and "aria-haspopup='dialog'" in knop
+    assert "name='q'" in render_search(None, "")
 
+def test_er_is_geen_header_meer():
+    html = _nav()
+    assert "<header" not in html and "c2-header" not in html
 
 def test_de_overleg_pillen_staan_bovenaan():
     """Ze stonden ONDER de nav-items, achter een scheiding. Nu erboven: dat is de snelle ingang
@@ -144,40 +151,27 @@ def test_de_paneelknoppen_houden_hun_hele_contract():
 
 
 def test_de_hamburger_staat_buiten_de_zijbalk():
-    """Anders verdwijnt de knop samen met wat hij opent. Hij staat vóór de header én vóór de
-    zijbalk, zodat hij op beide standen bereikbaar blijft."""
+    """Anders verdwijnt de knop samen met wat hij opent. Hij staat vóór de zijbalk, zodat hij op
+    beide standen bereikbaar blijft."""
     html = _nav()
-    assert html.index("c2-burger") < html.index("<header class='c2-header'>")
+    assert html.index("c2-burger") < html.index("<aside class='c2-side'>")
     assert "navToggle()" in html
 
-
-def test_de_live_zoek_hangt_nog_aan_hetzelfde_veld():
-    """`_GS_LIVE_JS` is niet herschreven, alleen verplaatst: hij zoekt `#gs-input` en `#gs-drop`
-    en die moeten er dus nog precies zo zijn."""
+def test_slash_doet_niets_in_een_veld_tekstvak_of_bewerkbaar_vlak():
+    """Voorwaarde Stefan (B1): `/` opent het zoeken, maar niet terwijl je typt."""
     html = _nav()
-    assert "id='gs-input'" in html and "id='gs-drop'" in html
-    assert "getElementById('gs-input')" in html and "getElementById('gs-drop')" in html
-    assert "/search?frag=1&q=" in html
-
+    for stuk in ("tag==='input'", "tag==='textarea'", "isContentEditable", "getElementById('c2-zoek')"):
+        assert stuk in html, stuk
 
 # ── 4. De stijl ─────────────────────────────────────────────────────────────────────────────
-def test_de_header_is_sticky_en_draagt_de_zwarte_onderrand():
-    per = _regels(CSS)
-    kop = per.get(".c2-header", "")
-    assert "position:sticky" in kop.replace(" ", "")
-    assert "top:0" in kop.replace(" ", "")
-    assert "height:56px" in kop.replace(" ", "")
-    # De 2px zwarte lijn zit in het TOKEN `--nu-border` (= 2px solid var(--nu-text)); die naam
-    # is de bron, de kleur erachter niet iets om hier over te typen.
-    nu = _regels(NU).get(":root .c2-header", "")
-    assert "border-bottom: var(--nu-border)" in nu, nu
+def test_de_header_regels_zijn_weg():
+    """Geen dode CSS: de header bestaat niet meer, dus ook geen regel die hem aankleedt."""
+    assert not [sel for sel in _regels(CSS, met_media=True) if ".c2-header" in sel]
 
-
-def test_de_zijbalk_begint_onder_de_header():
-    """Hij is `position:fixed` en zou anders ONDER de sticky header door lopen."""
+def test_de_zijbalk_begint_bovenaan():
+    """Er is geen header meer om onder te beginnen."""
     zij = _regels(CSS).get(".c2-side", "").replace(" ", "")
-    assert "top:56px" in zij, zij
-
+    assert "top:0" in zij, zij
 
 def test_de_zijbalk_toont_geen_zoek_of_begroeting_meer_op_mobiel():
     """De mobiele regel verstopte `.c2-search` en `.c2-greet` IN de balk. Die staan er niet
@@ -187,19 +181,12 @@ def test_de_zijbalk_toont_geen_zoek_of_begroeting_meer_op_mobiel():
         if sel.startswith(".c2-side .c2-search") or sel.startswith(".c2-side .c2-greet"):
             raise AssertionError(f"dode mobiele regel: {sel} → {decl}")
 
-def test_het_mobiele_menu_valt_niet_over_de_header():
-    """GEMETEN, NIET BEDACHT. De opengeklapte balk stond eerst op `inset:0` en lag dus óver de
-    sticky header: je zag het menu wél, maar logo, zoek, profiel én de hamburger waarmee je het
-    weer dicht zou doen verdwenen eronder. Hij begint nu op dezelfde hoogte als de header —
-    56px, hetzelfde getal als `.c2-header{height}`."""
+def test_het_open_mobiele_menu_laat_de_hamburger_vrij():
+    """De opengeklapte balk vult het scherm (er is geen header meer), maar begint ONDER de
+    hamburger (40px op 10px): anders lag hij over de knop waarmee je hem weer dicht doet."""
     mobiel = _regels(CSS, met_media=True)
-    kop_hoogte = re.search(r"height:\s*(\d+)px", _regels(CSS)[".c2-header"]).group(1)
-    for sel in (".c2-side", "body.navjs.navopen .c2-side"):
-        decl = mobiel.get(sel, "")
-        assert decl, sel
-        top = re.search(r"top:\s*(\d+)px", decl)
-        assert top and top.group(1) == kop_hoogte, (sel, decl)
-
+    decl = mobiel.get("body.navjs.navopen .c2-side", "").replace(" ", "")
+    assert "top:0" in decl and "padding-top:3.6rem" in decl, decl
 
 def test_het_open_menu_toont_woorden_en_geen_monogrammen():
     """De rail-regels verbergen `.c2-lbl` en tonen het monogram — dat klopt voor een balk van

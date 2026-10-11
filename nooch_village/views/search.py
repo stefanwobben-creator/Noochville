@@ -511,13 +511,23 @@ def render_search_fragment(st, q: str = "", leest=None) -> str:
     return sug + fout + "".join(blokken) + alle
 
 
+def _zoekveld(q: str = "") -> str:
+    """Het zoekveld OP de zoekpagina (B1, 11 oktober 2026). Het veld stond in de header; die is weg,
+    en de zoekknop in de zijbalk opent het palet. Zonder JS landt die knop hier — en dan moet je
+    hier kunnen typen."""
+    return (f"<form class='c2-search' action='/search' method='get' role='search'>"
+            f"<label class='sr' for='zoek-q'>Search</label>"
+            f"<input id='zoek-q' type='search' name='q' value='{_e(q)}' "
+            f"placeholder='Search people, roles, projects…' autocomplete='off'></form>")
+
+
 def render_search(st, q: str = "", leest=None) -> str:
     q = (q or "").strip()
     termen = [t for t in q.lower().split() if t]
     if not termen:
-        main = ("<div class='c2-main'><h1 class='ptitle'>Search</h1>"
-                "<p class='muted'>Type in the search bar above to search people, roles, "
-                "accountabilities, projects and the knowledge base in one go.</p></div>")
+        main = ("<div class='c2-main'><h1 class='ptitle'>Search</h1>" + _zoekveld() +
+                "<p class='muted'>Search people, roles, accountabilities, projects and the knowledge "
+                "base in one go.</p></div>")
         return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     resultaten, fouten = _zoek(st, termen, leest)
@@ -531,7 +541,7 @@ def render_search(st, q: str = "", leest=None) -> str:
         blokken.append("<p class='muted'>Nothing found. Try another word.</p>")
     sug = _suggestie_html(_suggestie(st, q, totaal)) + _fouten_html(fouten)
 
-    main = (f"<div class='c2-main'><h1 class='ptitle'>Search for “{_e(q)}”</h1>"
+    main = (f"<div class='c2-main'><h1 class='ptitle'>Search for “{_e(q)}”</h1>{_zoekveld(q)}"
             f"<p class='muted'>{totaal} hit(s) in people, roles, accountabilities, projects "
             f"and the knowledge base.</p>"
             f"{sug}{''.join(blokken)}</div>")

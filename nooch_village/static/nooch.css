@@ -1380,17 +1380,8 @@ span.ck-box{cursor:default;opacity:.5}
    een hele zin in typt.
    Nu een eigen balk over de volle breedte. Hij is `sticky` en niet `fixed`: zo houdt hij een
    plek in de flow en hoeft de rest van de pagina geen offset bovenaan te krijgen. */
-.c2-header{position:sticky;top:0;z-index:31;height:56px;box-sizing:border-box;
-  display:flex;align-items:center;gap:18px;padding:0 20px;
-  background:var(--surface);border-bottom:1px solid var(--border);
-  /* DE NEGATIEVE MARGES HALEN DE BODY-PADDING WEG. `body` heeft `padding:1.6rem 2rem` en de
-     zijbalk staat `fixed` op `left:0`; zonder dit begint de header 2rem naar binnen en zweeft
-     hij 1.6rem onder de bovenrand — twee stukken van dezelfde chrome die niet op elkaar
-     aansluiten. Deze drie waarden horen bij die ene body-regel; verandert die, dan deze mee. */
-  margin:-1.6rem -2rem 0}
-/* Het zoekveld is het middelpunt: het groeit mee, maar niet eindeloos — voorbij ~520px lees je
-   je eigen zoekterm niet sneller, en de balk valt uit elkaar. */
-.c2-header .c2-search{flex:1 1 auto;max-width:520px}
+/* DE HEADER IS WEG (B1, 11 oktober 2026): merk, zoekknop en gebruiker staan in de zijbalk, zoals in
+   het prototype v2. Hier stonden `.c2-header` en zijn zoekveld-breedte. */
 /* WAS "Hoi Stefan". De naam verdwijnt niet: hij staat in title en aria-label. */
 .c2-av{flex:none;width:32px;height:32px;display:inline-flex;align-items:center;
   justify-content:center;border-radius:50%;background:var(--green-tint);
@@ -1398,9 +1389,8 @@ span.ck-box{cursor:default;opacity:.5}
   text-decoration:none}
 .c2-av:hover{background:var(--ink);color:var(--surface)}
 .c2-av:empty{display:none}
-/* `top:56px` EN NIET 0: de balk is `fixed` en zou anders onder de sticky header door lopen.
-   Dat getal hoort bij `.c2-header{height:56px}` hierboven; verandert die hoogte, dan deze mee. */
-.c2-side{position:fixed;left:0;top:56px;bottom:0;width:216px;z-index:30;box-sizing:border-box;
+/* `top:0`: sinds B1 is er geen header meer om onder te beginnen. */
+.c2-side{position:fixed;left:0;top:0;bottom:0;width:216px;z-index:30;box-sizing:border-box;
   display:flex;flex-direction:column;gap:.85rem;padding:1rem .75rem;overflow-y:auto;
   background:var(--surface);border-right:1px solid var(--border)}
 /* `:not(.c2-paneel)` IS DE HELE BUG, en hij was niet te zien aan één regel.
@@ -1535,6 +1525,14 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
    opening op de verticale as van de zoekbalk valt (founder 23 jul). */
 .c2-logo img{height:26px;width:auto;display:block;transform:translateY(-6px)}
 .c2-search{position:relative;width:100%}
+/* DE ZOEKKNOP IN DE ZIJBALK (B1): een link die eruitziet als een veld — zonder JS gaat hij naar
+   /search, met JS opent hij het palet. Hairline, geen rand-volume: hij is een ingang, geen actie. */
+.c2-side a.c2-search{display:flex;align-items:center;gap:.5rem;box-sizing:border-box;
+  padding:.45rem 2rem .45rem .6rem;border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);font-size:13px;text-decoration:none}
+.c2-side a.c2-search:hover{border-color:var(--ink)}
+/* De gebruiker onderaan de zijbalk (uit de vervallen header). */
+.c2-side .c2-av{margin-top:auto}
 .c2-search input{width:100%;box-sizing:border-box;padding:.45rem 2rem .45rem .7rem;border:1px solid var(--border);
   border-radius:var(--radius-pill);background:var(--surface);font:inherit;font-size:14px;color:var(--ink)}
 .c2-search input:focus{outline:none;border-color:var(--green)}
@@ -1932,19 +1930,19 @@ progress.nu-progress.wide{height:8px}
     left:10px;top:10px;z-index:60;width:40px;height:40px;font-size:18px;line-height:1;
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
     color:var(--ink);cursor:pointer}
-  /* De header krimpt mee: het logo en de 40px-hamburger ernaast passen anders niet naast een
-     zoekveld op een telefoon. */
-  .c2-header{gap:10px;padding:0 10px 0 58px}
-  /* Gelijk aan `.c2-header{height:56px}`. Stond op 52 en dan lag de balk over de onderste vier
-     pixels van de header — te weinig om te zien, genoeg om een klik te stelen. */
-  .c2-side{top:56px}
   body.navjs .c2-side{display:none}
+  /* MET JS IS DE BALK DICHT, DUS GEEN RAIL-MARGE (B1). Hier bleef de 80px van de rail staan terwijl
+     de balk verborgen was: een lege strook links op elke pagina. Zonder JS blijft de rail staan en
+     dus ook zijn marge (de regel hierboven, zonder `navjs`). */
+  body.navjs .c2-side ~ *:not(.c2-paneel){margin-left:0}
   /* DE OPENGEKLAPTE BALK BEGINT ONDER DE HEADER, niet op `inset:0`. Met `top:0` lag hij over de
      sticky header heen: je zag het menu wél, maar het logo, de zoekbalk en je eigen profiel
      verdwenen eronder — inclusief de hamburger waarmee je het weer dicht zou doen. */
-  body.navjs.navopen .c2-side{display:flex;position:fixed;top:56px;left:0;right:0;bottom:0;
+  /* Sinds B1 geen header meer: de open balk vult het scherm, en begint onder de hamburger (40px
+     op 10px), zodat je hem weer dicht kunt doen. Het zoeken staat bovenaan in de balk. */
+  body.navjs.navopen .c2-side{display:flex;position:fixed;top:0;left:0;right:0;bottom:0;
     z-index:50;width:auto;flex-direction:column;align-items:stretch;overflow-y:auto;
-    padding-top:1rem}
+    padding-top:3.6rem}
   /* IN DE OPEN STAND WEER WOORDEN. De rail-regels hierboven verbergen `.c2-lbl` en tonen het
      monogram; dat klopt voor een balk van 64px, maar de opengeklapte versie is het hele scherm
      breed — en dan staat er "PR ME WI CI AD OR" onder elkaar. Zichtbaar geworden nu het menu
@@ -2281,8 +2279,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* De header draagt dezelfde 2px zwarte lijn als de balk ernaast: het is één omhulsel om het
    scherm, alleen in twee stukken. De avatar is een cirkel met diezelfde rand — de enige ronde
    vorm in dit systeem, en dat mag: een gezicht is geen kaart. */
-:root .c2-header { background: var(--nu-surface); border-bottom: var(--nu-border); }
-:root .c2-header .c2-search input { border-color: var(--nu-text); border-radius: 0; }
+:root .c2-search input { border-radius: 0; }
 :root .c2-av { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-text);
   color: var(--nu-text); font-family: var(--nu-font); }
 :root .c2-av:hover { background: var(--nu-text); color: var(--nu-surface); }
@@ -2300,7 +2297,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    `text-transform` staat erbij omdat `test_navigatie_en_tabbladen_staan_in_hoofdletters` dat van
    ÉLKE regel op een navigerend element eist — de waarde verandert hier niets, de belofte wel:
    een nav-regel die de huisstijl niet uitspreekt, is een plek waar hij stil kan wegvallen. */
-:root .c2-subnav [aria-current] { border-left-color: var(--nu-text);
+:root .c2-subnav [aria-current] { border-left-color: var(--nu-neon);
   background: var(--nu-bg-alt); color: var(--nu-text); text-transform: uppercase; }
 /* De stap waar je STAAT is geen hover: hij blijft staan als je de muis weghaalt. Zelfde
    markering als de overleg-knoppen hierboven — lichte groene vulling, zwarte tekst. */
@@ -2316,16 +2313,27 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    GROEN BESTAAT HIER NIET: fase 9 haalde groen als vulling weg. De live-stand krijgt daarom de
    bestaande actief-behandeling uit deze laag — zwart vlak, neon tekst, zoals `.msg-kanaal.on` —
    en het stipje wordt neon in plaats van wit. Dezelfde betekenis, de taal van dit palet. */
-:root .c2-subnav a.c2-overleg { background: var(--nu-bg-alt); color: var(--nu-text);
-  border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+:root .c2-subnav a.c2-overleg { display: flex; align-items: center; justify-content: flex-start;
+  gap: .5rem; text-align: left;
+  background: var(--nu-surface); color: var(--nu-text);
+  border: 1px solid var(--nu-border-subtle); border-radius: 0;
   text-transform: uppercase; }
-:root .c2-subnav a.c2-overleg:hover { background: var(--nu-text); color: var(--nu-surface); }
+/* B1 (prototype v2): RUSTIG ALS HIJ NIET LOOPT — wit, een hairline en een holle stip. Hover maakt
+   de rand zwart, zoals bij een kaart; geen inversie meer, want dat is het gewicht van een knop. */
+:root .c2-subnav a.c2-overleg:hover { border-color: var(--nu-text); background: var(--nu-surface);
+  color: var(--nu-text); text-transform: uppercase; }
 /* `text-transform` staat er ook hier, en dat is geen herhaling om de guard tevreden te stellen:
    deze regel is specifieker dan de basis erboven, dus wie hier ooit `text-transform: none` zet
-   zou de hoofdletters stil uitzetten. De guard eist hem per blok om precies die reden. */
-:root .c2-subnav a.c2-overleg--live { background: var(--nu-text); color: var(--nu-neon);
-  border-color: var(--nu-text); text-transform: uppercase; }
-:root .c2-live { background: var(--nu-neon); }
+   zou de hoofdletters stil uitzetten. De guard eist hem per blok om precies die reden.
+   LOOPT HIJ, DAN SPRINGT HIJ ERUIT: neon vulling, 2px zwart, vet, een gevulde stip en "Join". Dit
+   is een van de twee elementen die 2px mogen dragen (B3) en de enige neon vulling in de balk. */
+:root .c2-subnav a.c2-overleg--live { background: var(--nu-neon); color: var(--nu-text);
+  border: 2px solid var(--nu-text); font-weight: 800; text-transform: uppercase; }
+:root .c2-live { flex: none; width: 10px; height: 10px; margin: 0; box-sizing: border-box;
+  border: 1.5px solid var(--nu-text); background: transparent; animation: none; }
+:root .c2-overleg--live .c2-live { background: var(--nu-text); animation: nv-puls 1.6s ease-in-out infinite; }
+:root .c2-overleg .chip { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { :root .c2-overleg--live .c2-live { animation: none; } }
 
 /* ── Knoppen: zwart-op-wit, hover inverteert ────────────────────────────────────────────────
    FASE 12 — ÉÉN LIJNDIKTE PER ROL. Deze knop droeg `--nu-border` (2px): exact de lijn van een

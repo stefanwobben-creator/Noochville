@@ -20,7 +20,8 @@ def test_de_chrome_draagt_de_hele_navigatie():
     De begroeting is daarbij een avatar geworden. Beide stukken komen nog steeds uit `_nav()`,
     dus de bewering blijft — hij telt nu twee containers in plaats van één."""
     h = _nav()
-    assert "c2-header" in h and "c2-logo" in h and "class='c2-search'" in h and "c2-av" in h
+    # B1 (11 oktober 2026): geen header meer; merk, zoekknop en gebruiker staan in de zijbalk.
+    assert "c2-header" not in h and "c2-logo" in h and "id='c2-zoek'" in h and "c2-av" in h
     assert "c2-side" in h and "c2-subnav" in h
     # De boom staat hier als KNOP (paneel), niet meer als meegerenderd blok — zie
     # `test_nav_accordeon.py::test_de_organisatieboom_is_een_paneel_geworden`.
