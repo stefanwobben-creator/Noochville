@@ -1,7 +1,7 @@
 """Eén kopje per vraag op de materiaal- en leverancierpagina's (10 oktober 2026).
 
-`wiki_seed.vraagkoppen_body` is puur; `vraagkoppen` loopt de pagina's van /bom af en schrijft met
-`apply` één versie per pagina.
+`wiki_seed.vraagkoppen_body` is puur. De migratie `vraagkoppen` staat sinds W1 (11 oktober 2026)
+buiten werking: hij weigert altijd, zodat de lege vraagkopjes nooit terugkomen.
 """
 from __future__ import annotations
 
@@ -61,29 +61,37 @@ def test_een_kop_in_een_codeblok_telt_niet():
     assert "Biobased" in toegevoegd
 
 
-def test_de_keten_dry_run_dan_apply_op_de_paginas_van_bom(tmp_path):
+def test_de_migratie_staat_buiten_werking_en_schrijft_niets(tmp_path):
+    """W1 (11 oktober 2026): `vraagkoppen` mag de lege vraagkopjes nooit meer terugzetten — niet
+    met --apply, en ook geen dry-run-lijst die iemand zou kunnen volgen."""
+    import pytest
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     mat = st.att.add(OWNER, "note", title="Pliant", body=_zaad_body())
     lev = st.att.add(OWNER, "note", title="NFW", body="## Labor & compliance\nx")
-    los = st.att.add(OWNER, "note", title="Iets anders", body=_zaad_body())
     st.bom_leveranciers.zet("Pliant", "NFW")
-
-    def run(apply):
+    versies = {i: len(st.att.get(i).versions) for i in (mat.id, lev.id)}
+    for apply in (False, True):
         s = cockpit2._Stores(dd)
-        return wiki_seed.vraagkoppen(s.att, s.bom_materialen, s.bom_varianten, s.bom_leveranciers,
-                                     apply=apply)
-
-    droog = run(False)
-    assert {r["id"]: r["soort"] for r in droog} == {mat.id: "materiaal", lev.id: "leverancier"}
-    assert cockpit2._Stores(dd).att.get(mat.id).body == _zaad_body()      # dry-run schrijft niets
-    run(True)
+        with pytest.raises(wiki_seed.VraagkoppenUit):
+            wiki_seed.vraagkoppen(s.att, s.bom_materialen, s.bom_varianten, s.bom_leveranciers,
+                                  apply=apply, actor_id="t")
     st = cockpit2._Stores(dd)
-    assert "## Dyes & chemicals" in st.att.get(mat.id).body
-    assert "## Ownership & health" in st.att.get(lev.id).body
-    assert st.att.get(los.id).body == _zaad_body()                         # niet op /bom
-    assert run(False) == []                                               # idempotent
+    assert st.att.get(mat.id).body == _zaad_body()
+    assert st.att.get(lev.id).body == "## Labor & compliance\nx"
+    assert {i: len(st.att.get(i).versions) for i in (mat.id, lev.id)} == versies
+
+
+def test_de_cli_modus_weigert_met_een_niet_nul_exit(monkeypatch, capsys):
+    import sys
+    import pytest
+    from nooch_village import cli
+    monkeypatch.setattr(sys, "argv", ["village", "wiki_vraagkoppen", "--apply"])
+    with pytest.raises(SystemExit) as e:
+        cli.main()
+    assert e.value.code == 2
+    assert "disabled since W1" in capsys.readouterr().out
 
 
 def test_een_nieuw_kopje_krijgt_het_niveau_van_open_items():

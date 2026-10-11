@@ -807,25 +807,23 @@ def domein_zetten_tekst(r: dict) -> str:
     return "\n".join(uit)
 
 
+class VraagkoppenUit(RuntimeError):
+    """De migratie `vraagkoppen` staat sinds W1 (11 oktober 2026) buiten werking."""
+
+
 def vraagkoppen(store, materialen_store, varianten_store, leveranciers_store, *,
                 apply: bool = False, actor_id: str = "") -> list[dict]:
-    """Geef de materiaal- en leverancierpagina's van /bom een kopje per vraag (besluit Stefan,
-    10 oktober 2026) — zodat de dekking op /bom per vraag kan zien of er een antwoord staat.
+    """BUITEN WERKING sinds W1 (besluit Stefan, 11 oktober 2026) — weigert altijd, ook als dry-run.
 
-    Welke pagina's: wat /bom vandaag als materiaal of leverancier kent (`wiki.resolve_bom`), net als
-    "From the BOM". Idempotent en dry-run tenzij `apply`; met `apply` één NIEUWE VERSIE per pagina,
-    terug te draaien via de historie. Rapport: `[{id, titel, soort, toegevoegd, oud}]`."""
-    rapport = []
-    for a, soort in bom_paginas(store, materialen_store, varianten_store, leveranciers_store):
-        body, toegevoegd, oud = vraagkoppen_body(a.body or "", soort)
-        if not toegevoegd and not oud:
-            continue
-        rapport.append({"id": a.id, "titel": a.title or a.id, "soort": soort,
-                        "toegevoegd": toegevoegd, "oud": oud})
-        if apply and body != (a.body or ""):
-            store.update(a.id, body=body, actor_id=actor_id, actor_type="person",
-                         change_note="one heading per question")
-    return rapport
+    Deze migratie gaf de materiaal- en leverancierpagina's van /bom een kopje per vraag (10 oktober
+    2026). Sinds W1 telt een feit voor een vraag via zijn ANTWOORD bij het nakijken, niet via het
+    kopje waar het onder staat; de lege kopjes zijn ruis en `lege_koppen` haalt ze weg. Mocht deze
+    migratie nog eens draaien, dan zette hij ze er allemaal weer terug — daarom schrijft hij niets
+    meer en geeft hij ook geen lijst "toe te voegen" kopjes meer die iemand zou kunnen volgen.
+    `vraagkoppen_body` blijft bestaan als pure functie (geen I/O)."""
+    raise VraagkoppenUit("wiki_vraagkoppen is disabled since W1 (11 Oct 2026): a fact counts for a "
+                         "question through its answer when it is checked, not through a heading. "
+                         "Nothing was changed.")
 
 
 def vraagkoppen_tekst(rapport: list[dict]) -> str:

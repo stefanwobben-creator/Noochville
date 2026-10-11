@@ -993,22 +993,15 @@ def main() -> None:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
     elif mode == "wiki_vraagkoppen":
-        # Eén kopje per vraag op de materiaal- en leverancierpagina's van /bom (10 oktober 2026),
-        # zodat de dekking per vraag kan zien of er een antwoord staat. Dry-run; --apply schrijft
-        # één nieuwe versie per pagina (terug te draaien via de historie).
+        # BUITEN WERKING sinds W1 (11 oktober 2026): een feit telt voor een vraag via zijn antwoord
+        # bij het nakijken, niet via een kopje. Deze migratie zou de lege vraagkopjes terugzetten
+        # die `wiki_lege_koppen` weghaalt — hij leest en schrijft daarom niets meer.
         from nooch_village import wiki_seed
-        from nooch_village.cockpit2 import _Stores
-        from nooch_village.config import load_context
-        from nooch_village.village import BASE_DIR
-
-        ctx = load_context(BASE_DIR)
-        st = _Stores(ctx.data_dir)
-        apply = "--apply" in sys.argv
-        rapport = wiki_seed.vraagkoppen(st.att, st.bom_materialen, st.bom_varianten,
-                                        st.bom_leveranciers, apply=apply, actor_id="cli")
-        print(wiki_seed.vraagkoppen_tekst(rapport))
-        if rapport and not apply:
-            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+        try:
+            wiki_seed.vraagkoppen(None, None, None, None, apply="--apply" in sys.argv)
+        except wiki_seed.VraagkoppenUit as e:
+            print(e)
+            sys.exit(2)
 
     elif mode == "wiki_domein":
         # De indeling van de wiki: waar landt elke pagina, en wat vraagt nog een mens. Read-only;
