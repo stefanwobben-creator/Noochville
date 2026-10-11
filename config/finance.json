@@ -203,5 +203,12 @@
   ],
   "_revenue_uitleg": "Net sales is de basis van alle marges en percentages. Een andere opbrengstregel telt mee vanaf de laag in from_layer (een laag-sleutel: cm1, cm2, cm3, ebitda, ebit, ebt, net) en nooit in de percentagebasis. Venema bepaalt waar een subsidie hoort; pas from_layer dan hier aan.",
   "net_sales_source_from": "",
-  "_net_sales_source_from_uitleg": "YYYY-MM of leeg. Leeg = Net sales komt uit het handmatige register. Gezet (na de Shopify-koppeling) = vanaf die maand uit Shopify, eerdere maanden uit het register; een maand komt nooit uit twee bronnen."
+  "_net_sales_source_from_uitleg": "YYYY-MM of leeg. Leeg = Net sales komt uit het handmatige register. Gezet (na de Shopify-koppeling) = vanaf die maand uit Shopify, eerdere maanden uit het register; een maand komt nooit uit twee bronnen.",
+  "paid_via": [
+    {
+      "key": "rc_directie",
+      "label": "Current account (director)"
+    }
+  ],
+  "_paid_via_uitleg": "Wie een kostregel betaalde als het NIET de bankrekening van Nooch was (leeg = de bankrekening van Nooch). Alleen herkomst: het P&L leest dit veld niet, de kosten tellen gewoon mee. Een regel met betaald via staat op paid."
 }

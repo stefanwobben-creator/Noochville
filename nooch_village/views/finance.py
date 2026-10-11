@@ -271,14 +271,15 @@ def _popover(label: str, inhoud: str) -> str:
 
 # ── /finance/costs ──────────────────────────────────────────────────────────
 
-FILTERS = ("periode", "account", "regel", "batch", "leverancier", "status", "missing_doc")
+FILTERS = ("periode", "account", "regel", "batch", "leverancier", "status", "missing_doc", "betaald_via")
 
 
 def gefilterd(st, f: dict) -> list[dict]:
     return filter_regels(KostenRegister(st.dd).alle(), periode=f.get("periode", ""),
                          account=f.get("account", ""), regel=f.get("regel", ""),
                          batch=f.get("batch", ""), leverancier=f.get("leverancier", ""),
-                         status=f.get("status", ""), zonder_document=f.get("missing_doc") == "1")
+                         status=f.get("status", ""), zonder_document=f.get("missing_doc") == "1",
+                         betaald_via=f.get("betaald_via", ""))
 
 
 def _filter_select(label: str, naam: str, fid: str, opties, waarde: str, leeg: str) -> str:
@@ -288,6 +289,17 @@ def _filter_select(label: str, naam: str, fid: str, opties, waarde: str, leeg: s
 
 def _filter_veld(label: str, naam: str, fid: str, waarde: str, kind: str = "text") -> str:
     return f"<div><div class='qadd-form'>{_field(label, naam, kind=kind, value=waarde, fid=fid)}</div></div>"
+
+
+def _betaald_via_opties(cfg: dict) -> list[tuple[str, str]]:
+    """De filterkeuzes voor "paid via": de bankrekening van Nooch plus de lijst uit de config."""
+    from nooch_village.finance_register import BANK
+    return [(BANK, "Nooch bank account")] + [(x["key"], x["label"]) for x in fc.betaald_via(cfg)]
+
+
+def betaald_via_label(r: dict, cfg: dict) -> str:
+    via = r.get("paid_via") or ""
+    return next((x["label"] for x in fc.betaald_via(cfg) if x["key"] == via), via) if via else "Nooch bank account"
 
 
 def render_costs(st, username, csrf: str, f: dict, msg: str = "", *, waarden: dict | None = None,
@@ -303,6 +315,7 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "", *, waarden: di
                   f"{_filter_veld('Batch', 'batch', 'ff-batch', f.get('batch', ''))}"
                   f"{_filter_veld('Supplier', 'leverancier', 'ff-leverancier', f.get('leverancier', ''))}"
                   f"{_filter_select('Payment status', 'status', 'ff-status', [('open', 'Open'), ('paid', 'Paid')], f.get('status', ''), 'Any status')}"
+                  f"{_filter_select('Paid via', 'betaald_via', 'ff-betaald-via', _betaald_via_opties(cfg), f.get('betaald_via', ''), 'Anyone')}"
                   f"</div><input type='checkbox' id='fin-missing-doc' name='missing_doc' value='1'"
                   f"{' checked' if f.get('missing_doc') == '1' else ''}>"
                   f"<label for='fin-missing-doc' class='muted'>Only lines with a missing document</label> "
@@ -344,7 +357,9 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "", *, waarden: di
     actief = ", ".join(f"{k}: {v}" for k, v in f.items() if v)
     filters = (_popover("Filter", filterform)
                + (f"<span class='muted'>{_e(actief)} · <a href='/finance/costs'>clear</a></span>" if actief else ""))
-    inhoud = (f"{filters}<p><a href='/finance/costs.csv{'?' + q if q else ''}'>Export CSV for the accountant</a></p>"
+    importeer = (" · <a href='/finance/costs/import'>Import from a spreadsheet</a>"
+                 if mag_wijzigen(st, username) and csrf else "")
+    inhoud = (f"{filters}<p><a href='/finance/costs.csv{'?' + q if q else ''}'>Export CSV for the accountant</a>{importeer}</p>"
               f"{nieuw}<div class='c2-sec{_SCROLL if regels else ""}'>{tabel}</div><div class='c2-sec'>{som}</div>{open_punten}")
     return _frame("Finance · Costs", "/finance/costs", inhoud, msg)
 
@@ -363,6 +378,7 @@ def render_cost(st, username, csrf: str, kid: str, msg: str = "", *, waarden: di
               ("Account", r.get("account_code", "")),
               ("Management line", labels.get(r["management_line"], r["management_line"])),
               ("Batch", r.get("batch", "")), ("Payment", f"{r['payment_status']} {r.get('paid_date', '')}"),
+              ("Paid via", betaald_via_label(r, cfg)), ("Import", r.get("import_id", "")),
               ("Note", r.get("note", "")), ("Corrects", r.get("corrects", "")),
               ("Recorded", f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))} by {r.get('created_by') or '—'}")]
     tabel = ("<table class='mtab' aria-label='cost'>"
@@ -1147,7 +1163,7 @@ def verwerk_history_import(st, fields: dict, files: dict, *, door: str, csrf: st
 
 CSV_KOLOMMEN = ("id", "entry_date", "period", "supplier", "description", "account_code", "management_line",
                 "batch", "amount_excl_eur", "vat_eur", "currency", "payment_status", "paid_date",
-                "document", "corrects", "note")
+                "document", "corrects", "note", "paid_via", "import_id")
 
 
 def csv_export(regels: list[dict]) -> str:
@@ -1166,7 +1182,8 @@ def csv_export(regels: list[dict]) -> str:
         uit.append(";".join(cel(v) for v in (
             r["id"], r["entry_date"], r["period"], r["supplier"], r["description"], r.get("account_code", ""),
             r["management_line"], r.get("batch", ""), eur_nl(r["amount_excl_cents"]), eur_nl(r["vat_cents"]),
-            r["currency"], r["payment_status"], r.get("paid_date", ""), doc, r.get("corrects", ""), r.get("note", ""))))
+            r["currency"], r["payment_status"], r.get("paid_date", ""), doc, r.get("corrects", ""), r.get("note", ""),
+            r.get("paid_via", ""), r.get("import_id", ""))))
     return "\r\n".join(uit) + "\r\n"
 
 
@@ -1200,11 +1217,262 @@ def verwerk_kost(st, fields: dict, files: dict, *, username, door: str) -> str:
         v["attachment"] = bijlage
     elif oud is not None and oud.get("attachment"):
         v["attachment"] = oud["attachment"]                  # een correctie houdt het originele document
+    if oud is not None:
+        v["paid_via"] = oud.get("paid_via", "")              # het formulier toont het niet: niet stil wissen
     regel, fout = maak_kost(v, cfg)
     if regel is None:
+        if fout == "pick a management line" and str(v.get("supplier") or "").strip():
+            # DE LEVERANCIERSTANDAARD WORDT GENOEMD, NIET GEKOZEN (Finance PR 3).
+            from nooch_village.finance_kosten_import import LeveranciersStandaard
+            std = LeveranciersStandaard(st.dd).voor(v["supplier"])
+            if std and fc.regel(std, cfg):
+                return f"✗ pick a management line (the default for {v['supplier'].strip()} is {fc.regel(std, cfg)['label']})"
         return f"✗ {fout}"
     if oud is not None:
         reg.correctie(correctie_van, regel, door=door)
         return "✓ corrected: a reversal and a new line were added"
     reg.voeg_toe(regel, door=door)
     return "✓ cost saved"
+
+
+# ── /finance/costs/import (Finance PR 3, 11 oktober 2026) ───────────────────
+#
+# PATROON: hetzelfde als de historie-import (`verwerk_history_import`): kies bestanden → preview
+# (bestanden meteen geborgd, niets in het register) → bevestigen. LAGEN, allemaal bestaand:
+#   atom      `.chip` (status van een rij) · `.muted` · `td.num` · `.btn`
+#   molecule  `table.mtab` in `.c2-scroll` · `_nieuw_kaart` (`details.card`) · `.qadd-form` + `_field`
+#   pattern   het importscherm, de preview en de lijst met imports (met terugdraaien)
+
+_IMPORT_PAD = "/finance/costs/import"
+
+
+def _status_chip(status: str) -> str:
+    return f"<span class='chip'>{_e(status)}</span>"
+
+
+def render_kosten_import(st, username, csrf: str, msg: str = "") -> str | None:
+    """Het importscherm: alleen voor wie mag wijzigen (anders None → 404)."""
+    from nooch_village import finance_kosten_import as fki
+    if not (mag_wijzigen(st, username) and csrf):
+        return None
+    cfg = fc.laad()
+    labels = {x["key"]: x["label"] for x in fc.regels(cfg)}
+    kies = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='action' value='finance_kosten_import'>"
+            f"<input type='hidden' name='next' value='{_IMPORT_PAD}'>"
+            f"<div class='qadd-form'>{_field('Cost file (.xlsx or .csv) *', 'file', kind='file', fid='fki-file', required=True, attrs='accept=.xlsx,.csv')}"
+            f"<div class='muted'>One row per cost line. Only rows with action <em>importeren</em> are imported.</div></div>"
+            f"<div class='qadd-form'>{_field('Documents (.zip)', 'zip', kind='file', fid='fki-zip', attrs='accept=.zip')}"
+            f"<div class='muted'>The PDFs, matched on the column <em>bestand</em> by file name.</div></div>"
+            f"<p class='muted'>Each file at most 20 MB. You see a preview first; nothing is saved until you confirm.</p>"
+            f"<button class='btn ok sm' type='submit'>Preview</button></form>")
+    log = fki.KostenImportLog(st.dd)
+    reg = KostenRegister(st.dd)
+    alle = reg.alle()
+    rijen = []
+    for imp in log.imports():
+        if imp.get("status") not in ("applied", "undone"):
+            continue
+        eigen = [r for r in alle if r.get("import_id") == imp["import_id"] and not r.get("corrects")]
+        terug = ""
+        if imp["status"] == "applied":
+            # EEN INLINE KAART, GEEN POPOVER: de tabel staat in een scrollcontainer, en daarin wordt een
+            # absoluut geplaatst `.datepop` afgekapt (gezien in de browser, 11 oktober 2026).
+            terug = _nieuw_kaart("Undo import", (
+                f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='finance_kosten_import_terug'>"
+                f"<input type='hidden' name='import_id' value='{_e(imp['import_id'])}'>"
+                f"<input type='hidden' name='next' value='{_IMPORT_PAD}'>"
+                f"<p class='muted'>Every line of this import that was not corrected gets a reversal "
+                f"(\"import {_e(imp['import_id'])} undone\"). Nothing is deleted.</p>"
+                f"<input type='checkbox' id='fki-terug-{_e(imp['import_id'])}' name='bevestig' value='1' required>"
+                f"<label for='fki-terug-{_e(imp['import_id'])}'>Undo all {len(eigen)} line(s) of this import</label> "
+                f"<button class='btn sm' type='submit'>Undo</button></form>"), open_=False)
+        rijen.append(f"<tr><td>{time.strftime('%Y-%m-%d %H:%M', time.localtime(imp['created_at']))}</td>"
+                     f"<td>{_e(imp['attachment']['filename'])}<div class='muted'>{_e(imp['import_id'])}</div></td>"
+                     f"<td>{_e(imp['status'])}</td><td class='num'>{len(eigen)}</td><td>{terug}</td></tr>")
+    lijst = ("<table class='mtab' aria-label='imports'><tr><th>When</th><th>File</th><th>Status</th>"
+             "<th class='num'>Lines</th><th></th></tr>" + "".join(rijen) + "</table>"
+             if rijen else "<p class='muted'>No imports yet.</p>")
+    inhoud = (f"<p class='muted'>Import cost lines from the spreadsheet, with their documents. Nothing is "
+              f"guessed: a row without a management line or with another currency than EUR is an error.</p>"
+              f"<p><a href='/finance/costs'>← Costs</a></p>"
+              f"{_nieuw_kaart('Choose the files', kies, open_=True)}"
+              f"{_standaard_aanbod(st, csrf, log, alle, labels)}"
+              f"<div class='c2-sec'><h2>Imports</h2>{("<div class='c2-scroll'>" + lijst + "</div>") if rijen else lijst}</div>")
+    return _frame("Finance · Import costs", "/finance/costs", inhoud, msg)
+
+
+def _standaard_aanbod(st, csrf: str, log, alle: list[dict], labels: dict) -> str:
+    """Na een geslaagde import: per leverancier de gekozen regel als standaard bewaren — een AANBOD,
+    nooit een automatisme. Alleen leveranciers met één regel in die import, en waar de standaard nu
+    anders is."""
+    from nooch_village import finance_kosten_import as fki
+    laatste = next((i for i in log.imports() if i.get("status") == "applied"), None)
+    if laatste is None:
+        return ""
+    std = fki.LeveranciersStandaard(st.dd)
+    per: dict[str, set] = {}
+    naam: dict[str, str] = {}
+    for r in alle:
+        if r.get("import_id") == laatste["import_id"] and not r.get("corrects"):
+            k = fki._norm(r["supplier"])
+            per.setdefault(k, set()).add(r["management_line"])
+            naam.setdefault(k, r["supplier"])
+    kandidaten = [(naam[k], next(iter(v))) for k, v in sorted(per.items())
+                  if len(v) == 1 and std.voor(naam[k]) != next(iter(v))]
+    if not kandidaten:
+        return ""
+    vinkjes = "".join(
+        f"<div><input type='checkbox' id='fki-std-{i}' name='standaard' value='{_e(lev)}|{_e(lijn)}'>"
+        f"<label for='fki-std-{i}'>{_e(lev)} → {_e(labels.get(lijn, lijn))}</label></div>"
+        for i, (lev, lijn) in enumerate(kandidaten))
+    return _nieuw_kaart(f"Save supplier defaults ({len(kandidaten)})", (
+        f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
+        f"<input type='hidden' name='action' value='finance_leverancier_standaard'>"
+        f"<input type='hidden' name='next' value='{_IMPORT_PAD}'>"
+        f"<p class='muted'>From import {_e(laatste['import_id'])}. A default is only suggested later, "
+        f"never chosen for you.</p>{vinkjes}"
+        f"<button class='btn sm' type='submit'>Save the ticked defaults</button></form>"), open_=False)
+
+
+def _oordeel_van(st, imp: dict, tabel: tuple) -> dict:
+    from nooch_village import finance_historie as fh
+    from nooch_village import finance_kosten_import as fki
+    tnaam, tblob, zblob = tabel
+    return fki.beoordeel(tnaam, tblob, zblob, register=KostenRegister(st.dd).alle(), cfg=fc.laad(),
+                         history_until=fh.Instellingen(st.dd).history_until(),
+                         standaarden=fki.LeveranciersStandaard(st.dd).standaarden(),
+                         import_id=imp["import_id"])
+
+
+def verwerk_kosten_import(st, fields: dict, files: dict, *, door: str, csrf: str,
+                          limiet: int) -> tuple[str, str]:
+    """Stap 1: borg de bestanden en toon de PREVIEW → ("html", pagina) of ("msg", melding).
+    Stap 2 (`finance_kosten_import_bevestig`): lees de geborgde bestanden opnieuw (hash gecontroleerd),
+    beoordeel opnieuw tegen de stand van nu, en schrijf. Fouten blokkeren tenzij "import the valid
+    rows". De rechten toetst de aanroeper (404)."""
+    from nooch_village import finance_kosten_import as fki
+    log = fki.KostenImportLog(st.dd)
+    if fields.get("action") == "finance_kosten_import_bevestig":
+        imp = log.status(fields.get("import_id", ""))
+        if imp is None or imp.get("status") != "previewed":
+            return "msg", "✗ this import does not exist or was already handled"
+        tabel, fout = log.lees(imp)
+        if tabel is None:
+            return "msg", f"✗ {fout}"
+        o = _oordeel_van(st, imp, tabel)
+        fouten = len(o["fouten"]) + o["telling"][fki.FOUT]
+        if fouten and fields.get("valid_rows") != "1":
+            return "msg", "✗ nothing imported: there are errors — tick 'import the valid rows' to go ahead"
+        if o["fouten"]:
+            return "msg", f"✗ nothing imported: {o['fouten'][0]}"
+        try:
+            nieuw = fki.toepassen(KostenRegister(st.dd), o, tabel[2], door=door)
+        except ValueError as e:
+            return "msg", f"✗ nothing imported: {e}"
+        log.meld(imp, door=door, status="applied", lines=len(nieuw), errors=fouten,
+                 duplicates=o["telling"][fki.DUBBEL], not_imported=o["telling"][fki.NIET])
+        return "msg", (f"✓ imported {len(nieuw)} line(s) (import {imp['import_id']}); "
+                       f"{o['telling'][fki.DUBBEL]} duplicate(s) and {fouten} error(s) skipped")
+    imp, fout = log.bewaar(files.get("file") or ("", b""), files.get("zip") or ("", b""), door=door,
+                           limiet=limiet)
+    if imp is None:
+        return "msg", f"✗ {fout}"
+    tabel, fout = log.lees(imp)
+    if tabel is None:
+        return "msg", f"✗ {fout}"
+    return "html", _preview_html(st, imp, _oordeel_van(st, imp, tabel), csrf)
+
+
+def _preview_html(st, imp: dict, o: dict, csrf: str) -> str:
+    from nooch_village import finance_kosten_import as fki
+    labels = {x["key"]: x["label"] for x in fc.regels(fc.laad())}
+    t = o["telling"]
+    fouten = len(o["fouten"]) + t[fki.FOUT]
+    totalen = "".join(
+        f"<tr><td>{_e(val)}</td><td class='num'>{x['aantal']}</td><td class='num'>{_eur(x['excl'])}</td>"
+        f"<td class='num'>{_eur(x['btw'])}</td></tr>" for val, x in sorted(o["totalen"].items()))
+    totaaltabel = ("<table class='mtab' aria-label='totals to import'><tr><th>Currency</th><th class='num'>Rows</th>"
+                   "<th class='num'>Excl. VAT</th><th class='num'>VAT</th></tr>" + totalen + "</table>"
+                   if totalen else "<p class='muted'>No rows to import.</p>")
+    c = o["cutover"]
+    if not c["tot"]:
+        cut = f"<p>No cutover set: all {c['aantal']} rows count in the P&amp;L.</p>"
+    else:
+        cut = (f"<p>Cutover: months up to and including <strong>{_e(c['tot'])}</strong> come from the history. "
+               f"<strong>{c['voor_aantal']}</strong> of the {c['aantal']} rows to import fall on or before it "
+               f"({_eur(c['voor_excl'])} excl. VAT): kept, but not counted in the P&amp;L.</p>")
+    bestandfouten = ("<h2>Errors in the file</h2><ul>" + "".join(f"<li>{_e(f)}</li>" for f in o["fouten"])
+                     + "</ul>" if o["fouten"] else "")
+
+    def rij(x):
+        r = x["regel"] or {}
+        ruw = x["ruw"]
+        reden = "; ".join(x["redenen"] + x["waarschuwingen"])
+        # Zonder geldige regel (een fout, niet geïmporteerd) staat er wat er IN HET BESTAND staat.
+        return (f"<tr><td class='num'>{x['nr']}</td><td>{_status_chip(x['status'])}</td>"
+                f"<td>{_e(r.get('entry_date') or str(ruw.get('entry_date') or '')[:10])}</td><td>{_e(x['leverancier'])}</td>"
+                f"<td>{_e(labels.get(r.get('management_line', ''), '') if r else str(ruw.get('management_line') or ''))}</td>"
+                f"<td class='num'>{_eur(r['amount_excl_cents']) if r else _e(str(ruw.get('amount_excl') or ''))}</td>"
+                f"<td class='num'>{_eur(r['vat_cents']) if r else _e(str(ruw.get('vat') or ''))}</td>"
+                f"<td>{_e(x['bestand'])}</td><td>{_e(reden)}</td></tr>")
+    volgorde = {fki.FOUT: 0, fki.WAARSCHUWING: 1, fki.DUBBEL: 2, fki.NIET: 3, fki.NIEUW: 4}
+    lijst = ("<table class='mtab' aria-label='rows'><tr><th class='num'>Row</th><th>Status</th><th>Date</th>"
+             "<th>Supplier</th><th>Management line</th><th class='num'>Excl. VAT</th><th class='num'>VAT</th>"
+             "<th>File</th><th>Reason</th></tr>"
+             + "".join(rij(x) for x in sorted(o["rijen"], key=lambda x: (volgorde[x["status"]], x["nr"])))
+             + "</table>") if o["rijen"] else ""
+    ook = ("<input type='checkbox' id='fki-valid' name='valid_rows' value='1'>"
+           "<label for='fki-valid'>Import the valid rows; the rows with errors are skipped</label> "
+           if fouten else "")
+    kan = (t[fki.NIEUW] + t[fki.WAARSCHUWING]) and not o["fouten"]
+    bevestig = (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='finance_kosten_import_bevestig'>"
+                f"<input type='hidden' name='import_id' value='{_e(imp['import_id'])}'>"
+                f"<input type='hidden' name='next' value='{_IMPORT_PAD}'>{ook}"
+                f"<button class='btn ok sm' type='submit'>Confirm import</button> "
+                f"<a href='{_IMPORT_PAD}'>Cancel</a></form>" if kan else
+                f"<p><a href='{_IMPORT_PAD}'>Back</a></p>")
+    zipinfo = (f" · zip {_e(imp['zip']['filename'])} sha256 <code>{_e(imp['zip']['sha256'][:16])}…</code>"
+               if imp.get("zip") else " · no zip")
+    inhoud = (f"<p>{_e(imp['attachment']['filename'])} · sha256 <code>{_e(imp['attachment']['sha256'][:16])}…</code>"
+              f"{zipinfo}</p>"
+              f"<p><strong>{t[fki.NIEUW]}</strong> new · <strong>{t[fki.WAARSCHUWING]}</strong> with a warning "
+              f"(imported) · <strong>{t[fki.DUBBEL]}</strong> duplicate · <strong>{fouten}</strong> error(s) · "
+              f"<strong>{t[fki.NIET]}</strong> not imported</p>"
+              f"<div class='c2-sec'><h2>To import</h2>{("<div class='c2-scroll'>" + totaaltabel + "</div>") if totalen else totaaltabel}{cut}</div>"
+              f"{bestandfouten}{bevestig}"
+              f"<div class='c2-sec'>{("<div class='c2-scroll'>" + lijst + "</div>") if lijst else ''}</div>")
+    return _frame("Finance · Import preview", "/finance/costs", inhoud)
+
+
+def verwerk_kosten_import_terug(st, fields: dict, *, door: str) -> str:
+    """Draai een import terug: alle regels die nog niet gecorrigeerd zijn krijgen een tegenboeking."""
+    from nooch_village import finance_kosten_import as fki
+    log = fki.KostenImportLog(st.dd)
+    imp = log.status(fields.get("import_id", ""))
+    if imp is None or imp.get("status") != "applied":
+        return "✗ this import does not exist or was not applied"
+    if fields.get("bevestig") != "1":
+        return "✗ tick the box to confirm undoing the import"
+    gedaan, overgeslagen = fki.terugdraaien(KostenRegister(st.dd), imp["import_id"], door=door)
+    log.meld(imp, door=door, status="undone", undone=gedaan, kept_corrected=overgeslagen)
+    return (f"✓ import {imp['import_id']} undone: {gedaan} line(s) cancelled"
+            + (f", {overgeslagen} corrected line(s) left as they are" if overgeslagen else ""))
+
+
+def verwerk_leverancier_standaard(st, keuzes: list[str], *, door: str) -> str:
+    """Bewaar de aangevinkte leverancier → regel als standaard (een voorstel voor later)."""
+    from nooch_village import finance_kosten_import as fki
+    cfg = fc.laad()
+    std = fki.LeveranciersStandaard(st.dd)
+    n = 0
+    for k in keuzes:
+        lev, _s, lijn = str(k).rpartition("|")
+        if lev.strip() and fc.regel(lijn, cfg) is not None:
+            std.bewaar(lev, lijn, door=door)
+            n += 1
+    return f"✓ {n} supplier default(s) saved" if n else "✗ nothing ticked"
