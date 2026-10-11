@@ -481,9 +481,9 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
     # hangen betekende een cel reserveren voor elk van de twee, en dat is precies de dode ruimte
     # die dit herontwerp weghaalt.
     voet = (f"<div class='uk-voet'>"
-            f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
-            f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
-            f"Only visible to this circle</label>"
+            # HET VINKJE "Only visible to this circle" IS WEG: privé-projecten staan uit (11 oktober
+            # 2026, zie `cockpit2.PRIVE_UIT`). Een lege span houdt Opslaan rechts in de voetrij.
+            f"<span></span>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
             f"Save</button></div>")
     # EIGEN KLASSE, EN NIET MEER `.wo-oc`. Die is een flexRIJ van losse velden met

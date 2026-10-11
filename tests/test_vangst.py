@@ -557,7 +557,7 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
         assert veld in html, veld
     assert "— Kies persoon —" in html and "Elk cirkellid" in html
     assert "Individuele actie" in html          # eerste rol-optie, rol is niet verplicht
-    assert "Only visible to this circle" in html
+    assert "Only visible to this circle" not in html             # privé-projecten staan uit (11 okt 2026)
     # DE STAAT-KEUZE IS TERUG (besluit Stefan, 21 september 2026), maar anders dan hij wegging.
     # Hij is op 29 augustus weggehaald omdat hij een eigen veld op de uitkomst was naast de
     # wachtstatus op het project — twee plekken die hetzelfde bijhouden. Nu schrijft hij naar
@@ -632,7 +632,9 @@ def test_de_leeftijd_is_fijn_aan_de_korte_kant(tmp_path):
     assert _leeftijd(0) == ""
 
 
-def test_alleen_zichtbaar_voor_de_cirkel_maakt_het_project_prive(tmp_path):
+def test_een_privé_uitkomst_wordt_geweigerd(tmp_path):
+    """Privé-projecten staan uit (besluit Stefan, 11 oktober 2026): ook een handmatig meegestuurd
+    `prive=1` maakt geen project en geen uitkomst."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     naam = cockpit2._name(st.records.get(ROL))
@@ -640,11 +642,8 @@ def test_alleen_zichtbaar_voor_de_cirkel_maakt_het_project_prive(tmp_path):
     _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project", rol=naam,
           tekst="Stil project", prive="1", next="/vangst")
     st2 = cockpit2._Stores(dd)
-    pr = [x for x in st2.projects.all() if "Stil project" in str(x.get("scope"))]
-    assert pr and pr[0].get("private") is True
-    u = st2.werk.punt_get(CIRCLE, it["id"])["uitkomsten"][0]
-    assert u["prive"] is True
-    assert "🔒" in render_vangst(st2, CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert not [x for x in st2.projects.all() if "Stil project" in str(x.get("scope"))]
+    assert not st2.werk.punt_get(CIRCLE, it["id"]).get("uitkomsten")
 
 
 def test_elk_cirkellid_is_een_echte_keuze(tmp_path):

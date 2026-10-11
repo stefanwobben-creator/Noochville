@@ -53,7 +53,7 @@ def test_a_alle_acties_bereikbaar(tmp_path):
     # resp. de 'Vraag …'-knop — een rol nodig je nu uit via @mention). De dispatch-takken blijven bestaan
     # en zijn via de API bereikbaar; ze hebben alleen geen UI-caller meer — daarom niet in deze lijst.
     for action in ("proj_rename", "proj_status", "proj_done", "proj_archive", "proj_delete",
-                   "proj_setowner", "proj_settrekker", "proj_setprivate", "proj_setimpact",
+                   "proj_setowner", "proj_settrekker", "proj_setimpact",   # proj_setprivate: uit sinds 11 okt 2026
                    "proj_setdue", "checklist_add", "check_toggle", "check_add",
                    "check_remove", "attach_file", "attach_add", "attach_remove", "proj_feed",
                    "react_add", "feed_edit", "feed_remove", "proj_agendeer_verzwakt"):

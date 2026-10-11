@@ -405,7 +405,8 @@ def test_het_vinkje_en_opslaan_staan_op_een_rij(tmp_path):
     dd, st, mens = _dorp(tmp_path)
     h = _uitkomst_formulier(st, CIRCLE, {"id": "abc", "title": "t"}, "TOK", "/x")
     voet = h.split("class='uk-voet'")[1].rsplit("</div></form>", 1)[0]
-    assert "type='checkbox'" in voet and "Save" in voet
-    assert voet.index("type='checkbox'") < voet.index("Save")
+    # HET VINKJE "Only visible to this circle" IS WEG (privé-projecten staan uit, 11 oktober 2026);
+    # Opslaan staat nog in de voetrij, rechts.
+    assert "Save" in voet and "type='checkbox'" not in voet
     assert "qadd-row" not in h, "er staat nog een losse flexrij in het formulier"
     assert "<div></div>" not in h, "er staat nog een lege cel in het formulier"

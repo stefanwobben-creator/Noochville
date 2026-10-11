@@ -1514,7 +1514,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         pers_v = f"<a href='/person?id={_e(p['person'])}'>{_e(_person_name(st, p['person']))}</a>"
     else:
         pers_v = "<span class='muted'>—</span>"
-    if rw:
+    if rw and p.get("private"):
+        # PRIVÉ-PROJECTEN STAAN UIT (11 oktober 2026, `cockpit2.PRIVE_UIT`): geen knop meer om een
+        # project te verbergen. Een oud privé-project kan alleen nog terug naar zichtbaar.
         # EEN TOGGLE, GEEN VINKJE MET EEN ZIN ERNAAST. Zichtbaar is de normale toestand; de actie
         # die je soms wilt is verbergen. Het vinkje "only for this circle" vroeg je om een
         # negatieve eigenschap aan te zetten — een omweg om te zeggen "hou dit binnen".

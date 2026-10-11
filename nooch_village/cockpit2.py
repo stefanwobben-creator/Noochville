@@ -1359,9 +1359,18 @@ class _Ctx:
         self.pj = st.projects
 
 
+#: PRIVÉ-PROJECTEN STAAN UIT (besluit Stefan, 11 oktober 2026): de optie "Only for this circle" is
+#: nooit gebruikt (0 van 458). De server weigert de vlag bij aanmaken en zetten, ook bij een
+#: handmatig POST-verzoek. De leesregels, de guard en de datavlag zelf blijven staan; terugzetten is
+#: dit weghalen. De vijf open punten staan als backlog in claude/backlog_prive_projecten_11okt.md.
+PRIVE_UIT = ("✗ Private projects are switched off: a project is visible to the whole circle tree.")
+
+
 def _act_proj_add(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
+        if g("private") == "1":
+            return nxt, PRIVE_UIT
         owner = g("owner")
         # Autorisatie: bij een rol → rolvervuller of Circle Lead; bij een Individueel
         # Initiatief (ii:<circle>) mag elk lid van die cirkel zijn eigen initiatief starten.
@@ -1396,7 +1405,7 @@ def _act_proj_add(c):
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
                             done_when=done_when[:200],
-                            person=person or None, agent=agent or None, private=(g("private") == "1"))
+                            person=person or None, agent=agent or None)
             if col == "wacht":
                 pj.block(pid, "—")
             msg = "➕ project added"
@@ -3668,7 +3677,9 @@ def _act_proj_setprivate(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
+        if g("private") == "1":
+            return nxt, PRIVE_UIT                     # alleen nog terug naar zichtbaar (een oud privé-project)
+        if pj.edit(g("pid"), private=False, allow_done=True):
             msg = "✓ visibility saved"
         return nxt, msg
 
@@ -4717,7 +4728,9 @@ def _act_vangst_uitkomst(c):
             return nxt, "✗ die persoon bestaat niet"
         # GEEN staat meer op een nieuwe uitkomst: de wachtstatus leeft op projectniveau. Oude
         # uitkomsten houden hun waarde — dit stopt alleen de aanwas, het wist niets.
-        prive = g("prive") == "1"
+        if g("prive") == "1":
+            return nxt, PRIVE_UIT
+        prive = False
         # DE STAAT-KEUZE GELDT ALLEEN BIJ EEN PROJECT, en dat is geen halve uitvoering maar de
         # consequentie van de afspraak: hij schrijft naar de plek waar de waarheid al staat, en
         # die plek bestaat alleen bij een project (`status=blocked`).
@@ -5189,6 +5202,8 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
                _lead_hop: bool = False) -> tuple[str, str]:
     """Waar landt een stuk werk? ÉÉN regel, gedeeld door het werkoverleg en de project-wizard.
 
+    `prive` STAAT UIT (11 oktober 2026, zie `PRIVE_UIT`): wie hem toch meegeeft krijgt een fout.
+
     Dit stond als losse tak in `_act_vangst_uitkomst` (#364). Hem hier een tweede keer uitschrijven
     zou precies de fout zijn die `docs/CONVENTIES.md` verbiedt: twee vormen van hetzelfde die na één
     wijziging uit de pas lopen — en dan landt werk stil op de verkeerde plek.
@@ -5214,6 +5229,8 @@ def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: st
     opdrachtgever bericht (`meld_opdrachtgever`).
 
     Geeft (soort, ref) terug: "inbox" / "project" / "keuze" plus een leesbare verwijzing."""
+    if prive:
+        raise ValueError("private projects are switched off")
     # DE BESLISSING KOMT UIT `bestemming`, en daar staat hij één keer. Hier stond hem nóg een keer
     # uitschrijven — inclusief de lead-hop als recursie — en dat is precies de tweede vorm waar
     # docs/CONVENTIES.md voor waarschuwt. Nu voorspelt de droge run van de wees-opruiming met
