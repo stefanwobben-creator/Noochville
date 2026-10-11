@@ -920,6 +920,39 @@ def main() -> None:
         if any(r["geplaatst"] for r in rapport) and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_feit_herstel":
+        # W1 (11 oktober 2026): feiten die de oude bulk import aan elkaar plakte ("<kop> Text: …
+        # Type: … Ref: …") terug naar hun tekst; afgekapte stukken gemarkeerd, niets verzonnen, niets
+        # verplaatst of gekoppeld. Dry-run; --apply schrijft één nieuwe versie per pagina.
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.feiten_herstellen(st.att, apply=apply, actor_id="cli")
+        print(wiki_seed.feiten_herstellen_tekst(rapport))
+        if rapport and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
+    elif mode == "wiki_lege_koppen":
+        # W1 (11 oktober 2026): de lege vraagkopjes (alleen hun uitlegzin, verder niets) van de pagina's
+        # af; de uitleg staat bij de vraag. Dry-run; --apply schrijft één nieuwe versie per pagina.
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.lege_koppen(st.att, apply=apply, actor_id="cli")
+        print(wiki_seed.lege_koppen_tekst(rapport))
+        if rapport and not apply:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_bom_sleutels":
         # Zet op bestaande materiaal-/leverancierpagina's hun /bom-naam vast (`wiki.BOM_NAMEN`), zodat
         # een hernoeming de koppeling niet meer breekt. Dry-run; --apply schrijft (set_meta).
@@ -1464,7 +1497,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

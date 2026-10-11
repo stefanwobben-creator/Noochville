@@ -188,10 +188,10 @@ def materiaal_paginas(bom_tekst: str = "",
         regels += ["", "## CO2 & Water",
                    "As a fact with a value (CO2e per kg, water per kg), grounded in the supplier "
                    "TDS or another source. The BOM screen calculates with these values."]
-        # EEN KOPJE PER VRAAG (10 oktober 2026): de secties en hun standaard-open-punten uit
-        # `wiki.VRAAGSECTIES` — dezelfde tekst als het skelet, één plek.
+        # GEEN LEEG KOPJE PER VRAAG MEER (W1, 11 oktober 2026; was: een kopje per vraag sinds 10
+        # oktober). De uitleg staat bij de vraag (`wiki_dekking.wat_telt`); de standaard-open-punten
+        # uit `wiki.VRAAGSECTIES` blijven, onder "Open items".
         for sectie in wiki.VRAAGSECTIES["materiaal"]:
-            regels += ["", sectie[0], sectie[1]]
             open_punten += [f"- {p}" for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
@@ -342,16 +342,10 @@ def leverancier_paginas(ledger, *, vandaag: str = "",
         # PRIJSAFSPRAAK HOORT HIER en niet op de materiaalpagina: twee leveranciers van hetzelfde
         # materiaal kunnen verschillend prijzen. Zelfde regel als bij CO2 & water: de plek, geen
         # bewering over of het getal er al is.
-        # EEN KOPJE PER VRAAG (10 oktober 2026), uit `wiki.VRAAGSECTIES`: locatie en certificering
-        # vóór de prijs, arbeid en eigendom erna — dezelfde volgorde als het skelet.
-        voor, na = wiki.VRAAGSECTIES["leverancier"][:2], wiki.VRAAGSECTIES["leverancier"][2:]
-        for sectie in voor:
-            regels += ["", sectie[0], sectie[1]]
+        # GEEN LEEG KOPJE PER VRAAG MEER (W1, 11 oktober 2026): zie de materiaalpagina hierboven.
         regels += ["", "## Price agreement",
                    "As a fact with a value (cost price per kg), grounded in the quote or the "
                    "contract. The BOM screen calculates with this value."]
-        for sectie in na:
-            regels += ["", sectie[0], sectie[1]]
         open_punten += [f"- {p}" for sectie in wiki.VRAAGSECTIES["leverancier"] for p in sectie[2]]
         if open_punten:
             regels += ["", "## Open items", *open_punten]
@@ -838,4 +832,174 @@ def vraagkoppen_tekst(rapport: list[dict]) -> str:
             uit.append(f"    add: {', '.join(r['toegevoegd'])}")
         if r["oud"]:
             uit.append(f"    {r['oud']}")
+    return "\n".join(uit)
+
+
+# ── Feiten herstellen die de oude bulk import aan elkaar plakte (W1, 11 oktober 2026) ──────────
+#
+# DE OORZAAK. Eén `##`-kop in de geplakte tekst zette de parser in de markdown-stand: elke sectie werd
+# één feit met kop + alle regels aan elkaar ("Location & contact Text: … Type: link Ref: …"),
+# afgekapt op 400 tekens. De parser is gerepareerd; dit herstelt de feiten die er al staan.
+#
+# WAT HET DOET, EN WAT NIET (besluit Stefan, 11 oktober 2026):
+#   - de tekst van het feit wordt de `Text:` zelf;
+#   - een VOLLEDIG citaat dat de mens plakte, gaat naar het citaat van de bron — alleen als dat leeg
+#     is en de bron een citaat kan dragen;
+#   - wat is AFGEKAPT blijft zichtbaar, gemarkeerd "incomplete, check the source" — er wordt niets
+#     aangevuld of verzonnen;
+#   - de bron die een mens zette (document, attested) blijft; het feit wordt NIET verplaatst of aan
+#     een vraag gekoppeld (geen `sectie`): het telt pas mee als een mens het met een antwoord nakijkt;
+#   - de tekst verandert, dus "checked" vervalt (zelfde regel als bij elke tekstwijziging).
+
+_GEPLAKT_RE = re.compile(r"^(?P<kop>.*?)\s+Text:\s*(?P<rest>.*)$", re.S)
+_VELD_RE = re.compile(r"\s+(Type|Ref|Quote|URL|For|Text):\s*")
+_AFGEKAPT = 395            # de import kapte af op 400 tekens; wit eraf geeft 395-400
+_ONVOLLEDIG = "incomplete, check the source"
+
+
+def ontleed_geplakt(tekst: str) -> dict | None:
+    """{kop, velden: [(naam, waarde)], afgekapt} of None als dit geen aan elkaar geplakt feit is."""
+    m = _GEPLAKT_RE.match(tekst or "")
+    if not m:
+        return None
+    delen = _VELD_RE.split(m.group("rest"))
+    velden = [("Text", delen[0].strip())] + [(delen[i], delen[i + 1].strip()) for i in range(1, len(delen) - 1, 2)]
+    return {"kop": m.group("kop").strip(), "velden": velden, "afgekapt": len(tekst) >= _AFGEKAPT}
+
+
+def herstel_feit(f: dict) -> tuple[dict | None, list[str]]:
+    """(nieuw feit, notities) of (None, []) als er niets te herstellen valt. Puur."""
+    o = ontleed_geplakt(str(f.get("tekst") or ""))
+    if o is None:
+        return None, []
+    velden = list(o["velden"])
+    notities = [f"heading in the text removed: '{o['kop']}'"]
+    # Een tweede `Text:` in hetzelfde feit is het begin van het volgende feit dat er aan vast kwam.
+    tweede = next((i for i, (n, _v) in enumerate(velden) if i and n == "Text"), None)
+    if tweede is not None:
+        notities.append(f"a second fact was glued on and cut off: “{velden[tweede][1][:40]}”")
+        velden = velden[:tweede]
+        laatste_afgekapt = False
+    else:
+        laatste_afgekapt = o["afgekapt"]
+    if tweede is not None and o["afgekapt"]:
+        notities.append("the end of this fact was cut off by the old import")
+    tekst = velden[0][1]
+    grond = dict(f.get("grond") or {})
+    for i, (naam, waarde) in enumerate(velden[1:], start=1):
+        is_laatste_afgekapt = laatste_afgekapt and i == len(velden) - 1
+        if is_laatste_afgekapt:
+            notities.append(f"{naam} cut off — marked: “{waarde[:50]}”")
+            # Het merkteken moet HEEL blijven: het feit heeft 400 tekens, dus het afgekapte stuk
+            # krijgt alleen de ruimte die over is (desnoods niets, dan staat alleen de markering er).
+            kaal = f"{tekst} [{naam} {_ONVOLLEDIG}]"
+            ruimte = 400 - len(kaal) - 5
+            tekst = f"{tekst} [{naam} {_ONVOLLEDIG}: “{waarde[:ruimte]}…”]" if ruimte >= 12 else kaal
+        elif naam == "Quote" and waarde and not grond.get("citaat") and grond.get("soort") in ("bron", "document"):
+            grond["citaat"] = waarde
+            notities.append(f"Quote → source quote: “{waarde[:60]}”")
+        elif naam in ("Ref", "URL", "Quote", "Type"):
+            notities.append(f"{naam} not stored (the source on the fact stays as set): “{waarde[:60]}”")
+    if laatste_afgekapt and len(velden) == 1:
+        tekst = f"{tekst} [{_ONVOLLEDIG}]"
+    nieuw = wiki.maak_feit(tekst, soort=grond.get("soort", ""), ref=grond.get("ref", ""),
+                           citaat=grond.get("citaat", ""), url=grond.get("url", ""), waarde=f.get("waarde"),
+                           sectie=f.get("sectie", ""), fid=wiki.feit_id(f), op=grond.get("op", ""),
+                           hercheck=f.get("hercheck", ""))
+    if nieuw is not None and grond.get("check"):
+        nieuw["grond"]["check"] = grond["check"]
+    if f.get("gezien"):
+        notities.append("'checked' lapses: the text changes — check it again")
+    return nieuw, notities
+
+
+def feiten_herstellen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Rapport `[{id, titel, feiten: [{fid, oud, nieuw, notities}]}]`. Dry-run tenzij `apply`; met
+    `apply` één nieuwe versie per pagina (terug te draaien via de historie)."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        feiten = wiki.met_ids(list(wiki.feiten(a)))
+        regels, nieuwe = [], []
+        for f in feiten:
+            nieuw, notities = herstel_feit(f)
+            if nieuw is None:
+                nieuwe.append(f)
+                continue
+            regels.append({"fid": f["id"], "oud": f.get("tekst", ""), "nieuw": nieuw["tekst"],
+                           "citaat": nieuw["grond"].get("citaat", ""), "notities": notities})
+            nieuwe.append(nieuw)
+        if not regels:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "feiten": regels})
+        if apply:
+            meta = dict(getattr(a, "meta", None) or {})
+            meta["feiten"] = nieuwe
+            store.update(a.id, meta=meta, actor_id=actor_id, actor_type="person",
+                         change_note=f"facts repaired from the old bulk import ({len(regels)})")
+    return rapport
+
+
+def feiten_herstellen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to repair: no fact carries glued-together import fields."
+    uit = []
+    for r in rapport:
+        uit.append(f"{r['id']}  {r['titel']}  ({len(r['feiten'])} fact(s))")
+        for f in r["feiten"]:
+            uit.append(f"  fact {f['fid']}")
+            uit.append(f"    was: {f['oud'][:110]}…")
+            uit.append(f"    now: {f['nieuw']}")
+            if f["citaat"]:
+                uit.append(f"    source quote: “{f['citaat']}”")
+            uit += [f"    - {n}" for n in f["notities"]]
+    return "\n".join(uit)
+
+
+# ── Lege vraagkopjes weghalen (W1, 11 oktober 2026) ─────────────────────────────────────────────
+#
+# Het sjabloon en de migratie `vraagkoppen` (#697) zetten per vraag een kopje met zijn uitlegzin op
+# elke materiaal- en leverancierpagina. Op 14 van de 14 materiaalpagina's stond onder "Contains
+# plastic", "Biobased", "Animal-derived" en "Dyes & chemicals" niets anders dan die zin. De uitleg
+# staat nu bij de VRAAG (de Questions-tabel, "What counts"); het kopje op de pagina zei alleen nog
+# "hier hoort iets" en verwarde: een feit erboven of ernaast telde niet.
+#
+# ALLEEN HELEMAAL LEGE: een kopje gaat weg als eronder EXACT zijn uitlegzin staat en verder niets —
+# geen feit, geen eigen tekst, geen subkopje. Al het andere blijft staan.
+
+def _lege_vraagkop_blokken(body: str) -> tuple[str, list[str]]:
+    """(nieuwe body, weggehaalde kopjes)."""
+    weg = []
+    for soort_secties in wiki.VRAAGSECTIES.values():
+        for s in soort_secties:
+            kop, uitleg = s[0], s[1]
+            patroon = re.compile(r"(^|\n)" + re.escape(kop) + r"[ \t]*\n+" + re.escape(uitleg) + r"[ \t]*(?=\n\s*#|\s*$)")
+            m = patroon.search(body)
+            if m:
+                body = body[:m.start()] + (m.group(1) if m.start() else "") + body[m.end():].lstrip("\n")
+                weg.append(kop.lstrip("# "))
+    body = re.sub(r"\n{3,}", "\n\n", body).strip("\n") + ("\n" if body.endswith("\n") else "")
+    return body, weg
+
+
+def lege_koppen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Rapport `[{id, titel, weg: [kopje]}]`. Dry-run tenzij `apply`; met `apply` één nieuwe versie
+    per pagina (terug te draaien via de historie)."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        body = a.body or ""
+        nieuw, weg = _lege_vraagkop_blokken(body)
+        if not weg:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "weg": weg})
+        if apply:
+            store.update(a.id, body=nieuw, actor_id=actor_id, actor_type="person",
+                         change_note=f"empty question headings removed ({len(weg)}): " + ", ".join(weg))
+    return rapport
+
+
+def lege_koppen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to remove: no page carries an empty question heading."
+    uit = [f"{r['id']}  {r['titel']}: remove " + ", ".join(f"'{k}'" for k in r["weg"]) for r in rapport]
+    uit.append(f"\n{len(rapport)} page(s), {sum(len(r['weg']) for r in rapport)} heading(s).")
     return "\n".join(uit)

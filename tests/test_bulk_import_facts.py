@@ -88,8 +88,11 @@ def test_een_afsluitend_leesteken_hoort_niet_bij_het_adres(tmp_path):
 
 # ══ de knop (de client-kant: hier zat de fout) ══════════════════════════════
 def _bulk_js() -> str:
+    """De bulk-import: de parser (sinds W1, 11 oktober 2026 een niveau hoger, als `NV.bulkParse`,
+    zodat hij echt te toetsen is) plus de knop zelf."""
+    p = JS.index("function parseFacts(")
     a = JS.index("function bulkImportFacts(")
-    return JS[a:JS.index("\n  }\n", a)]
+    return JS[p:a] + JS[a:JS.index("\n  }\n", a)]
 
 
 def test_de_knop_post_naar_de_echte_route_met_de_echte_velden():

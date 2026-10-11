@@ -42,15 +42,20 @@ def test_stap_4_volgt_het_mechanisme_van_stap_1_tot_3(tmp_path):
 
 def test_een_materiaalpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "Biorel", sjabloon="materiaal")
-    for kop in ("Characteristics", "CO2 & Water", "Circularity", "Certification", "Open items"):
+    for kop in ("Characteristics", "CO2 & Water", "Circularity", "Open items"):
         assert f"## {kop}" in a.body
     assert "Price agreement" not in a.body                    # de prijs hoort bij de leverancier
+    # GEEN LEEG KOPJE PER VRAAG (W1, 11 oktober 2026): de uitleg staat bij de vraag.
+    for sectie in wiki.VRAAGSECTIES["materiaal"]:
+        assert sectie[0] not in a.body
 
 
 def test_een_leverancierpagina_krijgt_de_kopjes(tmp_path):
     a = _maak(_dd(tmp_path), "LTA S.R.L.", sjabloon="leverancier")
-    for kop in ("Location & contact", "Company certification", "Price agreement", "Open items"):
+    for kop in ("Price agreement", "Open items"):
         assert f"## {kop}" in a.body
+    for sectie in wiki.VRAAGSECTIES["leverancier"]:
+        assert sectie[0] not in a.body
     assert "CO2 & Water" not in a.body
     # "Material" is geen skelet-kop meer: die wordt berekend uit /bom (3 oktober 2026).
     assert "## Material" not in a.body

@@ -1001,74 +1001,68 @@
     kiezer.click();
   }
 
-  function bulkImportFacts(blok, body) {
-    // Dual parser: GROUNDING-format facts OR markdown narrative blocks.
-    // GROUNDING: "Text: ...\nType: ...\nRef: ...\nQuote: ...\nURL: ..."
-    // Markdown: "## Heading\nContent for this section..."
-    // Note: blok and body parameters are optional; function can be called without them
-    function parseFacts(text) {
-      // Detect format: if text contains "##" or "###", treat as markdown. Otherwise GROUNDING.
-      if (/^#+\s+/m.test(text)) {
-        return parseMarkdown(text);
-      } else {
-        return parseGrounding(text);
+  /* BULK IMPORT: GROUNDING-formaat ("Text: …\nType: …\nRef: …\nQuote: …\nURL: …") OF markdown.
+   *
+   * DE FOUT VAN VOOR 11 OKTOBER 2026: één `##`-kop ergens in de geplakte tekst zette ALLES in de
+   * markdown-stand. Elke sectie werd dan één feit met kop + alle regels aan elkaar ("Location &
+   * contact Text: … Type: link Ref: …"), afgekapt op 400 tekens, zonder bron en zonder `For:`. Zo
+   * kwamen er zes feiten op Full Green en LTA. Nu wint het GROUNDING-formaat zodra er een
+   * `Text:`-regel in staat, en een kop wordt de `For:` van de feiten eronder (tenzij een feit zijn
+   * eigen `For:` heeft). Losse functies op NV, zodat `tests/js/bulk_import.test.js` ze echt draait. */
+  function parseFacts(text) {
+    if (/^\s*text\s*:/im.test(text)) return parseGrounding(text);
+    if (/^#+\s+/m.test(text)) return parseMarkdown(text);
+    return parseGrounding(text);
+  }
+
+  function parseGrounding(text) {
+    var facts = [];
+    var kop = "";
+    var blocks = text.split(/\n\s*\n+/);
+    blocks.forEach(function(block) {
+      if (!block.trim()) return;
+      var fact = {};
+      block.trim().split('\n').forEach(function(line) {
+        var h = line.match(/^\s*#+\s+(.*?)\s*#*\s*$/);
+        if (h) { kop = h[1].trim(); return; }
+        var m = line.match(/^([^:]+):\s*(.*)$/);
+        if (!m) return;
+        var key = m[1].trim(), val = m[2].trim();
+        if (/^text$/i.test(key)) fact.Text = val;
+        else if (/^type$/i.test(key)) fact.Type = val;
+        else if (/^ref$/i.test(key)) fact.Ref = val;
+        else if (/^quote$/i.test(key)) fact.Quote = val;
+        else if (/^url$/i.test(key)) fact.URL = val;
+        // De getal-regel uit de feiten-prompts ("Cost price per kg" = 4,20). De server leest
+        // hem (`_waarde_uit_regel`); hier alleen doorgeven. Zonder deze regel viel hij stil weg.
+        else if (/^value$/i.test(key)) fact.Value = val;
+        // Onder welk kopje dit feit hoort (de `For:`-regel uit de feiten-prompts).
+        else if (/^for$/i.test(key)) fact.For = val;
+      });
+      if (fact.Text) {
+        if (!fact.For && kop) fact.For = kop;
+        facts.push(fact);
       }
-    }
+    });
+    return facts;
+  }
 
-    function parseGrounding(text) {
-      var facts = [];
-      var blocks = text.split(/\n\s*\n+/);
-      blocks.forEach(function(block) {
-        if (!block.trim()) return;
-        var lines = block.trim().split('\n');
-        var fact = {};
-        lines.forEach(function(line) {
-          var m = line.match(/^([^:]+):\s*(.*)$/);
-          if (m) {
-            var key = m[1].trim();
-            var val = m[2].trim();
-            if (/^text$/i.test(key)) fact.Text = val;
-            else if (/^type$/i.test(key)) fact.Type = val;
-            else if (/^ref$/i.test(key)) fact.Ref = val;
-            else if (/^quote$/i.test(key)) fact.Quote = val;
-            else if (/^url$/i.test(key)) fact.URL = val;
-            // De getal-regel uit de feiten-prompts ("Cost price per kg" = 4,20). De server leest
-            // hem (`_waarde_uit_regel`); hier alleen doorgeven. Zonder deze regel viel hij stil weg.
-            else if (/^value$/i.test(key)) fact.Value = val;
-            // Onder welk kopje dit feit hoort (de `For:`-regel uit de feiten-prompts).
-            else if (/^for$/i.test(key)) fact.For = val;
-          }
-        });
-        if (fact.Text) facts.push(fact);
-      });
-      return facts;
-    }
+  function parseMarkdown(text) {
+    // Alleen voor echte vrije tekst ZONDER `Text:`-regels: elke sectie wordt een feit.
+    var facts = [];
+    text.split(/^#+\s+/m).forEach(function(section) {
+      if (!section.trim()) return;
+      var lines = section.trim().split('\n');
+      var heading = lines[0] || '';
+      var content = lines.slice(1).join(' ').trim();
+      var t = heading + (content ? '\n' + content : '');
+      if (t) facts.push({Text: t.substring(0, 400), Type: "source", Ref: "", Quote: "", URL: ""});
+    });
+    return facts;
+  }
+  NV.bulkParse = parseFacts;
 
-    function parseMarkdown(text) {
-      // Parse markdown sections (H2/H3 headings + content)
-      // Each section becomes a "fact" with Text = heading + narrative, Type = source
-      var facts = [];
-      var sections = text.split(/^#+\s+/m);
-      sections.forEach(function(section) {
-        if (!section.trim()) return;
-        var lines = section.trim().split('\n');
-        var heading = lines[0] || '';
-        var content = lines.slice(1).join(' ').trim();
-        // Combine heading + content as the fact text
-        var text = heading + (content ? '\n' + content : '');
-        if (text) {
-          facts.push({
-            Text: text.substring(0, 400),  // Cap at reasonable length
-            Type: "source",                 // Default type for markdown imports
-            Ref: "",
-            Quote: "",
-            URL: ""
-          });
-        }
-      });
-      return facts;
-    }
-
+  function bulkImportFacts(blok, body) {
     // Open modal dialog
     var dialog = document.createElement('div');
     dialog.className = 'bulk-import-dialog';

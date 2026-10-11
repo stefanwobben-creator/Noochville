@@ -143,6 +143,30 @@ def _norm(s: str) -> str:
     return " ".join((s or "").split()).lower()
 
 
+def wat_telt(soort: str, k: str) -> str:
+    """Wat deze vraag als antwoord telt — de uitlegzin die tot W1 als leeg kopje op elke pagina stond.
+    Eén bron: de tekstvragen lezen hem uit `wiki.VRAAGSECTIES`, de getalvragen uit `wiki.GROOTHEDEN`."""
+    v = next((x for x in vragen(soort) if x["k"] == k), None)
+    if v is None:
+        return ""
+    if v["grootheid"]:
+        label = wiki.GROOTHEDEN.get(v["grootheid"], {}).get("label", v["label"])
+        return (f"A fact with a number ({label}), grounded in the supplier's data sheet, a quote or "
+                f"another source. The BOM screen calculates with it.")
+    sectie = next((s for s in wiki.VRAAGSECTIES.get(soort, ()) if wiki.kopnamen(s) == v["koppen"]), None)
+    return sectie[1] if sectie else ""
+
+
+def toegestane_antwoorden(k: str) -> tuple[str, ...]:
+    """Welke antwoorden een vraag kent: een getalvraag (CO2e, water, prijs) `value` of `na`, een
+    tekstvraag `yes`, `no` of `na`. () voor een vraag die niet bestaat."""
+    for soort in VRAGEN:
+        for v in vragen(soort):
+            if v["k"] == k:
+                return ("value", "na") if v["grootheid"] else ("yes", "no", "na")
+    return ()
+
+
 def vragen(soort: str, doel: str = "") -> list[dict]:
     """De vragen voor een paginasoort, eventueel alleen die van één doel."""
     uit = []
@@ -226,6 +250,11 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     toegestaan = {_norm(k) for k in vraag["koppen"]}
     treffers: list[tuple[dict, str]] = []          # (feit, het kopje waar hij onder stond)
     for f in wiki.feiten(pagina):
+        # EEN BEVESTIGD ANTWOORD KOPPELT, WAAR HET FEIT OOK STAAT (W1, 11 oktober 2026). De mens zei
+        # bij het nakijken welke vraag dit feit beantwoordt; het kopje doet er dan niet meer toe.
+        if any(a["vraag"] == vraag["k"] for a in wiki.antwoorden(f)):
+            treffers.append((f, next((k for k in _koppen_van(f, paden) if _norm(k) in toegestaan), "")))
+            continue
         if vraag["grootheid"]:
             w = wiki.waarde(f)
             if w and w["grootheid"] == vraag["grootheid"]:
@@ -249,6 +278,13 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
         return {"status": LEEG, "feiten": [], "kop": plek, "reden": "no fact for this question"}
     statussen = [_feit_status(f, ctx) for f, _k in treffers]
     reden = ""
+    # DE ANTWOORDEN VAN DE GECHECKTE FEITEN. Zeggen twee gecheckte feiten yes en no op dezelfde vraag,
+    # dan is de cel een CONFLICT — ook als ze op verschillende plekken van de pagina staan.
+    ja_nee = {a["waarde"] for (f, _k), s in zip(treffers, statussen) if s == GECHECKT
+              for a in wiki.antwoorden(f) if a["vraag"] == vraag["k"]}
+    if {"yes", "no"} <= ja_nee:
+        statussen.append(CONFLICT)
+        reden = "checked facts disagree: one says yes, another no"
     if vraag["grootheid"]:
         getallen = {wiki.waarde(f)["getal"] for f, _k in treffers}
         if len(getallen) > 1:
@@ -259,8 +295,11 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     status = max(statussen, key=_GEWICHT.__getitem__)
     if status == CONFLICT and not reden:
         reden = "a certificate has expired"
-    return {"status": status, "feiten": [wiki.feit_id(f) for f, _k in treffers],
-            "kop": next((k for _f, k in treffers if k), ""), "reden": reden}
+    uit = {"status": status, "feiten": [wiki.feit_id(f) for f, _k in treffers],
+           "kop": next((k for _f, k in treffers if k), ""), "reden": reden}
+    if status == GECHECKT and len(ja_nee) == 1:
+        uit["antwoord"] = next(iter(ja_nee))       # het bevestigde antwoord (yes / no / na / value)
+    return uit
 
 
 def _rij(soort: str, naam: str, pagina, ctx: dict, **extra) -> dict:
