@@ -86,7 +86,7 @@ h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transfo
  letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
 a{color:var(--green-dark)}
 .bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
-.badge{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;
+.badge{font-size:var(--type-12,.75rem);text-transform:uppercase;letter-spacing:.05em;font-weight:700;
  padding:.18rem .55rem;border-radius:var(--radius-pill);vertical-align:middle;margin-left:.4rem}
 .badge.ro{background:var(--sand);color:var(--gray)}
 .badge.rw{background:var(--green-tint);color:var(--green-dark)}

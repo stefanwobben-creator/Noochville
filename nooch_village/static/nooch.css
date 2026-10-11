@@ -57,7 +57,7 @@ ul.clean li:last-child{border-bottom:none}
 .tree details.tree-c>summary::-webkit-details-marker{display:none}
 .tree details.tree-c>summary::before{content:'\0025B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
 .tree details.tree-c[open]>summary::before{content:'\0025BE'}
-.pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
+.pill{display:inline-block;font-size:var(--type-12);padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
 .pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem}
@@ -144,7 +144,7 @@ ul.clean li:last-child{border-bottom:none}
 .kc-radio input{width:auto;margin-right:.4rem}
 .kc-cond{margin:.3rem 0 .3rem 1.3rem}
 .kc-hint{font-size:.72rem;margin:.2rem 0 0}
-.tile-prov{font-size:.66rem;color:var(--coral);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
+.tile-prov{font-size:var(--type-12);color:var(--coral);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -173,10 +173,10 @@ ul.clean li:last-child{border-bottom:none}
    runner, dus hier gebeurt gegarandeerd nooit iets. Rood en vet, want dit is het enige dat je
    moet zien. Dát er wél gewerkt wordt, laat de projectpagina zien door de vinkjes te tonen die
    omvallen (scope 23) en niet door er een woord over te schrijven. */
-.pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:.66rem;
+.pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:var(--type-12);
   padding:.05rem .4rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray)}
 .pstatus.is-onbemand{background:var(--coral);color:#fff;font-weight:600}
-.pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
+.pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:var(--type-12);color:var(--muted)}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
 /* doelen (scope 46): dezelfde balk als <progress>, zodat de breedte geen inline style hoeft te zijn */
@@ -309,7 +309,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .acc-text{flex:1 1 auto;min-width:0}
 .acc-ai{flex:0 0 auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
 /* Chip-atoom: .chip (default = tint) + kleur-modifiers. Eén pill voor status/deadline/reactie/AI. */
-.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:700;line-height:1.5;background:var(--green-tint);color:var(--green-dark)}
+.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:var(--type-12);font-weight:700;line-height:1.5;background:var(--green-tint);color:var(--green-dark)}
 .chip svg{width:13px;height:13px}
 .chip.green{background:var(--green);color:#fff}
 .chip.muted{background:var(--cream-2);color:var(--gray)}
@@ -321,7 +321,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .chip.amber{background:var(--yellow-light);color:#8a6d0b;border:1px solid var(--yellow)}
 .chip.doel{background:var(--goal-tint);color:var(--goal);text-decoration:none}
 .chip.doel:hover{background:var(--goal);color:#fff}
-.chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
+.chip.coral-solid{background:var(--coral);color:#fff;font-size:var(--type-12);text-transform:uppercase;padding:.04rem .4rem}
 /* Impact-pills (scope 2): klikbare optie-chips met semantische kleur; elke pill toont z'n kleur (gedempt),
    de gekozen pill (.on) staat vol + met inset-ring. Kleuren per spec: g=groen, n=grijs, r=rood, l=lichtgrijs. */
 .imp-wrap{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
@@ -344,7 +344,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .chiplink{text-decoration:none}
 /* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
    plus twee modifiers. Geen losse knop-varianten meer elders. */
-.btn.sm{padding:.2rem .6rem;font-size:.74rem}
+.btn.sm{padding:.2rem .6rem;font-size:var(--type-12)}
 .btn.ghost{background:none;border-color:transparent}
 .btn.ghost:hover{background:rgba(27,27,27,.05);border-color:var(--border)}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
@@ -920,7 +920,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .uk-lijst{display:flex;flex-direction:column}
 .uk-rij{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem 0;
   border-top:1px solid var(--border)}
-.uk-badge{flex:0 0 auto;margin-top:.1rem;white-space:nowrap;font-size:.66rem;font-weight:700;
+.uk-badge{flex:0 0 auto;margin-top:.1rem;white-space:nowrap;font-size:var(--type-12);font-weight:700;
   text-transform:uppercase;letter-spacing:.03em;padding:.22rem .5rem;border-radius:var(--radius)}
 .uk-badge--actie{background:var(--uk-actie);color:var(--ukt-actie)}
 .uk-badge--project{background:var(--uk-project);color:var(--ukt-project)}
@@ -934,7 +934,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    `<code>`: op telefoonbreedte duwde hij de hele rij voorbij de rand (gemeten op 390px:
    scrollWidth 431). Wrappen mag hier — je leest hem niet, je herkent of kopieert hem. */
 .uk-meta .pill{overflow-wrap:anywhere;max-width:100%}
-.uk-staat{font-size:.68rem;font-weight:700;padding:.05rem .45rem;border-radius:var(--radius-pill);
+.uk-staat{font-size:var(--type-12);font-weight:700;padding:.05rem .45rem;border-radius:var(--radius-pill);
   background:var(--col-wacht);color:var(--colb-wacht)}
 .uk-acties{flex:0 0 auto;display:flex;gap:.3rem;align-items:flex-start}
 /* HET BEWERK-FORMULIER IN EEN SMALLE RIJ. `.wo-oc` is een flexRIJ met `flex:1 1 12rem`
@@ -1021,10 +1021,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .catcard .emo-f{position:absolute;top:.4rem;right:.5rem;line-height:1}
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-pill);overflow:hidden;vertical-align:middle}
 .seg>form,.seg>a{display:inline-flex;margin:0}
-.seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:.72rem;padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
+.seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:var(--type-12);padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
 .seg>form:last-child button,.seg>a:last-child{border-right:none}
 .seg>form button.on,.seg>a.on{background:var(--green);color:#fff}
-.selseg{font:inherit;font-size:.72rem;border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
+.selseg{font:inherit;font-size:var(--type-12);border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
 .m2empty{text-align:center;color:var(--subtle);padding:2.4rem 1rem}
 .m2empty .big{font-size:34px;display:block;color:var(--border)}
 .tile-wrap{display:flex;flex-direction:column;gap:.35rem;min-width:0}
@@ -1223,7 +1223,7 @@ span.ck-box{cursor:default;opacity:.5}
 .ck-item .ck-box{margin-top:.1rem}
 .ck-txt{flex:1 1 auto;min-width:0}
 .ck-meta{display:block;margin-top:.15rem;font-size:.7rem;line-height:1.5}
-.ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:.66rem;color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:var(--type-12);color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-payload{font-family:ui-monospace,Menlo,monospace;font-size:.64rem;color:var(--subtle)}
 .ck-warn{font-size:.68rem;color:var(--coral);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-noskill{font-size:.68rem;color:var(--gray);background:var(--sand);padding:.02rem .35rem;border-radius:5px}
@@ -1433,12 +1433,12 @@ span.ck-box{cursor:default;opacity:.5}
    krimpt (zie de media-query onderaan). */
 .c2-mono{display:none}
 .c2-navct{background:var(--green);color:#fff;border-radius:var(--radius-pill);
-  font-size:11px;font-weight:700;padding:.05rem .4rem}
+  font-size:var(--type-12);font-weight:700;padding:.05rem .4rem}
 .c2-org{font-size:13px;overflow-y:auto}
 /* De zoek-sneltoets. `/` en Cmd/Ctrl+K zetten de cursor in het veld; de toets staat erbij zodat
    je hem kunt vinden zonder hem te kennen. */
 .c2-kbd{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);pointer-events:none;
-  font:inherit;font-size:11px;font-weight:700;color:var(--gray);
+  font:inherit;font-size:var(--type-12);font-weight:700;color:var(--gray);
   border:1px solid var(--border);border-radius:3px;padding:0 .25rem}
 /* DE BALK BLIJFT VERTICAAL, OOK SMAL (21 september 2026, expliciet besluit Stefan).
    Hier stond `flex-direction:row` onder 760px: de zijbalk klapte om naar een horizontale rij
@@ -1608,7 +1608,7 @@ input.wz-itxt{border:1px solid transparent;border-radius:var(--radius);backgroun
  padding:.15rem .3rem;font-family:inherit;color:var(--ink);width:100%}
 input.wz-itxt:hover{border-color:var(--border)}
 input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:none}
-.wz-badge{font-size:.64rem;font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
+.wz-badge{font-size:var(--type-12);font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
 .wz-badge.ok{background:var(--green-tint);color:var(--green-dark)}
 .wz-badge.no{background:var(--error-tint);color:#b3402f}
 .wz-rm{border:none;background:none;color:var(--muted);cursor:pointer;font-size:1rem;margin-top:.1rem}
@@ -2365,7 +2365,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pill, :root .chip, :root .badge {
   display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
   border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
-  padding: .15em .6em; font-size: .72rem;
+  padding: .15em .6em; font-size: var(--type-12);
   /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
      en kostte het scherm zijn rustpunt. `.nu-status` houdt zijn gewicht wél: daar IS de chip het
      signaal, en die leunt bovendien op vorm plus woord. */
@@ -2523,7 +2523,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-kanaal--nieuw { font-weight: 700; }
 :root .msg-nieuw {
   float: right; min-width: 1.15rem; padding: 0 .3rem; margin-left: .4rem;
-  font-size: 11px; font-weight: 700; line-height: 1.15rem; text-align: center;
+  font-size: var(--type-12); font-weight: 700; line-height: 1.15rem; text-align: center;
   background: var(--nu-text); color: var(--nu-neon); }
 /* In het OPEN kanaal draait het contrast om, anders valt het plaatje weg tegen de actieve rij. */
 :root .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
