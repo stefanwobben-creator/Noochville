@@ -39,3 +39,27 @@ def test_geen_scrollcontainer_om_een_lege_toestand(tmp_path):
     """`overflow` om een gewone alinea verandert het samenvallen van marges (14px verschil gemeten)."""
     html = fin.render_costs(_st(_dorp(tmp_path)), "fc@t.nl", "t", {})
     assert "c2-scroll" not in html
+
+
+def test_kale_finance_ingang_stuurt_door_naar_de_kosten_en_blijft_404_zonder_recht(tmp_path):
+    import http.client
+    import threading
+    from http.server import HTTPServer
+
+    from nooch_village import auth as _auth
+    from nooch_village import cockpit2
+    dd = _dorp(tmp_path)
+    sessies = _auth.SessionStore()
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit2.make_handler(dd, "T", sessions=sessies))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        for wie, verwacht in (("fc@t.nl", 303), ("bs@t.nl", 303), ("stefan@nooch.earth", 303), ("lid@t.nl", 404)):
+            c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
+            c.request("GET", "/finance", headers={"Cookie": f"nv_session={sessies.create(wie)}"})
+            r = c.getresponse()
+            r.read()
+            assert r.status == verwacht, wie
+            if verwacht == 303:
+                assert r.getheader("Location") == "/finance/costs"
+    finally:
+        httpd.shutdown()

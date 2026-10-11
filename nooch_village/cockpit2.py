@@ -7378,6 +7378,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_tools(st, csrf_token=effective_csrf, username=username,
                                         msg=(qs.get("msg") or [""])[0]))
                 return
+            if path == "/finance":
+                # AUTHZ: zicht-groep `finance` (recht "zien"), net als /finance/*: wie het niet mag,
+                # houdt een 404. Voor wie het wel mag: de kale ingang wijst naar de kosten.
+                from nooch_village.views import finance as _fin
+                if not _fin.mag_zien(st, username):
+                    self._send("<p>404</p>", 404); return
+                self._redirect_to("/finance/costs"); return
             if path.startswith("/finance/"):
                 # AUTHZ: zicht-groep `finance` (recht "zien"; `zicht.py`). Wie het niet mag, krijgt
                 # een 404 — niet verraden dat Finance bestaat (besluit Stefan, 10 oktober 2026).
