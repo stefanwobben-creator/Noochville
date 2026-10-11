@@ -5519,6 +5519,21 @@ def _act_verplichting_zet(c):
         return c.nxt, "✓ commitment saved"
 
 
+def _act_finance_annuleer(c):
+        # AUTHZ: rolvervuller of Circle Lead — zicht-groep `finance`, recht "wijzigen", dezelfde poort
+        # als Correct (`finance_kost_correct`/`finance_omzet_correct`). Geen recht = 404. Annuleren is
+        # ALLEEN een tegenboeking erbij (`_Register.annuleer`), niets verdwijnt.
+        from nooch_village.finance_omzet import OpbrengstRegister
+        from nooch_village.finance_register import KostenRegister
+        from nooch_village.views import finance as _fin
+        st = c.st
+        if not _fin.mag_wijzigen(st, c.username):
+            raise NietGevonden()
+        reg = KostenRegister if c.action == "finance_kost_cancel" else OpbrengstRegister
+        velden = {"kid": c.g("kid"), "reason": c.g("reason")}
+        return c.nxt, _fin.verwerk_annuleer(st, velden, door=_web_actor_id(c.username, st) or "", register=reg)
+
+
 def _act_finance_hist_opslaan(c):
         # AUTHZ: rolvervuller of Circle Lead — zicht-groep `finance`, recht "wijzigen" (domeinhouder
         # van "Financial administration", tot die er is de Financial Controller, en Stefan). Geen
@@ -6867,6 +6882,8 @@ ACTIONS = {
     "verplichting_zet": _act_verplichting_zet,
     "verplichting_weg": _act_verplichting_weg,
     "finance_hist_opslaan": _act_finance_hist_opslaan,
+    "finance_kost_cancel": _act_finance_annuleer,
+    "finance_omzet_cancel": _act_finance_annuleer,
     "finance_hist_cutover": _act_finance_hist_cutover,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
