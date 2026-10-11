@@ -367,7 +367,7 @@ GROOTHEDEN: dict[str, dict[str, str]] = {
 #:
 #: Een sectie is (kop, uitlegzin, standaard-open-punten, andere namen). De ANDERE NAMEN zijn kopjes
 #: die al op pagina's staan en dezelfde vraag dragen ("Certifications"): de migratie
-#: (`wiki_seed.vraagkoppen`) voegt dan geen tweede kopje toe.
+#: (`wiki_seed.vraagkoppen`, buiten werking sinds W1) voegde dan geen tweede kopje toe.
 PLASTIC = (
     "## Contains plastic",
     "As a fact, grounded in the technical data sheet or a lab report: whether the material contains "
@@ -432,7 +432,7 @@ VRAAGSECTIES: dict[str, tuple[tuple, ...]] = {
 
 def kopnamen(sectie: tuple) -> tuple[str, ...]:
     """De namen waaronder een vraag-sectie op een pagina kan staan: zijn kop plus zijn aliassen,
-    klein geschreven. ÉÉN plek: de migratie (`wiki_seed.vraagkoppen`) en de dekking op /bom
+    klein geschreven. ÉÉN plek: `wiki_seed.vraagkoppen_body` en de dekking op /bom
     (`wiki_dekking.VRAGEN`) lezen allebei hier."""
     return (" ".join(sectie[0].lstrip("#").split()).lower(), *sectie[3])
 
