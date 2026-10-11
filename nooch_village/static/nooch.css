@@ -35,7 +35,7 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 /* Wachtindicator: draaiende 🌍 + tekst over de (nog zwarte) bol, verdwijnt zodra het frame geladen is. */
 @media (prefers-reduced-motion:reduce){.epic-globe{animation:none}}
 .c2-sec{margin:1.1rem 0}
-.c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
+.c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}
 ul.clean li{padding:.22rem 0;border-bottom:1px solid var(--border)}
 ul.clean li:last-child{border-bottom:none}
@@ -43,7 +43,7 @@ ul.clean li:last-child{border-bottom:none}
 .av{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;font-size:.62rem;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
 .av.ai{background:#7A5BD1}
 .tree{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .85rem;box-shadow:var(--shadow)}
-.tree h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;color:var(--green-dark);margin:.1rem 0 .4rem}
+.tree h3{font-family:var(--font-display);font-size:var(--type-12);text-transform:uppercase;color:var(--green-dark);margin:.1rem 0 .4rem}
 .tree ul{list-style:none;margin:0;padding-left:.8rem}.tree>ul{padding-left:0}
 .tree li{padding:.12rem 0;font-size:.86rem}
 .tree .c{font-weight:700}
@@ -64,7 +64,7 @@ ul.clean li:last-child{border-bottom:none}
 .pcol-scroll{max-height:540px;overflow-y:auto}
 .swim{margin:.6rem 0}
 .swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
-.pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
+.pcol-h{font-family:var(--font-display);font-weight:700;font-size:var(--type-12);text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
 /* Subtiele status-tint per kolom: het label blijft de primaire drager, de kleur versterkt.
    doing=blauw (actief), waiting=ROOD, done=groen, todo=grijs (toekomst).
@@ -375,7 +375,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    de bubbel staat in de designsysteem-helft hieronder — daar wordt `.fbubble` omkaderd, en een
    regel hier zou daar met gelijke specificiteit onder verliezen. */
 .fentry-log{margin-bottom:.4rem}
-.fkicker{display:block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
+.fkicker{display:block;font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 /* De genummerde lijst, zelfde inspringing als `.fbul` — het is dezelfde soort lijst met een
    andere opsommingsvorm, en twee verschillende inspringingen naast elkaar lezen als twee
@@ -603,7 +603,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rovm{border:1px solid var(--border);border-radius:var(--radius);padding:.8rem .9rem;margin-bottom:.9rem;background:var(--surface)}
 .rovm-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
-.rovm-kind{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
+.rovm-kind{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
 .rovm-kind b{color:var(--gray)}
 .rovm-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 .2rem}
 .rovm-close:hover{color:var(--coral)}
@@ -631,7 +631,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .sec-issue.let{background:var(--cream-2);color:var(--gray)}
 .sec-issue.blok{background:var(--error-tint);color:var(--coral)}
 .sec-block{margin-top:.9rem}
-.sec-kop{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.3rem}
+.sec-kop{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.3rem}
 .rov-consent{margin-top:1rem}
 .btn.ok:disabled,.btn:disabled{background:var(--cream-2);color:var(--muted);border-color:var(--border);cursor:not-allowed}
 .kb-msg{margin-bottom:.55rem}
@@ -665,7 +665,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
 .pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
 .pcard-head-r{flex:0 0 auto;display:flex;align-items:center;gap:.5rem;padding-top:.2rem}
-.menu-h{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;padding:.25rem .55rem .1rem}
+.menu-h{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;padding:.25rem .55rem .1rem}
 .menu-sep{height:1px;background:var(--border);margin:.3rem 0}
 .menuitem.on{font-weight:700;color:var(--green-dark);background:var(--green-tint)}
 .pdetail-h{display:flex;align-items:flex-start;gap:.4rem;margin-bottom:.7rem}
@@ -704,7 +704,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .cl-title{font-weight:700;font-size:.92rem}
 .cl-del{margin-left:auto}
 .dcol{display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-content:start;min-width:0}
-.dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
+.dk{align-self:baseline;color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
 /* DE VERSIE-UITKLAPPER IS BIJZAAK (25 september 2026). `details>summary` is globaal vet en in
@@ -732,7 +732,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .descedit>summary::-webkit-details-marker{display:none}
 .descedit>summary:hover{color:var(--ink)}
 .att-pop{min-width:230px}
-.att-lbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
+.att-lbl{display:block;font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
 /* Leesbare artefact-body (note/policy/tool): donkerder dan .muted + wat regelhoogte. */
 .att-body{color:var(--gray);line-height:1.5}
 .att-pop input[type=text],.att-pop input[name=url],.att-pop input[name=title]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;font-size:.85rem}
@@ -1012,7 +1012,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .subtab{border:none;background:none;font:inherit;font-weight:600;font-size:.9rem;color:var(--muted);padding:.5rem .8rem;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .subtab.on{color:var(--green-dark);border-bottom-color:var(--green-dark)}
 .subtab .chip{margin-left:.3rem}
-.catgroup>h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin:1.1rem 0 .5rem}
+.catgroup>h3{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin:1.1rem 0 .5rem}
 .catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
 .catcard{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem .85rem;box-shadow:var(--shadow)}
 .catcard .nm{font-weight:600;padding-right:1.7rem}
@@ -1033,7 +1033,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .tile-foot-l{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .tile-foot-r{display:inline-flex;align-items:center;gap:.4rem}
 .tile-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem}
-.tile-t{font-size:.74rem;color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.tile-t{font-size:var(--type-12);color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .tile-trend{display:flex;align-items:flex-end;justify-content:space-between;gap:.5rem}
 .kpi-val.sm{font-size:1.15rem}
 .tile-h-r{display:inline-flex;align-items:center;gap:.3rem}
@@ -1144,13 +1144,13 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .c2-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
-.psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
+.psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
 .psec-h svg{width:14px;height:14px;opacity:.75;flex:0 0 auto}
 .pside .psec{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.65rem .75rem;margin-bottom:.8rem}
 /* structuur-kantlijn blijft in beeld tijdens scrollen door de wall (scope 1) */
 @media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
-.wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
+.wall-head h2{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
 .wall-scroll{overflow-y:auto}
 /* Inline bewerken, ÉÉN component voor de wall-comment en de Conclusion van een project
    (cockpit2_util.inline_edit). Namen uit de bestaande `editor-`-familie, want dit IS de editor —
@@ -1173,7 +1173,7 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .c2-main.pdetail{max-width:1120px}
 .dangling-warn{margin-bottom:.3rem}
 .smeta{margin:0}
-.smeta dt{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
+.smeta dt{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
 .smeta dt:first-child{margin-top:0}
 .smeta dd{margin:.1rem 0 0}
 .ckadd{display:flex;gap:.4rem;margin-top:.5rem}
@@ -1475,7 +1475,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .c2-pnaam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .c2-psub{flex:0 0 auto;font-size:11px;font-weight:600;color:var(--gray)}
 .c2-prij .chip{flex:0 0 auto}
-.c2-pgroep{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+.c2-pgroep{font-size:var(--type-12);font-weight:700;letter-spacing:.07em;text-transform:uppercase;
   color:var(--subtle);margin:1rem 0 .3rem}
 .c2-pgroep:first-of-type{margin-top:0}
 .c2-pleeg{font-size:12.5px;line-height:1.5;padding:.3rem .5rem}
@@ -1498,7 +1498,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 
    `tests/test_live_join_en_band.py::test_de_live_knop_wint_van_de_nav_regel` rekent die
    specificiteit uit en faalt zodra een van de twee weer de verkeerde kant op beweegt. */
-.c2-subnav a.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:11.5px;
+.c2-subnav a.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:var(--type-12);
   font-weight:700;line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
   background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius)}
 .c2-subnav a.c2-overleg:hover{background:var(--green);color:#fff}
@@ -1540,7 +1540,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .gs-hit{display:block;padding:.5rem .7rem;border:1px solid var(--border);border-radius:var(--radius);
   margin:.3rem 0;background:var(--surface);text-decoration:none;color:var(--ink)}
 .gs-hit:hover{border-color:var(--green)}
-.gs-hit .gs-kind{font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
+.gs-hit .gs-kind{font-size:var(--type-12);color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
 .gs-hit .gs-snip{color:var(--muted);font-size:13px;display:block;margin-top:.15rem}
 
 /* Live-zoek dropdown onder de headerbalk */
@@ -1556,7 +1556,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
   color:var(--green);font-weight:600;text-decoration:none;font-size:13px}
 .gs-empty{padding:.7rem;color:var(--muted);font-size:13px}
 /* Categorie-badge: eigen kleur per soort zodat role/project/insight/signal meteen te onderscheiden zijn */
-.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:10px;font-weight:700;
+.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:var(--type-12);font-weight:700;
   text-transform:uppercase;letter-spacing:.03em;padding:.08rem .4rem;border-radius:var(--radius-pill);
   margin-right:.15rem;vertical-align:middle}
 /* Zacht getinte badges met leesbare donkere tekst (i.p.v. felle vlakken met wit) */
@@ -1582,7 +1582,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .wz-fill{height:100%;background:linear-gradient(90deg,var(--green),#57c07d);border-radius:999px;width:0;transition:width .35s}
 .wz-who{font-size:.78rem;color:var(--subtle);white-space:nowrap}
 .wz-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 10px rgba(27,27,27,.05);padding:1.4rem 1.3rem;min-height:330px;display:flex;flex-direction:column}
-.wz-k{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
+.wz-k{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
 .wz-card h2{font-family:var(--font-display);font-weight:700;font-size:1.3rem;margin:0 0 .3rem;line-height:1.25}
 .wz-hint{color:var(--subtle);font-size:.9rem;margin:0 0 1rem}
 .wz textarea,.wz input,.wz select{width:100%;font:inherit;padding:.7rem .85rem;border:1.5px solid var(--border);border-radius:10px;background:var(--cream);color:var(--ink)}
@@ -1620,7 +1620,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
 .wz-chip{border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
 .wz-chip.on{border-color:var(--green);background:var(--green-tint);color:var(--green-dark)}
-.wz-clab{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
+.wz-clab{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
 .wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
 .wz-srow:first-child{border-top:none}.wz-sk{width:95px;flex:none;color:var(--subtle);font-weight:600}.wz-sv{flex:1}
 .wz-cheer{text-align:center;padding:1rem 0}.wz-cheer .big{font-size:2.6rem}
@@ -1682,7 +1682,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .pchip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
   background:var(--surface);border-radius:var(--radius-pill);padding:.26rem .7rem;
   font-size:.78rem;font-weight:600;color:var(--ink);line-height:1.5}
-.pchip-k{color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.pchip-k{color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .pchip-v{font-weight:600}
 .pchip-leeg{background:var(--green-tint);border-style:dashed;border-color:var(--green)}
 .pchip-leeg .pchip-v{color:var(--green-dark);font-weight:500}
@@ -1703,7 +1703,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .psec-act{margin-left:auto;display:flex;gap:.8rem;align-items:baseline;font-size:.78rem}
 
 /* De rail: één regel per veld, waarde rechts. Geen formulierveld in beeld tot je hem aanraakt. */
-.rail-kop{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);
+.rail-kop{font-size:var(--type-12);letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);
   font-weight:700;margin:0 0 .55rem}
 .rail-kop2{margin-top:1.4rem}
 .rail-rij{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;font-size:.8rem;min-width:0}
@@ -1764,7 +1764,7 @@ summary.pchip:hover{border-color:var(--gray)}
 /* ── /messages: kanalenlijst links, draad rechts (fase 8) ───────────────────────────────────── */
 .msg-layout{display:flex;gap:1.2rem;align-items:flex-start}
 .msg-lijst{flex:0 0 210px;max-width:210px;display:flex;flex-direction:column;gap:.1rem}
-.msg-groep{font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:.6rem 0 .2rem}
+.msg-groep{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;margin:.6rem 0 .2rem}
 .msg-kanaal{display:block;padding:.35rem .5rem;border-radius:var(--radius);font-size:13.5px;
   font-weight:600;color:var(--ink);text-decoration:none}
 .msg-kanaal:hover{background:var(--surface)}
@@ -1866,7 +1866,7 @@ progress.nu-progress.wide{height:8px}
    TWEE DRAGERS, want kleur alleen is nooit genoeg bij een statusverschil: een gestippelde rand
    (overleeft zwart-wit en kleurenblindheid) én het woord "add" in de rij zelf. */
 .msg-kanaal--vreemd{border:1px dashed var(--border)}
-.msg-add{flex:0 0 auto;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+.msg-add{flex:0 0 auto;font-size:var(--type-12);letter-spacing:.04em;text-transform:uppercase;
   color:var(--gray);border:1px solid var(--border);border-radius:var(--radius);padding:0 .3rem}
 .msg-kanaal--vreemd:hover .msg-add{color:var(--green-dark);border-color:var(--green)}
 /* De uit-je-lijst-knop hoort bij de kop van het gesprek, niet eronder: het is een eigenschap van
@@ -2685,7 +2685,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .sec-kop, :root .menu-h, :root .dk, :root .att-lbl, :root .cl-group h4,
 :root .psec-h, :root .pchip-k, :root .rail-kop, :root .wz-k, :root .wz-clab,
 :root .gs-group, :root .gs-kind {
-  font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
+  /* 12px (A1, 11 oktober 2026): het label was 11,2px — leesbaar alleen door het vette gewicht. */
+  font-family: var(--nu-font); font-size: var(--type-12); font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; }
 
 /* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom

@@ -94,7 +94,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;background:var(--surfac
  border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
 th,td{border-bottom:1px solid var(--border);padding:.5rem .6rem;text-align:left;vertical-align:top}
 th{background:var(--cream-2);font-family:var(--font-display);font-weight:700;
- text-transform:uppercase;font-size:11px;letter-spacing:.03em;color:var(--gray)}
+ text-transform:uppercase;font-size:var(--type-12,.75rem);letter-spacing:.03em;color:var(--gray)}
 tr:last-child td{border-bottom:none}
 tr.archived td{opacity:.45}
 tr.st-pending td{background:var(--yellow-light)}
