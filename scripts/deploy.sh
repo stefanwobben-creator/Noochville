@@ -181,6 +181,37 @@ alles_gezond(){
 [ "$(id -u)" -eq 0 ] || { fout "draai dit als root (ssh root@...)"; exit 1; }
 [ -d "$REPO/.git" ] || { fout "geen git-repo op $REPO"; exit 1; }
 
+# ── 0b. Eén deploy tegelijk ─────────────────────────────────────────────────────────────────────
+#
+# WAT ER GEBEURDE (11 oktober 2026). Eén deploy-opdracht vanaf de Mac opende twee ssh-sessies, drie
+# seconden na elkaar, en dus twee runs van dit script tegelijk (auth.log, git-reflog, journal). De
+# eerste rolde 3412856 → 148f634 uit en herstartte; de tweede haalde op, zag "geen nieuwe commit" en
+# meldde dat — en dát was de uitvoer die terugkwam. Het ging goed omdat de tweede pas ophaalde ná de
+# merge van de eerste. Drie seconden eerder hadden ze allebei gemerged en herstart, of had de één
+# teruggerold terwijl de ander net live meldde.
+#
+# DE REGEL. Wie het slot niet krijgt, stopt METEEN en raakt niets aan: geen fetch, geen restart. Niet
+# wachten — de run die al loopt rolt toch al origin/main uit, en een wachtende tweede run zou daarna
+# alleen nog een verwarrende "geen nieuwe commit" melden. Exit 3, zodat een aanroeper het
+# onderscheidt van een mislukte deploy (1).
+#
+# HET SLOT OVERLEEFT DE WISSEL HIERONDER. `exec bash "$KOPIE"` vervangt het proces maar houdt fd 9
+# open, dus de kopie erft het slot. De kopie loopt dit blok opnieuw door; `NOOCH_DEPLOY_SLOT` laat hem
+# het overslaan — opnieuw `exec 9>` zou het bestand heropenen, het oude fd sluiten en het slot heel
+# even loslaten. Het slot gaat vanzelf weg als het proces eindigt, ook bij een crash of Ctrl-C.
+SLOT="${NOOCH_DEPLOY_SLOT_PAD:-/run/lock/noochville-deploy.lock}"
+if [ -z "${NOOCH_DEPLOY_SLOT:-}" ]; then
+  exec 9>>"$SLOT"
+  if ! flock -n 9; then
+    fout "er loopt al een deploy ($(cat "$SLOT" 2>/dev/null || true)) — deze run stopt; er is niets gedaan"
+    exit 3
+  fi
+  # Wie het slot heeft, voor de melding van een tweede run. Een eigen open-en-sluit van het bestand
+  # laat het slot op fd 9 staan (flock hoort bij fd 9, niet bij het bestand).
+  printf 'pid %s, gestart %s' "$$" "$(date '+%F %T')" > "$SLOT"
+  export NOOCH_DEPLOY_SLOT="$SLOT"
+fi
+
 # ── 1. Uit de vuurlinie: verder draaien vanaf een kopie ─────────────────────────────────────────
 #
 # WAT ER MISGING (27 september 2026). Dit script ligt IN de repo die het zelf uitrolt, en bash leest
