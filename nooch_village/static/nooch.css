@@ -2177,6 +2177,20 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   --nu-sp-3: 1.1rem;
   --nu-sp-4: 1.8rem;
   --nu-font: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* TYPOGRAFISCHE SCHAAL (A1, 11 oktober 2026): niets onder 12px. 12 = label en kleinste meta,
+     13 = metadata, 15 = lopende tekst, daarna 18, 24, 32. In rem, zodat zoomen blijft werken.
+     `tests/test_typografie.py` faalt zodra een nieuwe regel onder de 12px gaat. */
+  --type-12: .75rem;
+  --type-13: .8125rem;
+  --type-15: .9375rem;
+  --type-18: 1.125rem;
+  --type-24: 1.5rem;
+  --type-32: 2rem;
+  /* TEKSTROOD (A1): --nu-danger (#EE4036, 3,87:1) en --coral (#FF6B5B, 2,8:1) blijven VULLING; als
+     tekstkleur dit, het dichtstbijzijnde rood met 4,5:1 op wit, #FFFAFA en #E2FFE3. */
+  --danger-text: #E01E13;
+  /* Grijs OP ZWART (een zwarte chip met een tellertje erin): #58595B haalde daar 2,99:1. */
+  --text-on-dark-muted: #BDBDBD;
 }
 :root body {
   background: var(--nu-bg);
