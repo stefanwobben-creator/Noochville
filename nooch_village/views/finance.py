@@ -32,6 +32,9 @@ _CHIP_CORR = "<span class='chip'>correction</span>"
 _CHIP_GEEN_DOC = "<span class='chip'>missing document</span>"
 _DOORLOPEND = "<span class='muted'>ongoing</span>"
 _STREEP = "<span class='muted'>—</span>"
+#: Een brede tabel in zijn eigen scrollcontainer (`.c2-scroll`, 11 oktober 2026). ALLEEN om een
+#: tabel: om een gewone alinea (de lege toestand) verandert `overflow` het samenvallen van marges.
+_SCROLL = " c2-scroll"
 _GEEN_DATA = "<span class='muted'>no data</span>"
 _SCHERMEN = (("/finance/costs", "Costs"), ("/finance/revenue", "Revenue"), ("/finance/recurring", "Recurring"),
              ("/finance/monthly", "Monthly"), ("/finance/pnl", "P&L"), ("/finance/history", "History"),
@@ -58,7 +61,9 @@ def _eur(c) -> str:
 def _frame(titel: str, actief: str, inhoud: str, msg: str = "") -> str:
     tabs = " ".join(f"<a class='cl-filter{' on' if pad == actief else ''}' href='{pad}'>{_e(l)}</a>"
                     for pad, l in _SCHERMEN)
-    main = (f"<div class='c2-main'><h1 class='ptitle'>{_e(titel)}</h1>"
+    # `c2-main--vol`: op een telefoon de volle breedte, zodat een brede tabel in zijn eigen
+    # scrollcontainer blijft (`c2-scroll`) in plaats van de hele pagina breder te maken.
+    main = (f"<div class='c2-main c2-main--vol'><h1 class='ptitle'>{_e(titel)}</h1>"
             f"<div class='cl-bar' aria-label='finance'>{tabs}</div>{_banner(msg)}"
             f"<p class='muted'>Management administration next to the books. The books stay with the "
             f"accountant (Dutch GAAP, RJ). Amounts exclude VAT.</p>{inhoud}</div>")
@@ -335,7 +340,7 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "", *, waarden: di
     filters = (_popover("Filter", filterform)
                + (f"<span class='muted'>{_e(actief)} · <a href='/finance/costs'>clear</a></span>" if actief else ""))
     inhoud = (f"{filters}<p><a href='/finance/costs.csv{'?' + q if q else ''}'>Export CSV for the accountant</a></p>"
-              f"{nieuw}<div class='c2-sec'>{tabel}</div><div class='c2-sec'>{som}</div>{open_punten}")
+              f"{nieuw}<div class='c2-sec{_SCROLL if regels else ""}'>{tabel}</div><div class='c2-sec'>{som}</div>{open_punten}")
     return _frame("Finance · Costs", "/finance/costs", inhoud, msg)
 
 
@@ -627,7 +632,7 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
                  f"<a href='/finance/history'>{_e(fh.LABEL)}</a>; later months from the register.</p>")
     if genegeerd:
         noot += _cutover_waarschuwing(genegeerd, h_tot)
-    return _frame("Finance · P&L", "/finance/pnl", f"{filt}{noot}<div class='c2-sec'>{tabel}</div>")
+    return _frame("Finance · P&L", "/finance/pnl", f"{filt}{noot}<div class='c2-sec c2-scroll'>{tabel}</div>")
 
 
 def _cutover_waarschuwing(n: int, h_tot: str) -> str:
@@ -728,7 +733,7 @@ def render_revenue(st, username, csrf: str, f: dict, msg: str = "", *, waarden: 
     inhoud = (f"<p class='muted'>Enter revenue on the period of delivery, as the accountant recognises it. "
               f"Any month can be entered, also in the past. A grant should carry its decision as a document.</p>"
               f"{filters}<p><a href='/finance/revenue.csv{'?' + q if q else ''}'>Export CSV for the accountant</a></p>"
-              f"{nieuw}<div class='c2-sec'>{tabel}</div><div class='c2-sec'>{som}</div>")
+              f"{nieuw}<div class='c2-sec{_SCROLL if regels_ else ""}'>{tabel}</div><div class='c2-sec'>{som}</div>")
     return _frame("Finance · Revenue", "/finance/revenue", inhoud, msg)
 
 

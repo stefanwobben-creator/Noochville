@@ -23,6 +23,13 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 .c2-bar{color:var(--gray);font-size:.85rem;margin:.2rem 0 .5rem}
 .c2-wrap{display:flex;gap:1.2rem;align-items:flex-start;margin-top:.6rem}
 .c2-main{flex:1 1 auto;min-width:0}
+/* BREDE TABELLEN OP EEN TELEFOON (11 oktober 2026). Onder 760px wordt `.c2-wrap` een kolom met
+   `align-items:flex-start`, en dan is `.c2-main` zo breed als zijn INHOUD: één brede tabel maakte de
+   hele pagina breder dan het scherm (/finance/costs 747px op 390px). `--vol` rekt de kolom op tot de
+   schermbreedte; de tabel scrollt dan in zijn eigen `.c2-scroll`. Een modifier, niet `.c2-main`
+   zelf: gemeten verschuift dat op /projects en /wiki op 390px vrijwel alles. */
+@media(max-width:760px){.c2-main--vol{align-self:stretch}}
+.c2-scroll{overflow-x:auto;max-width:100%}
 .c2-rail{flex:0 0 280px;max-width:280px}
 .c2-meet{display:flex;gap:.4rem;margin:.4rem 0}
 .c2-tabs{display:flex;flex-wrap:wrap;gap:.1rem;border-bottom:1px solid var(--border);margin:.7rem 0 1rem}
@@ -194,6 +201,7 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .qadd[open]{padding:0}
 .qadd[open]>summary{display:none}
 .qadd-form{display:flex;flex-direction:column;gap:.4rem;margin-top:.1rem}
+.qadd-form input[type=file]{max-width:100%}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
 .qadd-row{display:flex;align-items:center;gap:.4rem}
 /* Een éénregelig invoerveld in dezelfde rij. `.qadd-form textarea` hierboven kreeg `width:100%`,
@@ -619,6 +627,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .rov-addprop{margin-top:.4rem;padding-top:.8rem;border-top:1px dashed var(--border)}
 .rov-addgrid{display:grid;gap:.8rem;grid-template-columns:1fr}
 @media(min-width:560px){.rov-addgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+/* Een gridcel mag smaller worden dan zijn inhoud (11 oktober 2026): een bestandsveld is ~253px
+   breed, en zonder dit maakte één bestandsveld het hele formulier breder dan een telefoon. */
+.rov-addgrid>*{min-width:0}
 .rov-addgrid select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;background:var(--cream-2);color:var(--muted)}
 .is-soon{color:var(--muted)}
 .rov-more{font-size:.7rem;color:var(--subtle);font-weight:700}
