@@ -340,7 +340,9 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     andere_cirkels = [k for k in st.channels.bestaande(channels.CIRCLE) if k != wortel]
     onderwerpen = st.channels.topics() + andere_cirkels
     projecten_alles = _projectkanalen_met_gesprek(st)
-    projecten = [k for k in projecten_alles if k in gevolgd]
+    # PRIVÉ-PROJECTEN: ook een GEVOLGD projectkanaal staat alleen in de lijst als je het mag lezen
+    # (je kan het gevolgd hebben vóór het privé werd). Openen vroeg dit al; de lijst nu ook.
+    projecten = [k for k in projecten_alles if k in gevolgd and mag_kanaal_lezen(st, k, ik)]
     dms, _rollen = _dm_groepen(st, ik)
 
     # "ROLES & SYSTEM" STOND HIER ALS GROEP, en is op 22 september 2026 uit de lijst gehaald (eis

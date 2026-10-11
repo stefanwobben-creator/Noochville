@@ -1297,7 +1297,7 @@ def _tijdlijn_rijen(p) -> str:
     return uit
 
 
-def _doel_rijen(st, p, rw: bool, hid) -> str:
+def _doel_rijen(st, p, rw: bool, hid, username: str | None = None) -> str:
     """Goal · Work package · Depends on, als rail-regels (zelfde `mform`/`ctrl`/autosave als impact).
 
     Goal: een select over de open doelen (`proj_goal`). Work package: alleen als het doel er
@@ -1331,7 +1331,10 @@ def _doel_rijen(st, p, rw: bool, hid) -> str:
                                  f"<select class='ctrl' name='activiteit' onchange='{_AUTOSAVE}'>"
                                  f"<option value=''>—</option>{aopts}</select></form>"))
     # afhankelijkheden
-    per_id = {q["id"]: q for q in st.projects.all()}
+    # PRIVÉ-PROJECTEN: een afhankelijkheid toont een titel en een link; alleen wat de kijker mag zien.
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, username or getattr(st, "username", None))
+    per_id = {q["id"]: q for q in st.projects.all() if leest(q)}
     deps = [d for d in (p.get("depends_on") or []) if d in per_id]
     chips = ""
     for d in deps:
@@ -1351,7 +1354,7 @@ def _doel_rijen(st, p, rw: bool, hid) -> str:
     add = ""
     if rw and hid is not None:
         if cur:
-            kandidaten = [q for q in _D.projecten_van(cur["id"], st.projects.all())
+            kandidaten = [q for q in _D.projecten_van(cur["id"], list(per_id.values()))   # alleen leesbare
                           if q["id"] != p["id"] and q["id"] not in deps and q.get("status") not in _P_KLAAR]
             kopts = "".join(f"<option value='{_e(q['id'])}'>{_e(_scope_text(q)[:70])}</option>" for q in kandidaten)
             add = (f"<form method='post' action='/action' class='mform'>{hid()}"
@@ -1582,7 +1585,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             + _meta_rijen(st, p, rw, hid, _trekker_opts_html, terminaal)
             + _meta_rij("Role", rol_v)
             + _meta_rij("Deadline", due_head or "—")
-            + _doel_rijen(st, p, rw, hid)
+            + _doel_rijen(st, p, rw, hid, username)
             + _meta_rij("Visible", vis_v)
             + _meta_rij("Created", _created_full(p.get("created_at")))
             + _tijdlijn_rijen(p)

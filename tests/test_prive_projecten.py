@@ -130,3 +130,62 @@ def test_zonder_kijker_blijven_privé_projecten_weg_uit_het_zoeken(dorp):
     st = cockpit2._Stores(dd)
     assert TITEL not in render_search_fragment(st, TITEL)
     assert OPEN in render_search_fragment(st, OPEN)
+
+
+# ── de plekken uit de inventaris die in deze PR zijn dichtgezet ─────────────────────────────────
+
+@pytest.mark.parametrize("wie, ziet", [(LID, True), (BUITEN, False)])
+def test_doelpagina_afhankelijkheid_en_gevolgd_kanaal(dorp, wie, ziet):
+    from nooch_village import channels
+    dd, pid, open_pid = dorp
+    st = cockpit2._Stores(dd)
+    doel = st.doelen.add("Zandloperdoel")
+    st.projects.set_doel(pid, doel["id"])
+    st.projects.set_doel(open_pid, doel["id"])
+    st.projects.set_depends_on(open_pid, [pid])                  # het gewone project hangt af van het privé
+    st.people.volg(st.people.by_email(wie).id, channels.project_kanaal(pid))   # gevolgd vóór het privé werd
+    sessies = _auth.SessionStore()
+    httpd = _server(dd, sessies)
+    poort, s = httpd.server_address[1], sessies.create(wie)
+    try:
+        for pad in (f"/goal?id={doel['id']}", f"/project?id={open_pid}", "/messages"):
+            status, body = _get(poort, pad, s)
+            assert status == 200, pad
+            assert (TITEL in body) is ziet, pad
+    finally:
+        httpd.shutdown()
+
+
+@pytest.mark.parametrize("wie, ziet", [(LID, True), (BUITEN, False)])
+def test_de_wizard_stuurt_alleen_leesbare_projecten_als_ankers_naar_het_model(dorp, wie, ziet, monkeypatch):
+    from nooch_village import wizard
+    gezien = {}
+
+    echt = wizard.board_anchors
+
+    def nep(projecten, *a, **kw):                 # wat er de ankers IN gaat, vóór de selectie
+        gezien["ankers"] = [p.get("scope") for p in projecten]
+        return echt(projecten, *a, **kw)
+    monkeypatch.setattr(wizard, "board_anchors", nep)
+    monkeypatch.setattr(wizard, "sharpen_outcome", lambda ruw, **_kw: ruw)
+    dd, _pid, _ = dorp
+    sessies = _auth.SessionStore()
+    httpd = _server(dd, sessies)
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
+        c.request("POST", "/wizard/sharpen", body=urllib.parse.urlencode({"csrf": "T", "ruw": "iets"}),
+                  headers={"Cookie": f"nv_session={sessies.create(wie)}",
+                           "Content-Type": "application/x-www-form-urlencoded"})
+        assert c.getresponse().status == 200
+    finally:
+        httpd.shutdown()
+    assert (TITEL in str(gezien["ankers"])) is ziet
+
+
+@pytest.mark.parametrize("wie, ziet", [(LID, True), (BUITEN, False)])
+def test_de_doelkeuze_van_een_metriektegel(dorp, wie, ziet):
+    from nooch_village import zicht
+    from nooch_village.views.metrics import _goal_options
+    dd, _pid, _ = dorp
+    st = zicht.voor(cockpit2._Stores(dd), wie)
+    assert (TITEL in _goal_options(st, st.records.get(CIRKEL))) is ziet

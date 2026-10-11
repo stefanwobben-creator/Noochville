@@ -8226,7 +8226,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 try:
                     if path == "/wizard/sharpen":
                         from nooch_village.wizard import sharpen_outcome, board_anchors
-                        _ankers = board_anchors(st.projects.all())   # eigen bord = stem van het team
+                        # PRIVÉ-PROJECTEN: de ankers gaan als context naar het model en komen terug in
+                        # de suggestie; alleen projecten die deze gebruiker mag zien.
+                        _leest = _project_lezer(st, username)
+                        _ankers = board_anchors([p for p in st.projects.all() if _leest(p)])
                         self._send_json({"uitkomst": sharpen_outcome(g1("ruw"), anchors=_ankers)})
                         return
                     if path == "/wizard/plan":
