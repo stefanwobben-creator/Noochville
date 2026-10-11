@@ -936,7 +936,12 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
 
     Zelfde recept als `_metrics_tab_html` (nav → js-modal + data-href, anders een gewone link); geen
     tweede mechaniek, en buiten een modal verandert er niets."""
-    allp = st.projects.all()
+    # PRIVÉ-PROJECTEN (11 oktober 2026): alleen voor een lid van de cirkel van de eigenaar-rol, met
+    # dezelfde regel als Messages, het zoeken en /project. De werkoverleg- en persoonsroute geven
+    # geen `username` mee maar wel een kijker (`zicht.voor`), en die draagt hem.
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, username or getattr(st, "username", None))
+    allp = [p for p in st.projects.all() if leest(p)]
     # VOLGORDE: een modal wint van een eigen scherm wint van de cirkel-tab. Een bord dat IN een
     # overleg draait moet naar dat overleg terug, ook als het toevallig door `/projects` wordt
     # gerenderd — anders klapt het overleg dicht, precies de bug waarvoor `nav` bestaat.
@@ -1017,8 +1022,10 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     render (reference, not copy). group='rol' → elke swimlane is een van mijn rollen; quickadd=False
     → de lens voegt niet toe (dat blijft op rol-niveau)."""
     role_ids = set(st.assign.roles_of(filler_type, pid))
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, getattr(st, "username", None))      # privé: zie `_projects_tab_html`
     mine = [p for p in st.projects.all()
-            if p.get("owner") in role_ids and not p.get("archived")
+            if leest(p) and p.get("owner") in role_ids and not p.get("archived")
             and p.get("status") not in _OFF_BOARD]
     back = f"/person?id={pid}&tab=projecten"
     board = _projects_board(st, mine, "", csrf_token, back, "rol", quickadd=False)

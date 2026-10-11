@@ -207,9 +207,10 @@ def _accountabilities(st, termen):
     return uit
 
 
-def _projects(st, termen):
+def _projects(st, termen, leest=None):
+    """Projecten op hun scope. `leest`: de privé-regel van de kijker (`messages.project_lezer`)."""
     uit = []
-    alle = st.projects.all()
+    alle = [p for p in st.projects.all() if (leest or _prive_weg)(p)]
     for p in alle:
         scope = str(p.get("scope") or "")
         if _match(scope, termen):
@@ -252,7 +253,7 @@ def _pages(st, termen):
     return uit
 
 
-def _gesprekken(st, termen):
+def _gesprekken(st, termen, leest=None):
     """De gespreklaag: project-, cirkel- en DM-kanalen (fase 8).
 
     Hier staat het meeste van wat een mens ooit heeft OPGESCHREVEN maar nergens formeel vastlegde
@@ -264,7 +265,7 @@ def _gesprekken(st, termen):
     from nooch_village import channels
     uit = []
     for p in st.projects.all():
-        if p.get("archived"):
+        if p.get("archived") or not (leest or _prive_weg)(p):
             continue
         for e in (p.get("log") or []):
             if _match(str(e.get("text") or ""), termen):
@@ -339,12 +340,12 @@ def _kanalen(st, termen):
     return uit
 
 
-def _checklist_items(st, termen):
+def _checklist_items(st, termen, leest=None):
     """Checklist-items. Een stap is vaak het enige plek waar een concrete handeling staat
     ("vraag Selco om een monster"), en die was tot fase 8 onvindbaar."""
     uit = []
     for p in st.projects.all():
-        if p.get("archived"):
+        if p.get("archived") or not (leest or _prive_weg)(p):
             continue
         sc = p.get("scope")
         titel = sc if isinstance(sc, str) else ""
@@ -393,7 +394,16 @@ _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accoun
             ("Insights", _insights), ("Words", _words))
 
 
-def _zoek(st, termen) -> tuple[list, list]:
+#: De groepen die uit PROJECTEN lezen, en dus de privé-regel van de kijker krijgen.
+_PROJECTGROEPEN = {"Projects", "Steps", "Messages"}
+
+
+def _prive_weg(p) -> bool:
+    """Zonder kijker (een interne aanroep): privé-projecten blijven weg — fail-closed."""
+    return not p.get("private")
+
+
+def _zoek(st, termen, leest=None) -> tuple[list, list]:
     """Zoek per groep. Geeft (resultaten, fouten): de treffers, én de groepen die niet te laden waren.
 
     DE OPVANG STAAT HIER, EN NIET MEER IN DE HANDLERS. Elke groep had een eigen
@@ -408,7 +418,9 @@ def _zoek(st, termen) -> tuple[list, list]:
     resultaten, fouten = [], []
     for label, fn in _GROEPEN:
         try:
-            resultaten.append((label, fn(st, termen)))
+            # PRIVÉ-PROJECTEN (11 oktober 2026): Projects, Steps en Messages lezen uit projecten en
+            # vragen dezelfde regel als Messages en het bord (`messages.project_lezer`).
+            resultaten.append((label, fn(st, termen, leest) if label in _PROJECTGROEPEN else fn(st, termen)))
         except Exception as e:                            # noqa: BLE001 — bewust breed, mét reden
             resultaten.append((label, []))
             fouten.append((label, f"{type(e).__name__}: {e}"))
@@ -478,12 +490,12 @@ def _hit_html(h: dict) -> str:
             f"{_e((h.get('titel') or '')[:120])}{snip}</a>")
 
 
-def render_search_fragment(st, q: str = "") -> str:
+def render_search_fragment(st, q: str = "", leest=None) -> str:
     """Compacte dropdown-inhoud voor de live-zoek (max een paar per groep). chrome=False in de route."""
     termen = [t for t in (q or "").lower().split() if t]
     if len(q.strip()) < 2:
         return ""
-    resultaten, fouten = _zoek(st, termen)
+    resultaten, fouten = _zoek(st, termen, leest)
     totaal = sum(len(h) for _, h in resultaten)
     blokken = []
     for label, hits in resultaten:
@@ -499,7 +511,7 @@ def render_search_fragment(st, q: str = "") -> str:
     return sug + fout + "".join(blokken) + alle
 
 
-def render_search(st, q: str = "") -> str:
+def render_search(st, q: str = "", leest=None) -> str:
     q = (q or "").strip()
     termen = [t for t in q.lower().split() if t]
     if not termen:
@@ -508,7 +520,7 @@ def render_search(st, q: str = "") -> str:
                 "accountabilities, projects and the knowledge base in one go.</p></div>")
         return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
-    resultaten, fouten = _zoek(st, termen)
+    resultaten, fouten = _zoek(st, termen, leest)
     totaal = sum(len(h) for _, h in resultaten)
     blokken = []
     for label, hits in resultaten:

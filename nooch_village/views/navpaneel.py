@@ -90,7 +90,9 @@ def _paneel_zoek(st, ik: str, q: str) -> str:
             f"</form>")
     if len((q or "").strip()) < 2:
         return veld + _leeg("Type to search people, roles, projects, channels and wiki at once.")
-    return veld + f"<div class='c2-pzoekuit'>{render_search_fragment(st, q)}</div>"
+    from nooch_village.views.messages import mag_project_dict_lezen
+    leest = lambda p: mag_project_dict_lezen(st, p, ik)         # privé-projecten: zie `project_lezer`
+    return veld + f"<div class='c2-pzoekuit'>{render_search_fragment(st, q, leest=leest)}</div>"
 
 
 # ── PR ───────────────────────────────────────────────────────────────────────

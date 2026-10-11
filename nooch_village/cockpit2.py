@@ -1042,6 +1042,12 @@ class Forbidden(Exception):
     weigering ziet en een ontbrekende governance_ref nooit een 500 wordt."""
 
 
+def _project_lezer(st, username):
+    """De privé-regel voor projecten van deze kijker (`views.messages.project_lezer`)."""
+    from nooch_village.views.messages import project_lezer
+    return project_lezer(st, username)
+
+
 def _web_actor_id(username: str | None, st) -> str:
     """Person-id van de ingelogde mens (voor de versie-/changelog-actor). "guest"/onbekend → ""."""
     if username in (None, "guest"):
@@ -7355,7 +7361,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     return
                 from nooch_village.views.werkoverleg import _projects_tab_html as _ptab
                 self._send(_ptab(_st, _crec, csrf_token if username else "",
-                                 group=(qs.get("group") or [""])[0], add=False,
+                                 group=(qs.get("group") or [""])[0], add=False, username=username,
                                  nav=f"/werkoverleg?circle={_cid}&step=projecten"), chrome=False)
                 return
             if path == "/overleg-status":
@@ -7665,6 +7671,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 # historisch met ?id= (tevens de dedup-sleutel in `seen`), maar de route las alleen
                 # ?pid= → "Project not found". Alias ipv linkformaat wijzigen houdt de dedup stabiel.
                 _pid = (qs.get("pid") or qs.get("id") or [""])[0]
+                # AUTHZ: iedereen-ingelogd, behalve een PRIVÉ-project: alleen voor een lid van de cirkel
+                # van de eigenaar-rol (`messages.project_lezer`, dezelfde regel als Messages, het bord
+                # en het zoeken). Wie het niet mag, krijgt een 404 — niet verraden dat het bestaat.
+                if not _project_lezer(st, username)(st.projects.get(_pid)) and st.projects.get(_pid) is not None:
+                    self._send("<p>404</p>", 404); return
                 self._send(_frag(render_project(st, _pid, csrf_token=effective_csrf,
                                                 msg=(qs.get("msg") or [""])[0],
                                                 back=(qs.get("back") or ["/"])[0], fragment=fr,
@@ -7703,9 +7714,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 # ?frag=1 → alleen de dropdown-inhoud (live terwijl je typt); anders de volle pagina.
                 _q = (qs.get("q") or [""])[0]
                 if (qs.get("frag") or [""])[0] in ("1", "true", "on"):
-                    self._send(render_search_fragment(st, _q), chrome=False)
+                    self._send(render_search_fragment(st, _q, leest=_project_lezer(st, username)),
+                               chrome=False)
                 else:
-                    self._send(render_search(st, _q))
+                    self._send(render_search(st, _q, leest=_project_lezer(st, username)))
                 return
             if path == "/giphy-zoek":
                 # AUTHZ: iedereen-ingelogd — dezelfde poort als de rest van Messages: meedoen aan
