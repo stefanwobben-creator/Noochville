@@ -7,8 +7,8 @@ uitvoer die terugkwam. Zie sectie 0b in `scripts/deploy.sh`.
 WAT DEZE TOETS DOET. Hij knipt het ECHTE slot-blok (0b) en de ECHTE wissel (1) uit `deploy.sh`, zet
 er een run achter die blijft lopen tot de toets hem loslaat, en start daar een tweede naast.
 `test_zonder_slot_lopen_ze_allebei` laat eerst zien dat het scenario zonder slot echt stuk kan; anders
-bewijst de rest niets. `flock` zit in util-linux (de server, CI); op een Mac zonder flock slaat de
-toets over, op Linux faalt hij dan juist.
+bewijst de rest niets. `flock` zit in util-linux (de server, CI); op een Mac zonder flock slaan de
+drie toetsen die het slot draaien over, op Linux falen ze dan juist. De volgorde-toets draait overal.
 """
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ import pytest
 WORTEL = pathlib.Path(__file__).resolve().parents[1]
 DEPLOY = (WORTEL / "scripts" / "deploy.sh").read_text(encoding="utf-8")
 
-if shutil.which("flock") is None:
-    if sys.platform.startswith("linux"):
-        raise RuntimeError("flock ontbreekt op Linux — dan werkt het slot in deploy.sh ook niet")
-    pytest.skip("geen flock op dit systeem (macOS); CI en de server hebben hem", allow_module_level=True)
+# Alleen de toetsen die het slot ÉCHT draaien hebben flock nodig. Op Linux nooit overslaan: daar
+# hoort flock er te zijn, en ontbreekt hij, dan moet dat rood worden.
+vereist_flock = pytest.mark.skipif(shutil.which("flock") is None and not sys.platform.startswith("linux"),
+                                   reason="geen flock op dit systeem (macOS); CI en de server hebben hem")
 
 
 def _blok(kop: str) -> str:
@@ -75,6 +75,7 @@ def _tweede(tmp_path, pad):
                           env=_env(tmp_path, "b"))
 
 
+@vereist_flock
 def test_zonder_slot_lopen_ze_allebei(tmp_path):
     """Het scenario van 11 oktober: zonder slot komt een tweede run gewoon langs."""
     pad = _script(tmp_path, slot=False)
@@ -88,6 +89,7 @@ def test_zonder_slot_lopen_ze_allebei(tmp_path):
         b.wait(10)
 
 
+@vereist_flock
 def test_een_tweede_run_stopt_meteen_met_een_duidelijke_melding(tmp_path):
     pad = _script(tmp_path, slot=True)
     a, regel = _start(tmp_path, pad, "a")
@@ -104,6 +106,7 @@ def test_een_tweede_run_stopt_meteen_met_een_duidelijke_melding(tmp_path):
         assert a.wait(10) == 0
 
 
+@vereist_flock
 def test_na_afloop_is_het_slot_weer_vrij(tmp_path):
     pad = _script(tmp_path, slot=True)
     a, _ = _start(tmp_path, pad, "a")
@@ -114,8 +117,11 @@ def test_na_afloop_is_het_slot_weer_vrij(tmp_path):
 
 
 def test_het_slot_staat_voor_de_wissel_en_voor_elke_git_actie():
-    """Na de wissel is te laat: dan kan een tweede run al aan zijn kopie begonnen zijn."""
-    slot = DEPLOY.index("flock -n 9")
+    """Na de wissel is te laat: dan kan een tweede run al aan zijn kopie begonnen zijn. Alleen
+    CODEregels tellen: de uitleg in sectie 0b noemt `exec bash "$KOPIE"` zelf ook."""
+    code = [(i, r) for i, r in enumerate(DEPLOY.splitlines()) if not r.lstrip().startswith("#")]
+    regel = lambda tekst: next(i for i, r in code if tekst in r)
+    slot = regel("flock -n 9")
     for later in ('exec bash "$KOPIE"', "git_nooch status --porcelain", "git_nooch fetch --quiet origin main",
                   "git_nooch merge --ff-only origin/main"):
-        assert slot < DEPLOY.index(later), f"het slot staat ná: {later}"
+        assert slot < regel(later), f"het slot staat ná: {later}"
