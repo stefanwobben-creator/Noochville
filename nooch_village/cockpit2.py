@@ -3023,6 +3023,9 @@ def _act_pagina_bulk_import_facts(c):
     # Type-mapping: "source" → "bron", etc.
     type_map = {
         "source": "bron",
+        # "link" is het woord dat de feiten-prompt voor een webbron gebruikt; zonder deze regel werd
+        # zo'n feit "ungrounded" (gezien bij de zes kapotte feiten op Full Green en LTA, 11 okt 2026).
+        "link": "bron",
         "bron": "bron",
         "kroniek": "kroniek",
         "cert": "cert",

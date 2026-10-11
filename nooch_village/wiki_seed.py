@@ -839,3 +839,123 @@ def vraagkoppen_tekst(rapport: list[dict]) -> str:
         if r["oud"]:
             uit.append(f"    {r['oud']}")
     return "\n".join(uit)
+
+
+# ── Feiten herstellen die de oude bulk import aan elkaar plakte (W1, 11 oktober 2026) ──────────
+#
+# DE OORZAAK. Eén `##`-kop in de geplakte tekst zette de parser in de markdown-stand: elke sectie werd
+# één feit met kop + alle regels aan elkaar ("Location & contact Text: … Type: link Ref: …"),
+# afgekapt op 400 tekens. De parser is gerepareerd; dit herstelt de feiten die er al staan.
+#
+# WAT HET DOET, EN WAT NIET (besluit Stefan, 11 oktober 2026):
+#   - de tekst van het feit wordt de `Text:` zelf;
+#   - een VOLLEDIG citaat dat de mens plakte, gaat naar het citaat van de bron — alleen als dat leeg
+#     is en de bron een citaat kan dragen;
+#   - wat is AFGEKAPT blijft zichtbaar, gemarkeerd "incomplete, check the source" — er wordt niets
+#     aangevuld of verzonnen;
+#   - de bron die een mens zette (document, attested) blijft; het feit wordt NIET verplaatst of aan
+#     een vraag gekoppeld (geen `sectie`): het telt pas mee als een mens het met een antwoord nakijkt;
+#   - de tekst verandert, dus "checked" vervalt (zelfde regel als bij elke tekstwijziging).
+
+_GEPLAKT_RE = re.compile(r"^(?P<kop>.*?)\s+Text:\s*(?P<rest>.*)$", re.S)
+_VELD_RE = re.compile(r"\s+(Type|Ref|Quote|URL|For|Text):\s*")
+_AFGEKAPT = 395            # de import kapte af op 400 tekens; wit eraf geeft 395-400
+_ONVOLLEDIG = "incomplete, check the source"
+
+
+def ontleed_geplakt(tekst: str) -> dict | None:
+    """{kop, velden: [(naam, waarde)], afgekapt} of None als dit geen aan elkaar geplakt feit is."""
+    m = _GEPLAKT_RE.match(tekst or "")
+    if not m:
+        return None
+    delen = _VELD_RE.split(m.group("rest"))
+    velden = [("Text", delen[0].strip())] + [(delen[i], delen[i + 1].strip()) for i in range(1, len(delen) - 1, 2)]
+    return {"kop": m.group("kop").strip(), "velden": velden, "afgekapt": len(tekst) >= _AFGEKAPT}
+
+
+def herstel_feit(f: dict) -> tuple[dict | None, list[str]]:
+    """(nieuw feit, notities) of (None, []) als er niets te herstellen valt. Puur."""
+    o = ontleed_geplakt(str(f.get("tekst") or ""))
+    if o is None:
+        return None, []
+    velden = list(o["velden"])
+    notities = [f"heading in the text removed: '{o['kop']}'"]
+    # Een tweede `Text:` in hetzelfde feit is het begin van het volgende feit dat er aan vast kwam.
+    tweede = next((i for i, (n, _v) in enumerate(velden) if i and n == "Text"), None)
+    if tweede is not None:
+        notities.append(f"a second fact was glued on and cut off: “{velden[tweede][1][:40]}”")
+        velden = velden[:tweede]
+        laatste_afgekapt = False
+    else:
+        laatste_afgekapt = o["afgekapt"]
+    if tweede is not None and o["afgekapt"]:
+        notities.append("the end of this fact was cut off by the old import")
+    tekst = velden[0][1]
+    grond = dict(f.get("grond") or {})
+    for i, (naam, waarde) in enumerate(velden[1:], start=1):
+        is_laatste_afgekapt = laatste_afgekapt and i == len(velden) - 1
+        if is_laatste_afgekapt:
+            notities.append(f"{naam} cut off — marked: “{waarde[:50]}”")
+            # Het merkteken moet HEEL blijven: het feit heeft 400 tekens, dus het afgekapte stuk
+            # krijgt alleen de ruimte die over is (desnoods niets, dan staat alleen de markering er).
+            kaal = f"{tekst} [{naam} {_ONVOLLEDIG}]"
+            ruimte = 400 - len(kaal) - 5
+            tekst = f"{tekst} [{naam} {_ONVOLLEDIG}: “{waarde[:ruimte]}…”]" if ruimte >= 12 else kaal
+        elif naam == "Quote" and waarde and not grond.get("citaat") and grond.get("soort") in ("bron", "document"):
+            grond["citaat"] = waarde
+            notities.append(f"Quote → source quote: “{waarde[:60]}”")
+        elif naam in ("Ref", "URL", "Quote", "Type"):
+            notities.append(f"{naam} not stored (the source on the fact stays as set): “{waarde[:60]}”")
+    if laatste_afgekapt and len(velden) == 1:
+        tekst = f"{tekst} [{_ONVOLLEDIG}]"
+    nieuw = wiki.maak_feit(tekst, soort=grond.get("soort", ""), ref=grond.get("ref", ""),
+                           citaat=grond.get("citaat", ""), url=grond.get("url", ""), waarde=f.get("waarde"),
+                           sectie=f.get("sectie", ""), fid=wiki.feit_id(f), op=grond.get("op", ""),
+                           hercheck=f.get("hercheck", ""))
+    if nieuw is not None and grond.get("check"):
+        nieuw["grond"]["check"] = grond["check"]
+    if f.get("gezien"):
+        notities.append("'checked' lapses: the text changes — check it again")
+    return nieuw, notities
+
+
+def feiten_herstellen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]:
+    """Rapport `[{id, titel, feiten: [{fid, oud, nieuw, notities}]}]`. Dry-run tenzij `apply`; met
+    `apply` één nieuwe versie per pagina (terug te draaien via de historie)."""
+    rapport = []
+    for a in store.by_kind(wiki.PAGINA_KIND):
+        feiten = wiki.met_ids(list(wiki.feiten(a)))
+        regels, nieuwe = [], []
+        for f in feiten:
+            nieuw, notities = herstel_feit(f)
+            if nieuw is None:
+                nieuwe.append(f)
+                continue
+            regels.append({"fid": f["id"], "oud": f.get("tekst", ""), "nieuw": nieuw["tekst"],
+                           "citaat": nieuw["grond"].get("citaat", ""), "notities": notities})
+            nieuwe.append(nieuw)
+        if not regels:
+            continue
+        rapport.append({"id": a.id, "titel": a.title or a.id, "feiten": regels})
+        if apply:
+            meta = dict(getattr(a, "meta", None) or {})
+            meta["feiten"] = nieuwe
+            store.update(a.id, meta=meta, actor_id=actor_id, actor_type="person",
+                         change_note=f"facts repaired from the old bulk import ({len(regels)})")
+    return rapport
+
+
+def feiten_herstellen_tekst(rapport: list[dict]) -> str:
+    if not rapport:
+        return "Nothing to repair: no fact carries glued-together import fields."
+    uit = []
+    for r in rapport:
+        uit.append(f"{r['id']}  {r['titel']}  ({len(r['feiten'])} fact(s))")
+        for f in r["feiten"]:
+            uit.append(f"  fact {f['fid']}")
+            uit.append(f"    was: {f['oud'][:110]}…")
+            uit.append(f"    now: {f['nieuw']}")
+            if f["citaat"]:
+                uit.append(f"    source quote: “{f['citaat']}”")
+            uit += [f"    - {n}" for n in f["notities"]]
+    return "\n".join(uit)
