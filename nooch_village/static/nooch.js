@@ -2674,8 +2674,99 @@
     });
   }
 
+  /* FINANCE-FORMULIEREN (UX-PR, 11 oktober 2026). Drie kleine hulpen, data-gestuurd:
+   *   [data-toon-als="naam=waarde"]  alleen zichtbaar als dat veld van het formulier die waarde heeft
+   *                                  (Paid date bij Paid, het bestand of de reden bij de documentkeuze).
+   *                                  Zonder JavaScript staat alles er gewoon.
+   *   [data-btw-reken="pre"]          "Only know the total?": vult `amount_excl` en `vat` in HELE CENTEN.
+   *   [data-rc-samenvatting]          de zin onder de datums van een terugkerende kost.
+   * De rekenfuncties staan los op `NV`, zodat `tests/js/finance_formulieren.test.js` ze echt draait. */
+  NV.finCent = function (tekst) {
+    var s = String(tekst == null ? "" : tekst).replace(/[€\s\u00a0]/g, "");
+    if (!s) return null;
+    var min = s.charAt(0) === "-";
+    if (min) s = s.slice(1);
+    if (s.indexOf(",") >= 0 && s.indexOf(".") >= 0) {
+      var dec = s.lastIndexOf(",") > s.lastIndexOf(".") ? "," : ".";
+      s = s.split(dec === "," ? "." : ",").join("").replace(",", ".");
+    } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+      s = s.split(".").join("");
+    } else {
+      s = s.replace(",", ".");
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+    var delen = s.split(".");
+    var c = parseInt(delen[0], 10) * 100 + parseInt(((delen[1] || "") + "00").slice(0, 2), 10);
+    return min ? -c : c;
+  };
+  NV.finEuro = function (cent) {
+    var min = cent < 0, c = Math.abs(cent), heel = String(Math.floor(c / 100));
+    heel = heel.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (min ? "-" : "") + heel + "," + ("0" + (c % 100)).slice(-2);
+  };
+  NV.finBtw = function (totaalCent, procent) {
+    // Exclusief = totaal × 100 / (100 + tarief), afgerond op een hele cent; de btw is de REST, zodat
+    // de twee samen altijd precies het totaal zijn.
+    var excl = Math.round(totaalCent * 100 / (100 + procent));
+    return [excl, totaalCent - excl];
+  };
+  var MAANDEN = ["January", "February", "March", "April", "May", "June", "July", "August",
+                 "September", "October", "November", "December"];
+  function finDatum(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    if (!m || +m[2] < 1 || +m[2] > 12) return "";
+    return (+m[3]) + " " + MAANDEN[+m[2] - 1] + " " + m[1];
+  }
+  // DEZELFDE ZIN ALS `finance_uitleg.samenvatting` op de server; een toets houdt ze gelijk.
+  NV.finSamenvatting = function (cent, van, tot) {
+    if (cent == null || !finDatum(van)) return "";
+    var eind = finDatum(tot) ? "until " + finDatum(tot) : "ongoing";
+    var teken = cent < 0 ? "-" : "";
+    return teken + "€" + NV.finEuro(Math.abs(cent)) + " per month, from " + finDatum(van) + ", " + eind + ".";
+  };
+  function financeForms(root) {
+    root.querySelectorAll("[data-toon-als]").forEach(function (el) {
+      var form = el.closest("form");
+      if (!form || el.getAttribute("data-toon-bedraad")) return;
+      el.setAttribute("data-toon-bedraad", "1");
+      var paar = el.getAttribute("data-toon-als").split("=");
+      var toon = function () {
+        var gekozen = form.querySelector("[name='" + paar[0] + "']:checked");
+        var veld = gekozen || form.querySelector("select[name='" + paar[0] + "']");
+        var aan = !!veld && veld.value === paar[1];
+        el.hidden = !aan;
+        // Een verborgen bestand mag niet stilletjes meegaan.
+        if (!aan) el.querySelectorAll("input[type=file]").forEach(function (f) { f.value = ""; });
+      };
+      form.addEventListener("change", toon);
+      toon();
+    });
+    root.querySelectorAll("[data-btw-reken]").forEach(function (knop) {
+      knop.addEventListener("click", function () {
+        var pre = knop.getAttribute("data-btw-reken");
+        var totaal = NV.finCent((document.getElementById(pre + "-btw-totaal") || {}).value);
+        var tarief = parseInt((document.getElementById(pre + "-btw-tarief") || {}).value, 10);
+        if (totaal == null || isNaN(tarief)) return;
+        var r = NV.finBtw(totaal, tarief);
+        document.getElementById(pre + "-amount_excl").value = NV.finEuro(r[0]);
+        document.getElementById(pre + "-vat").value = r[1] ? NV.finEuro(r[1]) : "";
+      });
+    });
+    root.querySelectorAll("[data-rc-samenvatting]").forEach(function (p) {
+      var form = p.closest("form");
+      if (!form) return;
+      var zet = function () {
+        var w = function (n) { var e = form.querySelector("[name='" + n + "']"); return e ? e.value : ""; };
+        p.textContent = NV.finSamenvatting(NV.finCent(w("bedrag")), w("van"), w("tot"));
+      };
+      form.addEventListener("input", zet);
+      form.addEventListener("change", zet);
+    });
+  }
+
   NV.wire = function (root) {
     root = root || document;
+    financeForms(root);
     root.querySelectorAll("form[data-qa-frag]").forEach(quickAdd);
     barReset(root);
     inlineEdit(root);
