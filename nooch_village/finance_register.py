@@ -33,6 +33,8 @@ from decimal import Decimal, InvalidOperation
 
 MAP = "finance"
 BETAALSTATUS = ("open", "paid")
+#: De filterwaarde voor "betaald van de bankrekening van Nooch" (`paid_via` leeg).
+BANK = "bank"
 EXTENSIES = {"pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
 #: De eerste bytes die bij een toegestaan type horen. Een .pdf die geen PDF is, komt er niet in.
 _MAGIE = {"pdf": (b"%PDF",), "png": (b"\x89PNG",), "jpg": (b"\xff\xd8",), "jpeg": (b"\xff\xd8",)}
@@ -110,6 +112,12 @@ def maak_kost(v: dict, cfg: dict, *, correctie: bool = False) -> tuple[dict | No
     betaald = _datum(v.get("paid_date")) if str(v.get("paid_date") or "").strip() else ""
     if str(v.get("paid_date") or "").strip() and not betaald:
         return None, "the paid date must be YYYY-MM-DD"
+    # BETAALD VIA (11 oktober 2026): alleen herkomst — wie betaalde als het niet de bankrekening van
+    # Nooch was. Het P&L leest dit veld niet (`posten`). Een onbekende waarde komt er niet in.
+    via = fc.betaald_via_key(v.get("paid_via"), cfg)
+    if via is None:
+        return None, "paid via must be empty (Nooch bank account) or one of: " + ", ".join(
+            x["label"] for x in fc.betaald_via(cfg))
     bijlage = v.get("attachment") if isinstance(v.get("attachment"), dict) else None
     reden = _tekst(v.get("no_document_reason"), 200)
     if bijlage is None and not reden:
@@ -121,11 +129,27 @@ def maak_kost(v: dict, cfg: dict, *, correctie: bool = False) -> tuple[dict | No
             "batch": _tekst(v.get("batch"), 60), "payment_status": status, "paid_date": betaald,
             "recurring_id": _tekst(v.get("recurring_id"), 40),
             "attachment": bijlage, "no_document_reason": "" if bijlage else reden,
-            "note": _tekst(v.get("note"), 500), "corrects": _tekst(v.get("corrects"), 40)}, ""
+            "note": _tekst(v.get("note"), 500), "corrects": _tekst(v.get("corrects"), 40),
+            "paid_via": via, "import_id": _tekst(v.get("import_id"), 40)}, ""
 
 
 def sha256(blob: bytes) -> str:
     return hashlib.sha256(blob).hexdigest()
+
+
+def controleer_bijlage(bestandsnaam: str, blob: bytes) -> str:
+    """Waarom dit bestand geen bijlage kan zijn, of "". Dezelfde toets bij het bewaren en in de
+    preview van een import (die nog niets bewaart)."""
+    ext = os.path.splitext(bestandsnaam or "")[1].lower().lstrip(".")
+    if ext not in EXTENSIES:
+        return "only pdf, png or jpg"
+    if not blob:
+        return "the file is empty"
+    if len(blob) > MAX_BYTES:
+        return "the file is larger than 10 MB"
+    if not blob.startswith(_MAGIE[ext]):
+        return f"this file is not a real .{ext}"
+    return ""
 
 
 class _Register:
@@ -190,6 +214,13 @@ class _Register:
         self._append([r])
         return r
 
+    def voeg_toe_alle(self, regels: list[dict], *, door: str = "") -> list[dict]:
+        """Meerdere regels in ÉÉN append (een import): ze komen er allemaal bij of geen."""
+        rs = [self._stempel(r, door) for r in regels]
+        if rs:
+            self._append(rs)
+        return rs
+
     def niet_te_corrigeren(self, oud_id: str) -> str:
         """Waarom deze regel niet (meer) gecorrigeerd of geannuleerd kan worden, of "".
 
@@ -241,15 +272,10 @@ class _Register:
     def bewaar_bijlage(self, bestandsnaam: str, blob: bytes, *, jaar: str = "") -> tuple[dict | None, str]:
         """Schrijf een bijlage weg (nooit overschrijven: een nieuwe uuid) → (attachment, "") of
         (None, reden). pdf/png/jpg, maximaal 10 MB, en de inhoud moet bij de extensie passen."""
+        fout = controleer_bijlage(bestandsnaam, blob)
+        if fout:
+            return None, fout
         ext = os.path.splitext(bestandsnaam or "")[1].lower().lstrip(".")
-        if ext not in EXTENSIES:
-            return None, "only pdf, png or jpg"
-        if not blob:
-            return None, "the file is empty"
-        if len(blob) > MAX_BYTES:
-            return None, "the file is larger than 10 MB"
-        if not blob.startswith(_MAGIE[ext]):
-            return None, f"this file is not a real .{ext}"
         jaar = jaar or time.strftime("%Y")
         rel = os.path.join(MAP, "attachments", jaar, f"{uuid.uuid4().hex}.{ext}")
         vol = os.path.join(os.path.dirname(self.dir), rel)
@@ -288,8 +314,9 @@ class KostenRegister(_Register):
 
 def filter_regels(regels: list[dict], *, periode: str = "", account: str = "", regel: str = "",
                   batch: str = "", leverancier: str = "", status: str = "",
-                  zonder_document: bool = False) -> list[dict]:
-    """De regels die aan alle opgegeven filters voldoen (leeg = geen filter)."""
+                  zonder_document: bool = False, betaald_via: str = "") -> list[dict]:
+    """De regels die aan alle opgegeven filters voldoen (leeg = geen filter). `betaald_via`: een
+    sleutel uit `paid_via`, of `BANK` voor de regels die de bankrekening van Nooch betaalde."""
     uit = []
     for r in regels:
         if periode and r.get("period") != periode:
@@ -305,6 +332,8 @@ def filter_regels(regels: list[dict], *, periode: str = "", account: str = "", r
         if status and r.get("payment_status") != status:
             continue
         if zonder_document and r.get("attachment"):
+            continue
+        if betaald_via and (r.get("paid_via") or BANK) != betaald_via:
             continue
         uit.append(r)
     return uit

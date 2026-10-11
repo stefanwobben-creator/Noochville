@@ -26,6 +26,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/tools` | `render_tools` | `nooch_village/views/tools.py` |
 | `/finance` | `(inline)` | `cockpit2.py` |
 | `/finance/costs` | `render_costs` | `nooch_village/views/finance.py` |
+| `/finance/costs/import` | `render_kosten_import` | `nooch_village/views/finance.py` |
 | `/finance/costs/view` | `render_cost` | `nooch_village/views/finance.py` |
 | `/finance/recurring` | `render_recurring` | `nooch_village/views/finance.py` |
 | `/finance/monthly` | `render_monthly` | `nooch_village/views/finance.py` |
@@ -188,6 +189,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `finance_kost_cancel` | `_act_finance_annuleer` |
 | `finance_omzet_cancel` | `_act_finance_annuleer` |
 | `finance_hist_cutover` | `_act_finance_hist_cutover` |
+| `finance_kosten_import_terug` | `_act_finance_kosten_import_terug` |
+| `finance_leverancier_standaard` | `_act_finance_leverancier_standaard` |
 | `metrics2_compare` | `_act_metrics2_compare` |
 | `metrics2_formula` | `_act_metrics2_formula` |
 | `source_activate` | `_act_source_activate` |
@@ -377,6 +380,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | Databestand |
 |---|
 | `co2_factoren.json` |
+| `cost_imports.jsonl` |
 | `critical_numbers.json` |
 | `finance.json` |
 | `history.jsonl` |
@@ -389,6 +393,7 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 | `revenue.jsonl` |
 | `rugzakken.json` |
 | `seed_surges.json` |
+| `supplier_defaults.jsonl` |
 | `trend_signals.jsonl` |
 | `triage_uitkomsten.jsonl` |
 | `villageraad.jsonl` |
@@ -396,4 +401,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_71 routes · 177 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 17 zonder gevonden schrijver._
+_72 routes · 179 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 19 zonder gevonden schrijver._

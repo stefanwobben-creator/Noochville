@@ -38,3 +38,18 @@ def standaard_regel(account: str, cfg: dict | None = None) -> str:
         if a and a in namen - {""}:
             return acc.get("standaard_regel") or ""
     return ""
+
+
+def betaald_via(cfg: dict | None = None) -> list[dict]:
+    """De toegestane waarden voor `paid_via` ([{key, label}]); leeg = de bankrekening van Nooch."""
+    cfg = cfg or laad()
+    return list(cfg.get("paid_via") or [])
+
+
+def betaald_via_key(waarde, cfg: dict | None = None) -> str | None:
+    """Sleutel of label (hoofdletters maken niet uit) → de sleutel; "" bij leeg; None als onbekend."""
+    w = " ".join(str(waarde or "").split()).lower()
+    if not w:
+        return ""
+    return next((x["key"] for x in betaald_via(cfg)
+                 if w in {str(x["key"]).lower(), str(x.get("label") or "").lower()}), None)

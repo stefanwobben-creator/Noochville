@@ -5595,6 +5595,30 @@ def _act_finance_hist_cutover(c):
         return c.nxt, ("✓ cutover unchanged" if fout == "unchanged" else "✓ cutover saved")
 
 
+def _act_finance_kosten_import_terug(c):
+        # AUTHZ: rolvervuller of Circle Lead — zicht-groep `finance`, recht "wijzigen", dezelfde poort
+        # als de import zelf. Geen recht = 404. Terugdraaien is ALLEEN tegenboekingen erbij
+        # (`finance_kosten_import.terugdraaien`), niets verdwijnt.
+        from nooch_village.views import finance as _fin
+        st = c.st
+        if not _fin.mag_wijzigen(st, c.username):
+            raise NietGevonden()
+        return c.nxt, _fin.verwerk_kosten_import_terug(st, {"import_id": c.g("import_id"),
+                                                             "bevestig": c.g("bevestig")},
+                                                        door=_web_actor_id(c.username, st) or "")
+
+
+def _act_finance_leverancier_standaard(c):
+        # AUTHZ: rolvervuller of Circle Lead — zelfde poort als de import. Een standaard is een
+        # VOORSTEL voor later (`supplier_defaults.jsonl`, alleen toevoegen), nooit een automatisme.
+        from nooch_village.views import finance as _fin
+        st = c.st
+        if not _fin.mag_wijzigen(st, c.username):
+            raise NietGevonden()
+        return c.nxt, _fin.verwerk_leverancier_standaard(st, list(c.form.get("standaard") or []),
+                                                          door=_web_actor_id(c.username, st) or "")
+
+
 def _act_verplichting_weg(c):
         # AUTHZ: rolvervuller of Circle Lead — zelfde poort als `verplichting_zet`.
         st = c.st
@@ -6920,6 +6944,8 @@ ACTIONS = {
     "finance_kost_cancel": _act_finance_annuleer,
     "finance_omzet_cancel": _act_finance_annuleer,
     "finance_hist_cutover": _act_finance_hist_cutover,
+    "finance_kosten_import_terug": _act_finance_kosten_import_terug,
+    "finance_leverancier_standaard": _act_finance_leverancier_standaard,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
@@ -7431,6 +7457,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 if path == "/finance/costs":
                     self._send(_fin.render_costs(st, username, effective_csrf,
                                                  {k: _q(k) for k in _fin.FILTERS}, _msg)); return
+                if path == "/finance/costs/import":
+                    # AUTHZ: zicht-groep `finance`, recht "wijzigen" (Financial Controller en Stefan).
+                    # Wie alleen mag zien (Business strategy) krijgt hier ook een 404: importeren is
+                    # invoeren. Geen knop in het hoofdmenu; de ingang is de kostenpagina.
+                    h = _fin.render_kosten_import(st, username, effective_csrf, _msg)
+                    self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
                 if path == "/finance/costs/view":
                     h = _fin.render_cost(st, username, effective_csrf, _q("id"), _msg)
                     self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
@@ -8465,6 +8497,20 @@ def make_handler(data_dir: str, csrf_token: str,
                     if _soort == "html":
                         self._send(_uit); return
                     self._redirect(fields.get("next", "/finance/history"), _uit); return
+                if fields.get("action") in ("finance_kosten_import", "finance_kosten_import_bevestig"):
+                    # AUTHZ: zicht-groep `finance`, recht "wijzigen" — zelfde poort als de historie-
+                    # import; geen recht = een 404. Eerst een preview (bestanden meteen geborgd, niets in
+                    # het register), pas na bevestiging nieuwe kostregels (`finance_kosten_import`).
+                    from nooch_village.views import finance as _fin
+                    _st = _Stores(data_dir)
+                    if not _fin.mag_wijzigen(_st, username):
+                        self._send("<p>404</p>", 404); return
+                    _soort, _uit = _fin.verwerk_kosten_import(
+                        _st, fields, files, door=_web_actor_id(username, _st) or str(username or ""),
+                        csrf=csrf_token, limiet=_upload_max_bytes())
+                    if _soort == "html":
+                        self._send(_uit); return
+                    self._redirect(fields.get("next", "/finance/costs/import"), _uit); return
                 if fields.get("action") in ("finance_omzet_add", "finance_omzet_correct"):
                     # AUTHZ: zicht-groep `finance`, recht "wijzigen" — dezelfde poort als de kosten
                     # hierboven; geen recht = een 404. Alleen toevoegen: een correctie is een
