@@ -191,3 +191,33 @@ def test_een_fout_toont_het_formulier_met_wat_er_stond_en_slaat_niets_op(tmp_pat
         assert _st(dd).vaste_kosten.alle() == []
     finally:
         httpd.shutdown()
+
+
+def test_de_hulptekst_klopt_met_het_gedrag():
+    """De vier vragen uit de instructie (sectie 9): wat de tekst zegt, doet het systeem ook."""
+    from nooch_village import finance_config as fc
+    from nooch_village.finance_register import maak_kost
+    cfg = fc.laad()
+    basis = {"entry_date": "2026-10-05", "supplier": "X", "description": "Y", "amount_excl": "100",
+             "no_document_reason": "t"}
+    # a. zonder account en regel: geweigerd; een account uit de lijst stelt een regel voor, een vrij
+    #    getypte naam niet.
+    assert maak_kost(basis, cfg)[0] is None
+    assert maak_kost({**basis, "account_code": cfg["accounts"][0]["naam_nl"]}, cfg)[0] is not None
+    assert maak_kost({**basis, "account_code": "Telefoon"}, cfg)[0] is None
+    assert "Required, unless you picked an account from the list" in fu.KOSTEN["management_line"][2]
+    assert "not in the list proposes nothing" in fu.KOSTEN["account_code"][2]
+    # b. de runway telt de maandbedragen van alles wat vandaag loopt: "monthly share" klopt.
+    from nooch_village.finance_recurring import RecurringCostStore
+    import tempfile, os
+    rc = RecurringCostStore(os.path.join(tempfile.mkdtemp(), "recurring.json"))
+    rc.zet({"description": "Insurance", "supplier": "", "amount_cents": 10000, "account_code": "",
+            "management_line": "", "van": "2026-01-01", "tot": "", "notitie": ""}, door="t")
+    assert rc.totaal_cents_op("2026-06-15") == 10000
+    assert "divided by 12" in fu.TERUGKEREND["bedrag"][2] and "divided by 3" in fu.TERUGKEREND["bedrag"][2]
+    # c. een creditnota kan niet als losse negatieve regel (behalve op de marketingbijdrage): via Correct.
+    assert maak_kost({**basis, "management_line": "brand", "amount_excl": "-50"}, cfg)[0] is None
+    vat = " ".join(next(a for k, _t, a in fu.HELP if k == "vat"))
+    assert "use Correct" in vat and "cannot yet be entered as a line of its own" in vat
+    # d. niet-aftrekbare btw: geen fiscale regel, wel de verwijzing.
+    assert "Ask Venema before entering such a cost." in vat

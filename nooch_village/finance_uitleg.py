@@ -37,11 +37,13 @@ KOSTEN = {
             "never added to the totals. No VAT on the invoice (for example a supplier abroad with reverse "
             "charge)? Leave it empty.", "21,00"),
     "account_code": ("Account (accountant)", False,
-                     "The accountant's main group. Pick one and we propose the management line. The numbered "
-                     "scheme follows when Venema delivers it.", "Kantoorkosten"),
+                     "The accountant's main group. Pick one from the list and we propose the management line; a "
+                     "name that is not in the list proposes nothing. The numbered scheme follows when Venema "
+                     "delivers it.", "Kantoorkosten"),
     "management_line": ("Management line", False,
-                        "Where this cost lands in the P&L. Required unless you picked an account: then empty "
-                        "means we take the line proposed for that account.", "Other costs like housing and IT"),
+                        "Where this cost lands in the P&L. Required, unless you picked an account from the list: "
+                        "then empty means we take the line proposed for that account.",
+                        "Other costs like housing and IT"),
     "batch": ("Batch", False, "Only fill in if this cost belongs to one batch. It is used in the P&L per batch.",
               "Batch 4"),
     "payment_status": ("Payment status", True, "Open until the money has left the account.", "Open"),
@@ -76,7 +78,8 @@ TERUGKEREND = {
     "leverancier": ("Supplier", False, "Who you pay.", "Landlord"),
     "bedrag": ("Amount per month excl. VAT", True,
                "The amount for one month, without VAT. An annual or quarterly invoice? Enter the monthly share "
-               "here (annual amount divided by 12). The Runway adds up these monthly amounts.", "450,00"),
+               "here: the annual amount divided by 12, a quarterly amount divided by 3. The Runway adds up the "
+               "monthly amounts of everything that runs today.", "450,00"),
     "van": ("From", True, "The first day this cost applies.", "2026-01-01"),
     "tot": ("Until", False, "The last day it applies. Leave empty if it continues.", "2026-12-31"),
     "account_code": KOSTEN["account_code"],
@@ -186,8 +189,10 @@ HELP = (
         "The VAT field is optional and never counts in any total; it is only stored so the accountant can "
         "check it.",
         "No VAT on the invoice, for example a supplier abroad with reverse charge: leave the VAT field empty.",
-        "A credit note from a supplier: open the original cost line and use Correct, with the new net amount. "
-        "A credit note cannot yet be entered as a line of its own.",
+        "A credit note from a supplier: open the original cost line and use Correct, enter the new net "
+        "amount and attach the credit note as the document of the correction (the original invoice stays on "
+        "the reversed line). A credit note cannot yet be entered as a line of its own, and not at all when "
+        "the original invoice is not in the register.",
         "VAT that cannot be deducted is a decision for the books. Ask Venema before entering such a cost.",
     )),
     ("mistakes", "Mistakes", (
@@ -210,8 +215,9 @@ HELP = (
         "no document.",
         "A cost line is an actual invoice. Link it to the recurring cost with 'Belongs to recurring cost'; "
         "until then that month shows as 'expected, not invoiced'.",
-        "An annual invoice: enter the monthly share as the recurring cost. As a cost line, one invoice lands "
-        "in one month of the P&L, and the other months of that recurring cost show as expected, not invoiced.",
+        "An annual or quarterly invoice: enter the monthly share as the recurring cost. As a cost line, one "
+        "invoice lands in one month of the P&L (its period of use), and the other months of that recurring "
+        "cost show as expected, not invoiced. Spreading it means one cost line per month.",
     )),
     ("revenue", "Revenue and subsidy", (
         "Enter revenue in the month of delivery. Any month in the past is allowed.",
@@ -230,8 +236,10 @@ HELP = (
     )),
     ("lines", "Batch, account and management line", (
         "Batch: only when a cost or revenue belongs to one batch.",
-        "Account: the accountant's main group. Pick one and the management line is proposed for you.",
-        "Management line: the row of the P&L the amount lands on. Required unless an account proposes one.",
+        "Account: the accountant's main group. Pick one from the list and the management line is proposed "
+        "for you; a name that is not in the list proposes nothing.",
+        "Management line: the row of the P&L the amount lands on. Required, unless an account from the list "
+        "proposes one. Without both, the line is not saved.",
     )),
 )
 
