@@ -770,7 +770,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .editor textarea:focus{outline:none}
 /* Checklists */
 .cl-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
-.cl-bar{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;font-size:.82rem}
+/* flex-wrap (11 oktober 2026): op een telefoon liep een rij van 7-8 tabs (Finance) buiten beeld en
+   scrolde de hele pagina opzij. Past de rij, dan verandert er niets. */
+.cl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:.5rem;font-size:.82rem}
 .cl-filter{text-decoration:none;color:var(--gray);padding:.1rem .4rem;border-radius:var(--radius)}
 .cl-filter.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
 /* Pill-variant van dezelfde klasse (geen nieuwe familie): een keuze moet je in één blik zien staan.

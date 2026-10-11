@@ -221,6 +221,32 @@ def _kostformulier(st, cfg: dict, csrf: str, actie: str, terug: str, r: dict | N
             f"<button class='btn ok sm' type='submit'>Save</button></form>")
 
 
+def _annuleer_kaart(csrf: str, actie: str, kid: str, terug: str) -> str:
+    """"Cancel line": alleen een tegenboeking, met een verplichte reden (11 oktober 2026). Correct
+    maakt altijd ook een vervangende regel; wie een regel gewoon niet had moeten invoeren, wil die niet."""
+    return _nieuw_kaart("Cancel line", (
+        f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
+        f"<input type='hidden' name='action' value='{actie}'><input type='hidden' name='kid' value='{_e(kid)}'>"
+        f"<input type='hidden' name='next' value='{_e(terug)}'>"
+        f"<p class='muted'>{_e(fu.ANNULEER_KOP)}</p>{_hulp_link('mistakes')}"
+        f"{_veld(fu.ANNULEER, 'reason', 'fa', attrs='')}"
+        f"<button class='btn sm' type='submit'>Cancel this line</button></form>"), open_=False)
+
+
+def verwerk_annuleer(st, fields: dict, *, door: str, register) -> str:
+    """Annuleer een kost- of omzetregel: alleen de tegenboeking. De rechten toetst de aanroeper (404)."""
+    reg = register(st.dd)
+    kid = fields.get("kid", "")
+    if reg.get(kid) is None:
+        return "✗ the line does not exist"
+    if reg.niet_te_corrigeren(kid):
+        return f"✗ {reg.niet_te_corrigeren(kid)}"
+    if not " ".join(str(fields.get("reason") or "").split()):
+        return "✗ give a reason for cancelling the line"
+    reg.annuleer(kid, fields["reason"], door=door)
+    return "✓ cancelled: a reversal was added, and the line now counts as zero"
+
+
 def _nieuw_kaart(label: str, inhoud: str, open_: bool) -> str:
     """Het formulier voor een nieuwe regel: een volle kaart, niet in een klein popover-blokje. Open
     als er nog niets is, of als er net een fout was (dan staat wat je invulde er nog)."""
@@ -343,14 +369,18 @@ def render_cost(st, username, csrf: str, kid: str, msg: str = "", *, waarden: di
                              f"({_eur(x['amount_excl_cents'])})</li>" for x in geschiedenis) + "</ul>"
             if geschiedenis else "<p class='muted'>Not corrected.</p>")
     correct = ""
-    if mag_wijzigen(st, username) and csrf and not r.get("corrects"):
-        correct = _nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
-                               "with the values below. Nothing is overwritten.</p>"
-                               + _kostformulier(st, cfg, csrf, "finance_kost_correct",
-                                                f"/finance/costs/view?id={kid}", r,
-                                                extra=f"<input type='hidden' name='kid' value='{_e(kid)}'>",
-                                                pre="fkc", waarden=waarden, fout=fout),
-                               open_=bool(fout))
+    if mag_wijzigen(st, username) and csrf:
+        if reg.niet_te_corrigeren(kid):
+            correct = f"<p class='muted'>{_e(reg.niet_te_corrigeren(kid).capitalize())}.</p>"
+        else:
+            correct = (_nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
+                                    "with the values below. Nothing is overwritten.</p>"
+                                    + _kostformulier(st, cfg, csrf, "finance_kost_correct",
+                                                     f"/finance/costs/view?id={kid}", r,
+                                                     extra=f"<input type='hidden' name='kid' value='{_e(kid)}'>",
+                                                     pre="fkc", waarden=waarden, fout=fout),
+                                    open_=bool(fout))
+                       + _annuleer_kaart(csrf, "finance_kost_cancel", kid, f"/finance/costs/view?id={kid}"))
     inhoud = (f"<div class='c2-sec'>{tabel}</div><div class='c2-sec'><h2>Document</h2>{doc}</div>"
               f"<div class='c2-sec'><h2>Corrections</h2>{hist}{correct}</div>")
     return _frame(f"Finance · {r['supplier']}", "/finance/costs", inhoud, msg)
@@ -729,14 +759,18 @@ def render_revenue_regel(st, username, csrf: str, rid: str, msg: str = "", *, wa
                                   f"({_eur(x['amount_excl_cents'])})</li>" for x in hist) + "</ul>"
                  if hist else "<p class='muted'>Not corrected.</p>")
     correct = ""
-    if mag_wijzigen(st, username) and csrf and not r.get("corrects"):
-        correct = _nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
-                               "with the values below. Nothing is overwritten.</p>"
-                               + _omzetformulier(cfg, csrf, "finance_omzet_correct",
-                                                 f"/finance/revenue/view?id={rid}", r,
-                                                 extra=f"<input type='hidden' name='kid' value='{_e(rid)}'>",
-                                                 pre="foc", waarden=waarden, fout=fout),
-                               open_=bool(fout))
+    if mag_wijzigen(st, username) and csrf:
+        if reg.niet_te_corrigeren(rid):
+            correct = f"<p class='muted'>{_e(reg.niet_te_corrigeren(rid).capitalize())}.</p>"
+        else:
+            correct = (_nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
+                                    "with the values below. Nothing is overwritten.</p>"
+                                    + _omzetformulier(cfg, csrf, "finance_omzet_correct",
+                                                      f"/finance/revenue/view?id={rid}", r,
+                                                      extra=f"<input type='hidden' name='kid' value='{_e(rid)}'>",
+                                                      pre="foc", waarden=waarden, fout=fout),
+                                    open_=bool(fout))
+                       + _annuleer_kaart(csrf, "finance_omzet_cancel", rid, f"/finance/revenue/view?id={rid}"))
     inhoud = (f"<div class='c2-sec'>{tabel}</div><div class='c2-sec'><h2>Document</h2>{doc}</div>"
               f"<div class='c2-sec'><h2>Corrections</h2>{hist_html}{correct}</div>")
     return _frame(f"Finance · {r['description']}", "/finance/revenue", inhoud, msg)
@@ -772,6 +806,8 @@ def verwerk_omzet(st, fields: dict, files: dict, *, username, door: str) -> str:
     oud = reg.get(correctie_van) if correctie_van else None
     if correctie_van and oud is None:
         return "✗ the line to correct does not exist"
+    if correctie_van and reg.niet_te_corrigeren(correctie_van):
+        return f"✗ {reg.niet_te_corrigeren(correctie_van)}"
     v = {k: fields.get(k, "") for k in ("entry_date", "period", "revenue_line", "description", "amount_excl",
                                          "vat", "batch", "pairs", "note")}
     fname, blob = files.get("file") or ("", b"")
@@ -1135,6 +1171,8 @@ def verwerk_kost(st, fields: dict, files: dict, *, username, door: str) -> str:
     oud = reg.get(correctie_van) if correctie_van else None
     if correctie_van and oud is None:
         return "✗ the line to correct does not exist"
+    if correctie_van and reg.niet_te_corrigeren(correctie_van):
+        return f"✗ {reg.niet_te_corrigeren(correctie_van)}"
     v = {k: fields.get(k, "") for k in ("entry_date", "period", "supplier", "description", "amount_excl",
                                          "vat", "account_code", "management_line", "batch", "payment_status",
                                          "paid_date", "recurring_id", "note", "no_document_reason")}
