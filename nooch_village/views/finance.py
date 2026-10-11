@@ -35,6 +35,11 @@ _STREEP = "<span class='muted'>—</span>"
 #: Een brede tabel in zijn eigen scrollcontainer (`.c2-scroll`, 11 oktober 2026). ALLEEN om een
 #: tabel: om een gewone alinea (de lege toestand) verandert `overflow` het samenvallen van marges.
 _SCROLL = " c2-scroll"
+
+
+def _scrolt(tabel: str) -> str:
+    """Alleen de tabel in een scrollcontainer, niet het kopje erboven (zelfde reden als `_SCROLL`)."""
+    return f"<div class='c2-scroll'>{tabel}</div>"
 _GEEN_DATA = "<span class='muted'>no data</span>"
 _SCHERMEN = (("/finance/costs", "Costs"), ("/finance/revenue", "Revenue"), ("/finance/recurring", "Recurring"),
              ("/finance/monthly", "Monthly"), ("/finance/pnl", "P&L"), ("/finance/history", "History"),
@@ -493,8 +498,8 @@ def render_recurring(st, username, csrf: str, msg: str = "", *, waarden: dict | 
                 + "</table>") if open_ else "<p class='muted'>Every recurring cost has an invoice line.</p>"
     inhoud = (f"<p class='muted'>{_e(fu.TERUGKEREND_KOP)}</p>"
               f"<p>Running today: <strong>{_eur(st.vaste_kosten.totaal_cents_op())}</strong> per month — the "
-              f"fixed costs of the runway.</p>{nieuw}<div class='c2-sec'>{tabel}</div>"
-              f"<div class='c2-sec'><h2>Expected, not invoiced (last 6 months)</h2>{verwacht}</div>")
+              f"fixed costs of the runway.</p>{nieuw}<div class='c2-sec{_SCROLL if rijen else ""}'>{tabel}</div>"
+              f"<div class='c2-sec'><h2>Expected, not invoiced (last 6 months)</h2>{_scrolt(verwacht) if open_ else verwacht}</div>")
     return _frame("Finance · Recurring costs", "/finance/recurring", inhoud, msg)
 
 
@@ -515,7 +520,7 @@ def render_monthly(st, username) -> str:
                     + f"<td class='num'>{_eur(sum(cel.get((a, m), 0) for m in maanden))}</td></tr>" for a in accounts)
     tabel = (f"<table class='mtab' aria-label='totals per account per month'><tr><th>Account</th>{kop}"
              f"<th class='num'>Total</th></tr>{rijen}</table>")
-    return _frame("Finance · Monthly", "/finance/monthly", f"<div class='c2-sec'>{tabel}</div>")
+    return _frame("Finance · Monthly", "/finance/monthly", f"<div class='c2-sec c2-scroll'>{tabel}</div>")
 
 
 # ── /finance/pnl ────────────────────────────────────────────────────────────
@@ -913,8 +918,8 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
             rijen.append(f"<tr><td colspan='{len(maanden) + 1}'><strong>{_e(x['label'])}</strong></td></tr>")
             continue
         rijen.append(f"<tr><td>{_e(x['label'])}</td>{''.join(invoer(x, m) for m in maanden)}</tr>")
-    raster = (f"<table class='mtab' aria-label='history {jaar}'><tr><th>{jaar}</th>{kop}</tr>"
-              f"{''.join(rijen)}</table>")
+    raster = _scrolt(f"<table class='mtab' aria-label='history {jaar}'><tr><th>{jaar}</th>{kop}</tr>"
+                     f"{''.join(rijen)}</table>")
     if schrijven:
         raster = (f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
                   f"<input type='hidden' name='action' value='finance_hist_opslaan'>"
@@ -935,8 +940,8 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
         + "".join(f"<td class='num'>{_eur(r['waarden'].get(m)) if m in gevuld else _GEEN_DATA}</td>"
                   for m in maanden) + "</tr>"
         for r in uit["rijen"] if r["soort"] in ("omzet", "laag"))
-    controle = (f"<h2>Check: layers from the history above</h2><table class='mtab' aria-label='layers {jaar}'>"
-                f"<tr><th></th>{kop}</tr>{lagen}</table>")
+    controle = (f"<h2>Check: layers from the history above</h2>"
+                + _scrolt(f"<table class='mtab' aria-label='layers {jaar}'><tr><th></th>{kop}</tr>{lagen}</table>"))
     nav = (f"<p><a href='/finance/history?jaar={int(jaar) - 1}'>← {int(jaar) - 1}</a> · <strong>{jaar}</strong> · "
            f"<a href='/finance/history?jaar={int(jaar) + 1}'>{int(jaar) + 1} →</a> · "
            f"<a href='/finance/history.csv?jaar={jaar}'>Export CSV</a> · "

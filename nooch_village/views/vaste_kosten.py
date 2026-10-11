@@ -119,14 +119,16 @@ def render_vaste_kosten(st, username: str | None, csrf_token: str = "", msg: str
     eur = lambda x: "—" if x is None else f"€{x:,.2f}"
     maanden = (f"{r['maanden']:g} months" if r["maanden"] is not None
                else "no runway yet (missing: " + ", ".join(r["ontbreekt"]) + ")")
-    main = (f"<div class='c2-main'><h1 class='ptitle'>Runway inputs</h1>"
+    # `c2-main--vol` + `c2-scroll`: zoals de Finance-frame (#718) — op een telefoon scrollt een brede
+    # tabel in zijn eigen container in plaats van de hele pagina breder te maken.
+    main = (f"<div class='c2-main c2-main--vol'><h1 class='ptitle'>Runway inputs</h1>"
             f"<p class='muted'>Everything the runway is computed from. Not the books: ledger, invoices "
             f"and VAT stay with the accountant (Dutch GAAP, RJ).</p>{_banner(msg)}"
             f"<p><strong>Runway: {_e(maanden)}</strong><br>Cash {eur(r['cash'])} − production "
             f"commitments {eur(r['verplichtingen'])} − tax liabilities {eur(r['belasting'])} − supplier "
             f"payables {eur(r['crediteuren'])} = <strong>free cash {eur(r['vrije_cash'])}</strong>, "
             f"divided by fixed costs {eur(r['vaste_kosten'])} per month.</p>"
-            f"<div class='c2-sec'><h2>Cash and liabilities</h2>{_metingen(st, csrf_token, bewerk)}</div>"
+            f"<div class='c2-sec'><h2>Cash and liabilities</h2><div class='c2-scroll'>{_metingen(st, csrf_token, bewerk)}</div></div>"
             f"<div class='c2-sec' id='commitments'><h2>Production commitments (open batches)</h2>"
             f"<p class='muted'>The factory is paid 50% when the batch is ordered and 50% on delivery: "
             f"still owed = total − paid, and 0 once delivered and paid in full.</p>"

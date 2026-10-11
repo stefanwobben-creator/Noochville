@@ -6,8 +6,9 @@
 #
 # pytest staat bewust in requirements.txt en niet hier: CI installeert alleen dat bestand.
 
-# Browser-eindcheck op de herbouwde schermen (fase 9). Geen enkele test in tests/ importeert
-# playwright; hij draait handmatig via claude/fase9_screenshots/maak_screenshots.py.
+# Browser-eindcheck op de herbouwde schermen (fase 9); hij draait handmatig via
+# claude/fase9_screenshots/maak_screenshots.py. Eén test in tests/ gebruikt playwright
+# (test_finance_tabel_scroll, paginabreedte op 390px) en slaat over als hij of Chromium ontbreekt.
 #
 # Waarom vastgelegd en niet weggegooid: de screenshot-ronde vond twee fouten die de 4.027
 # unit-tests niet konden zien, omdat die de broncode lezen en niet de gerenderde pagina —
