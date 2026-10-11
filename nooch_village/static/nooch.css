@@ -42,7 +42,7 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 /* Wachtindicator: draaiende 🌍 + tekst over de (nog zwarte) bol, verdwijnt zodra het frame geladen is. */
 @media (prefers-reduced-motion:reduce){.epic-globe{animation:none}}
 .c2-sec{margin:1.1rem 0}
-.c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
+.c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}
 ul.clean li{padding:.22rem 0;border-bottom:1px solid var(--border)}
 ul.clean li:last-child{border-bottom:none}
@@ -50,7 +50,7 @@ ul.clean li:last-child{border-bottom:none}
 .av{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;font-size:.62rem;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
 .av.ai{background:#7A5BD1}
 .tree{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .85rem;box-shadow:var(--shadow)}
-.tree h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;color:var(--green-dark);margin:.1rem 0 .4rem}
+.tree h3{font-family:var(--font-display);font-size:var(--type-12);text-transform:uppercase;color:var(--green-dark);margin:.1rem 0 .4rem}
 .tree ul{list-style:none;margin:0;padding-left:.8rem}.tree>ul{padding-left:0}
 .tree li{padding:.12rem 0;font-size:.86rem}
 .tree .c{font-weight:700}
@@ -64,14 +64,14 @@ ul.clean li:last-child{border-bottom:none}
 .tree details.tree-c>summary::-webkit-details-marker{display:none}
 .tree details.tree-c>summary::before{content:'\0025B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
 .tree details.tree-c[open]>summary::before{content:'\0025BE'}
-.pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
+.pill{display:inline-block;font-size:var(--type-12);padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
 .pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem}
 .pcol-scroll{max-height:540px;overflow-y:auto}
 .swim{margin:.6rem 0}
 .swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
-.pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
+.pcol-h{font-family:var(--font-display);font-weight:700;font-size:var(--type-12);text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
 /* Subtiele status-tint per kolom: het label blijft de primaire drager, de kleur versterkt.
    doing=blauw (actief), waiting=ROOD, done=groen, todo=grijs (toekomst).
@@ -89,8 +89,8 @@ ul.clean li:last-child{border-bottom:none}
 .pcol[data-to='wacht']{background:var(--col-wacht);border-color:var(--colb-wacht)}
 .pcol[data-to='done']{background:var(--col-done);border-color:var(--colb-done)}
 .pcol[data-to='toekomst']{background:var(--col-toekomst);border-color:var(--colb-toekomst)}
-.dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
-.star{background:none;border:none;cursor:pointer;padding:0;font-size:1.15rem;line-height:1;color:var(--border);transition:color .12s}
+.dellink{background:none;border:none;color:var(--danger-text);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
+.star{background:none;border:none;cursor:pointer;padding:0;font-size:1.15rem;line-height:1;color:var(--subtle);transition:color .12s}
 .star:hover{color:var(--yellow)}
 .star.on{color:var(--yellow)}
 .rdr-cards .card{position:relative;padding-right:2rem}
@@ -117,7 +117,7 @@ ul.clean li:last-child{border-bottom:none}
 .cat-nav{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.4rem 0 .9rem;position:sticky;top:0;background:var(--cream-2);padding:.5rem 0;z-index:5}
 .cat-q{flex:1 1 14rem;min-width:10rem;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.4rem .8rem;font:inherit}
 .cat-f{border:1px solid var(--border);background:var(--surface);color:var(--gray);border-radius:var(--radius-pill);padding:.25rem .7rem;font-size:.8rem;cursor:pointer}
-.cat-f.on{background:var(--green);color:#fff;border-color:var(--green)}
+.cat-f.on{background:var(--nu-neon);color:var(--nu-text);border-color:var(--nu-text)}
 .cat-f-x{color:var(--subtle)}
 .cat-count{margin-left:auto}
 .cat-fg{display:inline-flex;align-items:center;gap:.3rem;flex-wrap:wrap}
@@ -126,7 +126,7 @@ ul.clean li:last-child{border-bottom:none}
 .burnup{display:block;border-bottom:1px solid var(--border)}
 .bu-tempo{font-size:.85rem}
 .bu-ok{color:var(--green-dark);font-weight:700}
-.bu-no{color:var(--coral);font-weight:700}
+.bu-no{color:var(--danger-text);font-weight:700}
 .bu-proj{font-size:.74rem}
 .tile-data{margin-top:.35rem;font-size:.76rem}
 .tile-data>summary{cursor:pointer;list-style:none;color:var(--subtle);display:flex;align-items:center;gap:.4rem}
@@ -136,7 +136,7 @@ ul.clean li:last-child{border-bottom:none}
 .tile-data .mtab{margin-top:.3rem;width:100%}
 .delta{font-weight:700}
 .delta.up{color:var(--green-dark)}
-.delta.down{color:var(--coral)}
+.delta.down{color:var(--danger-text)}
 .delta.flat{color:var(--subtle)}
 .bullet-wrap{display:flex;flex-direction:column;gap:.2rem}
 .bullet-h b{font-size:1.1rem}
@@ -151,7 +151,7 @@ ul.clean li:last-child{border-bottom:none}
 .kc-radio input{width:auto;margin-right:.4rem}
 .kc-cond{margin:.3rem 0 .3rem 1.3rem}
 .kc-hint{font-size:.72rem;margin:.2rem 0 0}
-.tile-prov{font-size:.66rem;color:var(--coral);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
+.tile-prov{font-size:var(--type-12);color:var(--danger-text);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -180,10 +180,10 @@ ul.clean li:last-child{border-bottom:none}
    runner, dus hier gebeurt gegarandeerd nooit iets. Rood en vet, want dit is het enige dat je
    moet zien. Dát er wél gewerkt wordt, laat de projectpagina zien door de vinkjes te tonen die
    omvallen (scope 23) en niet door er een woord over te schrijven. */
-.pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:.66rem;
+.pstatus{display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;font-size:var(--type-12);
   padding:.05rem .4rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray)}
 .pstatus.is-onbemand{background:var(--coral);color:#fff;font-weight:600}
-.pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
+.pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:var(--type-12);color:var(--muted)}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
 /* doelen (scope 46): dezelfde balk als <progress>, zodat de breedte geen inline style hoeft te zijn */
@@ -317,19 +317,19 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 .acc-text{flex:1 1 auto;min-width:0}
 .acc-ai{flex:0 0 auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
 /* Chip-atoom: .chip (default = tint) + kleur-modifiers. Eén pill voor status/deadline/reactie/AI. */
-.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:700;line-height:1.5;background:var(--green-tint);color:var(--green-dark)}
+.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:var(--type-12);font-weight:700;line-height:1.5;background:var(--green-tint);color:var(--green-dark)}
 .chip svg{width:13px;height:13px}
 .chip.green{background:var(--green);color:#fff}
 .chip.muted{background:var(--cream-2);color:var(--gray)}
 .chip.outline{background:transparent;border:1px solid var(--border);color:var(--gray);font-weight:600}
-.chip.coral{background:var(--error-tint);color:var(--coral);border:1px solid var(--coral)}
+.chip.coral{background:var(--error-tint);color:var(--danger-text);border:1px solid var(--coral)}
 /* 'werkt, maar niet zoals bedoeld': niet-geconfigureerd (ontbrekende creds) en een einddocument dat
    van de goedkope terugval-trede kwam i.p.v. het gevraagde model. Bewust anders dan coral (kapotte
    API) en muted (geen data) — er IS een resultaat, het is alleen niet wat er gevraagd werd. */
 .chip.amber{background:var(--yellow-light);color:#8a6d0b;border:1px solid var(--yellow)}
 .chip.doel{background:var(--goal-tint);color:var(--goal);text-decoration:none}
 .chip.doel:hover{background:var(--goal);color:#fff}
-.chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
+.chip.coral-solid{background:var(--coral);color:#fff;font-size:var(--type-12);text-transform:uppercase;padding:.04rem .4rem}
 /* Impact-pills (scope 2): klikbare optie-chips met semantische kleur; elke pill toont z'n kleur (gedempt),
    de gekozen pill (.on) staat vol + met inset-ring. Kleuren per spec: g=groen, n=grijs, r=rood, l=lichtgrijs. */
 .imp-wrap{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
@@ -346,13 +346,13 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
 /* Missie verzwakt: rode kaart-rand (signaal, geen blokkade) + infoblok in de modal. */
 .pcard.verzwakt{border-color:var(--coral)}
 .vzblock{border:1px solid var(--coral);background:var(--error-tint);border-radius:var(--radius);padding:.7rem .85rem;margin-bottom:.7rem}
-.vz-h{font-weight:700;color:var(--coral);margin-bottom:.1rem}
+.vz-h{font-weight:700;color:var(--danger-text);margin-bottom:.1rem}
 .vz-t{color:var(--gray);font-size:.85rem;margin-bottom:.5rem}
 .vz-form{margin:0}
 .chiplink{text-decoration:none}
 /* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
    plus twee modifiers. Geen losse knop-varianten meer elders. */
-.btn.sm{padding:.2rem .6rem;font-size:.74rem}
+.btn.sm{padding:.2rem .6rem;font-size:var(--type-12)}
 .btn.ghost{background:none;border-color:transparent}
 .btn.ghost:hover{background:rgba(27,27,27,.05);border-color:var(--border)}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
@@ -376,14 +376,14 @@ progress.pbar::-moz-progress-bar{background:var(--green);border-radius:999px}
    dat er al staat, geen nieuw soort blok. Een eigen prefix zou een nieuwe klasse-familie zijn
    (de ratchet in `test_ui_ratchets` telt ze) voor twee regels opmaak. */
 .is-verouderd-melding{display:none}
-.is-verouderd .is-verouderd-melding{display:block;color:var(--coral)}
+.is-verouderd .is-verouderd-melding{display:block;color:var(--danger-text)}
 .is-verouderd .editor{opacity:.45}
 /* Logregel (29 september 2026): door de code geschreven, geen opmerking van iemand. Modifier op
    het bestaande `.fentry`, zoals `-opdracht` en `-attach`; geen nieuwe klasse-familie. De VORM van
    de bubbel staat in de designsysteem-helft hieronder — daar wordt `.fbubble` omkaderd, en een
    regel hier zou daar met gelijke specificiteit onder verliezen. */
 .fentry-log{margin-bottom:.4rem}
-.fkicker{display:block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
+.fkicker{display:block;font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 /* De genummerde lijst, zelfde inspringing als `.fbul` — het is dezelfde soort lijst met een
    andere opsommingsvorm, en twee verschillende inspringingen naast elkaar lezen als twee
@@ -611,10 +611,10 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rovm{border:1px solid var(--border);border-radius:var(--radius);padding:.8rem .9rem;margin-bottom:.9rem;background:var(--surface)}
 .rovm-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
-.rovm-kind{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
+.rovm-kind{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
 .rovm-kind b{color:var(--gray)}
 .rovm-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 .2rem}
-.rovm-close:hover{color:var(--coral)}
+.rovm-close:hover{color:var(--danger-text)}
 .rovm-field{margin-top:.7rem}
 .rovm-field input[name=value],.rovm-field textarea,.rovm-field select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem;background:var(--surface);font:inherit}
 .rovm-was{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-style:italic}
@@ -640,9 +640,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .rov-addrow input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
 .sec-issue{font-size:.78rem;border-radius:var(--radius);padding:.3rem .5rem;margin:.15rem 0 .4rem}
 .sec-issue.let{background:var(--cream-2);color:var(--gray)}
-.sec-issue.blok{background:var(--error-tint);color:var(--coral)}
+.sec-issue.blok{background:var(--error-tint);color:var(--danger-text)}
 .sec-block{margin-top:.9rem}
-.sec-kop{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.3rem}
+.sec-kop{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.3rem}
 .rov-consent{margin-top:1rem}
 .btn.ok:disabled,.btn:disabled{background:var(--cream-2);color:var(--muted);border-color:var(--border);cursor:not-allowed}
 .kb-msg{margin-bottom:.55rem}
@@ -667,7 +667,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .kb-msg.noochie{text-align:left}
 
 .rov-delrole{margin-top:1rem;padding-top:.6rem;border-top:1px solid var(--border)}
-.rov-delrole .flink{color:var(--coral)}
+.rov-delrole .flink{color:var(--danger-text)}
 .rov-by{flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
@@ -676,7 +676,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
 .pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
 .pcard-head-r{flex:0 0 auto;display:flex;align-items:center;gap:.5rem;padding-top:.2rem}
-.menu-h{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;padding:.25rem .55rem .1rem}
+.menu-h{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;padding:.25rem .55rem .1rem}
 .menu-sep{height:1px;background:var(--border);margin:.3rem 0}
 .menuitem.on{font-weight:700;color:var(--green-dark);background:var(--green-tint)}
 .pdetail-h{display:flex;align-items:flex-start;gap:.4rem;margin-bottom:.7rem}
@@ -695,7 +695,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .cardmenu-b{position:absolute;right:0;top:2rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;z-index:5;min-width:150px}
 .menuitem{display:block;width:100%;text-align:left;border:none;background:none;padding:.4rem .55rem;border-radius:var(--radius);cursor:pointer;font-size:.85rem;color:var(--ink)}
 .menuitem:hover{background:var(--cream-2)}
-.menuitem.danger{color:var(--coral)}
+.menuitem.danger{color:var(--danger-text)}
 .detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem}
 .detailsbox .psec-h{margin-bottom:.5rem}
 .actioncards{display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 1.1rem}
@@ -715,7 +715,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .cl-title{font-weight:700;font-size:.92rem}
 .cl-del{margin-left:auto}
 .dcol{display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-content:start;min-width:0}
-.dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
+.dk{align-self:baseline;color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
 /* DE VERSIE-UITKLAPPER IS BIJZAAK (25 september 2026). `details>summary` is globaal vet en in
@@ -743,7 +743,7 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .descedit>summary::-webkit-details-marker{display:none}
 .descedit>summary:hover{color:var(--ink)}
 .att-pop{min-width:230px}
-.att-lbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
+.att-lbl{display:block;font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
 /* Leesbare artefact-body (note/policy/tool): donkerder dan .muted + wat regelhoogte. */
 .att-body{color:var(--gray);line-height:1.5}
 .att-pop input[type=text],.att-pop input[name=url],.att-pop input[name=title]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;font-size:.85rem}
@@ -820,8 +820,8 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .cl-act{flex:0 0 auto;display:flex;align-items:center;gap:.5rem}
 .cl-spark{display:inline-flex;gap:1px;font-size:.62rem;letter-spacing:0}
 .cl-spark i{font-style:normal;width:.95em;text-align:center}
-.cl-spark i.ok{color:var(--green)}
-.cl-spark i.no{color:var(--coral)}
+.cl-spark i.ok{color:var(--green-dark)}
+.cl-spark i.no{color:var(--danger-text)}
 .cl-checks{display:inline-flex;gap:.25rem}
 .cl-check{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;width:1.7rem;height:1.7rem;line-height:1;font-size:.85rem;color:var(--muted)}
 .cl-check.ok.on{background:var(--green);color:#fff;border-color:var(--green)}
@@ -931,7 +931,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .uk-lijst{display:flex;flex-direction:column}
 .uk-rij{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem 0;
   border-top:1px solid var(--border)}
-.uk-badge{flex:0 0 auto;margin-top:.1rem;white-space:nowrap;font-size:.66rem;font-weight:700;
+.uk-badge{flex:0 0 auto;margin-top:.1rem;white-space:nowrap;font-size:var(--type-12);font-weight:700;
   text-transform:uppercase;letter-spacing:.03em;padding:.22rem .5rem;border-radius:var(--radius)}
 .uk-badge--actie{background:var(--uk-actie);color:var(--ukt-actie)}
 .uk-badge--project{background:var(--uk-project);color:var(--ukt-project)}
@@ -945,7 +945,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    `<code>`: op telefoonbreedte duwde hij de hele rij voorbij de rand (gemeten op 390px:
    scrollWidth 431). Wrappen mag hier — je leest hem niet, je herkent of kopieert hem. */
 .uk-meta .pill{overflow-wrap:anywhere;max-width:100%}
-.uk-staat{font-size:.68rem;font-weight:700;padding:.05rem .45rem;border-radius:var(--radius-pill);
+.uk-staat{font-size:var(--type-12);font-weight:700;padding:.05rem .45rem;border-radius:var(--radius-pill);
   background:var(--col-wacht);color:var(--colb-wacht)}
 .uk-acties{flex:0 0 auto;display:flex;gap:.3rem;align-items:flex-start}
 /* HET BEWERK-FORMULIER IN EEN SMALLE RIJ. `.wo-oc` is een flexRIJ met `flex:1 1 12rem`
@@ -1023,7 +1023,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .subtab{border:none;background:none;font:inherit;font-weight:600;font-size:.9rem;color:var(--muted);padding:.5rem .8rem;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .subtab.on{color:var(--green-dark);border-bottom-color:var(--green-dark)}
 .subtab .chip{margin-left:.3rem}
-.catgroup>h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin:1.1rem 0 .5rem}
+.catgroup>h3{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin:1.1rem 0 .5rem}
 .catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
 .catcard{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem .85rem;box-shadow:var(--shadow)}
 .catcard .nm{font-weight:600;padding-right:1.7rem}
@@ -1032,19 +1032,19 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .catcard .emo-f{position:absolute;top:.4rem;right:.5rem;line-height:1}
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-pill);overflow:hidden;vertical-align:middle}
 .seg>form,.seg>a{display:inline-flex;margin:0}
-.seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:.72rem;padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
+.seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:var(--type-12);padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
 .seg>form:last-child button,.seg>a:last-child{border-right:none}
-.seg>form button.on,.seg>a.on{background:var(--green);color:#fff}
-.selseg{font:inherit;font-size:.72rem;border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
+.seg>form button.on,.seg>a.on{background:var(--nu-neon);color:var(--nu-text)}
+.selseg{font:inherit;font-size:var(--type-12);border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
 .m2empty{text-align:center;color:var(--subtle);padding:2.4rem 1rem}
-.m2empty .big{font-size:34px;display:block;color:var(--border)}
+.m2empty .big{font-size:34px;display:block;color:var(--subtle)}
 .tile-wrap{display:flex;flex-direction:column;gap:.35rem;min-width:0}
 .tile-wrap>.tile{flex:1 1 auto}
 .tile-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.8rem;flex-wrap:wrap}
 .tile-foot-l{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .tile-foot-r{display:inline-flex;align-items:center;gap:.4rem}
 .tile-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem}
-.tile-t{font-size:.74rem;color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.tile-t{font-size:var(--type-12);color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .tile-trend{display:flex;align-items:flex-end;justify-content:space-between;gap:.5rem}
 .kpi-val.sm{font-size:1.15rem}
 .tile-h-r{display:inline-flex;align-items:center;gap:.3rem}
@@ -1058,7 +1058,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .gr-row{display:flex;gap:.5rem;padding:.12rem 0;border-bottom:1px solid var(--border)}
 .gr-k{flex:0 0 4.5rem;color:var(--subtle);font-weight:700}
 .tile-goal{font-size:.72rem;margin-top:.3rem}
-.tile-warn{color:var(--coral);margin-left:.3rem}
+.tile-warn{color:var(--danger-text);margin-left:.3rem}
 .bars{display:flex;flex-direction:column;gap:.25rem}
 .bar-row{display:grid;grid-template-columns:minmax(0,7rem) 1fr auto;align-items:center;gap:.5rem;font-size:.78rem}
 .bar-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1103,7 +1103,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-head h2{margin:0;font-size:1.05rem}
 .wo-timer{margin-left:auto;font-variant-numeric:tabular-nums;font-size:.78rem;color:var(--gray);background:var(--cream-2);border:1px solid var(--border);border-radius:1rem;padding:.15rem .6rem}
 .wo-leave{font-size:.8rem;color:var(--gray);text-decoration:none;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .55rem}
-.wo-leave:hover{background:var(--coral-tint,#ffeeea);border-color:var(--coral,#e2574a);color:var(--coral,#e2574a)}
+.wo-leave:hover{background:var(--coral-tint,#ffeeea);border-color:var(--coral,#e2574a);color:var(--danger-text)}
 .wo-grid{display:grid;grid-template-columns:1fr;gap:1rem}
 @media(min-width:760px){.wo-grid{grid-template-columns:250px minmax(0,1fr)}}
 .wo-left{min-width:0}
@@ -1155,13 +1155,13 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .c2-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
-.psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
+.psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
 .psec-h svg{width:14px;height:14px;opacity:.75;flex:0 0 auto}
 .pside .psec{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.65rem .75rem;margin-bottom:.8rem}
 /* structuur-kantlijn blijft in beeld tijdens scrollen door de wall (scope 1) */
 @media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
-.wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
+.wall-head h2{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
 .wall-scroll{overflow-y:auto}
 /* Inline bewerken, ÉÉN component voor de wall-comment en de Conclusion van een project
    (cockpit2_util.inline_edit). Namen uit de bestaande `editor-`-familie, want dit IS de editor —
@@ -1184,7 +1184,7 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .c2-main.pdetail{max-width:1120px}
 .dangling-warn{margin-bottom:.3rem}
 .smeta{margin:0}
-.smeta dt{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
+.smeta dt{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
 .smeta dt:first-child{margin-top:0}
 .smeta dd{margin:.1rem 0 0}
 .ckadd{display:flex;gap:.4rem;margin-top:.5rem}
@@ -1234,9 +1234,9 @@ span.ck-box{cursor:default;opacity:.5}
 .ck-item .ck-box{margin-top:.1rem}
 .ck-txt{flex:1 1 auto;min-width:0}
 .ck-meta{display:block;margin-top:.15rem;font-size:.7rem;line-height:1.5}
-.ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:.66rem;color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:var(--type-12);color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-payload{font-family:ui-monospace,Menlo,monospace;font-size:.64rem;color:var(--subtle)}
-.ck-warn{font-size:.68rem;color:var(--coral);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-warn{font-size:.68rem;color:var(--danger-text);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-noskill{font-size:.68rem;color:var(--gray);background:var(--sand);padding:.02rem .35rem;border-radius:5px}
 .ck-skip{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
 /* Uitgevoerd-maar-leeg: zelfde vorm als .ck-skip (het is dezelfde soort mededeling:
@@ -1359,7 +1359,7 @@ span.ck-box{cursor:default;opacity:.5}
 /* ✗ als rustig token rechts achteraan de signaal-rij (inbox-actie, geen schreeuwer). */
 .rdr-wegform{margin-left:auto;flex:0 0 auto}
 .rdr-weg{border:1px solid var(--border);background:var(--surface);border-radius:999px;width:1.7rem;height:1.7rem;line-height:1;cursor:pointer;color:var(--muted);font-size:.85rem}
-.rdr-weg:hover{color:var(--coral,#c0554d);border-color:var(--coral,#c0554d)}
+.rdr-weg:hover{color:var(--danger-text);border-color:var(--coral,#c0554d)}
 /* ＋ Bron toevoegen op /signals: uitklapbaar intake-paneel (hergebruik Oracle-paneel). */
 .rdr-bronvorm{display:block;margin:.2rem 0 .6rem}
 .rdr-bronvorm>summary{display:inline-block;cursor:pointer;list-style:none}
@@ -1444,12 +1444,12 @@ span.ck-box{cursor:default;opacity:.5}
    krimpt (zie de media-query onderaan). */
 .c2-mono{display:none}
 .c2-navct{background:var(--green);color:#fff;border-radius:var(--radius-pill);
-  font-size:11px;font-weight:700;padding:.05rem .4rem}
+  font-size:var(--type-12);font-weight:700;padding:.05rem .4rem}
 .c2-org{font-size:13px;overflow-y:auto}
 /* De zoek-sneltoets. `/` en Cmd/Ctrl+K zetten de cursor in het veld; de toets staat erbij zodat
    je hem kunt vinden zonder hem te kennen. */
 .c2-kbd{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);pointer-events:none;
-  font:inherit;font-size:11px;font-weight:700;color:var(--gray);
+  font:inherit;font-size:var(--type-12);font-weight:700;color:var(--gray);
   border:1px solid var(--border);border-radius:3px;padding:0 .25rem}
 /* DE BALK BLIJFT VERTICAAL, OOK SMAL (21 september 2026, expliciet besluit Stefan).
    Hier stond `flex-direction:row` onder 760px: de zijbalk klapte om naar een horizontale rij
@@ -1486,7 +1486,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .c2-pnaam{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .c2-psub{flex:0 0 auto;font-size:11px;font-weight:600;color:var(--gray)}
 .c2-prij .chip{flex:0 0 auto}
-.c2-pgroep{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+.c2-pgroep{font-size:var(--type-12);font-weight:700;letter-spacing:.07em;text-transform:uppercase;
   color:var(--subtle);margin:1rem 0 .3rem}
 .c2-pgroep:first-of-type{margin-top:0}
 .c2-pleeg{font-size:12.5px;line-height:1.5;padding:.3rem .5rem}
@@ -1509,7 +1509,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 
    `tests/test_live_join_en_band.py::test_de_live_knop_wint_van_de_nav_regel` rekent die
    specificiteit uit en faalt zodra een van de twee weer de verkeerde kant op beweegt. */
-.c2-subnav a.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:11.5px;
+.c2-subnav a.c2-overleg{display:block;padding:.4rem .5rem;margin-top:.2rem;font-size:var(--type-12);
   font-weight:700;line-height:1.25;text-align:center;text-decoration:none;color:var(--green-dark);
   background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius)}
 .c2-subnav a.c2-overleg:hover{background:var(--green);color:#fff}
@@ -1551,7 +1551,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .gs-hit{display:block;padding:.5rem .7rem;border:1px solid var(--border);border-radius:var(--radius);
   margin:.3rem 0;background:var(--surface);text-decoration:none;color:var(--ink)}
 .gs-hit:hover{border-color:var(--green)}
-.gs-hit .gs-kind{font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
+.gs-hit .gs-kind{font-size:var(--type-12);color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
 .gs-hit .gs-snip{color:var(--muted);font-size:13px;display:block;margin-top:.15rem}
 
 /* Live-zoek dropdown onder de headerbalk */
@@ -1564,10 +1564,10 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
   margin:.3rem 0 .25rem;font-weight:700}
 .gs-more{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:.3rem}
 .gs-all{display:block;padding:.5rem .6rem;margin-top:.3rem;border-top:1px solid var(--border);
-  color:var(--green);font-weight:600;text-decoration:none;font-size:13px}
+  color:var(--green-dark);font-weight:600;text-decoration:none;font-size:13px}
 .gs-empty{padding:.7rem;color:var(--muted);font-size:13px}
 /* Categorie-badge: eigen kleur per soort zodat role/project/insight/signal meteen te onderscheiden zijn */
-.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:10px;font-weight:700;
+.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:var(--type-12);font-weight:700;
   text-transform:uppercase;letter-spacing:.03em;padding:.08rem .4rem;border-radius:var(--radius-pill);
   margin-right:.15rem;vertical-align:middle}
 /* Zacht getinte badges met leesbare donkere tekst (i.p.v. felle vlakken met wit) */
@@ -1581,7 +1581,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .gs-signal{background:#eef0dd;color:#6b6630}
 .gs-word{background:#f0e5e9;color:#8a4360}
 .gs-didyoumean{padding:.4rem .2rem;color:var(--muted);font-size:13.5px}
-.gs-didyoumean a{color:var(--green);font-weight:600}
+.gs-didyoumean a{color:var(--green-dark);font-weight:600}
 
 /* ── Project-wizard (/project/nieuw + de modal-overlay) ─────────────────────
    Verhuisd uit views/wizard.py (was een <style>-blob in de view): CSS is een bestand,
@@ -1593,7 +1593,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .wz-fill{height:100%;background:linear-gradient(90deg,var(--green),#57c07d);border-radius:999px;width:0;transition:width .35s}
 .wz-who{font-size:.78rem;color:var(--subtle);white-space:nowrap}
 .wz-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 10px rgba(27,27,27,.05);padding:1.4rem 1.3rem;min-height:330px;display:flex;flex-direction:column}
-.wz-k{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
+.wz-k{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
 .wz-card h2{font-family:var(--font-display);font-weight:700;font-size:1.3rem;margin:0 0 .3rem;line-height:1.25}
 .wz-hint{color:var(--subtle);font-size:.9rem;margin:0 0 1rem}
 .wz textarea,.wz input,.wz select{width:100%;font:inherit;padding:.7rem .85rem;border:1.5px solid var(--border);border-radius:10px;background:var(--cream);color:var(--ink)}
@@ -1619,7 +1619,7 @@ input.wz-itxt{border:1px solid transparent;border-radius:var(--radius);backgroun
  padding:.15rem .3rem;font-family:inherit;color:var(--ink);width:100%}
 input.wz-itxt:hover{border-color:var(--border)}
 input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:none}
-.wz-badge{font-size:.64rem;font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
+.wz-badge{font-size:var(--type-12);font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
 .wz-badge.ok{background:var(--green-tint);color:var(--green-dark)}
 .wz-badge.no{background:var(--error-tint);color:#b3402f}
 .wz-rm{border:none;background:none;color:var(--muted);cursor:pointer;font-size:1rem;margin-top:.1rem}
@@ -1631,7 +1631,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
 .wz-chip{border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
 .wz-chip.on{border-color:var(--green);background:var(--green-tint);color:var(--green-dark)}
-.wz-clab{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
+.wz-clab{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
 .wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
 .wz-srow:first-child{border-top:none}.wz-sk{width:95px;flex:none;color:var(--subtle);font-weight:600}.wz-sv{flex:1}
 .wz-cheer{text-align:center;padding:1rem 0}.wz-cheer .big{font-size:2.6rem}
@@ -1693,7 +1693,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .pchip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--border);
   background:var(--surface);border-radius:var(--radius-pill);padding:.26rem .7rem;
   font-size:.78rem;font-weight:600;color:var(--ink);line-height:1.5}
-.pchip-k{color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.pchip-k{color:var(--subtle);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .pchip-v{font-weight:600}
 .pchip-leeg{background:var(--green-tint);border-style:dashed;border-color:var(--green)}
 .pchip-leeg .pchip-v{color:var(--green-dark);font-weight:500}
@@ -1714,7 +1714,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .psec-act{margin-left:auto;display:flex;gap:.8rem;align-items:baseline;font-size:.78rem}
 
 /* De rail: één regel per veld, waarde rechts. Geen formulierveld in beeld tot je hem aanraakt. */
-.rail-kop{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);
+.rail-kop{font-size:var(--type-12);letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);
   font-weight:700;margin:0 0 .55rem}
 .rail-kop2{margin-top:1.4rem}
 .rail-rij{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;font-size:.8rem;min-width:0}
@@ -1775,7 +1775,7 @@ summary.pchip:hover{border-color:var(--gray)}
 /* ── /messages: kanalenlijst links, draad rechts (fase 8) ───────────────────────────────────── */
 .msg-layout{display:flex;gap:1.2rem;align-items:flex-start}
 .msg-lijst{flex:0 0 210px;max-width:210px;display:flex;flex-direction:column;gap:.1rem}
-.msg-groep{font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:.6rem 0 .2rem}
+.msg-groep{font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;margin:.6rem 0 .2rem}
 .msg-kanaal{display:block;padding:.35rem .5rem;border-radius:var(--radius);font-size:13.5px;
   font-weight:600;color:var(--ink);text-decoration:none}
 .msg-kanaal:hover{background:var(--surface)}
@@ -1877,7 +1877,7 @@ progress.nu-progress.wide{height:8px}
    TWEE DRAGERS, want kleur alleen is nooit genoeg bij een statusverschil: een gestippelde rand
    (overleeft zwart-wit en kleurenblindheid) én het woord "add" in de rij zelf. */
 .msg-kanaal--vreemd{border:1px dashed var(--border)}
-.msg-add{flex:0 0 auto;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+.msg-add{flex:0 0 auto;font-size:var(--type-12);letter-spacing:.04em;text-transform:uppercase;
   color:var(--gray);border:1px solid var(--border);border-radius:var(--radius);padding:0 .3rem}
 .msg-kanaal--vreemd:hover .msg-add{color:var(--green-dark);border-color:var(--green)}
 /* De uit-je-lijst-knop hoort bij de kop van het gesprek, niet eronder: het is een eigenschap van
@@ -2174,7 +2174,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root {
   --nu-neon: #00FF00;
   --nu-accent: #00A551;
-  --nu-accent-text: #1F9D55;
+  /* TEKSTGROEN = --green-dark (A1 f, 11 oktober 2026). #1F9D55 haalde 3,27-3,49:1 op wit, #FFFAFA en
+     #E2FFE3; --green-dark haalt 5,68-6,07:1. Verwijzing, geen kopie. */
+  --nu-accent-text: var(--green-dark);
   --nu-bg-alt: #E2FFE3;
   --nu-bg: #FFFAFA;
   --nu-surface: #FFFFFF;
@@ -2188,6 +2190,20 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   --nu-sp-3: 1.1rem;
   --nu-sp-4: 1.8rem;
   --nu-font: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* TYPOGRAFISCHE SCHAAL (A1, 11 oktober 2026): niets onder 12px. 12 = label en kleinste meta,
+     13 = metadata, 15 = lopende tekst, daarna 18, 24, 32. In rem, zodat zoomen blijft werken.
+     `tests/test_typografie.py` faalt zodra een nieuwe regel onder de 12px gaat. */
+  --type-12: .75rem;
+  --type-13: .8125rem;
+  --type-15: .9375rem;
+  --type-18: 1.125rem;
+  --type-24: 1.5rem;
+  --type-32: 2rem;
+  /* TEKSTROOD (A1): --nu-danger (#EE4036, 3,87:1) en --coral (#FF6B5B, 2,8:1) blijven VULLING; als
+     tekstkleur dit, het dichtstbijzijnde rood met 4,5:1 op wit, #FFFAFA, #E2FFE3 en de crèmes. */
+  --danger-text: #DE1E13;
+  /* Grijs OP ZWART (een zwarte chip met een tellertje erin): #58595B haalde daar 2,99:1. */
+  --text-on-dark-muted: #BDBDBD;
 }
 :root body {
   background: var(--nu-bg);
@@ -2362,7 +2378,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pill, :root .chip, :root .badge {
   display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
   border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
-  padding: .15em .6em; font-size: .72rem;
+  padding: .15em .6em; font-size: var(--type-12);
   /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
      en kostte het scherm zijn rustpunt. `.nu-status` houdt zijn gewicht wél: daar IS de chip het
      signaal, en die leunt bovendien op vorm plus woord. */
@@ -2392,7 +2408,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }                              /* half vierkant */
 /* Rood houdt zijn lijn. Dit is geen container-kader maar een alarm, en het is de enige status
    waar de kleur zelf iets zegt dat de vorm niet kan overnemen. */
-:root .nu-status--off { color: var(--nu-danger); background: var(--nu-surface);
+:root .nu-status--off { color: var(--danger-text); background: var(--nu-surface);
   border-color: var(--nu-danger); }
 :root .nu-status--off::before { background: var(--nu-danger);
   clip-path: polygon(50% 0, 100% 100%, 0 100%); }                                  /* driehoek */
@@ -2520,7 +2536,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-kanaal--nieuw { font-weight: 700; }
 :root .msg-nieuw {
   float: right; min-width: 1.15rem; padding: 0 .3rem; margin-left: .4rem;
-  font-size: 11px; font-weight: 700; line-height: 1.15rem; text-align: center;
+  font-size: var(--type-12); font-weight: 700; line-height: 1.15rem; text-align: center;
   background: var(--nu-text); color: var(--nu-neon); }
 /* In het OPEN kanaal draait het contrast om, anders valt het plaatje weg tegen de actieve rij. */
 :root .msg-kanaal.on .msg-nieuw { background: var(--nu-neon); color: var(--nu-text); }
@@ -2682,7 +2698,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .sec-kop, :root .menu-h, :root .dk, :root .att-lbl, :root .cl-group h4,
 :root .psec-h, :root .pchip-k, :root .rail-kop, :root .wz-k, :root .wz-clab,
 :root .gs-group, :root .gs-kind {
-  font-family: var(--nu-font); font-size: .7rem; font-weight: 700;
+  /* 12px (A1, 11 oktober 2026): het label was 11,2px — leesbaar alleen door het vette gewicht. */
+  font-family: var(--nu-font); font-size: var(--type-12); font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; }
 
 /* Kleur apart, want één uitzondering: de bordkolom-kop draagt al een vormmerk en blijft daarom
@@ -2694,6 +2711,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .gs-group, :root .gs-kind {
   color: var(--nu-muted); }
 :root .pcol-h { color: var(--nu-text); }
+/* Grijs OP ZWART (A1 f): de chip `.chip.green` is zwart in deze laag, en de teller erin (`· 27.100`
+   op /keywords) stond op --nu-muted — 2,99:1. Op een donker vlak een licht grijs (11:1). */
+:root .chip.green .muted { color: var(--text-on-dark-muted); }
 
 /* ── De groepskop op het bord ─────────────────────────────────────────────────────────────────
    `.swim-h` ("Creator of Shoes (4)") stond op `--green-dark` (#14713C) — de kleur die in geen van
@@ -2775,7 +2795,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pbar { background: var(--nu-text); }
 :root .av.ai, :root .ai { background: var(--nu-text); color: var(--nu-surface); }
 :root .av { background: var(--nu-text); color: var(--nu-surface); font-family: var(--nu-font); }
-:root .dellink, :root .vz-h { color: var(--nu-danger); font-family: var(--nu-font); }
+:root .dellink, :root .vz-h { color: var(--danger-text); font-family: var(--nu-font); }
 :root .chip.coral-solid { background: var(--nu-danger); color: var(--nu-surface);
   border-color: var(--nu-danger); }
 /* De twee chip-varianten zetten hun eigen rand en moeten dus mee met de regel hierboven, anders
@@ -2797,7 +2817,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    en later in het bestand won hij, en droeg de rij een 2px-zwart kader om twee lichte velden. */
 :root .cardmenu-b { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
-:root .danger { color: var(--nu-danger); }
+:root .danger { color: var(--danger-text); }
 :root .car { color: var(--nu-muted); }
 
 /* ══ Wat er van de inbox-lade overblijft: de regels die hij DEELDE ════════════════════════════
@@ -3065,8 +3085,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   background: var(--nu-surface); color: var(--nu-text); }
 
 /* 4 · Fout en verwijderen blijven rood */
-:root .rov-delrole { color: var(--nu-danger); }
-:root .blok { background: var(--nu-surface); color: var(--nu-danger);
+:root .rov-delrole { color: var(--danger-text); }
+:root .blok { background: var(--nu-surface); color: var(--danger-text);
   border: 1.5px solid var(--nu-danger); }
 
 /* 5 · Het laatste groen dat niet in de beelden staat */

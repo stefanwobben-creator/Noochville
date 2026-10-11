@@ -33,7 +33,7 @@ _FONTS = (
 
 _CSS = """
 :root{
- --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
+ --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#717171;--muted:#777161;
  --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
  --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
  --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--error-tint:#FDEAEA;
@@ -86,7 +86,7 @@ h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transfo
  letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
 a{color:var(--green-dark)}
 .bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
-.badge{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;
+.badge{font-size:var(--type-12,.75rem);text-transform:uppercase;letter-spacing:.05em;font-weight:700;
  padding:.18rem .55rem;border-radius:var(--radius-pill);vertical-align:middle;margin-left:.4rem}
 .badge.ro{background:var(--sand);color:var(--gray)}
 .badge.rw{background:var(--green-tint);color:var(--green-dark)}
@@ -94,7 +94,7 @@ table{border-collapse:collapse;width:100%;font-size:13px;background:var(--surfac
  border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
 th,td{border-bottom:1px solid var(--border);padding:.5rem .6rem;text-align:left;vertical-align:top}
 th{background:var(--cream-2);font-family:var(--font-display);font-weight:700;
- text-transform:uppercase;font-size:11px;letter-spacing:.03em;color:var(--gray)}
+ text-transform:uppercase;font-size:var(--type-12,.75rem);letter-spacing:.03em;color:var(--gray)}
 tr:last-child td{border-bottom:none}
 tr.archived td{opacity:.45}
 tr.st-pending td{background:var(--yellow-light)}
@@ -110,7 +110,7 @@ tr.st-future td{opacity:.55}
 .btn:hover{background:rgba(27,27,27,.05)}
 .btn.ok{background:var(--green);border-color:var(--green);color:#fff}
 .btn.ok:hover{background:var(--green-dark);border-color:var(--green-dark)}
-.btn.no{background:#fff;border-color:var(--coral);color:var(--coral)}
+.btn.no{background:#fff;border-color:var(--coral);color:var(--danger-text,#DE1E13)}
 .tension{background:var(--cream-3);border:1px solid var(--border);border-radius:var(--radius);
  padding:.7rem .9rem;margin:.6rem 0 1.4rem}
 details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
