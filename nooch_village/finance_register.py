@@ -190,16 +190,48 @@ class _Register:
         self._append([r])
         return r
 
-    def correctie(self, oud_id: str, nieuw: dict, *, door: str = "") -> tuple[dict, dict] | None:
-        """Corrigeer een regel in één stap: een tegenboeking (omgekeerde bedragen, `corrects` = de
-        oude regel, zelfde periode/regel/rekening) en de nieuwe, juiste regel. Samen één append."""
+    def niet_te_corrigeren(self, oud_id: str) -> str:
+        """Waarom deze regel niet (meer) gecorrigeerd of geannuleerd kan worden, of "".
+
+        EEN REGEL WORDT HOOGSTENS ÉÉN KEER TEGENGEBOEKT (11 oktober 2026). Tot dan kon dezelfde regel
+        twee keer gecorrigeerd worden, en dan werd hij twee keer tegengeboekt: een factuur van €100,
+        gecorrigeerd naar €0 en daarna naar €50, telde netto −€50. Wie nog eens wil corrigeren,
+        corrigeert de NIEUWSTE regel (de vervanger)."""
         oud = self.get(oud_id)
         if oud is None:
-            return None
+            return "the line does not exist"
+        if oud.get("corrects"):
+            return "this line is itself a correction or reversal; open the line it corrects"
+        if self.correcties_van(oud_id):
+            return "this line was already corrected or cancelled; correct the newest line instead"
+        return ""
+
+    def _tegenboeking(self, oud: dict, note: str) -> dict:
         storno = {k: v for k, v in oud.items() if k not in ("id", "created_at", "created_by")}
         storno.update({k: -oud[k] for k in self.BEDRAGEN if isinstance(oud.get(k), int)})
-        storno.update(corrects=oud_id, note=f"Reversal of {oud_id}",
+        storno.update(corrects=oud["id"], note=note,
                       attachment=oud.get("attachment"), no_document_reason=oud.get("no_document_reason", ""))
+        return storno
+
+    def annuleer(self, oud_id: str, reden: str, *, door: str = "") -> dict | None:
+        """Annuleer een regel: ALLEEN de tegenboeking, zonder vervangende regel (11 oktober 2026).
+        Samen tellen ze nul. Zelfde tegenboeking als bij `correctie`; de reden staat in de notitie.
+        None als de regel er niet is of niet (meer) tegengeboekt mag worden."""
+        reden = _tekst(reden, 300)
+        if not reden or self.niet_te_corrigeren(oud_id):
+            return None
+        s = self._stempel(self._tegenboeking(self.get(oud_id), f"Cancelled: {reden}"), door)
+        self._append([s])
+        return s
+
+    def correctie(self, oud_id: str, nieuw: dict, *, door: str = "") -> tuple[dict, dict] | None:
+        """Corrigeer een regel in één stap: een tegenboeking (omgekeerde bedragen, `corrects` = de
+        oude regel, zelfde periode/regel/rekening) en de nieuwe, juiste regel. Samen één append.
+        None als de regel er niet is of al eerder tegengeboekt werd (`niet_te_corrigeren`)."""
+        if self.niet_te_corrigeren(oud_id):
+            return None
+        oud = self.get(oud_id)
+        storno = self._tegenboeking(oud, f"Reversal of {oud_id}")
         s, n = self._stempel(storno, door), self._stempel({**nieuw, "corrects": ""}, door)
         n["note"] = (n.get("note") + " · " if n.get("note") else "") + f"Replaces {oud_id}"
         self._append([s, n])

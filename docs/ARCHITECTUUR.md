@@ -184,6 +184,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `verplichting_zet` | `_act_verplichting_zet` |
 | `verplichting_weg` | `_act_verplichting_weg` |
 | `finance_hist_opslaan` | `_act_finance_hist_opslaan` |
+| `finance_kost_cancel` | `_act_finance_annuleer` |
+| `finance_omzet_cancel` | `_act_finance_annuleer` |
 | `finance_hist_cutover` | `_act_finance_hist_cutover` |
 | `metrics2_compare` | `_act_metrics2_compare` |
 | `metrics2_formula` | `_act_metrics2_formula` |
@@ -393,4 +395,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_70 routes · 175 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 17 zonder gevonden schrijver._
+_70 routes · 177 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 17 zonder gevonden schrijver._

@@ -88,6 +88,14 @@ TERUGKEREND = {
     "notitie": ("Note", False, "Anything worth knowing later.", ""),
 }
 
+ANNULEER = {
+    "reason": ("Reason", True,
+               "Why this line should not count. It stays visible on the reversal, for you and the accountant.",
+               "Entered twice by mistake"),
+}
+ANNULEER_KOP = ("Cancel adds only a reversal of this line, so together they count as zero. Nothing is "
+                "deleted. Use Correct instead if a different amount or detail should replace it.")
+
 HISTORIE = {
     "history_until": ("History until (cutover month)", False,
                       "Months up to and including this month come from the history, later months from the "
@@ -201,6 +209,11 @@ HELP = (
         "Made a mistake? Open the line and use Correct. That adds two lines: a reversal of the old line "
         "(the same amounts, negative) and a new line with the right values. Together they count as the "
         "new value.",
+        "Should the line not count at all (entered twice, wrong supplier, cancelled order)? Open it and use "
+        "Cancel line, with a reason. That adds only the reversal: the line and its reversal count as zero, "
+        "and the reason stays visible.",
+        "A line is reversed at most once. To change a corrected line again, open the newest line (the "
+        "replacement) and correct or cancel that one.",
     )),
     ("documents", "Documents", (
         "Every cost line carries its invoice, so the accountant can check it. The file is stored with a "
