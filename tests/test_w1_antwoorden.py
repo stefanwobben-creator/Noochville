@@ -157,3 +157,14 @@ def test_de_pagina_toont_het_formulier_en_de_antwoorden(tmp_path):
     _check(dd, aid, "F1", plastic="yes")
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
     assert "Answers: Contains plastic?: <strong>yes</strong>" in h
+
+
+def test_een_al_gecheckt_feit_kan_opnieuw_met_een_antwoord(tmp_path):
+    """De 17 feiten die al gecheckt waren maar nergens telden: zonder eerst 'undo check'."""
+    from nooch_village.views.wiki import render_pagina
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes", gezien={"door": "Stefan", "op": "2026-10-06"})])
+    h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
+    assert "Check again with an answer" in h and "undo check" in h
+    _check(dd, aid, "F1", plastic="yes")
+    h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
+    assert "<option value='yes' selected>yes</option>" in h            # het huidige antwoord staat al gekozen

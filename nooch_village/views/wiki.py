@@ -437,11 +437,14 @@ def _antwoorden_html(feit: dict, soort: str) -> str:
     return "<div class='muted'>Answers: " + " · ".join(delen) + "</div>"
 
 
-def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str) -> str:
+def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str,
+                     label: str = "I checked this") -> str:
     """"I checked this", met erbij welke vraag dit feit beantwoordt (W1). Geen keuze = gewoon
     nakijken, zoals altijd. Eén klein formulier in de bestaande popover, geen apart scherm."""
     from nooch_village import wiki_dekking as dek
     rijen = []
+    # DE HUIDIGE ANTWOORDEN STAAN AL GEKOZEN: opnieuw nakijken houdt ze, tenzij je ze verandert.
+    nu = {x["vraag"]: x for x in wiki.antwoorden(feit)}
     for v in dek.vragen(soort):
         opties = (("", "—"), ("value", "value (the number of this fact)"), ("na", "not applicable")) \
             if v["grootheid"] else (("", "—"), ("yes", "yes"), ("no", "no"), ("na", "not applicable"))
@@ -449,10 +452,12 @@ def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str
         rijen.append(
             f"<tr><td><label for='{sid}'>{_e(v['label'])}</label></td>"
             f"<td><select id='{sid}' name='antwoord_{_e(v['k'])}'>"
-            + "".join(f"<option value='{w}'>{_e(t)}</option>" for w, t in opties)
+            + "".join(f"<option value='{w}'{' selected' if nu.get(v['k'], {}).get('waarde') == w and w else ''}>{_e(t)}</option>"
+                      for w, t in opties)
             + f"</select></td><td><label class='sr' for='{rid}'>Reason for {_e(v['label'])}</label>"
-              f"<input id='{rid}' name='reden_{_e(v['k'])}' placeholder='Reason (required for not applicable)'></td></tr>")
-    return (f"<details class='acard-d'><summary class='btn ok sm'>I checked this</summary><div class='datepop'>"
+              f"<input id='{rid}' name='reden_{_e(v['k'])}' value='{_e(nu.get(v['k'], {}).get('reden', ''))}' "
+              f"placeholder='Reason (for not applicable)'></td></tr>")
+    return (f"<details class='acard-d'><summary class='btn ok sm'>{_e(label)}</summary><div class='datepop'>"
             f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
@@ -500,6 +505,11 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     if nagekeken:
         check = _feit_knop("pagina_feit_gezien", "undo check", "flink", aid, fid, csrf_token,
                            extra="<input type='hidden' name='uit' value='1'>")
+        if soort and kan_nakijken:
+            # AL NAGEKEKEN, NOG ZONDER (of met een ander) ANTWOORD: opnieuw nakijken met een antwoord,
+            # zonder eerst "undo check". Dat is een nieuwe check, met naam en datum van nu.
+            check = _check_formulier(feit, soort, aid, fid, csrf_token,
+                                     label="Check again with an answer") + check
     elif soort and kan_nakijken:
         # OP EEN PAGINA VAN /bom: nakijken met een antwoord (W1). Ook bij een verklaring (attested):
         # die is wie het zegt, maar welke VRAAG ze beantwoordt moet een mens nog steeds zeggen.
