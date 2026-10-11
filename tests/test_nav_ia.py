@@ -25,8 +25,11 @@ def test_de_chrome_draagt_de_hele_navigatie():
     # De boom staat hier als KNOP (paneel), niet meer als meegerenderd blok — zie
     # `test_nav_accordeon.py::test_de_organisatieboom_is_een_paneel_geworden`.
     assert "data-nav-paneel='org'" in h
-    for href, label in (("/projects", "Projects"), ("/wiki", "Wiki"), ("/admin", "Admin")):
+    for href, label in (("/projects", "Projects"), ("/wiki", "Wiki")):
         assert href in h and label in h
+    # ADMIN WORDT PER VERZOEK INGEVULD, alleen voor wie de zicht-groep `admin` mag zien
+    # (`cockpit2._nav_admin`); in de kale chrome staat alleen de plek.
+    assert "/admin" not in h and "<!--c2-admin-->" in h
 
 
 def test_messages_staat_er_pas_in_sinds_er_data_achter_zit():
