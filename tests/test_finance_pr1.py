@@ -163,7 +163,8 @@ def test_echte_sessies_404_voor_wie_niet_mag(tmp_path):
         return r.status, body
 
     routes = ("/finance/costs", f"/finance/costs/view?id={kid}", "/finance/recurring", "/finance/monthly",
-              "/finance/pnl", "/finance/costs.csv", f"/finance/file?id={kid}", "/fixed-costs")
+              "/finance/pnl", "/finance/costs.csv", f"/finance/file?id={kid}", "/fixed-costs",
+              "/finance/help")
     try:
         for pad in routes:
             status, body = get(pad, "lid@t.nl")

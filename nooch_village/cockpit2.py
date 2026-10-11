@@ -7388,6 +7388,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 if path == "/finance/revenue/view":
                     h = _fin.render_revenue_regel(st, username, effective_csrf, _q("id"), _msg)
                     self._send(h if h is not None else "<p>404</p>", 200 if h is not None else 404); return
+                if path == "/finance/help":
+                    self._send(_fin.render_help(st, username)); return
                 if path == "/finance/history":
                     self._send(_fin.render_history(st, username, effective_csrf, _q("jaar"), _msg)); return
                 if path == "/finance/history/cell":
@@ -8379,6 +8381,16 @@ def make_handler(data_dir: str, csrf_token: str,
                         self._send("<p>404</p>", 404); return
                     _msg = _fin.verwerk_kost(_st, fields, files, username=username,
                                              door=_web_actor_id(username, _st) or str(username or ""))
+                    if _msg[:1] in ("✗", "⚠"):
+                        # NA EEN FOUT HET FORMULIER TERUG, MET WAT ER STOND (UX-PR, 11 oktober 2026):
+                        # een redirect gooide alles wat je had ingevuld weg. Opgeslagen is er niets.
+                        if fields.get("action") == "finance_kost_correct":
+                            _h = _fin.render_cost(_st, username, csrf_token, fields.get("kid", ""), _msg,
+                                                  waarden=fields, fout=_msg)
+                        else:
+                            _h = _fin.render_costs(_st, username, csrf_token, {}, _msg, waarden=fields, fout=_msg)
+                        if _h is not None:
+                            self._send(_h); return
                     self._redirect(fields.get("next", "/finance/costs"), _msg); return
                 if fields.get("action") in ("finance_hist_import", "finance_hist_import_bevestig"):
                     # AUTHZ: zicht-groep `finance`, recht "wijzigen" — zelfde poort als de registers;
@@ -8404,6 +8416,16 @@ def make_handler(data_dir: str, csrf_token: str,
                         self._send("<p>404</p>", 404); return
                     _msg = _fin.verwerk_omzet(_st, fields, files, username=username,
                                               door=_web_actor_id(username, _st) or str(username or ""))
+                    if _msg[:1] in ("✗", "⚠"):
+                        # Zelfde als bij de kosten: het formulier terug met wat er stond.
+                        if fields.get("action") == "finance_omzet_correct":
+                            _h = _fin.render_revenue_regel(_st, username, csrf_token, fields.get("kid", ""),
+                                                           _msg, waarden=fields, fout=_msg)
+                        else:
+                            _h = _fin.render_revenue(_st, username, csrf_token, {}, _msg, waarden=fields,
+                                                     fout=_msg)
+                        if _h is not None:
+                            self._send(_h); return
                     self._redirect(fields.get("next", "/finance/revenue"), _msg); return
                 if fields.get("action") == "bom_foto":
                     # AUTHZ: domeineigenaar of Circle Lead — van `Materials`, dezelfde poort als
@@ -8613,6 +8635,21 @@ def make_handler(data_dir: str, csrf_token: str,
                 _, msg = dispatch(data_dir, action, form, username=username)
                 self._send(msg or "ok", 200)
                 return
+            if action == "vaste_kosten_zet" and (form.get("next") or [""])[0].startswith("/finance/recurring"):
+                # NA EEN FOUT HET FORMULIER TERUG, MET WAT ER STOND (UX-PR, 11 oktober 2026). De
+                # rechten en de controle blijven die van de dispatch-tak; alleen het antwoord op een
+                # fout is een pagina in plaats van een redirect die de invoer weggooit.
+                try:
+                    nxt, msg = dispatch(data_dir, action, form, username=username)
+                except NietGevonden:
+                    self._send("<p>404</p>", 404); return
+                if msg.startswith("✗"):
+                    from nooch_village.views import finance as _fin
+                    self._send(_fin.render_recurring(_Stores(data_dir), username, csrf_token, msg,
+                                                     waarden=form, fout=msg,
+                                                     rid=(form.get("rid") or [""])[0]))
+                    return
+                self._redirect(nxt, msg); return
             try:
                 nxt, msg = dispatch(data_dir, action, form, username=username)
             except NietGevonden:

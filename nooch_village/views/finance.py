@@ -24,7 +24,8 @@ from nooch_village import finance_config as fc
 from nooch_village import finance_pnl, zicht
 from nooch_village.finance_register import KostenRegister, euro, filter_regels, maak_kost, posten, totalen
 from nooch_village.cockpit2_util import _DS_LINK, _nav
-from nooch_village.web_base import _banner, _e, _page
+from nooch_village import finance_uitleg as fu
+from nooch_village.web_base import _banner, _e, _field, _page
 
 GROEP = "finance"
 _CHIP_CORR = "<span class='chip'>correction</span>"
@@ -34,7 +35,7 @@ _STREEP = "<span class='muted'>—</span>"
 _GEEN_DATA = "<span class='muted'>no data</span>"
 _SCHERMEN = (("/finance/costs", "Costs"), ("/finance/revenue", "Revenue"), ("/finance/recurring", "Recurring"),
              ("/finance/monthly", "Monthly"), ("/finance/pnl", "P&L"), ("/finance/history", "History"),
-             ("/fixed-costs", "Runway inputs"))
+             ("/fixed-costs", "Runway inputs"), ("/finance/help", "Help"))
 
 
 def mag_zien(st, username) -> bool:
@@ -74,46 +75,157 @@ def _lijst(lid: str, waarden) -> str:
     return f"<datalist id='{lid}'>" + "".join(f"<option value='{_e(w)}'></option>" for w in waarden) + "</datalist>"
 
 
-def _kostvelden(st, cfg: dict, r: dict | None = None) -> str:
-    """De invoervelden van een kostregel (nieuw of correctie). Bedragen in euro's; de server rekent
-    in centen."""
-    r = r or {}
+# ── formulieren: label, hulptekst, blokken (UX-PR, 11 oktober 2026) ─────────
+#
+# ATOMEN: `_field` (label + veld als paar, `.att-lbl`), `.muted` (hulptekst), " *" (verplicht).
+# MOLECULEN: `_veld` (één veld: label, veld, fout, hulptekst in een `.qadd-form`-kolom) en `_blok`
+# (een `.card` met een kop en `.rov-addgrid`: twee kolommen op een breed scherm, één op een telefoon).
+# PATRONEN: de formulieren hieronder. De TEKSTEN komen uit `finance_uitleg` — één plek, ook voor
+# `/finance/help`. De veldnamen (wat er gepost wordt) zijn ongewijzigd.
+
+def _veld(tabel: dict, naam: str, pre: str, *, waarde: str = "", kind: str = "text", opties=None,
+          leeg: str = "", attrs: str = "", fout: str = "", toon_als: str = "", na: str = "") -> str:
+    label, verplicht, hulp, voorbeeld = tabel[naam]
+    fid = f"{pre}-{naam}"
+    tekst = label + (" *" if verplicht else "")
+    if opties is not None:
+        ctrl = (f"<label class='att-lbl' for='{fid}'>{_e(tekst)}</label>"
+                f"<select id='{fid}' name='{naam}'{' required' if verplicht else ''}{' ' + attrs if attrs else ''}>"
+                f"{_opties(opties, waarde, leeg)}</select>")
+    else:
+        # DE PLACEHOLDER IS ALLEEN NOG EEN VOORBEELD: hij verdwijnt bij typen, het label niet.
+        ph = f"Example: {voorbeeld}" if voorbeeld and kind == "text" else ""
+        ctrl = _field(tekst, naam, kind=kind, value=waarde, fid=fid, required=verplicht, placeholder=ph,
+                      attrs=attrs)
+    fout_html = f"<div class='muted'><strong>⚠ {_e(fout)}</strong></div>" if fout else ""
+    toon = f" data-toon-als='{_e(toon_als)}'" if toon_als else ""
+    # DE GRIDCEL IS EEN KALE <div>: een `.qadd-form` (flex-kolom) direct in de cel rekt mee met de
+    # hoogste buurcel, en dan groeit het invoerveld in de hoogte mee. Gezien in de browser.
+    return (f"<div{toon}><div class='qadd-form'>{ctrl}</div>{na}{fout_html}"
+            f"<div class='muted'>{_e(hulp)}</div></div>")
+
+
+#: Een browser kan een gekozen bestand niet terugzetten na een fout; dat zeggen we erbij.
+_OPNIEUW = "Choose the file again: a browser cannot keep a file after an error."
+
+
+def _blok(titel: str, inhoud: str) -> str:
+    return f"<div class='card'><h3>{_e(titel)}</h3><div class='rov-addgrid'>{inhoud}</div></div>"
+
+
+def _hulp_link(anker: str) -> str:
+    return f"<p class='muted'><a href='/finance/help#{_e(anker)}'>How do I fill this in?</a></p>"
+
+
+#: Welke melding bij welk veld hoort: (stukje van de melding, veld). De meldingen komen van de
+#: bestaande controles (`maak_kost`, `maak_opbrengst`, `maak_regel`); die veranderen niet.
+_FOUT_VELD = (
+    ("invoice date", "entry_date"), ("booking date", "entry_date"), ("period must", "period"),
+    ("supplier and description", "supplier"), ("a description is required", "description"),
+    ("pick a revenue line", "revenue_line"), ("amounts must", "amount_excl"),
+    ("negative amounts", "amount_excl"), ("needs a note", "note"), ("pairs", "pairs"),
+    ("pick a management line", "management_line"), ("unknown management line", "management_line"),
+    ("payment status", "payment_status"), ("paid date", "paid_date"),
+    ("attach the invoice", "no_document_reason"), ("already in the register", "file"),
+    ("only pdf", "file"), ("larger than 10 mb", "file"), ("not a real", "file"), ("file is empty", "file"),
+    ("amount per month", "bedrag"), ("start date", "van"), ("end date", "tot"),
+)
+
+
+def fout_veld(msg: str, velden) -> str:
+    """Het veld waar deze foutmelding bij hoort (uit `velden`), of "" — dan alleen de banner."""
+    m = (msg or "").lower()
+    if "a description is required" in m and "omschrijving" in velden:
+        return "omschrijving"
+    return next((v for stuk, v in _FOUT_VELD if stuk in m and v in velden), "")
+
+
+def _waarden(r: dict | None, waarden: dict | None, bedragen: dict) -> callable:
+    """Een lezer voor de waarde van een veld: eerst wat er net gepost is (na een fout blijft het
+    staan), anders het record (bedragen in centen → euro's)."""
+    def lees(naam: str) -> str:
+        if waarden is not None:
+            v = waarden.get(naam, "")
+            return str(v[0] if isinstance(v, list) else v)
+        r_ = r or {}
+        if naam in bedragen:
+            return euro(r_[bedragen[naam]]) if r_.get(bedragen[naam]) is not None else ""
+        return str(r_.get(naam) or "")
+    return lees
+
+
+def _btw_hulp(pre: str) -> str:
+    """De rekenhulp "Only know the total?": vult `amount_excl` en `vat` in hele centen (`nooch.js`,
+    `NV.finBtw`). De velden zelf blijven wat er wordt opgeslagen. Zonder JavaScript doet de knop
+    niets, en vul je de twee velden zelf in."""
+    tarieven = [(str(t), f"{t}%") for t in fu.BTW_TARIEVEN]
+    return (f"<details class='acard-d'><summary class='chip outline'>{_e(fu.BTW_HULP)}</summary>"
+            f"<div class='datepop'>"
+            f"{_field('Total incl. VAT', '', fid=f'{pre}-btw-totaal', placeholder='Example: 121,00', attrs='inputmode=decimal')}"
+            f"<label class='att-lbl' for='{pre}-btw-tarief'>VAT rate</label>"
+            f"<select id='{pre}-btw-tarief'>{_opties(tarieven, '21')}</select>"
+            f"<button class='btn sm' type='button' data-btw-reken='{pre}'>Fill in the two fields</button>"
+            f"</div></details>")
+
+
+def _kostvelden(st, cfg: dict, r: dict | None = None, *, pre: str = "fk", waarden: dict | None = None,
+                fout: str = "") -> str:
+    """De velden van een kostregel (nieuw of correctie), in vier blokken. Bedragen in euro's; de
+    server rekent in centen. `waarden` = wat er net gepost is (na een fout); `fout` = de melding."""
+    lees = _waarden(r, waarden, {"amount_excl": "amount_excl_cents", "vat": "vat_cents"})
     regels = [(x["key"], x["label"]) for x in fc.regels(cfg)]
     accounts = [a["naam_nl"] for a in cfg.get("accounts") or []]
     rec = [(x["id"], x["description"]) for x in st.vaste_kosten.alle()]
-    bedrag = euro(r["amount_excl_cents"]) if "amount_excl_cents" in r else ""
-    btw = euro(r["vat_cents"]) if "vat_cents" in r else ""
-    v = lambda k: _e(str(r.get(k) or ""))
-    return (f"<input type='date' name='entry_date' value='{v('entry_date')}' aria-label='invoice date' required>"
-            f"<input type='month' name='period' value='{v('period')}' aria-label='period of use (empty = month of the invoice)'>"
-            f"<input name='supplier' value='{v('supplier')}' aria-label='supplier' placeholder='Supplier' required>"
-            f"<input name='description' value='{v('description')}' aria-label='description' placeholder='Description' required>"
-            f"<input name='amount_excl' value='{_e(bedrag)}' inputmode='decimal' aria-label='amount excl. VAT in EUR' placeholder='EUR excl. VAT' required>"
-            f"<input name='vat' value='{_e(btw)}' inputmode='decimal' aria-label='VAT in EUR (stored, never counted)' placeholder='VAT EUR'>"
-            f"<input name='account_code' value='{v('account_code')}' list='fin-accounts' aria-label='account (Venema)' placeholder='Account'>"
-            f"{_lijst('fin-accounts', accounts)}"
-            f"<select name='management_line' aria-label='management line (empty = proposal from the account)'>"
-            f"{_opties(regels, r.get('management_line', ''), 'Management line: from the account')}</select>"
-            f"<input name='batch' value='{v('batch')}' list='fin-batches' aria-label='batch' placeholder='Batch'>"
-            f"{_lijst('fin-batches', cfg.get('batches') or [])}"
-            f"<select name='payment_status' aria-label='payment status'>"
-            f"{_opties([('open', 'open'), ('paid', 'paid')], r.get('payment_status', 'open'))}</select>"
-            f"<input type='date' name='paid_date' value='{v('paid_date')}' aria-label='paid date'>"
-            f"<select name='recurring_id' aria-label='recurring cost this invoice belongs to'>"
-            f"{_opties(rec, r.get('recurring_id', ''), 'Not a recurring cost')}</select>"
-            f"<input name='note' value='{v('note')}' aria-label='note' placeholder='Note'>")
+    bij = fout_veld(fout, fu.KOSTEN)
+    T = fu.KOSTEN
+
+    def v(naam, **kw):
+        f_ = fout if bij == naam else (_OPNIEUW if naam == "file" and waarden is not None and fout else "")
+        return _veld(T, naam, pre, waarde=lees(naam), fout=f_, **kw)
+
+    # DOCUMENT: EEN EXPLICIETE KEUZE in plaats van twee losse velden naast elkaar. De radioknoppen
+    # heten `doc_choice`, en die naam leest de server niet: het bestand of de reden blijft beslissen.
+    # Zonder JavaScript staan beide velden er gewoon.
+    geen = bool(lees("no_document_reason")) or (r is not None and not r.get("attachment") and waarden is None)
+    keuze = (f"<div class='qadd-form' role='radiogroup' aria-label='document'>"
+             f"<span class='att-lbl'>Document *</span>"
+             f"<span><input type='radio' id='{pre}-doc-have' name='doc_choice' value='have'{'' if geen else ' checked'}>"
+             f"<label for='{pre}-doc-have'>{_e(fu.DOC_HEB)}</label> "
+             f"<input type='radio' id='{pre}-doc-none' name='doc_choice' value='none'{' checked' if geen else ''}>"
+             f"<label for='{pre}-doc-none'>{_e(fu.DOC_GEEN)}</label></span></div>")
+    dubbel = (f"<div><input type='checkbox' id='{pre}-dubbel' name='bevestig_dubbel' value='1'>"
+              f"<label for='{pre}-dubbel' class='muted'>I know this file is already in the register</label></div>")
+    document = (keuze
+                + v("file", kind="file", attrs="accept='.pdf,.png,.jpg,.jpeg'", toon_als="doc_choice=have", na=dubbel)
+                + v("no_document_reason", toon_als="doc_choice=none"))
+    factuur = v("supplier") + v("description") + v("entry_date", kind="date") + v("period", kind="month") + document
+    bedrag = (v("amount_excl", attrs="inputmode='decimal'") + v("vat", attrs="inputmode='decimal'")
+              + f"<div class='qadd-form'>{_btw_hulp(pre)}</div>")
+    pnl = (v("account_code", attrs=f"list='{pre}-accounts'", na=_lijst(f"{pre}-accounts", accounts))
+           + v("management_line", opties=regels, leeg="— from the account —")
+           + v("batch", attrs=f"list='{pre}-batches'", na=_lijst(f"{pre}-batches", cfg.get("batches") or [])))
+    betaling = (v("payment_status", opties=[("open", "Open"), ("paid", "Paid")])
+                + v("paid_date", kind="date", toon_als="payment_status=paid")
+                + v("recurring_id", opties=rec, leeg="Not a recurring cost") + v("note"))
+    kop = [t for t, _v in fu.KOSTEN_BLOKKEN]
+    return _blok(kop[0], factuur) + _blok(kop[1], bedrag) + _blok(kop[2], pnl) + _blok(kop[3], betaling)
 
 
 def _kostformulier(st, cfg: dict, csrf: str, actie: str, terug: str, r: dict | None = None,
-                   extra: str = "") -> str:
+                   extra: str = "", *, pre: str = "fk", waarden: dict | None = None, fout: str = "") -> str:
     return (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+            f"<p class='muted'>{_e(fu.KOSTEN_KOP)}</p>{_hulp_link('costs')}"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='action' value='{actie}'>"
-            f"<input type='hidden' name='next' value='{_e(terug)}'>{extra}{_kostvelden(st, cfg, r)}"
-            f"<input type='file' name='file' accept='.pdf,.png,.jpg,.jpeg' aria-label='invoice (pdf, png or jpg, max 10 MB)'>"
-            f"<input name='no_document_reason' aria-label='no document available: why' placeholder='No document? Say why'>"
-            f"<input type='checkbox' id='fin-dubbel' name='bevestig_dubbel' value='1'>"
-            f"<label for='fin-dubbel' class='muted'>I know this file is already in the register</label>"
+            f"<input type='hidden' name='next' value='{_e(terug)}'>{extra}"
+            f"{_kostvelden(st, cfg, r, pre=pre, waarden=waarden, fout=fout)}"
             f"<button class='btn ok sm' type='submit'>Save</button></form>")
+
+
+def _nieuw_kaart(label: str, inhoud: str, open_: bool) -> str:
+    """Het formulier voor een nieuwe regel: een volle kaart, niet in een klein popover-blokje. Open
+    als er nog niets is, of als er net een fout was (dan staat wat je invulde er nog)."""
+    return (f"<details class='card'{' open' if open_ else ''}><summary><strong>{_e(label)}</strong></summary>"
+            f"{inhoud}</details>")
 
 
 def _popover(label: str, inhoud: str) -> str:
@@ -133,22 +245,31 @@ def gefilterd(st, f: dict) -> list[dict]:
                          status=f.get("status", ""), zonder_document=f.get("missing_doc") == "1")
 
 
-def render_costs(st, username, csrf: str, f: dict, msg: str = "") -> str:
+def _filter_select(label: str, naam: str, fid: str, opties, waarde: str, leeg: str) -> str:
+    return (f"<div><div class='qadd-form'><label class='att-lbl' for='{fid}'>{_e(label)}</label>"
+            f"<select id='{fid}' name='{naam}'>{_opties(opties, waarde, leeg)}</select></div></div>")
+
+
+def _filter_veld(label: str, naam: str, fid: str, waarde: str, kind: str = "text") -> str:
+    return f"<div><div class='qadd-form'>{_field(label, naam, kind=kind, value=waarde, fid=fid)}</div></div>"
+
+
+def render_costs(st, username, csrf: str, f: dict, msg: str = "", *, waarden: dict | None = None,
+                 fout: str = "") -> str:
     cfg = fc.laad()
     regels = gefilterd(st, f)
     labels = {x["key"]: x["label"] for x in fc.regels(cfg)}
-    filterform = (f"<form method='get' action='/finance/costs' aria-label='filters'>"
-                  f"<input type='month' name='periode' value='{_e(f.get('periode', ''))}' aria-label='period'>"
-                  f"<input name='account' value='{_e(f.get('account', ''))}' aria-label='account' placeholder='Account'>"
-                  f"<select name='regel' aria-label='management line'>"
-                  f"{_opties(sorted(labels.items(), key=lambda x: x[1]), f.get('regel', ''), 'All lines')}</select>"
-                  f"<input name='batch' value='{_e(f.get('batch', ''))}' aria-label='batch' placeholder='Batch'>"
-                  f"<input name='leverancier' value='{_e(f.get('leverancier', ''))}' aria-label='supplier' placeholder='Supplier'>"
-                  f"<select name='status' aria-label='payment status'>"
-                  f"{_opties([('open', 'open'), ('paid', 'paid')], f.get('status', ''), 'Any status')}</select>"
-                  f"<input type='checkbox' id='fin-missing-doc' name='missing_doc' value='1'"
+    # ZICHTBARE LABELS IN DE FILTERBALK (UX-PR): een placeholder verdwijnt zodra je typt.
+    filterform = (f"<form method='get' action='/finance/costs' aria-label='filters'><div class='rov-addgrid'>"
+                  f"{_filter_veld('Period', 'periode', 'ff-periode', f.get('periode', ''), 'month')}"
+                  f"{_filter_veld('Account', 'account', 'ff-account', f.get('account', ''))}"
+                  f"{_filter_select('Management line', 'regel', 'ff-regel', sorted(labels.items(), key=lambda x: x[1]), f.get('regel', ''), 'All lines')}"
+                  f"{_filter_veld('Batch', 'batch', 'ff-batch', f.get('batch', ''))}"
+                  f"{_filter_veld('Supplier', 'leverancier', 'ff-leverancier', f.get('leverancier', ''))}"
+                  f"{_filter_select('Payment status', 'status', 'ff-status', [('open', 'Open'), ('paid', 'Paid')], f.get('status', ''), 'Any status')}"
+                  f"</div><input type='checkbox' id='fin-missing-doc' name='missing_doc' value='1'"
                   f"{' checked' if f.get('missing_doc') == '1' else ''}>"
-                  f"<label for='fin-missing-doc' class='muted'>missing document</label>"
+                  f"<label for='fin-missing-doc' class='muted'>Only lines with a missing document</label> "
                   f"<button class='btn sm' type='submit'>Filter</button></form>")
     q = "&".join(f"{k}={_e(v)}" for k, v in f.items() if v)
     rijen = "".join(
@@ -159,9 +280,11 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "") -> str:
         f"<td class='num'>{_eur(r['amount_excl_cents'])}</td><td>{_e(r['payment_status'])}</td>"
         f"<td>{_CHIP_CORR if r.get('corrects') else ''}{'' if r.get('attachment') else _CHIP_GEEN_DOC}</td></tr>"
         for r in sorted(regels, key=lambda x: (x["entry_date"], x["created_at"]), reverse=True))
+    alles_leeg = not KostenRegister(st.dd).alle()
     tabel = ("<table class='mtab' aria-label='costs'><tr><th>Date</th><th>Supplier</th><th>Account</th>"
              "<th>Management line</th><th>Batch</th><th class='num'>Excl. VAT</th><th>Status</th><th></th></tr>"
-             f"{rijen}</table>" if regels else "<p class='muted'>No costs in this selection.</p>")
+             f"{rijen}</table>" if regels else
+             f"<p class='muted'>{_e(fu.LEEG['costs'] if alles_leeg else 'No costs in this selection.')}</p>")
     per_acc = totalen(regels, "account_code")
     per_regel = totalen(regels, "management_line")
     som = ("<table class='mtab' aria-label='totals per account'><tr><th>Account</th><th class='num'>Total</th></tr>"
@@ -176,7 +299,10 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "") -> str:
                    + "".join(f"<li><a href='/finance/costs/view?id={_e(r['id'])}'>{_e(r['entry_date'])} "
                              f"{_e(r['supplier'])}</a> — {_e(r['no_document_reason'])}</li>" for r in zonder)
                    + "</ul></div>") if zonder else ""
-    nieuw = (_popover("+ add a cost", _kostformulier(st, cfg, csrf, "finance_kost_add", "/finance/costs"))
+    nieuw = (_nieuw_kaart("+ Add a cost line",
+                          _kostformulier(st, cfg, csrf, "finance_kost_add", "/finance/costs",
+                                         waarden=waarden, fout=fout),
+                          open_=alles_leeg or bool(fout))
              if mag_wijzigen(st, username) and csrf else "")
     # DE FILTERS IN EEN POPOVER: zeven velden naast elkaar liepen op een gewoon scherm al buiten beeld.
     actief = ", ".join(f"{k}: {v}" for k, v in f.items() if v)
@@ -187,7 +313,8 @@ def render_costs(st, username, csrf: str, f: dict, msg: str = "") -> str:
     return _frame("Finance · Costs", "/finance/costs", inhoud, msg)
 
 
-def render_cost(st, username, csrf: str, kid: str, msg: str = "") -> str | None:
+def render_cost(st, username, csrf: str, kid: str, msg: str = "", *, waarden: dict | None = None,
+                fout: str = "") -> str | None:
     reg = KostenRegister(st.dd)
     r = reg.get(kid)
     if r is None:
@@ -217,10 +344,13 @@ def render_cost(st, username, csrf: str, kid: str, msg: str = "") -> str | None:
             if geschiedenis else "<p class='muted'>Not corrected.</p>")
     correct = ""
     if mag_wijzigen(st, username) and csrf and not r.get("corrects"):
-        correct = _popover("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
-                           "with the values below. Nothing is overwritten.</p>"
-                           + _kostformulier(st, cfg, csrf, "finance_kost_correct", f"/finance/costs/view?id={kid}",
-                                            r, extra=f"<input type='hidden' name='kid' value='{_e(kid)}'>"))
+        correct = _nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
+                               "with the values below. Nothing is overwritten.</p>"
+                               + _kostformulier(st, cfg, csrf, "finance_kost_correct",
+                                                f"/finance/costs/view?id={kid}", r,
+                                                extra=f"<input type='hidden' name='kid' value='{_e(kid)}'>",
+                                                pre="fkc", waarden=waarden, fout=fout),
+                               open_=bool(fout))
     inhoud = (f"<div class='c2-sec'>{tabel}</div><div class='c2-sec'><h2>Document</h2>{doc}</div>"
               f"<div class='c2-sec'><h2>Corrections</h2>{hist}{correct}</div>")
     return _frame(f"Finance · {r['supplier']}", "/finance/costs", inhoud, msg)
@@ -258,37 +388,52 @@ def verwacht_niet_gefactureerd(st, maanden: list[str]) -> list[dict]:
     return uit
 
 
-def render_recurring(st, username, csrf: str, msg: str = "") -> str:
+def render_recurring(st, username, csrf: str, msg: str = "", *, waarden: dict | None = None,
+                     fout: str = "", rid: str = "") -> str:
+    """`waarden`/`fout`/`rid`: na een fout opnieuw getoond, met wat er was ingevuld (`rid` = de regel
+    die bewerkt werd, leeg = een nieuwe)."""
+    from nooch_village.finance_register import centen
     cfg = fc.laad()
     labels = {x["key"]: x["label"] for x in fc.regels(cfg)}
     bewerk = mag_wijzigen(st, username) and bool(csrf)
+    T = fu.TERUGKEREND
 
-    def velden(r=None):
-        r = r or {}
-        v = lambda k: _e(str(r.get(k) or ""))
-        bedrag = euro(r["amount_cents"]) if "amount_cents" in r else ""
-        return (f"<input name='omschrijving' value='{v('description')}' aria-label='description' placeholder='Description' required>"
-                f"<input name='leverancier' value='{v('supplier')}' aria-label='supplier' placeholder='Supplier'>"
-                f"<input name='bedrag' value='{_e(bedrag)}' inputmode='decimal' aria-label='amount per month excl. VAT in EUR' placeholder='EUR per month' required>"
-                f"<input name='account_code' value='{v('account_code')}' list='fin-accounts' aria-label='account' placeholder='Account'>"
-                f"{_lijst('fin-accounts', [a['naam_nl'] for a in cfg.get('accounts') or []])}"
-                f"<select name='management_line' aria-label='management line'>"
-                f"{_opties([(x['key'], x['label']) for x in fc.regels(cfg)], r.get('management_line', ''), 'Management line')}</select>"
-                f"<input type='date' name='van' value='{v('van')}' aria-label='from' required>"
-                f"<input type='date' name='tot' value='{v('tot')}' aria-label='until (empty = ongoing)'>"
-                f"<input name='notitie' value='{v('notitie')}' aria-label='note' placeholder='Note'>")
+    def velden(r=None, pre="fr", w=None, f_=""):
+        # Het record heet anders dan het formulier (description → omschrijving): de vertaling hier.
+        rec = {"omschrijving": (r or {}).get("description"), "leverancier": (r or {}).get("supplier"),
+               "amount_cents": (r or {}).get("amount_cents"), **(r or {})}
+        lees = _waarden(rec if r else None, w, {"bedrag": "amount_cents"})
+        bij = fout_veld(f_, T)
 
-    def form(extra="", r=None):
+        def v(naam, **kw):
+            return _veld(T, naam, pre, waarde=lees(naam), fout=f_ if bij == naam else "", **kw)
+        # DE LIVE SAMENVATTING (`NV.finSamenvatting`), met dezelfde zin al vanaf de server, zodat hij
+        # ook zonder JavaScript klopt voor wat er staat.
+        zin = fu.samenvatting(centen(lees("bedrag")), lees("van"), lees("tot"))
+        samen = f"<p class='muted' data-rc-samenvatting>{_e(zin)}</p>"
+        kop = [t for t, _v in fu.TERUGKEREND_BLOKKEN]
+        return (_blok(kop[0], v("omschrijving") + v("leverancier") + v("bedrag", attrs="inputmode='decimal'"))
+                + _blok(kop[1], v("van", kind="date") + v("tot", kind="date") + samen)
+                + _blok(kop[2], v("account_code", attrs=f"list='{pre}-accounts'",
+                                  na=_lijst(f"{pre}-accounts", [a["naam_nl"] for a in cfg.get("accounts") or []]))
+                        + v("management_line", opties=[(x["key"], x["label"]) for x in fc.regels(cfg)],
+                            leeg="— none —")
+                        + v("notitie")))
+
+    def form(extra="", r=None, pre="fr", w=None, f_=""):
         return (f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
                 f"<input type='hidden' name='action' value='vaste_kosten_zet'>"
-                f"<input type='hidden' name='next' value='/finance/recurring'>{extra}{velden(r)}"
-                f"<button class='btn ok sm' type='submit'>Save</button></form>")
+                f"<input type='hidden' name='next' value='/finance/recurring'>{extra}{_hulp_link('recurring')}"
+                f"{velden(r, pre, w, f_)}<button class='btn ok sm' type='submit'>Save</button></form>")
 
     rijen = []
     for r in st.vaste_kosten.alle():
         acties = ""
         if bewerk:
-            acties = (_popover("✎", form(f"<input type='hidden' name='rid' value='{_e(r['id'])}'>", r))
+            fout_hier = fout if rid == r["id"] else ""
+            acties = (_nieuw_kaart("✎ Edit", form(f"<input type='hidden' name='rid' value='{_e(r['id'])}'>", r,
+                                                  pre=f"fr-{r['id']}", w=waarden if fout_hier else None,
+                                                  f_=fout_hier), open_=bool(fout_hier))
                       + f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
                       f"<input type='hidden' name='action' value='vaste_kosten_weg'><input type='hidden' name='next' "
                       f"value='/finance/recurring'><input type='hidden' name='rid' value='{_e(r['id'])}'>"
@@ -301,15 +446,18 @@ def render_recurring(st, username, csrf: str, msg: str = "") -> str:
                      f"<td>{acties}</td></tr>")
     tabel = ("<table class='mtab' aria-label='recurring costs'><tr><th>Description</th><th>Account</th>"
              "<th>Management line</th><th class='num'>Per month</th><th>From</th><th>Until</th><th></th></tr>"
-             + "".join(rijen) + "</table>" if rijen else "<p class='muted'>No recurring costs yet.</p>")
-    nieuw = _popover("+ add a recurring cost", form()) if bewerk else ""
+             + "".join(rijen) + "</table>" if rijen else f"<p class='muted'>{_e(fu.LEEG['recurring'])}</p>")
+    nieuw_fout = fout if not rid else ""
+    nieuw = (_nieuw_kaart("+ Add a recurring cost", form(w=waarden if nieuw_fout else None, f_=nieuw_fout),
+                          open_=not rijen or bool(nieuw_fout)) if bewerk else "")
     open_ = verwacht_niet_gefactureerd(st, _maanden_tot_nu())
     verwacht = ("<table class='mtab' aria-label='expected, not invoiced'><tr><th>Month</th><th>Recurring cost</th>"
                 "<th class='num'>Expected</th></tr>"
                 + "".join(f"<tr><td>{_e(x['maand'])}</td><td>{_e(x['description'])}</td>"
                           f"<td class='num'>{_eur(x['amount_cents'])}</td></tr>" for x in open_)
                 + "</table>") if open_ else "<p class='muted'>Every recurring cost has an invoice line.</p>"
-    inhoud = (f"<p>Running today: <strong>{_eur(st.vaste_kosten.totaal_cents_op())}</strong> per month — the "
+    inhoud = (f"<p class='muted'>{_e(fu.TERUGKEREND_KOP)}</p>"
+              f"<p>Running today: <strong>{_eur(st.vaste_kosten.totaal_cents_op())}</strong> per month — the "
               f"fixed costs of the runway.</p>{nieuw}<div class='c2-sec'>{tabel}</div>"
               f"<div class='c2-sec'><h2>Expected, not invoiced (last 6 months)</h2>{verwacht}</div>")
     return _frame("Finance · Recurring costs", "/finance/recurring", inhoud, msg)
@@ -375,13 +523,13 @@ def render_pnl(st, username, van: str = "", tot: str = "", batch: str = "", omze
     met_data = {p[0] for p in k_posten} | {p[0] for p in o_posten} | set(omzet or {})
     is_hist = lambda m: bool(h_tot) and m <= h_tot
     perpaar = per == "paar"
-    filt = (f"<form method='get' action='/finance/pnl' class='cl-bar' aria-label='filters'>"
-            f"<input type='month' name='van' value='{_e(van)}' aria-label='from month'>"
-            f"<input type='month' name='tot' value='{_e(tot)}' aria-label='until month'>"
-            f"<input name='batch' value='{_e(batch)}' list='fin-batches' aria-label='batch' placeholder='Batch'>"
-            f"{_lijst('fin-batches', cfg.get('batches') or [])}"
-            f"<select name='per' aria-label='view'>{_opties([('', 'Amounts'), ('paar', 'Per pair')], per)}</select>"
-            f"<button class='btn sm' type='submit'>Filter</button></form>")
+    filt = (f"<form method='get' action='/finance/pnl' aria-label='filters'><div class='rov-addgrid'>"
+            f"{_filter_veld('From month', 'van', 'fp-van', van, 'month')}"
+            f"{_filter_veld('Until month', 'tot', 'fp-tot', tot, 'month')}"
+            f"<div class='qadd-form'>{_field('Batch', 'batch', value=batch, fid='fp-batch', attrs='list=fin-batches')}"
+            f"{_lijst('fin-batches', cfg.get('batches') or [])}</div>"
+            f"{_filter_select('View', 'per', 'fp-per', [('', 'Amounts'), ('paar', 'Per pair')], per, '')}"
+            f"</div><button class='btn sm' type='submit'>Filter</button></form>")
     if not maanden:
         return _frame("Finance · P&L", "/finance/pnl", filt + "<p class='muted'>Nothing in this selection.</p>")
     paren = uit["paren"]
@@ -462,32 +610,40 @@ def _cutover_waarschuwing(n: int, h_tot: str) -> str:
 OMZET_FILTERS = ("periode", "lijn", "batch")
 
 
-def _omzetvelden(cfg: dict, r: dict | None = None) -> str:
+def _omzetvelden(cfg: dict, r: dict | None = None, *, pre: str = "fo", waarden: dict | None = None,
+                 fout: str = "") -> str:
     from nooch_village.finance_omzet import regels as omzetregels
-    r = r or {}
-    v = lambda k: _e(str(r.get(k) if r.get(k) is not None else ""))
-    bedrag = euro(r["amount_excl_cents"]) if "amount_excl_cents" in r else ""
-    btw = euro(r["vat_cents"]) if "vat_cents" in r else ""
-    return (f"<input type='date' name='entry_date' value='{v('entry_date')}' aria-label='booking date' required>"
-            f"<input type='month' name='period' value='{v('period')}' aria-label='period (any month, also in the past)'>"
-            f"<select name='revenue_line' aria-label='revenue line' required>"
-            f"{_opties([(x['key'], x['label']) for x in omzetregels(cfg)], r.get('revenue_line', 'net_sales'))}</select>"
-            f"<input name='description' value='{v('description')}' aria-label='description' placeholder='Description' required>"
-            f"<input name='amount_excl' value='{_e(bedrag)}' inputmode='decimal' aria-label='amount excl. VAT in EUR' placeholder='EUR excl. VAT' required>"
-            f"<input name='vat' value='{_e(btw)}' inputmode='decimal' aria-label='VAT in EUR (stored, never counted)' placeholder='VAT EUR'>"
-            f"<input name='batch' value='{v('batch')}' list='fin-batches' aria-label='batch' placeholder='Batch'>"
-            f"{_lijst('fin-batches', cfg.get('batches') or [])}"
-            f"<input name='pairs' value='{v('pairs')}' inputmode='numeric' aria-label='pairs (net sales only)' placeholder='Pairs'>"
-            f"<input name='note' value='{v('note')}' aria-label='note (required for a return or credit note)' placeholder='Note'>")
+    lees = _waarden(r, waarden, {"amount_excl": "amount_excl_cents", "vat": "vat_cents"})
+    if waarden is None and r is None:
+        lees_ = lees
+        lees = lambda n: lees_(n) or ("net_sales" if n == "revenue_line" else "")
+    bij = fout_veld(fout, fu.OMZET)
+    T = fu.OMZET
+
+    def v(naam, **kw):
+        f_ = fout if bij == naam else (_OPNIEUW if naam == "file" and waarden is not None and fout else "")
+        return _veld(T, naam, pre, waarde=lees(naam), fout=f_, **kw)
+    dubbel = (f"<div><input type='checkbox' id='{pre}-dubbel' name='bevestig_dubbel' value='1'>"
+              f"<label for='{pre}-dubbel' class='muted'>I know this file is already in the register</label></div>")
+    kop = [t for t, _v in fu.OMZET_BLOKKEN]
+    return (_blok(kop[0], v("entry_date", kind="date") + v("period", kind="month")
+                  + v("revenue_line", opties=[(x["key"], x["label"]) for x in omzetregels(cfg)])
+                  + v("description"))
+            + _blok(kop[1], v("amount_excl", attrs="inputmode='decimal'") + v("vat", attrs="inputmode='decimal'")
+                    + f"<div class='qadd-form'>{_btw_hulp(pre)}</div>")
+            + _blok(kop[2], v("batch", attrs=f"list='{pre}-batches'",
+                              na=_lijst(f"{pre}-batches", cfg.get("batches") or []))
+                    + v("pairs", attrs="inputmode='numeric'"))
+            + _blok(kop[3], v("file", kind="file", attrs="accept='.pdf,.png,.jpg,.jpeg'", na=dubbel) + v("note")))
 
 
-def _omzetformulier(cfg: dict, csrf: str, actie: str, terug: str, r: dict | None = None, extra: str = "") -> str:
+def _omzetformulier(cfg: dict, csrf: str, actie: str, terug: str, r: dict | None = None, extra: str = "",
+                    *, pre: str = "fo", waarden: dict | None = None, fout: str = "") -> str:
     return (f"<form method='post' action='/action' enctype='multipart/form-data'>"
+            f"<p class='muted'>{_e(fu.OMZET_KOP)}</p>{_hulp_link('revenue-form')}"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='action' value='{actie}'>"
-            f"<input type='hidden' name='next' value='{_e(terug)}'>{extra}{_omzetvelden(cfg, r)}"
-            f"<input type='file' name='file' accept='.pdf,.png,.jpg,.jpeg' aria-label='document (optional; for a grant: the decision)'>"
-            f"<input type='checkbox' id='fin-dubbel-omzet' name='bevestig_dubbel' value='1'>"
-            f"<label for='fin-dubbel-omzet' class='muted'>I know this file is already in the register</label>"
+            f"<input type='hidden' name='next' value='{_e(terug)}'>{extra}"
+            f"{_omzetvelden(cfg, r, pre=pre, waarden=waarden, fout=fout)}"
             f"<button class='btn ok sm' type='submit'>Save</button></form>")
 
 
@@ -499,16 +655,17 @@ def omzet_gefilterd(st, f: dict) -> list[dict]:
             and (not f.get("batch") or r.get("batch") == f["batch"])]
 
 
-def render_revenue(st, username, csrf: str, f: dict, msg: str = "") -> str:
+def render_revenue(st, username, csrf: str, f: dict, msg: str = "", *, waarden: dict | None = None,
+                   fout: str = "") -> str:
     from nooch_village.finance_omzet import regels as omzetregels
     cfg = fc.laad()
     labels = {x["key"]: x["label"] for x in omzetregels(cfg)}
     regels_ = omzet_gefilterd(st, f)
-    filterform = (f"<form method='get' action='/finance/revenue' aria-label='filters'>"
-                  f"<input type='month' name='periode' value='{_e(f.get('periode', ''))}' aria-label='period'>"
-                  f"<select name='lijn' aria-label='revenue line'>{_opties(list(labels.items()), f.get('lijn', ''), 'All lines')}</select>"
-                  f"<input name='batch' value='{_e(f.get('batch', ''))}' aria-label='batch' placeholder='Batch'>"
-                  f"<button class='btn sm' type='submit'>Filter</button></form>")
+    filterform = (f"<form method='get' action='/finance/revenue' aria-label='filters'><div class='rov-addgrid'>"
+                  f"{_filter_veld('Period', 'periode', 'fr-periode', f.get('periode', ''), 'month')}"
+                  f"{_filter_select('Revenue line', 'lijn', 'fr-lijn', list(labels.items()), f.get('lijn', ''), 'All lines')}"
+                  f"{_filter_veld('Batch', 'batch', 'fr-batch', f.get('batch', ''))}"
+                  f"</div><button class='btn sm' type='submit'>Filter</button></form>")
     actief = ", ".join(f"{k}: {v}" for k, v in f.items() if v)
     filters = (_popover("Filter", filterform)
                + (f"<span class='muted'>{_e(actief)} · <a href='/finance/revenue'>clear</a></span>" if actief else ""))
@@ -524,7 +681,8 @@ def render_revenue(st, username, csrf: str, f: dict, msg: str = "") -> str:
         for r in sorted(regels_, key=lambda x: (x["period"], x["created_at"]), reverse=True))
     tabel = ("<table class='mtab' aria-label='revenue'><tr><th>Period</th><th>Line</th><th>Batch</th>"
              "<th class='num'>Pairs</th><th class='num'>Excl. VAT</th><th></th></tr>"
-             f"{rijen}</table>" if regels_ else "<p class='muted'>No revenue in this selection.</p>")
+             f"{rijen}</table>" if regels_ else
+             f"<p class='muted'>{_e('No revenue in this selection.' if any(f.values()) else fu.LEEG['revenue'])}</p>")
     per_maand = totalen(regels_, "period")
     per_lijn = totalen(regels_, "revenue_line")
     som = ("<table class='mtab' aria-label='totals per month'><tr><th>Month</th><th class='num'>Total</th></tr>"
@@ -532,7 +690,10 @@ def render_revenue(st, username, csrf: str, f: dict, msg: str = "") -> str:
            + "</table><table class='mtab' aria-label='totals per line'><tr><th>Line</th><th class='num'>Total</th></tr>"
            + "".join(f"<tr><td>{_e(labels.get(k, k))}</td><td class='num'>{_eur(v)}</td></tr>" for k, v in per_lijn.items())
            + "</table>") if regels_ else ""
-    nieuw = (_popover("+ add revenue", _omzetformulier(cfg, csrf, "finance_omzet_add", "/finance/revenue"))
+    nieuw = (_nieuw_kaart("+ Add a revenue line",
+                          _omzetformulier(cfg, csrf, "finance_omzet_add", "/finance/revenue",
+                                          waarden=waarden, fout=fout),
+                          open_=not regels_ and not any(f.values()) or bool(fout))
              if mag_wijzigen(st, username) and csrf else "")
     inhoud = (f"<p class='muted'>Enter revenue on the period of delivery, as the accountant recognises it. "
               f"Any month can be entered, also in the past. A grant should carry its decision as a document.</p>"
@@ -541,7 +702,8 @@ def render_revenue(st, username, csrf: str, f: dict, msg: str = "") -> str:
     return _frame("Finance · Revenue", "/finance/revenue", inhoud, msg)
 
 
-def render_revenue_regel(st, username, csrf: str, rid: str, msg: str = "") -> str | None:
+def render_revenue_regel(st, username, csrf: str, rid: str, msg: str = "", *, waarden: dict | None = None,
+                         fout: str = "") -> str | None:
     from nooch_village.finance_omzet import OpbrengstRegister, regels as omzetregels
     reg = OpbrengstRegister(st.dd)
     r = reg.get(rid)
@@ -568,10 +730,13 @@ def render_revenue_regel(st, username, csrf: str, rid: str, msg: str = "") -> st
                  if hist else "<p class='muted'>Not corrected.</p>")
     correct = ""
     if mag_wijzigen(st, username) and csrf and not r.get("corrects"):
-        correct = _popover("Correct", "<p class='muted'>This adds a reversal of this line and a new line with "
-                           "the values below. Nothing is overwritten.</p>"
-                           + _omzetformulier(cfg, csrf, "finance_omzet_correct", f"/finance/revenue/view?id={rid}",
-                                             r, extra=f"<input type='hidden' name='kid' value='{_e(rid)}'>"))
+        correct = _nieuw_kaart("Correct", "<p class='muted'>This adds a reversal of this line and a new line "
+                               "with the values below. Nothing is overwritten.</p>"
+                               + _omzetformulier(cfg, csrf, "finance_omzet_correct",
+                                                 f"/finance/revenue/view?id={rid}", r,
+                                                 extra=f"<input type='hidden' name='kid' value='{_e(rid)}'>",
+                                                 pre="foc", waarden=waarden, fout=fout),
+                               open_=bool(fout))
     inhoud = (f"<div class='c2-sec'>{tabel}</div><div class='c2-sec'><h2>Document</h2>{doc}</div>"
               f"<div class='c2-sec'><h2>Corrections</h2>{hist_html}{correct}</div>")
     return _frame(f"Finance · {r['description']}", "/finance/revenue", inhoud, msg)
@@ -635,6 +800,26 @@ def verwerk_omzet(st, fields: dict, files: dict, *, username, door: str) -> str:
     return "✓ revenue saved" + (f" — ⚠ {waarschuwing}" if waarschuwing else "")
 
 
+# ── /finance/help (UX-PR, 11 oktober 2026) ─────────────────────────────────
+
+def render_help(st, username) -> str:
+    """De hulppagina. Alle tekst komt uit `finance_uitleg`, dezelfde bron als de hulpteksten bij de
+    velden; de tabellen "What goes where" worden uit de veld-tabellen opgebouwd. Rechten: de route
+    zit onder /finance/ (404 voor wie Finance niet mag zien)."""
+    inhoud = ["<div class='c2-sec'><h2 id='what'>What goes where</h2>"]
+    for anker, kop, tabel, _blokken in fu.HELP_FORMULIEREN:
+        rijen = "".join(f"<tr><td>{_e(label)}{' *' if verplicht else ''}</td><td>{_e(hulp)}</td>"
+                        f"<td>{_e(voorbeeld)}</td></tr>"
+                        for label, verplicht, hulp, voorbeeld in tabel.values())
+        inhoud.append(f"<h3 id='{_e(anker)}'>{_e(kop)}</h3><table class='mtab' aria-label='{_e(kop)}'>"
+                      f"<tr><th>Field</th><th>What you fill in</th><th>Example</th></tr>{rijen}</table>")
+    inhoud.append("<p class='muted'>* required</p></div>")
+    for anker, kop, alineas in fu.HELP:
+        inhoud.append(f"<div class='c2-sec'><h2 id='{_e(anker)}'>{_e(kop)}</h2>"
+                      + "".join(f"<p>{_e(a)}</p>" for a in alineas) + "</div>")
+    return _frame("Finance · Help", "/finance/help", "".join(inhoud))
+
+
 # ── /finance/history (PR 2a) ────────────────────────────────────────────────
 
 def _jaar(jaar: str) -> str:
@@ -694,7 +879,8 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
                   f"<input type='hidden' name='action' value='finance_hist_opslaan'>"
                   f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
                   f"<input type='hidden' name='jaar' value='{jaar}'>{raster}"
-                  f"<input name='note' aria-label='note for this save' placeholder='Note (e.g. Venema 2025 annual figures)'>"
+                  f"<div class='qadd-form'>{_field('Note for this save', 'note', fid='fh-note', placeholder='Example: Venema 2025 annual figures')}"
+                  f"<div class='muted'>One note for all cells you changed; it shows in each cell's history.</div></div>"
                   f"<button class='btn ok sm' type='submit'>Save changed cells</button></form>"
                   f"<p class='muted'>An empty cell means no data, not zero. Emptying a cell that has a value "
                   f"clears it; the old value stays in the cell history (↺).</p>")
@@ -727,7 +913,7 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
             f"<form method='post' action='/action'><input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='action' value='finance_hist_cutover'>"
             f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
-            f"<input type='month' name='history_until' value='{_e(h_tot)}' aria-label='history until (empty = no history)'>"
+            f"{_veld(fu.HISTORIE, 'history_until', 'fh', waarde=h_tot, kind='month')}"
             f"<button class='btn ok sm' type='submit'>Save</button></form>"
             f"<p class='muted'>Every change is logged (who, when, old and new value).</p>"))
         beheer += _popover("Import", (
@@ -735,7 +921,7 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='action' value='finance_hist_import'>"
             f"<input type='hidden' name='next' value='/finance/history?jaar={jaar}'>"
-            f"<input type='file' name='file' accept='.csv,.xlsx' aria-label='CSV or XLSX in the export format' required>"
+            f"{_veld(fu.HISTORIE, 'file', 'fhi', kind='file', attrs='accept=.csv,.xlsx')}"
             f"<button class='btn sm' type='submit'>Preview</button></form>"
             f"<p class='muted'>Same format as the export. An empty cell in the file only clears a filled cell if you tick that in the preview. You see a preview first; nothing is saved until you confirm.</p>"))
     log = fh.Instellingen(st.dd).alle()[-5:]
@@ -743,7 +929,8 @@ def render_history(st, username, csrf: str, jaar: str = "", msg: str = "") -> st
         f"<li class='muted'>{time.strftime('%Y-%m-%d %H:%M', time.localtime(r['created_at']))} · "
         f"{_e(r.get('created_by') or '—')}: {_e(r.get('old') or 'none')} → {_e(r.get('new') or 'none')}</li>"
         for r in reversed(log)) + "</ul>") if log else ""
-    inhoud = (f"<p><span class='chip'>{_e(fh.LABEL)}</span></p>{cutover}{loghtml}{nav}{beheer}"
+    inhoud = (f"<p class='muted'>{_e(fu.HISTORIE_KOP)}</p>{_hulp_link('history')}"
+              f"<p><span class='chip'>{_e(fh.LABEL)}</span></p>{cutover}{loghtml}{nav}{beheer}"
               f"<div class='c2-sec'>{raster}</div><div class='c2-sec'>{controle}</div>")
     return _frame("Finance · History", "/finance/history", inhoud, msg)
 
