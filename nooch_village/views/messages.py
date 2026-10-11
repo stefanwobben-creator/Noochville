@@ -81,14 +81,39 @@ def mag_project_lezen(st, pid: str, ik: str) -> bool:
     project is voor iedereen die is ingelogd, zoals het bord dat ook toont.
 
     Fail-closed: onbekend project of onbekende mens → nee."""
-    from nooch_village.cockpit2 import resolve_circle_id, is_circle_member
     p = st.projects.get(pid or "")
     if p is None or not ik:
         return False
+    return mag_project_dict_lezen(st, p, ik)
+
+
+def mag_project_dict_lezen(st, p: dict | None, ik: str) -> bool:
+    """De privé-regel op een project dat je al in handen hebt (een lijst doorlopen zonder per
+    project opnieuw te laden). ÉÉN regel: `mag_project_lezen` roept deze aan.
+
+    Een niet-privé project is voor iedereen; een privé-project alleen voor een lid van de cirkel van
+    de eigenaar-rol. Fail-closed: geen project, of privé zonder bekende mens → nee."""
+    from nooch_village.cockpit2 import resolve_circle_id, is_circle_member
+    if p is None:
+        return False
     if not p.get("private"):
         return True
+    if not ik:
+        return False
     cid = resolve_circle_id(p.get("owner") or "", st.records)
     return bool(cid) and is_circle_member(ik, cid, st.records, st.assign)
+
+
+def project_lezer(st, username: str | None):
+    """Een filter `p -> bool` voor deze gebruiker: welke projecten mag hij zien (bord, zoeken,
+    /project). Guest (auth uit) mag alles, zoals overal in de cockpit; anders `mag_project_dict_lezen`
+    met de persoon achter de sessie. Zonder gebruiker (een interne aanroep) blijven privé-projecten
+    weg: fail-closed."""
+    if username == "guest":
+        return lambda p: p is not None
+    from nooch_village.cockpit2 import _web_actor_id
+    ik = _web_actor_id(username, st) if username else ""
+    return lambda p: mag_project_dict_lezen(st, p, ik)
 
 
 def mag_kanaal_lezen(st, kanaal: str, ik: str) -> bool:
@@ -315,7 +340,9 @@ def _kanalen(st, ik: str, q: str = "") -> tuple[dict[str, list[str]], dict[str, 
     andere_cirkels = [k for k in st.channels.bestaande(channels.CIRCLE) if k != wortel]
     onderwerpen = st.channels.topics() + andere_cirkels
     projecten_alles = _projectkanalen_met_gesprek(st)
-    projecten = [k for k in projecten_alles if k in gevolgd]
+    # PRIVÉ-PROJECTEN: ook een GEVOLGD projectkanaal staat alleen in de lijst als je het mag lezen
+    # (je kan het gevolgd hebben vóór het privé werd). Openen vroeg dit al; de lijst nu ook.
+    projecten = [k for k in projecten_alles if k in gevolgd and mag_kanaal_lezen(st, k, ik)]
     dms, _rollen = _dm_groepen(st, ik)
 
     # "ROLES & SYSTEM" STOND HIER ALS GROEP, en is op 22 september 2026 uit de lijst gehaald (eis

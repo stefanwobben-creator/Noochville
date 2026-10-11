@@ -90,7 +90,9 @@ def _paneel_zoek(st, ik: str, q: str) -> str:
             f"</form>")
     if len((q or "").strip()) < 2:
         return veld + _leeg("Type to search people, roles, projects, channels and wiki at once.")
-    return veld + f"<div class='c2-pzoekuit'>{render_search_fragment(st, q)}</div>"
+    from nooch_village.views.messages import mag_project_dict_lezen
+    leest = lambda p: mag_project_dict_lezen(st, p, ik)         # privé-projecten: zie `project_lezer`
+    return veld + f"<div class='c2-pzoekuit'>{render_search_fragment(st, q, leest=leest)}</div>"
 
 
 # ── PR ───────────────────────────────────────────────────────────────────────
@@ -106,8 +108,10 @@ def _paneel_projects(st, ik: str, welke: str) -> str:
     DEZELFDE DEFINITIE ALS DE PERSOON-LENS: een project is van jou als zijn eigenaar-rol door jou
     wordt vervuld (`owner ∈ roles_of("person", ik)`). Die stond er al; een tweede definitie van
     "mijn" zou hier stilletjes een andere lijst geven dan op je eigen pagina."""
+    from nooch_village.views.messages import mag_project_dict_lezen
     alle = [p for p in st.projects.all()
-            if not p.get("archived") and p.get("status") not in ("done", "draft")]
+            if not p.get("archived") and p.get("status") not in ("done", "draft")
+            and mag_project_dict_lezen(st, p, ik)]                 # privé-projecten: zie project_lezer
     rollen = set(st.assign.roles_of("person", ik)) if ik else set()
     mijn = [p for p in alle if p.get("owner") in rollen]
     lijst = alle if welke == "alle" else mijn

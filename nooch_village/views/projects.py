@@ -936,7 +936,12 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
 
     Zelfde recept als `_metrics_tab_html` (nav → js-modal + data-href, anders een gewone link); geen
     tweede mechaniek, en buiten een modal verandert er niets."""
-    allp = st.projects.all()
+    # PRIVÉ-PROJECTEN (11 oktober 2026): alleen voor een lid van de cirkel van de eigenaar-rol, met
+    # dezelfde regel als Messages, het zoeken en /project. De werkoverleg- en persoonsroute geven
+    # geen `username` mee maar wel een kijker (`zicht.voor`), en die draagt hem.
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, username or getattr(st, "username", None))
+    allp = [p for p in st.projects.all() if leest(p)]
     # VOLGORDE: een modal wint van een eigen scherm wint van de cirkel-tab. Een bord dat IN een
     # overleg draait moet naar dat overleg terug, ook als het toevallig door `/projects` wordt
     # gerenderd — anders klapt het overleg dicht, precies de bug waarvoor `nav` bestaat.
@@ -1017,8 +1022,10 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     render (reference, not copy). group='rol' → elke swimlane is een van mijn rollen; quickadd=False
     → de lens voegt niet toe (dat blijft op rol-niveau)."""
     role_ids = set(st.assign.roles_of(filler_type, pid))
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, getattr(st, "username", None))      # privé: zie `_projects_tab_html`
     mine = [p for p in st.projects.all()
-            if p.get("owner") in role_ids and not p.get("archived")
+            if leest(p) and p.get("owner") in role_ids and not p.get("archived")
             and p.get("status") not in _OFF_BOARD]
     back = f"/person?id={pid}&tab=projecten"
     board = _projects_board(st, mine, "", csrf_token, back, "rol", quickadd=False)
@@ -1290,7 +1297,7 @@ def _tijdlijn_rijen(p) -> str:
     return uit
 
 
-def _doel_rijen(st, p, rw: bool, hid) -> str:
+def _doel_rijen(st, p, rw: bool, hid, username: str | None = None) -> str:
     """Goal · Work package · Depends on, als rail-regels (zelfde `mform`/`ctrl`/autosave als impact).
 
     Goal: een select over de open doelen (`proj_goal`). Work package: alleen als het doel er
@@ -1324,7 +1331,10 @@ def _doel_rijen(st, p, rw: bool, hid) -> str:
                                  f"<select class='ctrl' name='activiteit' onchange='{_AUTOSAVE}'>"
                                  f"<option value=''>—</option>{aopts}</select></form>"))
     # afhankelijkheden
-    per_id = {q["id"]: q for q in st.projects.all()}
+    # PRIVÉ-PROJECTEN: een afhankelijkheid toont een titel en een link; alleen wat de kijker mag zien.
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, username or getattr(st, "username", None))
+    per_id = {q["id"]: q for q in st.projects.all() if leest(q)}
     deps = [d for d in (p.get("depends_on") or []) if d in per_id]
     chips = ""
     for d in deps:
@@ -1344,7 +1354,7 @@ def _doel_rijen(st, p, rw: bool, hid) -> str:
     add = ""
     if rw and hid is not None:
         if cur:
-            kandidaten = [q for q in _D.projecten_van(cur["id"], st.projects.all())
+            kandidaten = [q for q in _D.projecten_van(cur["id"], list(per_id.values()))   # alleen leesbare
                           if q["id"] != p["id"] and q["id"] not in deps and q.get("status") not in _P_KLAAR]
             kopts = "".join(f"<option value='{_e(q['id'])}'>{_e(_scope_text(q)[:70])}</option>" for q in kandidaten)
             add = (f"<form method='post' action='/action' class='mform'>{hid()}"
@@ -1575,7 +1585,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             + _meta_rijen(st, p, rw, hid, _trekker_opts_html, terminaal)
             + _meta_rij("Role", rol_v)
             + _meta_rij("Deadline", due_head or "—")
-            + _doel_rijen(st, p, rw, hid)
+            + _doel_rijen(st, p, rw, hid, username)
             + _meta_rij("Visible", vis_v)
             + _meta_rij("Created", _created_full(p.get("created_at")))
             + _tijdlijn_rijen(p)

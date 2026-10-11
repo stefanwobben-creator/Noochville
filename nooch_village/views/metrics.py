@@ -1604,6 +1604,10 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
     g = _grondslag(st, tile["source"], tile["measure"])
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
+    # PRIVÉ-PROJECTEN: het doel van een tegel is een projecttitel; niet voor wie het niet mag zien.
+    from nooch_village.views.messages import project_lezer
+    if gp is not None and not project_lezer(st, getattr(st, "username", None))(gp):
+        gp = None
     form = tile.get("form", "getal")
     agg = _tile_agg(st, tile["source"], tile["measure"])   # venster-samenvatregel voor de headline
     # last-standen pakken vandaag WÉL mee (headline 'stand per nu'): effectief venster-einde = nu i.p.v.
@@ -1754,8 +1758,10 @@ def _goal_options(st: _Stores, rec) -> str:
     is_c = org.is_circle(rec)
     nodes = {rec.id} | ({r.id for r in org.roles_of(st.records.all(), rec.id)} if is_c else set())
     out = "<option value=''>— no goal —</option>"
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, getattr(st, "username", None))     # privé-projecten: zie project_lezer
     for p in st.projects.all():
-        if p.get("owner") in nodes and not p.get("archived"):
+        if p.get("owner") in nodes and not p.get("archived") and leest(p):
             out += f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:50])}</option>"
     return out
 

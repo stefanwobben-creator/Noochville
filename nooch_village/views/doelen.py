@@ -101,8 +101,14 @@ def render_goal(st, doel_id: str, csrf_token: str = "", username: str | None = N
     alle = st.projects.all()
     terug = f"/goal?id={d['id']}"
     v = _D.voortgang(d, alle)
-    ps = _D.projecten_van(d["id"], alle)
-    per_id = {p["id"]: p for p in alle}
+    # PRIVÉ-PROJECTEN: de voortgang telt alle projecten (een aantal toont geen inhoud), de LIJST met
+    # titels alleen wat deze kijker mag zien (`messages.project_lezer`).
+    from nooch_village.views.messages import project_lezer
+    leest = project_lezer(st, username)
+    ps = [p for p in _D.projecten_van(d["id"], alle) if leest(p)]
+    # Titels en links (kritieke pad, afhankelijkheden): alleen leesbare projecten. Een privé-project
+    # op het pad blijft als id staan, zonder titel — het pad zelf klopt dan nog.
+    per_id = {p["id"]: p for p in alle if leest(p)}
     rw = bool(csrf_token)
 
     def hid() -> str:
@@ -149,7 +155,7 @@ def render_goal(st, doel_id: str, csrf_token: str = "", username: str | None = N
     koppel = bewerk = ""
     if rw:
         los = [p for p in alle if not p.get("archived") and not p.get("doel_id")
-               and p.get("status") not in _KLAAR]
+               and p.get("status") not in _KLAAR and leest(p)]
         los.sort(key=lambda p: _titel(p).lower())
         if los:
             def _eig(p) -> str:
