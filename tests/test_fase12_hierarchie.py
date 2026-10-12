@@ -122,11 +122,14 @@ def test_de_primaire_knop_heeft_geen_zichtbare_rand():
     assert _randkleur(body) == "transparent"
 
 
-def test_een_etiket_is_geen_doosje():
-    """101 voorkomens in 22 bestanden: één etiket met een kader valt niet op, honderd wel."""
+def test_een_etiket_is_neutraal_met_een_hairline():
+    """Fase 12 haalde de rand weg ("één etiket met een kader valt niet op, honderd wel") en gaf het
+    vlak een groene tint. B3 fase c (besluit Stefan, 12 en 13 oktober 2026): neutraal, met een
+    hairline — de tint droeg op /wiki 111 keer een kleur die niets betekende. Wel `--hair` en nooit
+    zwart: het blijft geen doosje."""
     body = _body(r":root \.pill, :root \.chip")
-    assert _randkleur(body) == "transparent"
-    assert "var(--nu-bg-alt)" in body                    # een lichte tint draagt het vlak
+    assert "border: 1px solid var(--hair)" in body and "var(--nu-text)" not in _randkleur(body)
+    assert "background: var(--nu-surface)" in body
 
 
 def test_ook_de_chip_varianten_dragen_geen_zwarte_lijn():
@@ -267,11 +270,12 @@ def test_omhulsels_houden_hun_kader():
     # Zonder die tweede helft leest de wijziging als "haal de randen weg" in plaats van als een
     # hiërarchie die eindelijk iets onderscheidt.
     subtiel = " | ".join(sel for sel, body in _regels()
-                         if "border: 1.5px solid var(--nu-border-subtle)" in body)
+                         if "border: 1px solid var(--hair)" in body)        # B3 fase c: 1px
     for klasse in ("card", "pkaart", "kcard"):
         assert re.search(rf"\.{re.escape(klasse)}(?![\w-])", subtiel), (
             f".{klasse} is een item en hoort de dunne lijn te dragen")
-    actief = " | ".join(sel for sel, body in _regels() if "border-width: 2px" in body)
+    # B3 fase c: actief = zwart (1px), niet langer 2px — de 2px is voor het ene element dat eruit springt.
+    actief = " | ".join(sel for sel, body in _regels() if "border-color: var(--nu-text)" in body)
     assert "hover" in actief and "pdrag-ghost" in actief, (
         "een actieve of gesleepte kaart hoort zijn zware lijn terug te krijgen")
 
@@ -288,7 +292,7 @@ def test_deadline_op_de_rail_draagt_het_veldkader():
     enige control op de rail die fase 12 oversloeg. De override is GESCOPED op de rail: elders is
     `.chip` een pil en dat blijft hij."""
     body = _body(r"^:root \.pkaart-rail \.chip\.outline$")
-    assert "border: 1.5px solid var(--nu-border-subtle)" in body and "border-radius: 0" in body
+    assert "border: 1px solid var(--hair)" in body and "border-radius: 0" in body          # B3 fase c
     assert not any(s.strip() == ".chip.outline" and "nu-" in b for s, b in _regels()), (
         "de rail-override lekt naar .chip.outline buiten de rail")
 
@@ -303,7 +307,7 @@ def test_kaart_en_tegel_zijn_hoekig_met_de_lichte_rand():
     for klasse in ("card", "tile"):
         assert re.search(rf":root \.{klasse}(?![\w-])", hoek), f".{klasse} is niet hoekig"
     tegel = " ".join(b for s, b in regels if re.fullmatch(r":root \.tile", s.strip()))
-    assert "1.5px solid var(--nu-border-subtle)" in tegel, "de tegel draagt niet de rand van de kaart"
+    assert "1px solid var(--hair)" in tegel, "de tegel draagt niet de rand van de kaart"   # B3 fase c
 
 
 def test_een_tabelcel_lijnt_uit_op_het_midden():

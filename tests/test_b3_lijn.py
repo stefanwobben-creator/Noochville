@@ -21,8 +21,6 @@ TWEE_PX = {
     ":root .c2-subnav a.c2-overleg--live": "de lopende meeting: het ene element dat eruit springt",
     # focus is een toestand, geen rand: wie typt moet zien wáár (toegankelijkheid)
     ":root input[type=text]:focus": "focus-toestand van een invoerveld",
-    # items op hover — B3 fase c (hairline items) zet dit om naar 1px zwart
-    ":root .pkaart:hover": "hover op een kaart (fase c)",
     # de oude laag (buiten de nu-scope), decoratief en geen kader
     ".c2-tab": "onderstreping van het actieve tabblad (transparant tot actief)",
     ".subtab": "onderstreping van het actieve subtabblad",
