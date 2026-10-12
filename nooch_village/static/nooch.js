@@ -2840,7 +2840,7 @@
     function open() {
       if (!pal.hidden) return;
       pal.hidden = false;
-      loslaten = NV.focusTrap(pal, knop);
+      loslaten = NV.focusTrap(pal, opener);
       veld.value = "";
       laad();
       veld.focus();
@@ -2851,7 +2851,10 @@
       var los = loslaten; loslaten = null;
       if (los) los();
     }
-    knop.addEventListener("click", function (e) { e.preventDefault(); open(); });
+    var opener = knop;
+    [].forEach.call(document.querySelectorAll("#c2-zoek, [data-palet-open]"), function (k) {
+      k.addEventListener("click", function (e) { e.preventDefault(); opener = k; open(); });
+    });
     veld.addEventListener("input", function () { clearTimeout(wacht); wacht = setTimeout(laad, 150); });
     veld.addEventListener("keydown", function (e) {
       if (e.key !== "Enter") return;

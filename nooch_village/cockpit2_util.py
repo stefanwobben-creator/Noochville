@@ -1735,6 +1735,15 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # samen met wat hij opent.
         "<button type='button' class='c2-burger' onclick='navToggle()' "
         "aria-label='Menu' aria-expanded='false'>\u2630</button>"
+        # ZOEKEN NAAST DE HAMBURGER (B2): op een telefoon zit de zoekknop anders achter het menu.
+        # Zelfde vorm als de hamburger, één plek verder; alleen mobiel zichtbaar. Zonder JS een link
+        # naar /search, met JS opent hij het palet (`data-palet-open`).
+        "<a class='c2-burger c2-burger--zoek' href='/search' data-palet-open "
+        # Een vergrootglas als SVG: het teken ⌕ ontbreekt in Archivo en viel terug op een klein
+        # vervangteken. `currentColor`, dus de kleur komt uit de CSS.
+        "aria-label='Search or jump to'><svg width='20' height='20' viewBox='0 0 24 24' "
+        "fill='none' stroke='currentColor' stroke-width='2' aria-hidden='true' focusable='false'>"
+        "<circle cx='11' cy='11' r='7'/><path d='M20 20l-4-4'/></svg></a>"
         # ── GEEN HORIZONTALE HEADER MEER (B1, 11 oktober 2026) ──────────────────────────────
         # Zoals het prototype v2 (`claude/prototype_v2_vormgeving_live.html`): het merk, een
         # zoekknop en de navigatie staan in één kolom, de gebruiker onderaan. De header droeg drie

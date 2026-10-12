@@ -3209,3 +3209,55 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .kpi-add { flex-wrap: wrap; align-items: center; }
 :root .kpi-add input[type=date] { width: auto; }
 :root .kpi-add input[name=notitie] { flex: 1 1 8rem; width: auto; }
+
+/* ── B2 · het bord (12 oktober 2026, prototype v2) ───────────────────────────────────────────
+   DE COMPACTE KAART: titel → metaregel → dunne balk. Padding 8 × 12px — een bewuste uitzondering
+   op "kaarten minimaal 12px" (besluit Stefan); `:root .pcol .card` hierboven (0,2,1) zette 14,4px. */
+:root .pcol .pcard { padding: .5rem .75rem; margin: .25rem 0; }
+:root .pcol .pcard .ptitle { margin: 0; line-height: 1.3; }
+:root .pcol .pcard .pmeta { display: flex; align-items: center; gap: .35rem; margin-top: .3rem; }
+:root .pcol .pcard .pmeta .av { width: 22px; height: 22px; font-size: var(--type-12); flex: none; }
+/* De balk zonder het percentage ERNAAST: `<progress>` draagt zijn waarde zelf (een schermlezer leest
+   hem), en de tekst blijft voor wie hem voorgelezen krijgt (visueel verborgen, niet weg). */
+:root .pcol .pcard .pbadge { margin-top: .35rem; }
+:root .pcol .pcard .pbadge > span { position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; }
+/* HET SLEEP-HINTJE BLIJFT, maar zweeft: het verschijnt bij hover over de kaart heen in plaats van
+   een eigen regel hoogte te kosten. Verplaatsen blijft zo even vindbaar als het was. */
+:root .pcol .pcard .pcard-hint { position: absolute; right: .4rem; bottom: .3rem; margin: 0;
+  pointer-events: none; background: var(--nu-surface); padding: 0 .2rem; }
+
+/* DE LEGE KOLOM ALS SMALLE STROOK: op zijn eigen plek (de volgorde per swimlane blijft gelijk), met
+   naam en aantal verticaal. Hij blijft een sleepdoel (`data-to`) en licht op ZOLANG er gesleept wordt
+   (`.pdrag-ghost` bestaat alleen dan; geen nieuwe klasse nodig). */
+:root .pcol[data-leeg] { flex: 0 0 44px; min-width: 44px; padding: .4rem .2rem; display: flex;
+  flex-direction: column; align-items: center; gap: .4rem; }
+:root .pcol[data-leeg] .pcol-h { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0;
+  white-space: nowrap; }
+:root .pcol[data-leeg] .pcol-h::before { transform: rotate(180deg); }
+:root .pcol[data-leeg] .pcol-scroll { display: none; }
+/* "+ add project" blijft een link met dezelfde tekst (die leest een schermlezer), maar toont "+". */
+:root .pcol[data-leeg] .addlink { font-size: 0; padding: .1rem .35rem; }
+:root .pcol[data-leeg] .addlink::before { content: "+"; font-size: 16px; }
+:root .pcol[data-leeg]:focus-visible { outline: 2px solid var(--nu-text); outline-offset: 2px; }
+:root body:has(.pdrag-ghost) .pcol[data-leeg] { outline: 2px dashed var(--nu-text); outline-offset: -2px;
+  background: var(--nu-bg-alt); }
+
+/* ZOEKEN NAAST DE HAMBURGER (B2): dezelfde vorm, één plek verder, alleen mobiel (de hamburger staat
+   op desktop op `display:none`, en deze erft dat). Touch target 44px. */
+@media (max-width: 760px) {
+  :root .c2-burger--zoek { left: 60px; width: 44px; height: 44px; text-decoration: none; color: var(--ink); }
+  :root .c2-burger { width: 44px; height: 44px; }
+  /* 10px + 44px: de inhoud begint eronder, zodat geen van beide knoppen iets afdekt. */
+  :root body.navjs .c2-main, :root body.navjs .c2-wrap { padding-top: 3.4rem; }
+}
+/* B2: op een telefoon lopen de groepering en het doelfilter van het bord door naar een volgende regel
+   in plaats van de pagina breder te maken. En een popover IN een scrollcontainer krijgt daar een
+   eigen vaste plek onderaan: absoluut geplaatst zou de container hem afkappen (gezien bij #722). */
+@media (max-width: 760px) {
+  :root .vswitch { flex-wrap: wrap; }
+  /* Vast onderaan het scherm: een `fixed` element wordt niet door de scrollcontainer afgekapt, en
+     staat altijd binnen beeld, ook als de knop zelf achter de horizontale scroll zit. */
+  :root .c2-scroll .datepop { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px;
+    z-index: 70; max-height: 60vh; overflow: auto; }
+}

@@ -171,7 +171,9 @@ def test_bord_pills_kop_en_kaartlabel(tmp_path):
     st = cockpit2._Stores(dd)
     alles = render_node(st, CIRKEL, "projects", csrf_token="t")
     assert "Goal:" in alles and "cl-filter pill on" in alles and alles.count("cl-filter pill") == 6
-    assert "chip doel" in alles and "Patentsearch EPO" in alles and "Los project" in alles
+    # B2 (12 oktober 2026, besluit Stefan): het doel-etiket staat niet meer op de bordkaart; het
+    # Goal-filter en de doelkop hierboven dragen het doel.
+    assert "chip doel" not in alles and "Patentsearch EPO" in alles and "Los project" in alles
     assert "card doel" not in alles, "zonder filter geen doelkop"
     mith = render_node(st, CIRKEL, "projects", csrf_token="t", goal=d["id"])
     assert "card doel" in mith and "🎯 Rapport MITH" in mith and "Patentsearch EPO" in mith
