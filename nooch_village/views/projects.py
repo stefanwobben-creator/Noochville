@@ -486,7 +486,10 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     # DE COMPACTE KAART (B2): titel → metaregel → dunne voortgangsbalk. Het status-vakje blijft,
     # met zijn eigen tegenspraak-logica (`_kaart_status`); het sleep-hintje ook, maar het zweeft nu
     # over de kaart in plaats van een regel hoogte te kosten.
-    inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
+    # DE TITEL STOPT NA TWEE REGELS (CSS `line-clamp`, besluit Stefan); de volle titel staat in
+    # `title` en op de projectpagina. Afkappen is weergave, geen inkorten van de data.
+    titel = _scope_text(p)
+    inner = (f"{bar}<div class='ptitle' title='{_e(titel)}'>{_missie_dot(p)}{_e(titel)}</div>"
              f"{meta}{_progress_badge(p)}{_kaart_status(st, p)}{hint}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
