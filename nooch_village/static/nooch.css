@@ -1201,6 +1201,23 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:980px;width:95%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
+/* `hidden` WINT VAN `display:flex` niet vanzelf: een auteursregel verslaat die van de browser. */
+.ovl[hidden]{display:none}
+/* HET PALET (B1): dezelfde overlay, smaller en hoger op het scherm, zoals het prototype v2. Het
+   veld heeft geen eigen rand; de lijn eronder scheidt het van de resultaten. */
+.ovl-box--palet{max-width:560px;margin-top:12vh;padding:0}
+/* Het palet staat na de zijbalk in de DOM, en `.c2-side ~ *` geeft elk zo'n element 232px marge —
+   op een `fixed` overlay schuift dat hem opzij en blijft de zijbalk ongedimd. Een id wint daarvan. */
+#c2-palet{margin-left:0}
+/* Het sluitkruisje: de vorm van `.ovl-x`, maar NIET die klasse — zie `_nav()` (de modal-JS van
+   bord en werkoverleg pakt het eerste `.ovl-x` in het document). */
+.ovl-box--palet [data-palet-dicht]{position:absolute;top:.7rem;right:.7rem;border:none;background:none;
+  font-size:1.2rem;cursor:pointer;color:var(--ink)}
+.ovl-box--palet input{width:100%;box-sizing:border-box;border:0;border-bottom:1px solid var(--ink);
+  padding:1rem 3rem 1rem 1rem;font:inherit;font-size:18px;background:var(--surface);color:var(--ink)}
+.ovl-box--palet input:focus{outline:2px solid var(--green-dark);outline-offset:-2px}
+.ovl-box--palet #gs-drop{padding:.4rem .8rem .8rem;max-height:60vh;overflow:auto}
+.ovl-box--palet .gs-group h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin:.6rem 0 .25rem}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}

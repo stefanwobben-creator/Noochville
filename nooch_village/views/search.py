@@ -521,6 +521,52 @@ def _zoekveld(q: str = "") -> str:
             f"placeholder='Search people, roles, projects…' autocomplete='off'></form>")
 
 
+#: De vaste regels van het palet: (groep, label, href). "Go to" volgt de zijbalk; Finance, de BOM en
+#: Admin hebben een eigen poort (`palet_regels`). Today staat er bewust niet in: dat scherm bestaat
+#: nog niet (besluit Stefan, 11 oktober 2026).
+_PALET_GA = (("Projects", "/projects"), ("Messages", "/messages"), ("My actions", "/acties"),
+             ("Wiki", "/wiki"), ("Tools", "/tools"), ("Open questions", "/open-questions"),
+             ("Goals", "/goals"))
+_PALET_MAAK = (("New project", "/project/nieuw"), ("New action", "/acties"))
+
+
+def palet_regels(st, username) -> list[tuple[str, str, str]]:
+    """[(groep, label, href)] voor DEZE gebruiker. Dezelfde rechtenfuncties als de zijbalk en de
+    routes zelf: Admin via `cockpit2.mag_admin`, Finance via `zicht.mag(…, "finance", "zien")`. Wie het niet
+    mag, ziet de regel niet — en krijgt op de pagina zelf nog steeds een 404. Er gaat GEEN
+    Finance-inhoud in het palet: alleen de ingang."""
+    from nooch_village import zicht
+    from nooch_village.cockpit2 import mag_admin
+    uit = [("Go to", l, h) for l, h in _PALET_GA]
+    # `zicht.mag(…, "finance", "zien")` is precies wat `views.finance.mag_zien` zegt; die module zelf
+    # hoort hier niet geïmporteerd te worden (de Finance-guard in `tests/test_finance_pr1.py`).
+    if zicht.mag(st, username, "finance", "zien"):
+        uit.append(("Go to", "Finance", "/finance"))
+    uit.append(("Go to", "Bill of materials", "/bom"))           # /bom is leesbaar voor iedereen
+    if mag_admin(st, username):
+        uit.append(("Go to", "Admin", "/admin"))
+    uit += [("Create", l, h) for l, h in _PALET_MAAK]
+    return uit
+
+
+def render_palet(st, username, q: str = "", leest=None) -> str:
+    """De inhoud van het palet: de regels die bij `q` passen, en vanaf twee tekens het bestaande
+    zoeken eronder (`render_search_fragment`, met de privé-regel voor projecten)."""
+    q = (q or "").strip()
+    termen = [t for t in q.lower().split() if t]
+    regels = [r for r in palet_regels(st, username) if all(t in r[1].lower() for t in termen)]
+    blokken = []
+    for groep in ("Go to", "Create"):
+        # Geen soort-etiket per regel: de groepskop ("Go to", "Create") zegt het al.
+        rijen = "".join(f"<a class='gs-hit' href='{_e(h)}'>{_e(l)}</a>" for g, l, h in regels if g == groep)
+        if rijen:
+            blokken.append(f"<div class='gs-group'><h2>{_e(groep)}</h2>{rijen}</div>")
+    zoek = render_search_fragment(st, q, leest=leest) if len(q) >= 2 else ""
+    if not blokken and not zoek:
+        return "<div class='gs-empty'>Nothing here. Try another word.</div>"
+    return "".join(blokken) + zoek
+
+
 def render_search(st, q: str = "", leest=None) -> str:
     q = (q or "").strip()
     termen = [t for t in q.lower().split() if t]

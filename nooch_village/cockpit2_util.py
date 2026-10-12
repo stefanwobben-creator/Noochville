@@ -1798,6 +1798,22 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # en 123 kanalen, per keer. Zie `views/navpaneel.py`.
         + "<aside class='c2-paneel' id='c2-paneel' hidden>"
           "<div class='c2-paneel-in' id='c2-paneel-in'></div></aside>"
+        # ── HET PALET (B1): "Go to, or create…" ────────────────────────────────────────────
+        # De bestaande overlay (`.ovl`, `.ovl-box`, `.ovl-x`) met één modifier voor de breedte.
+        # De inhoud komt van `/palet` (navigatie, create-acties en het bestaande zoeken), met
+        # dezelfde rechtenfuncties als de zijbalk. `nooch.js` opent hem (`/`, Cmd/Ctrl+K, klik op
+        # de zoekknop) en houdt de focus erin (`NV.focusTrap`). Zonder JS opent hij nooit: de
+        # zoekknop is dan gewoon een link naar /search.
+        + "<div class='ovl' id='c2-palet' hidden role='dialog' aria-modal='true' "
+          "aria-labelledby='c2-palet-kop'><div class='ovl-box ovl-box--palet'>"
+          "<h2 class='sr' id='c2-palet-kop'>Search or jump to</h2>"
+          # GEEN `.ovl-x` OP DEZE KNOP: de modal-JS van bord, werkoverleg en wizard pakt
+          # `document.querySelector('.ovl-x')` — het EERSTE kruisje in het document — en dat zou dan
+          # dit worden, waarna hun overlay niet meer dichtgaat. Gestyled via de palet-modifier.
+          "<button type='button' data-palet-dicht aria-label='Close'>\u2715</button>"
+          "<label class='sr' for='gs-input'>Go to, or create</label>"
+          "<input id='gs-input' type='text' placeholder='Go to, or create\u2026' autocomplete='off'>"
+          "<div id='gs-drop' aria-live='polite'></div></div></div>"
         + _GS_LIVE_JS + _NAV_JS)
 
 
