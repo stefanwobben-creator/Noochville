@@ -104,3 +104,11 @@ def test_wit_op_groen_alleen_de_bekende_schuld():
             nu.add((naam, sel))
     assert nu - WIT_OP_GROEN == set(), f"nieuw wit op groen (3,49:1): {sorted(nu - WIT_OP_GROEN)}"
     assert WIT_OP_GROEN - nu == set(), f"niet meer wit op groen — haal uit WIT_OP_GROEN: {sorted(WIT_OP_GROEN - nu)}"
+
+
+def test_de_paren_van_b3_fase_d():
+    """B3 fase d (13 oktober 2026): de gekozen modus is wit op zwart, de hoofdactie zwart op neon,
+    de huidige plek zwart op --nu-bg-alt. Alle drie gemeten tegen 4,5:1."""
+    tk = _tokens()
+    for tekst, vlak in (("--nu-surface", "--nu-text"), ("--nu-text", "--nu-neon"), ("--nu-text", "--nu-bg-alt")):
+        assert ratio(_hex(tk, tekst), _hex(tk, vlak)) >= 4.5, (tekst, vlak, round(ratio(_hex(tk, tekst), _hex(tk, vlak)), 2))

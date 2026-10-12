@@ -117,7 +117,7 @@ ul.clean li:last-child{border-bottom:none}
 .cat-nav{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.4rem 0 .9rem;position:sticky;top:0;background:var(--cream-2);padding:.5rem 0;z-index:5}
 .cat-q{flex:1 1 14rem;min-width:10rem;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.4rem .8rem;font:inherit}
 .cat-f{border:1px solid var(--border);background:var(--surface);color:var(--gray);border-radius:var(--radius-pill);padding:.25rem .7rem;font-size:.8rem;cursor:pointer}
-.cat-f.on{background:var(--nu-neon);color:var(--nu-text);border-color:var(--nu-text)}
+.cat-f.on{background:var(--nu-text);color:var(--nu-surface);border-color:var(--nu-text)}
 .cat-f-x{color:var(--subtle)}
 .cat-count{margin-left:auto}
 .cat-fg{display:inline-flex;align-items:center;gap:.3rem;flex-wrap:wrap}
@@ -1034,7 +1034,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .seg>form,.seg>a{display:inline-flex;margin:0}
 .seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:var(--type-12);padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
 .seg>form:last-child button,.seg>a:last-child{border-right:none}
-.seg>form button.on,.seg>a.on{background:var(--nu-neon);color:var(--nu-text)}
+.seg>form button.on,.seg>a.on{background:var(--nu-text);color:var(--nu-surface)}
 .selseg{font:inherit;font-size:var(--type-12);border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
 .m2empty{text-align:center;color:var(--subtle);padding:2.4rem 1rem}
 .m2empty .big{font-size:34px;display:block;color:var(--subtle)}
@@ -2652,13 +2652,18 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   color: var(--nu-text); font-family: var(--nu-font); font-weight: 500; padding: .3em .8em; }
 :root .addlink:hover, :root .vswitch a:hover, :root .flink:hover {
   background: var(--nu-text); color: var(--nu-surface); text-decoration: none; }
-:root .vswitch a.on { background: var(--nu-neon); color: var(--nu-text); }
+/* B3 FASE D (13 oktober 2026): DE GEKOZEN MODUS IS ZWART MET WITTE TEKST. Neon is voor de ene
+   hoofdactie per scherm en voor signalen (`tests/test_b3_neon.py`); een gekozen modus ("by role",
+   filter "All") is geen actie maar een toestand. Zelfde vorm als `.cl-filter.on` hierboven. */
+:root .vswitch a.on { background: var(--nu-text); color: var(--nu-surface); }
 
 /* ── De organisatieboom in de zijbalk ──────────────────────────────────────────────────────── */
 :root .tree { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; box-shadow: none;
   background: var(--nu-surface); }
 :root .tree h3 { color: var(--nu-muted); font-family: var(--nu-font); }
-:root .tree .here { background: var(--nu-neon); border-radius: 0; }
+/* B3 FASE D: DE HUIDIGE PLEK = --nu-bg-alt met een neon balkje, precies als het actieve nav-item
+   (`.c2-subnav [aria-current]`, 3px links). Een neon vlak zou hem een actie laten lijken. */
+:root .tree .here { background: var(--nu-bg-alt); border-left: 3px solid var(--nu-neon); border-radius: 0; }
 :root .tree a { color: var(--nu-text); }
 
 /* ── Kaarten in de wiki-index en de kanalenlijst ──────────────────────────────────────────── */
