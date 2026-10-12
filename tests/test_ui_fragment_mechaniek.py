@@ -28,7 +28,6 @@ JS = ROOT / "static" / "nooch.js"
 # plekken met hun huidige aantal; MONOTOON DALEND. Ga je zo'n scherm toch aanraken, zet hem dan
 # over op NV.swap en verlaag het plafond. Een bestand dat hier niet in staat mag er nul hebben.
 PLAFOND = {
-    "cockpit2_util.py": 1,
     "views/claims.py": 1,
     "views/noochie.py": 1,
     "views/projects.py": 1,         # de modal-controller zélf — dit IS de gastheer van fragmenten

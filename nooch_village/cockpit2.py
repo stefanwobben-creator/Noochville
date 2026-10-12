@@ -7726,6 +7726,14 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send("<p>404</p>", 404); return
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
+            if path == "/palet":
+                # AUTHZ: iedereen-ingelogd — het palet toont alleen ingangen; elke regel met een eigen
+                # poort (Finance, Admin) staat er alleen voor wie die poort mag passeren, met dezelfde
+                # functie als de zijbalk en de route zelf. Fragment, geen pagina.
+                from nooch_village.views.search import render_palet
+                self._send(render_palet(st, username, (qs.get("q") or [""])[0],
+                                        leest=_project_lezer(st, username)), chrome=False)
+                return
             if path == "/search":
                 # Globale zoekopdracht vanuit de header: roles, projects, insights, signals.
                 # ?frag=1 → alleen de dropdown-inhoud (live terwijl je typt); anders de volle pagina.

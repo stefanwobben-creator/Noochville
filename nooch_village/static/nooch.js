@@ -2799,6 +2799,81 @@
     if (form.requestSubmit) form.requestSubmit(); else form.submit();
   };
 
-  if (document.readyState !== "loading") NV.wire(document);
-  else document.addEventListener("DOMContentLoaded", function () { NV.wire(document); });
+  // ── Focus vasthouden in een dialoog (B1, 11 oktober 2026) ─────────────────────────────────
+  // HERBRUIKBAAR: `NV.focusTrap(box, terug)` houdt Tab en Shift-Tab binnen `box` en geeft een
+  // functie terug die loslaat en de focus teruggeeft aan `terug` (of aan wat de focus had). Het
+  // werkoverleg-overlay gebruikt hem (nog) niet; dat blijft ongemoeid.
+  NV.focusTrap = function (box, terug) {
+    var vorige = terug || document.activeElement;
+    function focusbaar() {
+      return [].slice.call(box.querySelectorAll(
+        "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled])," +
+        "textarea:not([disabled]),[tabindex]:not([tabindex='-1'])"))
+        .filter(function (e) { return e.offsetParent !== null; });
+    }
+    function toets(e) {
+      if (e.key !== "Tab") return;
+      var f = focusbaar();
+      if (!f.length) return;
+      var eerste = f[0], laatste = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === eerste) { e.preventDefault(); laatste.focus(); }
+      else if (!e.shiftKey && document.activeElement === laatste) { e.preventDefault(); eerste.focus(); }
+    }
+    box.addEventListener("keydown", toets);
+    return function () {
+      box.removeEventListener("keydown", toets);
+      if (vorige && vorige.focus) vorige.focus();
+    };
+  };
+
+  // ── Het palet: "Go to, or create…" (B1) ───────────────────────────────────────────────────
+  // Opent op een klik op de zoekknop (en dus ook op `/` en Cmd/Ctrl+K, die de knop aanklikken).
+  // Pijltjes lopen door de treffers, Enter in het veld opent de eerste, Esc sluit. De inhoud komt
+  // van `/palet` via `NV.swap` — de server bepaalt per gebruiker wat er mag staan.
+  function palet() {
+    var knop = document.getElementById("c2-zoek"), pal = document.getElementById("c2-palet");
+    if (!knop || !pal || pal.dataset.wired) return;
+    pal.dataset.wired = "1";
+    var veld = document.getElementById("gs-input"), uit = document.getElementById("gs-drop");
+    var loslaten = null, wacht;
+    function laad() { NV.swap(uit, "/palet?q=" + encodeURIComponent(veld.value.trim())); }
+    function open() {
+      if (!pal.hidden) return;
+      pal.hidden = false;
+      loslaten = NV.focusTrap(pal, knop);
+      veld.value = "";
+      laad();
+      veld.focus();
+    }
+    function dicht() {
+      if (pal.hidden) return;
+      pal.hidden = true;
+      var los = loslaten; loslaten = null;
+      if (los) los();
+    }
+    knop.addEventListener("click", function (e) { e.preventDefault(); open(); });
+    veld.addEventListener("input", function () { clearTimeout(wacht); wacht = setTimeout(laad, 150); });
+    veld.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      var a = uit.querySelector("a.gs-hit");
+      if (a) { e.preventDefault(); window.location.href = a.getAttribute("href"); }
+    });
+    pal.addEventListener("click", function (e) {
+      if (e.target === pal || (e.target.closest && e.target.closest("[data-palet-dicht]"))) dicht();
+    });
+    pal.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.preventDefault(); dicht(); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      var items = [].slice.call(uit.querySelectorAll("a.gs-hit, a.gs-all"));
+      if (!items.length) return;
+      e.preventDefault();
+      var i = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") i = i + 1 >= items.length ? 0 : i + 1;
+      else i = i <= 0 ? -1 : i - 1;
+      if (i === -1) veld.focus(); else items[i].focus();
+    });
+  }
+
+  if (document.readyState !== "loading") { NV.wire(document); palet(); }
+  else document.addEventListener("DOMContentLoaded", function () { NV.wire(document); palet(); });
 })();

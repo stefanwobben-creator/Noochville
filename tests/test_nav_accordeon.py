@@ -216,8 +216,8 @@ def test_het_zoekveld_is_de_enige_ingang(tmp_path):
     paneel is fail-closed leeg."""
     dd, st, ik = _dorp(tmp_path)
     h = _nav_ingevuld()
-    assert "id='gs-input'" in h and "id='gs-drop'" in h      # veld + typeahead
-    assert "action='/search'" in h or 'action="/search"' in h
+    # B1 (11 oktober 2026): het veld werd een zoekKNOP die het palet opent; zonder JS een link.
+    assert "id='c2-zoek'" in h and "href='/search'" in h
     assert "c2-kbd" in h                                      # de `/`-sneltoets staat erbij
     assert ">Search<" not in h, "de dubbele ingang staat er nog"
     assert "zoek" not in PANELEN
@@ -389,8 +389,8 @@ def test_het_zoekveld_draagt_nog_steeds_een_label(tmp_path):
     zoekveld zonder label is voor een schermlezer een naamloos invoerveld. Het veld in de balk
     heeft er een, en die mag niet stilletjes sneuvelen bij een volgende opruiming."""
     h = _nav_ingevuld()
-    veld = h.split("id='gs-input'")[1][:200]
-    assert "aria-label='global search'" in veld or "aria-label=\"global search\"" in veld
+    veld = h.split("id='c2-zoek'")[1][:300]
+    assert "aria-label='Search or jump to'" in veld           # ook in de rail, waar het label wegvalt
 
 
 # ── 8. De organisatieboom is een paneel geworden ─────────────────────────────

@@ -1669,9 +1669,11 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
                      ("/roloverleg2", "Governance meeting")):
         live = werk_open and h == "/werkoverleg"
         cls = "c2-overleg" + (" c2-overleg--live" if live else "")
-        stip = "<span class='c2-live' aria-hidden='true'></span>" if live else ""
-        tekst = "Join meeting" if live else label
-        uit.append(f"<a class='{cls}' href='{h}?circle={_e(circle_id)}'>{stip}{tekst}</a>")
+        # B1 (prototype v2): ALTIJD een stip — hol als de meeting niet loopt, gevuld als hij loopt —
+        # en bij live het woord "Join". Kleur is nooit de enige drager: vorm en woord dragen mee.
+        stip = "<span class='c2-live' aria-hidden='true'></span>"
+        join = " <span class='chip'>Join</span>" if live else ""
+        uit.append(f"<a class='{cls}' href='{h}?circle={_e(circle_id)}'>{stip}{label}{join}</a>")
     return "".join(uit)
 
 #: `_send` vult deze plek per pagina in (het is per-sessie/per-records-informatie, en `_nav()`
@@ -1733,31 +1735,22 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # samen met wat hij opent.
         "<button type='button' class='c2-burger' onclick='navToggle()' "
         "aria-label='Menu' aria-expanded='false'>\u2630</button>"
-        # ── DE HORIZONTALE HEADER ──────────────────────────────────────────────────────────
-        # Logo, zoek en profiel stonden ONDER elkaar bovenin de zijbalk. Drie dingen die niets
-        # met elkaar te maken hebben, gestapeld in de kolom waar de navigatie hoort — en het
-        # zoekveld was daardoor zo breed als die kolom (216px) terwijl het het enige veld in
-        # het dorp is waar je een hele zin in typt.
-        # Nu een eigen balk over de volle breedte: logo links, zoek in het midden (max 520px),
-        # profiel rechts. De zijbalk houdt alleen nog navigatie.
-        "<header class='c2-header'>"
+        # ── GEEN HORIZONTALE HEADER MEER (B1, 11 oktober 2026) ──────────────────────────────
+        # Zoals het prototype v2 (`claude/prototype_v2_vormgeving_live.html`): het merk, een
+        # zoekknop en de navigatie staan in één kolom, de gebruiker onderaan. De header droeg drie
+        # dingen — het logo, het zoekveld en de initialen; inbox, uitloggen of een taalkeuze stonden
+        # er niet. Alle drie hebben hun plek in de zijbalk gekregen.
+        "<aside class='c2-side'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
-        # HET ZOEKFORMULIER IS VERPLAATST, NIET HERSCHREVEN. `_GS_LIVE_JS` hangt aan `#gs-input`
-        # en `#gs-drop`; beide id's blijven exact zoals ze waren, inclusief de `/`-sneltoets en
-        # de typeahead-dropdown.
-        "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
-        "<input id='gs-input' type='search' name='q' placeholder='Search people, roles, projects…' "
-        "autocomplete='off' aria-label='global search'>"
-        "<kbd class='c2-kbd' aria-hidden='true'>/</kbd>"
-        "<div id='gs-drop' class='gs-drop' hidden></div>"
-        "</form>"
-        # WAS "Hoi Stefan". `_send` vult hier de initialen van de ingelogde persoon in, met de
-        # volle naam in title/aria-label en dezelfde link naar zijn eigen pagina. Leeg = niets
-        # te zien; een lege cirkel zou beloven dat er iemand achter zit.
-        "<span class='c2-av' id='c2-av'></span>"
-        "</header>"
-        "<aside class='c2-side'>"
+        # DE ZOEKKNOP IS EEN LINK NAAR /search: zonder JS kom je daar op de zoekpagina (met een
+        # eigen veld). Met JS opent hij het palet (`nooch.js`, `NV.palet`). `/` en Cmd/Ctrl+K doen
+        # hetzelfde, behalve in een invoerveld, tekstvak of contenteditable.
+        "<a class='c2-search' id='c2-zoek' href='/search' aria-haspopup='dialog' "
+        "aria-keyshortcuts='/' aria-label='Search or jump to' title='Search or jump to'>"
+        "<span class='c2-mono' aria-hidden='true'>/</span>"
+        "<span class='c2-lbl'>Search or jump to</span>"
+        "<kbd class='c2-kbd' aria-hidden='true'>/</kbd></a>"
         "<nav class='c2-subnav'>"
         # DE TWEE OVERLEGGEN STAAN BOVENAAN. Ze stonden onderaan, achter een scheiding, als
         # "een ander soort knop". Dat klopt nog steeds — het is een andere soort — maar het is
@@ -1792,6 +1785,9 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # knop en dezelfde flyout als Projects en Messages toen nog hadden.
         + _side_item("/node", "Organization", "org")
         + "</nav>"
+        # DE GEBRUIKER ONDERAAN (uit de vervallen header). `_send` vult de initialen in, met de
+        # volle naam in title/aria-label en een link naar je eigen pagina. Leeg = niets te zien.
+        + "<span class='c2-av' id='c2-av'></span>"
         # HIER STOND HET ORG-UITKLAPJE (`c2-orgfly`). Het is een nav-item geworden met een
         # flyout, zoals de andere; een tweede uitklap-mechanisme onder de balk hoefde niet te
         # blijven bestaan naast het eerste.
@@ -1802,34 +1798,38 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # en 123 kanalen, per keer. Zie `views/navpaneel.py`.
         + "<aside class='c2-paneel' id='c2-paneel' hidden>"
           "<div class='c2-paneel-in' id='c2-paneel-in'></div></aside>"
+        # ── HET PALET (B1): "Go to, or create…" ────────────────────────────────────────────
+        # De bestaande overlay (`.ovl`, `.ovl-box`, `.ovl-x`) met één modifier voor de breedte.
+        # De inhoud komt van `/palet` (navigatie, create-acties en het bestaande zoeken), met
+        # dezelfde rechtenfuncties als de zijbalk. `nooch.js` opent hem (`/`, Cmd/Ctrl+K, klik op
+        # de zoekknop) en houdt de focus erin (`NV.focusTrap`). Zonder JS opent hij nooit: de
+        # zoekknop is dan gewoon een link naar /search.
+        + "<div class='ovl' id='c2-palet' hidden role='dialog' aria-modal='true' "
+          "aria-labelledby='c2-palet-kop'><div class='ovl-box ovl-box--palet'>"
+          "<h2 class='sr' id='c2-palet-kop'>Search or jump to</h2>"
+          # GEEN `.ovl-x` OP DEZE KNOP: de modal-JS van bord, werkoverleg en wizard pakt
+          # `document.querySelector('.ovl-x')` — het EERSTE kruisje in het document — en dat zou dan
+          # dit worden, waarna hun overlay niet meer dichtgaat. Gestyled via de palet-modifier.
+          "<button type='button' data-palet-dicht aria-label='Close'>\u2715</button>"
+          "<label class='sr' for='gs-input'>Go to, or create</label>"
+          "<input id='gs-input' type='text' placeholder='Go to, or create\u2026' autocomplete='off'>"
+          "<div id='gs-drop' aria-live='polite'></div></div></div>"
         + _GS_LIVE_JS + _NAV_JS)
 
 
 # Live-zoek: terwijl je typt haalt dit de dropdown-resultaten op (fragment via /search?frag=1), debounced.
 # Klik buiten de balk sluit de dropdown; Enter opent de volledige /search-pagina (het form submit).
 _GS_LIVE_JS = """<script>(function(){
- // SNELTOETS (fase 7): `/` en Cmd/Ctrl+K zetten de cursor in de zoekbalk. `/` alleen als je
- // niet al in een veld staat — anders kun je geen schuine streep meer typen in een formulier.
+ // SNELTOETS: `/` en Cmd/Ctrl+K openen het zoeken. `/` doet niets in een invoerveld, tekstvak,
+ // keuzelijst of bewerkbaar tekstvlak — anders kun je daar geen schuine streep meer typen.
  addEventListener('keydown', function(e){
-   var b=document.getElementById('gs-input'); if(!b) return;
+   var k=document.getElementById('c2-zoek'); if(!k) return;
    var t=e.target||{}, tag=(t.tagName||'').toLowerCase();
    var tikt = tag==='input'||tag==='textarea'||tag==='select'||t.isContentEditable;
-   if(e.key==='/' && !tikt){ e.preventDefault(); b.focus(); b.select(); return; }
-   if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){ e.preventDefault(); b.focus(); b.select(); }
+   var slash = e.key==='/' && !tikt && !e.metaKey && !e.ctrlKey && !e.altKey;
+   var cmdk = (e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K');
+   if(slash||cmdk){ e.preventDefault(); k.click(); }
  });
- var box=document.getElementById('gs-input'), drop=document.getElementById('gs-drop'), t;
- if(!box||!drop||box.dataset.wired)return; box.dataset.wired='1';
- function hide(){drop.hidden=true;} function show(){if(drop.innerHTML.trim())drop.hidden=false;}
- function run(){
-   var q=box.value.trim();
-   if(q.length<2){drop.innerHTML='';hide();return;}
-   fetch('/search?frag=1&q='+encodeURIComponent(q),{credentials:'same-origin'})
-     .then(function(r){return r.text();})
-     .then(function(h){drop.innerHTML=h; show();}).catch(function(){});
- }
- box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,180);});
- box.addEventListener('focus',show);
- document.addEventListener('click',function(e){if(!e.target.closest('.c2-search'))hide();});
 })();</script>"""
 
 
