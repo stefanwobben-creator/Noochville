@@ -566,7 +566,11 @@ class Village:
             owner = p.get("owner", "")
             rec = self.records.get(owner) if owner else None
             if rec is not None and (getattr(rec, "archived", False) or getattr(rec, "slaapt", False)):
-                dood.setdefault(owner, []).append(p.get("title") or p.get("id", ""))
+                # De TITEL is `scope` (opruimlijst punt 3): `title` bestaat niet op een project, dus
+                # hier stond het id in de human inbox. Een scope kan een dict zijn (oude projecten).
+                sc = p.get("scope")
+                titel = (sc.get("titel") or sc.get("scope") or "") if isinstance(sc, dict) else str(sc or "")
+                dood.setdefault(owner, []).append(titel or p.get("id", ""))
         log = logging.getLogger("village")
         for rol_id, titels in dood.items():
             log.warning("👻 rol '%s' is gearchiveerd/slapend maar bezit nog %d "

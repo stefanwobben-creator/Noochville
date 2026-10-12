@@ -1797,6 +1797,9 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         # DE GEBRUIKER ONDERAAN (uit de vervallen header). `_send` vult de initialen in, met de
         # volle naam in title/aria-label en een link naar je eigen pagina. Leeg = niets te zien.
         + "<span class='c2-av' id='c2-av'></span>"
+        # UITLOGGEN (opruimlijst punt 1, 12 oktober 2026): de route `/logout` bestond, een link nergens.
+        # Bij de gebruiker, onderaan; een gewone link, want `/logout` is een GET die de sessie wist.
+        + "<a class='muted' href='/logout'>Log out</a>"
         # HIER STOND HET ORG-UITKLAPJE (`c2-orgfly`). Het is een nav-item geworden met een
         # flyout, zoals de andere; een tweede uitklap-mechanisme onder de balk hoefde niet te
         # blijven bestaan naast het eerste.
@@ -1816,9 +1819,10 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         + "<div class='ovl' id='c2-palet' hidden role='dialog' aria-modal='true' "
           "aria-labelledby='c2-palet-kop'><div class='ovl-box ovl-box--palet'>"
           "<h2 class='sr' id='c2-palet-kop'>Search or jump to</h2>"
-          # GEEN `.ovl-x` OP DEZE KNOP: de modal-JS van bord, werkoverleg en wizard pakt
-          # `document.querySelector('.ovl-x')` — het EERSTE kruisje in het document — en dat zou dan
-          # dit worden, waarna hun overlay niet meer dichtgaat. Gestyled via de palet-modifier.
+          # GEEN `.ovl-x` OP DEZE KNOP. De modal-JS van bord en wizard pakte tot 12 oktober 2026
+          # `document.querySelector('.ovl-x')` — het EERSTE kruisje in het document — en dat werd dan
+          # dit. Sinds opruimpunt 2 zoeken ze binnen hun eigen overlay; deze knop blijft toch zonder
+          # die klasse, zodat het niet opnieuw kan. Gestyled via de palet-modifier.
           "<button type='button' data-palet-dicht aria-label='Close'>\u2715</button>"
           "<label class='sr' for='gs-input'>Go to, or create</label>"
           "<input id='gs-input' type='text' placeholder='Go to, or create\u2026' autocomplete='off'>"
