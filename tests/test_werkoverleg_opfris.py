@@ -82,7 +82,7 @@ def test_een_input_zonder_type_krijgt_het_kader_en_de_groene_focus():
                 uit |= {re.sub(r"\s+", " ", s.strip()) for s in sel.split(",")}
         return uit
 
-    kader = _selectors(lambda b: "border: 1.5px solid var(--nu-border-subtle)" in b)
+    kader = _selectors(lambda b: "border: 1px solid var(--nu-text)" in b)       # B3: 1px zwart
     focus = _selectors(lambda b: "border-color: var(--nu-accent)" in b)
     assert ":root input:not([type])" in kader, "geen kader voor een input zonder type"
     assert ":root input:not([type]):focus" in focus, "geen groene focus voor een input zonder type"

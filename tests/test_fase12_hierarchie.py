@@ -96,10 +96,12 @@ def test_de_container_draagt_de_zwaarste_lijn():
     assert "border-radius: 0" in body and "box-shadow: none" in body   # scherp en plat blijft
 
 
-def test_de_zwaarste_lijn_is_twee_pixels():
-    """Het token zelf, zodat de vergelijkingen hieronder ergens tegenaan kunnen meten."""
+def test_de_containerlijn_is_1px_zwart():
+    """Het token zelf, zodat de vergelijkingen hieronder ergens tegenaan kunnen meten. SINDS B3
+    (12 oktober 2026) 1px: de buitenkant van een container is 1px zwart; 2px is voor het ene element
+    dat eruit moet springen (`tests/test_b3_lijn.py`)."""
     tokenblok = re.search(r":root\s*\{(.*?)\n\}", _ONTCOM, re.S).group(1)
-    assert re.search(r"--nu-border:\s*2px solid", tokenblok)
+    assert re.search(r"--nu-border:\s*1px solid var\(--nu-text\)", tokenblok)
 
 
 # ── de zes doorgevoerde regels ───────────────────────────────────────────────────────────────
@@ -226,15 +228,18 @@ def test_een_veld_draagt_een_licht_kader_geen_zwaar():
     moest opheffen, nu in veldvorm.
 
     DERDE HERZIENING (30 september 2026): de onderlijn werd een LICHT kader (1,5px
-    `--nu-border-subtle`). Het verschil met een omhulsel blijft wat deze test bewaakt: een veld
-    draagt nooit de zware zwarte lijn."""
+    `--nu-border-subtle`).
+
+    VIERDE HERZIENING (B3, 12 oktober 2026, besluit Stefan): een invoerveld is een container en
+    draagt 1px zwart — dezelfde dunne lijn als een tabel of een kolom, niet de oude zware 2px. Wat
+    deze test nu bewaakt: een veld draagt nooit méér dan 1px."""
     regels = {sel: body for sel, body in _regels()}
     veldregel = next((b for s, b in regels.items()
                       if s.startswith(":root input[type=text]") and "font-family" in b), None)
     assert veldregel, "de gedeelde veldregel bestaat niet"
-    assert "border: 1.5px solid var(--nu-border-subtle)" in veldregel
+    assert "border: 1px solid var(--nu-text)" in veldregel
     assert "border-radius: 0" in veldregel, "een veld hoort hoekig te blijven, zoals de rest"
-    assert "solid var(--nu-text)" not in veldregel, "een veld draagt de zware lijn weer"
+    assert "2px" not in veldregel and "var(--nu-border)" not in veldregel, "een veld draagt meer dan 1px"
     for veld in VELDEN:
         assert veld in " ".join(regels), f"{veld} valt buiten de veldregel"
 

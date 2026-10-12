@@ -2199,7 +2199,12 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   --nu-muted: #58595B;
   --nu-border-subtle: #E6E7E8;
   --nu-danger: #EE4036;
-  --nu-border: 2px solid var(--nu-text);
+  /* B3 FASE B (12 oktober 2026): de buitenkant van een container is 1px zwart. Deze token droeg 2px;
+     2px is nu voor het ene element dat eruit moet springen (zie `tests/test_b3_lijn.py`). */
+  --nu-border: 1px solid var(--nu-text);
+  /* B3 FASE A: de lijn binnen een container, en één ruimteschaal (4 · 8 · 12 · 16 · 24 · 32). */
+  --hair: var(--nu-border-subtle);
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
   --nu-sp-1: .4rem;
   --nu-sp-2: .7rem;
   --nu-sp-3: 1.1rem;
@@ -2480,7 +2485,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root input[type=text], :root input[type=search], :root input[type=email], :root input[type=number],
 :root input[type=url], :root input[type=date], :root input[type=password], :root input:not([type]),
 :root textarea, :root select, :root .ctrl, :root .fieldform {
-  font-family: var(--nu-font); border: 1.5px solid var(--nu-border-subtle);
+  font-family: var(--nu-font); border: 1px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text); box-shadow: none; }
 :root input[type=text]:focus, :root input[type=search]:focus, :root input[type=email]:focus,
 :root input[type=number]:focus, :root input[type=url]:focus, :root input[type=date]:focus,
@@ -2610,7 +2615,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 
    DE WAARDEN KOMEN UIT nooch.css (`--col-*`). Ze hier overtypen zou betekenen dat het bord op
    een nu-scherm na één wijziging andere kleuren heeft dan daarbuiten. */
-:root .pcol { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+:root .pcol { background: var(--nu-bg-alt); border: 1px solid var(--nu-text);
   border-radius: 0; }
 :root .pcol[data-to='actief']   { background: var(--col-actief); }
 :root .pcol[data-to='wacht']    { background: var(--col-wacht); }
