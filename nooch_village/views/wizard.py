@@ -163,7 +163,7 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
 _WIZ_HTML = r"""
 <div class="wz">
   <div class="wz-top">
-    <a class="wz-x" href="/" title="close" onclick="var x=document.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
+    <a class="wz-x" href="/" title="close" onclick="var o=this.closest('.ovl'),x=o&&o.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
     <span class="wz-who" id="wzwho"></span>
   </div>
   <div class="wz-card" id="wzcard"></div>

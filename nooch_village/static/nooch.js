@@ -243,8 +243,9 @@
    * contour blijft staan (`.pdrag-bron`).
    *
    * ALLEEN MUIS EN PEN. Op touch doet dit niets, met opzet: een sleepgebaar dat scrollen blokkeert
-   * maakt een bord op een telefoon onbruikbaar, en de statuswissel heeft daar al een weg (de
-   * knop/dropdown op de kaart zelf). Slepen is een versnelling, geen vervanging — dezelfde regel
+   * maakt een bord op een telefoon onbruikbaar, en de statuswissel heeft daar al een weg: de kaart
+   * aantikken opent het project, en daar staat de statuskeuze in de rail. (Hier stond "op de kaart
+   * zelf"; die knop staat sinds de compacte kaart van B2 niet meer op de kaart.) Slepen is een versnelling, geen vervanging — dezelfde regel
    * die de toegankelijkheidsval uit de fase-11-spec afdekt.
    *
    * `opties.onDrop(pid, naar)` krijgt de uitkomst; wát er dan gebeurt (formulier posten en

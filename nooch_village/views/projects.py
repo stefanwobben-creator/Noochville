@@ -658,7 +658,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "for(var i=0;i<o.attributes.length;i++){s.setAttribute(o.attributes[i].name,o.attributes[i].value);}"
         "s.textContent=o.textContent;o.parentNode.replaceChild(s,o);});"
         "window.__noclose=!!bd.querySelector('[data-noclose]');"
-        "var xb=document.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();"
+        # BINNEN DE EIGEN OVERLAY (`ov`), niet het eerste `.ovl-x` in het document: elk element
+        # ervoor met die klasse kaapte anders deze sluitknop (opruimlijst punt 2, 12 oktober 2026).
+        "var xb=ov.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();"
         # URL-sync: alleen voor project-kaarten. Bij de eerste opening zet de vorige (bord-)entry op
         # de back=<cirkel-url> die de kaart meegeeft (zonder oude msg=), dan pushState /project?pid=.
         "try{var pm=u.match(/[?&]pid=([^&]+)/);"
@@ -811,7 +813,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
         "ov.addEventListener('click',function(e){if(e.target===ov&&!window.__noclose)shut();});"
-        "document.querySelector('.ovl-x').addEventListener('click',function(){if(!window.__noclose)shut();});"
+        "ov.querySelector('.ovl-x').addEventListener('click',function(){if(!window.__noclose)shut();});"
         "document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.style.display!=='none'&&!window.__noclose)shut();});"
         "})();</script>")
 
