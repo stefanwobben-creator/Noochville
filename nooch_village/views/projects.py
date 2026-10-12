@@ -42,6 +42,20 @@ def _proj_chip(status: str) -> str:
     return f"<span class='chip {mod}'>{_e(lbl)}</span>"
 
 
+def _trekker_kort(st: _Stores, p: dict) -> str:
+    """De trekker op een bordkaart: alleen de initialen (of AI), de volle naam in title en
+    aria-label. Zelfde bron als `_trekker_html`, korter getoond."""
+    if p.get("agent"):
+        pa = st.personas.get(p["agent"])
+        naam = f"{pa.name if pa else p['agent']} (AI)"
+        return f"<span class='av ai' title='{_e(naam)}' aria-label='{_e(naam)}'>AI</span>"
+    if p.get("person"):
+        naam = _person_name(st, p["person"])
+        return (f"<span class='av' title='{_e(naam)}' aria-label='{_e(naam)}'>"
+                f"{_e(_initials(naam))}</span>")
+    return "<span class='muted'>no owner</span>"
+
+
 def _trekker_html(st: _Stores, p: dict) -> str:
     if p.get("agent"):
         pa = st.personas.get(p["agent"])
@@ -452,8 +466,12 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     bar = ""
     if p.get("label") in _LABELS and _LABELS.get(p.get("label")):
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
-    meta = (f"<div class='muted pmeta'>"
-            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
+    # B2 (prototype v2): ÉÉN metaregel — wie trekt (initialen, de naam in title en aria-label) en
+    # wanneer (de deadline als die er is, anders de leeftijd). Het doel-etiket staat niet meer op de
+    # kaart (besluit Stefan, 12 oktober 2026); dat staat op de projectpagina en in het Goal-filter.
+    due = p.get("deadline") or p.get("due")
+    wanneer = (f"due {_e(_fmt_due(due) or str(due))}" if due else _e(_age(p.get("created_at"))))
+    meta = f"<div class='muted pmeta'>{_trekker_kort(st, p)} · {wanneer}</div>"
     # DE VOORKANT, VAN BOVEN NAAR BENEDEN (fase 11, 1b): waar gaat dit over → waar hoort het bij →
     # hoe ver is het → van wie is het. Dat is de volgorde waarin je een kaart op een bord leest:
     # eerst herkennen, dan plaatsen, dan de stand. De titel stond hier ONDER het doel-etiket, dus
@@ -465,8 +483,11 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     # zonder csrf is er geen sleep-JS, en dan is de belofte vals. Hij verdwijnt zodra je de kaart
     # écht vastpakt — dan weet je het al.
     hint = ("<div class='pcard-hint'>✥ drag to another column</div>" if csrf_token else "")
+    # DE COMPACTE KAART (B2): titel → metaregel → dunne voortgangsbalk. Het status-vakje blijft,
+    # met zijn eigen tegenspraak-logica (`_kaart_status`); het sleep-hintje ook, maar het zweeft nu
+    # over de kaart in plaats van een regel hoogte te kosten.
     inner = (f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>"
-             f"{_kaart_chips(st, p)}{_progress_badge(p)}{meta}{_kaart_status(st, p)}{hint}")
+             f"{meta}{_progress_badge(p)}{_kaart_status(st, p)}{hint}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
@@ -528,7 +549,13 @@ def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
         its.sort(key=lambda p: -(p.get("created_at") or 0))
         body = "".join(_proj_card(st, p, csrf_token, back) for p in its)
         qa = _quickadd(add_owner, key, csrf_token, back, trekker=add_trekker) if quickadd else ""
-        cols += (f"<div class='pcol' data-to='{key}'>"
+        # EEN LEGE KOLOM IS EEN SMALLE STROOK (B2, besluit Stefan): op zijn eigen plek, zodat de
+        # volgorde per swimlane gelijk blijft, met naam en aantal. Hij blijft een sleepdoel
+        # (`data-to`), licht op tijdens het slepen (CSS: `:has(.pdrag-ghost)`), en is met het
+        # toetsenbord bereikbaar: hij draagt een naam, en zijn "+ add project" blijft een link.
+        leeg = (f" data-leeg='1' tabindex='0' role='group' aria-label='{_e(label)}, 0 projects'"
+                if not its else "")
+        cols += (f"<div class='pcol' data-to='{key}'{leeg}>"
                  f"<div class='pcol-h'>{_e(label)} ({len(its)})</div>"
                  f"<div class='pcol-scroll'>{body}</div>{qa}</div>")
     return f"<div class='pboard'>{cols}</div>"
@@ -1759,5 +1786,5 @@ def render_projects_screen(st: _Stores, rec, *, csrf_token: str = "", username: 
     # kaarten op prod die nergens op reageerden. Zelfde aanroep als daar, geen tweede variant.
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     return _page("Projects",
-                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>{kop}{inner}"
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main c2-main--vol'>{kop}{inner}"
                  f"</div></div>{modal}")

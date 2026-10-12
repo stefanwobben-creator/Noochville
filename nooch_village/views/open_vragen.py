@@ -106,7 +106,9 @@ def render_open_vragen(st, status: str = "", csrf_token: str = "", username: str
     tabel = ("<table class='mtab' aria-label='open questions'><tr><th>Page</th><th>Question</th>"
              f"<th>Status</th><th>Research by</th><th>Owner</th><th></th></tr>{''.join(tr)}</table>" if tr
              else "<p class='muted'>Nothing here.</p>")
-    main = (f"<div class='c2-main'><h1 class='ptitle'>Open questions</h1>"
+    # `c2-main--vol`: op een telefoon de volle breedte (B2), zodat wat breder is binnen zijn eigen
+    # container blijft in plaats van de hele pagina breder te maken.
+    main = (f"<div class='c2-main c2-main--vol'><h1 class='ptitle'>Open questions</h1>"
             f"<p class='muted'>Every question on the material and supplier pages of the bill of "
             f"materials that has no checked answer yet: {telling[dek.CONFLICT]} in conflict, "
             f"{telling[dek.ONGECHECKT]} unchecked, {telling[dek.LEEG]} open, "
@@ -115,5 +117,7 @@ def render_open_vragen(st, status: str = "", csrf_token: str = "", username: str
             f"someone will research it by the date shown; it never counts as checked, and once the "
             f"date has passed the question is open again.</p>"
             f"<div class='cl-bar' aria-label='status'><span class='muted'>Status</span> {filter_}</div>"
-            f"<div class='c2-sec'>{tabel}</div></div>")
+            # `c2-scroll`: op een telefoon scrollt de tabel in zijn eigen container (B2). Het popover
+            # in de cellen staat daar in de flow (nooch.css), anders zou de container hem afkappen.
+            f"<div class='c2-sec c2-scroll'>{tabel}</div></div>")
     return _page("Open questions", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
