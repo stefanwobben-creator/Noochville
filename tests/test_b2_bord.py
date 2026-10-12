@@ -72,6 +72,20 @@ def test_het_sleep_hintje_blijft_maar_kost_geen_hoogte(dorp):
     assert "position: absolute" in regel
 
 
+def test_de_titel_stopt_na_twee_regels_en_staat_volledig_in_title_en_op_de_projectpagina(dorp):
+    dd, _pid = dorp
+    st = cockpit2._Stores(dd)
+    lang = "Een heel lange projecttitel " * 8 + "met het einde HIER"
+    pid = st.projects.create(ROL, lang.strip(), "human")
+    k = _kaart(dd, pid)
+    kop = re.search(r"<div class='ptitle' title='([^']*)'>", k)
+    assert kop and kop.group(1) == lang.strip()                       # volledig in title
+    regel = re.search(r":root \.pcol \.pcard \.ptitle \{([^}]*)\}", CSS).group(1)
+    assert "-webkit-line-clamp: 2" in regel and "overflow: hidden" in regel
+    pagina = P.render_project(cockpit2._Stores(dd), pid, csrf_token="T", username="guest")
+    assert "met het einde HIER" in pagina                             # en volledig op de projectpagina
+
+
 # ── de lege kolom ───────────────────────────────────────────────────────────
 
 def test_een_lege_kolom_is_een_strook_met_naam_aantal_en_toetsenbord(dorp):
