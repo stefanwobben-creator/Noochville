@@ -457,7 +457,9 @@ def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str
             + f"</select></td><td><label class='sr' for='{rid}'>Reason for {_e(v['label'])}</label>"
               f"<input id='{rid}' name='reden_{_e(v['k'])}' value='{_e(nu.get(v['k'], {}).get('reden', ''))}' "
               f"placeholder='Reason (for not applicable)'></td></tr>")
-    return (f"<details class='acard-d'><summary class='btn ok sm'>{_e(label)}</summary><div class='datepop'>"
+    # B3 (13 oktober 2026): de opener staat bij ELK feit, dus secundair (`btn sm`); de knop ín de
+    # popover ("Check") is de ene neon actie van die popover (`tests/test_b3_neon.py`).
+    return (f"<details class='acard-d'><summary class='btn sm'>{_e(label)}</summary><div class='datepop'>"
             f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
@@ -517,7 +519,8 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     elif (feit.get("grond") or {}).get("soort") == "attested":
         check = ""                 # de verklaring IS het nakijken: naam en datum staan er al
     elif kan_nakijken:
-        check = _feit_knop("pagina_feit_gezien", "I checked this", "btn ok sm", aid, fid, csrf_token)
+        # Per feit herhaald, dus secundair: een pagina met tien feiten had tien neon knoppen (B3).
+        check = _feit_knop("pagina_feit_gezien", "I checked this", "btn sm", aid, fid, csrf_token)
     else:
         check = ""
     weg = _feit_knop("pagina_feit_del", "remove", "dellink", aid, fid, csrf_token,
