@@ -98,7 +98,7 @@ def test_het_kader_blijft_de_veldstijl():
     """`appearance:none` mag de huisstijl niet slopen: de gedeelde veldregel hoort de select nog
     steeds te raken."""
     gedeeld = re.search(r":root textarea, :root select, [^{]*\{([^}]*)\}", NU)
-    assert gedeeld and "border: 1.5px solid var(--nu-border-subtle)" in gedeeld.group(1)
+    assert gedeeld and "border: 1px solid var(--nu-text)" in gedeeld.group(1)   # B3: 1px zwart
 
 
 def test_een_meerkeuzelijst_krijgt_geen_chevron():
