@@ -101,7 +101,7 @@ def test_de_kaart_modal_en_de_wizard_sluiten_met_hun_eigen_kruisje(dorp):
             pg.locator("#ovl .ovl-x").click()
             ovl.wait_for(state="hidden")
             # de wizard (via "+ add project", in dezelfde overlay): zijn eigen ✕
-            pg.locator("a.addlink.js-modal").first.click()
+            pg.locator("a.btn.ok.js-modal").first.click()
             ovl.wait_for(state="visible")
             pg.locator("#ovl .wz-x").click()
             ovl.wait_for(state="hidden")

@@ -1685,7 +1685,9 @@ def _nieuwe_pagina_form(st, csrf_token: str, username: str | None) -> str:
     uitleg = (f"<div class='muted wiki-hint'>{weg} domain(s) are not listed: another role owns "
               f"them, and only that role or its Circle Lead can file a page there.</div>"
               if weg else "")
-    return (f"<details class='qadd'><summary>+ New page</summary>"
+    # B3 FASE D: "New page" is de hoofdactie van /wiki (neon). Open verdwijnt de summary
+    # (`.qadd[open]>summary`), dus dan is "Create" de enige neon knop.
+    return (f"<details class='qadd'><summary class='btn ok'>+ New page</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='action' value='artefact_add'>"

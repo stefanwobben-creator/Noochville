@@ -534,13 +534,17 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
 def _wizard_addlink(rec, csrf_token: str) -> str:
     """De enige 'project toevoegen'-ingang: opent de geleide wizard in de modal-overlay (js-modal),
     net als de projectkaarten. Op een rol wordt die rol voorgeselecteerd; op een cirkel kiest de
-    wizard zelf de rol. Zonder JS valt de link terug op de volledige wizard-pagina."""
+    wizard zelf de rol. Zonder JS valt de link terug op de volledige wizard-pagina.
+
+    B3 FASE D (13 oktober 2026): dit is DE hoofdactie van het bord, dus `btn ok` (neon). De
+    "+ add project"-links per kolom (`_quickadd`) blijven `addlink`: zelfde actie, maar
+    secundair — één neon actie per scherm (`tests/test_b3_neon.py`)."""
     if not csrf_token:
         return ""
     href = "/project/nieuw"
     if not org.is_circle(rec):
         href += f"?role={_e(rec.id)}"
-    return (f"<a class='addlink js-modal' href='{href}' data-href='{href}'>"
+    return (f"<a class='btn ok js-modal' href='{href}' data-href='{href}'>"
             f"＋ add project</a>")
 
 
