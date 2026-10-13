@@ -21,12 +21,6 @@ from tests.test_b3_lijn import CSS, _blokken, _regel
 
 #: selector → waarom hij 1,5px mag houden. Geen items: knoppen en vormen met een eigen betekenis.
 ANDERHALF = {
-    ":root .btn": "knop (fase d bepaalde de knoppen; geen item)",
-    ":root .addlink": "knop: de per-kolom \"+ add project\" en de link-knoppen",
-    ":root .wz-btn": "knop in de wizard",
-    ".wz-btn.ghost": "knop in de wizard (oude laag)",
-    ".wz-add button": "knop in de wizard (oude laag)",
-    ":root .c2-burger": "knop: menu en zoeken op mobiel",
     ":root .wb-menu": "menu van de wiki-werkbalk (een paneel, geen item)",
     ":root .wiki-tb": "de wiki-werkbalk (een paneel, geen item)",
     ":root .c2-tabs a.on": "het actieve tabblad: sluit met een witte onderrand aan op de inhoud",
@@ -174,3 +168,19 @@ def test_nav_items_hebben_geen_rand():
         if any(re.search(r"\.c2-subnav a(?![\w.-])|\.c2-subnav \[aria-current\]", x) and "c2-overleg" not in x
                for x in delen):
             assert d.startswith("border-left") or re.fullmatch(r"border\s*:\s*(0|none)", d), (sel, d)
+
+
+def test_secundaire_knoppen_hebben_1px_zwart_en_de_hoofdactie_houdt_haar_vorm():
+    """B3 fase e, commit 1 (13 oktober 2026): .btn, .addlink, de wizardknoppen en de menuknop van
+    1,5px naar 1px zwart. De neon hoofdactie verandert niet van vorm: vulling, transparante rand ter
+    breedte van de andere knoppen (geen eigen breedte, dus even hoog)."""
+    for sel, decl in ((":root .btn", "border: 1px solid var(--nu-text)"),
+                      (":root .addlink", "border: 1px solid var(--nu-text)"),
+                      (":root .wz-btn", "border: 1px solid var(--nu-text)"),
+                      (":root .c2-burger", "border: 1px solid var(--nu-text)"),
+                      (".wz-btn.ghost", "border:1px solid var(--nu-text)"),
+                      (".wz-add button", "border:1px solid var(--nu-text)")):
+        assert decl in _regel(sel), sel
+    ok = _regel(":root .btn.ok")
+    assert "background: var(--nu-neon)" in ok and "border-color: transparent" in ok
+    assert not re.search(r"border(-width)?\s*:\s*[\d.]+px", ok)        # volgt de breedte van .btn
