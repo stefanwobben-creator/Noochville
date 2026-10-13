@@ -2406,7 +2406,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    tinten. `transparent` en niet `border: 0`, zodat de hoogte gelijk blijft aan de varianten die
    hun lijn wél houden (`.outline`). */
 :root .pill, :root .chip, :root .badge {
-  display: inline-flex; align-items: center; gap: .35em; border: 1px solid var(--hair);
+  display: inline-flex; align-items: center; gap: .35em; border: 1px solid transparent;
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
   padding: .15em .6em; font-size: var(--type-12);
   /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
@@ -2414,7 +2414,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
      signaal, en die leunt bovendien op vorm plus woord. */
   font-weight: 500; text-transform: none; letter-spacing: .01em; }
 :root .pill.muted, :root .chip.muted, :root .badge.ro {
-  border-color: var(--hair); color: var(--nu-muted);
+  color: var(--nu-muted);
   text-transform: none; letter-spacing: 0; font-weight: 600; }
 
 /* ── STATUS: vorm + woord, nooit kleur alleen ─────────────────────────────────────────────────
@@ -2661,8 +2661,13 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    `.addlink` en `.flink` delen de regel hierboven maar zijn knoppen; die houden hun zwarte lijn. */
 :root .vswitch a { border: 1px solid var(--hair); }
 :root .vswitch a:hover, :root .vswitch a.on { border-color: var(--nu-text); }
-/* Een pill of kaart die je kunt aanklikken: dezelfde hairline, zwart bij hover. Een etiket dat
-   niets doet (`span.pill`) krijgt geen hover — een rand die reageert belooft een klik. */
+/* EEN RAND BETEKENT AANKLIKBAAR (besluit Stefan, 13 oktober 2026). Een etiket dat niets doet
+   (`span.pill`, `span.chip`, ook `.outline`) heeft geen rand: de basis hierboven is transparant, zodat
+   de hoogte gelijk blijft aan de pills die er wél een hebben. Een pill die je kunt aanklikken —
+   een link, een knop, de opener van een popover — krijgt de hairline, en zwart bij hover.
+   `tests/test_b3_hairline.py` houdt de lijst. */
+:root a.pill, :root a.chip, :root button.pill, :root button.chip, :root summary.pill,
+:root summary.chip { border-color: var(--hair); }
 :root a.pill:hover, :root a.chip:hover, :root summary.chip:hover, :root button.chip:hover,
 :root a.outline:hover, :root summary.outline:hover, :root .gs-hit:hover { border-color: var(--nu-text); }
 /* GEEN DUBBELE RANDEN. Twee etiketten naast elkaar (soort en domein in `.kc-actions`) braken op een
@@ -2840,7 +2845,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pchip-v { color: var(--nu-text); font-weight: 400; }
 
 /* 5 · Accentkleuren zonder merkdekking → neutraal, betekenis blijft in het WOORD staan */
-:root .doel { background: var(--nu-surface); border-color: var(--nu-text); }
+/* B3 fase c: geen eigen randkleur meer. De doelkaart volgt de kaart (hairline), het doel-etiket de
+   pill-regel: een rand alleen als je hem kunt aanklikken. */
+:root .doel { background: var(--nu-surface); }
 :root .pbar { background: var(--nu-text); }
 :root .av.ai, :root .ai { background: var(--nu-text); color: var(--nu-surface); }
 :root .av { background: var(--nu-text); color: var(--nu-surface); font-family: var(--nu-font); }
@@ -2851,7 +2858,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    staat er naast een kaderloos etiket alsnog een zwart doosje. Het ONDERSCHEID blijft, maar het
    zit nu in de tekst en niet in een lijn: groen = informatie, zwart = let op. */
 :root .amber { background: var(--nu-bg-alt); color: var(--nu-text); border-color: transparent; }
-:root .outline { background: none; border: 1px solid var(--hair);
+:root .outline { background: none; border: 1px solid transparent;
   color: var(--nu-muted); }
 
 /* 6 · De overlay zelf */

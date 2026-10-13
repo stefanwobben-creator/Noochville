@@ -41,7 +41,7 @@ ANDERHALF = {
 #: De families en hun regel. Een nieuwe kaart of rij erft dit; hier staat het om te zien dat het zo
 #: BLIJFT.
 KAARTEN = (":root .card", ":root .pkaart", ":root .kcard", ":root .attcard", ":root .gs-hit",
-           ":root .tile", ":root .pcol .card", ":root .tree", ":root .outline", ":root .msg-bijlage")
+           ":root .tile", ":root .pcol .card", ":root .tree", ":root .msg-bijlage")
 RIJEN = {":root .uk-rij": "top", ":root .uk-voet": "top", ":root .c2-foot": "top",
          ":root .msg-balk": "top", ":root .wo-mem": "bottom", ":root .qadd-bar": "top",
          ":root .c2-orgfly > summary": "bottom", ":root .wo-ocd .wo-band": "bottom"}
@@ -78,10 +78,69 @@ def test_rijen_staan_op_de_hairline():
         assert f"border-{kant}: 1px solid var(--hair)" in _regel(sel), sel
 
 
-def test_pills_zijn_neutraal_met_een_hairline():
+def test_een_label_dat_niets_doet_heeft_geen_rand():
+    """Besluit 13 oktober: een rand betekent aanklikbaar. De basis is transparant (de hoogte blijft
+    gelijk aan de pills mét rand), het vlak neutraal."""
+    for sel in (":root .pill", ":root .outline"):
+        assert "border: 1px solid transparent" in _regel(sel), sel
     r = _regel(":root .pill")
-    assert "border: 1px solid var(--hair)" in r
     assert "background: var(--nu-surface)" in r and "color: var(--nu-text)" in r
+    assert "border" not in _regel(":root .pill.muted")
+
+
+def test_een_aanklikbare_pill_heeft_de_hairline():
+    for sel in (":root a.pill", ":root a.chip", ":root button.chip", ":root summary.chip"):
+        assert "border-color: var(--hair)" in _regel(sel), sel
+
+
+#: Regels die een label een zichtbare rand geven zonder tag in de selector, met de reden.
+LABEL_RAND_UITZONDERING = {
+    ":root .pkaart-rail .chip.outline": "de Deadline-opener op de projectrail: altijd een <summary>",
+    ":root .pkaart-rail .chip.outline:hover": "idem, bij hover",
+    ":root .pkaart-rail details[open] > .chip.outline": "idem, als de popover open is",
+    ":root .chip.coral-solid": "rand in de vulkleur: geen zichtbare lijn, alleen het rode vlak",
+}
+
+
+def _label_klassen() -> set[str]:
+    """pill/chip/badge/outline plus elke klasse die in de views SAMEN met een label staat (`doel`,
+    `amber`, `muted` …): een regel op `:root .doel` raakt het label net zo goed."""
+    import pathlib
+    views = pathlib.Path(__file__).resolve().parents[1] / "nooch_village"
+    kern = {"pill", "chip", "badge", "outline"}
+    uit = set(kern)
+    for f in [*views.glob("*.py"), *(views / "views").glob("*.py")]:
+        for m in re.finditer(r"class=['\"]([^'\"{}]*)", f.read_text(encoding="utf-8")):
+            kl = set(m.group(1).split())
+            if kl & kern:
+                uit |= kl
+    return uit
+
+
+def _zichtbare_rand(decl: str) -> bool:
+    for d in re.findall(r"(border(?:-(?:top|right|bottom|left))?(?:-color)?\s*:[^;]*)", decl):
+        waarde = d.split(":", 1)[1].strip()
+        if "radius" in d or re.fullmatch(r"(0|none)", waarde) or "transparent" in waarde:
+            continue
+        return True
+    return False
+
+
+def test_geen_rand_op_een_label_tenzij_het_aanklikbaar_is():
+    labels = _label_klassen()
+    fout = []
+    for sel, decl in _blokken(CSS):
+        if not _zichtbare_rand(decl):
+            continue
+        for deel in (x.strip() for x in sel.split(",")):
+            if not deel.startswith(":root") or deel in LABEL_RAND_UITZONDERING:
+                continue
+            laatste = re.split(r"[\s>+~]+", deel)[-1]
+            klassen = set(re.findall(r"\.([\w-]+)", laatste.split(":")[0]))
+            tag = re.match(r"[a-z]+", laatste)
+            if klassen and klassen <= labels and not (tag and tag.group(0) in ("a", "button", "summary")):
+                fout.append(deel)
+    assert fout == [], "een rand op een label dat niets doet: " + ", ".join(sorted(set(fout)))
 
 
 def test_interactieve_items_worden_zwart_bij_hover():
