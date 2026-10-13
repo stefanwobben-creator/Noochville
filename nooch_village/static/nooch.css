@@ -3289,12 +3289,16 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    het raster, anders schuift de naam alsnog mee naar links. */
 :root [data-bord] .swim, :root [data-bord] [data-kop] { min-width: calc(4 * 160px + 3 * var(--s2)); }
 
-/* DE LEGE KOLOM IS EEN STILLE CEL: geen balk, geen label, geen tint — alleen een stippellijn van 1px
-   in de hairline-kleur, laag. De kolomkop bovenaan zegt welke status het is. Hij blijft een
-   sleepdoel (`data-to`) en licht op (stippellijn zwart) ZOLANG er gesleept wordt (`.pdrag-ghost`
-   bestaat alleen dan). Met Tab bereikbaar: de naam met aantal staat in `aria-label`. */
-:root .pcol[data-leeg] { min-height: 32px; box-sizing: border-box; padding: 0 var(--s2); display: flex;
-  align-items: center; justify-content: flex-end; background: none; border: 1px dotted var(--hair); }
+/* DE LEGE KOLOM IS EEN STILLE CEL: geen balk en geen label — een stippellijn van 1px in de
+   hairline-kleur. De kolomkop bovenaan zegt welke status het is. Hij blijft een sleepdoel
+   (`data-to`) en licht op (stippellijn zwart) ZOLANG er gesleept wordt (`.pdrag-ghost` bestaat alleen
+   dan). Met Tab bereikbaar: de naam met aantal staat in `aria-label`.
+   DEZELFDE TINT ALS ZIJN STATUS (13 oktober 2026): geen eigen achtergrond meer, dus de kolomtint per
+   status (`:root .pcol[data-to=…]`, hetzelfde token als een gevulde kolom) geldt ook hier. En hij rekt
+   mee tot de hoogte van de lane (minimaal 32px), zodat de rij een rij blijft. De "+" staat bovenaan. */
+:root .pcol[data-leeg] { min-height: 32px; align-self: stretch; box-sizing: border-box;
+  padding: var(--s1) var(--s2); display: flex; align-items: flex-start; justify-content: flex-end;
+  border: 1px dotted var(--hair); }
 :root .pcol[data-leeg] .pcol-h, :root .pcol[data-leeg] .pcol-scroll { display: none; }
 /* "+ add project" verschijnt alleen bij hover of focus, nooit als vaste ruis. Doorzichtig in plaats
    van verborgen: zo blijft hij in de tabvolgorde, en `:focus-within` maakt hem zichtbaar. */
@@ -3303,7 +3307,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pcol[data-leeg]:hover .addlink, :root .pcol[data-leeg]:focus-within .addlink { opacity: 1; }
 :root .pcol[data-leeg]:focus-visible { outline: 2px solid var(--nu-text); outline-offset: 2px; }
 :root body:has(.pdrag-ghost) .pcol[data-leeg], :root .pcol[data-leeg].over { border-color: var(--nu-text);
-  background: none; outline: none; }
+  outline: none; }
 /* RUIMTE ONDER DE LAATSTE KAART. In een kolom die scrollt lag "+ add project" direct tegen de
    afgesneden laatste kaart, alsof hij eroverheen lag. Een vaste tussenruimte maakt de grens zichtbaar. */
 :root .pcol > .addlink { margin-top: var(--s2); }

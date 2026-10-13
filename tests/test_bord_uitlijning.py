@@ -46,7 +46,10 @@ def test_kop_en_lanes_delen_een_scrollcontainer_en_de_kop_plakt():
 
 def test_een_lege_kolom_is_een_stille_stippellijn():
     r = _regel(":root .pcol[data-leeg]")
-    assert "border: 1px dotted var(--hair)" in r and "background: none" in r and "min-height: 32px" in r
+    assert "border: 1px dotted var(--hair)" in r and "min-height: 32px" in r
+    # 13 oktober: dezelfde tint als zijn status (geen eigen achtergrond) en mee tot de hoogte van de lane
+    assert "background" not in r and "align-self: stretch" in r
+    assert "background" not in _regel(":root body:has(.pdrag-ghost) .pcol[data-leeg]")
     assert "display: none" in _regel(":root .pcol[data-leeg] .pcol-h")          # geen label
     assert "opacity: 0" in _regel(":root .pcol[data-leeg] .addlink")             # "+" niet als ruis
     assert "opacity: 1" in _regel(":root .pcol[data-leeg]:hover .addlink")
@@ -70,6 +73,8 @@ def dorp(tmp_path):
     st.projects.create(rollen[1], "Kaart running", "human", status="running")
     st.projects.create(rollen[1], "Kaart future", "human", status="future")
     st.projects.block(st.projects.create(rollen[1], "Kaart blocked", "human", status="running"), rollen[0])
+    # ook een Done in lane 2: zo staat elke status ergens gevuld en ergens leeg (tintvergelijking)
+    st.projects.complete(st.projects.create(rollen[1], "Kaart done", "human", status="running"))
     return dd
 
 
@@ -92,7 +97,7 @@ def test_een_kop_rij_en_vier_kolommen_per_lane_en_lege_blijven_bereikbaar(dorp):
     kop = re.search(r"<div class='pboard' data-kop>(.*?)</div></div>", bord).group(1)
     cellen = re.findall(r"<div class='pcol-h' data-to='(\w+)'>[^<(]+\((\d+)\)</div>", kop + "</div>")
     assert [k for k, _n in cellen] == [key for _l, key, _s in _PROJ_COLS]
-    assert sum(int(n) for _k, n in cellen) == 4                  # het totaal over alle zichtbare lanes
+    assert sum(int(n) for _k, n in cellen) == 5                  # het totaal over alle zichtbare lanes
     lanes = bord.split("<div class='swim'>")[1:]
     assert len(lanes) >= 2
     for lane in lanes:
@@ -121,18 +126,32 @@ def test_in_chromium_staat_elke_status_onder_zijn_kopcel(dorp):
                   for (const h of document.querySelectorAll('[data-kop] .pcol-h')) {
                     const b = h.getBoundingClientRect(); kop[h.dataset.to] = [Math.round(b.left), Math.round(b.width)];
                   }
-                  const afwijkend = [], lege = [];
-                  for (const c of document.querySelectorAll('.swim .pcol')) {
-                    const b = c.getBoundingClientRect(), k = kop[c.dataset.to];
-                    if (!k || Math.abs(k[0] - Math.round(b.left)) > 1 || Math.abs(k[1] - Math.round(b.width)) > 1)
-                      afwijkend.push(c.dataset.to);
-                    if (c.hasAttribute('data-leeg')) lege.push(Math.round(b.height));
+                  const vol = {};
+                  for (const c of document.querySelectorAll('.swim .pcol:not([data-leeg])'))
+                    vol[c.dataset.to] = getComputedStyle(c).backgroundColor;
+                  const afwijkend = [], lege = [], tint = [];
+                  for (const s of document.querySelectorAll('.swim')) {
+                    const lane = s.querySelector('.pboard').getBoundingClientRect();
+                    for (const c of s.querySelectorAll('.pcol')) {
+                      const b = c.getBoundingClientRect(), k = kop[c.dataset.to];
+                      if (!k || Math.abs(k[0] - Math.round(b.left)) > 1 || Math.abs(k[1] - Math.round(b.width)) > 1)
+                        afwijkend.push(c.dataset.to);
+                      if (c.hasAttribute('data-leeg')) {
+                        lege.push([Math.round(b.height), Math.round(Math.max(32, lane.height))]);
+                        tint.push([c.dataset.to, getComputedStyle(c).backgroundColor, vol[c.dataset.to] || null]);
+                      }
+                    }
                   }
-                  return {kop: Object.keys(kop).length, afwijkend, lege, pagina: document.documentElement.scrollWidth};
+                  return {kop: Object.keys(kop).length, afwijkend, lege, tint, pagina: document.documentElement.scrollWidth};
                 }""")
                 assert meting["kop"] == len(_PROJ_COLS), (breedte, meting)
                 assert meting["afwijkend"] == [], (breedte, meting)          # elke cel onder zijn kopcel
-                assert meting["lege"] and all(28 <= h <= 40 for h in meting["lege"]), (breedte, meting)
+                # een lege cel is even hoog als zijn lane (minimaal 32px) ...
+                assert meting["lege"] and all(abs(h - lane) <= 1 for h, lane in meting["lege"]), (breedte, meting)
+                # ... en heeft dezelfde achtergrond als een gevulde kolom van dezelfde status
+                vergeleken = [t for t in meting["tint"] if t[2] is not None]
+                assert len(vergeleken) == len(meting["tint"]), (breedte, meting)   # elke status had een gevulde
+                assert all(eigen == gevuld for _s, eigen, gevuld in vergeleken), (breedte, meting)
                 assert meting["pagina"] == breedte, (breedte, meting)      # het bord scrollt, niet de pagina
                 pg.close()
             browser.close()
