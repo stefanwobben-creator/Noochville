@@ -556,10 +556,11 @@ def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
         its.sort(key=lambda p: -(p.get("created_at") or 0))
         body = "".join(_proj_card(st, p, csrf_token, back) for p in its)
         qa = _quickadd(add_owner, key, csrf_token, back, trekker=add_trekker) if quickadd else ""
-        # EEN LEGE KOLOM IS EEN SMALLE STROOK (B2, besluit Stefan): op zijn eigen plek, zodat de
-        # volgorde per swimlane gelijk blijft, met naam en aantal. Hij blijft een sleepdoel
-        # (`data-to`), licht op tijdens het slepen (CSS: `:has(.pdrag-ghost)`), en is met het
-        # toetsenbord bereikbaar: hij draagt een naam, en zijn "+ add project" blijft een link.
+        # EEN LEGE KOLOM IS EEN STILLE CEL (ontwerp B, 13 oktober 2026): op zijn eigen plek in het
+        # raster, zonder zichtbaar label — de kolomkop bovenaan zegt welke status het is. Hij blijft
+        # een sleepdoel (`data-to`), licht op tijdens het slepen (CSS: `:has(.pdrag-ghost)`), en is
+        # met het toetsenbord bereikbaar: hij draagt een voorleesbare naam met aantal, en zijn
+        # "+ add project" verschijnt bij hover of focus.
         leeg = (f" data-leeg='1' tabindex='0' role='group' aria-label='{_e(label)}, 0 projects'"
                 if not its else "")
         cols += (f"<div class='pcol' data-to='{key}'{leeg}>"
@@ -856,12 +857,20 @@ def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back:
         g["items"].append(p)
     if not groups:
         return ""
-    board = ""
+    # ÉÉN KOLOMKOP BOVENAAN (bord-uitlijning, ontwerp B, 13 oktober 2026): Active · Waiting · Done ·
+    # Future met statusvorm, woord en het totaal over alle zichtbare lanes. Hij staat in DEZELFDE
+    # scrollcontainer als de lanes (`data-bord`), zodat hij op een telefoon horizontaal meescrolt en
+    # uitgelijnd blijft. Attributen, geen nieuwe klassen: de kop is een `.pboard` met `.pcol-h`-cellen.
+    kop = "".join(
+        f"<div class='pcol-h' data-to='{key}'>{_e(label)} "
+        f"({sum(1 for p in projs if p.get('status') in statuses)})</div>"
+        for label, key, statuses in _PROJ_COLS)
+    board = f"<div class='pboard' data-kop>{kop}</div>"
     for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
         board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
                   f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=quickadd)}"
                   f"</div>")
-    return board + _drag_script(csrf_token, back)
+    return f"<div data-bord>{board}</div>" + _drag_script(csrf_token, back)
 
 
 def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> str:
