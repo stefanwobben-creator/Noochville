@@ -16,19 +16,15 @@ en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 13 oktober 
    (81190 en 81192, zelfde dag en bedrag als 81191). Fix: bij een ander bestand een WAARSCHUWING (wel
    importeren), met een test op precies dit geval. Gevonden bij de controle van de imports.
 
-8. **De lokale suite riep echte LLM's aan.** `load_context` zet de sleutels uit `.env` terug
-   (`os.environ.setdefault`) nadat `conftest._isolate_llm_keys` ze wiste; zo belde
-   `test_claims_v2::test_scan_van_tekst` lokaal echt Gemini (in CI is er geen `.env`). Sinds #739
-   faalt zo'n verbinding meteen, dus er gaat niets meer de deur uit — maar de oorzaak (sleutels
-   lekken de test-env in) staat er nog. Fix: `load_context` in tests de `.env` niet laten lezen, of
-   de sleutels ná `load_context` opnieuw wissen. Gevonden bij punt 7.
-
 ## Gedaan
 
 1. **Uitloglink** in het gebruikersblok van de zijbalk — opruim-PR (12 oktober 2026).
 2. **`.ovl-x` binnen de eigen overlay** (bord-modal 2×, wizard; het werkoverleg deed het al) — opruim-PR,
    met een lokaas-test per overlay (`tests/test_opruim_1_3.py`).
 3. **Weesprojecten-melding toont de titel** (`scope`) in plaats van het id — opruim-PR.
+8. **De lokale suite riep echte LLM's aan** — oorzaak: `cockpit2._claims_scan` roept bij elke aanroep
+   `_load_env()` aan, die de `.env` van de repo in os.environ zette (ná het wissen in conftest). In
+   tests is `_load_env` nu een no-op (`conftest._isolate_llm_keys`); productie ongewijzigd (13 oktober 2026).
 7. **Claims-tests hingen aan echte DNS** — #739: `tests/conftest.py::_geen_echte_dns`, een vaste,
    netwerkloze resolver voor de hele suite; verbindingen naar buiten worden meteen geweigerd. Met een
    kapotte DNS faalden er 39 tests, nu 0 (13 oktober 2026).

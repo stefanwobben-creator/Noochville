@@ -111,3 +111,16 @@ def test_de_suite_gaat_niet_het_netwerk_op():
     with pytest.raises(ConnectionRefusedError):
         socket.create_connection(("nooch.earth", 443), timeout=30)
     assert time.monotonic() - t < 2
+
+
+def test_een_claims_scan_in_een_test_zet_geen_llm_sleutels():
+    """Opruimlijst punt 8: `_claims_scan` riep `_load_env()` aan, en die zette de `.env`-sleutels
+    terug in os.environ nadat conftest ze had gewist. In tests is `_load_env` een no-op."""
+    import os
+    from nooch_village import cockpit2
+    cockpit2._claims_scan({"tekst": ["zero waste en klimaatneutraal"]})
+    # Alleen de NAMEN vergelijken: een assert op `os.environ` zelf zet bij falen alle waarden
+    # (sleutels!) in de testuitvoer en het CI-log.
+    gezet = [k for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "MISTRAL_API_KEY")
+             if k in os.environ]
+    assert gezet == []

@@ -74,6 +74,13 @@ def _isolate_llm_keys(monkeypatch):
     lokale/CI-.env."""
     for _k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.delenv(_k, raising=False)
+    # EN NIEMAND ZET ZE TERUG (opruimlijst punt 8, 13 oktober 2026). `cockpit2._claims_scan` roept
+    # bij elke aanroep `cockpit2._load_env()` aan, en die las de `.env` van de repo in os.environ —
+    # midden in de test, ná het wissen hierboven. Zo belde `test_claims_v2::test_scan_van_tekst`
+    # lokaal echt Gemini (in CI is er geen `.env`). In tests leest niets de `.env`; productie
+    # verandert niet.
+    from nooch_village import cockpit2 as _c2
+    monkeypatch.setattr(_c2, "_load_env", lambda: None)
 
 
 #: Het vaste publieke adres waar de nep-resolver elke gewone hostnaam heen stuurt (example.com).
