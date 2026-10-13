@@ -18,6 +18,14 @@ from tests.test_b3_lijn import _regel
 from tests.test_messages_inputbalk import _dorp, _kanaal
 
 
+def _ts(tekst: str) -> float:
+    """Een tijdstip in de zone van de LEZER (dezelfde als de pagina, `cockpit2_util._zone`), niet
+    van de machine: CI draait in UTC, en dan valt "middernacht" op een andere dag."""
+    import datetime
+    from nooch_village.cockpit2_util import _zone
+    return datetime.datetime.strptime(tekst, "%Y-%m-%d %H:%M").replace(tzinfo=_zone(None)).timestamp()
+
+
 def _post(st, k, wie, tekst, at):
     e = st.channels.post(k, tekst, author_type="human", author_id=wie)
     e["at"] = at
@@ -27,7 +35,7 @@ def _post(st, k, wie, tekst, at):
 def test_een_dagscheiding_en_een_nieuwe_dag_begint_een_nieuwe_groep(tmp_path):
     dd, st, ik, ander = _dorp(tmp_path)
     k = _kanaal()
-    middernacht = time.mktime(time.strptime("2026-10-13 00:00", "%Y-%m-%d %H:%M"))
+    middernacht = _ts("2026-10-13 00:00")
     _post(st, k, ander, "laat op de avond", middernacht - 60)
     _post(st, k, ander, "net na middernacht", middernacht + 60)    # binnen 5 minuten, andere dag
     h = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
@@ -96,7 +104,7 @@ def test_edit_en_remove_zijn_stil_in_de_actierij():
 def test_de_volledige_datum_staat_in_een_time_element(tmp_path):
     dd, st, ik, ander = _dorp(tmp_path)
     k = _kanaal()
-    at = time.mktime(time.strptime("2026-10-13 08:40", "%Y-%m-%d %H:%M"))
+    at = _ts("2026-10-13 08:40")
     _post(st, k, ander, "hallo", at)
     h = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
     import re
