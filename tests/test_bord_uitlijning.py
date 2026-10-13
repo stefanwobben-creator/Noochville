@@ -138,3 +138,45 @@ def test_in_chromium_staat_elke_status_onder_zijn_kopcel(dorp):
             browser.close()
     finally:
         httpd.shutdown()
+
+
+def test_op_390_valt_de_kop_niet_onder_de_menu_en_zoekknop(tmp_path):
+    """Besluit 13 oktober: op een telefoon mag de kolomkop niet onder de vaste menu- en zoekknop
+    liggen — in beginstand en na 200px verticaal scrollen binnen het bord. Gemeten als het snijvlak
+    van de bounding boxes."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rollen = [r.id for r in st.records.all() if r.id.startswith("mother_earth__nooch__")][:8]
+    for i, rol in enumerate(rollen):                   # genoeg lanes om het bord echt te laten scrollen
+        for j in range(3):
+            st.projects.create(rol, f"Kaart {i}-{j}", "human", status="future")
+    httpd = _html(dd)
+    basis = f"http://127.0.0.1:{httpd.server_address[1]}"
+    meet = """() => {
+      const k = document.querySelector('[data-kop]').getBoundingClientRect();
+      const knoppen = [...document.querySelectorAll('.c2-burger')].filter(e => e.checkVisibility());
+      const snij = knoppen.map(e => { const b = e.getBoundingClientRect();
+        return Math.max(0, Math.min(k.right, b.right) - Math.max(k.left, b.left))
+             * Math.max(0, Math.min(k.bottom, b.bottom) - Math.max(k.top, b.top)); });
+      return {knoppen: knoppen.length, snij, bord: Math.round(document.querySelector('[data-bord]').scrollTop)};
+    }"""
+    try:
+        with sync_api.sync_playwright() as p:
+            try:
+                browser = p.chromium.launch()
+            except Exception as e:                         # noqa: BLE001
+                pytest.skip(f"geen Chromium: {e}")
+            pg = browser.new_page(viewport={"width": 390, "height": 844})
+            pg.goto(basis + "/projects")
+            begin = pg.evaluate(meet)
+            assert begin["knoppen"] == 2, begin              # anders meet deze toets niets
+            assert begin["snij"] == [0, 0], begin
+            pg.evaluate("document.querySelector('[data-bord]').scrollTop = 200")
+            gescrold = pg.evaluate(meet)
+            assert gescrold["bord"] == 200, gescrold          # het bord scrolde echt
+            assert gescrold["snij"] == [0, 0], gescrold
+            browser.close()
+    finally:
+        httpd.shutdown()
