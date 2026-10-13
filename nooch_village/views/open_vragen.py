@@ -51,11 +51,55 @@ def terug_form(csrf: str, pagina, k: str, terug: str) -> str:
             f"value='{_e(k)}'><button class='dellink' type='submit'>undo</button></form>")
 
 
-def _eigenaar(st, pagina) -> str:
-    """De rol die de pagina bezit; zonder pagina de houder van `Materials`, die hem moet maken."""
+def _eigenaar_rec(st, pagina, _materials=None):
+    """Het record van de rol die de pagina bezit; zonder pagina de houder van `Materials`, die hem
+    moet maken. `_materials` = die houder, al opgezocht (anders per rij `role_for_domain`)."""
     rid = getattr(pagina, "anchor", "") if pagina is not None else ""
-    rec = st.records.get(rid) if rid else org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+    if rid:
+        return st.records.get(rid)
+    return _materials if _materials is not None else org.role_for_domain(st.records.all(),
+                                                                         bom_leveranciers.DOMEIN)
+
+
+def _rolnaam(rec) -> str:
     return getattr(getattr(rec, "definition", None), "name", "") or getattr(rec, "id", "") or "—"
+
+
+def _eigenaar(st, pagina) -> str:
+    """De naam van de rol die de pagina bezit (zie `_eigenaar_rec`)."""
+    return _rolnaam(_eigenaar_rec(st, pagina))
+
+
+#: De vier statussen van een open vraag, in de volgorde waarin ze tellen.
+STATUSSEN = (dek.CONFLICT, dek.ONGECHECKT, dek.LEEG, dek.UITGESTELD)
+
+
+def stand(st) -> dict:
+    """ÉÉN BEREKENING VOOR /open-questions EN /today (13 oktober 2026).
+
+    Een tweede telling die kan afwijken is een bug; daarom rekent alleen deze functie. Geeft:
+      `alle`         — de rijen uit `wiki_dekking.open_vragen` (gesorteerd: conflict eerst);
+      `telling`      — per status het aantal;
+      `paginas`      — over hoeveel materiaal- en leverancierspagina's de vragen gaan;
+      `per_eigenaar` — [(rol-id, naam, aantal)], grootste eerst: de rol die de pagina bezit, of
+                       zonder pagina de houder van `Materials`.
+    De dekking wordt één keer berekend (`wiki_dekking.uit_stores` is de dure stap)."""
+    from nooch_village.views.wiki import _bijlage_bestaat
+    d, _ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
+                             ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
+    alle = dek.open_vragen(d)
+    telling = {s: sum(1 for r in alle if r["status"] == s) for s in STATUSSEN}
+    materials = None
+    if any(r["pagina"] is None for r in alle):
+        materials = org.role_for_domain(st.records.all(), bom_leveranciers.DOMEIN)
+    per: dict[str, list] = {}
+    for r in alle:
+        rec = _eigenaar_rec(st, r["pagina"], materials)
+        rid = getattr(rec, "id", "") or ""
+        per.setdefault(rid, [rid, _rolnaam(rec), 0])[2] += 1
+    paginas = len({(r["soort"], r["naam"]) for r in alle})
+    return {"alle": alle, "telling": telling, "paginas": paginas,
+            "per_eigenaar": sorted((tuple(v) for v in per.values()), key=lambda t: (-t[2], t[1].lower()))}
 
 
 def _mag_bewerken(st, username, pagina) -> bool:
@@ -68,15 +112,12 @@ def _mag_bewerken(st, username, pagina) -> bool:
 
 
 def render_open_vragen(st, status: str = "", csrf_token: str = "", username: str | None = None) -> str:
-    from nooch_village.views.wiki import _bijlage_bestaat
-    d, ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
-                            ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
-    alle = dek.open_vragen(d)
+    # DE TELLING KOMT UIT `stand`, dezelfde als op /today (13 oktober 2026).
+    sd = stand(st)
+    alle, telling = sd["alle"], sd["telling"]
     status = status if status in {k for k, _s, _l in _FILTERS} else ""
     toegestaan = next(s for k, s, _l in _FILTERS if k == status)
     rijen = [r for r in alle if r["status"] in toegestaan]
-    telling = {s: sum(1 for r in alle if r["status"] == s)
-               for s in (dek.CONFLICT, dek.ONGECHECKT, dek.LEEG, dek.UITGESTELD)}
     filter_ = " ".join(
         f"<a class='cl-filter{' on' if k == status else ''}' "
         f"href='/open-questions{'?status=' + k if k else ''}'>{_e(l)}"

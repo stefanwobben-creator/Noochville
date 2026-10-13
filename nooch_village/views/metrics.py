@@ -729,19 +729,22 @@ def _batch_fetch(st: _Stores, cn: str):
     return {"kind": "number", "value": paren, "unit": "pairs"}
 
 
-def _batch_regel(stand: dict, tile: dict) -> str:
-    """De toestand onder de tegel. Alleen "open" krijgt daarna een status ten opzichte van de lijn."""
+def _batch_tekst(stand: dict, tile: dict) -> str:
+    """De toestand van een batch als zin (tegel én /today). Alleen "open" krijgt daarna een status."""
     from nooch_village import batch_cn
     lijn = tile.get("lijn") or {}
     if stand["toestand"] == batch_cn.NIET_GESTART:
-        tekst = f"Not started — the batch opens {lijn.get('van', '?')}"
-    elif stand["toestand"] == batch_cn.GESLOTEN:
-        tekst = (f"Closed {stand['sluitdatum']} — final count "
-                 f"{_num(stand['paren']) if stand['paren'] is not None else '—'} of {_num(tile.get('target'))}")
-    else:
-        tekst = (f"Open since {lijn.get('van', '?')}"
-                 + ("" if stand["paren"] is not None else " — no Shopify data yet"))
-    return f"<div class='tile-goal muted'>{_e(tekst)}</div>"
+        return f"Not started — the batch opens {lijn.get('van', '?')}"
+    if stand["toestand"] == batch_cn.GESLOTEN:
+        return (f"Closed {stand['sluitdatum']} — final count "
+                f"{_num(stand['paren']) if stand['paren'] is not None else '—'} of {_num(tile.get('target'))}")
+    return (f"Open since {lijn.get('van', '?')}"
+            + ("" if stand["paren"] is not None else " — no Shopify data yet"))
+
+
+def _batch_regel(stand: dict, tile: dict) -> str:
+    """De toestand onder de tegel. Alleen "open" krijgt daarna een status ten opzichte van de lijn."""
+    return f"<div class='tile-goal muted'>{_e(_batch_tekst(stand, tile))}</div>"
 
 
 def _dekking_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
@@ -1566,13 +1569,19 @@ def _eigenaar_regel(st: _Stores, domein: str, rol: str = "") -> str:
             else f"<div class='tile-goal muted'>Owner: no role holds “{_e(domein)}”</div>")
 
 
-def _grens_regel(tile: dict, waarde, richting: str) -> str:
-    """De status ten opzichte van het doel, of niets. GEEN DOEL, GEEN STATUS. Een `benchmark`-tegel
-    draagt in `target` een vergelijkwaarde, geen doel — die krijgt dus ook geen status."""
+def _grens(tile: dict, waarde, richting: str) -> dict | None:
+    """De status ten opzichte van het doel als GEGEVENS: {vorm, woord, tekst}, of None.
+
+    `vorm`/`woord` komen uit `_GRENS_VORM` (vorm + woord, nooit kleur alleen); `vorm` None betekent
+    alleen een zin, geen status (een lijn die nog niet begonnen is). Gedeeld door de tegel en
+    /today (13 oktober 2026): één berekening, één set woorden.
+
+    GEEN DOEL, GEEN STATUS. Een `benchmark`-tegel draagt in `target` een vergelijkwaarde, geen
+    doel — die krijgt dus ook geen status."""
     import time as _t
     from nooch_village.metrics import grens_status, lijn_status, lijn_waarde
     if tile.get("ref_kind") == "benchmark":
-        return ""
+        return None
     lijn = tile.get("lijn")
     if isinstance(lijn, dict):
         # EEN LIJN NAAR HET DOEL (CN1, CN3): de status volgt waar je vandaag zou moeten staan, niet
@@ -1581,18 +1590,89 @@ def _grens_regel(tile: dict, waarde, richting: str) -> str:
         uit = lijn_status(waarde, tile.get("target"), lijn, vandaag)
         lw = lijn_waarde(lijn, tile.get("target"), vandaag)
         if not uit:
-            return (f"<div class='tile-goal muted'>Line to {_num(tile.get('target'))} by "
-                    f"{_e(lijn['tot'])} starts {_e(lijn['van'])}</div>") if lw is None else ""
+            return ({"vorm": None, "woord": "",
+                     "tekst": f"Line to {_num(tile.get('target'))} by {lijn['tot']} starts {lijn['van']}"}
+                    if lw is None else None)
         vorm, woord = _GRENS_VORM[uit]
-        return (f"<div class='tile-goal muted'><span class='nu-status nu-status--{vorm}'>{woord}</span> "
-                f"line today {_num(round(lw, 1))} · target {_num(tile['target'])} by {_e(lijn['tot'])}</div>")
+        return {"vorm": vorm, "woord": woord,
+                "tekst": f"line today {_num(round(lw, 1))} · target {_num(tile['target'])} by {lijn['tot']}"}
     uit = grens_status(waarde, tile.get("target"), tile.get("oranje"), richting)
     if not uit:
-        return ""
+        return None
     vorm, woord = _GRENS_VORM[uit]
     drempel = (f" · amber from {_num(tile['oranje'])}" if tile.get("oranje") is not None else "")
-    return (f"<div class='tile-goal muted'><span class='nu-status nu-status--{vorm}'>{woord}</span> "
-            f"target {_num(tile['target'])}{drempel}</div>")
+    return {"vorm": vorm, "woord": woord, "tekst": f"target {_num(tile['target'])}{drempel}"}
+
+
+def cn_stand(st) -> list[dict]:
+    """DE CRITICAL NUMBERS ALS GEGEVENS, voor /today (13 oktober 2026).
+
+    Dezelfde bron, berekening en statuswoorden als de tegels op de kring: de waarde komt uit
+    `_fetch` (CN1 `batch_cn.stand`, CN2 `runway`, CN3 `wiki_dekking.cijfers`), het doel en de lijn
+    van de TEGEL (wie die in de UI verzet, verzet hem ook hier), de status uit `_grens`. Alleen
+    `niveau: critical` uit `config/critical_numbers.json`, in die volgorde.
+
+    ZICHT. Geef de kijker-versie van de stores mee (`zicht.voor`): die verbergt de Finance-tegels
+    al, en een nummer met een zicht-groep die de kijker niet mag zien valt hier bovendien expliciet
+    weg (dubbel slot). Wat wegvalt komt NIET in de uitvoer, ook niet als lege plek.
+
+    Per nummer: {sleutel, titel, waarde, eenheid, target, status, regel, stap, link, link_tekst}. `waarde` None
+    = nog geen waarde, nooit 0; `stap` zegt dan wat er moet gebeuren en `link` waar."""
+    from nooch_village import critical_numbers
+    from nooch_village import zicht as _zicht
+    try:
+        cfg = critical_numbers.laad()
+    except (OSError, ValueError):
+        return []
+    tegels = {t.get("cn"): t for t in st.metrics.tiles_of(cfg.get("kring", ""))}
+    uit = []
+    for n in cfg.get("nummers", []):
+        if n.get("niveau") != "critical":
+            continue
+        if n.get("zicht") and not _zicht.mag_zien(st, n["zicht"]):
+            continue
+        tile = tegels.get(n["sleutel"])
+        rij = {"sleutel": n["sleutel"], "titel": n.get("titel") or n["sleutel"], "waarde": None,
+               "eenheid": "", "target": n.get("target"), "status": None, "regel": "", "stap": "",
+               "link": "", "link_tekst": ""}
+        if tile is None:
+            rij["stap"] = "Not on the circle yet: run `village cn_zaad --apply`."
+            uit.append(rij)
+            continue
+        res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "totaal"), None)
+        waarde = _agg(res, _tile_agg(st, tile["source"], tile["measure"]))
+        rij.update(waarde=waarde, eenheid=res.get("unit", ""), target=tile.get("target"))
+        if tile["source"] == "batch":
+            stand = _batch_stand(st, tile)
+            rij["regel"] = _batch_tekst(stand, tile)
+            if stand["toestand"] == "open":
+                rij["status"] = _grens(tile, waarde, "up")
+            if waarde is None:
+                rij["stap"] = rij["regel"]
+        else:
+            rij["status"] = _grens(tile, waarde, _grondslag(st, tile["source"], tile["measure"]).get("richting") or "")
+            if waarde is None and tile["source"] == "runway":
+                ontbreekt = runway(st)["ontbreekt"]
+                rij["stap"] = ("Missing: " + ", ".join(ontbreekt)) if ontbreekt else "No value yet."
+                rij["link"], rij["link_tekst"] = "/fixed-costs", "Runway inputs"
+            elif waarde is None and tile["source"] == "dekking":
+                rij["stap"] = "No material or supplier pages with questions yet."
+                rij["link"], rij["link_tekst"] = "/bom", "BOM"
+            elif waarde is None:
+                rij["stap"] = "No value yet."
+        uit.append(rij)
+    return uit
+
+
+def _grens_regel(tile: dict, waarde, richting: str) -> str:
+    """De status ten opzichte van het doel onder een tegel, of niets (zie `_grens`)."""
+    g = _grens(tile, waarde, richting)
+    if g is None:
+        return ""
+    if g["vorm"] is None:
+        return f"<div class='tile-goal muted'>{_e(g['tekst'])}</div>"
+    return (f"<div class='tile-goal muted'><span class='nu-status nu-status--{g['vorm']}'>{g['woord']}</span> "
+            f"{_e(g['tekst'])}</div>")
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,

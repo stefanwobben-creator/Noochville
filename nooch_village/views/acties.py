@@ -226,7 +226,7 @@ def _regel(st, it: dict, ik: str, csrf_token: str) -> str:
             f"{_meta(st, it, ik, csrf_token)}</span>{weg}</div>")
 
 
-def _van_mijn_projecten(st, ik: str) -> list[tuple[dict, dict]]:
+def _van_mijn_projecten(st, ik: str, mijn: list[dict] | None = None) -> list[tuple[dict, dict]]:
     """De acties van ÁNDEREN op de projecten die van jou zijn, als (actie, project).
 
     DE OMGEKEERDE KOPPELING BESTOND AL: `ActieStore.bij_project` geeft alle acties aan een project,
@@ -249,8 +249,10 @@ def _van_mijn_projecten(st, ik: str) -> list[tuple[dict, dict]]:
     lijst, want het is dezelfde soort lijst."""
     from nooch_village.acties import zichtbaar_voor
 
+    # `mijn`: al berekend door de aanroeper (render_acties, /today) — één keer per pagina in plaats
+    # van per blok een eigen ronde over alle projecten.
     uit: list[tuple[dict, dict]] = []
-    for pr in _mijn_projecten(st, ik):
+    for pr in (_mijn_projecten(st, ik) if mijn is None else mijn):
         pid = str(pr.get("id") or "")
         for a in st.acties.bij_project(pid):
             if a.get("person") == ik or a.get("done"):
@@ -284,7 +286,7 @@ def _regel_van_ander(st, it: dict, pr: dict) -> str:
             f"<span class='muted'>{_e(naam)}</span></span></span></div>")
 
 
-def _mijn_checklist_items(st, ik: str) -> list[tuple[dict, dict, dict]]:
+def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[tuple[dict, dict, dict]]:
     """Open MENS-items op projecten die van jou zijn, als (item, checklist, project).
 
     WAT ER ONTBRAK. Een checklist-item zonder skill is een volgende stap die alleen een mens kan
@@ -311,7 +313,7 @@ def _mijn_checklist_items(st, ik: str) -> list[tuple[dict, dict, dict]]:
     privé project van een cirkel waar je niet in zit hoort hier niet op te duiken."""
     from nooch_village.views.messages import mag_project_lezen
 
-    projecten = {str(p.get("id") or ""): p for p in _mijn_projecten(st, ik)}
+    projecten = {str(p.get("id") or ""): p for p in (_mijn_projecten(st, ik) if mijn is None else mijn)}
     for p in st.projects.all():
         pid = str(p.get("id") or "")
         if not pid or pid in projecten or p.get("archived"):
