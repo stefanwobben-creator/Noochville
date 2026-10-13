@@ -423,6 +423,39 @@ def _vraag_soort(st, a) -> str:
     return cache[a.id]
 
 
+def _telt_voor_html(st, a, feit: dict, soort: str) -> str:
+    """"Counts for: Contains plastic? (yes)" — of "Counts for nothing: …" (W1b, 14 oktober 2026).
+
+    Uit dezelfde dekkingscellen als de vragentabel (`wiki_dekking.telt_voor`), dus wat hier staat is
+    precies waarom een cel zo staat. Alleen op een pagina met vragen (een /bom-pagina)."""
+    from nooch_village import wiki_dekking as dek
+    if not soort or a is None:
+        return ""
+    try:
+        rij, _s, _ctx = _dekking_rij(st, a)
+    except Exception:                                         # noqa: BLE001 — nooit de pagina breken
+        return ""
+    if rij is None:
+        return ""
+    labels = {v["k"]: v["label"] for v in dek.vragen(soort)}
+    telt = dek.telt_voor(rij).get(wiki.feit_id(feit), [])
+    if telt:
+        w = wiki.waarde(feit)
+        delen = []
+        for k, ant in telt:
+            if ant == "value" and w:
+                uitleg = wiki.waarde_tekst(w)
+            elif ant:
+                uitleg = wiki.antwoord_label(ant)
+            else:
+                uitleg = "answer not chosen yet"
+            delen.append(f"{_e(labels.get(k, k))} ({_e(uitleg)})")
+        return "<div class='muted'>Counts for: " + " · ".join(delen) + "</div>"
+    if wiki.achtergrond(feit):
+        return "<div class='muted'>Counts for nothing: background only, answers no question.</div>"
+    return "<div class='muted'>Counts for nothing: choose a question when you check it.</div>"
+
+
 def _antwoorden_html(feit: dict, soort: str) -> str:
     """De bevestigde antwoorden van een feit, leesbaar: "Contains plastic?: yes"."""
     from nooch_village import wiki_dekking as dek
@@ -439,8 +472,12 @@ def _antwoorden_html(feit: dict, soort: str) -> str:
 
 def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str,
                      label: str = "I checked this") -> str:
-    """"I checked this", met erbij welke vraag dit feit beantwoordt (W1). Geen keuze = gewoon
-    nakijken, zoals altijd. Eén klein formulier in de bestaande popover, geen apart scherm."""
+    """"I checked this", met erbij welke vraag dit feit beantwoordt (W1). Eén klein formulier in de
+    bestaande popover, geen apart scherm.
+
+    EEN KEUZE IS VERPLICHT (W1b, 14 oktober 2026): minstens één vraag, of expliciet "Background
+    only, answers no question". Geen stilzwijgende default — de server weigert een check zonder
+    keuze (`_act_pagina_feit_gezien`)."""
     from nooch_village import wiki_dekking as dek
     rijen = []
     # DE HUIDIGE ANTWOORDEN STAAN AL GEKOZEN: opnieuw nakijken houdt ze, tenzij je ze verandert.
@@ -465,9 +502,13 @@ def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
             f"<input type='hidden' name='fid' value='{_e(fid)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
-            f"<p class='muted'>Which question does this fact answer? Leave '—' for questions it does "
-            f"not answer. Changing an answer later means checking again.</p>"
+            f"<p class='muted'>Which question does this fact answer? Choose at least one, or tick "
+            f"'Background only'. Leave '—' for questions it does not answer. Changing an answer later "
+            f"means checking again.</p>"
             f"<table class='mtab' aria-label='answers'>{''.join(rijen)}</table>"
+            f"<p><input type='checkbox' id='ckb-{_e(fid)}' name='achtergrond' value='1'"
+            f"{' checked' if wiki.achtergrond(feit) else ''}> "
+            f"<label for='ckb-{_e(fid)}'>Background only, answers no question</label></p>"
             f"<button class='btn ok sm' type='submit' name='action' value='pagina_feit_gezien'>Check</button>"
             f"</form></div></details>")
 
@@ -497,9 +538,10 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
               if h and g["status"] != wiki.VERVALLEN else "")
     soort = _vraag_soort(st, a)
     getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-               f"<div>{_grond_chip(g)}{straks}</div>{citaat}{_antwoorden_html(feit, soort)}")
+               f"<div>{_grond_chip(g)}{straks}</div>{citaat}"
+               f"{_telt_voor_html(st, a, feit, soort) or _antwoorden_html(feit, soort)}")
     if not can_edit:
-        return f"<div>{getoond}</div>"
+        return f"<div id='feit-{_e(fid)}'>{getoond}</div>"
     # NAKIJKEN IS ÉÉN KLIK (5 oktober 2026). Alleen als er iets na te kijken valt: een feit zonder
     # bron, of met een bestand dat weg is, krijgt de knop niet — de server weigert het ook.
     nagekeken = wiki.nagekeken(feit)
@@ -535,8 +577,10 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
         getoond = inline_edit(getoond, _feit_formulier(feit, a, st), sleutel=f"feit-{fid}",
                               opslaan="pagina_feit_edit", verborgen=verborgen, klikbaar=True,
                               multipart=True)
+    # HET ANKER `#feit-<id>` (W1b): de dubbel-waarschuwing van Bulk Import linkt naar het feit dat er al is.
+    anker = f" id='feit-{_e(fid)}'"
     if not los:
-        return f"<div class='editor-inline'>{getoond}{check}{weg}</div>"
+        return f"<div class='editor-inline'{anker}>{getoond}{check}{weg}</div>"
     # EEN FEIT ZONDER PLEK. De greep is dezelfde als die van de wiki-blokken; `data-feit-los`
     # draagt de regel die in de tekst komt en `data-feit-soort` de bloksoort, zodat de browser het
     # blok kan neerzetten zonder de vorm van een markering of een soort te kennen.
@@ -544,7 +588,7 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
              "<button type='button' class='wb-greep-knop' aria-label='Drag this fact into the text' "
              "title='Drag into the text'>⠿</button></span>")
     plaats = _feit_knop("pagina_feit_plaats", "place at end of text", "flink", aid, fid, csrf_token)
-    return (f"<div class='editor-inline' data-feit-los='{_e(wiki.feit_marker(fid))}' "
+    return (f"<div class='editor-inline'{anker} data-feit-los='{_e(wiki.feit_marker(fid))}' "
             f"data-feit-soort='{FEIT_BLOK}' data-feit-plaats='pagina_feit_plaats'>"
             f"{greep}{getoond}{check}{plaats}{weg}</div>")
 
@@ -773,15 +817,29 @@ def _bom_sectie(st, a, pags: list) -> str:
 
 def _dekking_rij(st, a):
     """(rij, soort, ctx) van deze pagina in de dekking van /bom, of (None, "", {}). Eén plek, want
-    de Questions-sectie en de afgeleide open-punt-regels moeten hetzelfde zien."""
+    de Questions-sectie, de "Counts for"-regel bij elk feit en de afgeleide open-punt-regels moeten
+    hetzelfde zien. Per verzoek één keer per pagina berekend (de dekking is niet gratis, en een
+    pagina vraagt hem op vier plekken)."""
     from nooch_village import wiki_dekking as dek
+    cache = getattr(st, "_w1b_dekking_rij", None)
+    if cache is None:
+        cache = {}
+        try:
+            st._w1b_dekking_rij = cache
+        except Exception:                                     # noqa: BLE001 — een kijker-proxy
+            pass
+    if a.id in cache:
+        return cache[a.id]
     d, ctx = dek.uit_stores(st.att, st.bom_leveranciers, st.bom_materialen,
                             ledger=getattr(st, "evidence", None), bestaat=_bijlage_bestaat(st))
+    uit = (None, "", {})
     for s, sleutel in (("materiaal", "materialen"), ("leverancier", "leveranciers")):
         rij = next((r for r in d[sleutel] if r.get("pagina") is not None and r["pagina"].id == a.id), None)
         if rij is not None:
-            return rij, s, ctx
-    return None, "", {}
+            uit = (rij, s, ctx)
+            break
+    cache[a.id] = uit
+    return uit
 
 
 def _verborgen_placeholders(st, a) -> dict[str, dict]:
@@ -797,6 +855,11 @@ def _verborgen_placeholders(st, a) -> dict[str, dict]:
 def _dek_lezer(a) -> str:
     from nooch_village.wiki_dekking import tekst_voor_lezers
     return tekst_voor_lezers(a)
+
+
+def _kort(tekst: str, n: int) -> str:
+    tekst = " ".join(tekst.split())
+    return tekst if len(tekst) <= n else tekst[:n - 1].rstrip() + "…"
 
 
 def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
@@ -834,8 +897,18 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                 woord = f"{woord}: {wiki.antwoord_label(c['antwoord'])}"
             # WAT TELT (W1): de uitleg stond als leeg kopje op de pagina; nu staat hij bij de vraag.
             telt = f"<div class='muted'>{_e(dek.wat_telt(soort, v['k']))}</div>"
+            # WAAROM OPEN (W1b): bij elke cel die niet checked is de reden, uit de dekking zelf.
+            waarom = (f"<div class='muted'>{_e(c['reden'])}</div>"
+                      if c["status"] not in (dek.GECHECKT, dek.UITGESTELD) and c.get("reden") else "")
+            # WELK FEIT HET DRAAGT (W1b): een link naar elk feit dat voor deze vraag telt, zodat de
+            # lezer van "Checked: yes" naar de zin en zijn bron kan.
+            per_id = {wiki.feit_id(f): f for f in wiki.feiten(a)}
+            dragers = [f"<a href='#feit-{_e(fid)}'>{_e(_kort((per_id[fid].get('tekst') or ''), 60))}</a>"
+                       for fid in c.get("feiten", []) if fid in per_id]
+            if dragers:
+                waarom += f"<div class='muted'>Based on: {' · '.join(dragers)}</div>"
             regels.append(f"<tr><td>{_e(v['label'])}{telt}</td><td><span class='nu-status nu-status--{vorm}'>"
-                          f"{_e(woord)}</span></td><td>{antwoord} {actie}</td></tr>")
+                          f"{_e(woord)}</span>{waarom}</td><td>{antwoord} {actie}</td></tr>")
         gestaafd = dek.gestaafd(rij, **_ctx)
         return (f"<div class='wiki-inline'><h3>Questions</h3>"
                 f"<p class='muted'>What this page should answer (the coverage on the "
@@ -1300,6 +1373,17 @@ def _placeholders_afgeleid(html: str, placeholders: dict[str, dict]) -> str:
     return html
 
 
+def _bestaande_feiten_attr(a) -> str:
+    """`data-feiten` op `#wiki-form`: de feiten die al op de pagina staan, zodat Bulk Import een
+    mogelijk dubbel feit kan melden (W1b, 14 oktober 2026). Alleen wat de vergelijking nodig heeft
+    (id, tekst, quote, url); `_e` ontsnapt ook de enkele aanhalingstekens."""
+    import json
+    lijst = [{"id": f.get("id", ""), "tekst": f.get("tekst", ""),
+              "citaat": (f.get("grond") or {}).get("citaat", ""),
+              "url": (f.get("grond") or {}).get("url", "")} for f in wiki.feiten(a)]
+    return f" data-feiten='{_e(json.dumps(lijst, ensure_ascii=False))}'"
+
+
 def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
                  secties: dict[str, str] | None = None, *, feiten: bool = True,
                  feit_blokken: dict[str, str] | None = None,
@@ -1345,7 +1429,8 @@ def _wiki_editor(a, pags: list, csrf_token: str, can_edit: bool,
     # gaan wél mee: die maken gewone `<a href>`-links, en die werken in elke soort.
     return (opmaak_werkbalk() + lees + blok_menu(zonder=() if feiten else ("facts",))
             + link_kaart()
-            + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden>"
+            + f"<form method='post' action='/action' class='wiki-form' id='wiki-form' hidden"
+              f"{_bestaande_feiten_attr(a) if feiten else ''}>"
               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
               f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
               f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"

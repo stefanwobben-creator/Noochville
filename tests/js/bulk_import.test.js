@@ -25,4 +25,17 @@ check("de kop wordt For", r[0].For === "Location & contact" && r[1].For === "Com
 check("een eigen For wint van de kop", parse("## A\nText: x\nFor: B")[0].For === "B");
 check("zonder kop: zoals altijd", JSON.stringify(parse("Text: y\nType: source")) === JSON.stringify([{Text: "y", Type: "source"}]));
 check("echte vrije markdown blijft markdown", parse("## Notes\nSome narrative.")[0].Type === "source");
+
+// MOGELIJK DUBBEL (W1b): zelfde Quote + URL, of zelfde Text. Niet op alleen een URL.
+const dubbel = global.window.NV.bulkDubbel;
+const bestaand = [{id: "h1", tekst: "Full Green is 60% biobased", citaat: "60% bio-based", url: "https://fg.example/tds"},
+                  {id: "h2", tekst: "Made in Italy", citaat: "", url: ""}];
+const d = dubbel([{Text: "Other words", Quote: "60%  bio-based", URL: "https://fg.example/tds"},
+                  {Text: "made in  italy"},
+                  {Text: "New fact", Quote: "", URL: "https://fg.example/tds"},
+                  {Text: "Another", Quote: "60% bio-based", URL: "https://elders.example"}], bestaand);
+check("zelfde quote en url = dubbel", d.length === 2 && d[0].i === 0 && d[0].id === "h1" && d[0].waarom === "same quote and URL");
+check("zelfde tekst (spaties/hoofdletters tellen niet) = dubbel", d[1].i === 1 && d[1].id === "h2" && d[1].waarom === "same text");
+check("alleen dezelfde url of alleen dezelfde quote is geen dubbel", !d.some(x => x.i === 2 || x.i === 3));
+check("lege lijst bestaand: nooit dubbel", dubbel([{Text: "x"}], []).length === 0);
 process.exit(fouten ? 1 : 0);

@@ -1932,7 +1932,7 @@ def _act_pagina_feit_add(c):
     if g("grootheid") or g("getal"):
         waarde = wiki.maak_waarde(g("grootheid"), g("getal"))
         if waarde is None:
-            return nxt, "✗ a value needs both a quantity and a number (0 or more)"
+            return nxt, "✗ a value needs both a quantity and a number above 0"
     feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=g("ref"),
                           citaat=g("citaat"), url=g("url"), waarde=waarde)
     if feit is None:
@@ -2723,7 +2723,7 @@ def _act_pagina_feit_edit(c):
     if g("grootheid") or g("getal"):
         waarde = wiki.maak_waarde(g("grootheid"), g("getal"))
         if waarde is None:
-            return nxt, "✗ a value needs both a quantity and a number (0 or more)"
+            return nxt, "✗ a value needs both a quantity and a number above 0"
     soort, ref, url_regel = g("soort"), g("ref"), g("url").strip()
     url = _alleen_url(url_regel)
     m_file = re.match(r"(?i)on[ \t]*file[ \t]*:[ \t]*(.+)$", url_regel)
@@ -2835,17 +2835,32 @@ def _act_pagina_feit_gezien(c):
                 gekozen.append(ant)
         if fouten:
             return nxt, "✗ not checked — " + "; ".join(fouten)
+        # EEN VRAAG KIEZEN IS VERPLICHT op een pagina met vragen (W1b, 14 oktober 2026). Geen
+        # stilzwijgende default: wie nakijkt zegt welke vraag dit feit beantwoordt, of kiest bewust
+        # "Background only, answers no question". Een pagina zonder vragen (geen /bom-pagina)
+        # houdt de gewone "I checked this".
+        achter = bool(g("achtergrond"))
+        from nooch_village.views.wiki import _vraag_soort
+        if _vraag_soort(st, cur):
+            if not gekozen and not achter:
+                return nxt, ("✗ not checked — choose which question this fact answers, or "
+                             "'Background only, answers no question'")
+            if gekozen and achter:
+                return nxt, "✗ not checked — a fact that answers a question is not background only"
         feit["gezien"] = {"door": _persoon_naam(username, st), "op": time.strftime("%Y-%m-%d")}
         if gekozen:
             feit["gezien"]["antwoorden"] = gekozen
+        elif achter:
+            feit["gezien"]["achtergrond"] = True
         # EEN VERLOPEN HERCONTROLE IS HIERMEE GEDAAN. De oude datum laten staan zou het feit rood
         # houden terwijl er net naar gekeken is; een nieuwe datum kiest de schrijver zelf.
         h = wiki.hercheck_datum(feit)
         if h and h < feit["gezien"]["op"]:
             feit.pop("hercheck", None)
         notitie = "fact checked" + (" — answers: " + ", ".join(f"{a['vraag']}={a['waarde']}" for a in gekozen)
-                                    if gekozen else "")
-        melding = "✓ checked" + (f" — {len(gekozen)} answer(s)" if gekozen else "")
+                                    if gekozen else " — background only" if achter else "")
+        melding = "✓ checked" + (f" — {len(gekozen)} answer(s)" if gekozen
+                                 else " — background only" if achter else "")
     feiten[i] = feit
     meta = dict(getattr(cur, "meta", None) or {})
     meta["feiten"] = feiten

@@ -298,13 +298,21 @@ def _dek_cel(vraag: dict, cel: dict, pagina) -> str:
     vorm, woord = _DEK_VORM[cel["status"]]
     if cel["status"] == dek.UITGESTELD:
         woord = f"Deferred · {cel['tot']}"
-    reden = f" — {cel['reden']}" if cel["status"] == dek.CONFLICT and cel["reden"] else ""
+    # DE REDEN BIJ ELKE CEL DIE NIET "CHECKED" IS (W1b, 14 oktober 2026): kort zichtbaar onder de
+    # status, voluit in de title. Alleen een conflict had tot nu toe een reden.
+    reden = f" — {cel['reden']}" if cel["status"] != dek.UITGESTELD and cel.get("reden") else ""
+    kort = cel.get("reden_kort") or ("" if cel["status"] != dek.CONFLICT else "facts disagree")
+    # "no fact" niet onder elke lege cel: "Open" zegt dat al, en honderd keer dezelfde regel is ruis.
+    # Zichtbaar wordt de reden waar er WEL feiten staan die niet tellen, of bij een conflict.
+    onder = (f"<div class='muted'>{_e(kort)}</div>"
+             if kort and cel["status"] in (dek.ONGECHECKT, dek.CONFLICT) else "")
     label = _e(f"{vraag['label']}: {woord}{reden}")
     if pagina is None:
+        # "No page yet" staat al in de eerste kolom; per cel herhalen is ruis. De reden zit in de title.
         return (f"<span class='nu-status nu-status--{vorm}' aria-label='{label}' "
                 f"title='{label}'>{woord}</span>")
     return (f"<a class='nu-status nu-status--{vorm}' href='{_e(_sprong(pagina, cel['kop']))}' "
-            f"aria-label='{label}' title='{label}'>{woord}</a>")
+            f"aria-label='{label}' title='{label}'>{woord}</a>{onder}")
 
 
 def _nieuwe_pagina(st, naam: str, sjabloon: str, terug: str, csrf_token: str) -> str:
@@ -333,6 +341,8 @@ def _dek_tabel(st, rijen: list[dict], soort: str, doel: str, bewerk: bool, csrf_
                   f"{_e(' · '.join(dek.DOELEN[d] for d in v['doelen']))}</div></th>" for v in vragen)
     wat = "Material" if soort == "materiaal" else "Supplier"
     uit = [f"<table class='mtab' aria-label='{wat} coverage'><tr><th>{wat}</th>{kop}</tr>"]
+    # WAT TELT, OOK OP /BOM (W1b): dezelfde zin als bij "Questions" op de wiki (`dek.wat_telt`),
+    # onder de tabel in een `<details>` zodat de tabel zelf smal blijft.
     for r in rijen:
         if soort == "materiaal":
             sub = (f"Supplied by {r['leverancier']}" if r["leverancier"] else "No supplier linked")
@@ -348,7 +358,11 @@ def _dek_tabel(st, rijen: list[dict], soort: str, doel: str, bewerk: bool, csrf_
         uit.append(f"<tr><td>{naam}<div class='muted'>{_e(sub)}</div></td>{cellen}</tr>")
     # EEN BREDE TABEL IN ZIJN EIGEN SCROLLCONTAINER (B3 fase e, 13 oktober 2026): op 390px maakte
     # deze tabel de hele pagina 797px breed. Zelfde patroon als Finance (#718): `.c2-scroll`.
-    return "<div class='c2-scroll'>" + "".join(uit) + "</table></div>"
+    telt = "".join(f"<li><strong>{_e(v['label'])}</strong>: {_e(dek.wat_telt(soort, v['k']))}</li>"
+                   for v in vragen if dek.wat_telt(soort, v["k"]))
+    uitleg = (f"<details class='box-details'><summary>What counts — {wat.lower()} questions</summary>"
+              f"<ul>{telt}</ul></details>" if telt else "")
+    return "<div class='c2-scroll'>" + "".join(uit) + "</table></div>" + uitleg
 
 
 def _rollup_tegels(per_model: dict[str, dict], doel: str) -> str:

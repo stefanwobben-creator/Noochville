@@ -937,6 +937,40 @@ def main() -> None:
         if rapport and not apply:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_opschoon_w1b":
+        # W1b (14 oktober 2026): dubbele feiten en het afgebroken ISO/IEC 17025-fragment eraf; de
+        # niet-geplaatste feiten op LTA alleen gemeld. Dry-run; --apply maakt EERST een back-up met
+        # label en schrijft dan één nieuwe versie per pagina (de oude versies blijven bestaan).
+        from nooch_village import wiki_opschoon
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        rapport = wiki_opschoon.plan(st.att)
+        print(wiki_opschoon.plan_tekst(rapport))
+        if "--apply" in sys.argv:
+            pad = wiki_opschoon.back_up(st.att)
+            n = wiki_opschoon.toepassen(st.att, rapport, actor_id="cli")
+            print(f"\nBack-up: {pad}\n{n} fact(s) removed.")
+        elif any(r["weg"] for r in rapport):
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
+    elif mode == "wiki_feit_rapport":
+        # W1b: alleen lezen. Getallen zonder check op hun vraag, gecheckte feiten die nergens tellen
+        # (met een voorstel per feit), en feiten die alleen via hun kopje meetellen.
+        from nooch_village import wiki_opschoon
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        from nooch_village.views.wiki import _bijlage_bestaat
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        print(wiki_opschoon.leesrapport_tekst(wiki_opschoon.leesrapport(
+            st.att, st.bom_leveranciers, st.bom_materialen, bestaat=_bijlage_bestaat(st))))
+
     elif mode == "wiki_lege_koppen":
         # W1 (11 oktober 2026): de lege vraagkopjes (alleen hun uitlegzin, verder niets) van de pagina's
         # af; de uitleg staat bij de vraag. Dry-run; --apply schrijft één nieuwe versie per pagina.
@@ -1490,7 +1524,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

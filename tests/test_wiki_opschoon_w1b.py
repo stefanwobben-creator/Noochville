@@ -1,0 +1,103 @@
+"""W1b (14 oktober 2026): het eenmalige opschoonscript (`village wiki_opschoon_w1b`) en het
+leesrapport (`village wiki_feit_rapport`). Standaard een dry-run: er verandert niets."""
+from __future__ import annotations
+
+import json
+import os
+
+from nooch_village import cockpit2, wiki, wiki_opschoon
+
+from tests.test_cn3_substantiated import OWNER, _dd
+
+BRON = {"soort": "bron", "url": "https://x.example/a", "citaat": "molded in Vietnam", "ref": ""}
+
+
+def _nfw(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    feiten = [
+        {"id": "hlos", "tekst": "Production site: Vietnam.", "grond": dict(BRON)},
+        {"id": "hplek", "tekst": "Production site (placed): Vietnam.", "grond": dict(BRON), "sectie": "Labor"},
+        {"id": "hrisk1", "tekst": "RISK: wind-down", "grond": {"soort": "bron", "url": "https://t", "citaat": "q1"}},
+        {"id": "hrisk2", "tekst": "RISK:  wind-down", "grond": {"soort": "bron", "url": "https://t"},
+         "sectie": "Risk signal"},
+        {"id": "h06e6b5b718", "tekst": "An ISO/IEC 17025-accredited lab (University of Ge",
+         "grond": {"soort": "bron", "url": "https://u"}},
+        {"id": "heigen", "tekst": "Something else entirely", "grond": {"soort": "bron", "url": "https://t"}},
+    ]
+    a = st.att.add(OWNER, "note", title="NFW", body="## Labor & compliance\n{{fact:hplek}}",
+                   meta={"feiten": feiten})
+    lta = st.att.add(OWNER, "note", title="LTA", body="## Location & contact\n{{fact:l1}}",
+                     meta={"feiten": [{"id": "l1", "tekst": "Plant", "grond": {"soort": "bron", "url": "https://l"}},
+                                      {"id": "l2", "tekst": "Loose", "grond": {"soort": "bron", "url": "https://l2"}}]})
+    return dd, a.id, lta.id
+
+
+def test_dry_run_meldt_dubbelen_en_fragment_en_verandert_niets(tmp_path):
+    dd, aid, lta = _nfw(tmp_path)
+    st = cockpit2._Stores(dd)
+    voor = open(st.att.path, encoding="utf-8").read()
+    rapport = wiki_opschoon.plan(st.att)
+    nfw = next(r for r in rapport if r["id"] == aid)
+    weg = {w["fid"]: w for w in nfw["weg"]}
+    assert set(weg) == {"hlos", "hrisk1", "h06e6b5b718"}
+    assert weg["hlos"]["blijft"] == "hplek" and weg["hlos"]["waarom"] == "same quote and URL"   # geplaatst blijft
+    assert weg["hrisk1"]["blijft"] == "hrisk2" and weg["hrisk1"]["waarom"] == "same text"      # For: blijft
+    assert "quote the kept one lacks" in weg["hrisk1"]["let_op"]                             # niet stil kwijt
+    assert open(st.att.path, encoding="utf-8").read() == voor                                # dry-run
+    tekst = wiki_opschoon.plan_tekst(rapport)
+    assert "remove hlos (same quote and URL — keeps hplek)" in tekst
+
+
+def test_niet_geplaatste_feiten_op_lta_worden_alleen_gemeld(tmp_path):
+    dd, _aid, lta = _nfw(tmp_path)
+    st = cockpit2._Stores(dd)
+    r = next(r for r in wiki_opschoon.plan(st.att) if r["id"] == lta)
+    assert r["weg"] == [] and [o["fid"] for o in r["ongeplaatst"]] == ["l2"]
+
+
+def test_een_fragment_alleen_op_id_en_begin(tmp_path):
+    dd, aid, _lta = _nfw(tmp_path)
+    st = cockpit2._Stores(dd)
+    a = st.att.get(aid)
+    meta = dict(a.meta)
+    meta["feiten"] = [dict(f, tekst="Iets anders") if f["id"] == "h06e6b5b718" else f for f in meta["feiten"]]
+    st.att.update(aid, meta=meta)
+    nfw = next(r for r in wiki_opschoon.plan(st.att) if r["id"] == aid)
+    assert "h06e6b5b718" not in {w["fid"] for w in nfw["weg"]}
+
+
+def test_toepassen_maakt_eerst_een_back_up_en_een_nieuwe_versie(tmp_path):
+    dd, aid, _lta = _nfw(tmp_path)
+    st = cockpit2._Stores(dd)
+    rapport = wiki_opschoon.plan(st.att)
+    pad = wiki_opschoon.back_up(st.att)
+    assert os.path.basename(pad).startswith(os.path.basename(st.att.path) + ".bak-w1b-opschoon-")
+    voor_versies = len(st.att.get(aid).versions or [])
+    assert wiki_opschoon.toepassen(st.att, rapport, actor_id="cli") == 3
+    a = cockpit2._Stores(dd).att.get(aid)
+    assert {f["id"] for f in wiki.feiten(a)} == {"hplek", "hrisk2", "heigen"}
+    assert len(a.versions or []) == voor_versies + 1                                          # historie blijft
+    assert any(f["id"] == "hlos" for f in json.load(open(pad, encoding="utf-8"))[aid]["meta"]["feiten"])
+
+
+def test_leesrapport_vindt_het_pliant_getal_en_de_dode_feiten(tmp_path):
+    from tests.test_w1_antwoorden import _pagina
+    gezien = {"door": "Stefan", "op": "2026-10-05"}
+    dd, aid = _pagina(tmp_path, [
+        {"id": "W", "tekst": "Outsole weight 509 g per pair", "grond": {"soort": "bron", "url": "https://a"},
+         "waarde": {"grootheid": "water_per_kg", "getal": 0.0}, "gezien": gezien},
+        {"id": "P", "tekst": "Contains plastic: yes. 30% PLA", "grond": {"soort": "bron", "url": "https://b"},
+         "gezien": gezien},
+        {"id": "A", "tekst": "Background", "grond": {"soort": "bron", "url": "https://c"},
+         "gezien": {**gezien, "achtergrond": True}},
+    ])
+    st = cockpit2._Stores(dd)
+    r = wiki_opschoon.leesrapport(st.att, st.bom_leveranciers, st.bom_materialen)
+    assert [(x["fid"], x["geldig"]) for x in r["getal"]] == [("W", False)]
+    dood = {x["fid"]: x["voorstel"] for x in r["dood"]}
+    assert set(dood) == {"W", "P"}                                       # A koos bewust "background only"
+    assert dood["P"]["vraag"] == "Contains plastic?" and dood["P"]["waarde"] == "yes"
+    assert dood["W"]["vraag"] == ""                                       # geen vraag past: background only
+    # het rapport stelt voor, het slaat niets op
+    assert not wiki.antwoorden(next(f for f in wiki.feiten(st.att.get(aid)) if f["id"] == "P"))

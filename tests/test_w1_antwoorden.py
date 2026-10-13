@@ -32,6 +32,10 @@ def _cel(dd, k):
     return rij["cellen"][k]
 
 
+def _pagina_feit(dd, aid, fid):
+    return next(f for f in wiki.feiten(cockpit2._Stores(dd).att.get(aid)) if f["id"] == fid)
+
+
 def _check(dd, aid, fid, **antwoorden):
     form = {"aid": [aid], "fid": [fid], "next": ["/"]}
     for k, w in antwoorden.items():
@@ -142,11 +146,36 @@ def test_een_vervallen_check_draagt_het_antwoord_niet(tmp_path):
 
 
 def test_zonder_antwoord_blijft_het_oude_kopjes_pad_werken(tmp_path):
+    """Een feit dat VÓÓR W1b al gecheckt was (zonder vraagkeuze) telt nog via zijn kopje. Nieuw
+    checken zonder keuze kan niet meer (zie hieronder)."""
     body = "## Contains plastic\n\n{{fact:F1}}"
-    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes")], body=body)
-    _check(dd, aid, "F1")
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes",
+                                       gezien={"door": "Stefan", "op": "2026-10-06"})], body=body)
     c = _cel(dd, "plastic")
     assert c["status"] == wd.GECHECKT and "antwoord" not in c
+
+
+def test_checken_zonder_vraagkeuze_kan_niet_meer(tmp_path):
+    """W1b (14 oktober 2026): geen stilzwijgende default. Zonder vraag én zonder "Background only"
+    weigert de server, en het feit blijft ongecheckt."""
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes")])
+    msg = _check(dd, aid, "F1")
+    assert msg.startswith("✗") and "choose which question" in msg
+    assert not wiki.nagekeken(_pagina_feit(dd, aid, "F1"))
+
+
+def test_background_only_is_een_bewuste_keuze_en_telt_nergens(tmp_path):
+    body = "## Contains plastic\n\n{{fact:F1}}"
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes")], body=body)
+    form = {"aid": [aid], "fid": ["F1"], "next": ["/"], "achtergrond": ["1"]}
+    msg = cockpit2.dispatch(dd, "pagina_feit_gezien", form, username="guest")[1]
+    assert "background only" in msg
+    f = _pagina_feit(dd, aid, "F1")
+    assert wiki.achtergrond(f) and wiki.nagekeken(f)
+    assert _cel(dd, "plastic")["status"] == wd.LEEG                      # ook niet via het kopje
+    # en niet tegelijk een antwoord én achtergrond
+    form = {**form, "antwoord_plastic": ["yes"]}
+    assert cockpit2.dispatch(dd, "pagina_feit_gezien", form, username="guest")[1].startswith("✗")
 
 
 def test_de_pagina_toont_het_formulier_en_de_antwoorden(tmp_path):
@@ -156,7 +185,7 @@ def test_de_pagina_toont_het_formulier_en_de_antwoorden(tmp_path):
     assert "name='antwoord_plastic'" in h and "name='reden_animal'" in h
     _check(dd, aid, "F1", plastic="yes")
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
-    assert "Answers: Contains plastic?: <strong>yes</strong>" in h
+    assert "Counts for: Contains plastic? (yes)" in h
 
 
 def test_een_al_gecheckt_feit_kan_opnieuw_met_een_antwoord(tmp_path):
@@ -168,3 +197,23 @@ def test_een_al_gecheckt_feit_kan_opnieuw_met_een_antwoord(tmp_path):
     _check(dd, aid, "F1", plastic="yes")
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
     assert "<option value='yes' selected>yes</option>" in h            # het huidige antwoord staat al gekozen
+
+
+def test_een_pagina_zonder_vragen_kent_geen_vraagkeuze(tmp_path):
+    """Alleen materiaal- en leverancierpagina's hebben vragen; op een gewone wiki-pagina blijft
+    "I checked this" een gewone check."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    a = st.att.add(OWNER, "note", title="Meeting notes", body="x", meta={"feiten": [_feit("F1", "x")]})
+    assert _check(dd, a.id, "F1").startswith("✓")
+    assert wiki.nagekeken(_pagina_feit(dd, a.id, "F1"))
+
+
+def test_de_vragentabel_linkt_naar_het_feit_dat_de_cel_draagt(tmp_path):
+    """W1b, de toets van Stefan: bij "Contains plastic?" zie je welk feit het draagt."""
+    from nooch_village.views.wiki import _vragen_sectie
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes, 30% PLA")])
+    _check(dd, aid, "F1", plastic="yes")
+    st = cockpit2._Stores(dd)
+    h = _vragen_sectie(st, st.att.get(aid), "", False)
+    assert "Based on: <a href='#feit-F1'>Contains plastic: yes, 30% PLA</a>" in h
