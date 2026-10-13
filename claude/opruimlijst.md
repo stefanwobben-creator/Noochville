@@ -16,6 +16,12 @@ en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 12 oktober 
    (81190 en 81192, zelfde dag en bedrag als 81191). Fix: bij een ander bestand een WAARSCHUWING (wel
    importeren), met een test op precies dit geval. Gevonden bij de controle van de imports.
 
+7. **Claims-tests hangen aan echte DNS.** `safe_fetch` toetst vóór het (in de test nagebootste)
+   ophalen de host met `socket.getaddrinfo` (SSRF-poort). Bij een DNS-hapering op de machine falen
+   36 tests in `test_claims_*` tegelijk (13 oktober 2026, volle run; de herhaling was groen). Fix: in
+   die tests de DNS-poort stubben (zoals `_fetch` al gestubd is), met één aparte toets die de poort
+   zelf test. Gevonden bij de bord-kop-PR.
+
 ## Gedaan
 
 1. **Uitloglink** in het gebruikersblok van de zijbalk — opruim-PR (12 oktober 2026).
