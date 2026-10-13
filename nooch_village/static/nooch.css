@@ -3257,19 +3257,28 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pcol .pcard .pcard-hint { position: absolute; right: .4rem; bottom: .3rem; margin: 0;
   pointer-events: none; background: var(--nu-surface); padding: 0 .2rem; }
 
-/* DE LEGE KOLOM ALS SMALLE STROOK: op zijn eigen plek (de volgorde per swimlane blijft gelijk), met
-   naam en aantal verticaal. Hij blijft een sleepdoel (`data-to`) en licht op ZOLANG er gesleept wordt
-   (`.pdrag-ghost` bestaat alleen dan; geen nieuwe klasse nodig). */
-:root .pcol[data-leeg] { flex: 0 0 44px; min-width: 44px; padding: .4rem .2rem; display: flex;
-  flex-direction: column; align-items: center; gap: .4rem; }
-:root .pcol[data-leeg] .pcol-h { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0;
-  white-space: nowrap; }
-:root .pcol[data-leeg] .pcol-h::before { transform: rotate(180deg); }
+/* HET BORD IS EEN VAST RASTER (bord-uitlijning, 13 oktober 2026). Elke status staat in elke lane
+   op dezelfde plek en met dezelfde breedte: vier sporen, Active · Waiting · Done · Future. Als
+   flexrij rekte een volle kolom en kromp een lege, zodat "Future" per lane ergens anders stond (op
+   1300 px op vier tot zes plekken). Op een smal scherm scrollt het bord zelf, niet de pagina. */
+:root .pboard { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: var(--s2);
+  align-items: start; overflow-x: auto; }
+
+/* DE LEGE KOLOM ALS LAGE BALK: op zijn eigen plek en in zijn eigen breedte, ca. 36px hoog, met naam
+   en aantal HORIZONTAAL (de verticale strook was moeilijk te lezen). Hij blijft een sleepdoel
+   (`data-to`), licht op ZOLANG er gesleept wordt (`.pdrag-ghost` bestaat alleen dan), en is met het
+   toetsenbord bereikbaar (tabindex en naam staan in de markup). */
+:root .pcol[data-leeg] { min-height: 36px; box-sizing: border-box; padding: 0 var(--s2); display: flex;
+  flex-direction: row; align-items: center; justify-content: space-between; gap: var(--s2); }
+:root .pcol[data-leeg] .pcol-h { margin: 0; white-space: nowrap; }
 :root .pcol[data-leeg] .pcol-scroll { display: none; }
 /* "+ add project" blijft een link met dezelfde tekst (die leest een schermlezer), maar toont "+". */
-:root .pcol[data-leeg] .addlink { font-size: 0; padding: .1rem .35rem; }
+:root .pcol[data-leeg] .addlink { font-size: 0; padding: 0 .35rem; margin: 0; line-height: 1.4; }
 :root .pcol[data-leeg] .addlink::before { content: "+"; font-size: 16px; }
 :root .pcol[data-leeg]:focus-visible { outline: 2px solid var(--nu-text); outline-offset: 2px; }
+/* RUIMTE ONDER DE LAATSTE KAART. In een kolom die scrollt lag "+ add project" direct tegen de
+   afgesneden laatste kaart, alsof hij eroverheen lag. Een vaste tussenruimte maakt de grens zichtbaar. */
+:root .pcol > .addlink { margin-top: var(--s2); }
 :root body:has(.pdrag-ghost) .pcol[data-leeg] { outline: 2px dashed var(--nu-text); outline-offset: -2px;
   background: var(--nu-bg-alt); }
 
