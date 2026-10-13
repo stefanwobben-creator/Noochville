@@ -2878,6 +2878,50 @@
     });
   }
 
-  if (document.readyState !== "loading") { NV.wire(document); palet(); }
-  else document.addEventListener("DOMContentLoaded", function () { NV.wire(document); palet(); });
+  /* MESSAGES OPENT BIJ HET NIEUWSTE BERICHT (14 oktober 2026). Een gesprek lees je van onder: het
+     nieuwste staat onderaan, net boven het invoerveld. Na het versturen laadt de pagina opnieuw (het
+     formulier heeft geen JavaScript nodig) en komt hij hier weer langs, dus weer onderaan.
+     HEEFT DE URL EEN ANKER dat op deze pagina bestaat (een diepe link naar een bericht, bijv. uit
+     zoeken: `#m-<id>`), dan wint het anker en doet deze functie niets. Zonder JavaScript blijft het
+     gedrag zoals het was: de pagina opent bovenaan. */
+  function gesprekOnderaan() {
+    var draad = document.querySelector(".msg-draad");
+    if (!draad || !draad.querySelector(".msg-item")) return;
+    var h = window.location.hash;
+    if (h && h.length > 1 && document.getElementById(decodeURIComponent(h.slice(1)))) return;
+    // DE ONDERKANT VAN HET GESPREK tegen de onderkant van het scherm. Niet `scrollIntoView` op het
+    // invoerveld: dat plakt al onderaan (sticky) en "staat dus al in beeld", en dan scrolt er niets.
+    var naarOnder = function () {
+      window.scrollBy(0, draad.getBoundingClientRect().bottom - window.innerHeight);
+    };
+    naarOnder();
+    // NOG EEN KEER ALS ALLES GELADEN IS: een afbeelding of sticker maakt het gesprek ná dit moment
+    // langer. Alleen als de lezer intussen niet ZELF scrolde — dat wint. Gemeten aan invoer (wiel,
+    // aanraking, toets) en niet aan `scrollY`: de browser verschuift die zelf als er boven in beeld
+    // een afbeelding laadt (scroll anchoring), en dan leek het alsof de lezer scrolde.
+    var zelf = false;
+    var merk = function () { zelf = true; };
+    ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (t) {
+      window.addEventListener(t, merk, { once: true, passive: true });
+    });
+    // EN ALS HET GESPREK DAARNA NOG GROEIT (een luie afbeelding laadt pas als hij in beeld komt, dus
+    // ná `load`): een ResizeObserver houdt hem onderaan, tot de lezer zelf iets doet of na 3 s.
+    // HET SCHERMTOETSENBORD: gaat het open terwijl je in het invoerveld zit, dan wordt het zichtbare
+    // deel kleiner en zou het nieuwste bericht achter het veld verdwijnen. Dan weer onderaan.
+    var bijTypen = function () {
+      if (document.activeElement && document.activeElement.id === "msg-tekst") naarOnder();
+    };
+    window.addEventListener("resize", bijTypen);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", bijTypen);
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(function () { if (!zelf) naarOnder(); });
+      ro.observe(draad);
+      setTimeout(function () { ro.disconnect(); }, 3000);
+    } else if (document.readyState !== "complete") {
+      window.addEventListener("load", function () { if (!zelf) naarOnder(); }, { once: true });
+    }
+  }
+
+  if (document.readyState !== "loading") { NV.wire(document); palet(); gesprekOnderaan(); }
+  else document.addEventListener("DOMContentLoaded", function () { NV.wire(document); palet(); gesprekOnderaan(); });
 })();

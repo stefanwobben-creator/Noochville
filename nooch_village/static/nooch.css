@@ -2710,7 +2710,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-item, :root .msg-item--ik { justify-content: flex-start; position: relative;
   padding: var(--s1) var(--s2); margin-top: var(--s2); }
 :root .msg-item--volg { margin-top: 0; padding-top: 0; }
-:root .msg-item:hover, :root .msg-item:focus-within { background: var(--nu-bg-alt); }
+/* HOVER NEUTRAAL (14 oktober 2026): `--nu-bg-alt` is "huidige plek" in de navigatie. Dit is het
+   neutrale grijs van de hairline, als vlak — geen nieuw token. */
+:root .msg-item:hover, :root .msg-item:focus-within { background: var(--nu-border-subtle); }
 :root .msg-item--ik .msg-body { flex: 1 1 auto; max-width: none; background: none; border: 0;
   padding: 0; }
 :root .msg-item--ik .msg-meta { text-align: left; }
@@ -2719,6 +2721,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   top: var(--s1); right: var(--s2); padding: 0 var(--s1); background: var(--nu-surface);
   border: 1px solid var(--hair); opacity: 0; }
 :root .msg-item:hover .msg-acties, :root .msg-item:focus-within .msg-acties { opacity: 1; }
+/* EDIT EN REMOVE IN STILLE VORM: in de actierij geen zwarte-rand-knop maar een tekstlink. */
+:root .msg-acties .flink { border: 0; background: none; padding: 0 var(--s1); font-weight: 500; }
+:root .msg-acties .flink:hover { background: none; color: var(--nu-text); text-decoration: underline; }
 :root .msg-meer { display: none; }
 :root .msg-meer > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
   justify-content: center; min-width: 32px; min-height: 32px; }
@@ -2741,6 +2746,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-dag::before, :root .msg-dag::after { content: ""; flex: 1; border-top: 1px solid var(--hair); }
 :root .msg-balk { position: sticky; bottom: 0; z-index: 3; background: var(--nu-bg);
   padding-bottom: var(--s2); }
+/* Een anker (`#m-<id>`) landt op een telefoon onder de vaste menu- en zoekknop, niet erachter. */
+@media (max-width: 760px) { :root .msg-item { scroll-margin-top: 3.4rem; } }
 :root .msg-balk .msg-bijlage-add > .qadd-form { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); box-shadow: none; }
 :root .msg-balk .msg-bijlage-add > summary { color: var(--nu-muted); }

@@ -282,7 +282,10 @@ def _gesprekken(st, termen, leest=None):
         for k in st.channels.bestaande(soort):
             for e in st.channels.trail(k):
                 if _match(str(e.get("text") or ""), termen):
-                    uit.append({"url": f"/messages?k={k}", "kind": "message",
+                    # MET ANKER naar het bericht zelf (14 oktober 2026): Messages opent bij het
+                    # nieuwste bericht, behalve als de URL een anker heeft — dan wint het anker.
+                    anker = f"#m-{e['id']}" if e.get("id") else ""
+                    uit.append({"url": f"/messages?k={k}{anker}", "kind": "message",
                                 "titel": _kanaalnaam(st, k),
                                 "snip": _snip(str(e.get("text") or ""))})
     return uit

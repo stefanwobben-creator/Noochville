@@ -41,7 +41,7 @@ def test_naam_en_tijd_op_een_regel_en_iedereen_links(tmp_path):
     k = _kanaal()
     _post(st, k, ik, "van mij", time.time())
     h = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
-    assert "<b>Ik Zelf</b> <span class='muted' title='" in h
+    assert "<b>Ik Zelf</b> <time class='muted' datetime='" in h
     assert "justify-content: flex-start" in _regel(":root .msg-item--ik")
     eigen = _regel(":root .msg-item--ik .msg-body")
     assert "background: none" in eigen and "border: 0" in eigen       # geen bubbel meer
@@ -53,7 +53,8 @@ def test_een_bericht_is_een_regel_zonder_rand_met_hover(tmp_path):
     zichtbaar = [d for d in re.findall(r"border(?:-[a-z]+)?\s*:\s*[^;]+", r)
                  if "radius" not in d and not re.search(r":\s*0\s*$", d)]
     assert zichtbaar == [], zichtbaar
-    assert "background: var(--nu-bg-alt)" in _regel(":root .msg-item:hover")
+    # neutraal, niet `--nu-bg-alt` ("huidige plek" in de navigatie); geen nieuw token
+    assert "background: var(--nu-border-subtle)" in _regel(":root .msg-item:hover")
     assert "margin-top: 0" in _regel(":root .msg-item--volg")          # gegroepeerd: 4px (padding)
 
 
@@ -77,3 +78,53 @@ def test_acties_bij_hover_en_focus_en_op_touch_achter_een_knop(tmp_path):
 def test_het_invoerveld_blijft_onderaan():
     r = _regel(":root .msg-balk")
     assert "position: sticky" in r and "bottom: 0" in r
+
+
+def test_tekst_blijft_leesbaar_op_de_hover_vulling():
+    from tests.test_contrast import _hex, _tokens, ratio
+    tk = _tokens()
+    for tekst in ("--nu-text", "--nu-muted", "--nu-accent-text"):
+        assert ratio(_hex(tk, tekst), _hex(tk, "--nu-border-subtle")) >= 4.5, tekst
+
+
+def test_edit_en_remove_zijn_stil_in_de_actierij():
+    r = _regel(":root .msg-acties .flink")
+    assert "border: 0" in r and "background: none" in r
+    assert "background: none" in _regel(":root .msg-acties .flink:hover")
+
+
+def test_de_volledige_datum_staat_in_een_time_element(tmp_path):
+    dd, st, ik, ander = _dorp(tmp_path)
+    k = _kanaal()
+    at = time.mktime(time.strptime("2026-10-13 08:40", "%Y-%m-%d %H:%M"))
+    _post(st, k, ander, "hallo", at)
+    h = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
+    import re
+    m = re.search(r"<time class='muted' datetime='(2026-10-13T08:40[+-]\d{4})' title='[^']+'>08:40</time>", h)
+    assert m, "geen time-element met datetime in de kop"
+    assert "<div class='msg-dag' role='separator'><time datetime='2026-10-13'>Tuesday 13 October 2026</time></div>" in h
+
+
+def test_elk_bericht_heeft_een_anker_en_zoeken_linkt_ernaar(tmp_path):
+    dd, st, ik, ander = _dorp(tmp_path)
+    k = _kanaal()
+    e = st.channels.post(k, "zoekbaar woord", author_type="human", author_id=ander)
+    h = render_messages(cockpit2._Stores(dd), ik=ik, kanaal=k, csrf_token="t")
+    assert f"id='m-{e['id']}'" in h
+    from nooch_village.views.search import _zoek
+    resultaten, _fouten = _zoek(cockpit2._Stores(dd), ["zoekbaar"])
+    treffers = dict(resultaten)["Messages"]
+    assert treffers and treffers[0]["url"].endswith(f"#m-{e['id']}")
+
+
+def test_de_pagina_opent_bij_het_nieuwste_en_een_anker_wint():
+    import pathlib
+    js = (pathlib.Path(cockpit2.__file__).parent / "static" / "nooch.js").read_text(encoding="utf-8")
+    f = js.split("function gesprekOnderaan()", 1)[1].split("\n  }\n", 1)[0]
+    assert "window.location.hash" in f and "getElementById" in f and "return;" in f
+    assert "getBoundingClientRect().bottom - window.innerHeight" in f
+    assert "gesprekOnderaan();" in js.split("function gesprekOnderaan()", 1)[1]
+    # het schermtoetsenbord: bij een kleiner scherm terwijl je typt weer onderaan
+    assert "visualViewport" in f and "msg-tekst" in f
+    # een luie afbeelding die later laadt: een ResizeObserver, die stopt zodra de lezer zelf iets doet
+    assert "ResizeObserver" in f and "wheel" in f and "touchstart" in f

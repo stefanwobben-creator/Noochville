@@ -606,9 +606,13 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     rail = f"<div class='msg-av'>{'' if vervolg else _avatar(wie, a.get('type') == 'persona')}</div>"
     # NAAM EN TIJD OP ÉÉN REGEL; de datum staat in de dagscheiding erboven, de volledige stempel in
     # de tooltip.
+    # DE VOLLEDIGE DATUM STAAT IN `<time datetime>` (14 oktober 2026): dat is de bron, voor een
+    # schermlezer en voor wie hem kopieert. De tooltip is een extraatje (hij werkt niet op touch);
+    # zichtbaar staat de datum in de dagscheiding erboven.
     kop = ("" if vervolg else
-           f"<div class='msg-meta'><b>{_e(wie)}</b> <span class='muted' "
-           f"title='{_e(_stamp(e.get('at')))}'>{_e(lokaal(e.get('at'), '%H:%M', leeg=''))}</span>"
+           f"<div class='msg-meta'><b>{_e(wie)}</b> <time class='muted' "
+           f"datetime='{_e(lokaal(e.get('at'), '%Y-%m-%dT%H:%M%z', leeg=''))}' "
+           f"title='{_e(_stamp(e.get('at')))}'>{_e(lokaal(e.get('at'), '%H:%M', leeg=''))}</time>"
            f"{herk}</div>")
     # `editor-inline` OP HET BERICHT en niet strakker: `inline_edit` schuift het formulier op de
     # plek van de tekst, maar de knop die dat aanzet staat in de voet. Zit de grens tussen die
@@ -642,7 +646,10 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
         tekst = f"<div class='msg-text'>{linkify(_e(e.get('text') or ''))}</div>"
     if bewerkbaar:
         tekst = _bewerk_veld(e, kanaal, csrf_token)
-    return (f"<div class='{cls}'>{rail}<div class='msg-body'>{kop}"
+    # HET ANKER `#m-<id>`: een diepe link naar dit bericht (bijv. uit zoeken). Staat het in de URL,
+    # dan wint het van "open bij het nieuwste" (nooch.js, `gesprekOnderaan`).
+    anker = f" id='m-{_e(str(e['id']))}'" if e.get("id") else ""
+    return (f"<div class='{cls}'{anker}>{rail}<div class='msg-body'>{kop}"
             f"{tekst}{voet}</div></div>")
 
 
@@ -913,8 +920,8 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
         nieuwe_dag = dag != vorige_dag
         if nieuwe_dag and dag:
             label = lokaal(e.get("at"), "%A %-d %B %Y", leeg="")
-            stukken.append(f"<div class='msg-dag' role='separator' aria-label='{_e(label)}'>"
-                           f"<span>{_e(label)}</span></div>")
+            stukken.append(f"<div class='msg-dag' role='separator'>"
+                           f"<time datetime='{_e(dag)}'>{_e(label)}</time></div>")
         stukken.append(_bericht(st, e, kanaal, csrf_token, ik,
                                 trail[i - 1] if i and not nieuwe_dag else None))
         vorige_dag = dag
