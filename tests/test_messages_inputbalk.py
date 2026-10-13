@@ -179,15 +179,16 @@ def test_een_eigen_bericht_staat_apart(tmp_path):
     assert "msg-item--ik" not in diens
 
 
-def test_een_ander_krijgt_een_avatar_en_jij_niet(tmp_path):
-    """Een rail met tien keer je eigen initialen is ruis: je weet wie jij bent."""
+def test_iedereen_krijgt_een_avatar_links(tmp_path):
+    """Voorstel "chat in plaats van prikbord" (13 oktober 2026): alles links, met een avatar — ook
+    je eigen berichten. Tot dan stond jouw bericht rechts, zonder avatar, in een gekleurde bubbel."""
     dd, st, ik, ander = _dorp(tmp_path)
     k = _kanaal()
     e_ik = st.channels.post(k, "van mij", author_type="human", author_id=ik)
     e_ander = st.channels.post(k, "van ander", author_type="human", author_id=ander)
     st = cockpit2._Stores(dd)
-    assert "msg-av" not in _bericht(st, e_ik, k, "t", ik)
-    assert "msg-av" in _bericht(st, e_ander, k, "t", ik)
+    assert "<div class='msg-av'><span class='av'>" in _bericht(st, e_ik, k, "t", ik)
+    assert "<div class='msg-av'><span class='av'>" in _bericht(st, e_ander, k, "t", ik)
 
 
 def test_drie_zinnen_achter_elkaar_zijn_een_blok(tmp_path):
@@ -198,7 +199,7 @@ def test_drie_zinnen_achter_elkaar_zijn_een_blok(tmp_path):
     st = cockpit2._Stores(dd)
     html = render_messages(st, ik=ik, kanaal=k, csrf_token="t")
     assert html.count("msg-item--volg") == 2               # twee vervolgen op één kop
-    assert html.count("Ander Iemand &middot;") == 1        # en één keer de naam
+    assert html.count("<b>Ander Iemand</b>") == 1          # en één keer de naam
 
 
 def test_een_andere_spreker_breekt_het_blok(tmp_path):

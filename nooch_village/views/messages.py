@@ -22,7 +22,7 @@ import urllib.parse
 from nooch_village import channels
 from nooch_village.cockpit2_util import (_DS_LINK, _md, _nav, _name, _person_name, _rol_naam,
                                          _stamp, _ICON_STICKER, _avatar, inline_edit,
-                                         inline_edit_knop)
+                                         inline_edit_knop, lokaal)
 from nooch_village.web_base import _e, _page, _banner
 
 #: Hoe diep we per kanaal terugkijken voor de ongelezen-telling. De lijst toont hooguit "9+", dus
@@ -592,15 +592,24 @@ def _bericht(st, e: dict, kanaal: str = "", csrf_token: str = "", ik: str = "",
     mag_wissen = bool(ik) and mag_bericht_verwijderen(st, e, ik)
     gereedschap = (_eigen_gereedschap(e, kanaal, csrf_token, bewerken=van_mij)
                    if mag_wissen else "")
-    voet = (f"<div class='msg-reacties'>{rx}{picker}{gereedschap}</div>"
-            if (rx or picker or gereedschap) else "")
-    voet = _bijlagen_html(e, kanaal) + voet
-    # De avatarkolom staat er ALTIJD bij een ander, ook leeg bij een vervolgbericht: zo blijft
-    # de tekst op dezelfde lijn staan in plaats van bij elk vervolg naar links te springen.
-    rail = ("" if van_mij else
-            f"<div class='msg-av'>{'' if vervolg else _avatar(wie, a.get('type') == 'persona')}</div>")
+    # CHAT IN PLAATS VAN PRIKBORD (voorstel, 13 oktober 2026). De reacties zijn INHOUD en blijven
+    # staan; wat je met een bericht kunt DOEN (reactie toevoegen, Edit, Remove) staat in één rij die
+    # pas verschijnt bij hover of focus, en op touch achter één knop "⋯" (`<details>` zonder inhoud:
+    # zijn `open` toont de rij ernaast, zie nooch.css — werkt zonder JavaScript).
+    reacties = f"<div class='msg-reacties'>{rx}</div>" if rx else ""
+    acties = (f"<div class='msg-acties'><details class='msg-meer'><summary aria-label='Message "
+              f"actions'>⋯</summary></details>{picker}{gereedschap}</div>"
+              if (picker or gereedschap) else "")
+    voet = _bijlagen_html(e, kanaal) + reacties + acties
+    # DE AVATARKOLOM STAAT ER ALTIJD, ook bij je eigen berichten en leeg bij een vervolg: alles
+    # links, op één lijn, zoals in een chat. De tint van je eigen bubbel verviel daarmee.
+    rail = f"<div class='msg-av'>{'' if vervolg else _avatar(wie, a.get('type') == 'persona')}</div>"
+    # NAAM EN TIJD OP ÉÉN REGEL; de datum staat in de dagscheiding erboven, de volledige stempel in
+    # de tooltip.
     kop = ("" if vervolg else
-           f"<div class='msg-meta'>{_e(wie)} &middot; {_e(_stamp(e.get('at')))}{herk}</div>")
+           f"<div class='msg-meta'><b>{_e(wie)}</b> <span class='muted' "
+           f"title='{_e(_stamp(e.get('at')))}'>{_e(lokaal(e.get('at'), '%H:%M', leeg=''))}</span>"
+           f"{herk}</div>")
     # `editor-inline` OP HET BERICHT en niet strakker: `inline_edit` schuift het formulier op de
     # plek van de tekst, maar de knop die dat aanzet staat in de voet. Zit de grens tussen die
     # twee in, dan vindt `closest()` hem niet — dat staat zo in `inline_edit` en het is hier
@@ -896,9 +905,20 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
             except Exception:                          # noqa: BLE001
                 logging.getLogger("village.messages").debug(
                     "gezien-stand niet bijgewerkt", exc_info=True)
-    draad = "".join(_bericht(st, e, kanaal, csrf_token, ik, trail[i - 1] if i else None)
-                    for i, e in enumerate(trail)) or (
-        "<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
+    # DAGSCHEIDING (voorstel, 13 oktober 2026): een nieuwe dag begint een nieuwe groep, ook als
+    # dezelfde persoon vlak voor en na middernacht schreef.
+    stukken, vorige_dag = [], None
+    for i, e in enumerate(trail):
+        dag = lokaal(e.get("at"), "%Y-%m-%d", leeg="")
+        nieuwe_dag = dag != vorige_dag
+        if nieuwe_dag and dag:
+            label = lokaal(e.get("at"), "%A %-d %B %Y", leeg="")
+            stukken.append(f"<div class='msg-dag' role='separator' aria-label='{_e(label)}'>"
+                           f"<span>{_e(label)}</span></div>")
+        stukken.append(_bericht(st, e, kanaal, csrf_token, ik,
+                                trail[i - 1] if i and not nieuwe_dag else None))
+        vorige_dag = dag
+    draad = "".join(stukken) or ("<p class='muted'>Nothing said here yet.</p>" if kanaal else "")
 
     schrijf = ""
     if kanaal and not kan_antwoorden(st, kanaal, ik):

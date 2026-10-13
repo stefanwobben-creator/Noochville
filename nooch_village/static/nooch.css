@@ -2701,6 +2701,46 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-item--ik .msg-body { background: var(--nu-bg-alt); border: 1px solid var(--hair);
   border-radius: 0; }
 :root .msg-balk { border-top: 1px solid var(--hair); }
+/* ── MESSAGES ALS CHAT, NIET ALS PRIKBORD (voorstel, 13 oktober 2026) ───────────────────────────
+   Een bericht is een REGEL zonder rand: avatar links (ook bij je eigen berichten), naam en tijd op
+   één regel, een lichte vulling bij hover of focus. Opeenvolgende berichten van dezelfde persoon
+   liggen 4px uit elkaar (`.msg-item--volg`), een nieuwe spreker 8px verder. Wat je met een bericht
+   kunt DOEN staat in `.msg-acties`: onzichtbaar tot hover of focus (opacity, zodat Tab erbij kan),
+   op touch achter één knop "⋯". De dag staat in een scheiding; het invoerveld blijft onderaan. */
+:root .msg-item, :root .msg-item--ik { justify-content: flex-start; position: relative;
+  padding: var(--s1) var(--s2); margin-top: var(--s2); }
+:root .msg-item--volg { margin-top: 0; padding-top: 0; }
+:root .msg-item:hover, :root .msg-item:focus-within { background: var(--nu-bg-alt); }
+:root .msg-item--ik .msg-body { flex: 1 1 auto; max-width: none; background: none; border: 0;
+  padding: 0; }
+:root .msg-item--ik .msg-meta { text-align: left; }
+:root .msg-meta b { color: var(--nu-text); }
+:root .msg-acties { display: flex; align-items: center; gap: var(--s1); position: absolute;
+  top: var(--s1); right: var(--s2); padding: 0 var(--s1); background: var(--nu-surface);
+  border: 1px solid var(--hair); opacity: 0; }
+:root .msg-item:hover .msg-acties, :root .msg-item:focus-within .msg-acties { opacity: 1; }
+:root .msg-meer { display: none; }
+:root .msg-meer > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; min-width: 32px; min-height: 32px; }
+:root .msg-meer > summary::-webkit-details-marker { display: none; }
+@media (hover: none) {
+  /* Op touch geen hover: de "⋯" staat rechtsboven in het bericht (geen eigen regel), en pas als hij
+     open is krijgt de rij een vlak en een rand. */
+  :root .msg-acties { opacity: 1; border-color: transparent; background: none; padding: 0;
+    right: var(--s1); }
+  :root .msg-meer { display: block; }
+  :root .msg-acties > :not(.msg-meer) { display: none; }
+  :root .msg-meer[open] ~ * { display: inline-flex; }
+  :root .msg-acties:has(.msg-meer[open]) { background: var(--nu-surface); border-color: var(--hair); }
+  /* ruimte voor de "⋯" rechtsboven, zodat hij nooit over de tekst valt */
+  :root .msg-item .msg-body { padding-right: var(--s6); }
+}
+:root .msg-dag { display: flex; align-items: center; gap: var(--s2); margin: var(--s4) 0 var(--s1);
+  color: var(--nu-muted); font-size: var(--type-12); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; }
+:root .msg-dag::before, :root .msg-dag::after { content: ""; flex: 1; border-top: 1px solid var(--hair); }
+:root .msg-balk { position: sticky; bottom: 0; z-index: 3; background: var(--nu-bg);
+  padding-bottom: var(--s2); }
 :root .msg-balk .msg-bijlage-add > .qadd-form { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); box-shadow: none; }
 :root .msg-balk .msg-bijlage-add > summary { color: var(--nu-muted); }

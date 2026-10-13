@@ -223,7 +223,7 @@ _DEKKING_PLAFOND = {
     # tegenhanger krijgen, telt geen van de vijf nog mee en kan dit plafond in één keer
     # naar 1. Dat is een besluit over hoe de kiezer eruitziet op élk scherm, en hoort
     # dus niet in een stickerkiezer-PR.
-    "messages.py": 6,
+    "messages.py": 5,
     "roloverleg.py": 1,      # `pdisc` zet alleen background:none/border:none
     "doelen.py": 0,
     "overview.py": 0,
