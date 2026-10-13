@@ -346,7 +346,9 @@ def _dek_tabel(st, rijen: list[dict], soort: str, doel: str, bewerk: bool, csrf_
                                     else "<div class='muted'>No page yet</div>")
         cellen = "".join(f"<td>{_dek_cel(v, r['cellen'][v['k']], r['pagina'])}</td>" for v in vragen)
         uit.append(f"<tr><td>{naam}<div class='muted'>{_e(sub)}</div></td>{cellen}</tr>")
-    return "".join(uit) + "</table>"
+    # EEN BREDE TABEL IN ZIJN EIGEN SCROLLCONTAINER (B3 fase e, 13 oktober 2026): op 390px maakte
+    # deze tabel de hele pagina 797px breed. Zelfde patroon als Finance (#718): `.c2-scroll`.
+    return "<div class='c2-scroll'>" + "".join(uit) + "</table></div>"
 
 
 def _rollup_tegels(per_model: dict[str, dict], doel: str) -> str:
@@ -431,7 +433,7 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
            "<th>Status</th></tr>")
     rijen = "".join(_rij(r, csrf_token, bewerk, terug, model, variant) for r in uit["rijen"])
     erbij = _nieuwe_rij(model, variant, csrf_token) if bewerk else ""
-    tabel = f"<table class='mtab'>{kop}{rijen}</table>{erbij}{lijst}"
+    tabel = f"<div class='c2-scroll'><table class='mtab'>{kop}{rijen}</table></div>{erbij}{lijst}"
     open_rijen = [r for r in uit["rijen"] if r["open"]]
     nog_open = ""
     if open_rijen:
@@ -453,7 +455,9 @@ def render_bom(st, csrf_token: str = "", username: str | None = None, msg: str =
     basis_zin = (f" This model has no list of its own yet: it starts from "
                  f"{_e(MODELLEN[basis]['naam'])}, and its differences are set here."
                  if basis in MODELLEN else "")
-    main = (f"<div class='c2-main'><h1 class='ptitle'>BOM · {_e(titel)}</h1>"
+    # `c2-main--vol`: op een telefoon de volle breedte, zodat de tabellen hierboven in hun eigen
+    # `.c2-scroll` scrollen in plaats van de pagina breder te maken (zoals views/finance.py).
+    main = (f"<div class='c2-main c2-main--vol'><h1 class='ptitle'>BOM · {_e(titel)}</h1>"
             f"<p class='muted'>Bill of materials — weight, cost price, CO2e and water per pair. "
             f"{uitleg}{basis_zin} Weights and materials can be changed here per component; the "
             f"factors come from the material and supplier pages.</p>{_banner(msg)}"

@@ -41,7 +41,8 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
    Lange, zachte fade voor een vloeiende draaiing. */
 /* Wachtindicator: draaiende 🌍 + tekst over de (nog zwarte) bol, verdwijnt zodra het frame geladen is. */
 @media (prefers-reduced-motion:reduce){.epic-globe{animation:none}}
-.c2-sec{margin:1.1rem 0}
+/* B3 fase e (13 oktober 2026): tussen secties 24px (`--s5`), was 1,1rem (17,6px). */
+.c2-sec{margin:var(--s5) 0}
 .c2-sec h3,.wiki-inline h3{font-family:var(--font-display);font-size:var(--type-12);text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}
 ul.clean li{padding:.22rem 0;border-bottom:1px solid var(--border)}
@@ -1617,7 +1618,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .wz-btn{font:inherit;font-weight:700;font-size:1rem;padding:.75rem 1.1rem;border-radius:999px;border:none;cursor:pointer;background:var(--green);color:#fff;box-shadow:0 3px 0 var(--green-dark)}
 .wz-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--green-dark)}
 .wz-btn:disabled{background:var(--sand);color:var(--muted);box-shadow:0 3px 0 var(--border);cursor:not-allowed}
-.wz-btn.ghost{background:var(--surface);color:var(--gray);border:1.5px solid var(--border);box-shadow:none;font-weight:600}
+.wz-btn.ghost{background:var(--surface);color:var(--gray);border:1px solid var(--nu-text);box-shadow:none;font-weight:600}
 /* De 'Bekijk op het bord'-knop is een <a>: zonder deze regel erfde die de link-underline
    en linkse uitlijning (stond eerder als inline style= in de view). */
 a.wz-btn{text-align:center;text-decoration:none;display:inline-block}
@@ -1642,7 +1643,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-add input,.wz-add select,.wz-add textarea{flex:1}   /* de rij mag ook een keuzelijst dragen: de
    handmatige toewijzing is tekst + rol + knop, en dan werd het tekstveld platgedrukt. En een
    tekstvak: ✨ staat naast "Your project" (12 sep), en dat is een textarea van twee regels */
-.wz-add button{border:1.5px solid var(--border);background:var(--surface);border-radius:10px;padding:0 .9rem;font-weight:700;color:var(--green-dark);cursor:pointer}
+.wz-add button{border:1px solid var(--nu-text);background:var(--surface);border-radius:10px;padding:0 .9rem;font-weight:700;color:var(--green-dark);cursor:pointer}
 .wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
 .wz-chip{border:1px solid var(--hair);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
 .wz-chip.on{border-color:var(--green);background:var(--green-tint);color:var(--green-dark)}
@@ -2281,7 +2282,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    krijgt dezelfde, en beide `border-radius: 0`. Raakt alle 86 `.card`-plekken (20 views) en de
    tegels van `/metrics` — bewust: een kaart die per scherm anders afrondt is geen kaart meer. */
 :root .card, :root .tile { border-radius: 0; }
-:root .tile { border: 1px solid var(--hair); background: var(--nu-surface); }
+:root .tile { border: 1px solid var(--hair); background: var(--nu-surface); padding: var(--s3); }   /* B3 fase e: was 10px */
 /* De basislaag (`web_base`) zet `td { vertical-align: top }`. In een tabel met alleen tekst valt
    dat niet op; staat er een statuslabel in de rij (hoger dan de tekst, met eigen rand), dan zit de
    tekst tegen de bovenrand en het label eronder. Midden is de as die beide delen. */
@@ -2365,7 +2366,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    maar door te kiezen wie de dikste lijn krijgt. */
 :root .btn {
   font-family: var(--nu-font); font-weight: 700; font-size: .9rem;
-  border: 1.5px solid var(--nu-text);
+  border: 1px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
   padding: .5em 1em; min-height: 38px; box-shadow: none;
   text-transform: uppercase; letter-spacing: .04em; }
@@ -2373,6 +2374,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* DE VULLING ÍS HET SIGNAAL. De hoofdactie droeg een neon vlak én een zwarte rand: twee signalen
    voor één betekenis, en samen eten ze het onderscheid op. `transparent` en niet `border: 0`,
    want de rand telt mee in de hoogte — weghalen zou de knop 3px korter maken dan zijn buren. */
+/* B3 FASE E (13 oktober 2026): secundaire knoppen 1px zwart (was 1,5px). De hoofdactie verandert niet
+   van vorm: neon vlak, de rand transparant en even breed als die van de andere knoppen, zodat alle
+   knoppen even hoog blijven. */
 :root .btn.ok { background: var(--nu-neon); border-color: transparent; color: var(--nu-text); }
 :root .btn.ok:hover { background: var(--nu-text); color: var(--nu-neon); }
 /* 3 · Lucht in de kaart. Gemeten: 6,4-8px padding tegen een 2px rand — een dichtgeknepen vlak.
@@ -2648,7 +2652,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   /* Secundaire links. Ze stonden in hoofdletters én vet, net als de topnav — dan is er geen
      verschil meer tussen "waar ben ik" en "wat kan ik hier nog meer". */
   text-transform: none; letter-spacing: 0;
-  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  border: 1px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); font-weight: 500; padding: .3em .8em; }
 :root .addlink:hover, :root .vswitch a:hover, :root .flink:hover {
   background: var(--nu-text); color: var(--nu-surface); text-decoration: none; }
@@ -2931,7 +2935,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* DEZE VIER STONDEN IN ÉÉN REGEL, en dat was precies het probleem: twee knoppen en twee etiketten
    met dezelfde container-lijn. De rolverdeling splitst ze (fase 12). */
 :root .wz-btn, :root .wz-add {
-  border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
+  border: 1px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
 :root .wz-chip, :root .wz-badge {
   border: 1px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
@@ -3205,7 +3209,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .msg-bijlage-naam { font-family: var(--nu-font); }
 :root .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
 :root .c2-orgfly > summary { border-bottom: 1px solid var(--hair); }
-:root .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
+:root .c2-burger { border: 1px solid var(--nu-text); border-radius: 0;
   background: var(--nu-surface); }
 
 /* De kaart op het bord in dit systeem. `.pcard` was tot nu toe onzichtbaar voor de dekkings-
@@ -3242,7 +3246,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* ── B2 · het bord (12 oktober 2026, prototype v2) ───────────────────────────────────────────
    DE COMPACTE KAART: titel → metaregel → dunne balk. Padding 8 × 12px — een bewuste uitzondering
    op "kaarten minimaal 12px" (besluit Stefan); `:root .pcol .card` hierboven (0,2,1) zette 14,4px. */
-:root .pcol .pcard { padding: .5rem .75rem; margin: .25rem 0; }
+/* B3 fase e: kaartpadding minimaal 12px (`--s3`); was 8px verticaal. */
+:root .pcol .pcard { padding: var(--s3); margin: .25rem 0; }
 :root .pcol .pcard .ptitle { margin: 0; line-height: 1.3; display: -webkit-box;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 :root .pcol .pcard .pmeta { display: flex; align-items: center; gap: .35rem; margin-top: .3rem; }

@@ -174,7 +174,7 @@ def test_link_knoppen_zijn_secundair_en_dus_niet_in_hoofdletters():
     assert blok
     assert "text-transform: none" in blok.group(1)
     assert "font-weight: 500" in blok.group(1)
-    assert "border: 1.5px solid var(--nu-text)" in blok.group(1)     # nog steeds een knop
+    assert "border: 1px solid var(--nu-text)" in blok.group(1)       # nog steeds een knop (B3 fase e: 1px)
 
 
 def test_green_dark_ratchet():
