@@ -2625,11 +2625,11 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   font-family: var(--nu-font); }
 :root .pcol-h::before { content: ""; width: .6em; height: .6em; flex: none;
   border: 1.5px solid var(--nu-text); }
-:root .pcol[data-to='actief']  .pcol-h::before { background: var(--nu-accent); border-radius: 50%; }
-:root .pcol[data-to='wacht']   .pcol-h::before { background: var(--nu-danger);
+:root .pcol[data-to='actief']  .pcol-h::before, :root [data-kop] .pcol-h[data-to='actief']::before { background: var(--nu-accent); border-radius: 50%; }
+:root .pcol[data-to='wacht']   .pcol-h::before, :root [data-kop] .pcol-h[data-to='wacht']::before { background: var(--nu-danger);
   border-color: var(--nu-danger); clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }
-:root .pcol[data-to='done']    .pcol-h::before { background: var(--nu-text); border-radius: 50%; }
-:root .pcol[data-to='toekomst'] .pcol-h::before { border-style: dashed; border-radius: 50%; }
+:root .pcol[data-to='done']    .pcol-h::before, :root [data-kop] .pcol-h[data-to='done']::before { background: var(--nu-text); border-radius: 50%; }
+:root .pcol[data-to='toekomst'] .pcol-h::before, :root [data-kop] .pcol-h[data-to='toekomst']::before { border-style: dashed; border-radius: 50%; }
 
 /* ── De footer staat naast de zijbalk, niet eronder ──────────────────────────────────────────
    `_send` injecteert hem vóór </body>, dus buiten de `.c2-wrap` die de zijbalk-offset draagt. */
@@ -3257,21 +3257,51 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pcol .pcard .pcard-hint { position: absolute; right: .4rem; bottom: .3rem; margin: 0;
   pointer-events: none; background: var(--nu-surface); padding: 0 .2rem; }
 
-/* DE LEGE KOLOM ALS SMALLE STROOK: op zijn eigen plek (de volgorde per swimlane blijft gelijk), met
-   naam en aantal verticaal. Hij blijft een sleepdoel (`data-to`) en licht op ZOLANG er gesleept wordt
-   (`.pdrag-ghost` bestaat alleen dan; geen nieuwe klasse nodig). */
-:root .pcol[data-leeg] { flex: 0 0 44px; min-width: 44px; padding: .4rem .2rem; display: flex;
-  flex-direction: column; align-items: center; gap: .4rem; }
-:root .pcol[data-leeg] .pcol-h { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0;
-  white-space: nowrap; }
-:root .pcol[data-leeg] .pcol-h::before { transform: rotate(180deg); }
-:root .pcol[data-leeg] .pcol-scroll { display: none; }
-/* "+ add project" blijft een link met dezelfde tekst (die leest een schermlezer), maar toont "+". */
-:root .pcol[data-leeg] .addlink { font-size: 0; padding: .1rem .35rem; }
+/* HET BORD IS EEN VAST RASTER MET ÉÉN KOLOMKOP (bord-uitlijning, ontwerp B, 13 oktober 2026).
+   Elke lane is een raster van vier sporen — Active · Waiting · Done · Future — en de kop bovenaan is
+   hetzelfde raster, dus elke status staat in elke lane op dezelfde x-positie en breedte als de kop.
+   Als flexrij stond een status op 1300px op vier tot zes plekken. */
+:root .pboard { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: var(--s2);
+  align-items: start; overflow: visible; }   /* niet per lane scrollen: het bord scrollt als geheel */
+/* De kop: statusvorm, woord en het totaal over alle zichtbare lanes. Sticky bovenaan het bord. */
+:root [data-kop] { position: sticky; top: 0; z-index: 2; background: var(--nu-bg); padding: var(--s2) 0;
+  border-bottom: 1px solid var(--hair); }
+:root [data-kop] .pcol-h { margin: 0; padding: 0 .4rem; }
+/* EÉN SCROLLCONTAINER VOOR KOP EN LANES. Een container met `overflow-x: auto` scrollt in CSS ook
+   verticaal, en dan plakt een sticky kop tegen díe container in plaats van tegen de pagina. Daarom:
+   past het bord (vanaf 1000px; vier sporen van 160px naast de zijbalk), dan scrollt er niets
+   horizontaal en plakt de kop tegen de pagina. Smaller wordt het bord zelf het scrolvlak, in beide
+   richtingen: de kop scrollt horizontaal mee met de lanes en blijft bovenaan het bord staan. */
+:root [data-bord] { overflow: auto; max-height: calc(100dvh - 3.4rem); }
+/* (Geen `overscroll-behavior: contain`: het bord vult bijna het scherm, en dan zou je er niet meer
+   uit kunnen scrollen. Aan het eind van het bord loopt de beweging door naar de pagina. De 3,4rem is
+   de strook van de vaste menu- en zoekknop op een telefoon.) */
+@media (min-width: 1000px) { :root [data-bord] { overflow: visible; max-height: none; } }
+/* De lane-naam blijft links staan als je het bord horizontaal scrollt: anders weet je in de Future-
+   kolom niet meer van wie de kaarten zijn. */
+:root [data-bord] .swim-h { position: sticky; left: 0; width: max-content; }
+/* Een sticky element blijft binnen zijn ouder: de lane (en de kop) zijn daarom minstens zo breed als
+   het raster, anders schuift de naam alsnog mee naar links. */
+:root [data-bord] .swim, :root [data-bord] [data-kop] { min-width: calc(4 * 160px + 3 * var(--s2)); }
+
+/* DE LEGE KOLOM IS EEN STILLE CEL: geen balk, geen label, geen tint — alleen een stippellijn van 1px
+   in de hairline-kleur, laag. De kolomkop bovenaan zegt welke status het is. Hij blijft een
+   sleepdoel (`data-to`) en licht op (stippellijn zwart) ZOLANG er gesleept wordt (`.pdrag-ghost`
+   bestaat alleen dan). Met Tab bereikbaar: de naam met aantal staat in `aria-label`. */
+:root .pcol[data-leeg] { min-height: 32px; box-sizing: border-box; padding: 0 var(--s2); display: flex;
+  align-items: center; justify-content: flex-end; background: none; border: 1px dotted var(--hair); }
+:root .pcol[data-leeg] .pcol-h, :root .pcol[data-leeg] .pcol-scroll { display: none; }
+/* "+ add project" verschijnt alleen bij hover of focus, nooit als vaste ruis. Doorzichtig in plaats
+   van verborgen: zo blijft hij in de tabvolgorde, en `:focus-within` maakt hem zichtbaar. */
+:root .pcol[data-leeg] .addlink { font-size: 0; padding: 0 .35rem; margin: 0; line-height: 1.4; opacity: 0; }
 :root .pcol[data-leeg] .addlink::before { content: "+"; font-size: 16px; }
+:root .pcol[data-leeg]:hover .addlink, :root .pcol[data-leeg]:focus-within .addlink { opacity: 1; }
 :root .pcol[data-leeg]:focus-visible { outline: 2px solid var(--nu-text); outline-offset: 2px; }
-:root body:has(.pdrag-ghost) .pcol[data-leeg] { outline: 2px dashed var(--nu-text); outline-offset: -2px;
-  background: var(--nu-bg-alt); }
+:root body:has(.pdrag-ghost) .pcol[data-leeg], :root .pcol[data-leeg].over { border-color: var(--nu-text);
+  background: none; outline: none; }
+/* RUIMTE ONDER DE LAATSTE KAART. In een kolom die scrollt lag "+ add project" direct tegen de
+   afgesneden laatste kaart, alsof hij eroverheen lag. Een vaste tussenruimte maakt de grens zichtbaar. */
+:root .pcol > .addlink { margin-top: var(--s2); }
 
 /* ZOEKEN NAAST DE HAMBURGER (B2): dezelfde vorm, één plek verder, alleen mobiel (de hamburger staat
    op desktop op `display:none`, en deze erft dat). Touch target 44px. */
