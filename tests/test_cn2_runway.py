@@ -274,9 +274,10 @@ def test_de_routes_schermen_af_voor_een_lid(tmp_path):
 
     try:
         for pad in (f"/node?id={C}&tab=metrics&mset=all", f"/metrics2?node={C}&mset=all",
-                    f"/werkoverleg?circle={C}&step=metrics"):
+                    f"/werkoverleg?circle={C}&step=metrics", "/today"):
             assert "Runway (months)" not in get(pad, "lid@t.nl"), pad
         assert "Runway (months)" in get(f"/node?id={C}&tab=metrics&mset=all", "fc@t.nl")
+        assert "Runway (months)" in get("/today", "fc@t.nl")              # Today (13 oktober 2026)
         assert "4321" not in get(f"/metric_export?mid={mid}", "lid@t.nl")
         assert "4321" in get(f"/metric_export?mid={mid}", "fc@t.nl")
     finally:

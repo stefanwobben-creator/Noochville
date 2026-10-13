@@ -40,6 +40,7 @@ _UITGEZONDERD = {
     "cockpit2.py:_outcome_action": "OPEN (3): schrijfactie op een pid",
     # ── alleen aantallen, geen inhoud ──
     "views/doelen.py:render_goals": "alleen de voortgang (x/y) per doel, geen titels",
+    "views/today.py:_doelen": "alleen de voortgang (x/y) per doel, geen titels (zoals /goals)",
     "views/projects.py:_doel_kop": "alleen de voortgang (x/y) van het doel",
     "views/metrics.py:_project_fetch": "alleen aantallen per status / doorlooptijd",
     # ── de aanroeper heeft de regel al gevraagd ──

@@ -7587,6 +7587,14 @@ def make_handler(data_dir: str, csrf_token: str,
                                       variant=(qs.get("variant") or [""])[0],
                                       doel=(qs.get("doel") or [""])[0]))
                 return
+            if path == "/today":
+                # AUTHZ: iedereen-ingelogd — een leesoverzicht op bestaande gegevens; wat erop staat
+                # volgt de bestaande regels (je eigen acties, leesbare projecten, zicht-groepen).
+                # ZICHT: deze route toont Critical Numbers; de kijker-versie laat CN2 (Finance) weg
+                # voor wie het niet mag zien — zonder plaatshouder. Zie `zicht.voor`.
+                from nooch_village.views.today import render_today
+                self._send(render_today(_zicht.voor(st, username), ik=_web_actor_id(username, st)))
+                return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
                 # herkende persoon is er niets te tonen (`render_acties` zegt dat zelf). Er is geen

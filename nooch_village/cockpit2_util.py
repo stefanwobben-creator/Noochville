@@ -1598,6 +1598,9 @@ _SIDE_ITEMS = (
     # Het oude argument hieronder — "bij Projects voegt het paneel iets toe dat de pagina niet
     # heeft" — klopte alleen zolang je het paneel als filter las ("mijn projecten"). Dat filter
     # bestaat op het bord zelf als groepering, dus er ging niets verloren.
+    # TODAY BOVENAAN (13 oktober 2026): onder de twee meeting-knoppen, boven Projects. Een
+    # leesoverzicht dat Stefan een week test; `/` blijft naar /projects gaan.
+    ("/today",    "Today",    ""),
     ("/projects", "Projects", ""),
     # MESSAGES IS GEEN PANEEL (eis Stefan, 21 september 2026). Hij was het wel, en het leverde een
     # halve Messages op: het paneel toonde de kanalenlijst terwijl je nog op je vorige scherm
@@ -1684,10 +1687,14 @@ def overleg_items(circle_id: str, *, werk_open: bool = False) -> str:
 # je erop klikt. Eén uitklap-mechanisme in de balk in plaats van twee.
 
 
+#: Waar de eerste twee letters botsen: "Today" en "Tools" zouden allebei "TO" zijn in de rail.
+_MONOGRAM = {"Today": "TD"}
+
+
 def _monogram(label: str) -> str:
     """Twee letters als icoon-vorm. Geen icoonset erbij halen voor vijf items, en twee letters
     blijven leesbaar in zwart-wit — dezelfde afweging als bij de statusvormen."""
-    return (label.strip()[:2] or "?").upper()
+    return _MONOGRAM.get(label.strip()) or (label.strip()[:2] or "?").upper()
 
 
 def _side_item(href: str, label: str, paneel: str = "") -> str:
