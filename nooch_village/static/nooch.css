@@ -1236,7 +1236,7 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}
 .ck-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .3rem;border:none;border-radius:var(--radius)}
 .ck-item:hover{background:var(--cream-2)}
-.ck-box{width:18px;height:18px;border:1.5px solid var(--subtle);border-radius:4px;background:var(--surface);cursor:pointer;font-size:.72rem;line-height:1;color:#fff;flex:0 0 auto}
+.ck-box{width:18px;height:18px;border:1px solid var(--nu-text);border-radius:4px;background:var(--surface);cursor:pointer;font-size:.72rem;line-height:1;color:#fff;flex:0 0 auto}
 .ck-box.on{background:var(--green);border-color:var(--green)}
 /* Een bolletje dat geen knop is: de regel van iemand anders is te lezen, niet af te vinken.
    Uitbreiding van dezelfde klasse (geen nieuwe familie). De handcursor klopt niet, en een vakje
@@ -1545,7 +1545,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 /* DE ZOEKKNOP IN DE ZIJBALK (B1): een link die eruitziet als een veld — zonder JS gaat hij naar
    /search, met JS opent hij het palet. Hairline, geen rand-volume: hij is een ingang, geen actie. */
 .c2-side a.c2-search{display:flex;align-items:center;gap:.5rem;box-sizing:border-box;
-  padding:.45rem 2rem .45rem .6rem;border:1px solid var(--border);background:var(--surface);
+  padding:.45rem 2rem .45rem .6rem;border:1px solid var(--hair);background:var(--surface);
   color:var(--muted);font-size:13px;text-decoration:none}
 .c2-side a.c2-search:hover{border-color:var(--ink)}
 /* De gebruiker onderaan de zijbalk (uit de vervallen header). */
@@ -1611,7 +1611,7 @@ body.navpaneel-open .c2-side ~ *:not(.c2-paneel){margin-left:548px}
 .wz-k{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
 .wz-card h2{font-family:var(--font-display);font-weight:700;font-size:1.3rem;margin:0 0 .3rem;line-height:1.25}
 .wz-hint{color:var(--subtle);font-size:.9rem;margin:0 0 1rem}
-.wz textarea,.wz input,.wz select{width:100%;font:inherit;padding:.7rem .85rem;border:1.5px solid var(--border);border-radius:10px;background:var(--cream);color:var(--ink)}
+.wz textarea,.wz input,.wz select{width:100%;font:inherit;padding:.7rem .85rem;border:1px solid var(--nu-text);border-radius:10px;background:var(--cream);color:var(--ink)}
 .wz textarea:focus,.wz input:focus,.wz select:focus{outline:none;border-color:var(--green)}
 .wz-grow{flex:1}
 .wz-btn{font:inherit;font-weight:700;font-size:1rem;padding:.75rem 1.1rem;border-radius:999px;border:none;cursor:pointer;background:var(--green);color:#fff;box-shadow:0 3px 0 var(--green-dark)}
@@ -1644,7 +1644,7 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
    tekstvak: ✨ staat naast "Your project" (12 sep), en dat is een textarea van twee regels */
 .wz-add button{border:1.5px solid var(--border);background:var(--surface);border-radius:10px;padding:0 .9rem;font-weight:700;color:var(--green-dark);cursor:pointer}
 .wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
-.wz-chip{border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
+.wz-chip{border:1px solid var(--hair);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
 .wz-chip.on{border-color:var(--green);background:var(--green-tint);color:var(--green-dark)}
 .wz-clab{font-size:var(--type-12);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
 .wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
@@ -2265,11 +2265,11 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* 1 · De kaart is geen container. `.box`, `.kpi` en `table` houden hun 2px: dat zijn blokken op
    paginaniveau, geen items in een lijst. */
 :root .card, :root .pkaart, :root .kcard, :root .attcard, :root .gs-hit {
-  border: 1.5px solid var(--nu-border-subtle); }
+  border: 1px solid var(--hair); }
 /* ACTIEF IS WEER ZWAAR. Hover, gesleept en de bron waar je vandaan komt: daar zegt de dikke lijn
    iets, en dat kan pas nu de rest hem niet meer draagt. */
 :root .pkaart:hover, :root .pcard:hover, :root .pdrag-ghost, :root .pcard.pdrag-bron {
-  border-width: 2px; }
+  border-color: var(--nu-text); }
 
 /* ── TEGEL, KAART EN TABELCEL (1 oktober 2026) ───────────────────────────────────────────────
    Gevonden op het BOM-scherm, gesloten in het PATROON en niet op dat scherm: `.tile` droeg nog
@@ -2281,7 +2281,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    krijgt dezelfde, en beide `border-radius: 0`. Raakt alle 86 `.card`-plekken (20 views) en de
    tegels van `/metrics` — bewust: een kaart die per scherm anders afrondt is geen kaart meer. */
 :root .card, :root .tile { border-radius: 0; }
-:root .tile { border: 1.5px solid var(--nu-border-subtle); background: var(--nu-surface); }
+:root .tile { border: 1px solid var(--hair); background: var(--nu-surface); }
 /* De basislaag (`web_base`) zet `td { vertical-align: top }`. In een tabel met alleen tekst valt
    dat niet op; staat er een statuslabel in de rij (hoger dan de tekst, met eigen rand), dan zit de
    tekst tegen de bovenrand en het label eronder. Midden is de as die beide delen. */
@@ -2406,15 +2406,15 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    tinten. `transparent` en niet `border: 0`, zodat de hoogte gelijk blijft aan de varianten die
    hun lijn wél houden (`.outline`). */
 :root .pill, :root .chip, :root .badge {
-  display: inline-flex; align-items: center; gap: .35em; border: 1.5px solid transparent;
-  border-radius: 0; background: var(--nu-bg-alt); color: var(--nu-accent-text);
+  display: inline-flex; align-items: center; gap: .35em; border: 1px solid var(--hair);
+  border-radius: 0; background: var(--nu-surface); color: var(--nu-text);
   padding: .15em .6em; font-size: var(--type-12);
   /* METADATA, GEEN NADRUK. Het woord in de chip draagt de betekenis; het volume voegde niets toe
      en kostte het scherm zijn rustpunt. `.nu-status` houdt zijn gewicht wél: daar IS de chip het
      signaal, en die leunt bovendien op vorm plus woord. */
   font-weight: 500; text-transform: none; letter-spacing: .01em; }
 :root .pill.muted, :root .chip.muted, :root .badge.ro {
-  border-color: var(--nu-border-subtle); color: var(--nu-muted);
+  border-color: var(--hair); color: var(--nu-muted);
   text-transform: none; letter-spacing: 0; font-weight: 600; }
 
 /* ── STATUS: vorm + woord, nooit kleur alleen ─────────────────────────────────────────────────
@@ -2425,14 +2425,14 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    van dit bestand); de rand was de derde en die maakte van elke status een doosje. */
 :root .nu-status {
   display: inline-flex; align-items: center; gap: .45em; font-size: .78rem; font-weight: 700;
-  padding: .2em .6em; border: 1.5px solid transparent; background: var(--nu-bg-alt); }
+  padding: .2em .6em; border: 1px solid transparent; background: var(--nu-bg-alt); }
 :root .nu-status::before { content: ""; width: .55em; height: .55em; flex: none; }
 :root .nu-status--ok { background: var(--nu-bg-alt); color: var(--nu-accent-text); }
 :root .nu-status--ok::before { background: var(--nu-accent); border-radius: 50%; }   /* rond, gevuld */
 /* Open/vacant houdt zijn gestippelde lijn — niet als kader maar als BETEKENIS: gestippeld is in
    dit systeem "nog niet ingevuld". Daarom subtiel grijs en niet zwart. */
 :root .nu-status--open { color: var(--nu-muted); background: var(--nu-surface);
-  border: 1.5px dashed var(--nu-border-subtle); }
+  border: 1px dashed var(--hair); }
 :root .nu-status--open::before { border: 1px solid var(--nu-muted); border-radius: 50%; }  /* rond, leeg */
 :root .nu-status--wait::before { background: var(--nu-text);
   clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%); }                              /* half vierkant */
@@ -2452,7 +2452,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   background: var(--nu-surface); color: var(--nu-text); }
 /* FASE 12 — EEN RIJ FILTERS IS GEEN RIJ DOOSJES. In rust geen lijn; actief blijft gevuld, want
    dáár is het onderscheid dat je moet zien. Zelfde keuze als bij de kanaalrij, die dit al deed. */
-:root .cl-filter { border: 1.5px solid transparent; border-radius: 0; background: var(--nu-surface);
+:root .cl-filter { border: 1px solid transparent; border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-weight: 500; }
 :root .cl-filter.on { background: var(--nu-text); color: var(--nu-surface); }
 /* ── FASE 12, TWEEDE HERZIENING: een VELD is geen container (21 september 2026) ──────────────
@@ -2545,10 +2545,10 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    zoals hij nu in de markup staat; `.pside` wordt nergens meer gerenderd): elders is `.chip`
    een pil (reacties, AI-badges, wall) en dat blijft hij. `.chip.coral` (over de deadline) houdt
    zijn eigen rode lijn — een alarm hoort niet op te gaan in de rust van de rest. */
-:root .pkaart-rail .chip.outline { background: var(--nu-surface); border: 1.5px solid var(--nu-border-subtle);
+:root .pkaart-rail .chip.outline { background: var(--nu-surface); border: 1px solid var(--hair);
   border-radius: 0; color: var(--nu-text); font-weight: 500; }
 :root .pkaart-rail .chip.outline:hover, :root .pkaart-rail details[open] > .chip.outline {
-  border-color: var(--nu-accent); }
+  border-color: var(--nu-text); }
 :root .c2-search input { border-color: var(--nu-text); }
 :root :focus-visible { outline: 3px solid var(--nu-neon); outline-offset: -1px; }
 
@@ -2580,13 +2580,13 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    betekenen dat een badge op een nu-scherm na één wijziging anders kleurt dan daarbuiten. */
 :root .uk-invoer { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
   font-family: var(--nu-font); }
-:root .uk-sub { background: var(--nu-bg); border: 1.5px solid var(--nu-border-subtle);
+:root .uk-sub { background: var(--nu-bg); border: 1px solid var(--hair);
   border-radius: 0; }
-:root .uk-sub input, :root .uk-sub select { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+:root .uk-sub input, :root .uk-sub select { border: 0; border-bottom: 1px solid var(--nu-text);
   border-radius: 0; background: var(--nu-surface); font-family: var(--nu-font); }
 :root .uk-sub input:focus, :root .uk-sub select:focus { border-bottom-color: var(--nu-accent); }
-:root .uk-voet { border-top: 1.5px solid var(--nu-border-subtle); }
-:root .uk-rij { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .uk-voet { border-top: 1px solid var(--hair); }
+:root .uk-rij { border-top: 1px solid var(--hair); }
 :root .uk-badge { border-radius: 0; font-family: var(--nu-font); font-weight: 800; }
 :root .uk-badge--actie { background: var(--uk-actie); color: var(--ukt-actie); }
 :root .uk-badge--project { background: var(--uk-project); color: var(--ukt-project); }
@@ -2599,7 +2599,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* De afsluitende actie onder een agendapunt. Zelfde rolverdeling als op de oude laag: de lijn
    erboven scheidt "invullen" van "afsluiten", en de knop draagt zwart in plaats van het groen
    dat "dit is de knop die je nu wil" betekent — dat groen hoort bij Opslaan ernaast. */
-:root .wo-afronden { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .wo-afronden { border-top: 1px solid var(--hair); }
 :root .wo-aftik { border-color: var(--nu-text); color: var(--nu-text); background: var(--nu-surface); }
 :root .wo-aftik:hover { background: var(--nu-text); color: var(--nu-surface); }
 
@@ -2633,12 +2633,12 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 
 /* ── De footer staat naast de zijbalk, niet eronder ──────────────────────────────────────────
    `_send` injecteert hem vóór </body>, dus buiten de `.c2-wrap` die de zijbalk-offset draagt. */
-:root .c2-foot { margin-left: 232px; border-top: 1.5px solid var(--nu-border-subtle);
+:root .c2-foot { margin-left: 232px; border-top: 1px solid var(--hair);
   color: var(--nu-muted); }
 @media (max-width: 760px) { .nu .c2-foot { margin-left: 0; } }
 
 /* ── Groeperings- en filterknoppen in de bordkop ─────────────────────────────────────────── */
-:root .pcol .card { border: 1.5px solid var(--nu-border-subtle); }
+:root .pcol .card { border: 1px solid var(--hair); }
 :root .c2-sec > h1 + p.muted { max-width: 720px; }
 
 /* ── De resterende knop-achtigen: alles vierkant, zwart-op-wit ───────────────────────────────
@@ -2656,9 +2656,23 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    hoofdactie per scherm en voor signalen (`tests/test_b3_neon.py`); een gekozen modus ("by role",
    filter "All") is geen actie maar een toestand. Zelfde vorm als `.cl-filter.on` hierboven. */
 :root .vswitch a.on { background: var(--nu-text); color: var(--nu-surface); }
+/* B3 FASE C (13 oktober 2026): ITEMS OP EEN HAIRLINE, ZWART ALS JE ERNAAR WIJST. Een modusknop of
+   doelpill is een item in een rij, geen knop: 1px `--hair`, en zwart bij hover en als hij gekozen is.
+   `.addlink` en `.flink` delen de regel hierboven maar zijn knoppen; die houden hun zwarte lijn. */
+:root .vswitch a { border: 1px solid var(--hair); }
+:root .vswitch a:hover, :root .vswitch a.on { border-color: var(--nu-text); }
+/* Een pill of kaart die je kunt aanklikken: dezelfde hairline, zwart bij hover. Een etiket dat
+   niets doet (`span.pill`) krijgt geen hover — een rand die reageert belooft een klik. */
+:root a.pill:hover, :root a.chip:hover, :root summary.chip:hover, :root button.chip:hover,
+:root a.outline:hover, :root summary.outline:hover, :root .gs-hit:hover { border-color: var(--nu-text); }
+/* GEEN DUBBELE RANDEN. Twee etiketten naast elkaar (soort en domein in `.kc-actions`) braken op een
+   smal scherm onder elkaar en raakten elkaar: twee lijnen op één plek. Twee tabellen direct onder
+   elkaar deden hetzelfde met hun zwarte kader (/bom). Ruimte ertussen, geen weggehaalde rand. */
+:root .kc-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); }
+:root table + table { margin-top: var(--s4); }
 
 /* ── De organisatieboom in de zijbalk ──────────────────────────────────────────────────────── */
-:root .tree { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; box-shadow: none;
+:root .tree { border: 1px solid var(--hair); border-radius: 0; box-shadow: none;
   background: var(--nu-surface); }
 :root .tree h3 { color: var(--nu-muted); font-family: var(--nu-font); }
 /* B3 FASE D: DE HUIDIGE PLEK = --nu-bg-alt met een neon balkje, precies als het actieve nav-item
@@ -2675,9 +2689,9 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    systeem al gebruikt voor "dit is de actieve/eigen stand" (`.nu .wo-step.on`, de
    overleg-knoppen). Geen nieuwe kleur, geen tweede conventie. */
 :root .msg-item { border-bottom: 0; }
-:root .msg-item--ik .msg-body { background: var(--nu-bg-alt); border: 1.5px solid var(--nu-border-subtle);
+:root .msg-item--ik .msg-body { background: var(--nu-bg-alt); border: 1px solid var(--hair);
   border-radius: 0; }
-:root .msg-balk { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .msg-balk { border-top: 1px solid var(--hair); }
 :root .msg-balk .msg-bijlage-add > .qadd-form { border: var(--nu-border); border-radius: 0;
   background: var(--nu-surface); box-shadow: none; }
 :root .msg-balk .msg-bijlage-add > summary { color: var(--nu-muted); }
@@ -2701,17 +2715,17 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    bekeken, en deze kaart leeft alleen in `projects.py`. De structurele test vond hem wel.
    Zonder deze regel zat er een crème kaart met ronde hoeken óm zwart-gestylde inhoud. */
 :root .attcard { background: var(--nu-surface);
-  border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+  border: 1px solid var(--hair); border-radius: 0; }
 :root .att-pop { border-radius: 0; }
 :root .att-pop input[type=text], :root .att-pop input[name=url], :root .att-pop input[name=title] {
-  border: 0; border-bottom: 1.5px solid var(--nu-text); border-radius: 0;
+  border: 0; border-bottom: 1px solid var(--nu-text); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text);
   font-family: var(--nu-font); }
 
 :root .qadd > summary { border-radius: 0; color: var(--nu-text); font-family: var(--nu-font);
   font-weight: 500; }
 :root .qadd > summary:hover { background: var(--nu-bg-alt); color: var(--nu-text); }
-:root .qadd-form textarea { border: 0; border-bottom: 1.5px solid var(--nu-text);
+:root .qadd-form textarea { border: 0; border-bottom: 1px solid var(--nu-text);
   border-radius: 0; box-shadow: none;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 :root .qadd-x { color: var(--nu-text); font-family: var(--nu-font); }
@@ -2837,7 +2851,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    staat er naast een kaderloos etiket alsnog een zwart doosje. Het ONDERSCHEID blijft, maar het
    zit nu in de tekst en niet in een lijn: groen = informatie, zwart = let op. */
 :root .amber { background: var(--nu-bg-alt); color: var(--nu-text); border-color: transparent; }
-:root .outline { background: none; border: 1.5px solid var(--nu-border-subtle);
+:root .outline { background: none; border: 1px solid var(--hair);
   color: var(--nu-muted); }
 
 /* 6 · De overlay zelf */
@@ -2877,7 +2891,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    allebei (0,2,0) en zetten `border`. Een regel op `.nu .wo-ocd` zou daar niet overheen komen;
    `.nu .wo-ocd .wo-band` is (0,3,0) en wint. De buitenkaart houdt zijn 2px lijn, de blokken
    erbinnen worden gescheiden door een dunne lijn. */
-:root .wo-ocd .wo-band { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle);
+:root .wo-ocd .wo-band { border: 0; border-bottom: 1px solid var(--hair);
   border-radius: 0; background: none; }
 :root .wo-ocd .wo-oc, :root .wo-ocd .uk-form { border: 0; border-radius: 0; background: none; }
 /* En de verwerken-kaart zelf geeft zijn kader op zodra hij IN een punt-rij staat: die rij
@@ -2885,8 +2899,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    `.nu .box-details` (0,2,0) hierboven — zelfde specificiteits-reden als een paar regels
    terug. */
 :root .rdr-row .wo-ocd { border: 0; background: none; }
-:root .rdr-row .wo-ocd > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
-:root .wo-ocd .c2-sec { border-top: 1.5px solid var(--nu-border-subtle); }
+:root .rdr-row .wo-ocd > summary { border-bottom: 1px solid var(--hair); }
+:root .wo-ocd .c2-sec { border-top: 1px solid var(--hair); }
 :root .wo-staat-lbl { color: var(--nu-muted); font-family: var(--nu-font); }
 
 :root .fsep{
@@ -2913,7 +2927,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   border: 1.5px solid var(--nu-text); border-radius: 0; background: var(--nu-surface);
   color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
 :root .wz-chip, :root .wz-badge {
-  border: 1.5px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
+  border: 1px solid transparent; border-radius: 0; background: var(--nu-bg-alt);
   color: var(--nu-accent-text); font-family: var(--nu-font); box-shadow: none; }
 :root .wz-btn { text-transform: uppercase; letter-spacing: .04em; }
 :root .wz-card { border: var(--nu-border); border-radius: 0; background: var(--nu-surface);
@@ -2925,7 +2939,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    gedeelde eyebrow-definitie hierboven, niet in een eigen blok. */
 :root .gs-empty, :root .gs-snip, :root .gs-more, :root .gs-didyoumean {
   color: var(--nu-muted); font-family: var(--nu-font); }
-:root .gs-hit { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+:root .gs-hit { border: 1px solid var(--hair); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); }
 :root .gs-all { border-top: var(--nu-border); color: var(--nu-text); }
 
@@ -3102,7 +3116,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   color: var(--nu-text); font-family: var(--nu-font); }
 /* De rij scheidt zich van de volgende, meer niet. `.sel` mag wél opvallen: dat is waar je met de
    pijltjes staat, en dat moet je kunnen zien. */
-:root .wo-mem { border: 0; border-bottom: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+:root .wo-mem { border: 0; border-bottom: 1px solid var(--hair); border-radius: 0;
   background: none; color: var(--nu-text); font-family: var(--nu-font); box-shadow: none; }
 :root .wo-mem.sel { background: var(--nu-bg-alt); }
 :root .rov-foot { background: var(--nu-surface); border-top: var(--nu-border); }
@@ -3128,7 +3142,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .kpidata-v { color: var(--nu-text); }
 
 /* punt 1a · het zoekveld boven de kanalenlijst */
-:root .msg-zoek input[type=search] { border: 0; border-bottom: 1.5px solid var(--nu-text);
+:root .msg-zoek input[type=search] { border: 0; border-bottom: 1px solid var(--nu-text);
   border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 :root .msg-telling { color: var(--nu-muted); font-family: var(--nu-font); }
@@ -3137,14 +3151,14 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    De GESTIPPELDE rand blijft — dat is de tweede drager naast het woord "add", en vorm overleeft
    zwart-wit waar een tint dat niet doet. Wat weggaat is het doosje óm dat woord: een klein etiket
    is informatie, geen container, en die regel ligt in fase 12 vast. */
-:root .msg-kanaal--vreemd { border: 1.5px dashed var(--nu-border-subtle); border-radius: 0; }
+:root .msg-kanaal--vreemd { border: 1px dashed var(--hair); border-radius: 0; }
 :root .msg-add { border: 0; border-radius: 0; background: none; color: var(--nu-muted);
   font-family: var(--nu-font); }
 :root .msg-kanaal--vreemd:hover .msg-add { color: var(--nu-text); }
 :root .msg-uit { color: var(--nu-muted); font-family: var(--nu-font); }
 
 /* punt 4 · de opslaan-balk van het inline formulier */
-:root .qadd-bar { border-top: 1.5px solid var(--nu-border-subtle); padding-top: .5rem; }
+:root .qadd-bar { border-top: 1px solid var(--hair); padding-top: .5rem; }
 
 /* ── Fase 11, laag 1: de atomen in dit systeem ───────────────────────────────────────────────
    De basisvormen staan in nooch.css (die ook geldt op schermen die niet meedoen); hier krijgen ze
@@ -3176,14 +3190,14 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 /* 22 september · bijlagen onder een bericht. De rij is een ITEM in een lijst, dus de dunne lijn
    (zie de rebalans van gisteren); het voorbeeld van een afbeelding krijgt er een omdat hij anders
    op een witte achtergrond geen rand heeft om tegen te staan. */
-:root .msg-bijlage { border: 1.5px solid var(--nu-border-subtle); border-radius: 0;
+:root .msg-bijlage { border: 1px solid var(--hair); border-radius: 0;
   background: var(--nu-surface); color: var(--nu-text); font-family: var(--nu-font); }
 :root .msg-bijlage:hover { border-color: var(--nu-text); }
 :root .msg-bijlage--beeld { border: 0; background: none; }
-:root .msg-bijlage--beeld img { border: 1.5px solid var(--nu-border-subtle); border-radius: 0; }
+:root .msg-bijlage--beeld img { border: 1px solid var(--hair); border-radius: 0; }
 :root .msg-bijlage-naam { font-family: var(--nu-font); }
 :root .msg-kanaal.on .msg-tijd { color: var(--nu-neon); opacity: .8; }
-:root .c2-orgfly > summary { border-bottom: 1.5px solid var(--nu-border-subtle); }
+:root .c2-orgfly > summary { border-bottom: 1px solid var(--hair); }
 :root .c2-burger { border: 1.5px solid var(--nu-text); border-radius: 0;
   background: var(--nu-surface); }
 
@@ -3193,8 +3207,7 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    een groene hover-gloed met schaduw, en `--coral` voor een verzwakte kaart. Hier krijgt hij de
    taal van dit systeem: geen schaduw, de lijn draagt de nadruk, en rood is `--nu-danger`. */
 :root .pcard { transition: none; }
-:root .pcard:hover { border-color: var(--nu-accent); box-shadow: none;
-  outline: 1.5px solid var(--nu-accent); outline-offset: -3px; }
+:root .pcard:hover { border-color: var(--nu-text); box-shadow: none; }
 :root .pcard.verzwakt { border-color: var(--nu-danger); }
 :root .pcard-link { color: var(--nu-text); }
 :root .pmeta { color: var(--nu-muted); }
@@ -3204,7 +3217,6 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
    de twee tokens die het bord al draagt, zodat "hier kan hij heen" dezelfde groen is als elders. */
 :root .pcol.over, :root .pcol[data-to].over {
   background: var(--nu-bg-alt); border-color: var(--nu-accent); }
-:root .pcard:hover { border-color: var(--nu-accent); }
 :root .pcard-hint { color: var(--nu-accent-text); }
 /* De opgetilde kaart: scherp, zwart omlijnd, en de schaduw doet hier het werk dat een radius
    elders zou doen — hij zegt "dit zweeft", niet "dit is zacht". */

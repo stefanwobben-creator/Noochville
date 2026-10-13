@@ -64,7 +64,7 @@ def test_een_rij_en_een_veldwrapper_krijgen_geen_kaartrand():
 
 def test_de_deelnemersrij_scheidt_met_een_lijn():
     body = _body_van(NU, ":root .wo-mem")
-    assert "border-bottom" in body and "--nu-border-subtle" in body
+    assert "border-bottom" in body and "var(--hair)" in body          # B3 fase c: de hairline-token
     assert "border: 0" in body
 
 
