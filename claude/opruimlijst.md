@@ -1,7 +1,7 @@
 # Opruimlijst
 
 Kleine dingen die bij het werk boven kwamen en een eigen, kleine PR verdienen. Per punt: wat, waar,
-en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 12 oktober 2026.
+en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 13 oktober 2026.
 
 ## Open
 
@@ -16,11 +16,12 @@ en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 12 oktober 
    (81190 en 81192, zelfde dag en bedrag als 81191). Fix: bij een ander bestand een WAARSCHUWING (wel
    importeren), met een test op precies dit geval. Gevonden bij de controle van de imports.
 
-7. **Claims-tests hangen aan echte DNS.** `safe_fetch` toetst vóór het (in de test nagebootste)
-   ophalen de host met `socket.getaddrinfo` (SSRF-poort). Bij een DNS-hapering op de machine falen
-   36 tests in `test_claims_*` tegelijk (13 oktober 2026, volle run; de herhaling was groen). Fix: in
-   die tests de DNS-poort stubben (zoals `_fetch` al gestubd is), met één aparte toets die de poort
-   zelf test. Gevonden bij de bord-kop-PR.
+8. **De lokale suite riep echte LLM's aan.** `load_context` zet de sleutels uit `.env` terug
+   (`os.environ.setdefault`) nadat `conftest._isolate_llm_keys` ze wiste; zo belde
+   `test_claims_v2::test_scan_van_tekst` lokaal echt Gemini (in CI is er geen `.env`). Sinds #739
+   faalt zo'n verbinding meteen, dus er gaat niets meer de deur uit — maar de oorzaak (sleutels
+   lekken de test-env in) staat er nog. Fix: `load_context` in tests de `.env` niet laten lezen, of
+   de sleutels ná `load_context` opnieuw wissen. Gevonden bij punt 7.
 
 ## Gedaan
 
@@ -28,6 +29,9 @@ en waarom het niet in de PR zat waarin het gevonden werd. Bijgewerkt 12 oktober 
 2. **`.ovl-x` binnen de eigen overlay** (bord-modal 2×, wizard; het werkoverleg deed het al) — opruim-PR,
    met een lokaas-test per overlay (`tests/test_opruim_1_3.py`).
 3. **Weesprojecten-melding toont de titel** (`scope`) in plaats van het id — opruim-PR.
+7. **Claims-tests hingen aan echte DNS** — #739: `tests/conftest.py::_geen_echte_dns`, een vaste,
+   netwerkloze resolver voor de hele suite; verbindingen naar buiten worden meteen geweigerd. Met een
+   kapotte DNS faalden er 39 tests, nu 0 (13 oktober 2026).
 6. **Kaarten verplaatsen op een touchscreen.** Slepen werkt bewust niet op touch (`NV.bord` negeert
    `pointerType === "touch"`: een sleepgebaar zou het scrollen blokkeren). Verplaatsen kan via de kaart
    aantikken → statuskeuze in de rail van het project. Het commentaar in `nooch.js` beweerde nog "de
