@@ -83,3 +83,18 @@ def test_new_action_heeft_een_zichtbaar_label_en_het_formulier_werkt(dorp):
                                 username="lid@t.nl")
     st = cockpit2._Stores(dd)
     assert any(a.get("tekst") == "Nieuwe actie" for a in st.acties.voor(ik)), msg
+
+
+def test_in_een_checklistgroep_staat_het_projectlabel_niet_per_regel(dorp):
+    """13 oktober: de projectnaam staat al in de groepskop; per regel is dat herhaling. De link naar
+    het project staat één keer bovenin de groep. Bij "From your projects" blijft het label staan."""
+    dd, ik = dorp
+    h = render_acties(cockpit2._Stores(dd), ik=ik, csrf_token="T")
+    checklists = h.split("From project checklists", 1)[1]
+    for blok in checklists.split("<details class='box-details'")[1:]:
+        naam = re.search(r"<summary>(.*?) &middot;", blok).group(1)
+        assert f">{naam}</a>" not in blok.split("Open project</a>", 1)[1], naam   # geen label per regel
+        assert blok.count("Open project</a>") == 1 and "href='/project?id=" in blok
+        assert "cl-filter pill" not in blok
+    eigen = h.split("From your projects", 1)[1].split("From project checklists", 1)[0]
+    assert "<a class='cl-filter pill' href='/project?id=" in eigen and "Vegan Society</a>" in eigen

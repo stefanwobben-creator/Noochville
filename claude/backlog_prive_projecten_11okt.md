@@ -29,6 +29,13 @@ een niet-lid. Bij het parkeren faalde nog één toets, de taal-ratchet: eerst di
 
 Daarna: de guard-lijst zonder OPEN-regels, met een toets die dat zo houdt.
 
+## Bij terugkeer van privéprojecten bewust beslissen
+
+- **Goals-voortgang op /goals en /today telt privéprojecten mee** (13 oktober 2026). `doelen.voortgang`
+  rekent elk project van een doel mee, ook een privé-project; er worden geen titels getoond (staat zo op
+  de privé-guardlijst: `views/doelen.py:render_goals`, `views/today.py:_doelen`). Bij terugkeer van
+  privéprojecten bewust beslissen of de voortgang dan per kijker moet verschillen.
+
 ## Bijvangst
 
 De weesprojecten-melding in de human inbox leest `p.get("title")`, maar projecten hebben `scope`, geen

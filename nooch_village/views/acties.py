@@ -345,7 +345,8 @@ def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[t
     return uit
 
 
-def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str) -> str:
+def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str,
+                     met_project: bool = True) -> str:
     """Eén checklist-item: hetzelfde molecuul als een actie, met het project erbij.
 
     AFVINKEN MAG ALLEEN WIE HET OOK OP DE PROJECTPAGINA MAG. `check_toggle` poort op
@@ -371,30 +372,39 @@ def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str) 
                f"aria-label='Tick off'></button></form>")
     else:
         bol = "<span class='ck-box'></span>"
+    # `met_project=False` IN EEN GROEP PER PROJECT (13 oktober 2026): daar staat de projectnaam al
+    # in de groepskop, en dezelfde naam bij elke regel is herhaling. De link naar het project staat
+    # dan één keer bovenin de groep (`_groepen`).
+    project = (f"<a class='cl-filter pill' href='/project?id={_e(pid)}'>"
+               f"{_e(_projectnaam(st, pid))}</a>" if met_project else "")
     return (f"<div class='ck-item'>{bol}<span class='ck-txt'>"
             f"{_e(str(it.get('text') or ''))}"
-            f"<span class='ck-meta'>"
-            f"<a class='cl-filter pill' href='/project?id={_e(pid)}'>"
-            f"{_e(_projectnaam(st, pid))}</a>"
+            f"<span class='ck-meta'>{project}"
             f"<span class='muted'>needs a human</span></span></span></div>")
 
 
-def _per_project(st, paren) -> list[tuple[str, list[str]]]:
-    """(project, regel-HTML)-paren → [(projectnaam, [regels])], grootste groep eerst, dan op naam."""
-    groepen: dict[str, tuple[str, list[str]]] = {}
+def _per_project(st, paren) -> list[tuple[str, str, list[str]]]:
+    """(project, regel-HTML)-paren → [(projectnaam, project-id, [regels])], grootste groep eerst,
+    dan op naam."""
+    groepen: dict[str, tuple[str, str, list[str]]] = {}
     for p, regel in paren:
         pid = str(p.get("id") or "")
-        groepen.setdefault(pid, (_projectnaam(st, pid), []))[1].append(regel)
-    return sorted(groepen.values(), key=lambda g: (-len(g[1]), g[0].lower()))
+        groepen.setdefault(pid, (_projectnaam(st, pid), pid, []))[2].append(regel)
+    return sorted(groepen.values(), key=lambda g: (-len(g[2]), g[0].lower()))
 
 
-def _groepen(per: list[tuple[str, list[str]]], alle_open: bool = False) -> str:
+def _groepen(per: list[tuple[str, str, list[str]]], alle_open: bool = False,
+             projectlink: bool = False) -> str:
     """Eén `<details class='box-details'>` per project, met het aantal in de kop. Zonder
-    `alle_open` staat alleen de eerste (grootste) open."""
+    `alle_open` staat alleen de eerste (grootste) open. `projectlink`: één link naar het project
+    bovenin de groep — voor regels die hun projectlabel kwijt zijn (zie `_checklist_regel`)."""
+    def link(pid: str) -> str:
+        return (f"<p class='muted'><a href='/project?id={_e(pid)}'>Open project</a></p>"
+                if projectlink and pid else "")
     return "".join(
         f"<details class='box-details'{' open' if alle_open or i == 0 else ''}>"
-        f"<summary>{_e(naam)} &middot; {len(regels)}</summary>{''.join(regels)}</details>"
-        for i, (naam, regels) in enumerate(per))
+        f"<summary>{_e(naam)} &middot; {len(regels)}</summary>{link(pid)}{''.join(regels)}</details>"
+        for i, (naam, pid, regels) in enumerate(per))
 
 
 def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
@@ -486,11 +496,12 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
         # lazen als één lijst zonder vorm. Opvouwbaar met `<details>` (werkt zonder JavaScript),
         # grootste groep eerst en alleen die open, het aantal in de kop. Wat er staat en wie wat
         # mag afvinken verandert niet: de regels zijn dezelfde `_checklist_regel`.
-        per = _per_project(st, ((p, _checklist_regel(st, it, cl, p, ik, csrf_token)) for it, cl, p in stappen))
+        per = _per_project(st, ((p, _checklist_regel(st, it, cl, p, ik, csrf_token, met_project=False))
+                                for it, cl, p in stappen))
         uit_plannen = (f"<div class='c2-sec'><div class='ck-klaar-kop'><span class='muted'>From "
                        f"project checklists &middot; {len(stappen)} in {len(per)} "
                        f"project{'s' if len(per) != 1 else ''}</span></div>"
-                       f"{_groepen(per)}"
+                       f"{_groepen(per, projectlink=True)}"
                        f"<p class='muted'>All of these are marked “needs a human”. Grouped per "
                        f"project, biggest first; open one to see its lines.</p></div>")
 
