@@ -122,13 +122,13 @@ def test_de_primaire_knop_heeft_geen_zichtbare_rand():
     assert _randkleur(body) == "transparent"
 
 
-def test_een_etiket_is_neutraal_met_een_hairline():
-    """Fase 12 haalde de rand weg ("één etiket met een kader valt niet op, honderd wel") en gaf het
-    vlak een groene tint. B3 fase c (besluit Stefan, 12 en 13 oktober 2026): neutraal, met een
-    hairline — de tint droeg op /wiki 111 keer een kleur die niets betekende. Wel `--hair` en nooit
-    zwart: het blijft geen doosje."""
+def test_een_etiket_is_geen_doosje():
+    """101 voorkomens in 22 bestanden: één etiket met een kader valt niet op, honderd wel.
+    B3 fase c (besluit Stefan, 13 oktober 2026) bevestigt dit en scherpt het aan: een rand betekent
+    aanklikbaar, dus alleen een pill die je kunt aanklikken krijgt een hairline
+    (`tests/test_b3_hairline.py`). Het vlak is neutraal in plaats van een groene tint."""
     body = _body(r":root \.pill, :root \.chip")
-    assert "border: 1px solid var(--hair)" in body and "var(--nu-text)" not in _randkleur(body)
+    assert _randkleur(body) == "transparent"
     assert "background: var(--nu-surface)" in body
 
 
