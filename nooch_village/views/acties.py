@@ -23,8 +23,10 @@ klassen, en de afbeelding die ze samen maken is precies het prototype:
     molecuul   .qadd-form        het snelinvoer-blok
     patroon    .card             de lijst als geheel
 
-WAT HIER NIET STAAT: geen filters, geen sortering, geen deadline-kolom, geen groepering per
-project. Elk daarvan is een scherm-element dat je moet lezen vóór je kunt schrijven.
+WAT HIER NIET STAAT: geen filters, geen sortering, geen deadline-kolom. Elk daarvan is een
+scherm-element dat je moet lezen vóór je kunt schrijven. WEL GEGROEPEERD (13 oktober 2026, Today
+deel 2): de blokken onder je eigen lijst ("From your projects", "From project checklists") staan per
+project in een `<details class='box-details'>` — je eigen lijst blijft één lijst.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ import urllib.parse
 from nooch_village import acties as _A
 from nooch_village import projects as _P
 from nooch_village.cockpit2_util import _AUTOSAVE, _DS_LINK, _nav, _name
-from nooch_village.web_base import _e, _page
+from nooch_village.web_base import _e, _field, _page
 
 
 def _projectnaam(st, pid: str) -> str:
@@ -377,6 +379,24 @@ def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str) 
             f"<span class='muted'>needs a human</span></span></span></div>")
 
 
+def _per_project(st, paren) -> list[tuple[str, list[str]]]:
+    """(project, regel-HTML)-paren → [(projectnaam, [regels])], grootste groep eerst, dan op naam."""
+    groepen: dict[str, tuple[str, list[str]]] = {}
+    for p, regel in paren:
+        pid = str(p.get("id") or "")
+        groepen.setdefault(pid, (_projectnaam(st, pid), []))[1].append(regel)
+    return sorted(groepen.values(), key=lambda g: (-len(g[1]), g[0].lower()))
+
+
+def _groepen(per: list[tuple[str, list[str]]], alle_open: bool = False) -> str:
+    """Eén `<details class='box-details'>` per project, met het aantal in de kop. Zonder
+    `alle_open` staat alleen de eerste (grootste) open."""
+    return "".join(
+        f"<details class='box-details'{' open' if alle_open or i == 0 else ''}>"
+        f"<summary>{_e(naam)} &middot; {len(regels)}</summary>{''.join(regels)}</details>"
+        for i, (naam, regels) in enumerate(per))
+
+
 def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     """De pagina. Zonder herkende mens geen lijst — een actie hoort bij iemand."""
     from nooch_village.views.overview import _banner
@@ -392,12 +412,14 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
 
     # HET INVOERVELD IS HET ENIGE DAT ER MOET ZIJN. `autofocus` zodat je meteen kunt typen: kom je
     # op dit scherm, dan kom je om iets op te schrijven.
+    veld = _field("New action", "tekst", fid="actie-tekst",
+                  placeholder="Type an action and press Enter…", attrs="autocomplete='off' autofocus")
     toevoegen = (f"<form method='post' action='/action' class='qadd-form'>"
                  f"{_verborgen(csrf_token)}"
+                 # ZICHTBAAR LABEL (Today deel 2, 13 oktober 2026): `_field`, het label-veld-paar
+                 # van het designsysteem; het label stond er alleen voor schermlezers.
                  f"<div class='qadd-row'>"
-                 f"<label class='sr' for='actie-tekst'>New action</label>"
-                 f"<input id='actie-tekst' name='tekst' autocomplete='off' autofocus "
-                 f"placeholder='Type an action and press Enter&hellip;'>"
+                 f"{veld}"
                  f"<button class='btn ok sm' type='submit' name='action' value='actie_add'>"
                  f"Add</button></div></form>")
 
@@ -443,25 +465,34 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
     #
     # LEEG IS ECHT LEEG: geen kopje met niets eronder. Een kop "From your projects" boven een lege
     # ruimte is meubilair, en op de meeste dagen zou dat de stand zijn.
-    van_projecten = _van_mijn_projecten(st, ik)
+    mijn = _mijn_projecten(st, ik)                       # één keer, voor beide blokken hieronder
+    van_projecten = _van_mijn_projecten(st, ik, mijn)
     elders = ""
     if van_projecten:
-        elders = (f"<div class='card'>"
-                  f"<div class='ck-klaar-kop'><span class='muted'>From your projects &middot; "
-                  f"{len(van_projecten)}</span></div>"
-                  f"{''.join(_regel_van_ander(st, a, pr) for a, pr in van_projecten)}</div>")
+        # OOK ALS GROEP (Today deel 2): per project een `<details>`, allemaal open — wat hier stond
+        # bleef zichtbaar, en dat blijft zo; alleen de vorm is die van het blok eronder.
+        per = _per_project(st, ((pr, _regel_van_ander(st, a, pr)) for a, pr in van_projecten))
+        elders = (f"<div class='c2-sec'><div class='ck-klaar-kop'><span class='muted'>From your "
+                  f"projects &middot; {len(van_projecten)}</span></div>"
+                  f"{_groepen(per, alle_open=True)}</div>")
 
     # UIT DE PROJECTPLANNEN, in een derde blok. Zelfde regel als hierboven: leeg is echt leeg, want
     # een kopje boven een lege ruimte is meubilair. En zelfde volgorde-gedachte: je eigen briefjes
     # eerst, dan wat anderen op jouw projecten schreven, dan wat er in de plannen op een mens wacht.
-    stappen = _mijn_checklist_items(st, ik)
+    stappen = _mijn_checklist_items(st, ik, mijn)
     uit_plannen = ""
     if stappen:
-        uit_plannen = (f"<div class='card'>"
-                       f"<div class='ck-klaar-kop'><span class='muted'>From project checklists "
-                       f"&middot; {len(stappen)}</span></div>"
-                       f"{''.join(_checklist_regel(st, it, cl, p, ik, csrf_token) for it, cl, p in stappen)}"
-                       f"</div>")
+        # PER PROJECT GEGROEPEERD (Today deel 2, 13 oktober 2026): 24 regels plat onder elkaar
+        # lazen als één lijst zonder vorm. Opvouwbaar met `<details>` (werkt zonder JavaScript),
+        # grootste groep eerst en alleen die open, het aantal in de kop. Wat er staat en wie wat
+        # mag afvinken verandert niet: de regels zijn dezelfde `_checklist_regel`.
+        per = _per_project(st, ((p, _checklist_regel(st, it, cl, p, ik, csrf_token)) for it, cl, p in stappen))
+        uit_plannen = (f"<div class='c2-sec'><div class='ck-klaar-kop'><span class='muted'>From "
+                       f"project checklists &middot; {len(stappen)} in {len(per)} "
+                       f"project{'s' if len(per) != 1 else ''}</span></div>"
+                       f"{_groepen(per)}"
+                       f"<p class='muted'>All of these are marked “needs a human”. Grouped per "
+                       f"project, biggest first; open one to see its lines.</p></div>")
 
     main = (f"<div class='c2-main c2-smal'><h1 class='ptitle'>My actions</h1>"
             f"<p class='muted'>Jot it down like on paper. Link it to a project only if you want "
