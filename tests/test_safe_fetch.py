@@ -83,3 +83,31 @@ def test_http_fout_is_geen_lege_scan():
     """Fail-closed: een 404 mag nooit als 'geen claims gevonden' doorgaan."""
     with pytest.raises(sf.FetchMislukt):
         sf.haal_tekst("https://nooch.earth/", _fetch=lambda u: (404, "<html>weg</html>"))
+
+
+def test_een_hostnaam_die_naar_een_intern_adres_resolvet_wordt_geweigerd(monkeypatch):
+    """De poort kijkt naar het adres, niet naar de naam. De nep-resolver uit conftest stuurt elke
+    naam naar een publiek adres; hier wijst één naam naar binnen, zoals bij DNS-rebinding."""
+    import socket
+    echt = socket.getaddrinfo
+    monkeypatch.setattr(socket, "getaddrinfo",
+                        lambda h, p, *a, **k: echt("10.0.0.7" if h == "intern.nooch.earth" else h, p, *a, **k))
+    with pytest.raises(sf.FetchGeweigerd):
+        sf.controleer_url("https://intern.nooch.earth/")
+
+
+def test_de_suite_zoekt_niets_echt_op():
+    """De autouse-resolver in conftest: een gewone naam krijgt het vaste nep-adres, zonder netwerk."""
+    import socket
+    from tests.conftest import NEP_PUBLIEK_IP
+    assert socket.getaddrinfo("nooch.earth", 443)[0][4][0] == NEP_PUBLIEK_IP
+
+
+def test_de_suite_gaat_niet_het_netwerk_op():
+    """Een verbinding met het nep-adres wordt meteen geweigerd, in plaats van te hangen."""
+    import socket
+    import time
+    t = time.monotonic()
+    with pytest.raises(ConnectionRefusedError):
+        socket.create_connection(("nooch.earth", 443), timeout=30)
+    assert time.monotonic() - t < 2

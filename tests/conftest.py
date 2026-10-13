@@ -76,6 +76,67 @@ def _isolate_llm_keys(monkeypatch):
         monkeypatch.delenv(_k, raising=False)
 
 
+#: Het vaste publieke adres waar de nep-resolver elke gewone hostnaam heen stuurt (example.com).
+#: Publiek, dus de SSRF-poort laat hem door — precies wat een echte publieke host zou doen.
+NEP_PUBLIEK_IP = "93.184.215.14"
+
+
+@pytest.fixture(autouse=True)
+def _geen_echte_dns(monkeypatch):
+    """Geen test zoekt ooit echt een hostnaam op (opruimlijst punt 7, 13 oktober 2026).
+
+    `safe_fetch.controleer_url` toetst elke URL met `socket.getaddrinfo` — óók als de test het
+    ophalen zelf nabootst met `_fetch`. Bij een DNS-hapering op de machine of in CI vielen daardoor
+    36 claims-tests tegelijk om. Deze resolver is vast en netwerkloos:
+      - een IP-adres gaat door naar de echte functie (die doet voor een letterlijk adres geen DNS);
+      - `localhost` → 127.0.0.1, zodat de poort hem blijft weigeren;
+      - `.invalid`, `.test`, `.example` (RFC 2606) bestaan nooit → `gaierror`;
+      - elke andere naam → één vast publiek adres (`NEP_PUBLIEK_IP`).
+    Een test die zelf `socket.getaddrinfo` patcht, overschrijft dit gewoon (monkeypatch stapelt).
+
+    EN GEEN VERBINDING NAAR BUITEN. Een verbinding met `NEP_PUBLIEK_IP` wordt meteen geweigerd. Bij
+    het invoeren hiervan bleek `test_claims_v2::test_scan_van_tekst` lokaal écht Gemini aan te
+    roepen: `load_context` zet de sleutels uit `.env` terug nadat `_isolate_llm_keys` ze wiste. Met
+    alleen een nep-adres hing die verbinding een minuut; nu faalt hij direct, zoals zonder sleutel."""
+    import ipaddress
+    import socket
+    echt = socket.getaddrinfo
+
+    def nep(host, port, family=0, type=0, proto=0, flags=0):
+        naam = host.decode() if isinstance(host, bytes) else (host or "")
+        try:
+            ipaddress.ip_address(naam.strip("[]"))
+            return echt(host, port, family, type, proto, flags)
+        except ValueError:
+            pass
+        if naam.lower().rstrip(".") == "localhost":
+            return echt("127.0.0.1", port, family, type, proto, flags)
+        if naam.lower().rstrip(".").rsplit(".", 1)[-1] in ("invalid", "test", "example"):
+            raise socket.gaierror(socket.EAI_NONAME, "nep-resolver: bestaat niet")
+        return echt(NEP_PUBLIEK_IP, port, family, type, proto, flags)
+
+    monkeypatch.setattr(socket, "getaddrinfo", nep)
+
+    echt_connect, echt_connect_ex = socket.socket.connect, socket.socket.connect_ex
+
+    def _naar_buiten(adres) -> bool:
+        return isinstance(adres, tuple) and adres and adres[0] == NEP_PUBLIEK_IP
+
+    def connect(self, adres):
+        if _naar_buiten(adres):
+            raise ConnectionRefusedError("tests gaan niet het netwerk op (conftest._geen_echte_dns)")
+        return echt_connect(self, adres)
+
+    def connect_ex(self, adres):
+        if _naar_buiten(adres):
+            import errno
+            return errno.ECONNREFUSED
+        return echt_connect_ex(self, adres)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+
+
 @pytest.fixture
 def records(tmp_path):
     """Lege Records backed by een tijdelijk bestand."""
