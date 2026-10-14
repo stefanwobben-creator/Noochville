@@ -286,11 +286,13 @@ _DEK_VORM = {dek.GECHECKT: ("ok", "Checked"), dek.ONGECHECKT: ("wait", "Unchecke
              dek.UITGESTELD: ("open", "Deferred")}
 
 
-def _sprong(pagina, kop: str) -> str:
-    """De pagina-URL, bij een kopje met `#kop=<tekst>`. Wiki-koppen hebben geen id; `naarKop` in
-    nooch.js zoekt het kopje op zijn tekst (een `#:~:text=`-fragment werkt niet in bewerkbare tekst).
-    Zonder JavaScript opent gewoon de pagina."""
+def _sprong(pagina, kop: str, k: str = "") -> str:
+    """De pagina-URL, bij de vraag `#vraag-<k>` (variant B, W1b-2: de feiten staan per vraag, met
+    een gewoon id — werkt ook zonder JavaScript). Zonder `k` het oude pad: een kopje met
+    `#kop=<tekst>`, dat `naarKop` in nooch.js op zijn tekst zoekt."""
     url = wiki.pagina_url(pagina.id)
+    if k:
+        return url + "#vraag-" + urllib.parse.quote(k, safe="")
     return url + ("#kop=" + urllib.parse.quote(kop, safe="") if kop else "")
 
 
@@ -306,12 +308,16 @@ def _dek_cel(vraag: dict, cel: dict, pagina) -> str:
     # Zichtbaar wordt de reden waar er WEL feiten staan die niet tellen, of bij een conflict.
     onder = (f"<div class='muted'>{_e(kort)}</div>"
              if kort and cel["status"] in (dek.ONGECHECKT, dek.CONFLICT) else "")
+    if cel["status"] == dek.GECHECKT and cel.get("zelf_gerapporteerd"):
+        # BEWIJSSTERKTE (W1b-2): checked, maar alleen op het woord van de leverancier.
+        onder = "<div class='muted'>self-reported</div>"
+        reden = " — self-reported"
     label = _e(f"{vraag['label']}: {woord}{reden}")
     if pagina is None:
         # "No page yet" staat al in de eerste kolom; per cel herhalen is ruis. De reden zit in de title.
         return (f"<span class='nu-status nu-status--{vorm}' aria-label='{label}' "
                 f"title='{label}'>{woord}</span>")
-    return (f"<a class='nu-status nu-status--{vorm}' href='{_e(_sprong(pagina, cel['kop']))}' "
+    return (f"<a class='nu-status nu-status--{vorm}' href='{_e(_sprong(pagina, cel['kop'], vraag['k']))}' "
             f"aria-label='{label}' title='{label}'>{woord}</a>{onder}")
 
 

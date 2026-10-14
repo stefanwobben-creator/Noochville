@@ -863,21 +863,31 @@ def _kort(tekst: str, n: int) -> str:
 
 
 def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
-    """"Questions": de vraagcellen van /bom voor DEZE pagina, met per vraag de status en — voor wie de
-    pagina mag bewerken — "Defer" (een datum) of "undo" (CN3, 10 oktober 2026).
+    """VARIANT B (W1b-2, 14 oktober 2026): de feiten van een /bom-pagina staan PER VRAAG.
 
-    Zelfde berekening als /bom en /open-questions (`wiki_dekking`); niets opgeslagen behalve het
-    uitstel zelf, in de `meta` van deze pagina. Een pagina die /bom niet kent, krijgt niets.
-    FAIL-SOFT, net als "From the BOM": een pagina mag nooit breken op de dekking."""
+    Per vraag: de cel (status, het gekozen antwoord en — als hij alleen op zelfgerapporteerde feiten
+    rust — "self-reported"), waarom hij open staat, wat telt, wat er nodig is om hem te veranderen,
+    en daaronder de feiten die volgens de dekking voor die vraag tellen. Wat nergens telt staat
+    onder "Other facts". Eén berekening met /bom en /open-questions (`wiki_dekking`).
+
+    VERPLAATSEN = KIES DE VRAAG. Een feit staat hier niet waar iemand het neerzette, maar waar zijn
+    check het heen stuurt; er is geen "Not placed yet" en geen greep meer. Telt een feit voor meer
+    vragen, dan staat het voluit bij de eerste en bij de andere een verwijzing (één anker per feit).
+
+    Een pagina die /bom niet kent, krijgt niets (die houdt de feiten in de tekst). FAIL-SOFT: een
+    pagina mag nooit breken op de dekking."""
     try:
         from nooch_village import wiki_dekking as dek
-        from nooch_village.views.bom import _DEK_VORM, _sprong
+        from nooch_village.views.bom import _DEK_VORM
         from nooch_village.views.open_vragen import terug_form, uitstel_form
         rij, soort, _ctx = _dekking_rij(st, a)
         if rij is None:
             return ""
         terug = wiki.pagina_url(a.id)
-        regels = []
+        feiten = list(wiki.feiten(a))
+        per_id = {wiki.feit_id(f): (i, f) for i, f in enumerate(feiten)}
+        getoond: dict[str, str] = {}                 # feit-id → label van de vraag waar het voluit staat
+        blokken = []
         for v in dek.vragen(soort):
             c = rij["cellen"][v["k"]]
             vorm, woord = _DEK_VORM[c["status"]]
@@ -885,37 +895,50 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                 woord = f"Deferred · research by {c['tot']}"
             elif c.get("verlopen"):
                 woord = f"Open — deferral expired {c['tot']}"
+            if c.get("antwoord"):
+                woord = f"{woord}: {wiki.antwoord_label(c['antwoord'])}"
+            if c.get("zelf_gerapporteerd"):
+                woord = f"{woord}, self-reported" if c.get("antwoord") else f"{woord}: self-reported"
             actie = ""
             if can_edit and csrf_token:
                 if c["status"] == dek.UITGESTELD:
-                    actie = terug_form(csrf_token, a, v["k"], terug)
+                    actie = " " + terug_form(csrf_token, a, v["k"], terug)
                 elif c["status"] == dek.LEEG:
-                    actie = uitstel_form(csrf_token, a, soort, v["k"], terug)
-            antwoord = (f"<a href='{_e(_sprong(a, c['kop']))}'>answer</a>"
-                        if c["status"] in (dek.LEEG, dek.UITGESTELD) else "")
-            if c.get("antwoord"):
-                woord = f"{woord}: {wiki.antwoord_label(c['antwoord'])}"
-            # WAT TELT (W1): de uitleg stond als leeg kopje op de pagina; nu staat hij bij de vraag.
-            telt = f"<div class='muted'>{_e(dek.wat_telt(soort, v['k']))}</div>"
-            # WAAROM OPEN (W1b): bij elke cel die niet checked is de reden, uit de dekking zelf.
-            waarom = (f"<div class='muted'>{_e(c['reden'])}</div>"
+                    actie = " " + uitstel_form(csrf_token, a, soort, v["k"], terug)
+            waarom = (f"<p class='muted'>{_e(c['reden'])}</p>"
                       if c["status"] not in (dek.GECHECKT, dek.UITGESTELD) and c.get("reden") else "")
-            # WELK FEIT HET DRAAGT (W1b): een link naar elk feit dat voor deze vraag telt, zodat de
-            # lezer van "Checked: yes" naar de zin en zijn bron kan.
-            per_id = {wiki.feit_id(f): f for f in wiki.feiten(a)}
-            dragers = [f"<a href='#feit-{_e(fid)}'>{_e(_kort((per_id[fid].get('tekst') or ''), 60))}</a>"
-                       for fid in c.get("feiten", []) if fid in per_id]
-            if dragers:
-                waarom += f"<div class='muted'>Based on: {' · '.join(dragers)}</div>"
-            regels.append(f"<tr><td>{_e(v['label'])}{telt}</td><td><span class='nu-status nu-status--{vorm}'>"
-                          f"{_e(woord)}</span>{waarom}</td><td>{antwoord} {actie}</td></tr>")
+            rijen = []
+            for fid in c.get("feiten", []):
+                if fid not in per_id:
+                    continue
+                if fid in getoond:
+                    tekst = _kort(per_id[fid][1].get("tekst") or "", 60)
+                    rijen.append(f"<p class='muted'>Same fact as under {_e(getoond[fid])}: "
+                                 f"<a href='#feit-{_e(fid)}'>{_e(tekst)}</a></p>")
+                    continue
+                getoond[fid] = v["label"]
+                rijen.append(_feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token, can_edit, a))
+            blokken.append(
+                f"<div class='wiki-inline' id='vraag-{_e(v['k'])}'><h3>{_e(v['label'])}</h3>"
+                f"<p><span class='nu-status nu-status--{vorm}'>{_e(woord)}</span>{actie}</p>{waarom}"
+                f"<p class='muted'>What counts: {_e(dek.wat_telt(soort, v['k']))}</p>"
+                f"<p class='muted'>{_e(dek.wat_verandert(soort, v['k'], c))}</p>{''.join(rijen)}</div>")
+        overig = [(i, f) for i, f in enumerate(feiten) if wiki.feit_id(f) not in getoond]
+        if overig:
+            blokken.append(
+                "<div class='wiki-inline' id='vraag-overig'><h3>Other facts</h3>"
+                "<p class='muted'>These facts answer none of the questions above. To make one count, "
+                "check it and choose a question.</p>"
+                + "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a) for i, f in overig) + "</div>")
+        if can_edit:
+            blokken.append(f"<div class='wiki-inline'>{_FEIT_INGANG}{_synthese_knop(a, csrf_token)}</div>")
         gestaafd = dek.gestaafd(rij, **_ctx)
-        return (f"<div class='wiki-inline'><h3>Questions</h3>"
+        return (f"<div class='c2-sec' id='vragen'><h2>Questions and facts</h2>"
                 f"<p class='muted'>What this page should answer (the coverage on the "
-                f"<a href='/bom#coverage'>BOM screen</a>). A question without an answer can be deferred "
-                f"to a research-by date; it then no longer holds the page back, until the date passes. "
-                f"This page counts as substantiated: <strong>{'yes' if gestaafd else 'no'}</strong>.</p>"
-                f"<table class='mtab' aria-label='questions on this page'>{''.join(regels)}</table></div>")
+                f"<a href='/bom#coverage'>BOM screen</a>), with the facts that answer it. A question "
+                f"without an answer can be deferred to a research-by date; it then no longer holds the "
+                f"page back, until the date passes. This page counts as substantiated: "
+                f"<strong>{'yes' if gestaafd else 'no'}</strong>.</p>{''.join(blokken)}</div>")
     except Exception:                                         # noqa: BLE001 — nooit de pagina breken
         return ""
 
@@ -1561,7 +1584,16 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # en `_afgeleid_blok` kunnen daar allebei tegen.
     secties = {"backlinks": _backlink_sectie(a, pags)}
     feit_blokken: dict[str, str] = {}
-    if is_note:
+    # VARIANT B (W1b-2): op een pagina van /bom staan de feiten per vraag (`_vragen_sectie`), niet
+    # in de tekst. Een `{{fact:<id>}}`-regel die nog in de tekst staat, wordt niet getoond — de
+    # opslag losmaken doet `village wiki_feit_losmaken` (met versie, dus terug te lezen).
+    try:
+        per_vraag = bool(is_note and _dekking_rij(st, a)[0] is not None)
+    except Exception:                                         # noqa: BLE001 — nooit de pagina breken
+        per_vraag = False
+    if per_vraag:
+        a = _replace(a, body=wiki.FEIT_MARKER_RE.sub("", a.body or ""))
+    if is_note and not per_vraag:
         # WELKE FEITEN STAAN IN DE TEKST? De tekst zegt het zelf (`{{fact:<id>}}`); wat daar niet
         # staat komt in het bakje onderaan. Eén bron voor allebei, dus geen feit twee keer.
         per_id = {wiki.feit_id(f): (i, f) for i, f in enumerate(wiki.feiten(a))}
@@ -1645,7 +1677,8 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_wiki_melding(msg)}"
             f"<div class='pkaart-body'><div class='pkaart-main'>{body}{voorstel}"
             f"{_bom_sectie(st, a, pags) if is_note else ''}"
-            f"{_vragen_sectie(st, a, csrf_token, can_edit) if is_note else ''}{_onder('facts')}"
+            f"{_vragen_sectie(st, a, csrf_token, can_edit) if per_vraag else ''}"
+            f"{'' if per_vraag else _onder('facts')}"
             f"{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>"
             f"<aside class='pkaart-rail'>{meta}</aside></div></div></div>")
     return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",

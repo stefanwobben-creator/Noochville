@@ -48,5 +48,5 @@ def test_wat_telt_staat_bij_de_vraag(tmp_path):
     a = st.att.add(OWNER, "note", title="Pliant", body="## Characteristics\nx")
     st.bom_materialen.zet("Outsole", "Pliant")
     h = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="t", username="guest")
-    blok = h[h.index("<h3>Questions</h3>"):]
+    blok = h[h.index("<h2>Questions and facts</h2>"):]
     assert "a measured biobased content" in blok

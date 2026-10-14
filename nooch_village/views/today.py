@@ -147,7 +147,7 @@ def _open_vragen(st, ik: str) -> str:
     if eerst:
         items = []
         for r in eerst:
-            naam = (f"<a href='{_e(_sprong(r['pagina'], r['kop']))}'>{_e(r['naam'])}</a>"
+            naam = (f"<a href='{_e(_sprong(r['pagina'], r['kop'], r['k']))}'>{_e(r['naam'])}</a>"
                     if r["pagina"] is not None else _e(r["naam"]))
             items.append(f"<li>{_status(*_DEK_VORM[r['status']])} {naam} "
                          f"<span class='muted'>{_e(r['vraag'])}</span></li>")

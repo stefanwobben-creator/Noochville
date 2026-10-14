@@ -61,7 +61,8 @@ def test_een_cel_linkt_naar_het_kopje_op_de_pagina(tmp_path):
                                           "grond": {"soort": "attested", "ref": "Stefan",
                                                     "op": "2026-10-05"}}]})
     s = _sectie(render_bom(st, username="guest"))
-    assert f"href='/pagina?id={a.id}#kop=Contains%20plastic'" in s
+    # variant B (W1b-2): de cel springt naar de vraag zelf, een gewoon id op de pagina
+    assert f"href='/pagina?id={a.id}#vraag-plastic'" in s
     assert ("aria-label='Contains plastic?: Unchecked — 1 fact found, none counts as checked: "
             "1 is not checked yet. Check one and choose this question.'") in s
     assert "<div class='muted'>1 found, none checked</div>" in s
@@ -82,7 +83,7 @@ def test_de_reden_staat_bij_elke_open_cel_op_alle_drie_de_schermen(tmp_path):
     w = _vragen_sectie(st, st.att.get(a.id), "", False)
     oq = render_open_vragen(st, username="guest")
     for h in (w, oq):
-        assert f"<div class='muted'>{zin}</div>" in h and f"<div class='muted'>{leeg}</div>" in h
+        assert zin in h and leeg in h
 
 
 def test_create_page_maakt_de_pagina_met_skelet_en_de_rij_wijst_ernaar(tmp_path):

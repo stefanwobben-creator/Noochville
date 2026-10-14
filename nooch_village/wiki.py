@@ -611,6 +611,13 @@ def nagekeken(feit: dict) -> dict:
     return uit
 
 
+def zelf_gerapporteerd(feit: dict) -> bool:
+    """Zegt het feit zelf dat het van de leverancier komt? De feiten-prompts schrijven dat vooraan
+    in de tekst ("Self-reported: …", "Self-reported (EMAS statement …): …"); een veld ervoor bestaat
+    niet. Alleen voor het label bij de cel (W1b-2), nooit voor de telling."""
+    return (feit.get("tekst") or "").lstrip().lower().startswith("self-reported")
+
+
 def achtergrond(feit: dict) -> bool:
     """Is dit feit bij het nakijken bewust als achtergrond gemarkeerd (beantwoordt geen vraag)?"""
     return nagekeken(feit).get("achtergrond") is True
