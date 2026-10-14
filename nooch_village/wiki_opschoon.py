@@ -31,6 +31,10 @@ from nooch_village import wiki_dekking as dek
 #: de tekst: staat er onder die id iets anders, dan blijft het staan.
 FRAGMENTEN = {"h06e6b5b718": "An ISO/IEC 17025-accredited lab"}
 
+#: Dubbel OVER PAGINA'S heen, per besluit van Stefan (14 oktober): {weg te halen feit: het feit dat
+#: blijft, op een andere pagina}. Alleen als dat andere feit nog bestaat met dezelfde tekst.
+KRUIS_DUBBEL = {"3a3719e4c0": "ab169b9f5f"}
+
 #: Pagina's waarvan de niet-geplaatste feiten gemeld worden (opdracht 14 oktober: LTA).
 MELD_ONGEPLAATST = ("LTA",)
 
@@ -66,6 +70,7 @@ def plan(store) -> list[dict]:
     """[{id, titel, weg: [{fid, tekst, waarom, blijft}], ongeplaatst: [{fid, tekst, gecheckt}]}]
     — alleen pagina's waar iets te doen of te melden is."""
     rapport = []
+    alle = {wiki.feit_id(f): (f, a) for a in wiki.paginas(store) for f in wiki.feiten(a)}
     for a in wiki.paginas(store):
         feiten = list(wiki.feiten(a))
         geplaatst = _geplaatst(getattr(a, "body", ""))
@@ -78,6 +83,11 @@ def plan(store) -> list[dict]:
                 weg.append({"fid": fid, "tekst": f.get("tekst", ""), "blijft": "",
                             "waarom": "cut-off fragment from the old bulk import"})
                 continue
+            ander = alle.get(KRUIS_DUBBEL.get(fid, ""))
+            if ander and ander[1].id != a.id and _n(ander[0].get("tekst")) == _n(f.get("tekst")):
+                weg.append({"fid": fid, "tekst": f.get("tekst", ""), "blijft": "",
+                            "waarom": f"same text as {KRUIS_DUBBEL[fid]} on {ander[1].title}, which stays"})
+                continue
             twin = next((g for g in gezien if _zelfde(f, g)), None)
             if twin is None:
                 gezien.append(f)
@@ -88,11 +98,13 @@ def plan(store) -> list[dict]:
                 gezien[gezien.index(twin)] = f
             regel = {"fid": wiki.feit_id(kwijt), "tekst": kwijt.get("tekst", ""), "waarom": waarom,
                      "blijft": wiki.feit_id(houden)}
-            # Een quote die alleen op het weg te halen exemplaar staat, gaat niet stil verloren: hij
-            # wordt gemeld (en niet overgezet — de bron van het blijvende feit verandert niet).
+            # Een quote die alleen op het weg te halen exemplaar staat, gaat niet verloren: hij gaat
+            # LETTERLIJK naar het blijvende feit (besluit Stefan, 14 oktober). Was dat feit gecheckt,
+            # dan vervalt die check — zijn bron verandert — en dat staat in de dry-run.
             q = (kwijt.get("grond") or {}).get("citaat")
             if q and not (houden.get("grond") or {}).get("citaat"):
-                regel["let_op"] = f"the removed copy has a quote the kept one lacks: “{q[:80]}”"
+                regel["quote_naar"] = {"fid": wiki.feit_id(houden), "citaat": q,
+                                       "check_vervalt": bool(wiki.nagekeken(houden))}
             weg.append(regel)
         ongeplaatst = []
         if (a.title or "") in MELD_ONGEPLAATST:
@@ -113,7 +125,8 @@ def back_up(store, label: str = "w1b-opschoon") -> str:
 
 
 def toepassen(store, rapport: list[dict], *, actor_id: str = "") -> int:
-    """Haalt de feiten in `weg` van hun pagina (en hun `{{fact:id}}`-regel uit de tekst). Eén nieuwe
+    """Haalt de feiten in `weg` van hun pagina (en hun `{{fact:id}}`-regel uit de tekst) en zet een
+    quote die alleen op het weggehaalde exemplaar stond letterlijk op het blijvende feit. Eén nieuwe
     versie per pagina. Geeft het aantal verwijderde feiten."""
     n = 0
     for r in rapport:
@@ -122,7 +135,16 @@ def toepassen(store, rapport: list[dict], *, actor_id: str = "") -> int:
             continue
         a = store.get(r["id"])
         meta = dict(getattr(a, "meta", None) or {})
-        meta["feiten"] = [f for f in wiki.feiten(a) if wiki.feit_id(f) not in ids]
+        quotes = {w["quote_naar"]["fid"]: w["quote_naar"]["citaat"] for w in r["weg"] if w.get("quote_naar")}
+        feiten = []
+        for f in wiki.feiten(a):
+            if wiki.feit_id(f) in ids:
+                continue
+            if wiki.feit_id(f) in quotes and not (f.get("grond") or {}).get("citaat"):
+                f = {**f, "grond": {**(f.get("grond") or {}), "citaat": quotes[wiki.feit_id(f)]}}
+                f.pop("gezien", None)                       # nieuwe bron: opnieuw nakijken
+            feiten.append(f)
+        meta["feiten"] = feiten
         body = getattr(a, "body", "") or ""
         nieuw = re.sub(r"^\{\{fact:(%s)\}\}[ \t]*\n?" % "|".join(map(re.escape, ids)), "", body, flags=re.M)
         store.update(r["id"], meta=meta, body=nieuw if nieuw != body else None, actor_id=actor_id,
@@ -140,8 +162,10 @@ def plan_tekst(rapport: list[dict]) -> str:
         for w in r["weg"]:
             blijft = f" — keeps {w['blijft']}" if w["blijft"] else ""
             uit.append(f"  remove {w['fid']} ({w['waarom']}{blijft}): {w['tekst'][:90]}")
-            if w.get("let_op"):
-                uit.append(f"    ! {w['let_op']}")
+            if w.get("quote_naar"):
+                qn = w["quote_naar"]
+                uit.append(f"    copy quote literally to {qn['fid']}: “{qn['citaat']}”"
+                           + (" (its check lapses: the source changes)" if qn["check_vervalt"] else ""))
         if r["ongeplaatst"]:
             uit.append(f"  not placed (no action — choose per fact: place under a heading, mark "
                        f"background only when checking, or remove):")
