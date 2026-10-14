@@ -140,7 +140,10 @@ def render_open_vragen(st, status: str = "", csrf_token: str = "", username: str
         naam = (f"<a href='{_e(_sprong(r['pagina'], r['kop']))}'>{_e(r['naam'])}</a>"
                 if r["pagina"] is not None else f"{_e(r['naam'])} <span class='muted'>(no page yet)</span>")
         label = "Material" if soort == "materiaal" else "Supplier"
-        reden = f" — {_e(r['reden'])}" if r["status"] == dek.CONFLICT and r["reden"] else ""
+        # DE REDEN BIJ ELKE OPEN CEL (W1b): niet alleen bij een conflict. "Open" zonder waarom laat
+        # de lezer raden wat er ontbreekt.
+        reden = (f"<div class='muted'>{_e(r['reden'])}</div>"
+                 if r["status"] != dek.UITGESTELD and r.get("reden") else "")
         tr.append(f"<tr><td>{naam}<div class='muted'>{label}</div></td><td>{_e(r['vraag'])}</td>"
                   f"<td><span class='nu-status nu-status--{vorm}'>{woord}</span>{reden}</td>"
                   f"<td>{datum}</td><td>{_e(_eigenaar(st, r['pagina']))}</td><td>{antwoord}{actie}</td></tr>")

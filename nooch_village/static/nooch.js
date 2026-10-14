@@ -1063,6 +1063,27 @@
   }
   NV.bulkParse = parseFacts;
 
+  /* MOGELIJK DUBBEL (W1b, 14 oktober 2026). Een geplakt feit dat al op de pagina staat: dezelfde
+   * Quote én URL, of dezelfde Text (spaties en hoofdletters tellen niet). Niet blokkeren — de mens
+   * bevestigt. `bestaand` komt uit `data-feiten` op `#wiki-form`: [{id, tekst, citaat, url}]. */
+  function bulkDubbel(facts, bestaand) {
+    function n(s) { return String(s || "").replace(/\s+/g, " ").trim().toLowerCase(); }
+    var uit = [];
+    facts.forEach(function(f, i) {
+      for (var j = 0; j < (bestaand || []).length; j++) {
+        var b = bestaand[j];
+        var zelfdeBron = n(f.Quote) && n(f.URL) && n(f.Quote) === n(b.citaat) && n(f.URL) === n(b.url);
+        var zelfdeTekst = n(f.Text) && n(f.Text) === n(b.tekst);
+        if (zelfdeBron || zelfdeTekst) {
+          uit.push({i: i, id: b.id, tekst: b.tekst, waarom: zelfdeBron ? "same quote and URL" : "same text"});
+          return;
+        }
+      }
+    });
+    return uit;
+  }
+  NV.bulkDubbel = bulkDubbel;
+
   function bulkImportFacts(blok, body) {
     // Open modal dialog
     var dialog = document.createElement('div');
@@ -1082,9 +1103,29 @@
     var importBtn = dialog.querySelector('#bulk-import-btn');
     var cancelBtn = dialog.querySelector('#bulk-cancel-btn');
 
+    var bestaand = [];
+    try {
+      var wf = document.querySelector("#wiki-form");
+      bestaand = JSON.parse((wf && wf.getAttribute("data-feiten")) || "[]");
+    } catch (e) { bestaand = []; }
+    var bevestigd = false;
+
+    function dubbelLijst(dubbel) {
+      return '<p><strong>' + dubbel.length + ' possible duplicate(s) of facts already on this page:</strong></p><ul>' +
+        dubbel.map(function(d) {
+          var t = document.createElement('span');
+          t.textContent = (d.tekst || '').substring(0, 60) + ' (' + d.waarom + ')';
+          return '<li><a href="#feit-' + encodeURIComponent(d.id) + '" data-bulk-sluit>' +
+            t.innerHTML + '</a></li>';
+        }).join('') + '</ul>';
+    }
+
     // Live preview
     textarea.addEventListener('input', function() {
+      bevestigd = false;
+      importBtn.textContent = 'Import';
       var facts = parseFacts(textarea.value);
+      var dubbel = bulkDubbel(facts, bestaand);
       preview.innerHTML = facts.length ?
         '<strong>' + facts.length + ' fact(s) ready:</strong><ul>' +
         facts.map(function(f,i) {
@@ -1093,7 +1134,12 @@
             + (f.For ? ' · section: ' + f.For : '');
           return '<li><strong>' + tekst.innerHTML + '</strong></li>';
         }).join('') +
-        '</ul>' : '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
+        '</ul>' + (dubbel.length ? dubbelLijst(dubbel) : '') :
+        '<em>No facts parsed yet (paste GROUNDING format or markdown)</em>';
+    });
+    // Een link naar het bestaande feit sluit de dialoog, zodat je het feit op de pagina ziet.
+    preview.addEventListener('click', function(ev) {
+      if (ev.target.closest && ev.target.closest('[data-bulk-sluit]')) dialog.remove();
     });
 
     // De melding staat IN de dialog, op de plek van de voorvertoning. `zeg` hoort bij
@@ -1109,6 +1155,15 @@
     importBtn.addEventListener('click', function() {
       var facts = parseFacts(textarea.value);
       if (!facts.length) { meld("No facts to import."); return; }
+      // BEVESTIGEN BIJ EEN MOGELIJK DUBBEL: de eerste klik toont de lijst en vraagt het nog eens.
+      var dubbel = bulkDubbel(facts, bestaand);
+      if (dubbel.length && !bevestigd) {
+        bevestigd = true;
+        preview.innerHTML = dubbelLijst(dubbel) + '<p>Import all ' + facts.length +
+          ' fact(s) anyway? Click "Import anyway", or Cancel.</p>';
+        importBtn.textContent = 'Import anyway';
+        return;
+      }
       var wikiForm = document.querySelector("#wiki-form");
       function veld(naam) {
         var el = wikiForm && wikiForm.querySelector("[name=" + naam + "]");

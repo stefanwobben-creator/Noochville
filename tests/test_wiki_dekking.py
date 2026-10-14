@@ -126,11 +126,35 @@ def test_een_kop_in_een_codeblok_telt_niet():
 
 # ── Getal-vragen ────────────────────────────────────────────────────────────
 
+def _gezien_met(vraag: str) -> dict:
+    """Nagekeken MET een antwoord op deze getalvraag (W1b: zonder antwoord telt een getal niet als
+    checked)."""
+    return {**GEZIEN, "antwoorden": [{"vraag": vraag, "waarde": "value"}]}
+
+
 def test_een_getal_vraag_leest_de_grootheid_waar_het_feit_ook_staat():
-    f = _feit("a", gezien=GEZIEN, waarde={"grootheid": "co2e_per_kg", "getal": 2.4})
+    f = _feit("a", gezien=_gezien_met("co2"), waarde={"grootheid": "co2e_per_kg", "getal": 2.4})
     p = _pagina("P", "## Whatever\n{{fact:a}}", [f])
     assert _cel(p, "co2")["status"] == wd.GECHECKT
     assert _cel(p, "water")["status"] == wd.LEEG
+
+
+def test_een_getal_zonder_check_op_die_vraag_is_niet_checked():
+    """W1b (14 oktober 2026): het Pliant-gewichtsfeit droeg "Water per kg" en was nagekeken, maar
+    niemand had het getal als antwoord op de watervraag bevestigd. Dan: unchecked, met de reden."""
+    f = _feit("a", gezien=GEZIEN, waarde={"grootheid": "water_per_kg", "getal": 5})
+    c = _cel(_pagina("P", "", [f]), "water")
+    assert c["status"] == wd.ONGECHECKT
+    assert "not checked as the answer to this question" in c["reden"]
+
+
+def test_nul_is_geen_geldig_getal():
+    """Een 0 die in de opslag staat (de Pliant-fout) telt niet: geen waarde, dus ook geen treffer."""
+    from nooch_village import wiki
+    assert wiki.maak_waarde("water_per_kg", "0") is None and wiki.maak_waarde("water_per_kg", 0.0) is None
+    f = _feit("a", gezien=_gezien_met("water"), waarde={"grootheid": "water_per_kg", "getal": 0.0})
+    assert wiki.waarde(f) is None
+    assert _cel(_pagina("P", "", [f]), "water")["status"] == wd.LEEG
 
 
 def test_twee_verschillende_getallen_zijn_een_conflict():
@@ -144,7 +168,7 @@ def test_twee_verschillende_getallen_zijn_een_conflict():
 
 def test_twee_gelijke_getallen_zijn_geen_conflict():
     p = _pagina("P", "", [
-        _feit("a", gezien=GEZIEN, waarde={"grootheid": "water_per_kg", "getal": 5}),
+        _feit("a", gezien=_gezien_met("water"), waarde={"grootheid": "water_per_kg", "getal": 5}),
         _feit("b", waarde={"grootheid": "water_per_kg", "getal": 5}),
     ])
     assert _cel(p, "water")["status"] == wd.GECHECKT

@@ -29,7 +29,9 @@ def _add(dd, aid, **velden):
 
 def test_een_waarde_is_fail_closed():
     assert wiki.maak_waarde("co2e_per_kg", "2,4") == {"grootheid": "co2e_per_kg", "getal": 2.4}
-    assert wiki.maak_waarde("co2e_per_kg", "0") == {"grootheid": "co2e_per_kg", "getal": 0.0}
+    # NUL IS GEEN GELDIG GETAL (W1b, 14 oktober 2026): de Pliant-fout ("Water per kg = 0,0" op
+    # een gewichtsfeit) kwam uit een formulier dat 0 doorliet.
+    assert wiki.maak_waarde("co2e_per_kg", "0") is None
     for grootheid, getal in (("onbekend", "1"), ("co2e_per_kg", ""), ("co2e_per_kg", "abc"),
                              ("co2e_per_kg", "-1"), ("water_per_kg", "nan"), ("water_per_kg", "inf")):
         assert wiki.maak_waarde(grootheid, getal) is None, (grootheid, getal)

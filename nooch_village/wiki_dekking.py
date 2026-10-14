@@ -11,9 +11,12 @@ formulier; verandert er een feit op een pagina, dan klopt de strook de volgende 
 "contains no plastic" met een bron IS een antwoord, en kleurt dus net zo als "contains plastic".
 Deze laag oordeelt niet over de inhoud, alleen over of er een gegrond antwoord staat.
 
-WELK FEIT BIJ WELKE VRAAG. Twee manieren, allebei expliciet en in `VRAGEN` vastgelegd:
+WELK FEIT BIJ WELKE VRAAG. Eerst het ANTWOORD dat een mens bij het nakijken koos (W1, `gezien.
+antwoorden`): dat koppelt, waar het feit ook staat. Zonder antwoord twee oudere manieren:
 1. een GETAL-vraag (CO2e, water, prijs) leest de grootheid van een feit met waarde
-   (`wiki.GROOTHEDEN`) — dezelfde regel als `bom_reken`, waar het kopje niet uitmaakt;
+   (`wiki.GROOTHEDEN`) — dezelfde regel als `bom_reken`, waar het kopje niet uitmaakt. Sinds W1b
+   (14 oktober 2026) maakt zo'n getal de cel nooit "checked" zonder een check op DEZE vraag: een
+   getal zonder antwoord is "unchecked";
 2. een TEKST-vraag leest het kopje waaronder het feit in de tekst staat (`{{fact:id}}` sinds #693),
    of, voor een feit dat nog geen plek heeft, zijn `For:`-regel (`sectie`). Alleen de kopnamen in
    `koppen` tellen; een feit onder een ander kopje beantwoordt geen vraag. Dat is bewust streng: een
@@ -246,14 +249,23 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     `kop` is het kopje waar het scherm naartoe springt: waar het antwoord staat, of — bij een lege
     cel — het kopje op de pagina waar het hoort. Leeg als de pagina zo'n kopje (nog) niet heeft."""
     if pagina is None:
-        return {"status": LEEG, "feiten": [], "kop": "", "reden": "no page"}
+        return {"status": LEEG, "feiten": [], "kop": "",
+                "reden": "No page yet: create one to answer this question.", "reden_kort": "no page"}
     toegestaan = {_norm(k) for k in vraag["koppen"]}
     treffers: list[tuple[dict, str]] = []          # (feit, het kopje waar hij onder stond)
     for f in wiki.feiten(pagina):
         # EEN BEVESTIGD ANTWOORD KOPPELT, WAAR HET FEIT OOK STAAT (W1, 11 oktober 2026). De mens zei
         # bij het nakijken welke vraag dit feit beantwoordt; het kopje doet er dan niet meer toe.
-        if any(a["vraag"] == vraag["k"] for a in wiki.antwoorden(f)):
+        mijn = [a for a in wiki.antwoorden(f) if a["vraag"] == vraag["k"]]
+        if mijn:
+            if vraag["grootheid"] and mijn[0]["waarde"] == "value" and not wiki.waarde(f):
+                # "value" bevestigd, maar het getal is (niet meer) geldig — bijv. een 0 (W1b). Geen
+                # getal = geen antwoord; de cel ziet dit feit niet.
+                continue
             treffers.append((f, next((k for k in _koppen_van(f, paden) if _norm(k) in toegestaan), "")))
+            continue
+        if wiki.achtergrond(f):
+            # BEWUST "BACKGROUND ONLY" (W1b): beantwoordt geen vraag, ook niet via zijn kopje of getal.
             continue
         if vraag["grootheid"]:
             w = wiki.waarde(f)
@@ -274,9 +286,18 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
         if u:
             # VERLOPEN: terug naar leeg — de afspraak is niet nagekomen, de pagina telt niet meer.
             return {"status": LEEG, "feiten": [], "kop": plek, "verlopen": True, "tot": u["tot"],
-                    "eigenaar": u["eigenaar"], "reden": f"deferred until {u['tot']} — expired"}
-        return {"status": LEEG, "feiten": [], "kop": plek, "reden": "no fact for this question"}
+                    "eigenaar": u["eigenaar"], "reden": f"deferred until {u['tot']} — expired",
+                    "reden_kort": "deferral expired"}
+        return {"status": LEEG, "feiten": [], "kop": plek, "reden": _reden_leeg(vraag),
+                "reden_kort": "no fact"}
     statussen = [_feit_status(f, ctx) for f, _k in treffers]
+    if vraag["grootheid"]:
+        # EEN GETAL IS GEEN CHECK OP DEZE VRAAG (W1b, 14 oktober 2026). Een feit met "Water per kg"
+        # dat nagekeken is ZONDER antwoord op de watervraag, maakt de cel niet "checked": iemand
+        # keek naar het feit, niet naar dit getal als antwoord op deze vraag.
+        statussen = [ONGECHECKT if st_ == GECHECKT and not any(a["vraag"] == vraag["k"]
+                                                               for a in wiki.antwoorden(f)) else st_
+                     for (f, _k), st_ in zip(treffers, statussen)]
     reden = ""
     # DE ANTWOORDEN VAN DE GECHECKTE FEITEN. Zeggen twee gecheckte feiten yes en no op dezelfde vraag,
     # dan is de cel een CONFLICT — ook als ze op verschillende plekken van de pagina staan.
@@ -286,7 +307,7 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
         statussen.append(CONFLICT)
         reden = "checked facts disagree: one says yes, another no"
     if vraag["grootheid"]:
-        getallen = {wiki.waarde(f)["getal"] for f, _k in treffers}
+        getallen = {w["getal"] for f, _k in treffers if (w := wiki.waarde(f))}
         if len(getallen) > 1:
             # Twee waarden voor dezelfde grootheid: welke het is, is een besluit van de eigenaar.
             # `bom_reken` telt hem dan ook niet mee.
@@ -295,10 +316,85 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     status = max(statussen, key=_GEWICHT.__getitem__)
     if status == CONFLICT and not reden:
         reden = "a certificate has expired"
+    kort = reden
+    if status == ONGECHECKT:
+        reden, kort = _reden_ongecheckt(vraag, treffers, ctx)
     uit = {"status": status, "feiten": [wiki.feit_id(f) for f, _k in treffers],
-           "kop": next((k for _f, k in treffers if k), ""), "reden": reden}
+           "kop": next((k for _f, k in treffers if k), ""), "reden": reden, "reden_kort": kort}
     if status == GECHECKT and len(ja_nee) == 1:
         uit["antwoord"] = next(iter(ja_nee))       # het bevestigde antwoord (yes / no / na / value)
+    return uit
+
+
+# ── Waarom een cel open staat (W1b, 14 oktober 2026) ───────────────────────────────────────
+
+#: Per bronstatus van een feit: wat er nog ontbreekt, in de woorden van de lezer.
+_ONTBREEKT = {wiki.ONGEGROND: "has no source", wiki.ONTBREEKT: "points to a file that is missing",
+              wiki.ONGECONTROLEERD: "is not checked yet", wiki.VERVALLEN: "is due for a re-check"}
+
+
+def _reden_leeg(vraag: dict) -> str:
+    if vraag["grootheid"]:
+        return "No fact on this page carries this number yet."
+    return "No fact on this page answers this question yet."
+
+
+def _reden_ongecheckt(vraag: dict, treffers: list, ctx: dict) -> tuple[str, str]:
+    """(zin, kort) voor een cel waar feiten staan maar geen enkele telt als gecheckt. Uit de bron-
+    status van elk feit, niet uit een oordeel: "2 facts found: 1 is not checked yet, 1 has no
+    source". Een gecheckt feit met een getal maar zonder antwoord op deze vraag heet zo."""
+    tel: dict[str, int] = {}
+    for f, _k in treffers:
+        st_ = wiki.grond_status(f, **ctx)["status"]
+        if st_ == wiki.GEGROND:
+            sleutel = ("its number is not checked as the answer to this question" if vraag["grootheid"]
+                       else "is checked, but not as the answer to this question")
+        else:
+            sleutel = _ONTBREEKT.get(st_, "is not checked yet")
+        tel[sleutel] = tel.get(sleutel, 0) + 1
+    n = len(treffers)
+    delen = ", ".join(f"{aantal} {wat}" for wat, aantal in sorted(tel.items(), key=lambda t: -t[1]))
+    zin = (f"{n} fact{'s' if n != 1 else ''} found, none counts as checked: {delen}. "
+           f"Check one and choose this question.")
+    return zin, f"{n} found, none checked"
+
+
+def dode_feiten(rij: dict, ctx: dict) -> list[dict]:
+    """Gecheckte feiten op deze pagina die voor GEEN ENKELE vraag tellen, met de reden. Een feit dat
+    bij het nakijken bewust "background only" kreeg, telt niet als dood (zie `achtergrond_feiten`).
+    Alleen een lijst: niets wordt omgezet — een afgeleid antwoord mag nooit stilzwijgend tellen."""
+    p = rij.get("pagina")
+    if p is None:
+        return []
+    telt = {fid for c in rij["cellen"].values() for fid in c["feiten"]}
+    paden = kop_paden(getattr(p, "body", ""))
+    uit = []
+    for f in wiki.feiten(p):
+        fid = wiki.feit_id(f)
+        if fid in telt or wiki.achtergrond(f) or _feit_status(f, ctx) != GECHECKT:
+            continue
+        koppen = _koppen_van(f, paden)
+        reden = (f"under '{koppen[-1]}', which is not a question heading, and checked without "
+                 f"choosing a question" if koppen else "not placed, and checked without choosing a question")
+        uit.append({"fid": fid, "tekst": f.get("tekst") or "", "kop": koppen[-1] if koppen else "",
+                    "reden": reden})
+    return uit
+
+
+def telt_voor(rij: dict) -> dict[str, list[tuple[str, str]]]:
+    """{feit-id: [(vraag-sleutel, antwoord)]} — voor welke vragen elk feit op deze pagina telt, met
+    het antwoord dat een mens bij het nakijken koos ("" als het feit via zijn kopje of getal telt,
+    zonder antwoord). Leest dezelfde cellen als de vragentabel: één berekening."""
+    p = rij.get("pagina")
+    uit: dict[str, list[tuple[str, str]]] = {}
+    if p is None:
+        return uit
+    per_id = {wiki.feit_id(f): f for f in wiki.feiten(p)}
+    for k, c in rij["cellen"].items():
+        for fid in c["feiten"]:
+            f = per_id.get(fid)
+            ant = next((a["waarde"] for a in wiki.antwoorden(f) if a["vraag"] == k), "") if f else ""
+            uit.setdefault(fid, []).append((k, ant))
     return uit
 
 

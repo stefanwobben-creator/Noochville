@@ -27,7 +27,9 @@ def test_de_sectie_staat_onder_de_stuklijst_met_een_strook_per_materiaal(tmp_pat
     assert h.index("<h1") < h.index("id='coverage'")
     assert "Material coverage" in s and "Contains plastic?" in s
     assert s.count("<tr>") >= 14 + 1               # 14 materialen + de kop
-    assert "nu-status--open" in s and "aria-label='Contains plastic?: Open'" in s
+    assert "nu-status--open" in s and "aria-label='Contains plastic?: Open — No page yet" in s
+    # een rij zonder pagina zegt dat al in de eerste kolom: de reden staat dan alleen in de title
+    assert "<div class='muted'>no page</div>" not in s and "<div class='muted'>no fact</div>" not in s
 
 
 def test_het_doelfilter_laat_alleen_de_vragen_van_dat_doel_zien(tmp_path):
@@ -60,7 +62,27 @@ def test_een_cel_linkt_naar_het_kopje_op_de_pagina(tmp_path):
                                                     "op": "2026-10-05"}}]})
     s = _sectie(render_bom(st, username="guest"))
     assert f"href='/pagina?id={a.id}#kop=Contains%20plastic'" in s
-    assert "aria-label='Contains plastic?: Unchecked'" in s
+    assert ("aria-label='Contains plastic?: Unchecked — 1 fact found, none counts as checked: "
+            "1 is not checked yet. Check one and choose this question.'") in s
+    assert "<div class='muted'>1 found, none checked</div>" in s
+    assert "<summary>What counts — material questions</summary>" in s
+
+
+def test_de_reden_staat_bij_elke_open_cel_op_alle_drie_de_schermen(tmp_path):
+    """W1b: wiki "Questions", /bom en /open-questions tonen dezelfde reden (uit `wiki_dekking`)."""
+    from nooch_village.views.open_vragen import render_open_vragen
+    from nooch_village.views.wiki import _vragen_sectie
+    st = _dorp(tmp_path)
+    a = st.att.add(OWNER, "note", title="Pliant", body="## Contains plastic\n{{fact:a}}")
+    st.att.update(a.id, meta={"feiten": [{"id": "a", "tekst": "No plastic.",
+                                          "grond": {"soort": "attested", "ref": "Stefan",
+                                                    "op": "2026-10-05"}}]})
+    zin = "1 fact found, none counts as checked: 1 is not checked yet. Check one and choose this question."
+    leeg = "No fact on this page answers this question yet."
+    w = _vragen_sectie(st, st.att.get(a.id), "", False)
+    oq = render_open_vragen(st, username="guest")
+    for h in (w, oq):
+        assert f"<div class='muted'>{zin}</div>" in h and f"<div class='muted'>{leeg}</div>" in h
 
 
 def test_create_page_maakt_de_pagina_met_skelet_en_de_rij_wijst_ernaar(tmp_path):

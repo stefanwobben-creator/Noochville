@@ -474,15 +474,20 @@ SJABLONEN: dict[str, tuple[str, str]] = {
 
 
 def maak_waarde(grootheid: str, getal) -> dict | None:
-    """`{grootheid, getal}` of None. Fail-closed: een onbekende grootheid, geen getal, een negatief
-    of oneindig getal → None. Komma als decimaalteken mag ('2,4')."""
+    """`{grootheid, getal}` of None. Fail-closed: een onbekende grootheid, geen getal, nul, een
+    negatief of oneindig getal → None. Komma als decimaalteken mag ('2,4').
+
+    NUL IS GEEN GELDIGE MEETWAARDE (W1b, 14 oktober 2026). CO2e, water en kostprijs per kg zijn
+    nooit 0 voor een echt materiaal; een 0 is een lege invoer die als getal binnenkwam. Zo droeg het
+    gewichtsfeit van Pliant PCS "Water per kg = 0" en kleurde de watercel groen. Een 0 die al in de
+    opslag staat valt bij het LEZEN (`waarde()`) weg, dus ook oude data telt niet meer."""
     if grootheid not in GROOTHEDEN:
         return None
     try:
         n = float(str(getal).strip().replace(",", "."))
     except (TypeError, ValueError):
         return None
-    if n != n or n in (float("inf"), float("-inf")) or n < 0:
+    if n != n or n in (float("inf"), float("-inf")) or n <= 0:
         return None
     return {"grootheid": grootheid, "getal": n}
 
@@ -599,7 +604,16 @@ def nagekeken(feit: dict) -> dict:
             gezien_vragen.add(ant["vraag"])
     if goed:
         uit["antwoorden"] = goed
+    elif z.get("achtergrond") is True:
+        # "BACKGROUND ONLY, ANSWERS NO QUESTION" (W1b): bewust gekozen bij het nakijken. Alleen
+        # zonder antwoorden — een feit dat een vraag beantwoordt is geen achtergrond.
+        uit["achtergrond"] = True
     return uit
+
+
+def achtergrond(feit: dict) -> bool:
+    """Is dit feit bij het nakijken bewust als achtergrond gemarkeerd (beantwoordt geen vraag)?"""
+    return nagekeken(feit).get("achtergrond") is True
 
 
 def hercheck_datum(feit: dict) -> str:
