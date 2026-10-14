@@ -122,3 +122,26 @@ def test_een_dubbel_over_paginas_heen_gaat_weg_als_aparte_regel(tmp_path):
     a = st.att.get(lta.id)
     st.att.update(lta.id, meta={"feiten": [dict(wiki.feiten(a)[0], tekst="Iets anders")]})
     assert all(w["fid"] != "3a3719e4c0" for r in wiki_opschoon.plan(st.att) for w in r["weg"])
+
+
+def test_bevestigde_dode_feiten_worden_background_only_en_de_check_blijft(tmp_path):
+    from tests.test_w1_antwoorden import _cel, _pagina
+    gezien = {"door": "Stefan Wobben", "op": "2026-10-06"}
+    dd, aid = _pagina(tmp_path, [
+        {"id": "ab169b9f5f", "tekst": "End of life", "grond": {"soort": "bron", "url": "https://a"}, "gezien": gezien},
+        {"id": "d558e4dbe0", "tekst": "Contains plastic: yes", "grond": {"soort": "bron", "url": "https://b"},
+         "gezien": gezien},                                                      # bewust niet in de lijst
+        {"id": "7f19dd4247", "tekst": "Carding line", "grond": {"soort": "bron", "url": "https://c"}},   # ongecheckt
+    ])
+    st = cockpit2._Stores(dd)
+    voor = open(st.att.path, encoding="utf-8").read()
+    plan_ = wiki_opschoon.achtergrond_plan(st.att)
+    acties = {p["fid"]: p["actie"] for p in plan_}
+    assert acties["ab169b9f5f"] == "mark" and acties["7f19dd4247"] == "skip"
+    assert "d558e4dbe0" not in acties and "504a99532c" not in acties
+    assert "7f94b0a52a" not in wiki_opschoon.ACHTERGROND_BEVESTIGD and "504a99532c" not in wiki_opschoon.ACHTERGROND_BEVESTIGD
+    assert open(st.att.path, encoding="utf-8").read() == voor                      # dry-run
+    assert wiki_opschoon.achtergrond_toepassen(st.att, plan_, actor_id="cli") == 1
+    f = next(f for f in wiki.feiten(cockpit2._Stores(dd).att.get(aid)) if f["id"] == "ab169b9f5f")
+    assert wiki.achtergrond(f) and wiki.nagekeken(f)["door"] == "Stefan Wobben"   # check blijft
+    assert "1 fact(s) to mark background only" in wiki_opschoon.achtergrond_tekst(plan_)

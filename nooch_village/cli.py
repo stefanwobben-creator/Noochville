@@ -978,6 +978,25 @@ def main() -> None:
         elif plan_:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "wiki_feit_achtergrond":
+        # W1b: de door Stefan bevestigde dode feiten expliciet "Background only" (alleen de
+        # classificatie; de bestaande check blijft). Dry-run; --apply maakt EERST een back-up.
+        from nooch_village import wiki_opschoon
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        plan_ = wiki_opschoon.achtergrond_plan(st.att)
+        print(wiki_opschoon.achtergrond_tekst(plan_))
+        if "--apply" in sys.argv and any(p["actie"] == "mark" for p in plan_):
+            pad = wiki_opschoon.back_up(st.att, "w1b-achtergrond")
+            n = wiki_opschoon.achtergrond_toepassen(st.att, plan_, actor_id="cli")
+            print(f"\nBack-up: {pad}\n{n} fact(s) marked.")
+        elif any(p["actie"] == "mark" for p in plan_):
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_feit_rapport":
         # W1b: alleen lezen. Getallen zonder check op hun vraag, gecheckte feiten die nergens tellen
         # (met een voorstel per feit), en feiten die alleen via hun kopje meetellen.
@@ -1545,7 +1564,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | wiki_feit_achtergrond | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)

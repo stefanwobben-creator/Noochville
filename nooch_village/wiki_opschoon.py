@@ -361,3 +361,71 @@ def bom_pagina_ids(att, leveranciers, materialen) -> set[str]:
     d, _ctx = dek.uit_stores(att, leveranciers, materialen)
     return {r["pagina"].id for rijen in (d["materialen"], d["leveranciers"]) for r in rijen
             if r.get("pagina") is not None}
+
+
+# ── Bevestigde dode feiten: "Background only" (W1b, besluit Stefan 14 oktober 2026) ─────────────
+#
+# Gecheckte feiten die nergens voor tellen, die Stefan per feit als achtergrond bevestigde. Alleen
+# de CLASSIFICATIE wordt gezet (`gezien.achtergrond`): wie en wanneer het feit nakeek blijft staan.
+# Bewust NIET in deze lijst: d558e4dbe0 en f4f60d4c1a (die checkt Stefan zelf met een vraag), en
+# LTA 7f94b0a52a en 504a99532c (nieuw sinds de meting, eerst door Stefan te bekijken).
+
+ACHTERGROND_BEVESTIGD = (
+    "hf4f09b8537", "h4e7b98c623",                                              # Pliant PCS
+    "f2e05567fa", "8dc881b14f", "a78c2c81cf", "a3411b3552", "acefabad18",      # Full Green FG S20
+    "7f19dd4247", "ab169b9f5f",
+    "04585f57ff", "dd1e297497",                                                # LTA
+)
+
+
+def achtergrond_plan(store, ids=ACHTERGROND_BEVESTIGD) -> list[dict]:
+    """[{id, titel, fid, tekst, actie, reden}] per bevestigd feit. `actie` is "mark" of "skip"; een
+    feit dat niet (meer) gecheckt is, al een antwoord heeft of al achtergrond is, wordt overgeslagen
+    met de reden — dan is er sinds de bevestiging iets veranderd en beslist Stefan opnieuw."""
+    plan_, gevonden = [], set()
+    for a in wiki.paginas(store):
+        for f in wiki.feiten(a):
+            fid = wiki.feit_id(f)
+            if fid not in ids:
+                continue
+            gevonden.add(fid)
+            z = wiki.nagekeken(f)
+            if not z:
+                actie, reden = "skip", "not checked (any more)"
+            elif z.get("antwoorden"):
+                actie, reden = "skip", "already answers a question"
+            elif z.get("achtergrond"):
+                actie, reden = "skip", "already background only"
+            else:
+                actie, reden = "mark", f"checked by {z['door']} on {z['op']}; that stays"
+            plan_.append({"id": a.id, "titel": a.title or a.id, "fid": fid,
+                          "tekst": f.get("tekst", ""), "actie": actie, "reden": reden})
+    for fid in ids:
+        if fid not in gevonden:
+            plan_.append({"id": "", "titel": "", "fid": fid, "tekst": "", "actie": "skip",
+                          "reden": "fact not found"})
+    return plan_
+
+
+def achtergrond_toepassen(store, plan_: list[dict], *, actor_id: str = "") -> int:
+    per_pagina: dict[str, set[str]] = {}
+    for p in plan_:
+        if p["actie"] == "mark":
+            per_pagina.setdefault(p["id"], set()).add(p["fid"])
+    for pid, fids in per_pagina.items():
+        a = store.get(pid)
+        meta = dict(getattr(a, "meta", None) or {})
+        meta["feiten"] = [{**f, "gezien": {**f["gezien"], "achtergrond": True}}
+                          if wiki.feit_id(f) in fids else f for f in wiki.feiten(a)]
+        store.update(pid, meta=meta, actor_id=actor_id, actor_type="person",
+                     change_note=f"W1b: {len(fids)} checked fact(s) marked background only (confirmed by Stefan)")
+    return sum(len(v) for v in per_pagina.values())
+
+
+def achtergrond_tekst(plan_: list[dict]) -> str:
+    n = sum(1 for p in plan_ if p["actie"] == "mark")
+    uit = [f"{n} fact(s) to mark background only, {len(plan_) - n} skipped."]
+    for p in plan_:
+        uit.append(f"  {p['actie']:4}  {p['titel'] or '?'} {p['fid']} — {p['reden']}"
+                   + (f": {p['tekst'][:70]}" if p["tekst"] else ""))
+    return "\n".join(uit)
