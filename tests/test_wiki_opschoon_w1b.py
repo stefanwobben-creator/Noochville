@@ -43,10 +43,11 @@ def test_dry_run_meldt_dubbelen_en_fragment_en_verandert_niets(tmp_path):
     assert set(weg) == {"hlos", "hrisk1", "h06e6b5b718"}
     assert weg["hlos"]["blijft"] == "hplek" and weg["hlos"]["waarom"] == "same quote and URL"   # geplaatst blijft
     assert weg["hrisk1"]["blijft"] == "hrisk2" and weg["hrisk1"]["waarom"] == "same text"      # For: blijft
-    assert "quote the kept one lacks" in weg["hrisk1"]["let_op"]                             # niet stil kwijt
+    assert weg["hrisk1"]["quote_naar"] == {"fid": "hrisk2", "citaat": "q1", "check_vervalt": False}
     assert open(st.att.path, encoding="utf-8").read() == voor                                # dry-run
     tekst = wiki_opschoon.plan_tekst(rapport)
     assert "remove hlos (same quote and URL — keeps hplek)" in tekst
+    assert "copy quote literally to hrisk2: “q1”" in tekst
 
 
 def test_niet_geplaatste_feiten_op_lta_worden_alleen_gemeld(tmp_path):
@@ -77,6 +78,8 @@ def test_toepassen_maakt_eerst_een_back_up_en_een_nieuwe_versie(tmp_path):
     assert wiki_opschoon.toepassen(st.att, rapport, actor_id="cli") == 3
     a = cockpit2._Stores(dd).att.get(aid)
     assert {f["id"] for f in wiki.feiten(a)} == {"hplek", "hrisk2", "heigen"}
+    blijft = next(f for f in wiki.feiten(a) if f["id"] == "hrisk2")
+    assert blijft["grond"]["citaat"] == "q1" and blijft["grond"]["url"] == "https://t"      # letterlijk
     assert len(a.versions or []) == voor_versies + 1                                          # historie blijft
     assert any(f["id"] == "hlos" for f in json.load(open(pad, encoding="utf-8"))[aid]["meta"]["feiten"])
 
@@ -101,3 +104,21 @@ def test_leesrapport_vindt_het_pliant_getal_en_de_dode_feiten(tmp_path):
     assert dood["W"]["vraag"] == ""                                       # geen vraag past: background only
     # het rapport stelt voor, het slaat niets op
     assert not wiki.antwoorden(next(f for f in wiki.feiten(st.att.get(aid)) if f["id"] == "P"))
+
+
+def test_een_dubbel_over_paginas_heen_gaat_weg_als_aparte_regel(tmp_path):
+    """Besluit 14 oktober: LTA 3a3719e4c0 weg, Full Green ab169b9f5f blijft. Alleen met dezelfde tekst."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    tekst = "Self-reported: at end of life its components follow the shoe."
+    st.att.add(OWNER, "note", title="Full Green FG S20", body="x",
+               meta={"feiten": [{"id": "ab169b9f5f", "tekst": tekst, "grond": {"soort": "bron", "url": "https://a"}}]})
+    lta = st.att.add(OWNER, "note", title="LTA", body="x",
+                     meta={"feiten": [{"id": "3a3719e4c0", "tekst": tekst, "grond": {"soort": "bron", "url": "https://a"}}]})
+    r = next(r for r in wiki_opschoon.plan(st.att) if r["id"] == lta.id)
+    assert [w["fid"] for w in r["weg"]] == ["3a3719e4c0"] and r["ongeplaatst"] == []
+    assert "same text as ab169b9f5f on Full Green FG S20, which stays" in wiki_opschoon.plan_tekst([r])
+    # een andere tekst onder die id: blijft staan
+    a = st.att.get(lta.id)
+    st.att.update(lta.id, meta={"feiten": [dict(wiki.feiten(a)[0], tekst="Iets anders")]})
+    assert all(w["fid"] != "3a3719e4c0" for r in wiki_opschoon.plan(st.att) for w in r["weg"])
