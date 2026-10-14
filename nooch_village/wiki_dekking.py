@@ -160,6 +160,29 @@ def wat_telt(soort: str, k: str) -> str:
     return sectie[1] if sectie else ""
 
 
+def wat_verandert(soort: str, k: str, cel: dict) -> str:
+    """"To change this answer: …" — wat iemand zonder voorkennis moet doen om de cel te veranderen,
+    per status. Alleen tekst; de route zelf (Bulk Import, I checked this, Defer) bestaat al."""
+    v = next((x for x in vragen(soort) if x["k"] == k), None)
+    if v is None:
+        return ""
+    nieuw = ("add a fact with this number (Bulk Import in the / menu, with a Value: line)"
+             if v["grootheid"] else "add a fact that answers it (Bulk Import in the / menu)")
+    status = cel.get("status")
+    if status == GECHECKT:
+        return (f"To change this answer: if the fact below is wrong, use 'Check again with an answer' "
+                f"on it. If a source says otherwise, {nieuw} and check it with the other answer; the "
+                f"page owner then resolves the conflict.")
+    if status == ONGECHECKT:
+        return "To change this answer: check one of the facts below with 'I checked this' and choose this question."
+    if status == CONFLICT:
+        return ("To change this answer: look at the facts below, then remove the wrong one or check "
+                "it again with the right answer.")
+    if status == UITGESTELD:
+        return f"To change this answer: {nieuw} and check it, or undo the deferral."
+    return f"To change this answer: {nieuw}, then check it with 'I checked this' and choose this question."
+
+
 def toegestane_antwoorden(k: str) -> tuple[str, ...]:
     """Welke antwoorden een vraag kent: een getalvraag (CO2e, water, prijs) `value` of `na`, een
     tekstvraag `yes`, `no` of `na`. () voor een vraag die niet bestaat."""
@@ -323,6 +346,11 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
            "kop": next((k for _f, k in treffers if k), ""), "reden": reden, "reden_kort": kort}
     if status == GECHECKT and len(ja_nee) == 1:
         uit["antwoord"] = next(iter(ja_nee))       # het bevestigde antwoord (yes / no / na / value)
+    if status == GECHECKT:
+        # BEWIJSSTERKTE (W1b-2): rust de cel ALLEEN op zelfgerapporteerde feiten, dan zegt de cel dat.
+        # Alleen een label: de telling verandert niet.
+        dragers = [f for (f, _k), s_ in zip(treffers, statussen) if s_ == GECHECKT]
+        uit["zelf_gerapporteerd"] = bool(dragers) and all(wiki.zelf_gerapporteerd(f) for f in dragers)
     return uit
 
 

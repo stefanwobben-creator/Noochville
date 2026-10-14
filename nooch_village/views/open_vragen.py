@@ -135,9 +135,9 @@ def render_open_vragen(st, status: str = "", csrf_token: str = "", username: str
             datum = (f"<span class='muted'>{_e(r['tot'])} — expired</span>" if r.get("verlopen") else "")
             actie = (uitstel_form(csrf_token, r["pagina"], soort, r["k"], terug)
                      if bewerk and r["status"] == dek.LEEG else "")
-        antwoord = (f"<a href='{_e(_sprong(r['pagina'], r['kop']))}'>answer</a> " if r["pagina"] is not None
+        antwoord = (f"<a href='{_e(_sprong(r['pagina'], r['kop'], r['k']))}'>answer</a> " if r["pagina"] is not None
                     and r["status"] in (dek.LEEG, dek.UITGESTELD) else "")
-        naam = (f"<a href='{_e(_sprong(r['pagina'], r['kop']))}'>{_e(r['naam'])}</a>"
+        naam = (f"<a href='{_e(_sprong(r['pagina'], r['kop'], r['k']))}'>{_e(r['naam'])}</a>"
                 if r["pagina"] is not None else f"{_e(r['naam'])} <span class='muted'>(no page yet)</span>")
         label = "Material" if soort == "materiaal" else "Supplier"
         # DE REDEN BIJ ELKE OPEN CEL (W1b): niet alleen bij een conflict. "Open" zonder waarom laat

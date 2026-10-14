@@ -269,6 +269,6 @@ def test_defer_staat_op_open_questions_en_op_de_wikipagina(tmp_path):
     assert "value='vraag_uitstel'" in h and "Research by" in h and ">Deferred" in h
     assert "value='vraag_uitstel'" not in render_open_vragen(st)       # zonder sessie geen knop
     p = render_pagina(st, aid, csrf_token="t", username="guest")
-    blok = p[p.index("<h3>Questions</h3>"):]
+    blok = p[p.index("<h2>Questions and facts</h2>"):]
     assert "Dyes &amp; chemicals" in blok and "value='vraag_uitstel'" in blok
     assert "counts as substantiated: <strong>no</strong>" in blok

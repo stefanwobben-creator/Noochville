@@ -253,3 +253,87 @@ def leesrapport_tekst(r: dict) -> str:
         uit.append(f"   {x['pagina']} {x['fid']} → {x['vraag']} ({'checked' if x['gecheckt'] else 'unchecked'})"
                    f": {x['tekst'][:60]}")
     return "\n".join(uit)
+
+
+# ── Feiten losmaken uit de tekst (W1b-2, variant B) ─────────────────────────────────────────────
+#
+# Op een pagina van /bom staan de feiten sinds W1b-2 per vraag. Hun `{{fact:<id>}}`-regels in de
+# tekst worden dan niet meer getoond; dit haalt ze ook uit de OPSLAG, met één versie per pagina. Een
+# kopje dat daarna leeg is (er stonden alleen feiten onder) gaat mee; een kopje met tekst — Conclusion,
+# TODO, een alinea — blijft, met zijn tekst.
+
+_KOP_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+
+
+def _losgemaakt(body: str) -> tuple[str, list[dict]]:
+    """(nieuwe tekst, per kopje met feiten: {kop, feiten, midden, kop_weg})."""
+    regels = (body or "").split("\n")
+    # in secties: [kop-regel of None, [regels]]
+    secties: list[list] = [[None, []]]
+    for r in regels:
+        if _KOP_RE.match(r):
+            secties.append([r, []])
+        else:
+            secties[-1][1].append(r)
+    uit, rapport = [], []
+    for kop, inhoud in secties:
+        fids = [m.group(1) for r in inhoud if (m := wiki.FEIT_MARKER_RE.match(r))]
+        rest = [r for r in inhoud if not wiki.FEIT_MARKER_RE.match(r)]
+        tekst_over = any(r.strip() for r in rest)
+        if fids:
+            naam = _KOP_RE.match(kop).group(2) if kop else "(top of the page)"
+            rapport.append({"kop": naam, "feiten": fids, "midden": tekst_over,
+                            "kop_weg": bool(kop) and not tekst_over})
+            if kop and not tekst_over:
+                continue                                     # het kopje droeg alleen feiten
+            # lege regels die de markeringen achterlieten samenvoegen
+            schoon = []
+            for r in rest:
+                if not r.strip() and schoon and not schoon[-1].strip():
+                    continue
+                schoon.append(r)
+            rest = schoon
+        if kop is not None:
+            uit.append(kop)
+        uit.extend(rest)
+    return "\n".join(uit).strip("\n") + ("\n" if (body or "").endswith("\n") else ""), rapport
+
+
+def losmaken_plan(store, pagina_ids) -> list[dict]:
+    """[{id, titel, voor, na, koppen}] voor de pagina's van /bom die nog feiten in hun tekst hebben."""
+    uit = []
+    for pid in sorted(pagina_ids):
+        a = store.get(pid)
+        if a is None or not wiki.FEIT_MARKER_RE.search(a.body or ""):
+            continue
+        na, koppen = _losgemaakt(a.body or "")
+        uit.append({"id": a.id, "titel": a.title or a.id, "voor": a.body or "", "na": na, "koppen": koppen})
+    return uit
+
+
+def losmaken_toepassen(store, plan_: list[dict], *, actor_id: str = "") -> int:
+    for p in plan_:
+        store.update(p["id"], body=p["na"], actor_id=actor_id, actor_type="person",
+                     change_note="W1b-2: facts shown per question, no longer in the text")
+    return len(plan_)
+
+
+def losmaken_tekst(plan_: list[dict]) -> str:
+    if not plan_:
+        return "Nothing to detach: no page of /bom has facts in its text."
+    n_f = sum(len(k["feiten"]) for p in plan_ for k in p["koppen"])
+    n_m = sum(len(k["feiten"]) for p in plan_ for k in p["koppen"] if k["midden"])
+    uit = [f"{len(plan_)} page(s), {n_f} fact(s) in the text; {n_m} of them between other text."]
+    for p in plan_:
+        uit.append(f"{p['id']}  {p['titel']}")
+        for k in p["koppen"]:
+            waar = "between text" if k["midden"] else "only facts under it"
+            weg = " — heading goes (empty after)" if k["kop_weg"] else ""
+            uit.append(f"  {k['kop']}: {len(k['feiten'])} fact(s), {waar}{weg}")
+    return "\n".join(uit)
+
+
+def bom_pagina_ids(att, leveranciers, materialen) -> set[str]:
+    d, _ctx = dek.uit_stores(att, leveranciers, materialen)
+    return {r["pagina"].id for rijen in (d["materialen"], d["leveranciers"]) for r in rijen
+            if r.get("pagina") is not None}

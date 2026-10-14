@@ -209,11 +209,14 @@ def test_een_pagina_zonder_vragen_kent_geen_vraagkeuze(tmp_path):
     assert wiki.nagekeken(_pagina_feit(dd, a.id, "F1"))
 
 
-def test_de_vragentabel_linkt_naar_het_feit_dat_de_cel_draagt(tmp_path):
-    """W1b, de toets van Stefan: bij "Contains plastic?" zie je welk feit het draagt."""
+def test_het_feit_staat_onder_de_vraag_waarvoor_het_telt(tmp_path):
+    """W1b-2 (variant B), de toets van Stefan: onder "Contains plastic?" staat het feit dat de cel
+    draagt, met de status en wat er nodig is om het antwoord te veranderen."""
     from nooch_village.views.wiki import _vragen_sectie
     dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes, 30% PLA")])
     _check(dd, aid, "F1", plastic="yes")
     st = cockpit2._Stores(dd)
     h = _vragen_sectie(st, st.att.get(aid), "", False)
-    assert "Based on: <a href='#feit-F1'>Contains plastic: yes, 30% PLA</a>" in h
+    blok = h.split("id='vraag-plastic'", 1)[1].split("<div class='wiki-inline' id='vraag-", 1)[0]
+    assert "<h3>Contains plastic?</h3>" in blok and "Checked: yes</span>" in blok
+    assert "id='feit-F1'" in blok and "To change this answer:" in blok
