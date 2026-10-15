@@ -1933,7 +1933,12 @@ def _act_pagina_feit_add(c):
         waarde = wiki.maak_waarde(g("grootheid"), g("getal"))
         if waarde is None:
             return nxt, "✗ a value needs both a quantity and a number above 0"
-    feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=g("ref"),
+    # "I KNOW THIS FIRST-HAND" (+ Add fact per vraag, 15 oktober 2026): de naam komt uit de sessie,
+    # nooit uit het formulier — dezelfde regel als bij nakijken.
+    ref = g("ref")
+    if g("soort") == "attested" and not ref:
+        ref = _persoon_naam(username, st)
+    feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=ref,
                           citaat=g("citaat"), url=g("url"), waarde=waarde)
     if feit is None:
         return nxt, "✗ a fact needs text"
@@ -1948,7 +1953,22 @@ def _act_pagina_feit_add(c):
                         governance_ref=gref, change_note="feit toegevoegd")
     artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                          actor_id=actor_id, actor_type="person", governance_ref=gref)
-    return nxt, f"➕ fact added ({upd.id})"
+    melding = f"➕ fact added ({upd.id})"
+    # MEETEEN NAKIJKEN (+ Add fact per vraag, 15 oktober 2026): alleen als de mens het vinkje zette,
+    # en via EXACT dezelfde route als "Check" (`pagina_feit_gezien`), met dezelfde poort en dezelfde
+    # bronregel. Zonder bron weigert die route, en dan staat het feit er gewoon ongecheckt.
+    if g("nakijken") == "1" and g("vraag"):
+        k = g("vraag")
+        form2 = {"aid": [cur.id], "fid": [wiki.feit_id(feit)], "next": [nxt],
+                 f"antwoord_{k}": [g(f"antwoord_{k}")]}
+        g2 = lambda n: (form2.get(n) or [""])[0].strip()                     # noqa: E731
+        _n, uitkomst = _act_pagina_feit_gezien(_Ctx(st, g2, nxt, form2, username,
+                                                     "pagina_feit_gezien", data_dir))
+        if uitkomst.startswith("✗"):
+            melding += " — not checked: add a link, a file or ‘first-hand’ to check it"
+        else:
+            melding += " and checked"
+    return nxt, melding
 
 
 def _vermeldingen_in_kanaal(st, kanaal: str, tekst: str, afzender: str) -> int:
@@ -8607,7 +8627,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                                    else f"role:{_a.anchor}"),
                                    change_note=f"bijlage toegevoegd: {safe}")
                     self._redirect(fields.get("next", "/"), "📎 bijlage toegevoegd"); return
-                if fields.get("action") == "pagina_feit_edit":
+                if fields.get("action") in ("pagina_feit_edit", "pagina_feit_add"):
                     # AUTHZ: domeineigenaar of Circle Lead — de poort van `pagina_feit_edit` zelf,
                     # hier vóór het wegschrijven ook al, zodat een geweigerde upload niets achterlaat.
                     # EEN FEIT BEWERKEN MÉT BEWIJS (4 oktober 2026): het bestand komt bij de pagina,
@@ -8635,8 +8655,10 @@ def make_handler(data_dir: str, csrf_token: str,
                         with open(full, "wb") as fh:
                             fh.write(blob)
                         fields["url"] = f"on file: {opgeslagen}"     # het EXACTE bestand, niet op naam
+                        if fields.get("action") == "pagina_feit_add":
+                            fields["soort"] = "document"           # een geüpload bestand IS de bron
                     try:
-                        nxt, msg = dispatch(data_dir, "pagina_feit_edit",
+                        nxt, msg = dispatch(data_dir, fields.get("action"),
                                             {k: [v] for k, v in fields.items()}, username=username)
                     except NietGevonden:
                         self._send("<p>404</p>", 404); return

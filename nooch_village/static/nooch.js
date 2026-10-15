@@ -2609,6 +2609,44 @@
    * de wiki-pagina. Staat die vraag in een dichtgeklapt `<details>` (pagina zonder feiten), dan
    * opent dit het blok en scrolt erheen — bij het laden (directe URL) én bij een klik op dezelfde
    * pagina (`hashchange`). Een browser die zelf openklapt, doet hier niets dubbel: `open` is al waar. */
+  /* ⋯-MENU EN BRONPOORT (wiki-feiten, 15 oktober 2026).
+   * Escape sluit een open `<details data-esc>` waar de focus in staat en zet de focus terug op de
+   * summary (Tab naar ⋯, Enter opent, Escape sluit). En in een "+ Add fact"-formulier
+   * (`form[data-bron-poort]`) staat het vinkje "I checked this" pas aan als er een bron is: een link,
+   * een gekozen bestand of "first-hand". De server toetst hetzelfde; dit is alleen het gemak. */
+  function escSluit(ev) {
+    if (ev.key !== "Escape") return false;
+    var t = ev.target, d = t && t.closest ? t.closest("details[data-esc][open]") : null;
+    if (!d) return false;
+    d.open = false;
+    var s = d.querySelector("summary");
+    if (s && s.focus) s.focus();
+    ev.preventDefault && ev.preventDefault();
+    return true;
+  }
+  NV.escSluit = escSluit;
+  function bronPoort(form) {
+    var soort = form.querySelector("[name=soort]"), url = form.querySelector("[name=url]"),
+        bestand = form.querySelector("[name=file]"), vink = form.querySelector("[name=nakijken]");
+    if (!vink) return false;
+    var heeft = (soort && soort.value === "attested") ||
+                (url && (url.value || "").trim() !== "") ||
+                (bestand && bestand.files && bestand.files.length > 0);
+    vink.disabled = !heeft;
+    if (!heeft) vink.checked = false;
+    return heeft;
+  }
+  NV.bronPoort = bronPoort;
+  if (document.addEventListener) {
+    document.addEventListener("keydown", escSluit);
+    ["input", "change"].forEach(function (soort) {
+      document.addEventListener(soort, function (ev) {
+        var f = ev.target && ev.target.closest ? ev.target.closest("form[data-bron-poort]") : null;
+        if (f) bronPoort(f);
+      });
+    });
+  }
+
   function vraagAnker(doc) {
     var hash = (window.location && window.location.hash) || "";
     if (hash.indexOf("#vraag-") !== 0) return false;

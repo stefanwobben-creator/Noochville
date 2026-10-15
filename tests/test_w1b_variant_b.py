@@ -69,12 +69,12 @@ def test_self_reported_staat_bij_de_cel_en_de_telling_verandert_niet(tmp_path):
 def test_to_change_this_answer_per_status(tmp_path):
     dd, aid = _dorp(tmp_path)
     h = _html(dd, aid)
-    assert "To change this answer: add a fact that answers it (Bulk Import in the / menu)" in _blok(h, "plastic")
+    assert "To change this answer: add a fact that answers it (+ Add fact below, or Bulk Import in the / menu)" in _blok(h, "plastic")
     assert "add a fact with this number" in _blok(h, "co2")
     _check(dd, aid, "F1", plastic="yes")
     b = _blok(_html(dd, aid), "plastic")
     assert "What counts:" in b and b.index("What counts:") < b.index("To change this answer:")
-    assert "use &#x27;Check again with an answer&#x27; on it" in b and "conflict" in b
+    assert "use &#x27;Re-check&#x27; on it" in b and "conflict" in b
 
 
 def test_een_pagina_buiten_bom_houdt_de_feiten_in_de_tekst(tmp_path):
