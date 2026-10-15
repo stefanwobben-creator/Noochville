@@ -312,6 +312,10 @@ def _dek_cel(vraag: dict, cel: dict, pagina) -> str:
         # BEWIJSSTERKTE (W1b-2): checked, maar alleen op het woord van de leverancier.
         onder = "<div class='muted'>self-reported</div>"
         reden = " — self-reported"
+    if cel["status"] == dek.GECHECKT and cel.get("nee_notitie"):
+        # ANTWOORDREGEL "BESTAAN": yes, met zichtbaar hoeveel gecheckte feiten no zeggen.
+        onder += f"<div class='muted'>{cel['nee_notitie']} says no</div>"
+        reden = f"{reden} — {cel['nee_notitie']} checked fact(s) say no"
     label = _e(f"{vraag['label']}: {woord}{reden}")
     if pagina is None:
         # "No page yet" staat al in de eerste kolom; per cel herhalen is ruis. De reden zit in de title.

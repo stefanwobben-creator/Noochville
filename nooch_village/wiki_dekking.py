@@ -34,7 +34,7 @@ from nooch_village import wiki
 #: De drie doelen waar de vragen voor bestaan. Sleutel → label op het scherm.
 DOELEN: dict[str, str] = {"vs": "Vegan Society", "pp": "Product Passport", "cfj": "CFJ labor"}
 
-#: DE ENE PLEK VOOR DE VRAGEN, per paginasoort: (sleutel, label, doelen, koppen, grootheid).
+#: DE ENE PLEK VOOR DE VRAGEN, per paginasoort: (sleutel, label, doelen, koppen, grootheid, regel).
 #: `koppen` = de kopnamen (hoofdletter-ongevoelig) waaronder een feit deze vraag beantwoordt;
 #: `grootheid` = voor een getal-vraag de grootheid uit `wiki.GROOTHEDEN`, anders "".
 #: De doelen komen uit het prototype van 10 oktober 2026 (arrays MQ en SQ).
@@ -42,22 +42,34 @@ DOELEN: dict[str, str] = {"vs": "Vegan Society", "pp": "Product Passport", "cfj"
 #: DE KOPNAMEN KOMEN UIT `wiki.VRAAGSECTIES` (een kopje per vraag, #697): het skelet, het zaad en
 #: deze dekking lezen dezelfde namen. Het oude gedeelde kopje "Animal-derived & chemical status"
 #: telt nergens voor: een feit eronder zegt niet welke van de twee vragen het beantwoordt.
-VRAGEN: dict[str, tuple[tuple[str, str, tuple[str, ...], tuple[str, ...], str], ...]] = {
+#: DE ANTWOORDREGEL PER VRAAG (zesde veld, besluit Stefan 15 oktober 2026):
+#:   BESTAAN   — één gecheckte yes is genoeg ("bevat het plastic?", "is er een certificaat?"). Een
+#:               gecheckte no naast een yes is geen conflict maar een notitie bij de vraag. "No"
+#:               alleen als er minstens één gecheckte no is en geen enkele yes.
+#:   EENDUIDIG — yes tegen no is een conflict (locatie, eigendom, biobased; chem en labor tot de
+#:               vraag scherper is).
+#:   ""        — een getalvraag: verschillende getallen zijn een conflict, zoals altijd.
+#: Alleen GECHECKTE antwoorden tellen: ongecheckt, zonder antwoord op deze vraag of met een
+#: verlopen/ontbrekende bron telt niet — onbekend is nooit nee.
+BESTAAN = "bestaan"
+EENDUIDIG = "eenduidig"
+
+VRAGEN: dict[str, tuple[tuple[str, str, tuple[str, ...], tuple[str, ...], str, str], ...]] = {
     "materiaal": (
-        ("plastic", "Contains plastic?", ("pp",), wiki.kopnamen(wiki.PLASTIC), ""),
-        ("biobased", "Biobased?", ("pp",), wiki.kopnamen(wiki.BIOBASED), ""),
-        ("animal", "Animal-derived", ("vs",), wiki.kopnamen(wiki.DIERLIJK), ""),
-        ("chem", "Dyes & chemicals", ("vs", "pp"), wiki.kopnamen(wiki.CHEMISCH), ""),
-        ("co2", "CO2e per kg", ("pp",), (), "co2e_per_kg"),
-        ("water", "Water per kg", ("pp",), (), "water_per_kg"),
-        ("cert", "Certificate", ("vs", "pp"), wiki.kopnamen(wiki.CERTIFICERING), ""),
+        ("plastic", "Contains plastic?", ("pp",), wiki.kopnamen(wiki.PLASTIC), "", BESTAAN),
+        ("biobased", "Biobased?", ("pp",), wiki.kopnamen(wiki.BIOBASED), "", EENDUIDIG),
+        ("animal", "Animal-derived", ("vs",), wiki.kopnamen(wiki.DIERLIJK), "", BESTAAN),
+        ("chem", "Dyes & chemicals", ("vs", "pp"), wiki.kopnamen(wiki.CHEMISCH), "", EENDUIDIG),
+        ("co2", "CO2e per kg", ("pp",), (), "co2e_per_kg", ""),
+        ("water", "Water per kg", ("pp",), (), "water_per_kg", ""),
+        ("cert", "Certificate", ("vs", "pp"), wiki.kopnamen(wiki.CERTIFICERING), "", BESTAAN),
     ),
     "leverancier": (
-        ("loc", "Location & contact", ("pp",), wiki.kopnamen(wiki.LOCATIE), ""),
-        ("cert", "Company certification", ("vs", "pp"), wiki.kopnamen(wiki.BEDRIJFSCERT), ""),
-        ("price", "Price per kg", ("pp",), (), "prijs_per_kg"),
-        ("labor", "Labor & compliance", ("cfj",), wiki.kopnamen(wiki.ARBEID_COMPLIANCE), ""),
-        ("own", "Ownership & health", ("pp",), wiki.kopnamen(wiki.EIGENDOM), ""),
+        ("loc", "Location & contact", ("pp",), wiki.kopnamen(wiki.LOCATIE), "", EENDUIDIG),
+        ("cert", "Company certification", ("vs", "pp"), wiki.kopnamen(wiki.BEDRIJFSCERT), "", BESTAAN),
+        ("price", "Price per kg", ("pp",), (), "prijs_per_kg", ""),
+        ("labor", "Labor & compliance", ("cfj",), wiki.kopnamen(wiki.ARBEID_COMPLIANCE), "", EENDUIDIG),
+        ("own", "Ownership & health", ("pp",), wiki.kopnamen(wiki.EIGENDOM), "", EENDUIDIG),
     ),
 }
 
@@ -196,11 +208,11 @@ def toegestane_antwoorden(k: str) -> tuple[str, ...]:
 def vragen(soort: str, doel: str = "") -> list[dict]:
     """De vragen voor een paginasoort, eventueel alleen die van één doel."""
     uit = []
-    for k, label, doelen, koppen, grootheid in VRAGEN.get(soort, ()):
+    for k, label, doelen, koppen, grootheid, regel in VRAGEN.get(soort, ()):
         if doel and doel not in doelen:
             continue
         uit.append({"k": k, "label": label, "doelen": doelen, "koppen": koppen,
-                    "grootheid": grootheid})
+                    "grootheid": grootheid, "regel": regel})
     return uit
 
 
@@ -324,9 +336,12 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     reden = ""
     # DE ANTWOORDEN VAN DE GECHECKTE FEITEN. Zeggen twee gecheckte feiten yes en no op dezelfde vraag,
     # dan is de cel een CONFLICT — ook als ze op verschillende plekken van de pagina staan.
-    ja_nee = {a["waarde"] for (f, _k), s in zip(treffers, statussen) if s == GECHECKT
-              for a in wiki.antwoorden(f) if a["vraag"] == vraag["k"]}
-    if {"yes", "no"} <= ja_nee:
+    gecheckte_antwoorden = [a["waarde"] for (f, _k), s in zip(treffers, statussen) if s == GECHECKT
+                            for a in wiki.antwoorden(f) if a["vraag"] == vraag["k"]]
+    ja_nee = set(gecheckte_antwoorden)
+    n_nee = gecheckte_antwoorden.count("no")
+    bestaan_ja = vraag.get("regel") == BESTAAN and "yes" in ja_nee
+    if {"yes", "no"} <= ja_nee and not bestaan_ja:
         statussen.append(CONFLICT)
         reden = "checked facts disagree: one says yes, another no"
     if vraag["grootheid"]:
@@ -344,7 +359,13 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
         reden, kort = _reden_ongecheckt(vraag, treffers, ctx)
     uit = {"status": status, "feiten": [wiki.feit_id(f) for f, _k in treffers],
            "kop": next((k for _f, k in treffers if k), ""), "reden": reden, "reden_kort": kort}
-    if status == GECHECKT and len(ja_nee) == 1:
+    if status == GECHECKT and bestaan_ja:
+        # BESTAAN: één gecheckte yes is het antwoord. Een gecheckte no ernaast wordt een notitie bij
+        # de vraag ("1 checked fact says no"), zichtbaar, niet weggestopt.
+        uit["antwoord"] = "yes"
+        if n_nee:
+            uit["nee_notitie"] = n_nee
+    elif status == GECHECKT and len(ja_nee) == 1:
         uit["antwoord"] = next(iter(ja_nee))       # het bevestigde antwoord (yes / no / na / value)
     if status == GECHECKT:
         # BEWIJSSTERKTE (W1b-2): rust de cel ALLEEN op zelfgerapporteerde feiten, dan zegt de cel dat.
