@@ -338,7 +338,10 @@ def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
     st2 = cockpit2._Stores(st.dd)
 
     filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
-    assert "To add facts" in filler and "+ Add fact" not in filler
+    # "+ Add fact" staat sinds 15 oktober 2026 bij elke VRAAG (HyphaLite staat op /bom), niet als
+    # los formulier op de pagina; de wijzer naar Bulk Import blijft één keer staan.
+    assert "To add facts" in filler
+    assert filler.count("<summary class='flink'>+ Add fact</summary>") == 7      # 7 materiaalvragen
     assert ">Facts</h3>" not in filler
     assert filler.count("To add facts") == 1                     # één ingang, niet twee
     # HyphaLite staat op /bom: sinds 15 oktober 2026 (besluit Stefan) zegt één regel welke vragen
@@ -347,6 +350,7 @@ def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
 
     outsider = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
     assert "To add facts" not in outsider and ">Facts</h3>" not in outsider
+    assert "<summary class='flink'>+ Add fact</summary>" not in outsider     # alleen wie mag bewerken
 
 
 def test_onbekende_pagina_geeft_nette_melding(tmp_path):

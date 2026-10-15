@@ -708,6 +708,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 .acard-d{position:relative;list-style:none;padding:0;margin:0}
 .acard-d>summary{list-style:none}
 .acard-d>summary::-webkit-details-marker{display:none}
+/* In een wiki-feit en bij "+ Add fact" is de summary een knop, geen balk over de hele breedte
+   (15 oktober 2026). Alleen in de wiki; elders blijft hij zoals hij was. */
+.wiki-inline .acard-d>summary{display:inline-block}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
 .datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
 .checklist{margin:0 0 1.1rem}

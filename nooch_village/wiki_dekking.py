@@ -166,21 +166,22 @@ def wat_verandert(soort: str, k: str, cel: dict) -> str:
     v = next((x for x in vragen(soort) if x["k"] == k), None)
     if v is None:
         return ""
-    nieuw = ("add a fact with this number (Bulk Import in the / menu, with a Value: line)"
-             if v["grootheid"] else "add a fact that answers it (Bulk Import in the / menu)")
+    nieuw = ("add a fact with this number (+ Add fact below, or Bulk Import in the / menu with a "
+             "Value: line)" if v["grootheid"]
+             else "add a fact that answers it (+ Add fact below, or Bulk Import in the / menu)")
     status = cel.get("status")
     if status == GECHECKT:
-        return (f"To change this answer: if the fact below is wrong, use 'Check again with an answer' "
+        return (f"To change this answer: if the fact below is wrong, use 'Re-check' "
                 f"on it. If a source says otherwise, {nieuw} and check it with the other answer; the "
                 f"page owner then resolves the conflict.")
     if status == ONGECHECKT:
-        return "To change this answer: check one of the facts below with 'I checked this' and choose this question."
+        return "To change this answer: use 'Check' on one of the facts below and choose this question."
     if status == CONFLICT:
         return ("To change this answer: look at the facts below, then remove the wrong one or check "
                 "it again with the right answer.")
     if status == UITGESTELD:
         return f"To change this answer: {nieuw} and check it, or undo the deferral."
-    return f"To change this answer: {nieuw}, then check it with 'I checked this' and choose this question."
+    return f"To change this answer: {nieuw}, then use 'Check' on it and choose this question."
 
 
 def toegestane_antwoorden(k: str) -> tuple[str, ...]:

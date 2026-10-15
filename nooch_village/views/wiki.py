@@ -21,7 +21,7 @@ from dataclasses import replace as _replace
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import (_DS_LINK, _nav, _md, _name, link_kaart,
                                          opmaak_werkbalk,
-                                         BLOK_SOORTEN, blok_menu, inline_edit)
+                                         BLOK_SOORTEN, blok_menu, inline_edit, inline_edit_knop)
 from nooch_village import domeinen, wiki
 
 # Status → chip-icoon. Bewust vijf verschillende tekens: 'gegrond' en 'ongecontroleerd' mogen op
@@ -437,23 +437,29 @@ def _telt_voor_html(st, a, feit: dict, soort: str) -> str:
         return ""
     if rij is None:
         return ""
+    # ALS CHIP NAAST DE BRON (15 oktober 2026, besluit Stefan): "Counts for" was een losse regel
+    # onder elk feit. Nu een `chip` per vraag waarvoor het telt; telt het nergens, dan één gedimde
+    # chip. De uitleg ("Counts for …") staat in de title.
     labels = {v["k"]: v["label"] for v in dek.vragen(soort)}
     telt = dek.telt_voor(rij).get(wiki.feit_id(feit), [])
     if telt:
         w = wiki.waarde(feit)
-        delen = []
+        chips = []
         for k, ant in telt:
             if ant == "value" and w:
                 uitleg = wiki.waarde_tekst(w)
             elif ant:
                 uitleg = wiki.antwoord_label(ant)
             else:
-                uitleg = "answer not chosen yet"
-            delen.append(f"{_e(labels.get(k, k))} ({_e(uitleg)})")
-        return "<div class='muted'>Counts for: " + " · ".join(delen) + "</div>"
+                uitleg = "answer not chosen"
+            tekst = f"{labels.get(k, k)}: {uitleg}"
+            chips.append(f"<span class='chip' title='Counts for {_e(tekst)}'>{_e(tekst)}</span>")
+        return " ".join(chips)
     if wiki.achtergrond(feit):
-        return "<div class='muted'>Counts for nothing: background only, answers no question.</div>"
-    return "<div class='muted'>Counts for nothing: choose a question when you check it.</div>"
+        return ("<span class='chip muted' title='Counts for nothing: background only, answers no "
+                "question'>Background only</span>")
+    return ("<span class='chip muted' title='Counts for nothing: choose a question when you check "
+            "it'>No question yet</span>")
 
 
 def _antwoorden_html(feit: dict, soort: str) -> str:
@@ -537,36 +543,38 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     straks = (f" <span class='muted'>check again by {_e(wiki._mooie_datum(h))}</span>"
               if h and g["status"] != wiki.VERVALLEN else "")
     soort = _vraag_soort(st, a)
+    telt = _telt_voor_html(st, a, feit, soort)
     getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-               f"<div>{_grond_chip(g)}{straks}</div>{citaat}"
-               f"{_telt_voor_html(st, a, feit, soort) or _antwoorden_html(feit, soort)}")
+               f"<div>{_grond_chip(g)} {telt}{straks}</div>{citaat}"
+               f"{'' if telt else _antwoorden_html(feit, soort)}")
     if not can_edit:
         return f"<div id='feit-{_e(fid)}'>{getoond}</div>"
-    # NAKIJKEN IS ÉÉN KLIK (5 oktober 2026). Alleen als er iets na te kijken valt: een feit zonder
-    # bron, of met een bestand dat weg is, krijgt de knop niet — de server weigert het ook.
+    # ÉÉN PRIMAIRE KNOP, DE REST ACHTER ⋯ (15 oktober 2026, besluit Stefan). Per feit stonden er drie
+    # of vier knoppen naast elkaar, en "bewerken" zat onzichtbaar onder een klik op de tekst. Nu:
+    # "Check" (nog niet nagekeken) of "Re-check" (wel), en ⋯ met Edit, Undo check en Remove. Klikken
+    # op de tekst blijft ook bewerken. Alleen als er iets na te kijken valt: een feit zonder bron, of
+    # met een bestand dat weg is, krijgt geen Check — de server weigert het ook.
     nagekeken = wiki.nagekeken(feit)
     kan_nakijken = g["status"] not in (wiki.ONGEGROND, wiki.ONTBREEKT)
-    if nagekeken:
-        check = _feit_knop("pagina_feit_gezien", "undo check", "flink", aid, fid, csrf_token,
-                           extra="<input type='hidden' name='uit' value='1'>")
-        if soort and kan_nakijken:
-            # AL NAGEKEKEN, NOG ZONDER (of met een ander) ANTWOORD: opnieuw nakijken met een antwoord,
-            # zonder eerst "undo check". Dat is een nieuwe check, met naam en datum van nu.
-            check = _check_formulier(feit, soort, aid, fid, csrf_token,
-                                     label="Check again with an answer") + check
-    elif soort and kan_nakijken:
+    if soort and kan_nakijken:
         # OP EEN PAGINA VAN /bom: nakijken met een antwoord (W1). Ook bij een verklaring (attested):
         # die is wie het zegt, maar welke VRAAG ze beantwoordt moet een mens nog steeds zeggen.
-        check = _check_formulier(feit, soort, aid, fid, csrf_token)
-    elif (feit.get("grond") or {}).get("soort") == "attested":
-        check = ""                 # de verklaring IS het nakijken: naam en datum staan er al
-    elif kan_nakijken:
-        # Per feit herhaald, dus secundair: een pagina met tien feiten had tien neon knoppen (B3).
-        check = _feit_knop("pagina_feit_gezien", "I checked this", "btn sm", aid, fid, csrf_token)
+        check = _check_formulier(feit, soort, aid, fid, csrf_token,
+                                 label="Re-check" if nagekeken else "Check")
+    elif nagekeken or (feit.get("grond") or {}).get("soort") == "attested" or not kan_nakijken:
+        check = ""                 # al nagekeken, een verklaring IS het nakijken, of niets na te kijken
     else:
-        check = ""
-    weg = _feit_knop("pagina_feit_del", "remove", "dellink", aid, fid, csrf_token,
-                     attrs=" onclick=\"return confirm('Remove this fact?')\"")
+        check = _feit_knop("pagina_feit_gezien", "Check", "btn sm", aid, fid, csrf_token)
+    menu = [inline_edit_knop("Edit")] if a is not None else []
+    if nagekeken:
+        menu.append(_feit_knop("pagina_feit_gezien", "Undo check", "flink", aid, fid, csrf_token,
+                               extra="<input type='hidden' name='uit' value='1'>"))
+    menu.append(_feit_knop("pagina_feit_del", "Remove", "dellink", aid, fid, csrf_token,
+                           attrs=" onclick=\"return confirm('Remove this fact?')\""))
+    # `data-esc`: Escape sluit dit menu en zet de focus terug op ⋯ (`nooch.js`). Hetzelfde
+    # uitklappaneel als het checkformulier ernaast (`acard-d` + `datepop`); geen nieuwe klasse.
+    weg = (f"<details class='acard-d' data-esc><summary class='flink' aria-label='More actions' "
+           f"title='More actions'>⋯</summary><div class='datepop'>{' '.join(menu)}</div></details>")
     if a is not None:
         # KLIK OP HET FEIT = BEWERKEN (4 oktober 2026), hetzelfde `inline_edit` als de wall en de
         # Conclusion. Multipart, want in hetzelfde formulier kan bewijs worden geüpload.
@@ -579,8 +587,10 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
                               multipart=True)
     # HET ANKER `#feit-<id>` (W1b): de dubbel-waarschuwing van Bulk Import linkt naar het feit dat er al is.
     anker = f" id='feit-{_e(fid)}'"
+    # DE KNOPPEN OP ÉÉN REGEL: de primaire knop en ⋯ naast elkaar (`qadd-row`), niet onder elkaar.
+    knoppen = f"<div class='qadd-row'>{check}{weg}</div>"
     if not los:
-        return f"<div class='editor-inline'{anker}>{getoond}{check}{weg}</div>"
+        return f"<div class='editor-inline'{anker}>{getoond}{knoppen}</div>"
     # EEN FEIT ZONDER PLEK. De greep is dezelfde als die van de wiki-blokken; `data-feit-los`
     # draagt de regel die in de tekst komt en `data-feit-soort` de bloksoort, zodat de browser het
     # blok kan neerzetten zonder de vorm van een markering of een soort te kennen.
@@ -590,7 +600,7 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     plaats = _feit_knop("pagina_feit_plaats", "place at end of text", "flink", aid, fid, csrf_token)
     return (f"<div class='editor-inline'{anker} data-feit-los='{_e(wiki.feit_marker(fid))}' "
             f"data-feit-soort='{FEIT_BLOK}' data-feit-plaats='pagina_feit_plaats'>"
-            f"{greep}{getoond}{check}{plaats}{weg}</div>")
+            f"{greep}{getoond}{knoppen}{plaats}</div>")
 
 
 #: De ingang voor feiten, sinds "+ Add fact" weg is (3 oktober 2026, besluit Stefan): het /-menu.
@@ -857,6 +867,51 @@ def _dek_lezer(a) -> str:
     return tekst_voor_lezers(a)
 
 
+def _feit_toevoegen(a, v: dict, csrf_token: str) -> str:
+    """"+ Add fact" bij één vraag (15 oktober 2026, besluit Stefan). Het BESTAANDE `pagina_feit_add`
+    (`wiki.maak_feit`), met de vraag voorgekozen. Bulk Import blijft bestaan.
+
+    NAKIJKEN ALLEEN MET EEN BRON: het vinkje "I checked this" staat uit tot er een link, een bestand
+    of "first-hand" is (`data-bron-poort`, nooch.js). De server toetst hetzelfde: zonder bron komt
+    het feit ALTIJD ongecheckt binnen. Een check ontstaat nooit vanzelf — alleen door dat vinkje."""
+    k = v["k"]
+    pre = f"fa-{_e(a.id)}-{_e(k)}"
+    getal = ""
+    if v["grootheid"]:
+        g = wiki.GROOTHEDEN.get(v["grootheid"], {})
+        getal = (f"<input type='hidden' name='grootheid' value='{_e(v['grootheid'])}'>"
+                 + _field(f"Number ({g.get('eenheid', '')})", "getal", fid=f"{pre}-getal"))
+        antwoorden = (("value", "the number above"),)
+    else:
+        antwoorden = (("yes", "yes"), ("no", "no"))
+    opties = "".join(f"<option value='{_e(w)}'>{_e(lbl)}</option>" for w, lbl in antwoorden)
+    return (f"<details class='acard-d' data-esc><summary class='flink'>+ Add fact</summary>"
+            f"<div class='datepop'>"
+            f"<form method='post' action='/action' enctype='multipart/form-data' class='qadd-form' "
+            f"data-bron-poort>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='vraag' value='{_e(k)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}#vraag-{_e(k)}'>"
+            + _field("Fact", "tekst", kind="textarea", required=True, fid=f"{pre}-tekst")
+            + f"<label class='att-lbl' for='{pre}-soort'>Source</label>"
+              f"<select id='{pre}-soort' name='soort'><option value='bron'>Link</option>"
+              f"<option value='document'>File</option>"
+              f"<option value='attested'>I know this first-hand</option></select>"
+            + _field("Link", "url", kind="url", fid=f"{pre}-url")
+            + f"<label class='att-lbl' for='{pre}-file'>File</label>"
+              f"<input type='file' id='{pre}-file' name='file'>"
+            + _field("Quote (optional)", "citaat", kind="textarea", fid=f"{pre}-citaat")
+            + getal
+            + f"<div class='qadd-row'><input type='checkbox' id='{pre}-check' name='nakijken' value='1' "
+              f"disabled><label for='{pre}-check'>I checked this — it answers “{_e(v['label'])}” with</label>"
+              f"<select id='{pre}-antwoord' name='antwoord_{_e(k)}' aria-label='Answer'>{opties}</select></div>"
+              f"<p class='muted'>Without a link, a file or first-hand knowledge the fact is added "
+              f"unchecked.</p>"
+              f"<button class='btn sm' type='submit' name='action' value='pagina_feit_add'>Add fact</button>"
+              f"</form></div></details>")
+
+
 def _kort(tekst: str, n: int) -> str:
     tekst = " ".join(tekst.split())
     return tekst if len(tekst) <= n else tekst[:n - 1].rstrip() + "…"
@@ -918,11 +973,13 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                     continue
                 getoond[fid] = v["label"]
                 rijen.append(_feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token, can_edit, a))
+            toevoegen = (_feit_toevoegen(a, v, csrf_token) if can_edit and csrf_token else "")
             blokken.append(
                 f"<div class='wiki-inline' id='vraag-{_e(v['k'])}'><h3>{_e(v['label'])}</h3>"
                 f"<p><span class='nu-status nu-status--{vorm}'>{_e(woord)}</span>{actie}</p>{waarom}"
                 f"<p class='muted'>What counts: {_e(dek.wat_telt(soort, v['k']))}</p>"
-                f"<p class='muted'>{_e(dek.wat_verandert(soort, v['k'], c))}</p>{''.join(rijen)}</div>")
+                f"<p class='muted'>{_e(dek.wat_verandert(soort, v['k'], c))}</p>{''.join(rijen)}"
+                f"{toevoegen}</div>")
         overig = [(i, f) for i, f in enumerate(feiten) if wiki.feit_id(f) not in getoond]
         if overig:
             blokken.append(
