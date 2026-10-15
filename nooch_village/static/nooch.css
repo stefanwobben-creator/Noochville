@@ -1236,7 +1236,7 @@ span.ck-box{cursor:default;opacity:.5}
 .ck-item .dellink{margin-left:auto;opacity:0}
 .ck-item:hover .dellink{opacity:1}
 .ck-done{text-decoration:line-through;color:var(--muted)}
-/* checklist-item-states: ✓ done · open · ⤳ overgeslagen · 🙋 mens-taak. De AI-states (uitvoerbaar,
+/* checklist-item-states: ✓ done · open · ⤳ overgeslagen. 🙋 mens-taak is weg (15 okt 2026). De AI-states (uitvoerbaar,
    ⚠ payload-onvolledig, ○ geen-skill) zijn weg sinds 15 oktober 2026: de uitvoerder bestaat niet meer. */
 .ck-item{align-items:flex-start}
 .ck-item .ck-box{margin-top:.1rem}
@@ -1245,8 +1245,6 @@ span.ck-box{cursor:default;opacity:.5}
 .ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:var(--type-12);color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-skip{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
 .ck-box.b-skip{border-style:dotted;opacity:.6}
-.ck-human{font-size:.68rem;color:var(--gray);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
-.ck-box.b-human{border-color:var(--green);border-style:dashed}
 /* Uitklap-paneel (✎ bewerken) op een checklist-regel.
 
    DICHT = een chip in de rij. OPEN = een eigen regel eronder, over de volle breedte.

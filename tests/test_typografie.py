@@ -26,7 +26,6 @@ SCHULD = {
     ('nooch.css', '.c2-psub'),
     ('nooch.css', '.catcard .src'),
     ('nooch.css', '.ck-box'),
-    ('nooch.css', '.ck-human'),
     ('nooch.css', '.ck-klaar-kop .muted'),
     ('nooch.css', '.ck-meta'),
     ('nooch.css', '.ck-prog .muted'),

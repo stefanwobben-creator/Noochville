@@ -18,7 +18,7 @@ import re
 from nooch_village import web_base
 from tests.test_b3_lijn import CSS, _blokken, _regel
 
-PADDING_PLAFOND = 264
+PADDING_PLAFOND = 263
 
 
 def _buiten_schaal() -> int:

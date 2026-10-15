@@ -647,8 +647,7 @@ class ProjectLedger:
 
     def check_add(self, pid: str, clid: str, text: str, *,
                   skill: str | None = None, query: str = "", reason: str = "",
-                  payload: dict | None = None, payload_ok: bool = True,
-                  human_task: bool = False) -> bool:
+                  payload: dict | None = None, payload_ok: bool = True) -> bool:
         p = self._projects.get(pid)
         text = (text or "").strip()
         cl = self._checklist(p, clid) if p else None
@@ -662,11 +661,6 @@ class ProjectLedger:
         if reason: item["reason"] = reason[:300]     # 'geen skill' of 'payload onvolledig' → waarom (blijft open)
         if not payload_ok:
             item["payload_ok"] = False               # payload mist een verplicht veld → niet uitvoerbaar
-        if human_task:
-            # Expliciete mens-taak: geen enkele skill kan dit ooit (fysiek/offline werk). Telt NIET
-            # mee in de klaar-telling — anders houdt hij het project eeuwig onaf, en dat is precies
-            # de zombie die we vóór zijn. Blijft wél zichtbaar staan als openstaand mens-werk.
-            item["human_task"] = True
         cl.setdefault("items", []).append(item)
         p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()
@@ -771,38 +765,6 @@ class ProjectLedger:
                 it["payload"] = payload
                 it.pop("payload_ok", None)               # weer uitvoerbaar
                 it.pop("reason", None)                   # de oude klacht is opgelost
-                self._touch(p)
-                self._save()
-                return True
-        return False
-
-    def set_item_human(self, pid: str, clid: str, item_id: str, human: bool = True,
-                       reden: str = "") -> bool:
-        """Markeer één item alsnog als mens-/extern werk (of haal die markering weg).
-
-        `check_add` kon dit alleen bij het aanmaken, en de planner ziet het niet altijd goed: een
-        checklist waarin "ontwerp een testprotocol" en "voer 5 testrondes uit" naast elkaar staan is
-        half rol-werk en half labwerk. Zonder deze setter is de enige uitweg het hele project naar
-        de backlog schuiven, en dan verdwijnt ook het deel dat een rol wél kan oppakken.
-
-        Een mens-taak telt niet mee in de klaar-telling (`_NIET_TELBAAR`) maar blijft zichtbaar
-        openstaan — zo houdt het project geen zombie-status en raakt het werk niet zoek.
-
-        `reden` (scope 57): WAAROM dit bij een mens ligt — bij een escaleer-beslissing de vraag
-        zelf. Het komt in `reason` op het item, waar `not_answered_note` het bij de review toont;
-        zonder reden las de review-melding alleen de item-tekst en niet wat er gevraagd wordt."""
-        p = self._projects.get(pid)
-        cl = self._checklist(p, clid) if p else None
-        if cl is None:
-            return False
-        for it in cl.get("items", []):
-            if it["id"] == item_id:
-                if human:
-                    it["human_task"] = True
-                    if reden:
-                        it["reason"] = str(reden)[:300]
-                else:
-                    it.pop("human_task", None)
                 self._touch(p)
                 self._save()
                 return True
@@ -1302,13 +1264,15 @@ class ProjectLedger:
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
 
 
-# De twee redenen waarom een item NIET meetelt in de klaar-telling. Beide betekenen "dit project
-# levert dit niet", maar ze zijn niet hetzelfde en lezen dus ook anders:
-#   skipped    — de mens besloot achteraf dat het niet (meer) hoeft;
-#   human_task — de planner zag vooraf dat alleen een mens of externe partij dit kan doen.
-# Eén constante, want de teller, de badge, het einddocument en de park-klep moeten per se dezelfde
-# set uitsluiten (anders zegt de UI 4/5 terwijl de rol het project al als af beschouwt).
-_NIET_TELBAAR = ("skipped", "human_task")
+# De reden waarom een item NIET meetelt in de klaar-telling: `skipped` — de mens besloot achteraf
+# dat het niet (meer) hoeft. Eén constante, want de teller, de badge, het einddocument en de
+# park-klep moeten per se dezelfde set uitsluiten.
+#
+# `human_task` STOND HIER OOK (tot 15 oktober 2026, besluit Stefan). Die vlag zei "de rol doet dit
+# niet, een mens wel" en haalde het item daarom uit de telling. Sinds er geen AI-uitvoerder meer is
+# (#516) is élk item mensenwerk; de uitzondering liet lijsten op 100% staan terwijl er nog werk
+# openlag. Het veld blijft in de opslag staan, het telt alleen niet meer anders.
+_NIET_TELBAAR = ("skipped",)
 
 
 def _items_van(project_or_cl) -> list[dict]:
@@ -1320,14 +1284,6 @@ def _items_van(project_or_cl) -> list[dict]:
 def skipped_items(project_or_cl) -> list[dict]:
     """De bewust overgeslagen items (mens-besluit achteraf)."""
     return [it for it in _items_van(project_or_cl) if it.get("skipped")]
-
-
-def human_task_items(project_or_cl, alleen_open: bool = True) -> list[dict]:
-    """De expliciete mens-taken (planner-besluit vooraf). Default alleen de nog openstaande —
-    een afgevinkte mens-taak is gedaan en hoeft niet als voorbehoud gemeld te worden."""
-    return [it for it in _items_van(project_or_cl)
-            if it.get("human_task") and not it.get("skipped")
-            and not (alleen_open and it.get("done"))]
 
 
 def empty_items(project_or_cl) -> list:
@@ -1342,21 +1298,20 @@ def empty_items(project_or_cl) -> list:
 
 
 def not_answered_note(project_or_cl, max_toon: int = 2) -> str:
-    """Één leesbare regel over wat dit project NIET beantwoordt: overgeslagen taken plus nog
-    openstaande mens-taken. Leeg als er niets uitstaat.
+    """Één leesbare regel over wat dit project NIET beantwoordt: overgeslagen taken en taken die
+    liepen zonder resultaat. Leeg als er niets uitstaat. (Openstaande "mens-taken" stonden hier tot
+    15 oktober 2026 ook; die tellen sindsdien gewoon mee in de voortgang.)
 
     Eén bron, want de badge, het einddocument, de afrond-uitkomst en de review-melding moeten alle
     vier hetzelfde zeggen: dit project rondt af zónder deze ta(a)k(en). Dat is de rem op valse
     voltooiing — 4/4 mag nooit lezen als 'alles gedaan'."""
     delen = []
     weg = skipped_items(project_or_cl)
-    mens = human_task_items(project_or_cl)
     # Uitgevoerd-maar-leeg hoort in dezelfde regel: het is afgevinkt, maar het beantwoordt niets.
     # Zonder deze groep is een project waarin élke taak leegliep niet van een afgerond project te
     # onderscheiden — de duurste vorm van valse voltooiing.
     leeg = empty_items(project_or_cl)
     for groep, label, redenveld in ((weg, "skipped", "skip_reason"),
-                                    (mens, "human task(s) still open", "reason"),
                                     (leeg, "run without a result", "leeg_reden")):
         if not groep:
             continue
@@ -1374,10 +1329,11 @@ def checklist_progress(cl_or_items) -> tuple[int, int]:
     """(afgevinkt, telbaar) voor één checklist of een lijst items — DE bron van waarheid voor
     "is deze checklist af?".
 
-    Overgeslagen items én expliciete mens-taken tellen niet mee in de noemer (`_NIET_TELBAAR`): een
-    besluit dat dit project het niet levert, mag het niet eeuwig onafgerond houden. Eén definitie,
-    want de worker (review-gate), de voortgangsbalk en de kaart-badge moeten het per se over
-    hetzelfde getal hebben."""
+    Overgeslagen items tellen niet mee in de noemer (`_NIET_TELBAAR`): een besluit dat dit project
+    het niet levert, mag het niet eeuwig onafgerond houden. Elk ander item telt mee, ook een met de
+    oude `human_task`-vlag (sinds 15 oktober 2026). Eén definitie, want de review-poort
+    (`project_items.maybe_finish`), de voortgangsbalk, de kaart-badge, de doelvoortgang
+    (`doelen.project_score`) en het Noochie-memo moeten het per se over hetzelfde getal hebben."""
     items = cl_or_items.get("items", []) if isinstance(cl_or_items, dict) else (cl_or_items or [])
     telbaar = [it for it in items if not any(it.get(v) for v in _NIET_TELBAAR)]
     return sum(1 for it in telbaar if it.get("done")), len(telbaar)
@@ -1445,7 +1401,7 @@ _WRITE_METHODS = (
     "mark_formalized", "to_future",
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
-    "set_item_human", "set_item_payload",
+    "set_item_payload",
     "set_item_text", "move_item", "set_doel", "set_depends_on", "migreer_queued",
 )
 for _m in _WRITE_METHODS:
