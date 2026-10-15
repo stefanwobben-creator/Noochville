@@ -11,8 +11,8 @@ heeft het dorp (nog) niet. Zolang ronde twee niet automatisch is, staat de lus a
 mét de zoekopdrachten erbij, zodat de mens niet zelf hoeft te bedenken wat hij moet typen. Wat hij
 vindt hangt hij als links aan het project, en dáár leest de rol de volgende ronde uit.
 
-WAT ER STAAT. Een `human_task`-item (telt niet mee voor done, precies als een fabrieksbezoek) met een
-korte tekst, en een bericht op de wall met (1) de Google-queries: de termen van het plan, in alle
+WAT ER STAAT. Een gewoon item (sinds 15 oktober 2026 zonder `human_task`-vlag: elk item is
+mensenwerk en telt mee voor done) met een korte tekst, en een bericht op de wall met (1) de Google-queries: de termen van het plan, in alle
 drie de woordenschatten als de planner ze schreef, plus de brede vorm; (2) een deep-research-prompt
 voor Gemini, Claude of Perplexity met het doel en de opdracht van de mens erin. Beide binnen de caps
 van het bord (`check_add` 200 tekens per item, `add_role_message` 1500 per bericht).

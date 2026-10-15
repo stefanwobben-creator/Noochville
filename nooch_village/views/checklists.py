@@ -147,35 +147,29 @@ def _cl_item_state(it: dict, done) -> tuple[str, str]:
 
       done     ✓  afgevinkt
       open        nog te doen
-      human    🙋 expliciete mens-taak (oud planner-veld) — telt niet mee
       skipped  ⤳  bewust overgeslagen door de mens — telt niet mee
 
     DE AI-STATES ZIJN WEG (15 oktober 2026, besluit Stefan). `exec`, `warn` en `noskill` bestonden
     voor de uitvoerder die sinds #516 (19-20 september) niet meer bestaat: ze beloofden werk dat niets
     meer deed. De `skill`- en `payload`-velden op oude items blijven in de opslag staan; ze worden
-    alleen niet meer getoond. `human` en `skipped` blijven, want `checklist_progress` telt ze nog
-    steeds niet mee en dat moet op het scherm te zien zijn."""
+    alleen niet meer getoond. `skipped` blijft, want `checklist_progress` telt het niet mee en dat
+    moet op het scherm te zien zijn. `human` (de vlag `human_task`) is weg sinds 15 oktober 2026:
+    elk item is mensenwerk en telt mee."""
     if it.get("skipped"):                        # bewust overgeslagen: telt niet meer mee (n.v.t./elders)
         return "skipped", " b-skip"
     if done:
         return "done", ""
-    if it.get("human_task"):                     # oud planner-veld: telt niet mee in de voortgang
-        return "human", " b-human"
     return "open", ""
 
 
 def _cl_item_meta(state: str, it: dict) -> str:
     """De meta-regel onder een checklist-item, alleen waar hij iets zegt over de TELLING: een
-    overgeslagen item en een mens-taak tellen niet mee. Verder is een item een tekstregel met vinkje
-    (geen skill, payload, "no skill · needs a human" of "ran, but returned nothing" meer)."""
+    overgeslagen item telt niet mee. Verder is een item een tekstregel met vinkje (geen skill,
+    payload, "no skill · needs a human", "human task" of "ran, but returned nothing" meer)."""
     if state == "skipped":
         why = (it.get("skip_reason") or "").strip()
         return (f"<span class='ck-meta'><span class='ck-skip'>⤳ skipped — does not count"
                 f"{' · ' + _e(why) if why else ''}</span></span>")
-    if state == "human":
-        why = (it.get("reason") or "").strip()
-        return (f"<span class='ck-meta'><span class='ck-human'>🙋 human task — does not count towards "
-                f"done{' · ' + _e(why) if why else ''}</span></span>")
     return ""
 
 

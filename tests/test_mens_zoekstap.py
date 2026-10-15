@@ -130,8 +130,9 @@ def test_de_wizard_zet_de_mens_zoekstap_ook_op_het_project(tmp_path, monkeypatch
                                         "items": json.dumps(items)})
     p = cockpit2._Stores(st.dd).projects.get(r["pid"])
     cl = p["checklists"][0]["items"]
-    assert [it["text"][:1] for it in cl] == ["s", "c", "🔎"] and cl[2]["human_task"] is True
-    assert checklist_progress(cl) == (0, 2)
+    # de 🔎-stap is sinds 15 oktober 2026 een gewoon item: zonder `human_task`, telt mee
+    assert [it["text"][:1] for it in cl] == ["s", "c", "🔎"] and "human_task" not in cl[2]
+    assert checklist_progress(cl) == (0, 3)                     # de 🔎-stap telt nu mee
     bericht = next(e["text"] for e in p["log"] if e["text"].startswith(mz.MARKER))
     assert "   • bio-based glue footwear" in bericht and "Research this: Glue-free joining." in bericht
     # zonder zoekstap: niets extra's

@@ -46,7 +46,6 @@ TWEEDE_DRAGER_IN_DE_MARKUP = {
     ".noo-cta": "knop met het woord 'Noochie' erin (views/noochie.py)",
     ".noo-head": "kop met '🐸 Noochie' (views/noochie.py)",
     ".ck-skill": "de chip bevat de skill-NAAM als tekst (views/checklists.py)",
-    ".ck-human": "'🙋 human task …' (views/checklists.py)",
 }
 
 

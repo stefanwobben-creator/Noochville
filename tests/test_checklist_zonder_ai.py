@@ -80,3 +80,18 @@ def test_de_kaart_volgt_niets_meer():
     bron = inspect.getsource(P)
     assert "volgStart" not in bron and "[data-bezig]" not in bron
     assert not hasattr(cockpit2, "_offer_skill") and not hasattr(cockpit2, "_act_check_handoff")
+
+
+def test_human_task_label_en_uitzondering_zijn_weg(dorp):
+    """15 oktober 2026: "Human task — does not count towards done" klopt niet meer nu elk item
+    mensenwerk is. Geen label, en het item telt mee in de voortgangsbalk."""
+    dd, pid = dorp
+    st = cockpit2._Stores(dd)
+    p = st.projects._projects[pid]
+    p["checklists"][0]["items"][1].update(human_task=True, reason="needs a factory visit")
+    st.projects._save()
+    html = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t")
+    assert "human task" not in html.lower() and "does not count towards done" not in html
+    assert "b-human" not in html and "ck-human" not in html
+    # 3 open items in de eerste lijst, ook het item met de oude vlag
+    assert "0% (0/3)" in html

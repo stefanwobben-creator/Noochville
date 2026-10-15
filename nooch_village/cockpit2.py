@@ -8291,7 +8291,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                 [it for it in items if isinstance(it, dict)])
                             if _mens:
                                 pj.check_add(pid, cl["id"], _mens["text"], skill=None, payload=None,
-                                             reason=_mens["reason"], human_task=True)
+                                             reason=_mens["reason"])
                                 pj.add_role_message(pid, mens_zoekstap.bericht_voor_de_mens(
                                     titel, "", mens_zoekstap.queries(items)))
                     # WERKT DE SUGGESTIE EIGENLIJK? Eén regel per project, dom geteld, zodat
