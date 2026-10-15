@@ -4071,8 +4071,49 @@ def _act_check_rename(c):
         tekst = (g("text") or "").strip()
         if not tekst:
             return nxt, "✗ an item needs text — remove it instead if it can go"
+        # TOEWIJZEN AAN EEN PERSOON (15 oktober 2026, besluit Stefan) zit in hetzelfde ✎-formulier:
+        # eerst toetsen, dan pas iets schrijven, zodat een onbekende persoon ook de tekst niet raakt.
+        # Alleen als het veld meekomt; een oud formulier zonder het veld laat de toewijzing staan.
+        from nooch_village import project_items
+        persoon = None
+        if "persoon" in (c.form or {}):
+            persoon = (g("persoon") or "").strip()
+            if persoon and project_items.toegewezen(st, {"persoon": persoon}) is None:
+                return nxt, "✗ pick someone from the list — that person is not a user here"
         ok = pj.set_item_text(g("pid"), g("clid"), g("item"), tekst)
+        if persoon is None:
+            return nxt, ("✎ item updated" if ok else "· nothing changed")
+        gewisseld, _vorige = pj.set_item_persoon(g("pid"), g("clid"), g("item"), persoon)
+        if gewisseld and persoon:
+            _meld_toegewezen(st, g("pid"), tekst, persoon, username)
+        if gewisseld:
+            wie = project_items.toegewezen(st, {"persoon": persoon})
+            return nxt, (f"✎ item given to {wie.name}" if wie else "✎ item no longer assigned")
         return nxt, ("✎ item updated" if ok else "· nothing changed")
+
+
+def _meld_toegewezen(st, pid: str, tekst: str, persoon: str, username: str | None) -> None:
+    """Eén DM aan wie het item krijgt. Niet aan jezelf, en niet aan wie het eerder had (besluit
+    Stefan, 15 oktober 2026). Bewust NIET via `route_werk`: dat maakt voor een persoon een actie in
+    diens eigen lijst aan, en dan staat hetzelfde werk twee keer op /acties. Dit is alleen de
+    melding; het werk zelf blijft het item op het project."""
+    ik = st.people.by_email(username) if username and username != "guest" else None
+    if ik is not None and ik.id == persoon:
+        return
+    p = st.projects.get(pid) or {}
+    door = ik.name if ik is not None else "Someone"
+    # DE PRIVÉ-REGEL: mag de ontvanger dit project niet lezen, dan noemt de melding geen naam en
+    # geen tekst (privé-projecten staan uit, maar de leesregel blijft de buitengrens).
+    from nooch_village.views.messages import mag_project_lezen
+    if not mag_project_lezen(st, pid, persoon):
+        _signaleer(st, "person", persoon, f"{door} gave you a checklist item on a project.", by=door)
+        return
+    project = str(p.get("scope") or pid)
+    bericht = f"{door} gave you an item on “{project}”: “{tekst}”."
+    from nooch_village.projects import OP_HET_BORD
+    if p.get("status") not in OP_HET_BORD:
+        bericht += " The project hasn't started yet; the item appears in your actions once it does."
+    _signaleer(st, "person", persoon, bericht, by=door, herkomst={"project": pid})
 
 
 def _act_check_move(c):

@@ -215,3 +215,17 @@ def resolve_item(ledger, pid: str, clid: str, item_id: str, actie: str, *,
     if maybe_finish(ledger, pid, clid):
         msg += " — checklist compleet, project staat klaar voor review"
     return True, msg
+
+
+def toegewezen(st, it: dict):
+    """De persoon aan wie dit item gegeven is, of None (15 oktober 2026, besluit Stefan).
+
+    Alleen een BESTAANDE gebruiker telt: een persoon met een e-mailadres (wie kan inloggen). Is hij
+    verwijderd of heeft hij geen e-mail meer, dan valt het item terug naar niet-toegewezen — geen
+    fout, en het volgt dan weer de gewone regel op /acties. Eén plek, want de projectpagina, /acties,
+    /today en de actie die toewijst moeten hetzelfde zien."""
+    pid = str((it or {}).get("persoon") or "")
+    if not pid:
+        return None
+    p = st.people.get(pid)
+    return p if p is not None and (p.email or "").strip() else None

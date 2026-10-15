@@ -857,7 +857,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    ernaast samen tot één woord per regel. `min-width:0` op het veld en `flex-wrap` zorgen dat het
    uitklap-blok binnen zijn eigen breedte blijft in plaats van de rij open te duwen. */
 .ck-doorgeef{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin-top:.35rem;max-width:100%}
-.ck-doorgeef input{flex:1 1 11rem;min-width:0;font:inherit;font-size:12.5px;padding:.25rem .45rem;
+.ck-doorgeef input,.ck-doorgeef select{flex:1 1 11rem;min-width:0;max-width:100%;font:inherit;font-size:12.5px;padding:.25rem .45rem;
   border:1px solid var(--border);border-radius:7px;background:var(--surface)}
 /* grotere textarea's in de verwerk-formulieren */
 .wo-oc textarea{min-height:88px}
