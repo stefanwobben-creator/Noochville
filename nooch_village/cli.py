@@ -1022,9 +1022,16 @@ def main() -> None:
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
         apply = "--apply" in sys.argv
-        rapport = wiki_seed.lege_koppen(st.att, apply=apply, actor_id="cli")
+        # Sinds 15 oktober 2026 ook de sjabloonkopjes (CO2 & Water, Price agreement, Open items, …)
+        # met alleen hun zin. --apply maakt EERST een back-up met label.
+        rapport = wiki_seed.lege_koppen(st.att, apply=False)
         print(wiki_seed.lege_koppen_tekst(rapport))
-        if rapport and not apply:
+        if rapport and apply:
+            from nooch_village import wiki_opschoon
+            pad = wiki_opschoon.back_up(st.att, "lege-koppen")
+            wiki_seed.lege_koppen(st.att, apply=True, actor_id="cli")
+            print(f"\nBack-up: {pad}\n{len(rapport)} page(s) changed.")
+        elif rapport:
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
     elif mode == "wiki_bom_sleutels":

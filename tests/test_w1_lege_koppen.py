@@ -50,3 +50,31 @@ def test_wat_telt_staat_bij_de_vraag(tmp_path):
     h = render_pagina(cockpit2._Stores(dd), a.id, csrf_token="t", username="guest")
     blok = h[h.index("<h2>Questions and facts</h2>"):]
     assert "a measured biobased content" in blok
+
+
+def test_ook_sjabloonkopjes_met_alleen_hun_zin_op_elk_kopniveau():
+    """15 oktober 2026: ook de sjabloonkopjes (`wiki.SJABLONEN`) met EXACT hun ene zin gaan weg, ook
+    met `#` in plaats van `##` (zoals op NFW). Echte tekst, open punten en feiten blijven."""
+    sjabloon = dict(wiki_seed._kop_zin_paren())
+    co2, prijs = sjabloon["CO2 & Water"], sjabloon["Price agreement"]
+    body = _body(f"## CO2 & Water\n{co2}",                          # alleen de zin: weg
+                 f"# Price agreement\n{prijs}",                      # één #: ook weg
+                 "## Open items\nWhat still needs to be found out.",  # alleen de zin: weg
+                 f"## Circularity\n{sjabloon['Circularity']}\nComposts in 12 weeks.",   # eigen tekst: blijft
+                 "## Characteristics\n{{fact:F1}}")                  # geen sjabloonzin: blijft
+    nieuw, weg = wiki_seed._lege_vraagkop_blokken(body)
+    assert sorted(weg) == ["CO2 & Water", "Open items", "Price agreement"]
+    assert "Composts in 12 weeks." in nieuw and "## Circularity" in nieuw and "{{fact:F1}}" in nieuw
+    # met open punten eronder blijft "Open items" staan (dat is inhoud)
+    nieuw2, weg2 = wiki_seed._lege_vraagkop_blokken("## Open items\nWhat still needs to be found out.\n- X: not yet provided")
+    assert weg2 == [] and "- X: not yet provided" in nieuw2
+
+
+def test_de_paren_komen_uit_het_sjabloon_zelf():
+    """Reference, don't copy: elke sjabloonsectie met een zin is een paar; geen tweede lijst."""
+    paren = wiki_seed._kop_zin_paren()
+    for _naam, body in wiki.SJABLONEN.values():
+        for blok in body.split("\n\n"):
+            r = blok.strip().split("\n")
+            if len(r) >= 2 and r[0].startswith("#"):
+                assert (r[0].lstrip("#").strip(), r[1].strip()) in paren

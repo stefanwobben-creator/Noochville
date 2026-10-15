@@ -964,17 +964,37 @@ def feiten_herstellen_tekst(rapport: list[dict]) -> str:
 # ALLEEN HELEMAAL LEGE: een kopje gaat weg als eronder EXACT zijn uitlegzin staat en verder niets —
 # geen feit, geen eigen tekst, geen subkopje. Al het andere blijft staan.
 
+# OOK DE SJABLOONZINNEN (15 oktober 2026, besluit Stefan). "CO2 & Water", "Price agreement",
+# "Characteristics", "Circularity" en "Open items" kwamen uit het sjabloon met alleen hun uitlegzin
+# eronder; de vraag (en "What counts") staat sinds variant B in de feitensectie. Dezelfde regel als
+# hierboven: alleen weg als er EXACT die ene zin onder staat. De paren komen uit `wiki.SJABLONEN`
+# zelf (reference, don't copy): elke sectie daar is "## Kop\nZin\n…".
+#
+# OP ELK KOPNIVEAU: NFW gebruikt `#` waar de rest `##` heeft. Het patroon matcht daarom de NAAM.
+
+def _kop_zin_paren() -> list[tuple[str, str]]:
+    paren = [(s[0].lstrip("#").strip(), s[1].strip())
+             for soort_secties in wiki.VRAAGSECTIES.values() for s in soort_secties]
+    for _naam, body in wiki.SJABLONEN.values():
+        for blok in body.split("\n\n"):
+            regels = blok.strip().split("\n")
+            if len(regels) >= 2 and regels[0].startswith("#"):
+                paar = (regels[0].lstrip("#").strip(), regels[1].strip())
+                if paar not in paren:
+                    paren.append(paar)
+    return paren
+
+
 def _lege_vraagkop_blokken(body: str) -> tuple[str, list[str]]:
     """(nieuwe body, weggehaalde kopjes)."""
     weg = []
-    for soort_secties in wiki.VRAAGSECTIES.values():
-        for s in soort_secties:
-            kop, uitleg = s[0], s[1]
-            patroon = re.compile(r"(^|\n)" + re.escape(kop) + r"[ \t]*\n+" + re.escape(uitleg) + r"[ \t]*(?=\n\s*#|\s*$)")
-            m = patroon.search(body)
-            if m:
-                body = body[:m.start()] + (m.group(1) if m.start() else "") + body[m.end():].lstrip("\n")
-                weg.append(kop.lstrip("# "))
+    for naam, uitleg in _kop_zin_paren():
+        patroon = re.compile(r"(^|\n)#{1,6}[ \t]+" + re.escape(naam) + r"[ \t]*\n+" + re.escape(uitleg)
+                             + r"[ \t]*(?=\n\s*#|\s*$)")
+        m = patroon.search(body)
+        if m:
+            body = body[:m.start()] + (m.group(1) if m.start() else "") + body[m.end():].lstrip("\n")
+            weg.append(naam)
     body = re.sub(r"\n{3,}", "\n\n", body).strip("\n") + ("\n" if body.endswith("\n") else "")
     return body, weg
 
@@ -997,7 +1017,7 @@ def lege_koppen(store, *, apply: bool = False, actor_id: str = "") -> list[dict]
 
 def lege_koppen_tekst(rapport: list[dict]) -> str:
     if not rapport:
-        return "Nothing to remove: no page carries an empty question heading."
+        return "Nothing to remove: no page carries an empty question or template heading."
     uit = [f"{r['id']}  {r['titel']}: remove " + ", ".join(f"'{k}'" for k in r["weg"]) for r in rapport]
     uit.append(f"\n{len(rapport)} page(s), {sum(len(r['weg']) for r in rapport)} heading(s).")
     return "\n".join(uit)
