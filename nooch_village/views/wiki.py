@@ -907,6 +907,13 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                     actie = " " + uitstel_form(csrf_token, a, soort, v["k"], terug)
             waarom = (f"<p class='muted'>{_e(c['reden'])}</p>"
                       if c["status"] not in (dek.GECHECKT, dek.UITGESTELD) and c.get("reden") else "")
+            if c.get("nee_notitie"):
+                # ANTWOORDREGEL "BESTAAN" (15 oktober 2026): één gecheckte yes is genoeg; een gecheckte
+                # no ernaast staat hier, zichtbaar bij de vraag, in plaats van als nepconflict.
+                n = c["nee_notitie"]
+                waarom += (f"<p class='muted'>{n} checked fact{'s' if n != 1 else ''} "
+                           f"say{'s' if n == 1 else ''} no — for this question one checked yes is "
+                           f"enough.</p>")
             rijen = []
             for fid in c.get("feiten", []):
                 if fid not in per_id:

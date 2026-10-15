@@ -124,11 +124,13 @@ def test_een_feit_beantwoordt_twee_vragen(tmp_path):
 
 
 def test_yes_tegen_no_is_een_conflict_ook_op_verschillende_plekken(tmp_path):
+    """Bij een EENDUIDIG-vraag (biobased) blijft yes tegen no een conflict. Plastic is sinds 15
+    oktober 2026 een BESTAAN-vraag: zie `test_antwoordregel_per_vraag.py`."""
     body = "## Environmental impact\n\n{{fact:F1}}\n\n## Composition\n\n{{fact:F2}}"
-    dd, aid = _pagina(tmp_path, [_feit("F1", "Contains PLA"), _feit("F2", "No plastic at all")], body=body)
-    _check(dd, aid, "F1", plastic="yes")
-    _check(dd, aid, "F2", plastic="no")
-    c = _cel(dd, "plastic")
+    dd, aid = _pagina(tmp_path, [_feit("F1", "Biobased"), _feit("F2", "Not biobased")], body=body)
+    _check(dd, aid, "F1", biobased="yes")
+    _check(dd, aid, "F2", biobased="no")
+    c = _cel(dd, "biobased")
     assert c["status"] == wd.CONFLICT and "disagree" in c["reden"] and "antwoord" not in c
 
 
