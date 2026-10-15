@@ -98,7 +98,9 @@ def test_zichtbaar_bij_de_juiste_persoon_en_niet_bij_anderen(dorp):
     assert _teksten(st, cees) == []
     # /today rekent met dezelfde lijst
     from nooch_village.views.today import render_today
-    assert "<b>1 checklist item need a human</b>" in render_today(st, ik=beer.id)
+    # de zin is "1 checklist item need a human" of, na #755, "1 checklist item open"
+    import re
+    assert re.search(r"<b>1 checklist item (need a human|open)</b>", render_today(st, ik=beer.id))
     assert "checklist item" not in render_today(st, ik=cees.id)
 
 
