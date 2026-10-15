@@ -878,6 +878,33 @@ class ProjectLedger:
         self._touch(p); self._save()
         return True
 
+    def set_item_persoon(self, pid: str, clid: str, item_id: str, persoon: str) -> tuple[bool, str]:
+        """Geef één item aan een persoon (een person-id), of haal dat weg (`persoon=""`).
+
+        Besluit Stefan, 15 oktober 2026: een item moet aan een MENS gegeven kunnen worden. Eén
+        optionele persoon per item, opgeslagen als `persoon` op het item zelf — geen tweede store en
+        geen kopie in iemands actielijst, want dan staat hetzelfde werk op twee plekken.
+
+        Of de persoon bestaat, toetst de aanroeper (die heeft de PeopleStore). Geeft (veranderd,
+        vorige-persoon) terug, zodat de aanroeper alleen bij een échte wissel een melding stuurt."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False, ""
+        persoon = str(persoon or "").strip()[:64]
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                vorige = str(it.get("persoon") or "")
+                if vorige == persoon:
+                    return False, vorige                  # niets veranderd → geen schrijfactie
+                if persoon:
+                    it["persoon"] = persoon
+                else:
+                    it.pop("persoon", None)
+                self._touch(p); self._save()
+                return True, vorige
+        return False, ""
+
     def set_item_text(self, pid: str, clid: str, item_id: str, text: str) -> bool:
         """Hernoem één item. ALLEEN de tekst — skill, payload en staat blijven staan.
 
@@ -1446,7 +1473,7 @@ _WRITE_METHODS = (
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
     "set_item_human", "set_item_payload",
-    "set_item_text", "move_item", "set_doel", "set_depends_on", "migreer_queued",
+    "set_item_text", "set_item_persoon", "move_item", "set_doel", "set_depends_on", "migreer_queued",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

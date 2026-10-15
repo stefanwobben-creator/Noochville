@@ -312,6 +312,7 @@ def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[t
 
     EN ALTIJD LEESBAAR: `mag_project_lezen` blijft de buitengrens, ook voor de trekker-kant — een
     privé project van een cirkel waar je niet in zit hoort hier niet op te duiken."""
+    from nooch_village import project_items
     from nooch_village.views.messages import mag_project_lezen
 
     projecten = {str(p.get("id") or ""): p for p in (_mijn_projecten(st, ik) if mijn is None else mijn)}
@@ -338,7 +339,26 @@ def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[t
                     continue
                 if not str(it.get("text") or "").strip():
                     continue
+                # GEGEVEN AAN IEMAND ANDERS (15 oktober 2026): dan staat het bij die persoon, niet
+                # (ook) bij jou. Een verwijderde gebruiker telt als niet-toegewezen: gewone regel.
+                wie = project_items.toegewezen(st, it)
+                if wie is not None and wie.id != ik:
+                    continue
                 uit.append((it, cl, p))
+    # AAN JOU GEGEVEN op een project dat niet van jou is: dat hoort hier ook. Zelfde bord-regel
+    # (alleen `running`/`blocked`; op een future-project verschijnt het zodra het start) en zelfde
+    # leesgrens (`mag_project_lezen`) als de rest van deze lijst.
+    for p in st.projects.all():
+        pid = str(p.get("id") or "")
+        if not pid or pid in projecten or p.get("archived") or p.get("status") not in _LOPEND:
+            continue
+        mijn_items = [(it, cl) for cl in (p.get("checklists") or []) for it in (cl.get("items") or [])
+                      if not it.get("done") and not it.get("skipped")
+                      and str(it.get("text") or "").strip()
+                      and str(it.get("persoon") or "") == ik
+                      and project_items.toegewezen(st, it) is not None]
+        if mijn_items and mag_project_lezen(st, pid, ik):
+            uit.extend((it, cl, p) for it, cl in mijn_items)
     uit.sort(key=lambda t: (_projectnaam(st, str(t[2].get("id") or "")).lower(),
                             str(t[0].get("text") or "").lower()))
     return uit

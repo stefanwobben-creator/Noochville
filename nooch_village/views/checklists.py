@@ -346,6 +346,18 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
     # ahead", "the role is working — N to go"), de uitvoerlijst-keuze ("the role works this list"),
     # het skill-aanbod ("can pick this up") en de hand-off naar een rol. Allemaal voor de uitvoerder
     # die sinds #516 (19-20 september) niet meer bestaat. Een item is een tekstregel met een vinkje.
+    #
+    # EEN ITEM AAN EEN PERSOON GEVEN (15 oktober 2026, besluit Stefan): één optionele persoon per
+    # item, gekozen in het ✎-formulier uit de gebruikers (wie een e-mail heeft). Een verwijderde
+    # gebruiker valt stil terug naar niet-toegewezen (`project_items.toegewezen`).
+    from nooch_village import project_items
+    mensen = []
+    if st is not None:
+        try:
+            mensen = sorted((m for m in st.people.all() if (m.email or "").strip()),
+                            key=lambda m: (m.name or "").lower())
+        except Exception:                                 # noqa: BLE001 — de lijst mag de kaart nooit breken
+            mensen = []
     out = ""
     for cl in (p.get("checklists") or []):
         items = cl.get("items", [])
@@ -363,6 +375,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
         for it in items:
             d = it.get("done")
             state, box_extra = _cl_item_state(it, d)
+            wie = project_items.toegewezen(st, it) if st is not None else None
             clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                       f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
             # `data-ck-item` koppelt het vakje aan de balk van DEZELFDE lijst (fase 11, 2b). De
@@ -383,14 +396,23 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                      if rw else "")
             # BEWERKEN WAS ER NIET, alleen weggooien. Wie een tikfout wilde herstellen moest het item
             # verwijderen en opnieuw typen. Een `fedit`-uitklap, onder de tekst.
-            edit = (f"<details class='fedit ck-bewerk'><summary class='flink' title='edit text'>✎</summary>"
+            keuze = ""
+            if mensen:
+                opties = "".join(
+                    f"<option value='{_e(m.id)}'{' selected' if wie is not None and wie.id == m.id else ''}>"
+                    f"{_e(m.name)}</option>" for m in mensen)
+                keuze = (f"<select name='persoon' aria-label='Assigned to'>"
+                         f"<option value=''>Nobody</option>{opties}</select>")
+            edit = (f"<details class='fedit ck-bewerk'><summary class='flink' title='edit item'>✎</summary>"
                     f"<form method='post' action='/action' class='ck-doorgeef'>{hid()}{clitem}"
                     f"<input name='text' value='{_e(it['text'])}' autocomplete='off' "
-                    f"aria-label='item text'>"
+                    f"aria-label='item text'>{keuze}"
                     f"<button class='btn sm' type='submit' name='action' value='check_rename'>"
                     f"save</button></form></details>") if rw else ""
+            label = (f" <span class='chip muted' title='Assigned to {_e(wie.name)}'>{_e(wie.name)}</span>"
+                     if wie is not None else "")
             txt = (f"<span class='ck-txt'><span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>"
-                   f"{_cl_item_meta(state, it)}</span>")
+                   f"{label}{_cl_item_meta(state, it)}</span>")
             unskip = (f"<form method='post' action='/action' class='emo-f'>{hid()}{clitem}"
                       f"<button class='flink' type='submit' name='action' value='check_unskip'>"
                       f"undo skip</button></form>") if (rw and state == "skipped") else ""
