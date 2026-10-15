@@ -1466,14 +1466,14 @@ _WRITE_METHODS = (
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_conclusie", "set_conclusie_voorstel",
-    "edit", "approve", "discard",
+    "edit", "approve", "discard", "set_item_persoon",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future",
     "note_item_fail", "reset_item_fails",
     "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "claim_human_items",
     "set_item_human", "set_item_payload",
-    "set_item_text", "set_item_persoon", "move_item", "set_doel", "set_depends_on", "migreer_queued",
+    "set_item_text", "move_item", "set_doel", "set_depends_on", "migreer_queued",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
