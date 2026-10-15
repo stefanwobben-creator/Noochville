@@ -75,38 +75,6 @@ def test_handoff_blijft_bestaan_voor_de_rol_naar_rol_route(project):
     assert "handoff" in project_items._ACTIES and "doorgeven" in project_items._ACTIES
 
 
-def test_de_knop_routeert_en_maakt_niets(monkeypatch):
-    """De routering staat in `route_werk`, de gedeelde regel van het werkoverleg en de inbox. Een
-    tweede kopie hier zou na één wijziging werk stil op de verkeerde plek laten landen."""
-    import inspect
-    from nooch_village import cockpit2
-    src = inspect.getsource(cockpit2._act_check_handoff)
-    assert "route_werk(" in src
-    assert "handoff" not in src.replace("_act_check_handoff", "").replace("check_handoff", "")
-    assert '"doorgeven"' in src
-
-
-def test_een_onbekend_doel_is_een_fout_en_geen_gok():
-    """FAIL-CLOSED. Werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
-    import inspect
-    from nooch_village import cockpit2
-    src = inspect.getsource(cockpit2._act_check_handoff)
-    assert "is not a role or person I know" in src
-
-
-def test_het_formulier_is_een_at_veld_en_geen_projectformulier():
-    """Twee dingen mis met het oude: het vroeg om een projectdoel, en drie velden naast de itemtekst
-    persten die tekst samen tot één woord per regel."""
-    import inspect
-    from nooch_village.views import checklists as C
-    src = inspect.getsource(C._cl_resolve_row)
-    assert "list='ck-doelen'" in src
-    # Op de MARKUP toetsen en niet op de tekst: 'done when' staat nog in het commentaar dat uitlegt
-    # waarom het weg is, en dat commentaar hoort te blijven staan.
-    assert "placeholder='done when" not in src             # geen projectdoel meer
-    assert "select name='naar_rol'" not in src
-
-
 # ── 2. De modal is een modal ─────────────────────────────────────────────────
 def test_zonder_context_is_het_gewoon_het_dna():
     """Elke oudere aanroeper gedraagt zich als voorheen; niets verandert stil van gedrag."""

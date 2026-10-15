@@ -81,8 +81,8 @@ def _context_of(_dd: str):
     """De dorpscontext (settings, koppelingen, rugzakken) vanuit het COCKPIT-proces.
 
     Waarom dit nodig is: het cockpit heeft geen Inwoner en dus geen `self.context`, en juist daardoor
-    las `plan_offers` alleen het rol-DNA. Zonder rugzak zag de matcher `web_zoek` niet, en kreeg een
-    mens-getypt item "no skill · needs a human" terwijl het gereedschap er lag.
+    las `plan_offers` alleen het rol-DNA. Zonder rugzak zag de matcher `web_zoek` niet. Sinds 15
+    oktober 2026 gebruikt alleen de @mention-reply (`_dna_skill_for`) dit nog; het checklist-aanbod is weg.
 
     Gecachet op de datamap: `load_context` leest drie bestanden van schijf en dat hoeft niet bij elke
     toetsaanslag. Wijzig je `config/rugzakken.json`, dan pakt het cockpit dat op na een herstart —
@@ -3977,35 +3977,6 @@ def _act_checklist_add(c):
         return nxt, msg
 
 
-def _act_checklist_uitvoer(c):
-        # AUTHZ: rolvervuller of Circle Lead — dezelfde poort als check_toggle. Aanwijzen welke lijst
-        # de rol afwerkt is operationeel werk binnen de rol, geen governance-besluit.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        if not pj.set_checklist_uitvoer(g("pid"), g("clid")):
-            return nxt, ""
-        return nxt, "▶️ de rol werkt voortaan deze lijst af"
-
-
-def _act_plan_akkoord(c):
-        # AUTHZ: rolvervuller of Circle Lead - dit IS de menselijke poort voor uitvoering. Dezelfde
-        # gate als check_toggle: wie het werk van deze rol mag afvinken, mag ook zeggen dat het mag
-        # beginnen. Niet founder-only: dan zou Nina's plan op Stefan wachten.
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        if not pj.plan_akkoord(g("pid"), g("clid"), door=username or ""):
-            return nxt, ""                               # geen open akkoord-vraag -> stil, geen valse melding
-        # Op de wall, niet alleen in een flash: over een week is "wie zei ga maar doen, en wanneer?"
-        # precies de vraag die je stelt als een project iets deed wat je niet verwachtte.
-        pj.add_role_message(g("pid"), f"▶️ Execution plan approved by {username or 'a human'} — "
-                                      f"the role may run the items.")
-        return nxt, "▶️ plan approved — the role picks it up within seconds"
-
-
 def _act_checklist_remove(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -4016,70 +3987,16 @@ def _act_checklist_remove(c):
         return nxt, msg
 
 
-def _offer_skill(st, pj, pid: str, clid: str) -> bool:
-    """Stil skill-aanbod bij een net toegevoegd checklist-item: match het item-tekst tegen de DNA-skills
-    van de owner-rol en, bij een match, hang een aanbod aan het item. UITSLUITEND op de "Uitvoerplan"-
-    checklist (de enige die de daemon uitvoert) en alleen bij een echte rol-owner (geen II, geen dangling).
-    Draait de match in het cockpit-proces via de ladder; fail-closed — nooit een foutmelding.
-    Grens: dit matcht en biedt aan; uitvoeren doet uitsluitend de daemon.
-
-    Elke early-return logt een STABIELE code via refuse() (WARNING, laag volume — het pad draait alleen
-    bij een menselijke check_add). Zonder deze regels kost "waarom geen aanbod?" uren gis-diagnose: de
-    fail-closed maakte II/title-gate/geen-record/geen-DNA/geen-match/exceptie ononderscheidbaar in het log."""
-    p = pj.get(pid) or {}
-    owner = p.get("owner") or ""
-    if not owner or owner.startswith(_II_PREFIX):        # II / geen owner → geen rol-DNA
-        return refuse("OFFER_SKIP_II", "geen rol-owner (II/dangling) → geen skill-match", pid=pid, owner=owner)
-    cl = next((c for c in (p.get("checklists") or []) if c.get("id") == clid), None)
-    if cl is None:
-        return refuse("OFFER_SKIP_NO_CL", "checklist niet gevonden op project", pid=pid, clid=clid)
-    # GEEN TITEL-POORT MEER. Hij stond hier omdat alleen "Uitvoerplan" werd uitgevoerd, en die
-    # koppeling is verplaatst naar `projects.uitvoerlijst`: een project heeft één lijst die de rol
-    # afwerkt, en welke dat is staat in een veld en niet in een naam. Aanbieden mag daarom overal —
-    # het accepteren van een aanbod is juist wat een enkele lijst tot uitvoerlijst maakt (regel 3).
-    items = cl.get("items") or []
-    if not items:
-        return refuse("OFFER_SKIP_EMPTY", "Uitvoerplan leeg", pid=pid, clid=clid)
-    item = items[-1]                                     # het net toegevoegde item (append't, dus laatste)
-    if item.get("skill") or item.get("offer"):
-        return refuse("OFFER_SKIP_HAS", "laatste item heeft al skill/offer", pid=pid, item=item.get("id"))
-    orec = st.records.get(owner)
-    if orec is None:                                     # owner-id matcht geen record → geen DNA-lookup mogelijk
-        return refuse("OFFER_NO_RECORD", "owner-record niet gevonden in records", pid=pid, owner=owner)
-    _load_env()                                          # LLM-keys beschikbaar maken (zoals bij _ai_reply)
-    offers = plan_offers(orec, [item.get("text", "")], shared_registry(), name=_name(orec),
-                         context=_context_of(st.dd))
-    off = offers[0] if offers else None
-    if not off:                                          # geen match (plan_offers logt LLM-None/-exceptie apart)
-        return refuse("OFFER_NO_MATCH", "geen DNA-skill matcht het item", pid=pid, owner=owner,
-                      text=(item.get("text", "") or "")[:80])
-    return pj.set_item_offer(pid, clid, item["id"], off)   # succes: het aanbod verschijnt in de UI
-
-
 def _act_check_add(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
+        # GEEN SKILL-AANBOD MEER (15 oktober 2026): hier volgde een LLM-call per handmatig item om een
+        # skill voor te stellen ("can pick this up"). De uitvoerder bestaat sinds #516 niet meer.
         if pj.check_add(g("pid"), g("clid"), g("text")):
             msg = "✓ item added"
-            try:                                         # skill-aanbod is bijzaak: mag de toevoeging nooit breken
-                if _offer_skill(st, pj, g("pid"), g("clid")):
-                    msg += " · 🤖 aanbod"
-            except Exception as e:                       # bv. een stille registry-bouwfout: niet meer onzichtbaar
-                refuse("OFFER_UNCAUGHT", "skill-aanbod wierp een exceptie (weggevangen)",
-                       pid=g("pid"), exc=type(e).__name__)
-        return nxt, msg
-
-
-def _act_check_accept(c):
-        # AUTHZ: rolvervuller of Circle Lead — operationeel werk binnen een rol (een skill aan een item hangen)
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        msg = "🤖 picked up by the role" if pj.accept_item_offer(g("pid"), g("clid"), g("item")) else ""
         return nxt, msg
 
 
@@ -4127,17 +4044,6 @@ def _act_check_unskip(c):
         _ok, msg = project_items.resolve_item(pj, g("pid"), g("clid"), g("item"), "unskip",
                                               by=username or "")
         return nxt, msg
-
-
-def _checklist_item(pj, pid: str, clid: str, item_id: str) -> dict | None:
-    """Eén item uit een checklist. Fail-soft: onbekend project, lijst of item → None."""
-    p = pj.get(pid) or {}
-    for cl in (p.get("checklists") or []):
-        if cl.get("id") == clid:
-            return next((i for i in (cl.get("items") or []) if i.get("id") == item_id), None)
-    return None
-
-
 
 
 def _act_check_remove(c):
@@ -6277,54 +6183,6 @@ def _act_person_remove(c):
 # cureren (`_claims_gate`). De JSON-route /claims/db.json is in fase 6 verwijderd: nul verzoeken in
 # veertien dagen log, en Stefan bevestigde dat niets van buiten hem aansprak.
 
-def _act_check_handoff(c):
-        """Eén checklist-item doorgeven aan een rol of persoon.
-
-        DIT MAAKTE EEN HEEL PROJECT, en dat was de klacht. De knop vroeg om een 'done when…' en zette
-        een slapend project op het bord van de ontvanger. Maar een mens die één item doorgeeft wil geen
-        project, hij wil dat iemand het ziet: "@iemand, kijk jij hier even naar".
-
-        Nu loopt het langs `route_werk` — DEZELFDE regel als het werkoverleg en de inbox. Die kijkt
-        naar de VERVULLER en niet naar de rol: een mens-vervulde rol levert een bericht in de inbox
-        van díe mens, een AI-rol krijgt alsnog een project (die leest de NotifStore nooit, en
-        verstuurd mag nooit kwijt betekenen). Een tweede kopie van die regel hier zou na één wijziging
-        uit de pas lopen en werk stil op de verkeerde plek laten landen.
-
-        HET DOEL WORDT SERVER-SIDE OPGELOST, en fail-closed. De mens typt een naam; wij zoeken hem op
-        in dezelfde lijst die het veld voedt. Staat hij er niet in, dan is dit een FOUT en geen gok —
-        werk bij een geraden ontvanger neerleggen is stiller en erger dan een melding."""
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        pid = g("pid")
-        _deny = _role_gate((pj.get(pid) or {}).get("owner") or "", username, st)
-        if _deny:
-            return nxt, _deny
-        getypt = (g("naar") or g("naar_rol") or "").strip().lstrip("@")
-        if not getypt:
-            return nxt, "✗ pick a role or person to hand this to"
-        from nooch_village.cockpit2_util import _at_doelen
-        doel = next((d for d in _at_doelen(st) if d["label"].strip().lower() == getypt.lower()), None)
-        if doel is None:
-            return nxt, f"✗ '{getypt[:40]}' is not a role or person I know — pick one from the list"
-
-        it = _checklist_item(pj, pid, g("clid"), g("item"))
-        tekst = (it or {}).get("text", "") if it else ""
-        if not tekst:
-            return nxt, "✗ item not found"
-        soort, ref = route_werk(st, tekst=tekst,
-                                rol=doel["id"] if doel["kind"] == "role" else "",
-                                persoon=doel["id"] if doel["kind"] == "person" else "",
-                                herkomst=f"↳ doorgegeven uit project {pid}",
-                                door=username or "", opdrachtgever=username or "",
-                                bron_project=pid, van_mens=True)
-        if soort == "keuze":
-            return nxt, (f"✗ {doel['label']} has more than one person filling it — "
-                         f"pick the person instead of the role")
-        from nooch_village import project_items
-        _ok, msg = project_items.resolve_item(pj, pid, g("clid"), g("item"), "doorgeven",
-                                              by=username or "", naar_label=doel["label"])
-        return nxt, (msg + (f" ({soort})" if soort else ""))
-
-
 def _claims_bordresultaat(qs: dict) -> dict:
     """Het resultaat van de laatste 'Zet op het bord'-klik, meegegeven in de redirect-URL.
     Onleesbaar of afwezig → niets tonen; dit is presentatie, geen waarheid."""
@@ -7006,10 +6864,7 @@ ACTIONS = {
     "proj_feed": _act_proj_feed,
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
-    "plan_akkoord": _act_plan_akkoord,
-    "checklist_uitvoer": _act_checklist_uitvoer,
     "check_add": _act_check_add,
-    "check_accept": _act_check_accept,
     "check_toggle": _act_check_toggle,
     "check_skip": _act_check_skip,
     "check_unskip": _act_check_unskip,
@@ -7069,7 +6924,6 @@ ACTIONS = {
     "rov2_dom_remove": _act_rov2_set,
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
-    "check_handoff": _act_check_handoff,
     "claims_skill": _act_claims_skill,
     "claims_term_add": _act_claims_term_add,
     "claims_term_retract": _act_claims_term_retract,

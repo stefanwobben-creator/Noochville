@@ -210,25 +210,14 @@ def test_de_ratchet_ziet_een_echte_overtreder():
 
 # ── 5. Afgevinkt is niet hetzelfde als beantwoord ────────────────────────────
 
-def test_een_leeg_item_zegt_op_het_scherm_dat_het_geen_antwoord_is():
-    """De uitvoerlaag legt dit zorgvuldig vast (`set_item_leeg`, mét reden en bron) en de weergave
-    gooide het weg: `if state == "done": return ""`. Op het bord stond de leeg-teruggekomen
-    zoekopdracht doorgestreept naast twee die wél iets vonden."""
+def test_een_afgerond_item_blijft_stil():
+    """Zou elk afgevinkt item een regel krijgen, dan is de melding ruis en leert niemand hem lezen.
+    Ook een item dat ooit leeg terugkwam (`leeg`, uit de AI-uitvoering van vóór #516) krijgt sinds
+    15 oktober 2026 geen regel meer: de velden blijven in de opslag, het scherm toont ze niet."""
     from nooch_village.views.checklists import _cl_item_meta
-    leeg = {"id": "a", "done": True, "leeg": True, "leeg_bron": "gemeld",
-            "leeg_reden": "geen organische treffers"}
-    html = _cl_item_meta("done", "web_zoek", leeg)
-    assert "no answer" in html and "geen organische treffers" in html
-    assert "📭" in html, "'gemeld' is een ANTWOORD (de bron zei zelf: niets gevonden)"
-
-    gat = {**leeg, "leeg_bron": "geen_inhoud"}
-    assert "🕳" in _cl_item_meta("done", "web_zoek", gat), "'geen_inhoud' is een GAT, geen antwoord"
-
-
-def test_een_gewoon_afgerond_item_blijft_stil():
-    """Zou elk afgevinkt item een regel krijgen, dan is de melding ruis en leert niemand hem lezen."""
-    from nooch_village.views.checklists import _cl_item_meta
-    assert _cl_item_meta("done", "web_zoek", {"id": "a", "done": True}) == ""
+    assert _cl_item_meta("done", {"id": "a", "done": True}) == ""
+    assert _cl_item_meta("done", {"id": "a", "done": True, "leeg": True, "leeg_bron": "gemeld",
+                                  "leeg_reden": "geen organische treffers"}) == ""
 
 
 def test_een_verzonnen_ontvanger_wordt_geweigerd():

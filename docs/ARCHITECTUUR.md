@@ -199,10 +199,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `proj_feed` | `_act_proj_feed` |
 | `checklist_add` | `_act_checklist_add` |
 | `checklist_remove` | `_act_checklist_remove` |
-| `plan_akkoord` | `_act_plan_akkoord` |
-| `checklist_uitvoer` | `_act_checklist_uitvoer` |
 | `check_add` | `_act_check_add` |
-| `check_accept` | `_act_check_accept` |
 | `check_toggle` | `_act_check_toggle` |
 | `check_skip` | `_act_check_skip` |
 | `check_unskip` | `_act_check_unskip` |
@@ -262,7 +259,6 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `rov2_dom_remove` | `_act_rov2_set` |
 | `person_edit` | `_act_person_edit` |
 | `person_remove` | `_act_person_remove` |
-| `check_handoff` | `_act_check_handoff` |
 | `claims_skill` | `_act_claims_skill` |
 | `claims_term_add` | `_act_claims_term_add` |
 | `claims_term_retract` | `_act_claims_term_retract` |
@@ -402,4 +398,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_73 routes · 179 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 19 zonder gevonden schrijver._
+_73 routes · 175 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 19 zonder gevonden schrijver._

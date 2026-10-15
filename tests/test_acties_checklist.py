@@ -74,13 +74,14 @@ def test_ook_als_ik_alleen_de_trekker_ben(tmp_path):
 
 
 # ══ 2. Wat er niet in hoort ══════════════════════════════════════════════════
-def test_een_item_met_een_skill_hoort_bij_de_rol_en_niet_bij_jou(tmp_path):
-    """"needs a human" is de hele selectie. Een item met een skill wordt door de rol uitgevoerd;
-    dat op een mens-lijst zetten is werk teruggeven dat al belegd is."""
+def test_een_item_met_een_skill_is_ook_mensenwerk(tmp_path):
+    """Tot 15 oktober 2026 viel een item met een skill hier weg: "de rol voert het uit". Die
+    uitvoerder bestaat sinds #516 niet meer, dus zo'n item deed niemand en stond nergens als actie.
+    De `skill` blijft in de opslag staan; hij telt niet meer."""
     dd, st, ik, beer = _dorp(tmp_path)
     pid = st.projects.create(ROL, "Project", "human", status="running")
     _plan(st, pid, [("Rapport draaien", "rapport")])
-    assert _teksten(cockpit2._Stores(dd), ik) == []
+    assert _teksten(cockpit2._Stores(dd), ik) == ["Rapport draaien"]
 
 
 def test_afgevinkt_en_overgeslagen_tellen_niet_mee(tmp_path):

@@ -139,23 +139,7 @@ def test_zonder_park_reden_valt_er_niets_te_claimen(tmp_path):
     assert "staat nu op jou" not in msg
 
 
-# ── 5: teruggeven aan de rol ────────────────────────────────────────────────
-
-def test_skill_aanbod_accepteren_geeft_de_stap_terug_aan_de_rol(tmp_path):
-    ledger = ProjectLedger(str(tmp_path / "projects.json"))
-    pid, clid = _project(ledger, [("bel de boekhouder", None)])
-    item = ledger.get(pid)["checklists"][0]["items"][0]
-    ledger.park(pid, "human", [{"id": item["id"], "text": item["text"], "reden": "human"}])
-    assert ledger.claim_human_items(pid, door="stefan") == [item["id"]]
-
-    ledger.set_item_offer(pid, clid, item["id"], {"skill": "claims_check", "payload": {"claim": "x"}})
-    assert ledger.accept_item_offer(pid, clid, item["id"])
-
-    it = ledger.get(pid)["checklists"][0]["items"][0]
-    assert it.get("skill") == "claims_check" and not it.get("geclaimd")
-
-
-# ── de kaart laat zien dat de rol niet meer vraagt ──────────────────────────
+# ── de kaart: een geclaimde stap is een gewone regel ────────────────────────
 
 def test_de_kaart_toont_dat_jij_de_stap_hebt_opgepakt(tmp_path):
     dd = _dd(tmp_path)
@@ -165,5 +149,6 @@ def test_de_kaart_toont_dat_jij_de_stap_hebt_opgepakt(tmp_path):
 
     html = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t")
 
-    assert "you picked this up" in html
-    assert "○ no skill" not in html
+    # Sinds 15 oktober 2026 is een item een tekstregel met een vinkje: geen "you picked this up"
+    # (dat zei dat de rol stopte met vragen) en geen "no skill" meer.
+    assert "you picked this up" not in html and "no skill" not in html

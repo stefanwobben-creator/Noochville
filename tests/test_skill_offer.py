@@ -1,17 +1,13 @@
-"""Stil skill-aanbod bij checklist-toevoeging.
+"""`plan_offers`: de cockpit-side skill-match (LLM gestubd), machine-check tegen DNA, fail-closed.
 
-- plan_offers: cockpit-side match (LLM gestubd), machine-check tegen DNA, fail-closed.
-- Trigger: op ELKE checklist van een project met een echte rol-owner; II-owner → geen aanbod. De
-  titel-poort is vervallen (scope "aanbod op elk item"): welke lijst de rol afwerkt staat sindsdien
-  in een veld, niet in een naam (projects.uitvoerlijst).
-- Accepteren: hangt skill+payload aan het item, aanbod weg. Negeren = afwijzen (blijft staan).
-- Render: het aanbod verschijnt als "🤖 kan dit oppakken"-knop.
+SINDS 15 OKTOBER 2026 alleen nog in gebruik door de @mention-reply (`cockpit2._dna_skill_for`). Het
+stille aanbod bij een checklist-item ("can pick this up"), het accepteren en de knop zijn weg, samen
+met hun toetsen: de uitvoerder waarvoor ze bestonden bestaat sinds #516 niet meer.
 """
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from nooch_village import cockpit2
 from nooch_village.skill_match import plan_offers
 from nooch_village.registry_factory import shared_registry
 from nooch_village.models import Record, RoleDefinition, RecordType
@@ -64,123 +60,9 @@ def test_plan_offers_owner_none_en_llm_none_en_exceptie():
         assert plan_offers(_owner(["openalex_evidence"]), ["a"], shared_registry()) == [None]
 
 
-# ── trigger via dispatch (check_add) ─────────────────────────────────────────────
-def _setup(tmp_path, title=_TITLE):
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    rid = "mother_earth__nooch__website_developer"
-    pid = st.projects.create(rid, "Doel", "human")
-    cl = st.projects.checklist_add(pid, title=title)
-    return dd, pid, cl["id"]
-
-
-def _offer_of(dd, pid, clid):
-    cl = next(c for c in cockpit2._Stores(dd).projects.get(pid)["checklists"] if c["id"] == clid)
-    return cl["items"][-1].get("offer")
-
-
-def test_trigger_alleen_op_uitvoerplan(tmp_path):
-    dd, pid, clid = _setup(tmp_path, title=_TITLE)
-    fake = [{"skill": "openalex_evidence", "payload": {"term": "x"}, "payload_ok": True}]
-    with patch("nooch_village.cockpit2.plan_offers", return_value=fake):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["onderzoek"], "next": ["/"]}, "guest")
-    off = _offer_of(dd, pid, clid)
-    assert off and off["skill"] == "openalex_evidence"
-
-
-def test_trigger_ook_op_een_eigen_titel(tmp_path):
-    """De omkering van de oude test_trigger_andere_titel_geen_aanbod. Nina's lijst heet "Acties uit
-    overleg" en Lottes "What's needed"; die kregen nooit een aanbod. Nu wel."""
-    dd, pid, clid = _setup(tmp_path, title="Acties uit overleg")
-    fake = [{"skill": "openalex_evidence", "payload": {}, "payload_ok": True}]
-    with patch("nooch_village.cockpit2.plan_offers", return_value=fake):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    off = _offer_of(dd, pid, clid)
-    assert off and off["skill"] == "openalex_evidence"
-
-
-def test_trigger_ii_owner_geen_aanbod(tmp_path):
-    dd = str(tmp_path / "poc")
-    cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    pid = st.projects.create("ii:mother_earth__nooch", "Doel", "human")   # II-owner: geen rol-DNA
-    clid = st.projects.checklist_add(pid, title=_TITLE)["id"]
-    called = []
-    with patch("nooch_village.cockpit2.plan_offers", side_effect=lambda *a, **k: called.append(1) or [None]):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert not called and _offer_of(dd, pid, clid) is None      # stil overgeslagen, geen match-call
-
-
-# ── accepteren + render ──────────────────────────────────────────────────────────
-def test_accept_hangt_skill_aan_item(tmp_path):
-    dd, pid, clid = _setup(tmp_path)
-    st = cockpit2._Stores(dd)
-    st.projects.check_add(pid, clid, "onderzoek")
-    item = st.projects.get(pid)["checklists"][0]["items"][-1]
-    st.projects.set_item_offer(pid, clid, item["id"],
-                               {"skill": "openalex_evidence", "payload": {"term": "x"}, "payload_ok": True})
-    cockpit2.dispatch(dd, "check_accept",
-                      {"pid": [pid], "clid": [clid], "item": [item["id"]], "next": ["/"]}, "guest")
-    it2 = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][-1]
-    assert it2.get("skill") == "openalex_evidence" and it2.get("payload") == {"term": "x"}
-    assert "offer" not in it2                                    # aanbod verbruikt
-
-
-def test_render_toont_aanbod_knop(tmp_path):
-    dd, pid, clid = _setup(tmp_path)
-    st = cockpit2._Stores(dd)
-    st.projects.check_add(pid, clid, "onderzoek")
-    item = st.projects.get(pid)["checklists"][0]["items"][-1]
-    st.projects.set_item_offer(pid, clid, item["id"],
-                               {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
-    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "🤖 can pick this up" in frag and "value='check_accept'" in frag
-
-
 # ── observability: elke stille fail-closed logt nu een STABIELE refuse-code ──────
 def _codes(caplog):
     return " ".join(r.getMessage() for r in caplog.records)
-
-
-def test_geen_title_gate_meer(tmp_path, caplog):
-    """De poort is weg, dus zijn refuse-code hoort ook weg te zijn. Blijft hij per ongeluk staan,
-    dan weigert de cockpit stil op een titel terwijl de daemon die lijst wél zou draaien."""
-    dd, pid, clid = _setup(tmp_path, title="Mijn eigen lijst")
-    with patch("nooch_village.cockpit2.plan_offers", return_value=[None]), \
-         caplog.at_level("WARNING", logger="nooch.refuse"):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    codes = _codes(caplog)
-    assert "OFFER_SKIP_TITLE" not in codes
-    assert "OFFER_NO_MATCH" in codes                            # hij liep dóór tot de match
-
-
-def test_refuse_ii_owner(tmp_path, caplog):
-    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    pid = st.projects.create("ii:mother_earth__nooch", "Doel", "human")
-    clid = st.projects.checklist_add(pid, title=_TITLE)["id"]
-    with caplog.at_level("WARNING", logger="nooch.refuse"):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert "OFFER_SKIP_II" in _codes(caplog)
-
-
-def test_refuse_no_record(tmp_path, caplog):
-    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
-    st = cockpit2._Stores(dd)
-    pid = st.projects.create("rol_bestaat_niet", "Doel", "human")      # owner matcht geen record
-    clid = st.projects.checklist_add(pid, title=_TITLE)["id"]
-    with caplog.at_level("WARNING", logger="nooch.refuse"):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert "OFFER_NO_RECORD" in _codes(caplog)
-
-
-def test_refuse_no_match(tmp_path, caplog):
-    dd, pid, clid = _setup(tmp_path)                                   # seeded owner + Uitvoerplan
-    with patch("nooch_village.cockpit2.plan_offers", return_value=[None]), \
-         caplog.at_level("WARNING", logger="nooch.refuse"):
-        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
-    assert "OFFER_NO_MATCH" in _codes(caplog)
 
 
 def test_refuse_plan_offers_dna_none_exc(caplog):

@@ -62,8 +62,8 @@ def test_a_alle_acties_bereikbaar(tmp_path):
     assert "value='ai_reply'" not in frag             # 'Vraag …'-knop weg; rol uitnodigen gaat via @mention
 
 
-# b. checklist rendert de vier states onderscheidbaar; ⚠ toont de reden; ontbrekend payload_ok = uitvoerbaar
-def test_b_checklist_states_onderscheidbaar(tmp_path):
+# b. elk item is een tekstregel met een vinkje (AI-states weg sinds 15 oktober 2026)
+def test_b_checklist_items_zijn_tekst_met_vinkje(tmp_path):
     dd, pid, codie = _setup(tmp_path)
     st = cockpit2._Stores(dd)
     cl = st.projects.checklist_add(pid, title="Uitvoerplan")
@@ -76,28 +76,13 @@ def test_b_checklist_states_onderscheidbaar(tmp_path):
     first = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]["id"]
     st.projects.check_toggle(pid, cid, first)
     frag = _frag(dd, pid)
-    assert "ck-skill" in frag                                   # skill-naam getoond (uitvoerbaar/warn)
-    assert "ck-warn" in frag and "brands ontbreekt" in frag     # ⚠ + reden letterlijk
-    assert "ck-noskill" in frag                                 # ○ geen-skill
-    assert "b-warn" in frag and "b-noskill" in frag             # ⚠ en ○ verschillen visueel (box-klasse)
-    # het uitvoerbare item (query=barefoot) staat NIET als ⚠ gemarkeerd
-    assert "uitvoerbaar-item" in frag
-    # ontbrekend payload_ok telt niet als ongeldig: precies één ⚠-blok (het warn-item), niet meer
-    assert frag.count("payload incomplete") == 1
-
-
-# b2. item met ONTBREKEND payload_ok-veld → uitvoerbaar, niet ⚠ (legacy vóór PR #136)
-def test_b2_ontbrekend_payload_ok_is_uitvoerbaar(tmp_path):
-    dd, pid, codie = _setup(tmp_path)
-    st = cockpit2._Stores(dd)
-    cl = st.projects.checklist_add(pid, title="Uitvoerplan")
-    st.projects.check_add(pid, cl["id"], "legacy-item", skill="ngram_culture", query="vegan")
-    # zeker weten: geen payload_ok-veld op het item
-    item = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]
-    assert "payload_ok" not in item
-    frag = _frag(dd, pid)
-    assert "ck-skill" in frag                       # als uitvoerbaar gerenderd (skill-chip)
-    assert "payload onvolledig" not in frag         # NIET als ⚠ gemarkeerd
+    # SINDS 15 OKTOBER 2026 IS ELK ITEM EEN TEKSTREGEL MET EEN VINKJE. De AI-states (uitvoerbaar,
+    # ⚠ payload onvolledig, ○ geen skill) en hun markeringen zijn weg; de velden blijven in de opslag.
+    for t in ("afgerond-item", "uitvoerbaar-item", "warn-item", "noskill-item"):
+        assert t in frag
+    for weg in ("ck-skill", "ck-warn", "ck-noskill", "b-warn", "b-noskill", "payload incomplete",
+                "brands ontbreekt", "mens nodig", "no skill", "needs a human"):
+        assert weg not in frag, weg
 
 
 # c. voortgangsbalk telt alleen afgevinkte items (⚠ en ○ tellen als open)
