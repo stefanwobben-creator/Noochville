@@ -930,15 +930,32 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                 "<p class='muted'>These facts answer none of the questions above. To make one count, "
                 "check it and choose a question.</p>"
                 + "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a) for i, f in overig) + "</div>")
+        gestaafd = dek.gestaafd(rij, **_ctx)
+        intro = (f"<p class='muted'>What this page should answer (the coverage on the "
+                 f"<a href='/bom#coverage'>BOM screen</a>), with the facts that answer it. A question "
+                 f"without an answer can be deferred to a research-by date; it then no longer holds the "
+                 f"page back, until the date passes. This page counts as substantiated: "
+                 f"<strong>{'yes' if gestaafd else 'no'}</strong>.</p>")
+        if not feiten:
+            # INGEKLAPT (besluit Stefan, 15 oktober 2026): een pagina zonder één feit krijgt één regel;
+            # de vragen met What counts en Defer staan achter een `<details>` (toetsenbord: de summary
+            # is focusbaar, Enter/Spatie klapt open). Een link naar `#vraag-<k>` opent het blok
+            # (`vraagAnker` in nooch.js). Zodra er één feit is, staat alles weer open zoals hieronder.
+            labels = [v["label"] for v in dek.vragen(soort) if rij["cellen"][v["k"]]["status"] == dek.LEEG]
+            uitgesteld = sum(1 for v in dek.vragen(soort) if rij["cellen"][v["k"]]["status"] == dek.UITGESTELD)
+            regel = f"No facts yet, {len(labels)} question{'s' if len(labels) != 1 else ''} open: {', '.join(labels)}."
+            if uitgesteld:
+                regel += f" {uitgesteld} deferred."
+            ingang = (" To add facts: type <b>/</b> in the text and choose <b>Bulk Import Facts</b>."
+                      if can_edit else "")
+            return (f"<div class='c2-sec' id='vragen'><h2>Questions and facts</h2>"
+                    f"<p class='muted'>{_e(regel)}{ingang}</p>"
+                    f"<details class='box-details' id='vragen-blok'><summary>Show the questions</summary>"
+                    f"{intro}{''.join(blokken)}</details></div>")
         if can_edit:
             blokken.append(f"<div class='wiki-inline'>{_FEIT_INGANG}{_synthese_knop(a, csrf_token)}</div>")
-        gestaafd = dek.gestaafd(rij, **_ctx)
         return (f"<div class='c2-sec' id='vragen'><h2>Questions and facts</h2>"
-                f"<p class='muted'>What this page should answer (the coverage on the "
-                f"<a href='/bom#coverage'>BOM screen</a>), with the facts that answer it. A question "
-                f"without an answer can be deferred to a research-by date; it then no longer holds the "
-                f"page back, until the date passes. This page counts as substantiated: "
-                f"<strong>{'yes' if gestaafd else 'no'}</strong>.</p>{''.join(blokken)}</div>")
+                f"{intro}{''.join(blokken)}</div>")
     except Exception:                                         # noqa: BLE001 — nooit de pagina breken
         return ""
 
