@@ -2605,6 +2605,22 @@
     if (document.readyState !== "complete") window.addEventListener("load", ga, { once: true });
   }
 
+  /* EEN VRAAG ALS ANKER (#vraag-<k>, W1b): /bom, /open-questions en /today linken naar de vraag op
+   * de wiki-pagina. Staat die vraag in een dichtgeklapt `<details>` (pagina zonder feiten), dan
+   * opent dit het blok en scrolt erheen — bij het laden (directe URL) én bij een klik op dezelfde
+   * pagina (`hashchange`). Een browser die zelf openklapt, doet hier niets dubbel: `open` is al waar. */
+  function vraagAnker(doc) {
+    var hash = (window.location && window.location.hash) || "";
+    if (hash.indexOf("#vraag-") !== 0) return false;
+    var el = doc.getElementById(decodeURIComponent(hash.slice(1)));
+    if (!el) return false;
+    var d = el.closest ? el.closest("details") : null;
+    if (d && !d.open) d.open = true;
+    if (el.scrollIntoView) el.scrollIntoView({ block: "start" });
+    return true;
+  }
+  NV.vraagAnker = vraagAnker;
+
   // ── De emoji-kiezer: zoeken, en invoegen in een tekstveld ─────────────────────────────────
   // ZOEKEN STOND IN EEN INLINE-SCRIPT dat alleen op schermen met de project-modal werd
   // meegestuurd (`window.emoFilter` in `_modal_html`). In Messages bestond die functie niet,
@@ -2831,8 +2847,10 @@
     mentions(root);
     feest(root);
     naarKop(root);
+    if (root === document) vraagAnker(document);
     emoKiezer(root);
   };
+  window.addEventListener && window.addEventListener("hashchange", function () { vraagAnker(document); });
 
   /* Effort: de eenheid wisselen rekent het GETAL om, en verandert de omvang niet. Zonder dit postte
    * de select `5` + `uren` terwijl er 5 dagen stond, en werd 40 uur 5 uur. `data-unit` is de

@@ -339,8 +339,11 @@ def test_het_eerste_feit_heeft_een_ingang_voor_wie_mag_bewerken(tmp_path):
 
     filler = render_pagina(st2, a.id, csrf_token="tok", username="alice@nooch.earth")
     assert "To add facts" in filler and "+ Add fact" not in filler
-    assert ">Facts</h3>" not in filler and "No facts yet" not in filler
+    assert ">Facts</h3>" not in filler
     assert filler.count("To add facts") == 1                     # één ingang, niet twee
+    # HyphaLite staat op /bom: sinds 15 oktober 2026 (besluit Stefan) zegt één regel welke vragen
+    # open staan — geen leeg kopje, maar de stand van de pagina (`tests/test_w1b_inklappen.py`).
+    assert "No facts yet, 7 questions open:" in filler
 
     outsider = render_pagina(st2, a.id, csrf_token="tok", username="bob@nooch.earth")
     assert "To add facts" not in outsider and ">Facts</h3>" not in outsider
