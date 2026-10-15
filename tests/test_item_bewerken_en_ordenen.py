@@ -154,28 +154,14 @@ def _html(led, pid, st=None):
     return _checklists_html(led.get(pid), "csrf-token", pid, "/projects", True, st)
 
 
-def test_de_at_lijst_draagt_het_apenstaartje():
-    """DE OORZAAK VAN 'GEEN SUGGESTIES'. Een datalist filtert op de optie-WAARDE. Stonden daar kale
-    namen, dan matcht de `@` die de placeholder vraagt niets en lijkt het veld stuk. De server
-    strippen we hem er weer af, dus dit is puur de kant die de mens ziet."""
-    import re
-    from nooch_village.views import checklists
-    bron = open(checklists.__file__, encoding="utf-8").read()
-    # De regel die de opties bouwt moet '@' vóór het label zetten.
-    m = re.search(r"role_opts\s*=\s*\"\"\.join\(f\"<option value='([^']*)\{_e\(d\['label'\]\)\}",
-                  bron)
-    assert m, "de optie-bouwer is verplaatst — controleer of het '@' er nog voor staat"
-    assert m.group(1) == "@", "zonder '@' in de waarde matcht de datalist niets als je '@' typt"
-
-
 def test_het_uitklapblok_is_de_details_zelf():
     """De CSS moet op `[open]` kunnen zien dat het paneel openstaat, om het over de volle breedte
     ONDER de tekst te zetten. Zat de klasse op een wikkel eromheen, dan was daar `:has()` voor nodig
     — een omweg om een structuurfout heen."""
     from nooch_village.views import checklists
     bron = open(checklists.__file__, encoding="utf-8").read()
-    assert "<details class='fedit ck-resolve'>" in bron
-    assert "<span class='ck-resolve'>" not in bron
+    assert "<details class='fedit ck-bewerk'>" in bron
+    assert "<span class='ck-bewerk'>" not in bron
 
 
 def test_de_css_zet_een_open_paneel_op_een_eigen_regel():
@@ -187,14 +173,14 @@ def test_de_css_zet_een_open_paneel_op_een_eigen_regel():
     css = open(os.path.join(os.path.dirname(views.__file__), "..", "static", "nooch.css"),
                encoding="utf-8").read()
     assert ".ck-item{flex-wrap:wrap}" in css
-    assert ".ck-resolve[open],.ck-bewerk[open]{flex:1 1 100%" in css
+    assert ".ck-bewerk[open]{flex:1 1 100%" in css
     # `flex-basis:0` op de tekst. Met `auto` is de basismaat de VOLLE tekstbreedte, en zodra de rij
     # mag wrappen springt een lange itemtekst naar een eigen regel ONDER het ✓-vakje. Gevonden door
     # de regel te renderen en op te meten; in de code was het niet te zien.
     assert ".ck-txt{flex:1 1 0}" in css
     # `order:1` houdt de ✕ op de eerste regel. Zonder duwt het 100%-brede paneel hem naar een derde
     # regel, waar hij los onder het formulier hangt.
-    assert "order:1" in css.split(".ck-resolve[open]")[1].split("}")[0]
+    assert "order:1" in css.split(".ck-bewerk[open]")[1].split("}")[0]
     # De oude regel maakte ELK form doorzichtig, ook het doorgeef-formulier — en dan werkt de
     # flex-indeling van dat formulier niet. De uitzondering moet er staan.
     assert ".ck-item form:not(.ck-doorgeef){display:contents}" in css

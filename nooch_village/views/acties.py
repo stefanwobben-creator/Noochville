@@ -291,9 +291,8 @@ def _regel_van_ander(st, it: dict, pr: dict) -> str:
 def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[tuple[dict, dict, dict]]:
     """Open MENS-items op projecten die van jou zijn, als (item, checklist, project).
 
-    WAT ER ONTBRAK. Een checklist-item zonder skill is een volgende stap die alleen een mens kan
-    zetten — op de projectpagina staat er letterlijk "no skill · needs a human" bij. Maar het stond
-    alleen daar: je moest weten welk project je moest openen. Dat is precies wat een actielijst
+    WAT ER ONTBRAK. Een open checklist-item is een volgende stap die een mens zet. Maar het stond
+    alleen op de projectpagina: je moest weten welk project je moest openen. Dat is precies wat een actielijst
     oplost, en het is dezelfde soort regel als de rest van dit scherm.
 
     NIET UIT DE `ActieStore` maar uit de projecten (`ProjectLedger.checklists`): dit zijn geen
@@ -331,11 +330,11 @@ def _mijn_checklist_items(st, ik: str, mijn: list[dict] | None = None) -> list[t
     for pid, p in projecten.items():
         for cl in (p.get("checklists") or []):
             for it in (cl.get("items") or []):
-                # GEEN SKILL = EEN MENS. `skipped` telt niet mee (bewust overgeslagen), `done`
-                # evenmin. Dat is dezelfde lezing als `_cl_item_state` op de projectpagina; die
-                # functie geeft een WEERGAVE-state terug en niet een ja/nee, dus hier staat de
-                # vraag zelf — niet zijn antwoord overgeschreven.
-                if it.get("done") or it.get("skipped") or it.get("skill"):
+                # ELK OPEN ITEM IS MENSENWERK. Tot 15 oktober 2026 viel een item met een `skill`
+                # hier weg ("de rol doet dat"), maar die uitvoerder bestaat sinds #516 niet meer:
+                # zo'n item werd door niemand gedaan en stond ook nergens als actie. `skipped` en
+                # `done` tellen niet mee. De `skill`-velden blijven in de opslag; ze tellen niet.
+                if it.get("done") or it.get("skipped"):
                     continue
                 if not str(it.get("text") or "").strip():
                     continue

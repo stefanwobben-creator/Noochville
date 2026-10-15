@@ -1,4 +1,11 @@
-"""Cockpit-side skill-match: een stil skill-aanbod bij een mens-toegevoegd checklist-item.
+"""Cockpit-side skill-match.
+
+SINDS 15 OKTOBER 2026 ALLEEN NOG VOOR DE @MENTION-REPLY (`cockpit2._dna_skill_for`, en de helpers
+`_extract_json` en `_payload_ok`). Het stille skill-aanbod bij een mens-toegevoegd checklist-item
+("can pick this up") is weg, samen met de uitvoerder waarvoor het bestond (#516). Hieronder de
+oorspronkelijke uitleg.
+
+Oorspronkelijk: een stil skill-aanbod bij een mens-toegevoegd checklist-item.
 
 Hergebruikt het `_plan_checklist`-recept (item-tekst tegen de DNA-skills van de owner-rol + hun
 INPUT-vorm, met een machine-check tegen de harde DNA-lijst), maar voor een GEGEVEN item i.p.v. het

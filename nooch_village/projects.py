@@ -633,51 +633,6 @@ class ProjectLedger:
         self._touch(p); self._save()
         return cl
 
-    def plan_akkoord(self, pid: str, clid: str, door: str = "") -> bool:
-        """De mens zegt 'ga maar doen': zet `akkoord` op True zodat de daemon dit plan mag draaien.
-
-        EENRICHTINGSVERKEER. Er is geen weg terug naar False, en dat is geen omissie: een plan
-        intrekken doet de mens door de checklist te verwijderen of het project uit ACTIEF te slepen.
-        Een knop die het akkoord terugdraait terwijl de daemon halverwege is, geeft een half
-        uitgevoerd plan dat er onaangeraakt uitziet.
-
-        Raakt `review_raised` NIET aan: akkoord geven verandert geen enkel item, dus de review-vlag
-        (die over de INHOUD van de checklist gaat) hoort te blijven staan.
-
-        WIST WÉL `last_tended` (scope 52). Die dagrem voorkomt dat één lijst twee keer op een dag
-        draait; een zojuist goedgekeurd plan heeft nog nooit gedraaid, dus daar is niets om te
-        remmen. Zonder deze regel lag een go ahead op ronde twee (of een herplan na de strategie)
-        tot de volgende dag stil, terwijl de knop "the role picks it up within seconds" belooft."""
-        p = self._projects.get(pid)
-        cl = self._checklist(p, clid) if p else None
-        if cl is None or cl.get("akkoord") is not False:
-            return False                                  # geen plan, of er stond geen akkoord-vraag open
-        cl["akkoord"] = True
-        if door:
-            cl["akkoord_door"] = str(door)[:80]           # wie het zei - de wall vertelt wanneer
-        p.pop("last_tended", None)
-        self._touch(p); self._save()
-        return True
-
-    def set_checklist_uitvoer(self, pid: str, clid: str) -> bool:
-        """Wijs de lijst aan die de rol afwerkt (regel 1 van `uitvoerlijst`).
-
-        EXCLUSIEF: de vlag wordt eerst overal weggehaald en dan op deze lijst gezet. `uitvoerlijst`
-        kiest er ook maar één, dus twee vlaggen zouden betekenen dat de volgorde in het bestand
-        bepaalt welke lijst draait. Omkeerbaar door een andere lijst aan te wijzen; dat is meteen
-        de undo, en daarom is er geen aparte 'zet uit'.
-
-        Raakt `review_raised` niet aan: aanwijzen verandert geen enkel item."""
-        p = self._projects.get(pid)
-        cl = self._checklist(p, clid) if p else None
-        if cl is None:
-            return False
-        for c in self._checklists(p):
-            c.pop("uitvoer", None)
-        cl["uitvoer"] = True
-        self._touch(p); self._save()
-        return True
-
     def checklist_remove(self, pid: str, clid: str) -> bool:
         p = self._projects.get(pid)
         if p is None:
@@ -995,51 +950,6 @@ class ProjectLedger:
             p.pop("review_raised", None)              # checklist-mutatie → review-vlag wissen (Q2)
             self._touch(p); self._save()
             return True
-        return False
-
-    def set_item_offer(self, pid: str, clid: str, item_id: str, offer: dict) -> bool:
-        """Hang een STIL skill-aanbod aan een item: een suggestie (skill+payload), NOG geen skill. Alleen
-        als het item nog geen skill heeft. `offer` = {skill, payload, payload_ok}. Accepteren gebeurt via
-        accept_item_offer; negeren = afwijzen (het aanbod blijft staan tot acceptatie)."""
-        p = self._projects.get(pid)
-        cl = self._checklist(p, clid) if p else None
-        if cl is None or not (offer or {}).get("skill"):
-            return False
-        for it in cl.get("items", []):
-            if it["id"] == item_id and not it.get("skill"):
-                pl = offer.get("payload")
-                it["offer"] = {"skill": offer["skill"],
-                               "payload": pl if isinstance(pl, dict) else {},
-                               "payload_ok": bool(offer.get("payload_ok", True))}
-                self._touch(p); self._save()
-                return True
-        return False
-
-    def accept_item_offer(self, pid: str, clid: str, item_id: str) -> bool:
-        """Accepteer het aanbod: hang skill+payload aan het item via het bestaande checklist-model en
-        verwijder het aanbod. payload_ok=False (onvolledige payload) markeert het item als niet-uitvoerbaar
-        (de daemon slaat het dan over) — identiek aan het prep-pad."""
-        p = self._projects.get(pid)
-        cl = self._checklist(p, clid) if p else None
-        if cl is None:
-            return False
-        for it in cl.get("items", []):
-            if it["id"] == item_id and it.get("offer"):
-                off = it.pop("offer")
-                # Teruggegeven aan de rol: een geclaimde stap die alsnog een skill krijgt is niet
-                # langer mens-werk. Zou de claim blijven staan, dan slaat de vastloop-klep dit item
-                # over terwijl de rol het juist wél kan draaien.
-                for veld in ("geclaimd", "geclaimd_door", "geclaimd_at"):
-                    it.pop(veld, None)
-                it["skill"] = off.get("skill")
-                pl = off.get("payload")
-                if isinstance(pl, dict) and pl:
-                    it["payload"] = pl
-                if off.get("payload_ok") is False:
-                    it["payload_ok"] = False
-                p.pop("review_raised", None)          # checklist-mutatie → review-vlag wissen (Q2)
-                self._touch(p); self._save()
-                return True
         return False
 
     def edit(self, pid: str, scope=None, owner: str | None = None,
@@ -1529,7 +1439,6 @@ _WRITE_METHODS = (
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
     "set_conclusie", "set_conclusie_voorstel",
-    "set_item_offer", "accept_item_offer", "plan_akkoord", "set_checklist_uitvoer",
     "edit", "approve", "discard",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",

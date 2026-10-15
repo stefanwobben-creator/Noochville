@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # de naam die de wizard en de puls zetten, niet iets wat iemand bedacht. Die op elke kaart tonen is
 # ruis met de vorm van informatie: je leest een kop die op 90% van de kaarten hetzelfde zegt.
 #
-# `Uitvoerplan` BLIJFT de identifier: hij gate't de Done-uitkomst, het aanbod-mechanisme, de wizard
+# `Uitvoerplan` BLIJFT de identifier: hij gate't de Done-uitkomst, de wizard
 # en de puls (`projects.PREP_CHECKLIST_TITLE`). Alleen de WEERGAVE vervalt — identifier is
 # mechaniek, label is content, dezelfde scheiding als bij de verslag-voorzet.
 _DEFAULT_TITELS = {PREP_CHECKLIST_TITLE.casefold(), "tasks", "checklist"}
@@ -142,102 +142,32 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav
     return f"<div class='c2-sec'>{head}</div>{groups}"
 
 
-def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
+def _cl_item_state(it: dict, done) -> tuple[str, str]:
     """Bepaal de weergave-state van een checklist-item + de extra box-klasse.
 
-    Vier onderscheidbare states (scope 1):
       done     ✓  afgevinkt
-      exec     ·  uitvoerbaar (skill + payload in orde, nog niet gedraaid)
-      warn     ⚠  payload onvolledig (payload_ok=False) — de checklist deugt niet
-      noskill  ○  geen skill (skill=None) — er is (nog) geen software voor
-      human    🙋 expliciete mens-taak (planner zag vooraf: fysiek/offline) — telt niet mee
+      open        nog te doen
+      human    🙋 expliciete mens-taak (oud planner-veld) — telt niet mee
       skipped  ⤳  bewust overgeslagen door de mens — telt niet mee
 
-    Fail-soft (afgesproken): een ONTBREKEND payload_ok = 'niet gevalideerd' = gewoon uitvoerbaar (·),
-    NIET ongeldig. Alleen expliciet payload_ok is False → ⚠. Zo staat een oud item (geprepareerd vóór
-    PR #136, zonder het veld) niet ten onrechte als onvolledig gemarkeerd — consistent met hoe het
-    primitief fail-soft is op skills zonder required_payload."""
+    DE AI-STATES ZIJN WEG (15 oktober 2026, besluit Stefan). `exec`, `warn` en `noskill` bestonden
+    voor de uitvoerder die sinds #516 (19-20 september) niet meer bestaat: ze beloofden werk dat niets
+    meer deed. De `skill`- en `payload`-velden op oude items blijven in de opslag staan; ze worden
+    alleen niet meer getoond. `human` en `skipped` blijven, want `checklist_progress` telt ze nog
+    steeds niet mee en dat moet op het scherm te zien zijn."""
     if it.get("skipped"):                        # bewust overgeslagen: telt niet meer mee (n.v.t./elders)
         return "skipped", " b-skip"
     if done:
         return "done", ""
-    if it.get("human_task"):                     # planner zag vooraf: alleen een mens/externe partij
+    if it.get("human_task"):                     # oud planner-veld: telt niet mee in de voortgang
         return "human", " b-human"
-    if not skill:
-        return "noskill", " b-noskill"
-    if it.get("payload_ok") is False:            # expliciet False; None/afwezig telt NIET als ongeldig
-        return "warn", " b-warn"
-    return "exec", ""
+    return "open", ""
 
 
-def _gate_samenvatting(items) -> tuple[str, int]:
-    """Wat gebeurt er als ik op 'go ahead' klik?
-
-    Dat is de enige vraag die die knop stelt, en het antwoord stond alleen verspreid over de items,
-    elk met een eigen klein labeltje: een dichte of gestippelde checkbox, een groene skill-chip, een
-    gemarkeerde mens-taak-regel. Je moest vier items decoderen om te weten wat er ging draaien.
-
-    Hier staat het één keer, in de vorm waarin je het nodig hebt: hoeveel de rol draait en met welke
-    skills, en wat er voor jou overblijft. Geeft (html, aantal-uitvoerbaar) terug; dat tweede getal
-    bepaalt of de knop überhaupt iets belooft."""
-    from collections import Counter
-    telling: Counter = Counter()
-    skills: list[str] = []
-    for it in items:
-        if it.get("done"):
-            continue
-        state, _ = _cl_item_state(it, False, it.get("skill"))
-        telling[state] += 1
-        if state == "exec" and it.get("skill"):
-            skills.append(it["skill"])
-
-    delen = []
-    if telling["exec"]:
-        chips = " ".join(f"<span class='ck-skill'>{_e(s)}</span>"
-                         for s in dict.fromkeys(skills))         # dedup, volgorde behouden
-        delen.append(f"<b>the role runs {telling['exec']}</b> {chips}")
-    if telling["human"]:
-        delen.append(f"{telling['human']} for you (hands-on)")
-    if telling["noskill"]:
-        delen.append(f"{telling['noskill']} nobody can run yet")
-    if telling["warn"]:
-        delen.append(f"{telling['warn']} incomplete, stays open")
-    if not delen:
-        return "<span class='muted'>nothing here for the role to run</span>", 0
-    return " · ".join(delen), telling["exec"]
-
-
-def _cl_fmt_payload(it: dict) -> str:
-    """Compacte payload-weergave (zoals in het prototype: {sleutel: waarde}). Valt terug op query."""
-    payload = it.get("payload")
-    if isinstance(payload, dict) and payload:
-        inner = ", ".join(f"{k}: {v}" for k, v in list(payload.items())[:4])
-        return "{" + inner[:80] + "}"
-    q = (it.get("query") or "").strip()
-    return "{" + q[:60] + "}" if q else ""
-
-
-def _cl_item_meta(state: str, skill, it: dict) -> str:
-    """De meta-regel onder een checklist-item: skill-naam + payload, en per state het ⚠/○-signaal.
-    ⚠ (coral) en ○ (grijs) verschillen bewust visueel — ze vragen om verschillende actie."""
-    if state == "done":
-        # AFGEVINKT IS NIET HETZELFDE ALS BEANTWOORD. `set_item_leeg` markeert een item dat draaide
-        # maar niets opleverde — het wordt bewust wél afgevinkt (anders haalt het project de
-        # review-gate nooit), en die markering stond nergens op het scherm. Op 8 september kwam de
-        # belangrijkste zoekopdracht van een leveranciers-onderzoek leeg terug, en op het bord stond
-        # hij doorgestreept naast twee die wél iets vonden: niet te onderscheiden. De uitvoerlaag
-        # legde het verschil zorgvuldig vast en de weergave gooide het weg.
-        #
-        # `leeg_bron` scheidt twee dingen die je niet mag verwarren: 'gemeld' is een ANTWOORD (de
-        # bron zei zelf: niets gevonden), 'geen_inhoud' is een GAT (er kwam iets terug waar niets
-        # in zat). Alleen het tweede is ontbrekende kennis.
-        if not it.get("leeg"):
-            return ""                            # afgerond mét resultaat → geen ruis; het staat in de wall
-        why = (it.get("leeg_reden") or "").strip()
-        gemeld = it.get("leeg_bron") == "gemeld"
-        merk = "📭 searched, nothing found" if gemeld else "🕳 ran, but returned nothing"
-        return (f"<span class='ck-meta'><span class='ck-leeg'>{merk} — this step has no answer"
-                f"{' · ' + _e(why) if why else ''}</span></span>")
+def _cl_item_meta(state: str, it: dict) -> str:
+    """De meta-regel onder een checklist-item, alleen waar hij iets zegt over de TELLING: een
+    overgeslagen item en een mens-taak tellen niet mee. Verder is een item een tekstregel met vinkje
+    (geen skill, payload, "no skill · needs a human" of "ran, but returned nothing" meer)."""
     if state == "skipped":
         why = (it.get("skip_reason") or "").strip()
         return (f"<span class='ck-meta'><span class='ck-skip'>⤳ skipped — does not count"
@@ -246,60 +176,7 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
         why = (it.get("reason") or "").strip()
         return (f"<span class='ck-meta'><span class='ck-human'>🙋 human task — does not count towards "
                 f"done{' · ' + _e(why) if why else ''}</span></span>")
-    reason = (it.get("reason") or "").strip()
-    parts = []
-    if skill:
-        parts.append(f"<span class='ck-skill'>{_e(str(skill))}</span>")
-        pl = _cl_fmt_payload(it)
-        if pl:
-            parts.append(f"<span class='ck-payload'>{_e(pl)}</span>")
-    if state == "warn":
-        parts.append(f"<span class='ck-warn'>⚠ payload incomplete{': ' + _e(reason) if reason else ''}</span>")
-    elif state == "noskill" and it.get("geclaimd"):
-        # Je nam deze stap zelf op je (project uit WACHT terug naar ACTIEF gesleept). Zonder dit
-        # merkteken ziet hij eruit als elk ander "○ no skill"-item en is niet te zien wáárom de rol
-        # er niet meer naar vraagt. `ck-human` hergebruikt, geen nieuwe klasse: dit is dezelfde
-        # soort mededeling (dit ligt bij een mens), alleen op een ander moment ontstaan.
-        parts.append("<span class='ck-human'>🙋 you picked this up — the role stopped asking, "
-                     "and it still counts towards done</span>")
-    elif state == "noskill":
-        parts.append(f"<span class='ck-noskill'>○ no skill{' · ' + _e(reason) if reason else ' · needs a human'}</span>")
-    return f"<span class='ck-meta'>{' '.join(parts)}</span>" if parts else ""
-
-
-def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
-    """De drie mens-uitkomsten op een item dat alleen een mens kan oplossen (geen skill, of een
-    onvolledige payload). Zonder deze knoppen sluit de mens wel de spanning maar blijft het item open
-    en het project geparkeerd — de herhaal-lus. 'Gedaan' zit al op het ✓-vakje ernaast (dat loopt via
-    dezelfde resolutie-route), hier staan 'overslaan' en 'overdragen'."""
-    # 'skip (n/a)' IS WEG. Hij stond naast het ✓-vakje en deed vrijwel hetzelfde: een item dat
-    # niet meer hoeft, vink je af of haal je weg. Twee knoppen voor één gedachte maakt de keuze
-    # zwaarder dan de handeling. De `skipped`-STAAT blijft bestaan (oude items dragen hem nog en
-    # `checklist_progress` telt hem correct niet mee); alleen de knop om hem te zetten is weg.
-    # ÉÉN VELD, GEEN PROJECTFORMULIER. Hier stonden een rol-dropdown en een 'done when…' naast
-    # elkaar, en die bouwden een heel project op het bord van de ontvanger. Twee dingen mis: het
-    # vroeg om een projectdoel terwijl de bedoeling "@iemand, kijk jij hier even naar" is, en de drie
-    # velden naast de itemtekst persten die tekst op het scherm samen tot één woord per regel.
-    #
-    # Nu: één `@`-veld met dezelfde doelenlijst als de inbox (rollen én personen), en de server
-    # routeert het langs `route_werk`. `ck-doorgeef` is een modifier binnen de bestaande `ck-`-familie,
-    # geen nieuw prefix — zie de klasse-ratchet.
-    # HET UITKLAP-BLOK IS DE `ck-resolve` ZELF, en niet iets in een span eromheen. Alleen zo kan de
-    # CSS op `[open]` zien dat het paneel openstaat en het over de volle breedte ONDER de tekst
-    # zetten. Stond het in een wikkel, dan had je `:has()` nodig om vanaf de ouder naar het kind te
-    # kijken, en dat is een omweg om een structuurfout heen.
-    hand = (f"<details class='fedit ck-resolve'><summary class='flink'>📤 hand off</summary>"
-            f"<form method='post' action='/action' class='ck-doorgeef'>{hid}{clitem}"
-            # `@` STAAT IN DE OPTIEWAARDEN, niet alleen in de placeholder. Een datalist filtert op de
-            # waarde: stonden daar kale namen, dan matcht de eerste `@` die je typt niets en lijkt
-            # het veld stuk. De server strippen we hem er weer af (`lstrip("@")`), dus dit is puur
-            # de kant die de mens ziet — en het is dezelfde vorm als het `@`-veld in de inbox.
-            f"<input name='naar' list='ck-doelen' autocomplete='off' "
-            f"placeholder='type @ to pick a role or person'>"
-            f"<datalist id='ck-doelen'>{role_opts}</datalist>"
-            f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
-            f"hand off</button></form></details>") if role_opts else ""
-    return hand
+    return ""
 
 
 #: De lege checklist. "no items yet" CONSTATEERT; dit NODIGT UIT — en zegt erbij waar een eerste
@@ -323,12 +200,11 @@ _CL_LEEG = ("<li class='cl-empty'>No actions yet. Put the first step from the me
 #: `json.dumps` en niet `_e` voor csrf en next: dit is een SCRIPT-context, geen HTML-context.
 #: HTML-escapen maakt van `&back=` een `&amp;back=`, en dan post de sleep naar een URL die niet
 #: bestaat. Zelfde keuze als in `projects.py`, om dezelfde reden.
-def _ck_sleep_js(csrf: str, nxt: str, waak: bool = False) -> str:
+def _ck_sleep_js(csrf: str, nxt: str) -> str:
     import json
     return _CK_SLEEP_JS_ROMP.replace(
         "__VARS__",
-        f"var csrf={json.dumps(csrf)},nxt={json.dumps(nxt)},bron=null,"
-        f"waak={'true' if waak else 'false'};")
+        f"var csrf={json.dumps(csrf)},nxt={json.dumps(nxt)},bron=null;")
 
 
 # DE STAND MEETEEN ZIEN staat in `static/nooch.js` en niet meer hier. Dit was een `<script>` in
@@ -339,48 +215,6 @@ def _ck_sleep_js(csrf: str, nxt: str, waak: bool = False) -> str:
 #
 # De haken blijven hier: `data-ck-item` op het vakje, `data-ck-bar`/`data-ck-tot` op de balk en
 # `data-ck-tel` op de teller. Eén gedelegeerde listener in het gedeelde bestand leest ze.
-
-
-def _mag_waken(p: dict, st) -> bool:
-    """Kan er op dit moment een ROL aan deze lijst werken? Alleen dan gaat de pagina meekijken.
-
-    Drie voorwaarden, en alle drie lezen een feit dat al bestaat:
-
-      1. de kaart staat in de lopende kolom (`_ACTIEF_STATUSSEN`, afgeleid uit `_PROJ_COLS`);
-      2. de UITVOERLIJST heeft nog een open item mét skill — de daemon werkt alleen die ene lijst
-         af, en alleen items die een skill dragen;
-      3. de eigenaar-rol heeft een RUNNER.
-
-    Punt 3 is bewust `heeft_runner` en niet `wordt_opgepakt`. Een mens in de rol laat de vinkjes
-    niet vanzelf omvallen; die vinkt aan in deze browser, en dat handelt de inline-post uit scope 21
-    al af. Meekijken is alleen zinnig als er ergens anders iets kan bewegen.
-
-    Fail-CLOSED, andersom dan de badge op de kaart. Weten we het niet, dan kijken we niet: een
-    poll die nergens naar kijkt kost bandbreedte en levert niets. Niets tonen is hier de veilige
-    kant; bij de badge was dat juist wél tonen."""
-    try:
-        from nooch_village.views.projects import _ACTIEF_STATUSSEN
-        if str(p.get("status") or "") not in _ACTIEF_STATUSSEN:
-            return False
-        from nooch_village.projects import uitvoerlijst
-        lijst = uitvoerlijst(p) or {}
-        if not any(it.get("skill") and not it.get("done") and not it.get("skipped")
-                   for it in (lijst.get("items") or [])):
-            return False
-        rol = str(p.get("owner") or "")
-        if not rol or st is None:
-            return False
-        rec = st.records.get(rol)
-        if rec is None:
-            return False
-        from nooch_village import governance
-        from nooch_village.registry_factory import shared_registry
-        from nooch_village.village import CLASS_MAP
-        leeft, _reden = governance.heeft_runner(rec, class_map=CLASS_MAP,
-                                                registry=shared_registry(), context=None)
-        return bool(leeft)
-    except Exception:                                    # noqa: BLE001
-        return False
 
 
 _CK_SLEEP_JS_ROMP = (
@@ -479,52 +313,23 @@ _CK_SLEEP_JS_ROMP = (
     "return fetch('/action',{method:'POST',"
     "headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})"
     ".then(function(r){if(!r.ok)throw new Error('ck '+r.status);"
-    # `W.laatst` bijzetten: wie zelf zit af te vinken is bezig met deze lijst, en dan hoort het
-    # waken niet af te tellen naar stilte alsof er niemand kijkt.
     "if(ckWeigering(r.url))throw new Error('ckgeweigerd');"
-    "W.laatst=Date.now();return ckVervers();});}"
+    "return ckVervers();});}"
     "document.addEventListener('submit',function(e){"
     "var f=e.target;if(!f||!f.closest||!f.closest('.ck-list'))return;"
     "var knop=f.querySelector('[name=action]');if(!knop)return;"
     # Alleen de handelingen die je vaak achter elkaar doet. Verwijderen en doorgeven blijven een
     # hele paginabeurt: dat zijn eindpunten, geen ritme, en daar is een duidelijke overgang beter
     # dan een vloeiende.
-    "if(['check_toggle','check_accept','check_rename'].indexOf(knop.value)<0)return;"
+    "if(['check_toggle','check_rename'].indexOf(knop.value)<0)return;"
     "var rij=f.closest('.ck-item');e.preventDefault();"
     "if(rij)rij.classList.add('bezig');"
     "ckPost(f).catch(function(){"
     # Alles wat niet goed ging valt terug op de oude weg, zodat de mens de melding krijgt die de
     # server altijd al gaf. Stil falen zou hier het ergst zijn: dan lijkt je klik gelukt.
     "if(rij)rij.classList.remove('bezig');f.submit();});},true);"
-    # ── De lijst werkt voor je ogen ─────────────────────────────────────────────────────────────
-    #
-    # WAAROM HIER GEEN STATUSVELD WORDT GELEZEN. `ProjectLedger.start()` zet `status` op 'running'
-    # en niets zet hem ooit terug; dat woord blijft staan tot een mens de kaart versleept. Een veld
-    # dat iemand moet intrekken is geen bewijs van activiteit. VERANDERING is dat wel, en die kan
-    # niet verlopen: verandert er niets, dan is er ook niets te zien.
-    #
-    # DE GETALLEN KOMEN UIT DE ECHTE UITVOERING, niet uit een gevoel. Een rol werkt alle open items
-    # van de uitvoerlijst achter elkaar af op zijn eigen thread, en elk item is een echte
-    # netwerk-aanroep: time-outs van 10 tot 30s in de skills, een LLM-stap tot 180s. Vandaar kijken
-    # per 3s zolang er beweging is, terugzakken naar 10 en dan 20s als het stil blijft, en pas
-    # stoppen na 4 minuten stilte. Een kortere stilte-grens zou middenin een trage stap afhaken en
-    # precies het moment missen waar het om gaat.
-    "var W={laatst:Date.now(),t:null,mag:waak,aan:waak};"
-    "function ckStil(){return Date.now()-W.laatst;}"
-    "function ckRitme(){var s=ckStil();return s<30000?3000:(s<90000?10000:20000);}"
-    "function ckPlan(){if(!W.aan)return;if(ckStil()>240000){W.aan=false;return;}"
-    "clearTimeout(W.t);W.t=setTimeout(ckKijk,ckRitme());}"
-    "function ckKijk(){"
-    # Niet kijken naar een tabblad dat niemand ziet, en niet midden in een eigen post: die zet zo
-    # meteen zelf de nieuwe stand neer, en er dwars doorheen vervangen laat de rij springen.
-    "if(document.hidden||document.querySelector('.ck-item.bezig')){ckPlan();return;}"
-    "ckVervers().then(function(n){if(n>0)W.laatst=Date.now();ckPlan();})"
-    ".catch(function(){ckPlan();});}"
-    # Terug op het scherm is een nieuw moment: het venster begint opnieuw, ook als het waken
-    # inmiddels was gestopt. Wat er intussen gebeurde zie je dan alsnog in één keer.
-    "document.addEventListener('visibilitychange',function(){"
-    "if(document.hidden||!W.mag)return;W.laatst=Date.now();W.aan=true;ckKijk();});"
-    "ckPlan();"
+    # HET MEEKIJKEN IS WEG (15 oktober 2026). Hier pollde de pagina zolang "een rol" de lijst
+    # afwerkte. Die uitvoerder bestaat sinds #516 niet meer; er beweegt niets meer buiten deze browser.
     "})();</script>")
 
 
@@ -536,22 +341,11 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='next' value='{_e(nxt)}'>")
 
-    from nooch_village.projects import checklist_progress, uitvoerlijst
-    # Welke lijst werkt de rol af? Alleen relevant als er meer dan één is; bij één lijst valt er
-    # niets te kiezen en zou de melding ruis zijn.
-    _uit_id = (uitvoerlijst(p) or {}).get("id")
-    _meerdere = len(p.get("checklists") or []) > 1
-    # Doelen voor het doorgeven: ROLLEN ÉN PERSONEN, uit dezelfde bron die het `@`-veld in de inbox
-    # voedt (reference, don't copy). Stond hier eerst op `_wall_outcome_opts`, dat alleen rollen geeft
-    # — terwijl je een item meestal aan een PERSOON wilt geven.
-    role_opts = ""
-    if rw and st is not None:
-        try:
-            from nooch_village.cockpit2_util import _at_doelen
-            role_opts = "".join(f"<option value='@{_e(d['label'])}'></option>"
-                                for d in _at_doelen(st))
-        except Exception:
-            role_opts = ""
+    from nooch_village.projects import checklist_progress
+    # GEEN AI-RESTANTEN MEER (15 oktober 2026, besluit Stefan). Hier stonden de akkoord-poort ("go
+    # ahead", "the role is working — N to go"), de uitvoerlijst-keuze ("the role works this list"),
+    # het skill-aanbod ("can pick this up") en de hand-off naar een rol. Allemaal voor de uitvoerder
+    # die sinds #516 (19-20 september) niet meer bestaat. Een item is een tekstregel met een vinkje.
     out = ""
     for cl in (p.get("checklists") or []):
         items = cl.get("items", [])
@@ -565,38 +359,10 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                f"data-ck-bar='{_e(cl['id'])}' data-ck-tot='{tot}'></progress>"
                f"<span class='muted' data-ck-tel='{_e(cl['id'])}'>{pct}% ({done}/{tot})</span>"
                f"</div>") if tot else ""
-        # Het uitvoerplan is een VOORSTEL tot een mens het goedkeurt (projects.plan_wacht_op_akkoord).
-        # Deze knop is de enige weg naar akkoord; zonder hem staat de daemon stil en zie je niet waarom.
-        poort = ""
-        if cl.get("akkoord") is False:
-            wat, n_exec = _gate_samenvatting(items)
-            knop = (f"<form method='post' action='/action'>{hid()}"
-                    f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-                    f"<button class='btn ok sm' type='submit' name='action' value='plan_akkoord'>"
-                    f"▶ go ahead</button></form>") if (rw and n_exec) else ""
-            # Geen knop als er niets te draaien valt: dan is 'go ahead' een lege belofte, en de
-            # samenvatting zegt al waarom. Weggooien of zelf afvinken is dan de weg.
-            poort = (f"<div class='ck-gate'><span class='chip amber'>⏸ waiting for your go-ahead</span>"
-                     f"{knop}<span class='ck-gate-wat'>{wat}</span></div>")
-        elif cl.get("akkoord_door"):
-            wat, n_exec = _gate_samenvatting(items)
-            # DRIE TOESTANDEN, NIET TWEE. Tussen "goedgekeurd" en "klaar" zit een gat waarin de rol
-            # bezig is, en dat was onzichtbaar: je klikte, de kaart herlaadde meteen, er stond nog
-            # niets, en daarna bewoog het scherm niet meer. Je moest zelf raden wanneer je moest
-            # verversen. Dat is geen nieuwe state om op te slaan — hij is af te leiden uit wat er
-            # al staat: goedgekeurd, en er staan nog items open die een skill hebben.
-            if n_exec:
-                poort = (f"<div class='ck-gate' data-bezig='1'>"
-                         f"<span class='chip amber'>⏳ the role is working — {n_exec} to go</span>"
-                         f"<span class='ck-gate-wat'>{wat}</span></div>")
-            else:
-                poort = (f"<div class='ck-gate'><span class='chip muted'>▶ approved by "
-                         f"{_e(cl['akkoord_door'])}</span><span class='ck-gate-wat'>{wat}</span></div>")
         rows = ""
         for it in items:
             d = it.get("done")
-            skill = it.get("skill")
-            state, box_extra = _cl_item_state(it, d, skill)
+            state, box_extra = _cl_item_state(it, d)
             clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                       f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
             # `data-ck-item` koppelt het vakje aan de balk van DEZELFDE lijst (fase 11, 2b). De
@@ -616,8 +382,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             greep = (f"<span class='ck-greep' draggable='true' title='drag to reorder'>⠿</span>"
                      if rw else "")
             # BEWERKEN WAS ER NIET, alleen weggooien. Wie een tikfout wilde herstellen moest het item
-            # verwijderen en opnieuw typen — en gooide daarmee de skill en payload weg die eraan
-            # hingen. Zelfde `fedit`-uitklap als de hand-off, en dus ook onder de tekst.
+            # verwijderen en opnieuw typen. Een `fedit`-uitklap, onder de tekst.
             edit = (f"<details class='fedit ck-bewerk'><summary class='flink' title='edit text'>✎</summary>"
                     f"<form method='post' action='/action' class='ck-doorgeef'>{hid()}{clitem}"
                     f"<input name='text' value='{_e(it['text'])}' autocomplete='off' "
@@ -625,18 +390,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                     f"<button class='btn sm' type='submit' name='action' value='check_rename'>"
                     f"save</button></form></details>") if rw else ""
             txt = (f"<span class='ck-txt'><span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>"
-                   f"{_cl_item_meta(state, skill, it)}</span>")
-            # Stil skill-aanbod (cockpit-match): alleen als het item nog geen skill heeft. Klik = accepteren
-            # (skill+payload aan het item, uitvoering door de daemon); negeren = afwijzen.
-            offer = it.get("offer") if not skill else None
-            offer_html = (f"<form method='post' action='/action'>{hid()}{clitem}"
-                          f"<button class='btn ghost sm' type='submit' name='action' value='check_accept' "
-                          f"title='skill: {_e(str((offer or {}).get('skill','')))}'>🤖 can pick this up</button>"
-                          f"</form>") if (rw and offer) else ""
-            # Een item dat geen enkele skill kan draaien blijft anders eeuwig open en houdt het project
-            # geparkeerd. Geef de mens hier de twee uitkomsten die dat doorbreken (✓ = de derde).
-            resolve = (_cl_resolve_row(it, hid(), clitem, role_opts)
-                       if (rw and state in ("noskill", "warn", "human")) else "")
+                   f"{_cl_item_meta(state, it)}</span>")
             unskip = (f"<form method='post' action='/action' class='emo-f'>{hid()}{clitem}"
                       f"<button class='flink' type='submit' name='action' value='check_unskip'>"
                       f"undo skip</button></form>") if (rw and state == "skipped") else ""
@@ -644,7 +398,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             # Ze staan op de <li> en niet op de greep, want de drop-doelen zijn de REGELS.
             rows += (f"<li class='ck-item' data-pid='{_e(pid)}' data-item='{_e(it['id'])}' "
                      f"data-clid='{_e(cl['id'])}'>"
-                     f"{greep}{chk}{txt}{offer_html}{edit}{resolve}{unskip}{rm}</li>")
+                     f"{greep}{chk}{txt}{edit}{unskip}{rm}</li>")
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                # EEN PLACEHOLDER IS EEN UITNODIGING OF EEN GRIJS VLAK. "add item…" beschrijft het
@@ -655,34 +409,11 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                 f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
                 f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
-        # De stille valkuil zichtbaar maken: een lijst met skill-items die de rol NIET afwerkt.
-        # Zonder deze regel accepteer je een aanbod en gebeurt er nooit iets, zonder enig spoor.
-        rol_lijst = ""
-        if _meerdere:
-            if cl["id"] == _uit_id:
-                rol_lijst = ("<div class='ck-gate'><span class='chip muted'>"
-                             "▶ the role works this list</span></div>")
-            elif any(it.get("skill") for it in items):
-                knop = (f"<form method='post' action='/action'>{hid()}"
-                        f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-                        f"<button class='btn sm' type='submit' name='action' value='checklist_uitvoer'>"
-                        f"make this the role's list</button></form>") if rw else ""
-                # Achterstallig (wall_diepdive_rubberproject_13sept.md, "algemene feedback 6"): dit
-                # is al een knop, geen instelling — een project kan meerdere checklists hebben, maar
-                # de rol werkt er autonoom maar één (`uitvoerlijst`, met opzet exclusief). Wat
-                # ontbrak was uitleg, niet mechaniek: één zin in een title zegt waarom er twee
-                # lijsten zijn en wat de knop doet, zonder iets nieuws te bouwen.
-                rol_lijst = (f"<div class='ck-gate'><span class='chip amber' "
-                             f"title='A project can have more than one checklist, but the role "
-                             f"only works one at a time — the button below makes this the one it "
-                             f"works.'>⏸ the role doesn't work this list</span>"
-                             f"<span class='muted'>items with a skill sit here unused</span>{knop}</div>")
         _titel = toon_titel(cl.get("title", ""))
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
                 + (f"<span class='cl-title'>{_e(_titel)}</span>" if _titel else "")
                 + f"{delc}</div>"
-                f"{rol_lijst}{poort}{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
+                f"{bar}<ul class='clean ck-list'>{rows or _CL_LEEG}</ul>{add}</div>")
     if rw and out:
-        out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""),
-                            waak=_mag_waken(p, st))
+        out += _ck_sleep_js(csrf, f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe=""))
     return out

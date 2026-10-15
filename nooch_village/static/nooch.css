@@ -1222,16 +1222,6 @@ body.wo-focus .c2-side ~ *:not(.c2-paneel){margin-left:0}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
-/* De akkoord-poort: een plan dat wacht hoort niet weg te vallen tussen de items. Geel = wacht op
-   jou (zelfde betekenis als .chip.amber elders), grijs = het is al gezegd. */
-.ck-gate{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.2rem 0 .6rem;padding:.45rem .6rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius)}
-.ck-gate .muted{font-size:.72rem}
-.ck-gate form{margin-left:auto}
-/* De samenvatting krijgt een eigen regel (flex-basis 100%), zodat de chip en de knop bovenaan naast
-   elkaar blijven staan en de uitleg eronder de volle breedte heeft. */
-.ck-gate-wat{flex:1 1 100%;font-size:.74rem;line-height:1.7;color:var(--gray)}
-.ck-gate-wat b{color:var(--ink)}
-.ck-gate-wat .ck-skill{margin-left:.25rem}
 .ck-prog{display:flex;align-items:center;gap:.6rem;margin:.2rem 0 .6rem}
 .ck-prog .pbar{flex:1 1 auto;width:auto}
 .ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}
@@ -1246,46 +1236,38 @@ span.ck-box{cursor:default;opacity:.5}
 .ck-item .dellink{margin-left:auto;opacity:0}
 .ck-item:hover .dellink{opacity:1}
 .ck-done{text-decoration:line-through;color:var(--muted)}
-/* checklist-item-states (scope 1): ✓ done · uitvoerbaar ⚠ payload-onvolledig ○ geen-skill.
-   ⚠ (coral) en ○ (grijs/sand) MOETEN visueel verschillen — ze vragen om verschillende actie. */
+/* checklist-item-states: ✓ done · open · ⤳ overgeslagen · 🙋 mens-taak. De AI-states (uitvoerbaar,
+   ⚠ payload-onvolledig, ○ geen-skill) zijn weg sinds 15 oktober 2026: de uitvoerder bestaat niet meer. */
 .ck-item{align-items:flex-start}
 .ck-item .ck-box{margin-top:.1rem}
 .ck-txt{flex:1 1 auto;min-width:0}
 .ck-meta{display:block;margin-top:.15rem;font-size:.7rem;line-height:1.5}
 .ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:var(--type-12);color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
-.ck-payload{font-family:ui-monospace,Menlo,monospace;font-size:.64rem;color:var(--subtle)}
-.ck-warn{font-size:.68rem;color:var(--danger-text);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
-.ck-noskill{font-size:.68rem;color:var(--gray);background:var(--sand);padding:.02rem .35rem;border-radius:5px}
 .ck-skip{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
-/* Uitgevoerd-maar-leeg: zelfde vorm als .ck-skip (het is dezelfde soort mededeling:
-   dit item telt anders dan het lijkt), maar apart zodat de twee later los kunnen. */
-.ck-leeg{font-size:.68rem;color:var(--subtle);background:var(--cream-2);padding:.02rem .35rem;border-radius:5px}
-.ck-box.b-warn{border-color:var(--coral)}
-.ck-box.b-noskill{border-color:var(--subtle);border-style:dashed}
 .ck-box.b-skip{border-style:dotted;opacity:.6}
 .ck-human{font-size:.68rem;color:var(--gray);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
 .ck-box.b-human{border-color:var(--green);border-style:dashed}
-/* Uitklap-panelen (hand off, ✎ bewerken) op een checklist-regel.
+/* Uitklap-paneel (✎ bewerken) op een checklist-regel.
 
    DICHT = een chip in de rij. OPEN = een eigen regel eronder, over de volle breedte.
 
-   Dat tweede is de fix voor wat er op het scherm gebeurde: `.ck-resolve` stond op `flex:0 0 auto`
+   Dat tweede is de fix voor wat er op het scherm gebeurde: het paneel stond op `flex:0 0 auto`
    naast `.ck-txt`, dus het opengeklapte formulier nam de breedte die het nodig had en weigerde te
    krimpen. De itemtekst kreeg wat overbleef en wikkelde tot één woord per regel. Een formulier
    hoort een regel niet samen te persen; het hoort eronder te staan.
 
    `[open]` op het element zelf, niet `:has()` op een ouder — daarom IS de <details> de
-   `.ck-resolve`. Werkt daarmee ook in oudere Safari. */
+   `.ck-bewerk`. Werkt daarmee ook in oudere Safari. */
 .ck-item{flex-wrap:wrap}
 /* `flex-basis:0` en niet `auto`. Met `auto` is de basismaat de VOLLE tekstbreedte, en zodra de rij
    mag wrappen springt een lange itemtekst dus naar een eigen regel onder het ✓-vakje in plaats van
    ernaast te krimpen. Gevonden door de rij te renderen en op te meten, niet door te redeneren. */
 .ck-txt{flex:1 1 0}
-.ck-resolve,.ck-bewerk{flex:0 0 auto}
+.ck-bewerk{flex:0 0 auto}
 /* `order:1` zet het open paneel achter ALLE andere onderdelen van de regel, ook achter de ✕. Zonder
    dat duwt een paneel van 100% breed de ✕ naar een derde regel, waar hij als een losse dwaler onder
    het formulier hangt. Ook gevonden op de gerenderde regel, niet in de code. */
-.ck-resolve[open],.ck-bewerk[open]{flex:1 1 100%;display:block;margin-top:.15rem;order:1;
+.ck-bewerk[open]{flex:1 1 100%;display:block;margin-top:.15rem;order:1;
   padding-left:2.75rem}                    /* ⠿ + ✓ + hun gaps: het paneel lijnt uit met de tekst */
 /* `display:contents` maakt van een form een doorzichtige doos, wat klopt voor de losse knopjes
    (✓, ✕, aanbod) maar niet voor de uitklapformulieren: die hebben hun eigen flex-indeling nodig.

@@ -181,9 +181,10 @@ def test_view_toont_de_uitkomsten_bij_een_mens_item(tmp_path):
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
 
-    # `check_skip` is weg: hij stond naast het ✓-vakje en deed vrijwel hetzelfde. Wat een
-    # vastgelopen item wél nodig heeft — hem elders beleggen — is `check_handoff`, en die blijft.
-    assert "check_handoff" in rw and "check_skip" not in rw
+    # `check_skip` is weg: hij stond naast het ✓-vakje en deed vrijwel hetzelfde. `check_handoff`
+    # (doorgeven aan een rol) is weg sinds 15 oktober 2026: het item is een tekstregel met een vinkje.
+    assert "check_handoff" not in rw and "check_skip" not in rw
+    assert "check_toggle" in rw
     assert "check_skip" not in ro                      # read-only: geen knoppen
 
 
