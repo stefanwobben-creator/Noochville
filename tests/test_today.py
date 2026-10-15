@@ -95,7 +95,8 @@ def test_today_laadt_met_de_blokken_en_de_juiste_aantallen(server):
     for kop in ("Critical numbers", "My actions", "Open questions", "Goals"):
         assert kop in h, kop
     assert "2 open of your own" in h
-    assert "5 checklist items need a human" in h and "across 2 projects" in h
+    assert "5 checklist items open" in h and "across 2 projects" in h
+    assert "need a human" not in h                                        # AI-restant, 15 okt 2026
     assert "biggest: Vegan Society (3), MITH report (2)" in h
     for link in ("href='/acties'", "href='/open-questions'", "href='/goals'"):
         assert link in h, link
@@ -244,3 +245,19 @@ def test_lege_toestand_open_vragen(dorp, monkeypatch):
     h = today._open_vragen(_st(dorp), "")
     assert "No open questions" in h and "<b>0 open</b>" not in h
     assert dek.CONFLICT in open_vragen.STATUSSEN
+
+
+def test_een_enkel_checklist_item_heet_enkelvoud(tmp_path):
+    """15 oktober 2026: "N checklist items open" in plaats van "need a human", met het juiste
+    enkelvoud ("1 checklist item open", niet "1 checklist item need a human")."""
+    dd = _testdorp(tmp_path, vragen=False, werk=False, doelen=False)
+    st = _st(dd)
+    pid = st.projects.create(LID_ROL, "Eén stap", "human", status="running")
+    cl = st.projects.checklist_add(pid, "Plan")
+    st.projects.check_add(pid, cl["id"], "Stap 1")
+    httpd, sessies = _server(dd)
+    try:
+        _s, h = _get(httpd, sessies, "/today", "lid@t.nl")
+    finally:
+        httpd.shutdown()
+    assert "<b>1 checklist item open</b>" in h and "across 1 project," in h

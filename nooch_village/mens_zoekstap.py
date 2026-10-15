@@ -37,11 +37,11 @@ MAX_QUERIES = 6
 _MAX_BERICHT = 1500                 # = projects.add_role_message; langer wordt daar afgekapt
 _MAX_DOEL = 220
 
-ITEM_TEKST = ("🔎 Human search step: run the Google queries on the wall (and the deep-research "
+ITEM_TEKST = ("🔎 Search step: run the Google queries on the wall (and the deep-research "
               "prompt), add the best five URLs as links on this project")
 ITEM_REDEN = ("the village searches with the terms it wrote and stops; a person looks, reads, "
               "adjusts and searches again")
-MARKER = "🔎 For you, the human"
+MARKER = "🔎 For you"
 
 
 def _term(item: dict) -> str:

@@ -378,8 +378,7 @@ def _checklist_regel(st, it: dict, cl: dict, p: dict, ik: str, csrf_token: str,
                f"{_e(_projectnaam(st, pid))}</a>" if met_project else "")
     return (f"<div class='ck-item'>{bol}<span class='ck-txt'>"
             f"{_e(str(it.get('text') or ''))}"
-            f"<span class='ck-meta'>{project}"
-            f"<span class='muted'>needs a human</span></span></span></div>")
+            f"<span class='ck-meta'>{project}</span></span></div>")
 
 
 def _per_project(st, paren) -> list[tuple[str, str, list[str]]]:
@@ -501,8 +500,8 @@ def render_acties(st, ik: str = "", csrf_token: str = "", msg: str = "") -> str:
                        f"project checklists &middot; {len(stappen)} in {len(per)} "
                        f"project{'s' if len(per) != 1 else ''}</span></div>"
                        f"{_groepen(per, projectlink=True)}"
-                       f"<p class='muted'>All of these are marked “needs a human”. Grouped per "
-                       f"project, biggest first; open one to see its lines.</p></div>")
+                       f"<p class='muted'>Grouped per project, biggest first; open one to see its "
+                       f"lines.</p></div>")
 
     main = (f"<div class='c2-main c2-smal'><h1 class='ptitle'>My actions</h1>"
             f"<p class='muted'>Jot it down like on paper. Link it to a project only if you want "

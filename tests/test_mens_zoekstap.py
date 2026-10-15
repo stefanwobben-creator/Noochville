@@ -139,3 +139,13 @@ def test_de_wizard_zet_de_mens_zoekstap_ook_op_het_project(tmp_path, monkeypatch
                                          "items": json.dumps([items[1]])})
     p2 = cockpit2._Stores(st.dd).projects.get(r2["pid"])
     assert len(p2["checklists"][0]["items"]) == 1
+
+
+def test_nieuwe_zoekstap_teksten_zonder_human():
+    """15 oktober 2026: nieuwe 🔎-items heten "🔎 Search step: …" en het wall-bericht begint met
+    "🔎 For you". Bestaande items en berichten blijven zoals ze zijn; een oud bericht ("🔎 For you,
+    the human: …") wordt door de nieuwe marker nog steeds herkend."""
+    assert mz.ITEM_TEKST.startswith("🔎 Search step: ") and "human" not in mz.ITEM_TEKST.lower()
+    assert mz.MARKER == "🔎 For you"
+    assert "🔎 For you, the human: the role searches …".startswith(mz.MARKER)
+    assert mz.bericht_voor_de_mens("doel", "", ["q"]).startswith("🔎 For you: ")

@@ -110,8 +110,10 @@ def _mijn_acties(st, ik: str) -> str:
             naam = _projectnaam(st, str(p.get("id") or ""))
             per[naam] = per.get(naam, 0) + 1
         groot = sorted(per.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:3]
-        regels.append(f"<b>{len(stappen)} checklist item{'s' if len(stappen) != 1 else ''} need a "
-                      f"human</b> <span class='muted'>across {len(per)} project"
+        # "NEED A HUMAN" WAS EEN AI-RESTANT (15 oktober 2026): sinds er geen uitvoerder meer is, is
+        # elk item mensenwerk. Een neutrale telling zegt hetzelfde zonder de tegenstelling.
+        regels.append(f"<b>{len(stappen)} checklist item{'s' if len(stappen) != 1 else ''} open"
+                      f"</b> <span class='muted'>across {len(per)} project"
                       f"{'s' if len(per) != 1 else ''}, biggest: "
                       f"{_e(', '.join(f'{n} ({k})' for n, k in groot))}</span>")
     if not eigen and not van_projecten and not stappen:

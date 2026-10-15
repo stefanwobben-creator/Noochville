@@ -53,7 +53,10 @@ def test_de_groepen_tellen_op_tot_24_grootste_eerst_alleen_die_open(dorp):
     assert [(naam, int(n)) for _o, naam, n in groepen] == sorted(
         VERDELING, key=lambda t: (-t[1], t[0].lower()))
     assert [bool(o) for o, _n, _k in groepen] == [True] + [False] * 7
-    assert h.split("From project checklists", 1)[1].count("needs a human</span>") == 24
+    blok = h.split("From project checklists", 1)[1]
+    assert blok.count("<div class='ck-item'>") == 24
+    # "needs a human" achter elke regel is weg (15 oktober 2026): elk item is mensenwerk
+    assert "needs a human" not in h and "Grouped per project, biggest first; open one to see its lines." in blok
 
 
 def test_from_your_projects_is_ook_een_groep_en_blijft_zichtbaar(dorp):
