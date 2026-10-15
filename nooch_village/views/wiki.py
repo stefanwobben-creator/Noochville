@@ -867,13 +867,28 @@ def _dek_lezer(a) -> str:
     return tekst_voor_lezers(a)
 
 
-def _feit_toevoegen(a, v: dict, csrf_token: str) -> str:
+def _hoe_het_werkt() -> str:
+    """"How this works", één keer bovenaan en ingeklapt (15 oktober 2026). Vervangt de regel "To change
+    this answer" die per vraag herhaald werd; de per-status-uitleg staat hier bij elkaar."""
+    return ("<details class='box-details'><summary>How this works</summary>"
+            "<p class='muted'>A question counts as answered when a person checks a fact and chooses that "
+            "question. <strong>Checked:</strong> if the fact is wrong, use ‘Re-check’ on it; if a source "
+            "says otherwise, add that fact and check it with the other answer — the page owner then "
+            "resolves the conflict. <strong>Unchecked:</strong> use ‘Check’ on one of the facts and "
+            "choose the question. <strong>Open:</strong> add a fact (+ Add fact, or Bulk Import in the "
+            "/ menu), then check it. <strong>Conflict:</strong> remove the wrong fact, or re-check it "
+            "with the right answer. <strong>Deferred:</strong> add a fact before the date, or undo the "
+            "deferral.</p></details>")
+
+
+def _feit_toevoegen(a, v: dict, csrf_token: str, soort: str = "") -> str:
     """"+ Add fact" bij één vraag (15 oktober 2026, besluit Stefan). Het BESTAANDE `pagina_feit_add`
     (`wiki.maak_feit`), met de vraag voorgekozen. Bulk Import blijft bestaan.
 
     NAKIJKEN ALLEEN MET EEN BRON: het vinkje "I checked this" staat uit tot er een link, een bestand
     of "first-hand" is (`data-bron-poort`, nooch.js). De server toetst hetzelfde: zonder bron komt
     het feit ALTIJD ongecheckt binnen. Een check ontstaat nooit vanzelf — alleen door dat vinkje."""
+    from nooch_village import wiki_dekking as dek
     k = v["k"]
     pre = f"fa-{_e(a.id)}-{_e(k)}"
     getal = ""
@@ -893,6 +908,7 @@ def _feit_toevoegen(a, v: dict, csrf_token: str) -> str:
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='vraag' value='{_e(k)}'>"
             f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}#vraag-{_e(k)}'>"
+            + (f"<p class='muted'>What counts: {_e(dek.wat_telt(soort, k))}</p>" if soort else "")
             + _field("Fact", "tekst", kind="textarea", required=True, fid=f"{pre}-tekst")
             + f"<label class='att-lbl' for='{pre}-soort'>Source</label>"
               f"<select id='{pre}-soort' name='soort'><option value='bron'>Link</option>"
@@ -980,13 +996,30 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                     continue
                 getoond[fid] = v["label"]
                 rijen.append(_feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token, can_edit, a))
-            toevoegen = (_feit_toevoegen(a, v, csrf_token) if can_edit and csrf_token else "")
+            toevoegen = (_feit_toevoegen(a, v, csrf_token, soort) if can_edit and csrf_token else "")
+            # COMPACTER (besluit Stefan, 15 oktober 2026). "What counts" zit achter een knop in de
+            # statusregel (dezelfde tekst staat ook in het "+ Add fact"-paneel), en "To change this
+            # answer" staat één keer bovenaan in "How this works". Alleen bij een conflict of een
+            # uitstel houdt de vraag één korte eigen regel: daar is de volgende stap anders.
+            telt = (f"<details class='acard-d'><summary class='flink'>What counts</summary>"
+                    f"<div class='datepop'>{_e(dek.wat_telt(soort, v['k']))}</div></details>")
+            eigen = ""
+            if c["status"] == dek.CONFLICT:
+                eigen = ("<p class='muted'>Remove the wrong fact, or re-check it with the right "
+                         "answer.</p>")
+            elif c["status"] == dek.UITGESTELD:
+                eigen = ("<p class='muted'>Add a fact before the date, or undo the deferral.</p>")
+            if not rijen and c["status"] in (dek.LEEG, dek.UITGESTELD):
+                # OPEN ZONDER FEITEN OP ÉÉN REGEL: "Open · no fact yet · [+ Add fact] [Defer]".
+                status = (f"<span class='qadd-row'><span class='nu-status nu-status--{vorm}'>{_e(woord)}"
+                          f"</span><span class='muted'>no fact yet</span>{toevoegen}{actie}{telt}</span>")
+                waarom, toevoegen = "", ""
+            else:
+                status = (f"<span class='qadd-row'><span class='nu-status nu-status--{vorm}'>{_e(woord)}"
+                          f"</span>{actie}{telt}</span>")
             blokken.append(
                 f"<div class='wiki-inline' id='vraag-{_e(v['k'])}'><h3>{_e(v['label'])}</h3>"
-                f"<p><span class='nu-status nu-status--{vorm}'>{_e(woord)}</span>{actie}</p>{waarom}"
-                f"<p class='muted'>What counts: {_e(dek.wat_telt(soort, v['k']))}</p>"
-                f"<p class='muted'>{_e(dek.wat_verandert(soort, v['k'], c))}</p>{''.join(rijen)}"
-                f"{toevoegen}</div>")
+                f"{status}{waarom}{eigen}{''.join(rijen)}{toevoegen}</div>")
         overig = [(i, f) for i, f in enumerate(feiten) if wiki.feit_id(f) not in getoond]
         if overig:
             blokken.append(
@@ -1019,7 +1052,7 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
         if can_edit:
             blokken.append(f"<div class='wiki-inline'>{_FEIT_INGANG}{_synthese_knop(a, csrf_token)}</div>")
         return (f"<div class='c2-sec' id='vragen'><h2>Questions and facts</h2>"
-                f"{intro}{''.join(blokken)}</div>")
+                f"{intro}{_hoe_het_werkt()}{''.join(blokken)}</div>")
     except Exception:                                         # noqa: BLE001 — nooit de pagina breken
         return ""
 
