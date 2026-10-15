@@ -1329,10 +1329,11 @@ def checklist_progress(cl_or_items) -> tuple[int, int]:
     """(afgevinkt, telbaar) voor één checklist of een lijst items — DE bron van waarheid voor
     "is deze checklist af?".
 
-    Overgeslagen items én expliciete mens-taken tellen niet mee in de noemer (`_NIET_TELBAAR`): een
-    besluit dat dit project het niet levert, mag het niet eeuwig onafgerond houden. Eén definitie,
-    want de worker (review-gate), de voortgangsbalk en de kaart-badge moeten het per se over
-    hetzelfde getal hebben."""
+    Overgeslagen items tellen niet mee in de noemer (`_NIET_TELBAAR`): een besluit dat dit project
+    het niet levert, mag het niet eeuwig onafgerond houden. Elk ander item telt mee, ook een met de
+    oude `human_task`-vlag (sinds 15 oktober 2026). Eén definitie, want de review-poort
+    (`project_items.maybe_finish`), de voortgangsbalk, de kaart-badge, de doelvoortgang
+    (`doelen.project_score`) en het Noochie-memo moeten het per se over hetzelfde getal hebben."""
     items = cl_or_items.get("items", []) if isinstance(cl_or_items, dict) else (cl_or_items or [])
     telbaar = [it for it in items if not any(it.get(v) for v in _NIET_TELBAAR)]
     return sum(1 for it in telbaar if it.get("done")), len(telbaar)
