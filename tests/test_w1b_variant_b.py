@@ -31,7 +31,7 @@ def _html(dd, aid, wie="guest"):
 
 
 def _blok(h, k):
-    return h.split(f"id='vraag-{k}'", 1)[1].split("<div class='wiki-inline' id='vraag-", 1)[0]
+    return h.split(f"id='vraag-{k}'", 1)[1].split(" id='vraag-", 1)[0]
 
 
 def test_feiten_staan_per_vraag_en_de_rest_onder_other_facts(tmp_path):
@@ -59,11 +59,14 @@ def test_self_reported_staat_bij_de_cel_en_de_telling_verandert_niet(tmp_path):
     dd, aid = _dorp(tmp_path)
     _check(dd, aid, "F1", plastic="yes")
     assert _cel(dd, "plastic")["status"] == dek.GECHECKT and _cel(dd, "plastic")["zelf_gerapporteerd"]
-    assert "Checked: yes, self-reported</span>" in _blok(_html(dd, aid), "plastic")
+    # sinds herontwerp A staat "self-reported" in de kolom Evidence, niet in het antwoord
+    kop = _blok(_html(dd, aid), "plastic").split("</summary>", 1)[0]
+    assert "Checked: yes</span>" in kop and "<span class='muted'>self-reported</span>" in kop
     # een onafhankelijk feit erbij: niet meer alleen self-reported
     _check(dd, aid, "F3", plastic="yes")
     assert _cel(dd, "plastic")["status"] == dek.GECHECKT and not _cel(dd, "plastic")["zelf_gerapporteerd"]
-    assert "Checked: yes</span>" in _blok(_html(dd, aid), "plastic")
+    kop = _blok(_html(dd, aid), "plastic").split("</summary>", 1)[0]
+    assert "Checked: yes</span>" in kop and "self-reported" not in kop
 
 
 def test_hoe_het_werkt_staat_een_keer_bovenaan_en_what_counts_achter_een_knop(tmp_path):
@@ -96,8 +99,10 @@ def test_conflict_en_uitstel_houden_een_eigen_regel(tmp_path):
 def test_open_zonder_feiten_staat_op_een_regel(tmp_path):
     dd, aid = _dorp(tmp_path)
     b = _blok(_html(dd, aid), "co2")
-    regel = b.split("<span class='qadd-row'>", 1)[1]
-    assert regel.startswith("<span class='nu-status nu-status--open'>Open</span><span class='muted'>no fact yet</span>")
+    # herontwerp A: de status staat in de kop; de voetregel zegt "no fact yet" met de handelingen
+    assert "<span class='nu-status nu-status--open'>Open</span>" in b.split("</summary>", 1)[0]
+    regel = b.split("<div class='qadd-row'>", 1)[1]
+    assert regel.startswith("<span class='muted'>no fact yet</span>")
     assert "+ Add fact</summary>" in regel and "value='vraag_uitstel'" in regel
     assert "No fact on this page carries this number yet." not in b
 

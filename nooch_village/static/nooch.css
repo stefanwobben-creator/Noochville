@@ -3372,3 +3372,42 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   :root .c2-scroll .datepop { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px;
     z-index: 70; max-height: 60vh; overflow: auto; }
 }
+
+/* ── Wiki-vragen, herontwerp A (16 oktober 2026, besluit Stefan) ────────────────────────────────
+   Eén nieuwe familie `wv-`, vier klassen (66 → 67 families):
+     wv-vraag  een vraag (`<details>`), gescheiden door een hairline;
+     wv-kop    de tabelrij: vraag · antwoord · bewijs · aantal feiten, op één vast raster dat de
+               kolomkop en alle `<summary>`s delen — de status staat één keer op de pagina;
+     wv-feit   een feitrij: tekst links, metakolom rechts, die vanzelf onder de tekst zakt als de
+               tekstkolom anders smaller wordt dan 20rem (flex-wrap, geen media query);
+     wv-meta   de metakolom: Counts-for-chip, bron, check-regel, handelingen.
+   Hiërarchie: vraagnaam 15px vet > feittekst 15px > meta 13px gedimd. Alleen "Check" bij een
+   ongecheckt feit draagt een rand; Re-check, ⋯, What counts en + Add fact zijn tekstknoppen. */
+:root .wv-kop {display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.6fr) minmax(4.5rem,1fr) 3.75rem;
+  gap:var(--s2) var(--s3);align-items:baseline;padding:var(--s2) 0;list-style:none}
+:root div.wv-kop {border-bottom:1px solid var(--nu-text);font-size:var(--type-12);text-transform:uppercase;
+  letter-spacing:.04em}
+:root summary.wv-kop {cursor:pointer;font-size:var(--type-13)}
+:root summary.wv-kop::-webkit-details-marker {display:none}
+:root summary.wv-kop>strong {font-size:var(--type-15)}
+:root summary.wv-kop>strong::before {content:"▸";display:inline-block;width:1.1em;font-weight:400}
+:root details[open]>summary.wv-kop>strong::before {content:"▾"}
+:root .wiki-inline.wv-vraag {margin:0;padding:0 0 var(--s2);border-bottom:1px solid var(--hair)}
+:root .wv-vraag>div, :root .wv-vraag>p {margin:var(--s2) 0 0 1.1em}
+:root .wv-vraag>.wv-feit {border-left:0;padding:var(--s3) 0 0;border-top:1px solid var(--hair)}
+:root .wv-vraag>.qadd-row {display:flex;border-left:0;padding-left:0}
+/* een open paneel (Re-check, ⋯) blijft binnen de metakolom; wat breder is scrollt in het paneel */
+:root .wv-meta > * {max-width:100%}
+:root .wv-meta > .qadd-row {align-self:stretch;min-width:0}
+:root .wv-feit {display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4)}
+:root .wv-feit>div:first-child {flex:1 1 20rem;min-width:0;font-size:var(--type-15);line-height:1.5}
+:root .wv-feit .ptitle {font-weight:400}
+:root .wv-meta {flex:0 1 15rem;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:var(--s1);
+  font-size:var(--type-13);color:var(--nu-muted)}
+:root .wv-vraag .flink {border:0;background:none;padding:0;text-decoration:underline;color:var(--nu-text)}
+/* Op een smal scherm (het bestaande breekpunt) staat de vraagnaam op een eigen regel over de volle
+   breedte; antwoord · bewijs · feiten eronder. Anders wordt de vraagkolom ±40 px breed. */
+@media (max-width: 760px) {
+  :root .wv-kop { grid-template-columns: minmax(0,1fr) auto auto; }
+  :root .wv-kop > :first-child { grid-column: 1 / -1; }
+}

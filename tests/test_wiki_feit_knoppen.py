@@ -78,7 +78,7 @@ def test_first_hand_draagt_de_naam_uit_de_sessie(tmp_path):
 def test_het_formulier_staat_bij_elke_vraag_met_het_vinkje_uit(tmp_path):
     dd, aid = _pagina(tmp_path, [_feit("F1", "x")])
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
-    blok = h.split("id='vraag-plastic'", 1)[1].split("<div class='wiki-inline' id='vraag-", 1)[0]
+    blok = h.split("id='vraag-plastic'", 1)[1].split(" id='vraag-", 1)[0]
     assert "<summary class='flink'>+ Add fact</summary>" in blok and "data-bron-poort" in blok
     assert "name='vraag' value='plastic'" in blok and "value='pagina_feit_add'" in blok
     assert "name='nakijken' value='1' disabled>" in blok
@@ -132,9 +132,9 @@ def test_primaire_knop_check_dan_re_check_en_de_rest_achter_het_menu(tmp_path):
     assert "confirm('Remove this fact?')" in menu                      # bevestiging blijft
     _check(dd, aid, "F1", plastic="yes")
     b = _blok(render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest"), "F1")
-    assert "<summary class='btn sm'>Re-check</summary>" in b and ">Undo check</button>" in b
+    assert "<summary class='flink'>Re-check</summary>" in b and ">Undo check</button>" in b
     # nog steeds maar één primaire knop (btn) per feit
-    assert b.count("class='btn sm'") == 1                              # alleen de primaire knop
+    assert b.count("class='btn sm'") == 0                              # Re-check heeft geen rand
 
 
 def test_counts_for_is_een_chip_en_nergens_is_gedimd(tmp_path):

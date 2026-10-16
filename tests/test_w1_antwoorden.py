@@ -197,7 +197,8 @@ def test_een_al_gecheckt_feit_kan_opnieuw_met_een_antwoord(tmp_path):
     dd, aid = _pagina(tmp_path, [_feit("F1", "Contains plastic: yes", gezien={"door": "Stefan", "op": "2026-10-06"})])
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
     # één primaire knop "Re-check"; "Undo check" staat achter ⋯ (15 oktober 2026)
-    assert "<summary class='btn sm'>Re-check</summary>" in h and "Undo check" in h
+    # "Re-check" op tekstniveau sinds herontwerp A (16 oktober 2026); "Undo check" achter ⋯
+    assert "<summary class='flink'>Re-check</summary>" in h and "Undo check" in h
     _check(dd, aid, "F1", plastic="yes")
     h = render_pagina(cockpit2._Stores(dd), aid, csrf_token="t", username="guest")
     assert "<option value='yes' selected>yes</option>" in h            # het huidige antwoord staat al gekozen
@@ -221,7 +222,7 @@ def test_het_feit_staat_onder_de_vraag_waarvoor_het_telt(tmp_path):
     _check(dd, aid, "F1", plastic="yes")
     st = cockpit2._Stores(dd)
     h = _vragen_sectie(st, st.att.get(aid), "", False)
-    blok = h.split("id='vraag-plastic'", 1)[1].split("<div class='wiki-inline' id='vraag-", 1)[0]
-    assert "<h3>Contains plastic?</h3>" in blok and "Checked: yes</span>" in blok
+    blok = h.split("id='vraag-plastic'", 1)[1].split(" id='vraag-", 1)[0]
+    assert "<strong>Contains plastic?</strong>" in blok and "Checked: yes</span>" in blok
     # "To change this answer" staat sinds 15 oktober 2026 één keer bovenaan in "How this works"
     assert "id='feit-F1'" in blok and "<summary class='flink'>What counts</summary>" in blok
