@@ -42,17 +42,25 @@ def _proj_chip(status: str) -> str:
     return f"<span class='chip {mod}'>{_e(lbl)}</span>"
 
 
-def _trekker_kort(st: _Stores, p: dict) -> str:
-    """De trekker op een bordkaart: alleen de initialen (of AI), de volle naam in title en
-    aria-label. Zelfde bron als `_trekker_html`, korter getoond."""
+def _bord_trekker(st: _Stores, p: dict):
+    """De mens die dit project op het BORD trekt, of None (16 oktober 2026, besluit Stefan).
+
+    ALLEEN EEN GEBRUIKER: een `person` met een people-record. Een onbekende `person` (zoals het
+    login-e-mailadres dat de oude aannameroute schreef) en elke `agent` — een AI trekt sinds "AI is
+    instrument, geen rol" geen project — vallen onder "No owner". De data blijft staan; dit is
+    alleen wat het bord toont. Eén plek voor de rij (`_group_meta`) en de kaart (`_trekker_kort`)."""
     if p.get("agent"):
-        pa = st.personas.get(p["agent"])
-        naam = f"{pa.name if pa else p['agent']} (AI)"
-        return f"<span class='av ai' title='{_e(naam)}' aria-label='{_e(naam)}'>AI</span>"
-    if p.get("person"):
-        naam = _person_name(st, p["person"])
-        return (f"<span class='av' title='{_e(naam)}' aria-label='{_e(naam)}'>"
-                f"{_e(_initials(naam))}</span>")
+        return None
+    return st.people.get(p.get("person")) if p.get("person") else None
+
+
+def _trekker_kort(st: _Stores, p: dict) -> str:
+    """De trekker op een bordkaart: alleen de initialen, de volle naam in title en aria-label.
+    Zelfde regel als de rij op het bord (`_bord_trekker`)."""
+    mens = _bord_trekker(st, p)
+    if mens is not None:
+        return (f"<span class='av' title='{_e(mens.name)}' aria-label='{_e(mens.name)}'>"
+                f"{_e(_initials(mens.name))}</span>")
     return "<span class='muted'>no owner</span>"
 
 
@@ -795,13 +803,9 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
                     f"⚠ {owner} (role no longer exists)", owner, "")
         nm = _name(orec) if orec else (owner or "—")
         return (("rol", owner), nm.lower(), nm, owner, "")
-    if p.get("agent"):
-        pa = st.personas.get(p["agent"])
-        return (("persona", p["agent"]), "1", f"🤖 {(pa.name if pa else p['agent'])} (AI)",
-                node_owner, f"persona:{p['agent']}")
-    if p.get("person"):
-        nm = _person_name(st, p["person"])
-        return (("person", p["person"]), "0_" + nm.lower(), nm, node_owner, f"person:{p['person']}")
+    mens = _bord_trekker(st, p)
+    if mens is not None:
+        return (("person", mens.id), "0_" + mens.name.lower(), mens.name, node_owner, f"person:{mens.id}")
     return (("none",), "2", "No owner", node_owner, "")
 
 
