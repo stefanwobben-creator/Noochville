@@ -30,7 +30,7 @@ def test_zonder_feiten_een_regel_met_de_juiste_aantallen(tmp_path):
             "Dyes &amp; chemicals, CO2e per kg, Water per kg, Certificate. To add facts: type <b>/</b> in the "
             "text and choose <b>Bulk Import Facts</b>.</p>") in h
     blok = h.split("<details class='box-details' id='vragen-blok'><summary>Show the questions</summary>", 1)[1]
-    assert blok.count("<div class='wiki-inline' id='vraag-") == 7
+    assert blok.count("<details class='wiki-inline wv-vraag' id='vraag-") == 7
     assert blok.count("What counts:") == 7
     assert blok.count("value='vraag_uitstel'") == 7                      # Defer blijft bereikbaar
     assert "id='vraag-overig'" not in h
@@ -60,7 +60,7 @@ def test_met_een_feit_blijft_alles_zoals_het_was(tmp_path):
     assert "No facts yet" not in h and "id='vragen-blok'" not in h
     assert h.count("<details class='box-details'>") == 1 and "<summary>How this works</summary>" in h
     assert h.startswith("<div class='c2-sec' id='vragen'><h2>Questions and facts</h2><p class='muted'>What this page should answer")
-    assert h.count("<div class='wiki-inline' id='vraag-") == 8            # 7 vragen + Other facts
+    assert h.count("<details class='wiki-inline wv-vraag' id='vraag-") == 8   # 7 vragen + Other facts
     assert "To add facts: type <b>/</b>" in h
 
 

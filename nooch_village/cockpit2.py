@@ -8124,12 +8124,18 @@ def make_handler(data_dir: str, csrf_token: str,
             # (nxt, msg) terug, en dit is het ene punt waar elke melding langskomt. De emoji blijft
             # voor de MENS; `ok=0` is voor de machine. Zou de client op de emoji sniffen, dan zit de
             # betekenis in een teken dat iemand ooit vervangt door een ander teken.
+            # HET ANKER BLIJFT ACHTERAAN (16 oktober 2026). `next` kan een `#vraag-<k>` dragen (de vraag
+            # die je net aanraakte blijft open). Stond `?msg=` er ná het `#`, dan zat de melding in het
+            # anker: de server zag hem niet en het anker wees naar een id dat niet bestaat.
+            nxt, _hekje, anker = nxt.partition("#")
             if msg and is_weigering(msg):
                 sep = "&" if "?" in nxt else "?"
                 nxt = f"{nxt}{sep}ok=0"
             if msg:
                 sep = "&" if "?" in nxt else "?"
                 nxt = f"{nxt}{sep}msg={urllib.parse.quote(msg)}"
+            if anker:
+                nxt = f"{nxt}#{anker}"
             self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def do_POST(self):

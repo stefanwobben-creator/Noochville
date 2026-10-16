@@ -2649,11 +2649,18 @@
 
   function vraagAnker(doc) {
     var hash = (window.location && window.location.hash) || "";
-    if (hash.indexOf("#vraag-") !== 0) return false;
+    // `#vraag-<k>` en sinds 16 oktober 2026 ook `#feit-<id>` ("Same fact as above", de
+    // dubbelwaarschuwing van Bulk Import): ELKE dichte `<details>` rond het doel gaat open — de vraag
+    // zelf, en bij een pagina zonder feiten ook het blok "Show the questions".
+    if (hash.indexOf("#vraag-") !== 0 && hash.indexOf("#feit-") !== 0) return false;
     var el = doc.getElementById(decodeURIComponent(hash.slice(1)));
     if (!el) return false;
-    var d = el.closest ? el.closest("details") : null;
-    if (d && !d.open) d.open = true;
+    var d = el.tagName === "DETAILS" ? el : (el.closest ? el.closest("details") : null);
+    while (d) {
+      if (!d.open) d.open = true;
+      var p = d.parentElement;
+      d = p && p.closest ? p.closest("details") : null;
+    }
     if (el.scrollIntoView) el.scrollIntoView({ block: "start" });
     return true;
   }

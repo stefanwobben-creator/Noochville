@@ -391,13 +391,14 @@ def _feit_formulier(feit: dict, a, st) -> str:
 
 
 def _feit_knop(actie: str, label: str, klasse: str, aid: str, fid: str, csrf_token: str,
-               extra: str = "", attrs: str = "") -> str:
-    """Eén handeling op een feit als eigen formulier — zelfde vorm als "remove" altijd had."""
+               extra: str = "", attrs: str = "", terug: str = "") -> str:
+    """Eén handeling op een feit als eigen formulier — zelfde vorm als "remove" altijd had.
+    `terug`: het anker waar je na de handeling landt (`#vraag-<k>`: die vraag blijft open)."""
     return (f"<form method='post' action='/action' class='fentry-inline'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
             f"<input type='hidden' name='fid' value='{_e(fid)}'>{extra}"
-            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid) + terug)}'>"
             f"<button class='{klasse}' type='submit' name='action' value='{_e(actie)}'{attrs}>"
             f"{_e(label)}</button></form>")
 
@@ -477,7 +478,7 @@ def _antwoorden_html(feit: dict, soort: str) -> str:
 
 
 def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str,
-                     label: str = "I checked this") -> str:
+                     label: str = "I checked this", terug: str = "", stil: bool = False) -> str:
     """"I checked this", met erbij welke vraag dit feit beantwoordt (W1). Eén klein formulier in de
     bestaande popover, geen apart scherm.
 
@@ -502,12 +503,15 @@ def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str
               f"placeholder='Reason (for not applicable)'></td></tr>")
     # B3 (13 oktober 2026): de opener staat bij ELK feit, dus secundair (`btn sm`); de knop ín de
     # popover ("Check") is de ene neon actie van die popover (`tests/test_b3_neon.py`).
-    return (f"<details class='acard-d'><summary class='btn sm'>{_e(label)}</summary><div class='datepop'>"
+    # `stil`: "Re-check" op tekstniveau (herontwerp A, 16 oktober 2026); alleen "Check" bij een
+    # ongecheckt feit heeft een rand. `terug`: de vraag blijft open na het nakijken.
+    knop = "flink" if stil else "btn sm"
+    return (f"<details class='acard-d'><summary class='{knop}'>{_e(label)}</summary><div class='datepop'>"
             f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(aid)}'>"
             f"<input type='hidden' name='fid' value='{_e(fid)}'>"
-            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid) + terug)}'>"
             f"<p class='muted'>Which question does this fact answer? Choose at least one, or tick "
             f"'Background only'. Leave '—' for questions it does not answer. Changing an answer later "
             f"means checking again.</p>"
@@ -520,7 +524,7 @@ def _check_formulier(feit: dict, soort: str, aid: str, fid: str, csrf_token: str
 
 
 def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool, a=None,
-               los: bool = False) -> str:
+               los: bool = False, terug: str = "") -> str:
     """Eén feit: de bewering, wat er met de bron is gedaan, en voor wie mag bewerken de handelingen.
 
     `los=True`: het feit heeft nog geen plek in de tekst. Het krijgt dan een greep om het de tekst
@@ -544,10 +548,22 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
               if h and g["status"] != wiki.VERVALLEN else "")
     soort = _vraag_soort(st, a)
     telt = _telt_voor_html(st, a, feit, soort)
-    getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
-               f"<div>{_grond_chip(g)} {telt}{straks}</div>{citaat}"
-               f"{'' if telt else _antwoorden_html(feit, soort)}")
+    # HET RASTER (herontwerp A, 16 oktober 2026): op een /bom-pagina links de tekst, rechts de
+    # metakolom (chips, bron, check-regel, handelingen). `wv-feit` laat de metakolom vanzelf onder de
+    # tekst zakken als de tekstkolom anders te smal wordt — zonder media query.
+    raster = bool(soort)
+    if raster:
+        getoond = f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}{citaat}"
+        meta = f"{telt} {_grond_chip(g)}{straks}"
+    else:
+        getoond = (f"<div class='ptitle'>{_e(feit.get('tekst') or '')}</div>{getal}"
+                   f"<div>{_grond_chip(g)} {telt}{straks}</div>{citaat}"
+                   f"{'' if telt else _antwoorden_html(feit, soort)}")
+        meta = ""
     if not can_edit:
+        if raster:
+            return (f"<div class='wv-feit' id='feit-{_e(fid)}'><div>{getoond}</div>"
+                    f"<div class='wv-meta'>{meta}</div></div>")
         return f"<div id='feit-{_e(fid)}'>{getoond}</div>"
     # ÉÉN PRIMAIRE KNOP, DE REST ACHTER ⋯ (15 oktober 2026, besluit Stefan). Per feit stonden er drie
     # of vier knoppen naast elkaar, en "bewerken" zat onzichtbaar onder een klik op de tekst. Nu:
@@ -560,17 +576,18 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
         # OP EEN PAGINA VAN /bom: nakijken met een antwoord (W1). Ook bij een verklaring (attested):
         # die is wie het zegt, maar welke VRAAG ze beantwoordt moet een mens nog steeds zeggen.
         check = _check_formulier(feit, soort, aid, fid, csrf_token,
-                                 label="Re-check" if nagekeken else "Check")
+                                 label="Re-check" if nagekeken else "Check", terug=terug,
+                                 stil=bool(nagekeken))
     elif nagekeken or (feit.get("grond") or {}).get("soort") == "attested" or not kan_nakijken:
         check = ""                 # al nagekeken, een verklaring IS het nakijken, of niets na te kijken
     else:
-        check = _feit_knop("pagina_feit_gezien", "Check", "btn sm", aid, fid, csrf_token)
+        check = _feit_knop("pagina_feit_gezien", "Check", "btn sm", aid, fid, csrf_token, terug=terug)
     menu = [inline_edit_knop("Edit")] if a is not None else []
     if nagekeken:
         menu.append(_feit_knop("pagina_feit_gezien", "Undo check", "flink", aid, fid, csrf_token,
-                               extra="<input type='hidden' name='uit' value='1'>"))
+                               extra="<input type='hidden' name='uit' value='1'>", terug=terug))
     menu.append(_feit_knop("pagina_feit_del", "Remove", "dellink", aid, fid, csrf_token,
-                           attrs=" onclick=\"return confirm('Remove this fact?')\""))
+                           attrs=" onclick=\"return confirm('Remove this fact?')\"", terug=terug))
     # `data-esc`: Escape sluit dit menu en zet de focus terug op ⋯ (`nooch.js`). Hetzelfde
     # uitklappaneel als het checkformulier ernaast (`acard-d` + `datepop`); geen nieuwe klasse.
     weg = (f"<details class='acard-d' data-esc><summary class='flink' aria-label='More actions' "
@@ -581,7 +598,7 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
         verborgen = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                      f"<input type='hidden' name='aid' value='{_e(aid)}'>"
                      f"<input type='hidden' name='fid' value='{_e(fid)}'>"
-                     f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid))}'>")
+                     f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(aid) + terug)}'>")
         getoond = inline_edit(getoond, _feit_formulier(feit, a, st), sleutel=f"feit-{fid}",
                               opslaan="pagina_feit_edit", verborgen=verborgen, klikbaar=True,
                               multipart=True)
@@ -589,6 +606,9 @@ def _feit_html(i: int, feit: dict, st, aid: str, csrf_token: str, can_edit: bool
     anker = f" id='feit-{_e(fid)}'"
     # DE KNOPPEN OP ÉÉN REGEL: de primaire knop en ⋯ naast elkaar (`qadd-row`), niet onder elkaar.
     knoppen = f"<div class='qadd-row'>{check}{weg}</div>"
+    if raster and not los:
+        return (f"<div class='editor-inline wv-feit'{anker}><div>{getoond}</div>"
+                f"<div class='wv-meta'>{meta}{knoppen}</div></div>")
     if not los:
         return f"<div class='editor-inline'{anker}>{getoond}{knoppen}</div>"
     # EEN FEIT ZONDER PLEK. De greep is dezelfde als die van de wiki-blokken; `data-feit-los`
@@ -867,6 +887,34 @@ def _dek_lezer(a) -> str:
     return tekst_voor_lezers(a)
 
 
+def _bewijs(c: dict, per_id: dict, ctx: dict) -> str:
+    """De bewijssterkte in één woord, voor de kop van een vraag: waarop rust dit antwoord?
+    `self-reported` (alleen het woord van de leverancier), `first-hand`, `checked`, of `—`."""
+    if c.get("zelf_gerapporteerd"):
+        return "self-reported"
+    soorten = []
+    for fid in c.get("feiten") or []:
+        f = (per_id.get(fid) or (None, None))[1]
+        if f is None:
+            continue
+        g = wiki.grond_status(f, **ctx)
+        soorten.append("first-hand" if g["soort"] == "attested" else
+                       "checked" if g["status"] == wiki.GEGROND else "unchecked")
+    for s in ("checked", "first-hand", "unchecked"):
+        if s in soorten:
+            return s
+    return "—"
+
+
+def _vraag_kop(label: str, vorm: str, woord: str, bewijs: str, n: int) -> str:
+    """De `<summary>` van een vraag: dezelfde vier kolommen als de kolomkop (`wv-kop`)."""
+    status = (f"<span class='nu-status nu-status--{vorm}'>{_e(woord)}</span>" if vorm
+              else f"<span class='muted'>{_e(woord)}</span>")
+    return (f"<summary class='wv-kop'><strong>{_e(label)}</strong><span>{status}</span>"
+            f"<span class='muted'>{_e(bewijs)}</span><span class='muted'>{n} fact{'s' if n != 1 else ''}"
+            f"</span></summary>")
+
+
 def _hoe_het_werkt() -> str:
     """"How this works", één keer bovenaan en ingeklapt (15 oktober 2026). Vervangt de regel "To change
     this answer" die per vraag herhaald werd; de per-status-uitleg staat hier bij elkaar."""
@@ -966,10 +1014,14 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                 woord = f"Deferred · research by {c['tot']}"
             elif c.get("verlopen"):
                 woord = f"Open — deferral expired {c['tot']}"
-            if c.get("antwoord"):
+            if c.get("antwoord") == "value":
+                # een getalvraag: het getal zelf in de kop, niet het woord "value"
+                w = next((wiki.waarde(per_id[f][1]) for f in c.get("feiten") or []
+                          if f in per_id and wiki.waarde(per_id[f][1])), None)
+                woord = f"{woord}: {wiki.waarde_tekst(w)}" if w else f"{woord}: value"
+            elif c.get("antwoord"):
                 woord = f"{woord}: {wiki.antwoord_label(c['antwoord'])}"
-            if c.get("zelf_gerapporteerd"):
-                woord = f"{woord}, self-reported" if c.get("antwoord") else f"{woord}: self-reported"
+            # "self-reported" staat in de kolom Evidence (`_bewijs`), niet nog eens in het antwoord.
             actie = ""
             if can_edit and csrf_token:
                 if c["status"] == dek.UITGESTELD:
@@ -995,12 +1047,14 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                                  f"<a href='#feit-{_e(fid)}'>{_e(tekst)}</a></p>")
                     continue
                 getoond[fid] = v["label"]
-                rijen.append(_feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token, can_edit, a))
+                rijen.append(_feit_html(per_id[fid][0], per_id[fid][1], st, a.id, csrf_token, can_edit, a,
+                                        terug=f"#vraag-{v['k']}"))
             toevoegen = (_feit_toevoegen(a, v, csrf_token, soort) if can_edit and csrf_token else "")
-            # COMPACTER (besluit Stefan, 15 oktober 2026). "What counts" zit achter een knop in de
-            # statusregel (dezelfde tekst staat ook in het "+ Add fact"-paneel), en "To change this
-            # answer" staat één keer bovenaan in "How this works". Alleen bij een conflict of een
-            # uitstel houdt de vraag één korte eigen regel: daar is de volgende stap anders.
+            # HERONTWERP A (besluit Stefan, 16 oktober 2026). Elke vraag is één `<details>`; de
+            # `<summary>` IS de tabelrij (vraag · antwoord · bewijs · aantal feiten) op één vast
+            # raster dat alle vragen en de kolomkop delen. Zo staat een status één keer op de pagina,
+            # en Enter/Spatie op de kop opent en sluit zonder JavaScript. Open, ongecheckt en
+            # conflict staan open; beantwoord en uitgesteld dicht, met het antwoord in de kop.
             telt = (f"<details class='acard-d'><summary class='flink'>What counts</summary>"
                     f"<div class='datepop'>{_e(dek.wat_telt(soort, v['k']))}</div></details>")
             eigen = ""
@@ -1009,24 +1063,35 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                          "answer.</p>")
             elif c["status"] == dek.UITGESTELD:
                 eigen = ("<p class='muted'>Add a fact before the date, or undo the deferral.</p>")
-            if not rijen and c["status"] in (dek.LEEG, dek.UITGESTELD):
-                # OPEN ZONDER FEITEN OP ÉÉN REGEL: "Open · no fact yet · [+ Add fact] [Defer]".
-                status = (f"<span class='qadd-row'><span class='nu-status nu-status--{vorm}'>{_e(woord)}"
-                          f"</span><span class='muted'>no fact yet</span>{toevoegen}{actie}{telt}</span>")
-                waarom, toevoegen = "", ""
-            else:
-                status = (f"<span class='qadd-row'><span class='nu-status nu-status--{vorm}'>{_e(woord)}"
-                          f"</span>{actie}{telt}</span>")
+            leeg = "" if rijen else "<span class='muted'>no fact yet</span>"
+            if not rijen:
+                waarom = ""                              # "no fact yet" zegt het al
+            voet = f"<div class='qadd-row'>{leeg}{toevoegen}{actie}{telt}</div>"
+            kop = _vraag_kop(v["label"], vorm, woord, _bewijs(c, per_id, _ctx),
+                             len([f for f in c.get("feiten") or [] if f in per_id]))
+            open_ = c["status"] in (dek.LEEG, dek.ONGECHECKT, dek.CONFLICT)
             blokken.append(
-                f"<div class='wiki-inline' id='vraag-{_e(v['k'])}'><h3>{_e(v['label'])}</h3>"
-                f"{status}{waarom}{eigen}{''.join(rijen)}{toevoegen}</div>")
+                f"<details class='wiki-inline wv-vraag' id='vraag-{_e(v['k'])}'{' open' if open_ else ''}>"
+                f"{kop}{waarom}{eigen}{''.join(rijen)}{voet}</details>")
+        # WAT NERGENS TELT: zonder vraag zichtbaar (open), "Background only" in één dichte sectie
+        # met teller (9 van de 11 feiten op Full Green).
         overig = [(i, f) for i, f in enumerate(feiten) if wiki.feit_id(f) not in getoond]
-        if overig:
+        zonder = [(i, f) for i, f in overig if not wiki.achtergrond(f)]
+        achter = [(i, f) for i, f in overig if wiki.achtergrond(f)]
+        if zonder:
             blokken.append(
-                "<div class='wiki-inline' id='vraag-overig'><h3>Other facts</h3>"
-                "<p class='muted'>These facts answer none of the questions above. To make one count, "
-                "check it and choose a question.</p>"
-                + "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a) for i, f in overig) + "</div>")
+                f"<details class='wiki-inline wv-vraag' id='vraag-overig' open>"
+                + _vraag_kop("Other facts", "", "No question yet", "—", len(zonder))
+                + "<p class='muted'>These facts answer none of the questions above. To make one "
+                  "count, check it and choose a question.</p>"
+                + "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a, terug="#vraag-overig")
+                          for i, f in zonder) + "</details>")
+        if achter:
+            blokken.append(
+                f"<details class='wiki-inline wv-vraag' id='vraag-achtergrond'>"
+                + _vraag_kop("Background facts", "", "Background only", "—", len(achter))
+                + "".join(_feit_html(i, f, st, a.id, csrf_token, can_edit, a, terug="#vraag-achtergrond")
+                          for i, f in achter) + "</details>")
         gestaafd = dek.gestaafd(rij, **_ctx)
         intro = (f"<p class='muted'>What this page should answer (the coverage on the "
                  f"<a href='/bom#coverage'>BOM screen</a>), with the facts that answer it. A question "
@@ -1051,8 +1116,10 @@ def _vragen_sectie(st, a, csrf_token: str, can_edit: bool) -> str:
                     f"{intro}{''.join(blokken)}</details></div>")
         if can_edit:
             blokken.append(f"<div class='wiki-inline'>{_FEIT_INGANG}{_synthese_knop(a, csrf_token)}</div>")
+        kolommen = ("<div class='wv-kop'><span class='muted'>Question</span><span class='muted'>Answer"
+                    "</span><span class='muted'>Evidence</span><span class='muted'>Facts</span></div>")
         return (f"<div class='c2-sec' id='vragen'><h2>Questions and facts</h2>"
-                f"{intro}{_hoe_het_werkt()}{''.join(blokken)}</div>")
+                f"{intro}{_hoe_het_werkt()}{kolommen}{''.join(blokken)}</div>")
     except Exception:                                         # noqa: BLE001 — nooit de pagina breken
         return ""
 
@@ -1790,11 +1857,14 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
     # onder de inhoud. Owner, domein, sectie, historie en opruimen zijn beheer, geen tekst.
     main = (f"<div class='c2-main'><div class='wiki-doc'>{kop}{_wiki_melding(msg)}"
             f"<div class='pkaart-body'><div class='pkaart-main'>{body}{voorstel}"
-            f"{_bom_sectie(st, a, pags) if is_note else ''}"
+            f"{_bom_sectie(st, a, pags) if (is_note and not per_vraag) else ''}"
             f"{_vragen_sectie(st, a, csrf_token, can_edit) if per_vraag else ''}"
             f"{'' if per_vraag else _onder('facts')}"
             f"{_besluiten_sectie(a, st, persoon)}{_onder('backlinks')}</div>"
-            f"<aside class='pkaart-rail'>{meta}</aside></div></div></div>")
+            # "FROM THE BOM" IN DE ZIJBALK op een /bom-pagina (herontwerp A, 16 oktober 2026): het is
+            # afgeleide administratie, geen inhoud — de vragen en feiten staan zo direct onder de tekst.
+            f"<aside class='pkaart-rail'>{_bom_sectie(st, a, pags) if per_vraag else ''}{meta}"
+            f"</aside></div></div></div>")
     return _page(f"{a.title or a.id} — {'page' if is_note else a.kind}",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
