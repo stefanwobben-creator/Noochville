@@ -289,6 +289,7 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
                 "reden": "No page yet: create one to answer this question.", "reden_kort": "no page"}
     toegestaan = {_norm(k) for k in vraag["koppen"]}
     treffers: list[tuple[dict, str]] = []          # (feit, het kopje waar hij onder stond)
+    alleen_ongecheckt: set[int] = set()            # treffers via `bij_vraag`: nooit bewijs, nooit tegenspraak
     for f in wiki.feiten(pagina):
         # EEN BEVESTIGD ANTWOORD KOPPELT, WAAR HET FEIT OOK STAAT (W1, 11 oktober 2026). De mens zei
         # bij het nakijken welke vraag dit feit beantwoordt; het kopje doet er dan niet meer toe.
@@ -302,6 +303,16 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
             continue
         if wiki.achtergrond(f):
             # BEWUST "BACKGROUND ONLY" (W1b): beantwoordt geen vraag, ook niet via zijn kopje of getal.
+            continue
+        if f.get("bij_vraag") == vraag["k"] and not wiki.nagekeken(f):
+            # TOEGEVOEGD BIJ DEZE VRAAG (16 oktober 2026, besluit Stefan): het feit staat eronder
+            # zolang niemand het nakeek. Een treffer maakt de cel hooguit ONGECHECKT — een antwoord
+            # komt alleen uit gecheckte feiten. Na een check beslist het gekozen antwoord, niet dit
+            # veld; anders zou een feit dat voor een ANDERE vraag gecheckt is hier als bewijs tellen.
+            # Ook een bron die zichzelf bewijst (een teruggevonden citaat, een certificaat) maakt er
+            # geen antwoord van: zonder mens die deze vraag koos blijft de bijdrage ONGECHECKT.
+            alleen_ongecheckt.add(len(treffers))
+            treffers.append((f, ""))
             continue
         if vraag["grootheid"]:
             w = wiki.waarde(f)
@@ -326,7 +337,8 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
                     "reden_kort": "deferral expired"}
         return {"status": LEEG, "feiten": [], "kop": plek, "reden": _reden_leeg(vraag),
                 "reden_kort": "no fact"}
-    statussen = [_feit_status(f, ctx) for f, _k in treffers]
+    statussen = [ONGECHECKT if i in alleen_ongecheckt else _feit_status(f, ctx)
+                 for i, (f, _k) in enumerate(treffers)]
     if vraag["grootheid"]:
         # EEN GETAL IS GEEN CHECK OP DEZE VRAAG (W1b, 14 oktober 2026). Een feit met "Water per kg"
         # dat nagekeken is ZONDER antwoord op de watervraag, maakt de cel niet "checked": iemand
@@ -359,6 +371,8 @@ def _cel(vraag: dict, pagina, koppen: list[str], paden: dict, ctx: dict) -> dict
     if status == ONGECHECKT:
         reden, kort = _reden_ongecheckt(vraag, treffers, ctx)
     uit = {"status": status, "feiten": [wiki.feit_id(f) for f, _k in treffers],
+           # welke van die feiten hier (nog) niets dragen — `telt_voor` slaat ze over
+           "ongecheckt": [wiki.feit_id(f) for (f, _k), s_ in zip(treffers, statussen) if s_ == ONGECHECKT],
            "kop": next((k for _f, k in treffers if k), ""), "reden": reden, "reden_kort": kort}
     if status == GECHECKT and bestaan_ja:
         # BESTAAN: één gecheckte yes is het antwoord. Een gecheckte no ernaast wordt een notitie bij
@@ -443,6 +457,10 @@ def telt_voor(rij: dict) -> dict[str, list[tuple[str, str]]]:
     for k, c in rij["cellen"].items():
         for fid in c["feiten"]:
             f = per_id.get(fid)
+            if fid in c.get("ongecheckt", ()):
+                # EEN ONGECHECKT FEIT TELT NERGENS VOOR (16 oktober 2026): het staat onder een vraag
+                # (via zijn kopje, zijn getal of "+ Add fact"), maar "Counts for" zou bewijs suggereren.
+                continue
             ant = next((a["waarde"] for a in wiki.antwoorden(f) if a["vraag"] == k), "") if f else ""
             uit.setdefault(fid, []).append((k, ant))
     return uit
