@@ -957,6 +957,28 @@ def main() -> None:
         elif any(r["weg"] for r in rapport):
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "bord_eigenaren":
+        # Projecten waarvan de trekker geen gebruiker is (16 oktober 2026): een `person` zonder
+        # people-record of een AI-`agent` krijgt een eigen rij op het bord. Dry-run; --apply maakt
+        # EERST een back-up van projects.json. --email-naar-persoon zet een login-e-mailadres om naar
+        # het people-id van die mens (ook op een gearchiveerd project). Zie `bord_eigenaren`.
+        from nooch_village import bord_eigenaren, wiki_opschoon
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        plan_ = bord_eigenaren.plan(st.projects, st.people, st.personas,
+                                    email_naar_persoon="--email-naar-persoon" in sys.argv)
+        print(bord_eigenaren.tekst(plan_, st.people))
+        if "--apply" in sys.argv and plan_:
+            pad = wiki_opschoon.back_up(st.projects, "bord-eigenaren")
+            n = bord_eigenaren.toepassen(st.projects, plan_)
+            print(f"\nBack-up: {pad}\n{n} project(s) changed.")
+        elif plan_:
+            print("\nDRY-RUN — nothing changed. Run again with --apply.")
+
     elif mode == "wiki_feit_losmaken":
         # W1b-2 (variant B): op de pagina's van /bom staan feiten per vraag; hun `{{fact:<id>}}`-regels
         # gaan uit de tekst, kopjes die alleen feiten droegen ook. Dry-run; --apply maakt EERST een
@@ -1571,7 +1593,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | wiki_feit_achtergrond | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | bord_eigenaren | wiki_feit_achtergrond | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)
