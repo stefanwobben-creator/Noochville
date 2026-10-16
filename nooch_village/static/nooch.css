@@ -3299,10 +3299,14 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
 :root .pcol .pcard .pbadge { margin-top: .35rem; }
 :root .pcol .pcard .pbadge > span { position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; }
-/* HET SLEEP-HINTJE BLIJFT, maar zweeft: het verschijnt bij hover over de kaart heen in plaats van
-   een eigen regel hoogte te kosten. Verplaatsen blijft zo even vindbaar als het was. */
-:root .pcol .pcard .pcard-hint { position: absolute; right: .4rem; bottom: .3rem; margin: 0;
-  pointer-events: none; background: var(--nu-surface); padding: 0 .2rem; }
+/* HET SLEEP-HINTJE STAAT ALS LAATSTE IN DE METAREGEL (16 oktober 2026, besluit Stefan): rechts
+   uitgelijnd en zichtbaar bij hover, zonder een eigen regel hoogte. Zwevend rechtsonder dekte het
+   de metaregel af op een kaart zonder voortgangsbalk. Is de kaart te smal, dan kapt het hintje af
+   (…) in plaats van over de kaartrand te lopen: de naam en de leeftijd gaan voor. Het krijgt alleen
+   de ruimte die OVER is (`flex: 1 1 0`, rechts uitgelijnd): anders duwt het "· 2mo old" naar een
+   tweede regel en wordt elke kaart hoger, ook zonder hover. */
+:root .pcol .pcard .pcard-hint { margin: 0 0 0 auto; flex: 1 1 0; min-width: 0; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 
 /* HET BORD IS EEN VAST RASTER MET ÉÉN KOLOMKOP (bord-uitlijning, ontwerp B, 13 oktober 2026).
    Elke lane is een raster van vier sporen — Active · Waiting · Done · Future — en de kop bovenaan is

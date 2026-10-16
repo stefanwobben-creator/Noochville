@@ -471,7 +471,12 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     # kaart (besluit Stefan, 12 oktober 2026); dat staat op de projectpagina en in het Goal-filter.
     due = p.get("deadline") or p.get("due")
     wanneer = (f"due {_e(_fmt_due(due) or str(due))}" if due else _e(_age(p.get("created_at"))))
-    meta = f"<div class='muted pmeta'>{_trekker_kort(st, p)} · {wanneer}</div>"
+    # HET SLEEP-HINTJE STAAT ALS LAATSTE IN DE METAREGEL (16 oktober 2026, besluit Stefan): rechts
+    # uitgelijnd, zichtbaar bij hover. Zwevend rechtsonder dekte het op een kaart zonder voortgangs-
+    # balk de metaregel af ("2mo old" half weg bij Mylo). Alleen op een kaart die je KUNT slepen:
+    # zonder csrf is er geen sleep-JS, en dan is de belofte vals.
+    hint = ("<span class='pcard-hint'>✥ drag to another column</span>" if csrf_token else "")
+    meta = f"<div class='muted pmeta'>{_trekker_kort(st, p)} · {wanneer}{hint}</div>"
     # DE VOORKANT, VAN BOVEN NAAR BENEDEN (fase 11, 1b): waar gaat dit over → waar hoort het bij →
     # hoe ver is het → van wie is het. Dat is de volgorde waarin je een kaart op een bord leest:
     # eerst herkennen, dan plaatsen, dan de stand. De titel stond hier ONDER het doel-etiket, dus
@@ -479,18 +484,16 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     #
     # ALLEEN BESTAANDE VELDEN. Geen nieuw datamodel: het doel-etiket, het label, de deadline en de
     # checklist-stand stonden allemaal al in het project — ze stonden alleen niet op de voorkant.
-    # HET HINTJE (fase 11, laag 3, prototype sectie 2). Alleen op een kaart die je KUNT slepen:
-    # zonder csrf is er geen sleep-JS, en dan is de belofte vals. Hij verdwijnt zodra je de kaart
-    # écht vastpakt — dan weet je het al.
-    hint = ("<div class='pcard-hint'>✥ drag to another column</div>" if csrf_token else "")
+    # HET HINTJE (fase 11, laag 3, prototype sectie 2) staat in de metaregel hierboven. Hij verdwijnt
+    # zodra je de kaart écht vastpakt — dan weet je het al.
     # DE COMPACTE KAART (B2): titel → metaregel → dunne voortgangsbalk. Het status-vakje blijft,
-    # met zijn eigen tegenspraak-logica (`_kaart_status`); het sleep-hintje ook, maar het zweeft nu
-    # over de kaart in plaats van een regel hoogte te kosten.
+    # met zijn eigen tegenspraak-logica (`_kaart_status`); het sleep-hintje zit in de metaregel en
+    # kost dus geen eigen regel hoogte.
     # DE TITEL STOPT NA TWEE REGELS (CSS `line-clamp`, besluit Stefan); de volle titel staat in
     # `title` en op de projectpagina. Afkappen is weergave, geen inkorten van de data.
     titel = _scope_text(p)
     inner = (f"{bar}<div class='ptitle' title='{_e(titel)}'>{_missie_dot(p)}{_e(titel)}</div>"
-             f"{meta}{_progress_badge(p)}{_kaart_status(st, p)}{hint}")
+             f"{meta}{_progress_badge(p)}{_kaart_status(st, p)}")
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
