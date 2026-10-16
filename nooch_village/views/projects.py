@@ -483,7 +483,9 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     # uitgelijnd, zichtbaar bij hover. Zwevend rechtsonder dekte het op een kaart zonder voortgangs-
     # balk de metaregel af ("2mo old" half weg bij Mylo). Alleen op een kaart die je KUNT slepen:
     # zonder csrf is er geen sleep-JS, en dan is de belofte vals.
-    hint = ("<span class='pcard-hint'>✥ drag to another column</span>" if csrf_token else "")
+    # KORT (16 oktober 2026, besluit Stefan): "✥ drag to another column" paste in geen kolombreedte
+    # en werd altijd afgekapt; "✥ drag" past op 1300, 1088 en 390 px.
+    hint = ("<span class='pcard-hint'>✥ drag</span>" if csrf_token else "")
     meta = f"<div class='muted pmeta'>{_trekker_kort(st, p)} · {wanneer}{hint}</div>"
     # DE VOORKANT, VAN BOVEN NAAR BENEDEN (fase 11, 1b): waar gaat dit over → waar hoort het bij →
     # hoe ver is het → van wie is het. Dat is de volgorde waarin je een kaart op een bord leest:

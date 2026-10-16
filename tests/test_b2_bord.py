@@ -72,7 +72,7 @@ def test_het_sleep_hintje_blijft_maar_kost_geen_hoogte(dorp):
     assert "pcard-hint" in k                                           # verplaatsen blijft vindbaar
     assert "pcard-hint" not in _kaart(dd, pid, csrf="")                # zonder sleep-JS geen belofte
     meta = k.split("class='muted pmeta'>", 1)[1].split("</div>", 1)[0]
-    assert meta.endswith("<span class='pcard-hint'>✥ drag to another column</span>")
+    assert meta.endswith("<span class='pcard-hint'>✥ drag</span>")
     regel = re.search(r":root \.pcol \.pcard \.pcard-hint \{([^}]*)\}", CSS).group(1)
     assert "margin: 0 0 0 auto" in regel and "position: absolute" not in regel
 
@@ -164,13 +164,18 @@ def test_390px_geen_horizontale_scroll_niets_afgedekt_en_het_palet_opent(dorp):
 
 def test_in_chromium_dekt_het_hintje_de_metaregel_niet_af(dorp):
     """16 oktober 2026: zwevend rechtsonder dekte het hintje "2mo old" af op een kaart zonder
-    voortgangsbalk. In de metaregel: geen overlap, binnen de kaart, en de metaregel blijft één regel
-    (anders wordt elke kaart hoger, ook zonder hover)."""
+    voortgangsbalk. In de metaregel, met de korte tekst "✥ drag": op een kaart MET en ZONDER
+    checklist geen overlap met de metaregel of de balk, binnen de kaart, NIET afgekapt, en de
+    metaregel blijft één regel (anders wordt elke kaart hoger, ook zonder hover)."""
     sync_api = pytest.importorskip("playwright.sync_api")
     dd, _pid = dorp
     st = cockpit2._Stores(dd)
-    kaal = st.projects.create(ROL, "Zonder checklist en zonder deadline", "human",
-                              person=st.people.by_name("Lotte Mulder").id)
+    lotte = st.people.by_name("Lotte Mulder").id
+    kaal = st.projects.create(ROL, "Zonder checklist en zonder deadline", "human", person=lotte)
+    lijst = st.projects.create(ROL, "Met een checklist en zonder deadline", "human", person=lotte)
+    st.projects.get(lijst)["checklists"] = [{"id": "c1", "title": "Plan", "items": [
+        {"id": "i1", "text": "Eerste stap", "done": True}, {"id": "i2", "text": "Tweede stap", "done": False}]}]
+    st.projects._save()
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), cockpit2.make_handler(dd, "T"))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     basis = f"http://127.0.0.1:{httpd.server_address[1]}"
@@ -183,25 +188,30 @@ def test_in_chromium_dekt_het_hintje_de_metaregel_niet_af(dorp):
             for breedte in (1300, 1088, 390):
                 pg = browser.new_page(viewport={"width": breedte, "height": 900})
                 pg.goto(f"{basis}/node?id={ROL}&tab=projects")
-                kaart = pg.locator(f".pcard[data-pid='{kaal}']")
-                kaart.scroll_into_view_if_needed()
-                kaart.hover()
-                pg.wait_for_timeout(300)                         # de opacity-overgang (.15s)
-                r = pg.evaluate(f"""(() => {{ const k = document.querySelector(".pcard[data-pid='{kaal}']");
-                    const kr = k.getBoundingClientRect(), m = k.querySelector('.pmeta');
-                    const hint = m.querySelector('.pcard-hint'), h = hint.getBoundingClientRect();
-                    let ov = 0;
-                    for (const n of m.childNodes) {{ if (n === hint) continue;
-                      const rg = document.createRange(); rg.selectNodeContents(n);
-                      for (const t of rg.getClientRects())
-                        ov += Math.max(0, Math.min(h.right, t.right) - Math.max(h.left, t.left)) *
-                              Math.max(0, Math.min(h.bottom, t.bottom) - Math.max(h.top, t.top)); }}
-                    return [ov, h.right <= kr.right + .5, m.getBoundingClientRect().height,
-                            getComputedStyle(hint).opacity]; }})()""")
-                ov, binnen, hoogte, zicht = r
-                assert ov == 0 and binnen, (breedte, r)
-                assert hoogte < 30, f"{breedte}: metaregel {hoogte}px — over twee regels"
-                assert zicht == "1"                                  # zichtbaar bij hover
+                for pid, balk in ((kaal, False), (lijst, True)):
+                    kaart = pg.locator(f".pcard[data-pid='{pid}']")
+                    kaart.scroll_into_view_if_needed()
+                    kaart.hover()
+                    pg.wait_for_timeout(300)                     # de opacity-overgang (.15s)
+                    r = pg.evaluate(f"""(() => {{ const k = document.querySelector(".pcard[data-pid='{pid}']");
+                        const kr = k.getBoundingClientRect(), m = k.querySelector('.pmeta');
+                        const hint = m.querySelector('.pcard-hint'), h = hint.getBoundingClientRect();
+                        const opp = (t) => Math.max(0, Math.min(h.right, t.right) - Math.max(h.left, t.left)) *
+                                          Math.max(0, Math.min(h.bottom, t.bottom) - Math.max(h.top, t.top));
+                        let ov = 0;
+                        for (const n of m.childNodes) {{ if (n === hint) continue;
+                          const rg = document.createRange(); rg.selectNodeContents(n);
+                          for (const t of rg.getClientRects()) ov += opp(t); }}
+                        const b = k.querySelector('.pbadge');
+                        return {{ov, binnen: h.right <= kr.right + .5, hoogte: m.getBoundingClientRect().height,
+                                zicht: getComputedStyle(hint).opacity, tekst: hint.textContent,
+                                afgekapt: hint.scrollWidth > hint.clientWidth,
+                                balk: !!b, op_balk: b ? opp(b.getBoundingClientRect()) : 0}}; }})()""")
+                    assert r["balk"] == balk, (breedte, pid, r)
+                    assert r["ov"] == 0 and r["op_balk"] == 0 and r["binnen"], (breedte, pid, r)
+                    assert not r["afgekapt"] and r["tekst"] == "✥ drag", (breedte, pid, r)
+                    assert r["hoogte"] < 30, f"{breedte}: metaregel {r['hoogte']}px — over twee regels"
+                    assert r["zicht"] == "1"                     # zichtbaar bij hover
                 pg.close()
             browser.close()
     finally:
