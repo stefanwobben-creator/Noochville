@@ -711,6 +711,9 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 /* In een wiki-feit en bij "+ Add fact" is de summary een knop, geen balk over de hele breedte
    (15 oktober 2026). Alleen in de wiki; elders blijft hij zoals hij was. */
 .wiki-inline .acard-d>summary{display:inline-block}
+/* De statusregel van een vraag ("Open · no fact yet · + Add fact · Defer · What counts", 15 oktober
+   2026) loopt op een smal scherm door naar een volgende regel in plaats van de woorden te persen. */
+.wiki-inline .qadd-row{flex-wrap:wrap}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
 .datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
 .checklist{margin:0 0 1.1rem}

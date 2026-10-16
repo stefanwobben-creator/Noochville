@@ -223,4 +223,5 @@ def test_het_feit_staat_onder_de_vraag_waarvoor_het_telt(tmp_path):
     h = _vragen_sectie(st, st.att.get(aid), "", False)
     blok = h.split("id='vraag-plastic'", 1)[1].split("<div class='wiki-inline' id='vraag-", 1)[0]
     assert "<h3>Contains plastic?</h3>" in blok and "Checked: yes</span>" in blok
-    assert "id='feit-F1'" in blok and "To change this answer:" in blok
+    # "To change this answer" staat sinds 15 oktober 2026 één keer bovenaan in "How this works"
+    assert "id='feit-F1'" in blok and "<summary class='flink'>What counts</summary>" in blok

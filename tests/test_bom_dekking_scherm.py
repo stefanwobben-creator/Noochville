@@ -83,7 +83,10 @@ def test_de_reden_staat_bij_elke_open_cel_op_alle_drie_de_schermen(tmp_path):
     w = _vragen_sectie(st, st.att.get(a.id), "", False)
     oq = render_open_vragen(st, username="guest")
     for h in (w, oq):
-        assert zin in h and leeg in h
+        assert zin in h
+    assert leeg in oq
+    # op de wiki staat een open vraag zonder feiten sinds 15 oktober 2026 op één regel: "no fact yet"
+    assert "<span class='muted'>no fact yet</span>" in w
 
 
 def test_create_page_maakt_de_pagina_met_skelet_en_de_rij_wijst_ernaar(tmp_path):

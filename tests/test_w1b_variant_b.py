@@ -66,15 +66,40 @@ def test_self_reported_staat_bij_de_cel_en_de_telling_verandert_niet(tmp_path):
     assert "Checked: yes</span>" in _blok(_html(dd, aid), "plastic")
 
 
-def test_to_change_this_answer_per_status(tmp_path):
+def test_hoe_het_werkt_staat_een_keer_bovenaan_en_what_counts_achter_een_knop(tmp_path):
+    """15 oktober 2026: "To change this answer" per vraag is één ingeklapte "How this works" bovenaan
+    geworden; "What counts" zit achter een knop in de statusregel én in het "+ Add fact"-paneel."""
     dd, aid = _dorp(tmp_path)
-    h = _html(dd, aid)
-    assert "To change this answer: add a fact that answers it (+ Add fact below, or Bulk Import in the / menu)" in _blok(h, "plastic")
-    assert "add a fact with this number" in _blok(h, "co2")
     _check(dd, aid, "F1", plastic="yes")
-    b = _blok(_html(dd, aid), "plastic")
-    assert "What counts:" in b and b.index("What counts:") < b.index("To change this answer:")
-    assert "use &#x27;Re-check&#x27; on it" in b and "conflict" in b
+    h = _html(dd, aid)
+    assert h.count("<summary>How this works</summary>") == 1 and "To change this answer" not in h
+    hoe = h.split("<summary>How this works</summary>", 1)[1].split("</details>", 1)[0]
+    for status in ("Checked:", "Unchecked:", "Open:", "Conflict:", "Deferred:"):
+        assert status in hoe, status
+    b = _blok(h, "plastic")
+    knop = b.split("<summary class='flink'>What counts</summary>", 1)[1].split("</details>", 1)[0]
+    assert "Under EU guidance PLA counts as plastic" in knop
+    paneel = h.split("id='vraag-plastic'", 1)[1].split("<summary class='flink'>+ Add fact</summary>", 1)[1]
+    assert paneel.split("</form>", 1)[0].count("What counts: As a fact, grounded in the technical") == 1
+
+
+def test_conflict_en_uitstel_houden_een_eigen_regel(tmp_path):
+    dd, aid = _dorp(tmp_path)
+    _check(dd, aid, "F1", biobased="yes")
+    _check(dd, aid, "F3", biobased="no")
+    assert "Remove the wrong fact, or re-check it with the right answer." in _blok(_html(dd, aid), "biobased")
+    form = {"aid": [aid], "soort": ["materiaal"], "k": ["co2"], "tot": ["2099-01-01"], "next": ["/"]}
+    cockpit2.dispatch(dd, "vraag_uitstel", form, username="guest")
+    assert "Add a fact before the date, or undo the deferral." in _blok(_html(dd, aid), "co2")
+
+
+def test_open_zonder_feiten_staat_op_een_regel(tmp_path):
+    dd, aid = _dorp(tmp_path)
+    b = _blok(_html(dd, aid), "co2")
+    regel = b.split("<span class='qadd-row'>", 1)[1]
+    assert regel.startswith("<span class='nu-status nu-status--open'>Open</span><span class='muted'>no fact yet</span>")
+    assert "+ Add fact</summary>" in regel and "value='vraag_uitstel'" in regel
+    assert "No fact on this page carries this number yet." not in b
 
 
 def test_een_pagina_buiten_bom_houdt_de_feiten_in_de_tekst(tmp_path):

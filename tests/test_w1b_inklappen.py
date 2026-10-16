@@ -57,7 +57,8 @@ def test_met_een_feit_blijft_alles_zoals_het_was(tmp_path):
     """Exact de opbouw van vóór het inklappen: intro, zeven open vraagblokken, Other facts, de ingang."""
     dd, aid = _pagina(tmp_path, [_feit("F1", "Weight 540 g/m2")])
     h = _sectie(dd, aid)
-    assert "No facts yet" not in h and "id='vragen-blok'" not in h and "<details class='box-details'" not in h
+    assert "No facts yet" not in h and "id='vragen-blok'" not in h
+    assert h.count("<details class='box-details'>") == 1 and "<summary>How this works</summary>" in h
     assert h.startswith("<div class='c2-sec' id='vragen'><h2>Questions and facts</h2><p class='muted'>What this page should answer")
     assert h.count("<div class='wiki-inline' id='vraag-") == 8            # 7 vragen + Other facts
     assert "To add facts: type <b>/</b>" in h
