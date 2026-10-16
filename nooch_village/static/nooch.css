@@ -3301,8 +3301,8 @@ h1 .wiki-titel.wiki-aan{padding-left:.4rem}
   clip: rect(0 0 0 0); white-space: nowrap; }
 /* HET SLEEP-HINTJE STAAT ALS LAATSTE IN DE METAREGEL (16 oktober 2026, besluit Stefan): rechts
    uitgelijnd en zichtbaar bij hover, zonder een eigen regel hoogte. Zwevend rechtsonder dekte het
-   de metaregel af op een kaart zonder voortgangsbalk. Is de kaart te smal, dan kapt het hintje af
-   (…) in plaats van over de kaartrand te lopen: de naam en de leeftijd gaan voor. Het krijgt alleen
+   de metaregel af op een kaart zonder voortgangsbalk. De tekst is kort ("✥ drag") zodat hij past; is
+   een kaart tóch te smal, dan kapt hij af (…) in plaats van over de kaartrand te lopen. Het krijgt alleen
    de ruimte die OVER is (`flex: 1 1 0`, rechts uitgelijnd): anders duwt het "· 2mo old" naar een
    tweede regel en wordt elke kaart hoger, ook zonder hover. */
 :root .pcol .pcard .pcard-hint { margin: 0 0 0 auto; flex: 1 1 0; min-width: 0; text-align: right;
