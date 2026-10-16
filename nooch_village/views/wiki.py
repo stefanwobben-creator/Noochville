@@ -459,6 +459,12 @@ def _telt_voor_html(st, a, feit: dict, soort: str) -> str:
     if wiki.achtergrond(feit):
         return ("<span class='chip muted' title='Counts for nothing: background only, answers no "
                 "question'>Background only</span>")
+    fid = wiki.feit_id(feit)
+    if not wiki.nagekeken(feit) and any(fid in c.get("ongecheckt", ()) for c in rij["cellen"].values()):
+        # ONDER EEN VRAAG, NOG NIET NAGEKEKEN (16 oktober 2026): het staat er (via zijn kopje of
+        # "+ Add fact"), maar telt pas als iemand het nakijkt en de vraag kiest.
+        return ("<span class='chip muted' title='Counts for nothing until someone checks it and "
+                "chooses a question'>Not checked yet</span>")
     return ("<span class='chip muted' title='Counts for nothing: choose a question when you check "
             "it'>No question yet</span>")
 
@@ -896,6 +902,10 @@ def _bewijs(c: dict, per_id: dict, ctx: dict) -> str:
     for fid in c.get("feiten") or []:
         f = (per_id.get(fid) or (None, None))[1]
         if f is None:
+            continue
+        if fid in c.get("ongecheckt", ()):
+            # draagt hier niets (bijv. via "+ Add fact" toegevoegd en nog niet voor deze vraag gecheckt)
+            soorten.append("unchecked")
             continue
         g = wiki.grond_status(f, **ctx)
         soorten.append("first-hand" if g["soort"] == "attested" else

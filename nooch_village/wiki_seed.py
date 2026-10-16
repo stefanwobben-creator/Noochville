@@ -903,7 +903,7 @@ def herstel_feit(f: dict) -> tuple[dict | None, list[str]]:
     nieuw = wiki.maak_feit(tekst, soort=grond.get("soort", ""), ref=grond.get("ref", ""),
                            citaat=grond.get("citaat", ""), url=grond.get("url", ""), waarde=f.get("waarde"),
                            sectie=f.get("sectie", ""), fid=wiki.feit_id(f), op=grond.get("op", ""),
-                           hercheck=f.get("hercheck", ""))
+                           hercheck=f.get("hercheck", ""), bij_vraag=f.get("bij_vraag", ""))
     if nieuw is not None and grond.get("check"):
         nieuw["grond"]["check"] = grond["check"]
     if f.get("gezien"):

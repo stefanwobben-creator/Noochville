@@ -1938,8 +1938,10 @@ def _act_pagina_feit_add(c):
     ref = g("ref")
     if g("soort") == "attested" and not ref:
         ref = _persoon_naam(username, st)
+    # DE VRAAG GAAT ALTIJD MEE (16 oktober 2026, besluit Stefan): wie bij een vraag op "+ Add fact"
+    # klikt, ziet het feit daaronder — ook ongecheckt. Het telt daar niet als bewijs (`_cel`).
     feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=ref,
-                          citaat=g("citaat"), url=g("url"), waarde=waarde)
+                          citaat=g("citaat"), url=g("url"), waarde=waarde, bij_vraag=g("vraag"))
     if feit is None:
         return nxt, "✗ a fact needs text"
     # Feiten leven in meta van dezelfde note: geen tweede opslag, dus ze reizen mee in de versie-
@@ -2770,7 +2772,7 @@ def _act_pagina_feit_edit(c):
     hercheck = g("hercheck") if "hercheck" in c.form else oud.get("hercheck", "")
     nieuw = wiki.maak_feit(g("tekst"), soort=soort, ref=ref, citaat=g("citaat"), url=url,
                            waarde=waarde, sectie=sectie, fid=wiki.feit_id(oud), op=op,
-                           hercheck=hercheck)
+                           hercheck=hercheck, bij_vraag=oud.get("bij_vraag", ""))
     if nieuw is None:
         return nxt, "✗ a fact needs text"
     # NAGEKEKEN BLIJFT ALLEEN STAAN ALS HET FEIT HETZELFDE ZEGT EN BEWIJST (5 oktober 2026). Wie de

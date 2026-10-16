@@ -641,7 +641,7 @@ def bewijs_gelijk(a: dict, b: dict) -> bool:
 def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
               url: str = "", waarde: dict | None = None, sectie: str = "",
               fid: str = "", op: str = "", gezien: dict | None = None,
-              hercheck: str = "") -> dict | None:
+              hercheck: str = "", bij_vraag: str = "") -> dict | None:
     """Normaliseer één feit. None bij lege tekst (fail-closed: geen leeg feit in de lijst).
     Een onbekende grond-soort valt weg — het feit blijft dan bestaan, maar heet `ongegrond`.
 
@@ -657,7 +657,12 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
     `fid`: het id dat het feit houdt bij een BEWERKING; leeg = een nieuw id.
     `op`: bij `attested` de datum van de verklaring (ISO); leeg = vandaag.
     `gezien` (`{door, op}`) en `hercheck` (ISO-datum): wie het feit nakeek en wanneer het opnieuw
-    bekeken moet worden — zie `grond_status`."""
+    bekeken moet worden — zie `grond_status`.
+
+    `bij_vraag` (16 oktober 2026, besluit Stefan): de vraag waar dit feit via "+ Add fact" is
+    toegevoegd. Het feit staat dan onder die vraag, ook ongecheckt — maar het is GEEN antwoord en
+    GEEN bewijs: de koppeling geldt alleen zolang niemand het nakeek (`wiki_dekking._cel`). Na een
+    check beslist het gekozen antwoord; na "Undo check" staat het weer waar het toegevoegd is."""
     tekst = " ".join((tekst or "").split())[:_TEKST_MAX]
     if not tekst:
         return None
@@ -675,6 +680,9 @@ def maak_feit(tekst: str, *, soort: str = "", ref: str = "", citaat: str = "",
     sectie = " ".join((sectie or "").split())[:_SECTIE_MAX]
     if sectie:
         uit["sectie"] = sectie
+    bij_vraag = re.sub(r"[^a-z0-9_]", "", str(bij_vraag or "").lower())[:30]
+    if bij_vraag:
+        uit["bij_vraag"] = bij_vraag
     if isinstance(waarde, dict) and maak_waarde(str(waarde.get("grootheid") or ""), waarde.get("getal")):
         uit["waarde"] = maak_waarde(str(waarde["grootheid"]), waarde["getal"])
     # NAGEKEKEN DOOR EEN MENS, EN TOT WANNEER (5 oktober 2026). Twee losse velden op het feit, niet
