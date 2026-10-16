@@ -714,6 +714,15 @@ hr{border:none;border-top:1px solid var(--border);margin:.9rem 0}
 /* De statusregel van een vraag ("Open · no fact yet · + Add fact · Defer · What counts", 15 oktober
    2026) loopt op een smal scherm door naar een volgende regel in plaats van de woorden te persen. */
 .wiki-inline .qadd-row{flex-wrap:wrap}
+/* HET PANEEL IN DE STROOM OP EEN SMAL SCHERM (16 oktober 2026). `.datepop` staat absoluut onder zijn
+   knop; op 390 px was het "+ Add fact"-paneel en het checkformulier daardoor breder dan het scherm
+   (Full Green, "Dyes & chemicals": de pagina werd 477 px breed). Op een smal scherm duwt het paneel
+   de inhoud eronder omlaag en is het nooit breder dan zijn kolom; wat erin te breed is (de
+   antwoordtabel van het checkformulier) scrollt in het paneel zelf, zoals `.c2-scroll`. */
+@media (max-width: 760px){
+  .wiki-inline .acard-d .datepop{position:static;max-width:100%;box-sizing:border-box;overflow-x:auto}
+  .wiki-inline .acard-d[open]{flex:1 1 100%;min-width:0;max-width:100%}
+}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
 .datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
 .checklist{margin:0 0 1.1rem}
