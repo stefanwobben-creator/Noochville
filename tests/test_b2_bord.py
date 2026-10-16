@@ -65,11 +65,16 @@ def test_het_status_vakje_komt_alleen_uit_de_bestaande_tegenspraak_logica(dorp, 
 
 
 def test_het_sleep_hintje_blijft_maar_kost_geen_hoogte(dorp):
+    """Sinds 16 oktober 2026 (besluit Stefan) als laatste element IN de metaregel, rechts uitgelijnd:
+    zwevend rechtsonder dekte het de metaregel af op een kaart zonder voortgangsbalk."""
     dd, pid = dorp
-    assert "pcard-hint" in _kaart(dd, pid)                             # verplaatsen blijft vindbaar
+    k = _kaart(dd, pid)
+    assert "pcard-hint" in k                                           # verplaatsen blijft vindbaar
     assert "pcard-hint" not in _kaart(dd, pid, csrf="")                # zonder sleep-JS geen belofte
+    meta = k.split("class='muted pmeta'>", 1)[1].split("</div>", 1)[0]
+    assert meta.endswith("<span class='pcard-hint'>✥ drag to another column</span>")
     regel = re.search(r":root \.pcol \.pcard \.pcard-hint \{([^}]*)\}", CSS).group(1)
-    assert "position: absolute" in regel
+    assert "margin: 0 0 0 auto" in regel and "position: absolute" not in regel
 
 
 def test_de_titel_stopt_na_twee_regels_en_staat_volledig_in_title_en_op_de_projectpagina(dorp):
@@ -152,6 +157,52 @@ def test_390px_geen_horizontale_scroll_niets_afgedekt_en_het_palet_opent(dorp):
             assert pg.evaluate("document.activeElement.id") == "gs-input"
             pg.keyboard.press("Escape")
             assert pg.evaluate("document.activeElement.classList.contains('c2-burger--zoek')")
+            browser.close()
+    finally:
+        httpd.shutdown()
+
+
+def test_in_chromium_dekt_het_hintje_de_metaregel_niet_af(dorp):
+    """16 oktober 2026: zwevend rechtsonder dekte het hintje "2mo old" af op een kaart zonder
+    voortgangsbalk. In de metaregel: geen overlap, binnen de kaart, en de metaregel blijft één regel
+    (anders wordt elke kaart hoger, ook zonder hover)."""
+    sync_api = pytest.importorskip("playwright.sync_api")
+    dd, _pid = dorp
+    st = cockpit2._Stores(dd)
+    kaal = st.projects.create(ROL, "Zonder checklist en zonder deadline", "human",
+                              person=st.people.by_name("Lotte Mulder").id)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), cockpit2.make_handler(dd, "T"))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    basis = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        with sync_api.sync_playwright() as p:
+            try:
+                browser = p.chromium.launch()
+            except Exception as e:
+                pytest.skip(f"geen Chromium: {e}")
+            for breedte in (1300, 1088, 390):
+                pg = browser.new_page(viewport={"width": breedte, "height": 900})
+                pg.goto(f"{basis}/node?id={ROL}&tab=projects")
+                kaart = pg.locator(f".pcard[data-pid='{kaal}']")
+                kaart.scroll_into_view_if_needed()
+                kaart.hover()
+                pg.wait_for_timeout(300)                         # de opacity-overgang (.15s)
+                r = pg.evaluate(f"""(() => {{ const k = document.querySelector(".pcard[data-pid='{kaal}']");
+                    const kr = k.getBoundingClientRect(), m = k.querySelector('.pmeta');
+                    const hint = m.querySelector('.pcard-hint'), h = hint.getBoundingClientRect();
+                    let ov = 0;
+                    for (const n of m.childNodes) {{ if (n === hint) continue;
+                      const rg = document.createRange(); rg.selectNodeContents(n);
+                      for (const t of rg.getClientRects())
+                        ov += Math.max(0, Math.min(h.right, t.right) - Math.max(h.left, t.left)) *
+                              Math.max(0, Math.min(h.bottom, t.bottom) - Math.max(h.top, t.top)); }}
+                    return [ov, h.right <= kr.right + .5, m.getBoundingClientRect().height,
+                            getComputedStyle(hint).opacity]; }})()""")
+                ov, binnen, hoogte, zicht = r
+                assert ov == 0 and binnen, (breedte, r)
+                assert hoogte < 30, f"{breedte}: metaregel {hoogte}px — over twee regels"
+                assert zicht == "1"                                  # zichtbaar bij hover
+                pg.close()
             browser.close()
     finally:
         httpd.shutdown()

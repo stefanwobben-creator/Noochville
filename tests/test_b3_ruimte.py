@@ -18,7 +18,7 @@ import re
 from nooch_village import web_base
 from tests.test_b3_lijn import CSS, _blokken, _regel
 
-PADDING_PLAFOND = 263
+PADDING_PLAFOND = 262   # -1: het zwevende sleep-hintje (padding 0 .2rem) weg, 16 okt 2026
 
 
 def _buiten_schaal() -> int:
