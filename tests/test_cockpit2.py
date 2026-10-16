@@ -553,8 +553,14 @@ def test_project_ai_trekker(tmp_path):
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["SEO-audit"],
                                        "done_when": ["af bij oplevering"],
                                        "trekker": [f"persona:{noochie.id}"], "next": ["/"]}, username="guest")
-    page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
-    assert "SEO-audit" in page and "Noochie" in page and "(AI)" in page
+    st = cockpit2._Stores(dd)
+    pid = next(p["id"] for p in st.projects.all() if p.get("scope") == "SEO-audit")
+    assert st.projects.get(pid)["agent"] == noochie.id                # de data houdt de AI-trekker
+    page = cockpit2.render_node(st, role, "projects", csrf_token="t")
+    # OP HET BORD GEEN AI-RIJ (16 oktober 2026, besluit Stefan): alleen een gebruiker met een
+    # people-record krijgt een eigen rij; een agent valt onder "No owner".
+    assert "SEO-audit" in page and "<div class='swim-h'>No owner (1)</div>" in page
+    assert "(AI) (" not in page
 
 
 def test_persoonspagina_mijn_rollen(tmp_path):
