@@ -367,7 +367,7 @@ Meer dan één module schrijft dit bestand. Dat is geen fout, maar de kaart kan 
 | `human_inbox.json` | `cli.py, cockpit2.py, dagcyclus.py, village.py` |
 | `lexicon.json` | `cli.py, village.py` |
 | `llm_usage.jsonl` | `llm_usage.py, village.py` |
-| `system_log.jsonl` | `cockpit2.py, verslag.py, village.py` |
+| `system_log.jsonl` | `cockpit2.py, mail.py, verslag.py, village.py` |
 | `timekeeper_last_day.json` | `dagcyclus.py, puls_wacht.py` |
 
 

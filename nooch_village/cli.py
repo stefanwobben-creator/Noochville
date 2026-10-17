@@ -2,6 +2,10 @@
 from __future__ import annotations
 import sys
 
+#: Waar `village mail_test --send` zijn ene testmail heen stuurt (besluit Stefan, 17 oktober 2026).
+#: Bewust vast: een testcommando mag nooit naar iemand anders mailen dan wie hem draait.
+MAIL_TEST_AAN = "stefan@nooch.earth"
+
 
 def _iso(ts) -> str:
     """Epoch → 'YYYY-MM-DD HH:MM' (lokale tijd van de server), leeg als er niets is."""
@@ -957,6 +961,29 @@ def main() -> None:
         elif any(r["weg"] for r in rapport):
             print("\nDRY-RUN — nothing changed. Run again with --apply.")
 
+    elif mode == "mail_test":
+        # Stap 1 van de mail (17 oktober 2026): toont in dry-run wat er zou gaan; alleen met --send
+        # gaat er één testmail naar Stefan, via de Workspace-relay. Zie `nooch_village/mail.py`.
+        from nooch_village import mail
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        cfg = mail.instellingen()
+        echt = "--send" in sys.argv
+        print(f"Config: host={cfg['host'] or '(empty)'} port={cfg['poort']} "
+              f"from={cfg['naam']} <{cfg['afzender'] or '(empty)'}> "
+              f"→ {'configured' if cfg['ok'] else 'NOT configured'}")
+        uit = mail.verstuur(
+            MAIL_TEST_AAN, "Village mail test",
+            "This is a test message from Village.\n\nIf you can read this, outgoing mail works.\n",
+            verzend=echt, data_dir=ctx.data_dir)
+        print(f"To: {MAIL_TEST_AAN} · subject: Village mail test · {'SEND' if echt else 'DRY-RUN'}")
+        print("Result:", ", ".join(f"{k}={v}" for k, v in uit.items()))
+        if not echt:
+            print("\nDRY-RUN — nothing was sent. Run again with --send to send one test mail.")
+        sys.exit(0 if uit["status"] in ("dry-run", "sent") else 1)
+
     elif mode == "bord_eigenaren":
         # Projecten waarvan de trekker geen gebruiker is (16 oktober 2026): een `person` zonder
         # people-record of een AI-`agent` krijgt een eigen rij op het bord. Dry-run; --apply maakt
@@ -1593,7 +1620,7 @@ def main() -> None:
               "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde | les | "
-              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | bord_eigenaren | wiki_feit_achtergrond | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
+              "wiki_zaad | wiki_broncheck | wiki_bom_opschoon | wiki_bom_sleutels | wiki_vraagkoppen | cn_zaad | finance_vaste_kosten | wiki_domein_materials | wiki_feit_plaats | wiki_feit_herstel | wiki_opschoon_w1b | wiki_feit_rapport | wiki_feit_losmaken | bord_eigenaren | mail_test | wiki_feit_achtergrond | wiki_lege_koppen | wiki_domein | site_audit | doelen_zaad | status_log | "
               "weekmemo | noochie_memo | noochie_kanaal",
               file=sys.stderr)
         sys.exit(1)
