@@ -7043,6 +7043,30 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 # Niets is publiek: een uitgelogde bezoeker gaat overal naar /login. /login en /logout worden in
 # do_GET vóór de auth-check afgehandeld en blijven dus bereikbaar. Er is geen asset/health-route die
 # publiek moet blijven (/file staat al achter de auth-check).
+#: WAT EEN PAGINA MAG INFRAMEN, en wie Village mag inframen (17 oktober 2026, besluit Stefan).
+#: Alleen gepubliceerde Google Slides (de embed volgt in een eigen PR; die bouwt deze lijst dan uit
+#: zijn allowlist-tabel, zodat de header en de renderer één bron hebben). Village maakt verder nergens
+#: een iframe, dus een strakke `frame-src` breekt niets.
+FRAME_SRC = ("https://docs.google.com/presentation/",)
+
+#: De beveiligingsheaders op ELK HTML-antwoord (`_send`). Bewust GEEN `script-src`/`default-src`: de
+#: pagina's hebben veel inline scripts, en een CSP met alleen `frame-src` en `frame-ancestors` raakt
+#: scripts niet.
+#:   frame-src        — Village mag alleen wat in `FRAME_SRC` staat inframen (vangnet als een bug
+#:                      ooit een andere iframe maakt);
+#:   frame-ancestors  — niemand mag Village inframen (clickjacking); `X-Frame-Options: DENY` is
+#:                      hetzelfde voor oudere browsers;
+#:   nosniff          — de browser gelooft ons `Content-Type`, raadt niet zelf;
+#:   Referrer-Policy  — naar buiten alleen de herkomst (`https://village.nooch.earth`), nooit het pad
+#:                      met query (daar kunnen id's in staan); binnen Village de volle referrer.
+HTML_BEVEILIGING = (
+    ("Content-Security-Policy", f"frame-src {' '.join(FRAME_SRC)}; frame-ancestors 'none'"),
+    ("X-Frame-Options", "DENY"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+)
+
+
 #: GETs die zónder sessie mogen. Hij was leeg: alles zit achter login, en dat blijft zo.
 #:
 #: `/version` is de enige uitzondering, en hij is géén publieke pagina: de handler weigert hem
@@ -7184,6 +7208,8 @@ def make_handler(data_dir: str, csrf_token: str,
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            for naam, waarde in HTML_BEVEILIGING:            # zie de toelichting bij de constante
+                self.send_header(naam, waarde)
             # `no-store` OP ELKE HTML-PAGINA. Hier stond helemaal geen cache-header: geen
             # `Cache-Control`, geen `ETag`, geen `Last-Modified`. Een browser mag dan HEURISTISCH
             # cachen, en bij terug/vooruit (bfcache) krijg je gegarandeerd de oude pagina terug.
