@@ -7050,7 +7050,13 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 #: dus alleen bereikbaar vánaf de machine zelf — voor `deploy.sh`, die móét kunnen vragen welke
 #: code er draait vóórdat hij "geslaagd" meldt. Achter de login zetten zou betekenen dat het
 #: deploy-script een sessie moet aanmaken, en dan controleert het zichzelf met een inbraak.
-_PUBLIC_GET: set[str] = {"/version"}
+#:
+#: `/l` (17 oktober 2026, besluit Stefan) is de tussenpagina voor links in een mail: hij toont niets
+#: en wijzigt niets, hij stuurt de browser alleen door naar een pad BINNEN Village (`veilig_pad`).
+#: Waarom hij openbaar moet zijn: de sessiecookie is `SameSite=Strict`, dus een klik vanuit Gmail-web
+#: komt zonder cookie aan. Hier hoeft dat niet; de doorverwijzing daarna start op Village zelf en
+#: draagt de cookie wél. Zie `auth.doorstuur_pagina`.
+_PUBLIC_GET: set[str] = {"/version", "/l"}
 
 
 
@@ -7269,6 +7275,11 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/login":
                 next_url = (qs.get("next") or ["/"])[0]
                 self._send(_auth.login_page(next_url))
+                return
+            if path == "/l":
+                # AUTHZ: openbaar — wijzigt niets en toont niets; stuurt alleen door naar een relatief
+                # pad binnen Village (`veilig_pad`), zodat de sessiecookie (SameSite=Strict) meegaat.
+                self._send(_auth.doorstuur_pagina((qs.get("p") or ["/"])[0]))
                 return
             if path == "/logout":
                 token = _auth.get_session_token(self.headers)

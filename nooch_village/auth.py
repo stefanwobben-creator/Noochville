@@ -314,6 +314,32 @@ def veilig_anker(waarde) -> str:
     return a if _ANKER_RE.match(a) else ""
 
 
+def doorstuur_pagina(pad) -> str:
+    """De tussenpagina `/l?p=<pad>` voor links in een mail (17 oktober 2026, besluit Stefan).
+
+    WAAROM. De sessiecookie is `SameSite=Strict`: een klik vanuit Gmail-web is een navigatie van een
+    andere site, en dan stuurt de browser de cookie niet mee — wie al ingelogd is ziet toch het
+    inlogscherm. Deze pagina zelf heeft geen cookie nodig. Het `location.replace` dat hij doet start
+    op Village, is dus same-site, en draagt de cookie wél. Het `#anker` van de mail-link reist mee
+    (`p + location.hash`). De cookie blijft Strict; dat is precies de bedoeling.
+
+    WAT HIJ NIET DOET: iets tonen, iets wijzigen, of ergens anders heen sturen dan een relatief pad
+    binnen Village — dezelfde toets als `next` na het inloggen (`veilig_pad`); ongeldig → "/".
+    Zonder JavaScript een gewone link (`noscript`)."""
+    doel = veilig_pad(pad)
+    # json.dumps geeft een JS-string; `<` als \u003c zodat `</script>` in een pad niets kan sluiten.
+    js = json.dumps(doel).replace("<", "\\u003c")
+    attr = html.escape(doel, quote=True)
+    return f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<title>NoochVille</title>
+<script>location.replace({js} + location.hash);</script>
+</head><body>
+<noscript><p><a href="{attr}">Continue to NoochVille</a></p></noscript>
+</body></html>"""
+
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
 
