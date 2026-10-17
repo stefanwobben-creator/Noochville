@@ -8,6 +8,7 @@ import hashlib, html, json, logging, os, re, secrets, time, urllib.parse
 
 from nooch_village.util import JsonStore
 import bcrypt
+import hmac
 
 SESSION_COOKIE = "nv_session"
 SESSION_TTL    = 7 * 24 * 3600   # 1 week
@@ -106,6 +107,21 @@ class _CsrfStore(JsonStore):
         self._save()
 
 
+def csrf_voor(geheim: str, sessie_token: str) -> str:
+    """Het CSRF-token van ÉÉN sessie (17 oktober 2026, besluit Stefan): HMAC-SHA256 over het
+    sessie-id met het servergeheim uit `csrf.json`.
+
+    Het sessie-id is de hash waaronder de sessie op schijf staat (`SessionStore._hash`), niet het
+    cookie-token zelf: het geheim en het id komen zo nooit samen in één bestand. Elke sessie heeft
+    dus een eigen token; uitloggen en opnieuw inloggen geeft een nieuwe sessie en dus een nieuw
+    token, en een token uit sessie A zegt niets in sessie B. Leeg sessie-token → "" (geen geldig
+    token: een vergelijking ermee faalt altijd)."""
+    if not geheim or not sessie_token:
+        return ""
+    sid = SessionStore._hash(sessie_token)
+    return hmac.new(geheim.encode(), sid.encode(), hashlib.sha256).hexdigest()
+
+
 def load_or_create_csrf(path: str) -> str:
     """Het CSRF-token van de server, bewaard zodat het een herstart overleeft.
 
@@ -118,6 +134,10 @@ def load_or_create_csrf(path: str) -> str:
     niet meer bij elke herstart vervangen. Dat is geen verzwakking van het ontwerp maar een langere
     levensduur van hetzelfde ontwerp. De sterkere vorm is een token per sessie (HMAC over het
     sessietoken), en die is een aparte stap: hij raakt elke csrf-vergelijking in cockpit2.
+
+    DIE STAP IS GEZET (17 oktober 2026): met ingelogde sessies is wat hier staat geen token meer
+    maar het GEHEIM waarmee `csrf_voor` per sessie een token afleidt. Alleen zonder sessies
+    (auth uit: lokaal ontwikkelen, tests) wordt het nog zelf als token gebruikt.
 
     Bestandsrechten 0600, zelfde route als de sessies. Onleesbaar of leeg → een vers token, en dan
     is het gedrag exact zoals vóór deze wijziging."""
@@ -363,7 +383,8 @@ button:hover{{opacity:.9}}
 </body></html>"""
 
 
-def password_change_page(next_url: str = "/", error: str = "", forced: bool = False) -> str:
+def password_change_page(next_url: str = "/", error: str = "", forced: bool = False,
+                         csrf: str = "") -> str:
     """Self-service wachtwoord-wijzigen (dezelfde auth-interstitial-stijl als login_page). `forced=True`
     bij een verplichte eerste-login-wijziging (temp-wachtwoord)."""
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
@@ -401,6 +422,7 @@ button:hover{{opacity:.9}}
   <h1>Change password</h1>
   {intro}{err}
   <form method="post" action="/wachtwoord">
+    <input type="hidden" name="csrf" value="{csrf}">
     <input type="hidden" name="next" value="{nxt}">
     {current_field}
     <label for="n">New password</label>

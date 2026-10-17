@@ -337,9 +337,11 @@ def test_echte_sessies_404_en_bewerken_alleen_wie_mag(tmp_path):
 
     def req(methode, pad, wie, body=None):
         conn = http.client.HTTPConnection("127.0.0.1", poort, timeout=10)
-        kop = {"Cookie": f"nv_session={sessies.create(wie)}"}
+        tok = sessies.create(wie)
+        kop = {"Cookie": f"nv_session={tok}"}
         if body is not None:
             kop["Content-Type"] = "application/x-www-form-urlencoded"
+            body = body.replace("csrf=T", "csrf=" + _auth.csrf_voor("T", tok))   # CSRF per sessie
         conn.request(methode, pad, body=body, headers=kop)
         r = conn.getresponse()
         data = r.read()

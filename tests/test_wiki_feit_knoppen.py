@@ -95,14 +95,15 @@ def test_een_bestand_als_bron_via_de_echte_server(tmp_path):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     try:
         b = uuid.uuid4().hex
-        velden = {"csrf": "T", "action": "pagina_feit_add", "aid": aid, "next": "/", "vraag": "cert",
+        tok = sessies.create('guest')                         # CSRF per sessie (17 oktober 2026)
+        velden = {"csrf": _auth.csrf_voor("T", tok), "action": "pagina_feit_add", "aid": aid, "next": "/", "vraag": "cert",
                   "tekst": "GOTS certificate", "soort": "bron", "nakijken": "1", "antwoord_cert": "yes"}
         body = b"".join(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
                         for k, v in velden.items())
         body += (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="gots.pdf"\r\n'
                  f'Content-Type: application/pdf\r\n\r\n').encode() + b"%PDF-1.4 test\r\n" + f"--{b}--\r\n".encode()
         c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
-        c.request("POST", "/action", body, {"Cookie": f"nv_session={sessies.create('guest')}",
+        c.request("POST", "/action", body, {"Cookie": f"nv_session={tok}",
                                             "Content-Type": f"multipart/form-data; boundary={b}"})
         r = c.getresponse(); r.read()
     finally:

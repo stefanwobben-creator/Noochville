@@ -89,7 +89,7 @@ def _pdf_met_tekstlaag() -> bytes:
 
 
 def _post(port, tok, actie, pdf):
-    body, ctype = _multipart({"csrf": CSRF, "action": actie, "atom_id": "NOTE-X"},
+    body, ctype = _multipart({"csrf": _auth.csrf_voor(CSRF, tok), "action": actie, "atom_id": "NOTE-X"},
                              ("bron.pdf", pdf, "application/pdf"))
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     conn.request("POST", "/action", body=body,

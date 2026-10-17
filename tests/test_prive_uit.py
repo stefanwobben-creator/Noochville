@@ -35,8 +35,10 @@ def _post(dd, velden, wie=LID):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     try:
         c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
-        c.request("POST", "/action", body=urllib.parse.urlencode({"csrf": "T", "next": "/x", **velden}),
-                  headers={"Cookie": f"nv_session={sessies.create(wie)}",
+        tok = sessies.create(wie)
+        c.request("POST", "/action", body=urllib.parse.urlencode({"csrf": _auth.csrf_voor("T", tok),
+                                                                  "next": "/x", **velden}),
+                  headers={"Cookie": f"nv_session={tok}",
                            "Content-Type": "application/x-www-form-urlencoded"})
         r = c.getresponse()
         return r.status, urllib.parse.unquote(r.getheader("Location") or "")

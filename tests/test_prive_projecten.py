@@ -173,8 +173,10 @@ def test_de_wizard_stuurt_alleen_leesbare_projecten_als_ankers_naar_het_model(do
     httpd = _server(dd, sessies)
     try:
         c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
-        c.request("POST", "/wizard/sharpen", body=urllib.parse.urlencode({"csrf": "T", "ruw": "iets"}),
-                  headers={"Cookie": f"nv_session={sessies.create(wie)}",
+        tok = sessies.create(wie)
+        c.request("POST", "/wizard/sharpen", body=urllib.parse.urlencode({"csrf": _auth.csrf_voor("T", tok),
+                                                                          "ruw": "iets"}),
+                  headers={"Cookie": f"nv_session={tok}",
                            "Content-Type": "application/x-www-form-urlencoded"})
         assert c.getresponse().status == 200
     finally:

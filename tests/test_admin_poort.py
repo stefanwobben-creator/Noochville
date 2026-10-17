@@ -46,7 +46,7 @@ def _get(poort, pad, sessie=None):
 
 def _post(poort, velden, sessie):
     c = http.client.HTTPConnection("127.0.0.1", poort, timeout=10)
-    c.request("POST", "/action", body=urllib.parse.urlencode({"csrf": "T", **velden}),
+    c.request("POST", "/action", body=urllib.parse.urlencode({"csrf": _auth.csrf_voor("T", sessie), **velden}),
               headers={"Cookie": f"nv_session={sessie}", "Content-Type": "application/x-www-form-urlencoded"})
     r = c.getresponse()
     return r.status, r.read().decode()

@@ -164,13 +164,14 @@ def test_een_fout_toont_het_formulier_met_wat_er_stond_en_slaat_niets_op(tmp_pat
     httpd, sessies = _server(dd)
     try:
         b = uuid.uuid4().hex
-        velden = {"csrf": "T", "action": "finance_kost_add", "next": "/finance/costs", "entry_date": "2026-10-05",
+        fc = sessies.create('fc@t.nl')                        # CSRF per sessie (17 oktober 2026)
+        velden = {"csrf": _auth.csrf_voor("T", fc), "action": "finance_kost_add", "next": "/finance/costs", "entry_date": "2026-10-05",
                   "supplier": "OKAPI-LEVERANCIER", "description": "Strobel", "amount_excl": "100,00",
                   "payment_status": "open", "no_document_reason": "test"}       # geen account, geen regel
         body = b"".join(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
                         for k, v in velden.items()) + f"--{b}--\r\n".encode()
         c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
-        c.request("POST", "/action", body, {"Cookie": f"nv_session={sessies.create('fc@t.nl')}",
+        c.request("POST", "/action", body, {"Cookie": f"nv_session={fc}",
                                             "Content-Type": f"multipart/form-data; boundary={b}"})
         r = c.getresponse()
         html = r.read().decode()
@@ -179,11 +180,11 @@ def test_een_fout_toont_het_formulier_met_wat_er_stond_en_slaat_niets_op(tmp_pat
         assert "⚠ ✗ pick a management line" in html[i:i + 4000]                 # bij het veld
         assert KostenRegister(dd).alle() == []
         # terugkerende kost: zelfde, via de gewone (niet-multipart) route
-        form = urllib.parse.urlencode({"csrf": "T", "action": "vaste_kosten_zet", "next": "/finance/recurring",
+        form = urllib.parse.urlencode({"csrf": _auth.csrf_voor("T", fc), "action": "vaste_kosten_zet", "next": "/finance/recurring",
                                        "omschrijving": "OKAPI-HUUR", "bedrag": "450", "van": "2026-02-01",
                                        "tot": "2026-01-01"})
         c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=10)
-        c.request("POST", "/action", form, {"Cookie": f"nv_session={sessies.create('fc@t.nl')}",
+        c.request("POST", "/action", form, {"Cookie": f"nv_session={fc}",
                                              "Content-Type": "application/x-www-form-urlencoded"})
         r = c.getresponse()
         html = r.read().decode()
