@@ -142,6 +142,17 @@ def _limiet_uit_env() -> int:
     return max(0, n)
 
 
+def afmeld_pad(soort: str) -> str:
+    """Het pad voor de afmeldlink onderaan een mail van deze soort: via de tussenpagina `/l` (zodat
+    een klik vanuit Gmail-web de Strict-cookie meekrijgt) naar `/account?uit=<soort>`. Daar staat de
+    knop; een GET wijzigt nooit iets. Leeg bij een onbekende soort — dan hoort er geen link te staan."""
+    from urllib.parse import quote
+    from nooch_village.people import MAIL_SOORTEN
+    if soort not in MAIL_SOORTEN:
+        return ""
+    return "/l?p=" + quote(f"/account?uit={soort}", safe="")
+
+
 def instellingen() -> dict:
     """De mailconfiguratie uit de omgeving (`.env` via `config.load_context`). `ok` is alleen waar
     als host én afzender er zijn."""
@@ -191,7 +202,7 @@ def _data_dir(data_dir: str | None) -> str:
 
 def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
              verzend: bool = False, data_dir: str | None = None, run: MailRun | None = None,
-             smtp_cls=_SMTPv4) -> dict:
+             smtp_cls=_SMTPv4, voorkeur: str | None = None) -> dict:
     """Verstuur één mail, of — standaard — schrijf hem als dry-run weg.
 
     Geeft `{"status": ..., ...}` terug, nooit een exceptie:
@@ -207,6 +218,17 @@ def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
         return {"status": "refused", "reden": "invalid address"}
     if not onderwerp:
         return {"status": "refused", "reden": "no subject"}
+    if voorkeur is not None:
+        # DE ONTVANGER BESLIST (17 oktober 2026). Een mail van een soort (`week`, `verslag`) gaat
+        # alleen naar een mens met een people-record die hem niet heeft uitgezet. Geen record → geen
+        # mail: een weekmail aan een onbekend adres is geen kennisgeving maar een lek.
+        from nooch_village.people import PeopleStore
+        ps = PeopleStore(os.path.join(_data_dir(data_dir), "people.json"))
+        mens = ps.by_email(aan)
+        if mens is None:
+            return {"status": "refused", "reden": "no person with this address"}
+        if not ps.mail_voorkeur(mens.id, voorkeur):
+            return {"status": "refused", "reden": f"turned off by the recipient ({voorkeur})"}
     if run is None:
         mag, limiet = _venster_toelaten()
         if not mag:

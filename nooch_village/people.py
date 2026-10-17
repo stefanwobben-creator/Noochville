@@ -17,6 +17,10 @@ from dataclasses import dataclass, asdict
 from nooch_village.util import atomic_write_json, read_json
 
 
+#: De soorten mail waar een mens zelf over beslist (17 oktober 2026). Eén plek: de accountpagina, de
+#: dispatch-actie en `mail.verstuur` lezen hem.
+MAIL_SOORTEN = ("week", "verslag")
+
 @dataclass
 class Person:
     """Een mens in de organisatie."""
@@ -251,6 +255,29 @@ class PeopleStore:
         if n:
             self._save()
         return n
+
+    # MAILVOORKEUR (17 oktober 2026, besluit Stefan). Losse sleutel `mail: {week, verslag}` op de
+    # people-rij, net als `gezien`, `gevolgd` en `logins`: een eigenschap van een MENS, geen eigen
+    # store (`test_conventies_ratchet.STORES` is bevroren). ONTBREEKT DE SLEUTEL, DAN STAAT HIJ AAN:
+    # wie nooit iets koos krijgt de mails. Een onbekende soort is altijd UIT — er gaat nooit een mail
+    # uit van een soort die hier niet bestaat. `mail.verstuur(..., voorkeur=…)` leest deze helper.
+    def mail_voorkeur(self, pid: str, soort: str) -> bool:
+        if soort not in MAIL_SOORTEN:
+            return False
+        d = self._items.get(pid) or {}
+        v = (d.get("mail") or {}).get(soort) if isinstance(d.get("mail"), dict) else None
+        return True if v is None else bool(v)
+
+    def zet_mail_voorkeur(self, pid: str, soort: str, aan: bool) -> bool:
+        """Zet één voorkeur. False bij een onbekende persoon of soort (er verandert dan niets)."""
+        if soort not in MAIL_SOORTEN or pid not in self._items:
+            return False
+        d = self._items[pid]
+        mail = dict(d.get("mail") or {}) if isinstance(d.get("mail"), dict) else {}
+        mail[soort] = bool(aan)
+        d["mail"] = mail
+        self._save()
+        return True
 
     # LOGINS (17 oktober 2026, besluit Stefan). Tot nu toe bleef alleen `last_login` over: hoe vaak
     # iemand inlogde was achteraf niet te zien (de sessiestore ruimt verlopen sessies op, nginx weet
