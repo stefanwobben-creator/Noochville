@@ -240,6 +240,68 @@ def _is_mens(st, wie: str) -> bool:
                for p in st.people.all())
 
 
+def _nieuwe_berichten(st, ik: str, kanaal: str, sinds: float) -> list[dict]:
+    """De berichten in `kanaal` ná `sinds` die niet van `ik` zelf zijn, hooguit `_ONGELEZEN_CAP`
+    diep. Eén regel, drie gebruikers: het Messages-scherm, `ongelezen` en straks de weekmail."""
+    uit = []
+    for e in st.channels.trail(kanaal, limit=_ONGELEZEN_CAP):
+        if float(e.get("at") or 0) <= sinds:
+            continue
+        if (e.get("author") or {}).get("id") == ik:
+            continue                                   # je eigen woorden zijn niet nieuw voor jou
+        uit.append(e)
+    return uit
+
+
+def ongelezen_per_kanaal(st, ik: str, kanalen) -> dict[str, int]:
+    """{kanaal: aantal ongelezen} voor deze kanalen — alleen de kanalen mét iets nieuws.
+
+    ONGELEZEN IS EEN VERGELIJKING, GEEN OPGESLAGEN VLAG: berichten ná het moment dat deze mens het
+    kanaal voor het laatst opende (`people.gezien`), en niet van hemzelf. Puur: leest alleen, markeert
+    niets. Het Messages-scherm roept dit aan met precies de kanalen die het toont."""
+    if not ik:
+        return {}
+    gz = st.people.gezien(ik)
+    uit: dict[str, int] = {}
+    for k in kanalen:
+        n = len(_nieuwe_berichten(st, ik, k, float(gz.get(k) or 0)))
+        if n:
+            uit[k] = n
+    return uit
+
+
+def _is_vermelding(e: dict) -> bool:
+    """Een @-vermelding wordt een DM van de schrijver met de plek erbij (`herkomst`): `entry` uit
+    een projectgesprek, `kanaal` uit een kanaal. Een signaal (alleen `project`) is geen vermelding."""
+    h = e.get("herkomst") or {}
+    return isinstance(h, dict) and bool(h.get("entry") or h.get("kanaal"))
+
+
+def ongelezen(st, ik: str) -> list[dict]:
+    """Wat er voor deze mens ongelezen is, voor `/today` en de weekmail. GEEN BERICHTTEKST: per kanaal
+    `{kanaal, soort, aantal, vermeldingen, laatste_at, van}` — `van` zijn de id's van de schrijvers.
+
+    Dezelfde kanalen als het Messages-scherm toont (`_kanalen`, zonder zoekterm) en dezelfde regel
+    (`_nieuwe_berichten`), dus wat hier staat is precies wat daar als ongelezen gemarkeerd is.
+    Gesorteerd op het laatste nieuwe bericht, nieuwste eerst. Puur: leest alleen."""
+    if not ik:
+        return []
+    groepen, _totaal, _gevolgd = _kanalen(st, ik, "")
+    gz = st.people.gezien(ik)
+    uit = []
+    for k in dict.fromkeys(k for rij in groepen.values() for k in rij):
+        nieuw = _nieuwe_berichten(st, ik, k, float(gz.get(k) or 0))
+        if not nieuw:
+            continue
+        van = list(dict.fromkeys((e.get("author") or {}).get("id") or "" for e in nieuw))
+        uit.append({"kanaal": k, "soort": channels.soort_van(k), "aantal": len(nieuw),
+                    "vermeldingen": sum(1 for e in nieuw if _is_vermelding(e)),
+                    "laatste_at": max(float(e.get("at") or 0) for e in nieuw),
+                    "van": [x for x in van if x]})
+    uit.sort(key=lambda r: -r["laatste_at"])
+    return uit
+
+
 def _dm_groepen(st, ik: str) -> tuple[list, list]:
     """De DM-kanalen van deze mens, gesplitst in (echte gesprekken, rol- en systeemafzenders).
 
@@ -804,21 +866,7 @@ def render_messages(st, *, ik: str = "", kanaal: str = "", csrf_token: str = "",
     #
     # Het kanaal dat je NU opent markeren we hieronder pas, ná het tellen: anders staat het nooit
     # als ongelezen in de lijst waar je het net in aanklikte, en zie je nooit wat je zojuist opende.
-    ongelezen: dict = {}
-    if ik:
-        gz = st.people.gezien(ik)
-        for groep_rij in groepen.values():
-            for k in groep_rij:
-                sinds = float(gz.get(k) or 0)
-                n = 0
-                for e in st.channels.trail(k, limit=_ONGELEZEN_CAP):
-                    if float(e.get("at") or 0) <= sinds:
-                        continue
-                    if (e.get("author") or {}).get("id") == ik:
-                        continue                       # je eigen woorden zijn niet nieuw voor jou
-                    n += 1
-                if n:
-                    ongelezen[k] = n
+    ongelezen = ongelezen_per_kanaal(st, ik, [k for rij in groepen.values() for k in rij])
 
     # Het zoekveld is een GET-formulier en geen JS-filter: zo werkt hij zonder scripts, is de
     # uitkomst deelbaar als URL, en hoeven er geen 442 regels naar de browser die je toch verbergt.
