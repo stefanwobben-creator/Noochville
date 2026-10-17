@@ -135,3 +135,57 @@ def test_in_chromium_draagt_de_doorverwijzing_de_strict_cookie_wel(server):
         pg.wait_for_url(re.compile(r".*/pagina\?id=NOTE-1#feit-9$"))
         assert pg.url == f"{village}{doel}#feit-9"                              # ingelogd op het doel
         browser.close()
+
+
+#: Vijandige p-waarden (controle Stefan, 17 oktober 2026): aanhalingstekens, `</script>`, een
+#: `<img onerror>`, en een regeleinde — ruw, gecodeerd en als CRLF.
+VIJANDIG = [
+    '/x"y',
+    "/x'y",
+    '/x"\'><b>',
+    "/x</script><script>alert(1)</script>",
+    "/x</SCRIPT ><script>alert(1)</script>",
+    '/x<img src=x onerror="alert(1)">',
+    "/x'><img src=x onerror=alert(1)>",
+    "/x y",                                    # JS-regelscheider (geen geldige URL, wel een test)
+]
+REGELEINDE = ["/x\ny", "/x\r\ny", "/x%0ay", "/x%0d%0aSet-Cookie:a=b", "/x\n</script><script>alert(1)//"]
+
+
+def _script_en_link(h: str) -> tuple[str, str]:
+    script = h.split("<script>", 1)[1].split("</script>", 1)[0]
+    link = re.search(r'<noscript><p><a href="([^"]*)">', h).group(1)
+    return script, link
+
+
+@pytest.mark.parametrize("p", VIJANDIG)
+def test_een_vijandige_p_blijft_tekst_in_script_en_attribuut(p):
+    h = _auth.doorstuur_pagina(p)
+    script, link = _script_en_link(h)
+    # SCRIPT-CONTEXT: precies één JSON-string, geen enkele echte `<` (dus geen `</script>`), en hij
+    # leest terug als exact het doel — een `"` kan de string niet verlaten.
+    assert "<" not in script
+    assert script.startswith("location.replace(") and script.endswith(" + location.hash);")
+    assert json.loads(script[len("location.replace("):-len(" + location.hash);")]) == _auth.veilig_pad(p)
+    # ATTRIBUUT: geen ruwe `"`, `'`, `<` of `>`; html-ontsleuteld is het weer exact het doel.
+    import html as _html
+    assert not set(link) & set("\"'<>")
+    assert _html.unescape(link) == _auth.veilig_pad(p)
+    # nergens in de pagina een tweede script of een img
+    assert h.count("<script>") == 1 and "<img" not in h and "onerror=\"alert" not in h
+
+
+@pytest.mark.parametrize("p", REGELEINDE)
+def test_een_regeleinde_in_p_wordt_de_voordeur(p):
+    h = _auth.doorstuur_pagina(p)
+    assert _doel(h) == "/" and '<a href="/">' in h and h.count("<script>") == 1
+
+
+@pytest.mark.parametrize("p", VIJANDIG + REGELEINDE)
+def test_ook_via_de_echte_route(server, p):
+    """Zoals een mail-link hem aanlevert: URL-gecodeerd in de query, door de handler ontsleuteld."""
+    _dd, port, _s = server
+    r, h = _get(port, "/l?p=" + urllib.parse.quote(p, safe=""))
+    assert r.status == 200 and h.count("<script>") == 1 and "<img" not in h
+    script, link = _script_en_link(h)
+    assert "<" not in script and not set(link) & set("\"'<>")
