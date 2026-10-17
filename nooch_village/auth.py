@@ -4,7 +4,7 @@ people.json is de enige bron van waarheid. UserStore leest het bestand en bouwt
 een email-index op records met zowel een email- als een password_hash-veld.
 """
 from __future__ import annotations
-import hashlib, json, logging, os, secrets, time
+import hashlib, html, json, logging, os, re, secrets, time, urllib.parse
 
 from nooch_village.util import JsonStore
 import bcrypt
@@ -38,6 +38,10 @@ class UserStore:
     def verify_by_email(self, email: str, password: str) -> bool:
         u = self._by_email().get(email.lower())
         if not u:
+            # GEEN SNELLE "NEE" (17 oktober 2026). Zonder bcrypt antwoordt een onbekend adres in
+            # microseconden en een bekend adres in ~0,2 s: de responstijd verraadt dan wie een account
+            # heeft. Dezelfde vergelijking tegen een vaste dummy-hash maakt beide even traag.
+            bcrypt.checkpw(password.encode(), _dummy_hash())
             return False
         return bcrypt.checkpw(password.encode(), u["password_hash"].encode())
 
@@ -239,6 +243,57 @@ class SessionStore(JsonStore):
 
 
 
+_DUMMY_HASH: bytes | None = None
+
+
+def _dummy_hash() -> bytes:
+    """Een vaste bcrypt-hash met dezelfde kosten als echte wachtwoorden (`hash_password`), één keer
+    per proces gemaakt. Het wachtwoord erachter is willekeurig en wordt nergens bewaard."""
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = bcrypt.hashpw(secrets.token_bytes(16), bcrypt.gensalt(12))
+    return _DUMMY_HASH
+
+
+#: Een anker dat over de login heen mag: `#vraag-plastic`, `#feit-1a2b`, `#m-<id>`, `#kop=…`.
+_ANKER_RE = re.compile(r"^#[A-Za-z0-9_.:=%-]{1,200}$")
+
+
+def veilig_pad(waarde) -> str:
+    """Een terugkeer-adres na inloggen (`next`), of "/" (17 oktober 2026, besluit Stefan).
+
+    ALLEEN EEN RELATIEF PAD DAT MET ÉÉN `/` BEGINT. Alles wat de browser als een ander domein of
+    als code kan lezen valt weg: `//host` en `/\\host` (protocol-relatief), elk schema
+    (`https:`, `javascript:`), een backslash, witruimte en stuurtekens. Ook GECODEERD: `/%2f%2fhost`
+    of `%2F%2Fhost` wordt herhaald gedecodeerd en dan opnieuw getoetst — een filter dat alleen de
+    ruwe tekst bekijkt, laat precies die varianten door. Ongeldig is nooit een fout, maar "/"."""
+    p = waarde if isinstance(waarde, str) else ""
+    if not p or len(p) > 2000:
+        return "/"
+    vormen, d = [p], p
+    for _ in range(5):                                   # tot hij niet meer verandert
+        nd = urllib.parse.unquote(d)
+        if nd == d:
+            break
+        vormen.append(nd)
+        d = nd
+    if any(ord(ch) < 33 or ord(ch) == 127 for ch in p):  # ruwe witruimte/stuurtekens
+        return "/"
+    for v in vormen:
+        # Elke vorm moet met precies één `/` beginnen: dat sluit ook elk schema uit. Een gecodeerde
+        # spatie (`%20` in een zoekopdracht) is wél goed; stuurtekens (tab, regeleinde) niet.
+        if (not v.startswith("/") or v.startswith("//") or "\\" in v
+                or any(ord(ch) < 32 or ord(ch) == 127 for ch in v)):
+            return "/"
+    return p
+
+
+def veilig_anker(waarde) -> str:
+    """Een `#anker` dat na het inloggen terug mag, of "". Alleen letters, cijfers en `_.:=%-`."""
+    a = waarde if isinstance(waarde, str) else ""
+    return a if _ANKER_RE.match(a) else ""
+
+
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
 
@@ -263,9 +318,14 @@ def clear_cookie() -> str:
     return f"{SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict"
 
 
-def login_page(next_url: str = "/", error: str = "") -> str:
+def login_page(next_url: str = "/", error: str = "", anker: str = "") -> str:
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
-    nxt = next_url.replace('"', '%22')
+    nxt = html.escape(veilig_pad(next_url), quote=True)
+    # HET ANKER REIST MEE (17 oktober 2026). `#feit-…` bereikt de server nooit, dus de pagina zelf
+    # zet `location.hash` in een verborgen veld; de server plakt hem (getoetst) achter `next`. Na een
+    # fout wachtwoord staat het anker niet meer in de adresbalk (de POST ging naar /login), dus dan
+    # rendert de server het veld al gevuld.
+    ank = html.escape(veilig_anker(anker), quote=True)
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in — NoochVille</title>
@@ -291,13 +351,16 @@ button:hover{{opacity:.9}}
   {err}
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{nxt}">
+    <input type="hidden" name="anker" id="anker" value="{ank}">
     <label for="u">Email address</label>
     <input type="email" id="u" name="email" autocomplete="email" autofocus required>
     <label for="p">Password</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
   </form>
-</div></body></html>"""
+</div>
+<script>(function(){{var a=document.getElementById('anker');if(a&&location.hash&&!a.value)a.value=location.hash;}})();</script>
+</body></html>"""
 
 
 def password_change_page(next_url: str = "/", error: str = "", forced: bool = False) -> str:
@@ -306,7 +369,7 @@ def password_change_page(next_url: str = "/", error: str = "", forced: bool = Fa
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
     intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">You are using a temporary '
              'password. Choose your own password now to continue.</p>') if forced else ""
-    nxt = next_url.replace('"', '%22')
+    nxt = html.escape(veilig_pad(next_url), quote=True)
     # Bij een VERPLICHTE wijziging geen 'huidig wachtwoord'-veld: de gebruiker is net via login
     # geauthenticeerd (die verifieerde het temp al), en het veld lokt browser-autofill van het OUDE
     # wachtwoord uit → een onmogelijk-op-te-lossen loop. Voor een vrijwillige wijziging blijft het staan.

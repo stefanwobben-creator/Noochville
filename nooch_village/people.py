@@ -252,13 +252,27 @@ class PeopleStore:
             self._save()
         return n
 
+    # LOGINS (17 oktober 2026, besluit Stefan). Tot nu toe bleef alleen `last_login` over: hoe vaak
+    # iemand inlogde was achteraf niet te zien (de sessiestore ruimt verlopen sessies op, nginx weet
+    # niet wie). Nu de laatste `LOGINS_MAX` tijdstippen, als losse sleutel op de people-rij — net als
+    # `gezien` en `gevolgd` hierboven, en om dezelfde reden geen eigen store. Alleen het tijdstip:
+    # geen IP, geen apparaat.
+    LOGINS_MAX = 30
+
     def touch_login(self, email: str) -> None:
         el = (email or "").lower()
         for d in self._items.values():
             if d.get("email", "").lower() == el:
-                d["last_login"] = time.time()
+                nu = time.time()
+                d["last_login"] = nu
+                d["logins"] = (list(d.get("logins") or []) + [nu])[-self.LOGINS_MAX:]
                 self._save()
                 return
+
+    def logins(self, pid: str) -> list[float]:
+        """De laatste (hooguit `LOGINS_MAX`) inlogtijdstippen van deze mens, oudste eerst."""
+        d = self._items.get(pid) or {}
+        return [float(t) for t in (d.get("logins") or []) if isinstance(t, (int, float))]
 
     def remove(self, pid: str) -> bool:
         if pid in self._items:
