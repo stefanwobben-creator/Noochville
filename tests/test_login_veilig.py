@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer
@@ -112,7 +113,14 @@ def test_wachtwoord_next_nooit_naar_buiten(server, nxt, waar):
     _dd, _p, port, sessions = server
     tok = sessions.create(EMAIL)
     nieuw = "EenNieuwWachtwoord77"
-    body = urllib.parse.urlencode({"current": PW, "new": nieuw, "confirm": nieuw, "next": nxt})
+    velden = {"current": PW, "new": nieuw, "confirm": nieuw, "next": nxt}
+    # Stuur mee wat het formulier zelf meegeeft (een CSRF-token zodra de pagina er een draagt), zoals
+    # een browser doet — dan blijft deze test kloppen met én zonder CSRF per sessie.
+    _r, pagina = _req(port, "GET", "/wachtwoord", cookie=tok)
+    m = re.search(r'name="csrf" value="([^"]*)"', pagina)
+    if m:
+        velden["csrf"] = m.group(1)
+    body = urllib.parse.urlencode(velden)
     r, _ = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
     assert r.status == 303 and r.getheader("Location") == waar
 
