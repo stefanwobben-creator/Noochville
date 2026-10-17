@@ -8151,13 +8151,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 form = urllib.parse.parse_qs(raw)
                 email    = (form.get("email") or [""])[0].strip()
                 password = (form.get("password") or [""])[0]
-                next_url = (form.get("next") or ["/"])[0]
+                # TERUG NAAR WAAR JE WAS, MAAR ALLEEN BINNEN VILLAGE (17 oktober 2026): `next` alleen als
+                # relatief pad (`veilig_pad`), anders "/". Het anker komt van de loginpagina zelf.
+                next_url = _auth.veilig_pad((form.get("next") or ["/"])[0])
+                anker = _auth.veilig_anker((form.get("anker") or [""])[0])
                 if users and users.verify_by_email(email, password):
                     _Stores(data_dir).people.touch_login(email)
                     token = sessions.create(email) if sessions else ""
-                    self._redirect_to(next_url or "/", _auth.set_cookie(token))
+                    self._redirect_to(next_url + anker, _auth.set_cookie(token))
                 else:
-                    self._send(_auth.login_page(next_url, error="Email address or password is incorrect."))
+                    self._send(_auth.login_page(next_url, error="Email address or password is incorrect.",
+                                                anker=anker))
                 return
 
 
@@ -8432,7 +8436,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 if ok:
                     if sessions is not None:      # haak: verbreek oude sessies, behoud de eigen (no-op nu)
                         sessions.invalidate_user(username, keep_token=_auth.get_session_token(self.headers))
-                    self._redirect_to((form.get("next") or ["/"])[0] or "/")
+                    self._redirect_to(_auth.veilig_pad((form.get("next") or ["/"])[0]))
                 else:
                     self._send(page, 200)
                 return
