@@ -4,10 +4,11 @@ people.json is de enige bron van waarheid. UserStore leest het bestand en bouwt
 een email-index op records met zowel een email- als een password_hash-veld.
 """
 from __future__ import annotations
-import hashlib, hmac, html, json, logging, os, secrets, time
+import hashlib, json, logging, os, secrets, time
 
 from nooch_village.util import JsonStore
 import bcrypt
+import hmac
 
 SESSION_COOKIE = "nv_session"
 SESSION_TTL    = 7 * 24 * 3600   # 1 week
@@ -358,7 +359,7 @@ button:hover{{opacity:.9}}
   <h1>Change password</h1>
   {intro}{err}
   <form method="post" action="/wachtwoord">
-    <input type="hidden" name="csrf" value="{html.escape(csrf, quote=True)}">
+    <input type="hidden" name="csrf" value="{csrf}">
     <input type="hidden" name="next" value="{nxt}">
     {current_field}
     <label for="n">New password</label>
