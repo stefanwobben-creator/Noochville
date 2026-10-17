@@ -2373,6 +2373,23 @@ def _act_giphy_post(c):
         if ok else "✗ could not post")
 
 
+def _act_mail_voorkeur_zet(c):
+    # AUTHZ: iedereen-ingelogd — alleen de EIGEN mailvoorkeur: de persoon komt uit de sessie
+    # (`_web_actor_id`), er is geen veld voor een ander. Zonder herkende mens gebeurt er niets.
+    """Zet de weekmail of het overlegverslag aan of uit voor jezelf (17 oktober 2026)."""
+    from nooch_village.people import MAIL_SOORTEN
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    ik = _web_actor_id(username, st)
+    if not ik:
+        return nxt, "✗ log in as a person to manage your mail preferences"
+    soort = g("soort")
+    if soort not in MAIL_SOORTEN:
+        return nxt, "✗ unknown kind of mail"
+    aan = g("aan") == "1"
+    st.people.zet_mail_voorkeur(ik, soort, aan)
+    return nxt, f"✓ {'on' if aan else 'off'}"
+
+
 def _act_kanaal_ontvolg(c):
     """Haal een kanaal uit JOUW lijst in Messages.
 
@@ -6861,6 +6878,7 @@ ACTIONS = {
     "linkbuilding_zoek": _act_linkbuilding_zoek,
     "linkbuilding_besluit": _act_linkbuilding_besluit,
     "kanaal_ontvolg": _act_kanaal_ontvolg,
+    "mail_voorkeur_zet": _act_mail_voorkeur_zet,
     "kanaal_verwijder": _act_kanaal_verwijder,
     "pagina_synthese": _act_pagina_synthese,
     "pagina_synthese_verwerp": _act_pagina_synthese_verwerp,
@@ -7567,6 +7585,14 @@ def make_handler(data_dir: str, csrf_token: str,
                 # voor wie het niet mag zien — zonder plaatshouder. Zie `zicht.voor`.
                 from nooch_village.views.today import render_today
                 self._send(render_today(_zicht.voor(st, username), ik=_web_actor_id(username, st)))
+                return
+            if path == "/account":
+                # AUTHZ: iedereen-ingelogd — toont en wijzigt alleen de EIGEN mailvoorkeuren (de
+                # persoon komt uit de sessie, nooit uit de URL). De pagina zelf wijzigt niets; de
+                # schakelaars zijn POST-formulieren met CSRF (`mail_voorkeur_zet`).
+                from nooch_village.views.account import render_account
+                self._send(render_account(st, ik=_web_actor_id(username, st), csrf_token=effective_csrf,
+                                          uit=(qs.get("uit") or [""])[0], msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/acties":
                 # AUTHZ: iedereen-ingelogd — maar de pagina toont ALLEEN je eigen lijst, en zonder
