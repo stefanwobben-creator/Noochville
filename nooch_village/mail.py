@@ -19,6 +19,12 @@ DRIE VANGNETTEN, en elk faalt gesloten:
 
 Dry-run-bestanden ouder dan 14 dagen worden bij elke dry-run opgeruimd.
 
+ALLEEN IPv4 (17 oktober 2026). De Workspace-relay laat het server-IP toe, en dat is het IPv4-adres.
+De server heeft ook IPv6, en zonder keuze verbond hij daarover — Google weigerde toen met `550 5.7.1
+Invalid credentials for relay [<ipv6>]`. `_SMTPv4` laat de hostnaam daarom met `AF_INET` resolven.
+De hostnaam zelf blijft het doel van de verbinding, dus STARTTLS controleert het certificaat nog
+steeds tegen `smtp-relay.gmail.com` (en niet tegen een kaal IP-adres).
+
 GEEN GEGEVENS IN EEN FOUT. Een SMTP-fout wordt gevangen; terug komt alleen de foutSOORT (en een SMTP-
 code), nooit de melding zelf — die bevat bij smtplib vaak het adres of een stuk van het bericht.
 
@@ -35,6 +41,7 @@ import os
 import re
 import itertools
 import smtplib
+import socket
 import ssl
 import threading
 import time
@@ -46,6 +53,24 @@ _ADRES_RE = re.compile(r"^[^@\s<>,;\"']+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 _STANDAARD_LIMIET = 20
 _ONDERWERP_MAX = 200
 _DRYRUN_MAP = "mail_dryrun"
+
+
+class _SMTPv4(smtplib.SMTP):
+    """`smtplib.SMTP` dat alleen via IPv4 verbindt. Alleen de socket verandert: `connect()` bewaart de
+    HOSTNAAM in `self._host`, en `starttls()` geeft die als `server_hostname` aan TLS — de
+    certificaatcontrole blijft dus op de naam, niet op het IP-adres."""
+
+    def _get_socket(self, host, port, timeout):
+        if timeout is not None and not timeout:
+            raise ValueError("Non-blocking socket (timeout=0) is not supported")
+        fout = None
+        for _fam, _type, _proto, _naam, adres in socket.getaddrinfo(host, port, socket.AF_INET,
+                                                                     socket.SOCK_STREAM):
+            try:
+                return socket.create_connection(adres, timeout, self.source_address)
+            except OSError as e:                     # volgende IPv4-adres proberen
+                fout = e
+        raise fout or OSError("no IPv4 address for the SMTP host")
 
 
 class MailRun:
@@ -137,7 +162,9 @@ def _bericht(aan: str, onderwerp: str, tekst: str, html: str | None, cfg: dict) 
     m["To"] = aan
     m["Subject"] = onderwerp
     m["Date"] = formatdate(localtime=True)
-    m["Message-ID"] = make_msgid(domain=(cfg["afzender"].split("@")[-1] if cfg["afzender"] else None))
+    # Altijd een domein meegeven: zonder domein vraagt `make_msgid` de eigen hostnaam op via DNS
+    # (`socket.getfqdn`), en dat kan bij een dry-run zonder config seconden duren.
+    m["Message-ID"] = make_msgid(domain=(cfg["afzender"].split("@")[-1] if cfg["afzender"] else "localhost"))
     m.set_content(tekst or "")
     if html:
         m.add_alternative(html, subtype="html")
@@ -164,7 +191,7 @@ def _data_dir(data_dir: str | None) -> str:
 
 def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
              verzend: bool = False, data_dir: str | None = None, run: MailRun | None = None,
-             smtp_cls=smtplib.SMTP) -> dict:
+             smtp_cls=_SMTPv4) -> dict:
     """Verstuur één mail, of — standaard — schrijf hem als dry-run weg.
 
     Geeft `{"status": ..., ...}` terug, nooit een exceptie:
@@ -216,12 +243,18 @@ def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
             s.ehlo()
             s.send_message(bericht)
     except Exception as e:                                  # noqa: BLE001 — nooit een traceback met gegevens
-        reden = type(e).__name__
+        klasse, code = type(e).__name__, None
         if isinstance(e, smtplib.SMTPResponseException):
-            reden += f" {e.smtp_code}"
+            code = int(e.smtp_code)
         elif isinstance(e, smtplib.SMTPRecipientsRefused):
+            codes = sorted({int(v[0]) for v in e.recipients.values()})
+            code = codes[0] if len(codes) == 1 else None
+        reden = klasse + (f" {code}" if code is not None else "")
+        if isinstance(e, smtplib.SMTPRecipientsRefused) and code is None:
             reden += " " + ",".join(str(v[0]) for v in e.recipients.values())
-        _audit(dd, "mail_failed", aan, onderwerp, reden=reden)
+        # IN DE LOG: de foutklasse en de numerieke SMTP-code, nooit de tekst van de server — die
+        # noemt adressen (en bij een weigering soms een stuk van het bericht).
+        _audit(dd, "mail_failed", aan, onderwerp, reden=reden, fout=klasse, smtp_code=code)
         return {"status": "failed", "reden": reden}
     _audit(dd, "mail_sent", aan, onderwerp)
     return {"status": "sent", "message_id": bericht["Message-ID"]}

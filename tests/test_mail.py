@@ -327,3 +327,128 @@ def test_mail_test_send_stuurt_een_testmail_naar_stefan(tmp_path, monkeypatch, c
 def test_mail_test_send_zonder_config_faalt_gesloten(tmp_path, monkeypatch, capsys):
     assert _cli(monkeypatch, tmp_path, "--send") == 1
     assert NepSMTP.gezien == [] and "NOT configured" in capsys.readouterr().out
+
+
+# ── alleen IPv4, en TLS op de hostnaam (17 oktober 2026) ─────────────────────────────────────
+# Aanleiding: de server verbond via IPv6 met de relay; Google kende alleen het IPv4-adres en
+# weigerde met 550. Geen echt netwerk in deze tests: getaddrinfo, create_connection en TLS zijn nep.
+
+import socket  # noqa: E402
+
+
+def test_de_standaard_verbinding_is_de_ipv4_klasse():
+    assert mail.verstuur.__kwdefaults__["smtp_cls"] is mail._SMTPv4
+    assert issubclass(mail._SMTPv4, smtplib.SMTP)
+
+
+def test_a_de_verbinding_vraagt_alleen_ipv4_adressen(monkeypatch):
+    gevraagd, verbonden = [], []
+
+    def nep_getaddrinfo(host, port, family=0, type=0, *a, **k):
+        gevraagd.append((host, port, family, type))
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.10", port))]
+
+    monkeypatch.setattr(mail.socket, "getaddrinfo", nep_getaddrinfo)
+    monkeypatch.setattr(mail.socket, "create_connection",
+                        lambda adres, timeout=None, bron=None: verbonden.append(adres) or "SOCK")
+    s = mail._SMTPv4(local_hostname="test")                                        # zonder host: maakt nog geen verbinding
+    assert s._get_socket("smtp-relay.gmail.com", 587, 30) == "SOCK"
+    assert gevraagd == [("smtp-relay.gmail.com", 587, socket.AF_INET, socket.SOCK_STREAM)]
+    assert verbonden == [("192.0.2.10", 587)]
+
+
+def test_a_volgende_ipv4_adres_als_het_eerste_faalt_en_nooit_ipv6(monkeypatch):
+    monkeypatch.setattr(mail.socket, "getaddrinfo", lambda *a, **k: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 587)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.2", 587))])
+    pogingen = []
+
+    def nep(adres, timeout=None, bron=None):
+        pogingen.append(adres)
+        if adres[0] == "192.0.2.1":
+            raise OSError("onbereikbaar")
+        return "SOCK"
+
+    monkeypatch.setattr(mail.socket, "create_connection", nep)
+    assert mail._SMTPv4(local_hostname="test")._get_socket("smtp-relay.gmail.com", 587, 30) == "SOCK"
+    assert pogingen == [("192.0.2.1", 587), ("192.0.2.2", 587)]
+    monkeypatch.setattr(mail.socket, "getaddrinfo", lambda *a, **k: [])
+    with pytest.raises(OSError):
+        mail._SMTPv4(local_hostname="test")._get_socket("smtp-relay.gmail.com", 587, 30)
+
+
+def test_b_tls_controleert_het_certificaat_op_de_hostnaam_niet_op_het_ip(monkeypatch):
+    """`connect()` met de HOSTNAAM; de socket is nep. `starttls()` moet die hostnaam als
+    `server_hostname` aan het TLS-context geven."""
+    class NepSock:
+        def makefile(self, *a, **k):
+            import io
+            return io.BytesIO(b"220 smtp-relay.gmail.com ESMTP ready\r\n")
+
+        def sendall(self, *a):
+            pass
+
+        def close(self):
+            pass
+
+    class NepContext:
+        gezien = None
+
+        def wrap_socket(self, sock, server_hostname=None):
+            NepContext.gezien = server_hostname
+            return sock
+
+    monkeypatch.setattr(mail._SMTPv4, "_get_socket", lambda self, h, p, t: NepSock())
+    s = mail._SMTPv4(local_hostname="test")
+    code, _ = s.connect("smtp-relay.gmail.com", 587)
+    assert code == 220 and s._host == "smtp-relay.gmail.com"
+    s.esmtp_features = {"starttls": ""}
+    s.does_esmtp = True
+    s.ehlo_resp = b"smtp-relay.gmail.com"                     # alsof EHLO al gebeurd is
+    monkeypatch.setattr(s, "docmd", lambda *a, **k: (220, b"go ahead"))
+    s.starttls(context=NepContext())
+    assert NepContext.gezien == "smtp-relay.gmail.com"
+
+
+def test_b_verstuur_geeft_de_hostnaam_door_niet_een_ip(tmp_path, monkeypatch):
+    _env(monkeypatch)
+    mail.verstuur("stefan@nooch.earth", "T", "x", verzend=True, data_dir=str(tmp_path), smtp_cls=NepSMTP)
+    assert NepSMTP.gezien[0]["host"] == "smtp-relay.gmail.com"
+    assert NepSMTP.gezien[0]["tls_context"].check_hostname
+
+
+def test_c_een_weigering_met_550_komt_als_code_in_de_log_en_niet_als_tekst(tmp_path, monkeypatch):
+    _env(monkeypatch)
+    NepSMTP.fout = smtplib.SMTPSenderRefused(
+        550, b"5.7.1 Invalid credentials for relay [2a01:4f8:c010:8974::1]. The IP address you've "
+             b"registered doesn't match", "village@nooch.earth")
+    uit = mail.verstuur("stefan@nooch.earth", "Village mail test", "Hallo geheim", verzend=True,
+                        data_dir=str(tmp_path), smtp_cls=NepSMTP)
+    assert uit == {"status": "failed", "reden": "SMTPSenderRefused 550"}
+    (regel,) = _audit(str(tmp_path))
+    assert regel["event"] == "mail_failed"
+    assert regel["fout"] == "SMTPSenderRefused" and regel["smtp_code"] == 550
+    assert set(regel) == {"event", "by", "aan", "onderwerp", "at", "reden", "fout", "smtp_code"}
+    tekst = json.dumps(regel)
+    for verboden in ("Invalid credentials", "2a01", "registered", "geheim", "village@nooch.earth"):
+        assert verboden not in tekst
+
+
+def test_c_een_fout_zonder_smtp_code_logt_klasse_en_geen_code(tmp_path, monkeypatch):
+    _env(monkeypatch)
+    NepSMTP.fout = OSError("Network is unreachable: 2a01:4f8:c010:8974::1")
+    mail.verstuur("stefan@nooch.earth", "T", "x", verzend=True, data_dir=str(tmp_path), smtp_cls=NepSMTP)
+    (regel,) = _audit(str(tmp_path))
+    assert regel["fout"] == "OSError" and regel["smtp_code"] is None and "2a01" not in json.dumps(regel)
+
+
+def test_geen_netwerk_bij_een_dry_run_ook_niet_voor_de_eigen_hostnaam(tmp_path, monkeypatch):
+    """Zonder domein vroeg `make_msgid` de eigen hostnaam op via DNS (seconden, en netwerk in een
+    test). Een dry-run — met of zonder config — mag geen enkele netwerkfunctie aanroepen."""
+    def geen_netwerk(*a, **k):
+        raise AssertionError("netwerk aangeroepen")
+    for naam in ("getfqdn", "gethostname", "gethostbyaddr", "getaddrinfo", "create_connection"):
+        monkeypatch.setattr(mail.socket, naam, geen_netwerk)
+    assert mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] == "dry-run"
+    _env(monkeypatch)
+    assert mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] == "dry-run"
