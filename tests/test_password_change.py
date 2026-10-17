@@ -53,6 +53,12 @@ def _req(port, method, path, cookie=None, body=None):
     return r, text
 
 
+def _csrf(tok: str) -> str:
+    """Het CSRF-token van deze sessie (per sessie sinds 17 oktober 2026; `_server` gebruikt TESTTOKEN
+    als geheim)."""
+    return _auth.csrf_voor("TESTTOKEN", tok)
+
+
 def _flag(dd) -> bool:
     return PeopleStore(os.path.join(dd, "people.json")).must_change(EMAIL)
 
@@ -91,7 +97,7 @@ def test_geldige_wijziging_wist_flag_en_laat_door(tmp_path):
     httpd, port = _server(dd, sessions)
     try:
         # Lotte-fix: een VERPLICHTE wijziging vraagt géén 'huidig wachtwoord' → POST zónder 'current' slaagt
-        body = "new=MijnNieuwe99&confirm=MijnNieuwe99&next=/"
+        body = f"new=MijnNieuwe99&confirm=MijnNieuwe99&next=/&csrf={_csrf(tok)}"
         r, _ = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
         assert r.status == 303 and (r.getheader("Location") or "") == "/"
         assert _flag(dd) is False                                    # flag gewist
@@ -114,7 +120,7 @@ def test_forced_beleid_blokkeert_zonder_huidig_wachtwoord_check(tmp_path):
             (f"new={TEMP}&confirm={TEMP}", "different password"),      # nieuw ≠ het temp (via verify, niet getypt)
         ]
         for body, needle in cases:
-            r, txt = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
+            r, txt = _req(port, "POST", "/wachtwoord", cookie=tok, body=f"{body}&csrf={_csrf(tok)}")
             assert r.status == 200 and needle in txt
             assert _flag(dd) is True                                 # nog steeds geflagd, niets gewijzigd
     finally:
@@ -130,10 +136,10 @@ def test_vrijwillige_wijziging_vraagt_wel_huidig_wachtwoord(tmp_path):
         _, page = _req(port, "GET", "/wachtwoord", cookie=tok)
         assert "Current password" in page and 'name="current"' in page
         r1, t1 = _req(port, "POST", "/wachtwoord", cookie=tok,
-                      body="current=FOUT&new=MijnNieuwe99&confirm=MijnNieuwe99")
+                      body=f"current=FOUT&new=MijnNieuwe99&confirm=MijnNieuwe99&csrf={_csrf(tok)}")
         assert r1.status == 200 and "Current password is incorrect" in t1   # fout huidig → geblokkeerd
         r2, _ = _req(port, "POST", "/wachtwoord", cookie=tok,
-                     body=f"current={TEMP}&new=MijnNieuwe99&confirm=MijnNieuwe99")
+                     body=f"current={TEMP}&new=MijnNieuwe99&confirm=MijnNieuwe99&csrf={_csrf(tok)}")
         assert r2.status == 303                                      # juist huidig → slaagt
     finally:
         httpd.shutdown()

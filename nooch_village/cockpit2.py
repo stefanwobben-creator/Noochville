@@ -914,7 +914,7 @@ def _handle_person_reset(data_dir: str, form: dict, username: str | None = None)
 _MIN_PASSWORD_LEN = 10
 
 
-def _password_change(data_dir: str, form: dict, username: str | None):
+def _password_change(data_dir: str, form: dict, username: str | None, csrf: str = ""):
     """Self-service wachtwoordwijziging (self óf geforceerd bij een temp). Valideert het huidige
     wachtwoord, het beleid (min. lengte + ≠ huidig) en de bevestiging. (True, None) bij succes → de
     caller redirect + verbreekt oude sessies; (False, foutpagina) bij een fout."""
@@ -926,7 +926,7 @@ def _password_change(data_dir: str, form: dict, username: str | None):
     us = _auth.UserStore(os.path.join(data_dir, "people.json"))
 
     def fail(msg):
-        return False, _auth.password_change_page(error=msg, forced=forced)
+        return False, _auth.password_change_page(error=msg, forced=forced, csrf=csrf)
 
     if person is None:
         return fail("User not recognised.")
@@ -7077,6 +7077,25 @@ def make_handler(data_dir: str, csrf_token: str,
             token = _auth.get_session_token(self.headers)
             return sessions.get_username(token) if token else None
 
+        def _csrf(self) -> str:
+            """Het CSRF-token van DIT verzoek (17 oktober 2026, besluit Stefan).
+
+            Met sessies: per sessie afgeleid (`auth.csrf_voor`, HMAC over het sessie-id met het
+            geheim uit csrf.json). Zonder geldige sessie: een willekeurige waarde per verzoek, NIET
+            "" — `compare_digest("", "")` is waar, dus een leeg token zou een leeg formulierveld
+            goedkeuren zodra een route de sessiecheck vergeet.
+            Zonder sessies (auth uit: lokaal, tests): het vaste token, zoals het altijd was.
+
+            In `do_GET` en `do_POST` heet het resultaat bewust weer `csrf_token`: elke bestaande
+            render en elke `compare_digest` gebruikt zo vanzelf het sessietoken, zonder dat een
+            van de ~55 plekken hoeft te veranderen — en zonder dat er één vergeten kan worden."""
+            if sessions is None:
+                return csrf_token
+            tok = _auth.get_session_token(self.headers)
+            if not tok or sessions.get_username(tok) is None:
+                return "geen-sessie:" + secrets.token_hex(16)
+            return _auth.csrf_voor(csrf_token, tok)
+
         def _redirect_to(self, location: str, cookie: str | None = None) -> None:
             # OOK EEN REDIRECT IS NIET TE BEWAREN. Elke schrijfactie eindigt hier (303 terug naar
             # de pagina), en een gecachte redirect stuurt je morgen naar het adres van gisteren —
@@ -7242,6 +7261,7 @@ def make_handler(data_dir: str, csrf_token: str,
             self._schrijf(b)
 
         def do_GET(self):
+            csrf_token = self._csrf()                       # per sessie; zie `_csrf`
             path, _, query = self.path.partition("?")
             qs = urllib.parse.parse_qs(query)
 
@@ -7339,7 +7359,8 @@ def make_handler(data_dir: str, csrf_token: str,
             # ── Wachtwoordwijziging (self-service + verplichte eerste-login/na-reset-poort) ──
             if path == "/wachtwoord":
                 # AUTHZ: circle-member of iedereen-ingelogd — eigen wachtwoord wijzigen
-                self._send(_auth.password_change_page(forced=st.people.must_change(username or "")))
+                self._send(_auth.password_change_page(forced=st.people.must_change(username or ""),
+                                                      csrf=csrf_token))
                 return
             if username and st.people.must_change(username):     # poort: alles → /wachtwoord tot gewijzigd
                 self._redirect_to("/wachtwoord")
@@ -8141,6 +8162,7 @@ def make_handler(data_dir: str, csrf_token: str,
             self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def do_POST(self):
+            csrf_token = self._csrf()                       # per sessie; zie `_csrf`
             path = self.path.split("?", 1)[0]
             ctype = self.headers.get("Content-Type", "")
             length = int(self.headers.get("Content-Length") or 0)
@@ -8428,7 +8450,11 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._redirect_to("/login"); return
                 raw = self.rfile.read(length).decode("utf-8") if length else ""
                 form = urllib.parse.parse_qs(raw)
-                ok, page = _password_change(data_dir, form, username)
+                # OOK HIER EEN TOKEN (17 oktober 2026): een VERPLICHTE wijziging vraagt het huidige
+                # wachtwoord niet, dus zonder token kon een andere site die wijziging laten doen.
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self._send("CSRF token invalid", 403); return
+                ok, page = _password_change(data_dir, form, username, csrf=csrf_token)
                 if ok:
                     if sessions is not None:      # haak: verbreek oude sessies, behoud de eigen (no-op nu)
                         sessions.invalidate_user(username, keep_token=_auth.get_session_token(self.headers))
