@@ -207,11 +207,25 @@ def _accountabilities(st, termen):
     return uit
 
 
+def _project_groep(p: dict) -> int:
+    """0 = actief (niet afgerond, niet gearchiveerd), 1 = afgerond, 2 = gearchiveerd. "Afgerond"
+    komt uit `projects.KLAAR`, de ene bron voor die vraag — geen tweede lijst hier."""
+    from nooch_village.projects import KLAAR
+    if p.get("archived"):
+        return 2
+    return 1 if p.get("status") in KLAAR else 0
+
+
 def _projects(st, termen, leest=None):
-    """Projecten op hun scope. `leest`: de privé-regel van de kijker (`messages.project_lezer`)."""
+    """Projecten op hun scope. `leest`: de privé-regel van de kijker (`messages.project_lezer`).
+
+    ACTIEF EERST (17 oktober 2026, besluit Stefan): actief, dan afgerond, dan gearchiveerd. Binnen
+    een groep blijft de volgorde zoals hij was (de opslagvolgorde; `sorted` is stabiel). Alleen de
+    VOLGORDE verandert: dezelfde treffers, hetzelfde aantal. Geen koppen of kaders tussen de groepen —
+    een afgerond project draagt al zijn status in `snip`."""
     uit = []
     alle = [p for p in st.projects.all() if (leest or _prive_weg)(p)]
-    for p in alle:
+    for p in sorted(alle, key=_project_groep):
         scope = str(p.get("scope") or "")
         if _match(scope, termen):
             uit.append({"url": f"/project?id={p.get('id')}", "kind": "project",
