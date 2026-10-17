@@ -410,13 +410,14 @@ button:hover{{opacity:.9}}
 
 
 def password_change_page(next_url: str = "/", error: str = "", forced: bool = False,
-                         csrf: str = "") -> str:
+                         csrf: str = "", anker: str = "") -> str:
     """Self-service wachtwoord-wijzigen (dezelfde auth-interstitial-stijl als login_page). `forced=True`
     bij een verplichte eerste-login-wijziging (temp-wachtwoord)."""
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
     intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">You are using a temporary '
              'password. Choose your own password now to continue.</p>') if forced else ""
     nxt = html.escape(veilig_pad(next_url), quote=True)
+    ank = html.escape(veilig_anker(anker), quote=True)      # zelfde regel als de loginpagina
     # Bij een VERPLICHTE wijziging geen 'huidig wachtwoord'-veld: de gebruiker is net via login
     # geauthenticeerd (die verifieerde het temp al), en het veld lokt browser-autofill van het OUDE
     # wachtwoord uit → een onmogelijk-op-te-lossen loop. Voor een vrijwillige wijziging blijft het staan.
@@ -450,6 +451,7 @@ button:hover{{opacity:.9}}
   <form method="post" action="/wachtwoord">
     <input type="hidden" name="csrf" value="{csrf}">
     <input type="hidden" name="next" value="{nxt}">
+    <input type="hidden" name="anker" id="anker" value="{ank}">
     {current_field}
     <label for="n">New password</label>
     <input type="password" id="n" name="new" autocomplete="new-password"{new_focus} required>
@@ -457,4 +459,6 @@ button:hover{{opacity:.9}}
     <input type="password" id="n2" name="confirm" autocomplete="new-password" required>
     <button type="submit">Save</button>
   </form>
-</div></body></html>"""
+</div>
+<script>(function(){{var a=document.getElementById('anker');if(a&&location.hash&&!a.value)a.value=location.hash;}})();</script>
+</body></html>"""
