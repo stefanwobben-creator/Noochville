@@ -62,8 +62,9 @@ def schoon(monkeypatch):
     NepSMTP.gezien = []
     NepSMTP.fout = None
     NepSMTP.tls = True
-    mail.nieuwe_run()
+    mail._VENSTER.clear()                                  # het standaardvenster is per proces
     yield
+    mail._VENSTER.clear()
 
 
 def _env(monkeypatch, **extra):
@@ -191,22 +192,100 @@ def test_een_regeleinde_in_het_onderwerp_kan_geen_header_toevoegen(tmp_path, mon
 
 
 def test_de_limiet_per_run_stopt_een_lus(tmp_path, monkeypatch):
+    """Een EXPLICIETE run (één weekmail-ronde) telt zichzelf, los van het tijdvenster."""
     _env(monkeypatch, MAIL_MAX_PER_RUN="3")
     run = mail.nieuwe_run()
     uit = [mail.verstuur(f"p{i}@nooch.earth", "Week 42", "x", verzend=True, data_dir=str(tmp_path),
-                         smtp_cls=NepSMTP)["status"] for i in range(10)]
+                         run=run, smtp_cls=NepSMTP)["status"] for i in range(10)]
     assert uit == ["sent"] * 3 + ["refused"] * 7 and len(NepSMTP.gezien) == 3 and run.aantal == 3
     # een nieuwe run begint opnieuw te tellen
-    mail.nieuwe_run()
     assert mail.verstuur("p@nooch.earth", "T", "x", verzend=True, data_dir=str(tmp_path),
-                         smtp_cls=NepSMTP)["status"] == "sent"
+                         run=mail.nieuwe_run(), smtp_cls=NepSMTP)["status"] == "sent"
 
 
 def test_ook_dry_runs_tellen_mee_voor_de_limiet(tmp_path, monkeypatch):
     _env(monkeypatch, MAIL_MAX_PER_RUN="2")
-    mail.nieuwe_run()
     s = [mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] for _ in range(3)]
     assert s == ["dry-run", "dry-run", "refused"]
+
+
+# ── het tijdvenster (17 oktober 2026) ────────────────────────────────────────────────────────
+
+class Klok:
+    def __init__(self, t=1_800_000_000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
+def test_zonder_eigen_run_hooguit_de_limiet_per_uur(tmp_path, monkeypatch):
+    """Na 3 mails dicht; binnen het uur blijft hij dicht; een (gesimuleerd) uur later weer open."""
+    _env(monkeypatch, MAIL_MAX_PER_RUN="3")
+    klok = Klok()
+    monkeypatch.setattr(mail, "_nu", klok)
+
+    def stuur():
+        return mail.verstuur("p@nooch.earth", "T", "x", verzend=True, data_dir=str(tmp_path),
+                             smtp_cls=NepSMTP)
+
+    assert [stuur()["status"] for _ in range(3)] == ["sent"] * 3
+    dicht = stuur()
+    assert dicht["status"] == "refused" and "per 60 minutes" in dicht["reden"]
+    klok.t += 3599                                                            # nét binnen het uur
+    assert stuur()["status"] == "refused"
+    klok.t += 2                                                               # ruim een uur na de eerste
+    assert stuur()["status"] == "sent"
+    assert len(NepSMTP.gezien) == 4
+
+
+def test_het_venster_glijdt_mee(tmp_path, monkeypatch):
+    _env(monkeypatch, MAIL_MAX_PER_RUN="2")
+    klok = Klok()
+    monkeypatch.setattr(mail, "_nu", klok)
+    st = lambda: mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"]   # noqa: E731
+    assert st() == "dry-run"                       # t = 0
+    klok.t += 1800
+    assert st() == "dry-run"                       # t = 30 min
+    assert st() == "refused"
+    klok.t += 1801                                 # t = 60 min + 1 s: de eerste valt eruit, de tweede niet
+    assert st() == "dry-run" and st() == "refused"
+
+
+def test_een_expliciete_run_negeert_een_vol_venster(tmp_path, monkeypatch):
+    _env(monkeypatch, MAIL_MAX_PER_RUN="1")
+    assert mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] == "dry-run"
+    assert mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] == "refused"
+    run = mail.nieuwe_run(limiet=2)
+    assert [mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path), run=run)["status"]
+            for _ in range(3)] == ["dry-run", "dry-run", "refused"]
+
+
+# ── dry-runs opruimen ─────────────────────────────────────────────────────────────────────────
+
+def test_dry_runs_ouder_dan_14_dagen_gaan_weg_bij_de_volgende_dry_run(tmp_path, monkeypatch):
+    _env(monkeypatch)
+    klok = Klok()
+    monkeypatch.setattr(mail, "_nu", klok)
+    map_ = tmp_path / "mail_dryrun"
+    map_.mkdir()
+    dag = 86400
+    bestanden = {"oud.eml": 15 * dag, "net-te-oud.eml": 14 * dag + 60, "jong.eml": 13 * dag + 12 * 3600,
+                 "oud-maar-geen-eml.txt": 30 * dag}
+    for naam, leeftijd in bestanden.items():
+        (map_ / naam).write_text("x")
+        os.utime(map_ / naam, (klok.t - leeftijd, klok.t - leeftijd))
+    uit = mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))
+    over = sorted(os.listdir(map_))
+    assert "oud.eml" not in over and "net-te-oud.eml" not in over
+    assert "jong.eml" in over and "oud-maar-geen-eml.txt" in over
+    assert os.path.basename(uit["pad"]) in over                              # de nieuwe staat er wel
+
+
+def test_opruimen_breekt_een_dry_run_nooit(tmp_path, monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.setattr(mail.os, "scandir", lambda p: (_ for _ in ()).throw(PermissionError("nee")))
+    assert mail.verstuur("p@nooch.earth", "T", "x", data_dir=str(tmp_path))["status"] == "dry-run"
 
 
 # ── het commando ──────────────────────────────────────────────────────────────────────────────

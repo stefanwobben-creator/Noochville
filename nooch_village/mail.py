@@ -11,8 +11,13 @@ DRIE VANGNETTEN, en elk faalt gesloten:
 2. **Geen configuratie = geen verzending.** Host en afzender komen uit `.env` (`MAIL_SMTP_HOST`,
    `MAIL_FROM`); ontbreekt er één, dan weigert `verzend=True`. Er is bewust geen standaard-host: een
    server die nog niet is ingericht hoort niets te versturen.
-3. **Een limiet per run** (`MAIL_MAX_PER_RUN`, standaard 20). Een fout in een lus die per persoon
-   mailt stopt dan na een handvol, niet na honderd. Elke poging telt, ook een dry-run.
+3. **Een limiet** (`MAIL_MAX_PER_RUN`, standaard 20). Een fout in een lus die per persoon mailt stopt
+   dan na een handvol, niet na honderd. Elke poging telt, ook een dry-run. Geeft de aanroeper een
+   eigen `MailRun` mee, dan telt die run; anders geldt een TIJDVENSTER: hooguit `MAIL_MAX_PER_RUN`
+   per 60 minuten voor het hele proces (de cockpit en de daemon draaien weken, en een teller over
+   die hele levensduur zou na twintig mails voorgoed dichtzitten).
+
+Dry-run-bestanden ouder dan 14 dagen worden bij elke dry-run opgeruimd.
 
 GEEN GEGEVENS IN EEN FOUT. Een SMTP-fout wordt gevangen; terug komt alleen de foutSOORT (en een SMTP-
 code), nooit de melding zelf — die bevat bij smtplib vaak het adres of een stuk van het bericht.
@@ -28,8 +33,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import itertools
 import smtplib
 import ssl
+import threading
 import time
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
@@ -49,15 +56,57 @@ class MailRun:
         self.aantal = 0
 
 
-_RUN: MailRun | None = None
-
-
 def nieuwe_run(limiet: int | None = None) -> MailRun:
-    """Begin een nieuwe run met een verse teller. Een langlopend proces (de daemon) roept dit per
-    taak aan; een commando krijgt er vanzelf één per proces."""
-    global _RUN
-    _RUN = MailRun(limiet)
-    return _RUN
+    """Een run met een verse teller, om expliciet mee te geven (`verstuur(..., run=...)`): één
+    weekmail-ronde, één overlegverslag. Zonder `run` geldt het tijdvenster hieronder."""
+    return MailRun(limiet)
+
+
+#: HET STANDAARDVENSTER (17 oktober 2026, besluit Stefan): wie geen eigen run meegeeft, valt onder
+#: hooguit `MAIL_MAX_PER_RUN` pogingen per `VENSTER_SECONDEN`, glijdend, voor het hele proces.
+VENSTER_SECONDEN = 3600
+_VENSTER: list[float] = []
+_VENSTER_SLOT = threading.Lock()                 # de cockpit is meerdradig
+
+
+def _nu() -> float:
+    return time.time()
+
+
+def _venster_toelaten() -> tuple[bool, int]:
+    """(mag het, limiet). Telt de poging mee als hij mag."""
+    limiet = _limiet_uit_env()
+    nu = _nu()
+    with _VENSTER_SLOT:
+        _VENSTER[:] = [t for t in _VENSTER if nu - t < VENSTER_SECONDEN]
+        if len(_VENSTER) >= limiet:
+            return False, limiet
+        _VENSTER.append(nu)
+        return True, limiet
+
+
+_VOLGNR = itertools.count(1)                      # unieke bestandsnaam binnen dezelfde seconde
+
+#: Dry-run-bestanden ouder dan dit gaan weg bij de volgende dry-run.
+DRYRUN_BEWAAR_DAGEN = 14
+
+
+def _ruim_dryruns_op(map_: str) -> int:
+    """Haal `.eml`-bestanden ouder dan `DRYRUN_BEWAAR_DAGEN` weg. Goedkoop (één `scandir`) en
+    fail-soft: opruimen mag een dry-run nooit breken. Geeft het aantal weggehaalde bestanden."""
+    grens = _nu() - DRYRUN_BEWAAR_DAGEN * 86400
+    weg = 0
+    try:
+        for e in os.scandir(map_):
+            if e.is_file() and e.name.endswith(".eml") and e.stat().st_mtime < grens:
+                try:
+                    os.remove(e.path)
+                    weg += 1
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return weg
 
 
 def _limiet_uit_env() -> int:
@@ -125,7 +174,6 @@ def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
       - `failed`  → `reden` = alleen de foutsoort (en SMTP-code), nooit de melding.
     Statussen, redenen en audit-events zijn Engels: systeemoutput (docs/CONVENTIES.md).
     """
-    global _RUN
     aan = (aan or "").strip()
     onderwerp = " ".join((onderwerp or "").split())[:_ONDERWERP_MAX]
     if not _ADRES_RE.match(aan):
@@ -133,10 +181,14 @@ def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
     if not onderwerp:
         return {"status": "refused", "reden": "no subject"}
     if run is None:
-        run = _RUN if _RUN is not None else nieuwe_run()
-    if run.aantal >= run.limiet:
-        return {"status": "refused", "reden": f"limit of {run.limiet} mails per run reached"}
-    run.aantal += 1
+        mag, limiet = _venster_toelaten()
+        if not mag:
+            return {"status": "refused",
+                    "reden": f"limit of {limiet} mails per {VENSTER_SECONDEN // 60} minutes reached"}
+    else:
+        if run.aantal >= run.limiet:
+            return {"status": "refused", "reden": f"limit of {run.limiet} mails per run reached"}
+        run.aantal += 1
 
     cfg = instellingen()
     dd = _data_dir(data_dir)
@@ -145,7 +197,9 @@ def verstuur(aan: str, onderwerp: str, tekst: str, html: str | None = None, *,
     if not verzend:
         map_ = os.path.join(dd, _DRYRUN_MAP)
         os.makedirs(map_, exist_ok=True)
-        naam = time.strftime("%Y%m%d-%H%M%S") + f"-{run.aantal:02d}-" + re.sub(r"[^a-z0-9]+", "-", aan.lower())[:40]
+        _ruim_dryruns_op(map_)
+        naam = (time.strftime("%Y%m%d-%H%M%S") + f"-{next(_VOLGNR):04d}-"
+                + re.sub(r"[^a-z0-9]+", "-", aan.lower())[:40])
         pad = os.path.join(map_, naam + ".eml")
         with open(pad, "wb") as f:
             f.write(bytes(bericht))
