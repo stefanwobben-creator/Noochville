@@ -926,7 +926,10 @@ def _password_change(data_dir: str, form: dict, username: str | None, csrf: str 
     us = _auth.UserStore(os.path.join(data_dir, "people.json"))
 
     def fail(msg):
-        return False, _auth.password_change_page(error=msg, forced=forced, csrf=csrf)
+        # Na een fout blijven bestemming en anker in het formulier: anders raakt wie zich één keer
+        # vertypt de deeplink alsnog kwijt.
+        return False, _auth.password_change_page(g("next") or "/", error=msg, forced=forced, csrf=csrf,
+                                                 anker=g("anker"))
 
     if person is None:
         return fail("User not recognised.")
@@ -7370,11 +7373,17 @@ def make_handler(data_dir: str, csrf_token: str,
             # ── Wachtwoordwijziging (self-service + verplichte eerste-login/na-reset-poort) ──
             if path == "/wachtwoord":
                 # AUTHZ: circle-member of iedereen-ingelogd — eigen wachtwoord wijzigen
-                self._send(_auth.password_change_page(forced=st.people.must_change(username or ""),
+                self._send(_auth.password_change_page((qs.get("next") or ["/"])[0],
+                                                      forced=st.people.must_change(username or ""),
                                                       csrf=csrf_token))
                 return
             if username and st.people.must_change(username):     # poort: alles → /wachtwoord tot gewijzigd
-                self._redirect_to("/wachtwoord")
+                # DE BESTEMMING REIST MEE (17 oktober 2026): wie via een deeplink of `/l` binnenkomt
+                # en eerst een eigen wachtwoord moet kiezen, landt daarna waar hij heen wilde. Het pad
+                # (met query) gaat als `next` mee en wordt bij de POST getoetst (`veilig_pad`); het
+                # `#anker` houdt de browser over deze 303 heen vast, en de pagina zet het in een veld.
+                nxt = "" if self.path in ("", "/") else f"?next={urllib.parse.quote(self.path, safe='')}"
+                self._redirect_to(f"/wachtwoord{nxt}")
                 return
             if path == "/context":
                 # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes
@@ -8473,7 +8482,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 if ok:
                     if sessions is not None:      # haak: verbreek oude sessies, behoud de eigen (no-op nu)
                         sessions.invalidate_user(username, keep_token=_auth.get_session_token(self.headers))
-                    self._redirect_to(_auth.veilig_pad((form.get("next") or ["/"])[0]))
+                    self._redirect_to(_auth.veilig_pad((form.get("next") or ["/"])[0])
+                                      + _auth.veilig_anker((form.get("anker") or [""])[0]))
                 else:
                     self._send(page, 200)
                 return

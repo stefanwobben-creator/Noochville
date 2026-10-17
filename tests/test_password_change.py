@@ -72,7 +72,8 @@ def test_geflagde_gebruiker_wordt_overal_naar_wachtwoord_gestuurd(tmp_path):
         r, _ = _req(port, "GET", "/", cookie=tok)
         assert r.status == 303 and (r.getheader("Location") or "") == "/wachtwoord"
         r2, _ = _req(port, "GET", f"/node?id=mother_earth", cookie=tok)   # ook een gewone route
-        assert r2.status == 303 and (r2.getheader("Location") or "") == "/wachtwoord"
+        # sinds 17 oktober 2026 reist de bestemming mee (zie test_wachtwoord_bestemming.py)
+        assert r2.status == 303 and (r2.getheader("Location") or "") == "/wachtwoord?next=%2Fnode%3Fid%3Dmother_earth"
         # /wachtwoord zelf mag wél (anders redirect-lus)
         r3, body = _req(port, "GET", "/wachtwoord", cookie=tok)
         assert r3.status == 200 and "Change password" in body and "temporary password" in body
