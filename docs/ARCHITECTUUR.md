@@ -12,6 +12,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | Route | Handler | View-bestand |
 |---|---|---|
 | `/login` | `(inline)` | `cockpit2.py` |
+| `/l` | `(inline)` | `cockpit2.py` |
 | `/logout` | `(inline)` | `cockpit2.py` |
 | `/linkbuilding-status` | `(inline)` | `cockpit2.py` |
 | `/scan-status` | `(inline)` | `cockpit2.py` |
@@ -398,4 +399,4 @@ Genoemd in het pakket, maar niemand schrijft hem aantoonbaar: lees-only configur
 
 
 ---
-_73 routes · 175 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 19 zonder gevonden schrijver._
+_74 routes · 175 dispatch-acties · 33 stores in `_Stores` · 38 daarbuiten met één schrijver · 6 met meerdere · 19 zonder gevonden schrijver._
